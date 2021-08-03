@@ -14,7 +14,7 @@ Operation *getNextOpFromOp(Operation *op) {
 }
 
 std::vector<Operation *> Filter::filter(Operation *root) {
-  std::vector<mlir::Operation *> filtered;
+  std::vector<Operation *> filtered;
   std::vector<std::pair<Operation *, Filter *>> opStack;
 
   opStack.push_back(std::make_pair(root, this));
@@ -38,16 +38,17 @@ std::vector<Operation *> Filter::filter(Operation *root) {
       }
     } else {
       for (auto &region : op->getRegions()) {
-        for (auto &op : region.getOps()) {
-          auto *next = getNextOpFromOp(&op);
+        for (auto &block : region) {
+          for (auto &op : block) {
+            auto *next = getNextOpFromOp(&op);
 
-          if (filter->matches(next)) {
-            if (filter->type.addSelf()) {
-              opStack.push_back(std::make_pair(next, filter));
+            if (filter->matches(next)) {
+              if (filter->type->addSelf()) {
+                opStack.push_back(std::make_pair(next, filter));
+              }
+
+              opStack.push_back(std::make_pair(next, filter->nextFilter()));
             }
-
-            opStack.push_back(std::make_pair(next, filter->nextFilter()));
-            break;
           }
         }
       }
@@ -94,13 +95,13 @@ bool AttributeFilter::matches(Operation *op) {
   std::string value;
   llvm::raw_string_ostream stream(value);
   op->getAttr(StringRef(key)).print(stream);
-  return type.valueMatches(value);
+  return type->valueMatches(value);
 }
 
 bool NameFilter::matches(Operation *op) {
   std::string name;
   for (size_t nameIndex = 0; !(name = getNameFromOp(op, nameIndex)).empty(); nameIndex++) {
-    if (type.valueMatches(name)) {
+    if (type->valueMatches(name)) {
       return true;
     }
   }
@@ -109,12 +110,12 @@ bool NameFilter::matches(Operation *op) {
 
 bool OpFilter::matches(Operation *op) {
   std::string s(op->getName().stripDialect().str());
-  return type.valueMatches(s);
+  return type->valueMatches(s);
 }
 
 bool AndFilter::matches(Operation *op) {
-  for (auto &filter : filters) {
-    if (!filter.matches(op)) {
+  for (auto *filter : filters) {
+    if (!filter->matches(op)) {
       return false;
     }
   }
@@ -123,21 +124,11 @@ bool AndFilter::matches(Operation *op) {
 
 bool OrFilter::matches(Operation *op) {
   for (auto &filter : filters) {
-    if (filter.matches(op)) {
+    if (filter->matches(op)) {
       return true;
     }
   }
   return false;
-}
-
-InstanceFilter::InstanceFilter(Filter &filter, Filter &child) {
-  this->filter = new Filter(filter);
-  this->child = new Filter(child);
-}
-
-InstanceFilter::~InstanceFilter() {
-  delete filter;
-  delete child;
 }
 
 bool InstanceFilter::matches(Operation *op) {

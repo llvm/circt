@@ -60,9 +60,9 @@ private:
 
 class Filter {
 public:
-  Filter() = default;
-  Filter(FilterType type) : type (type) { }
-  virtual ~Filter() { }
+  virtual ~Filter() {
+    delete type;
+  }
 
   virtual bool matches(Operation *op) { return false; }
 
@@ -70,14 +70,16 @@ public:
   std::vector<Operation *> filter(std::vector<Operation *> results);
 
 protected:
-  FilterType type;
+  Filter(FilterType *type) : type (type) { }
+
+  FilterType *type;
 
   virtual Filter *nextFilter() { return nullptr; };
 };
 
 class AttributeFilter : public Filter {
 public:
-  AttributeFilter(std::string &key, FilterType type) : Filter(type), key (key) { }
+  AttributeFilter(std::string &key, FilterType *type) : Filter(type), key (key) { }
 
   bool matches(Operation *op) override;
 
@@ -87,42 +89,57 @@ private:
 
 class NameFilter : public Filter {
 public:
-  NameFilter(FilterType type) : Filter(type) { }
+  NameFilter(FilterType *type) : Filter(type) { }
 
   bool matches(Operation *op) override;
 };
 
 class OpFilter : public Filter {
 public:
-  OpFilter(FilterType type) : Filter(type) { }
+  OpFilter(FilterType *type) : Filter(type) { }
 
   bool matches(Operation *op) override;
 };
 
 class AndFilter : public Filter {
 public:
-  AndFilter(std::vector<Filter> &filters) : filters (filters) { }
+  AndFilter(std::vector<Filter *> &filters) : Filter(new FilterType), filters (filters) { }
+
+  ~AndFilter() {
+    for (auto *f : filters) {
+      delete f;
+    }
+  }
 
   bool matches(Operation *op) override;
 
 private:
-  std::vector<Filter> filters;
+  std::vector<Filter *> filters;
 };
 
 class OrFilter : public Filter {
 public:
-  OrFilter(std::vector<Filter> &filters) : filters (filters) { }
+  OrFilter(std::vector<Filter *> &filters) : Filter(new FilterType), filters (filters) { }
+
+  ~OrFilter() {
+    for (auto *f : filters) {
+      delete f;
+    }
+  }
 
   bool matches(Operation *op) override;
 
 private:
-  std::vector<Filter> filters;
+  std::vector<Filter *> filters;
 };
 
 class InstanceFilter : public Filter {
 public:
-  InstanceFilter(Filter &filter, Filter &child);
-  ~InstanceFilter();
+  InstanceFilter(Filter *filter, Filter *child) : Filter(new FilterType), filter (filter), child (child) { }
+  ~InstanceFilter() {
+    delete filter;
+    delete child;
+  }
 
   bool matches(Operation *op) override;
 

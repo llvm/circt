@@ -36,80 +36,80 @@ std::vector<T> infix(T (*fn)(Lexer &, bool &), TokenType op, Lexer &lexer, bool 
 }
 
 
-Filter parseValue(Lexer &lexer, bool &errored) {
+Filter *parseValue(Lexer &lexer, bool &errored) {
   auto state = lexer.pushState();
 
   Token token;
   switch ((token = lexer.next()).getType()) {
     case TokenType::GLOB_TOKEN:
-      return NameFilter(GlobFilterType());
+      return new NameFilter(new GlobFilterType());
 
     case TokenType::DOUBLE_GLOB_TOKEN:
-      return NameFilter(RecursiveGlobFilterType());
+      return new NameFilter(new RecursiveGlobFilterType());
 
     case TokenType::LITERAL_TOKEN: {
       auto literal = token.getStringFromSpan(lexer.getSource()).str();
-      return NameFilter(LiteralFilterType(literal));
+      return new NameFilter(new LiteralFilterType(literal));
     }
 
     case TokenType::REGEX_TOKEN: {
       auto regex = token.getStringFromSpan(lexer.getSource()).str();
-      return NameFilter(RegexFilterType(regex));
+      return new NameFilter(new RegexFilterType(regex));
     }
 
     default:
       errored = true;
       lexer.popState(state);
-      return Filter();
+      return nullptr;
   }
 }
 
-Filter parseInstances(Lexer &lexer, bool &errored) {
-  auto filters = infix<Filter>(parseValue, TokenType::AND_TOKEN, lexer, errored);
+Filter *parseInstances(Lexer &lexer, bool &errored) {
+  auto filters = infix<Filter *>(parseValue, TokenType::DOUBLE_COLON_TOKEN, lexer, errored);
 
   if (errored) {
-    return Filter();
+    return nullptr;
   }
 
-  auto result = filters.back();
+  auto *result = filters.back();
   filters.pop_back();
   while (!filters.empty()) {
-    result = InstanceFilter(filters.back(), result);
+    result = new InstanceFilter(filters.back(), result);
     filters.pop_back();
   }
 
   return result;
 }
 
-Filter parseAnd(Lexer &lexer, bool &errored) {
-  auto filters = infix<Filter>(parseInstances, TokenType::AND_TOKEN, lexer, errored);
+Filter *parseAnd(Lexer &lexer, bool &errored) {
+  auto filters = infix<Filter *>(parseInstances, TokenType::AND_TOKEN, lexer, errored);
 
   if (errored) {
-    return Filter();
+    return nullptr;
   }
 
   if (filters.size() == 1) {
     return filters[0];
   }
 
-  return AndFilter(filters);
+  return new AndFilter(filters);
 }
 
-Filter parseOr(Lexer &lexer, bool &errored) {
-  auto filters = infix<Filter>(parseAnd, TokenType::OR_TOKEN, lexer, errored);
+Filter *parseOr(Lexer &lexer, bool &errored) {
+  auto filters = infix<Filter *>(parseAnd, TokenType::OR_TOKEN, lexer, errored);
 
   if (errored) {
-    return Filter();
+    return nullptr;
   }
 
   if (filters.size() == 1) {
     return filters[0];
   }
 
-  return OrFilter(filters);
+  return new OrFilter(filters);
 }
 
-Filter parse(llvm::StringRef source, bool &errored) {
+Filter *parse(llvm::StringRef source, bool &errored) {
   Lexer lexer(source);
   errored = false;
   return parseOr(lexer, errored);

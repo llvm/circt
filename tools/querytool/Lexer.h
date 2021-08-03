@@ -31,7 +31,7 @@ public:
   }
 
   llvm::StringRef getStringFromSpan(llvm::StringRef source) {
-    if (end < source.size()) {
+    if (end <= source.size()) {
       return source.slice(start, end);
     }
 

@@ -5,7 +5,7 @@ using namespace circt::query;
 namespace querytool {
 namespace parser {
 
-Filter parse(llvm::StringRef source, bool &errored);
+Filter *parse(llvm::StringRef source, bool &errored);
 
 } /* namespace parser */
 } /* namespace querytool */

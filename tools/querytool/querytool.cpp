@@ -274,14 +274,14 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   // Create the filter and filter from the module
   bool errored;
-  Filter filter = parse(filterInput, errored);
+  auto *filter = parse(filterInput, errored);
   if (errored) {
     std::cerr << "Invalid filter!\n";
     return failure();
   }
 
   auto mod = module.release();
-  auto ops = filter.filter(mod);
+  auto ops = filter->filter(mod);
 
   for (auto *op : ops) {
     op->dump();
