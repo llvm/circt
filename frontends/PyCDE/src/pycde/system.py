@@ -13,6 +13,7 @@ import circt
 import circt.support
 from circt.dialects import hw
 
+import gc
 import sys
 import typing
 
@@ -79,6 +80,7 @@ class System:
     if all([op.operation.name not in self.mod_ops for op in sys_mod_block]):
       self.system_mod.operation.erase()
       self.system_mod = None
+      gc.collect()
 
   def run_passes(self):
     if self.passed:
