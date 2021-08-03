@@ -1,6 +1,6 @@
 from typing import Type
 import circt.support as support
-import circt.dialects.hw as hw
+from circt.dialects import hw, seq
 
 import mlir.ir as ir
 
@@ -51,6 +51,9 @@ class Value:
         with get_user_loc():
           return Value(hw.StructExtractOp.create(self.value, attr))
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
+
+  def reg(self, clk, rst=None):
+    return seq.reg(self.value, clk, rst)
 
 
 # PyCDE needs a custom version of this to support python classes.

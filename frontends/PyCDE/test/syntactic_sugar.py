@@ -38,6 +38,7 @@ class Top:
 
 @module
 class ComplexPorts:
+  clk = Input(types.i1)
   sel = Input(types.i2)
   data_in = Input(dim(32, 3))
   struct_data_in = Input(types.struct({"foo": types.i32}))
@@ -49,7 +50,7 @@ class ComplexPorts:
   @generator
   def build(mod):
     return {
-      'a': mod.data_in[0],
+      'a': mod.data_in[0].reg(mod.clk),
       'b': mod.data_in[mod.sel],
       'c': mod.struct_data_in.foo
     }
@@ -80,9 +81,10 @@ top.print()
 sys = System([ComplexPorts])
 sys.generate()
 sys.print()
-# CHECK:  hw.module @pycde.Comple_Ports(%data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i32>) -> (%a: i32, %b: i32, %c: i32) {
+# CHECK:  hw.module @pycde.Comple_Ports(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i32>) -> (%a: i32, %b: i32, %c: i32) {
 # CHECK:    %c0_i2 = hw.constant 0 : i2
 # CHECK:    [[REG0:%.+]] = hw.array_get %data_in[%c0_i2] : !hw.array<3xi32>
+# CHECK:    [[REGR:%.+]] = seq.compreg [[REG0]], %clk : i32
 # CHECK:    [[REG1:%.+]] = hw.array_get %data_in[%sel] : !hw.array<3xi32>
 # CHECK:    [[REG2:%.+]] = hw.struct_extract %struct_data_in["foo"] : !hw.struct<foo: i32>
-# CHECK:    hw.output [[REG0]], [[REG1]], [[REG2]] : i32, i32, i32
+# CHECK:    hw.output [[REGR]], [[REG1]], [[REG2]] : i32, i32, i32
