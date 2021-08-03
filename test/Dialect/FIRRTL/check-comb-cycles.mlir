@@ -32,9 +32,7 @@ module  {
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %z, %y : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
     }
@@ -51,7 +49,6 @@ module  {
     firrtl.module @loop(out %y: !firrtl.uint<8>) {
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %w = firrtl.wire  : !firrtl.uint<8>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %w, %w : !firrtl.uint<8>, !firrtl.uint<8>
       firrtl.connect %y, %w : !firrtl.uint<8>, !firrtl.uint<8>
     }
@@ -73,7 +70,6 @@ module  {
       %0 = firrtl.and %c, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %z = firrtl.node %0  : !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
     }
@@ -93,23 +89,17 @@ module  {
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+2 {{this operation is part of the combinational cycle, field ID is 1}}
-      // expected-note @+1 {{this operation is part of the combinational cycle, field ID is 4}}
       %m_r = firrtl.mem Undefined  {depth = 2 : i64, name = "m", portNames = ["r"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
       %0 = firrtl.subfield %m_r(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.clock
       firrtl.connect %0, %clk : !firrtl.clock, !firrtl.clock
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %1 = firrtl.subfield %m_r(0) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %1, %y : !firrtl.uint<1>, !firrtl.uint<1>
       %2 = firrtl.subfield %m_r(1) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
       %c1_ui = firrtl.constant 1 : !firrtl.uint
       firrtl.connect %2, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       %3 = firrtl.subfield %m_r(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>) -> !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %z, %3 : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
     }
@@ -132,14 +122,10 @@ module  {
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+2 {{this operation is part of the combinational cycle, result number is 0}}
-      // expected-note @+1 {{this operation is part of the combinational cycle, result number is 1}}
+      // expected-note @+1 {{this operation is part of the combinational cycle}}
       %inner_in, %inner_out = firrtl.instance @thru  {name = "inner"} : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %inner_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %z, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %d, %z : !firrtl.uint<1>, !firrtl.uint<1>
     }
@@ -166,19 +152,14 @@ module  {
       %e = firrtl.wire  : !firrtl.uint<1>
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %0 = firrtl.and %c, %i : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %a, %0 : !firrtl.uint<1>, !firrtl.uint<1>
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %1 = firrtl.and %a, %d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %b, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
       // expected-note @+1 {{this operation is part of the combinational cycle}}
       %2 = firrtl.and %c, %e : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %d, %2 : !firrtl.uint<1>, !firrtl.uint<1>
-      // expected-note @+1 {{this operation is part of the combinational cycle}}
       firrtl.connect %e, %b : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %o, %e : !firrtl.uint<1>, !firrtl.uint<1>
     }
