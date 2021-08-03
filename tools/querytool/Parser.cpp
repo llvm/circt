@@ -53,7 +53,8 @@ Filter *parseValue(Lexer &lexer, bool &errored) {
     }
 
     case TokenType::REGEX_TOKEN: {
-      auto regex = token.getStringFromSpan(lexer.getSource()).str();
+      auto value = token.getStringFromSpan(lexer.getSource());
+      auto regex = value.slice(1, value.size() - 1).str();
       return new NameFilter(new RegexFilterType(regex));
     }
 
