@@ -1,8 +1,8 @@
-add_circt_library(CIRCTCalyxToSV
-  CalyxToSV.cpp
+add_circt_library(CIRCTCalyxToHW
+  CalyxToHW.cpp
 
   ADDITIONAL_HEADER_DIRS
-  ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/CalyxToSV
+  ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/CalyxToHW
 
   DEPENDS
   CIRCTConversionPassIncGen
@@ -13,6 +13,7 @@ add_circt_library(CIRCTCalyxToSV
   LINK_LIBS PUBLIC
   CIRCTCalyx
   CIRCTSV
+  CIRCTHW
   MLIRIR
   MLIRPass
   MLIRStandard

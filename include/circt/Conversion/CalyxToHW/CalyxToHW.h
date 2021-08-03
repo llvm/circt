@@ -1,4 +1,4 @@
-//===- CalyxToSV.h - Calyx to SV conversion pass ----------------*- C++ -*-===//
+//===- CalyxToHW.h - Calyx to SV conversion pass ----------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_CONVERSION_CALYXTOSV_CALYXTOSV_H
-#define CIRCT_CONVERSION_CALYXTOSV_CALYXTOSV_H
+#ifndef CIRCT_CONVERSION_CALYXTOHW_CALYXTOHW_H
+#define CIRCT_CONVERSION_CALYXTOHW_CALYXTOHW_H
 
 #include "circt/Support/LLVM.h"
 #include <memory>
@@ -23,8 +23,8 @@ class Pass;
 
 namespace circt {
 
-std::unique_ptr<mlir::Pass> createCalyxToSVPass();
+std::unique_ptr<mlir::Pass> createCalyxToHWPass();
 
 } // namespace circt
 
-#endif // CIRCT_CONVERSION_CALYXTOSV_CALYXTOSV_H
+#endif // CIRCT_CONVERSION_CALYXTOHW_CALYXTOHW_H

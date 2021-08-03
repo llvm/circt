@@ -1,4 +1,4 @@
-//===- CalyxToSV.cpp - Translate Calyx into SV ----------------------------===//
+//===- CalyxToHW.cpp - Translate Calyx into HW ----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,32 +10,30 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/CalyxToSV/CalyxToSV.h"
+#include "circt/Conversion/CalyxToHW/CalyxToHW.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Utils.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace circt::calyx;
+using namespace circt::hw;
 using namespace circt::sv;
 
 namespace {
-class CalyxToSVPass : public CalyxToSVBase<CalyxToSVPass> {
+class CalyxToHWPass : public CalyxToHWBase<CalyxToHWPass> {
 public:
   void runOnOperation() override;
 };
 } // end anonymous namespace
 
-void CalyxToSVPass::runOnOperation() {
+void CalyxToHWPass::runOnOperation() {
   // auto op = getOperation();
-  ConversionTarget target(getContext());
-  target.addIllegalDialect<CalyxDialect>();
-  target.addLegalDialect<SVDialect>();
 }
 
-std::unique_ptr<mlir::Pass> circt::createCalyxToSVPass() {
-  return std::make_unique<CalyxToSVPass>();
+std::unique_ptr<mlir::Pass> circt::createCalyxToHWPass() {
+  return std::make_unique<CalyxToHWPass>();
 }

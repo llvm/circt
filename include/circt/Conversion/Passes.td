@@ -16,16 +16,17 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
-// CalyxToSV
+// CalyxToHW
 //===----------------------------------------------------------------------===//
 
-def CalyxToSV : Pass<"lower-calyx-to-sv", "mlir::ModuleOp"> {
-  let summary = "Lower Calyx to SV";
+def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower Calyx to HW";
   let description = [{
-    This pass lowers Calyx to SV.
+    This pass lowers Calyx to HW.
   }];
-  let constructor = "circt::createCalyxToSVPass()";
-  let dependentDialects = ["sv::SVDialect"];
+  let constructor = "circt::createCalyxToHWPass()";
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
+                           "sv::SVDialect"];
 }
 
 //===----------------------------------------------------------------------===//

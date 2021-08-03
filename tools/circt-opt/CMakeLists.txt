@@ -9,7 +9,7 @@ llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
   PRIVATE
   CIRCTCalyx
-  CIRCTCalyxToSV
+  CIRCTCalyxToHW
   CIRCTCalyxTransforms
   CIRCTESI
   CIRCTFIRRTL
