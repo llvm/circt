@@ -6,7 +6,7 @@
 
 //===----------------------------------------------------------------------===//
 //
-// This is the main Calyx to SV Conversion Pass Implementation.
+// This is the main Calyx to HW Conversion Pass Implementation.
 //
 //===----------------------------------------------------------------------===//
 
