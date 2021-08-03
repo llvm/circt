@@ -118,6 +118,11 @@ static cl::opt<bool>
                           "Grand Central annotations"),
                  cl::init(false));
 
+static cl::opt<bool>
+    checkCombCycles("firrtl-check-comb-cycles",
+                    cl::desc("check combinational cycles on firrtl"),
+                    cl::init(false));
+
 enum OutputFormatKind {
   OutputMLIR,
   OutputVerilog,
@@ -229,6 +234,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
       modulePM.addPass(firrtl::createExpandWhensPass());
     }
   }
+
+  if (checkCombCycles)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
   if (!disableOptimization) {
