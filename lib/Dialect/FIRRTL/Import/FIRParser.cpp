@@ -3541,8 +3541,16 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
     }
   }
 
+  // After the outline of the file has been parsed, we can go ahead and parse
+  // all the bodies.  This allows us to resolve forward-referenced modules and
+  // makes it possible to parse their bodies in parallel.
 DoneParsing:
+  // Each of the modules may translate source locations, and doing so touches
+  // the SourceMgr to build a line number cache.  This isn't thread safe, so we
+  // proactively touch it to make sure that it is always already created.
+  (void)getLexer().translateLocation(info.getFIRLoc());
 
+  // Next, parse all the module bodies.
   auto anyFailed = mlir::failableParallelForEachN(
       getContext(), 0, deferredModules.size(), [&](size_t index) {
         if (parseModuleBody(deferredModules[index]))
