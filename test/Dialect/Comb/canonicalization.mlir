@@ -344,11 +344,11 @@ hw.module @narrowAdditionToWidestExtract(%x: i8, %y: i8) -> (%z1: i3, %z2: i4) {
   // CHECK-NEXT: [[RESULT1:%.+]] = comb.extract [[RESULT2]] from 0 : (i4) -> i3
   // CHECK-NEXT: hw.output [[RESULT1]], [[RESULT2]]
 
-  %0 = comb.concat %x, %x : (i8, i8) -> i9
-  %1 = comb.concat %y, %y : (i8, i8) -> i9
-  %2 = comb.add %0, %1 : i9
-  %3 = comb.extract %2 from 0 : (i9) -> i3
-  %4 = comb.extract %2 from 0 : (i9) -> i4
+  %0 = comb.concat %x, %x : (i8, i8) -> i16
+  %1 = comb.concat %y, %y : (i8, i8) -> i16
+  %2 = comb.add %0, %1 : i16
+  %3 = comb.extract %2 from 0 : (i16) -> i3
+  %4 = comb.extract %2 from 0 : (i16) -> i4
   hw.output %3, %4 : i3, i4
 }
 
