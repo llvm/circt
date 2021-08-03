@@ -476,16 +476,17 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
 
         // Traversing SCCs in the combinational graph to detect cycles. As
         // FIRRTL module is an SSA region, all cycles must contain at least one
-        // connect op on its path. Thus we introduce a dummy source node to
-        // iterate on the `dest`s of all connect ops in the module.
+        // connect op. Thus we introduce a dummy source node to iterate on the
+        // `dest`s of all connect ops in the module.
         using SCCIterator = llvm::scc_iterator<Node>;
-        for (auto SCC = SCCIterator::begin(dummyNode); !SCC.isAtEnd(); ++SCC) {
-          if (SCC.hasCycle()) {
+        for (auto combSCC = SCCIterator::begin(dummyNode); !combSCC.isAtEnd();
+             ++combSCC) {
+          if (combSCC.hasCycle()) {
             auto errorDiag = mlir::emitError(
                 module.getLoc(),
                 "detected combinational cycle in a FIRRTL module");
-            for (auto it = SCC->begin(), e = SCC->end(); it != e; ++it) {
-              auto &noteDiag = errorDiag.attachNote((*it).value.getLoc());
+            for (auto node : *combSCC) {
+              auto &noteDiag = errorDiag.attachNote(node.value.getLoc());
               noteDiag << "this operation is part of the combinational cycle";
             }
           }
