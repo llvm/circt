@@ -282,14 +282,17 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   auto mod = module.release();
   auto ops = filter->filter(mod);
+  std::vector<std::string> attrs;
+  attrs.push_back(std::string("argNames"));
+  attrs.push_back(std::string("resultNames"));
+  auto attrsMapping = dumpAttributes(ops, attrs);
 
-  for (auto *op : ops) {
+  for (auto pair : attrsMapping) {
+    auto *op = pair.first;
     op->dump();
-    for (auto &attr : op->getAttrs()) {
-      attr.first.dump();
-      std::cout << "------------";
-      attr.second.dump();
-      std::cout << std::endl << std::endl;
+    auto attrs = pair.second;
+    for (auto attr : attrs) {
+      attr.dump();
     }
   }
 

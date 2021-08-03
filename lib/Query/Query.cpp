@@ -172,5 +172,26 @@ Filter *InstanceFilter::nextFilter() {
   return child;
 }
 
+std::vector<std::pair<Operation *, std::vector<Attribute>>> dumpAttributes(std::vector<Operation *> results, std::vector<std::string> filters) {
+  std::vector<std::pair<Operation *, std::vector<Attribute>>> result;
+
+  if (filters.empty()) {
+    return result;
+  }
+
+  for (auto *op : results) {
+    std::vector<Attribute> attrs;
+
+    for (auto attrName : filters) {
+      if (op->hasAttr(attrName)) {
+        attrs.push_back(op->getAttr(attrName));
+      }
+    }
+
+    result.push_back(std::make_pair(op, attrs));
+  }
+  return result;
+}
+
 } /* namespace query */
 } /* namespace circt */

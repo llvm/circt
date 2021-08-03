@@ -152,6 +152,8 @@ private:
   Filter *child;
 };
 
+std::vector<std::pair<Operation *, std::vector<Attribute>>> dumpAttributes(std::vector<Operation *> results, std::vector<std::string> filters);
+
 } /* namespace query */
 } /* namespace circt */
 
