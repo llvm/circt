@@ -29,15 +29,21 @@ using namespace firrtl;
 using CombPathsType = SmallVector<SmallVector<size_t, 2>>;
 using CombPathsMap = DenseMap<Operation *, CombPathsType>;
 
+using ConnectIterator =
+    mlir::detail::op_iterator<ConnectOp, Region::OpIterator>;
+using ConnectRange = llvm::iterator_range<ConnectIterator>;
+
 namespace {
 /// The graph context containing pointers of the combinational paths map and the
 /// instance graph.
 struct NodeContext {
   CombPathsMap *map;
   InstanceGraph *graph;
+  ConnectRange connects;
 
-  explicit NodeContext(CombPathsMap *map, InstanceGraph *graph)
-      : map(map), graph(graph) {}
+  explicit NodeContext(CombPathsMap *map, InstanceGraph *graph,
+                       ConnectRange connects)
+      : map(map), graph(graph), connects(connects) {}
 };
 } // namespace
 
@@ -269,6 +275,46 @@ public:
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// DummySourceNodeIterator class
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// The default node iterator.
+class DummySourceNodeIterator
+    : public llvm::iterator_facade_base<DummySourceNodeIterator,
+                                        std::forward_iterator_tag, Node> {
+public:
+  explicit DummySourceNodeIterator(Node node, bool end = false)
+      : node(node), connect(end ? node.context->connects.end()
+                                : node.context->connects.begin()) {}
+
+  using llvm::iterator_facade_base<DummySourceNodeIterator,
+                                   std::forward_iterator_tag, Node>::operator++;
+  DummySourceNodeIterator &operator++() {
+    assert(connect != node.context->connects.end() &&
+           "incrementing the end iterator");
+    return ++connect, *this;
+  }
+  Node operator*() {
+    assert(connect != node.context->connects.end() &&
+           "dereferencing the end iterator");
+    return Node((*connect).dest(), node.context);
+  }
+
+  bool operator==(const DummySourceNodeIterator &rhs) const {
+    return connect == rhs.connect;
+  }
+  bool operator!=(const DummySourceNodeIterator &rhs) const {
+    return !(*this == rhs);
+  }
+
+private:
+  Node node;
+  ConnectIterator connect;
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // CombGraphIterator class
 //===----------------------------------------------------------------------===//
 
@@ -277,13 +323,17 @@ class CombGraphIterator
     : public llvm::iterator_facade_base<CombGraphIterator,
                                         std::forward_iterator_tag, Node> {
   using variant_iterator =
-      std::variant<NodeIterator, InstanceNodeIterator, SubfieldNodeIterator>;
+      std::variant<NodeIterator, InstanceNodeIterator, SubfieldNodeIterator,
+                   DummySourceNodeIterator>;
 
 public:
   explicit CombGraphIterator(Node node, bool end = false)
       : impl(dispatchConstructor(node, end)) {}
 
   variant_iterator dispatchConstructor(Node node, bool end) {
+    if (!node.value)
+      return DummySourceNodeIterator(node, end);
+
     auto defOp = node.value.getDefiningOp();
     if (!defOp)
       return NodeIterator(node, end);
@@ -310,6 +360,8 @@ public:
       return ++std::get<InstanceNodeIterator>(impl), *this;
     case 2:
       return ++std::get<SubfieldNodeIterator>(impl), *this;
+    case 3:
+      return ++std::get<DummySourceNodeIterator>(impl), *this;
     default:
       return llvm_unreachable("invalid iterator variant"), *this;
     }
@@ -323,6 +375,8 @@ public:
       return *std::get<InstanceNodeIterator>(impl);
     case 2:
       return *std::get<SubfieldNodeIterator>(impl);
+    case 3:
+      return *std::get<DummySourceNodeIterator>(impl);
     default:
       return llvm_unreachable("invalid iterator variant"), Node();
     }
@@ -411,33 +465,25 @@ namespace {
 class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    NodeContext context(&map, &instanceGraph);
 
     // Traverse modules in a post order to make sure the combinational paths
     // between IOs of a module have been detected and recorded in `combPathsMap`
     // before we handle its parent modules.
     for (auto node : llvm::post_order<InstanceGraph *>(&instanceGraph)) {
       if (auto module = dyn_cast<FModuleOp>(node->getModule())) {
-        DenseSet<Value> visited;
-        for (auto connect : module.getOps<ConnectOp>()) {
-          if (visited.count(connect.dest()))
-            continue;
+        NodeContext context(&map, &instanceGraph, module.getOps<ConnectOp>());
+        auto dummyNode = Node(nullptr, &context);
 
-          // Traversing SCCs in the combinational graph to detect cycles.
-          using SCCIterator = llvm::scc_iterator<Node>;
-          Node destNode(connect.dest(), &context);
-          for (auto SCC = SCCIterator::begin(destNode); !SCC.isAtEnd(); ++SCC) {
-            for (auto it = SCC->begin(), e = SCC->end(); it != e; ++it)
-              visited.insert((*it).value);
-
-            if (SCC.hasCycle()) {
-              auto errorDiag = mlir::emitError(
-                  module.getLoc(),
-                  "detected combinational cycle in a FIRRTL module");
-              for (auto it = SCC->begin(), e = SCC->end(); it != e; ++it) {
-                auto &noteDiag = errorDiag.attachNote((*it).value.getLoc());
-                noteDiag << "this operation is part of the combinational cycle";
-              }
+        // Traversing SCCs in the combinational graph to detect cycles.
+        using SCCIterator = llvm::scc_iterator<Node>;
+        for (auto SCC = SCCIterator::begin(dummyNode); !SCC.isAtEnd(); ++SCC) {
+          if (SCC.hasCycle()) {
+            auto errorDiag = mlir::emitError(
+                module.getLoc(),
+                "detected combinational cycle in a FIRRTL module");
+            for (auto it = SCC->begin(), e = SCC->end(); it != e; ++it) {
+              auto &noteDiag = errorDiag.attachNote((*it).value.getLoc());
+              noteDiag << "this operation is part of the combinational cycle";
             }
           }
         }
