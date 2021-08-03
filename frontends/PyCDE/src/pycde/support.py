@@ -1,3 +1,4 @@
+from typing import Type
 import circt.support as support
 import circt.dialects.hw as hw
 
@@ -19,9 +20,16 @@ class Value:
   def __getitem__(self, sub):
     ty = self.type.inner
     if isinstance(ty, hw.ArrayType):
-      idx = int(sub)
-      if idx >= self.type.size:
-        raise ValueError("Subscript out-of-bounds")
+      if isinstance(sub, int):
+        idx = int(sub)
+        if idx >= self.type.size:
+          raise ValueError("Subscript out-of-bounds")
+      else:
+        idx = support.get_value(sub)
+        if idx is None or not isinstance(support.type_to_pytype(idx.type),
+                                         ir.IntegerType):
+          raise TypeError("Subscript on array must be either int or MLIR int"
+                          f" Value, not {type(sub)}.")
       with get_user_loc():
         return Value(hw.ArrayGetOp.create(self.value, idx))
 
