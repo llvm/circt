@@ -1,5 +1,6 @@
 #include <regex>
 #include <string>
+#include <iostream>
 #include <vector>
 
 #include "circt/Dialect/Comb/CombDialect.h"

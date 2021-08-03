@@ -92,10 +92,35 @@ bool AttributeFilter::matches(Operation *op) {
     return false;
   }
 
-  std::string value;
-  llvm::raw_string_ostream stream(value);
-  op->getAttr(StringRef(key)).print(stream);
-  return type->valueMatches(value);
+  auto attr = op->getAttr(StringRef(key));
+  return TypeSwitch<Attribute, bool>(attr)
+    .Case<mlir::BoolAttr>([&](auto &attr) {
+        std::string value(attr.getValue() ? "true" : "false");
+        return type->valueMatches(value);
+    })
+    .Case<mlir::IntegerAttr>([&](auto &attr) {
+        std::stringstream stream;
+        stream << attr.getValue().getZExtValue();
+        std::string s;
+        stream.str(s);
+        return type->valueMatches(s);
+    })
+    .Case<mlir::StringAttr>([&](StringAttr &attr) {
+        auto s = attr.getValue().str();
+        return type->valueMatches(s);
+    })
+    .Case<mlir::ArrayAttr>([&](auto &attr) {
+        std::cout << "warning: unknown attribute type\n";
+        return false;
+    })
+    .Case<mlir::DictionaryAttr>([&](auto &attr) {
+        std::cout << "warning: unknown attribute type\n";
+        return false;
+    })
+    .Default([&](auto &attr) {
+        std::cout << "warning: unknown attribute type\n";
+        return false;
+    });
 }
 
 bool NameFilter::matches(Operation *op) {

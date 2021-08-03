@@ -49,7 +49,34 @@ Filter *parseValue(Lexer &lexer, bool &errored) {
 
     case TokenType::LITERAL_TOKEN: {
       auto literal = token.getStringFromSpan(lexer.getSource()).str();
-      return new NameFilter(new LiteralFilterType(literal));
+
+      auto state2 = lexer.pushState();
+      if (lexer.next().getType() == TokenType::EQUALS_TOKEN) {
+        Token token;
+        switch ((token = lexer.next()).getType()) {
+          case TokenType::GLOB_TOKEN:
+            return new AttributeFilter(literal, new GlobFilterType());
+
+          case TokenType::LITERAL_TOKEN: {
+            auto value = token.getStringFromSpan(lexer.getSource()).str();
+            return new AttributeFilter(literal, new LiteralFilterType(value));
+          }
+
+          case TokenType::REGEX_TOKEN: {
+            auto value = token.getStringFromSpan(lexer.getSource());
+            auto regex = value.slice(1, value.size() - 1).str();
+            return new AttributeFilter(literal, new RegexFilterType(regex));
+          }
+
+          default:
+            errored = true;
+            lexer.popState(state);
+            return nullptr;
+        }
+      } else {
+        lexer.popState(state2);
+        return new NameFilter(new LiteralFilterType(literal));
+      }
     }
 
     case TokenType::REGEX_TOKEN: {

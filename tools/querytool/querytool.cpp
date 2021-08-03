@@ -285,7 +285,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   for (auto *op : ops) {
     op->dump();
-    std::cout << std::endl;
+    for (auto &attr : op->getAttrs()) {
+      attr.first.dump();
+      std::cout << "------------";
+      attr.second.dump();
+      std::cout << std::endl << std::endl;
+    }
   }
 
   return success();
