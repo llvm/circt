@@ -145,6 +145,10 @@ narrowOperationWidth(Operation *narrowingCandidate, ValueRange inputs,
   auto loc = narrowingCandidate->getLoc();
   size_t narrowedWidth = highestBitRequired - lowestBitRequired + 1;
   auto narrowedType = rewriter.getIntegerType(narrowedWidth);
+
+  // Insert the new narrowedOperation at a point where all narrowingCandidate's
+  // operands are available, and resides before all users.
+  rewriter.setInsertionPoint(narrowingCandidate);
   Value narrowedOperation =
       createOp(SmallVector<Value>(llvm::map_range(inputs, [&](auto input) {
         return rewriter.create<ExtractOp>(loc, narrowedType, input,
@@ -175,8 +179,16 @@ narrowOperationWidth(Operation *narrowingCandidate, ValueRange inputs,
   for (Operation *user :
        llvm::make_early_inc_range(narrowingCandidate->getUsers())) {
     auto extractUser = cast<ExtractOp>(user);
+
+    // This is necessary because the rewriter's insertion point can be a
+    // replaced extractUser
+    rewriter.setInsertionPoint(extractUser);
     rewriter.replaceOp(extractUser, getNarrowedExtractReplacement(extractUser));
   }
+
+  // narrowingCandidate can be safely removed now, as all old users of
+  // narrowingCandidate are replaced.
+  rewriter.eraseOp(narrowingCandidate);
 
   return true;
 }
