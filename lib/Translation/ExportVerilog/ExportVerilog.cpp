@@ -64,7 +64,7 @@ static bool isExpressionAlwaysInline(Operation *op) {
 
 /// Return whether an operation is a constant.
 static bool isConstantExpression(Operation *op) {
-  return isa<ConstantOp>(op) || isa<ConstantXOp>(op) || isa<ConstantZOp>(op);
+  return isa<ConstantOp, ConstantXOp, ConstantZOp>(op);
 }
 
 /// Return true for nullary operations that are better emitted multiple
@@ -315,7 +315,7 @@ static StringRef getVerilogDeclWord(Operation *op) {
   }
   if (isa<WireOp>(op))
     return "wire";
-  if (isa<ConstantOp>(op))
+  if (isa<ConstantOp, LocalParamOp>(op))
     return "localparam";
 
   // Interfaces instances use the name of the declared interface.
@@ -344,6 +344,8 @@ static StringRef getNameRemotely(Value &value,
       return reg.name();
     }
   }
+  if (auto localparam = dyn_cast<LocalParamOp>(value.getDefiningOp()))
+    return localparam.name();
   return {};
 }
 
@@ -1712,6 +1714,7 @@ private:
 
   LogicalResult visitSV(WireOp op) { return emitNoop(); }
   LogicalResult visitSV(RegOp op) { return emitNoop(); }
+  LogicalResult visitSV(LocalParamOp op) { return emitNoop(); }
   LogicalResult visitSV(AssignOp op);
   LogicalResult visitSV(BPAssignOp op);
   LogicalResult visitSV(PAssignOp op);
@@ -2689,6 +2692,11 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       printUnpackedTypePostfix(type, os);
     }
 
+    if (auto localparam = dyn_cast<LocalParamOp>(decl)) {
+      os << " = ";
+      emitExpression(localparam.input(), ops, ForceEmitMultiUse);
+    }
+
     // Constants carry their assignment directly in the declaration.
     if (isConstantExpression(decl)) {
       os << " = ";
@@ -3335,6 +3343,8 @@ static void prepareHWModule(Block &block, ModuleNameManager &names,
       names.addLegalName(op.getResult(0), wire.name(), &op);
     else if (auto regOp = dyn_cast<RegOp>(op))
       names.addLegalName(op.getResult(0), regOp.name(), &op);
+    else if (auto localParamOp = dyn_cast<LocalParamOp>(op))
+      names.addLegalName(op.getResult(0), localParamOp.name(), &op);
     else if (auto interfaceInstanceOp = dyn_cast<InterfaceInstanceOp>(op))
       names.addLegalName(op.getResult(0), interfaceInstanceOp.name(), &op);
 

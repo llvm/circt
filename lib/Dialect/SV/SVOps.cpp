@@ -176,6 +176,17 @@ void ConstantZOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
+// LocalParamOp
+//===----------------------------------------------------------------------===//
+
+void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the localparam has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+//===----------------------------------------------------------------------===//
 // RegOp
 //===----------------------------------------------------------------------===//
 
