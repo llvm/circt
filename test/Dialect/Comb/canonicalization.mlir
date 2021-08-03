@@ -464,3 +464,26 @@ hw.module @narrowBitwiseOpsExtractFromNoneZero(%a: i8, %b: i8, %c: i8, %d: i1) -
   // CHECK-NEXT: hw.output [[AND]], [[OR]], [[XOR]], [[MUX]]
   hw.output %1, %3, %5, %7 : i4, i4, i4, i4
 }
+
+// A regression test case that checks if the narrowed bitwise optimization sets
+// insertion points appropriately on rewriting operations.
+// CHECK-LABEL: hw.module @narrowBitwiseOpsInsertionPointRegression
+hw.module @narrowBitwiseOpsInsertionPointRegression(%a: i8) -> (%out: i1) {
+  // CHECK-NEXT: [[A1:%.+]] = comb.extract %a from 4 : (i8) -> i3
+  // CHECK-NEXT: [[A2:%.+]] = comb.extract %a from 0 : (i8) -> i3
+  // CHECK-NEXT: [[AR:%.+]] = comb.or [[A1]], [[A2]] : i3
+  %0 = comb.extract %a from 4 : (i8) -> i4
+  %1 = comb.extract %a from 0 : (i8) -> i4
+  %2 = comb.or %0, %1 : i4
+
+  // CHECK-NEXT: [[B1:%.+]] = comb.extract %2 from 2 : (i3) -> i1
+  // CHECK-NEXT: [[B2:%.+]] = comb.extract %2 from 0 : (i3) -> i1
+  // CHECK-NEXT: [[BR:%.+]] = comb.or [[B1]], [[B2]] : i1
+  %3 = comb.extract %2 from 2 : (i4) -> i2
+  %4 = comb.extract %2 from 0 : (i4) -> i2
+  %5 = comb.or %3, %4 : i2
+
+  // CHECK-NEXT: hw.output [[BR]] : i1
+  %6 = comb.extract %5 from 0 : (i2) -> i1
+  hw.output %6 : i1
+}
