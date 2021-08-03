@@ -205,6 +205,11 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.connect %out, %in
   %8 = firrtl.or %invalid_ui4, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %8 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: firrtl.or %sin, %invalid_si4
+  %invalid_si4 = firrtl.invalidvalue : !firrtl.sint<4>
+  %9 = firrtl.or %sin, %invalid_si4 : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %9 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Xor
@@ -240,6 +245,11 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
   // CHECK: firrtl.connect %out, %in
   %8 = firrtl.xor %invalid_ui4, %in : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %8 : !firrtl.uint<4>, !firrtl.uint<4>
+
+  // CHECK: firrtl.xor %sin, %invalid_si4
+  %invalid_si4 = firrtl.invalidvalue : !firrtl.sint<4>
+  %9 = firrtl.xor %sin, %invalid_si4 : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.connect %out, %9 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @EQ

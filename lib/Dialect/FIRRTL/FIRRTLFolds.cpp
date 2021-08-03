@@ -368,9 +368,11 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
   // This is legal because it aligns with the Scala FIRRTL Compiler
   // interpretation of lowering invalid to constant zero before constant
   // propagation.
-  if (operands[0].dyn_cast_or_null<InvalidValueAttr>())
+  if (operands[0].dyn_cast_or_null<InvalidValueAttr>() &&
+      rhs().getType() == getType())
     return rhs();
-  if (operands[1].dyn_cast_or_null<InvalidValueAttr>())
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() &&
+      lhs().getType() == getType())
     return lhs();
 
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
@@ -400,9 +402,11 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
   // This is legal because it aligns with the Scala FIRRTL Compiler
   // interpretation of lowering invalid to constant zero before constant
   // propagation.
-  if (operands[0].dyn_cast_or_null<InvalidValueAttr>())
+  if (operands[0].dyn_cast_or_null<InvalidValueAttr>() &&
+      rhs().getType() == getType())
     return rhs();
-  if (operands[1].dyn_cast_or_null<InvalidValueAttr>())
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() &&
+      lhs().getType() == getType())
     return lhs();
 
   /// xor(x, 0) -> x
