@@ -1,4 +1,4 @@
-// RUN: circt-translate --export-calyx --verify-diagnostics %s
+// RUN: circt-translate --export-calyx --verify-diagnostics %s | FileCheck %s --strict-whitespace
 
 calyx.program {
   // CHECK-LABEL: component A(in: 8, go: 1, clk: 1, reset: 1) -> (out: 8, done: 1) {
