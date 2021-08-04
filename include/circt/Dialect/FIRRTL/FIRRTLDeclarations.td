@@ -305,7 +305,7 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal, ResetType:$resetSignal, PassiveType:$resetValue,
+    ins ClockType:$clockVal, AnyResetType:$resetSignal, PassiveType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 
