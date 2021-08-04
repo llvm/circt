@@ -22,7 +22,6 @@
 
 using namespace circt;
 using namespace calyx;
-using namespace hw;
 
 //===----------------------------------------------------------------------===//
 // Emitter
@@ -152,7 +151,7 @@ void Emitter::emitComponent(ComponentOp op) {
 void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
   std::vector<ComponentPortInfo> inPorts, outPorts;
   for (auto &&port : ports) {
-    if (port.direction == calyx::PortDirection::INPUT)
+    if (port.direction == PortDirection::INPUT)
       inPorts.push_back(port);
     else
       outPorts.push_back(port);
@@ -201,7 +200,7 @@ void Emitter::emitAssignment(AssignOp op) {
           emitted += ".";
           emitted += portName.getValue();
         })
-        .template Case<ConstantOp>([&](auto op) {
+        .template Case<hw::ConstantOp>([&](auto op) {
           // A constant is defined as <bit-width>'<base><value>, where the base
           // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
 
