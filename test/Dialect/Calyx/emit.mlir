@@ -21,8 +21,8 @@ calyx.program {
         calyx.assign %c0.in = %c0.out : i8
         calyx.group_done %c0.done : i1
       }
-      // CHECK:   c0.go = 1'd1;
-      %c1 = hw.constant 1 : i1
+      // CHECK:   c0.go = 1'd0;
+      %c1 = hw.constant 0 : i1
       calyx.assign %c0.go = %c1 : i1
     }
     // CHECK: control {
