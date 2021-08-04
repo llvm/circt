@@ -98,14 +98,14 @@ private:
     TypeSwitch<Operation *>(definingOp)
         .Case<CellOp>([&](auto op) {
           // A cell port should be defined as <instance-name>.<port-name>
-          auto opResult = value.template cast<OpResult>();
+          auto opResult = value.cast<OpResult>();
           unsigned portIndex = opResult.getResultNumber();
           auto ports = getComponentPortInfo(op.getReferencedComponent());
           StringAttr portName = ports[portIndex].name;
           (isIndented ? indent() : os)
               << op.instanceName() << "." << portName.getValue();
         })
-        .template Case<hw::ConstantOp>([&](auto op) {
+        .Case<hw::ConstantOp>([&](auto op) {
           // A constant is defined as <bit-width>'<base><value>, where the base
           // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
 
