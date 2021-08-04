@@ -186,7 +186,7 @@ void Emitter::emitAssignment(AssignOp op) {
   if (op.guard())
     emitOpError(op, "guard not supported for emission currently");
 
-  auto emitAssignmentValue = [&](auto assignValue) -> StringRef {
+  auto emitAssignmentValue = [&](auto assignValue) {
     auto definingOp = assignValue.getDefiningOp();
     std::string emitted;
     TypeSwitch<Operation *>(definingOp)
