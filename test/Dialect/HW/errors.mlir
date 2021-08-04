@@ -77,7 +77,7 @@ hw.module @wire(%a: i42) {
 // -----
 
 hw.module @struct(%a: i42) {
-  // expected-error @+1 {{custom op 'hw.struct_create' invalid kind of type specified}}
+  // expected-error @+1 {{custom op 'hw.struct_create' expected !hw.struct type or alias}}
   %aget = hw.struct_create(%a) : i42
 }
 
