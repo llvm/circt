@@ -4,7 +4,7 @@
 #include "mlir/IR/PatternMatch.h"
 // returns the bitwidth of the type.
 namespace helper {
-unsigned getBitWidth(mlir::Type);
+llvm::Optional<uint64_t> getBitWidth(mlir::Type);
 unsigned clog2(int);
 
 /// A primitive type is integer, float or a tuple/tensor of a primitive type.

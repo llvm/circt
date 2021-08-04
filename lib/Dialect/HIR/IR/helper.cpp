@@ -19,7 +19,7 @@ std::string typeString(Type t) {
   return typeStr;
 }
 
-unsigned getBitWidth(Type type) {
+llvm::Optional<uint64_t> getBitWidth(Type type) {
   if (type.dyn_cast<hir::TimeType>())
     return 1;
   if (auto intTy = type.dyn_cast<IntegerType>())
@@ -29,7 +29,10 @@ unsigned getBitWidth(Type type) {
   if (auto tupleTy = type.dyn_cast<TupleType>()) {
     int width = 1;
     for (Type ty : tupleTy.getTypes()) {
-      width *= getBitWidth(ty);
+      auto widthTy = getBitWidth(ty);
+      if (!widthTy)
+        return llvm::None;
+      width *= widthTy.getValue();
     }
     return width;
   }
@@ -38,14 +41,21 @@ unsigned getBitWidth(Type type) {
     for (auto szDim : tensorTy.getShape()) {
       size *= szDim;
     }
-    return size * getBitWidth(tensorTy.getElementType());
+    auto widthElementTy = getBitWidth(tensorTy.getElementType());
+    if (widthElementTy)
+      return size * widthElementTy.getValue();
   }
-
-  // error
-  fprintf(stderr, "\nERROR: Can't calculate getBitWidth for type %s.\n",
-          typeString(type).c_str());
-  assert(false);
-  return 0;
+  if (auto busTy = type.dyn_cast<hir::BusType>()) {
+    int width = 0;
+    for (Type ty : busTy.getElementTypes()) {
+      auto elementWidth = helper::getBitWidth(ty);
+      if (!elementWidth)
+        return llvm::None;
+      width += elementWidth.getValue();
+    }
+    return width;
+  }
+  return llvm::None;
 }
 
 unsigned clog2(int value) { return (int)(ceil(log2(((double)value)))); }

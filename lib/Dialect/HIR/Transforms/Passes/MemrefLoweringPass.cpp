@@ -351,12 +351,16 @@ void createValidCombineCallOp(OpBuilder &builder, Value destBusTensor,
                                    {bus.getType(), busTensor.getType()},
                                    {sendAttr, recvAttr}, {}, {});
 
-  builder.create<hir::CallOp>(
+  auto callOp = builder.create<hir::CallOp>(
       builder.getUnknownLoc(), SmallVector<Type>(),
       FlatSymbolRefAttr::get(builder.getContext(), "hir_valid_combine"),
       TypeAttr::get(funcTy), SmallVector<Value>({bus, busTensor}), tstartRegion,
       IntegerAttr());
+  auto tensorTy = busTensor.getType().dyn_cast<mlir::TensorType>();
+  callOp->setAttr("TENSOR_SIZE",
+                  builder.getI64IntegerAttr(tensorTy.getNumElements()));
 }
+
 void createBusBroadcastCallOp(OpBuilder &builder, Value sourceBusTensor,
                               ArrayRef<uint64_t> bankIndices,
                               Value destBusValidTensor, Value destBusTensor,
@@ -375,12 +379,21 @@ void createBusBroadcastCallOp(OpBuilder &builder, Value sourceBusTensor,
                           sourceBus.getType()},
                          {sendAttr, recvAttr, recvAttr}, {}, {});
 
-  builder.create<hir::CallOp>(
+  auto callOp = builder.create<hir::CallOp>(
       builder.getUnknownLoc(), SmallVector<Type>(),
       FlatSymbolRefAttr::get(builder.getContext(), "hir_bus_broadcast"),
       TypeAttr::get(funcTy),
       SmallVector<Value>({destBusTensor, destBusValidTensor, sourceBus}),
       tstartRegion, IntegerAttr());
+
+  auto tensorSize =
+      destBusTensor.getType().dyn_cast<mlir::TensorType>().getNumElements();
+  auto elementWidth = helper::getBitWidth(
+      destBusTensor.getType().dyn_cast<mlir::TensorType>().getElementType());
+
+  callOp->setAttr("TENSOR_SIZE", builder.getI64IntegerAttr(tensorSize));
+  callOp->setAttr("ELEMENT_WIDTH",
+                  builder.getI64IntegerAttr(elementWidth.getValue()));
 }
 
 void createBusMuxCallOp(OpBuilder &builder, Value destBusTensor,
@@ -399,12 +412,20 @@ void createBusMuxCallOp(OpBuilder &builder, Value destBusTensor,
       {bus.getType(), busValidTensor.getType(), busTensor.getType()},
       {sendAttr, recvAttr, recvAttr}, {}, {});
 
-  builder.create<hir::CallOp>(
+  auto callOp = builder.create<hir::CallOp>(
       builder.getUnknownLoc(), SmallVector<Type>(),
       FlatSymbolRefAttr::get(builder.getContext(), "hir_bus_mux"),
       TypeAttr::get(funcTy),
       SmallVector<Value>({bus, busValidTensor, busTensor}), tstartRegion,
       IntegerAttr());
+  auto tensorSize =
+      busTensor.getType().dyn_cast<mlir::TensorType>().getNumElements();
+  auto elementWidth = helper::getBitWidth(
+      busTensor.getType().dyn_cast<mlir::TensorType>().getElementType());
+
+  callOp->setAttr("TENSOR_SIZE", builder.getI64IntegerAttr(tensorSize));
+  callOp->setAttr("ELEMENT_WIDTH",
+                  builder.getI64IntegerAttr(elementWidth.getValue()));
 }
 
 void connectUseAndPortInterfaces(OpBuilder &builder,

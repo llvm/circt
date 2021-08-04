@@ -251,6 +251,9 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
     return failure();
   parseTimeAndOffset(parser, tstart, offsetAttr);
 
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
   // parse arg types and delays.
   if (parser.parseColon())
     return failure();
@@ -291,6 +294,9 @@ static void printCallOp(OpAsmPrinter &printer, CallOp op) {
   printer << "hir.call @" << op.callee();
   printer << "(" << op.operands() << ") at ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
+  printer.printOptionalAttrDict(
+      op->getAttrs(), SmallVector<StringRef>({"operand_segment_sizes", "callee",
+                                              "funcTy", "offset"}));
   printer << " : ";
   printer << op.funcTy();
 }
