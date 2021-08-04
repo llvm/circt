@@ -24,16 +24,19 @@ namespace {
 ArrayAttr getRegWritePort(OpBuilder &builder) {
   SmallVector<Attribute> ports;
   ports.push_back(helper::getDictionaryAttr(
-      builder, "wr_latency", helper::getIntegerAttr(builder.getContext(), 1)));
+      builder, "wr_latency",
+      helper::getI64IntegerAttr(builder.getContext(), 1)));
   return ArrayAttr::get(builder.getContext(), ports);
 }
 
 ArrayAttr getDefaultMemrefPorts(OpBuilder &builder) {
   SmallVector<Attribute> ports;
   ports.push_back(helper::getDictionaryAttr(
-      builder, "rd_latency", helper::getIntegerAttr(builder.getContext(), 1)));
+      builder, "rd_latency",
+      helper::getI64IntegerAttr(builder.getContext(), 1)));
   ports.push_back(helper::getDictionaryAttr(
-      builder, "wr_latency", helper::getIntegerAttr(builder.getContext(), 1)));
+      builder, "wr_latency",
+      helper::getI64IntegerAttr(builder.getContext(), 1)));
   return ArrayAttr::get(builder.getContext(), ports);
 }
 

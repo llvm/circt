@@ -60,7 +60,7 @@ llvm::Optional<uint64_t> getBitWidth(Type type) {
 
 unsigned clog2(int value) { return (int)(ceil(log2(((double)value)))); }
 
-IntegerAttr getIntegerAttr(MLIRContext *context, int value) {
+IntegerAttr getI64IntegerAttr(MLIRContext *context, int value) {
   return IntegerAttr::get(IntegerType::get(context, 64), APInt(64, value));
 }
 

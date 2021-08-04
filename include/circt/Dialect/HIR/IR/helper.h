@@ -12,7 +12,7 @@ bool isBuiltinSizedType(mlir::Type);
 bool isBusType(mlir::Type);
 int64_t getConstantIntValue(mlir::Value var);
 mlir::LogicalResult isConstantIntValue(mlir::Value var);
-mlir::IntegerAttr getIntegerAttr(mlir::MLIRContext *context, int value);
+mlir::IntegerAttr getI64IntegerAttr(mlir::MLIRContext *context, int value);
 
 circt::hir::TimeType getTimeType(mlir::MLIRContext *context);
 mlir::ParseResult parseMemrefPortsArray(mlir::DialectAsmParser &,

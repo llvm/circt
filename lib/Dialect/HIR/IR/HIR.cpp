@@ -55,8 +55,9 @@ ParseResult parseDelayAttr(OpAsmParser &parser,
       return failure();
     attrsList.push_back(DictionaryAttr::get(context, argAttrs));
   } else {
-    attrsList.push_back(helper::getDictionaryAttr(
-        parser.getBuilder(), "hir.delay", helper::getIntegerAttr(context, 0)));
+    attrsList.push_back(
+        helper::getDictionaryAttr(parser.getBuilder(), "hir.delay",
+                                  helper::getI64IntegerAttr(context, 0)));
   }
   return success();
 }
@@ -535,7 +536,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
       if (parser.parseAttribute(offsetAttr, "offset", result.attributes))
         return failure();
     } else {
-      result.addAttribute("offset", helper::getIntegerAttr(context, 0));
+      result.addAttribute("offset", helper::getI64IntegerAttr(context, 0));
     }
   }
   if (parser.parseRParen())

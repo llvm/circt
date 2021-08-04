@@ -59,7 +59,7 @@ ParseResult parseDelayAttr(DialectAsmParser &parser,
     if (parser.parseAttribute(delayAttr, IntegerType::get(context, 64)))
       return failure();
   } else {
-    delayAttr = helper::getIntegerAttr(context, 0);
+    delayAttr = helper::getI64IntegerAttr(context, 0);
   }
   attrsList.push_back(
       helper::getDictionaryAttr(parser.getBuilder(), "hir.delay", delayAttr));

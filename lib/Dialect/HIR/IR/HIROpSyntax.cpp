@@ -85,10 +85,10 @@ parseOptionalArrayAccess(OpAsmParser &parser,
     OpAsmParser::OperandType var;
     mlir::OptionalParseResult result = parser.parseOptionalInteger(val);
     if (result.hasValue() && !result.getValue()) {
-      tempConstAddrs.push_back(helper::getIntegerAttr(context, val));
+      tempConstAddrs.push_back(helper::getI64IntegerAttr(context, val));
     } else if (!parser.parseOperand(var)) {
       varAddrs.push_back(var);
-      tempConstAddrs.push_back(helper::getIntegerAttr(
+      tempConstAddrs.push_back(helper::getI64IntegerAttr(
           parser.getBuilder().getContext(), -varAddrs.size()));
     } else
       return failure();

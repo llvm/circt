@@ -16,7 +16,7 @@ namespace {
 enum MemrefPortKind { RD = 0, WR = 1, RW = 2 };
 struct MemrefPortInterface {
   Value addrBus;
-  Value addrValidBus;
+  Value addrEnableBus;
   Value rdEnableBus;
   uint64_t rdLatency;
   Value rdDataBus;
@@ -94,11 +94,15 @@ Type getTensorElementType(Value tensor) {
   assert(ty);
   return ty.getElementType();
 }
-LogicalResult convertOp(hir::LoadOp, MemrefPortInterface portInterface,
+LogicalResult convertOp(hir::LoadOp, MemrefPortInterface useInterface,
                         uint64_t useNum) {
+  // send 1 to addrEnableBus.
+  // send 1 to rdEnableBus
+  // concat mem addresses to a tuple value
+  // send this value to the addrBus.
   return success();
 }
-LogicalResult convertOp(hir::StoreOp, MemrefPortInterface portInterface,
+LogicalResult convertOp(hir::StoreOp, MemrefPortInterface useInterface,
                         uint64_t useNum) {
   return success();
 }
@@ -136,10 +140,17 @@ void insertBusTypesAndAttrsForMemrefPort(
   auto *context = memrefTy.getContext();
   Type enableTy = buildBusTensor(context, memrefTy.filterShape(BANK),
                                  {IntegerType::get(context, 1)});
-  Type addrTy = buildBusTensor(
-      context, memrefTy.filterShape(BANK),
-      {IntegerType::get(context,
-                        helper::clog2(memrefTy.getNumElementsPerBank()))});
+
+  SmallVector<Type> addrTupleElementTypes;
+
+  for (uint64_t dimSize : memrefTy.filterShape(ADDR)) {
+    addrTupleElementTypes.push_back(
+        IntegerType::get(context, helper::clog2(dimSize)));
+  }
+
+  Type addrTupleTy =
+      buildBusTensor(context, memrefTy.filterShape(BANK),
+                     {TupleType::get(context, addrTupleElementTypes)});
   Type dataTy = buildBusTensor(context, memrefTy.filterShape(BANK),
                                {memrefTy.getElementType()});
   DictionaryAttr sendAttr = helper::getDictionaryAttr(
@@ -150,9 +161,9 @@ void insertBusTypesAndAttrsForMemrefPort(
       ArrayAttr::get(context, StringAttr::get(context, "recv")));
 
   if (memrefTy.getNumElementsPerBank() > 1) {
-    portInterface.addrValidBus = bb.insertArgument(i, enableTy);
+    portInterface.addrEnableBus = bb.insertArgument(i, enableTy);
     inputAttrs.insert(inputAttrs.begin() + i++, sendAttr);
-    portInterface.addrBus = bb.insertArgument(i, addrTy);
+    portInterface.addrBus = bb.insertArgument(i, addrTupleTy);
     inputAttrs.insert(inputAttrs.begin() + i++, sendAttr);
   }
 
@@ -301,11 +312,11 @@ MemrefPortInterface defineBusTensors(OpBuilder &builder,
   MemrefPortInterface busTensor;
   auto shape = SmallVector<int64_t>({(int64_t)numUses});
 
-  if (portInterface.addrValidBus)
-    busTensor.addrValidBus = builder.create<hir::BusInstantiateOp>(
+  if (portInterface.addrEnableBus)
+    busTensor.addrEnableBus = builder.create<hir::BusInstantiateOp>(
         builder.getUnknownLoc(),
         mlir::RankedTensorType::get(
-            shape, getTensorElementType(portInterface.addrValidBus)));
+            shape, getTensorElementType(portInterface.addrEnableBus)));
 
   if (portInterface.addrBus)
     busTensor.addrBus = builder.create<hir::BusInstantiateOp>(
@@ -437,12 +448,12 @@ void connectUseAndPortInterfaces(OpBuilder &builder,
   // extract-tensor from port interface.
   // call memref_mux on addr, data-out and valid buses.
   // call memref_broadcast on data-in bus.
-  if (portInterface.addrValidBus)
-    createValidCombineCallOp(builder, portInterface.addrValidBus, bankIndices,
-                             useInterface.addrValidBus, tstartRegion);
+  if (portInterface.addrEnableBus)
+    createValidCombineCallOp(builder, portInterface.addrEnableBus, bankIndices,
+                             useInterface.addrEnableBus, tstartRegion);
   if (portInterface.addrBus)
     createBusMuxCallOp(builder, portInterface.addrBus, bankIndices,
-                       useInterface.addrValidBus, useInterface.addrBus,
+                       useInterface.addrEnableBus, useInterface.addrBus,
                        tstartRegion);
   if (portInterface.rdEnableBus)
     createValidCombineCallOp(builder, portInterface.rdEnableBus, bankIndices,
@@ -493,15 +504,15 @@ LogicalResult replacePortUses(OpBuilder &builder, Location loc,
       assert(uses.size() > bank.getLinearIdx());
     }
     uint64_t numUses = uses[bank.getLinearIdx()].size();
-    auto busInterfaceForLoadStoreOps = createBusInterfaceForBankUse(
+    auto useInterface = createBusInterfaceForBankUse(
         builder, portInterface, bank.getIndices(), numUses, tstartRegion);
     for (uint64_t use = 0; use < numUses; use++) {
       if (auto op = dyn_cast<hir::LoadOp>(uses[bank.getLinearIdx()][use])) {
-        if (failed(convertOp(op, busInterfaceForLoadStoreOps, use)))
+        if (failed(convertOp(op, useInterface, use)))
           return failure();
       } else if (auto op =
                      dyn_cast<hir::StoreOp>(uses[bank.getLinearIdx()][use])) {
-        if (failed(convertOp(op, busInterfaceForLoadStoreOps, use)))
+        if (failed(convertOp(op, useInterface, use)))
           return failure();
       }
     }

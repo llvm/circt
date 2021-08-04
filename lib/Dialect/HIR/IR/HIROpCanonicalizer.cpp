@@ -122,7 +122,7 @@ OpFoldResult TimeOp::fold(ArrayRef<Attribute> operands) {
     delay += timeOp.delay();
   }
   this->timevarMutable().assign(timeVar);
-  this->delayAttr(helper::getIntegerAttr(this->getContext(), delay));
+  this->delayAttr(helper::getI64IntegerAttr(this->getContext(), delay));
 
   return {};
 }
