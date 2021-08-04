@@ -221,7 +221,7 @@ void Emitter::emitAssignment(AssignOp op) {
     return emitted;
   };
   indent() << emitAssignmentValue(op.dest()) << " = "
-           << emitAssignmentValue(op.src()) << ";";
+           << emitAssignmentValue(op.src()) << ";\n";
 }
 
 void Emitter::emitWires(WiresOp op) {
