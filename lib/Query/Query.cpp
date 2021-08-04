@@ -151,16 +151,90 @@ bool AndFilter::matches(Operation *op) {
     if (!filter->matches(op)) {
       return false;
     }
+
+    std::vector<std::pair<Operation *, Filter *>> opStack;
+    if (filter->getType()->addSelf()) {
+      opStack.push_back(std::make_pair(op, filter));
+    }
+    opStack.push_back(std::make_pair(op, filter->nextFilter()));
+
+    bool found = false;
+    while (!opStack.empty()) {
+      auto pair = opStack.back();
+      opStack.pop_back();
+      auto *op = pair.first;
+      auto *filter = pair.second;
+
+      if (!filter) {
+        found = true;
+        break;
+      }
+
+      for (auto &region : op->getRegions()) {
+        for (auto &block : region) {
+          for (auto &op : block) {
+            auto *next = getNextOpFromOp(&op);
+
+            if (filter->matches(next)) {
+              if (filter->getType()->addSelf()) {
+                opStack.push_back(std::make_pair(next, filter));
+              }
+
+              opStack.push_back(std::make_pair(next, filter->nextFilter()));
+            }
+          }
+        }
+      }
+    }
+
+    if (!found) {
+      return false;
+    }
   }
+
   return true;
 }
 
 bool OrFilter::matches(Operation *op) {
-  for (auto &filter : filters) {
-    if (filter->matches(op)) {
-      return true;
+  for (auto *filter : filters) {
+    if (!filter->matches(op)) {
+      continue;
+    }
+
+    std::vector<std::pair<Operation *, Filter *>> opStack;
+    if (filter->getType()->addSelf()) {
+      opStack.push_back(std::make_pair(op, filter));
+    }
+    opStack.push_back(std::make_pair(op, filter->nextFilter()));
+
+    while (!opStack.empty()) {
+      auto pair = opStack.back();
+      opStack.pop_back();
+      auto *op = pair.first;
+      auto *filter = pair.second;
+
+      if (!filter) {
+        return true;
+      }
+
+      for (auto &region : op->getRegions()) {
+        for (auto &block : region) {
+          for (auto &op : block) {
+            auto *next = getNextOpFromOp(&op);
+
+            if (filter->matches(next)) {
+              if (filter->getType()->addSelf()) {
+                opStack.push_back(std::make_pair(next, filter));
+              }
+
+              opStack.push_back(std::make_pair(next, filter->nextFilter()));
+            }
+          }
+        }
+      }
     }
   }
+
   return false;
 }
 

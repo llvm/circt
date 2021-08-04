@@ -1,6 +1,6 @@
+#include <iostream>
 #include <regex>
 #include <string>
-#include <iostream>
 #include <vector>
 
 #include "circt/Dialect/Comb/CombDialect.h"
@@ -66,6 +66,9 @@ public:
   }
 
   virtual bool matches(Operation *op) { return false; }
+  virtual Filter *nextFilter() { return nullptr; };
+
+  FilterType *getType() { return type; }
 
   std::vector<Operation *> filter(Operation *root);
   std::vector<Operation *> filter(std::vector<Operation *> results);
@@ -74,8 +77,6 @@ protected:
   Filter(FilterType *type) : type (type) { }
 
   FilterType *type;
-
-  virtual Filter *nextFilter() { return nullptr; };
 };
 
 class AttributeFilter : public Filter {
