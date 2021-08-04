@@ -1,4 +1,4 @@
-// RUN: circt-translate --export-calyx --verify-diagnostics %s | FileCheck %s --strict-whitespace
+// RUN: circt-translate --export-calyx --verify-diagnostics %s
 
 calyx.program {
   // CHECK-LABEL: component A(in: 8, go: 1, clk: 1, reset: 1) -> (out: 8, done: 1) {
@@ -15,8 +15,8 @@ calyx.program {
 
     // CHECK: wires {
     calyx.wires {
-      // CHECK:   group Group1 {
-      // CHECK:     c0.in = c0.out;
+      // CHECK: group Group1 {
+      // CHECK:   c0.in = c0.out;
       calyx.group @Group1 {
         calyx.assign %c0.in = %c0.out : i8
         calyx.group_done %c0.done : i1

@@ -92,6 +92,36 @@ private:
     indent() << "}\n";
   }
 
+  /// Emits the value of a guard or assignment.
+  void emitValue(Value value, bool isIndented) {
+    auto definingOp = value.getDefiningOp();
+    TypeSwitch<Operation *>(definingOp)
+        .Case<CellOp>([&](auto op) {
+          // A cell port should be defined as <instance-name>.<port-name>
+          auto opResult = value.template cast<OpResult>();
+          unsigned portIndex = opResult.getResultNumber();
+          auto ports = getComponentPortInfo(op.getReferencedComponent());
+          StringAttr portName = ports[portIndex].name;
+          (isIndented ? indent() : os)
+              << op.instanceName() << "." << portName.getValue();
+        })
+        .template Case<hw::ConstantOp>([&](auto op) {
+          // A constant is defined as <bit-width>'<base><value>, where the base
+          // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
+
+          // Emit the Radix-10 version of the ConstantOp.
+          APInt value = op.value();
+
+          SmallVector<char> stringValue;
+          value.toString(stringValue, /*Radix=*/10, /*Signed=*/false);
+
+          (isIndented ? indent() : os)
+              << std::to_string(value.getBitWidth()) << "'d" << stringValue;
+        })
+        .Default(
+            [&](auto op) { emitOpError(op, "not supported for emission"); });
+  }
+
   /// The stream we are emitting into.
   llvm::raw_ostream &os;
 
@@ -145,6 +175,7 @@ void Emitter::emitComponent(ComponentOp op) {
   emitWires(wires);
   emitControl(control);
   reduceIndent();
+  os << "}\n";
 }
 
 /// Emit the ports of a component.
@@ -185,42 +216,10 @@ void Emitter::emitAssignment(AssignOp op) {
   if (op.guard())
     emitOpError(op, "guard not supported for emission currently");
 
-  auto emitAssignmentValue = [&](auto assignValue) {
-    auto definingOp = assignValue.getDefiningOp();
-    std::string emitted;
-    TypeSwitch<Operation *>(definingOp)
-        .Case<CellOp>([&](auto op) {
-          // A cell port should be defined as <instance-name>.<port-name>
-          auto opResult = assignValue.template cast<OpResult>();
-          unsigned portIndex = opResult.getResultNumber();
-          auto ports = getComponentPortInfo(op.getReferencedComponent());
-          StringAttr portName = ports[portIndex].name;
-
-          emitted = op.instanceName();
-          emitted += ".";
-          emitted += portName.getValue();
-        })
-        .template Case<hw::ConstantOp>([&](auto op) {
-          // A constant is defined as <bit-width>'<base><value>, where the base
-          // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
-
-          // Emit the Radix-10 version of the ConstantOp.
-          APInt value = op.value();
-          emitted += std::to_string(value.getBitWidth());
-          emitted += "'d";
-
-          SmallVector<char> stringValue;
-          value.toString(stringValue, /*Radix=*/10, /*Signed=*/false);
-          for (char ch : stringValue)
-            emitted.push_back(ch);
-        })
-        .Default([&](auto op) {
-          emitOpError(op, "not supported for emission inside an assignment");
-        });
-    return emitted;
-  };
-  indent() << emitAssignmentValue(op.dest()) << " = "
-           << emitAssignmentValue(op.src()) << ";\n";
+  emitValue(op.dest(), /*isIndented=*/true);
+  os << " = ";
+  emitValue(op.src(), /*isIndented=*/false);
+  os << ";\n";
 }
 
 void Emitter::emitWires(WiresOp op) {
