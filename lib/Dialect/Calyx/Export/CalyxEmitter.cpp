@@ -13,6 +13,7 @@
 
 #include "circt/Dialect/Calyx/CalyxEmitter.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -60,6 +61,9 @@ struct Emitter {
   // Control emission
   void emitControl(ControlOp op);
 
+  // Assignment emission
+  void emitAssignment(AssignOp op);
+
 private:
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
@@ -88,7 +92,36 @@ private:
     indent() << "}\n";
   }
 
-private:
+  /// Emits the value of a guard or assignment.
+  void emitValue(Value value, bool isIndented) {
+    auto definingOp = value.getDefiningOp();
+    TypeSwitch<Operation *>(definingOp)
+        .Case<CellOp>([&](auto op) {
+          // A cell port should be defined as <instance-name>.<port-name>
+          auto opResult = value.cast<OpResult>();
+          unsigned portIndex = opResult.getResultNumber();
+          auto ports = getComponentPortInfo(op.getReferencedComponent());
+          StringAttr portName = ports[portIndex].name;
+          (isIndented ? indent() : os)
+              << op.instanceName() << "." << portName.getValue();
+        })
+        .Case<hw::ConstantOp>([&](auto op) {
+          // A constant is defined as <bit-width>'<base><value>, where the base
+          // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
+
+          // Emit the Radix-10 version of the ConstantOp.
+          APInt value = op.value();
+
+          SmallVector<char> stringValue;
+          value.toString(stringValue, /*Radix=*/10, /*Signed=*/false);
+
+          (isIndented ? indent() : os)
+              << std::to_string(value.getBitWidth()) << "'d" << stringValue;
+        })
+        .Default(
+            [&](auto op) { emitOpError(op, "not supported for emission"); });
+  }
+
   /// The stream we are emitting into.
   llvm::raw_ostream &os;
 
@@ -142,6 +175,7 @@ void Emitter::emitComponent(ComponentOp op) {
   emitWires(wires);
   emitControl(control);
   reduceIndent();
+  os << "}\n";
 }
 
 /// Emit the ports of a component.
@@ -177,12 +211,24 @@ void Emitter::emitCell(CellOp op) {
   indent() << op.instanceName() << " = " << op.componentName() << "();\n";
 }
 
+void Emitter::emitAssignment(AssignOp op) {
+  // TODO(Calyx): Support guards.
+  if (op.guard())
+    emitOpError(op, "guard not supported for emission currently");
+
+  emitValue(op.dest(), /*isIndented=*/true);
+  os << " = ";
+  emitValue(op.src(), /*isIndented=*/false);
+  os << ";\n";
+}
+
 void Emitter::emitWires(WiresOp op) {
   emitCalyxSection("wires", [&]() {
     for (auto &&bodyOp : *op.getBody()) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupOp>([&](auto op) { emitGroup(op); })
-          // TODO(Calyx): Assignments
+          .Case<AssignOp>([&](auto op) { emitAssignment(op); })
+          .Case<hw::ConstantOp>([&](auto op) { /* Do nothing */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
           });
@@ -191,9 +237,19 @@ void Emitter::emitWires(WiresOp op) {
 }
 
 void Emitter::emitGroup(GroupOp op) {
-  emitCalyxSection(
-      // TODO(Calyx): Assignments, GoOp, DoneOp, combinational guards.
-      "group", [&]() {}, op.sym_name());
+  auto emitGroupBody = [&]() {
+    for (auto &&bodyOp : *op.getBody()) {
+      TypeSwitch<Operation *>(&bodyOp)
+          .Case<AssignOp>([&](auto op) { emitAssignment(op); })
+          .Case<GroupDoneOp>([&](auto op) { /* TODO(Calyx): Unimplemented */ })
+          .Case<GroupGoOp>([&](auto op) { /* TODO(Calyx): Unimplemented */ })
+          .Case<hw::ConstantOp>([&](auto op) { /* Do nothing. */ })
+          .Default([&](auto op) {
+            emitOpError(op, "not supported for emission inside group");
+          });
+    }
+  };
+  emitCalyxSection("group", emitGroupBody, op.sym_name());
 }
 
 void Emitter::emitControl(ControlOp op) {
@@ -223,6 +279,7 @@ void circt::calyx::registerToCalyxTranslation() {
         return exportCalyx(module, os);
       },
       [](mlir::DialectRegistry &registry) {
-        registry.insert<calyx::CalyxDialect>();
+        registry
+            .insert<calyx::CalyxDialect, comb::CombDialect, hw::HWDialect>();
       });
 }
