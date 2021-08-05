@@ -245,12 +245,11 @@ public:
 
     // Only `data` or `rdata` subfield is combinationally connected to `addr`
     // subfield. Find the corresponding subfield op.
-    auto users = subfield.input().getUsers();
-    for (auto it = users.begin(), e = users.end(); it != e; ++it) {
-      auto currentSubfield = dyn_cast<SubfieldOp>(*it);
+    for (auto user : subfield.input().getUsers()) {
+      auto currentSubfield = dyn_cast<SubfieldOp>(user);
       if (!currentSubfield) {
-        it->emitOpError("MemOp must be used by SubfieldOp, please run "
-                        "-firrtl-lower-types first");
+        user->emitOpError("MemOp must be used by SubfieldOp, please run "
+                          "-firrtl-lower-types first");
         return;
       }
 
