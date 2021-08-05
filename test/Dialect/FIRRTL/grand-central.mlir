@@ -59,14 +59,14 @@ firrtl.circuit "InterfaceVectorType" attributes {
         {a},
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
          defName = "Foo",
-         name = "foo"}]} : (!firrtl.clock) -> !firrtl.uint<1>
+         name = "foo"}]} : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %a_1 = firrtl.regreset %clock, %reset, %c0_ui1 {
       annotations = [
         {a},
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
          defName = "Foo",
-         name = "foo"}]} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+         name = "foo"}]} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
