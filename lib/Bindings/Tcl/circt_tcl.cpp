@@ -2,9 +2,9 @@
 #include <tcl.h>
 
 #include "Circt.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
-#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/Parser.h"
@@ -16,13 +16,15 @@ int returnErrorStr(Tcl_Interp *interp, const char *error) {
   return TCL_ERROR;
 }
 
-int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int objc,
+                    Tcl_Obj *const objv[]) {
   if (objc != 3) {
     return returnErrorStr(interp, "usage: circt load [MLIR|FIR] [file]");
   }
 
   std::string errorMessage;
-  auto input = mlir::openInputFile(llvm::StringRef(objv[2]->bytes), &errorMessage);
+  auto input =
+      mlir::openInputFile(llvm::StringRef(objv[2]->bytes), &errorMessage);
 
   if (!input) {
     return returnErrorStr(interp, errorMessage.c_str());
@@ -34,7 +36,8 @@ int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int objc, Tc
 
   MlirOperation module;
   if (!strcmp(objv[1]->bytes, "MLIR")) {
-    module = wrap(mlir::parseSourceFile(sourceMgr, context).release().getOperation());
+    module = wrap(
+        mlir::parseSourceFile(sourceMgr, context).release().getOperation());
   } else if (!strcmp(objv[1]->bytes, "FIR")) {
     // TODO
     return returnErrorStr(interp, "loading FIR files is unimplemented :(");
@@ -50,7 +53,7 @@ int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int objc, Tc
 
   auto *obj = Tcl_NewObj();
   obj->typePtr = Tcl_GetObjType("MlirOperation");
-  obj->internalRep.otherValuePtr = (void *) m;
+  obj->internalRep.otherValuePtr = (void *)m;
   obj->length = 0;
   obj->bytes = nullptr;
   Tcl_SetObjResult(interp, obj);
@@ -58,12 +61,13 @@ int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int objc, Tc
   return TCL_OK;
 }
 
-int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
+                     Tcl_Obj *const objv[]) {
   if (objc < 2) {
     return returnErrorStr(interp, "usage: circt load");
   }
 
-  auto *context = (mlir::MLIRContext *) cdata;
+  auto *context = (mlir::MLIRContext *)cdata;
 
   if (!strcmp("load", objv[1]->bytes)) {
     return loadFirMlirFile(context, interp, objc - 1, objv + 1);
@@ -72,9 +76,7 @@ int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *co
   return returnErrorStr(interp, "usage: circt load");
 }
 
-void deleteContext(ClientData data) {
-  delete (mlir::MLIRContext *) data;
-}
+void deleteContext(ClientData data) { delete (mlir::MLIRContext *)data; }
 
 extern "C" {
 
@@ -101,8 +103,8 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   auto *context = new mlir::MLIRContext;
   context->loadDialect<circt::hw::HWDialect, circt::comb::CombDialect,
                        circt::sv::SVDialect>();
-  Tcl_CreateObjCommand(interp, "circt", circtTclFunction, context, deleteContext);
+  Tcl_CreateObjCommand(interp, "circt", circtTclFunction, context,
+                       deleteContext);
   return TCL_OK;
 }
-
 }

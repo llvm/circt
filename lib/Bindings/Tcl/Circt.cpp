@@ -20,7 +20,7 @@ int operationTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
 
 void operationTypeUpdateStringProc(Tcl_Obj *obj) {
   std::string str;
-  auto *op = unwrap((MlirOperation) { obj->internalRep.otherValuePtr });
+  auto *op = unwrap((MlirOperation){obj->internalRep.otherValuePtr});
   llvm::raw_string_ostream stream(str);
   op->print(stream);
   obj->length = str.length();
@@ -30,12 +30,11 @@ void operationTypeUpdateStringProc(Tcl_Obj *obj) {
 }
 
 void operationTypeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
-  auto *op = unwrap((MlirOperation) { src->internalRep.otherValuePtr })->clone();
+  auto *op = unwrap((MlirOperation){src->internalRep.otherValuePtr})->clone();
   dup->internalRep.otherValuePtr = wrap(op).ptr;
 }
 
 void operationTypeFreeIntRepProc(Tcl_Obj *obj) {
-  auto *op = unwrap((MlirOperation) { obj->internalRep.otherValuePtr });
+  auto *op = unwrap((MlirOperation){obj->internalRep.otherValuePtr});
   op->erase();
 }
-
