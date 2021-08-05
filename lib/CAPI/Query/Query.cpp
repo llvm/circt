@@ -17,70 +17,64 @@
 using namespace circt;
 using namespace query;
 
-CirctQueryWidthRange CirctQueryNewWidthRange(size_t start, size_t end) {
-  return nullptr;
+CirctQueryFilterType circtQueryNewGlobFilterType() {
+  return { new GlobFilterType };
 }
 
-void CirctQueryDeleteValueType(CirctQueryValueType type) {
+CirctQueryFilterType circtQueryNewRecursiveGlobFilterType() {
+  return { new RecursiveGlobFilterType };
 }
 
-void CirctQueryDeleteWidthRange(CirctQueryWidthRange range) {
+CirctQueryFilterType circtQueryNewLiteralFilterType(char *literal) {
+  std::string s(literal);
+  return { new LiteralFilterType(s) };
 }
 
-CirctQueryFilterNode CirctQueryNewGlobFilter() {
-  return nullptr;
+CirctQueryFilterType circtQueryNewRegexFilterType(char *regex) {
+  std::string s(regex);
+  return { new RegexFilterType(s) };
 }
 
-CirctQueryFilterNode CirctQueryNewGlobFilterWithType(CirctQueryValueType type) {
-  return nullptr;
+void circtQueryDeleteFilterType(CirctQueryFilterType type) {
+  delete (FilterType *) type.ptr;
 }
 
-CirctQueryFilterNode CirctQueryNewRecursiveGlobFilter() {
-  return nullptr;
+CirctQueryFilter circtQueryNewAttributeFilter(char *key, CirctQueryFilterType type) {
+  std::string s(key);
+  return { new AttributeFilter(s, (FilterType *) type.ptr) };
 }
 
-CirctQueryFilterNode CirctQueryNewLiteralFilter(char *literal) {
-  return nullptr;
+CirctQueryFilter circtQueryNewNameFilter(CirctQueryFilterType type) {
+  return { new NameFilter((FilterType *) type.ptr) };
 }
 
-CirctQueryFilterNode CirctQueryNewLiteralFilterWithType(char *literal, CirctQueryValueType type) {
-  return nullptr;
+CirctQueryFilter circtQueryNewOperatorFilter(CirctQueryFilterType type) {
+  return { new OpFilter((FilterType *) type.ptr) };
 }
 
-CirctQueryFilterNode CirctQueryNewRegexFilter(char *regex) {
-  return nullptr;
+CirctQueryFilter circtQueryNewAndFilter(size_t count, CirctQueryFilter *filters) {
+  std::vector<Filter *> fs;
+  for (size_t i = 0; i < count; i++) {
+    fs.push_back((Filter *) filters[i].ptr);
+  }
+
+  return { new AndFilter(fs) };
 }
 
-CirctQueryFilterNode CirctQueryNewRegexFilterWithType(char *regex, CirctQueryValueType type) {
-  return nullptr;
+CirctQueryFilter circtQueryNewOrFilter(size_t count, CirctQueryFilter *filters) {
+  std::vector<Filter *> fs;
+  for (size_t i = 0; i < count; i++) {
+    fs.push_back((Filter *) filters[i].ptr);
+  }
+
+  return { new OrFilter(fs) };
 }
 
-void CirctQueryDeleteFilterNode(CirctQueryFilterNode node) {
+CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter, CirctQueryFilter child) {
+  return { new InstanceFilter((Filter *) filter.ptr, (Filter *) child.ptr) };
 }
 
-CirctQueryFilter CirctQueryNewFilterArray(size_t count, CirctQueryFilterNode *nodes) {
-  return nullptr;
+void circtQueryDeleteFilter(CirctQueryFilter filter) {
+  delete (Filter *) filter.ptr;
 }
 
-CirctQueryFilter CirctQueryNewFilter(size_t count, ...) {
-  return nullptr;
-}
-
-CirctQueryFilterResult CirctQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root) {
-  return nullptr;
-}
-
-size_t CirctQueryFilterResultSize(CirctQueryFilterResult result) {
-  return result->size();
-}
-
-MlirOperation CirctQueryGetFromFilterResult(CirctQueryFilterResult result, size_t i) {
-  return wrap((*result)[i]);
-}
-
-void CirctQueryDeleteFilterResult(CirctQueryFilterResult result) {
-  delete result;
-}
-
-void CirctQueryDeleteFilter(CirctQueryFilter filter) {
-}

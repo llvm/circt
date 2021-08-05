@@ -14,38 +14,24 @@
 extern "C" {
 #endif
 
-typedef enum {
-  CIRCT_QUERY_PORT_TYPE_NONE    = 1,
-  CIRCT_QUERY_PORT_TYPE_INPUT   = 2,
-  CIRCT_QUERY_PORT_TYPE_OUTPUT  = 4,
-} CirctQueryPortType;
+typedef struct { void* ptr; } CirctQueryFilterType;
+typedef struct { void* ptr; } CirctQueryFilter;
+typedef struct { void* ptr; } CirctQueryFilterResult;
+typedef struct { void* ptr; } CirctQueryAttributeDump;
 
-typedef void                            *CirctQueryWidthRange;
-typedef void                            *CirctQueryValueType;
-typedef void                            *CirctQueryFilterNode;
-typedef void                            *CirctQueryFilter;
-typedef std::vector<mlir::Operation *>  *CirctQueryFilterResult;
+CirctQueryFilterType circtQueryNewGlobFilterType();
+CirctQueryFilterType circtQueryNewRecursiveGlobFilterType();
+CirctQueryFilterType circtQueryNewLiteralFilterType(char *literal);
+CirctQueryFilterType circtQueryNewRegexFilterType(char *regex);
+void circtQueryDeleteFilterType(CirctQueryFilterType type);
 
-CirctQueryWidthRange CirctQueryNewWidthRange(size_t start, size_t end);
-void CirctQueryDeleteValueType(CirctQueryValueType type);
-void CirctQueryDeleteWidthRange(CirctQueryWidthRange range);
-
-CirctQueryFilterNode CirctQueryNewGlobFilter();
-CirctQueryFilterNode CirctQueryNewGlobFilterWithType(CirctQueryValueType type);
-CirctQueryFilterNode CirctQueryNewRecursiveGlobFilter();
-CirctQueryFilterNode CirctQueryNewLiteralFilter(char *literal);
-CirctQueryFilterNode CirctQueryNewLiteralFilterWithType(char *literal, CirctQueryValueType type);
-CirctQueryFilterNode CirctQueryNewRegexFilter(char *regex);
-CirctQueryFilterNode CirctQueryNewRegexFilterWithType(char *regex, CirctQueryValueType type);
-void CirctQueryDeleteFilterNode(CirctQueryFilterNode node);
-
-CirctQueryFilter CirctQueryNewFilterArray(size_t count, CirctQueryFilterNode *nodes);
-CirctQueryFilter CirctQueryNewFilter(size_t count, ...);
-CirctQueryFilterResult CirctQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root);
-size_t CirctQueryFilterResultSize(CirctQueryFilterResult result);
-MlirOperation CirctQueryGetFromFilterResult(CirctQueryFilterResult result, size_t i);
-void CirctQueryDeleteFilterResult(CirctQueryFilterResult result);
-void CirctQueryDeleteFilter(CirctQueryFilter filter);
+CirctQueryFilter circtQueryNewAttributeFilter(char *key, CirctQueryFilterType type);
+CirctQueryFilter circtQueryNewNameFilter(CirctQueryFilterType type);
+CirctQueryFilter circtQueryNewOperatorFilter(CirctQueryFilterType type);
+CirctQueryFilter circtQueryNewAndFilter(size_t count, CirctQueryFilter *filters);
+CirctQueryFilter circtQueryNewOrFilter(size_t count, CirctQueryFilter *filters);
+CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter, CirctQueryFilter child);
+void circtQueryDeleteFilter(CirctQueryFilter filter);
 
 #ifdef __cplusplus
 }
