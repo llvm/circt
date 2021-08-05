@@ -3660,7 +3660,7 @@ void SplitEmitter::createFile(Identifier fileName, FileInfo &file) {
   auto outputDir = llvm::sys::path::parent_path(outputFilename);
 
   // Create the output directory if needed.
-  std::error_code error = llvm::sys::fs::create_directory(outputDir);
+  std::error_code error = llvm::sys::fs::create_directories(outputDir);
   if (error) {
     mlir::emitError(file.ops[0].op->getLoc(),
                     "cannot create output directory \"" + outputDir +
