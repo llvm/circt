@@ -140,6 +140,24 @@ verifyBusPortsAttribute(mlir::function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
+LogicalResult MemrefType::verify(function_ref<InFlightDiagnostic()> emitError,
+                                 ArrayRef<int64_t> shape, Type elementType,
+                                 ArrayRef<DimKind> dimKinds) {
+  for (uint64_t i = 0; i < shape.size(); i++) {
+    if (dimKinds[i] == ADDR) {
+      if ((pow(2, helper::clog2(shape[i]))) != shape[i]) {
+        return emitError()
+               << "hir.memref dimension sizes must be a power of two, dim " << i
+               << " has size " << shape[i];
+      }
+      if (shape[i] <= 0) {
+        return emitError() << "hir.memref dimension size must be >0. dim " << i
+                           << " has size " << shape[i];
+      }
+    }
+  }
+  return success();
+}
 LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
                                ArrayRef<Type> inputTypes,
                                ArrayRef<DictionaryAttr> inputAttrs,

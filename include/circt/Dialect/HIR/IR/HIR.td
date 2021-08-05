@@ -247,10 +247,10 @@ def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
     ```%w = hir.alloc("bram") : !hir.memref<...>```
   }];
 
-  let arguments = (ins AnyAttr:$moduleAttr, ArrayAttr: $ports);
+  let arguments = (ins StrAttr:$mem_type, ArrayAttr: $ports);
   let results = (outs MemrefType:$res);
 
-  let assemblyFormat = [{`(`$moduleAttr`)` attr-dict 
+  let assemblyFormat = [{`(`$mem_type`)` attr-dict 
     `:` type($res) `ports` $ports}];
 }
 
@@ -328,7 +328,7 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
   let verifier =[{return verify$cppClass(*this);}];
   let extraClassDeclaration = [{
     public:
-      SmallVector<Value> filerIndices(hir::DimKind);
+      SmallVector<Value> filterIndices(hir::DimKind);
   }];
 }
 

@@ -85,7 +85,7 @@ void MemrefUseInfo::visitOp(hir::LoadOp op) {
 void MemrefUseInfo::visitOp(hir::StoreOp op) {
   Value mem = op.mem();
   auto memrefTy = mem.getType().dyn_cast<hir::MemrefType>();
-  int64_t linearIdx = helper::calcLinearIndex(op.filerIndices(BANK),
+  int64_t linearIdx = helper::calcLinearIndex(op.filterIndices(BANK),
                                               memrefTy.filterShape(BANK));
   // before lowering explicit port must be specified.
   assert(op.port().hasValue());

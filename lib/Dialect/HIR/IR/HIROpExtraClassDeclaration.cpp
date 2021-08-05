@@ -31,12 +31,12 @@ SmallVector<Value> LoadOp::filterIndices(DimKind idxKind) {
   return ::filterIndices(idxKind, indices, dimKinds);
 }
 
-SmallVector<Value> StoreOp::filerIndices(DimKind idxKind) {
+SmallVector<Value> StoreOp::filterIndices(DimKind idxKind) {
 
   OperandRange indices = this->indices();
   auto dimKinds =
       this->mem().getType().dyn_cast<hir::MemrefType>().getDimKinds();
-  return filterIndices(idxKind, indices, dimKinds);
+  return ::filterIndices(idxKind, indices, dimKinds);
 }
 
 SmallVector<Value, 4> hir::FuncOp::getOperands() {

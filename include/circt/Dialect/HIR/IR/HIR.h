@@ -237,6 +237,8 @@ public:
     return Base::get(context, shape, elementType, dimKinds);
   }
 
+  static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
+                              ArrayRef<int64_t>, Type, ArrayRef<DimKind>);
   ArrayRef<int64_t> getShape() { return getImpl()->shape; }
   Type getElementType() { return getImpl()->elementType; }
   ArrayRef<DimKind> getDimKinds() { return getImpl()->dimKinds; }
