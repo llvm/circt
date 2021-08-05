@@ -23,13 +23,13 @@
 // CHECK:   %[[FALSE_CONST:.+]] = firrtl.constant 0 : !firrtl.uint<1>
 
 // Won register and win wire.
-// CHECK:   %[[WON:won]] = firrtl.regreset %[[CLOCK]], %[[RESET]], %[[NO_WINNER]] {{.+}} -> !firrtl.uint<2>
+// CHECK:   %[[WON:won]] = firrtl.regreset %[[CLOCK]], %[[RESET]], %[[NO_WINNER]] {{.+}} !firrtl.uint<2>
 // CHECK:   %win = firrtl.wire : !firrtl.uint<2>
 
 // Fired wire, emitted registers, and done wires.
 // CHECK:   %fired = firrtl.wire : !firrtl.uint<1>
-// CHECK:   %[[RESULT_EMITTED:resultEmitted]] = firrtl.regreset %[[CLOCK]], %[[RESET]], %[[FALSE_CONST]] {{.+}} -> !firrtl.uint<1>
-// CHECK:   %[[CONTROL_EMITTED:controlEmitted]] = firrtl.regreset %[[CLOCK]], %[[RESET]], %[[FALSE_CONST]] {{.+}} -> !firrtl.uint<1>
+// CHECK:   %[[RESULT_EMITTED:resultEmitted]] = firrtl.regreset %[[CLOCK]], %[[RESET]], %[[FALSE_CONST]] {{.+}} !firrtl.uint<1>
+// CHECK:   %[[CONTROL_EMITTED:controlEmitted]] = firrtl.regreset %[[CLOCK]], %[[RESET]], %[[FALSE_CONST]] {{.+}} !firrtl.uint<1>
 // CHECK:   %[[RESULT_DONE:resultDone]] = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %[[CONTROL_DONE:controlDone]] = firrtl.wire : !firrtl.uint<1>
 

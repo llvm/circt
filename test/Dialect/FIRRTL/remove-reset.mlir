@@ -17,9 +17,9 @@ firrtl.module @NoMuxForInvalid(
   // CHECK: %foo1 = firrtl.reg %clk :
   // CHECK: %foo2 = firrtl.reg %clk :
   %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
-  %foo0 = firrtl.regreset %clk, %rst, %invalid_ui42 : (!firrtl.clock, !firrtl.reset, !firrtl.uint<42>) -> !firrtl.uint<42>
-  %foo1 = firrtl.regreset %clk, %arst, %invalid_ui42 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>) -> !firrtl.uint<42>
-  %foo2 = firrtl.regreset %clk, %srst, %invalid_ui42 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>) -> !firrtl.uint<42>
+  %foo0 = firrtl.regreset %clk, %rst, %invalid_ui42 : !firrtl.reset, !firrtl.uint<42>, !firrtl.uint<42>
+  %foo1 = firrtl.regreset %clk, %arst, %invalid_ui42 : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
+  %foo2 = firrtl.regreset %clk, %srst, %invalid_ui42 : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
 }
 
 // Should not generate a reset mux for an invalid init.
@@ -36,9 +36,9 @@ firrtl.module @NoMuxForInvalidWire(
   %bar = firrtl.wire  : !firrtl.uint<42>
   %invalid_ui42 = firrtl.invalidvalue : !firrtl.uint<42>
   firrtl.connect %bar, %invalid_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
-  %foo0 = firrtl.regreset %clk, %rst, %bar : (!firrtl.clock, !firrtl.reset, !firrtl.uint<42>) -> !firrtl.uint<42>
-  %foo1 = firrtl.regreset %clk, %arst, %bar : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>) -> !firrtl.uint<42>
-  %foo2 = firrtl.regreset %clk, %srst, %bar : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>) -> !firrtl.uint<42>
+  %foo0 = firrtl.regreset %clk, %rst, %bar : !firrtl.reset, !firrtl.uint<42>, !firrtl.uint<42>
+  %foo1 = firrtl.regreset %clk, %arst, %bar : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
+  %foo2 = firrtl.regreset %clk, %srst, %bar : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
 }
 
 // Should generate a reset mux for only the portion of an invalid aggregate that
@@ -69,9 +69,9 @@ firrtl.module @PartiallyNoMuxInAggregate(
   // CHECK: %foo2_a_0 = firrtl.reg %clk :
   // CHECK: %foo2_a_1 = firrtl.regreset %clk, %srst, %bar_a_1 :
   // CHECK: %foo2_b = firrtl.reg %clk :
-  %foo0 = firrtl.regreset %clk, %rst, %bar  : (!firrtl.clock, !firrtl.reset, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>) -> !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
-  %foo1 = firrtl.regreset %clk, %arst, %bar  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>) -> !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
-  %foo2 = firrtl.regreset %clk, %srst, %bar  : (!firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>) -> !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
+  %foo0 = firrtl.regreset %clk, %rst, %bar  : !firrtl.reset, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
+  %foo1 = firrtl.regreset %clk, %arst, %bar  : !firrtl.asyncreset, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
+  %foo2 = firrtl.regreset %clk, %srst, %bar  : !firrtl.uint<1>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>, !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
 }
 
 // Should propagate invalidations across connects.
@@ -101,9 +101,9 @@ firrtl.module @PropagateInvalidAcrossConnects(
   // CHECK: %foo1_b = firrtl.reg %clk :
   // CHECK: %foo2_a = firrtl.regreset %clk, %srst, %bar_a :
   // CHECK: %foo2_b = firrtl.reg %clk :
-  %foo0 = firrtl.regreset %clk, %rst, %bar  : (!firrtl.clock, !firrtl.reset, !firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
-  %foo1 = firrtl.regreset %clk, %arst, %bar  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
-  %foo2 = firrtl.regreset %clk, %srst, %bar  : (!firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+  %foo0 = firrtl.regreset %clk, %rst, %bar  : !firrtl.reset, !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+  %foo1 = firrtl.regreset %clk, %arst, %bar  : !firrtl.asyncreset, !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+  %foo2 = firrtl.regreset %clk, %srst, %bar  : !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
 }
 
 // Should convert a reset wired to UInt(0) to a canonical non-reset.
@@ -118,9 +118,9 @@ firrtl.module @TreatUInt0ResetAsNonReset(
   // CHECK: %foo0 = firrtl.reg %clk :
   // CHECK: %foo1 = firrtl.reg %clk :
   // CHECK: %foo2 = firrtl.reg %clk :
-  %foo0 = firrtl.regreset %clk, %rst, %c3_ui2  : (!firrtl.clock, !firrtl.reset, !firrtl.uint<2>) -> !firrtl.uint<2>
-  %foo1 = firrtl.regreset %clk, %arst, %c3_ui2  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>) -> !firrtl.uint<2>
-  %foo2 = firrtl.regreset %clk, %srst, %c3_ui2  : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
+  %foo0 = firrtl.regreset %clk, %rst, %c3_ui2  : !firrtl.reset, !firrtl.uint<2>, !firrtl.uint<2>
+  %foo1 = firrtl.regreset %clk, %arst, %c3_ui2  : !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+  %foo2 = firrtl.regreset %clk, %srst, %c3_ui2  : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
 }
 
 }
