@@ -298,7 +298,7 @@ def LoadOp : HIR_Op<"load", [NoSideEffect, AttrSizedOperandSegments]> {
   let verifier =[{return verify$cppClass(*this);}];
   let extraClassDeclaration = [{
     public:
-      SmallVector<Value> filerIndices(hir::DimKind);
+      SmallVector<Value> filterIndices(hir::DimKind);
   }];
 }
 

@@ -18,7 +18,7 @@ struct MemrefPortInterface {
   Value addrBus;
   Value addrEnableBus;
   Value rdEnableBus;
-  uint64_t rdLatency;
+  int64_t rdLatency = -1;
   Value rdDataBus;
   Value wrEnableBus;
   Value wrDataBus;
@@ -94,14 +94,103 @@ Type getTensorElementType(Value tensor) {
   assert(ty);
   return ty.getElementType();
 }
-LogicalResult convertOp(hir::LoadOp, MemrefPortInterface useInterface,
+
+Value createAddrTuple(OpBuilder &builder, Location loc,
+                      ArrayRef<Value> indices) {
+  if (indices.size() == 0)
+    return Value();
+
+  SmallVector<Type, 4> idxTypes;
+  for (auto idx : indices)
+    idxTypes.push_back(idx.getType());
+
+  return builder
+      .create<hir::CreateTupleOp>(loc, builder.getTupleType(idxTypes), indices)
+      .getResult();
+}
+
+LogicalResult convertOp(hir::LoadOp op, MemrefPortInterface useInterface,
                         uint64_t useNum) {
-  // send 1 to addrEnableBus.
-  // send 1 to rdEnableBus
-  // concat mem addresses to a tuple value
-  // send this value to the addrBus.
+
+  mlir::OpBuilder builder(op.getContext());
+  builder.setInsertionPoint(op);
+  Value cUse = builder
+                   .create<mlir::ConstantOp>(
+                       op.getLoc(), IndexType::get(op.getContext()),
+                       helper::getI64IntegerAttr(op.getContext(), useNum))
+                   .getResult();
+  Value c1 = builder
+                 .create<mlir::ConstantOp>(
+                     op.getLoc(), IndexType::get(op.getContext()),
+                     helper::getI64IntegerAttr(op.getContext(), 1))
+                 .getResult();
+
+  if (useInterface.addrEnableBus) {
+    assert(useInterface.addrBus);
+
+    // Extract the addrEnableBus for this use of memref.
+    auto addrEnableBus = builder.create<hir::TensorExtract>(
+        builder.getUnknownLoc(),
+        getTensorElementType(useInterface.addrEnableBus),
+        useInterface.addrEnableBus, cUse, builder.getStrArrayAttr({"send"}));
+
+    // Send 1 to the addrEnableBus.
+    builder.create<hir::SendOp>(op.getLoc(), c1, addrEnableBus,
+                                builder.getI64IntegerAttr(0), op.tstart(),
+                                op.offsetAttr());
+
+    // Extract the addrBus for this use of memref.
+    auto addrBus = builder.create<hir::TensorExtract>(
+        builder.getUnknownLoc(), getTensorElementType(useInterface.addrBus),
+        useInterface.addrBus, cUse, builder.getStrArrayAttr({"send"}));
+
+    // Create a tuple of the addresses corresponding to the ADDR dims.
+    Value addrTuple =
+        createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
+
+    // Send the address tuple to the addrBus.
+    builder.create<hir::SendOp>(op.getLoc(), addrTuple, addrBus,
+                                builder.getI64IntegerAttr(0), op.tstart(),
+                                op.offsetAttr());
+  }
+
+  assert(useInterface.rdDataBus);
+
+  // extract the rdEnableBus for this use of memref.
+  auto rdEnableBus = builder.create<hir::TensorExtract>(
+      builder.getUnknownLoc(), getTensorElementType(useInterface.rdEnableBus),
+      useInterface.rdEnableBus, cUse, builder.getStrArrayAttr({"send"}));
+
+  // Send 1 to the rdEnableBus.
+  builder.create<hir::SendOp>(op.getLoc(), c1, rdEnableBus,
+                              builder.getI64IntegerAttr(0), op.tstart(),
+                              op.offsetAttr());
+
+  // the time at which the data is received depends on the read-latency of the
+  // original memref load operation.
+  assert(useInterface.rdLatency >= 0);
+  IntegerAttr recvOffset =
+      (useInterface.rdLatency == 0)
+          ? op.offsetAttr()
+          : builder.getI64IntegerAttr(op.offset().getValueOr(0) +
+                                      useInterface.rdLatency);
+
+  // Extract the rdDataBus for this use of memref.
+  auto rdDataBus = builder.create<hir::TensorExtract>(
+      builder.getUnknownLoc(), getTensorElementType(useInterface.rdDataBus),
+      useInterface.rdDataBus, cUse, builder.getStrArrayAttr({"send"}));
+
+  // Receive the data from the rdDataBus.
+  auto recvOp = builder.create<hir::RecvOp>(
+      op.getLoc(), op.res().getType(), rdDataBus, builder.getI64IntegerAttr(0),
+      op.tstart(), recvOffset);
+
+  // Remove the LoadOp.
+  op.replaceAllUsesWith((Operation *)recvOp);
+  op.erase();
   return success();
 }
+
 LogicalResult convertOp(hir::StoreOp, MemrefPortInterface useInterface,
                         uint64_t useNum) {
   return success();
@@ -297,10 +386,10 @@ void initUnconnectedValidBus(OpBuilder &builder, Value busTensor,
 }
 
 /// Connect the valid buses of unused banks to zero and the other buses to 'X'.
-// FIXME: For now we are going to drive only the valid buses. Later use SendOp
-// with NoneType $value to mean that it is connected with 'X' or 'Z'.
 void initBusesForNoMemrefUse(OpBuilder &builder, ArrayRef<uint64_t> bankIndices,
                              MemrefPortInterface portInterface) {
+  // FIXME: For now we are going to drive only the valid buses. Later use
+  // AssignOp with 'X' or 'Z'.
 
   initUnconnectedValidBus(builder, portInterface.rdEnableBus, bankIndices);
   initUnconnectedValidBus(builder, portInterface.wrEnableBus, bankIndices);
@@ -441,7 +530,7 @@ void createBusMuxCallOp(OpBuilder &builder, Value destBusTensor,
 
 void connectUseAndPortInterfaces(OpBuilder &builder,
                                  ArrayRef<uint64_t> bankIndices,
-                                 MemrefPortInterface useInterface,
+                                 MemrefPortInterface &useInterface,
                                  MemrefPortInterface portInterface,
                                  Value tstartRegion) {
   // TODO
@@ -455,14 +544,16 @@ void connectUseAndPortInterfaces(OpBuilder &builder,
     createBusMuxCallOp(builder, portInterface.addrBus, bankIndices,
                        useInterface.addrEnableBus, useInterface.addrBus,
                        tstartRegion);
-  if (portInterface.rdEnableBus)
+  if (portInterface.rdEnableBus) {
     createValidCombineCallOp(builder, portInterface.rdEnableBus, bankIndices,
                              useInterface.rdEnableBus, tstartRegion);
-  if (portInterface.rdDataBus) {
+    useInterface.rdLatency = portInterface.rdLatency;
+
+    assert(portInterface.rdDataBus);
     Value delayedRdEnableBus = builder.create<hir::DelayOp>(
         builder.getUnknownLoc(), useInterface.rdEnableBus.getType(),
         useInterface.rdEnableBus,
-        builder.getI64IntegerAttr(portInterface.rdLatency), tstartRegion,
+        builder.getI64IntegerAttr(useInterface.rdLatency), tstartRegion,
         IntegerAttr());
     createBusBroadcastCallOp(builder, portInterface.rdDataBus, bankIndices,
                              delayedRdEnableBus, useInterface.rdDataBus,

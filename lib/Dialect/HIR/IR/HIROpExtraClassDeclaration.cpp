@@ -23,12 +23,12 @@ SmallVector<Value> filterIndices(DimKind idxKind, OperandRange indices,
   return addrIndices;
 }
 } // namespace
-SmallVector<Value> LoadOp::filerIndices(DimKind idxKind) {
+SmallVector<Value> LoadOp::filterIndices(DimKind idxKind) {
 
   OperandRange indices = this->indices();
   auto dimKinds =
       this->mem().getType().dyn_cast<hir::MemrefType>().getDimKinds();
-  return filterIndices(idxKind, indices, dimKinds);
+  return ::filterIndices(idxKind, indices, dimKinds);
 }
 
 SmallVector<Value> StoreOp::filerIndices(DimKind idxKind) {
