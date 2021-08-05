@@ -181,11 +181,7 @@ void TestASAPSchedulerPass::runOnFunction() {
 
   Problem prob(func);
   constructProblem(prob, func);
-
-  if (failed(prob.check())) {
-    func->emitError("problem check failed");
-    return signalPassFailure();
-  }
+  assert(succeeded(prob.check()));
 
   if (failed(scheduleASAP(prob))) {
     func->emitError("scheduling failed");
@@ -205,6 +201,42 @@ void TestASAPSchedulerPass::runOnFunction() {
 }
 
 //===----------------------------------------------------------------------===//
+// SimplexScheduler
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestSimplexSchedulerPass
+    : public PassWrapper<TestSimplexSchedulerPass, FunctionPass> {
+  void runOnFunction() override;
+};
+} // anonymous namespace
+
+void TestSimplexSchedulerPass::runOnFunction() {
+  auto func = getFunction();
+  CyclicProblem prob(func);
+  constructCyclicProblem(prob, func);
+  assert(succeeded(prob.check()));
+
+  if (failed(scheduleSimplex(prob, func.getBlocks().front().getTerminator()))) {
+    func->emitError("scheduling failed");
+    return signalPassFailure();
+  }
+
+  if (failed(prob.verify())) {
+    func->emitError("schedule verification failed");
+    return signalPassFailure();
+  }
+
+  OpBuilder builder(func.getContext());
+  func->setAttr("simplexInitiationInterval",
+                builder.getI32IntegerAttr(*prob.getInitiationInterval()));
+  for (auto *op : prob.getOperations()) {
+    unsigned startTime = *prob.getStartTime(op);
+    op->setAttr("simplexStartTime", builder.getI32IntegerAttr(startTime));
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -218,6 +250,9 @@ void registerSchedulingTestPasses() {
       "Import a solution for the cyclic problem encoded as attributes");
   PassRegistration<TestASAPSchedulerPass> asapTester(
       "test-asap-scheduler", "Emit ASAP scheduler's solution as attributes");
+  PassRegistration<TestSimplexSchedulerPass> simplexTester(
+      "test-simplex-scheduler",
+      "Emit simplex scheduler's solution as attributes");
 }
 } // namespace test
 } // namespace circt

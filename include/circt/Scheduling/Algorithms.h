@@ -24,6 +24,14 @@ namespace scheduling {
 /// name). Fails if the dependence graph contains cycles.
 LogicalResult scheduleASAP(Problem &prob);
 
+/// This scheduler solves the resource-free cyclic problem using linear
+/// programming and a handwritten implementation of the simplex algorithm. Its
+/// objectives are to determine the smallest feasible initiation interval, and
+/// to minimize the start time of the given \p lastOp. Fails if the dependence
+/// graph contains cycles that do not include at least one edge with a non-zero
+/// distance.
+LogicalResult scheduleSimplex(CyclicProblem &prob, Operation *lastOp);
+
 } // namespace scheduling
 } // namespace circt
 
