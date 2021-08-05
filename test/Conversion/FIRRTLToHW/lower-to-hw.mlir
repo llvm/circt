@@ -399,11 +399,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
   }
 
-  // CHECK: sv.bind @[[bazSymbol:.+]] {output_file
+  // CHECK: sv.bind @[[bazSymbol:.+]]
+  // CHECK-NOT: output_file
+  // CHECK-NEXT: sv.bind @[[quxSymbol:.+]] {output_file
+  // CHECK-SAME: directory = "outputDir", exclude_from_filelist = true
+  // CHECK-SAME: exclude_replicated_ops = true, name = "bindings.sv"
   // CHECK-NEXT: hw.module @bindTest()
   firrtl.module @bindTest() {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
     %baz = firrtl.instance @bar {lowerToBind = true, name = "baz"} : !firrtl.uint<1>
+    // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
+    %qux = firrtl.instance @bar {lowerToBind = true, name = "qux",
+      output_file = {
+        directory = "outputDir",
+        exclude_from_filelist = true,
+        exclude_replicated_ops = true,
+        name = "bindings.sv"}} : !firrtl.uint<1>
   }
 
 

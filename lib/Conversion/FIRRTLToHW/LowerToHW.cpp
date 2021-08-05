@@ -2078,13 +2078,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
     auto bindOp =
         builder.create<sv::BindOp>(builder.getSymbolRefAttr(symbol.getValue()));
-    bindOp->setAttr("output_file",
-                    hw::OutputFileAttr::get(
-                        builder.getStringAttr(""),
-                        builder.getStringAttr("bindings.sv"),
-                        /*exclude_from_filelist=*/builder.getBoolAttr(true),
-                        /*exclude_replicated_ops=*/builder.getBoolAttr(true),
-                        bindOp.getContext()));
+    // If the lowered op already had output file information, then use that.
+    // Otherwise, generate some default bind information.
+    if (auto outputFile = oldInstance->getAttr("output_file"))
+      bindOp->setAttr("output_file", outputFile);
     // Add the bind to the circuit state.  This will be moved outside of the
     // encapsulating module after all modules have been processed in parallel.
     circuitState.addBind(bindOp);
