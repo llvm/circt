@@ -140,7 +140,7 @@ DeclKind getDeclarationKind(Value val);
 
 enum class ReadPortSubfield { addr, en, clk, data };
 enum class WritePortSubfield { addr, en, clk, data, mask };
-enum class ReadWritePortSubfield { addr, en, clk, wmode, rdata, wdata, wmask };
+enum class ReadWritePortSubfield { addr, en, clk, rdata, wmode, wdata, wmask };
 
 // Out-of-line implementation of various trait verification methods and
 // functions commonly used among operations.

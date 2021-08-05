@@ -1232,8 +1232,8 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
     break;
 
   case PortKind::ReadWrite:
-    portFields.push_back({getId("wmode"), false, UIntType::get(context, 1)});
     portFields.push_back({getId("rdata"), true, dataType});
+    portFields.push_back({getId("wmode"), false, UIntType::get(context, 1)});
     portFields.push_back({getId("wdata"), false, dataType});
     portFields.push_back({getId("wmask"), false, dataType.getMaskType()});
     break;
