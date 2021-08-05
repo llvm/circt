@@ -235,12 +235,17 @@ public:
       return;
     }
 
+    if (memory.readLatency() != 0)
+      return;
+
     auto portKind =
         memory.getPortKind(subfield.input().cast<OpResult>().getResultNumber());
-    // Combinational path exists only when the current subfield is `addr` and
-    // the read latency is zero.
-    if (subfield.fieldIndex() != 0 || memory.readLatency() != 0 ||
-        portKind == MemOp::PortKind::Write)
+    auto subfieldIndex = subfield.fieldIndex();
+    // Combinational path exists only when the current subfield is `addr`.
+    if (!(portKind == MemOp::PortKind::Read &&
+          subfieldIndex == (unsigned)ReadPortSubfield::addr) &&
+        !(portKind == MemOp::PortKind::ReadWrite &&
+          subfieldIndex == (unsigned)ReadWritePortSubfield::addr))
       return;
 
     // Only `data` or `rdata` subfield is combinationally connected to `addr`
@@ -253,10 +258,11 @@ public:
         return;
       }
 
-      if ((currentSubfield.fieldIndex() == 3 &&
-           portKind == MemOp::PortKind::Read) ||
-          (currentSubfield.fieldIndex() == 4 &&
-           portKind == MemOp::PortKind::ReadWrite)) {
+      auto index = currentSubfield.fieldIndex();
+      if ((portKind == MemOp::PortKind::Read &&
+           index == (unsigned)ReadPortSubfield::data) ||
+          (portKind == MemOp::PortKind::ReadWrite &&
+           index == (unsigned)ReadWritePortSubfield::rdata)) {
         child = ChildIterator(currentSubfield.result());
         return;
       }
