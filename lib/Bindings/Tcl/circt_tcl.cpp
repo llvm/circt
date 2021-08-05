@@ -48,17 +48,18 @@ int createTclFilter(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *con
 }
 
 int loadFirMlirFile(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
-  if (objc != 3) {
+  if (objc != 4) {
     return TCL_ERROR;
   }
 
-  mlir::MLIRContext context;
-
-  context.loadDialect<circt::firrtl::FIRRTLDialect, circt::hw::HWDialect, circt::comb::CombDialect,
-                      circt::sv::SVDialect>();
+  auto *contextObj = objv[2];
+  if (Tcl_ConvertToType(interp, contextObj, Tcl_GetObjType("MlirContext")) != TCL_OK) {
+    return TCL_ERROR;
+  }
+  auto *context = unwrap((MlirContext) { contextObj->internalRep.otherValuePtr });
 
   std::string errorMessage;
-  auto input = mlir::openInputFile(llvm::StringRef(objv[2]->bytes), &errorMessage);
+  auto input = mlir::openInputFile(llvm::StringRef(objv[3]->bytes), &errorMessage);
 
   if (!input) {
     llvm::errs() << errorMessage << '\n';
@@ -67,11 +68,11 @@ int loadFirMlirFile(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *con
 
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(input), llvm::SMLoc());
-  mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
+  mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, context);
 
-  mlir::OwningModuleRef module;
+  MlirOperation module;
   if (!strcmp(objv[1]->bytes, "MLIR")) {
-    module = mlir::parseSourceFile(sourceMgr, &context);
+    module = wrap(mlir::parseSourceFile(sourceMgr, context).release().getOperation());
   } else if (!strcmp(objv[1]->bytes, "FIR")) {
     // TODO
     return TCL_ERROR;
@@ -79,15 +80,17 @@ int loadFirMlirFile(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *con
     return TCL_ERROR;
   }
 
-  if (!module) {
+  if (mlirOperationIsNull(module)) {
     return TCL_ERROR;
   }
 
-  auto *m = wrap(module.release()).ptr;
+  auto *m = module.ptr;
 
   auto *obj = Tcl_NewObj();
-  obj->typePtr = Tcl_GetObjType("MlirModule");
-  obj->internalRep.otherValuePtr = (void *) m;
+  obj->typePtr = Tcl_GetObjType("MlirOperation");
+  obj->internalRep.twoPtrValue.ptr1 = (void *) m;
+  obj->internalRep.twoPtrValue.ptr2 = (void *) contextObj;
+  Tcl_IncrRefCount(contextObj);
   obj->length = 0;
   obj->bytes = nullptr;
   Tcl_SetObjResult(interp, obj);
@@ -119,6 +122,14 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   filterType->freeIntRepProc = filterFreeIntRepProc;
   Tcl_RegisterObjType(filterType);
 
+  Tcl_ObjType *contextType = new Tcl_ObjType;
+  contextType->name = "MlirContext";
+  contextType->setFromAnyProc = contextTypeSetFromAnyProc;
+  contextType->updateStringProc = contextTypeUpdateStringProc;
+  contextType->dupIntRepProc = contextTypeDupIntRepProc;
+  contextType->freeIntRepProc = contextTypeFreeIntRepProc;
+  Tcl_RegisterObjType(contextType);
+
   Tcl_ObjType *operationType = new Tcl_ObjType;
   operationType->name = "MlirOperation";
   operationType->setFromAnyProc = operationTypeSetFromAnyProc;
@@ -126,14 +137,6 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   operationType->dupIntRepProc = operationTypeDupIntRepProc;
   operationType->freeIntRepProc = operationTypeFreeIntRepProc;
   Tcl_RegisterObjType(operationType);
-
-  Tcl_ObjType *moduleType = new Tcl_ObjType;
-  moduleType->name = "MlirModule";
-  moduleType->setFromAnyProc = moduleTypeSetFromAnyProc;
-  moduleType->updateStringProc = moduleTypeUpdateStringProc;
-  moduleType->dupIntRepProc = moduleTypeDupIntRepProc;
-  moduleType->freeIntRepProc = moduleTypeFreeIntRepProc;
-  Tcl_RegisterObjType(moduleType);
 
   // Register package
   if (Tcl_PkgProvide(interp, "Circt", "1.0") == TCL_ERROR) {
