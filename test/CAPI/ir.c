@@ -25,11 +25,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(_WIN32) || defined(__CYGWIN__)
-/// The C API is currently not supported on Windows
-/// (https://github.com/llvm/circt/issues/578)
-int main() { return 0; }
-#else
 int registerOnlyHW() {
   MlirContext ctx = mlirContextCreate();
   // The built-in dialect is always loaded.
@@ -146,4 +141,3 @@ int main() {
 
   return 0;
 }
-#endif

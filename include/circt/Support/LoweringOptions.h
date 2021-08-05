@@ -58,6 +58,11 @@ struct LoweringOptions {
   // Otherwise, it will print them as always statements
   bool useAlwaysFF = false;
 
+  /// If true, ExportVerilog allows expressions in the sensitivity list of
+  /// `always` statements, instead of forcing them to be simple wires. Some EDA
+  /// tools rely on these being simple wires.
+  bool allowExprInEventControl = false;
+
   /// This is the target width of lines in an emitted verilog source file in
   /// columns.
   unsigned emittedLineLength = 90;

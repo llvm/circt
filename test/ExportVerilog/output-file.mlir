@@ -2,13 +2,13 @@
 
 // CHECK-LABEL: module B
 
-// CHECK-LABEL: FILE "dir1/file1.sv"
+// CHECK-LABEL: FILE "dir1{{.}}file1.sv"
 // CHECK-LABEL: module foo1
 // CHECK-LABEL: module B
-// CHECK-LABEL: FILE "dir1/file2.sv"
+// CHECK-LABEL: FILE "dir1{{.}}file2.sv"
 // CHECK-LABEL: module foo2
 
-// CHECK-LABEL: FILE "dir2/foo3.sv"
+// CHECK-LABEL: FILE "dir2{{.}}foo3.sv"
 // CHECK-LABEL: module foo3
 // CHECK-LABEL: module B
 

@@ -31,6 +31,8 @@ def SVDialect : Dialect {
   let extraClassDeclaration = [{
     /// Register all SV types.
     void registerTypes();
+    /// Register all SV attributes.
+    void registerAttributes();
   }];
 }
 
@@ -51,6 +53,7 @@ def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
 }
 
 include "circt/Dialect/SV/SVTypes.td"
+include "circt/Dialect/SV/SVAttributes.td"
 include "circt/Dialect/SV/SVExpressions.td"
 include "circt/Dialect/SV/SVInOutOps.td"
 include "circt/Dialect/SV/SVStatements.td"

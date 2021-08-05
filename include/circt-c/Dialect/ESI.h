@@ -24,9 +24,13 @@ MLIR_CAPI_EXPORTED void registerESITranslations();
 MLIR_CAPI_EXPORTED MlirLogicalResult
 circtESIExportCosimSchema(MlirModule, MlirStringCallback, void *userData);
 
-bool circtESITypeIsAChannelType(MlirType type);
-MlirType circtESIChannelTypeGet(MlirType inner);
-MlirType circtESIChannelGetInner(MlirType channelType);
+MLIR_CAPI_EXPORTED bool circtESITypeIsAChannelType(MlirType type);
+MLIR_CAPI_EXPORTED MlirType circtESIChannelTypeGet(MlirType inner);
+MLIR_CAPI_EXPORTED MlirType circtESIChannelGetInner(MlirType channelType);
+
+MLIR_CAPI_EXPORTED MlirOperation circtESIWrapModule(MlirOperation cModOp,
+                                                    long numPorts,
+                                                    const MlirStringRef *ports);
 
 #ifdef __cplusplus
 }

@@ -54,6 +54,7 @@ struct PrintInstanceGraphPass
     auto &instanceGraph = getAnalysis<InstanceGraph>();
     llvm::WriteGraph(os, &instanceGraph, /*ShortNames=*/false,
                      circuitOp.name());
+    markAllAnalysesPreserved();
   }
   raw_ostream &os;
 };

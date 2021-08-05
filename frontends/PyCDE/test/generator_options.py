@@ -17,26 +17,18 @@ class GeneratorOptions:
     hw.ConstantOp.create(types.i32, 2)
 
 
-class Top(System):
-  inputs = []
-  outputs = []
-
-  def build(self, top):
-    GeneratorOptions()
-
-
 # CHECK: hw.constant 1
-top1 = Top()
+top1 = System([GeneratorOptions])
 top1.generate(["generator_a"])
 top1.print()
 
 # CHECK: hw.constant 2
-top2 = Top()
+top2 = System([GeneratorOptions])
 top2.generate(["generator_b"])
 top2.print()
 
 # CHECK: generator exception
-top3 = Top()
+top3 = System([GeneratorOptions])
 try:
   top3.generate()
 except RuntimeError:
@@ -44,7 +36,7 @@ except RuntimeError:
   pass
 
 # CHECK: generator exception
-top4 = Top()
+top4 = System([GeneratorOptions])
 try:
   top4.generate(["generator_a", "generator_b"])
 except RuntimeError:
@@ -52,7 +44,7 @@ except RuntimeError:
   pass
 
 # CHECK: generator exception
-top5 = Top()
+top5 = System([GeneratorOptions])
 try:
   top5.generate(["nonexistant"])
 except RuntimeError:

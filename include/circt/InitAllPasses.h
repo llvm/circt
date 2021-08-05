@@ -21,7 +21,6 @@
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Transforms/Passes.h"
 
 namespace circt {
 
@@ -36,7 +35,6 @@ inline void registerAllPasses() {
   llhd::initLLHDTransformationPasses();
   seq::registerSeqPasses();
   sv::registerPasses();
-  circt::registerPasses();
 }
 
 } // namespace circt

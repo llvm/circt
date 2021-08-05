@@ -1,3 +1,4 @@
+// REQUIRES: llhd-sim
 // RUN: llhd-sim %s -shared-libs=%shlibdir/libcirct-llhd-signals-runtime-wrappers%shlibext | FileCheck %s
 
 // CHECK: 0ps 0d 0e  root/bool  0x01

@@ -51,15 +51,6 @@ static IntegerAttr getIntZerosAttr(Type type) {
   return getIntAttr(type, APInt(width, 0));
 }
 
-/// Return an IntegerAttr filled with ones for the specified FIRRTL integer
-/// type.  This handles both the known width and unknown width case.
-static IntegerAttr getIntOnesAttr(Type type) {
-  int32_t width = abs(type.cast<IntType>().getWidthOrSentinel());
-  if (width == 0)
-    return {};
-  return getIntAttr(type, APInt(width, -1ULL, /*isSigned*/ true));
-}
-
 /// Return true if this operation's operands and results all have known width,
 /// or if the result has zero width result (which we cannot constant fold).
 /// This only works for integer types.
@@ -206,6 +197,11 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> operands) {
   return valueAttr();
 }
 
+OpFoldResult SpecialConstantOp::fold(ArrayRef<Attribute> operands) {
+  assert(operands.empty() && "constant has no operands");
+  return valueAttr();
+}
+
 OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
   return InvalidValueAttr::get(getType());
 }
@@ -217,46 +213,49 @@ OpFoldResult InvalidValueOp::fold(ArrayRef<Attribute> operands) {
 OpFoldResult AddPrimOp::fold(ArrayRef<Attribute> operands) {
   /// Any folding here requires a bitwidth extension.
 
-  // add(x, invalid) -> invalid
-  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
-      operands[0].dyn_cast_or_null<InvalidValueAttr>())
-    return InvalidValueAttr::get(getType());
-
   /// If both operands are constant, and the result is integer with known
   /// widths, then perform constant folding.
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
                                  [=](APSInt a, APSInt b) { return a + b; });
 }
 
-OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
-  // sub(x, invalid) -> invalid
-  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
-      operands[0].dyn_cast_or_null<InvalidValueAttr>())
-    return InvalidValueAttr::get(getType());
+void AddPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::AddWithInvalidOp>(context);
+}
 
+OpFoldResult SubPrimOp::fold(ArrayRef<Attribute> operands) {
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
                                  [=](APSInt a, APSInt b) { return a - b; });
 }
 
+void SubPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::SubWithInvalidOp>(context);
+}
+
 OpFoldResult MulPrimOp::fold(ArrayRef<Attribute> operands) {
-  // mul(x, invalid) -> invalid
+  // mul(x, invalid) -> 0
+  //
+  // This is legal because it aligns with the Scala FIRRTL Compiler
+  // interpretation of lowering invalid to constant zero before constant
+  // propagation.  Note: the Scala FIRRTL Compiler does NOT currently optimize
+  // multiplication this way and will emit "x * 0".
   if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
       operands[0].dyn_cast_or_null<InvalidValueAttr>())
-    return InvalidValueAttr::get(getType());
+    return getIntZerosAttr(getType());
+
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::Normal,
                                  [=](APSInt a, APSInt b) { return a * b; });
 }
 
 OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
-  // div(x, invalid) -> zero
-  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
-      operands[0].dyn_cast_or_null<InvalidValueAttr>())
-    return getIntZerosAttr(getType());
-
   /// div(x, x) -> 1
   ///
-  /// Division by zero is undefined in the FIRRTL specification. This
-  /// fold exploits that fact to optimize self division to one.
+  /// Division by zero is undefined in the FIRRTL specification.  This fold
+  /// exploits that fact to optimize self division to one.  Note: this should
+  /// supersede any division with invalid or zero.  Division of invalid by
+  /// invalid should be one.
   if (lhs() == rhs()) {
     auto width = getType().getWidthOrSentinel();
     if (width == -1)
@@ -264,6 +263,16 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
     if (width != 0)
       return getIntAttr(getType(), APInt(width, 1));
   }
+
+  // div(invalid, x) -> 0
+  //
+  // This is legal because it aligns with the Scala FIRRTL Compiler
+  // interpretation of lowering invalid to constant zero before constant
+  // propagation.  Note: the Scala FIRRTL Compiler does NOT currently optimize
+  // division this way and will emit "0 / x".
+  if (operands[0].dyn_cast_or_null<InvalidValueAttr>() &&
+      !operands[1].dyn_cast_or_null<InvalidValueAttr>())
+    return getIntZerosAttr(getType());
 
   /// div(x, 1) -> x : (uint, uint) -> uint
   ///
@@ -276,9 +285,6 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
 
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
                                  [=](APSInt a, APSInt b) -> APInt {
-                                   // Fold divide by zero to zero.  Would be
-                                   // better to fold it to invalid when we
-                                   // supports this as a constant.
                                    if (!!b)
                                      return a / b;
                                    return APInt(a.getBitWidth(), 0);
@@ -286,16 +292,18 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult RemPrimOp::fold(ArrayRef<Attribute> operands) {
-  // div(x, invalid) -> zero
-  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
-      operands[0].dyn_cast_or_null<InvalidValueAttr>())
+  // rem(invalid, x) -> 0
+  //
+  // This is legal because it aligns with the Scala FIRRTL Compiler
+  // interpretation of lowering invalid to constant zero before constant
+  // propagation.  Note: the Scala FIRRTL Compiler does NOT currently optimize
+  // division this way and will emit "0 % x".
+  if (operands[0].dyn_cast_or_null<InvalidValueAttr>() &&
+      !operands[1].dyn_cast_or_null<InvalidValueAttr>())
     return getIntZerosAttr(getType());
 
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
                                  [=](APSInt a, APSInt b) -> APInt {
-                                   // Fold divide by zero to zero.  Would be
-                                   // better to fold it to invalid when we
-                                   // supports this as a constant.
                                    if (!!b)
                                      return a % b;
                                    return APInt(a.getBitWidth(), 0);
@@ -325,6 +333,10 @@ OpFoldResult DShrPrimOp::fold(ArrayRef<Attribute> operands) {
 // TODO: Move to DRR.
 OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
   // and(x, invalid) -> 0
+  //
+  // This is legal because it aligns with the Scala FIRRTL Compiler
+  // interpretation of lowering invalid to constant zero before constant
+  // propagation.
   if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
       operands[0].dyn_cast_or_null<InvalidValueAttr>())
     return getIntZerosAttr(getType());
@@ -350,10 +362,18 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
-  // or(x, invalid) -> -1
-  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
-      operands[0].dyn_cast_or_null<InvalidValueAttr>())
-    return getIntOnesAttr(getType());
+  // or(x, invalid) -> x
+  // or(invalid, x) -> x
+  //
+  // This is legal because it aligns with the Scala FIRRTL Compiler
+  // interpretation of lowering invalid to constant zero before constant
+  // propagation.
+  if (operands[0].dyn_cast_or_null<InvalidValueAttr>() &&
+      rhs().getType() == getType())
+    return rhs();
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() &&
+      lhs().getType() == getType())
+    return lhs();
 
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// or(x, 0) -> x
@@ -376,10 +396,18 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
 }
 
 OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
-  // xor(x, invalid) -> invalid
-  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() ||
-      operands[0].dyn_cast_or_null<InvalidValueAttr>())
-    return InvalidValueAttr::get(getType());
+  // xor(x, invalid) -> x
+  // xor(invalid, x) -> x
+  //
+  // This is legal because it aligns with the Scala FIRRTL Compiler
+  // interpretation of lowering invalid to constant zero before constant
+  // propagation.
+  if (operands[0].dyn_cast_or_null<InvalidValueAttr>() &&
+      rhs().getType() == getType())
+    return rhs();
+  if (operands[1].dyn_cast_or_null<InvalidValueAttr>() &&
+      lhs().getType() == getType())
+    return lhs();
 
   /// xor(x, 0) -> x
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>())
@@ -713,12 +741,20 @@ OpFoldResult AsSIntPrimOp::fold(ArrayRef<Attribute> operands) {
   if (input().getType() == getType())
     return input();
 
+  if (!operands[0])
+    return {};
+
+  // Constant clocks and resets are bool attributes.
+  if (auto attr = operands[0].dyn_cast<BoolAttr>())
+    return getIntAttr(getType(), APInt(/*bitWidth*/ 1, attr.getValue()));
+
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
-  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+  if (auto attr = operands[0].dyn_cast<IntegerAttr>())
     if (getType().hasWidth())
       return getIntAttr(getType(), attr.getValue());
+
   return {};
 }
 
@@ -727,31 +763,43 @@ OpFoldResult AsUIntPrimOp::fold(ArrayRef<Attribute> operands) {
   if (input().getType() == getType())
     return input();
 
+  if (!operands[0])
+    return {};
+
+  // Constant clocks and resets are bool attributes.
+  if (auto attr = operands[0].dyn_cast<BoolAttr>())
+    return getIntAttr(getType(), APInt(/*bitWidth*/ 1, attr.getValue()));
+
   // Be careful to only fold the cast into the constant if the size is known.
   // Otherwise width inference may produce differently-sized constants if the
   // sign changes.
-  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+  if (auto attr = operands[0].dyn_cast<IntegerAttr>())
     if (getType().hasWidth())
       return getIntAttr(getType(), attr.getValue());
+
   return {};
 }
 
 OpFoldResult AsAsyncResetPrimOp::fold(ArrayRef<Attribute> operands) {
-  // TODO: Implement constants of asyncreset type.
-
   // No effect.
   if (input().getType() == getType())
     return input();
+
+  // Constant fold.
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return BoolAttr::get(getContext(), attr.getValue().getBoolValue());
 
   return {};
 }
 
 OpFoldResult AsClockPrimOp::fold(ArrayRef<Attribute> operands) {
-  // TODO: Implement constants of clock type.
-
   // No effect.
   if (input().getType() == getType())
     return input();
+
+  // Constant fold.
+  if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
+    return BoolAttr::get(getContext(), attr.getValue().getBoolValue());
 
   return {};
 }
@@ -966,6 +1014,10 @@ static void replaceWithBits(Operation *op, Value value, unsigned hiBit,
 OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   // mux(cond, x, invalid) -> x
   // mux(cond, invalid, x) -> x
+  //
+  // These are NOT optimizations that the Scala FIRRTL Compiler makes.  However,
+  // these agree with the interpretation of mux with an invalid true of false
+  // condition as a conditionally valid statement.
   if (operands[2].dyn_cast_or_null<InvalidValueAttr>())
     return getOperand(1);
   if (operands[1].dyn_cast_or_null<InvalidValueAttr>())
@@ -980,11 +1032,6 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   // not possible in a fold.
   if (getType().getBitWidthOrSentinel() < 0)
     return {};
-
-  // // mux(0-bit, x, y) -> y
-  if (sel().getType().cast<FIRRTLType>().getBitWidthOrSentinel() == 0 &&
-      low().getType() == getType())
-    return low();
 
   // mux(0/1, x, y) -> x or y
   if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {
@@ -1444,7 +1491,8 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegresetWithZeroReset,
-                 patterns::RegresetWithInvalidReset>(context);
+                 patterns::RegresetWithInvalidReset,
+                 patterns::RegresetWithInvalidResetValue>(context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {

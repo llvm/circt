@@ -56,25 +56,24 @@ void FIRRTLDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
 
 Attribute SubAnnotationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
                                    Type type) {
-  int64_t minFieldID, maxFieldID;
+  int64_t fieldID;
   DictionaryAttr annotations;
   StringRef fieldIDKeyword;
 
   if (p.parseLess() || p.parseKeyword(&fieldIDKeyword) || p.parseEqual() ||
-      p.parseLSquare() || p.parseInteger(minFieldID) || p.parseComma() ||
-      p.parseInteger(maxFieldID) || p.parseRSquare() || p.parseComma() ||
+      p.parseInteger(fieldID) || p.parseComma() ||
       p.parseAttribute<DictionaryAttr>(annotations) || p.parseGreater())
     return Attribute();
 
   if (fieldIDKeyword != "fieldID")
     return Attribute();
 
-  return SubAnnotationAttr::get(ctxt, minFieldID, maxFieldID, annotations);
+  return SubAnnotationAttr::get(ctxt, fieldID, annotations);
 }
 
 void SubAnnotationAttr::print(DialectAsmPrinter &p) const {
-  p << getMnemonic() << "<fieldID = [" << getMinFieldID() << ", "
-    << getMaxFieldID() << "], " << getAnnotations() << ">";
+  p << getMnemonic() << "<fieldID = " << getFieldID() << ", "
+    << getAnnotations() << ">";
 }
 
 void FIRRTLDialect::registerAttributes() {

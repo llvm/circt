@@ -27,9 +27,9 @@ circuit test_cse :
 
 ; Both adds persist.
 ; NOOPT: %0 = firrtl.add %a, %a
-; NOOPT: firrtl.connect %b, %0 
+; NOOPT: firrtl.connect %b, %0
 ; NOOPT: %1 = firrtl.add %a, %a
-; NOOPT: firrtl.connect %c, %1 
+; NOOPT: firrtl.connect %c, %1
 
 ; Ands persist.
 ; NOOPT: %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>

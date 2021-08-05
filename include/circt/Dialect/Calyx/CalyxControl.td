@@ -14,11 +14,8 @@ def ControlLike : NativeOpTrait<"ControlLike"> {
   let cppNamespace = "::circt::calyx";
 }
 
-// TODO(Calyx): Verify the semantics concerning
-// EnableOps placed directly inside "calyx.control".
 def ControlOp : CalyxContainer<"control", [
-    HasParent<"ComponentOp">,
-    ControlLike
+    HasParent<"ComponentOp">
   ]> {
   let summary = "Calyx Control";
   let description = [{
@@ -34,10 +31,10 @@ def ControlOp : CalyxContainer<"control", [
       }
     ```
   }];
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def SeqOp : CalyxContainer<"seq", [
-    ParentOneOf<["ControlOp", "SeqOp"]>,
     ControlLike
   ]> {
   let summary = "Calyx Sequential";
@@ -56,19 +53,25 @@ def SeqOp : CalyxContainer<"seq", [
 }
 
 def EnableOp : CalyxOp<"enable", [
-    ParentOneOf<["ControlOp", "SeqOp"]>
+    ControlLike
   ]> {
   let summary = "Calyx Enable";
   let description = [{
     The "calyx.enable" operation represents the execution of
     a group defined explicitly in the "calyx.wires" section.
 
+    The 'compiledGroups' attribute is used in the Compile
+    Control pass to track which groups are compiled within
+    the new compilation group.
+
     ```mlir
       calyx.enable @SomeGroup
     ```
   }];
-  let arguments = (ins FlatSymbolRefAttr:$groupName);
+  let arguments = (ins
+    FlatSymbolRefAttr:$groupName,
+    OptionalAttr<ArrayAttr>:$compiledGroups
+  );
   let assemblyFormat = "$groupName attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
-

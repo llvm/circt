@@ -35,8 +35,6 @@ std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 
-std::unique_ptr<mlir::Pass> createCheckWidthsPass();
-
 std::unique_ptr<mlir::Pass> createInferWidthsPass();
 
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
@@ -48,6 +46,8 @@ createBlackBoxReaderPass(llvm::Optional<StringRef> inputPrefix = {},
 std::unique_ptr<mlir::Pass> createGrandCentralPass();
 
 std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
+
+std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION

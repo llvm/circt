@@ -30,6 +30,10 @@ using mlir::RegionRange;
 using namespace circt;
 using namespace firrtl;
 
+//===----------------------------------------------------------------------===//
+// Utilities
+//===----------------------------------------------------------------------===//
+
 /// Remove elements at the specified indices from the input array, returning the
 /// elements not mentioned.  The indices array is expected to be sorted and
 /// unique.
@@ -375,6 +379,66 @@ BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
+/// Inserts the given ports. The insertion indices are expected to be in order.
+/// Insertion occurs in-order, such that ports with the same insertion index
+/// appear in the module in the same order they appeared in the list.
+void FModuleOp::insertPorts(
+    ArrayRef<std::pair<unsigned, ModulePortInfo>> ports) {
+  if (ports.empty())
+    return;
+  unsigned oldNumArgs = getNumArguments();
+  unsigned newNumArgs = oldNumArgs + ports.size();
+
+  // Add direction markers and names for new ports.
+  SmallVector<Direction> existingDirections = direction::unpackAttribute(*this);
+  ArrayRef<Attribute> existingNames = this->portNames().getValue();
+  assert(existingDirections.size() == oldNumArgs);
+  assert(existingNames.size() == oldNumArgs);
+
+  SmallVector<Direction> newDirections;
+  SmallVector<Attribute> newNames;
+  newDirections.reserve(newNumArgs);
+  newNames.reserve(newNumArgs);
+
+  unsigned oldIdx = 0;
+  auto migrateOldPorts = [&](unsigned untilOldIdx) {
+    while (oldIdx < oldNumArgs && oldIdx < untilOldIdx) {
+      newDirections.push_back(existingDirections[oldIdx]);
+      newNames.push_back(existingNames[oldIdx]);
+      ++oldIdx;
+    }
+  };
+  for (auto &port : ports) {
+    migrateOldPorts(port.first);
+    newDirections.push_back(port.second.direction);
+    newNames.push_back(port.second.name);
+  }
+  migrateOldPorts(oldNumArgs);
+
+  // Apply these changed markers.
+  (*this)->setAttr(direction::attrKey,
+                   direction::packAttribute(newDirections, getContext()));
+  (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
+
+  // Insert the common function-like stuff, including the block arguments, and
+  // argument attributes.
+  SmallVector<unsigned> argIndices;
+  SmallVector<Type> argTypes;
+  SmallVector<DictionaryAttr> argAttrs;
+  SmallVector<Optional<Location>> argLocs;
+  argIndices.reserve(ports.size());
+  argTypes.reserve(ports.size());
+  argAttrs.reserve(ports.size());
+  argLocs.reserve(ports.size());
+  for (auto &port : ports) {
+    argIndices.push_back(port.first);
+    argTypes.push_back(port.second.type);
+    argAttrs.push_back(port.second.annotations.getArgumentAttrDict());
+    argLocs.push_back(port.second.loc);
+  }
+  insertArguments(argIndices, argTypes, argAttrs, argLocs);
+}
+
 /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
 /// be in order and unique.
 void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
@@ -662,11 +726,11 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
                           omittedAttrs);
 }
 
-static void print(OpAsmPrinter &p, FExtModuleOp op) {
+static void printFExtModuleOp(OpAsmPrinter &p, FExtModuleOp op) {
   printModuleLikeOp(p, op);
 }
 
-static void print(OpAsmPrinter &p, FModuleOp op) {
+static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
   printModuleLikeOp(p, op);
 
   // Print the body if this is not an external function. Since this block does
@@ -841,10 +905,11 @@ Operation *InstanceOp::getReferencedModule() {
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
                        StringRef name, ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations) {
+                       ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
   result.addAttribute("moduleName", builder.getSymbolRefAttr(moduleName));
   result.addAttribute("name", builder.getStringAttr(name));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
+  result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
   result.addTypes(resultTypes);
 
   if (portAnnotations.empty()) {
@@ -1519,41 +1584,72 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
   return build(builder, result, type, attr);
 }
 
+static void printSpecialConstantOp(OpAsmPrinter &p, SpecialConstantOp &op) {
+  p << "firrtl.specialconstant ";
+  // SpecialConstant uses a BoolAttr, and we want to print `true` as `1`.
+  p << static_cast<unsigned>(op.value());
+  p << " : ";
+  p.printType(op.getType());
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+}
+
+static ParseResult parseSpecialConstantOp(OpAsmParser &parser,
+                                          OperationState &result) {
+  // Parse the constant value.  SpecialConstant uses bool attributes, but it
+  // prints as an integer.
+  APInt value;
+  auto loc = parser.getCurrentLocation();
+  auto valueResult = parser.parseOptionalInteger(value);
+  if (!valueResult.hasValue())
+    return parser.emitError(loc, "expected integer value");
+
+  // Clocks and resets can only be 0 or 1.
+  if (value != 0 && value != 1)
+    return parser.emitError(loc, "special constants can only be 0 or 1.");
+
+  // Parse the result firrtl type.
+  Type resultType;
+  if (failed(*valueResult) || parser.parseColonType(resultType) ||
+      parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+  result.addTypes(resultType);
+
+  // Create the attribute.
+  auto valueAttr = parser.getBuilder().getBoolAttr(value == 1);
+  result.addAttribute("value", valueAttr);
+  return success();
+}
+
+static LogicalResult verifySubfieldOp(SubfieldOp op) {
+  if (op.fieldIndex() >=
+      op.input().getType().cast<BundleType>().getNumElements())
+    return op.emitOpError("subfield element index is greater than the number "
+                          "of fields in the bundle type");
+  return success();
+}
+
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        Optional<Location> loc) {
-  auto inType = operands[0].getType();
-  auto fieldname = getAttr<StringAttr>(attrs, "fieldname");
+  auto inType = operands[0].getType().cast<BundleType>();
+  auto fieldIndex =
+      getAttr<IntegerAttr>(attrs, "fieldIndex").getValue().getZExtValue();
 
-  if (auto bundleType = inType.dyn_cast<BundleType>()) {
-    auto elt = bundleType.getElement(fieldname.getValue());
-    if (!elt) {
-      if (loc)
-        mlir::emitError(*loc, "unknown field '")
-            << fieldname.getValue() << "' in bundle type " << inType;
-      return {};
-    }
-    // FIRRTL puts flips on element fields, not on the underlying
-    // types.  The result type of a subfield should strip a flip
-    // if one exists.
-    return elt->type;
+  if (fieldIndex >= inType.getNumElements()) {
+    if (loc)
+      mlir::emitError(*loc, "subfield element index is greater than the number "
+                            "of fields in the bundle type");
+    return {};
   }
 
-  if (loc)
-    mlir::emitError(*loc, "subfield requires bundle operand");
-  return {};
+  // SubfieldOp verifier checks that the field index is valid with number of
+  // subelements.
+  return inType.getElement(fieldIndex).type;
 }
 
 bool SubfieldOp::isFieldFlipped() {
-  auto fieldname = this->fieldname();
   auto bundle = input().getType().cast<BundleType>();
-  auto field = bundle.getElement(fieldname);
-  if (!field) {
-    emitOpError() << "unknown field '" << fieldname << "' in bundle type "
-                  << bundle;
-    return false;
-  };
-  return field.getValue().isFlip;
+  return bundle.getElement(fieldIndex()).isFlip;
 }
 
 FIRRTLType SubindexOp::inferReturnType(ValueRange operands,
@@ -2344,14 +2440,25 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    NamedAttrList &resultAttrs) {
-  return parseElidePortAnnotations(parser, resultAttrs);
+  auto result = parseElidePortAnnotations(parser, resultAttrs);
+
+  if (!resultAttrs.get("lowerToBind")) {
+    resultAttrs.append("lowerToBind", parser.getBuilder().getBoolAttr(false));
+  }
+
+  return result;
 }
 
-/// Always elide "moduleName" and elide "annotations" if it exists or
-/// if it is empty.
+/// Always elide "moduleName", elide "lowerToBind" if false, and elide
+/// "annotations" if it exists or if it is empty.
 static void printInstanceOp(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
-  printElidePortAnnotations(p, op, attr, {"moduleName"});
+  SmallVector<StringRef, 2> elides = {"moduleName"};
+  if (auto lowerToBind = op->getAttrOfType<BoolAttr>("lowerToBind"))
+    if (!lowerToBind.getValue())
+      elides.push_back("lowerToBind");
+
+  printElidePortAnnotations(p, op, attr, elides);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2442,6 +2549,58 @@ SmallVector<Direction> direction::unpackAttribute(Operation *module) {
   for (size_t i = 0, e = value.getBitWidth(); i != e; ++i)
     result.push_back(direction::get(value[i]));
   return result;
+}
+
+//===----------------------------------------------------------------------===//
+// Miscellaneous custom elision logic.
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseElideEmptyName(OpAsmParser &p,
+                                       NamedAttrList &resultAttrs) {
+  auto result = p.parseOptionalAttrDict(resultAttrs);
+  if (!resultAttrs.get("name"))
+    resultAttrs.append("name", p.getBuilder().getStringAttr(""));
+
+  return result;
+}
+
+static void printElideEmptyName(OpAsmPrinter &p, Operation *op,
+                                DictionaryAttr attr,
+                                ArrayRef<StringRef> extraElides = {}) {
+
+  SmallVector<StringRef> elides(extraElides.begin(), extraElides.end());
+  if (op->getAttrOfType<StringAttr>("name").getValue().empty())
+    elides.push_back("name");
+
+  p.printOptionalAttrDict(op->getAttrs(), elides);
+}
+
+static ParseResult parsePrintfAttrs(OpAsmParser &p,
+                                    NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printPrintfAttrs(OpAsmPrinter &p, Operation *op,
+                             DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"formatString"});
+}
+
+static ParseResult parseStopAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printStopAttrs(OpAsmPrinter &p, Operation *op,
+                           DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"exitCode"});
+}
+
+static ParseResult parseVerifAttrs(OpAsmParser &p, NamedAttrList &resultAttrs) {
+  return parseElideEmptyName(p, resultAttrs);
+}
+
+static void printVerifAttrs(OpAsmPrinter &p, Operation *op,
+                            DictionaryAttr attr) {
+  printElideEmptyName(p, op, attr, {"message"});
 }
 
 //===----------------------------------------------------------------------===//

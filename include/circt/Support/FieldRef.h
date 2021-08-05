@@ -28,7 +28,7 @@ namespace circt {
 class FieldRef {
 public:
   /// Get a null FieldRef.
-  FieldRef(){};
+  FieldRef() {}
 
   /// Get a FieldRef location for the specified value.
   FieldRef(Value value, unsigned id) : value(value), id(id) {}
@@ -43,9 +43,16 @@ public:
   /// a specific field in a bundle.
   unsigned getFieldID() const { return id; }
 
+  /// Get a reference to a subfield.
+  FieldRef getSubField(unsigned subFieldID) const {
+    return FieldRef(value, id + subFieldID);
+  }
+
   bool operator==(const FieldRef &other) const {
     return value == other.value && id == other.id;
   }
+
+  operator bool() const { return bool(value); }
 
 private:
   /// A pointer to the value which created this.
