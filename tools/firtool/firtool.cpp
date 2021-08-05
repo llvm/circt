@@ -31,6 +31,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/Timing.h"
+#include "mlir/Support/ToolUtilities.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
@@ -63,6 +64,18 @@ static cl::opt<std::string>
     outputFilename("o",
                    cl::desc("Output filename, or directory for split output"),
                    cl::value_desc("filename"), cl::init("-"));
+
+static cl::opt<bool>
+    splitInputFile("split-input-file",
+                   cl::desc("Split the input file into pieces and process each "
+                            "chunk independently"),
+                   cl::init(false), cl::Hidden);
+
+static cl::opt<bool>
+    verifyDiagnostics("verify-diagnostics",
+                      cl::desc("Check that emitted diagnostics match "
+                               "expected-* lines on the corresponding line"),
+                      cl::init(false), cl::Hidden);
 
 static cl::opt<bool> disableOptimization("disable-opt",
                                          cl::desc("disable optimizations"));
@@ -172,29 +185,21 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 
 /// Process a single buffer of the input.
 static LogicalResult
-processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-              StringRef annotationFilename, TimingScope &ts,
-              MLIRContext &context,
-              std::function<LogicalResult(ModuleOp)> callback) {
-  // Register our dialects.
-  context.loadDialect<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
-                      sv::SVDialect>();
-
-  llvm::SourceMgr sourceMgr;
-  sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
-  SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
-
+processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
+              llvm::function_ref<LogicalResult(ModuleOp)> callback) {
   // Add the annotation file if one was explicitly specified.
   std::string annotationFilenameDetermined;
-  if (!annotationFilename.empty()) {
-    if (!(sourceMgr.AddIncludeFile(annotationFilename.str(), llvm::SMLoc(),
+  if (!inputAnnotationFilename.empty()) {
+    if (!(sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
                                    annotationFilenameDetermined))) {
       llvm::errs() << "cannot open input annotation file '"
-                   << annotationFilename << "': No such file or directory\n";
+                   << inputAnnotationFilename
+                   << "': No such file or directory\n";
       return failure();
     }
   }
 
+  // Parse the input.
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
@@ -313,6 +318,58 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   return callback(module.release());
 }
 
+/// Process a single split of the input. This allocates a source manager and
+/// creates a regular or verifying diagnostic handler, depending on whether the
+/// user set the verifyDiagnostics option.
+static LogicalResult
+processInputSplit(MLIRContext &context, TimingScope &ts,
+                  std::unique_ptr<llvm::MemoryBuffer> buffer,
+                  llvm::function_ref<LogicalResult(ModuleOp)> emitCallback) {
+  llvm::SourceMgr sourceMgr;
+  sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
+  if (verifyDiagnostics) {
+    SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
+    context.printOpOnDiagnostic(false);
+    (void)processBuffer(context, ts, sourceMgr, emitCallback);
+    return sourceMgrHandler.verify();
+  } else {
+    SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
+    return processBuffer(context, ts, sourceMgr, emitCallback);
+  }
+}
+
+/// Process the entire input provided by the user, splitting it up if the
+/// corresponding option was specified.
+static LogicalResult
+processInput(MLIRContext &context, TimingScope &ts,
+             std::unique_ptr<llvm::MemoryBuffer> input,
+             llvm::function_ref<LogicalResult(ModuleOp)> emitCallback) {
+  if (splitInputFile) {
+    // Emit an error if the user provides a separate annotation file alongside
+    // split input. This is technically not a problem, but the user likely
+    // expects the annotation file to be split as well, which is not the case.
+    // To prevent any frustration, we detect this constellation and emit an
+    // error here. The user can provide annotations for each split using the
+    // inline JSON syntax in FIRRTL.
+    if (!inputAnnotationFilename.empty()) {
+      llvm::errs() << "annotation file cannot be used with split input: "
+                      "use inline JSON syntax on FIRRTL `circuit` to specify "
+                      "per-split annotations\n";
+      return failure();
+    }
+
+    return splitAndProcessBuffer(
+        std::move(input),
+        [&](std::unique_ptr<MemoryBuffer> buffer, raw_ostream &) {
+          return processInputSplit(context, ts, std::move(buffer),
+                                   emitCallback);
+        },
+        llvm::outs());
+  } else {
+    return processInputSplit(context, ts, std::move(input), emitCallback);
+  }
+}
+
 /// This implements the top-level logic for the firtool command, invoked once
 /// command line options are parsed and LLVM/MLIR are all set up and ready to
 /// go.
@@ -382,9 +439,12 @@ static LogicalResult executeFirtool(MLIRContext &context) {
     return failure();
   };
 
-  auto result = processBuffer(std::move(input), inputAnnotationFilename, ts,
-                              context, std::move(emitCallback));
-  if (failed(result))
+  // Register our dialects.
+  context.loadDialect<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
+                      sv::SVDialect>();
+
+  // Process the input.
+  if (failed(processInput(context, ts, std::move(input), emitCallback)))
     return failure();
 
   // If the result succeeded and we're emitting a file, close it.
@@ -408,7 +468,7 @@ int main(int argc, char **argv) {
   registerAsmPrinterCLOptions();
   registerLoweringCLOptions();
   // Parse pass names in main to ensure static initialization completed.
-  cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
+  cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL compiler\n");
 
   // -disable-opt turns off constant propagation (unless it was explicitly
   // enabled).
