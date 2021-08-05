@@ -464,6 +464,7 @@ namespace {
 class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
   void runOnOperation() override {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
+    bool detectedCycle = false;
 
     // Traverse modules in a post order to make sure the combinational paths
     // between IOs of a module have been detected and recorded in `combPathsMap`
@@ -481,6 +482,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
         for (auto combSCC = SCCIterator::begin(dummyNode); !combSCC.isAtEnd();
              ++combSCC) {
           if (combSCC.hasCycle()) {
+            detectedCycle = true;
             auto errorDiag = mlir::emitError(
                 module.getLoc(),
                 "detected combinational cycle in a FIRRTL module");
@@ -523,6 +525,9 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
         combPaths.resize(extModule.getNumArguments());
       }
     }
+
+    if (detectedCycle)
+      signalPassFailure();
     markAllAnalysesPreserved();
   }
 

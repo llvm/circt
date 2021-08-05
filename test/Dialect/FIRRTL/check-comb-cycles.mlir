@@ -23,7 +23,7 @@ module  {
 
 module  {
   // Simple combinational loop
-  // CHECK: firrtl.circuit "hasloops"
+  // CHECK-NOT: firrtl.circuit "hasloops"
   firrtl.circuit "hasloops"   {
     // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
     firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
@@ -43,7 +43,7 @@ module  {
 
 module  {
   // Single-element combinational loop
-  // CHECK: firrtl.circuit "loop"
+  // CHECK-NOT: firrtl.circuit "loop"
   firrtl.circuit "loop"   {
     // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
     firrtl.module @loop(out %y: !firrtl.uint<8>) {
@@ -59,7 +59,7 @@ module  {
 
 module  {
   // Node combinational loop
-  // CHECK: firrtl.circuit "hasloops"
+  // CHECK-NOT: firrtl.circuit "hasloops"
   firrtl.circuit "hasloops"   {
     // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
     firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
@@ -80,7 +80,7 @@ module  {
 
 module  {
   // Combinational loop through a combinational memory read port
-  // CHECK: firrtl.circuit "hasloops"
+  // CHECK-NOT: firrtl.circuit "hasloops"
   firrtl.circuit "hasloops"   {
     // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
     firrtl.module @hasloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>, out %c: !firrtl.uint<1>, out %d: !firrtl.uint<1>) {
@@ -110,7 +110,7 @@ module  {
 
 module  {
   // Combination loop through an instance
-  // CHECK: firrtl.circuit "hasloops"
+  // CHECK-NOT: firrtl.circuit "hasloops"
   firrtl.circuit "hasloops"   {
     firrtl.module @thru(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
       firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
@@ -136,7 +136,7 @@ module  {
 
 module  {
   // Multiple simple loops in one SCC
-  // CHECK: firrtl.circuit "hasloops"
+  // CHECK-NOT: firrtl.circuit "hasloops"
   firrtl.circuit "hasloops"   {
     // expected-error @+1 {{detected combinational cycle in a FIRRTL module}}
     firrtl.module @hasloops(in %i: !firrtl.uint<1>, out %o: !firrtl.uint<1>) {
