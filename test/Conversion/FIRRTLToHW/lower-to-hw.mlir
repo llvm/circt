@@ -406,6 +406,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %baz = firrtl.instance @bar {lowerToBind = true, name = "baz"} : !firrtl.uint<1>
   }
 
+
+  // CHECK-LABEL: hw.module @output_fileTest
+  // CHECK-SAME: directory = "output_fileTest/dir", exclude_from_filelist = true
+  // CHECK-SAME: exclude_replicated_ops = true, name = "output_fileTest.sv"
+  firrtl.module @output_fileTest() attributes {output_file = {
+    directory = "output_fileTest/dir",
+    exclude_from_filelist = true,
+    exclude_replicated_ops = true,
+    name = "output_fileTest.sv"
+  }} {
+  }
+
   // https://github.com/llvm/circt/issues/314
   // CHECK-LABEL: hw.module @issue314
   firrtl.module @issue314(in %inp_2: !firrtl.uint<27>, in %inpi: !firrtl.uint<65>) {

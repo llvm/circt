@@ -726,7 +726,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   OpBuilder builder(topLevelModule->getParent()->getContext());
   builder.setInsertionPointToEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
-  return builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
+  auto newModule =
+      builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
+  if (auto outputFile = oldModule->getAttr("output_file"))
+    newModule->setAttr("output_file", outputFile);
+  return newModule;
 }
 
 /// Given a value of analog type, check to see the only use of it is an attach.
