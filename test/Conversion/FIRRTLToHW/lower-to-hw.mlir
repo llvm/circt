@@ -356,20 +356,18 @@ firrtl.circuit "Simple" {
    in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
    in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>) {
 
-    // CHECK-NEXT: sv.always posedge %clock {
-    // CHECK-NEXT:   sv.if %aEn {
-    // CHECK-NEXT:     sv.assert %aCond : i1
-    // CHECK-NEXT:     sv.assert "assert_0" %aCond : i1
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.if %bEn {
-    // CHECK-NEXT:     sv.assume %bCond  : i1
-    // CHECK-NEXT:     sv.assume "assume_0" %bCond  : i1
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.if %cEn {
-    // CHECK-NEXT:     sv.cover %cCond : i1
-    // CHECK-NEXT:     sv.cover "cover_0" %cCond : i1
-    // CHECK-NEXT:   }
-    // CHECK-NEXT: }
+    // CHECK-NEXT: %0 = comb.and %aEn, %aCond : i1
+    // CHECK-NEXT: sv.assert.concurrent  posedge %clock %0 : i1
+    // CHECK-NEXT: %1 = comb.and %aEn, %aCond : i1
+    // CHECK-NEXT: sv.assert.concurrent "assert_0" posedge %clock %1 : i1
+    // CHECK-NEXT: %2 = comb.and %bEn, %bCond : i1
+    // CHECK-NEXT: sv.assume.concurrent  posedge %clock %2 : i1
+    // CHECK-NEXT: %3 = comb.and %bEn, %bCond : i1
+    // CHECK-NEXT: sv.assume.concurrent "assume_0" posedge %clock %3 : i1
+    // CHECK-NEXT: %4 = comb.and %cEn, %cCond : i1
+    // CHECK-NEXT: sv.cover.concurrent  posedge %clock %4 : i1
+    // CHECK-NEXT: %5 = comb.and %cEn, %cCond : i1
+    // CHECK-NEXT: sv.cover.concurrent "cover_0" posedge %clock %5 : i1
     firrtl.assert %clock, %aCond, %aEn, "assert0"
     firrtl.assert %clock, %aCond, %aEn, "assert0" {name = "assert_0"}
     firrtl.assume %clock, %bCond, %bEn, "assume0"

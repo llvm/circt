@@ -2714,38 +2714,39 @@ template <typename AOpTy, typename BOpTy>
 LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op) {
   auto clock = getLoweredValue(op.clock());
   auto enable = getLoweredValue(op.enable());
-  auto predicate = getLoweredValue(op.predicate());
+  auto predicate = builder.createOrFold<comb::AndOp>(enable,getLoweredValue(op.predicate()));
   if (!clock || !enable || !predicate)
     return failure();
 
-  addToAlwaysBlock(clock, [&]() {
-    addIfProceduralBlock(enable, [&]() {
+  //addIfProceduralBlock(enable, [&]() {
       // Create BOpTy inside the always/if.
       StringAttr label;
       if (op.nameAttr())
-        label = op.nameAttr();
+      label = op.nameAttr();
       else
-        label = builder.getStringAttr("");
-      builder.create<BOpTy>(predicate, label);
-    });
-  });
+      label = builder.getStringAttr("");
+      
+      llvm::errs() << "\n event:"<< circt::sv::EventControlAttr::get( builder.getContext(),circt::sv::EventControl::AtPosEdge );
+      builder.create<BOpTy>(circt::sv::EventControlAttr::get(builder.getContext(),circt::sv::EventControl::AtPosEdge), clock, predicate, label);
+      //builder.create<BOpTy>(predicate, label);
+   //   });
 
   return success();
 }
 
 // Lower an assert to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
-  return lowerVerificationStatement<AssertOp, sv::AssertOp>(op);
+  return lowerVerificationStatement<AssertOp, sv::AssertConcurrentOp>(op);
 }
 
 // Lower an assume to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
-  return lowerVerificationStatement<AssumeOp, sv::AssumeOp>(op);
+  return lowerVerificationStatement<AssumeOp, sv::AssumeConcurrentOp>(op);
 }
 
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
-  return lowerVerificationStatement<CoverOp, sv::CoverOp>(op);
+  return lowerVerificationStatement<CoverOp, sv::CoverConcurrentOp>(op);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
