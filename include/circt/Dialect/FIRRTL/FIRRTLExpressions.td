@@ -170,6 +170,12 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
   let firrtlExtraClassDeclaration = [{
     /// Return true if the specified field is flipped.
     bool isFieldFlipped();
+
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(input(), input().getType().cast<BundleType>()
+                                      .getFieldID(fieldIndex()));
+    }
   }];
 
   let verifier = "return ::verifySubfieldOp(*this);";
@@ -200,6 +206,14 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` type($input)";
+
+  let firrtlExtraClassDeclaration = [{
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(input(), input().getType().cast<FVectorType>()
+                                      .getFieldID(index()));
+    }
+  }];
 }
 
 def SubaccessOp : FIRRTLExprOp<"subaccess", [
@@ -278,9 +292,12 @@ class IntBinaryPrimOp<string mnemonic, Type resultType,
                 traits # [SameOperandsIntTypeKind]>;
 
 let inferType = "impl::inferAddSubResult" in {
-  def AddPrimOp : IntBinaryPrimOp<"add", IntType, [Commutative]>;
-  def SubPrimOp : IntBinaryPrimOp<"sub", IntType>;
+  let hasCanonicalizer = true in {
+    def AddPrimOp : IntBinaryPrimOp<"add", IntType, [Commutative]>;
+    def SubPrimOp : IntBinaryPrimOp<"sub", IntType>;
+  }
 }
+
 def MulPrimOp : IntBinaryPrimOp<"mul", IntType, [Commutative]>;
 def DivPrimOp : IntBinaryPrimOp<"div", IntType> {
   let description = [{

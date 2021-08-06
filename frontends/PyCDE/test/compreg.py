@@ -1,21 +1,25 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
 import pycde
-from pycde import types
+from pycde import types, module, Input, Output
 
 from circt.dialects import seq
+from pycde.module import generator
 
+@module
+class CompReg:
+  clk = Input(types.i1)
+  input = Input(types.i8)
+  output = Output(types.i8)
 
-class CompReg(pycde.System):
-  inputs = [("clk", types.i1), ("input", types.i8)]
-  outputs = [("output", types.i8)]
-
-  def build(self, top):
-    compreg = seq.CompRegOp.create(types.i8, clk=top.clk, input=top.input)
+  @generator
+  def build(mod):
+    compreg = seq.CompRegOp.create(types.i8, clk=mod.clk, input=mod.input)
     return {"output": compreg.data}
 
 
-mod = CompReg()
+mod = pycde.System([CompReg])
+mod.generate()
 mod.print_verilog()
 
 # CHECK: reg [7:0] [[NAME:.+]];

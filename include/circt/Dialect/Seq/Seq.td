@@ -47,7 +47,7 @@ def CompRegOp : SeqOp<"compreg",
     Optional<I1>:$reset, Optional<AnyType>:$resetValue);
   let results = (outs AnyType:$data);
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
 }
 

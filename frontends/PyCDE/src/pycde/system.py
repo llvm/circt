@@ -10,7 +10,10 @@ import mlir.ir
 import mlir.passmanager
 
 import circt
+import circt.support
+from circt.dialects import hw
 
+import gc
 import sys
 import typing
 
@@ -24,26 +27,35 @@ class System:
   ]
   passed = False
 
-  def __init__(self):
+  def __init__(self, modules=[]):
+    self.modules = modules
     if not hasattr(self, "name"):
-      self.name = "top"
+      self.name = "__pycde_temp_top"
 
     self.mod = mlir.ir.Module.create()
-    self.get_types()
+    self.system_mod = None
+
+    self.build()
+
+  def build(self):
+    if self.system_mod is not None:
+      return
 
     with mlir.ir.InsertionPoint(self.mod.body):
-      self.declare_externs()
-      ModuleDefinition(modcls=None,
-                       name=self.name,
-                       input_ports=self.inputs,
-                       output_ports=self.outputs,
-                       body_builder=self.build)
+      self.system_mod = ModuleDefinition(modcls=None,
+                                         name=self.name,
+                                         input_ports=[],
+                                         output_ports=[])
 
-  def declare_externs(self):
-    pass
-
-  def get_types(self):
-    pass
+    # Add the module body. Don't use the `body_builder` to avoid using the
+    # `BackedgeBuilder` it creates.
+    bb = circt.support.BackedgeBuilder()
+    with mlir.ir.InsertionPoint(self.system_mod.add_entry_block()), bb:
+      self.mod_ops = set([m().operation.name for m in self.modules])
+      hw.OutputOp([])
+      # We don't care about the backedges since this module is supposed to be
+      # temporary.
+      bb.edges.clear()
 
   @property
   def body(self):
@@ -62,6 +74,13 @@ class System:
     pm = mlir.passmanager.PassManager.parse("run-generators{generators=" +
                                             ",".join(generator_names) + "}")
     pm.run(self.mod)
+    if self.system_mod is None:
+      return
+    sys_mod_block = self.system_mod.operation.regions[0].blocks[0]
+    if all([op.operation.name not in self.mod_ops for op in sys_mod_block]):
+      self.system_mod.operation.erase()
+      self.system_mod = None
+      gc.collect()
 
   def run_passes(self):
     if self.passed:

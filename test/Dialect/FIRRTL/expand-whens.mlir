@@ -305,17 +305,17 @@ firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
 
   // CHECK: %reg0 = firrtl.reg %clock
   // CHECK: firrtl.connect %reg0, %reg0
-  %reg0 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<2>
+  %reg0 = firrtl.reg %clock : !firrtl.uint<2>
 
   // CHECK: %reg1 = firrtl.reg %clock
   // CHECK: firrtl.connect %reg1, %c0_ui2
-  %reg1 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<2>
+  %reg1 = firrtl.reg %clock : !firrtl.uint<2>
   firrtl.connect %reg1, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 
   // CHECK: %reg2 = firrtl.reg %clock
   // CHECK: [[MUX:%.+]] = firrtl.mux(%p, %c0_ui2, %reg2)
   // CHECK: firrtl.connect %reg2, [[MUX]]
-  %reg2 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<2>
+  %reg2 = firrtl.reg %clock : !firrtl.uint<2>
   firrtl.when %p {
     firrtl.connect %reg2, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
@@ -323,7 +323,7 @@ firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
   // CHECK: %reg3 = firrtl.reg %clock
   // CHECK: [[MUX:%.+]] = firrtl.mux(%p, %c0_ui2, %c1_ui2)
   // CHECK: firrtl.connect %reg3, [[MUX]]
-  %reg3 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<2>
+  %reg3 = firrtl.reg %clock : !firrtl.uint<2>
   firrtl.when %p {
     firrtl.connect %reg3, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   } else {

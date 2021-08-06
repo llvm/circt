@@ -39,7 +39,7 @@ def ArrayCreateOp : HWOp<"array_create", [NoSideEffect, SameTypeOperands]> {
     return success();
   }];
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let builders = [
     // ValueRange needs to contain at least one element.
@@ -158,7 +158,7 @@ def StructCreateOp : HWOp<"struct_create", [NoSideEffect]> {
   let results = (outs StructTypeImpl:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
 }
 
 // Extract a range of bits from the specified input.
@@ -169,7 +169,7 @@ def StructExtractOp : HWOp<"struct_extract", [NoSideEffect]> {
   let results = (outs HWNonInOutType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StructType::FieldInfo":$field)>
@@ -186,7 +186,7 @@ def StructInjectOp : HWOp<"struct_inject", [NoSideEffect,
   let results = (outs StructType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
 }
 
 def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
@@ -194,7 +194,7 @@ def StructExplodeOp : HWOp<"struct_explode", [NoSideEffect]> {
   let arguments = (ins StructType:$input);
   let results = (outs Variadic<HWNonInOutType>:$result);
    let parser = "return ::parse$cppClass(parser, result);";
-   let printer = "return ::print(p, *this);";
+   let printer = "return ::print$cppClass(p, *this);";
  }
 
 //===----------------------------------------------------------------------===//
@@ -217,7 +217,7 @@ def UnionCreateOp : HWOp<"union_create", [NoSideEffect]> {
   let results = (outs UnionTypeImpl:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
 }
 
 def UnionExtractOp : HWOp<"union_extract", [NoSideEffect]> {
@@ -238,5 +238,5 @@ def UnionExtractOp : HWOp<"union_extract", [NoSideEffect]> {
   let results = (outs HWNonInOutType:$result);
 
   let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
 }

@@ -25,6 +25,8 @@ std::unique_ptr<mlir::Pass> createCompileControlPass();
 
 std::unique_ptr<mlir::Pass> createGoInsertionPass();
 
+std::unique_ptr<mlir::Pass> createRemoveGroupsPass();
+
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/Calyx/CalyxPasses.h.inc"

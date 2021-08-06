@@ -4,6 +4,14 @@
 hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.wire : !hw.inout<i42>
   %forceWire = sv.wire : !hw.inout<i1>
+ 
+  %c11_i42 = hw.constant 11: i42
+  // CHECK: localparam [41:0] param_x = 42'hB;
+  %param_x = sv.localparam %c11_i42 : i42
+
+  %param_tmp = comb.add %param_x, %c11_i42 : i42
+  // CHECK: localparam [41:0] param_y = param_x + 42'hB;
+  %param_y = sv.localparam %param_tmp : i42
 
   // CHECK:      always @(posedge clock) begin
   sv.always posedge %clock {
@@ -94,6 +102,9 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
       // CHECK-NEXT: wire42 = 42'h2A;
       sv.bpassign %wire42, %c42 : i42
+    } else {
+      // CHECK: wire42 = param_y;
+      sv.bpassign %wire42, %param_y : i42
     }
 
     // CHECK-NEXT:   if (cond)

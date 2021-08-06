@@ -737,7 +737,9 @@ circuit GCTInterface : %[
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 0, {
     ; CHECK-SAME:     class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:     defName = "ViewName",
-    ; CHECK-SAME:     name = "port"}>]}
+    ; CHECK-SAME:     name = "port"}>,
+    ; CHECK-SAME:   #firrtl.subAnno<fieldID = 0, {
+    ; CHECK-SAME:     class = "firrtl.transforms.DontTouchAnnotation"}>]}
     ; CHECK-SAME: annotations = [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.ViewAnnotation",
     ; CHECK-SAME:    defName = "ViewName",

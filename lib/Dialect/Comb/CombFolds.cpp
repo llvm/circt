@@ -11,6 +11,7 @@
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace circt;
@@ -71,6 +72,136 @@ static bool tryFlatteningOperands(Op op, PatternRewriter &rewriter) {
     return true;
   }
   return false;
+}
+
+// Given a range of uses of an operation, find the lowest and highest bits
+// inclusive that are ever referenced. The range of uses must not be empty.
+static std::pair<size_t, size_t>
+getLowestBitAndHighestBitRequired(Operation *op, bool narrowTrailingBits,
+                                  size_t originalOpWidth) {
+  auto users = op->getUsers();
+  assert(!users.empty() &&
+         "getLowestBitAndHighestBitRequired cannot operate on "
+         "a empty list of uses.");
+
+  // when we don't want to narrowTrailingBits (namely in arithmetic
+  // operations), forcing lowestBitRequired = 0
+  size_t lowestBitRequired = narrowTrailingBits ? originalOpWidth - 1 : 0;
+  size_t highestBitRequired = 0;
+
+  for (auto *user : users) {
+    if (auto extractOp = dyn_cast<ExtractOp>(user)) {
+      size_t lowBit = extractOp.lowBit();
+      size_t highBit = extractOp.getType().getWidth() + lowBit - 1;
+      highestBitRequired = std::max(highestBitRequired, highBit);
+      lowestBitRequired = std::min(lowestBitRequired, lowBit);
+      continue;
+    }
+
+    highestBitRequired = originalOpWidth - 1;
+    lowestBitRequired = 0;
+    break;
+  }
+
+  return {lowestBitRequired, highestBitRequired};
+}
+
+// narrowOperationWidth(...) attempts to create a new instance of Op
+// with createOp using narrowed operands. Ie: transforming f(x, y) into
+// f(x[n:m], y[n:m]), It analyzes all usage sites of narrowingCandidate and
+// mutate them to the newly created narrowed version if it's benefitial.
+//
+// narrowTrailingBits determines whether undemanded trailing bits should
+// be aggressively stripped off.
+//
+// This function requires the narrowingCandidate to have at least 1 use.
+//
+// Returns true if IR is mutated. IR is mutated iff narrowing happens.
+static bool
+narrowOperationWidth(Operation *narrowingCandidate, ValueRange inputs,
+                     bool narrowTrailingBits, PatternRewriter &rewriter,
+                     function_ref<Value(ArrayRef<Value>)> createOp) {
+  // If the result is never used, no point optimizing this. It will
+  // also complicated error handling in getLowestBitAndHigestBitRequired.
+  assert(!narrowingCandidate->getUsers().empty() &&
+         "narrowingCandidate must have at least one use.");
+  assert(narrowingCandidate->getNumResults() == 1 &&
+         "narrowingCandidate must have exactly one result");
+  IntegerType narrowingCandidateType =
+      narrowingCandidate->getResultTypes().front().cast<IntegerType>();
+
+  size_t highestBitRequired;
+  size_t lowestBitRequired;
+  size_t originalOpWidth = narrowingCandidateType.getIntOrFloatBitWidth();
+
+  std::tie(lowestBitRequired, highestBitRequired) =
+      getLowestBitAndHighestBitRequired(narrowingCandidate, narrowTrailingBits,
+                                        originalOpWidth);
+
+  // Give up, because we can't make it narrower than it already is.
+  if (lowestBitRequired == 0 && highestBitRequired == originalOpWidth - 1)
+    return false;
+
+  auto loc = narrowingCandidate->getLoc();
+  size_t narrowedWidth = highestBitRequired - lowestBitRequired + 1;
+  auto narrowedType = rewriter.getIntegerType(narrowedWidth);
+
+  // Insert the new narrowedOperation at a point where all narrowingCandidate's
+  // operands are available, and resides before all users.
+  rewriter.setInsertionPoint(narrowingCandidate);
+  Value narrowedOperation =
+      createOp(SmallVector<Value>(llvm::map_range(inputs, [&](auto input) {
+        return rewriter.create<ExtractOp>(loc, narrowedType, input,
+                                          lowestBitRequired);
+      })));
+
+  auto getNarrowedExtractReplacement = [&](ExtractOp extractUse) -> Value {
+    auto oldLowBit = extractUse.lowBit();
+
+    assert(oldLowBit >= lowestBitRequired &&
+           "incorrectly deduced the lowest bit required in usage arguments.");
+
+    auto loc = extractUse.getLoc();
+
+    if (narrowedWidth == extractUse.getType().getWidth()) {
+      return narrowedOperation;
+    }
+
+    uint32_t newLowBit = oldLowBit - lowestBitRequired;
+    Value narrowedExtract = rewriter.create<ExtractOp>(
+        loc, extractUse.getType(), narrowedOperation, newLowBit);
+    return narrowedExtract;
+  };
+
+  // Replaces all existing use sites with the newly created narrowed operation.
+  // This loop captures both the root and non-root use sites.  Note that
+  // PatternRewriter allows calling rewriter.replaceOp on non-root users.
+  for (Operation *user :
+       llvm::make_early_inc_range(narrowingCandidate->getUsers())) {
+    auto extractUser = cast<ExtractOp>(user);
+
+    // This is necessary because the rewriter's insertion point can be a
+    // replaced extractUser
+    rewriter.setInsertionPoint(extractUser);
+    rewriter.replaceOp(extractUser, getNarrowedExtractReplacement(extractUser));
+  }
+
+  // narrowingCandidate can be safely removed now, as all old users of
+  // narrowingCandidate are replaced.
+  rewriter.eraseOp(narrowingCandidate);
+
+  return true;
+}
+
+template <class Op>
+static bool narrowOperationWidth(Op op, ValueRange inputs,
+                                 bool narrowTrailingBits,
+                                 PatternRewriter &rewriter) {
+  auto createOp = [&](ArrayRef<Value> args) -> Value {
+    return rewriter.create<Op>(op.getLoc(), args);
+  };
+  return narrowOperationWidth(op, inputs, narrowTrailingBits, rewriter,
+                              createOp);
 }
 
 //===----------------------------------------------------------------------===//
@@ -219,20 +350,68 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
   return success();
 }
 
-LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
-  // Narrow Mux
-  // extract(mux(c,a,b)) -> mux(c,extract(a),extract(b))
-  if (auto mux = dyn_cast_or_null<MuxOp>(op.input().getDefiningOp())) {
-    if (mux->hasOneUse()) {
-      auto newT = rewriter.createOrFold<ExtractOp>(
-          mux.getLoc(), op.getType(), mux.trueValue(), op.lowBit());
-      auto newF = rewriter.createOrFold<ExtractOp>(
-          mux.getLoc(), op.getType(), mux.falseValue(), op.lowBit());
-      rewriter.replaceOpWithNewOp<MuxOp>(op, mux.cond(), newT, newF);
-      return success();
-    }
+// Pattern matches on extract(f(a, b)), and transforms f(extract(a), extract(b))
+// for some known f. This is performed by analyzing all usage sites of the
+// result of f(a, b). When this transformation returns true, it mutates all the
+// usage sites of outerExtractOp to reference the newly created narrowed
+// operation.
+static bool narrowExtractWidth(ExtractOp outerExtractOp,
+                               PatternRewriter &rewriter) {
+  auto *innerArg = outerExtractOp.input().getDefiningOp();
+
+  if (!innerArg) {
+    return false;
   }
 
+  // In calls to narrowOperationWidth below, innerOp is guranteed to have at
+  // least one use (ie: this extract operation). So we don't need to handle
+  // innerOp with no uses.
+
+  return llvm::TypeSwitch<Operation *, bool>(innerArg)
+      // The unreferenced leading bits of Add, Sub and Mul can be stripped of,
+      // but not the trailing bits. The trailing bits is used to compute the
+      // results of arithmetic operations.
+      .Case<AddOp, MulOp>([&](auto innerOp) {
+        return narrowOperationWidth(innerOp, innerOp.inputs(),
+                                    /* narrowTrailingBits= */ false, rewriter);
+      })
+      .Case<SubOp>([&](SubOp innerOp) {
+        return narrowOperationWidth(innerOp, {innerOp.lhs(), innerOp.rhs()},
+                                    /* narrowTrailingBits= */ false, rewriter);
+      })
+      // Bit-wise operations and muxes can be narrowed more aggressively.
+      // Trailing bits that are not referenced in the use-sits can all be
+      // removed.
+      .Case<AndOp, OrOp, XorOp>([&](auto innerOp) {
+        return narrowOperationWidth(innerOp, innerOp.inputs(),
+                                    /* narrowTrailingBits= */ true, rewriter);
+      })
+      .Case<MuxOp>([&](MuxOp innerOp) {
+        Type type = innerOp.getType();
+
+        assert(type.isa<IntegerType>() &&
+               "extract() requires input to be of type IntegerType!");
+
+        auto cond = innerOp.cond();
+        auto loc = innerOp.getLoc();
+        auto createMuxOp = [&](ArrayRef<Value> values) -> MuxOp {
+          assert(values.size() == 2 &&
+                 "createMuxOp expects exactly two elements");
+          return rewriter.create<MuxOp>(loc, cond, values[0], values[1]);
+        };
+
+        return narrowOperationWidth(
+            innerOp, {innerOp.trueValue(), innerOp.falseValue()},
+            /* narrowTrailingBits= */ true, rewriter, createMuxOp);
+      })
+
+      // TODO: Cautiously investigate whether this optimization can be performed
+      // on other comb operators (shifts & divs), arrays, memory, or even
+      // sequential operations.
+      .Default([](Operation *op) { return false; });
+}
+
+LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
   if (auto innerExtract =
           dyn_cast_or_null<ExtractOp>(op.input().getDefiningOp())) {
@@ -246,6 +425,12 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (auto innerCat = dyn_cast_or_null<ConcatOp>(op.input().getDefiningOp())) {
     return extractConcatToConcatExtract(op, innerCat, rewriter);
   }
+
+  // extract(f(a, b)) = f(extract(a), extract(b)). This is performed only when
+  // the number of bits to operation f can be reduced. See documentation of
+  // narrowExtractWidth for more information.
+  if (narrowExtractWidth(op, rewriter))
+    return success();
 
   return failure();
 }

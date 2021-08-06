@@ -80,8 +80,8 @@ def ComponentOp : CalyxOp<"component", [
 
   // TODO(Calyx): Allow explicit port naming?
   let arguments = (ins
-    ArrayAttr:$inPortNames,
-    ArrayAttr:$outPortNames
+    ArrayAttr:$portNames,
+    I64Attr:$numInPorts
   );
   let results = (outs);
   let regions = (region SizedRegion<1>: $body);
@@ -110,6 +110,12 @@ def ComponentOp : CalyxOp<"component", [
 
       /// Returns the ControlOp of a Calyx Component.
       ControlOp getControlOp();
+
+      /// Gets the Done port of a Calyx component.
+      Value getDonePort();
+
+      /// Gets the Go port of a Calyx component.
+      Value getGoPort();
   }];
 
   let verifier = "return ::verify$cppClass(*this);";

@@ -1,6 +1,10 @@
 // RUN: circt-opt -lower-firrtl-to-hw %s | FileCheck %s
 
-firrtl.circuit "Simple" {
+firrtl.circuit "Simple"   attributes {annotations = [{class =
+"sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", directory = "dir1",  filename = "./dir1/filename1" }, {class =
+"sifive.enterprise.firrtl.ExtractCoverageAnnotation", directory = "dir2",  filename = "./dir2/filename2" }, {class =
+"sifive.enterprise.firrtl.ExtractAssertionsAnnotation", directory = "dir3",  filename = "./dir3/filename3" }]}
+{
 
   // CHECK-LABEL: hw.module @Simple
   firrtl.module @Simple(in %in1: !firrtl.uint<4>,
@@ -355,16 +359,16 @@ firrtl.circuit "Simple" {
 
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
-    // CHECK-NEXT:     sv.assert %aCond : i1
-    // CHECK-NEXT:     sv.assert "assert_0" %aCond : i1
+    // CHECK-NEXT:     sv.assert {output_file = {directory = "dir3", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir3/filename3"}} %aCond : i1
+    // CHECK-NEXT:     sv.assert "assert_0" {output_file = {directory = "dir3", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir3/filename3"}} %aCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %bEn {
-    // CHECK-NEXT:     sv.assume %bCond  : i1
-    // CHECK-NEXT:     sv.assume "assume_0" %bCond  : i1
+    // CHECK-NEXT:     sv.assume {output_file = {directory = "dir1", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir1/filename1"}} %bCond : i1
+    // CHECK-NEXT:     sv.assume "assume_0" {output_file = {directory = "dir1", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir1/filename1"}} %bCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %cEn {
-    // CHECK-NEXT:     sv.cover %cCond : i1
-    // CHECK-NEXT:     sv.cover "cover_0" %cCond : i1
+    // CHECK-NEXT:     sv.cover {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} %cCond : i1
+    // CHECK-NEXT:     sv.cover "cover_0" {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} %cCond : i1
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
@@ -395,11 +399,34 @@ firrtl.circuit "Simple" {
     %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
   }
 
-  // CHECK: sv.bind @[[bazSymbol:.+]] {output_file
+  // CHECK: sv.bind @[[bazSymbol:.+]]
+  // CHECK-NOT: output_file
+  // CHECK-NEXT: sv.bind @[[quxSymbol:.+]] {output_file
+  // CHECK-SAME: directory = "outputDir", exclude_from_filelist = true
+  // CHECK-SAME: exclude_replicated_ops = true, name = "bindings.sv"
   // CHECK-NEXT: hw.module @bindTest()
   firrtl.module @bindTest() {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
     %baz = firrtl.instance @bar {lowerToBind = true, name = "baz"} : !firrtl.uint<1>
+    // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
+    %qux = firrtl.instance @bar {lowerToBind = true, name = "qux",
+      output_file = {
+        directory = "outputDir",
+        exclude_from_filelist = true,
+        exclude_replicated_ops = true,
+        name = "bindings.sv"}} : !firrtl.uint<1>
+  }
+
+
+  // CHECK-LABEL: hw.module @output_fileTest
+  // CHECK-SAME: directory = "output_fileTest/dir", exclude_from_filelist = true
+  // CHECK-SAME: exclude_replicated_ops = true, name = "output_fileTest.sv"
+  firrtl.module @output_fileTest() attributes {output_file = {
+    directory = "output_fileTest/dir",
+    exclude_from_filelist = true,
+    exclude_replicated_ops = true,
+    name = "output_fileTest.sv"
+  }} {
   }
 
   // https://github.com/llvm/circt/issues/314
@@ -475,7 +502,7 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
-    %count = firrtl.reg %clock {name = "count", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : (!firrtl.clock) -> !firrtl.uint<2>
+    %count = firrtl.reg %clock {name = "count", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
 
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   } else {
@@ -551,8 +578,8 @@ firrtl.circuit "Simple" {
     // CHECK-NEXT: }(syncreset : posedge %reset) {
     // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
     // CHECK-NEXT: }
-    %reg = firrtl.regreset %clock, %4, %c0_ui32 {name = "reg"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<32>) -> !firrtl.uint<32>
-    %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<32>) -> !firrtl.uint<32>
+    %reg = firrtl.regreset %clock, %4, %c0_ui32 {name = "reg"} : !firrtl.asyncreset, !firrtl.uint<32>, !firrtl.uint<32>
+    %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
 
     // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
     // CHECK-NEXT: %1 = comb.concat %false, %0 : (i1, i32) -> i33
@@ -615,13 +642,13 @@ firrtl.circuit "Simple" {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
-    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: sint<42>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
+    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
   // CHECK: %_M.ro_data_0, %_M.rw_rdata_0 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0(%clock1, %true, %c0_i4, %clock1, %true, %c0_i4_0, %true, %true, %0, %clock2, %inpred, %c0_i4_1, %[[mask:.+]], %[[data:.+]]) : (i1, i1, i4, i1, i1, i4, i1, i1, i42, i1, i1, i4, i1, i42) -> (i42, i42)
   // CHECK: hw.output %_M.ro_data_0, %_M.rw_rdata_0 : i42, i42
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.sint<42>
       firrtl.connect %result, %0 : !firrtl.sint<42>, !firrtl.sint<42>
-      %1 = firrtl.subfield %_M_rw(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: sint<42>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.sint<42>
+      %1 = firrtl.subfield %_M_rw(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.sint<42>
       firrtl.connect %result2, %1 : !firrtl.sint<42>, !firrtl.sint<42>
       %2 = firrtl.subfield %_M_read(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.uint<4>
       firrtl.connect %2, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
@@ -630,15 +657,15 @@ firrtl.circuit "Simple" {
       %4 = firrtl.subfield %_M_read(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.clock
       firrtl.connect %4, %clock1 : !firrtl.clock, !firrtl.clock
 
-      %5 = firrtl.subfield %_M_rw(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: sint<42>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<4>
+      %5 = firrtl.subfield %_M_rw(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<4>
       firrtl.connect %5, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
-      %6 = firrtl.subfield %_M_rw(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: sint<42>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
+      %6 = firrtl.subfield %_M_rw(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
       firrtl.connect %6, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %7 = firrtl.subfield %_M_rw(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: sint<42>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.clock
+      %7 = firrtl.subfield %_M_rw(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.clock
       firrtl.connect %7, %clock1 : !firrtl.clock, !firrtl.clock
-      %8 = firrtl.subfield %_M_rw(6) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: sint<42>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
+      %8 = firrtl.subfield %_M_rw(6) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
       firrtl.connect %8, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-      %9 = firrtl.subfield %_M_rw(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: sint<42>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
+      %9 = firrtl.subfield %_M_rw(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>) -> !firrtl.uint<1>
       firrtl.connect %9, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 
       %10 = firrtl.subfield %_M_write(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) -> !firrtl.uint<4>
@@ -688,7 +715,7 @@ firrtl.circuit "Simple" {
   //CHECK-LABEL: hw.module @test_partialconnect(%clock: i1) {
   //CHECK: sv.alwaysff(posedge %clock)
   firrtl.module @test_partialconnect(in %clock : !firrtl.clock) {
-    %b = firrtl.reg %clock {name = "pcon"} : (!firrtl.clock) -> !firrtl.uint<1>
+    %b = firrtl.reg %clock {name = "pcon"} : !firrtl.uint<1>
     %a = firrtl.constant 0 : !firrtl.uint<2>
     firrtl.partialconnect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
   }
@@ -737,7 +764,7 @@ firrtl.circuit "Simple" {
   // https://github.com/llvm/circt/issues/699
   firrtl.module @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>) -> !firrtl.uint<4>
+    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
   }
 
   // CHECK-LABEL: hw.module @Struct0bits(%source: !hw.struct<valid: i1, ready: i1, data: i0>) {
@@ -776,7 +803,7 @@ firrtl.circuit "Simple" {
                             in %cond: !firrtl.uint<1>, in %value: !firrtl.uint<42>) {
     %c0_ui42 = firrtl.constant 0 : !firrtl.uint<42>
     // CHECK: %count = sv.reg sym @count : !hw.inout<i42>
-    %count = firrtl.reg %clock {name = "count", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : (!firrtl.clock) -> !firrtl.uint<42>
+    %count = firrtl.reg %clock {name = "count", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<42>
 
     // CHECK: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT:   } else {

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import mlir
-
 import pycde
 from pycde import (Input, Output, Parameter, module, externmodule, generator,
                    types, dim)
@@ -75,11 +73,12 @@ class Coefficients:
     self.coeff = coeff
 
 
-class Polynomial(pycde.System):
-  inputs = []
-  outputs = [('y', types.i32)]
+@module
+class PolynomialSystem:
+  y = Output(types.i32)
 
-  def build(self, top):
+  @generator
+  def construct(_):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example")
@@ -93,27 +92,26 @@ class Polynomial(pycde.System):
     return {"y": poly.y}
 
 
-poly = Polynomial()
+poly = pycde.System([PolynomialSystem])
 
-poly.graph()
-# CHECK-LABEL: digraph "top"
-# CHECK: label="top";
-# CHECK: [shape=record,label="{hw.constant\ni32\n\nvalue: 23 : i32}"];
+print("Generating 1...")
+poly.generate()
 
 print("Printing...")
 poly.print()
-# CHECK-LABEL:  hw.module @top() -> (%y: i32)
+# CHECK-LABEL:  hw.module @pycde.PolynomialSystem() -> (%y: i32)
 # CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    [[REG1:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    [[REG2:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [1, 2, 3, 4, 5]}, module_name = "PolyComputeForCoeff_1_2_3_4_5", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    [[REG3:%.+]] = "pycde.CoolPolynomialCompute"(%c23_i32{{.*}}) {coefficients = [4, 42], opNames = ["x"], parameters = {}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
-print("Generating...")
+print("Generating 2...")
 poly.generate()
+
 print("Printing...")
 poly.print()
-# CHECK-LABEL: hw.module @top
+# CHECK-LABEL: hw.module @pycde.PolynomialSystem
 # CHECK: %example.y = hw.instance "example" @PolyComputeForCoeff_62_42_6(%c23_i32) {parameters = {}} : (i32) -> i32
 # CHECK: %example2.y = hw.instance "example2" @PolyComputeForCoeff_62_42_6(%example.y) {parameters = {}} : (i32) -> i32
 # CHECK: %example2.y_0 = hw.instance "example2" @PolyComputeForCoeff_1_2_3_4_5(%example.y) {parameters = {}} : (i32) -> i32
