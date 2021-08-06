@@ -144,22 +144,28 @@ void SimplexScheduler::buildTableau() {
   unsigned varNum = 0;
 
   // Assign column and variable numbers to the operations' start times.
-  nColumns = 2; // 0: `parameterOneColumn`, 1: `parameterIIColumn`
   for (auto *op : prob.getOperations()) {
-    opCols[op] = nColumns++;
+    opCols[op] = firstNonBasicVariableColumn + varNum;
     nonBasicVariables.push_back(varNum++);
   }
 
+  // `parameterOneColumn` + `parameterIIColumn` + one column per operation
+  nColumns = 2 + nonBasicVariables.size();
+
+  // Helper to grow both the tableau and the implicit column vector.
+  auto addRow = [&]() -> SmallVector<int> & {
+    implicitBasicVariableColumnVector.push_back(0);
+    return tableau.emplace_back(nColumns, 0);
+  };
+
   // Set up the objective row.
-  auto &objRowVec = tableau.emplace_back(nColumns, 0);
+  auto &objRowVec = addRow();
   objRowVec[opCols[lastOp]] = 1;
 
   // Now set up rows/constraints for the dependences.
-  nRows = 1; // 0: `objectiveRow`
   for (auto *op : prob.getOperations()) {
     for (auto &dep : prob.getDependences(op)) {
-      auto &consRowVec = tableau.emplace_back(nColumns, 0);
-      nRows++;
+      auto &consRowVec = addRow();
       basicVariables.push_back(varNum++);
 
       Operation *src = dep.getSource();
@@ -173,10 +179,8 @@ void SimplexScheduler::buildTableau() {
     }
   }
 
-  // Set up the temporary column vector, and zero-initialize it.
-  implicitBasicVariableColumnVector.set_size(nRows);
-  std::fill(implicitBasicVariableColumnVector.begin(),
-            implicitBasicVariableColumnVector.end(), 0);
+  // `objectiveRow` + one row per dependence
+  nRows = tableau.size();
 }
 
 Optional<unsigned> SimplexScheduler::findPivotRow() {
