@@ -1,9 +1,28 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-grand-central)' -split-input-file %s | FileCheck %s
 
-firrtl.circuit "InterfaceGroundType" attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Foo", elements = [{description = "description of foo", name = "foo", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}, {name = "bar", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
+firrtl.circuit "InterfaceGroundType" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {description = "description of foo",
+        name = "foo",
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"},
+       {name = "bar",
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
   firrtl.module @InterfaceGroundType() {
-    %a = firrtl.wire {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "Foo", name = "foo", target = []}]} : !firrtl.uint<2>
-    %b = firrtl.wire {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "Foo", name = "bar", target = []}]} : !firrtl.uint<4>
+    %a = firrtl.wire {annotations = [
+      {a},
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       defName = "Foo",
+       name = "foo",
+       target = []}]} : !firrtl.uint<2>
+    %b = firrtl.wire {annotations = [
+      {a},
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       defName = "Foo",
+       name = "bar",
+       target = []}]} : !firrtl.uint<4>
   }
 }
 
@@ -26,11 +45,28 @@ firrtl.circuit "InterfaceGroundType" attributes {annotations = [{class = "sifive
 
 // -----
 
-firrtl.circuit "InterfaceVectorType" attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Foo", elements = [{description = "description of foo", name = "foo", tpe = "sifive.enterprise.grandcentral.AugmentedVectorType"}]}]} {
+firrtl.circuit "InterfaceVectorType" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {description = "description of foo",
+        name = "foo",
+        tpe = "sifive.enterprise.grandcentral.AugmentedVectorType"}]}]} {
   firrtl.module @InterfaceVectorType(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    %a_0 = firrtl.reg %clock {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "Foo", name = "foo"}]} : (!firrtl.clock) -> !firrtl.uint<1>
+    %a_0 = firrtl.reg %clock {
+      annotations = [
+        {a},
+        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+         defName = "Foo",
+         name = "foo"}]} : !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %a_1 = firrtl.regreset %clock, %reset, %c0_ui1 {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "Foo", name = "foo"}]} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %a_1 = firrtl.regreset %clock, %reset, %c0_ui1 {
+      annotations = [
+        {a},
+        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+         defName = "Foo",
+         name = "foo"}]} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -52,10 +88,34 @@ firrtl.circuit "InterfaceVectorType" attributes {annotations = [{class = "sifive
 
 // -----
 
-firrtl.circuit "InterfaceBundleType" attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Bar", elements = [{name = "b", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}, {name = "a", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}, {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Foo", elements = [{description = "descripton of Bar", name = "Bar", tpe = "sifive.enterprise.grandcentral.AugmentedBundleType"}]}]}  {
+firrtl.circuit "InterfaceBundleType" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Bar",
+     elements = [
+       {name = "b",
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"},
+       {name = "a",
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {description = "descripton of Bar",
+        name = "Bar",
+        tpe = "sifive.enterprise.grandcentral.AugmentedBundleType"}]}]}  {
   firrtl.module @InterfaceBundleType() {
-    %x = firrtl.wire {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "Bar", name = "a"}]} : !firrtl.uint<1>
-    %y = firrtl.wire {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "Bar", name = "b"}]} : !firrtl.uint<2>
+    %x = firrtl.wire {
+      annotations = [
+        {a},
+        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+         defName = "Bar",
+         name = "a"}]} : !firrtl.uint<1>
+    %y = firrtl.wire {
+      annotations = [
+        {a},
+        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+         defName = "Bar",
+         name = "b"}]} : !firrtl.uint<2>
   }
 }
 
@@ -81,11 +141,24 @@ firrtl.circuit "InterfaceBundleType" attributes {annotations = [{class = "sifive
 
 // -----
 
-firrtl.circuit "InterfaceNode" attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Foo", elements = [{description = "some expression", name = "foo", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
+firrtl.circuit "InterfaceNode" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {description = "some expression",
+        name = "foo",
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
   firrtl.module @InterfaceNode() {
     %a = firrtl.wire : !firrtl.uint<2>
     %notA = firrtl.not %a : (!firrtl.uint<2>) -> !firrtl.uint<2>
-    %b = firrtl.node %notA {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "Foo", name = "foo", target = []}]} : !firrtl.uint<2>
+    %b = firrtl.node %notA {
+      annotations = [
+        {a},
+        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+         defName = "Foo",
+         name = "foo",
+         target = []}]} : !firrtl.uint<2>
   }
 }
 
@@ -104,8 +177,21 @@ firrtl.circuit "InterfaceNode" attributes {annotations = [{class = "sifive.enter
 
 // -----
 
-firrtl.circuit "InterfacePort" attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Foo", elements = [{description = "description of foo", name = "foo", tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
-  firrtl.module @InterfacePort(in %a : !firrtl.uint<4> {firrtl.annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "Foo", name = "foo", target = []}]}) {
+firrtl.circuit "InterfacePort" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {description = "description of foo",
+        name = "foo",
+        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
+  firrtl.module @InterfacePort(in %a : !firrtl.uint<4> {
+    firrtl.annotations = [
+      {a},
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       defName = "Foo",
+       name = "foo",
+       target = []}]}) {
   }
 }
 
@@ -124,7 +210,20 @@ firrtl.circuit "InterfacePort" attributes {annotations = [{class = "sifive.enter
 
 // -----
 
-firrtl.circuit "UnsupportedTypes" attributes {annotations = [{a}, {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Foo", elements = [{name = "string", tpe = "sifive.enterprise.grandcentral.AugmentedStringType"}, {name = "boolean", tpe = "sifive.enterprise.grandcentral.AugmentedBooleanType"}, {name = "integer", tpe = "sifive.enterprise.grandcentral.AugmentedIntegerType"}, {name = "double", tpe = "sifive.enterprise.grandcentral.AugmentedDoubleType"}]}]} {
+firrtl.circuit "UnsupportedTypes" attributes {
+  annotations = [
+    {a},
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {name = "string",
+        tpe = "sifive.enterprise.grandcentral.AugmentedStringType"},
+       {name = "boolean",
+        tpe = "sifive.enterprise.grandcentral.AugmentedBooleanType"},
+       {name = "integer",
+        tpe = "sifive.enterprise.grandcentral.AugmentedIntegerType"},
+       {name = "double",
+        tpe = "sifive.enterprise.grandcentral.AugmentedDoubleType"}]}]} {
   firrtl.module @UnsupportedTypes() {}
 }
 
@@ -140,8 +239,17 @@ firrtl.circuit "UnsupportedTypes" attributes {annotations = [{a}, {class = "sifi
 
 // -----
 
-firrtl.circuit "BindTest" attributes {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "Foo", elements = []}]} {
-  firrtl.module @Companion() attributes {annotations = [{class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 42 : i64, type = "companion"}]} {}
+firrtl.circuit "BindTest" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = []}]} {
+  firrtl.module @Companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 42 : i64,
+       type = "companion"}]} {}
   firrtl.module @BindTest() {
     firrtl.instance @Companion { name = "companion1" }
     firrtl.instance @Companion { name = "companion2" }
@@ -206,7 +314,8 @@ firrtl.circuit "BindInterfaceTest"  attributes {
 // CHECK-SAME: %a
 
 // An instance of the interface was added to the module.
-// CHECK: sv.interface.instance sym @[[INTERFACE_INSTANCE_SYMBOL]] {doNotPrint = true, name = "instanceName"} : !sv.interface<@InterfaceName>
+// CHECK: sv.interface.instance sym @[[INTERFACE_INSTANCE_SYMBOL]] {
+// CHECK-SAME: doNotPrint = true
 
 // The interface is added.
 // CHECK: sv.interface @InterfaceName {

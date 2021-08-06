@@ -43,6 +43,11 @@ public:
   /// a specific field in a bundle.
   unsigned getFieldID() const { return id; }
 
+  /// Get a reference to a subfield.
+  FieldRef getSubField(unsigned subFieldID) const {
+    return FieldRef(value, id + subFieldID);
+  }
+
   bool operator==(const FieldRef &other) const {
     return value == other.value && id == other.id;
   }

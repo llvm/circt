@@ -1,5 +1,6 @@
+from typing import Type
 import circt.support as support
-import circt.dialects.hw as hw
+from circt.dialects import hw, seq
 
 import mlir.ir as ir
 
@@ -19,9 +20,16 @@ class Value:
   def __getitem__(self, sub):
     ty = self.type.inner
     if isinstance(ty, hw.ArrayType):
-      idx = int(sub)
-      if idx >= self.type.size:
-        raise ValueError("Subscript out-of-bounds")
+      if isinstance(sub, int):
+        idx = int(sub)
+        if idx >= self.type.size:
+          raise ValueError("Subscript out-of-bounds")
+      else:
+        idx = support.get_value(sub)
+        if idx is None or not isinstance(support.type_to_pytype(idx.type),
+                                         ir.IntegerType):
+          raise TypeError("Subscript on array must be either int or MLIR int"
+                          f" Value, not {type(sub)}.")
       with get_user_loc():
         return Value(hw.ArrayGetOp.create(self.value, idx))
 
@@ -43,6 +51,9 @@ class Value:
         with get_user_loc():
           return Value(hw.StructExtractOp.create(self.value, attr))
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
+
+  def reg(self, clk, rst=None):
+    return seq.reg(self.value, clk, rst)
 
 
 # PyCDE needs a custom version of this to support python classes.
@@ -151,3 +162,12 @@ def obj_to_value(x, type, result_type=None):
                                     result_type=result_type).result
 
   raise ValueError(f"Unable to map object '{type(x)}' to MLIR Value")
+
+
+def create_type_string(ty):
+  ty = support.type_to_pytype(ty)
+  if isinstance(ty, hw.TypeAliasType):
+    return ty.name
+  if isinstance(ty, hw.ArrayType):
+    return f"{ty.size}x" + create_type_string(ty.element_type)
+  return str(ty)

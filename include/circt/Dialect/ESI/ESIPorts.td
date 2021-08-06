@@ -56,7 +56,7 @@ def WrapValidReady : ESI_Op<"wrap.vr", [NoSideEffect]> {
   let arguments = (ins AnyType:$rawInput, I1:$valid);
   let results = (outs ChannelType:$chanOutput, I1:$ready);
 
-  let printer = [{ return ::print(p, *this); }];
+  let printer = [{ return ::print$cppClass(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
   let hasFolder = 1;
 
@@ -76,7 +76,7 @@ def UnwrapValidReady : ESI_Op<"unwrap.vr", [NoSideEffect]> {
   let arguments = (ins ChannelType:$chanInput, I1:$ready);
   let results = (outs AnyType:$rawOutput, I1:$valid);
 
-  let printer = [{ return ::print(p, *this); }];
+  let printer = [{ return ::print$cppClass(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 
   let builders = [

@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from pycde.support import obj_to_value
 
-from .support import Value, get_user_loc, var_to_attribute, OpOperandConnect
 from .pycde_types import types
+from .support import (Value, get_user_loc, var_to_attribute, OpOperandConnect,
+                      create_type_string)
 
 from circt import support
 from circt.dialects import hw
@@ -71,9 +72,10 @@ class module:
     if inspect.isclass(func_or_class):
       # If it's just a module class, we should wrap it immediately
       self.mod = _module_base(func_or_class, extern_name is not None)
-      _register_generator(self.mod.__name__, "extern_instantiate",
-                          self._instantiate,
-                          mlir.ir.DictAttr.get(self.mod._parameters))
+      if extern_name is not None:
+        _register_generator(self.mod.__name__, "extern_instantiate",
+                            self._instantiate,
+                            mlir.ir.DictAttr.get(self.mod._parameters))
       return
     elif not inspect.isfunction(func_or_class):
       raise TypeError("@module got invalid object")
@@ -342,6 +344,11 @@ class _Generate:
   necessary logic to build an HWModule."""
 
   def __init__(self, gen_func):
+    sig = inspect.signature(gen_func)
+    if len(sig.parameters) != 1:
+      raise ValueError(
+          "Generate functions must take one argument and do not support 'self'."
+      )
     self.gen_func = gen_func
     self.modcls = None
     self.loc = get_user_loc()
@@ -408,20 +415,11 @@ class _Generate:
         inst.attributes[name] = attr
       return inst
 
-  @staticmethod
-  def create_type_string(ty):
-    ty = support.type_to_pytype(ty)
-    if isinstance(ty, hw.TypeAliasType):
-      return ty.name
-    if isinstance(ty, hw.ArrayType):
-      return f"{ty.size}x" + _Generate.create_type_string(ty.element_type)
-    return str(ty)
-
   def create_module_name(self, op):
 
     def val_str(val):
       if isinstance(val, mlir.ir.Type):
-        return self.create_type_string(val)
+        return create_type_string(val)
       return str(val)
 
     name = op.name

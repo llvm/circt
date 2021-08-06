@@ -205,10 +205,10 @@ firrtl.module @declarations(in %clock : !firrtl.clock, in %u8 : !firrtl.uint<8>,
   %memport = firrtl.memoryport Infer %cmem, %u8, %clock {name = "memoryport"} : (!firrtl.uint<8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
   // CHECK: %myinst_node = firrtl.node %myinst_u8  : !firrtl.uint<8>
   %node = firrtl.node %u8 {name = "node"} : !firrtl.uint<8>
-  // CHECK: %myinst_reg = firrtl.reg %myinst_clock : (!firrtl.clock) -> !firrtl.uint<8>
-  %reg = firrtl.reg %clock {name = "reg"} : (!firrtl.clock) -> !firrtl.uint<8>
-  // CHECK: %myinst_regreset = firrtl.regreset %myinst_clock, %myinst_reset, %myinst_u8 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>) -> !firrtl.uint<8>
-  %regreset = firrtl.regreset %clock, %reset, %u8 : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>) -> !firrtl.uint<8>
+  // CHECK: %myinst_reg = firrtl.reg %myinst_clock : !firrtl.uint<8>
+  %reg = firrtl.reg %clock {name = "reg"} : !firrtl.uint<8>
+  // CHECK: %myinst_regreset = firrtl.regreset %myinst_clock, %myinst_reset, %myinst_u8 : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+  %regreset = firrtl.regreset %clock, %reset, %u8 : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK: %myinst_smem = firrtl.smem Undefined  {name = "myinst_smem"} : !firrtl.uint<1>
   %smem = firrtl.smem Undefined {name = "smem"} : !firrtl.uint<1>
   // CHECK: %myinst_wire = firrtl.wire  : !firrtl.uint<1>

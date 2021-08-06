@@ -88,7 +88,7 @@ def HWModuleOp : HWOp<"module",
   public:
   }];
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verify$cppClass(*this);";
 }
@@ -167,7 +167,7 @@ def HWModuleExternOp : HWOp<"module.extern",
   public:
   }];
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verify$cppClass(*this);";
 }
@@ -272,7 +272,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
   public:
   }];
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verify$cppClass(*this);";
 }

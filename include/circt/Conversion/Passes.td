@@ -16,6 +16,20 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
+// CalyxToHW
+//===----------------------------------------------------------------------===//
+
+def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower Calyx to HW";
+  let description = [{
+    This pass lowers Calyx to HW.
+  }];
+  let constructor = "circt::createCalyxToHWPass()";
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
+                           "sv::SVDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 

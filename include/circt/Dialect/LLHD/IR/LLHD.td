@@ -92,9 +92,9 @@ class LLHD_Op<string mnemonic, list<OpTrait> traits = []>
   //
   // * static ParseResult parse<op-c++-class-name>(OpAsmParser &parser,
   //                                               OperationState &state);
-  // * static void print(OpAsmPrinter &p, <op-c++-class-name> op)
+  // * static void print<op-c++-class-name>(OpAsmPrinter &p, <op-c++-class-name> op)
   let parser = [{ return ::parse$cppClass(parser, result); }];
-  let printer = [{ ::print(p, *this); }];
+  let printer = [{ ::print$cppClass(p, *this); }];
 }
 
 class LLHD_ArithmeticOrBitwiseOp<string mnemonic, list<OpTrait> traits = []>

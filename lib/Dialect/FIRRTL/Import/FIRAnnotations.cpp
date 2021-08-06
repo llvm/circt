@@ -564,14 +564,21 @@ static bool parseAugmentedType(
       return false;
     }
     auto target = maybeTarget.getValue();
-    NamedAttrList attr;
+    NamedAttrList attr, dontTouchAnn;
     attr.append("class", classAttr);
     attr.append("defName", defName);
     attr.append("name", name);
-    if (target.second)
+    dontTouchAnn.append(
+        "class",
+        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+    if (target.second) {
       attr.append("target", target.second);
+      dontTouchAnn.append("target", target.second);
+    }
     newAnnotations[target.first].push_back(
         DictionaryAttr::getWithSorted(context, attr));
+    newAnnotations[target.first].push_back(
+        DictionaryAttr::getWithSorted(context, dontTouchAnn));
     return true;
   }
 
@@ -877,6 +884,14 @@ bool circt::firrtl::scatterCustomAnnotations(
       companionAttrs.append("class", viewAnnotationClass);
       companionAttrs.append("id", id);
       companionAttrs.append("type", StringAttr::get(context, "companion"));
+      auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
+      if (!viewAttr)
+        return false;
+      auto defName =
+          tryGetAs<StringAttr>(viewAttr, viewAttr, "defName", loc, clazz);
+      if (!defName)
+        return false;
+      companionAttrs.append("defName", defName);
       auto companionAttr =
           tryGetAs<StringAttr>(dict, dict, "companion", loc, clazz);
       if (!companionAttr)
@@ -888,13 +903,6 @@ bool circt::firrtl::scatterCustomAnnotations(
       if (!parentAttr)
         return false;
       parentAttrs.append("class", viewAnnotationClass);
-      auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
-      if (!viewAttr)
-        return false;
-      auto defName =
-          tryGetAs<StringAttr>(viewAttr, viewAttr, "defName", loc, clazz);
-      if (!defName)
-        return false;
       parentAttrs.append("id", id);
       auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
       if (!name)
