@@ -308,7 +308,7 @@ void SimplexScheduler::dumpTableau() {
 
 LogicalResult SimplexScheduler::schedule() {
   // Initialize data structures.
-  parameterII = 0;
+  parameterII = 1;
   buildTableau();
 
   LLVM_DEBUG(dbgs() << "Initial tableau:\n");
