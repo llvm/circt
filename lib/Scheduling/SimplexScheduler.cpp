@@ -361,12 +361,16 @@ LogicalResult SimplexScheduler::schedule() {
   auto &ops = prob.getOperations();
   unsigned nOps = ops.size();
   // For the start time variables currently in basis, we look up the solution
-  // in the first column. The slack variables (IDs >= |ops|) are ignored.
+  // in the ~B part of the tableau. The slack variables (IDs >= |ops|) are
+  // ignored.
   for (unsigned i = 0; i < basicVariables.size(); ++i) {
     unsigned varNum = basicVariables[i];
-    if (varNum < nOps)
-      prob.setStartTime(ops[varNum],
-                        tableau[firstConstraintRow + i][parameterOneColumn]);
+    if (varNum < nOps) {
+      unsigned startTime =
+          tableau[firstConstraintRow + i][parameterOneColumn] +
+          tableau[firstConstraintRow + i][parameterIIColumn] * parameterII;
+      prob.setStartTime(ops[varNum], startTime);
+    }
   }
 
   // Non-basic variables are 0 at the end of the simplex algorithm.
