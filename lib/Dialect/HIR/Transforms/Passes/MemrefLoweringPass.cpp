@@ -83,6 +83,7 @@ private:
   DenseMap<Value, SmallVector<MemrefPortInterface>> mapMemrefPortToBuses;
   llvm::DenseMap<Value, SmallVector<SmallVector<ListOfUses>>> *uses;
   Value tstartRegion;
+  SmallVector<Operation *> opsToErase;
 };
 } // end anonymous namespace
 
@@ -178,6 +179,7 @@ LogicalResult createBusInstantiationsAndCallOp(
   hir::MemrefType memrefTy = op.getType().dyn_cast<hir::MemrefType>();
   ArrayAttr ports = op.ports();
   OpBuilder builder(op);
+  builder.setInsertionPoint(op);
   SmallVector<MemrefPortInterface> memrefPortInterfaces;
 
   for (auto port : ports) {
@@ -224,6 +226,12 @@ LogicalResult createBusInstantiationsAndCallOp(
   Type funcTy = hir::FuncType::get(builder.getContext(), inputBusTypes,
                                    inputBusAttrs, {}, {});
 
+  auto blockOp = builder.create<hir::BlockOp>(
+      op.getLoc(), SmallVector<Type>({op.res().getType()}));
+  blockOp->setAttr("comment", builder.getStringAttr("AllocaOp"));
+  blockOp.body().push_back(new Block);
+  builder.setInsertionPointToStart(blockOp.getBody(0));
+
   auto callOp = builder.create<hir::CallOp>(
       builder.getUnknownLoc(), SmallVector<Type>(),
       FlatSymbolRefAttr::get(builder.getContext(), op.mem_type()),
@@ -239,9 +247,12 @@ LogicalResult createBusInstantiationsAndCallOp(
   callOp->setAttr("NUM_ELEMENTS",
                   builder.getI64IntegerAttr(memrefTy.getNumElementsPerBank()));
 
+  builder.create<hir::BlockYieldOp>(builder.getUnknownLoc(),
+                                    SmallVector<Value>());
   mapMemrefPortToBuses[op.res()] = memrefPortInterfaces;
   return success();
 }
+
 SmallVector<Value> filterMemrefArgs(Block::BlockArgListType args) {
   SmallVector<Value> memrefArgs;
   for (auto arg : args)
@@ -603,9 +614,11 @@ MemrefPortInterface createBusInterfaceForBankUse(
     ArrayRef<uint64_t> bankIndices, uint64_t numUses, Value tstartRegion) {
   if (numUses == 0) {
     initBusesForNoMemrefUse(builder, bankIndices, portInterface);
+
     return MemrefPortInterface();
   }
   auto useInterface = defineBusTensors(builder, portInterface, numUses);
+
   connectUseAndPortInterfaces(builder, bankIndices, useInterface, portInterface,
                               tstartRegion);
   return useInterface;
@@ -616,6 +629,13 @@ LogicalResult convertOp(hir::LoadOp op, MemrefPortInterface useInterface,
 
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
+
+  auto blockOp = builder.create<hir::BlockOp>(
+      op.getLoc(), SmallVector<Type>({op.res().getType()}));
+  blockOp->setAttr("comment", builder.getStringAttr("LoadOp"));
+  blockOp.body().push_back(new Block);
+  builder.setInsertionPointToStart(blockOp.getBody(0));
+
   Value cUse = builder
                    .create<mlir::ConstantOp>(op.getLoc(),
                                              IndexType::get(op.getContext()),
@@ -683,12 +703,16 @@ LogicalResult convertOp(hir::LoadOp op, MemrefPortInterface useInterface,
       useInterface.rdDataBus, cUse, builder.getStrArrayAttr({"send"}));
 
   // Receive the data from the rdDataBus.
-  auto recvOp = builder.create<hir::RecvOp>(
-      op.getLoc(), op.res().getType(), rdDataBus, builder.getI64IntegerAttr(0),
-      op.tstart(), recvOffset);
-
+  Value receivedValue =
+      builder
+          .create<hir::RecvOp>(op.getLoc(), op.res().getType(), rdDataBus,
+                               builder.getI64IntegerAttr(0), op.tstart(),
+                               recvOffset)
+          .getResult();
+  builder.create<hir::BlockYieldOp>(builder.getUnknownLoc(),
+                                    SmallVector<Value>({receivedValue}));
   // Remove the LoadOp.
-  op.replaceAllUsesWith((Operation *)recvOp);
+  op.replaceAllUsesWith((Operation *)blockOp);
   op.erase();
   return success();
 }
@@ -698,6 +722,12 @@ LogicalResult convertOp(hir::StoreOp op, MemrefPortInterface useInterface,
 
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
+  auto blockOp = builder.create<hir::BlockOp>(op.getLoc(), SmallVector<Type>());
+
+  blockOp->setAttr("comment", builder.getStringAttr("StoreOp"));
+  blockOp.body().push_back(new Block);
+  builder.setInsertionPointToStart(blockOp.getBody(0));
+
   Value cUse = builder
                    .create<mlir::ConstantOp>(op.getLoc(),
                                              IndexType::get(op.getContext()),
@@ -760,6 +790,8 @@ LogicalResult convertOp(hir::StoreOp op, MemrefPortInterface useInterface,
                               builder.getI64IntegerAttr(0), op.tstart(),
                               op.offsetAttr());
 
+  builder.create<hir::BlockYieldOp>(builder.getUnknownLoc(),
+                                    SmallVector<Value>());
   // Remove the StoreOp.
   op.erase();
   return success();
@@ -860,6 +892,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
   if (failed(replaceMemrefUses(builder, op.res(), mapMemrefPortToBuses, *uses,
                                tstartRegion)))
     return failure();
+  opsToErase.push_back(op);
   return success();
 }
 
@@ -888,6 +921,8 @@ void MemrefLoweringPass::runOnOperation() {
     signalPassFailure();
     return;
   }
+  for (auto *operation : opsToErase)
+    operation->erase();
 }
 
 namespace circt {

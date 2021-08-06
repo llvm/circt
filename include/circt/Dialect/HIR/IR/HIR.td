@@ -40,6 +40,17 @@ class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
 
 
+//def TerminatorOp : HIR_Op<"terminator", [ParentOneOf<["BlockOp"]>,Terminator] > {
+//  let summary = "Terminator op";
+//}
+
+def BlockYieldOp : HIR_Op<"block.yield", [ParentOneOf<["BlockOp"]>,Terminator] > {
+  let summary = "Yield from hir.block";
+  let arguments = (ins Variadic<AnyType> : $operands);
+
+  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? }];
+}
+
 def YieldOp : HIR_Op<"yield", [ParentOneOf<["ForOp","UnrollForOp","IfOp"]>,Terminator,AttrSizedOperandSegments] > {
   let summary = "Yield from loops";
   let description = [{
@@ -138,6 +149,20 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlockImplicitTerminator<"ReturnOp">, 
   }];
   let verifier =[{return verify$cppClass(*this);}];
 }
+
+def BlockOp : HIR_Op<"block", [SingleBlock, RecursiveSideEffects]> {
+  let summary = "code block";
+  let description = [{
+    This op is used for arranging code in a program. It helps the codegen pass to generate human readable Verilog.```
+  }];
+
+  let arguments = (ins );
+  let regions = (region SizedRegion<1>:$body);
+  let results = (outs Variadic<AnyType>:$results);
+
+  let assemblyFormat = [{(`->` `(` type($results)^`)`)? attr-dict-with-keyword regions  }];
+}
+
 
 def IfOp : HIR_Op<"if", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects]> {
   let summary = "if operation";
