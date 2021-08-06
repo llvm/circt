@@ -10,7 +10,7 @@ func @cyclic(%a1 : i32, %a2 : i32) -> i32 attributes {
   } {
   // SIMPLEX-NEXT: simplexStartTime = 0
   %0 = constant { problemStartTime = 0 } 42 : i32
-  // SIMPLEX-NEXT: simplexStartTime = 2
+  // SIMPLEX-NEXT: simplexStartTime = 1
   %1 = addi %a1, %a2 { opr = "_0", problemStartTime = 2 } : i32
   // SIMPLEX-NEXT: simplexStartTime = 0
   %2 = subi %a2, %a1 { opr = "_2", problemStartTime = 0 } : i32
