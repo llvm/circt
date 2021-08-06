@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <tcl.h>
 
-#include "Circt.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -11,43 +10,65 @@
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/SourceMgr.h"
 
-int returnErrorStr(Tcl_Interp *interp, const char *error) {
+static int operationTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
+  return TCL_ERROR;
+}
+
+static void operationTypeUpdateStringProc(Tcl_Obj *obj) {
+  std::string str;
+  auto *op = unwrap((MlirOperation){obj->internalRep.otherValuePtr});
+  llvm::raw_string_ostream stream(str);
+  op->print(stream);
+  obj->length = str.length();
+  obj->bytes = Tcl_Alloc(obj->length);
+  memcpy(obj->bytes, str.c_str(), obj->length);
+  obj->bytes[obj->length] = '\0';
+}
+
+static void operationTypeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
+  auto *op = unwrap((MlirOperation){src->internalRep.otherValuePtr})->clone();
+  dup->internalRep.otherValuePtr = wrap(op).ptr;
+}
+
+static void operationTypeFreeIntRepProc(Tcl_Obj *obj) {
+  auto *op = unwrap((MlirOperation){obj->internalRep.otherValuePtr});
+  op->erase();
+}
+
+static int returnErrorStr(Tcl_Interp *interp, const char *error) {
   Tcl_SetObjResult(interp, Tcl_NewStringObj(error, -1));
   return TCL_ERROR;
 }
 
-int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int objc,
+static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int objc,
                     Tcl_Obj *const objv[]) {
   if (objc != 3) {
-    return returnErrorStr(interp, "usage: circt load [MLIR|FIR] [file]");
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: circt load [MLIR|FIR] [file]");
+    return TCL_ERROR;
   }
 
   std::string errorMessage;
   auto input =
-      mlir::openInputFile(llvm::StringRef(objv[2]->bytes), &errorMessage);
+      mlir::openInputFile(llvm::StringRef(Tcl_GetString(objv[2])), &errorMessage);
 
-  if (!input) {
+  if (!input)
     return returnErrorStr(interp, errorMessage.c_str());
-  }
 
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(input), llvm::SMLoc());
   mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, context);
 
   MlirOperation module;
-  if (!strcmp(objv[1]->bytes, "MLIR")) {
+  if (!strcmp(Tcl_GetString(objv[1]), "MLIR"))
     module = wrap(
         mlir::parseSourceFile(sourceMgr, context).release().getOperation());
-  } else if (!strcmp(objv[1]->bytes, "FIR")) {
+  else if (!strcmp(Tcl_GetString(objv[1]), "FIR"))
     // TODO
     return returnErrorStr(interp, "loading FIR files is unimplemented :(");
-  } else {
-    return TCL_ERROR;
-  }
+  else return TCL_ERROR;
 
-  if (mlirOperationIsNull(module)) {
+  if (mlirOperationIsNull(module))
     return returnErrorStr(interp, "error loading module");
-  }
 
   auto *m = module.ptr;
 
@@ -61,29 +82,28 @@ int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int objc,
   return TCL_OK;
 }
 
-int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
+static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
                      Tcl_Obj *const objv[]) {
   if (objc < 2) {
-    return returnErrorStr(interp, "usage: circt load");
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: circt load");
+    return TCL_ERROR;
   }
 
   auto *context = (mlir::MLIRContext *)cdata;
 
-  if (!strcmp("load", objv[1]->bytes)) {
+  if (!strcmp("load", Tcl_GetString(objv[1])))
     return loadFirMlirFile(context, interp, objc - 1, objv + 1);
-  }
 
   return returnErrorStr(interp, "usage: circt load");
 }
 
-void deleteContext(ClientData data) { delete (mlir::MLIRContext *)data; }
+static void deleteContext(ClientData data) { delete (mlir::MLIRContext *)data; }
 
 extern "C" {
 
 int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
-  if (Tcl_InitStubs(interp, TCL_VERSION, 0) == NULL) {
+  if (Tcl_InitStubs(interp, TCL_VERSION, 0) == NULL)
     return TCL_ERROR;
-  }
 
   // Register types
   Tcl_ObjType *operationType = new Tcl_ObjType;
@@ -95,9 +115,8 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   Tcl_RegisterObjType(operationType);
 
   // Register package
-  if (Tcl_PkgProvide(interp, "Circt", "1.0") == TCL_ERROR) {
+  if (Tcl_PkgProvide(interp, "Circt", "1.0") == TCL_ERROR)
     return TCL_ERROR;
-  }
 
   // Register commands
   auto *context = new mlir::MLIRContext;
@@ -107,4 +126,5 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
                        deleteContext);
   return TCL_OK;
 }
+
 }
