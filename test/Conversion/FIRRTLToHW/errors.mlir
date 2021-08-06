@@ -49,21 +49,21 @@ firrtl.circuit "Div" {
     %c0_ui25 = firrtl.constant 0 : !firrtl.uint<25>
   // expected-error @+1 {{'firrtl.mem' should have simple type and known width}}
     %tmp41_r0, %tmp41_w0 = firrtl.mem Undefined {depth = 10 : i64, name = "tmp41", portNames = ["r0", "w0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>
-    %0 = firrtl.subfield %tmp41_r0("clk") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>) -> !firrtl.clock
+    %0 = firrtl.subfield %tmp41_r0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>) -> !firrtl.clock
     firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
-    %1 = firrtl.subfield %tmp41_r0("en") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %tmp41_r0(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>) -> !firrtl.uint<1>
     firrtl.connect %1, %r0en : !firrtl.uint<1>, !firrtl.uint<1>
-    %2 = firrtl.subfield %tmp41_r0("addr") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>) -> !firrtl.uint<4>
+    %2 = firrtl.subfield %tmp41_r0(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<0>>) -> !firrtl.uint<4>
     firrtl.connect %2, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
-    %3 = firrtl.subfield %tmp41_w0("clk") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.clock
+    %3 = firrtl.subfield %tmp41_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.clock
     firrtl.connect %3, %clock : !firrtl.clock, !firrtl.clock
-    %4 = firrtl.subfield %tmp41_w0("en") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<1>
+    %4 = firrtl.subfield %tmp41_w0(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %4, %r0en : !firrtl.uint<1>, !firrtl.uint<1>
-    %5 = firrtl.subfield %tmp41_w0("addr") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<4>
+    %5 = firrtl.subfield %tmp41_w0(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<4>
     firrtl.connect %5, %c0_ui4 : !firrtl.uint<4>, !firrtl.uint<4>
-    %6 = firrtl.subfield %tmp41_w0("mask") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<1>
+    %6 = firrtl.subfield %tmp41_w0(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<1>
     firrtl.connect %6, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %7 = firrtl.subfield %tmp41_w0("data") : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<0>
+    %7 = firrtl.subfield %tmp41_w0(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>) -> !firrtl.uint<0>
     firrtl.partialconnect %7, %c0_ui25 : !firrtl.uint<0>, !firrtl.uint<25>
   }
 }

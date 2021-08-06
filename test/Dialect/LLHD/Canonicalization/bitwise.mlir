@@ -1,4 +1,4 @@
-// RUN: circt-opt -simple-canonicalizer %s | FileCheck %s
+// RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
 
 // CHECK-LABEL: @check_not_folding
 // CHECK-SAME: %[[A:.*]]: i64

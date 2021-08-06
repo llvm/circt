@@ -757,7 +757,8 @@ private:
   void assertPred(Value val, ICmpPredicate pred, int64_t expected) {
     auto expectedVal = create<hw::ConstantOp>(loc, val.getType(), expected);
     create<sv::AssertOp>(
-        loc, create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal));
+        loc, create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal),
+        "");
   }
   Location loc;
 };

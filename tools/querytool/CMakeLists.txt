@@ -9,12 +9,13 @@ add_llvm_tool(querytool
 )
 llvm_update_compile_flags(querytool)
 target_link_libraries(querytool PRIVATE
-  CIRCTImportFIRRTL
+  CIRCTQuery
+
+  CIRCTExportVerilog
+  CIRCTImportFIRFile
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
-  CIRCTQuery
   CIRCTSVTransforms
-  CIRCTTransforms
 
   MLIRParser
   MLIRSupport

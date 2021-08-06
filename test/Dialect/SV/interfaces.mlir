@@ -49,7 +49,7 @@ module {
     sv.interface.signal.assign %iface(@handshake_example::@data) = %zero32 : i32
   }
   // CHECK-LABEL: hw.module @Top() {
-  // CHECK-NEXT:    %0 = sv.interface.instance : !sv.interface<@handshake_example>
+  // CHECK-NEXT:    %0 = sv.interface.instance {name = "iface"} : !sv.interface<@handshake_example>
   // CHECK-NEXT:    %1 = sv.modport.get %0 @dataflow_in : !sv.interface<@handshake_example> -> !sv.modport<@handshake_example::@dataflow_in>
   // CHECK-NEXT:    hw.instance "rcvr" @Rcvr(%1) : (!sv.modport<@handshake_example::@dataflow_in>) -> ()
   // CHECK-NEXT:    %2 = sv.interface.signal.read %0(@handshake_example::@data) : i32

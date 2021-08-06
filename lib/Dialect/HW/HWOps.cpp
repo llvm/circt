@@ -572,14 +572,14 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           omittedAttrs);
 }
 
-static void print(OpAsmPrinter &p, HWModuleExternOp op) {
+static void printHWModuleExternOp(OpAsmPrinter &p, HWModuleExternOp op) {
   printModuleOp(p, op, ExternMod);
 }
-static void print(OpAsmPrinter &p, HWModuleGeneratedOp op) {
+static void printHWModuleGeneratedOp(OpAsmPrinter &p, HWModuleGeneratedOp op) {
   printModuleOp(p, op, GenMod);
 }
 
-static void print(OpAsmPrinter &p, HWModuleOp op) {
+static void printHWModuleOp(OpAsmPrinter &p, HWModuleOp op) {
   printModuleOp(p, op, PlainMod);
 
   // Print the body if this is not an external function.
@@ -730,22 +730,6 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
     return op.emitError("Cannot find module definition '")
            << op.moduleName() << "'";
 
-  if (auto paramDictOpt = op.parameters()) {
-    DictionaryAttr paramDict = paramDictOpt.getValue();
-    auto checkParmValue = [&](NamedAttribute elt) -> bool {
-      auto value = elt.second;
-      if (value.isa<IntegerAttr>() || value.isa<StringAttr>() ||
-          value.isa<FloatAttr>())
-        return true;
-      op.emitError() << "has unknown extmodule parameter value '" << elt.first
-                     << "' = " << value;
-      return false;
-    };
-
-    if (!llvm::all_of(paramDict, checkParmValue))
-      return failure();
-  }
-
   // If the referenced module is internal, check that input and result types are
   // consistent with the referenced module.
   if (!isa<HWModuleOp>(referencedModule))
@@ -860,7 +844,7 @@ static ParseResult parseArrayCreateOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &p, ArrayCreateOp op) {
+static void printArrayCreateOp(OpAsmPrinter &p, ArrayCreateOp op) {
   p << "hw.array_create ";
   p.printOperands(op.inputs());
   p << " : " << op.inputs()[0].getType();
@@ -951,7 +935,7 @@ static ParseResult parseStructCreateOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &printer, hw::StructCreateOp op) {
+static void printStructCreateOp(OpAsmPrinter &printer, hw::StructCreateOp op) {
   printer << op.getOperationName() << " (";
   printer.printOperands(op.input());
   printer << ")";
@@ -986,7 +970,8 @@ static ParseResult parseStructExplodeOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &printer, hw::StructExplodeOp op) {
+static void printStructExplodeOp(OpAsmPrinter &printer,
+                                 hw::StructExplodeOp op) {
   printer << op.getOperationName() << " ";
   printer.printOperand(op.input());
   printer.printOptionalAttrDict(op->getAttrs());
@@ -1044,7 +1029,8 @@ static ParseResult parseStructExtractOp(OpAsmParser &parser,
   return parseExtractOp<StructType>(parser, result);
 }
 
-static void print(OpAsmPrinter &printer, hw::StructExtractOp op) {
+static void printStructExtractOp(OpAsmPrinter &printer,
+                                 hw::StructExtractOp op) {
   printExtractOp(printer, op);
 }
 
@@ -1089,7 +1075,7 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &printer, hw::StructInjectOp op) {
+static void printStructInjectOp(OpAsmPrinter &printer, hw::StructInjectOp op) {
   printer << op.getOperationName() << " ";
   printer.printOperand(op.input());
   printer << "[\"" << op.field() << "\"], ";
@@ -1128,7 +1114,7 @@ static ParseResult parseUnionCreateOp(OpAsmParser &parser,
   return success();
 }
 
-static void print(OpAsmPrinter &printer, hw::UnionCreateOp op) {
+static void printUnionCreateOp(OpAsmPrinter &printer, hw::UnionCreateOp op) {
   printer << op.getOperationName() << " \"" << op.field() << "\", ";
   printer.printOperand(op.input());
   printer.printOptionalAttrDict(op->getAttrs(), {"field"});
@@ -1144,7 +1130,7 @@ static ParseResult parseUnionExtractOp(OpAsmParser &parser,
   return parseExtractOp<UnionType>(parser, result);
 }
 
-static void print(OpAsmPrinter &printer, hw::UnionExtractOp op) {
+static void printUnionExtractOp(OpAsmPrinter &printer, hw::UnionExtractOp op) {
   printExtractOp(printer, op);
 }
 

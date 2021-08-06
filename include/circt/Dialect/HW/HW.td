@@ -43,6 +43,7 @@ include "circt/Dialect/HW/HWTypes.td"
 class HWOp<string mnemonic, list<OpTrait> traits = []> :
     Op<HWDialect, mnemonic, traits>;
 
+include "circt/Dialect/HW/HWMiscOps.td"
 include "circt/Dialect/HW/HWAggregates.td"
 include "circt/Dialect/HW/HWStructure.td"
 include "circt/Dialect/HW/HWTypeDecls.td"

@@ -17,20 +17,13 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVDialect.h"
-#include "circt/Dialect/SV/SVPasses.h"
-#include "circt/Support/LoweringOptions.h"
-#include "circt/Transforms/Passes.h"
-#include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/Timing.h"
 #include "mlir/Transforms/Passes.h"
@@ -176,7 +169,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
-    module = importFIRRTL(sourceMgr, &context, options);
+    //module = importFIRRTL(sourceMgr, &context, options);
+    return failure();
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
     assert(inputFormat == InputMLIRFile);
@@ -184,93 +178,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   }
   if (!module)
     return failure();
-
-  // Apply any pass manager command line options.
-  PassManager pm(&context);
-  pm.enableVerifier(verifyPasses);
-  pm.enableTiming(ts);
-  applyPassManagerCLOptions(pm);
-
-  if (!disableOptimization) {
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        createCSEPass());
-  }
-
-  // Width inference creates canonicalization opportunities.
-  if (inferWidths)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
-
-  // The input mlir file could be firrtl dialect so we might need to clean
-  // things up.
-  if (lowerTypes && !lowerTypesV2)
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
-  if (!lowerTypes && lowerTypesV2)
-    pm.addNestedPass<firrtl::CircuitOp>(
-        firrtl::createLowerBundleVectorTypesPass());
-  if (lowerTypes || lowerTypesV2) {
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    // Only enable expand whens if lower types is also enabled.
-    if (expandWhens)
-      modulePM.addPass(firrtl::createExpandWhensPass());
-  }
-
-  // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
-  if (!disableOptimization) {
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    modulePM.addPass(createSimpleCanonicalizerPass());
-  }
-
-  if (inliner)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
-
-  if (imconstprop)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
-
-  if (blackBoxMemory)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
-
-  // Read black box source files into the IR.
-  StringRef blackBoxRoot = blackBoxRootPath.empty()
-                               ? llvm::sys::path::parent_path(inputFilename)
-                               : blackBoxRootPath;
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxReaderPass(
-      blackBoxRoot, blackBoxRootResourcePath.empty()
-                        ? blackBoxRoot
-                        : blackBoxRootResourcePath));
-
-  if (grandCentral) {
-    auto &circuitPM = pm.nest<firrtl::CircuitOp>();
-    circuitPM.addPass(firrtl::createGrandCentralPass());
-    circuitPM.addPass(firrtl::createGrandCentralTapsPass());
-  }
-
-  // Lower if lowering was specifically requested.
-  if (lowerToHW ) {
-    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createCheckWidthsPass());
-    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
-    pm.addPass(sv::createHWMemSimImplPass());
-
-    if (extractTestCode)
-      pm.addPass(sv::createSVExtractTestCodePass());
-
-    // If enabled, run the optimizer.
-    if (!disableOptimization) {
-      auto &modulePM = pm.nest<hw::HWModuleOp>();
-      modulePM.addPass(sv::createHWCleanupPass());
-      modulePM.addPass(createCSEPass());
-      modulePM.addPass(createSimpleCanonicalizerPass());
-    }
-  }
-
-  // Load the emitter options from the command line. Command line options if
-  // specified will override any module options.
-  applyLoweringCLOptions(module.get());
-
-  if (failed(pm.run(module.get())))
-    return failure();
-
-  auto outputTimer = ts.nest("Output");
 
   // Create the filter and filter from the module
   bool errored;
@@ -341,10 +248,8 @@ int main(int argc, char **argv) {
 
   // Register any pass manager command line options.
   registerMLIRContextCLOptions();
-  registerPassManagerCLOptions();
   registerDefaultTimingManagerCLOptions();
   registerAsmPrinterCLOptions();
-  registerLoweringCLOptions();
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
 

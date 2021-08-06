@@ -51,6 +51,23 @@ public:
 } // end namespace llvm
 
 //===----------------------------------------------------------------------===//
+// Static class names
+//===----------------------------------------------------------------------===//
+
+static constexpr const char *dataTapsClass =
+    "sifive.enterprise.grandcentral.DataTapsAnnotation";
+static constexpr const char *memTapClass =
+    "sifive.enterprise.grandcentral.MemTapAnnotation";
+static constexpr const char *deletedKeyClass =
+    "sifive.enterprise.grandcentral.DeletedDataTapKey";
+static constexpr const char *literalKeyClass =
+    "sifive.enterprise.grandcentral.LiteralDataTapKey";
+static constexpr const char *referenceKeyClass =
+    "sifive.enterprise.grandcentral.ReferenceDataTapKey";
+static constexpr const char *internalKeyClass =
+    "sifive.enterprise.grandcentral.DataTapModuleSignalKey";
+
+//===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
 
@@ -174,22 +191,49 @@ static InstancePath stripCommonPrefix(InstancePath path, InstancePath other) {
   return path;
 }
 
-//===----------------------------------------------------------------------===//
-// Static class names
-//===----------------------------------------------------------------------===//
+/// A reference data tap key, identified by the annotation id and port id.
+using Key = std::pair<Attribute, Attribute>;
 
-static constexpr const char *dataTapsClass =
-    "sifive.enterprise.grandcentral.DataTapsAnnotation";
-static constexpr const char *memTapClass =
-    "sifive.enterprise.grandcentral.MemTapAnnotation";
-static constexpr const char *deletedKeyClass =
-    "sifive.enterprise.grandcentral.DeletedDataTapKey";
-static constexpr const char *literalKeyClass =
-    "sifive.enterprise.grandcentral.LiteralDataTapKey";
-static constexpr const char *referenceKeyClass =
-    "sifive.enterprise.grandcentral.ReferenceDataTapKey";
-static constexpr const char *internalKeyClass =
-    "sifive.enterprise.grandcentral.DataTapModuleSignalKey";
+/// A tapped port, described as the module/extmodule operation and the port
+/// number.
+struct Port : std::pair<Operation *, unsigned> {
+  using std::pair<Operation *, unsigned>::pair;
+  operator bool() const { return bool(first); }
+};
+
+// Allow printing of `Key` through `<<`.
+template <typename T>
+static T &operator<<(T &os, Key key) {
+  return os << "[" << key.first << ", " << key.second << "]";
+}
+
+/// Check if an annotation is a `ReferenceDataTapKey`, and that it has a `type`
+/// field with a given content.
+static bool isReferenceDataTapOfType(Annotation anno, StringRef type) {
+  if (!anno.isClass(referenceKeyClass))
+    return false;
+  auto typeAttr = anno.getMember<StringAttr>("type");
+  if (!typeAttr)
+    return false;
+  return typeAttr.getValue() == type;
+}
+
+/// Check if an annotation is a `ReferenceDataTapKey` with `source` type.
+static bool isReferenceDataTapSource(Annotation anno) {
+  return isReferenceDataTapOfType(anno, "source");
+}
+
+/// Check if an annotation is a `ReferenceDataTapKey` with `portName` type.
+static bool isReferenceDataTapPortName(Annotation anno) {
+  return isReferenceDataTapOfType(anno, "portName");
+}
+
+/// Map an annotation to a `Key`.
+static Key getKey(Annotation anno) {
+  auto id = anno.getMember("id");
+  auto portID = anno.getMember("portID");
+  return {id, portID};
+}
 
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
@@ -201,9 +245,18 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   void processAnnotation(AnnotatedPort &portAnno, AnnotatedExtModule &blackBox,
                          InstancePaths &instancePaths);
 
-private:
-  DenseMap<Attribute, BlockArgument> tappedArgs;
-  DenseMap<Attribute, Operation *> tappedOps;
+  // Helpers to simplify collecting taps on the various things.
+  void gatherTap(Annotation anno, Port port) {
+    auto it = tappedPorts.insert({getKey(anno), port});
+    assert(it.second && "ambiguous tap annotation");
+  }
+  void gatherTap(Annotation anno, Operation *op) {
+    auto it = tappedOps.insert({getKey(anno), op});
+    assert(it.second && "ambiguous tap annotation");
+  }
+
+  DenseMap<Key, Operation *> tappedOps;
+  DenseMap<Key, Port> tappedPorts;
   SmallDenseMap<Attribute, unsigned, 2> memPortIdx;
   SmallVector<PortWiring, 8> portWiring;
 };
@@ -256,7 +309,8 @@ void GrandCentralTapsPass::runOnOperation() {
       auto annos = AnnotationSet::forPort(extModule, argNum);
       annos.removeAnnotations([&](Annotation anno) {
         if (anno.isClass(memTapClass, deletedKeyClass, literalKeyClass,
-                         referenceKeyClass, internalKeyClass)) {
+                         internalKeyClass) ||
+            isReferenceDataTapPortName(anno)) {
           result.portAnnos.push_back({argNum, anno});
           return true;
         }
@@ -276,12 +330,12 @@ void GrandCentralTapsPass::runOnOperation() {
       modules.push_back(std::move(result));
   }
 
-#ifndef NDEBUG
-  for (auto m : modules) {
-    LLVM_DEBUG(llvm::dbgs() << "Extmodule " << m.extModule.getName() << " has "
-                            << m.portAnnos.size() << " port annotations\n");
-  }
-#endif
+  LLVM_DEBUG({
+    for (auto m : modules) {
+      llvm::dbgs() << "Extmodule " << m.extModule.getName() << " has "
+                   << m.portAnnos.size() << " port annotations\n";
+    }
+  });
 
   // Fast path if there's nothing to do.
   if (modules.empty()) {
@@ -294,31 +348,33 @@ void GrandCentralTapsPass::runOnOperation() {
 
   // Gather the annotated ports and operations throughout the design that we are
   // supposed to tap in one way or another.
-  tappedArgs.clear();
+  tappedPorts.clear();
   tappedOps.clear();
   circuitOp.walk([&](Operation *op) { gatherAnnotations(op); });
 
-#ifndef NDEBUG
-  LLVM_DEBUG(llvm::dbgs() << "Tapped values:\n");
-  for (auto it : tappedArgs)
-    LLVM_DEBUG(llvm::dbgs() << "- " << it.first << ": " << it.second << "\n");
-  LLVM_DEBUG(llvm::dbgs() << "Tapped ops:\n");
-  for (auto it : tappedOps)
-    LLVM_DEBUG(llvm::dbgs() << "- " << it.first << ": " << *it.second << "\n");
-#endif
+  LLVM_DEBUG({
+    llvm::dbgs() << "Tapped ports:\n";
+    for (auto it : tappedPorts)
+      llvm::dbgs() << "- " << it.first << ": "
+                   << it.second.first->getAttr("sym_name") << " port #"
+                   << it.second.second << "\n";
+    llvm::dbgs() << "Tapped ops:\n";
+    for (auto it : tappedOps)
+      llvm::dbgs() << "- " << it.first << ": " << *it.second << "\n";
+  });
 
   // Process each black box independently.
   for (auto blackBox : modules) {
     LLVM_DEBUG(llvm::dbgs() << "Generating impls for "
                             << blackBox.extModule.getName() << "\n");
 
-    // As a first step, gather a list of all absolute paths to instances of this
-    // black box.
+    // As a first step, gather a list of all absolute paths to instances of
+    // this black box.
     auto paths = instancePaths.getAbsolutePaths(blackBox.extModule);
-#ifndef NDEBUG
-    for (auto path : paths)
-      LLVM_DEBUG(llvm::dbgs() << "- " << path << "\n");
-#endif
+    LLVM_DEBUG({
+      for (auto path : paths)
+        llvm::dbgs() << "- " << path << "\n";
+    });
 
     // Go through the port annotations of the tap module and generate a
     // hierarchical path for each.
@@ -328,25 +384,25 @@ void GrandCentralTapsPass::runOnOperation() {
       processAnnotation(portAnno, blackBox, instancePaths);
     }
 
-#ifndef NDEBUG
-    LLVM_DEBUG(llvm::dbgs() << "- Wire up as follows:\n");
-    for (auto wiring : portWiring) {
-      LLVM_DEBUG(llvm::dbgs() << "- Port " << wiring.portNum << ":\n");
-      for (auto path : wiring.prefices) {
-        LLVM_DEBUG(llvm::dbgs()
-                   << "  - " << path << "." << wiring.suffix << "\n");
+    LLVM_DEBUG({
+      llvm::dbgs() << "- Wire up as follows:\n";
+      for (auto wiring : portWiring) {
+        llvm::dbgs() << "- Port " << wiring.portNum << ":\n";
+        for (auto path : wiring.prefices) {
+          llvm::dbgs() << "  - " << path << "." << wiring.suffix << "\n";
+        }
       }
-    }
-#endif
+    });
 
-    // Now we have an awkward mapping problem. We have multiple data tap module
-    // instances, which reference things in modules that in turn have multiple
-    // instances. This is a side-effect of how Grand Central annotates things on
-    // modules rather than instances. (However in practice these will have a
-    // one-to-one correspondence due to CHIRRTL having fully uniquified
-    // instances.) To solve this issue, create a dedicated implementation for
-    // every data tap instance, and among the possible targets for the data taps
-    // choose the one with the shortest relative path to the data tap instance.
+    // Now we have an awkward mapping problem. We have multiple data tap
+    // module instances, which reference things in modules that in turn have
+    // multiple instances. This is a side-effect of how Grand Central
+    // annotates things on modules rather than instances. (However in practice
+    // these will have a one-to-one correspondence due to CHIRRTL having fully
+    // uniquified instances.) To solve this issue, create a dedicated
+    // implementation for every data tap instance, and among the possible
+    // targets for the data taps choose the one with the shortest relative
+    // path to the data tap instance.
     ImplicitLocOpBuilder builder(blackBox.extModule->getLoc(),
                                  blackBox.extModule);
     unsigned implIdx = 0;
@@ -409,10 +465,11 @@ void GrandCentralTapsPass::runOnOperation() {
         builder.create<ConnectOp>(arg, hnameExpr);
       }
 
-      // Switch the instance from the original extmodule to this implementation.
-      // CAVEAT: If the same black box data tap module is instantiated in a
-      // parent module that itself is instantiated in different locations, this
-      // will pretty arbitrarily pick one of those locations.
+      // Switch the instance from the original extmodule to this
+      // implementation. CAVEAT: If the same black box data tap module is
+      // instantiated in a parent module that itself is instantiated in
+      // different locations, this will pretty arbitrarily pick one of those
+      // locations.
       path.back()->setAttr("moduleName",
                            builder.getSymbolRefAttr(name.getValue()));
     }
@@ -422,39 +479,46 @@ void GrandCentralTapsPass::runOnOperation() {
   }
 }
 
-/// Gather the annotations on ports and operations into the `tappedOps` and
-/// `tappedArgs` maps.
+/// Gather the annotations on ports and operations into the `tappedPorts` and
+/// `tappedOps` maps.
 void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
-  if (auto module = dyn_cast<FModuleOp>(op)) {
-    AnnotationSet::removePortAnnotations(
-        module, [&](unsigned argNum, Annotation anno) {
-          if (anno.isClass(referenceKeyClass)) {
-            auto it =
-                tappedArgs.insert({anno.getDict(), module.getArgument(argNum)});
-            assert(it.second && "ambiguous tap annotation");
-            return true;
-          }
-          return false;
-        });
-  } else {
-    AnnotationSet annos(op);
-    if (annos.empty())
-      return;
-
-    // Go through all annotations on this op and extract the interesting ones.
-    // Note that the way tap annotations are scattered to their targets, we
-    // should never see multiple values or memories annotated with the exact
-    // same annotation (hence the asserts).
-    annos.removeAnnotations([&](Annotation anno) {
-      if (anno.isClass(memTapClass, referenceKeyClass, internalKeyClass)) {
-        auto it = tappedOps.insert({anno.getDict(), op});
-        assert(it.second && "ambiguous tap annotation");
+  if (isa<FModuleOp, FExtModuleOp>(op)) {
+    // Handle port annotations on module/extmodule ops.
+    auto gather = [&](unsigned argNum, Annotation anno) {
+      if (isReferenceDataTapSource(anno)) {
+        gatherTap(anno, Port{op, argNum});
         return true;
       }
       return false;
-    });
-    annos.applyToOperation(op);
+    };
+    AnnotationSet::removePortAnnotations(op, gather);
+
+    // Handle internal data taps on extmodule ops.
+    if (isa<FExtModuleOp>(op)) {
+      auto gather = [&](Annotation anno) {
+        if (anno.isClass(internalKeyClass)) {
+          gatherTap(anno, op);
+          return true;
+        }
+        return false;
+      };
+      AnnotationSet::removeAnnotations(op, gather);
+    }
+
+    return;
   }
+
+  // Go through all annotations on this op and extract the interesting
+  // ones. Note that the way tap annotations are scattered to their
+  // targets, we should never see multiple values or memories annotated
+  // with the exact same annotation (hence the asserts).
+  AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
+    if (anno.isClass(memTapClass) || isReferenceDataTapSource(anno)) {
+      gatherTap(anno, op);
+      return true;
+    }
+    return false;
+  });
 }
 
 void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
@@ -462,23 +526,22 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
                                              InstancePaths &instancePaths) {
   LLVM_DEBUG(llvm::dbgs() << "- Processing port " << portAnno.portNum
                           << " anno " << portAnno.anno.getDict() << "\n");
+  auto key = getKey(portAnno.anno);
   auto portName = getModulePortName(blackBox.extModule, portAnno.portNum);
   PortWiring wiring = {portAnno.portNum, {}, {}};
 
   // Handle data taps on signals and ports.
   if (portAnno.anno.isClass(referenceKeyClass)) {
-    // Handle block arguments.
-    if (auto blockArg = tappedArgs.lookup(portAnno.anno.getDict())) {
-      auto parentModule = blockArg.getOwner()->getParentOp();
-      wiring.prefices = instancePaths.getAbsolutePaths(parentModule);
-      wiring.suffix =
-          getModulePortName(parentModule, blockArg.getArgNumber()).getValue();
+    // Handle ports.
+    if (auto port = tappedPorts.lookup(key)) {
+      wiring.prefices = instancePaths.getAbsolutePaths(port.first);
+      wiring.suffix = getModulePortName(port.first, port.second).getValue();
       portWiring.push_back(std::move(wiring));
       return;
     }
 
     // Handle operations.
-    if (auto op = tappedOps.lookup(portAnno.anno.getDict())) {
+    if (auto op = tappedOps.lookup(key)) {
       // We require the target to be a wire or node, such that it gets a name
       // during Verilog emission.
       if (!isa<WireOp, NodeOp, RegOp, RegResetOp>(op)) {
@@ -523,7 +586,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
 
   // Handle data taps on black boxes.
   if (portAnno.anno.isClass(internalKeyClass)) {
-    auto op = tappedOps.lookup(portAnno.anno.getDict());
+    auto op = tappedOps.lookup(key);
     if (!op) {
       blackBox.extModule.emitOpError(
           "DataTapModuleSignalKey annotation was not scattered to "
@@ -559,7 +622,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
 
   // Handle memory taps.
   if (portAnno.anno.isClass(memTapClass)) {
-    auto op = tappedOps.lookup(portAnno.anno.getDict());
+    auto op = tappedOps.lookup(key);
     if (!op) {
       blackBox.extModule.emitOpError(
           "MemTapAnnotation annotation was not scattered to "

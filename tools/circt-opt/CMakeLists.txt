@@ -9,6 +9,7 @@ llvm_update_compile_flags(circt-opt)
 target_link_libraries(circt-opt
   PRIVATE
   CIRCTCalyx
+  CIRCTCalyxToHW
   CIRCTCalyxTransforms
   CIRCTESI
   CIRCTFIRRTL
@@ -30,7 +31,6 @@ target_link_libraries(circt-opt
   CIRCTStaticLogicOps
   CIRCTSV
   CIRCTSVTransforms
-  CIRCTTransforms
 
   MLIRIR
   MLIRLLVMIR

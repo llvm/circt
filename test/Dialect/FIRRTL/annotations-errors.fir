@@ -1,6 +1,6 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics --split-input-file %s
 
-; COM: Invalid circuit should report an error
+; Invalid circuit should report an error
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
 ; expected-note @+1 {{/* error: annotation has invalid circuit name */}}
@@ -10,7 +10,7 @@ circuit Foo: %[[{"one":null,"target":"~Fooo|Foo>bar"}]]
 
 ; // -----
 
-; COM: Invalid circuit should report an error
+; Invalid circuit should report an error
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
 ; expected-note @+1 {{/* error: annotation has invalid circuit name */}}
@@ -20,7 +20,7 @@ circuit Foo: %[[{"one":null,"target":"~Fooo"}]]
 
 ; // -----
 
-; COM: A non-local Annotation is unsupported.
+; A non-local Annotation is unsupported.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
 ; expected-note @+1 {{"target": /* error: unsupported non-local target */ "~Foo|Foo/bar:Bar/baz:Baz"}}
@@ -30,7 +30,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
 
 ; // -----
 
-; COM: Annotations JSON is not an array.
+; Annotations JSON is not an array.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
 ; expected-note @+1 {{/* error: Expected annotations to be an array, but found something else. */}}
@@ -40,7 +40,7 @@ circuit Foo: %[{"a":"a"}]
 
 ; // -----
 
-; COM: Annotations JSON is not an array of objects.
+; Annotations JSON is not an array of objects.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
 ; expected-note @+1 {{/* error: Expected annotations to be an array of objects, but found an array of something else. */}}
@@ -50,7 +50,7 @@ circuit Foo: %[[{"a":"a"},[{"b":"b"}]]]
 
 ; // -----
 
-; COM: Annotations JSON is invalid. (There's a trailing comma.)
+; Annotations JSON is invalid. (There's a trailing comma.)
 
 ; expected-error @+2 {{Failed to parse JSON Annotations}}
 ; expected-note @+1 {{}}
@@ -60,7 +60,7 @@ circuit Foo: %[[{"a":"a"},]]]
 
 ; // -----
 
-; COM: A custom annotation fails to parse because it is missing fields
+; A custom annotation fails to parse because it is missing fields
 
 ; expected-error @+2 {{did not contain required key}}
 ; expected-note @+1 {{}}
@@ -75,7 +75,7 @@ circuit Foo: %[
 
 ; // -----
 
-; COM: An empty target should report an error (and not crash)
+; An empty target should report an error (and not crash)
 
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
@@ -86,7 +86,7 @@ circuit Foo: %[[{"target":""}]]
 
 ; // -----
 
-; COM: A null target should report an error (and not crash)
+; A null target should report an error (and not crash)
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
 ; expected-note @+1 {{"target": /* error: target must be a string type */}}
@@ -96,7 +96,7 @@ circuit Foo: %[[{"target":null}]]
 
 ; // -----
 
-; COM: Invalid port reference should report errors
+; Invalid port reference should report errors
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1]"}]]
   module Bar:
     input a: UInt<1>
@@ -106,7 +106,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1]"}]]
 
 ; // -----
 
-; COM: Invalid sub-target annotation should report an error
+; Invalid sub-target annotation should report an error
 
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[a].baz"}, {"two":null,"target":"~Foo|Foo>bar[2].baz"}]]
   module Foo:
@@ -116,7 +116,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[a].baz"}, {"two":null,"target
 
 ; // -----
 
-; COM: Invalid sub-target annotation should report an error
+; Invalid sub-target annotation should report an error
 
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1][0]"},{"two":null,"target":"~Foo|Foo>bar[1].qnx"}]]
   module Foo:
@@ -127,10 +127,39 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1][0]"},{"two":null,"target":
 
 ; // -----
 
-; COM: Invalid sub-target annotation should report an error
+; Invalid sub-target annotation should report an error
 
 circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[1].baz[0]"}]]
   module Foo:
     input clock: Clock
 ; expected-error @+1 {{the 3-th token of [1].baz[0] expects an aggregate type}}
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
+
+; // -----
+
+; A target pointing at a non-existent module should error.
+
+; expected-error @+1 {{unapplied annotations with target '~Foo|Bar' and payload '[{a}]'}}
+circuit Foo: %[[{"a":null,"target":"~Foo|Bar"}]]
+  module Foo:
+    skip
+
+; // -----
+
+; A target pointing at a non-existent component should error.
+
+; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>x' and payload '[{a}]'}}
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo>x"}]]
+  module Foo:
+    skip
+
+; // -----
+
+; A target pointing at a non-existent instance should error.
+
+; expected-error @+1 {{unapplied annotations with target '~Foo|Foo/baz:Bar' and payload '[{a}]'}}
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
+  module Bar:
+    skip
+  module Foo:
+    inst bar of Bar

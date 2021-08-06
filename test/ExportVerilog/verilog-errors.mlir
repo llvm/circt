@@ -21,3 +21,12 @@ module attributes {circt.loweringOptions = "badOption,anotherOne"} {}
 hw.module @namechange(%casex: i4) -> (%if: i4) {
   hw.output %casex : i4
 }
+
+// -----
+
+hw.module @A () {}
+
+hw.module @B() {
+  // expected-error @+1 {{unknown extmodule parameter value 'width' = @Foo}}
+  hw.instance "foo" @A() { parameters = { width = @Foo } }: () -> ()
+}

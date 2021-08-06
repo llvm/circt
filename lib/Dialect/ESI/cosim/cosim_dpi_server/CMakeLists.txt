@@ -14,6 +14,7 @@ if(ESI_COSIM)
       PROPERTIES
           LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
           RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+	  CXX_VISIBILITY_PRESET "default"
   )
   add_dependencies(EsiCosimDpiServer EsiCosimCapnp MtiPli)
   target_link_libraries(EsiCosimDpiServer PRIVATE

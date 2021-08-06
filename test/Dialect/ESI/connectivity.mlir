@@ -64,7 +64,7 @@ hw.module @testIfaceWrap() {
   %idataChanOut = esi.wrap.iface %ifaceOutSink: !sv.modport<@IData::@Sink> -> !esi.channel<i32>
 
   // CHECK-LABEL:  hw.module @testIfaceWrap() {
-  // CHECK-NEXT:     %0 = sv.interface.instance : !sv.interface<@IData>
+  // CHECK-NEXT:     %0 = sv.interface.instance {name = "ifaceOut"} : !sv.interface<@IData>
   // CHECK-NEXT:     %1 = sv.modport.get %0 @Source : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
   // CHECK-NEXT:     hw.instance "ifaceSender" @IFaceSender(%1) : (!sv.modport<@IData::@Source>) -> ()
   // CHECK-NEXT:     %2 = sv.modport.get %0 @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
@@ -76,7 +76,7 @@ hw.module @testIfaceWrap() {
   %ifaceInSource = sv.modport.get %ifaceIn @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Source>
   esi.unwrap.iface %idataChanOut into %ifaceInSource : (!esi.channel<i32>, !sv.modport<@IData::@Source>)
 
-  // CHECK-NEXT:     %4 = sv.interface.instance : !sv.interface<@IData>
+  // CHECK-NEXT:     %4 = sv.interface.instance {name = "ifaceIn"} : !sv.interface<@IData>
   // CHECK-NEXT:     %5 = sv.modport.get %4 @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Sink>
   // CHECK-NEXT:     hw.instance "ifaceRcvr" @IFaceRcvr(%5) : (!sv.modport<@IData::@Sink>) -> ()
   // CHECK-NEXT:     %6 = sv.modport.get %4 @Sink : !sv.interface<@IData> -> !sv.modport<@IData::@Source>

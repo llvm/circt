@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -simple-canonicalizer | FileCheck %s
+// RUN: circt-opt %s -canonicalize='top-down=true region-simplify=true' | FileCheck %s
 
 // CHECK-LABEL: @dyn_extract_slice_to_static_extract
 // CHECK-SAME: %[[INT:.*]]: i32

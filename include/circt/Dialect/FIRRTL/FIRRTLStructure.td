@@ -50,7 +50,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 }
 
 def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator, 
+      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator,
        HasParent<"CircuitOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
@@ -93,6 +93,9 @@ def FModuleOp : FIRRTLOp<"module",
       return OpBuilder::atBlockEnd(&bodyBlock);
     }
 
+    /// Inserts the given ports.
+    void insertPorts(ArrayRef<std::pair<unsigned, ModulePortInfo>> ports);
+
     /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
     /// be in order and unique.
     void erasePorts(ArrayRef<unsigned> portIndices);
@@ -120,7 +123,7 @@ def FModuleOp : FIRRTLOp<"module",
   public:
   }];
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyFModuleOp(*this);";
 }
@@ -177,7 +180,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   public:
   }];
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyFExtModuleOp(*this);";
 }

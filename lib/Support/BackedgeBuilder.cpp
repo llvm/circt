@@ -39,10 +39,13 @@ BackedgeBuilder::~BackedgeBuilder() {
 Backedge::operator mlir::Value() { return value; }
 
 BackedgeBuilder::BackedgeBuilder(OpBuilder &builder, Location loc)
-    : builder(builder), rewriter(nullptr), loc(loc) {}
+    : builder(builder), rewriter(nullptr), loc(loc) {
+  loc.getContext()->allowUnregisteredDialects();
+}
 BackedgeBuilder::BackedgeBuilder(PatternRewriter &rewriter, Location loc)
-    : builder(rewriter), rewriter(&rewriter), loc(loc) {}
-
+    : builder(rewriter), rewriter(&rewriter), loc(loc) {
+  loc.getContext()->allowUnregisteredDialects();
+}
 Backedge BackedgeBuilder::get(Type t) {
   OperationState s(loc, "TemporaryBackedge");
   s.addTypes(t);
