@@ -316,10 +316,13 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
       // Extract two sets of ops to different modules
       auto isAssert = [](Operation *op) -> bool {
-        return isa<AssertOp>(op) || isa<AssumeOp>(op) || isa<FinishOp>(op) ||
-               isa<FWriteOp>(op);
+        return isa<AssertOp>(op) || isa<AssumeOp>(op) ||
+               isa<AssertConcurrentOp>(op) || isa<AssumeConcurrentOp>(op) ||
+               isa<FinishOp>(op) || isa<FWriteOp>(op);
       };
-      auto isCover = [](Operation *op) -> bool { return isa<CoverOp>(op); };
+      auto isCover = [](Operation *op) -> bool {
+        return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
+      };
 
       doModule(rtlmod, isAssert, "_assert");
       doModule(rtlmod, isCover, "_cover");
