@@ -292,11 +292,18 @@ void SimplexScheduler::dumpTableau() {
         dbgs() << " |";
       dbgs() << format(" %3d", tableau[i][j]);
     }
+    if (i >= firstConstraintRow)
+      dbgs() << format(" |< %2d", basicVariables[i - firstConstraintRow]);
     dbgs() << '\n';
   }
   for (unsigned j = 0; j < nColumns; ++j)
     dbgs() << "====";
   dbgs() << "==\n";
+  dbgs() << "          ";
+  for (unsigned j = firstNonBasicVariableColumn; j < nColumns; ++j)
+    dbgs() << format(" %2d^",
+                     nonBasicVariables[j - firstNonBasicVariableColumn]);
+  dbgs() << '\n';
 }
 
 LogicalResult SimplexScheduler::schedule() {
