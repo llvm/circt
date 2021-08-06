@@ -2719,15 +2719,17 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 ///         bar(condition);
 ///       end
 ///     end
+/// The above can also be reduced into a concurrent verification statement
+/// sv.assert.concurrent posedge %clock (condition && enable)
 template <typename AOpTy, typename BOpTy>
 LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
                                                          StringRef annoClass) {
   auto clock = getLoweredValue(op.clock());
   auto enable = getLoweredValue(op.enable());
-  auto predicate = builder.createOrFold<comb::AndOp>(
-      enable, getLoweredValue(op.predicate()));
+  auto predicate = getLoweredValue(op.predicate());
   if (!clock || !enable || !predicate)
     return failure();
+  predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
 
   // Create BOpTy inside the always/if.
   StringAttr label;
