@@ -723,12 +723,12 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
           })
           .Case<PowExpr>([&](auto *expr) {
             // If we can evaluate `2**arg` to a sensible constant, do
-            // so. This is the case if a == 0 and if c <= 32 such that 2**c is
+            // so. This is the case if a == 0 and c < 31 such that 2**c is
             // representable.
             auto arg =
                 checkCycles(var, expr->arg, seenVars, reportInto, indent + 1);
             if (arg.rec_scale != 0 || arg.nonrec_bias < 0 ||
-                arg.nonrec_bias >= 32)
+                arg.nonrec_bias >= 31)
               return LinIneq::unsat();
             return LinIneq(1 << arg.nonrec_bias); // x >= 2**arg
           })
