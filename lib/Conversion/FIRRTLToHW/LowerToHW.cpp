@@ -2724,51 +2724,55 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
                                                          StringRef annoClass) {
   auto clock = getLoweredValue(op.clock());
   auto enable = getLoweredValue(op.enable());
-  auto predicate = builder.createOrFold<comb::AndOp>(enable,getLoweredValue(op.predicate()));
+  auto predicate = builder.createOrFold<comb::AndOp>(
+      enable, getLoweredValue(op.predicate()));
   if (!clock || !enable || !predicate)
     return failure();
 
-      // Create BOpTy inside the always/if.
-      StringAttr label;
-      if (op.nameAttr())
-      label = op.nameAttr();
-      else
-      label = builder.getStringAttr("");
-      
-      
-      auto svOp = builder.create<BOpTy>(circt::sv::EventControlAttr::get(builder.getContext(),circt::sv::EventControl::AtPosEdge), clock, predicate, label);
-      auto annoSet = AnnotationSet(circuitState.circuitOp);
-      StringRef fileName, dir;
-      if (auto a = annoSet.getAnnotation(annoClass)) {
-        fileName = a.getAs<StringAttr>("filename").getValue();
-        dir = a.getAs<StringAttr>("directory").getValue();
-      }
-      if (!fileName.empty() || !dir.empty())
-        svOp->setAttr("output_file",
-                      hw::OutputFileAttr::get(builder.getStringAttr(dir),
-                                              builder.getStringAttr(fileName),
-                                              builder.getBoolAttr(true),
-                                              builder.getBoolAttr(true),
-                                              svOp.getContext()));
+  // Create BOpTy inside the always/if.
+  StringAttr label;
+  if (op.nameAttr())
+    label = op.nameAttr();
+  else
+    label = builder.getStringAttr("");
+
+  auto svOp = builder.create<BOpTy>(
+      circt::sv::EventControlAttr::get(builder.getContext(),
+                                       circt::sv::EventControl::AtPosEdge),
+      clock, predicate, label);
+  auto annoSet = AnnotationSet(circuitState.circuitOp);
+  StringRef fileName, dir;
+  if (auto a = annoSet.getAnnotation(annoClass)) {
+    fileName = a.getAs<StringAttr>("filename").getValue();
+    dir = a.getAs<StringAttr>("directory").getValue();
+  }
+  if (!fileName.empty() || !dir.empty())
+    svOp->setAttr("output_file",
+                  hw::OutputFileAttr::get(builder.getStringAttr(dir),
+                                          builder.getStringAttr(fileName),
+                                          builder.getBoolAttr(true),
+                                          builder.getBoolAttr(true),
+                                          svOp.getContext()));
 
   return success();
 }
 
 // Lower an assert to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
-  return lowerVerificationStatement<AssertOp, sv::AssertConcurrentOp>(op,
-                                                            assertAnnoClass);
+  return lowerVerificationStatement<AssertOp, sv::AssertConcurrentOp>(
+      op, assertAnnoClass);
 }
 
 // Lower an assume to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
-  return lowerVerificationStatement<AssumeOp, sv::AssumeConcurrentOp>(op,
-                                                            assumeAnnoClass);
+  return lowerVerificationStatement<AssumeOp, sv::AssumeConcurrentOp>(
+      op, assumeAnnoClass);
 }
 
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
-  return lowerVerificationStatement<CoverOp, sv::CoverConcurrentOp>(op, coverAnnoClass);
+  return lowerVerificationStatement<CoverOp, sv::CoverConcurrentOp>(
+      op, coverAnnoClass);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
