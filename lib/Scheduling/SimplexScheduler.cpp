@@ -256,9 +256,9 @@ void SimplexScheduler::pivot(unsigned pivotRow, unsigned pivotColumn) {
     if (elem == 0)
       continue; // nothing to do
 
-    assert(elem * elem == 1);
-    // Make `tableau[row][pivotColumn]` := 0
-    addMultipleOfRow(pivotRow, -elem, row); // Factor in general: -1 / elem
+    // Make `tableau[row][pivotColumn]` := 0.
+    // Factor in general: -elem / pivotElem
+    addMultipleOfRow(pivotRow, -elem, row);
   }
 
   // Swap the pivot column with the implictly constructed column vector.
