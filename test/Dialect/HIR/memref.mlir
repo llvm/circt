@@ -17,7 +17,7 @@ hir.func @test at %t(
   hir.store %v to %a[port 1][%c1_i4,%c1_i4,%0,%0] at %t + 1: !hir.memref<16x16x(bank 2)x(bank 2)xf32> delay 1
 
   hir.return
-}
+}{inline}
 
 
 hir.func @test2 at %t(){

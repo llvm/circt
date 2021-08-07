@@ -830,6 +830,7 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   entryArgTypes.push_back(
       helper::getTimeType(parser.getBuilder().getContext()));
   auto r = parser.parseOptionalRegion(*body, entryArgs, entryArgTypes);
+  parser.parseOptionalAttrDict(result.attributes);
   FuncOp::ensureTerminator(*body, builder, result.location);
   if (r.hasValue())
     return r.getValue();
@@ -896,6 +897,8 @@ static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
   if (!body.empty())
     printer.printRegion(body, /*printEntryBlockArgs=*/false,
                         /*printBlockTerminators=*/true);
+  printer.printOptionalAttrDict(op->getAttrs(),
+                                {"funcTy", "type", "arg_attrs", "sym_name"});
 }
 
 // CallableOpInterface.

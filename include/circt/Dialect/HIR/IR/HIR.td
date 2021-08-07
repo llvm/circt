@@ -464,7 +464,7 @@ def DelayOp: HIR_Op<"delay",[NoSideEffect]>{
       Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{$input `by` $delay `at` custom<TimeAndOffset> 
-    ($tstart, $offset) attr-dict `:` type($input) `->` type($res)}];
+    ($tstart, $offset) attr-dict `:` type($res) custom<CopyType>(type($input),ref(type($res)))}];
   let verifier =[{return verify$cppClass(*this);}];
 }
 
