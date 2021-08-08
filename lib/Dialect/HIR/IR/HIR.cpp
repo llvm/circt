@@ -442,8 +442,14 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
       return failure();
 
   Region *ifBody = result.addRegion();
+  Region *elseBody = result.addRegion();
   if (parser.parseRegion(*ifBody, {}, {}))
     return failure();
+  if (parser.parseKeyword("else"))
+    return failure();
+  if (parser.parseRegion(*elseBody, {}, {}))
+    return failure();
+
   // IfOp::ensureTerminator(*ifBody, builder, result.location);
   return success();
 }
@@ -479,9 +485,11 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
     printer << "?";
   printer << ")";
 
-  printer.printRegion(op.region(),
+  printer.printRegion(op->getRegion(0),
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/true);
+  printer << "else";
+  printer.printRegion(op->getRegion(1));
 
   printer.printOptionalAttrDict(
       op->getAttrs(),

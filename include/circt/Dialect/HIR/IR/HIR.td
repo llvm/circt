@@ -174,8 +174,8 @@ def IfOp : HIR_Op<"if", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSide
   }];
 
   let arguments = (ins AnyType : $cond, Optional<TimeType> : $tstart, OptionalAttr<I64Attr>: $offset);
-  let regions = (region SizedRegion<1>:$if_region);
-  let results = (outs );
+  let regions = (region SizedRegion<1>:$if_region, SizedRegion<1>:$else_region);
+  let results = (outs AnyType:$results);
 
   let extraClassDeclaration = [{
   }];
