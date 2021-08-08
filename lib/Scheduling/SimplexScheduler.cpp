@@ -91,7 +91,7 @@ private:
   ///
   /// This vector stores the numeric IDs of non-basic variables. A variable's
   /// index *i* in this vector corresponds to the tableau *column*
-  /// `firstNonBasicVariableColum`+*i*.
+  /// `firstNonBasicVariableColumn`+*i*.
   SmallVector<unsigned> nonBasicVariables;
 
   /// This vector store the numeric IDs of basic variables. A variable's index
@@ -146,7 +146,8 @@ void SimplexScheduler::buildTableau() {
   // Assign column and variable numbers to the operations' start times.
   for (auto *op : prob.getOperations()) {
     opCols[op] = firstNonBasicVariableColumn + varNum;
-    nonBasicVariables.push_back(varNum++);
+    nonBasicVariables.push_back(varNum);
+    ++varNum;
   }
 
   // `parameterOneColumn` + `parameterIIColumn` + one column per operation
@@ -166,7 +167,8 @@ void SimplexScheduler::buildTableau() {
   for (auto *op : prob.getOperations()) {
     for (auto &dep : prob.getDependences(op)) {
       auto &consRowVec = addRow();
-      basicVariables.push_back(varNum++);
+      basicVariables.push_back(varNum);
+      ++varNum;
 
       Operation *src = dep.getSource();
       Operation *dst = dep.getDestination();
