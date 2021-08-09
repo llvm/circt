@@ -168,6 +168,32 @@ static int createInstanceFilter(ClientData cdata, Tcl_Interp *interp,
   return TCL_OK;
 }
 
+static int createAttributeFilter(ClientData cdata, Tcl_Interp *interp,
+                                 int objc, Tcl_Obj *const objv[]) {
+  if (objc != 3) {
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: attr [key] [filter type]");
+    return TCL_ERROR;
+  }
+
+  return TCL_OK;
+}
+
+static int createOpFilter(ClientData cdata, Tcl_Interp *interp,
+                                 int objc, Tcl_Obj *const objv[]) {
+  if (objc != 2) {
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: op [key]");
+    return TCL_ERROR;
+  }
+
+  auto *op = Tcl_GetString(objv[1]);
+  auto filter = circtQueryNewOperatorFilter(circtQueryNewLiteralFilterType(op));
+  auto *result = Tcl_NewObj();
+  result->typePtr = Tcl_GetObjType("Filter");
+  result->internalRep.otherValuePtr = filter.ptr;
+  Tcl_SetObjResult(interp, result);
+  return TCL_OK;
+}
+
 static int operationTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
   return TCL_ERROR;
 }
@@ -331,6 +357,7 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   Tcl_CreateObjCommand(interp, "inst", createInstanceFilter, NULL, NULL);
   Tcl_CreateObjCommand(interp, "and", createAndFilter, NULL, NULL);
   Tcl_CreateObjCommand(interp, "or", createOrFilter, NULL, NULL);
+  Tcl_CreateObjCommand(interp, "op", createOpFilter, NULL, NULL);
   return TCL_OK;
 }
 }
