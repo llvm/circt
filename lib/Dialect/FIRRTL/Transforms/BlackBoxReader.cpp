@@ -117,13 +117,13 @@ void BlackBoxReaderPass::runOnOperation() {
 
     // Handle resource file name annotation.
     if (annot.isClass(resourceFileNameAnnoClass)) {
-      if (auto resourceFN = annot.getMember<StringAttr>("resourceFileName")) {
+      if (auto resourceFN = annot.getMember<StringAttr>("filename")) {
         resourceFileName = resourceFN.getValue();
         continue;
       }
 
       circuitOp->emitError(resourceFileNameAnnoClass)
-          << " annotation missing \"resourceFileName\" attribute";
+          << " annotation missing \"filename\" attribute";
       signalPassFailure();
       continue;
     }

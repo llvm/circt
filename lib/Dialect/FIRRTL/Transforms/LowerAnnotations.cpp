@@ -335,6 +335,10 @@ LogicalResult applyDirFileNormalizeToCircuit(AnnoPathValue target,
           Identifier::get("directory", target.ref.op->getContext()), na.second);
       continue;
     }
+    if (na.first == "resourceFileName") {
+      newAnnoAttrs.emplace_back(Identifier::get("filename", target.ref.op->getContext()), na.second);
+      continue;
+    }
     target.ref.op->emitError("Unknown file or directory field '")
         << na.first << "'";
     return failure();
@@ -491,6 +495,8 @@ static const AnnoRecord annotationRecords[] = {
     {"sifive.enterprise.firrtl.TestBenchDirAnnotation", noParse, noResolve,
      applyDirFileNormalizeToCircuit},
     {"firrtl.transforms.BlackBoxTargetDirAnno", noParse, noResolve,
+     applyDirFileNormalizeToCircuit},
+    {"firrtl.transforms.BlackBoxResourceFileNameAnno", noParse, noResolve,
      applyDirFileNormalizeToCircuit},
     {"sifive.enterprise.firrtl.RetimeModulesAnnotation", noParse, noResolve,
      applyDirFileNormalizeToCircuit},
