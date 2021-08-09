@@ -19,8 +19,8 @@ public:
   virtual ~FilterType() { }
 
   virtual bool valueMatches(std::string &value) { return false; }
-
   virtual bool addSelf() { return false; }
+  virtual FilterType *clone() { return nullptr; }
 };
 
 class GlobFilterType : public FilterType {
@@ -28,6 +28,7 @@ public:
   GlobFilterType() { }
 
   bool valueMatches(std::string &value) override { return true; }
+  FilterType *clone() override { return new GlobFilterType; }
 };
 
 class RecursiveGlobFilterType : public FilterType {
@@ -35,8 +36,8 @@ public:
   RecursiveGlobFilterType() { }
 
   bool valueMatches(std::string &value) override { return true; }
-
   bool addSelf() override { return true; }
+  FilterType *clone() override { return new RecursiveGlobFilterType; }
 };
 
 class LiteralFilterType : public FilterType {
@@ -44,6 +45,7 @@ public:
   LiteralFilterType(std::string &literal) : literal (literal) { }
 
   bool valueMatches(std::string &value) override { return value == literal; }
+  FilterType *clone() override { return new LiteralFilterType(literal); }
 
 private:
   std::string literal;
@@ -52,8 +54,10 @@ private:
 class RegexFilterType : public FilterType {
 public:
   RegexFilterType(std::string &regex) : regex (std::regex(regex)) { }
+  RegexFilterType(std::regex &regex) : regex (regex) { }
 
   bool valueMatches(std::string &value) override { return std::regex_match(value, regex); }
+  FilterType *clone() override { return new RegexFilterType(regex); }
 
 private:
   std::regex regex;
@@ -67,11 +71,12 @@ public:
 
   virtual bool matches(Operation *op) { return false; }
   virtual Filter *nextFilter() { return nullptr; };
+  virtual Filter *clone() { return nullptr; }
 
   FilterType *getType() { return type; }
 
   std::vector<Operation *> filter(Operation *root);
-  std::vector<Operation *> filter(std::vector<Operation *> results);
+  std::vector<Operation *> filter(std::vector<Operation *> &results);
 
 protected:
   Filter(FilterType *type) : type (type) { }
@@ -84,6 +89,7 @@ public:
   AttributeFilter(std::string &key, FilterType *type) : Filter(type), key (key) { }
 
   bool matches(Operation *op) override;
+  Filter *clone() override;
 
 private:
   std::string key;
@@ -94,6 +100,7 @@ public:
   NameFilter(FilterType *type) : Filter(type) { }
 
   bool matches(Operation *op) override;
+  Filter *clone() override;
 };
 
 class OpFilter : public Filter {
@@ -101,6 +108,7 @@ public:
   OpFilter(FilterType *type) : Filter(type) { }
 
   bool matches(Operation *op) override;
+  Filter *clone() override;
 };
 
 class AndFilter : public Filter {
@@ -114,6 +122,7 @@ public:
   }
 
   bool matches(Operation *op) override;
+  Filter *clone() override;
 
 private:
   std::vector<Filter *> filters;
@@ -130,6 +139,7 @@ public:
   }
 
   bool matches(Operation *op) override;
+  Filter *clone() override;
 
 private:
   std::vector<Filter *> filters;
@@ -144,6 +154,7 @@ public:
   }
 
   bool matches(Operation *op) override;
+  Filter *clone() override;
 
 protected:
   Filter *nextFilter() override;

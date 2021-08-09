@@ -75,10 +75,30 @@ CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter, CirctQuery
 }
 
 CirctQueryFilter circtQueryCloneFilter(CirctQueryFilter filter) {
-  return (CirctQueryFilter){new Filter(*(Filter *) filter.ptr)};
+  return { ((Filter *) filter.ptr)->clone() };
 }
 
 void circtQueryDeleteFilter(CirctQueryFilter filter) {
   delete (Filter *) filter.ptr;
 }
 
+CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root) {
+  return { new std::vector<Operation *>(((Filter *) filter.ptr)->filter(unwrap(root))) };
+}
+
+CirctQueryFilterResult circtQueryFilterFromResult(CirctQueryFilter filter, CirctQueryFilterResult result) {
+  return { new std::vector<Operation *>(((Filter *) filter.ptr)->filter(*((std::vector<Operation *> *) result.ptr))) };
+}
+
+MlirOperation circtQueryGetFromFilterResult(CirctQueryFilterResult result, size_t index) {
+  auto &vec = *(std::vector<Operation *> *) result.ptr;
+  if (index < vec.size()) {
+    return wrap(vec[index]);
+  }
+
+  return { nullptr };
+}
+
+void circtQueryDeleteFilterResult(CirctQueryFilterResult result) {
+  delete (std::vector<Operation *> *) result.ptr;
+}

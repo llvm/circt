@@ -62,6 +62,63 @@ static void filterTypeFreeIntRepProc(Tcl_Obj *obj) {
   circtQueryDeleteFilter((CirctQueryFilter){obj->internalRep.otherValuePtr});
 }
 
+static int createAndOrFilter(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[],
+                             const char* usage, CirctQueryFilter (*createFunc)(size_t, CirctQueryFilter *)) {
+  if (objc <= 1) {
+    Tcl_WrongNumArgs(interp, objc, objv, usage);
+    return TCL_ERROR;
+  }
+
+  auto *type = Tcl_GetObjType("Filter");
+  if (objc == 2) {
+    if (Tcl_ConvertToType(interp, objv[1], type) == TCL_OK) {
+      Tcl_SetObjResult(interp, objv[1]);
+      return TCL_OK;
+    }
+
+    return returnErrorStr(interp, "expected filter");
+  }
+
+  CirctQueryFilter filters[objc - 1];
+  for (int i = 1; i < objc; ++i) {
+    if (Tcl_ConvertToType(interp, objv[i], type) == TCL_OK) {
+      void *ptr;
+      if (!Tcl_IsShared(objv[i])) {
+        ptr = objv[i]->internalRep.otherValuePtr;
+        objv[i]->internalRep.otherValuePtr = nullptr;
+        objv[i]->typePtr = nullptr;
+      } else {
+        ptr = circtQueryCloneFilter((CirctQueryFilter){objv[i]->internalRep.otherValuePtr}).ptr;
+      }
+
+      filters[i - 1] = { ptr };
+    } else {
+      for (int j = 0; j < i - 1; ++j) {
+        circtQueryDeleteFilter(filters[j]);
+      }
+
+      return returnErrorStr(interp, "expected filter");
+    }
+  }
+
+  auto filter = createFunc(objc - 1, filters);
+  auto *result = Tcl_NewObj();
+  result->typePtr = type;
+  result->internalRep.otherValuePtr = filter.ptr;
+  Tcl_SetObjResult(interp, result);
+  return TCL_OK;
+}
+
+static int createOrFilter(ClientData cdata, Tcl_Interp *interp,
+                           int objc, Tcl_Obj *const objv[]) {
+  return createAndOrFilter(interp, objc, objv, "usage: or [filter]+", circtQueryNewOrFilter);
+}
+
+static int createAndFilter(ClientData cdata, Tcl_Interp *interp,
+                           int objc, Tcl_Obj *const objv[]) {
+  return createAndOrFilter(interp, objc, objv, "usage: and [filter]+", circtQueryNewAndFilter);
+}
+
 static int createInstanceFilter(ClientData cdata, Tcl_Interp *interp,
                            int objc, Tcl_Obj *const objv[]) {
   if (objc <= 1) {
@@ -81,15 +138,15 @@ static int createInstanceFilter(ClientData cdata, Tcl_Interp *interp,
 
   auto filter = (CirctQueryFilter){nullptr};
   for (int i = objc - 1; i >= 1; --i) {
-    if (Tcl_ConvertToType(interp, objv[i], type) == TCL_OK) {
-      void *ptr;
-      if (Tcl_IsShared(objv[i])) {
-        ptr = objv[i]->internalRep.otherValuePtr;
-        objv[i]->internalRep.otherValuePtr = nullptr;
-        objv[i]->typePtr = nullptr;
-      } else {
-        ptr = circtQueryCloneFilter((CirctQueryFilter){objv[i]->internalRep.otherValuePtr}).ptr;
-      }
+    auto *obj = objv[i];
+    if (Tcl_IsShared(objv[i])) {
+      obj = Tcl_DuplicateObj(objv[i]);
+    }
+
+    if (Tcl_ConvertToType(interp, obj, type) == TCL_OK) {
+      void *ptr = obj->internalRep.otherValuePtr;
+      obj->internalRep.otherValuePtr = nullptr;
+      obj->typePtr = nullptr;
 
       if (filter.ptr == nullptr) {
         filter.ptr = ptr;
@@ -180,17 +237,59 @@ static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp,
   return TCL_OK;
 }
 
-static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
-                            Tcl_Obj *const objv[]) {
-  if (objc < 2) {
-    Tcl_WrongNumArgs(interp, objc, objv, "usage: circt load");
+static int filter(ClientData cdata, Tcl_Interp *interp,
+                           int objc, Tcl_Obj *const objv[]) {
+  if (objc != 3) {
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: circt query [filter] [operation|filter result]");
     return TCL_ERROR;
   }
 
-  auto *context = (mlir::MLIRContext *)cdata;
+  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("Filter")) == TCL_ERROR) {
+    return returnErrorStr(interp, "expected filter");
+  }
 
-  if (!strcmp("load", Tcl_GetString(objv[1])))
+  auto filter = (CirctQueryFilter){objv[1]->internalRep.otherValuePtr};
+  if (Tcl_ConvertToType(interp, objv[2], Tcl_GetObjType("MlirOperation")) == TCL_OK) {
+    auto root = (MlirOperation){objv[2]->internalRep.otherValuePtr};
+    auto result = circtQueryFilterFromRoot(filter, root);
+    MlirOperation op;
+    auto *type = Tcl_GetObjType("MlirOperation");
+    auto *list = Tcl_NewListObj(0, nullptr);
+    for (size_t i = 0; !mlirOperationIsNull(op = circtQueryGetFromFilterResult(result, i)); ++i) {
+      auto *obj = Tcl_NewObj();
+      obj->typePtr = type;
+      obj->internalRep.otherValuePtr = wrap(unwrap(op)->clone()).ptr;
+      obj->bytes = nullptr;
+      obj->length = 0;
+      if (Tcl_ListObjAppendElement(interp, list, obj) != TCL_OK) {
+        circtQueryDeleteFilterResult(result);
+        return returnErrorStr(interp, "something went wrong when appending to list");
+      }
+
+      Tcl_SetObjResult(interp, list);
+    }
+  } else {
+    return returnErrorStr(interp, "expected operation or list of operations");
+  }
+
+  return TCL_OK;
+}
+
+static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
+                            Tcl_Obj *const objv[]) {
+  if (objc < 2) {
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: circt [load|query]");
+    return TCL_ERROR;
+  }
+
+  auto *context = (mlir::MLIRContext *) cdata;
+  auto *str = Tcl_GetString(objv[1]);
+
+  if (!strcmp("load", str))
     return loadFirMlirFile(context, interp, objc - 1, objv + 1);
+
+  if (!strcmp("query", str))
+    return filter(cdata, interp, objc - 1, objv + 1);
 
   return returnErrorStr(interp, "usage: circt load");
 }
@@ -230,8 +329,9 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
                        circt::sv::SVDialect>();
   Tcl_CreateObjCommand(interp, "circt", circtTclFunction, context,
                        deleteContext);
-  Tcl_CreateObjCommand(interp, "inst", createInstanceFilter, NULL,
-                       NULL);
+  Tcl_CreateObjCommand(interp, "inst", createInstanceFilter, NULL, NULL);
+  Tcl_CreateObjCommand(interp, "and", createAndFilter, NULL, NULL);
+  Tcl_CreateObjCommand(interp, "or", createOrFilter, NULL, NULL);
   return TCL_OK;
 }
 }

@@ -58,7 +58,7 @@ std::vector<Operation *> Filter::filter(Operation *root) {
   return filtered;
 }
 
-std::vector<Operation *> Filter::filter(std::vector<Operation *> results) {
+std::vector<Operation *> Filter::filter(std::vector<Operation *> &results) {
   std::vector<Operation *> result;
   for (auto *op : results) {
     auto vec = filter(op);
@@ -131,6 +131,10 @@ bool AttributeFilter::matches(Operation *op) {
   return filterAttribute(attr, type);
 }
 
+Filter *AttributeFilter::clone() {
+  return new AttributeFilter(key, type->clone());
+}
+
 bool NameFilter::matches(Operation *op) {
   std::string name;
   for (size_t nameIndex = 0; !(name = getNameFromOp(op, nameIndex)).empty(); nameIndex++) {
@@ -141,9 +145,17 @@ bool NameFilter::matches(Operation *op) {
   return false;
 }
 
+Filter *NameFilter::clone() {
+  return new NameFilter(type->clone());
+}
+
 bool OpFilter::matches(Operation *op) {
   std::string s(op->getName().stripDialect().str());
   return type->valueMatches(s);
+}
+
+Filter *OpFilter::clone() {
+  return new OpFilter(type->clone());
 }
 
 bool AndFilter::matches(Operation *op) {
@@ -195,6 +207,10 @@ bool AndFilter::matches(Operation *op) {
   return true;
 }
 
+Filter *AndFilter::clone() {
+  return new AndFilter(filters);
+}
+
 bool OrFilter::matches(Operation *op) {
   for (auto *filter : filters) {
     if (!filter->matches(op)) {
@@ -238,8 +254,16 @@ bool OrFilter::matches(Operation *op) {
   return false;
 }
 
+Filter *OrFilter::clone() {
+  return new OrFilter(filters);
+}
+
 bool InstanceFilter::matches(Operation *op) {
   return filter->matches(op);
+}
+
+Filter *InstanceFilter::clone() {
+  return new InstanceFilter(filter, child);
 }
 
 Filter *InstanceFilter::nextFilter() {

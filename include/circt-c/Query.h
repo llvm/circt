@@ -34,6 +34,11 @@ CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter, CirctQuery
 CirctQueryFilter circtQueryCloneFilter(CirctQueryFilter filter);
 void circtQueryDeleteFilter(CirctQueryFilter filter);
 
+CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root);
+CirctQueryFilterResult circtQueryFilterFromResult(CirctQueryFilter filter, CirctQueryFilterResult result);
+MlirOperation circtQueryGetFromFilterResult(CirctQueryFilterResult result, size_t index);
+void circtQueryDeleteFilterResult(CirctQueryFilterResult result);
+
 #ifdef __cplusplus
 }
 #endif
