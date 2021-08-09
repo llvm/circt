@@ -54,7 +54,7 @@ ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
                                   result.operands);
 }
 
-static void print(::mlir::OpAsmPrinter &p, CompRegOp reg) {
+static void printCompRegOp(::mlir::OpAsmPrinter &p, CompRegOp reg) {
   p << "seq.compreg";
   p << ' ' << reg.input() << ", " << reg.clk();
   if (reg.reset()) {

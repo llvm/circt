@@ -176,6 +176,17 @@ void ConstantZOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
+// LocalParamOp
+//===----------------------------------------------------------------------===//
+
+void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // If the localparam has an optional 'name' attribute, use it.
+  auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
+  if (!nameAttr.getValue().empty())
+    setNameFn(getResult(), nameAttr.getValue());
+}
+
+//===----------------------------------------------------------------------===//
 // RegOp
 //===----------------------------------------------------------------------===//
 
@@ -1071,6 +1082,31 @@ static void printOmitEmptyStringAttr(OpAsmPrinter &p, Operation *op,
                                      StringAttr str) {
   if (str && !str.getValue().empty())
     p.printAttributeWithoutType(str);
+}
+
+//===----------------------------------------------------------------------===//
+// BindInterfaceOp
+//===----------------------------------------------------------------------===//
+
+sv::InterfaceInstanceOp BindInterfaceOp::getReferencedInstance() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  /// Lookup the instance for the symbol.  This returns null on
+  /// invalid IR.
+  auto *inst = lookupSymbolInNested(topLevelModuleOp, interface());
+  return dyn_cast_or_null<sv::InterfaceInstanceOp>(inst);
+}
+
+/// Ensure that the symbol being instantiated exists and is an InterfaceOp.
+static LogicalResult verifyBindInterfaceOp(BindInterfaceOp op) {
+  auto inst = op.getReferencedInstance();
+  if (!inst)
+    return op.emitError("Referenced interface doesn't exist");
+  if (!inst->getAttr("doNotPrint"))
+    return op.emitError("Referenced interface isn't marked as doNotPrint");
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

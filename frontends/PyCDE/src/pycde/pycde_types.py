@@ -105,11 +105,13 @@ def PyCDEType(type):
 
     # If we're subclassing a type alias, use a different 'inner' implementation.
     if isinstance(type, hw.TypeAliasType):
+
       @property
       def inner(self):
         """Return self or inner type."""
         return PyCDEType(self.inner_type)
     else:
+
       @property
       def inner(self):
         """Return self or inner type."""

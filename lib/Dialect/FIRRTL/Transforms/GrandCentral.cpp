@@ -356,13 +356,11 @@ void GrandCentralVisitor::visitDecl(InstanceOp op) {
   // move this onto the actual instance op.
   AnnotationSet annotations(op.getReferencedModule());
   if (auto anno = annotations.getAnnotation(
-          "sifive.enterprise.grandcentral.GrandCentralView$"
-          "SerializedViewAnnotation")) {
+          "sifive.enterprise.grandcentral.ViewAnnotation")) {
     auto tpe = anno.getAs<StringAttr>("type");
     if (!tpe) {
       op.getReferencedModule()->emitOpError(
-          "contains a GrandcCentralView$SerializedViewAnnotation that does not "
-          "contain a \"type\" field");
+          "contains a ViewAnnotation that does not contain a \"type\" field");
       failed = true;
       return;
     }
@@ -380,7 +378,11 @@ void GrandCentralPass::runOnOperation() {
   if (annotations.empty())
     return;
 
-  auto builder = OpBuilder::atBlockEnd(circuitOp->getBlock());
+  // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
+  // necessary because interfaces and interface instances are created.
+  // Instances link to their definitions via symbols and we don't want to break
+  // this.
+  auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
 
   // Utility that acts like emitOpError, but does _not_ include a note.  The
   // note in emitOpError includes the entire op which means the **ENTIRE**
@@ -440,18 +442,55 @@ void GrandCentralPass::runOnOperation() {
   // removed from modules after all referring instances have consumed their
   // annotations.
   for (auto &op : llvm::reverse(circuitOp.getBody()->getOperations())) {
-    if (isa<FModuleOp, FExtModuleOp>(op)) {
-      GrandCentralVisitor visitor(interfaceMap);
-      visitor.visitModule(&op);
-      if (visitor.hasFailed())
-        return signalPassFailure();
-      AnnotationSet annotations(&op);
-      annotations.removeAnnotations([](auto anno) {
-        return anno.isClass("sifive.enterprise.grandcentral.GrandCentralView$"
-                            "SerializedViewAnnotation");
-      });
-      annotations.applyToOperation(&op);
-    }
+    // Only process modules or external modules.
+    if (!isa<FModuleOp, FExtModuleOp>(op))
+      continue;
+
+    GrandCentralVisitor visitor(interfaceMap);
+    visitor.visitModule(&op);
+    if (visitor.hasFailed())
+      return signalPassFailure();
+    AnnotationSet annotations(&op);
+
+    annotations.removeAnnotations([&](auto anno) {
+      // Insert an instantiated interface.
+      if (auto viewAnnotation = annotations.getAnnotation(
+              "sifive.enterprise.grandcentral.ViewAnnotation")) {
+
+        auto tpe = viewAnnotation.getAs<StringAttr>("type");
+        if (tpe && tpe.getValue() == "parent") {
+          auto name = viewAnnotation.getAs<StringAttr>("name");
+          auto defName = viewAnnotation.getAs<StringAttr>("defName");
+          auto guard = OpBuilder::InsertionGuard(builder);
+          builder.setInsertionPointToEnd(cast<FModuleOp>(op).getBodyBlock());
+          auto instance = builder.create<sv::InterfaceInstanceOp>(
+              circuitOp->getLoc(),
+              interfaces.lookup(defName.getValue()).getInterfaceType(), name,
+              builder.getStringAttr(
+                  "__" + op.getAttrOfType<StringAttr>("sym_name").getValue() +
+                  "_" + defName.getValue() + "__"));
+          instance->setAttr("doNotPrint", builder.getBoolAttr(true));
+          builder.setInsertionPointToStart(
+              op.getParentOfType<ModuleOp>().getBody());
+          auto bind = builder.create<sv::BindInterfaceOp>(
+              circuitOp->getLoc(),
+              builder.getSymbolRefAttr(instance.sym_name().getValue()));
+          bind->setAttr(
+              "output_file",
+              hw::OutputFileAttr::get(
+                  builder.getStringAttr(""),
+                  builder.getStringAttr("bindings.sv"),
+                  /*exclude_from_filelist=*/builder.getBoolAttr(true),
+                  /*exclude_replicated_ops=*/builder.getBoolAttr(true),
+                  bind.getContext()));
+        }
+        return true;
+      }
+      // All other annotations pass through unmodified.
+      return false;
+    });
+
+    annotations.applyToOperation(&op);
   }
 
   // Populate interfaces.

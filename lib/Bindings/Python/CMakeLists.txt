@@ -3,21 +3,30 @@
 ################################################################################
 
 include(AddMLIRPython)
-add_custom_target(CIRCTBindingsPython)
 
 ################################################################################
-# Build native Python extension
+# Declare native Python extension
 ################################################################################
 
-add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
-  INSTALL_DIR
-    python
+declare_mlir_python_sources(CIRCTBindingsPythonExtension)
+
+set(_depends LLVMSupport)
+
+# TODO: remove these when ESIModule only uses C-APIs.
+if (BUILD_SHARED_LIBS)
+  list(APPEND _depends MLIRIR)
+  list(APPEND _depends MLIRParser)
+endif()
+
+declare_mlir_python_extension(CIRCTBindingsPythonExtension.Core
+  MODULE_NAME _circt
+  ADD_TO_PARENT CIRCTBindingsPythonExtension
   SOURCES
     CIRCTModule.cpp
     ESIModule.cpp
     HWModule.cpp
     MSFTModule.cpp
-  LINK_LIBS
+  EMBED_CAPI_LINK_LIBS
     CIRCTCAPIComb
     CIRCTCAPIESI
     CIRCTCAPIMSFT
@@ -25,99 +34,114 @@ add_mlir_python_extension(CIRCTBindingsPythonExtension _circt
     CIRCTCAPISeq
     CIRCTCAPISV
     CIRCTCAPIExportVerilog
-)
-add_dependencies(CIRCTBindingsPython CIRCTBindingsPythonExtension)
-
-################################################################################
-# Python source tree management
-################################################################################
-
-file(GLOB_RECURSE PY_SRC_FILES
-  RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
-  "${CMAKE_CURRENT_SOURCE_DIR}/circt/*.py")
-
-add_custom_target(CIRCTBindingsPythonSources ALL
-  DEPENDS ${PY_SRC_FILES}
-)
-add_dependencies(CIRCTBindingsPython CIRCTBindingsPythonSources)
-
-foreach(PY_SRC_FILE ${PY_SRC_FILES})
-  set(PY_DEST_FILE "${PROJECT_BINARY_DIR}/python/${PY_SRC_FILE}")
-  get_filename_component(PY_DEST_DIR "${PY_DEST_FILE}" DIRECTORY)
-  file(MAKE_DIRECTORY "${PY_DEST_DIR}")
-  add_custom_command(
-    TARGET CIRCTBindingsPythonSources PRE_BUILD
-    COMMENT "Symlinking Python source ${PY_SRC_FILE} -> ${PY_DEST_FILE}"
-    DEPENDS "${PY_SRC_FILE}"
-    COMMAND "${CMAKE_COMMAND}" -E create_symlink
-        "${CMAKE_CURRENT_SOURCE_DIR}/${PY_SRC_FILE}" "${PY_DEST_FILE}"
-  )
-endforeach()
-
-# The Python sources, including extensions, are in the circt.dialects namespace,
-# as expected. But, at the moment, the bindings are generated in the
-# mlir.dialects namespace, and look for Python extension modules there. To shim
-# this, symlink the extension modules in mlir.dialects.
-file(GLOB_RECURSE PY_EXT_FILES
-  RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/circt/dialects"
-  "${CMAKE_CURRENT_SOURCE_DIR}/circt/*_ops_ext.py")
-foreach(PY_EXT_FILE ${PY_EXT_FILES})
-  set(PY_DEST_FILE "${PROJECT_BINARY_DIR}/python/mlir/dialects/${PY_EXT_FILE}")
-  set(PY_SRC_FILE "${PROJECT_BINARY_DIR}/python/circt/dialects/${PY_EXT_FILE}")
-  add_custom_command(
-    TARGET CIRCTBindingsPythonSources POST_BUILD
-    COMMENT "Symlinking Python extension ${PY_SRC_FILE} -> ${PY_DEST_FILE}"
-    DEPENDS "${PY_SRC_FILE}"
-    COMMAND "${CMAKE_COMMAND}" -E create_symlink "${PY_SRC_FILE}" "${PY_DEST_FILE}"
-  )
-endforeach()
-
-# Note that we copy from the source tree just like for headers because
-# it will not be polluted with py_cache runtime artifacts (from testing and
-# such).
-install(
-  DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/circt
-  DESTINATION python
-  COMPONENT CIRCTBindingsPythonSources
-  FILES_MATCHING PATTERN "*.py"
-)
-
-# Dialect sources are generated. Install separately.
-# Note that __pycache__ directories may have been left by tests and other
-# executions. And __init__.py is handled as a regular source file.
-install(
-  DIRECTORY ${PROJECT_BINARY_DIR}/python/mlir/dialects
-  DESTINATION python/mlir
-  COMPONENT CIRCTBindingsPythonDialects
-  FILES_MATCHING PATTERN "*.py"
-  PATTERN "__pycache__" EXCLUDE
-  PATTERN "__init__.py" EXCLUDE
+  PRIVATE_LINK_LIBS
+    ${_depends}
 )
 
 ################################################################################
-# Generate dialect-specific bindings.
+# Declare Python sources
 ################################################################################
-add_mlir_dialect_python_bindings(CIRCTBindingsPythonCombOps
-  TD_FILE CombOps.td
+
+declare_mlir_python_sources(CIRCTBindingsPythonSources
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  SOURCES
+    circt/__init__.py
+    circt/esi.py
+    circt/support.py
+    circt/dialects/_ods_common.py)
+
+################################################################################
+# Declare dialect-specific bindings.
+################################################################################
+
+# Ensure the build directory for generated Python files exists. Ninja is able to
+# generate this, but make does not and the build fails.
+file(MAKE_DIRECTORY ${CIRCT_BINARY_DIR}/lib/Bindings/Python/circt/dialects)
+
+declare_mlir_python_sources(CIRCTBindingsPythonSources.Dialects
+  ADD_TO_PARENT CIRCTBindingsPythonSources)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE circt/dialects/CombOps.td
+  SOURCES
+    circt/dialects/comb.py
+    circt/dialects/_comb_ops_ext.py
   DIALECT_NAME comb)
-add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonCombOps)
 
-add_mlir_dialect_python_bindings(CIRCTBindingsPythonESIOps
-  TD_FILE ESIOps.td
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE circt/dialects/ESIOps.td
+  SOURCES circt/dialects/esi.py
   DIALECT_NAME esi)
-add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonESIOps)
 
-add_mlir_dialect_python_bindings(CIRCTBindingsPythonHWOps
-  TD_FILE HWOps.td
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE circt/dialects/HWOps.td
+  SOURCES
+    circt/dialects/hw.py
+    circt/dialects/_hw_ops_ext.py
   DIALECT_NAME hw)
-add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonHWOps)
 
-add_mlir_dialect_python_bindings(CIRCTBindingsPythonSeqOps
-  TD_FILE SeqOps.td
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE circt/dialects/SeqOps.td
+  SOURCES
+    circt/dialects/seq.py
+    circt/dialects/_seq_ops_ext.py
   DIALECT_NAME seq)
-add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonSeqOps)
 
-add_mlir_dialect_python_bindings(CIRCTBindingsPythonSVOps
-  TD_FILE SVOps.td
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE circt/dialects/SVOps.td
+  SOURCES circt/dialects/sv.py
   DIALECT_NAME sv)
-add_dependencies(CIRCTBindingsPythonSources CIRCTBindingsPythonSVOps)
+
+################################################################################
+# Build composite binaries
+################################################################################
+
+# Bundle our own, self-contained CAPI library with all of our deps.
+add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
+  INSTALL_COMPONENT CIRCTBindingsPythonModules
+  INSTALL_DESTINATION python_packages/circt_core/mlir/_mlir_libs
+  # NOTE: When the MLIR API is relocated under circt, this would change to
+  # .../circt/_mlir_libs
+  OUTPUT_DIRECTORY "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/mlir/_mlir_libs"
+  RELATIVE_INSTALL_ROOT "../../../.."
+  DECLARED_SOURCES
+    MLIRPythonSources.Core
+    CIRCTBindingsPythonSources
+    CIRCTBindingsPythonExtension
+)
+
+# Bundle the MLIR python sources into our package.
+# The MLIR API is position independent, so we explicitly output it to the mlir/
+# folder as a temporary measure. It will eventually migrate under the circt/
+# folder and be accessible under the unified "import circt..." namespace.
+add_mlir_python_modules(CIRCTMLIRPythonModules
+  ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/mlir"
+  INSTALL_PREFIX "python_packages/circt_core/mlir"
+  DECLARED_SOURCES
+    MLIRPythonSources.Core
+    # We need the circt extensions co-located with the MLIR extensions. When
+    # the namespace is unified, this moves to the below.
+    CIRCTBindingsPythonExtension
+  COMMON_CAPI_LINK_LIBS
+    CIRCTBindingsPythonCAPI
+)
+
+# Bundle the CIRCT python sources into our package.
+add_mlir_python_modules(CIRCTPythonModules
+  ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core"
+  INSTALL_PREFIX "python_packages/circt_core"
+  DECLARED_SOURCES
+    CIRCTBindingsPythonSources
+  COMMON_CAPI_LINK_LIBS
+    CIRCTBindingsPythonCAPI
+)

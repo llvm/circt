@@ -5,7 +5,7 @@ circuit test :
 
     ; expected-error @+1 {{unterminated string}}
     parameter FORMAT = "tilelink_timeou
-    : COM: "
+    : " ; End the string above for syntax highlighters...
 
 ;// -----
 
@@ -45,6 +45,15 @@ circuit invalid_name :
   module invalid_name :
     output out: UInt
     out <= c         ; expected-error {{use of unknown declaration 'c'}}
+
+;// -----
+
+circuit subfield_of_ground_type :
+  module subfield_of_ground_type :
+    input a: UInt<1>
+    output b: UInt<1>
+    ; expected-error @+1 {{subfield requires bundle operand}}
+    b <= a.a
 
 ;// -----
 

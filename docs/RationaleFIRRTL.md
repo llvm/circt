@@ -22,13 +22,16 @@ the SFC for the subset of FIRRTL IR that is produced by Chisel and in common
 use._  The FIRRTL dialect also provides robust support for SFC _Annotations_.
 
 To achieve these goals, the FIRRTL dialect follows the FIRRTL IR specification
-and the SFC implementation almost exactly.  The small deviations we do make are
-discussed below.  Early versions of the FIRRTL dialect made _heavy deviations_
-from FIRRTL IR and the SFC (see the Type Canonicalization section below).  These
-deviations, while elegant, led to difficult to resolve mismatches with the SFC
-and the inability to verify FIRRTL IR.  The remaining small deviations
-introduced in the FIRRTL dialect are done to simplify the CIRCT implementation
-of a FIRRTL compiler and to take advantage of MLIR's various features.
+and the SFC implementation almost exactly.  Where the FIRRTL specification
+allows for undefined behavior, FIRRTL dialect and its passes will choose the SFC
+interpretation of specific undefined behavior.  The small deviations we do make
+are discussed below.  Early versions of the FIRRTL dialect made _heavy
+deviations_ from FIRRTL IR and the SFC (see the Type Canonicalization section
+below).  These deviations, while elegant, led to difficult to resolve mismatches
+with the SFC and the inability to verify FIRRTL IR.  The remaining small
+deviations introduced in the FIRRTL dialect are done to simplify the CIRCT
+implementation of a FIRRTL compiler and to take advantage of MLIR's various
+features.
 
 This document generally assumes that you've read and have a basic grasp of the
 FIRRTL IR spec, and it can be occasionally helpful to refer to the ANTLR
@@ -348,7 +351,7 @@ firrtl.module @Foo(out %a: !firrtl.bundle<a: uint<1>, b: flip<uint<1>>>) {
 
 ### `validif` represented as a multiplexer
 
-The FIRRTL spec describes a `validIf(en, x)` operation that is used during lowering from high to low FIRRTL. Consider the following example:
+The FIRRTL spec describes a `validif(en, x)` operation that is used during lowering from high to low FIRRTL. Consider the following example:
 
 ```scala
 c <= invalid
@@ -359,10 +362,10 @@ when a:
 Lowering will introduce the following intermediate representation in low FIRRTL:
 
 ```scala
-c <= validIf(a, b)
+c <= validif(a, b)
 ```
 
-Since there is no precedence of this `validIf` being used anywhere in the Chisel/FIRRTL ecosystem thus far and instead is always replaced by its right-hand operand `b`, the FIRRTL MLIR dialect does not provide such an operation at all. Rather it directly replaces any `validIf` in FIRRTL input with the following equivalent operations:
+Since there is no precedence of this `validif` being used anywhere in the Chisel/FIRRTL ecosystem thus far and instead is always replaced by its right-hand operand `b`, the FIRRTL MLIR dialect does not provide such an operation at all. Rather it directly replaces any `validif` in FIRRTL input with the following equivalent operations:
 
 ```mlir
 %0 = firrtl.invalidvalue : !firrtl.uint<42>
@@ -394,3 +397,38 @@ module Magic (output [31:0] n);
 endmodule
 ```
 
+## Interpretation of Undefined Behavior
+
+The [FIRRTL
+Specification](https://github.com/chipsalliance/firrtl/blob/master/spec/spec.pdf)
+has undefined behavior for certain features.  When in doubt, FIRRTL dialect
+_typically_ chooses to implement undefined behavior in the same manner as the SFC.
+
+### Invalid
+
+The SFC has a context-sensitive interpretation of invalid.
+
+When an `is invalid` statement is used, the SFC will optimize this as a connect
+to a constant zero if the invalidated component is not assigned to inside a
+conditional block (`when`/`else`).  _This is an interpretation of invalid as a
+value that the compiler chooses to connect to a single component._
+
+When an `is invalid` statement is used to specify the default of a component
+that is connected to in a conditional block and the conditional block is not
+complete, then a conditionally valid (`validif`) statement is generated.  The
+conditionally valid statement connects a value when a condition is true and
+invalidates the component otherwise.  (This is modeled as a multiplexer in the
+FIRRTL dialect.)  When lowered, the SFC treats this invalidation as undefined
+behavior and will choose the valid path unconditionally.  _This is an
+interpretation of invalid as undefined behavior._  (See above for more
+information on `validif` and the modeling of this as a multiplexer.)
+
+Instead of choosing to aggressively optimize undefined behavior, FIRRTL dialect
+and its passes use this context-sensitive interpretation of invalid.  Folds of
+primitive operations treat an invalid operand as a zero-valued constant.  Folds
+of multiplexers treat invalid operands as undefined behavior and will optimize
+away the invalid path.
+
+Propagation of invalid values is handled with extreme caution.  Any propagation
+can cause a later conflation of these two interpretations of invalid and produce
+subtle bugs.

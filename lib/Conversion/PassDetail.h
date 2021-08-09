@@ -20,6 +20,10 @@ class LLVMDialect;
 
 namespace circt {
 
+namespace calyx {
+class CalyxDialect;
+} // namespace calyx
+
 namespace firrtl {
 class FIRRTLDialect;
 class FModuleOp;

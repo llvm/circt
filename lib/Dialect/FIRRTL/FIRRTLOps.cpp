@@ -737,11 +737,11 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
                           omittedAttrs);
 }
 
-static void print(OpAsmPrinter &p, FExtModuleOp op) {
+static void printFExtModuleOp(OpAsmPrinter &p, FExtModuleOp op) {
   printModuleLikeOp(p, op);
 }
 
-static void print(OpAsmPrinter &p, FModuleOp op) {
+static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
   printModuleLikeOp(p, op);
 
   // Print the body if this is not an external function. Since this block does
@@ -1243,8 +1243,8 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
     break;
 
   case PortKind::ReadWrite:
-    portFields.push_back({getId("wmode"), false, UIntType::get(context, 1)});
     portFields.push_back({getId("rdata"), true, dataType});
+    portFields.push_back({getId("wmode"), false, UIntType::get(context, 1)});
     portFields.push_back({getId("wdata"), false, dataType});
     portFields.push_back({getId("wmask"), false, dataType.getMaskType()});
     break;

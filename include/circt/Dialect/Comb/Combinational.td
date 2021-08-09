@@ -227,6 +227,7 @@ def ConcatOp : VariadicOp<"concat"> {
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
+  let verifier = "return ::verifyConcatOp(*this);";
 
   let builders = [
     OpBuilder<(ins "ValueRange":$inputs)>,

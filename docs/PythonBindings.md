@@ -1,13 +1,19 @@
 # Using the Python Bindings
 
-If you are mainly interested in using CIRCT from Python scripts, you need to compile both LLVM/MLIR and CIRCT with Python bindings enabled. To do this, follow the steps in ["Setting this up"](GettingStarted.md#setting-this-up), adding the following options:
+If you are mainly interested in using CIRCT from Python scripts, you need to compile both LLVM/MLIR and CIRCT with Python bindings enabled. Furthermore, you must use a unified build, where LLVM/MLIR and CIRCT are compiled together in one step. To do this, you can use a single CMake invocation like this:
 
 ```
-# in the LLVM/MLIR build directory
-cmake [...] -DMLIR_ENABLE_BINDINGS_PYTHON=ON
-
-# in the CIRCT build directory
-cmake [...] -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
+$ cd circt
+$ mkdir build
+$ cd build
+$ cmake -G Ninja ../llvm/llvm \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DLLVM_ENABLE_PROJECTS=mlir \
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DLLVM_EXTERNAL_PROJECTS=circt \
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=.. \
+    -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
+    -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
 ```
 
 Afterwards, use `ninja check-circt-integration` to ensure that the bindings work. (This will now additionally spin up a couple of Python scripts to test that they are accessible.)
@@ -17,7 +23,7 @@ Afterwards, use `ninja check-circt-integration` to ensure that the bindings work
 If you want to try the bindings fresh from the compiler without installation, you need to ensure Python can find the generated modules:
 
 ```
-export PYTHONPATH="$PWD/llvm/build/python:$PWD/build/python:$PYTHONPATH"
+export PYTHONPATH="$PWD/llvm/build/tools/circt/python_packages/circt_core"
 ```
 
 ## With Installation
@@ -40,9 +46,9 @@ with Context() as ctx, Location.unknown():
   i42 = IntegerType.get_signless(42)
   m = Module.create()
   with InsertionPoint(m.body):
-    @hw.HWModuleOp.from_py_func(i42, i42)
     def magic(a, b):
       return comb.XorOp(i42, [a, b]).result
+    hw.HWModuleOp(name="magic", body_builder=magic)
   print(m)
 ```
 

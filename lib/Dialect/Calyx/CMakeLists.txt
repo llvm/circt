@@ -39,4 +39,5 @@ add_circt_dialect_library(CIRCTCalyx
   ${Calyx_LinkLibs}
   )
 
+add_subdirectory(Export)
 add_subdirectory(Transforms)

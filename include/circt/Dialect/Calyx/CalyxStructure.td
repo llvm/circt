@@ -64,10 +64,14 @@ def ComponentOp : CalyxOp<"component", [
     (1) In- and output port definitions
         that define the interface.
     (2) The cells, wires, and control schedule.
-    ```mlir
-      calyx.component @MyComponent(%in1: i32) -> (%out1: i8) {
-        %in, %out = "c0" @SomeComponent : i32, i32
 
+    A Calyx component requires the following ports with bit width 1:
+    - Input ports: `go`, `clk`, and `reset`.
+    - Output ports: `done`.
+
+    ```mlir
+      calyx.component @MyComponent(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i16, %done: i1) {
+        ...
         calyx.wires { ... }
         calyx.control { ... }
       }
@@ -76,8 +80,8 @@ def ComponentOp : CalyxOp<"component", [
 
   // TODO(Calyx): Allow explicit port naming?
   let arguments = (ins
-    ArrayAttr:$inPortNames,
-    ArrayAttr:$outPortNames
+    ArrayAttr:$portNames,
+    I64Attr:$numInPorts
   );
   let results = (outs);
   let regions = (region SizedRegion<1>: $body);
@@ -106,6 +110,12 @@ def ComponentOp : CalyxOp<"component", [
 
       /// Returns the ControlOp of a Calyx Component.
       ControlOp getControlOp();
+
+      /// Gets the Done port of a Calyx component.
+      Value getDonePort();
+
+      /// Gets the Go port of a Calyx component.
+      Value getGoPort();
   }];
 
   let verifier = "return ::verify$cppClass(*this);";

@@ -282,11 +282,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: %_t_2621 = firrtl.regreset %clock, %reset, %{{.*}} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    ; CHECK: %_t_2621 = firrtl.regreset %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
     reg _t_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
-    ; CHECK: %_t_1601 = firrtl.regreset %clock, %reset, %{{.*}} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    ; CHECK: %_t_1601 = firrtl.regreset %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
     reg _t_1601 : UInt<2>, clock with :
       (reset => (reset, UInt<2>("h00"))) @[Edges.scala 230:27]
 
@@ -304,7 +304,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; The Scala implementation of FIRRTL prints registers without a reset value
     ; using the register name as the reset.  Make sure we handle this for
     ; compatibility.
-    ; CHECK: %_t_2622 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<4>
+    ; CHECK: %_t_2622 = firrtl.reg %clock : !firrtl.uint<4>
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
@@ -620,14 +620,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   extmodule issue183:
      parameter A = -1
 
-  ; COM: The Scala FIRRTL Compiler allows this for an aggregate node with an internal analog.
+  ; The Scala FIRRTL Compiler allows this for an aggregate node with an internal
+  ; analog.
   ; CHECK-LABEL: firrtl.module @analog_in_aggregate_node
   module analog_in_aggregate_node:
     input a: { a: UInt<1>, b: Analog<1>}
     ; CHECK: %b = firrtl.node %a : !firrtl.bundle<a: uint<1>, b: analog<1>>
     node b = a
 
-  ; COM: Check that a register clock sink is converted to passive
+  ; Check that a register clock sink is converted to passive
   ; CHECK-LABEL: firrtl.module @register_clock_passive
   module register_clock_passive:
     input clkIn: Clock
@@ -636,7 +637,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.reg %clkOut
     reg r: UInt<1>, clkOut
 
-  ; COM: Check that a register reset sink is converted to passive
+  ; Check that a register reset sink is converted to passive
   ; CHECK-LABEL: firrtl.module @register_reset_passive
   module register_reset_passive:
     input clk: Clock
@@ -645,7 +646,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.regreset %clk, %rst
     reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
 
-  ; COM: Check that a register init sink is converted to passive
+  ; Check that a register init sink is converted to passive
   ; CHECK-LABEL: firrtl.module @register_init_passive
   module register_init_passive:
     input clk: Clock
@@ -859,19 +860,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     infer mport w = a[wAddr], clock
     w <= wData
 
-  ; Test that a mux with unknown width or 0-bit width select line parses.  This
-  ; is a check of the predicate enforced on UInt1Type.
-  ; CHECK-LABEL: firrtl.module @MuxUnknownWidthOrZeroWidthSelect_Issue1108
-  module MuxUnknownWidthOrZeroWidthSelect_Issue1108:
+  ; Test that a mux with an unknown width select line parses.  This is a check
+  ; of the predicate enforced on UInt1Type.
+  ; CHECK-LABEL: firrtl.module @MuxUnknownWidthSelect_Issue1108
+  module MuxUnknownWidthSelect_Issue1108:
     input a: UInt<1>
     input b: UInt<1>
-    input selUnknown: UInt
-    input selZero: UInt<0>
-    output c: UInt<8>[2]
-    ; CHECK: firrtl.mux([[_:.+]]) : (!firrtl.uint, [[_:.+]]) -> !firrtl.uint<1>
-    c[0] <= mux(selUnknown, a, b)
-    ; CHECK: firrtl.mux([[_:.+]]) : (!firrtl.uint<0>, [[_:.+]]) -> !firrtl.uint<1>
-    c[1] <= mux(selZero, a, b)
+    input sel: UInt
+    output c: UInt<8>
+    c <= mux(sel, a, b)
 
   ; CHECK-LABEL: firrtl.extmodule @RawStringParam
   ; CHECK: parameters = {FORMAT = "xyz_timeout=%d\\n",
@@ -888,4 +885,3 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     out <= UInt(1)
     ; CHECK: %[[c1:.*]] = firrtl.constant 1 : !firrtl.uint
     ; CHECK-NEXT: firrtl.connect %out, %[[c1]] : !firrtl.reset, !firrtl.uint
-  

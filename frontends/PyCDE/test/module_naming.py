@@ -28,11 +28,13 @@ class UnParameterized:
     return {"y": mod.x}
 
 
-class Test(pycde.System):
+@pycde.module
+class Test:
   inputs = []
   outputs = []
 
-  def build(self, top):
+  @pycde.generator
+  def build(_):
     c1 = circt.dialects.hw.ConstantOp.create(pycde.types.i1, 1)
     Parameterized(1)(x=c1)
     Parameterized(1)(x=c1)
@@ -48,6 +50,7 @@ class Test(pycde.System):
 # CHECK-NOT: hw.module @pycde.Module_2
 # CHECK: hw.module @pycde.UnParameterized
 # CHECK-NOT: hw.module @pycde.UnParameterized
-t = Test()
+t = pycde.System([Test])
+t.generate()
 t.generate(["construct"])
 t.print()

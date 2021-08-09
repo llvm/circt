@@ -46,14 +46,6 @@ def UInt1Type : DialectType<FIRRTLDialect,
    "UInt<1> or UInt", "::circt::firrtl::UIntType">,
    BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
-def UInt01Type : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<UIntType>() && "
-        "($_self.cast<UIntType>().getWidth() == 0 ||"
-        "$_self.cast<UIntType>().getWidth() == 1 ||"
-        " $_self.cast<UIntType>().getWidth() == None)">,
-   "UInt<0> UInt<1> or UInt", "::circt::firrtl::UIntType">,
-   BuildableType<"UIntType::get($_builder.getContext(), 1)">;
-
 def AsyncResetType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<AsyncResetType>()">,
   "AsyncReset", "::circt::firrtl::AsyncResetType">;
@@ -131,11 +123,10 @@ def SubAnnotationAttr
   let summary = "An Annotation that targets part of what it's attached to";
   let description = [{
     An Annotation that is only applicable to part of what it is attached to.
-    This uses a range of field IDs to indicate to which fields it is applicable.
+    This uses a field ID to indicate to which field it is applicable.
   }];
   let mnemonic = "subAnno";
-  let parameters = (ins "int64_t":$minFieldID, "int64_t":$maxFieldID,
-                        "DictionaryAttr":$annotations);
+  let parameters = (ins "int64_t":$fieldID, "DictionaryAttr":$annotations);
 }
 
 def PortAnnotationsAttr : TypedArrayAttrBase<AnnotationArrayAttr,

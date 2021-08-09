@@ -391,14 +391,21 @@ static bool parseAugmentedType(
       return false;
     }
     auto target = maybeTarget.getValue();
-    NamedAttrList attr;
+    NamedAttrList attr, dontTouchAnn;
     attr.append("class", classAttr);
     attr.append("defName", defName);
     attr.append("name", name);
-    if (target.second)
+    dontTouchAnn.append(
+        "class",
+        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+    if (target.second) {
       attr.append("target", target.second);
+      dontTouchAnn.append("target", target.second);
+    }
     newAnnotations[target.first].push_back(
         DictionaryAttr::getWithSorted(context, attr));
+    newAnnotations[target.first].push_back(
+        DictionaryAttr::getWithSorted(context, dontTouchAnn));
     return true;
   }
 
@@ -697,11 +704,21 @@ static bool scatterCustomAnnotations(
 
     if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
                  "SerializedViewAnnotation") {
+      auto viewAnnotationClass = StringAttr::get(
+          context, "sifive.enterprise.grandcentral.ViewAnnotation");
       auto id = newID();
       NamedAttrList companionAttrs, parentAttrs;
-      companionAttrs.append("class", dict.get("class"));
+      companionAttrs.append("class", viewAnnotationClass);
       companionAttrs.append("id", id);
       companionAttrs.append("type", StringAttr::get(context, "companion"));
+      auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
+      if (!viewAttr)
+        return false;
+      auto defName =
+          tryGetAs<StringAttr>(viewAttr, viewAttr, "defName", loc, clazz);
+      if (!defName)
+        return false;
+      companionAttrs.append("defName", defName);
       auto companionAttr =
           tryGetAs<StringAttr>(dict, dict, "companion", loc, clazz);
       if (!companionAttr)
@@ -712,14 +729,17 @@ static bool scatterCustomAnnotations(
       auto parentAttr = tryGetAs<StringAttr>(dict, dict, "parent", loc, clazz);
       if (!parentAttr)
         return false;
-      parentAttrs.append("class", dict.get("class"));
+      parentAttrs.append("class", viewAnnotationClass);
       parentAttrs.append("id", id);
+      auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
+      if (!name)
+        return false;
+      parentAttrs.append("name", name);
       parentAttrs.append("type", StringAttr::get(context, "parent"));
+      parentAttrs.append("defName", defName);
       newAnnotations[parentAttr.getValue()].push_back(
           DictionaryAttr::get(context, parentAttrs));
-      auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
-      if (!viewAttr ||
-          !parseAugmentedType(context, viewAttr, dict, newAnnotations,
+      if (!parseAugmentedType(context, viewAttr, dict, newAnnotations,
                               companion, {}, {}, loc, clazz, "view"))
         return false;
       continue;

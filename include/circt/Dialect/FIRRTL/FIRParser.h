@@ -32,11 +32,11 @@ struct FIRParserOptions {
   bool ignoreInfoLocators = false;
 };
 
-mlir::OwningModuleRef importFIRRTL(llvm::SourceMgr &sourceMgr,
-                                   mlir::MLIRContext *context,
-                                   FIRParserOptions options = {});
+mlir::OwningModuleRef importFIRFile(llvm::SourceMgr &sourceMgr,
+                                    mlir::MLIRContext *context,
+                                    FIRParserOptions options = {});
 
-void registerFromFIRRTLTranslation();
+void registerFromFIRFileTranslation();
 
 } // namespace firrtl
 } // namespace circt
