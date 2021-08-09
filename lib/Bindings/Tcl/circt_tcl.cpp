@@ -81,16 +81,15 @@ static int createAndOrFilter(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]
 
   CirctQueryFilter filters[objc - 1];
   for (int i = 1; i < objc; ++i) {
-    if (Tcl_ConvertToType(interp, objv[i], type) == TCL_OK) {
-      void *ptr;
-      if (!Tcl_IsShared(objv[i])) {
-        ptr = objv[i]->internalRep.otherValuePtr;
-        objv[i]->internalRep.otherValuePtr = nullptr;
-        objv[i]->typePtr = nullptr;
-      } else {
-        ptr = circtQueryCloneFilter((CirctQueryFilter){objv[i]->internalRep.otherValuePtr}).ptr;
-      }
+    auto *obj = objv[i];
+    if (Tcl_IsShared(objv[i])) {
+      obj = Tcl_DuplicateObj(objv[i]);
+    }
 
+    if (Tcl_ConvertToType(interp, objv[i], type) == TCL_OK) {
+      void *ptr = objv[i]->internalRep.otherValuePtr;
+      objv[i]->internalRep.otherValuePtr = nullptr;
+      objv[i]->typePtr = nullptr;
       filters[i - 1] = { ptr };
     } else {
       for (int j = 0; j < i - 1; ++j) {
