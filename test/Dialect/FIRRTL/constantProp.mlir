@@ -156,8 +156,8 @@ firrtl.circuit "padConstWire"   {
 firrtl.circuit "padConstReg"   {
   // CHECK-LABEL: firrtl.module @padConstReg
   firrtl.module @padConstReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<16>) {
-    %r_a = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<8>
-    %r_b = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<8>
+    %r_a = firrtl.reg %clock  :  !firrtl.uint<8>
+    %r_b = firrtl.reg %clock  :  !firrtl.uint<8>
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     firrtl.connect %r_a, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
     firrtl.connect %r_b, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
@@ -172,7 +172,7 @@ firrtl.circuit "padConstReg"   {
 firrtl.circuit "padZeroReg"   {
   // CHECK-LABEL: firrtl.module @padZeroReg
   firrtl.module @padZeroReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<16>) {
-      %r = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<8>
+      %r = firrtl.reg %clock  :  !firrtl.uint<8>
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       %0 = firrtl.or %r, %c0_ui1 : (!firrtl.uint<8>, !firrtl.uint<1>) -> !firrtl.uint<8>
       firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
@@ -180,8 +180,10 @@ firrtl.circuit "padZeroReg"   {
       %n = firrtl.node %c171_ui8  : !firrtl.uint<8>
       %1 = firrtl.cat %n, %r : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
       firrtl.connect %z, %1 : !firrtl.uint<16>, !firrtl.uint<16>
-    // CHECK: %[[C7:.+]] = firrtl.constant 44031 : !firrtl.uint<16>
-    // CHECK-NEXT: firrtl.connect %z, %[[C7]] : !firrtl.uint<16>, !firrtl.uint<16>
+    // CHECK: %[[C7:.+]] = firrtl.constant 171 : !firrtl.uint<8>
+    // CHECK: %[[invalid:.+]] = firrtl.invalidvalue : !firrtl.uint<8>
+    // CHECK: %[[C7_0:.+]] = firrtl.cat %c171_ui8, %invalid_ui8 
+    // CHECK-NEXT: firrtl.connect %z, %[[C7_0]] : !firrtl.uint<16>, !firrtl.uint<16>
   }
 }
 
@@ -237,7 +239,7 @@ firrtl.circuit "removePad"   {
 firrtl.circuit "uninitSelfReg"   {
   // CHECK-LABEL: firrtl.module @uninitSelfReg
   firrtl.module @uninitSelfReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<8>) {
-    %r = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.uint<8>
+    %r = firrtl.reg %clock  :  !firrtl.uint<8>
     firrtl.connect %r, %r : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
@@ -250,7 +252,7 @@ firrtl.circuit "constResetReg"   {
   // CHECK-LABEL: firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
   firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
-    %r = firrtl.regreset %clock, %reset, %c11_ui4  : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>
     firrtl.connect %r, %r : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %[[C11:.+]] = firrtl.constant 11 : !firrtl.uint<8>
@@ -263,7 +265,7 @@ firrtl.circuit "asyncReset"   {
   // CHECK-LABEL: firrtl.module @asyncReset
   firrtl.module @asyncReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %en: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
-    %r = firrtl.regreset %clock, %reset, %c11_ui4  : (!firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>) -> !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.asyncreset, !firrtl.uint<4>, !firrtl.uint<8>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %0 = firrtl.mux(%en, %c0_ui4, %r) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
@@ -277,7 +279,7 @@ firrtl.circuit "asyncReset"   {
 firrtl.circuit "constReg2"   {
   // CHECK-LABEL: firrtl.module @constReg2
   firrtl.module @constReg2(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.sint<8>) {
-    %r = firrtl.reg %clock  : (!firrtl.clock) -> !firrtl.sint<8>
+    %r = firrtl.reg %clock  :  !firrtl.sint<8>
     %c-5_si4 = firrtl.constant -5 : !firrtl.sint<4>
     firrtl.connect %r, %c-5_si4 : !firrtl.sint<8>, !firrtl.sint<4>
     firrtl.connect %z, %r : !firrtl.sint<8>, !firrtl.sint<8>
@@ -291,7 +293,7 @@ firrtl.circuit "regSameConstReset"   {
   // CHECK-LABEL: firrtl.module @regSameConstReset
   firrtl.module @regSameConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
-    %r = firrtl.regreset %clock, %reset, %c11_ui4  : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>
     firrtl.connect %r, %c11_ui4 : !firrtl.uint<8>, !firrtl.uint<4>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK: %[[C13:.+]] = firrtl.constant 11 : !firrtl.uint<8>
