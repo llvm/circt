@@ -39,16 +39,16 @@ static int returnErrorStr(Tcl_Interp *interp, const char *error) {
   return TCL_ERROR;
 }
 
-static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int objc,
-                    Tcl_Obj *const objv[]) {
+static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp,
+                           int objc, Tcl_Obj *const objv[]) {
   if (objc != 3) {
     Tcl_WrongNumArgs(interp, objc, objv, "usage: circt load [MLIR|FIR] [file]");
     return TCL_ERROR;
   }
 
   std::string errorMessage;
-  auto input =
-      mlir::openInputFile(llvm::StringRef(Tcl_GetString(objv[2])), &errorMessage);
+  auto input = mlir::openInputFile(llvm::StringRef(Tcl_GetString(objv[2])),
+                                   &errorMessage);
 
   if (!input)
     return returnErrorStr(interp, errorMessage.c_str());
@@ -64,7 +64,8 @@ static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int o
   else if (!strcmp(Tcl_GetString(objv[1]), "FIR"))
     // TODO
     return returnErrorStr(interp, "loading FIR files is unimplemented :(");
-  else return TCL_ERROR;
+  else
+    return TCL_ERROR;
 
   if (mlirOperationIsNull(module))
     return returnErrorStr(interp, "error loading module");
@@ -82,7 +83,7 @@ static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp, int o
 }
 
 static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
-                     Tcl_Obj *const objv[]) {
+                            Tcl_Obj *const objv[]) {
   if (objc < 2) {
     Tcl_WrongNumArgs(interp, objc, objv, "usage: circt load");
     return TCL_ERROR;
@@ -125,5 +126,4 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
                        deleteContext);
   return TCL_OK;
 }
-
 }

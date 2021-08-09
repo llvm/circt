@@ -27,6 +27,3 @@ hw.module @always() -> () {
   hw.output
 }
 
-//
-// *::(** : op = (alwaysff | instance) & some_attribute = some_value? | /.*w.*/)::uwu
-//
