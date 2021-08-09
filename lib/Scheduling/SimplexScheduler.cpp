@@ -50,9 +50,17 @@ namespace {
 /// side product of solving the parametric problem, and corresponds to the
 /// "RecMII" (= recurrence-constrained minimum II) usually considered as one
 /// component in the lower II bound used by modulo schedulers.
+///
+/// The (acyclic) `Problem` constitutes a special case for this approach; it is
+/// solved by treating it as a `CyclicProblem` in which all dependence distances
+/// are zero.
 class SimplexScheduler {
 private:
-  CyclicProblem &prob;
+  Problem *problem;
+  CyclicProblem *cyclicProblem;
+  bool isCyclic() { return cyclicProblem != nullptr; }
+
+  /// The objective is to minimize the start time of this operation.
   Operation *lastOp;
 
   /// The minimally-feasible initiation interval is computed by the algorithm.
@@ -128,7 +136,9 @@ private:
 
 public:
   SimplexScheduler(CyclicProblem &prob, Operation *lastOp)
-      : prob(prob), lastOp(lastOp) {}
+      : problem(&prob), cyclicProblem(&prob), lastOp(lastOp) {}
+  SimplexScheduler(Problem &prob, Operation *lastOp)
+      : problem(&prob), cyclicProblem(nullptr), lastOp(lastOp) {}
   LogicalResult schedule();
 };
 
@@ -144,7 +154,7 @@ void SimplexScheduler::buildTableau() {
   unsigned varNum = 0;
 
   // Assign column and variable numbers to the operations' start times.
-  for (auto *op : prob.getOperations()) {
+  for (auto *op : problem->getOperations()) {
     opCols[op] = firstNonBasicVariableColumn + varNum;
     nonBasicVariables.push_back(varNum);
     ++varNum;
@@ -164,16 +174,19 @@ void SimplexScheduler::buildTableau() {
   objRowVec[opCols[lastOp]] = 1;
 
   // Now set up rows/constraints for the dependences.
-  for (auto *op : prob.getOperations()) {
-    for (auto &dep : prob.getDependences(op)) {
+  for (auto *op : problem->getOperations()) {
+    for (auto &dep : problem->getDependences(op)) {
       auto &consRowVec = addRow();
       basicVariables.push_back(varNum);
       ++varNum;
 
       Operation *src = dep.getSource();
       Operation *dst = dep.getDestination();
-      unsigned latency = *prob.getLatency(*prob.getLinkedOperatorType(src));
-      unsigned distance = prob.getDistance(dep).getValueOr(0);
+      auto operatorType = *problem->getLinkedOperatorType(src);
+      unsigned latency = *problem->getLatency(operatorType);
+      unsigned distance = 0;
+      if (isCyclic())
+        distance = cyclicProblem->getDistance(dep).getValueOr(0);
       consRowVec[parameterOneColumn] = -latency; // note the negation
       consRowVec[parameterIIColumn] = distance;
       consRowVec[opCols[src]] = 1;
@@ -314,7 +327,7 @@ void SimplexScheduler::dumpTableau() {
 
 LogicalResult SimplexScheduler::schedule() {
   // Initialize data structures.
-  parameterII = 1;
+  parameterII = isCyclic() ? 1 : 0;
   buildTableau();
 
   LLVM_DEBUG(dbgs() << "Initial tableau:\n");
@@ -354,17 +367,19 @@ LogicalResult SimplexScheduler::schedule() {
     }
 
     // Otherwise, there is nothing we can do.
-    return prob.getContainingOp()->emitError("problem is infeasible");
+    return problem->getContainingOp()->emitError("problem is infeasible");
   }
 
+  assert((!isCyclic() && parameterII == 0) || (isCyclic() && parameterII > 0));
   LLVM_DEBUG(dbgs() << "Optimal solution found with II = " << parameterII
                     << " and start time of last operation = "
                     << -tableau[objectiveRow][parameterOneColumn] << '\n');
 
   // Store solution in the problem object.
-  prob.setInitiationInterval(parameterII);
+  if (isCyclic())
+    cyclicProblem->setInitiationInterval(parameterII);
 
-  auto &ops = prob.getOperations();
+  auto &ops = problem->getOperations();
   unsigned nOps = ops.size();
   // For the start time variables currently in basis, we look up the solution
   // in the ~B part of the tableau. The slack variables (IDs >= |ops|) are
@@ -375,7 +390,7 @@ LogicalResult SimplexScheduler::schedule() {
       unsigned startTime =
           tableau[firstConstraintRow + i][parameterOneColumn] +
           tableau[firstConstraintRow + i][parameterIIColumn] * parameterII;
-      prob.setStartTime(ops[varNum], startTime);
+      problem->setStartTime(ops[varNum], startTime);
     }
   }
 
@@ -383,7 +398,7 @@ LogicalResult SimplexScheduler::schedule() {
   for (unsigned i = 0; i < nonBasicVariables.size(); ++i) {
     unsigned varNum = nonBasicVariables[i];
     if (varNum < nOps)
-      prob.setStartTime(ops[varNum], 0);
+      problem->setStartTime(ops[varNum], 0);
   }
 
   return success();
@@ -391,6 +406,11 @@ LogicalResult SimplexScheduler::schedule() {
 
 LogicalResult scheduling::scheduleSimplex(CyclicProblem &prob,
                                           Operation *lastOp) {
+  SimplexScheduler simplex(prob, lastOp);
+  return simplex.schedule();
+}
+
+LogicalResult scheduling::scheduleSimplex(Problem &prob, Operation *lastOp) {
   SimplexScheduler simplex(prob, lastOp);
   return simplex.schedule();
 }

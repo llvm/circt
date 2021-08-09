@@ -32,6 +32,11 @@ LogicalResult scheduleASAP(Problem &prob);
 /// distance.
 LogicalResult scheduleSimplex(CyclicProblem &prob, Operation *lastOp);
 
+/// Solve the basic problem with the aforementioned simplex scheduler. The
+/// objective is to minimize the start time of the given \p lastOp. Fails if the
+/// dependence graph contains cycles.
+LogicalResult scheduleSimplex(Problem &prob, Operation *lastOp);
+
 } // namespace scheduling
 } // namespace circt
 
