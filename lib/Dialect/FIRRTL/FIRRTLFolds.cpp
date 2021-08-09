@@ -1523,7 +1523,7 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
 
 // Turn synchronous reset looking register updates to registers with resets
 // Also, const prop registers that are driven by a mux tree containing only
-// instances of one constant or self-assigns. 
+// instances of one constant or self-assigns.
 static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   // reg ; connect(reg, mux(port, const, val)) ->
   // reg.reset(port, const); connect(reg, val)
@@ -1553,10 +1553,10 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   // Reset value must be constant
   auto constOp = dyn_cast_or_null<ConstantOp>(high);
 
-  // Detect the case if a register only has two possible drivers: 
-  // (1) itself/uninit and (2) constant. 
-  // The mux can then be replaced with the constant. 
-  // r = mux(cond, r, 3) --> r = 3 
+  // Detect the case if a register only has two possible drivers:
+  // (1) itself/uninit and (2) constant.
+  // The mux can then be replaced with the constant.
+  // r = mux(cond, r, 3) --> r = 3
   // r = mux(cond, 3, r) --> r = 3
   bool constReg = false;
 
