@@ -300,3 +300,62 @@ firrtl.circuit "regSameConstReset"   {
     // CHECK: firrtl.connect %z, %[[C13]] : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }
+
+firrtl.circuit "SignTester"   {
+  // CHECK-LABEL: firrtl.module @SignTester
+  firrtl.module @SignTester(out %ref: !firrtl.sint<3>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c0_si3 = firrtl.constant 0 : !firrtl.sint<3>
+    %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
+    %0 = firrtl.neg %c3_ui2 : (!firrtl.uint<2>) -> !firrtl.sint<3>
+    %1 = firrtl.mux(%c0_ui1, %c0_si3, %0) : (!firrtl.uint<1>, !firrtl.sint<3>, !firrtl.sint<3>) -> !firrtl.sint<3>
+    firrtl.connect %ref, %1 : !firrtl.sint<3>, !firrtl.sint<3>
+    // CHECK:  %[[C14:.+]] = firrtl.constant -3 : !firrtl.sint<3>
+    // CHECK:  firrtl.connect %ref, %[[C14]] : !firrtl.sint<3>, !firrtl.sint<3>
+  }
+}
+
+firrtl.circuit "AddTester"   {
+  // CHECK-LABEL: firrtl.module @AddTester
+  firrtl.module @AddTester(out %ref: !firrtl.sint<2>) {
+    %c-1_si1 = firrtl.constant -1 : !firrtl.sint<1>
+    %0 = firrtl.add %c-1_si1, %c-1_si1 : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.sint<2>
+    firrtl.connect %ref, %0 : !firrtl.sint<2>, !firrtl.sint<2>
+    // CHECK:  %[[C15:.+]] = firrtl.constant -2 : !firrtl.sint<2>
+    // CHECK:  firrtl.connect %ref, %[[C15]]
+  }
+}
+
+firrtl.circuit "ConstPropReductionTester"   {
+  // CHECK-LABEL: firrtl.module @ConstPropReductionTester
+  firrtl.module @ConstPropReductionTester(out %out1: !firrtl.uint<1>, out %out2: !firrtl.uint<1>, out %out3: !firrtl.uint<1>) {
+    %c-1_si2 = firrtl.constant -1 : !firrtl.sint<2>
+    %0 = firrtl.xorr %c-1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
+    firrtl.connect %out1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    %1 = firrtl.andr %c-1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
+    firrtl.connect %out2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.orr %c-1_si2 : (!firrtl.sint<2>) -> !firrtl.uint<1>
+    firrtl.connect %out3, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %[[C16:.+]] = firrtl.constant 1
+    // CHECK:  %[[C17:.+]] = firrtl.constant 0
+    // CHECK:  firrtl.connect %out1, %[[C17]]
+    // CHECK:  firrtl.connect %out2, %[[C16]]
+    // CHECK:  firrtl.connect %out3, %[[C16]]
+  }
+}
+
+firrtl.circuit "TailTester"   {
+  // CHECK-LABEL: firrtl.module @TailTester
+  firrtl.module @TailTester(out %out: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c23_ui5 = firrtl.constant 23 : !firrtl.uint<5>
+    %0 = firrtl.add %c0_ui1, %c23_ui5 : (!firrtl.uint<1>, !firrtl.uint<5>) -> !firrtl.uint<6>
+    %temp = firrtl.node %0  : !firrtl.uint<6>
+    %1 = firrtl.head %temp, 3 : (!firrtl.uint<6>) -> !firrtl.uint<3>
+    %head_temp = firrtl.node %1  : !firrtl.uint<3>
+    %2 = firrtl.tail %head_temp, 2 : (!firrtl.uint<3>) -> !firrtl.uint<1>
+    firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK:  %[[C18:.+]] = firrtl.constant 0
+    // CHECK:  firrtl.connect %out, %[[C18]]
+  }
+}
