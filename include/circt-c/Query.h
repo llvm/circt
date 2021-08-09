@@ -31,6 +31,7 @@ CirctQueryFilter circtQueryNewOperatorFilter(CirctQueryFilterType type);
 CirctQueryFilter circtQueryNewAndFilter(size_t count, CirctQueryFilter *filters);
 CirctQueryFilter circtQueryNewOrFilter(size_t count, CirctQueryFilter *filters);
 CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter, CirctQueryFilter child);
+CirctQueryFilter circtQueryCloneFilter(CirctQueryFilter filter);
 void circtQueryDeleteFilter(CirctQueryFilter filter);
 
 #ifdef __cplusplus

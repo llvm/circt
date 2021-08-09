@@ -2,7 +2,6 @@ add_library(circt-tcl
   SHARED
     circt_tcl.cpp
     Query.cpp
-    Circt.cpp
 )
 target_link_libraries(circt-tcl
   PUBLIC
