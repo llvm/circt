@@ -1917,8 +1917,8 @@ firrtl.module @constReg2(in %clock: !firrtl.clock,
   firrtl.connect %r2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
   %2 = firrtl.xor %r1, %r2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:  %[[C11:.+]] = firrtl.constant 1 : !firrtl.uint<1>
-  // CHECK:  firrtl.connect %out, %[[C11]] 
+  // CHECK:  %[[C12:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+  // CHECK:  firrtl.connect %out, %[[C12]] 
 }
 
 }
