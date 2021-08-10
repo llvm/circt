@@ -1521,7 +1521,9 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
 // Declarations
 //===----------------------------------------------------------------------===//
 
-// Turn synchronous reset looking register updates to registers with resets
+// Turn synchronous reset looking register updates to registers with resets.
+// Also, const prop registers that are driven by a mux tree containing only
+// instances of one constant or self-assigns.
 static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   // reg ; connect(reg, mux(port, const, val)) ->
   // reg.reset(port, const); connect(reg, val)
@@ -1546,9 +1548,24 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
   if (!mux)
     return failure();
-
+  auto high = mux.high().getDefiningOp();
+  auto low = mux.low().getDefiningOp();
   // Reset value must be constant
-  auto constOp = dyn_cast_or_null<ConstantOp>(mux.high().getDefiningOp());
+  auto constOp = dyn_cast_or_null<ConstantOp>(high);
+
+  // Detect the case if a register only has two possible drivers:
+  // (1) itself/uninit and (2) constant.
+  // The mux can then be replaced with the constant.
+  // r = mux(cond, r, 3) --> r = 3
+  // r = mux(cond, 3, r) --> r = 3
+  bool constReg = false;
+
+  if (constOp && low == reg)
+    constReg = true;
+  else if (dyn_cast_or_null<ConstantOp>(low) && high == reg) {
+    constReg = true;
+    constOp = dyn_cast<ConstantOp>(low);
+  }
   if (!constOp)
     return failure();
 
@@ -1569,12 +1586,14 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (constOp != &con->getBlock()->front())
     constOp->moveBefore(&con->getBlock()->front());
 
-  rewriter.replaceOpWithNewOp<RegResetOp>(reg, reg.getType(), reg.clockVal(),
-                                          mux.sel(), mux.high(), reg.name(),
-                                          reg.annotations());
+  if (!constReg)
+    rewriter.replaceOpWithNewOp<RegResetOp>(reg, reg.getType(), reg.clockVal(),
+                                            mux.sel(), mux.high(), reg.name(),
+                                            reg.annotations());
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
-  rewriter.replaceOpWithNewOp<ConnectOp>(con, con.dest(), mux.low());
+  rewriter.replaceOpWithNewOp<ConnectOp>(con, con.dest(),
+                                         constReg ? constOp : mux.low());
   rewriter.restoreInsertionPoint(pt);
   return success();
 }
