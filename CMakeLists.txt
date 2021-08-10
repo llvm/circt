@@ -337,6 +337,21 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# Tcl bindings
+#-------------------------------------------------------------------------------
+option(CIRCT_BINDINGS_TCL_ENABLED "Enables CIRCT Tcl bindings." OFF)
+
+llvm_canonicalize_cmake_booleans(CIRCT_BINDINGS_TCL_ENABLED)
+if(CIRCT_BINDINGS_TCL_ENABLED)
+  message(STATUS "CIRCT Tcl bindings are enabled")
+  find_package(TCL 8.6 REQUIRED)
+  find_package(TCLStub 8.6 REQUIRED)
+  message(STATUS "Found TCL include path: ${TCL_INCLUDE_PATH}")
+  message(STATUS "Found TCL library: ${TCL_LIBRARY}")
+  message(STATUS "Found TCL executable: ${TCL_TCLSH}")
+endif()
+
+#-------------------------------------------------------------------------------
 # Directory setup
 #-------------------------------------------------------------------------------
 
