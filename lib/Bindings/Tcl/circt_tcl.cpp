@@ -14,29 +14,40 @@ static int returnErrorStr(Tcl_Interp *interp, const char *error) {
   return TCL_ERROR;
 }
 
-static int filterTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
+static CirctQueryFilterType createFilterType(Tcl_Obj *obj) {
+  CirctQueryFilterType type;
   auto *str = Tcl_GetString(obj);
   size_t length = obj->length;
-  CirctQueryFilter filter;
   if (!strcmp(str, "*")) {
-    filter = circtQueryNewNameFilter(circtQueryNewGlobFilterType());
+    type = circtQueryNewGlobFilterType();
   } else if (!strcmp(str, "**")) {
-    filter = circtQueryNewNameFilter(circtQueryNewRecursiveGlobFilterType());
+    type = circtQueryNewRecursiveGlobFilterType();
   } else if (str[0] == '/' && str[length - 1] == '/' && length > 2) {
     char buffer[length - 1];
     memcpy(buffer, str + 1, length - 1);
     buffer[length - 2] = '\0';
-    filter = circtQueryNewNameFilter(circtQueryNewRegexFilterType(buffer));
+    type = circtQueryNewRegexFilterType(buffer);
   } else {
     for (size_t i = 0; i < length; i++) {
       char c = str[i];
       if (!(('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c == '_')) {
-        return TCL_ERROR;
+        return {nullptr};
       }
     }
 
-    filter = circtQueryNewNameFilter(circtQueryNewLiteralFilterType(str));
+    type = circtQueryNewLiteralFilterType(str);
   }
+
+  return type;
+}
+
+static int filterTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
+  auto type = createFilterType(obj);
+  if (type.ptr == nullptr) {
+    return TCL_ERROR;
+  }
+
+  CirctQueryFilter filter = circtQueryNewNameFilter(type);
 
   if (obj->typePtr != nullptr) {
     obj->typePtr->freeIntRepProc(obj);
@@ -176,27 +187,9 @@ static int createAttributeFilter(ClientData cdata, Tcl_Interp *interp,
   }
 
   auto *key = Tcl_GetString(objv[1]);
-  CirctQueryFilterType type;
-  auto *str = Tcl_GetString(objv[2]);
-  size_t length = objv[2]->length;
-  if (!strcmp(str, "*")) {
-    type = circtQueryNewGlobFilterType();
-  } else if (!strcmp(str, "**")) {
-    type = circtQueryNewRecursiveGlobFilterType();
-  } else if (str[0] == '/' && str[length - 1] == '/' && length > 2) {
-    char buffer[length - 1];
-    memcpy(buffer, str + 1, length - 1);
-    buffer[length - 2] = '\0';
-    type = circtQueryNewRegexFilterType(buffer);
-  } else {
-    for (size_t i = 0; i < length; i++) {
-      char c = str[i];
-      if (!(('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c == '_')) {
-        return TCL_ERROR;
-      }
-    }
-
-    type = circtQueryNewLiteralFilterType(str);
+  auto type = createFilterType(objv[2]);
+  if (type.ptr == nullptr) {
+    return returnErrorStr(interp, "invalid filter type");
   }
 
   auto filter = circtQueryNewAttributeFilter(key, type);
@@ -274,7 +267,7 @@ static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp,
     // TODO
     return returnErrorStr(interp, "loading FIR files is unimplemented :(");
   else
-    return TCL_ERROR;
+    return returnErrorStr(interp, "unsupported file type");
 
   if (mlirOperationIsNull(module))
     return returnErrorStr(interp, "error loading module");
