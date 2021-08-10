@@ -22,7 +22,7 @@ static int filterTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
     filter = circtQueryNewNameFilter(circtQueryNewGlobFilterType());
   } else if (!strcmp(str, "**")) {
     filter = circtQueryNewNameFilter(circtQueryNewRecursiveGlobFilterType());
-  } else if (str[0] == '/' && str[length - 1] == '/') {
+  } else if (str[0] == '/' && str[length - 1] == '/' && length > 2) {
     char buffer[length - 1];
     memcpy(buffer, str + 1, length - 1);
     buffer[length - 2] = '\0';
@@ -175,6 +175,35 @@ static int createAttributeFilter(ClientData cdata, Tcl_Interp *interp,
     return TCL_ERROR;
   }
 
+  auto *key = Tcl_GetString(objv[1]);
+  CirctQueryFilterType type;
+  auto *str = Tcl_GetString(objv[2]);
+  size_t length = objv[2]->length;
+  if (!strcmp(str, "*")) {
+    type = circtQueryNewGlobFilterType();
+  } else if (!strcmp(str, "**")) {
+    type = circtQueryNewRecursiveGlobFilterType();
+  } else if (str[0] == '/' && str[length - 1] == '/' && length > 2) {
+    char buffer[length - 1];
+    memcpy(buffer, str + 1, length - 1);
+    buffer[length - 2] = '\0';
+    type = circtQueryNewRegexFilterType(buffer);
+  } else {
+    for (size_t i = 0; i < length; i++) {
+      char c = str[i];
+      if (!(('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c == '_')) {
+        return TCL_ERROR;
+      }
+    }
+
+    type = circtQueryNewLiteralFilterType(str);
+  }
+
+  auto filter = circtQueryNewAttributeFilter(key, type);
+  auto *result = Tcl_NewObj();
+  result->typePtr = Tcl_GetObjType("Filter");
+  result->internalRep.otherValuePtr = filter.ptr;
+  Tcl_SetObjResult(interp, result);
   return TCL_OK;
 }
 
@@ -357,6 +386,7 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   Tcl_CreateObjCommand(interp, "inst", createInstanceFilter, NULL, NULL);
   Tcl_CreateObjCommand(interp, "and", createAndFilter, NULL, NULL);
   Tcl_CreateObjCommand(interp, "or", createOrFilter, NULL, NULL);
+  Tcl_CreateObjCommand(interp, "attr", createAttributeFilter, NULL, NULL);
   Tcl_CreateObjCommand(interp, "op", createOpFilter, NULL, NULL);
   return TCL_OK;
 }
