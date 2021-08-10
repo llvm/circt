@@ -232,13 +232,21 @@ static void operationTypeUpdateStringProc(Tcl_Obj *obj) {
 }
 
 static void operationTypeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
-  auto *op = unwrap((MlirOperation){src->internalRep.otherValuePtr})->clone();
-  dup->internalRep.otherValuePtr = wrap(op).ptr;
+  auto *op = unwrap((MlirOperation){src->internalRep.otherValuePtr});
+  MlirOperation result;
+  if (auto mod = llvm::dyn_cast_or_null<mlir::ModuleOp>(op)) {
+    result = wrap(mod.clone().getOperation());
+  } else {
+    result = wrap(op);
+  }
+  dup->internalRep.otherValuePtr = result.ptr;
 }
 
 static void operationTypeFreeIntRepProc(Tcl_Obj *obj) {
   auto *op = unwrap((MlirOperation){obj->internalRep.otherValuePtr});
-  op->erase();
+  if (auto mod = llvm::dyn_cast_or_null<mlir::ModuleOp>(op)) {
+    mod.erase();
+  }
 }
 
 static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp,
@@ -277,8 +285,7 @@ static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp,
   auto *obj = Tcl_NewObj();
   obj->typePtr = Tcl_GetObjType("MlirOperation");
   obj->internalRep.otherValuePtr = (void *)m;
-  obj->length = 0;
-  obj->bytes = nullptr;
+  Tcl_InvalidateStringRep(obj);
   Tcl_SetObjResult(interp, obj);
 
   return TCL_OK;
@@ -296,29 +303,59 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
   }
 
   auto filter = (CirctQueryFilter){objv[1]->internalRep.otherValuePtr};
-  if (Tcl_ConvertToType(interp, objv[2], Tcl_GetObjType("MlirOperation")) == TCL_OK) {
-    auto root = (MlirOperation){objv[2]->internalRep.otherValuePtr};
-    auto result = circtQueryFilterFromRoot(filter, root);
-    MlirOperation op;
-    auto *type = Tcl_GetObjType("MlirOperation");
-    auto *list = Tcl_NewListObj(0, nullptr);
-    for (size_t i = 0; !mlirOperationIsNull(op = circtQueryGetFromFilterResult(result, i)); ++i) {
-      auto *obj = Tcl_NewObj();
-      obj->typePtr = type;
-      obj->internalRep.otherValuePtr = wrap(unwrap(op)->clone()).ptr;
-      obj->bytes = nullptr;
-      obj->length = 0;
-      if (Tcl_ListObjAppendElement(interp, list, obj) != TCL_OK) {
-        circtQueryDeleteFilterResult(result);
-        return returnErrorStr(interp, "something went wrong when appending to list");
-      }
-
-      Tcl_SetObjResult(interp, list);
-    }
-  } else {
+  Tcl_Obj **objs = nullptr;
+  int length = 0;
+  auto *type = Tcl_GetObjType("MlirOperation");
+  if (Tcl_ConvertToType(interp, objv[2], type) == TCL_OK) {
+    objs = (Tcl_Obj **) &objv[2];
+    length = 1;
+  } else if (Tcl_ListObjGetElements(interp, objv[2], &length, &objs) != TCL_OK) {
     return returnErrorStr(interp, "expected operation or list of operations");
   }
 
+  auto *list = Tcl_NewListObj(0, nullptr);
+  for (int i = 0; i < length; ++i) {
+    if (Tcl_ConvertToType(interp, objs[i], type) != TCL_OK) {
+      return returnErrorStr(interp, "expected operation or list of operations");
+    }
+
+    auto root = (MlirOperation){objs[i]->internalRep.otherValuePtr};
+    auto result = circtQueryFilterFromRoot(filter, root);
+    MlirOperation op;
+    for (size_t j = 0; !mlirOperationIsNull(op = circtQueryGetFromFilterResult(result, j)); ++j) {
+      auto *obj = Tcl_NewObj();
+      obj->typePtr = type;
+      obj->internalRep.otherValuePtr = op.ptr;
+      Tcl_InvalidateStringRep(obj);
+
+      int length = 0;
+      Tcl_Obj **list_raw = nullptr;
+      if (Tcl_ListObjGetElements(interp, list, &length, &list_raw) != TCL_OK) {
+        return TCL_ERROR;
+      }
+
+      auto *unwrappedOp = unwrap(op);
+      bool contained = false;
+      for (int k = 0; k < length; ++k) {
+        if (unwrap((MlirOperation){list[k].internalRep.otherValuePtr}) == unwrappedOp) {
+          contained = true;
+          break;
+        }
+      }
+
+      if (!contained && Tcl_ListObjAppendElement(interp, list, obj) != TCL_OK) {
+        circtQueryDeleteFilterResult(result);
+        return TCL_ERROR;
+      }
+    }
+  }
+  Tcl_SetObjResult(interp, list);
+
+  return TCL_OK;
+}
+
+static int dumpAttributes(ClientData cdata, Tcl_Interp *interp, int objc,
+                            Tcl_Obj *const objv[]) {
   return TCL_OK;
 }
 

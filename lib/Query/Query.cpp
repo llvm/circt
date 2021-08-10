@@ -62,7 +62,19 @@ std::vector<Operation *> Filter::filter(std::vector<Operation *> &results) {
   std::vector<Operation *> result;
   for (auto *op : results) {
     auto vec = filter(op);
-    result.insert(result.end(), vec.begin(), vec.end());
+    for (auto *op : vec) {
+      bool contained = false;
+      for (auto *o : result) {
+        if (o == op) {
+          contained = true;
+          break;
+        }
+      }
+
+      if (!contained) {
+        result.push_back(op);
+      }
+    }
   }
 
   return result;
