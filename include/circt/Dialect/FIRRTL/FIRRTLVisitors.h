@@ -205,7 +205,7 @@ public:
   ResultType dispatchDeclVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<CMemOp, InstanceOp, MemOp, NodeOp, RegOp, SMemOp,
+        .template Case<CombMemOp, InstanceOp, MemOp, NodeOp, RegOp, SeqMemOp,
                        RegResetOp, WireOp>([&](auto opNode) -> ResultType {
           return thisCast->visitDecl(opNode, args...);
         })
@@ -231,13 +231,13 @@ public:
     return static_cast<ConcreteType *>(this)->visitUnhandledDecl(op, args...); \
   }
 
-  HANDLE(CMemOp);
+  HANDLE(CombMemOp);
   HANDLE(InstanceOp);
   HANDLE(MemOp);
   HANDLE(NodeOp);
   HANDLE(RegOp);
   HANDLE(RegResetOp);
-  HANDLE(SMemOp);
+  HANDLE(SeqMemOp);
   HANDLE(WireOp);
 #undef HANDLE
 };

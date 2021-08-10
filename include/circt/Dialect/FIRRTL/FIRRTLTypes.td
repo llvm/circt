@@ -54,6 +54,63 @@ def PassiveType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isPassive()">,
   "a passive type (contain no flips)", "::circt::firrtl::FIRRTLType">;
 
+def CMemoryType : TypeDef<FIRRTLDialect, "CMemory"> {
+  let mnemonic = "cmemory";
+  let summary = "a behavioral memory";
+  let description = [{
+    Syntax:
+    ```
+    cmemory-type ::= `cmemory` `<` element-type, element-count `>`
+    ```
+
+    The value of a `cmemory` type represents a behavioral memory with unknown
+    ports.  This is produced by `combmem` and `seqmem` declarations and used by
+    `memoryport` declarations to define memories and their ports. A CMemory is
+    similar to a vector of passive element types.
+
+    Examples:
+
+    ```mlir
+    !firrtl.cmemory<uint<32>, 16>
+    !firrtl.cmemory<bundle<a : uint<1>>, 16>
+    ```
+  }];
+
+  let parameters = (ins "FIRRTLType":$elementType, "unsigned":$numElements);
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "FIRRTLType":$elementType,
+                                        "unsigned":$numElements), [{
+      return $_get(elementType.getContext(), elementType, numElements);
+    }]>
+  ];
+
+  let printer = [{
+    $_printer << "cmemory<";
+    // Don't print element types with "!firrtl.".
+    getImpl()->elementType.print($_printer.getStream());
+    $_printer << ", " << getImpl()->numElements << ">";
+  }];
+
+  let parser = [{
+    if ($_parser.parseLess())
+      return {};
+    FIRRTLType elementType;
+    if (parseFIRRTLType(elementType, $_parser))
+      return {};
+    if ($_parser.parseComma())
+      return {};
+    unsigned numElements;
+    if ($_parser.parseInteger(numElements))
+      return {};
+    if ($_parser.parseGreater())
+      return {};
+    return $_parser.getChecked<CMemoryType>(elementType, numElements);
+  }];
+
+  let genVerifyDecl = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//

@@ -1179,7 +1179,7 @@ FIRParser::getSplitAnnotations(ArrayRef<Twine> targets, SMLoc loc,
       ports.size(), ArrayAttr::get(constants.context, {}));
   return {constants.emptyArrayAttr,
           ArrayAttr::get(constants.context, portAnnotations)};
-};
+}
 
 //===----------------------------------------------------------------------===//
 // FIRModuleContext
@@ -1218,12 +1218,9 @@ struct FIRModuleContext : public FIRParser {
 
   /// Add a symbol entry with the specified name, returning failure if the name
   /// is already defined.
-  ParseResult addSymbolEntry(StringRef name, SymbolValueEntry entry, SMLoc loc,
-                             bool insertNameIntoGlobalScope = false);
-  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc,
-                             bool insertNameIntoGlobalScope = false) {
-    return addSymbolEntry(name, SymbolValueEntry(value), loc,
-                          insertNameIntoGlobalScope);
+  ParseResult addSymbolEntry(StringRef name, SymbolValueEntry entry, SMLoc loc);
+  ParseResult addSymbolEntry(StringRef name, Value value, SMLoc loc) {
+    return addSymbolEntry(name, SymbolValueEntry(value), loc);
   }
 
   /// Resolved a symbol table entry to a value.  Emission of error is optional.
@@ -1295,13 +1292,9 @@ private:
 
 /// Add a symbol entry with the specified name, returning failure if the name
 /// is already defined.
-///
-/// When 'insertNameIntoGlobalScope' is true, we don't allow the name to be
-/// popped.  This is a workaround for (firrtl scala bug) that should eventually
-/// be fixed.
 ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
-                                             SymbolValueEntry entry, SMLoc loc,
-                                             bool insertNameIntoGlobalScope) {
+                                             SymbolValueEntry entry,
+                                             SMLoc loc) {
   // Do a lookup by trying to do an insertion.  Do so in a way that we can tell
   // if we hit a missing element (SMLoc is null).
   auto entryIt =
@@ -1316,7 +1309,7 @@ ParseResult FIRModuleContext::addSymbolEntry(StringRef name,
   // If we didn't have a hit, then record the location, and remember that this
   // was new to this scope.
   entryIt->second = {loc, entry};
-  if (currentScopeCollector && !insertNameIntoGlobalScope)
+  if (currentScopeCollector)
     currentScopeCollector->push_back(&*entryIt);
 
   return success();
@@ -1546,8 +1539,8 @@ private:
 
   // Declarations
   ParseResult parseInstance();
-  ParseResult parseCMem();
-  ParseResult parseSMem();
+  ParseResult parseCombMem();
+  ParseResult parseSeqMem();
   ParseResult parseMem(unsigned memIndent);
   ParseResult parseNode();
   ParseResult parseWire();
@@ -2198,9 +2191,9 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_inst:
     return parseInstance();
   case FIRToken::kw_cmem:
-    return parseCMem();
+    return parseCombMem();
   case FIRToken::kw_smem:
-    return parseSMem();
+    return parseSeqMem();
   case FIRToken::kw_mem:
     return parseMem(stmtIndent);
   case FIRToken::kw_node:
@@ -2242,7 +2235,6 @@ ParseResult FIRStmtParser::parseAttach() {
 /// mdir ::= 'infer' | 'read' | 'write' | 'rdwr'
 ///
 ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
-  auto mdirIndent = getIndentation();
   auto startTok = consumeToken();
   auto startLoc = startTok.getLoc();
 
@@ -2267,9 +2259,10 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       parseExp(clock, "expected clock expression") || parseOptionalInfo())
     return failure();
 
-  auto memVType = memory.getType().dyn_cast<FVectorType>();
+  auto memVType = memory.getType().dyn_cast<CMemoryType>();
   if (!memVType)
-    return emitError(startLoc, "memory should have vector type");
+    return emitError(startLoc,
+                     "memory port should have behavioral memory type");
   auto resultType = memVType.getElementType();
 
   auto annotations = getAnnotations(getModuleTarget() + ">" + id, startLoc,
@@ -2281,60 +2274,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
       resultType, memory, indexExp, clock, direction, name, annotations);
   Value result = resultMemoryPort;
 
-  // TODO(firrtl scala bug): If the next operation is a skip, just eat it if it
-  // is at the same indent level as us.  This is a horrible hack on top of the
-  // following hack to work around a Scala bug.
-  auto nextIndent = getIndentation();
-  if (getToken().is(FIRToken::kw_skip) && mdirIndent.hasValue() &&
-      nextIndent.hasValue() && mdirIndent.getValue() == nextIndent.getValue()) {
-    // End the location for the MemPort, and start the location processing for
-    // the skip op.
-    locationProcessor.endStatement(*this);
-    locationProcessor.startStatement();
-    if (parseSkip())
-      return failure();
-
-    nextIndent = getIndentation();
-  }
-
-  // TODO(firrtl scala bug): Chisel is creating invalid IR where the mports
-  // are logically defining their name at the scope of the memory itself.  This
-  // is a problem for us, because the index expression and clock may be defined
-  // in a nested expression.  We can't really tell when this is happening
-  //  without unbounded lookahead either.
-  //
-  // Fortunately, this seems to happen in very idiomatic cases, where the
-  // mport happens at the end of a when block.  We detect this situation by
-  // seeing if the next statement is indented less than our memport - if so,
-  // this is the last statement at the end of the 'when' block.   Trigger a
-  // hacky workaround just in this case.
-  bool insertNameIntoGlobalScope = false;
-  if (mdirIndent.hasValue() && nextIndent.hasValue() &&
-      mdirIndent.getValue() > nextIndent.getValue() &&
-      !isa<FModuleOp>(resultMemoryPort->getParentOp())) {
-
-    // If we need to inject this name into a parent scope, then we have to do
-    // some IR hackery.  Create a wire for the id name right before
-    // the mem in question, inject its name into that scope, then connect
-    // the output of the mport to it.
-    WireOp wireHack;
-    /* inject the wire into the enclosing firrtl.module*/ {
-      // TODO: Store this in moduleContext.
-      auto curModule = resultMemoryPort->getParentOfType<FModuleOp>();
-      auto insertPoint = builder.saveInsertionPoint();
-      builder.setInsertionPointToStart(curModule.getBodyBlock());
-      wireHack = builder.create<WireOp>(result.getType());
-      builder.restoreInsertionPoint(insertPoint);
-    }
-    builder.create<ConnectOp>(wireHack, result);
-
-    // Inject this the wire's name into the global scope.
-    result = wireHack;
-    insertNameIntoGlobalScope = true;
-  }
-
-  return moduleContext.addSymbolEntry(id, result, startLoc,
-                                      insertNameIntoGlobalScope);
+  return moduleContext.addSymbolEntry(id, result, startLoc);
 }
 
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
@@ -2728,7 +2668,7 @@ ParseResult FIRStmtParser::parseInstance() {
 }
 
 /// cmem ::= 'cmem' id ':' type info?
-ParseResult FIRStmtParser::parseCMem() {
+ParseResult FIRStmtParser::parseCombMem() {
   // TODO(firrtl spec) cmem is completely undocumented.
   auto startTok = consumeToken(FIRToken::kw_cmem);
 
@@ -2746,17 +2686,24 @@ ParseResult FIRStmtParser::parseCMem() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
+  // Transform the parsed vector type into a memory type.
+  auto vectorType = type.dyn_cast<FVectorType>();
+  if (!vectorType)
+    return emitError("cmem requires vector type");
+  auto memType = CMemoryType::get(vectorType.getElementType(),
+                                  vectorType.getNumElements());
+
   auto annotations =
       getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                      moduleContext.targetsInModule, type);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<CMemOp>(type, name, annotations);
+  auto result = builder.create<CombMemOp>(memType, name, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
 /// smem ::= 'smem' id ':' type ruw? info?
-ParseResult FIRStmtParser::parseSMem() {
+ParseResult FIRStmtParser::parseSeqMem() {
   // TODO(firrtl spec) smem is completely undocumented.
   auto startTok = consumeToken(FIRToken::kw_smem);
 
@@ -2769,20 +2716,27 @@ ParseResult FIRStmtParser::parseSMem() {
   FIRRTLType type;
   RUWAttr ruw = RUWAttr::Undefined;
 
-  if (parseId(id, "expected cmem name") ||
-      parseToken(FIRToken::colon, "expected ':' in cmem") ||
-      parseType(type, "expected cmem type") || parseOptionalRUW(ruw) ||
+  if (parseId(id, "expected smem name") ||
+      parseToken(FIRToken::colon, "expected ':' in smem") ||
+      parseType(type, "expected smem type") || parseOptionalRUW(ruw) ||
       parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
+
+  // Transform the parsed vector type into a memory type.
+  auto vectorType = type.dyn_cast<FVectorType>();
+  if (!vectorType)
+    return emitError("smem requires vector type");
+  auto memType = CMemoryType::get(getContext(), vectorType.getElementType(),
+                                  vectorType.getNumElements());
 
   auto annotations =
       getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                      moduleContext.targetsInModule, type);
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<SMemOp>(type, ruw, name, annotations);
+  auto result = builder.create<SeqMemOp>(memType, ruw, name, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

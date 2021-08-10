@@ -136,8 +136,8 @@ public:
                                           Value dest, Value cond,
                                           Operation *whenTrueConn,
                                           Operation *whenFalseConn) {
-    auto whenTrue = convertToPassive(b, loc, getConnectedValue(whenTrueConn));
-    auto whenFalse = convertToPassive(b, loc, getConnectedValue(whenFalseConn));
+    auto whenTrue = getConnectedValue(whenTrueConn);
+    auto whenFalse = getConnectedValue(whenFalseConn);
     auto newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
     auto newConnect = b.create<ConnectOp>(loc, dest, newValue);
     whenTrueConn->erase();

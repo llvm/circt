@@ -285,10 +285,6 @@ void FIRRTLDialect::initialize() {
   addInterfaces<FIRRTLOpAsmDialectInterface>();
 }
 
-void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
-  type.cast<FIRRTLType>().print(os.getStream());
-}
-
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
 /// the provided builder to create the operation without changing the

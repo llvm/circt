@@ -362,6 +362,52 @@ firrtl.circuit "OutOfOrder" {
 
 // -----
 
+firrtl.circuit "CombMemInvalidReturnType" {
+  firrtl.module @CombMemInvalidReturnType() {
+    // expected-error @+1 {{'firrtl.combmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
+    %mem = firrtl.combmem : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "CombMemNonPassiveReturnType" {
+  firrtl.module @CombMemNonPassiveReturnType() {
+    // expected-error @+1 {{behavioral memory element type must be passive}}
+    %mem = firrtl.combmem : !firrtl.cmemory<bundle<a flip : uint<1>>, 1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SeqMemInvalidReturnType" {
+  firrtl.module @SeqMemInvalidReturnType() {
+    // expected-error @+1 {{'firrtl.seqmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
+    %mem = firrtl.seqmem Undefined : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SeqMemNonPassiveReturnType" {
+  firrtl.module @SeqMemNonPassiveReturnType() {
+    // expected-error @+1 {{behavioral memory element type must be passive}}
+    %mem = firrtl.seqmem Undefined : !firrtl.cmemory<bundle<a flip : uint<1>>, 1>
+  }
+}
+
+// -----
+
+firrtl.circuit "MemoryPortInvalidReturnType" {
+  firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
+    %mem = firrtl.combmem : !firrtl.cmemory<uint<8>, 8>
+    // expected-error @+1 {{'firrtl.memoryport' op inferred type(s) '!firrtl.uint<8>' are incompatible with return type(s) of operation '!firrtl.uint<9>'}}
+    %memoryPort = firrtl.memoryport Infer %mem, %sel, %clock : (!firrtl.cmemory<uint<8>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.uint<9>
+  }
+}
+
+// -----
+
 firrtl.circuit "MemoryNegativeReadLatency" {
   firrtl.module @MemoryNegativeReadLatency() {
     // expected-error @+1 {{'firrtl.mem' op attribute 'readLatency' failed to satisfy constraint}}

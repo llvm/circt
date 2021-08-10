@@ -23,6 +23,7 @@ namespace detail {
 struct WidthTypeStorage;
 struct BundleTypeStorage;
 struct VectorTypeStorage;
+struct CMemoryTypeStorage;
 } // namespace detail.
 
 class ClockType;
@@ -375,6 +376,10 @@ public:
 
 } // namespace firrtl
 } // namespace circt
+
+// Include generated types.
+#define GET_TYPEDEF_CLASSES
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h.inc"
 
 namespace llvm {
 

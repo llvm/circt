@@ -61,28 +61,33 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 }
 
-def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
-  let summary = "Define a new cmem";
+def CombMemOp : FIRRTLOp<"combmem"> {
+  let summary = "Define a new combinational memory";
+  let description = [{
+    Define a new behavioral combinational memory. Combinational memories have a
+    write latency of 1 and a read latency of 0.
+  }];
   let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
-  let results = (outs FIRRTLType:$result);
-
-  let assemblyFormat = "custom<ElideAnnotations>(attr-dict) `:` type($result)";
+  let results = (outs CMemoryType:$result);
+  let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
 }
 
-def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
-  let summary = "Define a new smem";
+def SeqMemOp : FIRRTLOp<"seqmem"> {
+  let summary = "Define a new sequential memory";
+  let description = [{
+    Define a new behavioral sequential memories.  Sequential memories have a
+    write latency and a read latency of 1.
+  }];
   let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
                        AnnotationArrayAttr:$annotations);
-  let results = (outs FIRRTLType:$result);
-
-  let assemblyFormat =
-    "$ruw custom<SMemOp>(attr-dict) `:` type($result)";
+  let results = (outs CMemoryType:$result);
+  let assemblyFormat = "$ruw custom<SeqMemOp>(attr-dict) `:` type($result)";
 }
 
-def MemoryPortOp : FIRRTLOp<"memoryport"> {
+def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface]> {
   let summary = "Access a memory";
 
-  let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
+  let arguments = (ins CMemoryType:$memory, IntType:$index, ClockType:$clock,
                     MemDirAttr:$direction, StrAttr:$name,
                     AnnotationArrayAttr:$annotations);
   let results = (outs FIRRTLType:$result);
@@ -91,9 +96,19 @@ def MemoryPortOp : FIRRTLOp<"memoryport"> {
     $direction $memory `,` $index `,` $clock custom<MemoryPortOp>(attr-dict) `:`
        functional-type(operands, $result)
   }];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
 }
 
-def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
+def MemOp : FIRRTLOp<"mem"> {
   let summary = "Define a new mem";
   let arguments =
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,

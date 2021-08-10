@@ -1011,6 +1011,23 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   return success();
 }
 
+LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
+                                             Optional<Location> loc,
+                                             ValueRange operands,
+                                             DictionaryAttr attrs,
+                                             mlir::RegionRange regions,
+                                             SmallVectorImpl<Type> &results) {
+  auto inType = operands[0].getType();
+  auto memType = inType.dyn_cast<CMemoryType>();
+  if (!memType) {
+    if (loc)
+      mlir::emitError(*loc, "memory port requires memory operand");
+    return failure();
+  }
+  results.push_back(memType.getElementType());
+  return success();
+}
+
 void MemOp::build(OpBuilder &builder, OperationState &result,
                   TypeRange resultTypes, uint32_t readLatency,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
@@ -2429,9 +2446,10 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
 }
 
 static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr) {
+                                 DictionaryAttr attr,
+                                 ArrayRef<StringRef> extraElides = {}) {
   // List of attributes to elide when printing the dictionary.
-  SmallVector<StringRef, 2> elides;
+  SmallVector<StringRef, 2> elides(extraElides.begin(), extraElides.end());
 
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
@@ -2482,7 +2500,7 @@ static void printInstanceOp(OpAsmPrinter &p, Operation *op,
 
 static ParseResult parseMemoryPortOp(OpAsmParser &parser,
                                      NamedAttrList &resultAttrs) {
-  return parseElideAnnotations(parser, resultAttrs);
+  return parseImplicitSSAName(parser, resultAttrs);
 }
 
 /// Always elide "direction" and elide "annotations" if it exists or
@@ -2490,21 +2508,21 @@ static ParseResult parseMemoryPortOp(OpAsmParser &parser,
 static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
                               DictionaryAttr attr) {
   // "direction" is always elided.
-  printElideAnnotations(p, op, attr, {"direction"});
+  printImplicitSSAName(p, op, attr, {"direction"});
 }
 
 //===----------------------------------------------------------------------===//
-// SMemOp Custom attr-dict Directive
+// SeqMemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseSMemOp(OpAsmParser &parser,
-                               NamedAttrList &resultAttrs) {
-  return parseElideAnnotations(parser, resultAttrs);
+static ParseResult parseSeqMemOp(OpAsmParser &parser,
+                                 NamedAttrList &resultAttrs) {
+  return parseImplicitSSAName(parser, resultAttrs);
 }
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
-static void printSMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
-  printElideAnnotations(p, op, attr, {"ruw"});
+static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
+  printImplicitSSAName(p, op, attr, {"ruw"});
 }
 
 //===----------------------------------------------------------------------===//
