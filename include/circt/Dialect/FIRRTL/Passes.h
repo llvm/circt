@@ -36,6 +36,8 @@ std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 
+std::unique_ptr<mlir::Pass> createInferMemoriesPass();
+
 std::unique_ptr<mlir::Pass> createInferWidthsPass();
 
 std::unique_ptr<mlir::Pass> createInferResetsPass();

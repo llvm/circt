@@ -5,6 +5,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   GrandCentral.cpp
   GrandCentralTaps.cpp
   IMConstProp.cpp
+  InferMemories.cpp
   InferWidths.cpp
   InferResets.cpp
   LowerTypes.cpp
