@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <tcl.h>
 
-#include "Query.h"
+#include "circt-c/Query.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "mlir/CAPI/IR.h"
