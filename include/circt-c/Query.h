@@ -17,6 +17,11 @@ extern "C" {
 typedef struct { void* ptr; } CirctQueryFilterType;
 typedef struct { void* ptr; } CirctQueryFilter;
 typedef struct { void* ptr; } CirctQueryFilterResult;
+typedef struct { void* ptr; } CirctQueryAttributeList;
+typedef struct {
+  MlirOperation op;
+  CirctQueryAttributeList list;
+} CirctQueryOperationAttributesPair;
 typedef struct { void* ptr; } CirctQueryAttributeDump;
 
 CirctQueryFilterType circtQueryNewGlobFilterType();
@@ -38,6 +43,12 @@ CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOpe
 CirctQueryFilterResult circtQueryFilterFromResult(CirctQueryFilter filter, CirctQueryFilterResult result);
 MlirOperation circtQueryGetFromFilterResult(CirctQueryFilterResult result, size_t index);
 void circtQueryDeleteFilterResult(CirctQueryFilterResult result);
+
+CirctQueryAttributeDump circtQueryDumpAttributes(CirctQueryFilterResult result, size_t count, char **filter);
+CirctQueryOperationAttributesPair circtQueryGetFromAttributeDump(CirctQueryAttributeDump dump, size_t i);
+bool circtQueryIsOperationAttributePairNull(CirctQueryOperationAttributesPair pair);
+MlirAttribute circtQueryGetFromOperationAttributePair(CirctQueryOperationAttributesPair pair, size_t i);
+void circtQueryDeleteAttributeDump(CirctQueryAttributeDump dump);
 
 #ifdef __cplusplus
 }

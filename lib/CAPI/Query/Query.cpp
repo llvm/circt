@@ -102,3 +102,45 @@ MlirOperation circtQueryGetFromFilterResult(CirctQueryFilterResult result, size_
 void circtQueryDeleteFilterResult(CirctQueryFilterResult result) {
   delete (std::vector<Operation *> *) result.ptr;
 }
+
+CirctQueryAttributeDump circtQueryDumpAttributes(CirctQueryFilterResult result, size_t count, char **filter) {
+  auto &results = *(std::vector<Operation *> *) result.ptr;
+  std::vector<std::string> filters;
+
+  for (size_t i = 0; i < count; ++i) {
+    filters.push_back(std::string(filter[i]));
+  }
+
+  auto dump = dumpAttributes(results, filters);
+  return {new std::vector(dump)};
+}
+
+CirctQueryOperationAttributesPair circtQueryGetFromAttributeDump(CirctQueryAttributeDump dump, size_t i) {
+  auto &vec = *(std::vector<std::pair<Operation *, std::vector<Attribute>>> *) dump.ptr;
+  if (i < vec.size()) {
+    auto &pair = vec[i];
+    return {
+      wrap(pair.first),
+      {&pair.second}
+    };
+  }
+
+  return {{nullptr}, {nullptr}};
+}
+
+bool circtQueryIsOperationAttributePairNull(CirctQueryOperationAttributesPair pair) {
+  return pair.op.ptr == nullptr || pair.list.ptr == nullptr;
+}
+
+MlirAttribute circtQueryGetFromOperationAttributePair(CirctQueryOperationAttributesPair pair, size_t i) {
+  auto &vec = *(std::vector<Attribute> *) pair.list.ptr;
+  if (i < vec.size()) {
+    return wrap(vec[i]);
+  }
+
+  return {nullptr};
+}
+
+void circtQueryDeleteAttributeDump(CirctQueryAttributeDump dump) {
+  delete (std::vector<std::pair<Operation *, std::vector<Attribute>>> *) dump.ptr;
+}
