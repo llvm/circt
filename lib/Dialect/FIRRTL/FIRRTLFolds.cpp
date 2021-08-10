@@ -1521,7 +1521,7 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
 // Declarations
 //===----------------------------------------------------------------------===//
 
-// Turn synchronous reset looking register updates to registers with resets
+// Turn synchronous reset looking register updates to registers with resets.
 // Also, const prop registers that are driven by a mux tree containing only
 // instances of one constant or self-assigns.
 static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
