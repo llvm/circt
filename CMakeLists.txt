@@ -341,13 +341,13 @@ endif()
 #-------------------------------------------------------------------------------
 option(CIRCT_BINDINGS_TCL_ENABLED "Enables CIRCT Tcl bindings." OFF)
 
+llvm_canonicalize_cmake_booleans(CIRCT_BINDINGS_TCL_ENABLED)
 if(CIRCT_BINDINGS_TCL_ENABLED)
  message(STATUS "CIRCT Tcl bindings are enabled")
  find_package(TCL 8.6 REQUIRED)
  find_package(TCLStub 8.6 REQUIRED)
  message(STATUS "Found Tcl and Tclstub")
 endif()
-llvm_canonicalize_cmake_booleans(CIRCT_BINDINGS_TCL_ENABLED)
 
 #-------------------------------------------------------------------------------
 # Directory setup
