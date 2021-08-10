@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_FSM_FSMOPS_H
 
 #include "circt/Dialect/FSM/FSMDialect.h"
+#include "circt/Dialect/FSM/FSMTypes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"

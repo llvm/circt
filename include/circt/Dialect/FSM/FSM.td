@@ -22,10 +22,14 @@ def FSMDialect : Dialect {
   let cppNamespace = "::circt::fsm";
 }
 
-// Base class for the operation in this dialect.
+// Base class for the types in this dialect.
+class FSMType<string name> : TypeDef<FSMDialect, name> {}
+
+// Base class for the operations in this dialect.
 class FSMOp<string mnemonic, list<OpTrait> traits = []> :
     Op<FSMDialect, mnemonic, traits>;
 
+include "FSMTypes.td"
 include "FSMOps.td"
 
 #endif // CIRCT_DIALECT_FSM_TD

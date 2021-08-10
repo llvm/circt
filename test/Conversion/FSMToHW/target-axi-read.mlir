@@ -8,11 +8,11 @@ fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, 
   // CHECK: %rlast = sv.reg  : !hw.inout<i1>
   // CHECK: %cnt = sv.reg  : !hw.inout<i8>
 
-  %arready = fsm.variable "arready" : i1
-  %rvalid = fsm.variable "rvalid" : i1
-  %rlast = fsm.variable "rlast" : i1
+  %arready = fsm.variable "arready" {initValue = false} : i1
+  %rvalid = fsm.variable "rvalid" {initValue = false} : i1
+  %rlast = fsm.variable "rlast" {initValue = false} : i1
 
-  %cnt = fsm.variable "cnt" : i8
+  %cnt = fsm.variable "cnt" {initValue = 0 : i8} : i8
 
   %false = constant false
   %true = constant true
@@ -34,16 +34,16 @@ fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, 
 
   // CHECK: case b00:
   fsm.state "IDLE" entry  {
-    fsm.update %arready, %true : i1, i1
+    fsm.update %arready, %true : i1
   } exit  {
-    fsm.update %arready, %false : i1, i1
+    fsm.update %arready, %false : i1
   } transitions  {
     fsm.transition @MID guard  {
       %cond = and %arvalid, %arlen_eq0_n : i1
       fsm.return %cond : i1
     } action  {
       %init_cnt = subi %arlen, %c1_i8 : i8
-      fsm.update %cnt, %init_cnt : i8, i8
+      fsm.update %cnt, %init_cnt : i8
     }
     fsm.transition @END guard  {
       %cond = and %arvalid, %arlen_eq0 : i1
@@ -54,16 +54,16 @@ fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, 
 
   // CHECK: case b01:
   fsm.state "MID" entry  {
-    fsm.update %rvalid, %true : i1, i1
+    fsm.update %rvalid, %true : i1
   } exit  {
-    fsm.update %rvalid, %false : i1, i1
+    fsm.update %rvalid, %false : i1
   } transitions  {
     fsm.transition @MID guard  {
       %cond = and %rready, %cnt_eq0_n : i1
       fsm.return %cond : i1
     } action  {
       %next_cnt = subi %cnt, %c1_i8 : i8
-      fsm.update %cnt, %next_cnt : i8, i8
+      fsm.update %cnt, %next_cnt : i8
     }
     fsm.transition @END guard  {
       %cond = and %rready, %cnt_eq0 : i1
@@ -74,13 +74,13 @@ fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, 
 
   // CHECK: case b10:
   fsm.state "END" entry  {
-    fsm.update %arready, %true : i1, i1
-    fsm.update %rvalid, %true : i1, i1
-    fsm.update %rlast, %true : i1 , i1
+    fsm.update %arready, %true : i1
+    fsm.update %rvalid, %true : i1
+    fsm.update %rlast, %true : i1
   } exit  {
-    fsm.update %arready, %false : i1, i1
-    fsm.update %rvalid, %false : i1, i1
-    fsm.update %rlast, %false : i1 , i1
+    fsm.update %arready, %false : i1
+    fsm.update %rvalid, %false : i1
+    fsm.update %rlast, %false : i1
   } transitions  {
     fsm.transition @IDLE guard  {
       %cond = and %arvalid_n, %rready : i1
@@ -93,7 +93,7 @@ fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, 
       fsm.return %cond : i1
     } action  {
       %init_cnt = subi %arlen, %c1_i8 : i8
-      fsm.update %cnt, %init_cnt : i8, i8
+      fsm.update %cnt, %init_cnt : i8
     }
     fsm.transition @END guard  {
       %cond_tmp = and %arvalid, %rready : i1
@@ -110,18 +110,18 @@ fsm.machine @axi_read_target(%arvalid: i1, %arlen: i8, %rready: i1) -> (i1, i1, 
 
   // CHECK: case b11:
   fsm.state "HOLD" entry  {
-    fsm.update %rvalid, %true : i1, i1
-    fsm.update %rlast, %true : i1 , i1
+    fsm.update %rvalid, %true : i1
+    fsm.update %rlast, %true : i1
   } exit  {
-    fsm.update %rvalid, %false : i1, i1
-    fsm.update %rlast, %false : i1 , i1
+    fsm.update %rvalid, %false : i1
+    fsm.update %rlast, %false : i1
   } transitions  {
     fsm.transition @MID guard  {
       %cond = and %rready, %arlen_eq0_n : i1
       fsm.return %cond : i1
     } action  {
       %init_cnt = subi %arlen, %c1_i8 : i8
-      fsm.update %cnt, %init_cnt : i8, i8
+      fsm.update %cnt, %init_cnt : i8
     }
     fsm.transition @END guard  {
       %cond = and %rready, %arlen_eq0 : i1

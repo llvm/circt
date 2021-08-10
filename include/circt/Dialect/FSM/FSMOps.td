@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_FSMOPS_TD
-#define CIRCT_DIALECT_FSMOPS_TD
+#ifndef CIRCT_DIALECT_FSM_FSMOPS_TD
+#define CIRCT_DIALECT_FSM_FSMOPS_TD
 
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -66,12 +66,56 @@ def MachineOp : FSMOp<"machine",
   let verifier = [{ return ::verify(*this); }];
 }
 
-def InstanceOp : FSMOp<"instance", [Symbol]> {
+def InstanceOp : FSMOp<"instance",
+      [Symbol, DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Create an instance of a machine";
   let description = [{
     `fsm.instance` represents an instance of a machine, including an instance
-    name and a symbol reference of the machine. The inputs and outputs are
-    correponding to the inputs and outputs of the referenced machine.
+    name and a symbol reference of the machine.
+  }];
+
+  let arguments = (ins StrAttr:$sym_name, FlatSymbolRefAttr:$machine);
+  let results = (outs InstanceType:$instance);
+
+  let extraClassDeclaration = [{
+    /// Lookup the machine for the symbol. This returns null on invalid IR.
+    MachineOp getReferencedMachine();
+  }];
+
+  let assemblyFormat = [{ $sym_name $machine attr-dict }];
+
+  let verifier = "return ::verify$cppClass(*this);";
+}
+
+def TriggerOp : FSMOp<"trigger", []> {
+  let summary = "Trigger an instance";
+  let description = [{
+    `fsm.trigger` triggers a machine instance. The inputs and outputs are
+    correponding to the inputs and outputs of the instance.
+  }];
+
+  let arguments = (ins InstanceType:$instance, Variadic<AnyType>:$inputs);
+  let results = (outs Variadic<AnyType>:$outputs);
+
+  let extraClassDeclaration = [{
+    /// Lookup the machine for the symbol. This returns null on invalid IR.
+    MachineOp getReferencedMachine();
+  }];
+
+  let assemblyFormat = [{
+    $instance attr-dict `(` $inputs `)` `:` functional-type($inputs, $outputs)
+  }];
+
+  let verifier = "return ::verify$cppClass(*this);";
+}
+
+def HWInstanceOp : FSMOp<"hw_instance", [Symbol]> {
+  let summary = "Create a hardware-style instance of a machine";
+  let description = [{
+    `fsm.hw_instance` represents a hardware-style instance of a machine,
+    including an instance name and a symbol reference of the machine. The inputs
+    and outputs are correponding to the inputs and outputs of the referenced
+    machine.
   }];
 
   let arguments = (ins StrAttr:$sym_name, FlatSymbolRefAttr:$machine,
@@ -92,13 +136,14 @@ def InstanceOp : FSMOp<"instance", [Symbol]> {
 }
 
 def StateOp : FSMOp<"state",
-      [HasParent<"MachineOp">, SingleBlockImplicitTerminator<"ReturnOp">]> {
+      [Symbol, HasParent<"MachineOp">,
+       SingleBlockImplicitTerminator<"ReturnOp">]> {
   let summary = "Represent a state of a machine";
   let description = [{
     `fsm.state` represents a state of a machine. This op includes an `entry`
     region and an `exit` region that represent the actions to be executed when
-    entering and exiting the state. This op also includes a `body` region that
-    contains all the transitions of the state.
+    entering and exiting the state. This op also includes a `transitions` region
+    that contains all the transitions of the state.
   }];
 
   let arguments = (ins StrAttr:$sym_name);
@@ -154,19 +199,20 @@ def TransitionOp : FSMOp<"transition",
 }
 
 def VariableOp : FSMOp<"variable", 
-      [HasParent<"MachineOp">, DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+      [HasParent<"MachineOp">, FirstAttrDerivedResultType,
+       DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Declare a variable in a machine";
   let description = [{
     `fsm.variable` represents a variable in a machine.
   }];
 
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins AnyAttr:$initValue, StrAttr:$name);
   let results = (outs AnyType:$result);
 
   let assemblyFormat = [{ $name attr-dict `:` type($result) }];
 }
 
-def UpdateOp : FSMOp<"update", []> {
+def UpdateOp : FSMOp<"update", [SameTypeOperands]> {
   let summary = "Update a variable in a machine";
   let description = [{
     `fsm.update` updates the value of `$dst` with `$src`. The definition op of
@@ -181,7 +227,7 @@ def UpdateOp : FSMOp<"update", []> {
   }];
 
   let assemblyFormat = [{
-    attr-dict $dst `,` $src `:` type($dst) `,` type($src)
+    attr-dict $dst `,` $src `:` type($dst)
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -217,4 +263,4 @@ def ReturnOp : FSMOp<"return",
   let assemblyFormat = [{ attr-dict ($operands^ `:` type($operands))? }];
 }
 
-#endif // CIRCT_DIALECT_FSMOPS_TD
+#endif // CIRCT_DIALECT_FSM_FSMOPS_TD

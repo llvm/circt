@@ -13,6 +13,12 @@ using namespace circt;
 using namespace fsm;
 
 void FSMDialect::initialize() {
+  // Register types.
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "circt/Dialect/FSM/FSMTypes.cpp.inc"
+      >();
+
   // Register operations.
   addOperations<
 #define GET_OP_LIST

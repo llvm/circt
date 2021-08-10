@@ -130,11 +130,11 @@ static LogicalResult verify(MachineOp op) {
 }
 
 //===----------------------------------------------------------------------===//
-// InstanceOp
+// HWInstanceOp
 //===----------------------------------------------------------------------===//
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
-MachineOp InstanceOp::getReferencedMachine() {
+MachineOp HWInstanceOp::getReferencedMachine() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
@@ -146,7 +146,7 @@ MachineOp InstanceOp::getReferencedMachine() {
   return dyn_cast<MachineOp>(referencedMachine);
 }
 
-static LogicalResult verifyInstanceOp(InstanceOp op) {
+static LogicalResult verifyHWInstanceOp(HWInstanceOp op) {
   auto referencedMachine = op.getReferencedMachine();
   if (referencedMachine == nullptr)
     return op.emitError("Cannot find machine definition '")
@@ -172,6 +172,108 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
     if (operandType != expectedType) {
       auto diag = op.emitOpError()
                   << "#" << i << " operand type must be " << expectedType
+                  << ", but got " << operandType;
+
+      diag.attachNote(referencedMachine->getLoc())
+          << "original machine declared here";
+      return failure();
+    }
+  }
+
+  // Check result types.
+  auto numResults = op->getNumResults();
+  auto expectedResultTypes = referencedMachine.getType().getResults();
+
+  if (expectedResultTypes.size() != numResults) {
+    auto diag = op.emitOpError()
+                << "has a wrong number of results; expected "
+                << expectedResultTypes.size() << " but got " << numResults;
+    diag.attachNote(referencedMachine->getLoc())
+        << "original machine declared here";
+
+    return failure();
+  }
+
+  for (size_t i = 0; i != numResults; ++i) {
+    auto expectedType = expectedResultTypes[i];
+    auto resultType = op.getResult(i).getType();
+    if (resultType != expectedType) {
+      auto diag = op.emitOpError()
+                  << "#" << i << " result type must be " << expectedType
+                  << ", but got " << resultType;
+
+      diag.attachNote(referencedMachine->getLoc())
+          << "original machine declared here";
+      return failure();
+    }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// InstanceOp
+//===----------------------------------------------------------------------===//
+
+/// Lookup the machine for the symbol.  This returns null on invalid IR.
+MachineOp InstanceOp::getReferencedMachine() {
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  auto referencedMachine = topLevelModuleOp.lookupSymbol(machine());
+  if (!referencedMachine)
+    return nullptr;
+
+  return dyn_cast<MachineOp>(referencedMachine);
+}
+
+static LogicalResult verifyInstanceOp(InstanceOp op) {
+  auto referencedMachine = op.getReferencedMachine();
+  if (referencedMachine == nullptr)
+    return op.emitError("Cannot find machine definition '")
+           << op.machine() << "'";
+
+  return success();
+}
+
+void InstanceOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(instance(), sym_name());
+}
+
+//===----------------------------------------------------------------------===//
+// TriggerOp
+//===----------------------------------------------------------------------===//
+
+/// Lookup the machine for the symbol.  This returns null on invalid IR.
+MachineOp TriggerOp::getReferencedMachine() {
+  return cast<InstanceOp>(instance().getDefiningOp()).getReferencedMachine();
+}
+
+static LogicalResult verifyTriggerOp(TriggerOp op) {
+  auto referencedMachine = op.getReferencedMachine();
+
+  // Check operand types first.
+  auto numOperands = op->getNumOperands() - 1;
+  auto expectedOperandTypes = referencedMachine.getType().getInputs();
+
+  if (expectedOperandTypes.size() != numOperands) {
+    auto diag = op.emitOpError()
+                << "has a wrong number of operands; expected "
+                << expectedOperandTypes.size() << " but got " << numOperands;
+    diag.attachNote(referencedMachine->getLoc())
+        << "original machine declared here";
+
+    return failure();
+  }
+
+  for (size_t i = 0; i != numOperands; ++i) {
+    auto expectedType = expectedOperandTypes[i];
+    auto operandType = op.getOperand(i + 1).getType();
+    if (operandType != expectedType) {
+      auto diag = op.emitOpError()
+                  << "#" << i + 1 << " operand type must be " << expectedType
                   << ", but got " << operandType;
 
       diag.attachNote(referencedMachine->getLoc())

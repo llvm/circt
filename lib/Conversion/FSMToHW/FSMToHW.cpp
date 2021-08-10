@@ -16,7 +16,6 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
-using namespace circt;
 using namespace fsm;
 
 namespace {
@@ -101,7 +100,8 @@ static std::pair<sv::IfOp, bool> convertGuardRegion(TransitionOp transition,
   for (auto &op : transition.guard().front()) {
     if (dispatchStdOps(&op, b))
       continue;
-    else if (auto returnOp = dyn_cast<fsm::ReturnOp>(op))
+
+    if (auto returnOp = dyn_cast<fsm::ReturnOp>(op))
       guardIfOp = b.create<sv::IfOp>(returnOp.getLoc(), returnOp.getOperand(0));
     else {
       op.emitOpError("found unsupported op in the guard region");
@@ -115,7 +115,8 @@ static bool convertActionRegion(Region &region, OpBuilder &b) {
   for (auto &op : region.front()) {
     if (dispatchStdOps(&op, b))
       continue;
-    else if (auto update = dyn_cast<UpdateOp>(op))
+
+    if (auto update = dyn_cast<UpdateOp>(op))
       b.create<sv::PAssignOp>(update.getLoc(), update.dst(), update.src());
     else if (!isa<fsm::ReturnOp>(op))
       return op.emitOpError("found unsupported op in the action region"), false;
@@ -171,7 +172,8 @@ void FSMToHWPass::runOnOperation() {
     for (auto &op : machine.front()) {
       if (dispatchStdOps(&op, b))
         continue;
-      else if (auto variable = dyn_cast<fsm::VariableOp>(op)) {
+
+      if (auto variable = dyn_cast<fsm::VariableOp>(op)) {
         // Convert `variable` op to register.
         auto reg = b.create<sv::RegOp>(variable.getLoc(), variable.getType(),
                                        variable.nameAttr());
