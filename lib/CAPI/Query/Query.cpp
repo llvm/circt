@@ -118,10 +118,9 @@ CirctQueryAttributeDump circtQueryDumpAttributes(CirctQueryFilterResult result, 
 CirctQueryOperationAttributesPair circtQueryGetFromAttributeDump(CirctQueryAttributeDump dump, size_t i) {
   auto &vec = *(std::vector<std::pair<Operation *, std::vector<Attribute>>> *) dump.ptr;
   if (i < vec.size()) {
-    auto &pair = vec[i];
     return {
-      wrap(pair.first),
-      {&pair.second}
+      wrap(vec[i].first),
+      {&vec[i].second}
     };
   }
 
