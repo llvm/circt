@@ -55,6 +55,9 @@ class Value:
   def reg(self, clk, rst=None):
     return seq.reg(self.value, clk, rst)
 
+  def __len__(self):
+    return self.type.size
+
 
 # PyCDE needs a custom version of this to support python classes.
 def var_to_attribute(obj) -> ir.Attribute:
@@ -112,6 +115,7 @@ class OpOperandConnect(support.OpOperand):
 
 def obj_to_value(x, type, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
+  assert x is not None
 
   type = support.type_to_pytype(type)
   if isinstance(type, hw.TypeAliasType):
