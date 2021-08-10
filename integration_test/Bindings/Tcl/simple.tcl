@@ -1,8 +1,8 @@
 # REQUIRES: bindings_tcl
-# RUN: tclsh %s -- %TCL_PATH% | FileCheck %s
+# RUN: tclsh %s -- %TCL_PATH% %CIRCT_SOURCE% | FileCheck %s
 load [lindex $argv 1]libcirct-tcl[info sharedlibextension]
 
-set circuit [circt load MLIR [lindex $argv 1]../../../../integration_test/Bindings/Tcl/Inputs/simple.mlir]
+set circuit [circt load MLIR [lindex $argv 2]/integration_test/Bindings/Tcl/Inputs/simple.mlir]
 puts $circuit
 
 # CHECK: module  {
