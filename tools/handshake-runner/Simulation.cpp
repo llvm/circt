@@ -24,12 +24,26 @@
 
 #define INDEX_WIDTH 32
 
-using namespace llvm;
-
-using namespace circt;
-
 STATISTIC(instructionsExecuted, "Instructions Executed");
 STATISTIC(simulatedTime, "Simulated Time");
+
+namespace circt {
+namespace handshake {
+
+using namespace llvm;
+
+template <typename T>
+static void fatalValueError(StringRef reason, T &value) {
+  std::string err;
+  llvm::raw_string_ostream os(err);
+  os << reason << " ('";
+  // Explicitly use ::print instead of << due to possibl operator resolution
+  // error between i.e., mlir::Operation::<< and operator<<(OStream &&OS, const
+  // T &Value)
+  value.print(os);
+  os << "')\n";
+  llvm::report_fatal_error(err);
+}
 
 void executeOp(mlir::ConstantIndexOp op, std::vector<Any> &in,
                std::vector<Any> &out) {
@@ -144,7 +158,7 @@ unsigned allocateMemRef(mlir::MemRefType type, std::vector<Any> &in,
     } else if (elementType.isa<mlir::FloatType>()) {
       store[ptr][i] = APFloat(0.0);
     } else {
-      llvm_unreachable("Unknown result type!\n");
+      fatalValueError("Unknown result type!\n", elementType);
     }
   }
   return ptr;
@@ -444,10 +458,10 @@ void executeFunction(mlir::FuncOp &toplevel,
         instIter++;
         continue;
       } else {
-        llvm_unreachable("Callable was not a Function!\n");
+        fatalValueError("Callable was not a Function", op);
       }
     } else {
-      llvm_unreachable("Unknown operation!\n");
+      fatalValueError("Unknown operation!\n", op);
     }
     i = 0;
     for (mlir::Value out : op.getResults()) {
@@ -461,14 +475,12 @@ void executeFunction(mlir::FuncOp &toplevel,
   }
 }
 
-void executeHandshakeFunction(handshake::FuncOp &toplevel,
-                              llvm::DenseMap<mlir::Value, Any> &valueMap,
-                              llvm::DenseMap<mlir::Value, double> &timeMap,
-                              std::vector<Any> &results,
-                              std::vector<double> &resultTimes,
-                              std::vector<std::vector<Any>> &store,
-                              std::vector<double> &storeTimes) {
-  mlir::Block &entryBlock = toplevel.getBody().front();
+void executeHandshakeFunction(
+    handshake::FuncOp &func, llvm::DenseMap<mlir::Value, Any> &valueMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap, std::vector<Any> &results,
+    std::vector<double> &resultTimes, std::vector<std::vector<Any>> &store,
+    std::vector<double> &storeTimes, mlir::OwningModuleRef &module) {
+  mlir::Block &entryBlock = func.getBody().front();
   // The arguments of the entry block.
   mlir::Block::BlockArgListType blockArgs = entryBlock.getArguments();
   // A list of operations which might be ready to execute.
@@ -477,7 +489,7 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
   llvm::DenseMap<unsigned, unsigned> memoryMap;
 
   // Pre-allocate memory
-  toplevel.walk([&](Operation *op) {
+  func.walk([&](Operation *op) {
     if (auto handshakeMemoryOp = dyn_cast<handshake::MemoryOpInterface>(op))
       if (!handshakeMemoryOp.allocateMemory(memoryMap, store, storeTimes))
         llvm_unreachable("Memory op does not have unique ID!\n");
@@ -558,10 +570,43 @@ void executeHandshakeFunction(handshake::FuncOp &toplevel,
         resultTimes[i] = timeMap[returnOp.getOperand(i)];
       }
       return;
-      //} else {
-      // implement function calls.
+    } else if (auto instanceOp = dyn_cast<handshake::InstanceOp>(op)) {
+      if (auto funcSym = instanceOp->getAttr("module").cast<SymbolRefAttr>()) {
+        if (handshake::FuncOp func =
+                module->lookupSymbol<handshake::FuncOp>(funcSym)) {
+          const unsigned nRealFuncOuts = func.getType().getNumResults() - 1;
+          mlir::Block &entryBlock = func.getBody().front();
+          mlir::Block::BlockArgListType instanceBlockArgs =
+              entryBlock.getArguments();
+
+          // Associate each input argument with the arguments of the called
+          // function
+          for (size_t i = 0; i < inValues.size(); i++) {
+            valueMap[instanceBlockArgs[i]] = inValues[i];
+            timeMap[instanceBlockArgs[i]] = timeMap[op.getOperands()[i]];
+          }
+
+          // ... and the implicit none argument
+          APInt apnonearg(1, 0);
+          valueMap[instanceBlockArgs[instanceBlockArgs.size() - 1]] = apnonearg;
+          std::vector<Any> nestedRes(nRealFuncOuts);
+          std::vector<double> nestedResTimes(nRealFuncOuts);
+          executeHandshakeFunction(func, valueMap, timeMap, nestedRes,
+                                   nestedResTimes, store, storeTimes, module);
+          for (size_t i = 0; i < nRealFuncOuts; i++) {
+            outValues[i] = nestedRes.at(i);
+            valueMap[instanceOp.getResults()[i]] = nestedRes.at(i);
+            timeMap[instanceOp.getResults()[i]] = nestedResTimes[i];
+          }
+        } else {
+          fatalValueError("Function not found in module", funcSym);
+        }
+      } else {
+        fatalValueError("Missing 'module' attribute for InstanceOp",
+                        instanceOp);
+      }
     } else {
-      llvm_unreachable("Unknown operation!\n");
+      fatalValueError("Unknown operation!\n", op);
     }
     i = 0;
     for (mlir::Value out : op.getResults()) {
@@ -644,7 +689,8 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
     APInt apnonearg(1, 0);
     valueMap[blockArgs[blockArgs.size() - 1]] = apnonearg;
   } else {
-    llvm_unreachable("Function not supported.\n");
+    llvm::report_fatal_error("Function '" + toplevelFunction +
+                             "' not supported");
   }
 
   if (inputArgs.size() != realInputs) {
@@ -686,7 +732,7 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
   } else if (handshake::FuncOp toplevel =
                  module->lookupSymbol<handshake::FuncOp>(toplevelFunction)) {
     executeHandshakeFunction(toplevel, valueMap, timeMap, results, resultTimes,
-                             store, storeTimes);
+                             store, storeTimes, module);
   }
   double time = 0.0;
   for (unsigned i = 0; i < results.size(); i++) {
@@ -716,3 +762,6 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
 
   return 0;
 }
+
+} // namespace handshake
+} // namespace circt
