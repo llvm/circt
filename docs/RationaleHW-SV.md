@@ -81,6 +81,59 @@ IR more regular, easy to transform, and have fewer canonical forms.
 The absence of these operations doesn't affect the expressive ability of the IR,
 and ExportVerilog will notice these and generate the compact Verilog syntax.
 
+**No multibit mux operations**
+
+The comb dialect in CIRCT doesn't have a first-class multibit mux.  Instead we
+prefer to use two array operations to represent this.  For example, consider
+a 3-bit condition:
+
+```
+ hw.module @multibit_mux(%a: i32, %b: i32, %c: i32, %idx: i3) -> (%out: i32) {
+   %x_i32 = sv.constantX : i32
+   %tmpArray = hw.array_create %a, %b, %x_i32, %b, %c, %x_i32 : i32
+   %result   = hw.array_get %tmpArray[%idx] : !hw.array<6xi32>
+   hw.output %result: i32
+ }
+```
+
+This gets lowered into (something like) this Verilog:
+
+```
+module multibit_mux(
+  input  [31:0] a, b, c,
+  input  [2:0]  idx,
+  output [31:0] out);
+
+  assign out = ({{a}, {b}, {32'bx}, {b}, {c}, {32'bx}})[idx];
+endmodule
+```
+
+We believe that synthesis tools handle the correctly and generate efficient
+netlists.  In this example, the last X element could be dropped and generate
+equivalent code.
+
+While we could use the same approach for single-bit muxes, we choose to have a
+single bit `comb.mux` operation for a few reasons:
+
+ * This is extremely common in hardware, and using 2x the memory to represent
+   the IR would be wasteful.
+ * This are many peephole and other optimizations that apply to it.
+
+We discussed these design points at length in an [August 11, 2021 design
+meeting](https://docs.google.com/document/d/1fOSRdyZR2w75D87yU2Ma9h2-_lEPL4NxvhJGJd-s5pk/edit#heading=h.ygmlwiic5e1y), and
+discussed the tradeoffs of adding support for a single-operation mux.  Such a
+move has some advantages and disadvantages:
+
+1) It is another operation that many transformations would need to be aware of,
+   e.g. verilog emission would have to handle it, and peephole optimizations
+   would have to be aware of array_get and comb.mux.
+2) We don't have any known analyses or optimizations that are difficult to
+   implement with the current representation.
+
+We agreed that we'd revisit in the future if there were a specific reason to
+add it.  Until then we represent the array_create/array_get pattern for
+frontends that want to generate this.
+
 **Zero Bit Integers**
 
 Combinatorial operations like add and multiply work on values of signless
