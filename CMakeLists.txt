@@ -79,7 +79,8 @@ else()
 
   # The -fvisibility=hidden option only works for static builds.
   if (NOT BUILD_SHARED_LIBS)
-    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+    set(CMAKE_CXX_VISIBILITY_PRESET hidden CACHE STRING
+        "Default to visibility=hidden")
   else()
     if (CMAKE_CXX_VISIBILITY_PRESET STREQUAL "hidden")
       message(FATAL_ERROR "CMAKE_CXX_VISIBILITY_PRESET=hidden is incompatible \
