@@ -8,7 +8,14 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-translate
   circt-rtl-sim
   esi-cosim-runner
-  firtool)
+  firtool
+  mlir-opt
+  mlir-cpu-runner
+  mlir_runner_utils
+  mlir_c_runner_utils
+  )
+
+set(MLIR_RUNNER_UTILS_DIR ${LLVM_LIBRARY_DIR})
 
 # If Python bindings are available to build then enable the tests.
 if(CIRCT_BINDINGS_PYTHON_ENABLED)

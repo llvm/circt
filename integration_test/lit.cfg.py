@@ -76,9 +76,13 @@ tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
 ]
 tools = [
-    'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'esi-cosim-runner.py'
+    'mlir-opt', 'mlir-cpu-runner', 'circt-opt', 'circt-translate', 'firtool',
+    'circt-rtl-sim.py', 'esi-cosim-runner.py'
 ]
+
+tools.append(
+    ToolSubst('%mlir_runner_utils_dir', config.mlir_runner_utils_dir, unresolved='ignore')
+)
 
 # Enable yosys if it has been detected.
 if config.yosys_path != "":

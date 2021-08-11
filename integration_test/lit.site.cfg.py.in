@@ -30,6 +30,7 @@ config.llvm_host_triple = '@LLVM_HOST_TRIPLE@'
 config.host_arch = "@HOST_ARCH@"
 config.mlir_src_root = "@MLIR_SOURCE_DIR@"
 config.mlir_obj_root = "@MLIR_BINARY_DIR@"
+config.mlir_runner_utils_dir = "@MLIR_RUNNER_UTILS_DIR@"
 config.mlir_tools_dir = "@MLIR_TOOLS_DIR@"
 config.circt_src_root = "@CIRCT_SOURCE_DIR@"
 config.circt_obj_root = "@CIRCT_BINARY_DIR@"

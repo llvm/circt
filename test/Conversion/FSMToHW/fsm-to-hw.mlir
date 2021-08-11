@@ -42,7 +42,7 @@
 // CHECK: }
 
 fsm.machine @foo(%i_valid: i1, %i_len: i8) -> i1 attributes {stateType = i2} {
-  %o_ready = fsm.variable "o_ready" {initValue = false} : i1
+  %o_ready = fsm.variable "o_ready" {initValue = true} : i1
   %counter = fsm.variable "counter" {initValue = 0 : i8} : i8
 
   %true = constant true

@@ -187,7 +187,10 @@ void FSMToHWPass::runOnOperation() {
         // `reg` is lvalue and `regElem` is rvalue. Only when the register is
         // used as the `dst` of `fsm.update` op, replace the use with `reg`.
         variable.getResult().replaceUsesWithIf(reg, [&](OpOperand &use) {
-          return isa<UpdateOp>(use.getOwner()) && use.getOperandNumber() == 0;
+          if (auto update = dyn_cast<UpdateOp>(use.getOwner()))
+            if (use.get() == update.dst())
+              return true;
+          return false;
         });
         // Replace other register uses with `regElem`, which is the rvalue.
         variable.getResult().replaceAllUsesWith(regElem);
@@ -230,6 +233,7 @@ void FSMToHWPass::runOnOperation() {
     auto defaultState = machine.getDefaultState();
     b.setInsertionPointToStart(alwaysff.getResetBlock());
     b.create<sv::PAssignOp>(machineLoc, stateReg, stateValMap[defaultState]);
+    // FIXME: Use initValue to initalize registers.
     for (auto reg : regs) {
       auto constZero =
           b.create<hw::ConstantOp>(reg.getLoc(), reg.getElementType(), 0);

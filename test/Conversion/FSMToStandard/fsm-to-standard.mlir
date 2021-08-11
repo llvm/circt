@@ -25,23 +25,30 @@
 // CHECK:       memref.store %c1_i2, [[ARG4:%.+]][] : memref<i2>
 // CHECK:     }
 // CHECK:   }
-// CHECK:   return [[VAL0]] : i1
+// CHECK:   [[ARG4:%.+]] = memref.load [[ARG2]][] : memref<i1>
+// CHECK:   return [[ARG4]] : i1
 // CHECK: }
 // CHECK: func @bar() {
 // CHECK:   [[VAL0:%.+]] = memref.alloca() : memref<i1>
-// CHECK:   [[VAL1:%.+]] = memref.alloca() : memref<i8>
-// CHECK:   [[VAL2:%.+]] = memref.alloca() : memref<i2>
 // CHECK:   %true = constant true
-// CHECK:   %c16_i8 = constant 16 : i8
-// CHECK:   [[VAL3:%.+]] = call @foo(%true, %c16_i8, [[VAL0]], [[VAL1]], [[VAL2]]) : (i1, i8, memref<i1>, memref<i8>, memref<i2>) -> i1
-// CHECK:   %false = constant false
+// CHECK:   memref.store %true, [[VAL0]][] : memref<i1>
+// CHECK:   [[VAL1:%.+]] = memref.alloca() : memref<i8>
 // CHECK:   %c0_i8 = constant 0 : i8
-// CHECK:   [[VAL4:%.+]] = call @foo(%false, %c0_i8, [[VAL0]], [[VAL1]], [[VAL2]]) : (i1, i8, memref<i1>, memref<i8>, memref<i2>) -> i1
+// CHECK:   memref.store %c0_i8, [[VAL1]][] : memref<i8>
+// CHECK:   [[VAL2:%.+]] = memref.alloca() : memref<i2>
+// CHECK:   %c0_i2 = constant 0 : i2
+// CHECK:   memref.store %c0_i2, [[VAL2]][] : memref<i2>
+// CHECK:   %true_0 = constant true
+// CHECK:   %c16_i8 = constant 16 : i8
+// CHECK:   [[VAL3:%.+]] = call @foo(%true_0, %c16_i8, [[VAL0]], [[VAL1]], [[VAL2]]) : (i1, i8, memref<i1>, memref<i8>, memref<i2>) -> i1
+// CHECK:   %false = constant false
+// CHECK:   %c0_i8_1 = constant 0 : i8
+// CHECK:   [[VAL4:%.+]] = call @foo(%false, %c0_i8_1, [[VAL0]], [[VAL1]], [[VAL2]]) : (i1, i8, memref<i1>, memref<i8>, memref<i2>) -> i1
 // CHECK:   return
 // CHECK: }
 
 fsm.machine @foo(%i_valid: i1, %i_len: i8) -> i1 attributes {stateType = i2} {
-  %o_ready = fsm.variable "o_ready" {initValue = false} : i1
+  %o_ready = fsm.variable "o_ready" {initValue = true} : i1
   %counter = fsm.variable "counter" {initValue = 0 : i8} : i8
 
   %true = constant true

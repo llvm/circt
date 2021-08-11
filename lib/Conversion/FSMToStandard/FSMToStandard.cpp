@@ -84,16 +84,26 @@ void FSMToStandardPass::runOnOperation() {
 
         if (auto instance = dyn_cast<fsm::InstanceOp>(op)) {
           auto machine = instance.getReferencedMachine();
+          auto stateType = machine.stateType();
           auto &memRefs = memRefMap[instance];
 
-          // Alloca memrefs for the state and all variables.
+          // Alloca memrefs for the state and all variables. Then, store the
+          // initial value into them.
           for (auto variable : machine.getOps<VariableOp>()) {
             auto varMemRef = b.create<memref::AllocaOp>(
                 variable.getLoc(), MemRefType::get({}, variable.getType()));
+            auto initValue = b.create<mlir::ConstantOp>(variable.getLoc(),
+                                                        variable.initValue());
+            b.create<memref::StoreOp>(machine.getLoc(), initValue, varMemRef);
             memRefs.push_back(varMemRef);
           }
+
           auto stateMemRef = b.create<memref::AllocaOp>(
-              machine.getLoc(), MemRefType::get({}, machine.stateType()));
+              machine.getLoc(), MemRefType::get({}, stateType));
+          // The encoded value of the default state is always zero.
+          auto constZero = b.create<mlir::ConstantOp>(machine.getLoc(),
+                                                      b.getZeroAttr(stateType));
+          b.create<memref::StoreOp>(machine.getLoc(), constZero, stateMemRef);
           memRefs.push_back(stateMemRef);
 
           opToErase.push_back(instance);
@@ -171,7 +181,12 @@ void FSMToStandardPass::runOnOperation() {
         // `varMemRef` is lvalue and `varValue` is rvalue. Only when the memref
         // is used as the `dst` of `fsm.update`, replace uses with `varMemRef`.
         variable.getResult().replaceUsesWithIf(varMemRef, [&](OpOperand &use) {
-          return isa<UpdateOp>(use.getOwner()) && use.getOperandNumber() == 0;
+          if (auto update = dyn_cast<UpdateOp>(use.getOwner()))
+            if (use.get() == update.dst())
+              return true;
+          if (auto output = dyn_cast<OutputOp>(use.getOwner()))
+            return true;
+          return false;
         });
         // Replace other uses with `varValue`, which is the rvalue.
         variable.getResult().replaceAllUsesWith(varValue);
@@ -185,11 +200,7 @@ void FSMToStandardPass::runOnOperation() {
             state.getLoc(), b.getIntegerAttr(stateType, encode));
         ++stateIndex;
 
-      } else if (auto output = dyn_cast<fsm::OutputOp>(op)) {
-        auto returnOp =
-            b.create<mlir::ReturnOp>(output.getLoc(), output.getOperands());
-        b.setInsertionPoint(returnOp);
-      } else {
+      } else if (!isa<fsm::OutputOp>(op)) {
         op.emitOpError("found unsupported op in the state machine");
         return;
       }
@@ -260,6 +271,16 @@ void FSMToStandardPass::runOnOperation() {
       if (std::next(stateIt) != stateEnd)
         b.setInsertionPointToStart(stateIfOp.elseBlock());
     }
+
+    // Convert output operation. Load values from memrefs and return them.
+    b.setInsertionPointToEnd(&func.front());
+    auto outputOp = machine.front().getTerminator();
+
+    SmallVector<Value, 8> operands;
+    for (auto memref : outputOp->getOperands())
+      operands.push_back(b.create<memref::LoadOp>(outputOp->getLoc(), memref));
+    b.create<mlir::ReturnOp>(outputOp->getLoc(), operands);
+
     // Erase the original machine op.
     opToErase.push_back(machine);
   }
