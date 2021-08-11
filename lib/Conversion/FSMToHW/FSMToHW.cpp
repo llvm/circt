@@ -111,6 +111,8 @@ static std::pair<sv::IfOp, bool> convertGuardRegion(TransitionOp transition,
   return {guardIfOp, true};
 }
 
+// FIXME: As the entry and exit region of state can be converted multiple times,
+// the current implementation will cause some bugs.
 static bool convertActionRegion(Region &region, OpBuilder &b) {
   for (auto &op : region.front()) {
     if (dispatchStdOps(&op, b))
