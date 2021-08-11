@@ -16,6 +16,10 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/StringExtras.h"
+
+//Forward Decl for patterns.
+static bool isUselessName(circt::StringRef name);
 
 // Declarative canonicalization patterns
 namespace circt {
@@ -70,6 +74,26 @@ static bool isUInt1(Type type) {
   if (!t || !t.hasWidth() || t.getWidth() != 1)
     return false;
   return true;
+}
+
+/// Return true if this is a useless temporary name produced by FIRRTL.  We
+/// drop these as they don't convey semantic meaning.
+static bool isUselessName(StringRef name) {
+  llvm::errs() << "name: '" << name << "'\n";
+  // Ignore _T and _T_123
+  if (name.startswith("_T")) {
+    if (name.size() == 2)
+      return true;
+    return name.size() > 3 && name[2] == '_' && llvm::isDigit(name[3]);
+  }
+
+  // Ignore _GEN and _GEN_123, these are produced by Namespace.scala.
+  if (name.startswith("_GEN")) {
+    if (name.size() == 4)
+      return true;
+    return name.size() > 5 && name[4] == '_' && llvm::isDigit(name[5]);
+  }
+  return false;
 }
 
 /// Implicitly replace the operand to a constant folding operation with a const
@@ -1483,16 +1507,42 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
   return failure();
 }
 
+void InstanceOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  //results.insert<patterns::DropNameInstance>(context);
+}
+
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<patterns::EmptyNode>(context);
+  results.insert<patterns::EmptyNode, patterns::DropNameNode>(context);
+}
+
+void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<patterns::DropNameWire>(context);
+}
+
+void CMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<patterns::DropNameCMem>(context);
+}
+
+void SMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<patterns::DropNameSMem>(context);
+}
+
+void MemoryPortOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<patterns::DropNameMemoryPort>(context);
 }
 
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegresetWithZeroReset,
                  patterns::RegresetWithInvalidReset,
-                 patterns::RegresetWithInvalidResetValue>(context);
+                 patterns::RegresetWithInvalidResetValue,
+                 patterns::DropNameRegReset>(context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {

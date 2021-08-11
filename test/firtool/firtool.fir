@@ -1,7 +1,7 @@
-; RUN: firtool %s --format=fir -mlir    | circt-opt | FileCheck %s --check-prefix=MLIR
-; RUN: firtool %s --format=fir -mlir --annotation-file %s.anno.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
-; RUN: firtool %s --format=fir -mlir -lower-to-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
-; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
+; RUN: firtool %s --format=fir -mlir    --disable-annotation-classless | circt-opt | FileCheck %s --check-prefix=MLIR
+; RUN: firtool %s --format=fir -mlir    --disable-annotation-classless --annotation-file %s.anno.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --format=fir -mlir    --disable-annotation-classless -lower-to-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
+; RUN: firtool %s --format=fir -verilog --disable-annotation-classless |             FileCheck %s --check-prefix=VERILOG
 
 circuit test_mod : %[[{"a": "a"}]]
 
@@ -10,7 +10,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; ANNOTATIONS-LABEL: firrtl.circuit "test_mod"
 ; ANNOTATIONS-SAME: a = "a"
 ; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
-; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation
+; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation"
 ; ANNOTATIONS-SAME: info = "a CircuitName Annotation"
 
   module test_mod :

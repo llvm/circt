@@ -42,31 +42,6 @@ using mlir::LocationAttr;
 
 namespace json = llvm::json;
 
-/// Return true if this is a useless temporary name produced by FIRRTL.  We
-/// drop these as they don't convey semantic meaning.
-static bool isUselessName(StringRef name) {
-  // Ignore _T and _T_123
-  if (name.startswith("_T")) {
-    if (name.size() == 2)
-      return true;
-    return name.size() > 3 && name[2] == '_' && llvm::isDigit(name[3]);
-  }
-
-  // Ignore _GEN and _GEN_123, these are produced by Namespace.scala.
-  if (name.startswith("_GEN")) {
-    if (name.size() == 4)
-      return true;
-    return name.size() > 5 && name[4] == '_' && llvm::isDigit(name[5]);
-  }
-  return false;
-}
-
-/// If the specified name is a useless temporary name produced by FIRRTL, return
-/// an empty string to ignore it.  Otherwise, return the argument unmodified.
-static StringRef filterUselessName(StringRef name) {
-  return isUselessName(name) ? "" : name;
-}
-
 /// Get an annotation with a class name field.
 static DictionaryAttr getAnnotationOfClass(MLIRContext *context,
                                            StringRef classString) {
@@ -95,8 +70,6 @@ using TargetSet = StringSet<llvm::BumpPtrAllocator>;
 struct SharedParserConstants {
   SharedParserConstants(MLIRContext *context, FIRParserOptions options)
       : context(context), options(options),
-        dontTouchAnnotation(getAnnotationOfClass(
-            context, "firrtl.transforms.DontTouchAnnotation")),
         emptyArrayAttr(ArrayAttr::get(context, {})),
         loIdentifier(Identifier::get("lo", context)),
         hiIdentifier(Identifier::get("hi", context)),
@@ -120,9 +93,6 @@ struct SharedParserConstants {
   /// unapplied from the annotationMap.  This, like the annotationMap, should
   /// not be mutated directly unless the client is the Circuit parser.
   TargetSet targetSet;
-
-  /// Cached annotation for DontTouch.
-  const DictionaryAttr dontTouchAnnotation;
 
   /// An empty array attribute.
   const ArrayAttr emptyArrayAttr;
@@ -313,13 +283,6 @@ struct FIRParser {
   getSplitAnnotations(ArrayRef<Twine> targets, SMLoc loc,
                       ArrayRef<std::pair<StringAttr, Type>> ports,
                       TargetSet &targetSet);
-
-  /// Returns true if the annotation list contains the DontTouchAnnotation. This
-  /// method is slightly more efficient than other lookup methods, because it
-  /// uses a stashed copy of the annotation for lookup.
-  bool hasDontTouch(ArrayAttr annotations) {
-    return hasAnnotation(annotations, constants.dontTouchAnnotation);
-  }
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -2257,14 +2220,9 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     return emitError(startLoc, "memory should have vector type");
   auto resultType = memVType.getElementType();
 
-//  auto annotations = 
-//      getAnnotations(getModuleTarget() + ">" + id, startLoc, resultType);
-//  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-  auto name = id;
-
   locationProcessor.setLoc(startLoc);
   auto resultMemoryPort = builder.create<MemoryPortOp>(
-      resultType, memory, indexExp, clock, direction, name, getConstants().emptyArrayAttr);
+      resultType, memory, indexExp, clock, direction, id, getConstants().emptyArrayAttr);
   Value result = resultMemoryPort;
 
   // TODO(firrtl scala bug): If the next operation is a skip, just eat it if it
@@ -2677,27 +2635,7 @@ ParseResult FIRStmtParser::parseInstance() {
     resultNamesAndTypes.push_back({port.name, port.type});
   }
 
-  // Combine annotations that are ReferenceTargets and InstanceTargets.  By
-  // example, this will lookup all annotations with either of the following
-  // formats:
-  //     ~Foo|Foo>bar
-  //     ~Foo|Foo/bar:Bar
-//  auto annotations =
-//      getSplitAnnotations({getModuleTarget() + ">" + id,
-//                           getModuleTarget() + "/" + id + ":" + moduleName},
-//                          startTok.getLoc(), resultNamesAndTypes);
-
-  // Keep the name if a dont touch exist on either the instance or its ports.
-//  auto dontTouch = hasDontTouch(annotations.first) ||
-//                   llvm::any_of(annotations.second, [&](Attribute a) {
-//                     return hasDontTouch(a.cast<ArrayAttr>());
-//                   });
-  auto name = id; //dontTouch ? id : filterUselessName(id);
-
-  auto result = builder.create<InstanceOp>(resultTypes, moduleName, name);
-//                                           getConstants().emptyArrayAttr,
-//                                           getConstants().emptyArrayAttr
-//                                           );
+  auto result = builder.create<InstanceOp>(resultTypes, moduleName, id);
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2733,12 +2671,7 @@ ParseResult FIRStmtParser::parseCMem() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-//  auto annotations =
-//      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(), type);
-//  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-  auto name = id;
-
-  auto result = builder.create<CMemOp>(type, name, getConstants().emptyArrayAttr);
+  auto result = builder.create<CMemOp>(type, id, getConstants().emptyArrayAttr);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2764,12 +2697,7 @@ ParseResult FIRStmtParser::parseSMem() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-//  auto annotations =
-//      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(), type);
-//  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-  auto name = id;
-
-  auto result = builder.create<SMemOp>(type, ruw, name, getConstants().emptyArrayAttr);
+  auto result = builder.create<SMemOp>(type, ruw, id, getConstants().emptyArrayAttr);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2892,22 +2820,12 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-//  auto annotations = getSplitAnnotations(getModuleTarget() + ">" + id,
-//                                         startTok.getLoc(), ports);
-
-  // Keep the name if a dont touch exist on either the instance or its ports.
-//  auto dontTouch = hasDontTouch(annotations.first) ||
-//                   llvm::any_of(annotations.second, [&](Attribute a) {
-//                     return hasDontTouch(a.cast<ArrayAttr>());
-//                   });
-  auto name = id; // dontTouch ? id : filterUselessName(id);
-
-    SmallVector<Attribute, 4> portAnnotations(
+  SmallVector<Attribute, 4> portAnnotations(
         ports.size(), ArrayAttr::get(getContext(), {}));
 
   auto result =
       builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth, ruw,
-                            builder.getArrayAttr(resultNames), name,
+                            builder.getArrayAttr(resultNames), id,
                             getConstants().emptyArrayAttr, builder.getArrayAttr(portAnnotations));
 
   UnbundledValueEntry unbundledValueEntry;
@@ -2957,18 +2875,11 @@ ParseResult FIRStmtParser::parseNode() {
     return failure();
   }
 
-//  auto annotations = getAnnotations(getModuleTarget() + ">" + id,
-//                                    startTok.getLoc(), initializerType);
-
-  // Ignore useless names like _T.
-//  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-  auto name = id;
-
   // The entire point of a node declaration is to carry a name.  If it got
   // dropped, then we don't even need to create a result unless it is annotated.
   Value result;
-  if (!name.empty()) {// || !annotations.empty()) {
-    result = builder.create<NodeOp>(initializer.getType(), initializer, name);
+  if (!id.empty()) {// || !annotations.empty()) {
+    result = builder.create<NodeOp>(initializer.getType(), initializer, id);
   } else
     result = initializer;
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
@@ -2992,12 +2903,7 @@ ParseResult FIRStmtParser::parseWire() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-//  auto annotations =
-//      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(), type);
-//  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-  auto name = id;
-
-  auto result = builder.create<WireOp>(type, name);
+  auto result = builder.create<WireOp>(type, id);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3083,17 +2989,12 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-//  auto annotations =
-//      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(), type);
-//  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-  auto name = id;
-
   Value result;
   if (resetSignal)
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        name);
+                                        id);
   else
-    result = builder.create<RegOp>(type, clock, name);
+    result = builder.create<RegOp>(type, clock, id);
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }

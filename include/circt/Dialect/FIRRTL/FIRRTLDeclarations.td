@@ -25,6 +25,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
 
   let assemblyFormat =
     "$moduleName custom<InstanceOp>(attr-dict) (`:` type($results)^ )?";
+  let hasCanonicalizer = true;
 
   let verifier = "return ::verifyInstanceOp(*this);";
 
@@ -67,6 +68,7 @@ def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
   let results = (outs FIRRTLType:$result);
 
   let assemblyFormat = "custom<ElideAnnotations>(attr-dict) `:` type($result)";
+  let hasCanonicalizer = true;
 }
 
 def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
@@ -77,6 +79,7 @@ def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
 
   let assemblyFormat =
     "$ruw custom<SMemOp>(attr-dict) `:` type($result)";
+  let hasCanonicalizer = true;
 }
 
 def MemoryPortOp : FIRRTLOp<"memoryport"> {
@@ -91,6 +94,7 @@ def MemoryPortOp : FIRRTLOp<"memoryport"> {
     $direction $memory `,` $index `,` $clock custom<MemoryPortOp>(attr-dict) `:`
        functional-type(operands, $result)
   }];
+  let hasCanonicalizer = true;
 }
 
 def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
@@ -286,4 +290,5 @@ def WireOp : FIRRTLOp<"wire", []> {
   ];
 
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
+  let hasCanonicalizer = true;
 }

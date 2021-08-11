@@ -1,60 +1,63 @@
-; RUN: circt-translate -import-firrtl -split-input-file %s | FileCheck %s
+; RUN: circt-translate -import-firrtl -split-input-file %s | circt-opt --pass-pipeline='module(firrtl.circuit(firrtl-lower-annotations))' |FileCheck %s
+
+; circt.test copies the annotation to the target
+; circt.testNT puts the targetless annotation on the circuit
 
 ; An Annotation without a target is promoted to a CircuitTarget Annotation. This
 ; represents a Scala FIRRTL Compiler `firrtl.annotations.NoTargetAnnotation`.
-circuit Foo: %[[{"a":"a"}]]
+circuit Foo: %[[{"class":"circt.testNT","a":"a"}]]
   module Foo:
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
+    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a", class = "circt.testNT"}]}
 
 ; // -----
 
 ; A legacy `firrtl.annotations.CircuitName` annotation becomes a CircuitTarget
 ; Annotation.
-circuit Foo: %[[{"a":"a","target":"Foo"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"Foo"}]]
   module Foo:
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
+    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a", class = "circt.test"}]}
 
 ; // -----
 
 ; A CircuitTarget Annotation is attached to the circuit.
-circuit Foo: %[[{"a":"a","target":"~Foo"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo"}]]
   module Foo:
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
+    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a", , class = "circt.test"}]}
 
 ; // -----
 
 ; A legacy `firrtl.annotations.ModuleName` annotation becomes a ModuleTarget
 ; Annotation
-circuit Foo: %[[{"a":"a","target":"Foo.Foo"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"Foo.Foo"}]]
   module Foo:
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a"}]}
+    ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a", class = "circt.test"}]}
 
 ; // -----
 
 ; A ModuleTarget Annotation is attached to the correct module.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Foo"}]]
   module Foo:
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a"}]}
+    ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a", class = "circt.test"}]}
 
 ; // -----
 
 ; A ModuleTarget Annotation can be attached to an ExtModule.
-circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Bar"}]]
   extmodule Bar:
     input a: UInt<1>
   module Foo:
@@ -64,16 +67,16 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
 
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.extmodule @Bar
-    ; CHECK-SAME: attributes {annotations = [{a = "a"}]}
+    ; CHECK-SAME: attributes {annotations = [{a = "a", class = "circt.test"}]}
 
 ; // -----
 
 ; A ReferenceTarget, ComponentName, or InstanceTarget pointing at an Instance
 ; should work.
 circuit Foo: %[[
-{"a":"a","target":"~Foo|Foo>bar"},
-{"b":"b","target":"Foo.Foo.bar"},
-{"c":"c","target":"~Foo|Foo/bar:Bar"}
+{"class":"circt.test","a":"a","target":"~Foo|Foo>bar"},
+{"class":"circt.test","b":"b","target":"Foo.Foo.bar"},
+{"class":"circt.test","c":"c","target":"~Foo|Foo/bar:Bar"}
 ]]
   module Bar:
     skip
@@ -82,15 +85,14 @@ circuit Foo: %[[
 
     ; CHECK-LABEL: module {
     ; CHECK: firrtl.instance @Bar
-    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {c = "c"}]
+    ; CHECK-SAME: annotations = [{a = "a", class = "circt.test"}, {b = "b", class = "circt.test"}, {c = "c", class = "circt.test"}]
 
 ; // -----
 
 ; Test result annotations of InstanceOp.
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
-                {"two":null,"target":"~Foo|Foo>bar.b.baz"},
-                {"three":null,"target":"~Foo|Foo/bar:Bar>b.qux"},
-                {"four":null,"target":"Foo.Foo.bar.c"}]]
+circuit Foo: %[[{"class":"circt.test","one":null,"target":"~Foo|Foo>bar.a"},
+                {"class":"circt.test","two":null,"target":"~Foo|Foo>bar.b.baz"},
+                {"class":"circt.test","four":null,"target":"Foo.Foo.bar.c"}]]
   module Bar:
     input a: UInt<1>
     output b: {baz: UInt<1>, qux: UInt<1>}
@@ -108,7 +110,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
 ; // -----
 
 ; A ReferenceTarget/ComponentName pointing at a CMem should work.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Foo>bar"},{"class":"circt.test","b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     cmem bar: UInt<1>[8]
 
@@ -119,7 +121,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 ; // -----
 
 ; A ReferenceTarget/ComponentName pointing at a memory should work.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Foo>bar"},{"class":"circt.test","b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     mem bar:
       data-type => UInt<8>
@@ -137,10 +139,10 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 ; // -----
 
 ; Test result annotations of MemOp.
-circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
-                {"b":null,"target":"~Foo|Foo>bar.r.data.baz"},
-                {"c":null,"target":"~Foo|Foo>bar.w.en"},
-                {"d":null,"target":"~Foo|Foo>bar.w.data.qux"}]]
+circuit Foo: %[[{"class":"circt.test","a":null,"target":"~Foo|Foo>bar.r"},
+                {"class":"circt.test","b":null,"target":"~Foo|Foo>bar.r.data.baz"},
+                {"class":"circt.test","c":null,"target":"~Foo|Foo>bar.w.en"},
+                {"class":"circt.test","d":null,"target":"~Foo|Foo>bar.w.data.qux"}]]
   module Foo:
     mem bar:
       data-type => {baz: UInt<8>, qux: UInt<8>}
@@ -161,7 +163,7 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>bar.r"},
 
 ; A ReferenceTarget/ComponentName pointing at a node should work.  This
 ; shouldn't crash if the node is in a nested block.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Foo>bar"},{"class":"circt.test","b":"b","target":"Foo.Foo.baz"}]]
   module Foo:
     input cond: UInt<1>[2]
     node bar = UInt<1>(0)
@@ -178,7 +180,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz
 ; // -----
 
 ; A ReferenceTarget/ComponentName pointing at a wire should work.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Foo>bar"},{"class":"circt.test","b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     wire bar: UInt<1>
 
@@ -189,7 +191,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 ; // -----
 
 ; A ReferenceTarget/ComponentName pointing at a register should work.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Foo>bar"},{"class":"circt.test","b":"b","target":"Foo.Foo.baz"}]]
   module Foo:
     input clock: Clock
     input reset: UInt<1>
@@ -205,7 +207,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz
 ; // -----
 
 ; A ReferenceTarget/ComponentName pointing at an SMem should work.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Foo>bar"},{"class":"circt.test","b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     smem bar: UInt<1>[8]
 
@@ -216,7 +218,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
 ; // -----
 
 ; A ReferenceTarget/ComponentName pointing at a module/extmodule port should work.
-circuit Foo: %[[{"a":"a","target":"~Foo|Bar>bar"},{"b":"b","target":"Foo.Foo.foo"}]]
+circuit Foo: %[[{"class":"circt.test","a":"a","target":"~Foo|Bar>bar"},{"class":"circt.test","b":"b","target":"Foo.Foo.foo"}]]
   extmodule Bar:
     input bar: UInt<1>
   module Foo:
@@ -235,6 +237,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar>bar"},{"b":"b","target":"Foo.Foo.foo
 ; All types of JSON values should work
 circuit Foo: %[[
   {
+    "class" : "circt.testNT",
     "string": "a",
      "integer": 42,
     "float": 3.14,
@@ -261,7 +264,7 @@ circuit Foo: %[[
 ; // -----
 
 ; JSON escapes should work.
-circuit Foo: %[[{"\"":"}]]"}]]
+circuit Foo: %[[{"\"":"}]]","class":"circt.testNT"}]]
   module Foo:
     skip
 
@@ -270,17 +273,17 @@ circuit Foo: %[[{"\"":"}]]"}]]
 
 ; // -----
 ; JSON with a JSON-quoted string should be expanded.
-circuit Foo: %[[{"a":"{\"b\":null}"}]]
+circuit Foo: %[[{"a":"{\"b\":null}", "class": "circt.testNT"}]]
   module Foo:
     skip
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = {b}}]}
+    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = {b}, class : "circt.testNT"}]}
 
 ; // -----
 
 ; Subfield/Subindex annotations should be parsed correctly on wires
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]", "class":"circt.test"},{"two":null,"target":"~Foo|Foo>bar[1].baz", "class":"circt.test"} ]]
   module Foo:
     wire bar: {baz: UInt<1>, qux: UInt<1>}[2]
 
@@ -293,7 +296,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 ; // -----
 
 ; Subfield/Subindex annotations should be parsed correctly on registers
-circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~Foo|Foo>bar[1].baz"} ]]
+circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]", "class": "circt.test"},{"two":null,"target":"~Foo|Foo>bar[1].baz", "class": "circt.test"} ]]
   module Foo:
     input clock: Clock
     reg bar: {baz: UInt<1>, qux: UInt<1>}[2], clock
@@ -306,15 +309,15 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 ; // -----
 
 ; Annotations should apply even when the target's name is dropped.
-circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
-                {"target": "~Foo|Foo>_T_1", "a": "a"},
-                {"target": "~Foo|Foo>_T_2", "a": "a"},
-                {"target": "~Foo|Foo>_T_3", "a": "a"},
-                {"target": "~Foo|Foo>_T_4", "a": "a"},
-                {"target": "~Foo|Foo>_T_5", "a": "a"},
-                {"target": "~Foo|Foo>_T_6", "a": "a"},
-                {"target": "~Foo|Foo>_T_7", "a": "a"},
-                {"target": "~Foo|Foo>_T_8", "a": "a"}]]
+circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a", "class": "circt.test"},
+                {"target": "~Foo|Foo>_T_1", "a": "a", "class": "circt.test"},
+                {"target": "~Foo|Foo>_T_2", "a": "a", "class": "circt.test"},
+                {"target": "~Foo|Foo>_T_3", "a": "a", "class": "circt.test"},
+                {"target": "~Foo|Foo>_T_4", "a": "a", "class": "circt.test"},
+                {"target": "~Foo|Foo>_T_5", "a": "a", "class": "circt.test"},
+                {"target": "~Foo|Foo>_T_6", "a": "a", "class": "circt.test"},
+                {"target": "~Foo|Foo>_T_7", "a": "a", "class": "circt.test"},
+                {"target": "~Foo|Foo>_T_8", "a": "a", "class": "circt.test"}]]
   module Bar:
     skip
   module Foo:
@@ -405,7 +408,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
 ; Test that an annotated, anonymous node is preserved if annotated.  Normally,
 ; the FIRRTL parser will aggressively eliminate these.
 circuit AnnotationsBlockNodePruning: %[[
-  {"a": null, "target": "~AnnotationsBlockNodePruning|AnnotationsBlockNodePruning>_T"}
+  {"a": null, "target": "~AnnotationsBlockNodePruning|AnnotationsBlockNodePruning>_T", "class" : "circt.test"}
 ]]
   module AnnotationsBlockNodePruning:
     input a: UInt<1>
@@ -483,7 +486,8 @@ circuit GCTDataTap : %[
     ]
   },
   {
-    "unrelatedAnnotation": null
+    "unrelatedAnnotation": null,
+    "class" : "circt.testNT"
   }
 ]]
   extmodule DataTap :
@@ -630,7 +634,8 @@ circuit GCTMemTap : %[
     "source":"~GCTMemTap|GCTMemTap>mem"
   },
   {
-    "unrelatedAnnotation": null
+    "unrelatedAnnotation": null,
+    "class": "circt.testNT"
   }
 ]]
   extmodule MemTap :
@@ -678,7 +683,8 @@ circuit GCTInterface : %[
     "view": "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"name\":\"register\",\"description\":\"the register in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"register\",\"elements\":[{\"name\":\"_2\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":0}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":1}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}]}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"_0\",\"elements\":[{\"name\":\"_1\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_1\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}}]}},{\"name\":\"port\",\"description\":\"the port 'a' in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"a\",\"component\":[]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}"
   },
   {
-    "unrelatedAnnotation": null
+    "unrelatedAnnotation": null,
+    "class": "circt.testNT"
   }
 ]
 ]

@@ -58,8 +58,15 @@ struct BaseUnion {
   FIRRTLType getType() const {
     if (!op)
       return FIRRTLType();
-    if (portNum != ~0UL)
-      return getModulePortType(op, portNum);
+    if (portNum != ~0UL) {
+      if (isa<FModuleOp, FExtModuleOp>(op))
+        return getModulePortType(op, portNum);
+      if (isa<MemOp, InstanceOp>(op))
+        return op->getResult(portNum).getType().cast<FIRRTLType>();
+      llvm_unreachable("Unknown port instruction");
+    }
+    if (op->getNumResults() == 0)
+      return FIRRTLType();
     return op->getResult(0).getType().cast<FIRRTLType>();
   }
 };
@@ -109,31 +116,63 @@ void AnnoPathStr::dump() const { llvm::errs() << *this; }
 
 static bool hasName(StringRef name, Operation *op) {
   return TypeSwitch<Operation *, bool>(op)
-      .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp>(
-          [&](auto nop) {
-            if (nop.name() == name)
-              return true;
-            return false;
-          })
+      .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CMemOp,
+            SMemOp, MemoryPortOp>([&](auto nop) {
+        if (nop.name() == name)
+          return true;
+        return false;
+      })
       .Default([](auto &) { return false; });
 }
 
 static BaseUnion findNamedThing(StringRef name, Operation *op) {
-  // First check ports
-  auto ports = getModulePortInfo(op);
-  for (size_t i = 0, e = ports.size(); i != e; ++i)
-    if (ports[i].name.getValue() == name)
-      return BaseUnion{op, i};
+  BaseUnion retval;
+  auto nameChecker = [name, &retval](Operation *op) -> WalkResult {
+    if (isa<FModuleOp, FExtModuleOp>(op)) {
+      // Check the ports.
+      auto ports = getModulePortInfo(op);
+      for (size_t i = 0, e = ports.size(); i != e; ++i)
+        if (ports[i].name.getValue() == name) {
+          retval = BaseUnion{op, i};
+          return WalkResult::interrupt();
+        }
+      return WalkResult::advance();
+    }
+    if (hasName(name, op)) {
+      retval = BaseUnion{op};
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  };
 
-  // Second, check wires, nodes, registers, and instances.
-  if (auto mod = dyn_cast<FModuleOp>(op))
-    for (auto &oper : mod.getBodyBlock()->getOperations())
-      if (hasName(name, &oper))
-        return BaseUnion{&oper};
-
-  return nullptr;
+  op->walk(nameChecker);
+  return retval;
 }
 
+// Some types have been expanded so the first layer of aggregate path is
+// a return value.
+static BaseUnion resolveExpandedPorts(BaseUnion input,
+                                      SmallVectorImpl<aggAccess> &fields) {
+  if (fields.empty() || !isa<MemOp, InstanceOp>(input.op))
+    return input;
+  // If we are searching an expanded op, the first aggregate field must be an
+  // expanded port.
+  auto portName = fields.front().val;
+  fields.erase(fields.begin());
+
+  if (auto mem = dyn_cast<MemOp>(input.op))
+    for (size_t p = 0, pe = mem.portNames().size(); p < pe; ++p)
+      if (mem.getPortNameStr(p) == portName)
+        return {input.op, p};
+  if (auto inst = dyn_cast<InstanceOp>(input.op))
+    for (size_t p = 0, pe = inst.getNumResults(); p < pe; ++p)
+      if (inst.getPortNameStr(p) == portName)
+        return {input.op, p};
+  input.op->emitError("Cannot find port with name ") << portName;
+  return {};
+}
+
+// Turn a field sequence into a FieldID offset.
 static Optional<unsigned> resolveFieldIdx(SmallVectorImpl<aggAccess> &fields,
                                           FIRRTLType t) {
   unsigned fieldIdx = 0;
@@ -232,6 +271,12 @@ static Optional<AnnoPathStr> stdParse(DictionaryAttr anno, CircuitOp circuit) {
   retval.name = nameRef.take_front(nameRef.find_first_of("[."));
   nameRef = nameRef.drop_front(retval.name.size());
 
+  // Take the last instance from the instance path and use it as the thing
+  if (retval.name.empty() && !retval.instances.empty()) {
+    retval.name = retval.instances.back().first;
+    retval.instances.pop_back();
+  }
+
   while (!nameRef.empty()) {
     if (nameRef[0] == '.') {
       nameRef = nameRef.drop_front();
@@ -247,6 +292,15 @@ static Optional<AnnoPathStr> stdParse(DictionaryAttr anno, CircuitOp circuit) {
       llvm_unreachable("invalid annotation aggregate specifier");
     }
   }
+  return retval;
+}
+
+static Optional<AnnoPathStr> tryParse(DictionaryAttr anno, CircuitOp circuit) {
+  auto target = anno.getNamed("target");
+  if (target)
+    return stdParse(anno, circuit);
+  AnnoPathStr retval;
+  retval.circuit = circuit.name();
   return retval;
 }
 
@@ -301,13 +355,19 @@ static Optional<AnnoPathValue> stdResolve(AnnoPathStr path, CircuitOp circuit,
           << path.name << "' in '" << getModuleName(curModule) << "'";
       return {};
     }
-    auto field = resolveFieldIdx(path.agg, retval.ref.getType());
-    if (!field) {
-      circuit.emitError("cannot resolve field accesses");
-      return {};
-    }
-    retval.fieldIdx = *field;
   }
+
+  retval.ref = resolveExpandedPorts(retval.ref, path.agg);
+
+  // Since we have expanded memories, we need to check the aggregate
+  auto field = resolveFieldIdx(path.agg, retval.ref.getType());
+  if (!field) {
+    path.dump();
+    circuit.emitError("cannot resolve field accesses");
+    return {};
+  }
+  retval.fieldIdx = *field;
+
   return retval;
 }
 
@@ -336,7 +396,8 @@ LogicalResult applyDirFileNormalizeToCircuit(AnnoPathValue target,
       continue;
     }
     if (na.first == "resourceFileName") {
-      newAnnoAttrs.emplace_back(Identifier::get("filename", target.ref.op->getContext()), na.second);
+      newAnnoAttrs.emplace_back(
+          Identifier::get("filename", target.ref.op->getContext()), na.second);
       continue;
     }
     target.ref.op->emitError("Unknown file or directory field '")
@@ -363,6 +424,11 @@ LogicalResult applyWithoutTargetToTarget(AnnoPathValue target,
 }
 
 template <bool allowNonLocal = false>
+LogicalResult applyWithoutTarget(AnnoPathValue target, DictionaryAttr anno) {
+  return applyWithoutTargetToTarget(target, anno, allowNonLocal);
+}
+
+template <bool allowNonLocal = false>
 LogicalResult applyWithoutTargetToModule(AnnoPathValue target,
                                          DictionaryAttr anno) {
   if (!target.isOpOfType<FModuleOp>() && !target.isOpOfType<FExtModuleOp>())
@@ -386,8 +452,8 @@ LogicalResult applyWithoutTargetToMem(AnnoPathValue target,
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
 }
 
-// Fix up a path that contains missing modules and place the annotation on the
-// memory op.
+// Fix up a path that contains missing modules and place the annotation on
+// the memory op.
 static Optional<AnnoPathValue> seqMemInstanceResolve(AnnoPathStr path,
                                                      CircuitOp circuit,
                                                      SymbolTable modules) {
@@ -428,7 +494,8 @@ LogicalResult applyGrandCentralView(AnnoPathValue target, DictionaryAttr anno) {
 
 static const AnnoRecord annotationRecords[] = {
     /*
-      {"chisel3.aop.injecting.InjectStatement", noParse, noResolve, ignoreAnno},
+      {"chisel3.aop.injecting.InjectStatement", noParse, noResolve,
+      ignoreAnno},
       {"chisel3.util.experimental.ForceNameAnnotation", noParse, noResolve,
        ignoreAnno},
       {"sifive.enterprise.firrtl.DFTTestModeEnableAnnotation", noParse,
@@ -523,6 +590,11 @@ static const AnnoRecord annotationRecords[] = {
     {"sifive.enterprise.grandcentral.ViewAnnotation", noParse, noResolve,
      applyGrandCentralView},
 
+    // Testing Annotation
+    {"circt.test", stdParse, stdResolve, applyWithoutTarget<>},
+    {"circt.testNT", noParse, noResolve, applyWithoutTarget<>},
+    {"circt.missing", tryParse, stdResolve, applyWithoutTarget<>},
+
 };
 
 static const AnnoRecord *getAnnotationHandler(StringRef annoStr) {
@@ -542,6 +614,9 @@ struct LowerAnnotationsPass
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, CircuitOp circuit,
                                 SymbolTable modules);
+
+  bool ignoreUnhandledAnno = false;
+  bool ignoreClasslessAnno = false;
 };
 } // end anonymous namespace
 
@@ -560,13 +635,21 @@ void LowerAnnotationsPass::runOnOperation() {
 LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
                                                     CircuitOp circuit,
                                                     SymbolTable modules) {
-  auto annoClass = anno.getNamed("class");
-  if (!annoClass)
+  StringRef annoClassVal;
+  if (auto annoClass = anno.getNamed("class"))
+    annoClassVal = annoClass->second.cast<StringAttr>().getValue();
+  else if (ignoreClasslessAnno)
+    annoClassVal = "circt.missing";
+  else
     return circuit.emitError("Annotation without a class: ") << anno;
-  auto annoClassVal = annoClass->second.cast<StringAttr>().getValue();
+
   auto record = getAnnotationHandler(annoClassVal);
   if (!record)
-    return circuit.emitWarning("Unhandled annotation: ") << anno;
+    if (ignoreUnhandledAnno)
+      record = getAnnotationHandler("circt.missing");
+    else
+      return circuit.emitWarning("Unhandled annotation: ") << anno;
+
   auto path = record->path_parser(anno, circuit);
   if (!path)
     return circuit.emitError("Unable to parse target of annotation: ") << anno;
@@ -574,12 +657,18 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   if (!target)
     return circuit.emitError("Unable to resolve target of annotation: ")
            << anno;
-  if (record->anno_applier(*target, anno).failed())
+  if (record->anno_applier(*target, anno).failed()) {
+    path->dump();
     return circuit.emitError("Unable to apply annotation: ") << anno;
+  }
   return success();
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass() {
-  return std::make_unique<LowerAnnotationsPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLAnnotationsPass(
+    bool ignoreUnhandledAnnotations, bool ignoreClasslessAnnotations) {
+  auto pass = std::make_unique<LowerAnnotationsPass>();
+  pass->ignoreUnhandledAnno = ignoreUnhandledAnnotations;
+  pass->ignoreClasslessAnno = ignoreClasslessAnnotations;
+  return pass;
 }

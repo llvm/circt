@@ -23,6 +23,15 @@ def NonConstantOp : Constraint<CPred<"!$0.getDefiningOp<ConstantOp>()">>;
 // there are no FIRRTL annotation on an operation.
 def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 
+// Constraint that matches annotation sets without dontTouch.
+def NoDontTouch : Constraint<CPred<"!AnnotationSet($0).hasDontTouch()">>;
+
+// Constraint that matches annotation sets without dontTouch.
+def NoPortsDontTouch : Constraint<CPred<"!llvm::all_of($0, [](Attribute a) { if (auto b = a.dyn_cast<ArrayAttr>()) return !AnnotationSet(b).hasDontTouch(); return true; })">>;
+
+def NonEmptyStringAttr : Constraint<CPred<"!$0.getValue().empty()">>;
+def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
+
 // Constraint that enforces equal types
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
@@ -31,6 +40,13 @@ def KnownWidth : Constraint<CPred<[{
   $0.getType().isa<FIRRTLType>() &&
     $0.getType().cast<FIRRTLType>().getBitWidthOrSentinel() >= 0
   }]>>;
+
+// Constraint that enforces types of zero width
+def ZeroWidth : Constraint<CPred<[{
+  $0.getType().isa<FIRRTLType>() &&
+    $0.getType().cast<FIRRTLType>().getBitWidthOrSentinel() == 0
+  }]>>;
+
 
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
 def ZeroConstantOp : Constraint<Or<[
@@ -43,6 +59,9 @@ def ZeroConstantOp : Constraint<Or<[
 def IsInvalid : Constraint<
   CPred<"$0.getDefiningOp<InvalidValueOp>()">
 >;
+
+def GetEmptyString : NativeCodeCall<
+  "StringAttr::get($_builder.getContext(), {}) ">;
 
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
@@ -86,24 +105,24 @@ def MuxSameCondHigh : Pat<
 def EmptyNode : Pat<
   (NodeOp $x, $name, $annotations),
   (replaceWithValue $x),
-  [(EmptyAttrDict $annotations)]>;
+  [(NonEmptyStringAttr $name), (EmptyAttrDict $annotations)]>;
 
 // regreset(clock, invalidvalue, resetValue) -> reg(clock)
 def RegresetWithInvalidReset : Pat<
-  (RegResetOp $clock, (InvalidValueOp), $resetValue, $name, $annotations),
+  (RegResetOp $clock, (InvalidValueOp), $_, $name, $annotations),
   (RegOp $clock, $name, $annotations),
   []>;
 
 // regreset(clock, reset, invalidvalue) -> reg(clock)
 // This is handled by the `RemoveReset` pass in the original Scala code.
 def RegresetWithInvalidResetValue : Pat<
-  (RegResetOp $clock, $reset, (InvalidValueOp), $name, $annotations),
+  (RegResetOp $clock, $_, (InvalidValueOp), $name, $annotations),
   (RegOp $clock, $name, $annotations),
   []>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegresetWithZeroReset : Pat<
-  (RegResetOp $clock, $reset, $resetValue, $name, $annotations),
+  (RegResetOp $clock, $reset, $_, $name, $annotations),
   (RegOp $clock, $name, $annotations), [(ZeroConstantOp $reset)]>;
 
 // Return the width of an operation result as an integer attribute.  This is
@@ -133,6 +152,66 @@ def SubWithInvalidOp : Pat<
   (PadPrimOp $x, (GetWidthAsIntAttr $result)), [
     (KnownWidth $x), (IsInvalid $y)
   ]>;
+
+////////////////////////////////////////////////////////////////////////////////
+// DontTouch application
+////////////////////////////////////////////////////////////////////////////////
+
+// node(x,name),!dnt -> node(x, "")
+def DropNameNode : Pat<
+  (NodeOp $x, $name, $annotations),
+  (NodeOp $x, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// wire(name),!dnt -> wire("")
+def DropNameWire : Pat<
+  (WireOp $name, $annotations),
+  (WireOp (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+//FIXME: ADD, RegOp uses hand coded canonicalize.
+// reg(clk, name),!dnt -> reg(clk, "")
+def DropNameReg : Pat<
+  (RegOp $clk, $name, $annotations),
+  (RegOp $clk, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")
+def DropNameRegReset : Pat<
+  (RegResetOp $clk, $sig, $val, $name, $annotations),
+  (RegResetOp $clk, $sig, $val, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// instance(...,name),!dnt -> instance(..., "")
+def DropNameInstance : Pat<
+  (InstanceOp $mod, $name, $annotations, $portAnno, $bind),
+  (InstanceOp $mod, (GetEmptyString), $annotations, $portAnno, $bind),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+//FIXME: ADD
+// Mem(...,name),!dnt -> Mem(...x, "")
+def DropNameMem : Pat<
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $annotations, $portAnno),
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations, $portAnno),
+  [(uselessNameAttr $name), (NoDontTouch $annotations), (NoPortsDontTouch $portAnno)]>;
+
+// CMem(name),!dnt -> CMem("")
+def DropNameCMem : Pat<
+  (CMemOp $name, $annotations),
+  (CMemOp (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// SMem(ruw, name),!dnt -> SMem(ruw, "")
+def DropNameSMem : Pat<
+  (SMemOp $ruw, $name, $annotations),
+  (SMemOp $ruw, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// memoryport(..., name),!dnt -> memoryport(..., "")
+def DropNameMemoryPort : Pat<
+  (MemoryPortOp $memory, $index, $clock, $direction, $name, $annotations),
+  (MemoryPortOp $memory, $index, $clock, $direction, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
 
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

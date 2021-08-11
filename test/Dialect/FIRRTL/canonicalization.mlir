@@ -1,4 +1,4 @@
-// RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s | FileCheck %s
+// RUN: circt-opt -canonicalize='top-down=true region-simplify=true' %s --debug | FileCheck %s
 
 firrtl.circuit "Casts" {
 

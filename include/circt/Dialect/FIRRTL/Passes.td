@@ -23,6 +23,12 @@ def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp
     annotations and annotation paths.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLAnnotationsPass()";
+  let options = [
+    Option<"ignoreAnnotationClassless", "disable-annotation-classless", "bool", "false",
+      "Ignore classless annotations.">,
+    Option<"ignoreAnnotationUnknown", "disable-annotation-unknown", "bool", "true",
+      "Ignore unknown annotations.">
+  ];
 }
 
 def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {

@@ -92,6 +92,16 @@ static cl::opt<bool> enableAnnotationWarning(
     cl::desc("Warn about annotations that were not removed by lower-to-hw"),
     cl::init(false));
 
+static cl::opt<bool> disableAnnotationsClassless(
+    "disable-annotation-classless",
+    cl::desc("Ignore annotations without a class when parsing"),
+    cl::init(false));
+
+static cl::opt<bool> disableAnnotationsUnknown(
+    "disable-annotation-unknown",
+    cl::desc("Ignore unknown annotations when parsing"),
+    cl::init(false));
+
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -220,7 +230,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown, disableAnnotationsClassless));
 
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
