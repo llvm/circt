@@ -161,8 +161,8 @@ public:
 };
 
 /// This class just provides storage for the `Problem` reference; otherwise,
-/// the algorithm implementation in the base class is sufficient to solve
-/// acyclic problems.
+/// the algorithm implementation in the base class is already sufficient to
+/// solve acyclic problems.
 class AcyclicSimplexScheduler : public SimplexSchedulerBase {
 private:
   Problem &prob;
