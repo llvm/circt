@@ -70,8 +70,10 @@ public:
   }
 
   virtual bool matches(Operation *op) { return false; }
+  virtual bool addSelf() { return type->addSelf(); }
   virtual Filter *nextFilter() { return nullptr; };
   virtual Filter *clone() { return nullptr; }
+  virtual std::vector<Operation *> nextOperations(Operation *op) { std::vector<Operation *> ops; ops.push_back(op); return ops; }
 
   FilterType *getType() { return type; }
 
@@ -154,6 +156,7 @@ public:
   }
 
   bool matches(Operation *op) override;
+  bool addSelf() override;
   Filter *clone() override;
 
 protected:
@@ -162,6 +165,17 @@ protected:
 private:
   Filter *filter;
   Filter *child;
+};
+
+class UsageFilter : public Filter {
+public:
+  UsageFilter(Filter *filter) : Filter(new FilterType), filter (filter) { }
+
+  bool matches(Operation *op) override;
+  std::vector<Operation *> nextOperations(Operation *op) override;
+
+private:
+  Filter *filter;
 };
 
 std::vector<std::pair<Operation *, std::vector<Attribute>>> dumpAttributes(std::vector<Operation *> results, std::vector<std::string> filters);

@@ -216,6 +216,32 @@ static int createOpFilter(ClientData cdata, Tcl_Interp *interp,
   return TCL_OK;
 }
 
+static int createUsageFilter(ClientData cdata, Tcl_Interp *interp,
+                                 int objc, Tcl_Obj *const objv[]) {
+  if (objc != 2) {
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: usage [filter]");
+    return TCL_ERROR;
+  }
+
+  auto *obj = objv[1];
+  if (Tcl_IsShared(obj)) {
+    obj = Tcl_DuplicateObj(obj);
+  }
+
+  auto *type = Tcl_GetObjType("Filter");
+  if (Tcl_ConvertToType(interp, obj, type) != TCL_OK) {
+    return returnErrorStr(interp, "expected filter");
+  }
+
+  auto *result = Tcl_NewObj();
+  result->typePtr = type;
+  result->internalRep.otherValuePtr = circtQueryNewUsageFilter({obj->internalRep.otherValuePtr}).ptr;
+  obj->internalRep.otherValuePtr = nullptr;
+  obj->typePtr = nullptr;
+  Tcl_SetObjResult(interp, result);
+  return TCL_OK;
+}
+
 static int operationTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
   return TCL_ERROR;
 }
@@ -354,11 +380,6 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
   return TCL_OK;
 }
 
-static int dumpAttributes(ClientData cdata, Tcl_Interp *interp, int objc,
-                            Tcl_Obj *const objv[]) {
-  return TCL_OK;
-}
-
 static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
                             Tcl_Obj *const objv[]) {
   if (objc < 2) {
@@ -418,6 +439,7 @@ int DLLEXPORT Circt_Init(Tcl_Interp *interp) {
   Tcl_CreateObjCommand(interp, "or", createOrFilter, NULL, NULL);
   Tcl_CreateObjCommand(interp, "attr", createAttributeFilter, NULL, NULL);
   Tcl_CreateObjCommand(interp, "op", createOpFilter, NULL, NULL);
+  Tcl_CreateObjCommand(interp, "usage", createUsageFilter, NULL, NULL);
   return TCL_OK;
 }
 }

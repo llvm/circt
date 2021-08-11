@@ -74,6 +74,10 @@ CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter, CirctQuery
   return { new InstanceFilter((Filter *) filter.ptr, (Filter *) child.ptr) };
 }
 
+CirctQueryFilter circtQueryNewUsageFilter(CirctQueryFilter filter) {
+  return { new UsageFilter((Filter *) filter.ptr) };
+}
+
 CirctQueryFilter circtQueryCloneFilter(CirctQueryFilter filter) {
   return { ((Filter *) filter.ptr)->clone() };
 }

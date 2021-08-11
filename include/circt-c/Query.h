@@ -37,6 +37,7 @@ CirctQueryFilter circtQueryNewAndFilter(size_t count, CirctQueryFilter *filters)
 CirctQueryFilter circtQueryNewOrFilter(size_t count, CirctQueryFilter *filters);
 CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter, CirctQueryFilter child);
 CirctQueryFilter circtQueryCloneFilter(CirctQueryFilter filter);
+CirctQueryFilter circtQueryNewUsageFilter(CirctQueryFilter filter);
 void circtQueryDeleteFilter(CirctQueryFilter filter);
 
 CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root);
