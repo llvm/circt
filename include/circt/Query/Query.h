@@ -171,7 +171,7 @@ class UsageFilter : public Filter {
 public:
   UsageFilter(Filter *filter) : Filter(new FilterType), filter (filter) { }
 
-  bool matches(Operation *op) override;
+  bool matches(Operation *op) override { return filter->matches(op); }
   std::vector<Operation *> nextOperations(Operation *op) override;
 
 private:

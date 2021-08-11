@@ -297,9 +297,6 @@ Filter *InstanceFilter::nextFilter() {
   return child;
 }
 
-bool UsageFilter::matches(Operation *op) {
-}
-
 std::vector<Operation *> UsageFilter::nextOperations(Operation *op) {
   std::vector<Operation *> ops;
   TypeSwitch<Operation *>(op)
