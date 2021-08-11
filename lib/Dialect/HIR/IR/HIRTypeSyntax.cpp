@@ -51,21 +51,23 @@ ParseResult parseBankedDimensionList(DialectAsmParser &parser,
   return success();
 }
 
-ParseResult parseDelayAttr(DialectAsmParser &parser,
-                           SmallVectorImpl<DictionaryAttr> &attrsList) {
+mlir::OptionalParseResult
+parseOptionalDelayAttr(DialectAsmParser &parser,
+                       SmallVectorImpl<DictionaryAttr> &attrsList) {
   IntegerAttr delayAttr;
   auto *context = parser.getBuilder().getContext();
   if (succeeded(parser.parseOptionalKeyword("delay"))) {
     if (parser.parseAttribute(delayAttr, IntegerType::get(context, 64)))
       return failure();
   } else {
-    delayAttr = helper::getI64IntegerAttr(context, 0);
+    return llvm::None;
   }
   attrsList.push_back(
       helper::getDictionaryAttr(parser.getBuilder(), "hir.delay", delayAttr));
 
   return success();
 }
+
 ParseResult parseMemrefPortsAttr(DialectAsmParser &parser,
                                  SmallVectorImpl<DictionaryAttr> &attrsList) {
   ArrayAttr memrefPortsAttr;
@@ -230,8 +232,15 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
       inputTypes.push_back(type);
 
       if (helper::isBuiltinSizedType(type)) {
-        if (parseDelayAttr(parser, inputAttrs))
-          return Type();
+        auto parseResult = parseOptionalDelayAttr(parser, inputAttrs);
+        if (parseResult.hasValue()) {
+          if (parseResult.getValue())
+            return Type();
+        } else {
+          inputAttrs.push_back(helper::getDictionaryAttr(
+              parser.getBuilder(), "hir.delay",
+              parser.getBuilder().getI64IntegerAttr(0)));
+        }
       } else if (type.dyn_cast<hir::MemrefType>()) {
         if (parseMemrefPortsAttr(parser, inputAttrs))
           return Type();
@@ -261,13 +270,20 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
         if (parser.parseType(resultTy))
           return Type();
         resultTypes.push_back(resultTy);
-        if (!helper::isBuiltinSizedType(resultTy))
+        if (!(helper::isBuiltinSizedType(resultTy) ||
+              resultTy.isa<hir::TimeType>()))
           return parser.emitError(parser.getCurrentLocation(),
                                   "Only mlir builtin types are supported in "
                                   "function results."),
                  Type();
-        if (parseDelayAttr(parser, resultAttrs))
-          return Type();
+        auto parseResult = parseOptionalDelayAttr(parser, resultAttrs);
+
+        if (parseResult.hasValue()) {
+          if (failed(parseResult.getValue()))
+            return Type();
+        } else {
+          resultAttrs.push_back(DictionaryAttr());
+        }
 
         if (parser.parseOptionalComma())
           break;
@@ -453,6 +469,8 @@ static void printFuncType(FuncType moduleTy, DialectAsmPrinter &printer) {
     if (i > 0)
       printer << ", ";
     printer << resultTypes[i];
+    if (!helper::isBuiltinSizedType(inputTypes[i]))
+      continue;
     auto delay = helper::extractDelayFromDict(resultAttrs[i]);
     if (delay != 0)
       printer << " delay " << delay;

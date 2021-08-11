@@ -61,20 +61,16 @@ def YieldOp : HIR_Op<"yield", [ParentOneOf<["ForOp","UnrollForOp","IfOp"]>,Termi
   }];
 
   let arguments = (ins Variadic<AnyType> : $operands, Optional<TimeType>: $tstart,
-      OptionalAttr<I64Attr>: $offset);
+      OptionalAttr<I64Attr>: $offset,OptionalAttr<ArrayAttr>: $operand_attrs);
   let results = (outs );
 
   let builders = [OpBuilder<(ins),[{
-    build($_builder,$_state,SmallVector<Value>(),Value(),IntegerAttr());
+    build($_builder,$_state,SmallVector<Value>(),Value(),IntegerAttr(), ArrayAttr());
   }]>];
-  //TODO: Currently yieldOp prints even if there is no timevar or operands.
-  // If the custom printer returns without printing anything, then mlir does not print the op.
-  // We can use custom printer/parser to ensure that the yieldOp is not printed.
-  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? 
-    `at` custom<TimeAndOffset>($tstart, $offset)}];
 
-  //let parser = [{return parse$cppClass(parser,result);}];
-  //let printer = [{return print$cppClass(p,*this);}];
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
+
   let hasCanonicalizeMethod = true;
 }
 
@@ -95,7 +91,7 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
   let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
 }
 
-def FuncOp : HIR_Op<"func", [Symbol, SingleBlockImplicitTerminator<"ReturnOp">, FunctionLike, IsolatedFromAbove, DeclareOpInterfaceMethods<CallableOpInterface>]> {
+def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbove, DeclareOpInterfaceMethods<CallableOpInterface>]> {
   let summary = "Function definition";
   let description = [{
     This Op creates a new function 
@@ -164,7 +160,7 @@ def BlockOp : HIR_Op<"block", [SingleBlock, RecursiveSideEffects]> {
 }
 
 
-def IfOp : HIR_Op<"if", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects]> {
+def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
   let summary = "if operation";
   let description = [{
     This op implements an if statement.
@@ -173,9 +169,9 @@ def IfOp : HIR_Op<"if", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSide
       hir.if(%b) at %t {...}        ```
   }];
 
-  let arguments = (ins AnyType : $cond, Optional<TimeType> : $tstart, OptionalAttr<I64Attr>: $offset);
+  let arguments = (ins AnyType : $cond, Optional<TimeType> : $tstart, OptionalAttr<I64Attr>: $offset, ArrayAttr:$result_attrs);
   let regions = (region SizedRegion<1>:$if_region, SizedRegion<1>:$else_region);
-  let results = (outs AnyType:$results);
+  let results = (outs Variadic<AnyType>:$results);
 
   let extraClassDeclaration = [{
   }];
@@ -183,7 +179,7 @@ def IfOp : HIR_Op<"if", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSide
   let printer = [{return print$cppClass(p,*this);}];
 }
 
-def ForOp : HIR_Op<"for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments]> {
+def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
@@ -480,6 +476,19 @@ def TimeOp: HIR_Op<"time",[NoSideEffect]>{
   let results = (outs TimeType : $res);
   let assemblyFormat = [{custom<TimeAndOffset>($timevar, $delay) attr-dict `:` type($res)}];
   let hasFolder = true;
+}
+
+def TimeMaxOp: HIR_Op<"time.max",[NoSideEffect]>{
+  let summary = "Define a new time var that is the largest of the input time vars.";
+  let description = [{
+    This op defines a new time var that is the larger of the input time vars.
+      Example:
+      ```mlir %t = hir.time (%t1, %t2, %t3) :!hir.time``
+  }];
+
+  let arguments = (ins Variadic<TimeType> : $input_timevars);
+  let results = (outs TimeType : $res);
+  let assemblyFormat = [{`(` $input_timevars `)` attr-dict `:` type($res)}];
 }
 
 def LatchOp: HIR_Op<"latch",[NoSideEffect]>{

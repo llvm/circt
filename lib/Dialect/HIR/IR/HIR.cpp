@@ -228,20 +228,86 @@ LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
 //------------------------------------------------------------------------------
 
 // YieldOp
-// Syntax:
-// (`(` $operands^ `)`)?
-//    custom<TimeAndOffset>($tstart, $offset) attr-dict `:` (type($operands))?;
-//
-// static ParseResult parseYieldOp(OpAsmParser &parser, OperationState &result)
-// {
-//  SmallVector<OpAsmParser::OperandType, 4> operands;
-//  if (parser.parseLParen() && parser.parseOperandList(operands) &&
-//      parser.parseRParen())
-//    return failure();
-//  return success();
-//}
+// Syntax :
+//- hir.yield (%x, %y, %tt) at %t+1 : (i32 delay 1, f32 delay 2)
+//- hir.yield at %t+1
 
-// static void printYieldOp(OpAsmPrinter &printer, YieldOp op) {}
+static ParseResult parseYieldOp(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::OperandType, 4> operands;
+  SmallVector<Type> operandTypes;
+  ArrayAttr operandDelays;
+  llvm::Optional<OpAsmParser::OperandType> tstart;
+  IntegerAttr offsetAttr;
+  auto *context = parser.getBuilder().getContext();
+
+  // parse the optional operands
+  llvm::SMLoc argLoc;
+  if (succeeded(parser.parseOptionalLParen())) {
+    argLoc = parser.getCurrentLocation();
+    if (parser.parseOperandList(operands))
+      return failure();
+    if (parser.parseRParen())
+      return failure();
+  }
+
+  // parse the time and offset
+  if (parser.parseKeyword("at"))
+    return failure();
+  if (parseTimeAndOffset(parser, tstart, offsetAttr))
+    return failure();
+
+  // parse colon types
+  if (succeeded(parser.parseOptionalColon())) {
+    if (parser.parseLParen() ||
+        parseTypeAndDelayList(parser, operandTypes, operandDelays) ||
+        parser.parseRParen())
+      return failure();
+  }
+
+  // resolve operands
+  if (operandTypes.size() > 0)
+    if (parser.resolveOperands(operands, operandTypes, argLoc, result.operands))
+      return failure();
+  if (parser.resolveOperand(tstart.getValue(), TimeType::get(context),
+                            result.operands))
+    return failure();
+
+  // Add attributes.
+  result.addAttribute("operand_attrs", operandDelays);
+  result.addAttribute("operand_segment_sizes",
+                      parser.getBuilder().getI32VectorAttr(
+                          {static_cast<int32_t>(operands.size()),
+                           static_cast<int32_t>(tstart.hasValue() ? 1 : 0)}));
+  if (offsetAttr)
+    result.addAttribute("offset", offsetAttr);
+  return success();
+}
+
+static void printYieldOp(OpAsmPrinter &printer, YieldOp op) {
+  auto operands = op.operands();
+  printer << "hir.yield ";
+  // print operands
+  if (operands.size() > 0) {
+    printer << "(";
+    printer.printOperands(operands);
+    printer << ")";
+  }
+
+  // print time and offset
+  printer << "at ";
+  printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
+
+  // print operand types and delays.
+  if (operands.size() > 0) {
+    printer << ":(";
+    SmallVector<Type, 4> operandTypes;
+    for (auto operand : operands)
+      operandTypes.push_back(operand.getType());
+    assert(op.operand_attrs().hasValue());
+    printTypeAndDelayList(printer, operandTypes, op.operand_attrs().getValue());
+    printer << ")";
+  }
+}
 
 /// CallOp
 /// Syntax:
@@ -303,7 +369,8 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
 
   result.addAttribute("callee", calleeAttr);
   result.addAttribute("funcTy", TypeAttr::get(calleeTy));
-  result.addAttribute("offset", offsetAttr);
+  if (offsetAttr)
+    result.addAttribute("offset", offsetAttr);
   result.addTypes(funcTy.getFunctionType().getResults());
 
   return success();
@@ -397,49 +464,58 @@ static void printCallInstanceOp(OpAsmPrinter &printer, CallInstanceOp op) {
 /// IfOp
 static void printIfOp(OpAsmPrinter &printer, IfOp op) {
 
-  printer << "hir.if (" << op.cond() << ") at ";
-  if (op.tstart()) {
-    printer << op.tstart();
-    if (op.offset())
-      printer << " + " << op.offset();
-  } else
-    printer << "?";
-
+  printer << "hir.if " << op.cond() << " at ";
+  printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
+  if (op.results().size() > 0) {
+    printer << " -> (";
+    printTypeAndDelayList(printer, op->getResultTypes(), op.result_attrs());
+    printer << ")";
+  }
   printer.printRegion(op.if_region(),
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/true);
+  printer << "else";
+  printer.printRegion(op->getRegion(1));
 }
 
 static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType cond;
-  OpAsmParser::OperandType tstart;
-  OpAsmParser::OperandType offset;
-  if (parser.parseLParen() || parser.parseOperand(cond) || parser.parseRParen())
+  llvm::Optional<OpAsmParser::OperandType> tstart;
+  IntegerAttr offsetAttr;
+  SmallVector<Type> resultTypes;
+  ArrayAttr resultAttrs;
+
+  // parse the boolean condition
+  if (parser.parseOperand(cond))
     return failure();
+
+  // parse tstart.
   if (parser.parseKeyword("at"))
     return failure();
 
-  bool tstartPresent = false;
-  bool offsetPresent = false;
-  if (failed(parser.parseOptionalQuestion())) {
-    if (parser.parseOperand(tstart))
+  parseTimeAndOffset(parser, tstart, offsetAttr);
+
+  if (succeeded(parser.parseOptionalArrow()))
+    if (parser.parseLParen() ||
+        parseTypeAndDelayList(parser, resultTypes, resultAttrs) ||
+        parser.parseRParen())
       return failure();
-    tstartPresent = true;
-    if (succeeded(parser.parseOptionalPlus()))
-      if (parser.parseOperand(offset))
-        offsetPresent = true;
-  }
   auto *context = parser.getBuilder().getContext();
   if (parser.resolveOperand(cond, IntegerType::get(context, 1),
                             result.operands))
     return failure();
 
-  if (tstartPresent)
-    if (parser.resolveOperand(tstart, TimeType::get(context), result.operands))
+  if (tstart.hasValue())
+    if (parser.resolveOperand(tstart.getValue(), TimeType::get(context),
+                              result.operands))
       return failure();
-  if (offsetPresent)
-    if (parser.resolveOperand(offset, IndexType::get(context), result.operands))
-      return failure();
+  if (offsetAttr)
+    result.addAttribute("offset", offsetAttr);
+  if (resultTypes.size() > 0)
+    result.addAttribute("result_attrs", resultAttrs);
+  // Add outputs.
+  if (resultTypes.size() > 0)
+    result.addTypes(resultTypes);
 
   Region *ifBody = result.addRegion();
   Region *elseBody = result.addRegion();
@@ -488,8 +564,6 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
   printer.printRegion(op->getRegion(0),
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/true);
-  printer << "else";
-  printer.printRegion(op->getRegion(1));
 
   printer.printOptionalAttrDict(
       op->getAttrs(),
@@ -497,7 +571,6 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
 }
 
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
-  auto &builder = parser.getBuilder();
   auto *context = parser.getBuilder().getContext();
   Type ivTy;
   SmallVector<Type> regionOperandTypes;
@@ -600,7 +673,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
     return failure();
   // First result is the time at which last iteration yields.
   result.addTypes(TimeType::get(context));
-  ForOp::ensureTerminator(*body, builder, result.location);
+  // ForOp::ensureTerminator(*body, builder, result.location);
   return success();
 }
 
@@ -839,7 +912,7 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
       helper::getTimeType(parser.getBuilder().getContext()));
   auto r = parser.parseOptionalRegion(*body, entryArgs, entryArgTypes);
   parser.parseOptionalAttrDict(result.attributes);
-  FuncOp::ensureTerminator(*body, builder, result.location);
+  // FuncOp::ensureTerminator(*body, builder, result.location);
   if (r.hasValue())
     return r.getValue();
   return success();
@@ -905,8 +978,8 @@ static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
   if (!body.empty())
     printer.printRegion(body, /*printEntryBlockArgs=*/false,
                         /*printBlockTerminators=*/true);
-  printer.printOptionalAttrDict(op->getAttrs(),
-                                {"funcTy", "type", "arg_attrs", "sym_name"});
+  printer.printOptionalAttrDict(
+      op->getAttrs(), {"funcTy", "type", "arg_attrs", "res_attrs", "sym_name"});
 }
 
 // CallableOpInterface.

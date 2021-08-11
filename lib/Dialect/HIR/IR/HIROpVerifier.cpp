@@ -29,12 +29,12 @@ LogicalResult checkRegionCaptures(Region &region) {
           << "hir::TimeType can not be captured by a region. Only the region's "
              "own time-var (and any other time-var derived from it) is "
              "available inside the region.");
-    else if (!dyn_cast_or_null<mlir::ConstantOp>(
-                 operand->get().getDefiningOp()))
-      errorMsgs.push_back(operand->getOwner()->emitError()
-                          << "Values of type " << ty
-                          << " can not be directly captured by a region. "
-                             "Use 'latch' operands to capture it.");
+    // else if (!dyn_cast_or_null<mlir::ConstantOp>(
+    //             operand->get().getDefiningOp()))
+    //  errorMsgs.push_back(operand->getOwner()->emitError()
+    //                      << "Values of type " << ty
+    //                      << " can not be directly captured by a region. "
+    //                         "Use 'latch' operands to capture it.");
     return;
   });
   if (!errorMsgs.empty())

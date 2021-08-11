@@ -1,7 +1,9 @@
 #include "circt/Dialect/HIR/IR/HIROpSyntax.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#define min(x, y) x > y ? x : y
 
 // parser and printer for Time and offset.
+
 ParseResult parseTimeAndOffset(
     mlir::OpAsmParser &parser,
     llvm::Optional<mlir::OpAsmParser::OperandType> &tstartOptional,
@@ -186,7 +188,8 @@ ParseResult parseMemrefAndElementType(OpAsmParser &parser, Type &memrefTy,
     if (dimKinds[i] == hir::BANK)
       idxTypes.push_back(IndexType::get(context));
     else {
-      idxTypes.push_back(IntegerType::get(context, helper::clog2(shape[i])));
+      idxTypes.push_back(
+          IntegerType::get(context, min(1, helper::clog2(shape[i]))));
     }
   }
 
@@ -197,6 +200,44 @@ ParseResult parseMemrefAndElementType(OpAsmParser &parser, Type &memrefTy,
 void printMemrefAndElementType(OpAsmPrinter &printer, Operation *,
                                Type memrefTy, TypeRange, Type) {
   printer << memrefTy;
+}
+
+ParseResult parseTypeAndDelayList(mlir::OpAsmParser &parser,
+                                  SmallVectorImpl<Type> &typeList,
+                                  ArrayAttr &delayList) {
+  SmallVector<Attribute> delayAttrArray;
+  do {
+    Type ty;
+    int delay;
+    if (parser.parseType(ty))
+      return failure();
+    typeList.push_back(ty);
+    if (succeeded(parser.parseOptionalKeyword("delay"))) {
+      if (parser.parseInteger(delay))
+        return failure();
+      delayAttrArray.push_back(parser.getBuilder().getI64IntegerAttr(delay));
+    } else if (helper::isBuiltinSizedType(ty)) {
+      delayAttrArray.push_back(parser.getBuilder().getI64IntegerAttr(0));
+    } else {
+      delayAttrArray.push_back(Attribute());
+    }
+  } while (succeeded(parser.parseOptionalComma()));
+  delayList = parser.getBuilder().getArrayAttr(delayAttrArray);
+  return success();
+}
+
+void printTypeAndDelayList(mlir::OpAsmPrinter &printer, TypeRange typeList,
+                           ArrayAttr delayList) {
+  for (uint64_t i = 0; i < typeList.size(); i++) {
+    if (i > 0)
+      printer << ", ";
+    printer << typeList[i];
+    if (!delayList[i])
+      continue;
+    int delay = delayList[i].dyn_cast<IntegerAttr>().getInt();
+    if (delay != 0)
+      printer << " delay " << delay;
+  }
 }
 
 ParseResult parseBinOpOperandsAndResultType(mlir::OpAsmParser &parser,

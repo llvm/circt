@@ -52,6 +52,11 @@ ParseResult parseMemrefAndElementType(OpAsmParser &, Type &,
 void printMemrefAndElementType(OpAsmPrinter &, Operation *, Type, TypeRange,
                                Type);
 
+ParseResult parseTypeAndDelayList(mlir::OpAsmParser &, SmallVectorImpl<Type> &,
+                                  ArrayAttr &);
+
+void printTypeAndDelayList(mlir::OpAsmPrinter &, TypeRange, ArrayAttr);
+
 ParseResult parseBinOpOperandsAndResultType(mlir::OpAsmParser &parser,
                                             Type &resultTy, Type &op1Ty,
                                             Type &op2Ty);
