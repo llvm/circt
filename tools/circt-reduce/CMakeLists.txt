@@ -11,6 +11,7 @@ target_link_libraries(circt-reduce
   CIRCTCalyx
   CIRCTESI
   CIRCTFIRRTL
+  CIRCTFSM
   CIRCTHandshakeOps
   CIRCTLLHD
   CIRCTMSFT

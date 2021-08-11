@@ -129,6 +129,7 @@ void FSMToHWPass::runOnOperation() {
   auto b = OpBuilder(getOperation());
   SmallVector<Operation *, 16> opToErase;
 
+  // Traverse all machines.
   for (auto machine : getOperation().getOps<MachineOp>()) {
     b.setInsertionPoint(machine);
     auto machineLoc = machine.getLoc();
@@ -257,7 +258,7 @@ void FSMToHWPass::runOnOperation() {
     for (auto state : machine.getOps<StateOp>()) {
       b.setInsertionPointToStart(&casez.getRegion(stateIndex++).emplaceBlock());
 
-      // Build a `if-else` chain for `transition` ops.
+      // Build an `if-else` chain for `transition` ops.
       auto transRange = state.transitions().getOps<TransitionOp>();
       for (auto it = transRange.begin(), e = transRange.end(); it != e; ++it) {
         auto transition = *it;

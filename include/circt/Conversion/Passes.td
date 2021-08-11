@@ -145,4 +145,15 @@ def ConvertFSMToHW : Pass<"convert-fsm-to-hw", "mlir::ModuleOp"> {
                            "circt::sv::SVDialect"];
 }
 
+//===----------------------------------------------------------------------===//
+// FSMToStandard
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToStandard : Pass<"convert-fsm-to-standard", "mlir::ModuleOp"> {
+  let summary = "Convert FSM to Standard";
+  let constructor = "circt::createConvertFSMToStandardPass()";
+  let dependentDialects = ["mlir::memref::MemRefDialect",
+                           "mlir::scf::SCFDialect"];
+}
+
 #endif // CIRCT_CONVERSION_PASSES_TD

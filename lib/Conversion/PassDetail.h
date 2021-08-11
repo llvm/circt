@@ -13,9 +13,19 @@
 #include "mlir/Pass/Pass.h"
 
 namespace mlir {
+
 namespace LLVM {
 class LLVMDialect;
 } // namespace LLVM
+
+namespace memref {
+class MemRefDialect;
+} // namespace memref
+
+namespace scf {
+class SCFDialect;
+}
+
 } // namespace mlir
 
 namespace circt {
