@@ -85,29 +85,8 @@ def CMemoryType : TypeDef<FIRRTLDialect, "CMemory"> {
     }]>
   ];
 
-  let printer = [{
-    $_printer << "cmemory<";
-    // Don't print element types with "!firrtl.".
-    getImpl()->elementType.print($_printer.getStream());
-    $_printer << ", " << getImpl()->numElements << ">";
-  }];
-
-  let parser = [{
-    if ($_parser.parseLess())
-      return {};
-    FIRRTLType elementType;
-    if (parseFIRRTLType(elementType, $_parser))
-      return {};
-    if ($_parser.parseComma())
-      return {};
-    unsigned numElements;
-    if ($_parser.parseInteger(numElements))
-      return {};
-    if ($_parser.parseGreater())
-      return {};
-    return $_parser.getChecked<CMemoryType>(elementType, numElements);
-  }];
-
+  let printer = "printCMemoryType($_printer, *this);";
+  let parser = "return parseCMemoryType($_parser);";
   let genVerifyDecl = 1;
 }
 

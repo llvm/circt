@@ -25,6 +25,10 @@ using mlir::TypeStorageAllocator;
 static ParseResult parseFIRRTLType(FIRRTLType &result,
                                    DialectAsmParser &parser);
 
+Type parseCMemoryType(mlir::DialectAsmParser &parser);
+
+void printCMemoryType(mlir::DialectAsmPrinter &printer, CMemoryType cmemory);
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
@@ -865,6 +869,23 @@ std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
 //===----------------------------------------------------------------------===//
 // CMemory Type
 //===----------------------------------------------------------------------===//
+
+void printCMemoryType(mlir::DialectAsmPrinter &printer, CMemoryType cmemory) {
+  printer << "cmemory<";
+  // Don't print element types with "!firrtl.".
+  cmemory.getElementType().print(printer.getStream());
+  printer << ", " << cmemory.getNumElements() << ">";
+}
+
+Type parseCMemoryType(mlir::DialectAsmParser &parser) {
+  FIRRTLType elementType;
+  unsigned numElements;
+  if (parser.parseLess() || parseFIRRTLType(elementType, parser) ||
+      parser.parseComma() || parser.parseInteger(numElements) ||
+      parser.parseGreater())
+    return {};
+  return parser.getChecked<CMemoryType>(elementType, numElements);
+}
 
 LogicalResult CMemoryType::verify(function_ref<InFlightDiagnostic()> emitError,
                                   FIRRTLType elementType,

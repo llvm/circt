@@ -483,6 +483,58 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: }
     ; CHECK: }
 
+
+  ; CHECK-LABEL: firrtl.module @chisel_when_mport_bug(
+  module chisel_when_mport_bug :
+    input cond : UInt<1>
+    input foo : UInt
+    input clock : Clock
+
+    ; CHECK: [[HACKWIRE2:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE1:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: [[HACKWIRE0:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
+    ; CHECK: %memory = firrtl.seqmem Undefined : !firrtl.cmemory<vector<uint<1>, 9>, 256>
+    smem memory : UInt<1>[9] [256]
+
+    ; CHECK: firrtl.when %cond {
+    when cond :
+      node idx = foo
+      ; CHECK: %xyz0 = firrtl.memoryport Read %memory, %idx
+      ; CHECK: firrtl.connect [[HACKWIRE0]], %xyz
+      read mport xyz0 = memory[idx], clock
+    ; CHECK: }
+    node sometest = eq(foo, UInt(42))
+
+    ; This tests that the location parsing from mport doesn't crash when the
+    ; skip op is eaten as a substatement.
+    ; CHECK: firrtl.when %cond {
+    when cond :
+      ; CHECK: %xyz1 = firrtl.memoryport Read %memory, %foo
+      ; CHECK: firrtl.connect [[HACKWIRE1]], %xyz
+      read mport xyz1 = memory[foo], clock  @[SRAM.scala 321:27]
+      skip
+    ; CHECK: }
+
+    ; CHECK: firrtl.when %cond {
+    when cond :
+      node idx = foo
+      ; CHECK: %xyz2 = firrtl.memoryport Read %memory, %idx
+      ; CHECK: firrtl.skip
+      ; CHECK: firrtl.connect [[HACKWIRE2]], %xyz2
+      read mport xyz2 = memory[idx], clock
+      skip @[Debug.scala 1176:37]
+    ; CHECK: }
+    node sometest2 = eq(foo, UInt(42))
+
+    ; CHECK: firrtl.when %sometest {
+    when sometest :
+      ; CHECK: %awesome0 = firrtl.node [[HACKWIRE0]]
+      ; CHECK: %awesome1 = firrtl.node [[HACKWIRE1]]
+      ; CHECK: %awesome2 = firrtl.node [[HACKWIRE2]]
+      node awesome0 = xyz0
+      node awesome1 = xyz1
+      node awesome2 = xyz2
+
    ; CHECK-LABEL: firrtl.module @constant_implicit_cse(
   module constant_implicit_cse :
     input cond : UInt<1>
