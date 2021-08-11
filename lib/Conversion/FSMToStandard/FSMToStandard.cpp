@@ -72,9 +72,53 @@ static bool convertActionRegion(Region &region, OpBuilder &b) {
 void FSMToStandardPass::runOnOperation() {
   auto b = OpBuilder(getOperation());
   SmallVector<Operation *, 16> opToErase;
+  DenseMap<Value, SmallVector<Value>> memRefMap;
 
-  // Traverse all standard functions.
+  // Traverse all functions.
   for (auto func : getOperation().getOps<FuncOp>()) {
+    func.walk([&](Operation *op) {
+      if (op->getDialect()->getNamespace() == "fsm") {
+        b.setInsertionPoint(op);
+
+        if (auto instance = dyn_cast<fsm::InstanceOp>(op)) {
+          auto machine = instance.getReferencedMachine();
+          auto &memRefs = memRefMap[instance];
+
+          // Alloca memrefs for the state and all variables.
+          for (auto variable : machine.getOps<VariableOp>()) {
+            auto varMemRef = b.create<memref::AllocaOp>(
+                variable.getLoc(), MemRefType::get({}, variable.getType()));
+            memRefs.push_back(varMemRef);
+          }
+          auto stateMemRef = b.create<memref::AllocaOp>(
+              machine.getLoc(), MemRefType::get({}, machine.stateType()));
+          memRefs.push_back(stateMemRef);
+
+          opToErase.push_back(instance);
+
+        } else if (auto trigger = dyn_cast<fsm::TriggerOp>(op)) {
+          auto instance = trigger.instance().getDefiningOp<fsm::InstanceOp>();
+
+          // Add the original inputs and also the memrefs associated to the
+          // machine instance to the operand list.
+          SmallVector<Value, 16> operands(trigger.inputs());
+          operands.append(memRefMap[trigger.instance()]);
+          auto callOp =
+              b.create<CallOp>(trigger.getLoc(), instance.machineAttr(),
+                               trigger.getResultTypes(), operands);
+
+          // Replace all uses. Also drop all references.
+          trigger.replaceAllUsesWith(callOp);
+          trigger->dropAllReferences();
+          opToErase.push_back(trigger);
+
+        } else {
+          op->emitOpError("found unsupported FSM op in a function");
+          return WalkResult::interrupt();
+        }
+      }
+      return WalkResult::advance();
+    });
   }
 
   // Traverse all machines.
@@ -91,8 +135,9 @@ void FSMToStandardPass::runOnOperation() {
     argTypes.push_back(MemRefType::get({}, stateType));
 
     // Create a new function for the machine.
-    auto func = b.create<FuncOp>(machineLoc, machine.getName(),
-                                 b.getFunctionType(argTypes, {}));
+    auto func = b.create<FuncOp>(
+        machineLoc, machine.getName(),
+        b.getFunctionType(argTypes, machine.getType().getResults()));
     auto entryBlock = func.addEntryBlock();
     b.setInsertionPointToStart(entryBlock);
 
@@ -139,9 +184,9 @@ void FSMToStandardPass::runOnOperation() {
         ++stateIndex;
 
       } else if (auto output = dyn_cast<fsm::OutputOp>(op)) {
-        // The outputs are returned through memref store ops, no need to return
-        // anything here.
-        b.setInsertionPoint(b.create<mlir::ReturnOp>(output.getLoc()));
+        auto returnOp =
+            b.create<mlir::ReturnOp>(output.getLoc(), output.getOperands());
+        b.setInsertionPoint(returnOp);
       } else {
         op.emitOpError("found unsupported op in the state machine");
         return;
@@ -220,6 +265,4 @@ void FSMToStandardPass::runOnOperation() {
   // Finish the conversion.
   for (auto op : opToErase)
     op->erase();
-
-  llvm::outs() << *getOperation() << "\n";
 }
