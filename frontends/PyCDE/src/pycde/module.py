@@ -184,6 +184,9 @@ def _module_base(cls, extern: bool, params={}):
     _output_ports: list[(str, mlir.ir.Type)] = []
     _parameters: dict[str, mlir.ir.PyAttribute] = {}
 
+    # This property is technically redundant with __setattr__ below. I'm adding
+    # it here since we will want to add code to make this robust to hierarchy
+    # changes (e.g. inlining) in the future.
     @property
     def appid(self):
       """Many times the instance heirarchy contains instances of no
