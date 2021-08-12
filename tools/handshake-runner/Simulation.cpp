@@ -479,6 +479,62 @@ void executeHandshakeFunction(
     handshake::FuncOp &func, llvm::DenseMap<mlir::Value, Any> &valueMap,
     llvm::DenseMap<mlir::Value, double> &timeMap, std::vector<Any> &results,
     std::vector<double> &resultTimes, std::vector<std::vector<Any>> &store,
+    std::vector<double> &storeTimes, mlir::OwningModuleRef &module);
+
+/// @brief Prepares an InstanceOp for execution by creating a valueMap
+/// containing associations between the arguments provided to the intanceOp -
+/// available in the enclosing scope value map - and the argument SSA values
+/// within the called function of the InstanceOp.
+/// @returns the results of the intanceOp alongside their arrival times
+std::tuple<std::vector<Any>, std::vector<double>>
+executeInstanceOp(llvm::DenseMap<mlir::Value, double> &scopeTimeMap,
+                  std::vector<Any> inValues, handshake::InstanceOp instanceOp,
+                  std::vector<std::vector<Any>> &store,
+                  std::vector<double> &storeTimes,
+                  mlir::OwningModuleRef &module) {
+  if (auto funcSym = instanceOp->getAttr("module").cast<SymbolRefAttr>()) {
+    if (handshake::FuncOp func =
+            module->lookupSymbol<handshake::FuncOp>(funcSym)) {
+      const unsigned nRealFuncOuts = func.getType().getNumResults() - 1;
+      mlir::Block &entryBlock = func.getBody().front();
+      mlir::Block::BlockArgListType instanceBlockArgs =
+          entryBlock.getArguments();
+
+      // Create a new value map containing only the arguments of the
+      // InstanceOp. This will be the value and time map for the scope of the
+      // function pointed to by the InstanceOp.
+      llvm::DenseMap<mlir::Value, Any> valueMap;
+      llvm::DenseMap<mlir::Value, double> timeMap;
+
+      // Associate each input argument with the arguments of the called
+      // function
+      for (size_t i = 0; i < inValues.size(); i++) {
+        valueMap[instanceBlockArgs[i]] = inValues[i];
+        timeMap[instanceBlockArgs[i]] = scopeTimeMap[instanceOp.getOperand(i)];
+      }
+
+      // ... and the implicit none argument
+      APInt apnonearg(1, 0);
+      valueMap[instanceBlockArgs[instanceBlockArgs.size() - 1]] = apnonearg;
+      std::vector<Any> nestedRes(nRealFuncOuts);
+      std::vector<double> nestedResTimes(nRealFuncOuts);
+      executeHandshakeFunction(func, valueMap, timeMap, nestedRes,
+                               nestedResTimes, store, storeTimes, module);
+
+      return {nestedRes, nestedResTimes};
+    } else {
+      fatalValueError("Function not found in module", funcSym);
+    }
+  } else {
+    fatalValueError("Missing 'module' attribute for InstanceOp", instanceOp);
+  }
+  llvm_unreachable("Fatal error reached before this point");
+}
+
+void executeHandshakeFunction(
+    handshake::FuncOp &func, llvm::DenseMap<mlir::Value, Any> &valueMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap, std::vector<Any> &results,
+    std::vector<double> &resultTimes, std::vector<std::vector<Any>> &store,
     std::vector<double> &storeTimes, mlir::OwningModuleRef &module) {
   mlir::Block &entryBlock = func.getBody().front();
   // The arguments of the entry block.
@@ -571,40 +627,16 @@ void executeHandshakeFunction(
       }
       return;
     } else if (auto instanceOp = dyn_cast<handshake::InstanceOp>(op)) {
-      if (auto funcSym = instanceOp->getAttr("module").cast<SymbolRefAttr>()) {
-        if (handshake::FuncOp func =
-                module->lookupSymbol<handshake::FuncOp>(funcSym)) {
-          const unsigned nRealFuncOuts = func.getType().getNumResults() - 1;
-          mlir::Block &entryBlock = func.getBody().front();
-          mlir::Block::BlockArgListType instanceBlockArgs =
-              entryBlock.getArguments();
-
-          // Associate each input argument with the arguments of the called
-          // function
-          for (size_t i = 0; i < inValues.size(); i++) {
-            valueMap[instanceBlockArgs[i]] = inValues[i];
-            timeMap[instanceBlockArgs[i]] = timeMap[op.getOperands()[i]];
-          }
-
-          // ... and the implicit none argument
-          APInt apnonearg(1, 0);
-          valueMap[instanceBlockArgs[instanceBlockArgs.size() - 1]] = apnonearg;
-          std::vector<Any> nestedRes(nRealFuncOuts);
-          std::vector<double> nestedResTimes(nRealFuncOuts);
-          executeHandshakeFunction(func, valueMap, timeMap, nestedRes,
-                                   nestedResTimes, store, storeTimes, module);
-          for (size_t i = 0; i < nRealFuncOuts; i++) {
-            outValues[i] = nestedRes.at(i);
-            valueMap[instanceOp.getResults()[i]] = nestedRes.at(i);
-            timeMap[instanceOp.getResults()[i]] = nestedResTimes[i];
-          }
-        } else {
-          fatalValueError("Function not found in module", funcSym);
-        }
-      } else {
-        fatalValueError("Missing 'module' attribute for InstanceOp",
-                        instanceOp);
+      // Execute the instance op and create associations in the current
+      // scope's value and time maps for the returned values.
+      const auto &[instRes, instResTimes] = executeInstanceOp(
+          timeMap, inValues, instanceOp, store, storeTimes, module);
+      for (size_t i = 0; i < instRes.size(); i++) {
+        outValues[i] = instRes.at(i);
+        valueMap[instanceOp.getResults()[i]] = instRes.at(i);
+        timeMap[instanceOp.getResults()[i]] = instResTimes[i];
       }
+
     } else {
       fatalValueError("Unknown operation!\n", op);
     }
