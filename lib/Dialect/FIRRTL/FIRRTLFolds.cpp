@@ -1487,12 +1487,77 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<patterns::EmptyNode>(context);
 }
+// A register with constant reset and all connection to either itself or the
+// same constant, must be replaced by the constant.
+struct foldResetMux : public mlir::RewritePattern {
+  foldResetMux(MLIRContext *context)
+      : RewritePattern(RegResetOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto reg = cast<RegResetOp>(op);
+    auto reset = dyn_cast<ConstantOp>(reg.resetValue().getDefiningOp());
+    if (!reset)
+      return failure();
+    // Find the one true connect, or bail
+    ConnectOp con;
+    for (Operation *user : reg->getUsers()) {
+      // If we see a partial connect, just conservatively fail.
+      if (isa<PartialConnectOp>(user))
+        return failure();
+
+      auto aConnect = dyn_cast<ConnectOp>(user);
+      if (aConnect && aConnect.dest().getDefiningOp() == reg) {
+        if (con)
+          return failure();
+        con = aConnect;
+      }
+    }
+    if (!con)
+      return failure();
+
+    auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
+    if (!mux)
+      return failure();
+    auto high = mux.high().getDefiningOp();
+    auto low = mux.low().getDefiningOp();
+    auto constOp = dyn_cast_or_null<ConstantOp>(high);
+
+    if (constOp && low != reg)
+      return failure();
+    else if (dyn_cast_or_null<ConstantOp>(low) && high == reg)
+      constOp = dyn_cast<ConstantOp>(low);
+
+    if (!constOp || constOp.getType() != reset.getType() ||
+        constOp.value() != reset.value())
+      return failure();
+
+    // Check all types should be typed by now
+    auto regTy = reg.getType();
+    if (con.dest().getType() != regTy || con.src().getType() != regTy ||
+        mux.high().getType() != regTy || mux.low().getType() != regTy ||
+        regTy.getBitWidthOrSentinel() < 1)
+      return failure();
+
+    // Ok, we know we are doing the transformation.
+
+    // Make sure the constant dominates all users.
+    if (constOp != &con->getBlock()->front())
+      constOp->moveBefore(&con->getBlock()->front());
+
+    // Replace the register with the constant.
+    rewriter.replaceOp(reg, constOp.getResult());
+    // Remove the connect.
+    rewriter.eraseOp(con);
+    return success();
+  }
+};
 
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegresetWithZeroReset,
                  patterns::RegresetWithInvalidReset,
-                 patterns::RegresetWithInvalidResetValue>(context);
+                 patterns::RegresetWithInvalidResetValue, foldResetMux>(
+      context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
