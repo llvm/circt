@@ -1494,20 +1494,17 @@ struct foldResetMux : public mlir::RewritePattern {
       : RewritePattern(RegResetOp::getOperationName(), 0, context) {}
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
-    auto reg = dyn_cast_or_null<RegResetOp>(op);
+    auto reg = cast<RegResetOp>(op);
     if (!reg)
       return failure();
-    auto reset = dyn_cast_or_null<ConstantOp>(reg.resetValue().getDefiningOp());
-    auto resetSignal = reg.resetSignal();
-    // Check for a valid const reset.
-    // TODO: Shoud we add a check for resetSignal.isa<BlockArgument>()?
-    if (!reset || resetSignal.getType().isa<AsyncResetType>())
+    auto reset = dyn_cast<ConstantOp>(reg.resetValue().getDefiningOp());
+    if (!reset)
       return failure();
     // Find the one true connect, or bail
     ConnectOp con;
     for (Operation *user : reg->getUsers()) {
       // If we see a partial connect or attach, just conservatively fail.
-      if (isa<PartialConnectOp>(user) || isa<AttachOp>(user))
+      if (isa<PartialConnectOp>(user))
         return failure();
 
       auto aConnect = dyn_cast<ConnectOp>(user);
@@ -1552,7 +1549,7 @@ struct foldResetMux : public mlir::RewritePattern {
     // Replace the register with the constant.
     rewriter.replaceOp(reg, constOp.getResult());
     // Remove the connect.
-    con.erase();
+    rewriter.eraseOp(con);
     return success();
   }
 };
