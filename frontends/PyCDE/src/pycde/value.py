@@ -22,21 +22,28 @@ class Value:
     type = PyCDEType(type)
 
     if isinstance(type, hw.ArrayType):
-      return ListValue()._init(value, type)
+      return ListValue(value, type)
     if isinstance(type, hw.StructType):
-      return StructValue()._init(value, type)
-    return Value()._init(value, type)
-
-  def _init(self, value, type):
-    self.value = value
-    self.type = type
-    return self
+      return StructValue(value, type)
+    return RegularValue(value, type)
 
   def reg(self, clk, rst=None):
     return seq.reg(self.value, clk, rst)
 
 
+class RegularValue(Value):
+
+  def __init__(self, value, type):
+    self.value = value
+    self.type = type
+
+
 class ListValue(Value):
+
+  def __init__(self, value, type):
+    self.value = value
+    self.type = type
+
   def __getitem__(self, sub):
     if isinstance(sub, int):
       idx = int(sub)
@@ -56,6 +63,11 @@ class ListValue(Value):
 
 
 class StructValue(Value):
+
+  def __init__(self, value, type):
+    self.value = value
+    self.type = type
+
   def __getitem__(self, sub):
     fields = self.type.strip.get_fields()
     if sub not in [name for name, _ in fields]:
