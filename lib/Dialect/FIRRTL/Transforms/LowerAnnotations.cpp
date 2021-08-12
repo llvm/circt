@@ -26,33 +26,16 @@ using namespace firrtl;
 
 namespace {
 
-struct aggAccess {
-  bool isIndex;
-  StringRef val;
-  Optional<unsigned> getAsIdx() const {
-    unsigned retval;
-    if (val.getAsInteger(10, retval))
-      return {};
-    return retval;
-  }
-};
-
-struct AnnoPathStr {
-  StringRef circuit;
-  StringRef module;
-  SmallVector<std::pair<StringRef, StringRef>> instances;
-  StringRef name;
-  SmallVector<aggAccess> agg;
-  void dump() const;
-};
-
 struct BaseUnion {
   Operation *op;
   size_t portNum;
-  BaseUnion(Operation *op) : op(op), portNum(~0UL) {}
-  BaseUnion(Operation *mod, size_t portNum) : op(mod), portNum(portNum) {}
-  BaseUnion() : op(nullptr), portNum(~0) {}
+  unsigned fieldIdx;
+  BaseUnion(Operation *op) : op(op), portNum(~0UL), fieldIdx(0) {}
+  BaseUnion(Operation *mod, size_t portNum)
+      : op(mod), portNum(portNum), fieldIdx(0) {}
+  BaseUnion() : op(nullptr), portNum(~0), fieldIdx(0) {}
   operator bool() const { return op != nullptr; }
+
   bool isPort() const { return op && portNum != ~0UL; }
   bool isInstance() const { return op && isa<InstanceOp>(op); }
   FIRRTLType getType() const {
@@ -74,7 +57,13 @@ struct BaseUnion {
 struct AnnoPathValue {
   SmallVector<InstanceOp> instances;
   BaseUnion ref;
-  unsigned fieldIdx;
+
+  AnnoPathValue() = default;
+  AnnoPathValue(CircuitOp op) : ref(op) {}
+  AnnoPathValue(Operation *op) : ref(op) {}
+  AnnoPathValue(const SmallVectorImpl<InstanceOp> &insts, BaseUnion b)
+      : instances(insts.begin(), insts.end()), ref(b) {}
+
   bool isLocal() const { return instances.empty(); }
   template <typename T>
   bool isOpOfType() const {
@@ -84,35 +73,7 @@ struct AnnoPathValue {
   }
 };
 
-struct AnnoRecord {
-  const char *name;
-  llvm::function_ref<Optional<AnnoPathStr>(DictionaryAttr, CircuitOp)>
-      path_parser;
-  llvm::function_ref<Optional<AnnoPathValue>(AnnoPathStr, CircuitOp,
-                                             SymbolTable)>
-      path_resolver;
-  llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr)> anno_applier;
-};
-
 } // namespace
-
-template <typename T>
-T &operator<<(T &os, const AnnoPathStr &anno) {
-  os << "{circuit: " << anno.circuit << ", module: " << anno.module
-     << ", instances: {";
-  for (auto i : anno.instances)
-    os << "(" << i.first << ", " << i.second << "), ";
-  os << "}, name:" << anno.name << ", aggregates: ";
-  for (auto a : anno.agg)
-    if (a.isIndex)
-      os << '[' << a.val << ']';
-    else
-      os << '.' << a.val;
-  os << "}\n";
-  return os;
-}
-
-void AnnoPathStr::dump() const { llvm::errs() << *this; }
 
 static bool hasName(StringRef name, Operation *op) {
   return TypeSwitch<Operation *, bool>(op)
@@ -144,56 +105,8 @@ static BaseUnion findNamedThing(StringRef name, Operation *op) {
     }
     return WalkResult::advance();
   };
-
   op->walk(nameChecker);
   return retval;
-}
-
-// Some types have been expanded so the first layer of aggregate path is
-// a return value.
-static BaseUnion resolveExpandedPorts(BaseUnion input,
-                                      SmallVectorImpl<aggAccess> &fields) {
-  if (fields.empty() || !isa<MemOp, InstanceOp>(input.op))
-    return input;
-  // If we are searching an expanded op, the first aggregate field must be an
-  // expanded port.
-  auto portName = fields.front().val;
-  fields.erase(fields.begin());
-
-  if (auto mem = dyn_cast<MemOp>(input.op))
-    for (size_t p = 0, pe = mem.portNames().size(); p < pe; ++p)
-      if (mem.getPortNameStr(p) == portName)
-        return {input.op, p};
-  if (auto inst = dyn_cast<InstanceOp>(input.op))
-    for (size_t p = 0, pe = inst.getNumResults(); p < pe; ++p)
-      if (inst.getPortNameStr(p) == portName)
-        return {input.op, p};
-  input.op->emitError("Cannot find port with name ") << portName;
-  return {};
-}
-
-// Turn a field sequence into a FieldID offset.
-static Optional<unsigned> resolveFieldIdx(SmallVectorImpl<aggAccess> &fields,
-                                          FIRRTLType t) {
-  unsigned fieldIdx = 0;
-  for (auto agg : fields) {
-    if (auto vec = t.dyn_cast<FVectorType>()) {
-      if (auto idx = agg.getAsIdx()) {
-        fieldIdx += vec.getFieldID(*idx);
-        t = vec.getElementType();
-      } else {
-        return {};
-      }
-    } else if (auto bundle = t.dyn_cast<BundleType>()) {
-      if (auto idx = bundle.getElementIndex(agg.val)) {
-        fieldIdx += bundle.getFieldID(*idx);
-        t = bundle.getElementType(*idx);
-      } else {
-        return {};
-      }
-    }
-  }
-  return fieldIdx;
 }
 
 static void addNamedAttr(Operation *op, StringRef name, StringAttr value) {
@@ -219,156 +132,214 @@ static void addAnnotation(Operation *op, Annotation anno) {
               ArrayAttr::get(op->getContext(), newAnnos));
 }
 
+// Returns remainder of path if circuit is the correct circuit
+LogicalResult parseAndCheckCircuit(StringRef &path, CircuitOp circuit) {
+  if (path.startswith("~"))
+    path = path.drop_front();
+
+  // Any non-trivial target must start with a circuit name.
+  StringRef name;
+  std::tie(name, path) = path.split('|');
+  // ~ or ~Foo
+  if (name.empty() || name == circuit.name())
+    return success();
+  return circuit.emitError("circuit name '")
+         << circuit.name() << "' doesn't match annotation '" << path << "'";
+}
+
+// Returns remainder of path if circuit is the correct circuit
+LogicalResult parseAndCheckModule(StringRef &path, Operation *&module,
+                                  CircuitOp circuit, SymbolTable &modules) {
+  StringRef name;
+  if (path.contains('/'))
+    std::tie(name, path) = path.split('/');
+  else if (path.contains('>'))
+    std::tie(name, path) = path.split('>');
+  else {
+    name = path;
+    path = "";
+  }
+  if (name.empty())
+    return circuit.emitError("Cannot decode module in '") << path << "'";
+
+  module = modules.lookup(name);
+  if (!module || !isa<FModuleOp, FExtModuleOp>(module))
+    return circuit.emitError("cannot find module '")
+           << name << "' in annotation";
+  return success();
+}
+
+// Returns remainder of path if circuit is the correct circuit
+LogicalResult parseAndCheckInstance(StringRef &path, Operation *&module,
+                                    InstanceOp &inst, CircuitOp circuit,
+                                    SymbolTable &modules) {
+  StringRef name;
+  if (path.contains(':'))
+    std::tie(name, path) = path.split(':');
+  else
+    return success();
+
+  auto resolved = findNamedThing(name, module);
+  if (!resolved.isInstance())
+    return circuit.emitError("cannot find instance '")
+           << name << "' in '" << getModuleName(module) << "'";
+  if (parseAndCheckModule(path, module, circuit, modules).failed())
+    return failure();
+  inst = cast<InstanceOp>(resolved.op);
+  if (module != inst.getReferencedModule())
+    return circuit.emitError("path module '")
+           << getModuleName(module)
+           << "' doesn't match instance module referenced in '" << inst.name()
+           << "'";
+  return success();
+}
+
+// Some types have been expanded so the first layer of aggregate path is
+// a return value.
+LogicalResult updateExpandedPort(StringRef field, BaseUnion &entity) {
+  if (auto mem = dyn_cast<MemOp>(entity.op))
+    for (size_t p = 0, pe = mem.portNames().size(); p < pe; ++p)
+      if (mem.getPortNameStr(p) == field) {
+        entity.portNum = p;
+        return success();
+      }
+  if (auto inst = dyn_cast<InstanceOp>(entity.op))
+    for (size_t p = 0, pe = inst.getNumResults(); p < pe; ++p)
+      if (inst.getPortNameStr(p) == field) {
+        entity.portNum = p;
+        return success();
+      }
+  entity.op->emitError("Cannot find port with name ") << field;
+  return failure();
+}
+
+LogicalResult updateStruct(StringRef field, BaseUnion &entity) {
+  // The first field for some ops refers to expanded return values.
+  if (isa<MemOp, InstanceOp>(entity.op) && entity.fieldIdx == 0)
+    return updateExpandedPort(field, entity);
+
+  auto bundle = entity.getType().dyn_cast<BundleType>();
+  if (!bundle)
+    return entity.op->emitError("field access '")
+           << field << "' into non-bundle type '" << bundle << "'";
+  if (auto idx = bundle.getElementIndex(field)) {
+    entity.fieldIdx += bundle.getFieldID(*idx);
+    return success();
+  }
+  return entity.op->emitError("cannot resolve field '")
+         << field << "' in subtype '" << bundle << "'";
+}
+
+LogicalResult updateArray(unsigned index, BaseUnion &entity) {
+  auto vec = entity.getType().dyn_cast<FVectorType>();
+  if (!vec)
+    return entity.op->emitError("index access '")
+           << index << "' into non-vector type '" << vec << "'";
+  entity.fieldIdx += vec.getFieldID(index);
+  return success();
+}
+
+LogicalResult parseNextField(StringRef &path, BaseUnion &entity) {
+  if (path.empty())
+    return entity.op->emitError("empty string for aggregates");
+  if (path[0] == '.') {
+    path = path.drop_front();
+    StringRef field = path.take_front(path.find_first_of("[."));
+    path = path.drop_front(field.size());
+    return updateStruct(field, entity);
+  } else if (path[0] == '[') {
+    path = path.drop_front();
+    StringRef index = path.take_front(path.find_first_of(']'));
+    path = path.drop_front(index.size() + 1);
+    unsigned idxNum;
+    if (index.getAsInteger(10, idxNum))
+      return entity.op->emitError("non-integer array index");
+    return updateArray(idxNum, entity);
+  } else {
+    return entity.op->emitError("Unknown aggregate specifier in '")
+           << path << "'";
+  }
+}
+
+LogicalResult parseAndCheckName(StringRef &path, BaseUnion &entity,
+                                Operation *module) {
+  StringRef name = path.take_until([](char c) { return c == '.' || c == '['; });
+  path = path.drop_front(name.size());
+  if ((entity = findNamedThing(name, module)))
+    return success();
+  return failure();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Standard Utility resolvers and appliers
 ////////////////////////////////////////////////////////////////////////////////
 
-static Optional<AnnoPathValue> noResolve(AnnoPathStr path, CircuitOp circuit,
-                                         SymbolTable modules) {
-  AnnoPathValue retval;
-  retval.ref.op = circuit;
-  return retval;
+static Optional<AnnoPathValue> noResolve(DictionaryAttr anno, CircuitOp circuit,
+                                         SymbolTable &modules) {
+  return AnnoPathValue(circuit);
 }
 
 static LogicalResult ignoreAnno(AnnoPathValue target, DictionaryAttr anno) {
   return success();
 }
 
-static Optional<AnnoPathStr> noParse(DictionaryAttr anno, CircuitOp circuit) {
-  return AnnoPathStr{};
+static Optional<AnnoPathValue> stdResolveImpl(StringRef path, CircuitOp circuit,
+                                              SymbolTable &modules) {
+  if (parseAndCheckCircuit(path, circuit).failed())
+    return {};
+  if (path.empty())
+    return AnnoPathValue(circuit);
+
+  Operation *rootMod;
+  if (parseAndCheckModule(path, rootMod, circuit, modules).failed())
+    return {};
+  if (path.empty())
+    return AnnoPathValue(rootMod);
+
+  Operation *curMod = rootMod;
+  SmallVector<InstanceOp> stuff;
+  while (true) {
+    InstanceOp inst;
+    if (parseAndCheckInstance(path, curMod, inst, circuit, modules).failed())
+      return {};
+    if (!inst)
+      break;
+    stuff.push_back(inst);
+  }
+
+  BaseUnion entity;
+  if (parseAndCheckName(path, entity, curMod).failed())
+    return {};
+
+  // retval.ref = resolveExpandedPorts(retval.ref, path.agg);
+
+  while (!path.empty()) {
+    if (parseNextField(path, entity).failed())
+      return {};
+  }
+
+  return AnnoPathValue{stuff, entity};
 }
 
-static Optional<AnnoPathStr> stdParse(DictionaryAttr anno, CircuitOp circuit) {
+static Optional<AnnoPathValue>
+stdResolve(DictionaryAttr anno, CircuitOp circuit, SymbolTable &modules) {
   auto target = anno.getNamed("target");
-  if (!target || !target->second.isa<StringAttr>()) {
-    circuit.emitError("Annotation lacks target field: ") << anno;
+  if (!target) {
+    circuit.emitError("No target field in annotation") << anno;
     return {};
   }
-
-  StringRef path = target->second.cast<StringAttr>().getValue();
-
-  AnnoPathStr retval;
-  if (path.startswith("~"))
-    path = path.drop_front();
-  // Any non-trivial target must start with a circuit name.
-  std::tie(retval.circuit, path) = path.split('|');
-  if (retval.circuit.empty())
-    retval.circuit = circuit.name();
-
-  StringRef nameRef;
-  std::tie(path, nameRef) = path.rsplit('>');
-
-  SmallVector<StringRef> parts;
-  path.split(parts, '/');
-  retval.module = parts[0]; // There must be a module.
-
-  for (int i = 1, e = parts.size(); i < e; ++i) {
-    StringRef inst, mod;
-    std::tie(inst, mod) = parts[i].split(':');
-    retval.instances.emplace_back(inst, mod);
-  }
-
-  retval.name = nameRef.take_front(nameRef.find_first_of("[."));
-  nameRef = nameRef.drop_front(retval.name.size());
-
-  // Take the last instance from the instance path and use it as the thing
-  if (retval.name.empty() && !retval.instances.empty()) {
-    retval.name = retval.instances.back().first;
-    retval.instances.pop_back();
-  }
-
-  while (!nameRef.empty()) {
-    if (nameRef[0] == '.') {
-      nameRef = nameRef.drop_front();
-      StringRef field = nameRef.take_front(nameRef.find_first_of("[."));
-      nameRef = nameRef.drop_front(field.size());
-      retval.agg.push_back({true, field});
-    } else if (nameRef[0] == '[') {
-      nameRef = nameRef.drop_front();
-      StringRef index = nameRef.take_front(nameRef.find_first_of(']'));
-      nameRef = nameRef.drop_front(index.size() + 1);
-      retval.agg.push_back({false, index});
-    } else {
-      llvm_unreachable("invalid annotation aggregate specifier");
-    }
-  }
-  return retval;
+  return stdResolveImpl(target->second.cast<StringAttr>().getValue(), circuit,
+                        modules);
 }
 
-static Optional<AnnoPathStr> tryParse(DictionaryAttr anno, CircuitOp circuit) {
+static Optional<AnnoPathValue>
+tryResolve(DictionaryAttr anno, CircuitOp circuit, SymbolTable &modules) {
+  anno.dump();
   auto target = anno.getNamed("target");
   if (target)
-    return stdParse(anno, circuit);
-  AnnoPathStr retval;
-  retval.circuit = circuit.name();
-  return retval;
-}
-
-static Optional<AnnoPathValue> stdResolve(AnnoPathStr path, CircuitOp circuit,
-                                          SymbolTable modules) {
-  AnnoPathValue retval;
-  if (path.circuit != circuit.name()) {
-    circuit.emitError("circuit name '")
-        << circuit.name() << "' mismatch in annotation '" << path.circuit
-        << "'";
-    return {};
-  }
-  if (path.module.empty()) {
-    retval.ref = BaseUnion{circuit};
-    return retval; // Circuit only annotation.
-  }
-  auto curModule = modules.lookup(path.module);
-  if (!curModule) {
-    circuit.emitError("cannot find module '")
-        << path.module << "' specified in annotation";
-    return {};
-  }
-  for (auto inst : path.instances) {
-    auto resolved = findNamedThing(inst.first, curModule);
-    if (!resolved.isInstance()) {
-      circuit.emitError("cannot find instance '")
-          << inst.first << "' in '" << inst.second << "'";
-      return {};
-    }
-    auto resolvedInst = cast<InstanceOp>(resolved.op);
-    retval.instances.push_back(resolvedInst);
-    curModule = modules.lookup(inst.second);
-    if (!curModule) {
-      circuit.emitError("module '")
-          << inst.second << "' in instance path doesn't exist";
-      return {};
-    }
-    if (curModule != resolvedInst.getReferencedModule()) {
-      circuit.emitError("path module '")
-          << getModuleName(curModule)
-          << "' doesn't match instance module reference in '"
-          << resolvedInst.name() << "'";
-      return {};
-    }
-  }
-  retval.ref = BaseUnion{curModule};
-
-  if (!path.name.empty()) {
-    retval.ref = findNamedThing(path.name, curModule);
-    if (!retval.ref) {
-      circuit.emitError("cannot find a thing named '")
-          << path.name << "' in '" << getModuleName(curModule) << "'";
-      return {};
-    }
-  }
-
-  retval.ref = resolveExpandedPorts(retval.ref, path.agg);
-
-  // Since we have expanded memories, we need to check the aggregate
-  auto field = resolveFieldIdx(path.agg, retval.ref.getType());
-  if (!field) {
-    path.dump();
-    circuit.emitError("cannot resolve field accesses");
-    return {};
-  }
-  retval.fieldIdx = *field;
-
-  return retval;
+    return stdResolveImpl(target->second.cast<StringAttr>().getValue(), circuit,
+                          modules);
+  return AnnoPathValue(circuit);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -454,13 +425,19 @@ LogicalResult applyWithoutTargetToMem(AnnoPathValue target,
 
 // Fix up a path that contains missing modules and place the annotation on
 // the memory op.
-static Optional<AnnoPathValue> seqMemInstanceResolve(AnnoPathStr path,
+static Optional<AnnoPathValue> seqMemInstanceResolve(DictionaryAttr anno,
                                                      CircuitOp circuit,
-                                                     SymbolTable modules) {
-  path.instances.pop_back();
-  path.name = path.instances.back().first;
-  path.instances.pop_back();
-  return stdResolve(path, circuit, modules);
+                                                     SymbolTable &modules) {
+  auto target = anno.getNamed("target");
+  if (!target) {
+    circuit.emitError("No target field in annotation") << anno;
+    return {};
+  }
+  auto path = target->second.cast<StringAttr>().getValue();
+  //         path.instances.pop_back();
+  //    path.name = path.instances.back().first;
+  //    path.instances.pop_back();
+  return stdResolveImpl(path, circuit, modules);
 }
 
 LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno) {
@@ -492,7 +469,16 @@ LogicalResult applyGrandCentralView(AnnoPathValue target, DictionaryAttr anno) {
 // Driving table
 ////////////////////////////////////////////////////////////////////////////////
 
-static const AnnoRecord annotationRecords[] = {
+namespace {
+struct AnnoRecord {
+  llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, CircuitOp,
+                                             SymbolTable &)>
+      resolver;
+  llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr)> applier;
+};
+}; // namespace
+
+static const llvm::StringMap<AnnoRecord> annotationRecords{
     /*
       {"chisel3.aop.injecting.InjectStatement", noParse, noResolve,
       ignoreAnno},
@@ -502,105 +488,104 @@ static const AnnoRecord annotationRecords[] = {
       noResolve, ignoreAnno},
   */
     // Dropped annotations.
-    {"firrtl.EmitCircuitAnnotation", noParse, noResolve, ignoreAnno},
-    {"logger.LogLevelAnnotation", noParse, noResolve, ignoreAnno},
-    {"firrtl.transforms.DedupedResult", noParse, noResolve, ignoreAnno},
+    {"firrtl.EmitCircuitAnnotation", {noResolve, ignoreAnno}},
+    {"logger.LogLevelAnnotation", {noResolve, ignoreAnno}},
+    {"firrtl.transforms.DedupedResult", {noResolve, ignoreAnno}},
 
     // Targetless Annotations.
-    {"sifive.enterprise.firrtl.ElaborationArtefactsDirectory", noParse,
-     noResolve, applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.MetadataDirAnnotation", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
+    {"sifive.enterprise.firrtl.ElaborationArtefactsDirectory",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.MetadataDirAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
     {"sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
-     noParse, noResolve, applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation", noParse,
-     noResolve, applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation", noParse,
-     noResolve, applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.SitestBlackBoxAnnotation", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
-    {"firrtl.passes.memlib.InferReadWriteAnnotation$", noParse, noResolve,
-     applyWithoutTargetToCircuit<>},
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"firrtl.passes.memlib.InferReadWriteAnnotation$",
+     {noResolve, applyWithoutTargetToCircuit<>}},
 
     // Simple Annotations
-    {"sifive.enterprise.firrtl.TestHarnessPathAnnotation", noParse, noResolve,
-     applyWithoutTargetToCircuit<>},
+    {"sifive.enterprise.firrtl.TestHarnessPathAnnotation",
+     {noResolve, applyWithoutTargetToCircuit<>}},
     {"sifive.enterprise.grandcentral.phases.SimulationConfigPathPrefix",
-     noParse, noResolve, applyWithoutTargetToCircuit<>},
-    {"sifive.enterprise.firrtl.ScalaClassAnnotation", stdParse, stdResolve,
-     applyWithoutTargetToModule<>},
-    {"firrtl.transforms.NoDedupAnnotation", stdParse, stdResolve,
-     applyWithoutTargetToModule<>},
+     {noResolve, applyWithoutTargetToCircuit<>}},
+    {"sifive.enterprise.firrtl.ScalaClassAnnotation",
+     {stdResolve, applyWithoutTargetToModule<>}},
+    {"firrtl.transforms.NoDedupAnnotation",
+     {stdResolve, applyWithoutTargetToModule<>}},
     {"freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation",
-     stdParse, stdResolve, applyWithoutTargetToModule<>},
-    {"firrtl.passes.InlineAnnotation", stdParse, stdResolve,
-     applyWithoutTargetToModule<>},
-    {"sifive.enterprise.firrtl.DontObfuscateModuleAnnotation", stdParse,
-     stdResolve, applyWithoutTargetToModule<>},
-    {"firrtl.transforms.BlackBoxInlineAnno", stdParse, stdResolve,
-     applyWithoutTargetToModule<>},
-    {"freechips.rocketchip.linting.rule.DesiredNameAnnotation", stdParse,
-     stdResolve, applyWithoutTargetToModule<true>},
-    {"sifive.enterprise.firrtl.MarkDUTAnnotation", stdParse, stdResolve,
-     applyWithoutTargetToModule<>},
-    {"sifive.enterprise.firrtl.FileListAnnotation", stdParse, stdResolve,
-     applyWithoutTargetToModule<>},
-    {"sifive.enterprise.grandcentral.PrefixInterfacesAnnotation", noParse,
-     noResolve, applyWithoutTargetToCircuit<>},
-    {"sifive.enterprise.firrtl.NestedPrefixModulesAnnotation", stdParse,
-     stdResolve, applyWithoutTargetToModule<>},
-    {"firrtl.passes.memlib.ReplSeqMemAnnotation", noParse, noResolve,
-     applyWithoutTargetToCircuit<>},
+     {stdResolve, applyWithoutTargetToModule<>}},
+    {"firrtl.passes.InlineAnnotation",
+     {stdResolve, applyWithoutTargetToModule<>}},
+    {"sifive.enterprise.firrtl.DontObfuscateModuleAnnotation",
+     {stdResolve, applyWithoutTargetToModule<>}},
+    {"firrtl.transforms.BlackBoxInlineAnno",
+     {stdResolve, applyWithoutTargetToModule<>}},
+    {"freechips.rocketchip.linting.rule.DesiredNameAnnotation",
+     {stdResolve, applyWithoutTargetToModule<true>}},
+    {"sifive.enterprise.firrtl.MarkDUTAnnotation",
+     {stdResolve, applyWithoutTargetToModule<>}},
+    {"sifive.enterprise.firrtl.FileListAnnotation",
+     {stdResolve, applyWithoutTargetToModule<>}},
+    {"sifive.enterprise.grandcentral.PrefixInterfacesAnnotation",
+     {noResolve, applyWithoutTargetToCircuit<>}},
+    {"sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+     {stdResolve, applyWithoutTargetToModule<>}},
+    {"firrtl.passes.memlib.ReplSeqMemAnnotation",
+     {noResolve, applyWithoutTargetToCircuit<>}},
 
     // Directory or Filename Annotations
-    {"sifive.enterprise.firrtl.ExtractCoverageAnnotation", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.ExtractAssertionsAnnotation", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", noParse,
-     noResolve, applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.TestBenchDirAnnotation", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
-    {"firrtl.transforms.BlackBoxTargetDirAnno", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
-    {"firrtl.transforms.BlackBoxResourceFileNameAnno", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.RetimeModulesAnnotation", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.CoverPropReportAnnotation", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation", noParse,
-     noResolve, applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.firrtl.ModuleHierarchyAnnotation", noParse, noResolve,
-     applyDirFileNormalizeToCircuit},
-    {"sifive.enterprise.grandcentral.SubCircuitDirAnnotation", noParse,
-     noResolve, applyDirFileNormalizeToCircuit},
+    {"sifive.enterprise.firrtl.ExtractCoverageAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.ExtractAssertionsAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.ExtractAssumptionsAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.TestBenchDirAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"firrtl.transforms.BlackBoxTargetDirAnno",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"firrtl.transforms.BlackBoxResourceFileNameAnno",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.RetimeModulesAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.CoverPropReportAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.firrtl.ModuleHierarchyAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
+    {"sifive.enterprise.grandcentral.SubCircuitDirAnnotation",
+     {noResolve, applyDirFileNormalizeToCircuit}},
     {"sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory",
-     noParse, noResolve, applyDirFileNormalizeToCircuit},
+     {noResolve, applyDirFileNormalizeToCircuit}},
 
     // Complex Annotations
-    {"sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation", stdParse,
-     seqMemInstanceResolve, applyWithoutTargetToMem<>},
-    {"firrtl.transforms.DontTouchAnnotation", stdParse, stdResolve,
-     applyDontTouch},
-    {"sifive.enterprise.grandcentral.DataTapsAnnotation", noParse, noResolve,
-     applyGrandCentralDataTaps},
-    {"sifive.enterprise.grandcentral.MemTapAnnotation", noParse, noResolve,
-     applyGrandCentralMemTaps},
-    {"sifive.enterprise.grandcentral.ViewAnnotation", noParse, noResolve,
-     applyGrandCentralView},
+    {"sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation",
+     {/*stdParse,*/ seqMemInstanceResolve, applyWithoutTargetToMem<>}},
+    {"firrtl.transforms.DontTouchAnnotation", {stdResolve, applyDontTouch}},
+    {"sifive.enterprise.grandcentral.DataTapsAnnotation",
+     {noResolve, applyGrandCentralDataTaps}},
+    {"sifive.enterprise.grandcentral.MemTapAnnotation",
+     {noResolve, applyGrandCentralMemTaps}},
+    {"sifive.enterprise.grandcentral.ViewAnnotation",
+     {noResolve, applyGrandCentralView}},
 
     // Testing Annotation
-    {"circt.test", stdParse, stdResolve, applyWithoutTarget<>},
-    {"circt.testNT", noParse, noResolve, applyWithoutTarget<>},
-    {"circt.missing", tryParse, stdResolve, applyWithoutTarget<>},
+    {"circt.test", {stdResolve, applyWithoutTarget<>}},
+    {"circt.testNT", {noResolve, applyWithoutTarget<>}},
+    {"circt.missing", {tryResolve, applyWithoutTarget<>}},
 
 };
 
 static const AnnoRecord *getAnnotationHandler(StringRef annoStr) {
-  for (auto &a : annotationRecords)
-    if (a.name == annoStr)
-      return &a;
+  auto ii = annotationRecords.find(annoStr);
+  if (ii != annotationRecords.end())
+    return &ii->second;
   return nullptr;
 }
 
@@ -613,7 +598,7 @@ struct LowerAnnotationsPass
     : public LowerFIRRTLAnnotationsBase<LowerAnnotationsPass> {
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, CircuitOp circuit,
-                                SymbolTable modules);
+                                SymbolTable &modules);
 
   bool ignoreUnhandledAnno = false;
   bool ignoreClasslessAnno = false;
@@ -634,7 +619,7 @@ void LowerAnnotationsPass::runOnOperation() {
 
 LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
                                                     CircuitOp circuit,
-                                                    SymbolTable modules) {
+                                                    SymbolTable &modules) {
   StringRef annoClassVal;
   if (auto annoClass = anno.getNamed("class"))
     annoClassVal = annoClass->second.cast<StringAttr>().getValue();
@@ -644,23 +629,19 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
     return circuit.emitError("Annotation without a class: ") << anno;
 
   auto record = getAnnotationHandler(annoClassVal);
-  if (!record)
+  if (!record) {
     if (ignoreUnhandledAnno)
       record = getAnnotationHandler("circt.missing");
     else
       return circuit.emitWarning("Unhandled annotation: ") << anno;
+  }
 
-  auto path = record->path_parser(anno, circuit);
-  if (!path)
-    return circuit.emitError("Unable to parse target of annotation: ") << anno;
-  auto target = record->path_resolver(*path, circuit, modules);
+  auto target = record->resolver(anno, circuit, modules);
   if (!target)
     return circuit.emitError("Unable to resolve target of annotation: ")
            << anno;
-  if (record->anno_applier(*target, anno).failed()) {
-    path->dump();
+  if (record->applier(*target, anno).failed())
     return circuit.emitError("Unable to apply annotation: ") << anno;
-  }
   return success();
 }
 
