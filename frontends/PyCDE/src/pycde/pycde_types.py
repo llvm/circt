@@ -104,7 +104,7 @@ def PyCDEType(type):
     """Add methods to an MLIR type class."""
 
     @property
-    def inner(self):
+    def strip(self):
       """Return self or inner type."""
       if isinstance(type, hw.TypeAliasType):
         return PyCDEType(self.inner_type)
