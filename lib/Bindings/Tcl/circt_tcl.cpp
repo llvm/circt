@@ -355,8 +355,8 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
       Tcl_InvalidateStringRep(obj);
 
       int length = 0;
-      Tcl_Obj **list_raw = nullptr;
-      if (Tcl_ListObjGetElements(interp, list, &length, &list_raw) != TCL_OK) {
+      Tcl_Obj **listRaw = nullptr;
+      if (Tcl_ListObjGetElements(interp, list, &length, &listRaw) != TCL_OK) {
         return TCL_ERROR;
       }
 

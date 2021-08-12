@@ -14,15 +14,15 @@
 extern "C" {
 #endif
 
-typedef struct { void* ptr; } CirctQueryFilterType;
-typedef struct { void* ptr; } CirctQueryFilter;
-typedef struct { void* ptr; } CirctQueryFilterResult;
-typedef struct { void* ptr; } CirctQueryAttributeList;
+typedef struct { void *ptr; } CirctQueryFilterType;
+typedef struct { void *ptr; } CirctQueryFilter;
+typedef struct { void *ptr; } CirctQueryFilterResult;
+typedef struct { void *ptr; } CirctQueryAttributeList;
 typedef struct {
   MlirOperation op;
   CirctQueryAttributeList list;
 } CirctQueryOperationAttributesPair;
-typedef struct { void* ptr; } CirctQueryAttributeDump;
+typedef struct { void *ptr; } CirctQueryAttributeDump;
 
 CirctQueryFilterType circtQueryNewGlobFilterType();
 CirctQueryFilterType circtQueryNewRecursiveGlobFilterType();
