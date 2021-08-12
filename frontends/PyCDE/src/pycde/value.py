@@ -21,9 +21,9 @@ class Value:
       type = value.type
     type = PyCDEType(type)
 
-    if isinstance(type, hw.ArrayType):
+    if isinstance(type.strip, hw.ArrayType):
       return ListValue(value, type)
-    if isinstance(type, hw.StructType):
+    if isinstance(type.strip, hw.StructType):
       return StructValue(value, type)
     return RegularValue(value, type)
 
