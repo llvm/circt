@@ -14,6 +14,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using namespace circt;
 using namespace comb;
@@ -60,6 +61,24 @@ ICmpPredicate ICmpOp::getFlippedPredicate(ICmpPredicate predicate) {
     return ICmpPredicate::ult;
   case ICmpPredicate::uge:
     return ICmpPredicate::ule;
+  }
+  llvm_unreachable("unknown comparison predicate");
+}
+
+bool ICmpOp::isPredicateSigned(ICmpPredicate predicate) {
+  switch (predicate) {
+  case ICmpPredicate::ult:
+  case ICmpPredicate::ugt:
+  case ICmpPredicate::ule:
+  case ICmpPredicate::uge:
+  case ICmpPredicate::ne:
+  case ICmpPredicate::eq:
+    return false;
+  case ICmpPredicate::slt:
+  case ICmpPredicate::sgt:
+  case ICmpPredicate::sle:
+  case ICmpPredicate::sge:
+    return true;
   }
   llvm_unreachable("unknown comparison predicate");
 }
@@ -131,13 +150,37 @@ bool XorOp::isBinaryNot() {
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
-void ConcatOp::build(OpBuilder &builder, OperationState &result,
-                     ValueRange inputs) {
+static unsigned getTotalWidth(ValueRange inputs) {
   unsigned resultWidth = 0;
   for (auto input : inputs) {
     resultWidth += input.getType().cast<IntegerType>().getWidth();
   }
-  build(builder, result, builder.getIntegerType(resultWidth), inputs);
+  return resultWidth;
+}
+
+static LogicalResult verifyConcatOp(ConcatOp concatOp) {
+  unsigned tyWidth = concatOp.getType().getWidth();
+  unsigned operandsTotalWidth = getTotalWidth(concatOp.inputs());
+  if (tyWidth != operandsTotalWidth)
+    return concatOp.emitOpError("ConcatOp requires operands total width to "
+                                "match type width. operands "
+                                "totalWidth is")
+           << operandsTotalWidth << ", but concatOp type width is " << tyWidth;
+
+  return success();
+}
+
+void ConcatOp::build(OpBuilder &builder, OperationState &result,
+                     ValueRange inputs) {
+  build(builder, result, builder.getIntegerType(getTotalWidth(inputs)), inputs);
+}
+
+void ConcatOp::build(OpBuilder &builder, OperationState &result, Value hd,
+                     ValueRange tl) {
+  result.addOperands(ValueRange{hd});
+  result.addOperands(tl);
+  unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
+  result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
 }
 
 //===----------------------------------------------------------------------===//

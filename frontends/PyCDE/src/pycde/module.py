@@ -4,12 +4,16 @@
 
 from __future__ import annotations
 
-from .support import Value, get_user_loc, var_to_attribute
-from .types import types
+from pycde.support import obj_to_value
+
+from .pycde_types import types
+from .support import (get_user_loc, var_to_attribute, OpOperandConnect,
+                      create_type_string)
+from .value import Value
 
 from circt import support
 from circt.dialects import hw
-from circt.support import BackedgeBuilder, OpOperand
+from circt.support import BackedgeBuilder
 import circt
 
 import mlir.ir
@@ -50,6 +54,11 @@ class Parameter:
     self.name = name
 
 
+# Set an input to no_connect to indicate not to connect it. Only valid for
+# external module inputs.
+no_connect = object()
+
+
 class module:
   """Decorator for module classes or functions which parameterize module
   classes."""
@@ -64,9 +73,10 @@ class module:
     if inspect.isclass(func_or_class):
       # If it's just a module class, we should wrap it immediately
       self.mod = _module_base(func_or_class, extern_name is not None)
-      _register_generator(self.mod.__name__, "extern_instantiate",
-                          self._instantiate,
-                          mlir.ir.DictAttr.get(self.mod._parameters))
+      if extern_name is not None:
+        _register_generator(self.mod.__name__, "extern_instantiate",
+                            self._instantiate,
+                            mlir.ir.DictAttr.get(self.mod._parameters))
       return
     elif not inspect.isfunction(func_or_class):
       raise TypeError("@module got invalid object")
@@ -97,8 +107,14 @@ class module:
       cls = self.func(*args, **kwargs)
       if cls is None:
         raise ValueError("Parameterization function must return module class")
-      mod = _module_base(cls, self.extern_name is not None,
-                         param_values.arguments)
+
+      # Function arguments which start with '_' don't become parameters.
+      params = {
+          n: v
+          for n, v in param_values.arguments.items()
+          if not n.startswith("_")
+      }
+      mod = _module_base(cls, self.extern_name is not None, params)
 
       if self.extern_name:
         _register_generator(cls.__name__, "extern_instantiate",
@@ -140,8 +156,8 @@ class module:
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
       result_types = [x.type for x in op.results]
-      inst = self.extern_mod.create(
-        op.name, **mapping, results=result_types).operation
+      inst = self.extern_mod.create(op.name, **mapping,
+                                    results=result_types).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
@@ -182,11 +198,11 @@ def _module_base(cls, extern: bool, params={}):
       if len(pass_up_kwargs) > 0:
         init_sig = inspect.signature(cls.__init__)
         if not any(
-          [x == inspect.Parameter.VAR_KEYWORD for x in init_sig.parameters]):
+            [x == inspect.Parameter.VAR_KEYWORD for x in init_sig.parameters]):
           raise ValueError("Module constructor doesn't have a **kwargs"
                            " parameter, so the following are likely inputs"
-                           " which don't have a port: " + ",".join(
-                             pass_up_kwargs.keys()))
+                           " which don't have a port: " +
+                           ",".join(pass_up_kwargs.keys()))
       cls.__init__(self, *args, **pass_up_kwargs)
 
       # Build a list of operand values for the operation we're gonna create.
@@ -194,10 +210,17 @@ def _module_base(cls, extern: bool, params={}):
       self.backedges: dict[int:BackedgeBuilder.Edge] = {}
       for (idx, (name, type)) in enumerate(mod._input_ports):
         if name in inputs:
-          value = support.get_value(inputs[name])
-          assert value is not None
+          input = inputs[name]
+          if input == no_connect:
+            if not extern:
+              raise ConnectionError(
+                  "`no_connect` is only valid on extern module ports")
+            else:
+              value = hw.ConstantOp.create(types.i1, 0).result
+          else:
+            value = obj_to_value(input, type)
         else:
-          backedge = BackedgeBuilder.current().create(type, name, self)
+          backedge = BackedgeBuilder.current().create(type, name, self, loc=loc)
           self.backedges[idx] = backedge
           value = backedge.result
         input_ports_values.append(value)
@@ -226,6 +249,12 @@ def _module_base(cls, extern: bool, params={}):
                              results=[type for (_, type) in mod._output_ports],
                              operands=input_ports_values,
                              loc=loc))
+
+    def output_values(self):
+      return {
+          op_name: self.operation.results[idx]
+          for (idx, (op_name, _)) in enumerate(mod._output_ports)
+      }
 
     @staticmethod
     def inputs() -> list[(str, mlir.ir.Type)]:
@@ -277,18 +306,18 @@ def _module_base(cls, extern: bool, params={}):
   # subclasses. Add the names to "don't touch" since they can't be touched
   # (since they implictly call an OpView property) when the attributes are being
   # scanned in the `mod` constructor.
-  for (idx, (name, _)) in enumerate(mod._input_ports):
+  for (idx, (name, type)) in enumerate(mod._input_ports):
     setattr(
         mod, name,
-        property(lambda self, idx=idx: OpOperand(self, idx, self.operands[idx],
-                                                 self)))
+        property(lambda self, idx=idx: OpOperandConnect(self, idx, self.
+                                                        operands[idx], self)))
     cls._dont_touch.add(name)
   mod._input_ports_lookup = dict(mod._input_ports)
   for (idx, (name, type)) in enumerate(mod._output_ports):
     setattr(
         mod, name,
-        property(
-            lambda self, idx=idx, type=type: Value(self.results[idx], type)))
+        property(lambda self, idx=idx, type=type: Value.get(
+            self.results[idx], type)))
     cls._dont_touch.add(name)
   mod._output_ports_lookup = dict(mod._output_ports)
 
@@ -316,9 +345,18 @@ class _Generate:
   necessary logic to build an HWModule."""
 
   def __init__(self, gen_func):
+    sig = inspect.signature(gen_func)
+    if len(sig.parameters) != 1:
+      raise ValueError(
+          "Generate functions must take one argument and do not support 'self'."
+      )
     self.gen_func = gen_func
     self.modcls = None
     self.loc = get_user_loc()
+
+  def _generate(self, mod):
+    outputs = self.gen_func(mod)
+    self._create_output_op(outputs)
 
   def __call__(self, op):
     """Build an HWModuleOp and run the generator as the body builder."""
@@ -327,17 +365,6 @@ class _Generate:
     mod = op
     while mod.name != "module":
       mod = mod.parent
-
-    # Get the port names from the attributes we stored them in.
-    op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
-    op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-    input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
-
-    result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
-    result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
-    output_ports = [
-        (n.value, o.type) for (n, o) in zip(result_names, op.results)
-    ]
 
     # Assemble the parameters.
     self.params = {
@@ -363,23 +390,25 @@ class _Generate:
     # modules that are structurally equivalent. If the module name exists in the
     # top level MLIR module, assume that we've already generated it.
     existing_module_names = [
-       o for o in mod.regions[0].blocks[0].operations
-       if mlir.ir.StringAttr(o.name).value == module_name]
+        o for o in mod.regions[0].blocks[0].operations
+        if mlir.ir.StringAttr(o.name).value == module_name
+    ]
 
     if not existing_module_names:
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]), self.loc:
         mod = ModuleDefinition(self.modcls,
                                module_name,
-                               input_ports=input_ports,
-                               output_ports=output_ports,
-                               body_builder=self.gen_func)
+                               input_ports=self.modcls._input_ports,
+                               output_ports=self.modcls._output_ports,
+                               body_builder=self._generate)
     else:
-      assert(len(existing_module_names) == 1)
+      assert (len(existing_module_names) == 1)
       mod = existing_module_names[0]
 
     # Build a replacement instance at the op to be replaced.
+    op_names = [name for name, _ in self.modcls._input_ports]
     with mlir.ir.InsertionPoint(op):
-      mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
+      mapping = {name: op.operands[i] for i, name in enumerate(op_names)}
       inst = mod.create(op.name, **mapping).operation
       for (name, attr) in attrs.items():
         if name == "parameters":
@@ -388,11 +417,16 @@ class _Generate:
       return inst
 
   def create_module_name(self, op):
+
+    def val_str(val):
+      if isinstance(val, mlir.ir.Type):
+        return create_type_string(val)
+      return str(val)
+
     name = op.name
     if len(self.params) > 0:
       name += "_" + "_".join(
-          str(value) for (_, value) in
-          sorted(self.params.items()))
+          val_str(value) for (_, value) in sorted(self.params.items()))
 
     return name
 
@@ -403,6 +437,45 @@ class _Generate:
     for sub in ["<", "x", " "]:
       sanitized_str = sanitized_str.replace(sub, "_")
     return sanitized_str
+
+  def _create_output_op(self, gen_ret):
+    """Create the hw.OutputOp from the generator returns."""
+    assert hasattr(self, "modcls")
+    output_ports = self.modcls._output_ports
+
+    # If generator didn't return anything, this op mustn't have any outputs.
+    if gen_ret is None:
+      if len(output_ports) == 0:
+        hw.OutputOp([])
+        return
+      raise support.ConnectionError("Generator must return dict")
+
+    # Now create the output op depending on the object type returned
+    outputs: list[Value] = list()
+
+    # Only acceptable return is a dict of port, value mappings.
+    if not isinstance(gen_ret, dict):
+      raise support.ConnectionError("Generator must return a dict of outputs")
+
+    # A dict of `OutputPortName` -> ValueLike or convertable objects must be
+    # converted to a list in port order.
+    unconnected_ports = []
+    for (name, port_type) in output_ports:
+      if name not in gen_ret:
+        unconnected_ports.append(name)
+        outputs.append(None)
+      else:
+        val = obj_to_value(gen_ret[name], port_type)
+        outputs.append(val)
+        gen_ret.pop(name)
+    if len(unconnected_ports) > 0:
+      raise support.UnconnectedSignalError(unconnected_ports)
+    if len(gen_ret) > 0:
+      raise support.ConnectionError(
+          "Could not map the following to output ports: " +
+          ",".join(gen_ret.keys()))
+
+    hw.OutputOp(outputs)
 
 
 def generator(func):
@@ -428,6 +501,10 @@ class ModuleDefinition(hw.HWModuleOp):
   def __getattr__(self, name):
     if name in self.input_indices:
       index = self.input_indices[name]
-      return Value(self.entry_block.arguments[index],
-                   self.modcls._input_ports_lookup[name])
+      val = self.entry_block.arguments[index]
+      if self.modcls:
+        ty = self.modcls._input_ports_lookup[name]
+      else:
+        ty = support.type_to_pytype(val.type)
+      return Value.get(val, ty)
     raise AttributeError(f"unknown input port name {name}")

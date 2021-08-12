@@ -1,6 +1,9 @@
 /build*
 /docker_build
+tags
 .vscode
+compile_commands.json
+.cache/
 #*
 *~
 .DS_Store

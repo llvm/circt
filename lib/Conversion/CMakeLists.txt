@@ -1,3 +1,4 @@
+add_subdirectory(CalyxToHW)
 add_subdirectory(FIRRTLToHW)
 add_subdirectory(HWToLLHD)
 add_subdirectory(HandshakeToFIRRTL)

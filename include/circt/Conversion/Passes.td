@@ -28,6 +28,18 @@ def ConvertStandardToHIR : Pass<"convert-to-hir", "mlir::ModuleOp"> {
   let constructor = "circt::createConvertStandardToHIRPass()";
   let dependentDialects = ["hir::HIRDialect", "mlir::StandardOpsDialect"];
 }
+// CalyxToHW
+//===----------------------------------------------------------------------===//
+
+def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
+  let summary = "Lower Calyx to HW";
+  let description = [{
+    This pass lowers Calyx to HW.
+  }];
+  let constructor = "circt::createCalyxToHWPass()";
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
+                           "sv::SVDialect"];
+}
 
 //===----------------------------------------------------------------------===//
 // FIRRTLToHW
@@ -41,6 +53,10 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let constructor = "circt::createLowerFIRRTLToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "sv::SVDialect"];
+  let options = [
+    Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations", "bool", "false",
+    "Emit warnings on unprocessed annotations during lower-to-hw pass">
+  ];
 }
 
 //===----------------------------------------------------------------------===//

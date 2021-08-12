@@ -18,7 +18,13 @@ include "mlir/Pass/PassBase.td"
 def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{
-    Lower firrtl.module port types to ground types.
+    Lower aggregate FIRRTL types to ground types.  Memories, ports, wires, etc
+    are split appart by elements of aggregate types.  The only aggregate types
+    which exist after this pass are memory ports, though memory data types are
+    split.
+
+    Connect and partial connect expansion and canonicalization happen in this
+    pass.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
 }
@@ -94,19 +100,11 @@ def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createExpandWhensPass()";
 }
 
-def CheckWidths : Pass<"firrtl-check-widths", "firrtl::FModuleOp"> {
-  let summary = "Verify that types have a well-known width";
-  let description = [{
-    This pass checks if the widths of all types throughout a FIRRTL module are
-    well-known.
-  }];
-  let constructor = "circt::firrtl::createCheckWidthsPass()";
-}
-
 def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
   let summary = "Infer the width of types";
   let description = [{
-    This pass infers the widths of all types throughout a FIRRTL module.
+    This pass infers the widths of all types throughout a FIRRTL module, and
+    emits diagnostics for types that could not be inferred.
   }];
   let constructor = "circt::firrtl::createInferWidthsPass()";
 }
@@ -194,6 +192,14 @@ def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
   let summary = "Generate code for grand central data and memory taps";
   let constructor = "circt::firrtl::createGrandCentralTapsPass()";
   let dependentDialects = ["sv::SVDialect"];
+}
+
+def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {
+  let summary = "Check combinational cycles and emit errors";
+  let description = [{
+    This pass checks combinational cycles in the IR and emit errors.
+  }];
+  let constructor = "circt::firrtl::createCheckCombCyclesPass()";
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD

@@ -236,7 +236,7 @@ def ReturnOp : Handshake_Op<"return", [Terminator]> {
 
   let builders = [OpBuilder<(ins "ArrayRef<Value>":$operands)>];
 
-  let printer = "return ::print(p, *this);";
+  let printer = "return ::print$cppClass(p, *this);";
   let verifier = "return ::verify(*this);";
   let parser = "return ::parse$cppClass(parser, result);";
 }

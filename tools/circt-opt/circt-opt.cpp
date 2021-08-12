@@ -21,6 +21,13 @@
 #include "mlir/Support/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"
 
+// Defined in the test directory, no public header.
+namespace circt {
+namespace test {
+void registerSchedulingTestPasses();
+} // namespace test
+} // namespace circt
+
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
 
@@ -37,8 +44,12 @@ int main(int argc, char **argv) {
   mlir::registerCSEPass();
   mlir::registerSCCPPass();
   mlir::registerInlinerPass();
+  mlir::registerCanonicalizerPass();
+
+  // Register test passes
+  circt::test::registerSchedulingTestPasses();
 
   return mlir::failed(
       mlir::MlirOptMain(argc, argv, "CIRCT modular optimizer driver", registry,
-                        /*prelaodDialectsInContext=*/false));
+                        /*preloadDialectsInContext=*/false));
 }

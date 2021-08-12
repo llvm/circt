@@ -2,15 +2,15 @@
 
 // CHECK-LABEL: firrtl.module @handshake_buffer_1ins_1outs_ctrl_3slots_seq(
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-// CHECK:   %[[IN_VALID:.+]] = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[IN_READY:.+]] = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[OUT_VALID:.+]] = firrtl.subfield %arg1("valid") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[OUT_READY:.+]] = firrtl.subfield %arg1("ready") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[IN_VALID:.+]] = firrtl.subfield %arg0(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[IN_READY:.+]] = firrtl.subfield %arg0(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[OUT_VALID:.+]] = firrtl.subfield %arg1(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[OUT_READY:.+]] = firrtl.subfield %arg1(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
 // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
 
 // Stage 0 ready wire and valid register.
 // CHECK:   %readyWire0 = firrtl.wire : !firrtl.uint<1>
-// CHECK:   %validReg0 = firrtl.regreset %clock, %reset, %c0_ui1 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %validReg0 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   %ctrlValidWire0 = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %ctrlReadyWire0 = firrtl.wire : !firrtl.uint<1>
 
@@ -36,7 +36,7 @@
 
 // Stage 1 logics.
 // CHECK:   %readyWire1 = firrtl.wire : !firrtl.uint<1>
-// CHECK:   %validReg1 = firrtl.regreset %clock, %reset, %c0_ui1 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %validReg1 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   %ctrlValidWire1 = firrtl.wire : !firrtl.uint<1>
 // CHECK:   %ctrlReadyWire1 = firrtl.wire : !firrtl.uint<1>
 
@@ -60,7 +60,7 @@
 
 // Stage 2 logics.
 // CHECK:   %readyWire2 = firrtl.wire : !firrtl.uint<1>
-// CHECK:   %validReg2 = firrtl.regreset %clock, %reset, %c0_ui1 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+// CHECK:   %validReg2 = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
 
 // CHECK:   %[[VAL_10:.+]] = firrtl.not %validReg2 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 // CHECK:   %[[VAL_11:.+]] = firrtl.or %[[VAL_10:.+]], %readyWire2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -91,11 +91,11 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 
 // CHECK-LABEL: firrtl.module @handshake_buffer_1ins_1outs_ui64_2slots_seq(
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-// CHECK:   %[[IN_DATA:.+]] = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:   %[[OUT_DATA:.+]] = firrtl.subfield %arg1("data") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %[[IN_DATA:.+]] = firrtl.subfield %arg0(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %[[OUT_DATA:.+]] = firrtl.subfield %arg1(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
 // CHECK:   %c0_ui64 = firrtl.constant 0 : !firrtl.uint<64>
 
-// CHECK:   %dataReg0 = firrtl.regreset %clock, %reset, %c0_ui64 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<64>
+// CHECK:   %dataReg0 = firrtl.regreset %clock, %reset, %c0_ui64 : !firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>
 
 // CHECK:   %[[VAL_9:.+]] = firrtl.mux(%[[VAL_7:.+]], %[[IN_DATA:.+]], %dataReg0) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
 // CHECK:   firrtl.connect %dataReg0, %[[VAL_9:.+]] : !firrtl.uint<64>, !firrtl.uint<64>
@@ -104,7 +104,7 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 // CHECK:   %[[SUCC_DATA0:.+]] = firrtl.mux(%readyReg{{.*}}, %ctrlDataReg, %dataReg0)
 // CHECK:   firrtl.connect %ctrlDataWire0, %[[SUCC_DATA0]]
 
-// CHECK:   %dataReg1 = firrtl.regreset %clock, %reset, %c0_ui64 : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<64>) -> !firrtl.uint<64>
+// CHECK:   %dataReg1 = firrtl.regreset %clock, %reset, %c0_ui64 : !firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>
 
 // CHECK:   %[[CTRL_DATA_REG1:.+]] = firrtl.regreset %clock, %reset, %c0_ui64_6 {name = "ctrlDataReg"}
 // CHECK:   %[[SUCC_DATA1:.+]] = firrtl.mux(%readyReg{{.*}}, %[[CTRL_DATA_REG1]], %dataReg1)

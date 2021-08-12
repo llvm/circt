@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
 #include "mlir/IR/OpImplementation.h"
@@ -136,6 +137,10 @@ Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 enum class DeclKind { Port, Instance, Other };
 
 DeclKind getDeclarationKind(Value val);
+
+enum class ReadPortSubfield { addr, en, clk, data };
+enum class WritePortSubfield { addr, en, clk, data, mask };
+enum class ReadWritePortSubfield { addr, en, clk, rdata, wmode, wdata, wmask };
 
 // Out-of-line implementation of various trait verification methods and
 // functions commonly used among operations.

@@ -23,7 +23,7 @@ config.name = 'CIRCT'
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
 
 # suffixes: A list of file extensions to treat as test files.
-config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv', '.py']
+config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv', '.py', '.tcl']
 
 # test_source_root: The root path where tests are located.
 config.test_source_root = os.path.dirname(__file__)
@@ -36,6 +36,8 @@ config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
 config.substitutions.append(('%PYTHON%', config.python_executable))
+config.substitutions.append(('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
+config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
@@ -65,11 +67,10 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 
 # Tweak the PYTHONPATH to include the binary dir.
 if config.bindings_python_enabled:
-  llvm_config.with_environment('PYTHONPATH', [
-      os.path.join(config.llvm_obj_root, 'python'),
-      os.path.join(config.circt_obj_root, 'python')
-  ],
-                               append_path=True)
+  llvm_config.with_environment(
+      'PYTHONPATH',
+      [os.path.join(config.circt_python_packages_dir, 'circt_core')],
+      append_path=True)
 
 tool_dirs = [
     config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
@@ -150,5 +151,7 @@ if config.esi_capnp != "":
 # Enable Python bindings tests if they're supported.
 if config.bindings_python_enabled:
   config.available_features.add('bindings_python')
+if config.bindings_tcl_enabled:
+  config.available_features.add('bindings_tcl')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

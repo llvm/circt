@@ -41,7 +41,7 @@ static void getBackwardSliceSimple(Operation *rootOp,
     Operation *op = worklist.back();
     worklist.pop_back();
 
-    if (!op || op->hasTrait<OpTrait::IsIsolatedFromAbove>())
+    if (!op || op->hasTrait<mlir::OpTrait::IsIsolatedFromAbove>())
       continue;
 
     // Evaluate whether we should keep this def.
@@ -142,7 +142,8 @@ StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
 static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
                                          SetVector<Value> &inputs,
                                          BlockAndValueMapping &cutMap,
-                                         StringRef suffix, StringRef path) {
+                                         StringRef suffix, StringRef path,
+                                         StringRef fileName) {
   OpBuilder b(op->getParentOfType<mlir::ModuleOp>()->getRegion(0));
 
   // Construct the ports, this is just the input Values
@@ -160,7 +161,10 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
       b.getStringAttr((getVerilogModuleNameAttr(op).getValue() + suffix).str()),
       ports);
   if (!path.empty())
-    newMod->setAttr("outputPath", b.getStringAttr(path));
+    newMod->setAttr("output_file", hw::OutputFileAttr::get(
+                                       b.getStringAttr(path),
+                                       b.getStringAttr(""), b.getBoolAttr(true),
+                                       b.getBoolAttr(true), op.getContext()));
 
   // Update the mapping from old values to cloned values
   for (auto port : llvm::enumerate(inputs))
@@ -177,7 +181,13 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
-  b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst));
+  auto bindOp = b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst));
+  if (!fileName.empty())
+    bindOp->setAttr(
+        "output_file",
+        hw::OutputFileAttr::get(b.getStringAttr(""), b.getStringAttr(fileName),
+                                b.getBoolAttr(true), b.getBoolAttr(true),
+                                op.getContext()));
   return newMod;
 }
 
@@ -251,7 +261,7 @@ struct SVExtractTestCodeImplPass
 
 private:
   void doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
-                StringRef suffix, StringRef path) {
+                StringRef suffix) {
     // Find Operations of interest.
     SmallPtrSet<Operation *, 8> roots;
     module->walk([&fn, &roots](Operation *op) {
@@ -261,6 +271,20 @@ private:
     // No Ops?  No problem.
     if (roots.empty())
       return;
+    StringRef fileName, path;
+    // Check if the assert/assume/cover op has the output_file attribute.
+    // How to handle different path attributes on multiple ops?
+    for (auto extractOp : roots)
+      if (extractOp->hasAttr("output_file")) {
+        path = extractOp->getAttrOfType<hw::OutputFileAttr>("output_file")
+                   .directory()
+                   .getValue();
+        fileName = extractOp->getAttrOfType<hw::OutputFileAttr>("output_file")
+                       .name()
+                       .getValue();
+        break;
+      }
+
     // Find the data-flow and structural ops to clone.  Result includes roots.
     auto opsToClone = computeCloneSet(roots);
     // Find the dataflow into the clone set
@@ -274,7 +298,8 @@ private:
 
     // Make a module to contain the clone set, with arguments being the cut
     BlockAndValueMapping cutMap;
-    auto bmod = createModuleForCut(module, inputs, cutMap, suffix, path);
+    auto bmod =
+        createModuleForCut(module, inputs, cutMap, suffix, path, fileName);
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap);
     // erase old operations of interest
@@ -291,13 +316,14 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
       // Extract two sets of ops to different modules
       auto isAssert = [](Operation *op) -> bool {
-        return isa<AssertOp>(op) || isa<AssumeOp>(op) || isa<FinishOp>(op) ||
-               isa<FWriteOp>(op);
+        return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op);
       };
+      auto isAssume = [](Operation *op) -> bool { return isa<AssumeOp>(op); };
       auto isCover = [](Operation *op) -> bool { return isa<CoverOp>(op); };
 
-      doModule(rtlmod, isAssert, "_assert", "generated/asserts");
-      doModule(rtlmod, isCover, "_cover", "generated/covers");
+      doModule(rtlmod, isAssert, "_assert");
+      doModule(rtlmod, isAssume, "_assume");
+      doModule(rtlmod, isCover, "_cover");
     }
 }
 

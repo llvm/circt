@@ -309,7 +309,9 @@ Example:
 | target     | string | Reference target                        |
 
 The `DontTouchAnnotation` prevents the removal of elements through
-optimization. This annotation also ensures that the name of the object is
+optimization. This annotation is an optimization barrier, for 
+example, it blocks constant propagation through it.
+This annotation also ensures that the name of the object is
 preserved, and not discarded or modified. 
 
 Example:

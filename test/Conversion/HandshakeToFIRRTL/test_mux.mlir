@@ -2,18 +2,18 @@
 
 // CHECK-LABEL: firrtl.module @handshake_mux_3ins_1outs_ui64(
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
-// CHECK:   %0 = firrtl.subfield %arg0("valid") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %1 = firrtl.subfield %arg0("ready") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %2 = firrtl.subfield %arg0("data") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:   %3 = firrtl.subfield %arg1("valid") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %4 = firrtl.subfield %arg1("ready") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %5 = firrtl.subfield %arg1("data") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:   %6 = firrtl.subfield %arg2("valid") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %7 = firrtl.subfield %arg2("ready") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %8 = firrtl.subfield %arg2("data") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:   %9 = firrtl.subfield %arg3("valid") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %10 = firrtl.subfield %arg3("ready") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %11 = firrtl.subfield %arg3("data") : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %0 = firrtl.subfield %arg0(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %1 = firrtl.subfield %arg0(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %2 = firrtl.subfield %arg0(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %3 = firrtl.subfield %arg1(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %4 = firrtl.subfield %arg1(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %5 = firrtl.subfield %arg1(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %6 = firrtl.subfield %arg2(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %7 = firrtl.subfield %arg2(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %8 = firrtl.subfield %arg2(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %9 = firrtl.subfield %arg3(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %10 = firrtl.subfield %arg3(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %11 = firrtl.subfield %arg3(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
 // CHECK:   %12 = firrtl.bits %2 0 to 0 : (!firrtl.uint<64>) -> !firrtl.uint<1>
 // CHECK:   %13 = firrtl.mux(%12, %8, %5) : (!firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>) -> !firrtl.uint<64>
 // CHECK:   firrtl.connect %11, %13 : !firrtl.uint<64>, !firrtl.uint<64>
@@ -47,10 +47,10 @@ handshake.func @test_mux(%arg0: index, %arg1: index, %arg2: index, %arg3: none, 
 // Test a mux tree with an odd number of inputs.
 
 // CHECK-LABEL: firrtl.module @handshake_mux_4ins_1outs_ui64
-// CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1("data")
-// CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2("data")
-// CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3("data")
-// CHECK: %[[RESULT:.+]] = firrtl.subfield %arg4("data")
+// CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1(2)
+// CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2(2)
+// CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3(2)
+// CHECK: %[[RESULT:.+]] = firrtl.subfield %arg4(2)
 // CHECK: %[[MUX1:.+]] = firrtl.mux({{.+}}, %[[DATA2]], %[[DATA1]])
 // CHECK: %[[MUX2:.+]] = firrtl.mux({{.+}}, %[[DATA3]], %[[MUX1]])
 // CHECK: firrtl.connect %[[RESULT]], %[[MUX2]]
@@ -64,15 +64,15 @@ handshake.func @test_mux_3way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 // Test a mux tree with multiple full layers.
 
 // CHECK-LABEL: firrtl.module @handshake_mux_9ins_1outs_ui64
-// CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1("data")
-// CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2("data")
-// CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3("data")
-// CHECK: %[[DATA4:.+]] = firrtl.subfield %arg4("data")
-// CHECK: %[[DATA5:.+]] = firrtl.subfield %arg5("data")
-// CHECK: %[[DATA6:.+]] = firrtl.subfield %arg6("data")
-// CHECK: %[[DATA7:.+]] = firrtl.subfield %arg7("data")
-// CHECK: %[[DATA8:.+]] = firrtl.subfield %arg8("data")
-// CHECK: %[[RESULT:.+]] = firrtl.subfield %arg9("data")
+// CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1(2)
+// CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2(2)
+// CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3(2)
+// CHECK: %[[DATA4:.+]] = firrtl.subfield %arg4(2)
+// CHECK: %[[DATA5:.+]] = firrtl.subfield %arg5(2)
+// CHECK: %[[DATA6:.+]] = firrtl.subfield %arg6(2)
+// CHECK: %[[DATA7:.+]] = firrtl.subfield %arg7(2)
+// CHECK: %[[DATA8:.+]] = firrtl.subfield %arg8(2)
+// CHECK: %[[RESULT:.+]] = firrtl.subfield %arg9(2)
 // CHECK: %[[MUX1:.+]] = firrtl.mux({{.+}}, %[[DATA2]], %[[DATA1]])
 // CHECK: %[[MUX2:.+]] = firrtl.mux({{.+}}, %[[DATA4]], %[[DATA3]])
 // CHECK: %[[MUX3:.+]] = firrtl.mux({{.+}}, %[[DATA6]], %[[DATA5]])
@@ -91,12 +91,12 @@ handshake.func @test_mux_8way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 // Test a mux tree with multiple layers and a partial first layer (odd).
 
 // CHECK-LABEL: firrtl.module @handshake_mux_6ins_1outs_ui64
-// CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1("data")
-// CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2("data")
-// CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3("data")
-// CHECK: %[[DATA4:.+]] = firrtl.subfield %arg4("data")
-// CHECK: %[[DATA5:.+]] = firrtl.subfield %arg5("data")
-// CHECK: %[[RESULT:.+]] = firrtl.subfield %arg6("data")
+// CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1(2)
+// CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2(2)
+// CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3(2)
+// CHECK: %[[DATA4:.+]] = firrtl.subfield %arg4(2)
+// CHECK: %[[DATA5:.+]] = firrtl.subfield %arg5(2)
+// CHECK: %[[RESULT:.+]] = firrtl.subfield %arg6(2)
 // CHECK: %[[MUX1:.+]] = firrtl.mux({{.+}}, %[[DATA2]], %[[DATA1]])
 // CHECK: %[[MUX2:.+]] = firrtl.mux({{.+}}, %[[DATA4]], %[[DATA3]])
 // CHECK: %[[MUX3:.+]] = firrtl.mux({{.+}}, %[[MUX2]], %[[MUX1]])
@@ -112,13 +112,13 @@ handshake.func @test_mux_5way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 // Test a mux tree with multiple layers and a partial first layer (even).
 
 // CHECK-LABEL: firrtl.module @handshake_mux_7ins_1outs_ui64
-// CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1("data")
-// CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2("data")
-// CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3("data")
-// CHECK: %[[DATA4:.+]] = firrtl.subfield %arg4("data")
-// CHECK: %[[DATA5:.+]] = firrtl.subfield %arg5("data")
-// CHECK: %[[DATA6:.+]] = firrtl.subfield %arg6("data")
-// CHECK: %[[RESULT:.+]] = firrtl.subfield %arg7("data")
+// CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1(2)
+// CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2(2)
+// CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3(2)
+// CHECK: %[[DATA4:.+]] = firrtl.subfield %arg4(2)
+// CHECK: %[[DATA5:.+]] = firrtl.subfield %arg5(2)
+// CHECK: %[[DATA6:.+]] = firrtl.subfield %arg6(2)
+// CHECK: %[[RESULT:.+]] = firrtl.subfield %arg7(2)
 // CHECK: %[[MUX1:.+]] = firrtl.mux({{.+}}, %[[DATA2]], %[[DATA1]])
 // CHECK: %[[MUX2:.+]] = firrtl.mux({{.+}}, %[[DATA4]], %[[DATA3]])
 // CHECK: %[[MUX3:.+]] = firrtl.mux({{.+}}, %[[DATA6]], %[[DATA5]])

@@ -108,6 +108,11 @@ public:
   /// nested under another type.
   unsigned getMaxFieldID();
 
+  /// Returns the effective field id when treating the index field as the root
+  /// of the type.  Essentially maps a fieldID to a fieldID after a subfield op.
+  /// Returns the new id and whether the id is in the given child.
+  std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID, unsigned index);
+
 protected:
   using Type::Type;
 };
@@ -287,8 +292,14 @@ public:
   /// Look up an element's index by name.  This returns None on failure.
   llvm::Optional<unsigned> getElementIndex(StringRef name);
 
+  /// Look up an element's name by index. This asserts if index is invalid.
+  StringRef getElementName(size_t index);
+
   /// Look up an element by name.  This returns None on failure.
   llvm::Optional<BundleElement> getElement(StringRef name);
+
+  /// Look up an element by index.  This asserts if index is invalid.
+  BundleElement getElement(size_t index);
 
   /// Look up an element type by name.
   FIRRTLType getElementType(StringRef name);
@@ -314,6 +325,11 @@ public:
   /// Get the maximum field ID in this bundle.  This is helpful for constructing
   /// field IDs when this BundleType is nested in another aggregate type.
   unsigned getMaxFieldID();
+
+  /// Returns the effective field id when treating the index field as the root
+  /// of the type.  Essentially maps a fieldID to a fieldID after a subfield op.
+  /// Returns the new id and whether the id is in the given child.
+  std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID, unsigned index);
 };
 
 //===----------------------------------------------------------------------===//
@@ -350,6 +366,11 @@ public:
   /// Get the maximum field ID in this vector.  This is helpful for constructing
   /// field IDs when this VectorType is nested in another aggregate type.
   unsigned getMaxFieldID();
+
+  /// Returns the effective field id when treating the index field as the root
+  /// of the type.  Essentially maps a fieldID to a fieldID after a subfield op.
+  /// Returns the new id and whether the id is in the given child.
+  std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID, unsigned index);
 };
 
 } // namespace firrtl

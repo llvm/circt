@@ -16,10 +16,14 @@ set(CIRCT_TEST_DEPENDS
   esi-tester
   handshake-runner
   firtool
-  llhd-sim
   mlir-opt
   mlir-cpu-runner
   )
+
+if(CIRCT_LLHD_SIM_ENABLED)
+  list(APPEND CIRCT_TEST_DEPENDS llhd-sim)
+  list(APPEND CIRCT_TEST_DEPENDS circt-llhd-signals-runtime-wrappers)
+endif()
 
 add_lit_testsuite(check-circt "Running the CIRCT regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}

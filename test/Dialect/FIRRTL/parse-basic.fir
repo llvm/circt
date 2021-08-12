@@ -108,9 +108,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NOT: firrtl.connect %reset
     reset is invalid
 
-    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0("member") : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
-    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]]("0") : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
-    ; CHECK: [[C:%.+]] = firrtl.subfield [[B]]("reset") : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
+    ; CHECK: [[A:%.+]] = firrtl.subfield %out_0(0) : (!firrtl.bundle<member: bundle<0: bundle<clock: clock, reset: uint<1>>>>) -> !firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>
+    ; CHECK: [[B:%.+]] = firrtl.subfield [[A]](0) : (!firrtl.bundle<0: bundle<clock: clock, reset: uint<1>>>) -> !firrtl.bundle<clock: clock, reset: uint<1>>
+    ; CHECK: [[C:%.+]] = firrtl.subfield [[B]](1) : (!firrtl.bundle<clock: clock, reset: uint<1>>) -> !firrtl.uint<1>
     ; CHECK: firrtl.partialconnect %auto, [[C]] : !firrtl.uint<1>, !firrtl.uint<1>
     auto <- out_0.member.0.reset @[Field 173:49]
 
@@ -252,11 +252,17 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     else :
       _t <= _t_2
 
-    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x"(%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
+    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x" (%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
     printf(clock, reset, "Something interesting!\n %x %x", _t, _t_2)
+
+    ; CHECK: firrtl.printf %clock, %reset, "Something interesting!\0A %x %x" {name = "printf_0"}(%_t, %_t_2) : !firrtl.vector<uint<1>, 12>, !firrtl.vector<uint<1>, 12>
+    printf(clock, reset, "Something interesting!\n %x %x", _t, _t_2) : printf_0
 
     ; CHECK: firrtl.stop %clock, %reset, 42
     stop(clock, reset, 42)
+
+    ; CHECK: firrtl.stop %clock, %reset, 42 {name = "stop_0"}
+    stop(clock, reset, 42) : stop_0
 
     ; CHECK: firrtl.bits %i8 4 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<3>
     node n4 = bits(i8, 4, 2)
@@ -276,11 +282,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: %_t_2621 = firrtl.regreset %clock, %reset, %{{.*}} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    ; CHECK: %_t_2621 = firrtl.regreset %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
     reg _t_2621 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0")) @[Edges.scala 230:27]
 
-    ; CHECK: %_t_1601 = firrtl.regreset %clock, %reset, %{{.*}} : (!firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<2>
+    ; CHECK: %_t_1601 = firrtl.regreset %clock, %reset, %{{.*}} : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
     reg _t_1601 : UInt<2>, clock with :
       (reset => (reset, UInt<2>("h00"))) @[Edges.scala 230:27]
 
@@ -298,7 +304,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; The Scala implementation of FIRRTL prints registers without a reset value
     ; using the register name as the reset.  Make sure we handle this for
     ; compatibility.
-    ; CHECK: %_t_2622 = firrtl.reg %clock : (!firrtl.clock) -> !firrtl.uint<4>
+    ; CHECK: %_t_2622 = firrtl.reg %clock : !firrtl.uint<4>
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
@@ -396,16 +402,22 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     en <= not(reset)
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"
     assert(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" {name = "assert_0"}
+    assert(clock, pred, en, "X equals Y when Z is valid") : assert_0
     ; CHECK: [[C:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.assert %clock, %pred, [[C]], "assert:X equals Y when Z is valid"
     printf(clock, pred, "assert:X equals Y when Z is valid")
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"
     assume(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" {name = "assume_0"}
+    assume(clock, pred, en, "X equals Y when Z is valid") : assume_0
     ; CHECK: [[C2:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.assume %clock, %pred, [[C2]], "assume:X equals Y when Z is valid"
     printf(clock, pred, "assume:X equals Y when Z is valid")
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"
     cover(clock, pred, en, "X equals Y when Z is valid")
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" {name = "cover_0"}
+    cover(clock, pred, en, "X equals Y when Z is valid") : cover_0
     ; CHECK: [[C3:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
     ; CHECK-NEXT: firrtl.cover %clock, %pred, [[C3]], "cover:X equals Y when Z is valid"
     printf(clock, pred, "cover:X equals Y when Z is valid")
@@ -435,7 +447,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %write = firrtl.wire
     wire write : { id : UInt<4>, resp : UInt<2>}
 
-    ; CHECK: firrtl.subfield %write("id")
+    ; CHECK: firrtl.subfield %write(0)
     write.id <= UInt(1)
 
   ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity2(
@@ -556,10 +568,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-LABEL: firrtl.module @flip_one
   module flip_one :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
-    ; CHECK: %0 = firrtl.subfield %bf("int_1")
+    ; CHECK: %0 = firrtl.subfield %bf(0)
     node _T = bf.int_1
     ; CHECK: firrtl.when %0 {
-    when _T :  
+    when _T :
       skip
 
   ; CHECK-LABEL: firrtl.module @mem_depth_1
@@ -608,14 +620,15 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   extmodule issue183:
      parameter A = -1
 
-  ; COM: The Scala FIRRTL Compiler allows this for an aggregate node with an internal analog.
+  ; The Scala FIRRTL Compiler allows this for an aggregate node with an internal
+  ; analog.
   ; CHECK-LABEL: firrtl.module @analog_in_aggregate_node
   module analog_in_aggregate_node:
     input a: { a: UInt<1>, b: Analog<1>}
     ; CHECK: %b = firrtl.node %a : !firrtl.bundle<a: uint<1>, b: analog<1>>
     node b = a
 
-  ; COM: Check that a register clock sink is converted to passive
+  ; Check that a register clock sink is converted to passive
   ; CHECK-LABEL: firrtl.module @register_clock_passive
   module register_clock_passive:
     input clkIn: Clock
@@ -624,7 +637,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.reg %clkOut
     reg r: UInt<1>, clkOut
 
-  ; COM: Check that a register reset sink is converted to passive
+  ; Check that a register reset sink is converted to passive
   ; CHECK-LABEL: firrtl.module @register_reset_passive
   module register_reset_passive:
     input clk: Clock
@@ -633,7 +646,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.regreset %clk, %rst
     reg r: UInt<1>, clk with : (reset => (rst, UInt<1>(0)))
 
-  ; COM: Check that a register init sink is converted to passive
+  ; Check that a register init sink is converted to passive
   ; CHECK-LABEL: firrtl.module @register_init_passive
   module register_init_passive:
     input clk: Clock
@@ -693,13 +706,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NOT: firrtl.connect %in1
     in1 is invalid
 
-    ; CHECK: [[IN2_B:%.+]] = firrtl.subfield %in2("b")
+    ; CHECK: [[IN2_B:%.+]] = firrtl.subfield %in2(1)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[IN2_B]], [[INV]]
     in2 is invalid
 
-    ; CHECK: [[IN3_A:%.+]] = firrtl.subfield %in3("a")
-    ; CHECK: [[IN3_A_C:%.+]] = firrtl.subfield [[IN3_A]]("c")
+    ; CHECK: [[IN3_A:%.+]] = firrtl.subfield %in3(0)
+    ; CHECK: [[IN3_A_C:%.+]] = firrtl.subfield [[IN3_A]](1)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[IN3_A_C]], [[INV]]
     in3 is invalid
@@ -708,21 +721,21 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.connect %out0, [[INV]]
     out0 is invalid
 
-    ; CHECK: [[OUT1_A:%.+]] = firrtl.subfield %out1("a")
+    ; CHECK: [[OUT1_A:%.+]] = firrtl.subfield %out1(0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[OUT1_A]], [[INV]]
-    ; CHECK: [[OUT1_B:%.+]] = firrtl.subfield %out1("b")
+    ; CHECK: [[OUT1_B:%.+]] = firrtl.subfield %out1(1)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[OUT1_B]], [[INV]]
     out1 is invalid
 
-    ; CHECK: [[OUT2_A:%.+]] = firrtl.subfield %out2("a")
+    ; CHECK: [[OUT2_A:%.+]] = firrtl.subfield %out2(0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[OUT2_A]], [[INV]]
     out2 is invalid
 
-    ; CHECK: [[OUT3_A:%.+]] = firrtl.subfield %out3("a")
-    ; CHECK: [[OUT3_A_B:%.+]] = firrtl.subfield [[OUT3_A]]("b")
+    ; CHECK: [[OUT3_A:%.+]] = firrtl.subfield %out3(0)
+    ; CHECK: [[OUT3_A_B:%.+]] = firrtl.subfield [[OUT3_A]](0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[OUT3_A_B]], [[INV]]
     out3 is invalid
@@ -734,10 +747,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire0 is invalid
 
     ; CHECK: %wire1 = firrtl.wire
-    ; CHECK: [[WIRE1_A:%.+]] = firrtl.subfield %wire1("a")
+    ; CHECK: [[WIRE1_A:%.+]] = firrtl.subfield %wire1(0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[WIRE1_A]], [[INV]]
-    ; CHECK: [[WIRE1_B:%.+]] = firrtl.subfield %wire1("b")
+    ; CHECK: [[WIRE1_B:%.+]] = firrtl.subfield %wire1(1)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[WIRE1_B]], [[INV]]
     wire wire1 : {a : UInt<1>, flip b : UInt<1> }
@@ -745,11 +758,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; An analog in the leaf of a wire should be attached not connected.
     ; CHECK: %wire2 = firrtl.wire
-    ; CHECK: [[WIRE2_X:%.+]] = firrtl.subfield %wire2("x")
-    ; CHECK: [[WIRE2_X_A:%.+]] = firrtl.subfield [[WIRE2_X]]("a")
+    ; CHECK: [[WIRE2_X:%.+]] = firrtl.subfield %wire2(0)
+    ; CHECK: [[WIRE2_X_A:%.+]] = firrtl.subfield [[WIRE2_X]](0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[WIRE2_X_A]], [[INV]]
-    ; CHECK: [[WIRE2_X_B:%.+]] = firrtl.subfield [[WIRE2_X]]("b")
+    ; CHECK: [[WIRE2_X_B:%.+]] = firrtl.subfield [[WIRE2_X]](1)
     ; CHECK-NOT: firrtl.attach [[WIRE2_X_B]], [[INV]]
     wire wire2 : {x : {flip a : UInt<1>, flip b: Analog<1> } }
     wire2 is invalid
@@ -760,7 +773,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect %U0_in0, [[INV]]
-    ; CHECK: [[U0_IN1_A:%.+]] = firrtl.subfield %U0_in1("a")
+    ; CHECK: [[U0_IN1_A:%.+]] = firrtl.subfield %U0_in1(0)
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
     ; CHECK: firrtl.connect [[U0_IN1_A]], [[INV]]
     U0 is invalid
@@ -816,10 +829,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %out1 = firrtl.node %in1
     node out1 = validif(en, in1)
 
-    ; CHECK: %out2 = firrtl.node %in2 
+    ; CHECK: %out2 = firrtl.node %in2
     node out2 = validif(en, in2)
 
-    ; This is required for SFC compatibility. 
+    ; This is required for SFC compatibility.
     ; https://github.com/llvm/circt/issues/1186
     ; CHECK: %out3 = firrtl.node %in1
     node out3 = validif(UInt<1>(0), in1)
@@ -866,3 +879,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     parameter FORMAT = 'xyz_timeout=%d\n'
     parameter MIXED_QUOTES = '"\'\"'
 
+  ; CHECK-LABEL: firrtl.module @issue1303
+  module issue1303:
+    output out: Reset
+    out <= UInt(1)
+    ; CHECK: %[[c1:.*]] = firrtl.constant 1 : !firrtl.uint
+    ; CHECK-NEXT: firrtl.connect %out, %[[c1]] : !firrtl.reset, !firrtl.uint

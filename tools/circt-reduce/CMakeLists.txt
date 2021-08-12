@@ -1,0 +1,29 @@
+set(LLVM_LINK_COMPONENTS
+  Support
+)
+
+add_llvm_tool(circt-reduce
+ circt-reduce.cpp
+)
+llvm_update_compile_flags(circt-reduce)
+target_link_libraries(circt-reduce
+  PRIVATE
+  CIRCTCalyx
+  CIRCTESI
+  CIRCTFIRRTL
+  CIRCTHandshakeOps
+  CIRCTLLHD
+  CIRCTMSFT
+  CIRCTHW
+  CIRCTScheduling
+  CIRCTSeq
+  CIRCTStaticLogicOps
+  CIRCTSV
+
+  MLIRIR
+  MLIRParser
+  MLIRStandard
+  MLIRSupport
+  MLIRTransforms
+  MLIRReduceLib
+)

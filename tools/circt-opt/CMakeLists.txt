@@ -10,10 +10,12 @@ target_link_libraries(circt-opt
   PRIVATE
   CIRCTStandardToHIR
   CIRCTCalyx
-  CIRCTFIRRTLTransforms
+  CIRCTCalyxToHW
+  CIRCTCalyxTransforms
   CIRCTESI
   CIRCTFIRRTL
   CIRCTFIRRTLToHW
+  CIRCTFIRRTLTransforms
   CIRCTHandshakeOps
   CIRCTHandshakeToFIRRTL
   CIRCTHIR
@@ -24,13 +26,14 @@ target_link_libraries(circt-opt
   CIRCTMSFT
   CIRCTHW
   CIRCTHWToLLHD
+  CIRCTScheduling
+  CIRCTSchedulingTestPasses
   CIRCTSeq
   CIRCTStandardToHandshake
   CIRCTStandardToStaticLogic
   CIRCTStaticLogicOps
   CIRCTSV
   CIRCTSVTransforms
-  CIRCTTransforms
 
   MLIRIR
   MLIRLLVMIR

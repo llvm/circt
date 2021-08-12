@@ -1,4 +1,4 @@
-//===- Scheduler.h - Common interface for scheduling algorithms -*- C++ -*-===//
+//===- Problems.h - Modeling of scheduling problems -------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,13 +9,13 @@
 // Static scheduling algorithms for use in HLS flows all solve similar problems.
 // The classes in this file serve as an interface between clients and algorithm
 // implementations, and model a basic scheduling problem and some commonly used
-// extensions (e.g. modulo scheduling). This includes problem-specific utility
-// and verification methods.
+// extensions (e.g. modulo scheduling). This includes problem-specific
+// verification methods.
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_SCHEDULING_SCHEDULER_H
-#define CIRCT_SCHEDULING_SCHEDULER_H
+#ifndef CIRCT_SCHEDULING_PROBLEMS_H
+#define CIRCT_SCHEDULING_PROBLEMS_H
 
 #include "circt/Scheduling/DependenceIterator.h"
 #include "circt/Support/LLVM.h"
@@ -62,23 +62,21 @@ namespace scheduling {
 ///   is started. Together, the start times for all operations represent the
 ///   problem's solution, i.e. the schedule.
 ///
-/// Subclasses, i.e. base classes for more complex scheduling problems as well
-/// as concrete algorithms, can declare additional properties as needed. The
-/// top-level entrypoint for algorithms is the pure virtual `schedule()` method.
+/// Subclasses, i.e. corresponding to more complex scheduling problems, can
+/// declare additional properties as needed.
 //
-/// The `check...` methods perform validity checks before scheduling, e.g. all
-/// operation handles referenced in dependences are registered, all ops have an
-/// associated operator type, etc.
+/// The `check...` methods perform validity checks before scheduling, e.g. that
+/// all operations have an associated operator type, etc.
 ///
 /// The `verify...` methods check the correctness of the solution determined by
 /// a concrete scheduling algorithm, e.g. that there are start times available
 /// for each registered operation, and the precedence constraints as modeled by
 /// the dependences are satisfied.
-class Scheduler {
+class Problem {
 public:
   /// Initialize a scheduling problem corresponding to \p containingOp.
-  Scheduler(Operation *containingOp) : containingOp(containingOp) {}
-  virtual ~Scheduler() = default;
+  Problem(Operation *containingOp) : containingOp(containingOp) {}
+  virtual ~Problem() = default;
 
   friend detail::DependenceIterator;
 
@@ -96,11 +94,12 @@ public:
   //===--------------------------------------------------------------------===//
   // Aliases for containers storing the problem components and properties
   //===--------------------------------------------------------------------===//
-protected:
+public:
   using OperationSet = llvm::SetVector<Operation *>;
   using DependenceRange = llvm::iterator_range<detail::DependenceIterator>;
   using OperatorTypeSet = llvm::SetVector<OperatorType>;
 
+protected:
   using AuxDependenceMap =
       llvm::DenseMap<Operation *, llvm::SmallSetVector<Operation *, 4>>;
 
@@ -130,11 +129,11 @@ private:
   OperationProperty<OperatorType> linkedOperatorType;
   OperationProperty<unsigned> startTime;
 
-  // Pperator type properties
+  // Operator type properties
   OperatorTypeProperty<unsigned> latency;
 
   //===--------------------------------------------------------------------===//
-  // Client interface to construct problem
+  // Problem construction
   //===--------------------------------------------------------------------===//
 public:
   /// Include \p op in this scheduling problem.
@@ -153,10 +152,15 @@ public:
   OperatorType getOrInsertOperatorType(StringRef name);
 
   //===--------------------------------------------------------------------===//
-  // Subclass access to problem components
+  // Access to problem components
   //===--------------------------------------------------------------------===//
-protected:
+public:
+  /// Return the operation containing this problem, e.g. to emit diagnostics.
+  Operation *getContainingOp() { return containingOp; }
+
+  /// Return true if \p op is part of this problem.
   bool hasOperation(Operation *op) { return operations.contains(op); }
+  /// Return the set of operations.
   const OperationSet &getOperations() { return operations; }
 
   /// Return a range object to transparently iterate over \p op's *incoming*
@@ -171,31 +175,27 @@ protected:
   /// process the ranges for all registered operations.
   DependenceRange getDependences(Operation *op);
 
+  /// Return true if \p opr is part of this problem.
   bool hasOperatorType(OperatorType opr) { return operatorTypes.contains(opr); }
+  /// Return the set of operator types.
   const OperatorTypeSet &getOperatorTypes() { return operatorTypes; }
 
   //===--------------------------------------------------------------------===//
-  // Subclass access to properties: retrieve problem, set solution
+  // Access to properties
   //===--------------------------------------------------------------------===//
-protected:
+public:
+  /// The linked operator type provides the runtime characteristics for \p op.
   Optional<OperatorType> getLinkedOperatorType(Operation *op) {
     return linkedOperatorType.lookup(op);
   }
-
-  Optional<unsigned> getLatency(OperatorType opr) {
-    return latency.lookup(opr);
-  }
-
-  void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
-
-  //===--------------------------------------------------------------------===//
-  // Client access to properties: specify problem, retrieve solution
-  //===--------------------------------------------------------------------===//
-public:
   void setLinkedOperatorType(Operation *op, OperatorType opr) {
     linkedOperatorType[op] = opr;
   }
 
+  /// The latency is the number of cycles \p opr needs to compute its result.
+  Optional<unsigned> getLatency(OperatorType opr) {
+    return latency.lookup(opr);
+  }
   void setLatency(OperatorType opr, unsigned val) { latency[opr] = val; }
 
   /// Return the start time for \p op, as computed by the scheduler.
@@ -204,6 +204,7 @@ public:
   Optional<unsigned> getStartTime(Operation *op) {
     return startTime.lookup(op);
   }
+  void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
 
   //===--------------------------------------------------------------------===//
   // Hooks to check/verify the different problem components
@@ -224,16 +225,41 @@ public:
   LogicalResult check();
   /// Return success if the computed solution is valid.
   LogicalResult verify();
+};
 
-  //===--------------------------------------------------------------------===//
-  // Entry point to actual algorithm
-  //===--------------------------------------------------------------------===//
+/// This class models a cyclic scheduling problem. Its solution solution can be
+/// used to construct a pipelined datapath with a fixed, integer initiation
+/// interval, in which the execution of multiple iterations/samples/etc. may
+/// overlap.
+class CyclicProblem : public virtual Problem {
+private:
+  DependenceProperty<unsigned> distance;
+  ProblemProperty<unsigned> initiationInterval;
+
 public:
-  // Attempt to schedule the constructed problem.
-  virtual LogicalResult schedule() = 0;
+  using Problem::Problem;
+
+  /// The distance determines whether a dependence has to be satisfied in the
+  /// same iteration (distance=0 or not set), or distance-many iterations later.
+  Optional<unsigned> getDistance(Dependence dep) {
+    return distance.lookup(dep);
+  }
+  void setDistance(Dependence dep, unsigned val) { distance[dep] = val; }
+
+  /// The initiation interval (II) is the number of time steps between
+  /// subsequent iterations, i.e. a new iteration is started every II time
+  /// steps. The best possible value is 1, meaning that a corresponding pipeline
+  /// accepts new data every cycle. This property is part of the cyclic
+  /// problem's solution.
+  Optional<unsigned> getInitiationInterval() { return initiationInterval; }
+  void setInitiationInterval(unsigned val) { initiationInterval = val; }
+
+protected:
+  virtual LogicalResult verifyDependence(Dependence dep) override;
+  virtual LogicalResult verifyProblem() override;
 };
 
 } // namespace scheduling
 } // namespace circt
 
-#endif // CIRCT_SCHEDULING_SCHEDULER_H
+#endif // CIRCT_SCHEDULING_PROBLEMS_H

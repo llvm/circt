@@ -4,7 +4,7 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13.4)
 
 set( CMAKE_EXPORT_COMPILE_COMMANDS ON )
 
@@ -21,17 +21,21 @@ if(POLICY CMP0077)
   cmake_policy(SET CMP0077 NEW)
 endif()
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED YES)
+
 # If we are not building as a part of LLVM, build Circt as an
 # standalone project, using LLVM as an external library:
 if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
+  if (CIRCT_BINDINGS_PYTHON_ENABLED)
+    message(FATAL_ERROR "CIRCT Python bindings require a unified build. \
+                         See docs/PythonBindings.md.")
+  endif()
 
 #-------------------------------------------------------------------------------
 # Project setup and globals
 #-------------------------------------------------------------------------------
   project(circt LANGUAGES CXX C)
-  
-  set(CMAKE_CXX_STANDARD 14)
-  set(CMAKE_CXX_STANDARD_REQUIRED YES)
   
 #-------------------------------------------------------------------------------
 # Options and settings
@@ -69,9 +73,21 @@ endif ()
   set(CIRCT_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
 else()
+  # CMake library generation settings.
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Default to building a static mondo-lib")
+  set(CMAKE_PLATFORM_NO_VERSIONED_SONAME ON CACHE BOOL
+    "Python soname linked libraries are bad")
+  set(CMAKE_VISIBILITY_INLINES_HIDDEN ON CACHE BOOL "Hide inlines")
+
+  # The -fvisibility=hidden option only works for static builds.
+  if (BUILD_SHARED_LIBS AND (CMAKE_CXX_VISIBILITY_PRESET STREQUAL "hidden"))
+    message(FATAL_ERROR "CMAKE_CXX_VISIBILITY_PRESET=hidden is incompatible \
+                         with BUILD_SHARED_LIBS.")
+  endif()
+
   set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir ) # --src-root
   set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include ) # --includedir
-  set(MLIR_TABLEGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/tools/mlir/include)
+  set(MLIR_TABLEGEN_OUTPUT_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
   set(MLIR_TABLEGEN_EXE $<TARGET_FILE:mlir-tblgen>)
   include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
   include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
@@ -99,6 +115,7 @@ set(CIRCT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(CIRCT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(CIRCT_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include )
 set(CIRCT_TOOLS_DIR ${CMAKE_BINARY_DIR}/bin)
+set(CIRCT_PYTHON_PACKAGES_DIR ${CIRCT_BINARY_DIR}/python_packages)
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_MAIN_SRC_DIR}/cmake/modules")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
@@ -275,6 +292,24 @@ else()
 endif()
 
 #-------------------------------------------------------------------------------
+# llhd-sim Configuration
+#-------------------------------------------------------------------------------
+
+if(NOT WIN32)
+  option(CIRCT_LLHD_SIM_ENABLED "Enables LLHD sim." ON)
+else()
+  option(CIRCT_LLHD_SIM_ENABLED "Enables LLHD sim." OFF)
+endif()
+
+if(CIRCT_LLHD_SIM_ENABLED)
+  message(STATUS "llhd-sim is enabled.")
+else()
+  message(STATUS "llhd-sim is disabled.")
+endif()
+
+llvm_canonicalize_cmake_booleans(CIRCT_LLHD_SIM_ENABLED)
+
+#-------------------------------------------------------------------------------
 # Python Configuration
 #-------------------------------------------------------------------------------
 
@@ -297,6 +332,21 @@ if(CIRCT_BINDINGS_PYTHON_ENABLED)
                  "extension = '${PYTHON_MODULE_EXTENSION}'")
 else()
   message(STATUS "CIRCT Python bindings are disabled.")
+endif()
+
+#-------------------------------------------------------------------------------
+# Tcl bindings
+#-------------------------------------------------------------------------------
+option(CIRCT_BINDINGS_TCL_ENABLED "Enables CIRCT Tcl bindings." OFF)
+
+llvm_canonicalize_cmake_booleans(CIRCT_BINDINGS_TCL_ENABLED)
+if(CIRCT_BINDINGS_TCL_ENABLED)
+  message(STATUS "CIRCT Tcl bindings are enabled")
+  find_package(TCL 8.6 REQUIRED)
+  find_package(TCLStub 8.6 REQUIRED)
+  message(STATUS "Found TCL include path: ${TCL_INCLUDE_PATH}")
+  message(STATUS "Found TCL library: ${TCL_LIBRARY}")
+  message(STATUS "Found TCL executable: ${TCL_TCLSH}")
 endif()
 
 #-------------------------------------------------------------------------------

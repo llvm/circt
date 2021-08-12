@@ -25,7 +25,7 @@ of LLVM discord server.
 for more information.
 
 3) Contribute code.  CIRCT follows all of the LLVM Policies: you can create pull
-requests for the CIRCT repository, and gain commit access using the [standard LLVM policies](https://llvm.discourse.group/c/Projects-that-want-to-become-official-LLVM-Projects/circt/).
+requests for the CIRCT repository, and gain commit access using the [standard LLVM policies](https://llvm.org/docs/DeveloperPolicy.html#obtaining-commit-access).
 
 ## Motivation
 
@@ -92,9 +92,10 @@ $ mkdir llvm/build
 $ cd llvm/build
 $ cmake -G Ninja ../llvm \
     -DLLVM_ENABLE_PROJECTS="mlir" \
-    -DLLVM_TARGETS_TO_BUILD="X86;RISCV" \
+    -DLLVM_TARGETS_TO_BUILD="host" \
     -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DCMAKE_BUILD_TYPE=DEBUG
+    -DCMAKE_BUILD_TYPE=DEBUG \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 $ ninja
 $ ninja check-mlir
 ```
@@ -109,7 +110,8 @@ $ cmake -G Ninja .. \
     -DMLIR_DIR=$PWD/../llvm/build/lib/cmake/mlir \
     -DLLVM_DIR=$PWD/../llvm/build/lib/cmake/llvm \
     -DLLVM_ENABLE_ASSERTIONS=ON \
-    -DCMAKE_BUILD_TYPE=DEBUG
+    -DCMAKE_BUILD_TYPE=DEBUG \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 $ ninja
 $ ninja check-circt
 $ ninja check-circt-integration # Run the integration tests.
@@ -117,7 +119,9 @@ $ ninja check-circt-integration # Run the integration tests.
 
 The `-DCMAKE_BUILD_TYPE=DEBUG` flag enables debug information, which makes the
 whole tree compile slower, but allows you to step through code into the LLVM
-and MLIR frameworks.
+and MLIR frameworks. The `-DCMAKE_EXPOERT_COMPILE_COMMANDS=ON` flag generates
+a `build/compile_commands.json` file, which can be used by editors (or plugins)
+for autocomplete and/or IDE-like features.
 
 To get something that runs fast, use `-DCMAKE_BUILD_TYPE=Release` or
 `-DCMAKE_BUILD_TYPE=RelWithDebInfo` if you want to go fast and optionally if

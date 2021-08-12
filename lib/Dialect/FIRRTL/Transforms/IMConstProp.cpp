@@ -11,9 +11,9 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
-#include "llvm/Support/Parallel.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -189,6 +189,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(Value value, LatticeValue &valueEntry,
                          LatticeValue source) {
+    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+      source = LatticeValue::getOverdefined();
     if (valueEntry.mergeIn(source))
       changedLatticeValueWorklist.push_back(value);
   }
@@ -217,6 +219,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
     if (source.isUnknown())
       return;
 
+    if (!source.isOverdefined() && AnnotationSet::get(value).hasDontTouch())
+      source = LatticeValue::getOverdefined();
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[value];
     if (valueEntry != source) {
@@ -240,6 +244,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void markInvalidValueOp(InvalidValueOp invalid);
   void markConstantOp(ConstantOp constant);
+  void markSpecialConstantOp(SpecialConstantOp specialConstant);
   void markInstanceOp(InstanceOp instance);
 
   void visitConnect(ConnectOp connect);
@@ -303,14 +308,9 @@ void IMConstPropPass::runOnOperation() {
   }
 
   // Rewrite any constants in the modules.
-  if (circuit.getContext()->isMultithreadingEnabled()) {
-    SmallVector<FModuleOp> ops(circuit.getBody()->getOps<FModuleOp>());
-    llvm::parallelForEach(ops, [&](auto op) { rewriteModuleBody(op); });
-  } else {
-    for (auto &circuitBodyOp : *circuit.getBody())
-      if (auto module = dyn_cast<FModuleOp>(circuitBodyOp))
-        rewriteModuleBody(module);
-  }
+  mlir::parallelForEach(circuit.getContext(),
+                        circuit.getBody()->getOps<FModuleOp>(),
+                        [&](auto op) { rewriteModuleBody(op); });
 
   // Clean up our state for next time.
   instanceGraph = nullptr;
@@ -338,6 +338,14 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(Value value,
   if (result.isInvalidValue())
     return InvalidValueAttr::get(destType);
 
+  auto constant = result.getConstant();
+
+  // If this is a BoolAttr then we are dealing with a special constant.
+  if (auto boolAttr = constant.dyn_cast<BoolAttr>()) {
+    // No extOrTrunc necessary for clock or reset types.
+    return LatticeValue(boolAttr);
+  }
+
   // If destType is wider than the source constant type, extend it.
   auto resultConstant = result.getConstant().getAPSInt();
   auto destWidth = destType.getBitWidthOrSentinel();
@@ -359,15 +367,14 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
     return; // Already executable.
 
   for (auto &op : *block) {
-    // Filter out primitives etc quickly.
-    if (op.getNumOperands() != 0 || isa<RegResetOp>(&op))
-      continue;
 
     // Handle each of the special operations in the firrtl dialect.
     if (isa<WireOp>(op) || isa<RegOp>(op))
       markWireOrUnresetableRegOp(&op);
     else if (auto constant = dyn_cast<ConstantOp>(op))
       markConstantOp(constant);
+    else if (auto specialConstant = dyn_cast<SpecialConstantOp>(op))
+      markSpecialConstantOp(specialConstant);
     else if (auto invalid = dyn_cast<InvalidValueOp>(op))
       markInvalidValueOp(invalid);
     else if (auto instance = dyn_cast<InstanceOp>(op))
@@ -376,10 +383,6 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markRegResetOp(regReset);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
-    else {
-      for (auto result : op.getResults())
-        markOverdefined(result);
-    }
   }
 }
 
@@ -416,6 +419,10 @@ void IMConstPropPass::markMemOp(MemOp mem) {
 
 void IMConstPropPass::markConstantOp(ConstantOp constant) {
   mergeLatticeValue(constant, LatticeValue(constant.valueAttr()));
+}
+
+void IMConstPropPass::markSpecialConstantOp(SpecialConstantOp specialConstant) {
+  mergeLatticeValue(specialConstant, LatticeValue(specialConstant.valueAttr()));
 }
 
 void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
@@ -495,8 +502,11 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving result ports propagates the value to each instance using the
   // module.
   if (auto blockArg = connect.dest().dyn_cast<BlockArgument>()) {
-    for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
-      mergeLatticeValue(userOfResultPort, srcValue);
+    if (!AnnotationSet::get(blockArg).hasDontTouch())
+      for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
+        mergeLatticeValue(userOfResultPort, srcValue);
+    // Output ports are wire-like and may have users.
+    mergeLatticeValue(connect.dest(), srcValue);
     return;
   }
 
@@ -510,6 +520,8 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
   if (auto instance = dest.getDefiningOp<InstanceOp>()) {
+    // Update the dest, when its an instance op.
+    mergeLatticeValue(connect.dest(), srcValue);
     auto module =
         dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
     if (!module)
@@ -694,7 +706,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     }
 
     // Don't "refold" constants.  TODO: Unique in the module entry block.
-    if (isa<ConstantOp>(op) || isa<InvalidValueOp>(op))
+    if (isa<ConstantOp, SpecialConstantOp, InvalidValueOp>(op))
       continue;
 
     // If the op had any constants folded, replace them.

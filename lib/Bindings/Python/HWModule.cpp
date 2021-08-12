@@ -56,15 +56,25 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
               ctx = mlirTypeGetContext(type);
               names.emplace_back(tuple[0].cast<std::string>());
               mlirFieldInfos.push_back(HWStructFieldInfo{
-                  mlirStringRefCreate(names[i].data(), names[i].size()),
-                  mlirTypeAttrGet(type)});
+                  mlirStringRefCreate(names[i].data(), names[i].size()), type});
             }
             return cls(hwStructTypeGet(ctx, mlirFieldInfos.size(),
                                        mlirFieldInfos.data()));
           })
-      .def("get_field", [](MlirType self, std::string fieldName) {
-        return hwStructTypeGetField(
-            self, mlirStringRefCreateFromCString(fieldName.c_str()));
+      .def("get_field",
+           [](MlirType self, std::string fieldName) {
+             return hwStructTypeGetField(
+                 self, mlirStringRefCreateFromCString(fieldName.c_str()));
+           })
+      .def("get_fields", [](MlirType self) {
+        intptr_t num_fields = hwStructTypeGetNumFields(self);
+        py::list fields;
+        for (intptr_t i = 0; i < num_fields; ++i) {
+          auto field = hwStructTypeGetFieldNum(self, i);
+          std::string name(field.name.data, field.name.length);
+          fields.append(py::make_tuple(name, field.type));
+        }
+        return fields;
       });
 
   mlir_type_subclass(m, "TypeAliasType", hwTypeIsATypeAliasType)

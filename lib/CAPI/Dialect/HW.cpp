@@ -68,11 +68,8 @@ MlirType hwStructTypeGet(MlirContext ctx, intptr_t numElements,
   SmallVector<StructType::FieldInfo> fieldInfos;
   fieldInfos.reserve(numElements);
   for (intptr_t i = 0; i < numElements; ++i) {
-    auto typeAttr = unwrap(elements[i].attribute).dyn_cast<TypeAttr>();
-    if (!typeAttr)
-      return MlirType();
-    fieldInfos.push_back(
-        StructType::FieldInfo{unwrap(elements[i].name), typeAttr.getValue()});
+    fieldInfos.push_back(StructType::FieldInfo{unwrap(elements[i].name),
+                                               unwrap(elements[i].type)});
   }
   return wrap(StructType::get(unwrap(ctx), fieldInfos));
 }
@@ -80,6 +77,20 @@ MlirType hwStructTypeGet(MlirContext ctx, intptr_t numElements,
 MlirType hwStructTypeGetField(MlirType structType, MlirStringRef fieldName) {
   StructType st = unwrap(structType).cast<StructType>();
   return wrap(st.getFieldType(unwrap(fieldName)));
+}
+
+intptr_t hwStructTypeGetNumFields(MlirType structType) {
+  StructType st = unwrap(structType).cast<StructType>();
+  return st.getElements().size();
+}
+
+HWStructFieldInfo hwStructTypeGetFieldNum(MlirType structType, unsigned idx) {
+  StructType st = unwrap(structType).cast<StructType>();
+  auto cppField = st.getElements()[idx];
+  HWStructFieldInfo ret;
+  ret.name = wrap(cppField.name);
+  ret.type = wrap(cppField.type);
+  return ret;
 }
 
 bool hwTypeIsATypeAliasType(MlirType type) {

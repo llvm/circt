@@ -109,6 +109,28 @@ def ConstantOp : FIRRTLOp<"constant", [NoSideEffect, ConstantLike,
   let verifier = "return ::verifyConstantOp(*this);";
 }
 
+def SpecialConstantOp : FIRRTLOp<"specialconstant", [NoSideEffect,
+                                                     ConstantLike]> {
+  let summary = "Produce a constant Reset or Clock value";
+  let description = [{
+    The constant operation produces a constant value of Reset, AsyncReset, or
+    Clock type. The value can only be 0 or 1.
+    ```
+      %result = firrtl.specialconstant 1 : !firrtl.clock
+    ```
+    }];
+
+  let arguments = (ins BoolAttr:$value);
+  let results = (outs
+    AnyTypeOf<[ClockType, ResetType, AsyncResetType]>:$result);
+
+  // Need a custom parser/printer to avoid redundant type for the attribute and
+  // the op itself.
+  let parser = "return parse$cppClass(parser, result);";
+  let printer = "print$cppClass(p, *this);";
+  let hasFolder = 1;
+}
+
 def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect, ConstantLike]> {
   let summary = "InvalidValue primitive";
   let description = [{
@@ -134,21 +156,29 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
     The subfield expression refers to a subelement of an expression with a
     bundle type.
     ```
-      %result = firrtl.subfield %input "fieldname" : t1, t2
+      %result = firrtl.subfield %input "fieldIndex" : t1, t2
     ```
     }];
 
-  let arguments = (ins BundleType:$input, StrAttr:$fieldname);
+  let arguments = (ins BundleType:$input, I32Attr:$fieldIndex);
   let results = (outs FIRRTLType:$result);
 
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
-    "$input `(` $fieldname `)` attr-dict `:` functional-type($input, $result)";
+    "$input `(` $fieldIndex `)` attr-dict `:` functional-type($input, $result)";
 
   let firrtlExtraClassDeclaration = [{
     /// Return true if the specified field is flipped.
     bool isFieldFlipped();
+
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(input(), input().getType().cast<BundleType>()
+                                      .getFieldID(fieldIndex()));
+    }
   }];
+
+  let verifier = "return ::verifySubfieldOp(*this);";
 }
 
 class IndexConstraint<string value, string resultValue>
@@ -176,6 +206,14 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
   // TODO: Could drop the result type, inferring it from the source.
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` type($input)";
+
+  let firrtlExtraClassDeclaration = [{
+    /// Return a `FieldRef` to the accessed field.
+    FieldRef getAccessedField() {
+      return FieldRef(input(), input().getType().cast<FVectorType>()
+                                      .getFieldID(index()));
+    }
+  }];
 }
 
 def SubaccessOp : FIRRTLExprOp<"subaccess", [
@@ -254,9 +292,12 @@ class IntBinaryPrimOp<string mnemonic, Type resultType,
                 traits # [SameOperandsIntTypeKind]>;
 
 let inferType = "impl::inferAddSubResult" in {
-  def AddPrimOp : IntBinaryPrimOp<"add", IntType, [Commutative]>;
-  def SubPrimOp : IntBinaryPrimOp<"sub", IntType>;
+  let hasCanonicalizer = true in {
+    def AddPrimOp : IntBinaryPrimOp<"add", IntType, [Commutative]>;
+    def SubPrimOp : IntBinaryPrimOp<"sub", IntType>;
+  }
 }
+
 def MulPrimOp : IntBinaryPrimOp<"mul", IntType, [Commutative]>;
 def DivPrimOp : IntBinaryPrimOp<"div", IntType> {
   let description = [{

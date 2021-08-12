@@ -26,6 +26,10 @@ namespace hir {
 class HIRDialect;
 } // namespace hir
 
+namespace calyx {
+class CalyxDialect;
+} // namespace calyx
+
 namespace firrtl {
 class FIRRTLDialect;
 class FModuleOp;

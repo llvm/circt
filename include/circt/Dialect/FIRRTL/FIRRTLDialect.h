@@ -35,6 +35,7 @@ FieldRef getFieldRefFromValue(Value value);
 
 /// Get a string identifier representing the FieldRef.
 std::string getFieldName(const FieldRef &fieldRef);
+std::string getFieldName(const FieldRef &fieldRef, bool &rootKnown);
 
 } // namespace firrtl
 } // namespace circt

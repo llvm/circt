@@ -564,14 +564,21 @@ static bool parseAugmentedType(
       return false;
     }
     auto target = maybeTarget.getValue();
-    NamedAttrList attr;
+    NamedAttrList attr, dontTouchAnn;
     attr.append("class", classAttr);
     attr.append("defName", defName);
     attr.append("name", name);
-    if (target.second)
+    dontTouchAnn.append(
+        "class",
+        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+    if (target.second) {
       attr.append("target", target.second);
+      dontTouchAnn.append("target", target.second);
+    }
     newAnnotations[target.first].push_back(
         DictionaryAttr::getWithSorted(context, attr));
+    newAnnotations[target.first].push_back(
+        DictionaryAttr::getWithSorted(context, dontTouchAnn));
     return true;
   }
 
@@ -713,11 +720,20 @@ bool circt::firrtl::scatterCustomAnnotations(
             tryGetAs<StringAttr>(bDict, dict, "portName", loc, clazz, path);
         if (!portNameAttr)
           return false;
-        auto portTarget = canonicalizeTarget(portNameAttr.getValue());
-        if (!portTarget)
+        auto maybePortTarget = canonicalizeTarget(portNameAttr.getValue());
+        if (!maybePortTarget)
           return false;
+        auto portPair =
+            splitAndAppendTarget(port, maybePortTarget.getValue(), context);
         port.append("class", classAttr);
         port.append("id", id);
+
+        if (portPair.second.hasValue())
+          appendTarget(dontTouchAnn, portPair.second.getValue());
+        newAnnotations[portPair.first].push_back(
+            DictionaryAttr::getWithSorted(context, dontTouchAnn));
+        if (portPair.second.hasValue())
+          dontTouchAnn.pop_back();
 
         if (classAttr.getValue() ==
             "sifive.enterprise.grandcentral.ReferenceDataTapKey") {
@@ -733,27 +749,30 @@ bool circt::firrtl::scatterCustomAnnotations(
           auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
           if (!maybeSourceTarget)
             return false;
-          auto targetPair = splitAndAppendTarget(
+          auto sourcePair = splitAndAppendTarget(
               source, maybeSourceTarget.getValue(), context);
-          if (targetPair.second.hasValue())
-            appendTarget(dontTouchAnn, targetPair.second.getValue());
-          newAnnotations[targetPair.first].push_back(
+          if (sourcePair.second.hasValue())
+            appendTarget(dontTouchAnn, sourcePair.second.getValue());
+          source.append("type", StringAttr::get(context, "source"));
+          newAnnotations[sourcePair.first].push_back(
               DictionaryAttr::getWithSorted(context, source));
-          newAnnotations[targetPair.first].push_back(
+          newAnnotations[sourcePair.first].push_back(
               DictionaryAttr::getWithSorted(context, dontTouchAnn));
-          if (targetPair.second.hasValue())
+          if (sourcePair.second.hasValue())
             dontTouchAnn.pop_back();
+
+          // Port Annotations generation.
           port.append("portID", portID);
-          newAnnotations[portTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, port));
-          newAnnotations[portTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, dontTouchAnn));
+          port.append("type", StringAttr::get(context, "portName"));
+          newAnnotations[portPair.first].push_back(
+              DictionaryAttr::get(context, port));
           continue;
         }
 
         if (classAttr.getValue() ==
             "sifive.enterprise.grandcentral.DataTapModuleSignalKey") {
           NamedAttrList module;
+          auto portID = newID();
           module.append("class", classAttr);
           module.append("id", id);
           auto internalPathAttr = tryGetAs<StringAttr>(
@@ -763,6 +782,7 @@ bool circt::firrtl::scatterCustomAnnotations(
           if (!internalPathAttr || !moduleAttr)
             return false;
           module.append("internalPath", internalPathAttr);
+          module.append("portID", portID);
           auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
           if (!moduleTarget)
             return false;
@@ -770,19 +790,19 @@ bool circt::firrtl::scatterCustomAnnotations(
               DictionaryAttr::getWithSorted(context, module));
           newAnnotations[moduleTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, dontTouchAnn));
-          newAnnotations[portTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, port));
-          newAnnotations[portTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, dontTouchAnn));
+
+          // Port Annotations generation.
+          port.append("portID", portID);
+          newAnnotations[portPair.first].push_back(
+              DictionaryAttr::get(context, port));
           continue;
         }
 
         if (classAttr.getValue() ==
             "sifive.enterprise.grandcentral.DeletedDataTapKey") {
-          newAnnotations[portTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, port));
-          newAnnotations[portTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, dontTouchAnn));
+          // Port Annotations generation.
+          newAnnotations[portPair.first].push_back(
+              DictionaryAttr::get(context, port));
           continue;
         }
 
@@ -792,18 +812,13 @@ bool circt::firrtl::scatterCustomAnnotations(
           literal.append("class", classAttr);
           auto literalAttr =
               tryGetAs<StringAttr>(bDict, dict, "literal", loc, clazz, path);
-          auto portNameAttr =
-              tryGetAs<StringAttr>(bDict, dict, "portName", loc, clazz, path);
-          if (!literalAttr || !portNameAttr)
+          if (!literalAttr)
             return false;
           literal.append("literal", literalAttr);
-          auto portNameTarget = canonicalizeTarget(portNameAttr.getValue());
-          if (!portNameTarget)
-            return false;
-          newAnnotations[portNameTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, literal));
-          newAnnotations[portNameTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, dontTouchAnn));
+
+          // Port Annotaiton generation.
+          newAnnotations[portPair.first].push_back(
+              DictionaryAttr::get(context, literal));
           continue;
         }
 
@@ -862,11 +877,21 @@ bool circt::firrtl::scatterCustomAnnotations(
 
     if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
                  "SerializedViewAnnotation") {
+      auto viewAnnotationClass = StringAttr::get(
+          context, "sifive.enterprise.grandcentral.ViewAnnotation");
       auto id = newID();
       NamedAttrList companionAttrs, parentAttrs;
-      companionAttrs.append("class", dict.get("class"));
+      companionAttrs.append("class", viewAnnotationClass);
       companionAttrs.append("id", id);
       companionAttrs.append("type", StringAttr::get(context, "companion"));
+      auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
+      if (!viewAttr)
+        return false;
+      auto defName =
+          tryGetAs<StringAttr>(viewAttr, viewAttr, "defName", loc, clazz);
+      if (!defName)
+        return false;
+      companionAttrs.append("defName", defName);
       auto companionAttr =
           tryGetAs<StringAttr>(dict, dict, "companion", loc, clazz);
       if (!companionAttr)
@@ -877,14 +902,17 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto parentAttr = tryGetAs<StringAttr>(dict, dict, "parent", loc, clazz);
       if (!parentAttr)
         return false;
-      parentAttrs.append("class", dict.get("class"));
+      parentAttrs.append("class", viewAnnotationClass);
       parentAttrs.append("id", id);
+      auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
+      if (!name)
+        return false;
+      parentAttrs.append("name", name);
       parentAttrs.append("type", StringAttr::get(context, "parent"));
+      parentAttrs.append("defName", defName);
       newAnnotations[parentAttr.getValue()].push_back(
           DictionaryAttr::get(context, parentAttrs));
-      auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
-      if (!viewAttr ||
-          !parseAugmentedType(context, viewAttr, dict, newAnnotations,
+      if (!parseAugmentedType(context, viewAttr, dict, newAnnotations,
                               companion, {}, {}, loc, clazz, "view"))
         return false;
       continue;

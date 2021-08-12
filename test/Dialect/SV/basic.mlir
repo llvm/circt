@@ -4,6 +4,10 @@
 // CHECK-LABEL: hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 
+  %c11_i42 = hw.constant 11: i42
+  // CHECK: %param_x = sv.localparam %c11_i42 : i42
+  %param_x = sv.localparam %c11_i42 : i42
+
   // This corresponds to this block of system verilog code:
   //    always @(posedge arg0) begin
   //      `ifndef SYNTHESIS
@@ -19,7 +23,7 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
       %tmpz = sv.constantZ : i1
       %tmp2 = comb.and %tmp, %tmpx, %tmpz, %arg1 : i1
       sv.if %tmp2 {
-        sv.fwrite "Hi\n" 
+        sv.fwrite "Hi\n"
       }
       sv.if %tmp2 {
         // Test fwrite with operands.
@@ -38,12 +42,12 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT:     %z_i1 = sv.constantZ : i1
   // CHECK-NEXT:     %0 = comb.and %PRINTF_COND_, %x_i1, %z_i1, %arg1 : i1
   // CHECK-NEXT:     sv.if %0 {
-  // CHECK-NEXT:       sv.fwrite "Hi\0A" 
+  // CHECK-NEXT:       sv.fwrite "Hi\0A"
   // CHECK-NEXT:     }
   // CHECK-NEXT:     sv.if %0 {
   // CHECK-NEXT:       sv.fwrite "%x"(%0) : i1
   // CHECK-NEXT:     } else {
-  // CHECK-NEXT:       sv.fwrite "There\0A" 
+  // CHECK-NEXT:       sv.fwrite "There\0A"
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
@@ -60,13 +64,13 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     sv.fwrite "Sync Main Block\n"
   } ( syncreset : posedge %arg1) {
     sv.fwrite "Sync Reset Block\n"
-  } 
+  }
 
   // CHECK-NEXT: sv.alwaysff(posedge %arg0) {
   // CHECK-NEXT:   sv.fwrite "Sync Main Block\0A"
   // CHECK-NEXT:  }(syncreset : posedge %arg1) {
   // CHECK-NEXT:   sv.fwrite "Sync Reset Block\0A"
-  // CHECK-NEXT: } 
+  // CHECK-NEXT: }
 
   sv.alwaysff (posedge %arg0) {
     sv.fwrite "Async Main Block\n"
@@ -78,11 +82,11 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   // CHECK-NEXT:   sv.fwrite "Async Main Block\0A"
   // CHECK-NEXT:  }(asyncreset : negedge %arg1) {
   // CHECK-NEXT:   sv.fwrite "Async Reset Block\0A"
-  // CHECK-NEXT: } 
+  // CHECK-NEXT: }
 
 // Smoke test generic syntax.
   sv.initial {
-    "sv.if"(%arg0) ( { 
+    "sv.if"(%arg0) ( {
       ^bb0:
     }, {
     }) : (i1) -> ()
@@ -90,10 +94,10 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 
   // CHECK-NEXT:     sv.initial {
   // CHECK-NEXT:       sv.if %arg0 {
-  // CHECK-NEXT:       } 
+  // CHECK-NEXT:       }
   // CHECK-NEXT:     }
 
-  // CHECK-NEXT: sv.initial { 
+  // CHECK-NEXT: sv.initial {
   // CHECK-NEXT:   sv.casez %arg8 : i8
   // CHECK-NEXT:   case b0000001x: {
   // CHECK-NEXT:     sv.fwrite "x"
@@ -137,9 +141,9 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     }
   }
 
-  // CHECK-NEXT: %combWire = sv.wire : !hw.inout<i1> 
+  // CHECK-NEXT: %combWire = sv.wire : !hw.inout<i1>
   %combWire = sv.wire : !hw.inout<i1>
-  // CHECK-NEXT: %combWire2 = sv.wire : !hw.inout<i1> 
+  // CHECK-NEXT: %combWire2 = sv.wire : !hw.inout<i1>
   %combWire2 = sv.wire : !hw.inout<i1>
   // CHECK-NEXT: %regForce = sv.reg : !hw.inout<i1>
   %regForce = sv.reg  : !hw.inout<i1>
@@ -178,7 +182,7 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 sv.bind @a1
 sv.bind @b1
 //CHECK-NEXT: hw.module.extern @ExternDestMod(%a: i1, %b: i2)
-//CHECK-NEXT: hw.module @InternalDestMod(%a: i1, %b: i2) { 
+//CHECK-NEXT: hw.module @InternalDestMod(%a: i1, %b: i2) {
 //CHECK-NEXT:   hw.output
 //CHECK-NEXT: }
 hw.module.extern @ExternDestMod(%a: i1, %b: i2)
@@ -186,10 +190,12 @@ hw.module @InternalDestMod(%a: i1, %b: i2) {}
 //CHECK-NEXT: hw.module @AB(%a: i1, %b: i2) {
 //CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint = 1 : i64} : (i1, i2) -> ()
 //CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(%a, %b) {doNotPrint = 1 : i64} : (i1, i2) -> ()
+//CHECK-NEXT:   hw.instance "whazzzup" @ExternDestMod(%a, %b) {parameters = {CFG = #sv.verbatim.parameter<"\22FOO\22">}} : (i1, i2) -> ()
 //CHECK-NEXT:   hw.output
 //CHECK-NEXT: }
 hw.module @AB(%a: i1, %b: i2) -> () {
   hw.instance "whatever" sym @a1 @ExternDestMod(%a, %b) {doNotPrint=1}: (i1, i2) -> ()
   hw.instance "yo" sym @b1 @InternalDestMod(%a, %b) {doNotPrint=1} : (i1, i2) -> ()
+  hw.instance "whazzzup" @ExternDestMod(%a, %b) {parameters = {CFG = #sv.verbatim.parameter<"\"FOO\"">}} : (i1, i2) -> ()
   hw.output
 }

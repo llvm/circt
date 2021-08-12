@@ -543,9 +543,8 @@ static ValueVectorList extractSubfields(FModuleOp subModuleOp,
     auto type = arg.getType().cast<FIRRTLType>();
     if (auto bundleType = type.dyn_cast<BundleType>()) {
       // Extract all subfields of all bundle ports.
-      for (auto &element : bundleType.getElements()) {
-        subfields.push_back(
-            rewriter.create<SubfieldOp>(insertLoc, arg, element.name));
+      for (size_t i = 0, e = bundleType.getNumElements(); i < e; ++i) {
+        subfields.push_back(rewriter.create<SubfieldOp>(insertLoc, arg, i));
       }
     } else if (type.isa<ClockType>()) {
       // Extract clock signals.
@@ -1714,13 +1713,16 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     // Create a subfield op to access this port in the memory.
     auto fieldName = loadIdentifier(i);
     auto memBundle = memOp.getPortNamed(fieldName);
+    auto memType = memBundle.getType().cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
-    auto memClock = rewriter.create<SubfieldOp>(insertLoc, memBundle, "clk");
+    auto memClock = rewriter.create<SubfieldOp>(
+        insertLoc, memBundle, memType.getElementIndex("clk").getValue());
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the load address out of the bundle.
-    auto memAddr = rewriter.create<SubfieldOp>(insertLoc, memBundle, "addr");
+    auto memAddr = rewriter.create<SubfieldOp>(
+        insertLoc, memBundle, memType.getElementIndex("addr").getValue());
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
@@ -1739,13 +1741,15 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     rewriter.create<ConnectOp>(insertLoc, memAddr, loadAddrData);
 
     // Get the load data out of the bundle.
-    auto memData = rewriter.create<SubfieldOp>(insertLoc, memBundle, "data");
+    auto memData = rewriter.create<SubfieldOp>(
+        insertLoc, memBundle, memType.getElementIndex("data").getValue());
 
     // Connect the memory to the load data.
     rewriter.create<ConnectOp>(insertLoc, loadDataData, memData);
 
     // Get the load enable out of the bundle.
-    auto memEnable = rewriter.create<SubfieldOp>(insertLoc, memBundle, "en");
+    auto memEnable = rewriter.create<SubfieldOp>(
+        insertLoc, memBundle, memType.getElementIndex("en").getValue());
 
     // Connect the address valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, loadAddrValid);
@@ -1777,13 +1781,16 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
 
     auto fieldName = storeIdentifier(i);
     auto memBundle = memOp.getPortNamed(fieldName);
+    auto memType = memBundle.getType().cast<FIRRTLType>().cast<BundleType>();
 
     // Get the clock out of the bundle and connect it.
-    auto memClock = rewriter.create<SubfieldOp>(insertLoc, memBundle, "clk");
+    auto memClock = rewriter.create<SubfieldOp>(
+        insertLoc, memBundle, memType.getElementIndex("clk").getValue());
     rewriter.create<ConnectOp>(insertLoc, memClock, clock);
 
     // Get the store address out of the bundle.
-    auto memAddr = rewriter.create<SubfieldOp>(insertLoc, memBundle, "addr");
+    auto memAddr = rewriter.create<SubfieldOp>(
+        insertLoc, memBundle, memType.getElementIndex("addr").getValue());
 
     // Since addresses coming from Handshake are IndexType and have a hardcoded
     // 64-bit width in this pass, we may need to truncate down to the actual
@@ -1802,7 +1809,8 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
     rewriter.create<ConnectOp>(insertLoc, memAddr, storeAddrData);
 
     // Get the store data out of the bundle.
-    auto memData = rewriter.create<SubfieldOp>(insertLoc, memBundle, "data");
+    auto memData = rewriter.create<SubfieldOp>(
+        insertLoc, memBundle, memType.getElementIndex("data").getValue());
 
     // Connect the store data to the memory.
     rewriter.create<ConnectOp>(insertLoc, memData, storeDataData);
@@ -1855,13 +1863,15 @@ bool HandshakeBuilder::visitHandshake(MemoryOp op) {
                                writeValidBufferMux);
 
     // Get the store enable out of the bundle.
-    auto memEnable = rewriter.create<SubfieldOp>(insertLoc, memBundle, "en");
+    auto memEnable = rewriter.create<SubfieldOp>(
+        insertLoc, memBundle, memType.getElementIndex("en").getValue());
 
     // Connect the write valid signal to the memory enable.
     rewriter.create<ConnectOp>(insertLoc, memEnable, writeValid);
 
     // Get the store mask out of the bundle.
-    auto memMask = rewriter.create<SubfieldOp>(insertLoc, memBundle, "mask");
+    auto memMask = rewriter.create<SubfieldOp>(
+        insertLoc, memBundle, memType.getElementIndex("mask").getValue());
 
     // Since we are not storing bundles in the memory, we can assume the mask is
     // a single bit.

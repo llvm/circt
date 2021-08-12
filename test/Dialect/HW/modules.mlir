@@ -30,7 +30,7 @@ module {
     // Instantiate @C with a public symbol on the instance
     %f, %g = hw.instance "c1" sym @E @C(%d) : (i1) -> (i1, i1)
     // Connect the inout port with %f
-    sv.connect %e, %f : i1
+    sv.assign %e, %f : i1
     // Output values
     hw.output %g, %r1 : i1, i1
   }
@@ -40,7 +40,7 @@ module {
 
   hw.module @AnyType1(%a: vector< 3 x i8 >) { }
   // CHECK-LABEL: hw.module @AnyType1(%a: vector<3xi8>)
-  
+
   // CHECK-LABEL: hw.module @AnyTypeInstance()
   hw.module @AnyTypeInstance() {
     %vec = constant dense <0> : vector<3xi8>

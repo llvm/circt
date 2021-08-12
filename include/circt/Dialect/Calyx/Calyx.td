@@ -13,6 +13,8 @@
 #ifndef CALYX_TD
 #define CALYX_TD
 
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -35,13 +37,17 @@ def CalyxDialect : Dialect {
   let cppNamespace = "::circt::calyx";
 }
 
+class SameTypeConstraint<string lhs, string rhs>
+ : TypesMatchWith<"lhs and rhs types should be equivalent",
+                   lhs, rhs, [{ $_self }]>;
+
 /// Base class for the operation in this dialect.
 class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
   Op<CalyxDialect, mnemonic, traits>;
 
 /// Base class for Calyx containers.
 class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
-  Op<CalyxDialect, mnemonic, !listconcat(traits, [
+  CalyxOp<mnemonic, !listconcat(traits, [
       NoRegionArguments,
       NoTerminator,
       SingleBlock
@@ -55,6 +61,20 @@ class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
   }];
 }
 
+/// Base class for ports associated with a Calyx GroupOp.
+class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
+  CalyxOp<mnemonic, !listconcat(traits, [
+    HasParent<"GroupOp">
+  ])> {
+  let arguments = (ins
+    I1:$src,
+    Optional<I1>:$guard
+  );
+  let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
+}
+
 include "circt/Dialect/Calyx/CalyxStructure.td"
+include "circt/Dialect/Calyx/CalyxControl.td"
+include "circt/Dialect/Calyx/CalyxPrimitives.td"
 
 #endif // CALYX_TD
