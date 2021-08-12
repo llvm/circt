@@ -49,6 +49,7 @@ class ComplexPorts:
 
   @generator
   def build(mod):
+    assert len(mod.data_in) == 3
     return {
       'a': mod.data_in[0].reg(mod.clk),
       'b': mod.data_in[mod.sel],

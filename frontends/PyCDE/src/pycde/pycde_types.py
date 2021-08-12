@@ -103,18 +103,12 @@ def PyCDEType(type):
   class _PyCDEType(type.__class__):
     """Add methods to an MLIR type class."""
 
-    # If we're subclassing a type alias, use a different 'inner' implementation.
-    if isinstance(type, hw.TypeAliasType):
-
-      @property
-      def inner(self):
-        """Return self or inner type."""
+    @property
+    def strip(self):
+      """Return self or inner type."""
+      if isinstance(type, hw.TypeAliasType):
         return PyCDEType(self.inner_type)
-    else:
-
-      @property
-      def inner(self):
-        """Return self or inner type."""
+      else:
         return self
 
     def create(self, obj):
