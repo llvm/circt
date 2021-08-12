@@ -96,6 +96,14 @@ static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
   }
 }
 
+static void emitSchedule(Problem &prob, StringRef attrName,
+                         OpBuilder &builder) {
+  for (auto *op : prob.getOperations()) {
+    unsigned startTime = *prob.getStartTime(op);
+    op->setAttr(attrName, builder.getI32IntegerAttr(startTime));
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // (Basic) Problem
 //===----------------------------------------------------------------------===//
@@ -194,10 +202,7 @@ void TestASAPSchedulerPass::runOnFunction() {
   }
 
   OpBuilder builder(func.getContext());
-  for (auto *op : prob.getOperations()) {
-    unsigned startTime = *prob.getStartTime(op);
-    op->setAttr("asapStartTime", builder.getI32IntegerAttr(startTime));
-  }
+  emitSchedule(prob, "asapStartTime", builder);
 }
 
 //===----------------------------------------------------------------------===//
@@ -207,17 +212,42 @@ void TestASAPSchedulerPass::runOnFunction() {
 namespace {
 struct TestSimplexSchedulerPass
     : public PassWrapper<TestSimplexSchedulerPass, FunctionPass> {
+  TestSimplexSchedulerPass() = default;
+  TestSimplexSchedulerPass(const TestSimplexSchedulerPass &) {}
+  Option<bool> acyclicMode{*this, "acyclic"};
   void runOnFunction() override;
 };
 } // anonymous namespace
 
 void TestSimplexSchedulerPass::runOnFunction() {
   auto func = getFunction();
+  Operation *lastOp = func.getBlocks().front().getTerminator();
+  OpBuilder builder(func.getContext());
+
+  if (acyclicMode) {
+    Problem prob(func);
+    constructProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(scheduleSimplex(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    emitSchedule(prob, "simplexStartTime", builder);
+    return;
+  }
+
   CyclicProblem prob(func);
   constructCyclicProblem(prob, func);
   assert(succeeded(prob.check()));
 
-  if (failed(scheduleSimplex(prob, func.getBlocks().front().getTerminator()))) {
+  if (failed(scheduleSimplex(prob, lastOp))) {
     func->emitError("scheduling failed");
     return signalPassFailure();
   }
@@ -227,13 +257,9 @@ void TestSimplexSchedulerPass::runOnFunction() {
     return signalPassFailure();
   }
 
-  OpBuilder builder(func.getContext());
   func->setAttr("simplexInitiationInterval",
                 builder.getI32IntegerAttr(*prob.getInitiationInterval()));
-  for (auto *op : prob.getOperations()) {
-    unsigned startTime = *prob.getStartTime(op);
-    op->setAttr("simplexStartTime", builder.getI32IntegerAttr(startTime));
-  }
+  emitSchedule(prob, "simplexStartTime", builder);
 }
 
 //===----------------------------------------------------------------------===//
