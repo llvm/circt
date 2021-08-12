@@ -43,14 +43,18 @@ struct BaseUnion {
       return FIRRTLType();
     if (portNum != ~0UL) {
       if (isa<FModuleOp, FExtModuleOp>(op))
-        return getModulePortType(op, portNum);
+        return getModulePortType(op, portNum).getSubTypeByFieldID(fieldIdx);
       if (isa<MemOp, InstanceOp>(op))
-        return op->getResult(portNum).getType().cast<FIRRTLType>();
+        return op->getResult(portNum)
+            .getType()
+            .cast<FIRRTLType>()
+            .getSubTypeByFieldID(fieldIdx);
       llvm_unreachable("Unknown port instruction");
     }
     if (op->getNumResults() == 0)
       return FIRRTLType();
-    return op->getResult(0).getType().cast<FIRRTLType>();
+    return op->getResult(0).getType().cast<FIRRTLType>().getSubTypeByFieldID(
+        fieldIdx);
   }
 };
 
@@ -215,7 +219,7 @@ LogicalResult updateExpandedPort(StringRef field, BaseUnion &entity) {
 
 LogicalResult updateStruct(StringRef field, BaseUnion &entity) {
   // The first field for some ops refers to expanded return values.
-  if (isa<MemOp, InstanceOp>(entity.op) && entity.fieldIdx == 0)
+  if (isa<MemOp, InstanceOp>(entity.op) && entity.portNum == ~0)
     return updateExpandedPort(field, entity);
 
   auto bundle = entity.getType().dyn_cast<BundleType>();
@@ -308,10 +312,12 @@ static Optional<AnnoPathValue> stdResolveImpl(StringRef path, CircuitOp circuit,
   }
 
   BaseUnion entity;
-  if (parseAndCheckName(path, entity, curMod).failed())
+  // The last instance in a path may be the name
+  if (path.empty()) {
+    entity.op = stuff.back();
+    stuff.pop_back();
+  } else if (parseAndCheckName(path, entity, curMod).failed())
     return {};
-
-  // retval.ref = resolveExpandedPorts(retval.ref, path.agg);
 
   while (!path.empty()) {
     if (parseNextField(path, entity).failed())
