@@ -1,6 +1,7 @@
 # RUN: %PYTHON% %s | FileCheck %s
 
-from pycde import (Output, Input, module, generator, obj_to_value, types, dim, System, no_connect)
+from pycde import (Output, Input, module, generator, obj_to_value, types, dim,
+                   System, no_connect)
 from pycde.module import externmodule
 
 
@@ -51,9 +52,9 @@ class ComplexPorts:
   def build(mod):
     assert len(mod.data_in) == 3
     return {
-      'a': mod.data_in[0].reg(mod.clk),
-      'b': mod.data_in[mod.sel],
-      'c': mod.struct_data_in.foo
+        'a': mod.data_in[0].reg(mod.clk),
+        'b': mod.data_in[mod.sel],
+        'c': mod.struct_data_in.foo
     }
 
 
