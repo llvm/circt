@@ -67,12 +67,12 @@ let hasFolder = true in {
   def DivSOp : UTBinOp<"divs">;
   def ModUOp : UTBinOp<"modu">;
   def ModSOp : UTBinOp<"mods">;
-  def ShlOp : UTBinOp<"shl">;
-  def ShrUOp : UTBinOp<"shru">;
-  def ShrSOp : UTBinOp<"shrs">;
-
-  let hasCanonicalizeMethod = true in
-  def SubOp : UTBinOp<"sub">;
+  let hasCanonicalizeMethod = true in {
+    def ShlOp : UTBinOp<"shl">;
+    def ShrUOp : UTBinOp<"shru">;
+    def ShrSOp : UTBinOp<"shrs">;
+    def SubOp : UTBinOp<"sub">;
+  }
 }
 
 def AndOp : UTVariadicOp<"and", [Commutative]>;
