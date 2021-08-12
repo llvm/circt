@@ -1501,7 +1501,7 @@ struct foldResetMux : public mlir::RewritePattern {
     // Find the one true connect, or bail
     ConnectOp con;
     for (Operation *user : reg->getUsers()) {
-      // If we see a partial connect or attach, just conservatively fail.
+      // If we see a partial connect, just conservatively fail.
       if (isa<PartialConnectOp>(user))
         return failure();
 
