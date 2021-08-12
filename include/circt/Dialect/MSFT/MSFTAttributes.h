@@ -18,6 +18,13 @@
 
 #include "mlir/IR/BuiltinAttributes.h"
 
+namespace circt {
+namespace msft {
+using InstanceIDAttr = mlir::SymbolRefAttr;
+using InstIDAttrPair = std::pair<InstanceIDAttr, Attribute>;
+} // namespace msft
+} // namespace circt
+
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/MSFT/MSFTAttributes.h.inc"
 

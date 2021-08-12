@@ -22,6 +22,36 @@ using namespace msft;
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/MSFT/MSFTAttributes.cpp.inc"
 
+Attribute SwitchInstanceAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
+                                    Type type) {
+  if (p.parseLess())
+    return Attribute();
+  if (!p.parseOptionalGreater())
+    return SwitchInstanceAttr::get(ctxt, {});
+
+  SmallVector<InstIDAttrPair> instPairs;
+  do {
+    SymbolRefAttr instId;
+    Attribute attr;
+    if (p.parseAttribute(instId) || p.parseEqual() || p.parseAttribute(attr))
+      return Attribute();
+    instPairs.push_back(std::make_pair(instId, attr));
+  } while (!p.parseOptionalComma());
+  if (p.parseGreater())
+    return Attribute();
+
+  return SwitchInstanceAttr::get(ctxt, instPairs);
+}
+
+void SwitchInstanceAttr::print(DialectAsmPrinter &p) const {
+  p << "switch.inst<";
+  llvm::interleaveComma(getInstPairs(), p, [&](auto instPair) {
+    p << instPair.first << '=';
+    p.printAttribute(instPair.second);
+  });
+  p << '>';
+}
+
 Attribute PhysLocationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
                                   Type type) {
   llvm::SMLoc loc = p.getCurrentLocation();
