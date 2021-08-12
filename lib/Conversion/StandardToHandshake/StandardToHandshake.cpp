@@ -1374,7 +1374,7 @@ LogicalResult lowerToHandshake(TFuncOp op, MLIRContext *context,
 
 // Convenience function for running lowerToHandshake with a partial
 // handshake::FuncOp lowering function.
-template <typename TFuncOp = handshake::FuncOp>
+template <typename TFuncOp>
 std::function<LogicalResult(TFuncOp)> wrapRewriter(
     const std::function<LogicalResult(TFuncOp, ConversionPatternRewriter &)>
         &loweringFunc,
