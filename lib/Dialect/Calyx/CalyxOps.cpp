@@ -308,19 +308,20 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
 }
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ComponentPortInfo> ports) {
+                        StringAttr name, ArrayRef<ComponentPortInfo> inputs,
+                        ArrayRef<ComponentPortInfo> outputs) {
   using namespace mlir::function_like_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
   SmallVector<Type, 8> portTypes;
   SmallVector<Attribute, 8> portNames;
-  uint64_t numInPorts = 0;
-  for (auto &&port : ports) {
-    if (port.direction == PortDirection::INPUT)
-      ++numInPorts;
-    portNames.push_back(port.name);
-    portTypes.push_back(port.type);
+  uint64_t numInPorts = inputs.size();
+  for (auto &&ports : {inputs, outputs}) {
+    for (auto &&port : ports) {
+      portNames.push_back(port.name);
+      portTypes.push_back(port.type);
+    }
   }
 
   // Build the function type of the component.
