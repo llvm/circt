@@ -2,7 +2,6 @@
 ; Tests extracted from:
 ; - test/scala/firrtlTests/transforms/RemoveResetSpec.scala
 
-
 ; Should not generate a reset mux for an invalid init, given a 1-bit register
 ; 'foo' initialized to invalid, 1-bit wire 'bar'.
 circuit Example :
