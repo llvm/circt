@@ -184,9 +184,37 @@ def _module_base(cls, extern: bool, params={}):
     _output_ports: list[(str, mlir.ir.Type)] = []
     _parameters: dict[str, mlir.ir.PyAttribute] = {}
 
+    @property
+    def appid(self):
+      """Many times the instance heirarchy contains instances of no
+      consequences, architecturally or application wise. PyCDE adds a notion of
+      `appid`s to name modules which are relevant to the application. They allow
+      designers to locate specific modules by application names via the `appid`
+      hierarchy."""
+      if self._opview_valid and "appid" in self.attributes:
+        return mlir.ir.StringAttr(self.attributes["appid"])
+      return None
+
+    @appid.setter
+    def appid(self, new_appid: str):
+      assert self._opview_valid
+      self.attributes["appid"] = mlir.ir.StringAttr.get(new_appid)
+
+    # Keep module attributes up do date.
+    def __setattr__(self, name, value):
+      self.__dict__[name] = value
+      if name.startswith("_") or not self._opview_valid:
+        return
+      try:
+        attr = support.var_to_attribute(value)
+        self.attributes[name] = attr
+      except TypeError:
+        pass
+
     def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
+      self._opview_valid = False
 
       # Get the user callsite
       loc = get_user_loc()
@@ -203,7 +231,6 @@ def _module_base(cls, extern: bool, params={}):
                            " parameter, so the following are likely inputs"
                            " which don't have a port: " +
                            ",".join(pass_up_kwargs.keys()))
-      cls.__init__(self, *args, **pass_up_kwargs)
 
       # Build a list of operand values for the operation we're gonna create.
       input_ports_values: list[mlir.ir.Value] = []
@@ -249,6 +276,11 @@ def _module_base(cls, extern: bool, params={}):
                              results=[type for (_, type) in mod._output_ports],
                              operands=input_ports_values,
                              loc=loc))
+      self._opview_valid = True
+
+      # Call the pycde user module constructor after initing the OpView so it
+      # doesn't crash.
+      cls.__init__(self, *args, **pass_up_kwargs)
 
     def output_values(self):
       return {
