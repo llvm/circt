@@ -62,6 +62,10 @@ def SwitchInstance : MSFT_Attr<"SwitchInstance"> {
   let mnemonic = "switch.inst";
   let parameters = (ins
     ArrayRefParameter<"InstIDAttrPair">:$instPairs);
+
+  let extraClassDeclaration = [{
+    Attribute lookup(InstanceIDAttr);
+  }];
 }
 
 def PhysLocation : MSFT_Attr<"PhysLocation"> {

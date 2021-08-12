@@ -52,6 +52,14 @@ void SwitchInstanceAttr::print(DialectAsmPrinter &p) const {
   p << '>';
 }
 
+Attribute SwitchInstanceAttr::lookup(InstanceIDAttr id) {
+  // TODO: This is obviously very slow. Speed this up by using a sorted list.
+  for (auto pair : getInstPairs())
+    if (pair.first == id)
+      return pair.second;
+  return Attribute();
+}
+
 Attribute PhysLocationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
                                   Type type) {
   llvm::SMLoc loc = p.getCurrentLocation();
