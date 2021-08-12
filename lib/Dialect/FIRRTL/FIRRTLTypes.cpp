@@ -428,6 +428,7 @@ bool firrtl::areTypesEquivalent(FIRRTLType destType, FIRRTLType srcType) {
       if (!areBundleElementsEquivalent(destElement, srcElement))
         return false;
     }
+    return true;
   }
 
   // Ground types can be connected if their passive, widthless versions
