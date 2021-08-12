@@ -313,10 +313,18 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
+  // Order ports [inputs, outputs]
+  SmallVector<ComponentPortInfo> sortedPorts;
+  llvm::transform(ports, std::back_inserter(sortedPorts),
+                  [](const auto &p) { return p; });
+  llvm::sort(sortedPorts, [](const auto &lhs, const auto & /*rhs*/) {
+    return lhs.direction == PortDirection::INPUT;
+  });
+
   SmallVector<Type, 8> portTypes;
   SmallVector<Attribute, 8> portNames;
   uint64_t numInPorts = 0;
-  for (auto &&port : ports) {
+  for (auto &&port : sortedPorts) {
     if (port.direction == PortDirection::INPUT)
       ++numInPorts;
     portNames.push_back(port.name);
