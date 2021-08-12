@@ -36,7 +36,6 @@ inline void registerAllPasses() {
   llhd::initLLHDTransformationPasses();
   seq::registerSeqPasses();
   sv::registerPasses();
-  circt::registerPasses();
   hir::initHIRTransformationPasses();
 }
 
