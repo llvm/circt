@@ -20,11 +20,17 @@
 using namespace circt;
 using namespace hir;
 
-HIRDialect::HIRDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context, TypeID::get<HIRDialect>()) {
+void HIRDialect::initialize() {
   addTypes<TimeType, BusType, FuncType, MemrefType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/IR/HIR.cpp.inc"
       >();
 }
+
+Operation *HIRDialect::materializeConstant(OpBuilder &builder, Attribute value,
+                                           Type type, Location loc) {
+  return builder.create<mlir::ConstantOp>(loc, type, value);
+}
+
+#include "circt/Dialect/HIR/IR/HIRDialect.cpp.inc"

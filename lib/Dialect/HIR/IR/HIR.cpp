@@ -273,7 +273,8 @@ static ParseResult parseYieldOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // Add attributes.
-  result.addAttribute("operand_attrs", operandDelays);
+  if (operandDelays)
+    result.addAttribute("operand_attrs", operandDelays);
   result.addAttribute("operand_segment_sizes",
                       parser.getBuilder().getI32VectorAttr(
                           {static_cast<int32_t>(operands.size()),
@@ -1004,7 +1005,5 @@ LogicalResult hir::FuncOp::verifyBody() { return success(); }
 
 #include "HIROpVerifier.h"
 
-namespace circt {
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/IR/HIR.cpp.inc"
-} // namespace circt

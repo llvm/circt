@@ -19,20 +19,21 @@ def HIR_Dialect : Dialect {
       information. HIR supports high level constructs such as loops and 
       conditionals.
   }];
-  let cppNamespace = "hir";
+  let cppNamespace = "::circt::hir";
+  let hasConstantMaterializer = 1;
 }
 
 // Types
-def TimeType : Type<CPred<"$_self.isa<TimeType>()">, "HIR time type">,
+def HIR_TimeType : DialectType<HIR_Dialect,CPred<"$_self.isa<TimeType>()">, "HIR time type">,
     BuildableType<"TimeType::get($_builder.getContext())">;
 
-def MemrefType: Type<CPred<"$_self.isa<MemrefType>()">, "HIR memref type ">,
+def HIR_MemrefType: DialectType<HIR_Dialect,CPred<"$_self.isa<MemrefType>()">, "HIR memref type ">,
     BuildableType<"MemrefType::get($_builder.getContext())">;
 
-def FuncType: Type<CPred<"$_self.isa<FuncType>()">, "HIR interface type ">,
+def HIR_FuncType: DialectType<HIR_Dialect,CPred<"$_self.isa<FuncType>()">, "HIR interface type ">,
     BuildableType<"FuncType::get($_builder.getContext())">;
 
-def BusType: Type<CPred<"$_self.isa<BusType>()">, "HIR bus type ">,
+def HIR_BusType: DialectType<HIR_Dialect, CPred<"$_self.isa<BusType>()">, "HIR bus type ">,
     BuildableType<"BusType::get($_builder.getContext())">;
 
 // Ops
@@ -60,7 +61,7 @@ def YieldOp : HIR_Op<"yield", [ParentOneOf<["ForOp","UnrollForOp","IfOp"]>,Termi
       ```mlir hir.yield (%x, %A) at %t offset %3 : (!hir.val,!hir.val)```
   }];
 
-  let arguments = (ins Variadic<AnyType> : $operands, Optional<TimeType>: $tstart,
+  let arguments = (ins Variadic<AnyType> : $operands, Optional<HIR_TimeType>: $tstart,
       OptionalAttr<I64Attr>: $offset,OptionalAttr<ArrayAttr>: $operand_attrs);
   let results = (outs );
 
@@ -169,7 +170,7 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
       hir.if(%b) at %t {...}        ```
   }];
 
-  let arguments = (ins AnyType : $cond, Optional<TimeType> : $tstart, OptionalAttr<I64Attr>: $offset, ArrayAttr:$result_attrs);
+  let arguments = (ins AnyType : $cond, Optional<HIR_TimeType> : $tstart, OptionalAttr<I64Attr>: $offset, ArrayAttr:$result_attrs);
   let regions = (region SizedRegion<1>:$if_region, SizedRegion<1>:$else_region);
   let results = (outs Variadic<AnyType>:$results);
 
@@ -196,9 +197,9 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
   }];
 
   let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, Variadic<AnyType>: $captures,
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let regions = (region SizedRegion<1>:$region);
-  let results = (outs TimeType:$res);
+  let results = (outs HIR_TimeType:$res);
 
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
@@ -244,9 +245,9 @@ def UnrollForOp : HIR_Op<"unroll_for", [SingleBlockImplicitTerminator<"YieldOp">
   }];
 
   let arguments = (ins I32Attr: $lb, I32Attr: $ub, I32Attr: $step, 
-      TimeType:$tstart, OptionalAttr<I64Attr>: $offset);
+      HIR_TimeType:$tstart, OptionalAttr<I64Attr>: $offset);
   let regions = (region SizedRegion<1>:$region);
-  let results = (outs TimeType:$tlast);
+  let results = (outs HIR_TimeType:$tlast);
 
   let extraClassDeclaration = [{
     Value getInductionVar() { return getBody()->getArgument(0); }
@@ -269,7 +270,7 @@ def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
   }];
 
   let arguments = (ins StrAttr:$mem_type, ArrayAttr: $ports);
-  let results = (outs MemrefType:$res);
+  let results = (outs HIR_MemrefType:$res);
 
   let assemblyFormat = [{`(`$mem_type`)` attr-dict 
     `:` type($res) `ports` $ports}];
@@ -304,8 +305,8 @@ def LoadOp : HIR_Op<"load", [NoSideEffect, AttrSizedOperandSegments]> {
       ```mlir hir.load %A[%x,%y] at %t : !hir.memref<...>```
   }];
 
-  let arguments = (ins MemrefType:$mem, 
-      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, OptionalAttr<I64Attr>: $delay, Optional<TimeType> : $tstart,
+  let arguments = (ins HIR_MemrefType:$mem, 
+      Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, OptionalAttr<I64Attr>: $delay, Optional<HIR_TimeType> : $tstart,
       OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType: $res);
   let assemblyFormat = [{
@@ -335,9 +336,9 @@ def StoreOp : HIR_Op<"store", [AttrSizedOperandSegments]> {
       ```mlir hir.mem_write %v to %A[%x,%y] at %t + %1 : !hir.memref<...>```
   }];
 
-  let arguments = (ins AnyType:$value, MemrefType:$mem,
+  let arguments = (ins AnyType:$value, HIR_MemrefType:$mem,
       Variadic<AnyType>:$indices, OptionalAttr<I64Attr>:$port, 
-      OptionalAttr<I64Attr>:$delay, Optional<TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
+      OptionalAttr<I64Attr>:$delay, Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs );
   let assemblyFormat = [{
     $value `to` $mem  (`[` `port` $port^ `]`)? `[` $indices `]` `at` custom<TimeAndOffset>($tstart, $offset) attr-dict `:` 
@@ -361,8 +362,8 @@ def SendOp : HIR_Op<"send", []> {
       ```mlir hir.send %1 to %v[%0] : !hir.bus<...>```
   }];
 
-  let arguments = (ins AnyType:$value, BusType:$bus, I64Attr:$index,
-      Optional<TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
+  let arguments = (ins AnyType:$value, HIR_BusType:$bus, I64Attr:$index,
+      Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs );
   let assemblyFormat = [{
     $value `to` $bus `[` $index`]`
@@ -379,8 +380,8 @@ def RecvOp : HIR_Op<"recv", [NoSideEffect]> {
       ```mlir %v = hir.recv %x[%0] : !hir.bus<...> -> i32```
   }];
 
-  let arguments = (ins BusType:$bus,I64Attr:$index, 
-      Optional<TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
+  let arguments = (ins HIR_BusType:$bus,I64Attr:$index, 
+      Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType:$res);
 
   let assemblyFormat = [{
@@ -404,7 +405,7 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
   let arguments = (ins FlatSymbolRefAttr:$callee, 
       TypeAttr : $funcTy,
       Variadic<AnyType>:$operands, 
-      Optional<TimeType>:$tstart,
+      Optional<HIR_TimeType>:$tstart,
       OptionalAttr<I64Attr>: $offset
       );
   let results = (outs Variadic<AnyType> : $res);
@@ -418,7 +419,27 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
       ///Get the function arguments (excluding tstart).
       SmallVector<Value,4> getOperands();
       hir::FuncType getFuncType(){return funcTy().dyn_cast<hir::FuncType>();}
+
+    //CallOpInterface
+
+    StringRef getCallee() { return callee(); }
+    FunctionType getCalleeType() {return getFuncType().getFunctionType();}
+
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+
+    operand_iterator arg_operand_begin() { return operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the callee of this operation.
+    CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<SymbolRefAttr>("callee");
+    }
   }];
+
+
 }
 
 def CallInstanceOp : HIR_Op<"call.instance",[AttrSizedOperandSegments] > {
@@ -432,9 +453,9 @@ def CallInstanceOp : HIR_Op<"call.instance",[AttrSizedOperandSegments] > {
       ```
   }];
 
-  let arguments = (ins FuncType:$callee, 
+  let arguments = (ins HIR_FuncType:$callee, 
       Variadic<AnyType>:$operands, 
-      Optional<TimeType>:$tstart, 
+      Optional<HIR_TimeType>:$tstart, 
       OptionalAttr<I64Attr>: $offset
       );
   let results = (outs Variadic<AnyType> : $res);
@@ -457,7 +478,7 @@ def DelayOp: HIR_Op<"delay",[NoSideEffect]>{
   }];
 
   let arguments = (ins AnyType : $input, I64Attr:$delay, 
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{$input `by` $delay `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` type($res) custom<CopyType>(type($input),ref(type($res)))}];
@@ -472,8 +493,8 @@ def TimeOp: HIR_Op<"time",[NoSideEffect]>{
       ```mlir %t = hir.time %t+3 :!hir.time``
   }];
 
-  let arguments = (ins TimeType : $timevar, I64Attr:$delay);
-  let results = (outs TimeType : $res);
+  let arguments = (ins HIR_TimeType : $timevar, I64Attr:$delay);
+  let results = (outs HIR_TimeType : $res);
   let assemblyFormat = [{custom<TimeAndOffset>($timevar, $delay) attr-dict `:` type($res)}];
   let hasFolder = true;
 }
@@ -486,8 +507,8 @@ def TimeMaxOp: HIR_Op<"time.max",[NoSideEffect]>{
       ```mlir %t = hir.time (%t1, %t2, %t3) :!hir.time``
   }];
 
-  let arguments = (ins Variadic<TimeType> : $input_timevars);
-  let results = (outs TimeType : $res);
+  let arguments = (ins Variadic<HIR_TimeType> : $input_timevars);
+  let results = (outs HIR_TimeType : $res);
   let assemblyFormat = [{`(` $input_timevars `)` attr-dict `:` type($res)}];
 }
 
@@ -503,7 +524,7 @@ def LatchOp: HIR_Op<"latch",[NoSideEffect]>{
   }];
 
   let arguments = (ins AnyType : $input,
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{$input `at` custom<TimeAndOffset> ($tstart, $offset)  
       attr-dict `:` type($res) custom<CopyType>(type($input),ref(type($res)))
@@ -519,7 +540,7 @@ def AssignOp: HIR_Op<"assign",[]>{
       ```mlir %yy = hir.delay %xx by %1 at %tj```
   }];
 
-  let arguments = (ins AnyAttr:$value, BusType : $bus);
+  let arguments = (ins AnyAttr:$value, HIR_BusType : $bus);
   let results = (outs);
   let assemblyFormat = [{$value `to` $bus attr-dict `:` type($bus)}];
 }
@@ -533,7 +554,7 @@ def AddIOp: HIR_Op<"addi",[NoSideEffect]>{
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{`(`$op1 `,` $op2 `)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
@@ -550,7 +571,7 @@ def SubIOp: HIR_Op<"subi",[NoSideEffect]>{
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{`(`$op1 `,` $op2 `)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
@@ -567,7 +588,7 @@ def MulIOp: HIR_Op<"muli",[NoSideEffect]>{
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{`(`$op1 `,` $op2`)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
@@ -584,7 +605,7 @@ def AddFOp: HIR_Op<"addf",[NoSideEffect]>{
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{`(`$op1 `,` $op2`)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
@@ -601,7 +622,7 @@ def SubFOp: HIR_Op<"subf",[NoSideEffect]>{
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{`(`$op1 `,` $op2 `)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
@@ -618,7 +639,7 @@ def MulFOp: HIR_Op<"mulf",[NoSideEffect]>{
   }];
 
   let arguments = (ins AnyType : $op1, AnyType: $op2,  OptionalAttr<I64Attr>:$delay, 
-      Optional<TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+      Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType : $res);
   let assemblyFormat = [{`(`$op1 `,` $op2`)` `at` custom<TimeAndOffset> 
     ($tstart, $offset) attr-dict `:` custom<BinOpOperandsAndResultType>(type($res), type($op1),type($op2)) (`delay` $delay^)?
@@ -635,7 +656,7 @@ def TensorExtract :HIR_Op<"tensor.extract",[NoSideEffect]>{
   }];
 
   let arguments = (ins AnyType: $tensor, Variadic<Index>: $indices, ArrayAttr: $ports);
-  let results = (outs BusType: $res);
+  let results = (outs HIR_BusType: $res);
 
   let assemblyFormat = [{ $tensor `[`$indices`]` attr-dict `:`
     type($tensor) `->` type($res) `ports` $ports}];

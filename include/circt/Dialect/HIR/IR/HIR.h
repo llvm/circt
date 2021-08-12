@@ -367,8 +367,8 @@ public:
 };
 
 } // namespace hir.
+} // namespace circt
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/IR/HIR.h.inc"
-} // namespace circt
 
 #endif // HIR_HIR_H.
