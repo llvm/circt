@@ -1267,7 +1267,8 @@ LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
 /// exactly one connect that sets the value as its destination.  This returns
 /// true if the operation is found and if all the other users are "reads" from
 /// the value. Also sets the connect, if its null.
-static bool isOnlyConnectToValue(ConnectOp &connect, Value value) {
+static ConnectOp getSingleConnectUserOf(Value value) {
+  ConnectOp connect;
   for (Operation *user : value.getUsers()) {
     // If we see a partial connect or attach, just conservatively fail.
     if (isa<PartialConnectOp>(user) || isa<AttachOp>(user))
@@ -1278,14 +1279,11 @@ static bool isOnlyConnectToValue(ConnectOp &connect, Value value) {
         if (!connect)
           connect = aConnect;
         else if (aConnect != connect)
-          return false;
+          return {};
       }
   }
 
-  if (connect)
-    return true;
-
-  return false;
+  return connect;
 }
 
 // Forward simple values through wire's and reg's.
@@ -1305,7 +1303,7 @@ static LogicalResult foldSingleSetConnect(ConnectOp op,
 
   // Only forward if the types exactly match and there is one connect.
   if (op.dest().getType() != op.src().getType() ||
-      !isOnlyConnectToValue(op, op.dest()))
+      getSingleConnectUserOf(op.dest()) != op)
     return failure();
 
   // Only do this if the connectee and the declaration are in the same block.
@@ -1506,8 +1504,8 @@ struct foldResetMux : public mlir::RewritePattern {
     if (!reset)
       return failure();
     // Find the one true connect, or bail
-    ConnectOp con;
-    if (!isOnlyConnectToValue(con, reg.result()))
+    ConnectOp con = getSingleConnectUserOf(reg.result());
+    if (!con)
       return failure();
 
     auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
@@ -1589,8 +1587,8 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   // reg.reset(port, const); connect(reg, val)
 
   // Find the one true connect, or bail
-  ConnectOp con;
-  if (!isOnlyConnectToValue(con, reg.result()))
+  ConnectOp con = getSingleConnectUserOf(reg.result());
+  if (!con)
     return failure();
 
   auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
