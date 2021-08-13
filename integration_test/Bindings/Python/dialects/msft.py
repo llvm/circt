@@ -39,6 +39,15 @@ with Context() as ctx, Location.unknown():
 
   m.operation.print()
 
+  physAttr = msft.PhysLocationAttr.get(msft.M20K,
+                                       x=2,
+                                       y=6,
+                                       num=1,
+                                       ctxt=Context.current)
+
+  # CHECK: #msft.physloc<M20K, 2, 6, 1>
+  print(physAttr)
+
   # CHECK-LABEL: === tcl ===
   print("=== tcl ===")
 

@@ -50,3 +50,30 @@ void mlirMSFTAddPhysLocationAttr(MlirOperation cOp, const char *entityName,
   entity.append(entityName);
   op->setAttr(entity, loc);
 }
+
+bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute attr) {
+  return unwrap(attr).isa<PhysLocationAttr>();
+}
+MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext cCtxt,
+                                           CirctMSFTDevType devType, uint64_t x,
+                                           uint64_t y, uint64_t num) {
+  auto ctxt = unwrap(cCtxt);
+  return wrap(PhysLocationAttr::get(
+      ctxt, DeviceTypeAttr::get(ctxt, (DeviceType)devType), x, y, num));
+}
+
+CirctMSFTDevType circtMSFTPhysLocationAttrGetDeviceType(MlirAttribute attr) {
+  return (CirctMSFTDevType)unwrap(attr)
+      .cast<PhysLocationAttr>()
+      .getDevType()
+      .getValue();
+}
+uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute attr) {
+  return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getX();
+}
+uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute attr) {
+  return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getY();
+}
+uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute attr) {
+  return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getNum();
+}

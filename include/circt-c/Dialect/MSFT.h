@@ -51,6 +51,18 @@ MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
                                                     DeviceType type, long x,
                                                     long y, long num);
 
+// Values represented in `MSFT.td`.
+typedef uint32_t CirctMSFTDevType;
+bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
+MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTDevType,
+                                           uint64_t x, uint64_t y,
+                                           uint64_t num);
+
+CirctMSFTDevType circtMSFTPhysLocationAttrGetDeviceType(MlirAttribute);
+uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
+uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
+uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
+
 #ifdef __cplusplus
 }
 #endif
