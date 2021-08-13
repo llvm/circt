@@ -317,8 +317,7 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
-  auto topbit = rewriter.create<ExtractOp>(
-      op.getLoc(),  op.lhs(), 0, 1);
+  auto topbit = rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, 1);
   auto sext = rewriter.create<SExtOp>(op.getLoc(),
                                       rewriter.getIntegerType(shift), topbit);
 
