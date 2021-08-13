@@ -182,9 +182,17 @@ void FSMToHWPass::runOnOperation() {
         b.create<sv::RegOp>(machineLoc, stateType, b.getStringAttr("state"));
     auto stateRegElem = b.create<sv::ReadInOutOp>(machineLoc, stateReg);
 
-    // Used to store all the internal registers and their rvalues.
-    SmallVector<sv::RegOp, 8> regs;
-    SmallVector<Value, 8> regElems;
+    // Used to store all the internal registers and their initial values and
+    // rvalues.
+    struct RegInfo {
+      sv::RegOp reg;
+      hw::ConstantOp initValue;
+      Value element;
+
+      RegInfo(sv::RegOp reg, hw::ConstantOp initValue, Value element)
+          : reg(reg), initValue(initValue), element(element) {}
+    };
+    SmallVector<RegInfo, 8> regInfoList;
 
     // We encode each machine state with binary encoding and use `hw.constant`
     // to store the encoded value of each state. This is used to map each state
@@ -204,9 +212,10 @@ void FSMToHWPass::runOnOperation() {
         // Convert `variable` op to register.
         auto reg = b.create<sv::RegOp>(variable.getLoc(), variable.getType(),
                                        variable.nameAttr());
+        auto initValue = b.create<hw::ConstantOp>(
+            reg.getLoc(), variable.initValue().dyn_cast<IntegerAttr>());
         auto regElem = b.create<sv::ReadInOutOp>(op.getLoc(), reg);
-        regs.push_back(reg);
-        regElems.push_back(regElem);
+        regInfoList.push_back(RegInfo(reg, initValue, regElem));
 
         // `reg` is lvalue and `regElem` is rvalue. Only when the register is
         // used as the `dst` of `fsm.update` op, replace the use with `reg`.
@@ -258,12 +267,10 @@ void FSMToHWPass::runOnOperation() {
     auto defaultState = machine.getDefaultState();
     b.setInsertionPointToStart(alwaysff.getResetBlock());
     b.create<sv::PAssignOp>(machineLoc, stateReg, stateValMap[defaultState]);
-    // FIXME: Use initValue to initalize registers.
-    for (auto reg : regs) {
-      auto constZero =
-          b.create<hw::ConstantOp>(reg.getLoc(), reg.getElementType(), 0);
-      b.create<sv::PAssignOp>(reg.getLoc(), reg, constZero);
-    }
+    for (auto regInfo : regInfoList)
+      b.create<sv::PAssignOp>(regInfo.reg.getLoc(), regInfo.reg,
+                              regInfo.initValue);
+
     if (!convertActionRegion(defaultState.entry(), b)) {
       defaultState.emitOpError("failed to convert the entry region");
       signalPassFailure();
@@ -274,11 +281,9 @@ void FSMToHWPass::runOnOperation() {
     // internal registers and state to themselves.
     b.setInsertionPointToStart(alwaysff.getBodyBlock());
     b.create<sv::PAssignOp>(machineLoc, stateReg, stateRegElem);
-    for (auto regAndElem : llvm::zip(regs, regElems)) {
-      auto reg = std::get<0>(regAndElem);
-      auto elem = std::get<1>(regAndElem);
-      b.create<sv::PAssignOp>(reg.getLoc(), reg, elem);
-    }
+    for (auto regInfo : regInfoList)
+      b.create<sv::PAssignOp>(regInfo.reg.getLoc(), regInfo.reg,
+                              regInfo.element);
 
     // Create a `casez` statement with the state register as condition.
     auto casez =

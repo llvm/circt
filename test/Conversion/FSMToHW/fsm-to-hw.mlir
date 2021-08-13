@@ -4,10 +4,12 @@
 // CHECK:   %state = sv.reg  : !hw.inout<i2>
 // CHECK:   [[STATE:%.+]] = sv.read_inout %state : !hw.inout<i2>
 // CHECK:   %o_ready = sv.reg  : !hw.inout<i1>
+// CHECK:   %true = hw.constant true
 // CHECK:   [[O_READY:%.+]] = sv.read_inout %o_ready : !hw.inout<i1>
 // CHECK:   %counter = sv.reg  : !hw.inout<i8>
+// CHECK:   %c0_i8 = hw.constant 0 : i8
 // CHECK:   [[COUNTER:%.+]] = sv.read_inout %counter : !hw.inout<i8>
-// CHECK:   %true = hw.constant true
+// CHECK:   %true_0 = hw.constant true
 // CHECK:   %false = hw.constant false
 // CHECK:   %c0_i2 = hw.constant 0 : i2
 // CHECK:   %c1_i2 = hw.constant 1 : i2
@@ -24,7 +26,7 @@
 // CHECK:       } else  {
 // CHECK:         sv.passign %state, %c0_i2 : i2
 // CHECK:         sv.passign %o_ready, %false : i1
-// CHECK:         sv.passign %o_ready, %true : i1
+// CHECK:         sv.passign %o_ready, %true_0 : i1
 // CHECK:       }
 // CHECK:     }
 // CHECK:     case b01: {
@@ -32,11 +34,9 @@
 // CHECK:     }
 // CHECK:   }(asyncreset : negedge %rst_n)  {
 // CHECK:     sv.passign %state, %c0_i2 : i2
-// CHECK:     %false_0 = hw.constant false
-// CHECK:     sv.passign %o_ready, %false_0 : i1
-// CHECK:     %c0_i8 = hw.constant 0 : i8
-// CHECK:     sv.passign %counter, %c0_i8 : i8
 // CHECK:     sv.passign %o_ready, %true : i1
+// CHECK:     sv.passign %counter, %c0_i8 : i8
+// CHECK:     sv.passign %o_ready, %true_0 : i1
 // CHECK:   }
 // CHECK:   hw.output [[O_READY]] : i1
 // CHECK: }
