@@ -399,10 +399,34 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
   return TCL_OK;
 }
 
+static int dumpModuleName(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+  if (objc != 2) {
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: modname [module]");
+    return TCL_ERROR;
+  }
+
+  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("MlirOperation")) == TCL_ERROR) {
+    return returnErrorStr(interp, "expected operation");
+  }
+
+  auto *op = unwrap((MlirOperation){objv[1]->internalRep.twoPtrValue.ptr1});
+  auto *result = mlir::TypeSwitch<mlir::Operation *, Tcl_Obj *>(op)
+    .Case<circt::hw::HWModuleOp, circt::hw::HWModuleExternOp>([&](auto &mod) {
+      auto name = mod.getNameAttr().getValue();
+      return Tcl_NewStringObj(name.data(), name.size());
+    })
+    .Default([&](auto &op) {
+      return Tcl_NewStringObj("", 0);
+    });
+
+  Tcl_SetObjResult(interp, result);
+  return TCL_OK;
+}
+
 static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
                             Tcl_Obj *const objv[]) {
   if (objc < 2) {
-    Tcl_WrongNumArgs(interp, objc, objv, "usage: circt [load|query]");
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: circt [load|query|get]");
     return TCL_ERROR;
   }
 
@@ -415,7 +439,20 @@ static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
   if (!strcmp("query", str))
     return filter(cdata, interp, objc - 1, objv + 1);
 
-  return returnErrorStr(interp, "usage: circt load");
+  if (!strcmp("get", str)) {
+    if (objc < 3) {
+      Tcl_WrongNumArgs(interp, objc, objv, "usage: circt get [modname|attrs]");
+      return TCL_ERROR;
+    }
+
+    auto *str = Tcl_GetString(objv[2]);
+    if (!strcmp("modname", str))
+      return dumpModuleName(cdata, interp, objc - 2, objv + 2);
+
+    return returnErrorStr(interp, "usage: circt get [modname|attrs]");
+  }
+
+  return returnErrorStr(interp, "usage: circt [load|query|get]");
 }
 
 static void deleteContext(ClientData data) { delete (mlir::MLIRContext *)data; }
