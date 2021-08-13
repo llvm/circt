@@ -1045,6 +1045,9 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto lowCst = operands[2].dyn_cast_or_null<IntegerAttr>()) {
     // mux(cond, c1, c2)
     if (auto highCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+      if (highCst.getType() == lowCst.getType() &&
+          highCst.getValue() == lowCst.getValue())
+        return highCst;
       // mux(cond, 1, 0) -> cond
       if (highCst.getValue().isOneValue() && lowCst.getValue().isNullValue() &&
           getType() == sel().getType())
