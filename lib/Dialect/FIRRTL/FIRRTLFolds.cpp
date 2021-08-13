@@ -1282,7 +1282,6 @@ static ConnectOp getSingleConnectUserOf(Value value) {
           return {};
       }
   }
-
   return connect;
 }
 
