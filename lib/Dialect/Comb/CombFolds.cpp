@@ -1201,6 +1201,7 @@ static Value foldMuxChain(MuxOp rootMux, bool isFalseSide) {
     if (!nextCst)
       break;
     valuesFound.push_back({nextCst, getCaseValue(nextMux)});
+    locationsFound.push_back(nextMux.cond().getLoc());
     locationsFound.push_back(nextMux->getLoc());
     nextTreeValue = getTreeValue(nextMux);
   }
