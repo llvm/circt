@@ -1132,14 +1132,15 @@ static Value sextToDestTypeAndFlip(mlir::Value op, Type destType,
 /// `array_get (array_create(A, B, C), VAL)` which is far more compact and
 /// allows synthesis tools to do more interesting optimizations.
 ///
-/// This returns null if we cannot form the mux tree (or do not want to) and
-/// returns a newly created value if the mux can be replaced.
-static Value foldMuxChain(MuxOp rootMux, bool isFalseSide) {
+/// This returns false if we cannot form the mux tree (or do not want to) and
+/// returns true if the mux was replaced.
+static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
+                         PatternRewriter &rewriter) {
   // Get the index value being compared.  Later we check to see if it is
   // compared to a constant with the right predicate.
   auto rootCmp = rootMux.cond().getDefiningOp<ICmpOp>();
   if (!rootCmp)
-    return {};
+    return false;
   Value indexValue = rootCmp.lhs();
 
   // Check to see if the condition to the specified mux is an equality
@@ -1173,14 +1174,14 @@ static Value foldMuxChain(MuxOp rootMux, bool isFalseSide) {
   // Make sure the root is a correct comparison with a constant.
   auto rootCst = getCondConstant(rootMux);
   if (!rootCst)
-    return {};
+    return false;
 
   // Make sure that we're not looking at the intermediate node in a mux tree.
   if (rootMux->hasOneUse()) {
     if (auto userMux = dyn_cast<MuxOp>(*rootMux->user_begin())) {
       if (getCondConstant(userMux) &&
           getTreeValue(userMux) == rootMux.getResult())
-        return {};
+        return false;
     }
   }
 
@@ -1189,7 +1190,6 @@ static Value foldMuxChain(MuxOp rootMux, bool isFalseSide) {
   SmallVector<std::pair<hw::ConstantOp, Value>, 4> valuesFound;
   SmallVector<Location> locationsFound;
   valuesFound.push_back({rootCst, getCaseValue(rootMux)});
-  locationsFound.push_back(rootMux.getLoc());
 
   // Scan up the tree linearly.
   auto nextTreeValue = getTreeValue(rootMux);
@@ -1210,7 +1210,7 @@ static Value foldMuxChain(MuxOp rootMux, bool isFalseSide) {
   // arbitrary threshold which is saying that one or two muxes together is ok,
   // but three should be folded.
   if (valuesFound.size() < 3)
-    return {};
+    return false;
 
   // Next we need to see if the values are dense-ish.  We don't want to have
   // a tremendous number of replicated entries in the array.  Some sparsity is
@@ -1218,7 +1218,7 @@ static Value foldMuxChain(MuxOp rootMux, bool isFalseSide) {
   uint64_t tableSize = 1ULL
                        << indexValue.getType().cast<IntegerType>().getWidth();
   if (valuesFound.size() < (tableSize * 5) / 8)
-    return {}; // Not dense enough.
+    return false; // Not dense enough.
 
   // Ok, we're going to do the transformation, start by building the table
   // filled with the "otherwise" value.
@@ -1234,10 +1234,10 @@ static Value foldMuxChain(MuxOp rootMux, bool isFalseSide) {
   }
 
   // Build the array_create and the array_get.
-  OpBuilder builder(rootMux);
-  auto fusedLoc = builder.getFusedLoc(locationsFound);
-  auto array = builder.create<hw::ArrayCreateOp>(fusedLoc, table);
-  return builder.create<hw::ArrayGetOp>(fusedLoc, array, indexValue);
+  auto fusedLoc = rewriter.getFusedLoc(locationsFound);
+  auto array = rewriter.create<hw::ArrayCreateOp>(fusedLoc, table);
+  rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(rootMux, array, indexValue);
+  return true;
 }
 
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
@@ -1303,10 +1303,8 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     }
 
     // Check to see if we can fold a mux tree into an array_create/get pair.
-    if (Value result = foldMuxChain(op, /*isFalse*/ true)) {
-      rewriter.replaceOp(op, result);
+    if (foldMuxChain(op, /*isFalse*/ true, rewriter))
       return success();
-    }
   }
 
   if (auto trueMux = dyn_cast_or_null<MuxOp>(op.trueValue().getDefiningOp())) {
@@ -1319,10 +1317,8 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     }
 
     // Check to see if we can fold a mux tree into an array_create/get pair.
-    if (Value result = foldMuxChain(op, /*isFalseSide*/ false)) {
-      rewriter.replaceOp(op, result);
+    if (foldMuxChain(op, /*isFalseSide*/ false, rewriter))
       return success();
-    }
   }
 
   return failure();
