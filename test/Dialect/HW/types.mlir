@@ -42,4 +42,13 @@ module {
     %arg4: !hw.inout<uarray<2xarray<42xi8>>>) {
     return
   }
+
+  // CHECK-LABEL: aliasedAggregates
+  func @aliasedAggregates(%i: i1) {
+    // CHECK: !hw.typealias<@ns::@bar, !hw.struct<a: i1, b: i1>>
+    %0 = hw.struct_create(%i, %i) : !hw.typealias<@ns::@bar, !hw.struct<a: i1, b: i1>>
+    // CHECK: !hw.typealias<@ns::@bar, !hw.union<a: i1, b: i1>>
+    %1 = hw.union_create "a", %i : !hw.typealias<@ns::@bar, !hw.union<a: i1, b: i1>>
+    return
+  }
 }
