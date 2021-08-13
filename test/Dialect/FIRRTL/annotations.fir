@@ -305,6 +305,24 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
 ; // -----
 
+; Subindices should not get sign-extended and cause problems.  This circuit has
+; caused bugs in the past.
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo>w[9]"}]]
+  module Foo:
+    input a: UInt<1>[18]
+    output b: UInt<1>[18]
+
+    wire w: UInt<1>[18]
+
+    w <= a
+    b <= w
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %w = firrtl.wire {annotations =
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 10, {a}
+
+; // -----
+
 ; Annotations should apply even when the target's name is dropped.
 circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
                 {"target": "~Foo|Foo>_T_1", "a": "a"},

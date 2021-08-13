@@ -1487,12 +1487,77 @@ void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<patterns::EmptyNode>(context);
 }
+// A register with constant reset and all connection to either itself or the
+// same constant, must be replaced by the constant.
+struct foldResetMux : public mlir::RewritePattern {
+  foldResetMux(MLIRContext *context)
+      : RewritePattern(RegResetOp::getOperationName(), 0, context) {}
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    auto reg = cast<RegResetOp>(op);
+    auto reset = dyn_cast<ConstantOp>(reg.resetValue().getDefiningOp());
+    if (!reset)
+      return failure();
+    // Find the one true connect, or bail
+    ConnectOp con;
+    for (Operation *user : reg->getUsers()) {
+      // If we see a partial connect, just conservatively fail.
+      if (isa<PartialConnectOp>(user))
+        return failure();
+
+      auto aConnect = dyn_cast<ConnectOp>(user);
+      if (aConnect && aConnect.dest().getDefiningOp() == reg) {
+        if (con)
+          return failure();
+        con = aConnect;
+      }
+    }
+    if (!con)
+      return failure();
+
+    auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
+    if (!mux)
+      return failure();
+    auto high = mux.high().getDefiningOp();
+    auto low = mux.low().getDefiningOp();
+    auto constOp = dyn_cast_or_null<ConstantOp>(high);
+
+    if (constOp && low != reg)
+      return failure();
+    else if (dyn_cast_or_null<ConstantOp>(low) && high == reg)
+      constOp = dyn_cast<ConstantOp>(low);
+
+    if (!constOp || constOp.getType() != reset.getType() ||
+        constOp.value() != reset.value())
+      return failure();
+
+    // Check all types should be typed by now
+    auto regTy = reg.getType();
+    if (con.dest().getType() != regTy || con.src().getType() != regTy ||
+        mux.high().getType() != regTy || mux.low().getType() != regTy ||
+        regTy.getBitWidthOrSentinel() < 1)
+      return failure();
+
+    // Ok, we know we are doing the transformation.
+
+    // Make sure the constant dominates all users.
+    if (constOp != &con->getBlock()->front())
+      constOp->moveBefore(&con->getBlock()->front());
+
+    // Replace the register with the constant.
+    rewriter.replaceOp(reg, constOp.getResult());
+    // Remove the connect.
+    rewriter.eraseOp(con);
+    return success();
+  }
+};
 
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegresetWithZeroReset,
                  patterns::RegresetWithInvalidReset,
-                 patterns::RegresetWithInvalidResetValue>(context);
+                 patterns::RegresetWithInvalidResetValue, foldResetMux>(
+      context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
@@ -1521,7 +1586,9 @@ LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
 // Declarations
 //===----------------------------------------------------------------------===//
 
-// Turn synchronous reset looking register updates to registers with resets
+// Turn synchronous reset looking register updates to registers with resets.
+// Also, const prop registers that are driven by a mux tree containing only
+// instances of one constant or self-assigns.
 static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   // reg ; connect(reg, mux(port, const, val)) ->
   // reg.reset(port, const); connect(reg, val)
@@ -1546,9 +1613,24 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   auto mux = dyn_cast_or_null<MuxPrimOp>(con.src().getDefiningOp());
   if (!mux)
     return failure();
-
+  auto high = mux.high().getDefiningOp();
+  auto low = mux.low().getDefiningOp();
   // Reset value must be constant
-  auto constOp = dyn_cast_or_null<ConstantOp>(mux.high().getDefiningOp());
+  auto constOp = dyn_cast_or_null<ConstantOp>(high);
+
+  // Detect the case if a register only has two possible drivers:
+  // (1) itself/uninit and (2) constant.
+  // The mux can then be replaced with the constant.
+  // r = mux(cond, r, 3) --> r = 3
+  // r = mux(cond, 3, r) --> r = 3
+  bool constReg = false;
+
+  if (constOp && low == reg)
+    constReg = true;
+  else if (dyn_cast_or_null<ConstantOp>(low) && high == reg) {
+    constReg = true;
+    constOp = dyn_cast<ConstantOp>(low);
+  }
   if (!constOp)
     return failure();
 
@@ -1569,12 +1651,14 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (constOp != &con->getBlock()->front())
     constOp->moveBefore(&con->getBlock()->front());
 
-  rewriter.replaceOpWithNewOp<RegResetOp>(reg, reg.getType(), reg.clockVal(),
-                                          mux.sel(), mux.high(), reg.name(),
-                                          reg.annotations());
+  if (!constReg)
+    rewriter.replaceOpWithNewOp<RegResetOp>(reg, reg.getType(), reg.clockVal(),
+                                            mux.sel(), mux.high(), reg.name(),
+                                            reg.annotations());
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
-  rewriter.replaceOpWithNewOp<ConnectOp>(con, con.dest(), mux.low());
+  rewriter.replaceOpWithNewOp<ConnectOp>(con, con.dest(),
+                                         constReg ? constOp : mux.low());
   rewriter.restoreInsertionPoint(pt);
   return success();
 }

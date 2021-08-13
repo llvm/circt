@@ -193,4 +193,30 @@ public:
 #define GET_OP_CLASSES
 #include "circt/Dialect/FIRRTL/FIRRTL.h.inc"
 
+//===----------------------------------------------------------------------===//
+// Traits
+//===----------------------------------------------------------------------===//
+
+namespace llvm {
+template <>
+struct DenseMapInfo<circt::firrtl::FModuleOp> {
+  using Operation = mlir::Operation;
+  using FModuleOp = circt::firrtl::FModuleOp;
+  static inline FModuleOp getEmptyKey() {
+    return FModuleOp::getFromOpaquePointer(
+        DenseMapInfo<Operation *>::getEmptyKey());
+  }
+  static inline FModuleOp getTombstoneKey() {
+    return FModuleOp::getFromOpaquePointer(
+        DenseMapInfo<Operation *>::getTombstoneKey());
+  }
+  static unsigned getHashValue(const FModuleOp &val) {
+    return DenseMapInfo<Operation *>::getHashValue(val);
+  }
+  static bool isEqual(const FModuleOp &lhs, const FModuleOp &rhs) {
+    return lhs == rhs;
+  }
+};
+} // end namespace llvm
+
 #endif // CIRCT_DIALECT_FIRRTL_OPS_H
