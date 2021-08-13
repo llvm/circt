@@ -235,6 +235,13 @@ OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    unsigned shift = rhs.getValue().getZExtValue();
+    unsigned width = getType().getIntOrFloatBitWidth();
+    if (width <= shift)
+      return getIntAttr(APInt::getNullValue(width), getContext());
+  }
+
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.shl(b); });
 }
@@ -248,11 +255,9 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   unsigned srcWidth = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
-  if (srcWidth <= shift) {
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op,
-                                                APInt::getNullValue(srcWidth));
-    return success();
-  }
+  // This case is handled by fold.
+  if (srcWidth <= shift)
+    return failure();
 
   auto zeros =
       rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
@@ -261,12 +266,18 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), extractType, op.lhs(), shift);
 
-  SmallVector<Value> operand = {extract, zeros};
+  Value operand[] = {extract, zeros};
   rewriter.replaceOpWithNewOp<ConcatOp>(op, operand);
   return success();
 }
 
 OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    unsigned shift = rhs.getValue().getZExtValue();
+    unsigned width = getType().getIntOrFloatBitWidth();
+    if (width <= shift)
+      return getIntAttr(APInt::getNullValue(width), getContext());
+  }
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.lshr(b); });
 }
@@ -280,11 +291,9 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   unsigned srcWidth = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
-  if (srcWidth <= shift) {
-    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op,
-                                                APInt::getNullValue(srcWidth));
-    return success();
-  }
+  // This case is handled by fold.
+  if (srcWidth <= shift)
+    return failure();
 
   auto zeros =
       rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
