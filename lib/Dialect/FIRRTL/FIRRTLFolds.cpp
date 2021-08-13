@@ -1278,7 +1278,7 @@ static ConnectOp getSingleConnectUserOf(Value value) {
       if (aConnect.dest() == value) {
         if (!connect)
           connect = aConnect;
-        else if (aConnect != connect)
+        else
           return {};
       }
   }
