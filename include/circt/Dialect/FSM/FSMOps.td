@@ -109,7 +109,7 @@ def TriggerOp : FSMOp<"trigger", []> {
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def HWInstanceOp : FSMOp<"hw_instance", [Symbol]> {
+def HWInstanceOp : FSMOp<"hw_instance", [Symbol, AttrSizedOperandSegments]> {
   let summary = "Create a hardware-style instance of a machine";
   let description = [{
     `fsm.hw_instance` represents a hardware-style instance of a machine,
@@ -119,7 +119,8 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol]> {
   }];
 
   let arguments = (ins StrAttr:$sym_name, FlatSymbolRefAttr:$machine,
-                       Variadic<AnyType>:$inputs);
+                       Variadic<AnyType>:$inputs, Optional<AnyType>:$clock,
+                       Optional<AnyType>:$reset);
   let results = (outs Variadic<AnyType>:$outputs);
 
   let extraClassDeclaration = [{
@@ -129,7 +130,8 @@ def HWInstanceOp : FSMOp<"hw_instance", [Symbol]> {
 
   let assemblyFormat = [{
     $sym_name $machine attr-dict `(` $inputs `)` `:`
-    functional-type($inputs, $outputs)
+    functional-type($inputs, $outputs) (`,` `clock` $clock^ `:` type($clock))?
+    (`,` `reset` $reset^ `:` type($reset))?
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
@@ -226,9 +228,7 @@ def UpdateOp : FSMOp<"update", [SameTypeOperands]> {
     VariableOp getDstVariable();
   }];
 
-  let assemblyFormat = [{
-    attr-dict $dst `,` $src `:` type($dst)
-  }];
+  let assemblyFormat = [{ attr-dict $dst `,` $src `:` type($dst) }];
 
   let verifier = "return ::verify$cppClass(*this);";
 }

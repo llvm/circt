@@ -72,69 +72,60 @@ static bool convertActionRegion(Region &region, OpBuilder &b) {
 
 /// This is the main entrypoint for the lowering pass.
 void FSMToStandardPass::runOnOperation() {
-  auto b = OpBuilder(getOperation());
+  auto module = getOperation();
+  auto b = OpBuilder(module);
   SmallVector<Operation *, 16> opToErase;
   DenseMap<Value, SmallVector<Value>> memRefMap;
 
-  // Traverse all functions.
-  for (auto func : getOperation().getOps<FuncOp>()) {
-    func.walk([&](Operation *op) {
-      if (op->getDialect()->getNamespace() == "fsm") {
-        b.setInsertionPoint(op);
+  // Traverse all instances and triggers.
+  module.walk([&](Operation *op) {
+    if (auto instance = dyn_cast<fsm::InstanceOp>(op)) {
+      b.setInsertionPoint(instance);
+      auto machine = instance.getReferencedMachine();
+      auto stateType = machine.stateType();
+      auto &memRefs = memRefMap[instance];
 
-        if (auto instance = dyn_cast<fsm::InstanceOp>(op)) {
-          auto machine = instance.getReferencedMachine();
-          auto stateType = machine.stateType();
-          auto &memRefs = memRefMap[instance];
-
-          // Alloca memrefs for the state and all variables. Then, store the
-          // initial value into them.
-          for (auto variable : machine.getOps<VariableOp>()) {
-            auto varMemRef = b.create<memref::AllocaOp>(
-                variable.getLoc(), MemRefType::get({}, variable.getType()));
-            auto initValue = b.create<mlir::ConstantOp>(variable.getLoc(),
-                                                        variable.initValue());
-            b.create<memref::StoreOp>(machine.getLoc(), initValue, varMemRef);
-            memRefs.push_back(varMemRef);
-          }
-
-          auto stateMemRef = b.create<memref::AllocaOp>(
-              machine.getLoc(), MemRefType::get({}, stateType));
-          // The encoded value of the default state is always zero.
-          auto constZero = b.create<mlir::ConstantOp>(machine.getLoc(),
-                                                      b.getZeroAttr(stateType));
-          b.create<memref::StoreOp>(machine.getLoc(), constZero, stateMemRef);
-          memRefs.push_back(stateMemRef);
-
-          opToErase.push_back(instance);
-
-        } else if (auto trigger = dyn_cast<fsm::TriggerOp>(op)) {
-          auto instance = trigger.instance().getDefiningOp<fsm::InstanceOp>();
-
-          // Add the original inputs and also the memrefs associated to the
-          // machine instance to the operand list.
-          SmallVector<Value, 16> operands(trigger.inputs());
-          operands.append(memRefMap[trigger.instance()]);
-          auto callOp =
-              b.create<CallOp>(trigger.getLoc(), instance.machineAttr(),
-                               trigger.getResultTypes(), operands);
-
-          // Replace all uses. Also drop all references.
-          trigger.replaceAllUsesWith(callOp);
-          trigger->dropAllReferences();
-          opToErase.push_back(trigger);
-
-        } else {
-          op->emitOpError("found unsupported FSM op in a function");
-          return WalkResult::interrupt();
-        }
+      // Alloca memrefs for the state and all variables. Then, store the
+      // initial value into them.
+      for (auto variable : machine.getOps<VariableOp>()) {
+        auto varMemRef = b.create<memref::AllocaOp>(
+            variable.getLoc(), MemRefType::get({}, variable.getType()));
+        auto initValue =
+            b.create<mlir::ConstantOp>(variable.getLoc(), variable.initValue());
+        b.create<memref::StoreOp>(machine.getLoc(), initValue, varMemRef);
+        memRefs.push_back(varMemRef);
       }
-      return WalkResult::advance();
-    });
-  }
+
+      auto stateMemRef = b.create<memref::AllocaOp>(
+          machine.getLoc(), MemRefType::get({}, stateType));
+      // The encoded value of the default state is always zero.
+      auto constZero = b.create<mlir::ConstantOp>(machine.getLoc(),
+                                                  b.getZeroAttr(stateType));
+      b.create<memref::StoreOp>(machine.getLoc(), constZero, stateMemRef);
+      memRefs.push_back(stateMemRef);
+
+      opToErase.push_back(instance);
+
+    } else if (auto trigger = dyn_cast<fsm::TriggerOp>(op)) {
+      b.setInsertionPoint(trigger);
+      auto instance = trigger.instance().getDefiningOp<fsm::InstanceOp>();
+
+      // Add the original inputs and also the memrefs associated to the
+      // machine instance to the operand list.
+      SmallVector<Value, 16> operands(trigger.inputs());
+      operands.append(memRefMap[trigger.instance()]);
+      auto callOp = b.create<CallOp>(trigger.getLoc(), instance.machineAttr(),
+                                     trigger.getResultTypes(), operands);
+
+      // Replace all uses. Also drop all references.
+      trigger.replaceAllUsesWith(callOp);
+      trigger->dropAllReferences();
+      opToErase.push_back(trigger);
+    }
+  });
 
   // Traverse all machines.
-  for (auto machine : getOperation().getOps<MachineOp>()) {
+  for (auto machine : module.getOps<MachineOp>()) {
     b.setInsertionPoint(machine);
     auto machineLoc = machine.getLoc();
     auto stateType = machine.stateType().cast<IntegerType>();
@@ -202,6 +193,7 @@ void FSMToStandardPass::runOnOperation() {
 
       } else if (!isa<fsm::OutputOp>(op)) {
         op.emitOpError("found unsupported op in the state machine");
+        signalPassFailure();
         return;
       }
     }
@@ -232,6 +224,7 @@ void FSMToStandardPass::runOnOperation() {
         auto ifOpAndSucceeded = convertGuardRegion(transition, b);
         if (!ifOpAndSucceeded.second) {
           transition.emitOpError("failed to convert the guard region");
+          signalPassFailure();
           return;
         }
 
@@ -248,14 +241,17 @@ void FSMToStandardPass::runOnOperation() {
         // Convert action regions accordingly.
         if (!convertActionRegion(state.exit(), b)) {
           state.emitOpError("failed to convert the exit region");
+          signalPassFailure();
           return;
         }
         if (!convertActionRegion(transition.action(), b)) {
           transition.emitOpError("failed to convert the action region");
+          signalPassFailure();
           return;
         }
         if (!convertActionRegion(nextState.entry(), b)) {
           nextState.emitOpError("failed to convert the entry region");
+          signalPassFailure();
           return;
         }
 

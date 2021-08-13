@@ -39,10 +39,10 @@
 // BASIC:   [[VAL1:%.+]] = fsm.trigger %foo_inst(%false, %c0_i8) : (i1, i8) -> i1
 // BASIC:   return
 // BASIC: }
-// BASIC: hw.module @qux() {
+// BASIC: hw.module @qux(%clock: i1, %reset: i1) {
 // BASIC:   %true = hw.constant true
 // BASIC:   %c16_i8 = hw.constant 16 : i8
-// BASIC:   [[VAL:%.+]] = fsm.hw_instance "foo_inst" @foo(%true, %c16_i8) : (i1, i8) -> i1
+// BASIC:   [[VAL:%.+]] = fsm.hw_instance "foo_inst" @foo(%true, %c16_i8) : (i1, i8) -> i1, clock %clock : i1, reset %reset : i1
 // BASIC:   hw.output
 // BASIC: }
 
@@ -100,8 +100,8 @@ func @bar() {
   return
 }
 
-hw.module @qux() {
+hw.module @qux(%clock: i1, %reset: i1) {
   %i_valid = hw.constant true
   %i_len = hw.constant 16 : i8
-  %o_ready = fsm.hw_instance "foo_inst" @foo(%i_valid, %i_len) : (i1, i8) -> i1
+  %o_ready = fsm.hw_instance "foo_inst" @foo(%i_valid, %i_len) : (i1, i8) -> i1, clock %clock : i1, reset %reset : i1
 }

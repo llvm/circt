@@ -128,11 +128,35 @@ static bool convertActionRegion(Region &region, OpBuilder &b) {
 
 /// This is the main entrypoint for the lowering pass.
 void FSMToHWPass::runOnOperation() {
-  auto b = OpBuilder(getOperation());
+  auto module = getOperation();
+  auto b = OpBuilder(module);
   SmallVector<Operation *, 16> opToErase;
 
+  // Traverse all machine instances.
+  auto walkResult = module.walk([&](fsm::HWInstanceOp instance) {
+    if (!instance.clock() || !instance.reset()) {
+      instance.emitOpError("must have clock and reset operand");
+      return WalkResult::interrupt();
+    }
+
+    b.setInsertionPoint(instance);
+    auto hwInstance = b.create<hw::InstanceOp>(
+        instance.getLoc(), instance->getResultTypes(), instance.sym_nameAttr(),
+        instance.machineAttr(), instance->getOperands(), nullptr,
+        instance.sym_nameAttr());
+    instance.replaceAllUsesWith(hwInstance);
+
+    opToErase.push_back(instance);
+    return WalkResult::advance();
+  });
+
+  if (walkResult.wasInterrupted()) {
+    signalPassFailure();
+    return;
+  }
+
   // Traverse all machines.
-  for (auto machine : getOperation().getOps<MachineOp>()) {
+  for (auto machine : module.getOps<MachineOp>()) {
     b.setInsertionPoint(machine);
     auto machineLoc = machine.getLoc();
     auto stateType = machine.stateType().cast<IntegerType>();
@@ -217,6 +241,7 @@ void FSMToHWPass::runOnOperation() {
         hwModule.front().getTerminator()->setOperands(output.getOperands());
       } else {
         op.emitOpError("found unsupported op in the state machine");
+        signalPassFailure();
         return;
       }
     }
@@ -241,6 +266,7 @@ void FSMToHWPass::runOnOperation() {
     }
     if (!convertActionRegion(defaultState.entry(), b)) {
       defaultState.emitOpError("failed to convert the entry region");
+      signalPassFailure();
       return;
     }
 
@@ -272,6 +298,7 @@ void FSMToHWPass::runOnOperation() {
         auto ifOpAndSucceeded = convertGuardRegion(transition, b);
         if (!ifOpAndSucceeded.second) {
           transition.emitOpError("failed to convert the guard region");
+          signalPassFailure();
           return;
         }
 
@@ -288,14 +315,17 @@ void FSMToHWPass::runOnOperation() {
         // Convert action regions accordingly.
         if (!convertActionRegion(state.exit(), b)) {
           state.emitOpError("failed to convert the exit region");
+          signalPassFailure();
           return;
         }
         if (!convertActionRegion(transition.action(), b)) {
           transition.emitOpError("failed to convert the action region");
+          signalPassFailure();
           return;
         }
         if (!convertActionRegion(nextState.entry(), b)) {
           nextState.emitOpError("failed to convert the entry region");
+          signalPassFailure();
           return;
         }
 

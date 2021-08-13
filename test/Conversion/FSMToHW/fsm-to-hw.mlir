@@ -40,6 +40,12 @@
 // CHECK:   }
 // CHECK:   hw.output [[O_READY]] : i1
 // CHECK: }
+// CHECK: hw.module @qux(%clock: i1, %reset: i1) {
+// CHECK:   %true = hw.constant true
+// CHECK:   %c16_i8 = hw.constant 16 : i8
+// CHECK:   %foo_inst.out0 = hw.instance "foo_inst" sym @foo_inst @foo(%true, %c16_i8, %clock, %reset) : (i1, i8, i1, i1) -> i1
+// CHECK:   hw.output
+// CHECK: }
 
 fsm.machine @foo(%i_valid: i1, %i_len: i8) -> i1 attributes {stateType = i2} {
   %o_ready = fsm.variable "o_ready" {initValue = true} : i1
@@ -71,4 +77,10 @@ fsm.machine @foo(%i_valid: i1, %i_len: i8) -> i1 attributes {stateType = i2} {
     }
   }
   fsm.output %o_ready : i1
+}
+
+hw.module @qux(%clock: i1, %reset: i1) {
+  %i_valid = hw.constant true
+  %i_len = hw.constant 16 : i8
+  %o_ready = fsm.hw_instance "foo_inst" @foo(%i_valid, %i_len) : (i1, i8) -> i1, clock %clock : i1, reset %reset : i1
 }

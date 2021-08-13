@@ -153,7 +153,7 @@ static LogicalResult verifyHWInstanceOp(HWInstanceOp op) {
            << op.machine() << "'";
 
   // Check operand types first.
-  auto numOperands = op->getNumOperands();
+  auto numOperands = op.inputs().size();
   auto expectedOperandTypes = referencedMachine.getType().getInputs();
 
   if (expectedOperandTypes.size() != numOperands) {
@@ -168,7 +168,7 @@ static LogicalResult verifyHWInstanceOp(HWInstanceOp op) {
 
   for (size_t i = 0; i != numOperands; ++i) {
     auto expectedType = expectedOperandTypes[i];
-    auto operandType = op.getOperand(i).getType();
+    auto operandType = op.inputs()[i].getType();
     if (operandType != expectedType) {
       auto diag = op.emitOpError()
                   << "#" << i << " operand type must be " << expectedType
@@ -255,7 +255,7 @@ static LogicalResult verifyTriggerOp(TriggerOp op) {
   auto referencedMachine = op.getReferencedMachine();
 
   // Check operand types first.
-  auto numOperands = op->getNumOperands() - 1;
+  auto numOperands = op.inputs().size();
   auto expectedOperandTypes = referencedMachine.getType().getInputs();
 
   if (expectedOperandTypes.size() != numOperands) {
@@ -270,7 +270,7 @@ static LogicalResult verifyTriggerOp(TriggerOp op) {
 
   for (size_t i = 0; i != numOperands; ++i) {
     auto expectedType = expectedOperandTypes[i];
-    auto operandType = op.getOperand(i + 1).getType();
+    auto operandType = op.inputs()[i].getType();
     if (operandType != expectedType) {
       auto diag = op.emitOpError()
                   << "#" << i + 1 << " operand type must be " << expectedType
