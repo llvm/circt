@@ -302,7 +302,7 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), extractType, op.lhs(), 0);
 
-  SmallVector<Value> operand = {zeros, extract};
+  Value operand[] = {zeros, extract};
   rewriter.replaceOpWithNewOp<ConcatOp>(op, operand);
   return success();
 }
@@ -321,24 +321,21 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   unsigned srcWidth = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
-  if (srcWidth <= shift) {
-    auto topbit = rewriter.create<ExtractOp>(
-        op.getLoc(), rewriter.getIntegerType(1), op.lhs(), 0);
-
-    rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), topbit);
-    return success();
-  }
-
   auto topbit = rewriter.create<ExtractOp>(
       op.getLoc(), rewriter.getIntegerType(1), op.lhs(), 0);
   auto sext = rewriter.create<SExtOp>(op.getLoc(),
                                       rewriter.getIntegerType(shift), topbit);
 
+  if (srcWidth <= shift) {
+    rewriter.replaceOp(op, {sext});
+    return success();
+  }
+
   auto extractType = rewriter.getIntegerType(srcWidth - shift);
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), extractType, op.lhs(), 0);
 
-  SmallVector<Value> operand = {sext, extract};
+  Value operand[] = {sext, extract};
   rewriter.replaceOpWithNewOp<ConcatOp>(op, operand);
   return success();
 }
