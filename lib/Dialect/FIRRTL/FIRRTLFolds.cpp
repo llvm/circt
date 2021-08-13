@@ -1265,8 +1265,8 @@ LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
 
 /// Scan all the uses of the specified value, checking to see if there is
 /// exactly one connect that sets the value as its destination.  This returns
-/// true if the operation is found and if all the other users are "reads" from
-/// the value. Also sets the connect, if its null.
+/// the operation if found and if all the other users are "reads" from the
+/// value.
 static ConnectOp getSingleConnectUserOf(Value value) {
   ConnectOp connect;
   for (Operation *user : value.getUsers()) {
