@@ -13,6 +13,7 @@ import mlir.ir as ir
 
 
 class Value:
+
   @staticmethod
   def get(value, type=None):
     from .pycde_types import PyCDEType

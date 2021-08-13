@@ -1267,18 +1267,22 @@ LogicalResult SubaccessOp::canonicalize(SubaccessOp op,
 /// exactly one connect that sets the value as its destination.  This returns
 /// the operation if found and if all the other users are "reads" from the
 /// value.
-static bool isOnlyConnectToValue(ConnectOp connect, Value value) {
+static ConnectOp getSingleConnectUserOf(Value value) {
+  ConnectOp connect;
   for (Operation *user : value.getUsers()) {
     // If we see a partial connect or attach, just conservatively fail.
     if (isa<PartialConnectOp>(user) || isa<AttachOp>(user))
       return {};
 
-    if (auto aConnect = dyn_cast<ConnectOp>(user)) {
-      if (aConnect.dest() == value && aConnect != connect)
-        return false;
-    }
+    if (auto aConnect = dyn_cast<ConnectOp>(user))
+      if (aConnect.dest() == value) {
+        if (!connect)
+          connect = aConnect;
+        else
+          return {};
+      }
   }
-  return true;
+  return connect;
 }
 
 // Forward simple values through wire's and reg's.
@@ -1298,7 +1302,7 @@ static LogicalResult foldSingleSetConnect(ConnectOp op,
 
   // Only forward if the types exactly match and there is one connect.
   if (op.dest().getType() != op.src().getType() ||
-      !isOnlyConnectToValue(op, op.dest()))
+      getSingleConnectUserOf(op.dest()) != op)
     return failure();
 
   // Only do this if the connectee and the declaration are in the same block.
@@ -1499,19 +1503,7 @@ struct foldResetMux : public mlir::RewritePattern {
     if (!reset)
       return failure();
     // Find the one true connect, or bail
-    ConnectOp con;
-    for (Operation *user : reg->getUsers()) {
-      // If we see a partial connect, just conservatively fail.
-      if (isa<PartialConnectOp>(user))
-        return failure();
-
-      auto aConnect = dyn_cast<ConnectOp>(user);
-      if (aConnect && aConnect.dest().getDefiningOp() == reg) {
-        if (con)
-          return failure();
-        con = aConnect;
-      }
-    }
+    ConnectOp con = getSingleConnectUserOf(reg.result());
     if (!con)
       return failure();
 
@@ -1524,7 +1516,7 @@ struct foldResetMux : public mlir::RewritePattern {
 
     if (constOp && low != reg)
       return failure();
-    else if (dyn_cast_or_null<ConstantOp>(low) && high == reg)
+    if (dyn_cast_or_null<ConstantOp>(low) && high == reg)
       constOp = dyn_cast<ConstantOp>(low);
 
     if (!constOp || constOp.getType() != reset.getType() ||
@@ -1594,19 +1586,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   // reg.reset(port, const); connect(reg, val)
 
   // Find the one true connect, or bail
-  ConnectOp con;
-  for (Operation *user : reg->getUsers()) {
-    // If we see a partial connect or attach, just conservatively fail.
-    if (isa<PartialConnectOp>(user) || isa<AttachOp>(user))
-      return failure();
-
-    auto aConnect = dyn_cast<ConnectOp>(user);
-    if (aConnect && aConnect.dest().getDefiningOp() == reg) {
-      if (con)
-        return failure();
-      con = aConnect;
-    }
-  }
+  ConnectOp con = getSingleConnectUserOf(reg.result());
   if (!con)
     return failure();
 

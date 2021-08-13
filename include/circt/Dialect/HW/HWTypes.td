@@ -60,7 +60,8 @@ def ArrayTypeImpl : HWType<"Array"> {
 
 // A handle to refer to hw::ArrayType in ODS.
 def ArrayType : DialectType<HWDialect,
-    CPred<"type_isa<ArrayType>($_self)">, "an ArrayType">;
+    CPred<"type_isa<ArrayType>($_self)">, "an ArrayType",
+    "TypeAliasOr<ArrayType>">;
 
 // An 'unpacked' array of fixed size.
 def UnpackedArrayType : HWType<"UnpackedArray"> {
@@ -127,7 +128,8 @@ def StructTypeImpl : HWType<"Struct"> {
 
 // A handle to refer to hw::StructType in ODS.
 def StructType : DialectType<HWDialect,
-    CPred<"type_isa<StructType>($_self)">, "a StructType">;
+    CPred<"type_isa<StructType>($_self)">, "a StructType",
+    "TypeAliasOr<StructType>">;
 
 // An untagged union. Declares the hw::UnionType in C++.
 def UnionTypeImpl : HWType<"Union"> {
@@ -150,7 +152,8 @@ def UnionTypeImpl : HWType<"Union"> {
 
 // A handle to refer to hw::UnionType in ODS.
 def UnionType : DialectType<HWDialect,
-    CPred<"type_isa<UnionType>($_self)">, "a UnionType">;
+    CPred<"type_isa<UnionType>($_self)">, "a UnionType",
+    "TypeAliasOr<UnionType>">;
 
 def TypeAliasType : HWType<"TypeAlias"> {
   let summary = "An symbolic reference to a type declaration";

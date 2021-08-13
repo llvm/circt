@@ -33,6 +33,18 @@ static SmallVector<SmallVector<unsigned>> parseArrayOfArrays(ArrayAttr attr) {
   return result;
 }
 
+static SmallVector<std::pair<llvm::StringRef, unsigned>>
+parseArrayOfDicts(ArrayAttr attr, StringRef key) {
+  SmallVector<std::pair<llvm::StringRef, unsigned>> result;
+  for (auto dictAttr : attr.getAsRange<DictionaryAttr>()) {
+    auto name = dictAttr.getAs<StringAttr>("name");
+    auto value = dictAttr.getAs<IntegerAttr>(key);
+    if (name && value)
+      result.push_back(std::make_pair(name.getValue(), value.getInt()));
+  }
+  return result;
+}
+
 static void constructProblem(Problem &prob, FuncOp func) {
   // set up catch-all operator type with unit latency
   auto unitOpr = prob.getOrInsertOperatorType("unit");
@@ -40,14 +52,9 @@ static void constructProblem(Problem &prob, FuncOp func) {
 
   // parse additional operator type information attached to the test case
   if (auto attr = func->getAttrOfType<ArrayAttr>("operatortypes")) {
-    for (auto oprAttr : attr.getAsRange<DictionaryAttr>()) {
-      auto name = oprAttr.getAs<StringAttr>("name");
-      auto latency = oprAttr.getAs<IntegerAttr>("latency");
-      if (!(name && latency))
-        continue;
-
-      auto opr = prob.getOrInsertOperatorType(name.getValue());
-      prob.setLatency(opr, latency.getInt());
+    for (auto &elem : parseArrayOfDicts(attr, "latency")) {
+      auto opr = prob.getOrInsertOperatorType(std::get<0>(elem));
+      prob.setLatency(opr, std::get<1>(elem));
     }
   }
 
@@ -92,6 +99,19 @@ static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
       Operation *to = ops[elemArr[1]];
       unsigned dist = elemArr[2];
       prob.setDistance(std::make_pair(from, to), dist);
+    }
+  }
+}
+
+static void constructSPOProblem(SharedPipelinedOperatorsProblem &prob,
+                                FuncOp func) {
+  constructProblem(prob, func);
+
+  // parse operator type info (again) to extract optional operator limit
+  if (auto attr = func->getAttrOfType<ArrayAttr>("operatortypes")) {
+    for (auto &elem : parseArrayOfDicts(attr, "limit")) {
+      auto opr = prob.getOrInsertOperatorType(std::get<0>(elem));
+      prob.setLimit(opr, std::get<1>(elem));
     }
   }
 }
@@ -161,6 +181,39 @@ void TestCyclicProblemPass::runOnFunction() {
   // get II from the test case
   if (auto attr = func->getAttrOfType<IntegerAttr>("problemInitiationInterval"))
     prob.setInitiationInterval(attr.getInt());
+
+  // get schedule from the test case
+  for (auto *op : prob.getOperations())
+    if (auto startTimeAttr = op->getAttrOfType<IntegerAttr>("problemStartTime"))
+      prob.setStartTime(op, startTimeAttr.getInt());
+
+  if (failed(prob.verify())) {
+    func->emitError("problem verification failed");
+    return signalPassFailure();
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// SharedPipelinedOperatorsProblem
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestSPOProblemPass
+    : public PassWrapper<TestSPOProblemPass, FunctionPass> {
+  void runOnFunction() override;
+};
+} // namespace
+
+void TestSPOProblemPass::runOnFunction() {
+  auto func = getFunction();
+
+  SharedPipelinedOperatorsProblem prob(func);
+  constructSPOProblem(prob, func);
+
+  if (failed(prob.check())) {
+    func->emitError("problem check failed");
+    return signalPassFailure();
+  }
 
   // get schedule from the test case
   for (auto *op : prob.getOperations())
@@ -274,6 +327,9 @@ void registerSchedulingTestPasses() {
   PassRegistration<TestCyclicProblemPass> cyclicProblemTester(
       "test-cyclic-problem",
       "Import a solution for the cyclic problem encoded as attributes");
+  PassRegistration<TestSPOProblemPass> spoTester(
+      "test-spo-problem", "Import a solution for the shared, pipelined "
+                          "operators problem encoded as attributes");
   PassRegistration<TestASAPSchedulerPass> asapTester(
       "test-asap-scheduler", "Emit ASAP scheduler's solution as attributes");
   PassRegistration<TestSimplexSchedulerPass> simplexTester(
