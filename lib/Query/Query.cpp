@@ -299,8 +299,17 @@ Filter *InstanceFilter::nextFilter() {
 
 std::vector<Operation *> UsageFilter::nextOperations(Operation *op, FilterData &data) {
   std::vector<Operation *> ops;
-  auto users = data.userMap.getUsers(op);
-  ops.insert(ops.end(), users.begin(), users.end());
+  TypeSwitch<Operation *>(op)
+    .Case<hw::HWModuleOp>([&](auto &op) {
+      std::vector<Operation *> ops;
+      auto users = data.userMap.getUsers(op);
+      ops.insert(ops.end(), users.begin(), users.end());
+    })
+    .Default([&](auto *op) {
+      for (auto &use : op->getUses()) {
+        ops.push_back(use.getOwner());
+      }
+    });
   return ops;
 }
 
