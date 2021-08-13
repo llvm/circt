@@ -201,11 +201,13 @@ def _module_base(cls, extern: bool, params={}):
     @appid.setter
     def appid(self, new_appid: str):
       assert self._opview_valid
+      if any([not (c in "_[]" or c.isalnum()) for c in new_appid]):
+        raise ValueError("AppID can only contain alphanumerics and '_[]'")
       self.attributes["appid"] = mlir.ir.StringAttr.get(new_appid)
 
     # Keep module attributes up do date.
     def __setattr__(self, name, value):
-      self.__dict__[name] = value
+      super().__setattr__(name, value)
       if name.startswith("_") or not self._opview_valid:
         return
       try:
