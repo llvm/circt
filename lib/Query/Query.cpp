@@ -13,7 +13,7 @@ Operation *getNextOpFromOp(Operation *op) {
     });
 }
 
-std::vector<Operation *> Filter::filter(Operation *root) {
+std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
   std::vector<Operation *> filtered;
   std::vector<std::pair<Operation *, Filter *>> opStack;
 
@@ -47,7 +47,7 @@ std::vector<Operation *> Filter::filter(Operation *root) {
             auto *next = getNextOpFromOp(&op);
 
             if (filter->matches(next)) {
-              auto vec = filter->nextOperations(next);
+              auto vec = filter->nextOperations(next, data);
 
               if (filter->addSelf()) {
                 for (auto *op : vec) {
@@ -69,10 +69,10 @@ std::vector<Operation *> Filter::filter(Operation *root) {
   return filtered;
 }
 
-std::vector<Operation *> Filter::filter(std::vector<Operation *> &results) {
+std::vector<Operation *> Filter::filter(std::vector<Operation *> &results, FilterData &data) {
   std::vector<Operation *> result;
   for (auto *op : results) {
-    auto vec = filter(op);
+    auto vec = filter(op, data);
     for (auto *op : vec) {
       bool contained = false;
       for (auto *o : result) {
@@ -297,17 +297,10 @@ Filter *InstanceFilter::nextFilter() {
   return child;
 }
 
-std::vector<Operation *> UsageFilter::nextOperations(Operation *op) {
+std::vector<Operation *> UsageFilter::nextOperations(Operation *op, FilterData &data) {
   std::vector<Operation *> ops;
-  TypeSwitch<Operation *>(op)
-    //.Case<hw::HWModuleOp>([&](auto &op) {
-      // TODO
-    //})
-    .Default([&](auto *op) {
-      for (auto &use : op->getUses()) {
-        ops.push_back(use.getOwner());
-      }
-    });
+  auto users = data.userMap.getUsers(op);
+  ops.insert(ops.end(), users.begin(), users.end());
   return ops;
 }
 

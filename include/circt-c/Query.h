@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 typedef struct { void *ptr; } CirctQueryFilterType;
+typedef struct { void *ptr; } CirctQueryFilterData;
 typedef struct { void *ptr; } CirctQueryFilter;
 typedef struct { void *ptr; } CirctQueryFilterResult;
 typedef struct { void *ptr; } CirctQueryAttributeList;
@@ -30,6 +31,9 @@ CirctQueryFilterType circtQueryNewLiteralFilterType(char *literal);
 CirctQueryFilterType circtQueryNewRegexFilterType(char *regex);
 void circtQueryDeleteFilterType(CirctQueryFilterType type);
 
+CirctQueryFilterData circtQueryNewFilterData(MlirOperation root);
+void circtQueryDeleteFilterData(CirctQueryFilterData data);
+
 CirctQueryFilter circtQueryNewAttributeFilter(char *key, CirctQueryFilterType type);
 CirctQueryFilter circtQueryNewNameFilter(CirctQueryFilterType type);
 CirctQueryFilter circtQueryNewOperatorFilter(CirctQueryFilterType type);
@@ -40,8 +44,8 @@ CirctQueryFilter circtQueryCloneFilter(CirctQueryFilter filter);
 CirctQueryFilter circtQueryNewUsageFilter(CirctQueryFilter filter);
 void circtQueryDeleteFilter(CirctQueryFilter filter);
 
-CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root);
-CirctQueryFilterResult circtQueryFilterFromResult(CirctQueryFilter filter, CirctQueryFilterResult result);
+CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root, CirctQueryFilterData data);
+CirctQueryFilterResult circtQueryFilterFromResult(CirctQueryFilter filter, CirctQueryFilterResult result, CirctQueryFilterData data);
 MlirOperation circtQueryGetFromFilterResult(CirctQueryFilterResult result, size_t index);
 void circtQueryDeleteFilterResult(CirctQueryFilterResult result);
 

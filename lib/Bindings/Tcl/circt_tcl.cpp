@@ -248,7 +248,7 @@ static int operationTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
 
 static void operationTypeUpdateStringProc(Tcl_Obj *obj) {
   std::string str;
-  auto *op = unwrap((MlirOperation){obj->internalRep.otherValuePtr});
+  auto *op = unwrap((MlirOperation){obj->internalRep.twoPtrValue.ptr1});
   llvm::raw_string_ostream stream(str);
   op->print(stream);
   obj->length = str.length();
@@ -258,20 +258,28 @@ static void operationTypeUpdateStringProc(Tcl_Obj *obj) {
 }
 
 static void operationTypeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
-  auto *op = unwrap((MlirOperation){src->internalRep.otherValuePtr});
+  auto *op = unwrap((MlirOperation){src->internalRep.twoPtrValue.ptr1});
   MlirOperation result;
   if (auto mod = llvm::dyn_cast_or_null<mlir::ModuleOp>(op)) {
     result = wrap(mod.clone().getOperation());
+    dup->internalRep.twoPtrValue.ptr2 = circtQueryNewFilterData(result).ptr;
   } else {
     result = wrap(op);
+    auto *module = (Tcl_Obj *) src->internalRep.twoPtrValue.ptr2;
+    Tcl_IncrRefCount(module);
+    dup->internalRep.twoPtrValue.ptr2 = module;
   }
-  dup->internalRep.otherValuePtr = result.ptr;
+
+  dup->internalRep.twoPtrValue.ptr1 = result.ptr;
 }
 
 static void operationTypeFreeIntRepProc(Tcl_Obj *obj) {
-  auto *op = unwrap((MlirOperation){obj->internalRep.otherValuePtr});
+  auto *op = unwrap((MlirOperation){obj->internalRep.twoPtrValue.ptr1});
   if (auto mod = llvm::dyn_cast_or_null<mlir::ModuleOp>(op)) {
     mod.erase();
+    circtQueryDeleteFilterData((CirctQueryFilterData){obj->internalRep.twoPtrValue.ptr2});
+  } else {
+    Tcl_DecrRefCount((Tcl_Obj *) obj->internalRep.twoPtrValue.ptr2);
   }
 }
 
@@ -310,7 +318,8 @@ static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp,
 
   auto *obj = Tcl_NewObj();
   obj->typePtr = Tcl_GetObjType("MlirOperation");
-  obj->internalRep.otherValuePtr = (void *)m;
+  obj->internalRep.twoPtrValue.ptr1 = m;
+  obj->internalRep.twoPtrValue.ptr2 = circtQueryNewFilterData(module).ptr;
   Tcl_InvalidateStringRep(obj);
   Tcl_SetObjResult(interp, obj);
 
@@ -345,13 +354,23 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
       return returnErrorStr(interp, "expected operation or list of operations");
     }
 
-    auto root = (MlirOperation){objs[i]->internalRep.otherValuePtr};
-    auto result = circtQueryFilterFromRoot(filter, root);
+    auto root = (MlirOperation){objs[i]->internalRep.twoPtrValue.ptr1};
+    Tcl_Obj *module;
+    if (auto _ = llvm::dyn_cast_or_null<mlir::ModuleOp>(unwrap(root))) {
+      module = objs[i];
+    } else {
+      module = (Tcl_Obj *) objs[i]->internalRep.twoPtrValue.ptr2;
+    }
+
+    auto data = (CirctQueryFilterData){module->internalRep.twoPtrValue.ptr2};
+    auto result = circtQueryFilterFromRoot(filter, root, data);
     MlirOperation op;
     for (size_t j = 0; !mlirOperationIsNull(op = circtQueryGetFromFilterResult(result, j)); ++j) {
       auto *obj = Tcl_NewObj();
       obj->typePtr = type;
-      obj->internalRep.otherValuePtr = op.ptr;
+      obj->internalRep.twoPtrValue.ptr1 = op.ptr;
+      obj->internalRep.twoPtrValue.ptr2 = module;
+      Tcl_IncrRefCount(module);
       Tcl_InvalidateStringRep(obj);
 
       int length = 0;
@@ -363,7 +382,7 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
       auto *unwrappedOp = unwrap(op);
       bool contained = false;
       for (int k = 0; k < length; ++k) {
-        if (unwrap((MlirOperation){list[k].internalRep.otherValuePtr}) == unwrappedOp) {
+        if (unwrap((MlirOperation){list[k].internalRep.twoPtrValue.ptr1}) == unwrappedOp) {
           contained = true;
           break;
         }

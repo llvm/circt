@@ -39,6 +39,14 @@ void circtQueryDeleteFilterType(CirctQueryFilterType type) {
   delete (FilterType *) type.ptr;
 }
 
+CirctQueryFilterData circtQueryNewFilterData(MlirOperation root) {
+  return { new FilterData(unwrap(root)) };
+}
+
+void circtQueryDeleteFilterData(CirctQueryFilterData data) {
+  delete (FilterData *) data.ptr;
+}
+
 CirctQueryFilter circtQueryNewAttributeFilter(char *key, CirctQueryFilterType type) {
   std::string s(key);
   return { new AttributeFilter(s, (FilterType *) type.ptr) };
@@ -86,12 +94,12 @@ void circtQueryDeleteFilter(CirctQueryFilter filter) {
   delete (Filter *) filter.ptr;
 }
 
-CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root) {
-  return { new std::vector<Operation *>(((Filter *) filter.ptr)->filter(unwrap(root))) };
+CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root, CirctQueryFilterData data) {
+  return { new std::vector<Operation *>(((Filter *) filter.ptr)->filter(unwrap(root), *(FilterData *) data.ptr)) };
 }
 
-CirctQueryFilterResult circtQueryFilterFromResult(CirctQueryFilter filter, CirctQueryFilterResult result) {
-  return { new std::vector<Operation *>(((Filter *) filter.ptr)->filter(*((std::vector<Operation *> *) result.ptr))) };
+CirctQueryFilterResult circtQueryFilterFromResult(CirctQueryFilter filter, CirctQueryFilterResult result, CirctQueryFilterData data) {
+  return { new std::vector<Operation *>(((Filter *) filter.ptr)->filter(*(std::vector<Operation *> *) result.ptr, *(FilterData *) data.ptr)) };
 }
 
 MlirOperation circtQueryGetFromFilterResult(CirctQueryFilterResult result, size_t index) {

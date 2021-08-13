@@ -63,6 +63,14 @@ private:
   std::regex regex;
 };
 
+class FilterData {
+public:
+  FilterData(Operation *root) : tables (mlir::SymbolTableCollection()), userMap (mlir::SymbolUserMap(tables, root)) { }
+
+  mlir::SymbolTableCollection tables;
+  mlir::SymbolUserMap userMap;
+};
+
 class Filter {
 public:
   virtual ~Filter() {
@@ -73,12 +81,12 @@ public:
   virtual bool addSelf() { return type->addSelf(); }
   virtual Filter *nextFilter() { return nullptr; };
   virtual Filter *clone() { return nullptr; }
-  virtual std::vector<Operation *> nextOperations(Operation *op) { std::vector<Operation *> ops; ops.push_back(op); return ops; }
+  virtual std::vector<Operation *> nextOperations(Operation *op, FilterData &data) { std::vector<Operation *> ops; ops.push_back(op); return ops; }
 
   FilterType *getType() { return type; }
 
-  std::vector<Operation *> filter(Operation *root);
-  std::vector<Operation *> filter(std::vector<Operation *> &results);
+  std::vector<Operation *> filter(Operation *root, FilterData &data);
+  std::vector<Operation *> filter(std::vector<Operation *> &results, FilterData &data);
 
 protected:
   Filter(FilterType *type) : type (type) { }
@@ -172,7 +180,7 @@ public:
   UsageFilter(Filter *filter) : Filter(new FilterType), filter (filter) { }
 
   bool matches(Operation *op) override { return filter->matches(op); }
-  std::vector<Operation *> nextOperations(Operation *op) override;
+  std::vector<Operation *> nextOperations(Operation *op, FilterData &data) override;
 
 private:
   Filter *filter;

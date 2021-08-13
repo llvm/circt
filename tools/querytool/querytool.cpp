@@ -188,7 +188,8 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   }
 
   auto mod = module.release();
-  auto ops = filter->filter(mod);
+  auto data = FilterData(mod);
+  auto ops = filter->filter(mod, data);
   std::vector<std::string> attrs;
   attrs.push_back(std::string("argNames"));
   attrs.push_back(std::string("resultNames"));
