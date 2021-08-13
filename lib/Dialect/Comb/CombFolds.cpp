@@ -266,8 +266,7 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), extractType, op.lhs(), shift);
 
-  Value operand[] = {extract, zeros};
-  rewriter.replaceOpWithNewOp<ConcatOp>(op, operand);
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{extract, zeros});
   return success();
 }
 
@@ -288,22 +287,21 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   if (!matchPattern(op.rhs(), m_RConstant(value)))
     return failure();
 
-  unsigned srcWidth = op.lhs().getType().cast<IntegerType>().getWidth();
+  unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
-  if (srcWidth <= shift)
+  if (width <= shift)
     return failure();
 
   auto zeros =
       rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
 
-  auto extractType = rewriter.getIntegerType(srcWidth - shift);
+  auto extractType = rewriter.getIntegerType(width - shift);
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), extractType, op.lhs(), 0);
 
-  Value operand[] = {zeros, extract};
-  rewriter.replaceOpWithNewOp<ConcatOp>(op, operand);
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{zeros, extract});
   return success();
 }
 
@@ -335,8 +333,7 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), extractType, op.lhs(), 0);
 
-  Value operand[] = {sext, extract};
-  rewriter.replaceOpWithNewOp<ConcatOp>(op, operand);
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{sext, extract});
   return success();
 }
 
