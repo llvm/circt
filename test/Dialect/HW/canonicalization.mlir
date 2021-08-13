@@ -439,9 +439,10 @@ hw.module @xor_idempotent_two_arguments(%arg0: i11) -> (i11) {
 // Add reduction to shift left and multiplication.
 
 // CHECK-LABEL: hw.module @add_reduction1(%arg0: i11, %arg1: i11) -> (i11) {
-// CHECK-NEXT:    %c1_i11 = hw.constant 1 : i11
-// CHECK-NEXT:   [[RES:%[0-9]+]] = comb.shl %arg1, %c1_i11
-// CHECK-NEXT:    hw.output [[RES]]
+// CHECK-NEXT:    %false = hw.constant false
+// CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 1 : (i11) -> i10
+// CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %false : (i10, i1) -> i11
+// CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @add_reduction1(%arg0: i11, %arg1: i11) -> (i11) {
   %c1_i11 = hw.constant 1 : i11
@@ -461,9 +462,10 @@ hw.module @add_reduction2(%arg0: i11, %arg1: i11) -> (i11) {
 }
 
 // CHECK-LABEL: hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (i11) {
-// CHECK-NEXT:    %c3_i11 = hw.constant 3 : i11
-// CHECK-NEXT:   [[RES:%[0-9]+]] = comb.shl %arg1, %c3_i11
-// CHECK-NEXT:    hw.output [[RES]]
+// CHECK-NEXT:    %c0_i3 = hw.constant 0 : i3
+// CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 3 : (i11) -> i8
+// CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %c0_i3 : (i8, i3) -> i11
+// CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (i11) {
   %c3_i11 = hw.constant 3 : i11
@@ -476,9 +478,10 @@ hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (i11) {
 // Multiply reduction to shift left.
 
 // CHECK-LABEL: hw.module @multiply_reduction(%arg0: i11, %arg1: i11) -> (i11) {
-// CHECK-NEXT:    %c1_i11 = hw.constant 1 : i11
-// CHECK-NEXT:   [[RES:%[0-9]+]] = comb.shl %arg1, %c1_i11
-// CHECK-NEXT:    hw.output [[RES]]
+// CHECK-NEXT:    %false = hw.constant false
+// CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 1 : (i11) -> i10
+// CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %false : (i10, i1) -> i11
+// CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @multiply_reduction(%arg0: i11, %arg1: i11) -> (i11) {
   %c1_i11 = hw.constant 1 : i11
@@ -1195,3 +1198,34 @@ hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (%data: i32) {
 }
 
 // == End: test cases from LowerToHW ==
+
+// Convert shift to extract and concat.
+
+// CHECK-LABEL: hw.module @shift_to_extract_and_concat(%arg0: i12) -> (i12, i12, i12, i12, i12, i12) {
+// CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
+// CHECK-NEXT:   %c0_i12 = hw.constant 0 : i12
+// CHECK-NEXT:   %0 = comb.extract %arg0 from 2 : (i12) -> i10
+// CHECK-NEXT:   %1 = comb.concat %0, %c0_i2 : (i10, i2) -> i12
+// CHECK-NEXT:   %2 = comb.extract %arg0 from 0 : (i12) -> i10
+// CHECK-NEXT:   %3 = comb.concat %c0_i2, %2 : (i2, i10) -> i12
+// CHECK-NEXT:   %4 = comb.extract %arg0 from 0 : (i12) -> i1
+// CHECK-NEXT:   %5 = comb.sext %4 : (i1) -> i12
+// CHECK-NEXT:   %6 = comb.extract %arg0 from 0 : (i12) -> i1
+// CHECK-NEXT:   %7 = comb.extract %arg0 from 0 : (i12) -> i10
+// CHECK-NEXT:   %8 = comb.concat %6, %6, %7 : (i1, i1, i10) -> i12
+// CHECK-NEXT:   hw.output %c0_i12, %1, %c0_i12, %3, %5, %8 : i12, i12, i12, i12, i12, i12
+hw.module @shift_to_extract_and_concat(%arg0: i12) -> (i12, i12, i12, i12, i12, i12) {
+  %c12_i12 = hw.constant 12 : i12
+  %c2_i12 = hw.constant 2 : i12
+
+  %0 = comb.shl %arg0, %c12_i12 : i12
+  %1 = comb.shl %arg0, %c2_i12 : i12
+
+  %2 = comb.shru %arg0, %c12_i12 : i12
+  %3 = comb.shru %arg0, %c2_i12 : i12
+
+  %4 = comb.shrs %arg0, %c12_i12 : i12
+  %5 = comb.shrs %arg0, %c2_i12 : i12
+
+  hw.output %0, %1, %2, %3, %4, %5 : i12, i12, i12, i12, i12, i12
+}

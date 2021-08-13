@@ -235,18 +235,102 @@ OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    unsigned shift = rhs.getValue().getZExtValue();
+    unsigned width = getType().getIntOrFloatBitWidth();
+    if (width <= shift)
+      return getIntAttr(APInt::getNullValue(width), getContext());
+  }
+
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.shl(b); });
 }
 
+LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
+  // ShlOp(x, cst) -> Concat(Extract(x), zeros)
+  APInt value;
+  if (!matchPattern(op.rhs(), m_RConstant(value)))
+    return failure();
+
+  unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
+  unsigned shift = value.getZExtValue();
+
+  // This case is handled by fold.
+  if (width <= shift)
+    return failure();
+
+  auto zeros =
+      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
+
+  auto extract =
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
+
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{extract, zeros});
+  return success();
+}
+
 OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    unsigned shift = rhs.getValue().getZExtValue();
+    unsigned width = getType().getIntOrFloatBitWidth();
+    if (width <= shift)
+      return getIntAttr(APInt::getNullValue(width), getContext());
+  }
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.lshr(b); });
+}
+
+LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
+  // ShrUOp(x, cst) -> Concat(zeros, Extract(x))
+  APInt value;
+  if (!matchPattern(op.rhs(), m_RConstant(value)))
+    return failure();
+
+  unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
+  unsigned shift = value.getZExtValue();
+
+  // This case is handled by fold.
+  if (width <= shift)
+    return failure();
+
+  auto zeros =
+      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
+
+  auto extract =
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
+
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{zeros, extract});
+  return success();
 }
 
 OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.ashr(b); });
+}
+
+LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
+  // ShrSOp(x, cst) -> Concat(sext(extract(x, topbit)),extract(x))
+  APInt value;
+  if (!matchPattern(op.rhs(), m_RConstant(value)))
+    return failure();
+
+  unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
+  unsigned shift = value.getZExtValue();
+
+  auto topbit = rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, 1);
+  auto sext = rewriter.create<SExtOp>(op.getLoc(),
+                                      rewriter.getIntegerType(shift), topbit);
+
+  if (width <= shift) {
+    rewriter.replaceOp(op, {sext});
+    return success();
+  }
+
+  auto extract =
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
+
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{sext, extract});
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
