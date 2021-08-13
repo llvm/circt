@@ -17,6 +17,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OperationSupport.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/Support/JSON.h"
 
 namespace json = llvm::json;
@@ -774,36 +775,6 @@ bool circt::firrtl::fromJSONRaw(json::Value &value, StringRef circuitTarget,
                                 SmallVectorImpl<Attribute> &attrs,
                                 json::Path path, MLIRContext *context) {
 
-  /// Examine an Annotation JSON object and return an optional string indicating
-  /// the target associated with this annotation.  Erase the target from the
-  /// JSON object if a target was found.  Automatically convert any legacy Named
-  /// targets to actual Targets.  Note: it is expected that a target may not
-  /// exist, e.g., any subclass of firrtl.annotations.NoTargetAnnotation will
-  /// not have a target.
-  auto findTarget = [](json::Object *object,
-                       json::Path p) -> llvm::Optional<std::string> {
-    // If no "target" field exists, then promote the annotation to a
-    // CircuitTarget annotation by returning a target of "~".
-    auto maybeTarget = object->get("target");
-    if (!maybeTarget)
-      return llvm::Optional<std::string>("~");
-
-    // Find the target.
-    auto maybeTargetStr = maybeTarget->getAsString();
-    if (!maybeTargetStr) {
-      p.field("target").report("target must be a string type");
-      return {};
-    }
-    auto canonTargetStr = canonicalizeTarget(maybeTargetStr.getValue());
-    if (!canonTargetStr) {
-      p.field("target").report("invalid target string");
-      return {};
-    }
-
-    auto target = canonTargetStr.getValue();
-    return llvm::Optional<std::string>(target);
-  };
-
   /// Convert arbitrary JSON to an MLIR Attribute.
   std::function<Attribute(json::Value &, json::Path)> convertJSONToAttribute =
       [&](json::Value &value, json::Path p) -> Attribute {
@@ -870,7 +841,6 @@ bool circt::firrtl::fromJSONRaw(json::Value &value, StringRef circuitTarget,
   }
 
   // Build an array of annotations.
-  llvm::StringMap<llvm::SmallVector<Attribute>> mutableAnnotationMap;
   for (size_t i = 0, e = (*array).size(); i != e; ++i) {
     auto object = (*array)[i].getAsObject();
     auto p = path.index(i);
@@ -879,30 +849,11 @@ bool circt::firrtl::fromJSONRaw(json::Value &value, StringRef circuitTarget,
                "array of something else.");
       return false;
     }
-    // Find and remove the "target" field from the Annotation object if it
-    // exists.  In the FIRRTL Dialect, the target will be implicitly specified
-    // based on where the attribute is applied.
-    auto optTarget = findTarget(object, p);
-    if (!optTarget)
-      return false;
-    StringRef targetStrRef = optTarget.getValue();
-
-    if (targetStrRef != "~") {
-      auto circuitFieldEnd = targetStrRef.find_first_of('|');
-      if (circuitTarget != targetStrRef.take_front(circuitFieldEnd)) {
-        p.report("annotation has invalid circuit name");
-        return false;
-      }
-    }
 
     // Build up the Attribute to represent the Annotation
     NamedAttrList metadata;
 
     for (auto field : *object) {
-      if (field.first == "target") {
-        metadata.append("target", StringAttr::get(context, *canonicalizeTarget(targetStrRef)));
-        continue;
-      }
       if (auto value = convertJSONToAttribute(field.second, p)) {
         metadata.append(field.first, value);
         continue;

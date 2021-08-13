@@ -14,7 +14,6 @@
 #define FIRANNOTATIONS_H
 
 #include "circt/Support/LLVM.h"
-#include "llvm/ADT/StringMap.h"
 
 namespace llvm {
 namespace json {
@@ -23,24 +22,12 @@ class Value;
 } // namespace json
 } // namespace llvm
 
-namespace mlir {
-class ArrayAttr;
-}
-
 namespace circt {
 namespace firrtl {
-
-//bool fromJSON(llvm::json::Value &value, StringRef circuitTarget,
-//              llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
-//              MLIRContext *context);
 
 bool fromJSONRaw(llvm::json::Value &value, StringRef circuitTarget,
               SmallVectorImpl<Attribute> &attrs, llvm::json::Path path,
               MLIRContext *context);
-
-//bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
-//                              MLIRContext *context, unsigned &annotationID,
-//                              Location loc);
 
 } // namespace firrtl
 } // namespace circt
