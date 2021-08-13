@@ -451,8 +451,8 @@ firrtl.circuit "constRegReset2" {
 // CHECK-LABEL: firrtl.module @constRegReset2
 firrtl.module @constRegReset2(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
-  %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
-  %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
+  %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK:  %[[C14:.+]] = firrtl.constant 11
