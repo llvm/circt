@@ -252,19 +252,18 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   if (!matchPattern(op.rhs(), m_RConstant(value)))
     return failure();
 
-  unsigned srcWidth = op.lhs().getType().cast<IntegerType>().getWidth();
+  unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
-  if (srcWidth <= shift)
+  if (width <= shift)
     return failure();
 
   auto zeros =
       rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
 
-  auto extractType = rewriter.getIntegerType(srcWidth - shift);
   auto extract =
-      rewriter.create<ExtractOp>(op.getLoc(), extractType, op.lhs(), shift);
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
 
   rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{extract, zeros});
   return success();
@@ -297,9 +296,8 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   auto zeros =
       rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
 
-  auto extractType = rewriter.getIntegerType(width - shift);
   auto extract =
-      rewriter.create<ExtractOp>(op.getLoc(), extractType, op.lhs(), 0);
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
 
   rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{zeros, extract});
   return success();
@@ -316,22 +314,21 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   if (!matchPattern(op.rhs(), m_RConstant(value)))
     return failure();
 
-  unsigned srcWidth = op.lhs().getType().cast<IntegerType>().getWidth();
+  unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
   auto topbit = rewriter.create<ExtractOp>(
-      op.getLoc(), rewriter.getIntegerType(1), op.lhs(), 0);
+      op.getLoc(),  op.lhs(), 0, 1);
   auto sext = rewriter.create<SExtOp>(op.getLoc(),
                                       rewriter.getIntegerType(shift), topbit);
 
-  if (srcWidth <= shift) {
+  if (width <= shift) {
     rewriter.replaceOp(op, {sext});
     return success();
   }
 
-  auto extractType = rewriter.getIntegerType(srcWidth - shift);
   auto extract =
-      rewriter.create<ExtractOp>(op.getLoc(), extractType, op.lhs(), 0);
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
 
   rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{sext, extract});
   return success();

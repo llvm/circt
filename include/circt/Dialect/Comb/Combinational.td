@@ -200,6 +200,13 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
   let hasFolder = true;
   let verifier = "return ::verifyExtractOp(*this);";
   let hasCanonicalizeMethod = true;
+
+  let builders = [
+    OpBuilder<(ins "Value":$lhs, "int32_t":$lowBit, "int32_t":$bitWidth), [{
+      auto resultType = $_builder.getIntegerType(bitWidth);
+      return build($_builder, $_state, resultType, lhs, lowBit);
+    }]>
+  ];
 }
 
 def SExtOp : CombOp<"sext", [NoSideEffect]> {
