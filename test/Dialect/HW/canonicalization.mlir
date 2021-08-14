@@ -698,7 +698,7 @@ hw.module @icmp_canonicalize_sgt(%arg0: i2) -> (i1) {
 
 // CHECK-LABEL: hw.module @shl_fold1() -> (i12) {
 // CHECK-NEXT:   %c84_i12 = hw.constant 84 : i12
-// CHECK-NEXT: hw.output %c84_i12 : i12
+// CHECK-NEXT:   hw.output %c84_i12 : i12
 hw.module @shl_fold1() -> (i12) {
   %c42_i12 = hw.constant 42 : i12
   %c1_i12 = hw.constant 1 : i12
@@ -708,7 +708,7 @@ hw.module @shl_fold1() -> (i12) {
 
 // CHECK-LABEL: hw.module @shl_fold2() -> (i12) {
 // CHECK-NEXT:   %c0_i12 = hw.constant 0 : i12
-// CHECK-NEXT: hw.output %c0_i12 : i12
+// CHECK-NEXT:   hw.output %c0_i12 : i12
 hw.module @shl_fold2() -> (i12) {
   %c1_i12 = hw.constant 1 : i12
   %c10_i12 = hw.constant 12 : i12
@@ -716,9 +716,37 @@ hw.module @shl_fold2() -> (i12) {
   hw.output %0 : i12
 }
 
+// CHECK-LABEL: hw.module @shl_fold3(%arg0: i12) -> (i12) {
+// CHECK-NEXT:   %c0_i12 = hw.constant 0 : i12
+// CHECK-NEXT:   hw.output %c0_i12 : i12
+hw.module @shl_fold3(%arg0: i12) -> (i12) {
+  %c12_i12 = hw.constant 12 : i12
+  %0 = comb.shl %arg0, %c12_i12 : i12
+  hw.output %0 : i12
+}
+
+// CHECK-LABEL: hw.module @shl_fold4(%arg0: i12) -> (i12) {
+// CHECK-NEXT:   hw.output %arg0 : i12
+hw.module @shl_fold4(%arg0: i12) -> (i12) {
+  %c0_i12 = hw.constant 0 : i12
+  %0 = comb.shl %arg0, %c0_i12 : i12
+  hw.output %0 : i12
+}
+
+// CHECK-LABEL: hw.module @shl_shift_to_extract_and_concat(%arg0: i12) -> (i12) {
+// CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
+// CHECK-NEXT:   %0 = comb.extract %arg0 from 2 : (i12) -> i10
+// CHECK-NEXT:   %1 = comb.concat %0, %c0_i2 : (i10, i2) -> i12
+// CHECK-NEXT:   hw.output %1
+hw.module @shl_shift_to_extract_and_concat(%arg0: i12) -> (i12) {
+  %c2_i12 = hw.constant 2 : i12
+  %0 = comb.shl %arg0, %c2_i12 : i12
+  hw.output %0 : i12
+}
+
 // CHECK-LABEL: hw.module @shru_fold1() -> (i12) {
 // CHECK-NEXT:   %c21_i12 = hw.constant 21 : i12
-// CHECK-NEXT: hw.output %c21_i12 : i12
+// CHECK-NEXT:   hw.output %c21_i12 : i12
 hw.module @shru_fold1() -> (i12) {
   %c42_i12 = hw.constant 42 : i12
   %c1_i12 = hw.constant 1 : i12
@@ -728,7 +756,7 @@ hw.module @shru_fold1() -> (i12) {
 
 // CHECK-LABEL: hw.module @shru_fold2() -> (i12) {
 // CHECK-NEXT:   %c2047_i12 = hw.constant 2047 : i12
-// CHECK-NEXT: hw.output %c2047_i12 : i12
+// CHECK-NEXT:   hw.output %c2047_i12 : i12
 hw.module @shru_fold2() -> (i12) {
   %c-1_i12 = hw.constant -1 : i12
   %c1_i12 = hw.constant 1 : i12
@@ -736,9 +764,37 @@ hw.module @shru_fold2() -> (i12) {
   hw.output %0 : i12
 }
 
+// CHECK-LABEL: hw.module @shru_fold3(%arg0: i12) -> (i12) {
+// CHECK-NEXT:   %c0_i12 = hw.constant 0 : i12
+// CHECK-NEXT:   hw.output %c0_i12 : i12
+hw.module @shru_fold3(%arg0: i12) -> (i12) {
+  %c12_i12 = hw.constant 12 : i12
+  %0 = comb.shru %arg0, %c12_i12 : i12
+  hw.output %0 : i12
+}
+
+// CHECK-LABEL: hw.module @shru_fold4(%arg0: i12) -> (i12) {
+// CHECK-NEXT:   hw.output %arg0 : i12
+hw.module @shru_fold4(%arg0: i12) -> (i12) {
+  %c0_i12 = hw.constant 0 : i12
+  %0 = comb.shru %arg0, %c0_i12 : i12
+  hw.output %0 : i12
+}
+
+// CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat(%arg0: i12) -> (i12) {
+// CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
+// CHECK-NEXT:   %0 = comb.extract %arg0 from 0 : (i12) -> i10
+// CHECK-NEXT:   %1 = comb.concat %c0_i2, %0 : (i2, i10) -> i12
+// CHECK-NEXT:   hw.output %1
+hw.module @shru_shift_to_extract_and_concat(%arg0: i12) -> (i12) {
+  %c2_i12 = hw.constant 2 : i12
+  %0 = comb.shru %arg0, %c2_i12 : i12
+  hw.output %0 : i12
+}
+
 // CHECK-LABEL: hw.module @shrs_fold1() -> (i12) {
 // CHECK-NEXT:   %c21_i12 = hw.constant 21 : i12
-// CHECK-NEXT: hw.output %c21_i12 : i12
+// CHECK-NEXT:   hw.output %c21_i12 : i12
 hw.module @shrs_fold1() -> (i12) {
   %c42_i12 = hw.constant 42 : i12
   %c1_i12 = hw.constant 1 : i12
@@ -748,11 +804,40 @@ hw.module @shrs_fold1() -> (i12) {
 
 // CHECK-LABEL: hw.module @shrs_fold2() -> (i12) {
 // CHECK-NEXT:   %c-3_i12 = hw.constant -3 : i12
-// CHECK-NEXT: hw.output %c-3_i12 : i12
+// CHECK-NEXT:   hw.output %c-3_i12 : i12
 hw.module @shrs_fold2() -> (i12) {
   %c-5_i12 = hw.constant -5 : i12
   %c10_i12 = hw.constant 1 : i12
   %0 = comb.shrs %c-5_i12, %c10_i12 : i12
+  hw.output %0 : i12
+}
+
+// CHECK-LABEL: hw.module @shrs_fold3(%arg0: i12) -> (i12) {
+// CHECK-NEXT:   hw.output %arg0 : i12
+hw.module @shrs_fold3(%arg0: i12) -> (i12) {
+  %c0_i12 = hw.constant 0 : i12
+  %0 = comb.shrs %arg0, %c0_i12 : i12
+  hw.output %0 : i12
+}
+
+// CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (i12) {
+// CHECK-NEXT:   %0 = comb.extract %arg0 from 0 : (i12) -> i1
+// CHECK-NEXT:   %1 = comb.sext %0 : (i1) -> i12
+// CHECK-NEXT:   hw.output %1 : i12
+hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (i12) {
+  %c12_i12 = hw.constant 12 : i12
+  %0 = comb.shrs %arg0, %c12_i12 : i12
+  hw.output %0 : i12
+}
+
+// CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (i12) {
+// CHECK-NEXT:   %0 = comb.extract %arg0 from 0 : (i12) -> i1
+// CHECK-NEXT:   %1 = comb.extract %arg0 from 0 : (i12) -> i10
+// CHECK-NEXT:   %2 = comb.concat %0, %0, %1 : (i1, i1, i10) -> i12
+// CHECK-NEXT:   hw.output %2
+hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (i12) {
+  %c2_i12 = hw.constant 2 : i12
+  %0 = comb.shrs %arg0, %c2_i12 : i12
   hw.output %0 : i12
 }
 
@@ -1168,33 +1253,3 @@ hw.module @MemDepth1(%clock: i1, %en: i1, %addr: i1) -> (%data: i32) {
 
 // == End: test cases from LowerToHW ==
 
-// Convert shift to extract and concat.
-
-// CHECK-LABEL: hw.module @shift_to_extract_and_concat(%arg0: i12) -> (i12, i12, i12, i12, i12, i12) {
-// CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
-// CHECK-NEXT:   %c0_i12 = hw.constant 0 : i12
-// CHECK-NEXT:   %0 = comb.extract %arg0 from 2 : (i12) -> i10
-// CHECK-NEXT:   %1 = comb.concat %0, %c0_i2 : (i10, i2) -> i12
-// CHECK-NEXT:   %2 = comb.extract %arg0 from 0 : (i12) -> i10
-// CHECK-NEXT:   %3 = comb.concat %c0_i2, %2 : (i2, i10) -> i12
-// CHECK-NEXT:   %4 = comb.extract %arg0 from 0 : (i12) -> i1
-// CHECK-NEXT:   %5 = comb.sext %4 : (i1) -> i12
-// CHECK-NEXT:   %6 = comb.extract %arg0 from 0 : (i12) -> i1
-// CHECK-NEXT:   %7 = comb.extract %arg0 from 0 : (i12) -> i10
-// CHECK-NEXT:   %8 = comb.concat %6, %6, %7 : (i1, i1, i10) -> i12
-// CHECK-NEXT:   hw.output %c0_i12, %1, %c0_i12, %3, %5, %8 : i12, i12, i12, i12, i12, i12
-hw.module @shift_to_extract_and_concat(%arg0: i12) -> (i12, i12, i12, i12, i12, i12) {
-  %c12_i12 = hw.constant 12 : i12
-  %c2_i12 = hw.constant 2 : i12
-
-  %0 = comb.shl %arg0, %c12_i12 : i12
-  %1 = comb.shl %arg0, %c2_i12 : i12
-
-  %2 = comb.shru %arg0, %c12_i12 : i12
-  %3 = comb.shru %arg0, %c2_i12 : i12
-
-  %4 = comb.shrs %arg0, %c12_i12 : i12
-  %5 = comb.shrs %arg0, %c2_i12 : i12
-
-  hw.output %0, %1, %2, %3, %4, %5 : i12, i12, i12, i12, i12, i12
-}

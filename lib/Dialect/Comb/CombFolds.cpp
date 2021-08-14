@@ -238,6 +238,12 @@ OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
     unsigned width = getType().getIntOrFloatBitWidth();
+
+    // ShrlOp(x, 0) -> x
+    if (shift == 0)
+      return operands[0] ? OpFoldResult(operands[0]) : lhs();
+
+    // ShrlOp(x, large) -> 0
     if (width <= shift)
       return getIntAttr(APInt::getNullValue(width), getContext());
   }
@@ -256,7 +262,7 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
-  if (width <= shift)
+  if (width <= shift || shift == 0)
     return failure();
 
   auto zeros =
@@ -273,9 +279,17 @@ OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
     unsigned width = getType().getIntOrFloatBitWidth();
+
+    // ShrUOp(x, 0) -> x
+    if (shift == 0)
+      return operands[0] ? OpFoldResult(operands[0]) : lhs();
+
+    // ShrUOp(x, large) -> 0
     if (width <= shift)
       return getIntAttr(APInt::getNullValue(width), getContext());
   }
+
+  // Constant Fold
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.lshr(b); });
 }
@@ -290,7 +304,7 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
-  if (width <= shift)
+  if (width <= shift || shift == 0)
     return failure();
 
   auto zeros =
@@ -304,6 +318,13 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    // ShrUOp(x, 0) -> x
+    unsigned shift = rhs.getValue().getZExtValue();
+    if (shift == 0)
+      return operands[0] ? OpFoldResult(operands[0]) : lhs();
+  }
+
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.ashr(b); });
 }
