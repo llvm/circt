@@ -52,7 +52,7 @@ class ComplexPorts:
   def build(mod):
     assert len(mod.data_in) == 3
     return {
-        'a': mod.data_in[0].reg(mod.clk),
+        'a': mod.data_in[0].reg(mod.clk, name="a_reg"),
         'b': mod.data_in[mod.sel],
         'c': mod.struct_data_in.foo
     }

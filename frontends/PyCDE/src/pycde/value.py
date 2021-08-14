@@ -11,6 +11,8 @@ from circt.dialects import hw, seq
 
 import mlir.ir as ir
 
+import re
+
 
 class Value:
 
@@ -28,8 +30,21 @@ class Value:
       return StructValue(value, type)
     return RegularValue(value, type)
 
-  def reg(self, clk, rst=None):
-    return seq.reg(self.value, clk, rst)
+  _reg_name = re.compile("_reg(\\d+)$")
+
+  def reg(self, clk, rst=None, name=None):
+    # owner = support.get_value(self.value).owner
+    # if name is None and "name" in owner.attributes:
+    # pass
+    # name = owner.attributes["name"]
+    # m = Value._reg_name.match(name)
+    # if m:
+    #   reg_num = m.group(2)
+    #   basename = name[0:-(len(reg_num) + 4)]
+    #   name = f"{basename}{int(reg_num)+1}"
+    # else:
+    #   name = name + "_reg1"
+    return Value.get(seq.reg(self.value, clock=clk, reset=rst, name=name))
 
 
 class RegularValue(Value):
