@@ -108,6 +108,16 @@ firrtl.module @NestedAggregates(out %buzz: !firrtl.bundle<foo flip: vector<bundl
   firrtl.partialconnect %0, %1 : !firrtl.vector<bundle<a: reset, b flip: asyncreset, c: uint<8>>, 2>, !firrtl.vector<bundle<a: asyncreset, c: uint<1>, b flip: reset>, 2>
 }
 
+// Should work with deeply nested aggregates.
+// CHECK-LABEL: firrtl.module @DeeplyNestedAggregates(in %reset: !firrtl.uint<1>, out %buzz: !firrtl.bundle<a: bundle<b: uint<1>>>) {
+firrtl.module @DeeplyNestedAggregates(in %reset: !firrtl.uint<1>, out %buzz: !firrtl.bundle<a: bundle<b: reset>>) {
+  %0 = firrtl.subfield %buzz(0) : (!firrtl.bundle<a: bundle<b : reset>>) -> !firrtl.bundle<b: reset>
+  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<b: reset>) -> !firrtl.reset
+  // CHECK: firrtl.connect %1, %reset : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %1, %reset : !firrtl.reset, !firrtl.uint<1>
+}
+
+
 // Should not crash if a ResetType has no drivers
 // CHECK-LABEL: firrtl.module @DontCrashIfNoDrivers
 // CHECK-SAME: out %out: !firrtl.uint<1>
