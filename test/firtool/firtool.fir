@@ -91,8 +91,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:      .out1  (implicitTrunc_out1),
 ; VERILOG-NEXT:      .out2  (implicitTrunc_out2)
 ; VERILOG-NEXT:    );
-; VERILOG-NEXT:    wire [5:0] _T_0 = cat_d;
-; VERILOG-NEXT:    assign _T = _T_0[4:0];
+; VERILOG-NEXT:    assign _T = cat_d[4:0];
 ; VERILOG-NEXT:    PrettifyExample prettifyExample (
 ; VERILOG-NEXT:      .inp_1 (_T),
 ; VERILOG-NEXT:      .inp_2 (_T),

@@ -67,12 +67,12 @@ let hasFolder = true in {
   def DivSOp : UTBinOp<"divs">;
   def ModUOp : UTBinOp<"modu">;
   def ModSOp : UTBinOp<"mods">;
-  def ShlOp : UTBinOp<"shl">;
-  def ShrUOp : UTBinOp<"shru">;
-  def ShrSOp : UTBinOp<"shrs">;
-
-  let hasCanonicalizeMethod = true in
-  def SubOp : UTBinOp<"sub">;
+  let hasCanonicalizeMethod = true in {
+    def ShlOp : UTBinOp<"shl">;
+    def ShrUOp : UTBinOp<"shru">;
+    def ShrSOp : UTBinOp<"shrs">;
+    def SubOp : UTBinOp<"sub">;
+  }
 }
 
 def AndOp : UTVariadicOp<"and", [Commutative]>;
@@ -200,6 +200,13 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
   let hasFolder = true;
   let verifier = "return ::verifyExtractOp(*this);";
   let hasCanonicalizeMethod = true;
+
+  let builders = [
+    OpBuilder<(ins "Value":$lhs, "int32_t":$lowBit, "int32_t":$bitWidth), [{
+      auto resultType = $_builder.getIntegerType(bitWidth);
+      return build($_builder, $_state, resultType, lhs, lowBit);
+    }]>
+  ];
 }
 
 def SExtOp : CombOp<"sext", [NoSideEffect]> {

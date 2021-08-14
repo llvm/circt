@@ -70,8 +70,7 @@ top.print()
 # CHECK:  %1 = hw.array_create %c45_i8, %c42_i8 : i8
 # CHECK:  %c5_i8 = hw.constant 5 : i8
 # CHECK:  %c7_i12_0 = hw.constant 7 : i12
-# CHECK:  %2 = hw.struct_create (%c7_i12_0) : !hw.struct<foo: i12>
-# CHECK:  %3 = hw.bitcast %2 : (!hw.struct<foo: i12>) -> !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
+# CHECK:  %2 = hw.struct_create (%c7_i12_0) : !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
 
 # CHECK:  hw.module @pycde.Taps() -> (%taps: !hw.array<3xi8>)
 # CHECK:    %c-53_i8 = hw.constant -53 : i8

@@ -1309,10 +1309,9 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
   // If needed, add a reset port to the module.
   Value actualReset = domain.existingValue;
   if (domain.newPortName) {
-    ModulePortInfo portInfo{.name = domain.newPortName,
-                            .type = AsyncResetType::get(&getContext()),
-                            .direction = Direction::Input,
-                            .loc = domain.reset.getLoc()};
+    ModulePortInfo portInfo{domain.newPortName,
+                            AsyncResetType::get(&getContext()),
+                            Direction::Input, domain.reset.getLoc()};
     module.insertPorts({{0, portInfo}});
     actualReset = module.getArgument(0);
     LLVM_DEBUG(llvm::dbgs()

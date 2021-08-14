@@ -1,14 +1,14 @@
 set(LLVM_OPTIONAL_SOURCES
   ASAPScheduler.cpp
   Problems.cpp
-  SimplexScheduler.cpp
+  SimplexSchedulers.cpp
   TestPasses.cpp
   )
 
 add_circt_library(CIRCTScheduling
   ASAPScheduler.cpp
   Problems.cpp
-  SimplexScheduler.cpp
+  SimplexSchedulers.cpp
 
   LINK_LIBS PUBLIC
   MLIRIR

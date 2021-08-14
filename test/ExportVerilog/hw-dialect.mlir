@@ -411,8 +411,8 @@ hw.module @casts(%in1: i7, %in2: !hw.array<8xi4>) -> (%r1: !hw.array<7xi1>, %r2:
   %r1 = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>
   %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
 
-  // CHECK-NEXT: wire [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
   // CHECK-NEXT: assign r1 = in1;
+  // CHECK-NEXT: assign r2 = /*cast(bit[31:0])*/in2;
   hw.output %r1, %r2 : !hw.array<7xi1>, i32
 }
 
@@ -730,3 +730,11 @@ hw.module @Chi() -> (%Chi_output : i0) {
    hw.output
  }
  hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}
+
+// CHECK-LABEL: module Issue1563(
+hw.module @Issue1563(%a: i32) -> (%out : i32) {
+  // CHECK: assign out = a + a;{{.*}}//{{.*}}XX.scala:123:19, YY.haskell:309:14, ZZ.swift:3:4
+  %0 = comb.add %a, %a : i32 loc(fused["XX.scala":123:19, "YY.haskell":309:14, "ZZ.swift":3:4])
+  hw.output %0 : i32
+  // CHECK: endmodule
+}

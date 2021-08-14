@@ -235,18 +235,102 @@ OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    unsigned shift = rhs.getValue().getZExtValue();
+    unsigned width = getType().getIntOrFloatBitWidth();
+    if (width <= shift)
+      return getIntAttr(APInt::getNullValue(width), getContext());
+  }
+
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.shl(b); });
 }
 
+LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
+  // ShlOp(x, cst) -> Concat(Extract(x), zeros)
+  APInt value;
+  if (!matchPattern(op.rhs(), m_RConstant(value)))
+    return failure();
+
+  unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
+  unsigned shift = value.getZExtValue();
+
+  // This case is handled by fold.
+  if (width <= shift)
+    return failure();
+
+  auto zeros =
+      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
+
+  auto extract =
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
+
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{extract, zeros});
+  return success();
+}
+
 OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    unsigned shift = rhs.getValue().getZExtValue();
+    unsigned width = getType().getIntOrFloatBitWidth();
+    if (width <= shift)
+      return getIntAttr(APInt::getNullValue(width), getContext());
+  }
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.lshr(b); });
+}
+
+LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
+  // ShrUOp(x, cst) -> Concat(zeros, Extract(x))
+  APInt value;
+  if (!matchPattern(op.rhs(), m_RConstant(value)))
+    return failure();
+
+  unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
+  unsigned shift = value.getZExtValue();
+
+  // This case is handled by fold.
+  if (width <= shift)
+    return failure();
+
+  auto zeros =
+      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
+
+  auto extract =
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
+
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{zeros, extract});
+  return success();
 }
 
 OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.ashr(b); });
+}
+
+LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
+  // ShrSOp(x, cst) -> Concat(sext(extract(x, topbit)),extract(x))
+  APInt value;
+  if (!matchPattern(op.rhs(), m_RConstant(value)))
+    return failure();
+
+  unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
+  unsigned shift = value.getZExtValue();
+
+  auto topbit = rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, 1);
+  auto sext = rewriter.create<SExtOp>(op.getLoc(),
+                                      rewriter.getIntegerType(shift), topbit);
+
+  if (width <= shift) {
+    rewriter.replaceOp(op, {sext});
+    return success();
+  }
+
+  auto extract =
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
+
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{sext, extract});
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1118,85 +1202,171 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-static mlir::Value sextToDestTypeAndFlip(mlir::Value op, Type destType,
-                                         PatternRewriter &rewriter) {
-  op = rewriter.createOrFold<SExtOp>(op.getLoc(), destType, op);
-  Value newOperands[] = {
-      op, rewriter.create<hw::ConstantOp>(op.getLoc(), destType, -1)};
-  return rewriter.create<XorOp>(op.getLoc(), destType, newOperands);
+/// Given a mux, check to see if the "on true" value (or "on false" value if
+/// isFalseSide=true) is a mux tree with the same condition.  This allows us
+/// to turn things like `mux(VAL == 0, A, (mux (VAL == 1), B, C))` into
+/// `array_get (array_create(A, B, C), VAL)` which is far more compact and
+/// allows synthesis tools to do more interesting optimizations.
+///
+/// This returns false if we cannot form the mux tree (or do not want to) and
+/// returns true if the mux was replaced.
+static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
+                         PatternRewriter &rewriter) {
+  // Get the index value being compared.  Later we check to see if it is
+  // compared to a constant with the right predicate.
+  auto rootCmp = rootMux.cond().getDefiningOp<ICmpOp>();
+  if (!rootCmp)
+    return false;
+  Value indexValue = rootCmp.lhs();
+
+  // Check to see if the condition to the specified mux is an equality
+  // comparison `indexValue` and a constant.  If so, return the constant, if not
+  // return null.
+  auto getCondConstant = [&](MuxOp mux) -> hw::ConstantOp {
+    auto topLevelCmp = mux.cond().getDefiningOp<ICmpOp>();
+
+    // TODO: We could conceivably handle things like "x < 2" as two entries
+    // if there was a reason to.  We could also handle a mix of == / !=
+    // comparisons if they occur.
+    auto requiredPredicate =
+        (isFalseSide ? ICmpPredicate::eq : ICmpPredicate::ne);
+    if (!topLevelCmp || topLevelCmp.lhs() != indexValue ||
+        topLevelCmp.predicate() != requiredPredicate)
+      return {};
+    return topLevelCmp.rhs().getDefiningOp<hw::ConstantOp>();
+  };
+
+  // Return the value to use if the equality match succeeds.
+  auto getCaseValue = [&](MuxOp mux) -> Value {
+    return mux.getOperand(1 + unsigned(!isFalseSide));
+  };
+
+  // Return the value to use if the equality match fails.  This is the next
+  // mux in the sequence or the "otherwise" value.
+  auto getTreeValue = [&](MuxOp mux) -> Value {
+    return mux.getOperand(1 + unsigned(isFalseSide));
+  };
+
+  // Make sure the root is a correct comparison with a constant.
+  auto rootCst = getCondConstant(rootMux);
+  if (!rootCst)
+    return false;
+
+  // Make sure that we're not looking at the intermediate node in a mux tree.
+  if (rootMux->hasOneUse()) {
+    if (auto userMux = dyn_cast<MuxOp>(*rootMux->user_begin())) {
+      if (getCondConstant(userMux) &&
+          getTreeValue(userMux) == rootMux.getResult())
+        return false;
+    }
+  }
+
+  // Start scanning the mux tree to see what we've got.  Keep track of the
+  // constant comparison value and the SSA value to use when equal to it.
+  SmallVector<std::pair<hw::ConstantOp, Value>, 4> valuesFound;
+  SmallVector<Location> locationsFound;
+  valuesFound.push_back({rootCst, getCaseValue(rootMux)});
+
+  // Scan up the tree linearly.
+  auto nextTreeValue = getTreeValue(rootMux);
+  while (1) {
+    auto nextMux = nextTreeValue.getDefiningOp<MuxOp>();
+    if (!nextMux || !nextMux->hasOneUse())
+      break;
+    auto nextCst = getCondConstant(nextMux);
+    if (!nextCst)
+      break;
+    valuesFound.push_back({nextCst, getCaseValue(nextMux)});
+    locationsFound.push_back(nextMux.cond().getLoc());
+    locationsFound.push_back(nextMux->getLoc());
+    nextTreeValue = getTreeValue(nextMux);
+  }
+
+  // We need to have more than three values to create an array.  This is an
+  // arbitrary threshold which is saying that one or two muxes together is ok,
+  // but three should be folded.
+  if (valuesFound.size() < 3)
+    return false;
+
+  // Next we need to see if the values are dense-ish.  We don't want to have
+  // a tremendous number of replicated entries in the array.  Some sparsity is
+  // ok though, so we require the table to be at least 5/8 utilized.
+  uint64_t tableSize = 1ULL
+                       << indexValue.getType().cast<IntegerType>().getWidth();
+  if (valuesFound.size() < (tableSize * 5) / 8)
+    return false; // Not dense enough.
+
+  // Ok, we're going to do the transformation, start by building the table
+  // filled with the "otherwise" value.
+  SmallVector<Value, 8> table(tableSize, nextTreeValue);
+
+  // Fill in entries in the table from the leaf to the root of the expression.
+  // This ensures that any duplicate matches end up with the ultimate value,
+  // which is the one closer to the root.
+  for (auto &elt : llvm::reverse(valuesFound)) {
+    uint64_t idx = elt.first.getValue().getZExtValue();
+    assert(idx < table.size() && "constant should be same bitwidth as index");
+    table[idx] = elt.second;
+  }
+
+  // Build the array_create and the array_get.
+  auto fusedLoc = rewriter.getFusedLoc(locationsFound);
+  auto array = rewriter.create<hw::ArrayCreateOp>(fusedLoc, table);
+  rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(rootMux, array, indexValue);
+  return true;
 }
 
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   APInt value;
 
-  if (matchPattern(op.trueValue(), m_RConstant(value))) {
-    // mux(a, 11...1, b) -> or(a, b)
-    if (value.isAllOnesValue()) {
-      auto cond =
-          rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), op.cond());
-
-      Value newOperands[] = {cond, op.falseValue()};
-      rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
-      return success();
-    }
-
-    // mux(a, 0, b) -> and(not(a), b)
-    if (value.isNullValue()) {
-      auto cond = sextToDestTypeAndFlip(op.cond(), op.getType(), rewriter);
-      Value newOperands[] = {cond, op.falseValue()};
-      rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-      return success();
-    }
+  // mux(a, 1, b) -> or(a, b) for single-bit values.
+  if (matchPattern(op.trueValue(), m_RConstant(value)) &&
+      value.getBitWidth() == 1 && value.isAllOnesValue()) {
+    rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
+    return success();
   }
 
-  if (matchPattern(op.falseValue(), m_RConstant(value))) {
-    // mux(a, b, 0) -> and(a, b)
-    if (value.isNullValue()) {
-      auto cond =
-          rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), op.cond());
-
-      Value newOperands[] = {cond, op.trueValue()};
-      rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-      return success();
-    }
-
-    // mux(a, b, 11...1) -> or(not(a), b)
-    if (value.isAllOnesValue()) {
-      auto cond = sextToDestTypeAndFlip(op.cond(), op.getType(), rewriter);
-      Value newOperands[] = {cond, op.trueValue()};
-      rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
-      return success();
-    }
+  // mux(a, b, 0) -> and(a, b) for single-bit values.
+  if (matchPattern(op.falseValue(), m_RConstant(value)) &&
+      value.isNullValue() && value.getBitWidth() == 1) {
+    rewriter.replaceOpWithNewOp<AndOp>(op, op.cond(), op.trueValue());
+    return success();
   }
 
   // mux(!a, b, c) -> mux(a, c, b)
   if (auto xorOp = dyn_cast_or_null<XorOp>(op.cond().getDefiningOp())) {
     if (xorOp.isBinaryNot()) {
-      Value newOperands[]{xorOp.inputs()[0], op.falseValue(), op.trueValue()};
-      rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), newOperands);
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), xorOp.inputs()[0],
+                                         op.falseValue(), op.trueValue());
       return success();
     }
   }
 
-  // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
-  if (auto falseCase =
+  if (auto falseMux =
           dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
-    if (op.cond() == falseCase.cond()) {
-      Value newT = op.trueValue();
-      Value newF = falseCase.falseValue();
-      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), newT, newF);
+    // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
+    if (op.cond() == falseMux.cond()) {
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), op.trueValue(),
+                                         falseMux.falseValue());
       return success();
     }
+
+    // Check to see if we can fold a mux tree into an array_create/get pair.
+    if (foldMuxChain(op, /*isFalse*/ true, rewriter))
+      return success();
   }
 
-  // mux(selector, mux(selector, a, b), c) = mux(selector, a, c)
-  if (auto trueCase = dyn_cast_or_null<MuxOp>(op.trueValue().getDefiningOp())) {
-    if (op.cond() == trueCase.cond()) {
-      Value newT = trueCase.trueValue();
-      Value newF = op.falseValue();
-      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), newT, newF);
+  if (auto trueMux = dyn_cast_or_null<MuxOp>(op.trueValue().getDefiningOp())) {
+    // mux(selector, mux(selector, a, b), c) = mux(selector, a, c)
+    if (op.cond() == trueMux.cond()) {
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), trueMux.trueValue(),
+                                         op.falseValue());
       return success();
     }
+
+    // Check to see if we can fold a mux tree into an array_create/get pair.
+    if (foldMuxChain(op, /*isFalseSide*/ false, rewriter))
+      return success();
   }
 
   return failure();
@@ -1256,7 +1426,6 @@ static bool applyCmpPredicateToEqualOperands(ICmpPredicate predicate) {
 }
 
 OpFoldResult ICmpOp::fold(ArrayRef<Attribute> constants) {
-
   // gt a, a -> false
   // gte a, a -> true
   if (lhs() == rhs()) {
@@ -1294,8 +1463,8 @@ static size_t computeCommonPrefixLength(const Range &a, const Range &b) {
 static size_t getTotalWidth(const OperandRange &range) {
   size_t totalWidth = 0;
   for (auto operand : range) {
-    // getIntOrFloatBitWidth should never raise, since all arguments to ConcatOp
-    // are integers.
+    // getIntOrFloatBitWidth should never raise, since all arguments to
+    // ConcatOp are integers.
     ssize_t width = operand.getType().getIntOrFloatBitWidth();
     assert(width >= 0);
     totalWidth += width;
