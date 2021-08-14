@@ -666,3 +666,13 @@ hw.module @SevenSegmentDecoder(%in: i4) -> (%out: i7) {
   // CHECK: %4 = hw.array_get %3[%in]
   hw.output %30 : i7
 }
+
+// CHECK-LABEL: hw.module @shru_zero
+// This shouldn't crash canonicalize.
+hw.module @shru_zero(%a: i8) -> (%y: i8) {
+  // CHECK: hw.output %a : i8
+  %c = hw.constant 0 : i8
+  %0 = comb.shru %a, %c : i8
+  hw.output %0 : i8
+}
+

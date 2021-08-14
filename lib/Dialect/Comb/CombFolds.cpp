@@ -238,6 +238,8 @@ OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
     unsigned width = getType().getIntOrFloatBitWidth();
+    if (shift == 0)
+      return getOperand(0);
     if (width <= shift)
       return getIntAttr(APInt::getNullValue(width), getContext());
   }
@@ -256,7 +258,7 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
-  if (width <= shift)
+  if (width <= shift || shift == 0)
     return failure();
 
   auto zeros =
@@ -272,6 +274,9 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
 OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
+    if (shift == 0)
+      return getOperand(0);
+
     unsigned width = getType().getIntOrFloatBitWidth();
     if (width <= shift)
       return getIntAttr(APInt::getNullValue(width), getContext());
@@ -290,7 +295,7 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   unsigned shift = value.getZExtValue();
 
   // This case is handled by fold.
-  if (width <= shift)
+  if (width <= shift || shift == 0)
     return failure();
 
   auto zeros =
@@ -304,6 +309,10 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    if (rhs.getValue().getZExtValue() == 0)
+      return getOperand(0);
+  }
   return constFoldBinaryOp<IntegerAttr>(
       operands, [](APInt a, APInt b) { return a.ashr(b); });
 }
