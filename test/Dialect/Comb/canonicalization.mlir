@@ -592,3 +592,77 @@ hw.module @dont_fold_mux_tree1(%sel: i7, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y:
   %5 = comb.mux %4, %a, %3 : i8
   hw.output %5 : i8
 }
+
+// Issue 675: https://github.com/llvm/circt/issues/675
+// CHECK-LABEL: hw.module @SevenSegmentDecoder
+hw.module @SevenSegmentDecoder(%in: i4) -> (%out: i7) {
+  %c1_i4 = hw.constant 1 : i4
+  %c6_i6 = hw.constant 6 : i6
+  %c-1_i6 = hw.constant -1 : i6
+  %c2_i4 = hw.constant 2 : i4
+  %c-37_i7 = hw.constant -37 : i7
+  %c3_i4 = hw.constant 3 : i4
+  %c-49_i7 = hw.constant -49 : i7
+  %c4_i4 = hw.constant 4 : i4
+  %c-26_i7 = hw.constant -26 : i7
+  %c5_i4 = hw.constant 5 : i4
+  %c-19_i7 = hw.constant -19 : i7
+  %c6_i4 = hw.constant 6 : i4
+  %c-3_i7 = hw.constant -3 : i7
+  %c7_i4 = hw.constant 7 : i4
+  %c7_i7 = hw.constant 7 : i7
+  %c-8_i4 = hw.constant -8 : i4
+  %c-1_i7 = hw.constant -1 : i7
+  %c-7_i4 = hw.constant -7 : i4
+  %c-17_i7 = hw.constant -17 : i7
+  %c-6_i4 = hw.constant -6 : i4
+  %c-9_i7 = hw.constant -9 : i7
+  %c-5_i4 = hw.constant -5 : i4
+  %c-4_i7 = hw.constant -4 : i7
+  %c-4_i4 = hw.constant -4 : i4
+  %c57_i7 = hw.constant 57 : i7
+  %c-3_i4 = hw.constant -3 : i4
+  %c-34_i7 = hw.constant -34 : i7
+  %c-2_i4 = hw.constant -2 : i4
+  %c-7_i7 = hw.constant -7 : i7
+  %c-15_i7 = hw.constant -15 : i7
+  %false = hw.constant false
+  %c-1_i4 = hw.constant -1 : i4
+  %0 = comb.icmp eq %in, %c1_i4 : i4
+  %1 = comb.mux %0, %c6_i6, %c-1_i6 : i6
+  %2 = comb.icmp eq %in, %c2_i4 : i4
+  %3 = comb.concat %false, %1 : (i1, i6) -> i7
+  %4 = comb.mux %2, %c-37_i7, %3 : i7
+  %5 = comb.icmp eq %in, %c3_i4 : i4
+  %6 = comb.mux %5, %c-49_i7, %4 : i7
+  %7 = comb.icmp eq %in, %c4_i4 : i4
+  %8 = comb.mux %7, %c-26_i7, %6 : i7
+  %9 = comb.icmp eq %in, %c5_i4 : i4
+  %10 = comb.mux %9, %c-19_i7, %8 : i7
+  %11 = comb.icmp eq %in, %c6_i4 : i4
+  %12 = comb.mux %11, %c-3_i7, %10 : i7
+  %13 = comb.icmp eq %in, %c7_i4 : i4
+  %14 = comb.mux %13, %c7_i7, %12 : i7
+  %15 = comb.icmp eq %in, %c-8_i4 : i4
+  %16 = comb.mux %15, %c-1_i7, %14 : i7
+  %17 = comb.icmp eq %in, %c-7_i4 : i4
+  %18 = comb.mux %17, %c-17_i7, %16 : i7
+  %19 = comb.icmp eq %in, %c-6_i4 : i4
+  %20 = comb.mux %19, %c-9_i7, %18 : i7
+  %21 = comb.icmp eq %in, %c-5_i4 : i4
+  %22 = comb.mux %21, %c-4_i7, %20 : i7
+  %23 = comb.icmp eq %in, %c-4_i4 : i4
+  %24 = comb.mux %23, %c57_i7, %22 : i7
+  %25 = comb.icmp eq %in, %c-3_i4 : i4
+  %26 = comb.mux %25, %c-34_i7, %24 : i7
+  %27 = comb.icmp eq %in, %c-2_i4 : i4
+  %28 = comb.mux %27, %c-7_i7, %26 : i7
+  %29 = comb.icmp eq %in, %c-1_i4 : i4
+  %30 = comb.mux %29, %c-15_i7, %28 : i7
+  // CHECK: %0 = comb.icmp eq %in, %c1_i4 : i4
+  // CHECK: %1 = comb.mux %0, %c6_i6, %c-1_i6 : i6
+  // CHECK: %2 = comb.concat %false, %1 : (i1, i6) -> i7
+  // CHECK: %3 = hw.array_create %2, %2, %c-37_i7, %c-49_i7, %c-26_i7, %c-19_i7, %c-3_i7, %c7_i7, %c-1_i7, %c-17_i7, %c-9_i7, %c-4_i7, %c57_i7, %c-34_i7, %c-7_i7, %c-15_i7 : i7
+  // CHECK: %4 = hw.array_get %3[%in]
+  hw.output %30 : i7
+}

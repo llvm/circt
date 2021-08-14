@@ -1319,35 +1319,25 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   APInt value;
 
-  if (matchPattern(op.trueValue(), m_RConstant(value))) {
-    // mux(a, 11...1, b) -> or(a, b)
-    if (value.isAllOnesValue()) {
-      auto cond =
-          rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), op.cond());
-
-      Value newOperands[] = {cond, op.falseValue()};
-      rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
-      return success();
-    }
+  // mux(a, 1, b) -> or(a, b) for single-bit values.
+  if (matchPattern(op.trueValue(), m_RConstant(value)) &&
+      value.getBitWidth() == 1 && value.isAllOnesValue()) {
+    rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
+    return success();
   }
 
-  if (matchPattern(op.falseValue(), m_RConstant(value))) {
-    // mux(a, b, 0) -> and(a, b)
-    if (value.isNullValue()) {
-      auto cond =
-          rewriter.createOrFold<SExtOp>(op.getLoc(), op.getType(), op.cond());
-
-      Value newOperands[] = {cond, op.trueValue()};
-      rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-      return success();
-    }
+  // mux(a, b, 0) -> and(a, b) for single-bit values.
+  if (matchPattern(op.falseValue(), m_RConstant(value)) &&
+      value.isNullValue() && value.getBitWidth() == 1) {
+    rewriter.replaceOpWithNewOp<AndOp>(op, op.cond(), op.trueValue());
+    return success();
   }
 
   // mux(!a, b, c) -> mux(a, c, b)
   if (auto xorOp = dyn_cast_or_null<XorOp>(op.cond().getDefiningOp())) {
     if (xorOp.isBinaryNot()) {
-      Value newOperands[]{xorOp.inputs()[0], op.falseValue(), op.trueValue()};
-      rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), newOperands);
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), xorOp.inputs()[0],
+                                         op.falseValue(), op.trueValue());
       return success();
     }
   }
@@ -1356,9 +1346,8 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
           dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)
     if (op.cond() == falseMux.cond()) {
-      Value newT = op.trueValue();
-      Value newF = falseMux.falseValue();
-      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), newT, newF);
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), op.trueValue(),
+                                         falseMux.falseValue());
       return success();
     }
 
@@ -1370,9 +1359,8 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   if (auto trueMux = dyn_cast_or_null<MuxOp>(op.trueValue().getDefiningOp())) {
     // mux(selector, mux(selector, a, b), c) = mux(selector, a, c)
     if (op.cond() == trueMux.cond()) {
-      Value newT = trueMux.trueValue();
-      Value newF = op.falseValue();
-      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), newT, newF);
+      rewriter.replaceOpWithNewOp<MuxOp>(op, op.cond(), trueMux.trueValue(),
+                                         op.falseValue());
       return success();
     }
 
