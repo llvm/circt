@@ -80,16 +80,13 @@ def ComponentOp : CalyxOp<"component", [
 
   // TODO(Calyx): Allow explicit port naming?
   let arguments = (ins
-    ArrayAttr:$portNames,
-    I64Attr:$numInPorts
+    ArrayAttr:$portNames
   );
   let results = (outs);
   let regions = (region SizedRegion<1>: $body);
 
   let builders = [
-    OpBuilder<(ins "StringAttr":$name,
-      "ArrayRef<ComponentPortInfo>":$inputs,
-      "ArrayRef<ComponentPortInfo>":$outputs)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ComponentPortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
