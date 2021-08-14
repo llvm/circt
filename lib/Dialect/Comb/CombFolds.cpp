@@ -1202,14 +1202,6 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
   return {};
 }
 
-static Value sextToDestTypeAndFlip(mlir::Value op, Type destType,
-                                   PatternRewriter &rewriter) {
-  op = rewriter.createOrFold<SExtOp>(op.getLoc(), destType, op);
-  Value newOperands[] = {
-      op, rewriter.create<hw::ConstantOp>(op.getLoc(), destType, -1)};
-  return rewriter.create<XorOp>(op.getLoc(), destType, newOperands);
-}
-
 /// Given a mux, check to see if the "on true" value (or "on false" value if
 /// isFalseSide=true) is a mux tree with the same condition.  This allows us
 /// to turn things like `mux(VAL == 0, A, (mux (VAL == 1), B, C))` into
@@ -1337,14 +1329,6 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
       rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
       return success();
     }
-
-    // mux(a, 0, b) -> and(not(a), b)
-    if (value.isNullValue()) {
-      auto cond = sextToDestTypeAndFlip(op.cond(), op.getType(), rewriter);
-      Value newOperands[] = {cond, op.falseValue()};
-      rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-      return success();
-    }
   }
 
   if (matchPattern(op.falseValue(), m_RConstant(value))) {
@@ -1355,14 +1339,6 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
 
       Value newOperands[] = {cond, op.trueValue()};
       rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), newOperands);
-      return success();
-    }
-
-    // mux(a, b, 11...1) -> or(not(a), b)
-    if (value.isAllOnesValue()) {
-      auto cond = sextToDestTypeAndFlip(op.cond(), op.getType(), rewriter);
-      Value newOperands[] = {cond, op.trueValue()};
-      rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
       return success();
     }
   }

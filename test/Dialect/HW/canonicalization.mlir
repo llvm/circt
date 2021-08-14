@@ -794,35 +794,6 @@ hw.module @mux_canonicalize3(%a: i1, %b: i4) -> (i4) {
   hw.output %0 : i4
 }
 
-// CHECK-LABEL: hw.module @mux_canonicalize4(%a: i1, %b: i1, %c: i4) -> (i1, i1, i4, i4) {
-// CHECK-DAG:   %c-1_i4 = hw.constant -1 : i4
-// CHECK-DAG:   %true = hw.constant true
-// CHECK-NEXT:   %0 = comb.xor %a, %true : i1
-// CHECK-NEXT:   %1 = comb.and %0, %b : i1
-// CHECK-NEXT:   %2 = comb.xor %a, %true : i1
-// CHECK-NEXT:   %3 = comb.or %2, %b : i1
-// CHECK-NEXT:   %4 = comb.sext %a : (i1) -> i4
-// CHECK-NEXT:   %5 = comb.xor %4, %c-1_i4 : i4
-// CHECK-NEXT:   %6 = comb.or %5, %c : i4
-// CHECK-NEXT:   %7 = comb.sext %a : (i1) -> i4
-// CHECK-NEXT:   %8 = comb.xor %7, %c-1_i4 : i4
-// CHECK-NEXT:   %9 = comb.and %8, %c : i4
-// CHECK-NEXT: hw.output %1, %3, %6, %9 : i1, i1, i4, i4
-hw.module @mux_canonicalize4(%a: i1, %b: i1, %c: i4) -> (i1, i1, i4, i4) {
-  %false = hw.constant false
-  %0 = comb.mux %a, %false, %b : i1
-
-  %true = hw.constant true
-  %1 = comb.mux %a, %b, %true : i1
-
-  %c-1_i4 = hw.constant -1 : i4
-  %2 = comb.mux %a, %c, %c-1_i4 : i4
-
-  %c0_i4 = hw.constant 0 : i4
-  %3 = comb.mux %a, %c0_i4, %c : i4
-  hw.output %0, %1, %2, %3 : i1, i1, i4, i4
-}
-
 // CHECK-LABEL: hw.module @icmp_fold_1bit_eq1(%arg: i1) -> (i1, i1, i1, i1) {
 // CHECK-NEXT:   %true = hw.constant true
 // CHECK-NEXT:   %0 = comb.xor %arg, %true : i1

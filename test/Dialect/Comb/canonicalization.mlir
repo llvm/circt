@@ -557,10 +557,12 @@ hw.module @fold_mux_tree3(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) 
 }
 
 // CHECK-LABEL: hw.module @fold_mux_tree4
-// TODO: This *should* fold, but is not due to Issue #1549
-// CHECK-NOT: hw.array_create
-// CHECK: hw.output
 hw.module @fold_mux_tree4(%sel: i2, %a: i8, %b: i8, %c: i8) -> (%y: i8) {
+  // CHECK-NEXT: %c-1_i8 = hw.constant -1 : i8
+  // CHECK-NEXT: %0 = hw.array_create %a, %b, %c, %c-1_i8 : i8 
+  // CHECK-NEXT: %1 = hw.array_get %0[%sel]
+  // CHECK-NEXT: hw.output %1
+
   %c0_i2 = hw.constant 0 : i2
   %c1_i2 = hw.constant 1 : i2
   %c-1_i8 = hw.constant -1 : i8
