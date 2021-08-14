@@ -576,6 +576,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
     TypeSwitch<Operation *>(op)
         .Case<ConnectOp, PartialConnectOp>(
             [&](auto op) { traceResets(op.dest(), op.src(), op.getLoc()); })
+
         .Case<InstanceOp>([&](auto op) { traceResets(op); })
 
         .Case<InvalidValueOp>([&](auto op) {
@@ -596,6 +597,33 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             auto newOp = builder.create<InvalidValueOp>(type);
             use.set(newOp);
           }
+        })
+
+        .Case<SubfieldOp>([&](auto op) {
+          // Associate the input bundle's resets with the output field's resets.
+          auto bundleType = op.input().getType().template cast<BundleType>();
+          auto index = op.fieldIndex();
+          traceResets(op.getType(), op.getResult(), 0,
+                      bundleType.getElements()[index].type, op.input(),
+                      bundleType.getFieldID(index), op.getLoc());
+        })
+
+        .Case<SubindexOp, SubaccessOp>([&](auto op) {
+          // Associate the input vector's resets with the output field's resets.
+          //
+          // This collapses all elements in vectors into one shared element
+          // which will ensure that reset inference provides a uniform result
+          // for all elements.
+          //
+          // CAVEAT: This may infer reset networks that are too big, since
+          // unrelated resets in the same vector end up looking as if they were
+          // connected. However for the sake of type inference, this is
+          // indistinguishable from them having to share the same type (namely
+          // the vector element type).
+          auto vectorType = op.input().getType().template cast<FVectorType>();
+          traceResets(op.getType(), op.getResult(), 0,
+                      vectorType.getElementType(), op.input(),
+                      vectorType.getFieldID(0), op.getLoc());
         });
   });
 }
@@ -624,47 +652,10 @@ void InferResetsPass::traceResets(InstanceOp inst) {
 /// Analyze a connect or partial connect of one (possibly aggregate) value to
 /// another. Each drive involving a `ResetType` is recorded.
 void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
-  // Trace through any subfield/subindex/subaccess ops on both sides of the
-  // connect.
-  traceResets(dst);
-  traceResets(src);
-
   // Analyze the actual connection.
   auto dstType = dst.getType().cast<FIRRTLType>();
   auto srcType = src.getType().cast<FIRRTLType>();
   traceResets(dstType, dst, 0, srcType, src, 0, loc);
-}
-
-/// Trace a value through a possible subfield/subindex/subaccess op. This is
-/// used when analyzing connects and partial connects, to ensure we actually
-/// track down which subfields of larger aggregate values these drives refer to.
-void InferResetsPass::traceResets(Value value) {
-  auto op = value.getDefiningOp();
-  if (!op)
-    return;
-  TypeSwitch<Operation *>(op)
-      .Case<SubfieldOp>([&](auto op) {
-        auto bundleType = op.input().getType().template cast<BundleType>();
-        auto index = op.fieldIndex();
-        traceResets(op.getType(), op.getResult(), 0,
-                    bundleType.getElements()[index].type, op.input(),
-                    bundleType.getFieldID(index), value.getLoc());
-      })
-      .Case<SubindexOp, SubaccessOp>([&](auto op) {
-        // Collapse all elements in vectors into one shared element which will
-        // ensure that reset inference provides a uniform result for all
-        // elements.
-        //
-        // CAVEAT: This may infer reset networks that are too big, since
-        // unrelated resets in the same vector end up looking as if they were
-        // connected. However for the sake of type inference, this is
-        // indistinguishable from them having to share the same type (namely the
-        // vector element type).
-        auto vectorType = op.input().getType().template cast<FVectorType>();
-        traceResets(op.getType(), op.getResult(), 0,
-                    vectorType.getElementType(), op.input(),
-                    vectorType.getFieldID(0), value.getLoc());
-      });
 }
 
 /// Analyze a connect or partial connect of one (possibly aggregate) value to
