@@ -353,30 +353,50 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
                               "`clk`, `reset`, and output port `done`";
 }
 
+template <typename T>
+SmallVector<T> concat(const SmallVectorImpl<T> &a,
+                      const SmallVectorImpl<T> &b) {
+  SmallVector<T> out;
+  out.insert(out.end(), a.begin(), a.end());
+  out.insert(out.end(), b.begin(), b.end());
+  return out;
+}
+
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ComponentPortInfo> ports) {
   using namespace mlir::function_like_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
-  SmallVector<Type, 8> portTypes;
-  SmallVector<Attribute, 8> portNames;
+  std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
+  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
   SmallVector<Direction, 8> portDirections;
+  // Avoid using llvm::partition or llvm::sort to preserve relative ordering
+  // between individual inputs and outputs.
   for (auto &&port : ports) {
-    portNames.push_back(port.name);
-    portTypes.push_back(port.type);
-    portDirections.push_back(port.direction);
+    (port.direction == Direction::Input ? portIOTypes.first
+                                        : portIOTypes.second)
+        .push_back(port.type);
+    (port.direction == Direction::Input ? portIONames.first
+                                        : portIONames.second)
+        .push_back(port.name);
   }
+  auto portTypes = concat(portIOTypes.first, portIOTypes.second);
+  auto portNames = concat(portIONames.first, portIONames.second);
 
   // Build the function type of the component.
   auto functionType = builder.getFunctionType(portTypes, {});
   result.addAttribute(getTypeAttrName(), TypeAttr::get(functionType));
 
+  functionType.dump();
+
   // Record the port names and number of input ports of the component.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute(
-      direction::attrKey,
-      direction::packAttribute(portDirections, builder.getContext()));
+  result.addAttribute(direction::attrKey,
+                      direction::packAttribute(direction::genInOutDirections(
+                                                   portIOTypes.first.size(),
+                                                   portIOTypes.second.size()),
+                                               builder.getContext()));
 
   // Create a single-blocked region.
   result.addRegion();
