@@ -881,8 +881,8 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   auto &builder = parser.getBuilder();
 
   // Parse the name as a symbol.
-  StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+  StringAttr functionName;
+  if (parser.parseSymbolName(functionName, SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
   // Parse tstart.
@@ -981,16 +981,6 @@ static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
                         /*printBlockTerminators=*/true);
   printer.printOptionalAttrDict(
       op->getAttrs(), {"funcTy", "type", "arg_attrs", "res_attrs", "sym_name"});
-}
-
-// CallableOpInterface.
-Region *hir::FuncOp::getCallableRegion() {
-  return isExternal() ? nullptr : &body();
-}
-
-// CallableOpInterface.
-ArrayRef<Type> hir::FuncOp::getCallableResults() {
-  return getType().getResults();
 }
 
 LogicalResult hir::FuncOp::verifyType() {

@@ -39,4 +39,5 @@ llvm::Optional<mlir::ArrayAttr>
 extractMemrefPortsFromDict(mlir::DictionaryAttr dict);
 llvm::Optional<uint64_t> getRdLatency(mlir::Attribute port);
 llvm::StringRef extractBusPortFromDict(mlir::DictionaryAttr dict);
+llvm::StringRef getInlineAttrName();
 } // namespace helper

@@ -199,4 +199,5 @@ StringRef extractBusPortFromDict(mlir::DictionaryAttr dict) {
   assert(ports.size() == 1);
   return ports[0].dyn_cast<StringAttr>().getValue();
 }
+llvm::StringRef getInlineAttrName() { return "inline"; }
 } // namespace helper

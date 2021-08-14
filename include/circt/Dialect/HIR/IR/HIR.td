@@ -92,7 +92,7 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
   let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
 }
 
-def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbove, DeclareOpInterfaceMethods<CallableOpInterface>]> {
+def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbove, CallableOpInterface]> {
   let summary = "Function definition";
   let description = [{
     This Op creates a new function 
@@ -115,24 +115,19 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbov
   let printer = [{return print$cppClass(p,*this);}];
   let extraClassDeclaration = [{
     private:
-      // This trait needs access to the hooks defined below.
+      // FunctionLike interface.
       friend class OpTrait::FunctionLike<FuncOp>;
 
-      /// Returns the number of arguments. Hook for OpTrait::FunctionLike.
       unsigned getNumFuncArguments() { return getType().getNumInputs(); }
-
-      /// Returns the number of results. Hook for OpTrait::FunctionLike.
       unsigned getNumFuncResults() { return getType().getNumResults(); }
-
-      /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-      /// attribute is present and checks if it holds a function type. Ensures
-      /// getType, getNumFuncArguments, and getNumFuncResults can be called safely
       LogicalResult verifyType();
       Region& body(){ return getOperation()->getRegion(0);}
-
-      /// Hook for OpTrait::FunctionLike, called after verifying the function
-      /// type and the presence of the (potentially empty) function body.
       LogicalResult verifyBody();
+      Block *getBodyBlock() { return &body().front(); }
+      public:
+      //CallableOpInterface
+      Region* getCallableRegion(){return &getOperation()->getRegion(0);}
+      ArrayRef<Type> getCallableResults(){return getFuncType().getResultTypes();}
 
     public:
       Region& getFuncBody(){ return body();}
@@ -391,7 +386,7 @@ def RecvOp : HIR_Op<"recv", [NoSideEffect]> {
   let hasCanonicalizeMethod = true;
 }
 
-def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
+def CallOp : HIR_Op<"call", [CallOpInterface,AttrSizedOperandSegments] > {
   let summary = "Function call";
   let description = [{
     This Op calls a function/module. 
@@ -438,8 +433,6 @@ def CallOp : HIR_Op<"call",[AttrSizedOperandSegments] > {
       return (*this)->getAttrOfType<SymbolRefAttr>("callee");
     }
   }];
-
-
 }
 
 def CallInstanceOp : HIR_Op<"call.instance",[AttrSizedOperandSegments] > {

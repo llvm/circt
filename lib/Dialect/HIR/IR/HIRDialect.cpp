@@ -8,6 +8,7 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 
+#include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -20,12 +21,62 @@
 using namespace circt;
 using namespace hir;
 
+//-----------------------------------------------------------------------------
+// HIR Dialect interfaces
+//-----------------------------------------------------------------------------
+namespace {
+/// This class defines the interface for handling inlining with HIR operations.
+struct HIRInlinerInterface : public mlir::DialectInlinerInterface {
+  using mlir::DialectInlinerInterface::DialectInlinerInterface;
+
+  //===--------------------------------------------------------------------===//
+  // Analysis Hooks
+  //===--------------------------------------------------------------------===//
+
+  /// This hook checks to see if the given callable operation is legal to inline
+  /// into the given call. For Toy this hook can simply return true, as the Toy
+  /// Call operation is always inlinable.
+  bool isLegalToInline(Operation *call, Operation *callable,
+                       bool wouldBeCloned) const final {
+    return true;
+  }
+
+  /// This hook checks to see if the given operation is legal to inline into the
+  /// given region. For Toy this hook can simply return true, as all Toy
+  /// operations are inlinable.
+  bool isLegalToInline(Operation *, Region *, bool,
+                       BlockAndValueMapping &) const final {
+    return true;
+  }
+
+  bool isLegalToInline(Region *, Region *src, bool,
+                       BlockAndValueMapping &) const final {
+    return true;
+  }
+  void handleTerminator(Operation *op,
+                        ArrayRef<Value> valuesToRepl) const final {
+    // Only "hir.yield" needs to be handled here.
+    auto returnOp = cast<hir::ReturnOp>(op);
+    assert(returnOp);
+
+    // Replace the values directly with the return operands.
+    assert(returnOp.operands().size() == valuesToRepl.size());
+    for (const auto &it : llvm::enumerate(returnOp.operands()))
+      valuesToRepl[it.index()].replaceAllUsesWith(it.value());
+  }
+};
+} // end anonymous namespace
+
+//-----------------------------------------------------------------------------
+// HIR Dialect
+//-----------------------------------------------------------------------------
 void HIRDialect::initialize() {
   addTypes<TimeType, BusType, FuncType, MemrefType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/IR/HIR.cpp.inc"
       >();
+  addInterfaces<HIRInlinerInterface>();
 }
 
 Operation *HIRDialect::materializeConstant(OpBuilder &builder, Attribute value,
