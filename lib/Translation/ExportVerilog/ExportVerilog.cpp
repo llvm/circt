@@ -52,7 +52,7 @@ using namespace sv;
 /// expression.
 static bool isExpressionAlwaysInline(Operation *op) {
   // We need to emit array indexes inline per verilog "lvalue" semantics.
-  if (isa<ArrayIndexInOutOp>(op))
+  if (isa<ArrayIndexInOutOp>(op) || isa<ReadInOutOp>(op))
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.
@@ -1434,11 +1434,18 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 /// result of this expression.  It is conservatively correct to return false.
 static bool isOkToBitSelectFrom(Value v) {
   // Module ports are always ok to bit select from.
-  if (v.getDefiningOp())
-    // TODO: We could handle concat and other operators here.
-    return false;
+  if (v.isa<BlockArgument>())
+    return true;
 
-  return true;
+  // Uses of a wire or register can be done inline.
+  if (auto read = v.getDefiningOp<ReadInOutOp>()) {
+    if (read.input().getDefiningOp<WireOp>() ||
+        read.input().getDefiningOp<RegOp>())
+      return true;
+  }
+
+  // TODO: We could handle concat and other operators here.
+  return false;
 }
 
 /// Return true if we are unable to ever inline the specified operation.  This
@@ -1489,8 +1496,14 @@ static bool isExpressionUnableToInline(Operation *op) {
       return true;
 
     // Always blocks must have a name in their sensitivity list, not an expr.
-    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user))
+    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {
+      // Anything other than a read of a wire must be out of line.
+      if (auto read = dyn_cast<ReadInOutOp>(op))
+        if (read.input().getDefiningOp<WireOp>() ||
+            read.input().getDefiningOp<RegOp>())
+          continue;
       return true;
+    }
   }
   return false;
 }
@@ -3363,12 +3376,13 @@ static void prepareHWModule(Block &block, ModuleNameManager &names,
     // a trivial wire, if the corresponding option is set.
     if (!options.allowExprInEventControl) {
       auto enforceWire = [&](Value expr) {
-        auto definingOp = expr.getDefiningOp();
-        if (!definingOp ||
-            (isa<ReadInOutOp>(definingOp) &&
-             isa_and_nonnull<WireOp>(
-                 cast<ReadInOutOp>(definingOp).input().getDefiningOp())))
+        // Direct port uses are fine.
+        if (expr.isa<BlockArgument>())
           return;
+        // If this is a read from a wire, we're fine.
+        if (auto read = expr.getDefiningOp<ReadInOutOp>())
+          if (read.input().getDefiningOp<WireOp>())
+            return;
         auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);
         auto newWire = builder.create<WireOp>(expr.getType());
         builder.setInsertionPoint(&op);

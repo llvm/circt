@@ -648,13 +648,11 @@ hw.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
   %s = sv.reg  : !hw.inout<uarray<1xi1>>
   %2 = sv.array_index_inout %r[%0] : !hw.inout<uarray<1xi1>>, i1
   %3 = sv.array_index_inout %s[%1] : !hw.inout<uarray<1xi1>>, i1
-  // CHECK: wire _T = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
-  // CHECK: wire _T_0 = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;
   // CHECK: always_ff
   sv.alwaysff(posedge %clock)  {
-    // CHECK-NEXT: r[_T] <= in;
+    // CHECK-NEXT: r[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] <= in;
     sv.passign %2, %in : i1
-    // CHECK-NEXT: s[_T_0] <= in;
+    // CHECK-NEXT: s[bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb] <= in;
     sv.passign %3, %in : i1
   }
 }
@@ -782,6 +780,31 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
   // CHECK: struct packed {logic a; logic b; }[3:0][7:0] reg3
   %reg3 = sv.reg : !hw.inout<array<4xarray<8xstruct<a: i1, b: i1>>>>
 }
+
+
+// CHECK-LABEL: module MultiUseReadInOut(
+// Issue #1564
+hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (%aa: i3, %bb: i3){
+  %a = sv.reg  : !hw.inout<i3>
+  %b = sv.reg  : !hw.inout<i3>
+  %c = sv.reg  : !hw.inout<i3>
+  %d = sv.reg  : !hw.inout<i3>
+  %123 = sv.read_inout %b : !hw.inout<i3>
+  %124 = sv.read_inout %a : !hw.inout<i3>
+  %125 = sv.read_inout %c : !hw.inout<i3>
+  %126 = sv.read_inout %d : !hw.inout<i3>
+
+  // We should directly use a/b/c/d here instead of emitting temporary wires.
+
+  // CHECK: assign aa = ({{.}}{a}, {b}, {c}, {d}})[auto_in_ar_bits_id];
+  %127 = hw.array_create %124, %123, %125, %126 : i3
+  %128 = hw.array_get %127[%auto_in_ar_bits_id] : !hw.array<4xi3>
+
+  // CHECK: assign bb = b + a;
+  %xx = comb.add %123, %124 : i3
+  hw.output %128, %xx : i3, i3
+}
+
 
 // CHECK-LABEL: module extInst
 hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
