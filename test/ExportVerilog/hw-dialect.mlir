@@ -730,3 +730,13 @@ hw.module @Chi() -> (%Chi_output : i0) {
    hw.output
  }
  hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}
+
+// CHECK-LABEL: module Issue1563(
+hw.module @Issue1563(%a: i32) -> (%out : i32) {
+  // CHECK: assign out = a + a;{{.*}}//{{.*}}XX.scala:123:19, YY.haskell:309:14, ZZ.swift:3:4
+  %0 = comb.add %a, %a : i32 loc(fused["XX.scala":123:19, "YY.haskell":309:14, "ZZ.swift":3:4])
+  hw.output %0 : i32
+  // CHECK: endmodule
+}
+
+

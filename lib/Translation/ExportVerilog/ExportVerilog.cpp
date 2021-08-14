@@ -373,6 +373,18 @@ enum VerilogPrecedence {
 };
 } // end anonymous namespace
 
+/// Pull any FileLineCol locs out of the specified location and add it to the
+/// specified set.
+static void collectFileLineColLocs(Location loc,
+                                   SmallPtrSet<Attribute, 8> &locationSet) {
+  if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
+    locationSet.insert(fileLoc);
+
+  if (auto fusedLoc = loc.dyn_cast<FusedLoc>())
+    for (auto loc : fusedLoc.getLocations())
+      collectFileLineColLocs(loc, locationSet);
+}
+
 /// Return the location information as a (potentially empty) string.
 static std::string
 getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
@@ -381,11 +393,9 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
 
   // Multiple operations may come from the same location or may not have useful
   // location info.  Unique it now.
-  SmallPtrSet<Attribute, 8> locations;
-  for (auto *op : ops) {
-    if (auto loc = op->getLoc().dyn_cast<FileLineColLoc>())
-      locations.insert(loc);
-  }
+  SmallPtrSet<Attribute, 8> locationSet;
+  for (auto *op : ops)
+    collectFileLineColLocs(op->getLoc(), locationSet);
 
   auto printLoc = [&](FileLineColLoc loc) {
     sstr << loc.getFilename();
@@ -396,9 +406,10 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
     }
   };
 
-  switch (locations.size()) {
+  // Fast pass some common cases.
+  switch (locationSet.size()) {
   case 1:
-    printLoc((*locations.begin()).cast<FileLineColLoc>());
+    printLoc((*locationSet.begin()).cast<FileLineColLoc>());
     LLVM_FALLTHROUGH;
   case 0:
     return sstr.str();
@@ -408,8 +419,8 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
 
   // Sort the entries.
   SmallVector<FileLineColLoc, 8> locVector;
-  locVector.reserve(locations.size());
-  for (auto loc : locations)
+  locVector.reserve(locationSet.size());
+  for (auto loc : locationSet)
     locVector.push_back(loc.cast<FileLineColLoc>());
 
   llvm::array_pod_sort(
