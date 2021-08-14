@@ -558,6 +558,92 @@ static Attribute constFoldVariadicOp(ArrayRef<Attribute> operands,
   return AttrElementT::get(operands[0].getType(), accum);
 }
 
+/// When we find a logical operation (and, or, xor) with a constant e.g.
+/// `X & 42`, we want to push the constant into the computation of X if it leads
+/// to simplification.
+///
+/// This function handles the case where the logical operation has a concat
+/// operand.  We check to see if we can simplify the concat, e.g. when it has
+/// constant operands.
+///
+/// This returns true when a simplification happens.
+static bool canonicalizeLogicalCstWithConcat(Operation *logicalOp,
+                                             size_t concatIdx, const APInt &cst,
+                                             PatternRewriter &rewriter) {
+  auto concatOp = logicalOp->getOperand(concatIdx).getDefiningOp<ConcatOp>();
+  assert((isa<AndOp, OrOp, XorOp>(logicalOp) && concatOp));
+
+  // Check to see if any operands can be simplified by pushing the logical op
+  // into all parts of the concat.
+  bool canSimplify =
+      llvm::any_of(concatOp->getOperands(), [&](Value operand) -> bool {
+        auto *operandOp = operand.getDefiningOp();
+        if (!operandOp)
+          return false;
+
+        // If the concat has a constant operand then we can transform this.
+        if (isa<hw::ConstantOp>(operandOp))
+          return true;
+        // If the concat has the same logical operation and that operation has
+        // a constant operation than we can fold it into that suboperation.
+        return operandOp->getName() == logicalOp->getName() &&
+               operandOp->hasOneUse() && operandOp->getNumOperands() != 0 &&
+               operandOp->getOperands().back().getDefiningOp<hw::ConstantOp>();
+      });
+
+  if (!canSimplify)
+    return false;
+
+  // Create a new instance of the logical operation.  We have to do this the
+  // hard way since we're generic across a family of different ops.
+  auto createLogicalOp = [&](ArrayRef<Value> operands) -> Value {
+    OperationState state(logicalOp->getLoc(), logicalOp->getName());
+    state.addOperands(operands);
+    state.addTypes(operands[0].getType());
+    return rewriter.createOperation(state)->getResult(0);
+  };
+
+  // Ok, let's do the transformation.  We do this by slicing up the constant
+  // for each unit of the concat and duplicate the operation into the
+  // sub-operand.
+  SmallVector<Value> newConcatOperands;
+  newConcatOperands.reserve(concatOp->getNumOperands());
+
+  // Work from MSB to LSB.
+  size_t nextOperandBit = concatOp.getType().getIntOrFloatBitWidth();
+  for (Value operand : concatOp->getOperands()) {
+    size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
+    nextOperandBit -= operandWidth;
+    // Take a slice of the constant.
+    auto eltCst = rewriter.create<hw::ConstantOp>(
+        logicalOp->getLoc(), cst.lshr(nextOperandBit).trunc(operandWidth));
+
+    newConcatOperands.push_back(createLogicalOp({operand, eltCst}));
+  }
+
+  // Create the concat, and the rest of the logical op if we need it.
+  Value newResult =
+      rewriter.create<ConcatOp>(concatOp.getLoc(), newConcatOperands);
+
+  // If we had a variadic logical op on the top level, then recreate it with the
+  // new concat and without the constant operand.
+  if (logicalOp->getNumOperands() > 2) {
+    auto origOperands = logicalOp->getOperands();
+    SmallVector<Value> operands;
+    // Take any stuff before the concat.
+    operands.append(origOperands.begin(), origOperands.begin() + concatIdx);
+    // Take any stuff after the concat but before the constant.
+    operands.append(origOperands.begin() + concatIdx + 1,
+                    origOperands.begin() + (origOperands.size() - 1));
+    // Include the new concat.
+    operands.push_back(newResult);
+    newResult = createLogicalOp(operands);
+  }
+
+  rewriter.replaceOp(logicalOp, newResult);
+  return true;
+}
+
 OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
   APInt value = APInt::getAllOnesValue(getType().getWidth());
 
@@ -671,6 +757,15 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
         }
       }
     }
+
+    // and(concat(x, cst1), a, b, c, cst2)
+    //    ==> and(a, b, c, concat(and(x,cst2'), and(cst1,cst2'')).
+    // We do this for even more multi-use concats since they are "just wiring".
+    for (size_t i = 0; i < size - 1; ++i) {
+      if (auto concat = inputs[i].getDefiningOp<ConcatOp>())
+        if (canonicalizeLogicalCstWithConcat(op, i, value, rewriter))
+          return success();
+    }
   }
 
   // and(x, and(...)) -> and(x, ...) -- flatten
@@ -712,29 +807,39 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  APInt value, value2;
-
-  // or(..., 0) -> or(...) -- identity
-  if (matchPattern(inputs.back(), m_RConstant(value)) && value.isNullValue()) {
-
-    rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
-    return success();
-  }
-
   // or(..., x, x) -> or(..., x) -- idempotent
   if (inputs[size - 1] == inputs[size - 2]) {
     rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
     return success();
   }
 
-  // or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant folding
-  if (matchPattern(inputs[size - 1], m_RConstant(value)) &&
-      matchPattern(inputs[size - 2], m_RConstant(value2))) {
-    auto cst = rewriter.create<hw::ConstantOp>(op.getLoc(), value | value2);
-    SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
-    newOperands.push_back(cst);
-    rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
-    return success();
+  // Patterns for and with a constant on RHS.
+  APInt value;
+  if (matchPattern(inputs.back(), m_RConstant(value))) {
+    // or(..., '0) -> or(...) -- identity
+    if (value.isNullValue()) {
+      rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
+      return success();
+    }
+
+    // or(..., c1, c2) -> or(..., c3) where c3 = c1 | c2 -- constant folding
+    APInt value2;
+    if (matchPattern(inputs[size - 2], m_RConstant(value2))) {
+      auto cst = rewriter.create<hw::ConstantOp>(op.getLoc(), value | value2);
+      SmallVector<Value, 4> newOperands(inputs.drop_back(/*n=*/2));
+      newOperands.push_back(cst);
+      rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), newOperands);
+      return success();
+    }
+
+    // or(concat(x, cst1), a, b, c, cst2)
+    //    ==> or(a, b, c, concat(or(x,cst2'), or(cst1,cst2'')).
+    // We do this for even more multi-use concats since they are "just wiring".
+    for (size_t i = 0; i < size - 1; ++i) {
+      if (auto concat = inputs[i].getDefiningOp<ConcatOp>())
+        if (canonicalizeLogicalCstWithConcat(op, i, value, rewriter))
+          return success();
+    }
   }
 
   // or(x, or(...)) -> or(x, ...) -- flatten
@@ -804,6 +909,15 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
       newOperands.push_back(cst);
       rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), newOperands);
       return success();
+    }
+
+    // xor(concat(x, cst1), a, b, c, cst2)
+    //    ==> xor(a, b, c, concat(xor(x,cst2'), xor(cst1,cst2'')).
+    // We do this for even more multi-use concats since they are "just wiring".
+    for (size_t i = 0; i < size - 1; ++i) {
+      if (auto concat = inputs[i].getDefiningOp<ConcatOp>())
+        if (canonicalizeLogicalCstWithConcat(op, i, value, rewriter))
+          return success();
     }
   }
 

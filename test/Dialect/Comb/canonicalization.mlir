@@ -676,3 +676,38 @@ hw.module @shru_zero(%a: i8) -> (%y: i8) {
   hw.output %0 : i8
 }
 
+// CHECK-LABEL: hw.module @logical_concat_cst1
+hw.module @logical_concat_cst1(%value: i38, %v2: i39) -> (%a: i39) {
+  %true = hw.constant true
+  %0 = comb.concat %true, %value : (i1, i38) -> i39
+
+  %c255 = hw.constant 255 : i39
+  %1 = comb.and %0, %v2, %c255 : i39
+  hw.output %1 : i39
+
+  // CHECK: %false = hw.constant false
+  // CHECK: %c255_i38 = hw.constant 255 : i38
+  // CHECK: %0 = comb.and %value, %c255_i38 : i38
+  // CHECK: %1 = comb.concat %false, %0 : (i1, i38) -> i39
+  // CHECK: %2 = comb.and %v2, %1 : i39
+  // CHECK: hw.output %2 : i39
+}
+
+// CHECK-LABEL: hw.module @logical_concat_cst2
+hw.module @logical_concat_cst2(%value: i8, %v2: i16) -> (%a: i16) {
+  %c15 = hw.constant 15 : i8
+  %0 = comb.and %value, %c15 : i8
+
+  %1 = comb.concat %value, %0 : (i8, i8) -> i16
+
+  %c7 = hw.constant 7 : i16
+  %2 = comb.and %v2, %1, %c7 : i16
+  hw.output %2 : i16
+
+  // CHECK: %c0_i8 = hw.constant 0 : i8
+  // CHECK: %c7_i8 = hw.constant 7 : i8
+  // CHECK: %0 = comb.and %value, %c7_i8 : i8
+  // CHECK: %1 = comb.concat %c0_i8, %0 : (i8, i8) -> i16
+  // CHECK: %2 = comb.and %v2, %1 : i16
+  // CHECK: hw.output %2 : i16
+}
