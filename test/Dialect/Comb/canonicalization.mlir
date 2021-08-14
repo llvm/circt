@@ -487,3 +487,106 @@ hw.module @narrowBitwiseOpsInsertionPointRegression(%a: i8) -> (%out: i1) {
   %6 = comb.extract %5 from 0 : (i2) -> i1
   hw.output %6 : i1
 }
+
+// CHECK-LABEL: hw.module @fold_mux_tree1
+hw.module @fold_mux_tree1(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) {
+  // CHECK-NEXT: %0 = hw.array_create %a, %b, %c, %d : i8
+  // CHECK-NEXT: %1 = hw.array_get %0[%sel]
+  // CHECK-NEXT: hw.output %1
+  %c2_i2 = hw.constant 2 : i2
+  %0 = comb.icmp eq %sel, %c2_i2 : i2
+  %1 = comb.mux %0, %c, %d : i8
+
+  %c1_i2 = hw.constant 1 : i2
+  %2 = comb.icmp eq %sel, %c1_i2 : i2
+  %3 = comb.mux %2, %b, %1 : i8
+
+  %c0_i2 = hw.constant 0 : i2
+  %4 = comb.icmp eq %sel, %c0_i2 : i2
+  %5 = comb.mux %4, %a, %3 : i8
+  hw.output %5 : i8
+}
+
+// CHECK-LABEL: hw.module @fold_mux_tree2
+// This is a sparse tree with 5/8ths load.
+hw.module @fold_mux_tree2(%sel: i3, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) {
+  // CHECK-NEXT: %0 = hw.array_create %a, %b, %c, %a, %b, %d, %d, %d : i8
+  // CHECK-NEXT: %1 = hw.array_get %0[%sel]
+  // CHECK-NEXT: hw.output %1
+  %c2_i2 = hw.constant 2 : i3
+  %0 = comb.icmp eq %sel, %c2_i2 : i3
+  %1 = comb.mux %0, %c, %d : i8
+
+  %c1_i2 = hw.constant 1 : i3
+  %2 = comb.icmp eq %sel, %c1_i2 : i3
+  %3 = comb.mux %2, %b, %1 : i8
+
+  %c0_i2 = hw.constant 0 : i3
+  %4 = comb.icmp eq %sel, %c0_i2 : i3
+  %5 = comb.mux %4, %a, %3 : i8
+
+  %c3_i2 = hw.constant 3 : i3
+  %6 = comb.icmp eq %sel, %c3_i2 : i3
+  %7 = comb.mux %6, %a, %5 : i8
+
+  %c4_i2 = hw.constant 4 : i3
+  %8 = comb.icmp eq %sel, %c4_i2 : i3
+  %9 = comb.mux %8, %b, %7 : i8
+  hw.output %9 : i8
+}
+
+// CHECK-LABEL: hw.module @fold_mux_tree3
+// This has two selectors for the same index value. Make sure we get the
+// right one.  "%c" should not be used.
+hw.module @fold_mux_tree3(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) {
+  // CHECK-NEXT: %0 = hw.array_create %a, %b, %d, %d : i8
+  // CHECK-NEXT: %1 = hw.array_get %0[%sel]
+  // CHECK-NEXT: hw.output %1
+  %c2_i2 = hw.constant 0 : i2
+  %0 = comb.icmp eq %sel, %c2_i2 : i2
+  %1 = comb.mux %0, %c, %d : i8
+
+  %c1_i2 = hw.constant 1 : i2
+  %2 = comb.icmp eq %sel, %c1_i2 : i2
+  %3 = comb.mux %2, %b, %1 : i8
+
+  %c0_i2 = hw.constant 0 : i2
+  %4 = comb.icmp eq %sel, %c0_i2 : i2
+  %5 = comb.mux %4, %a, %3 : i8
+  hw.output %5 : i8
+}
+
+// CHECK-LABEL: hw.module @fold_mux_tree4
+// TODO: This *should* fold, but is not due to Issue #1549
+// CHECK-NOT: hw.array_create
+// CHECK: hw.output
+hw.module @fold_mux_tree4(%sel: i2, %a: i8, %b: i8, %c: i8) -> (%y: i8) {
+  %c0_i2 = hw.constant 0 : i2
+  %c1_i2 = hw.constant 1 : i2
+  %c-1_i8 = hw.constant -1 : i8
+  %c-2_i2 = hw.constant -2 : i2
+  %0 = comb.icmp eq %sel, %c-2_i2 : i2
+  %1 = comb.mux %0, %c, %c-1_i8 : i8
+  %2 = comb.icmp eq %sel, %c1_i2 : i2
+  %3 = comb.mux %2, %b, %1 : i8
+  %4 = comb.icmp eq %sel, %c0_i2 : i2
+  %5 = comb.mux %4, %a, %3 : i8
+  hw.output %5 : i8
+}
+
+// CHECK-LABEL: hw.module @dont_fold_mux_tree1
+// This shouldn't be turned into an array because it is too sparse.
+hw.module @dont_fold_mux_tree1(%sel: i7, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) {
+  // CHECK-NOT: array_create
+  // CHECK: hw.output
+  %c0_i2 = hw.constant 0 : i7
+  %c1_i2 = hw.constant 1 : i7
+  %c2_i2 = hw.constant 2 : i7
+  %0 = comb.icmp eq %sel, %c2_i2 : i7
+  %1 = comb.mux %0, %c, %d : i8
+  %2 = comb.icmp eq %sel, %c1_i2 : i7
+  %3 = comb.mux %2, %b, %1 : i8
+  %4 = comb.icmp eq %sel, %c0_i2 : i7
+  %5 = comb.mux %4, %a, %3 : i8
+  hw.output %5 : i8
+}
