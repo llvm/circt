@@ -411,8 +411,8 @@ hw.module @casts(%in1: i7, %in2: !hw.array<8xi4>) -> (%r1: !hw.array<7xi1>, %r2:
   %r1 = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>
   %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
 
-  // CHECK-NEXT: wire [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
   // CHECK-NEXT: assign r1 = in1;
+  // CHECK-NEXT: assign r2 = /*cast(bit[31:0])*/in2;
   hw.output %r1, %r2 : !hw.array<7xi1>, i32
 }
 
@@ -738,5 +738,3 @@ hw.module @Issue1563(%a: i32) -> (%out : i32) {
   hw.output %0 : i32
   // CHECK: endmodule
 }
-
-
