@@ -46,15 +46,7 @@ SmallVector<Direction> direction::genInOutDirections(size_t nIns,
 
 IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
                                      MLIRContext *ctx) {
-
-  // If the module contaions no ports (parameter a is empty), then use an APInt
-  // of size 1 with value 0 to store the ports.  This works around an issue
-  // where APInt cannot be zero-sized.  This aligns with port name storage which
-  // will use a zero-element array.
-  auto size = directions.size();
-  if (size == 0)
-    size = 1;
-
+  const size_t size = directions.size();
   // Pack the array of directions into an APInt.  Input is zero, output is one.
   APInt portDirections(size, 0);
   for (size_t i = 0, e = directions.size(); i != e; ++i)
