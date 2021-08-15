@@ -89,7 +89,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
   // Operations that may parent other ControlLike operations.
   auto isValidParent = [](Operation *operation) {
-    return isa<ControlOp, SeqOp>(operation);
+    return isa<ControlOp, SeqOp, IfOp>(operation);
   };
   if (!isValidParent(parent))
     return op->emitOpError()
@@ -102,7 +102,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -585,6 +585,24 @@ static LogicalResult verifyEnableOp(EnableOp enableOp) {
   if (!wiresOp.lookupSymbol<GroupOp>(groupName))
     return enableOp.emitOpError()
            << "with group: " << groupName << ", which does not exist.";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// IfOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyIfOp(IfOp ifOp) {
+  auto component = ifOp->getParentOfType<ComponentOp>();
+  auto wiresOp = component.getWiresOp();
+  auto groupName = ifOp.groupName();
+
+  if (!wiresOp.lookupSymbol<GroupOp>(groupName))
+    return ifOp.emitOpError()
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (ifOp.thenRegion().front().empty())
+    return ifOp.emitError() << "empty 'then' region.";
 
   return success();
 }

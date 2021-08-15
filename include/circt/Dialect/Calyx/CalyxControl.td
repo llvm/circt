@@ -34,6 +34,35 @@ def ControlOp : CalyxContainer<"control", [
   let verifier = "return ::verify$cppClass(*this);";
 }
 
+def IfOp : CalyxContainer<"if", [
+    ControlLike
+  ]> {
+  let summary = "Calyx If";
+  let arguments = (ins
+    I1:$cond,
+    FlatSymbolRefAttr:$groupName
+    );
+  let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
+  let description = [{
+    The "calyx.if" operation represents and if-then-else construct for
+    conditionally executing two calyx groups. The operands to an if operation
+    is a boolean value and the group under which this value is evaluated.
+
+    ```mlir
+      calyx.if (%1, @G1) {
+        calyx.enable @G2
+        ...
+      } else {
+        calyx.enable @G3
+        ...
+      }
+    ```
+  }];
+
+  let assemblyFormat = "$cond`,` $groupName $thenRegion (`else` $elseRegion^)? attr-dict";
+  let verifier = "return ::verify$cppClass(*this);";
+}
+
 def SeqOp : CalyxContainer<"seq", [
     ControlLike
   ]> {
