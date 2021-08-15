@@ -712,10 +712,52 @@ hw.module @logical_concat_cst2(%value: i8, %v2: i16) -> (%a: i16) {
   // CHECK: hw.output %2 : i16
 }
 
-
 // CHECK-LABEL: hw.module @concat_fold
 hw.module @concat_fold(%value: i8) -> (%a: i8) {
   // CHECK: hw.output %value : i8
   %0 = comb.concat %value : (i8) -> i8
   hw.output %0 : i8
+}
+
+
+// CHECK-LABEL: hw.module @combine_icmp_compare_concat0
+hw.module @combine_icmp_compare_concat0(%thing: i3) -> (%a: i1) {
+  %false = hw.constant false
+  %0 = comb.concat %thing, %false, %thing : (i3, i1, i3) -> i7
+
+  %c0 = hw.constant 0 : i7
+  %1 = comb.icmp ne %0, %c0 : i7
+
+  // CHECK: %c0_i6 = hw.constant 0 : i6
+  // CHECK: %0 = comb.concat %thing, %thing : (i3, i3) -> i6
+  // CHECK: %1 = comb.icmp ne %0, %c0_i6 : i6
+  // CHECK: hw.output %1 : i1
+  hw.output %1 : i1
+}
+
+// CHECK-LABEL: hw.module @combine_icmp_compare_concat1
+hw.module @combine_icmp_compare_concat1(%thing: i3) -> (%a: i1) {
+  %true = hw.constant true
+  %0 = comb.concat %thing, %true, %thing : (i3, i1, i3) -> i7
+
+  %c0 = hw.constant 0 : i7
+  %1 = comb.icmp ne %0, %c0 : i7
+
+  // CHECK: hw.output %true : i1
+  hw.output %1 : i1
+}
+
+// CHECK-LABEL: hw.module @combine_icmp_compare_concat2
+hw.module @combine_icmp_compare_concat2(%thing: i3) -> (%a: i1) {
+  %false = hw.constant false
+  %0 = comb.concat %thing, %false, %thing, %false : (i3, i1, i3, i1) -> i8
+
+  %c0 = hw.constant 0 : i8
+  %1 = comb.icmp eq %0, %c0 : i8
+  hw.output %1 : i1
+
+  // CHECK: %c0_i6 = hw.constant 0 : i6
+  // CHECK: %0 = comb.concat %thing, %thing : (i3, i3) -> i6
+  // CHECK: %1 = comb.icmp eq %0, %c0_i6 : i6
+  // CHECK: hw.output %1 : i1
 }

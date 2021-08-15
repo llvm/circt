@@ -1698,6 +1698,94 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
   return failure();
 }
 
+/// Given a comparison of a concat and a constant value, see if we can simplify
+/// the comparison to check a subset of the concat inputs.  We can do this when
+/// we know something about the concat operands, e.g. if they are constants.
+///
+/// One simple example of this is that `concat(0, stuff) == 0` can be simplified
+/// to `stuff == 0`.
+static bool combineICmpWithConcatAndConstant(ICmpOp cmpOp, ConcatOp concatOp,
+                                             const APInt &rhsCst,
+                                             PatternRewriter &rewriter) {
+  // We only support equality comparisons right now.
+  if (cmpOp.predicate() != ICmpPredicate::eq &&
+      cmpOp.predicate() != ICmpPredicate::ne)
+    return false;
+
+  // Check to see if any operands are constant.
+  // TODO: We need a "compute masked bits" sort of function that can handle more
+  // general expressions that just constants.
+  if (!llvm::any_of(concatOp.getOperands(), [](Value operand) -> bool {
+        return operand.getDefiningOp<hw::ConstantOp>() != nullptr;
+      }))
+    return false;
+
+  // Okay, the concat has at least one operand that has known bits.  Check to
+  // see if we can prove the result entirely of the comparison (in which we bail
+  // out early), otherwise build a smaller list of values to concat + smaller
+  // constant.
+  SmallVector<Value> newConcatOperands;
+  APInt newConstant;
+
+  // Work from MSB to LSB.
+  size_t nextOperandBit = concatOp.getType().getIntOrFloatBitWidth();
+  for (Value operand : concatOp->getOperands()) {
+    size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
+    nextOperandBit -= operandWidth;
+    // Take a slice of the constant we are comparing against.
+    auto cstSlice = rhsCst.lshr(nextOperandBit).trunc(operandWidth);
+
+    // If this has known bits then either the comparison isn't necessary or this
+    // refudiates the whole comparison.
+    if (auto operandCst = operand.getDefiningOp<hw::ConstantOp>()) {
+      // If the known bits equal the part of the constant we have, then it isn't
+      // contributing anything to the comparison.
+      if (operandCst.getValue() == cstSlice)
+        continue;
+
+      // If we discover a mismatch then we know an "eq" comparison is false and
+      // a "ne" comparison is true!
+      bool result = cmpOp.predicate() == ICmpPredicate::ne;
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(cmpOp, APInt(1, result));
+      return true;
+    }
+
+    // Otherwise, we add this constant slice and the operand to the new concat.
+    newConcatOperands.push_back(operand);
+
+    newConstant = (newConstant.zext(newConstant.getBitWidth() + operandWidth)
+                   << operandWidth);
+    newConstant |= cstSlice.zext(newConstant.getBitWidth());
+  }
+
+  // If all the operands to the concat are foldable then we have an identity
+  // situation where all the sub-elements equal each other.  This implies that
+  // the overall result is foldable.
+  if (newConcatOperands.empty()) {
+    bool result = cmpOp.predicate() == ICmpPredicate::eq;
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(cmpOp, APInt(1, result));
+    return true;
+  }
+
+  // If the concat has a single operand remaining, just use it, otherwise form a
+  // new smaller concat.
+  Value concatResult =
+      rewriter.createOrFold<ConcatOp>(concatOp.getLoc(), newConcatOperands);
+
+  // The default APInt constructor adds an extra bit to the top of the APInt
+  // constructor, trim it off now.
+  newConstant =
+      newConstant.trunc(concatResult.getType().getIntOrFloatBitWidth());
+
+  // Form the comparison against the smaller constant.
+  auto newConstantOp = rewriter.create<hw::ConstantOp>(
+      cmpOp.getOperand(1).getLoc(), newConstant);
+
+  rewriter.replaceOpWithNewOp<ICmpOp>(cmpOp, cmpOp.predicate(), concatResult,
+                                      newConstantOp);
+  return true;
+}
+
 // Canonicalizes a ICmp with a single constant
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
@@ -1826,6 +1914,12 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
         }
       }
       break;
+    }
+
+    // Simplify `icmp(concat(...), rhscst)` when the concat has constants in it.
+    if (auto concatLHS = op.lhs().getDefiningOp<ConcatOp>()) {
+      if (combineICmpWithConcatAndConstant(op, concatLHS, rhs, rewriter))
+        return success();
     }
   }
 
