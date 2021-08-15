@@ -45,12 +45,25 @@ class SameTypeConstraint<string lhs, string rhs>
 class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
   Op<CalyxDialect, mnemonic, traits>;
 
+/// Trait used to annotate instances of components and primitives.
+def Cell : NativeOpTrait<"Cell"> {
+  let cppNamespace = "::circt::calyx";
+}
+
+/// Base class for Calyx cells.
+class CalyxCell<string mnemonic, list<OpTrait> traits = []> :
+  CalyxOp<mnemonic, !listconcat(traits, [
+    Cell,
+    DeclareOpInterfaceMethods<OpAsmOpInterface>
+  ])> {
+}
+
 /// Base class for Calyx containers.
 class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
-      NoRegionArguments,
-      NoTerminator,
-      SingleBlock
+    NoRegionArguments,
+    NoTerminator,
+    SingleBlock
   ])> {
   let assemblyFormat = "$body attr-dict";
   let regions = (region SizedRegion<1>: $body);
@@ -73,8 +86,8 @@ class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
 }
 
-include "circt/Dialect/Calyx/CalyxPrimitives.td"
 include "circt/Dialect/Calyx/CalyxStructure.td"
 include "circt/Dialect/Calyx/CalyxControl.td"
+include "circt/Dialect/Calyx/CalyxPrimitives.td"
 
 #endif // CALYX_TD

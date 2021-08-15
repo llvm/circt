@@ -10,13 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def Cell : NativeOpTrait<"Cell"> {
-  let cppNamespace = "::circt::calyx";
-}
-
-def RegisterOp : CalyxOp<"register", [
-    Cell,
-    DeclareOpInterfaceMethods<OpAsmOpInterface>,
+def RegisterOp : CalyxCell<"register", [
     SameTypeConstraint<"in", "out">
   ]> {
   let summary = "Defines a register";
@@ -26,13 +20,13 @@ def RegisterOp : CalyxOp<"register", [
       %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i32
     ```
   }];
-  let arguments = (ins StrAttr:$name);
+  let arguments = (ins StrAttr:$instanceName);
   let results = (outs AnyType:$in, I1:$write_en, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
-  let assemblyFormat = "$name attr-dict `:` type($in)";
+  let assemblyFormat = "$instanceName attr-dict `:` type($in)";
 
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "size_t":$width), [{
-      $_state.addAttribute("name", name);
+    OpBuilder<(ins "StringAttr":$instanceName, "size_t":$width), [{
+      $_state.addAttribute("instanceName", instanceName);
       auto i1Type = $_builder.getI1Type();
       auto widthType = $_builder.getIntegerType(width);
       $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});

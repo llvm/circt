@@ -33,6 +33,9 @@ LogicalResult calyx::verifyCell(Operation *op) {
   if (!isa<ComponentOp>(opParent))
     return op->emitOpError()
            << "has parent: " << opParent << ". This should be ComponentOp.";
+  if (!op->hasAttr("instanceName"))
+    return op->emitOpError() << "does not have an instance name attribute.";
+
   return success();
 }
 
@@ -412,6 +415,18 @@ GroupDoneOp GroupOp::getDoneOp() {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
+/// Gives each result of the cell a meaningful name in the form:
+/// <prefix>.<port-name>
+static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
+                                  ArrayRef<StringRef> portNames) {
+  assert(op->hasTrait<Cell>() && "must have the Cell trait");
+
+  auto instanceName = op->getAttr("instanceName").cast<StringAttr>().getValue();
+  std::string prefix = instanceName.str() + ".";
+  for (size_t i = 0, e = portNames.size(); i != e; ++i)
+    setNameFn(op->getResult(i), prefix + portNames[i].str());
+}
+
 /// Lookup the component for the symbol. This returns null on
 /// invalid IR.
 ComponentOp InstanceOp::getReferencedComponent() {
@@ -424,14 +439,12 @@ ComponentOp InstanceOp::getReferencedComponent() {
 
 /// Provide meaningful names to the result values of a InstanceOp.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  auto component = getReferencedComponent();
-  auto portNames = component.portNames();
+  auto ports = getReferencedComponent().portNames();
+  SmallVector<StringRef, 16> portNames;
+  for (size_t i = 0, e = ports.size(); i != e; ++i)
+    portNames.push_back(ports[i].cast<StringAttr>().getValue());
 
-  std::string prefix = instanceName().str() + ".";
-  for (size_t i = 0, e = portNames.size(); i != e; ++i) {
-    StringRef portName = portNames[i].cast<StringAttr>().getValue();
-    setNameFn(getResult(i), prefix + portName.str());
-  }
+  getCellAsmResultNames(setNameFn, *this, portNames);
 }
 
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
@@ -492,16 +505,8 @@ void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 /// Provide meaningful names to the result values of a RegisterOp.
 void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // Provide default names for instance results.
-  StringRef registerName = this->name();
-  std::string prefix = registerName.str() + ".";
-
-  setNameFn(getResult(0), prefix + "in");
-  setNameFn(getResult(1), prefix + "write_en");
-  setNameFn(getResult(2), prefix + "clk");
-  setNameFn(getResult(3), prefix + "reset");
-  setNameFn(getResult(4), prefix + "out");
-  setNameFn(getResult(5), prefix + "done");
+  getCellAsmResultNames(setNameFn, *this,
+                        {"in", "write_en", "clk", "reset", "out", "done"});
 }
 
 //===----------------------------------------------------------------------===//
