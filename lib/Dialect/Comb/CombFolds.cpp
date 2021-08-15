@@ -878,6 +878,27 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
       constants, [](APInt &a, const APInt &b) { a ^= b; });
 }
 
+// xor(icmp, a, b, 1) -> xor(icmp, a, b) if icmp has one user.
+static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
+                                    PatternRewriter &rewriter) {
+  auto icmp = op.getOperand(icmpOperand).getDefiningOp<ICmpOp>();
+  auto negatedPred = ICmpOp::getNegatedPredicate(icmp.predicate());
+
+  Value result = rewriter.create<ICmpOp>(
+      icmp.getLoc(), negatedPred, icmp.getOperand(0), icmp.getOperand(1));
+
+  // If the xor had other operands, rebuild it.
+  if (op.getNumOperands() > 2) {
+    SmallVector<Value, 4> newOperands(op.getOperands());
+    newOperands.pop_back();
+    newOperands.erase(newOperands.begin() + icmpOperand);
+    newOperands.push_back(result);
+    result = rewriter.create<XorOp>(op.getLoc(), newOperands);
+  }
+
+  rewriter.replaceOp(op, result);
+}
+
 LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
   auto size = inputs.size();
@@ -911,13 +932,26 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
       return success();
     }
 
-    // xor(concat(x, cst1), a, b, c, cst2)
-    //    ==> xor(a, b, c, concat(xor(x,cst2'), xor(cst1,cst2'')).
-    // We do this for even more multi-use concats since they are "just wiring".
+    bool isSingleBit = value.getBitWidth() == 1;
+
+    // Check for subexpressions that we can simplify.
     for (size_t i = 0; i < size - 1; ++i) {
-      if (auto concat = inputs[i].getDefiningOp<ConcatOp>())
+      Value operand = inputs[i];
+
+      // xor(concat(x, cst1), a, b, c, cst2)
+      //    ==> xor(a, b, c, concat(xor(x,cst2'), xor(cst1,cst2'')).
+      // We do this for even more multi-use concats since they are "just
+      // wiring".
+      if (auto concat = operand.getDefiningOp<ConcatOp>())
         if (canonicalizeLogicalCstWithConcat(op, i, value, rewriter))
           return success();
+
+      // xor(icmp, a, b, 1) -> xor(icmp, a, b) if icmp has one user.
+      if (isSingleBit && operand.hasOneUse()) {
+        assert(value == 1 && "single bit constant has to be one if not zero");
+        if (auto icmp = operand.getDefiningOp<ICmpOp>())
+          return canonicalizeXorIcmpTrue(op, i, rewriter), success();
+      }
     }
   }
 

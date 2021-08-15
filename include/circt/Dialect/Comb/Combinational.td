@@ -156,6 +156,10 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
     /// Returns true if the predicate is signed.
     static bool isPredicateSigned(ICmpPredicate predicate);
 
+    /// Returns the predicate for a logically negated comparison, e.g. mapping
+    /// EQ => NE and SLE => SGT.
+    static ICmpPredicate getNegatedPredicate(ICmpPredicate predicate);
+
     /// Return true if this is an equality test with -1, which is a "reduction
     /// and" operation in Verilog.
     bool isEqualAllOnes();

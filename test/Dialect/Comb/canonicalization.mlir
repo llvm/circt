@@ -761,3 +761,22 @@ hw.module @combine_icmp_compare_concat2(%thing: i3) -> (%a: i1) {
   // CHECK: %1 = comb.icmp eq %0, %c0_i6 : i6
   // CHECK: hw.output %1 : i1
 }
+
+// CHECK-LABEL: hw.module @not_icmp
+hw.module @not_icmp(%a: i3, %b: i4, %c: i1) -> (%x: i1, %y: i1) {
+  %true = hw.constant true
+
+  %c0 = hw.constant 0 : i3
+  %2 = comb.icmp ne %a, %c0 : i3
+  %3 = comb.xor %2, %true : i1
+  // CHECK: %0 = comb.icmp eq %a, %c0_i3 : i3
+
+  %c1 = hw.constant 1 : i4
+  %4 = comb.icmp slt %b, %c1 : i4
+  %5 = comb.xor %4, %c, %true : i1
+  // CHECK: %1 = comb.icmp sgt %b, %c0_i4 : i4
+  // CHECK: %2 = comb.xor %c, %1 : i1
+
+  hw.output %3, %5 : i1, i1
+  // CHECK: hw.output %0, %2 : i1, i1
+}
