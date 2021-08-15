@@ -34,7 +34,14 @@ LogicalResult calyx::verifyCell(Operation *op) {
     return op->emitOpError()
            << "has parent: " << opParent << ". This should be ComponentOp.";
   if (!op->hasAttr("instanceName"))
-    return op->emitOpError() << "does not have an instance name attribute.";
+    return op->emitOpError()
+           << "with Cell trait does not have an instanceName attribute.";
+
+  // InstanceOps get their port names from the referenced component.
+  // In all other cases, the Cell should have a port names attribute.
+  if (!(isa<InstanceOp>(op) || op->hasAttr("portNames")))
+    return op->emitOpError()
+           << "with Cell trait does not have an portNames attribute.";
 
   return success();
 }
@@ -445,8 +452,7 @@ ComponentOp InstanceOp::getReferencedComponent() {
 
 /// Provide meaningful names to the result values of an InstanceOp.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  getCellAsmResultNames(setNameFn, *this,
-                        getReferencedComponent().portNames());
+  getCellAsmResultNames(setNameFn, *this, getReferencedComponent().portNames());
 }
 
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
