@@ -37,6 +37,7 @@ struct InferMemoriesPass : public InferMemoriesBase<InferMemoriesPass>,
   void visitDecl(CombMemOp op);
   void visitDecl(SeqMemOp op);
   void visitStmt(MemoryPortOp op);
+  void visitStmt(MemoryPortAccessOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
@@ -79,8 +80,8 @@ struct InferMemoriesPass : public InferMemoriesBase<InferMemoriesPass>,
     return invalid;
   }
 
+  //// Clear out any stale data.
   void clear() {
-    // Clear out any stale data.
     constOne = nullptr;
     constZero = nullptr;
     invalidCache.clear();
@@ -106,7 +107,7 @@ struct InferMemoriesPass : public InferMemoriesBase<InferMemoriesPass>,
 
   void runOnOperation() override;
 
-  /// Cached constants
+  /// Cached constants.
   Value constOne;
   Value constZero;
   DenseMap<Type, Value> invalidCache;
@@ -114,7 +115,9 @@ struct InferMemoriesPass : public InferMemoriesBase<InferMemoriesPass>,
   /// List of operations to delete at the end of the pass.
   SmallVector<Operation *> opsToDelete;
 
-  /// This maps subfield-like if they are indexing memory to
+  /// This tracks how the result of a subfield operation which is indexes a
+  /// MemoryPortOp is used.  This is used to track if the subfield operation
+  /// needs to be cloned to access a memories rdata or wdata.
   DenseMap<Operation *, MemDirAttr> subfieldDirs;
 
   /// This maps a subfield-like operation from a MemoryPortOp to a new subfield
@@ -227,18 +230,19 @@ MemDirAttr InferMemoriesPass::inferMemoryPortKind(MemoryPortOp memPort) {
   // operation we store how it is used into a global hashtable for later use.
   // This records how both the MemoryPort and Subfield operations are used.
   struct StackElement {
-    Operation *operation;
-    Operation::use_iterator iterator;
+    Value value;
+    Value::use_iterator iterator;
     MemDirAttr mode;
   };
 
   SmallVector<StackElement> stack;
-  stack.push_back({memPort, memPort->use_begin(), memPort.direction()});
+  stack.push_back(
+      {memPort.data(), memPort.data().use_begin(), memPort.direction()});
   MemDirAttr mode = MemDirAttr::Infer;
 
   while (!stack.empty()) {
     auto *iter = &stack.back().iterator;
-    auto end = stack.back().operation->use_end();
+    auto end = stack.back().value.use_end();
     stack.back().mode = mergeDirection(stack.back().mode, mode);
 
     while (*iter != end) {
@@ -248,21 +252,23 @@ MemDirAttr InferMemoriesPass::inferMemoryPortKind(MemoryPortOp memPort) {
       ++(*iter);
       if (isa<SubindexOp, SubfieldOp>(user)) {
         // We recurse into Subindex ops to find the leaf-uses.
-        stack.push_back({user, user->getUses().begin(), MemDirAttr::Infer});
+        auto input = user->getResult(0);
+        stack.push_back({input, input.use_begin(), MemDirAttr::Infer});
         mode = MemDirAttr::Infer;
         iter = &stack.back().iterator;
-        end = user->use_end();
+        end = input.use_end();
         continue;
       }
       if (auto subaccessOp = dyn_cast<SubaccessOp>(user)) {
         // Subaccess has two arguments, the vector and the index. If we are
         // using the memory port as an index, we can ignore it. If we are using
         // the memory as the vector, we need to recurse.
-        if (use.get() == subaccessOp.input()) {
-          stack.push_back({user, user->getUses().begin(), MemDirAttr::Infer});
+        auto input = subaccessOp.input();
+        if (use.get() == input) {
+          stack.push_back({input, input.use_begin(), MemDirAttr::Infer});
           mode = MemDirAttr::Infer;
           iter = &stack.back().iterator;
-          end = user->use_end();
+          end = input.use_end();
           continue;
         }
         // Otherwise we are reading from a memory for the index.
@@ -289,7 +295,7 @@ MemDirAttr InferMemoriesPass::inferMemoryPortKind(MemoryPortOp memPort) {
     // Store the direction of the current operation in the global map. This will
     // be used later to determine if this subaccess operation needs to be cloned
     // into rdata, wdata, and wmask.
-    subfieldDirs[stack.back().operation] = mode;
+    subfieldDirs[stack.back().value.getDefiningOp()] = mode;
     stack.pop_back();
   }
 
@@ -373,6 +379,7 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
   // to set the enable signal high.
   for (unsigned i = 0, e = memory.getNumResults(); i < e; ++i) {
     auto cmemoryPort = ports[i].cmemPort;
+    auto cmemoryPortAccess = cmemoryPort.getAccess();
     auto memoryPort = memory.getResult(i);
     auto portKind = ports[i].portKind;
 
@@ -381,7 +388,8 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
     // value at the location of the CHIRRTL memory port.
 
     // Initialization at the MemoryOp.
-    ImplicitLocOpBuilder portBuilder(cmemoryPort.getLoc(), cmemoryPort);
+    ImplicitLocOpBuilder portBuilder(cmemoryPortAccess.getLoc(),
+                                     cmemoryPortAccess);
     auto address = memBuilder.create<SubfieldOp>(memoryPort, "addr");
     emitInvalid(memBuilder, address);
     auto enable = memBuilder.create<SubfieldOp>(memoryPort, "en");
@@ -390,18 +398,18 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
     emitInvalid(memBuilder, clock);
 
     // Initialization at the MemoryPortOp
-    portBuilder.create<ConnectOp>(address, cmemoryPort.index());
+    portBuilder.create<ConnectOp>(address, cmemoryPortAccess.index());
     // Sequential+Read ports have a more complicated "enable inference".
     // Everything else sets the enable to true.
     if (!(portKind == MemOp::PortKind::Read && isSequential)) {
       portBuilder.create<ConnectOp>(enable, getConstOne());
     }
-    portBuilder.create<ConnectOp>(clock, cmemoryPort.clock());
+    portBuilder.create<ConnectOp>(clock, cmemoryPortAccess.clock());
 
     if (portKind == MemOp::PortKind::Read) {
       // Store the read information for updating subfield ops.
       auto data = memBuilder.create<SubfieldOp>(memoryPort, "data");
-      rdataValues[cmemoryPort] = data;
+      rdataValues[cmemoryPort.data()] = data;
     } else if (portKind == MemOp::PortKind::Write) {
       // Initialization at the MemoryOp.
       auto data = memBuilder.create<SubfieldOp>(memoryPort, "data");
@@ -413,7 +421,7 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
       connectLeafsTo(portBuilder, mask, getConstZero());
 
       // Store the write information for updating subfield ops.
-      wdataValues[cmemoryPort] = {data, mask, nullptr};
+      wdataValues[cmemoryPort.data()] = {data, mask, nullptr};
     } else if (portKind == MemOp::PortKind::ReadWrite) {
       // Initialization at the MemoryOp.
       auto rdata = memBuilder.create<SubfieldOp>(memoryPort, "rdata");
@@ -428,8 +436,8 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
       connectLeafsTo(portBuilder, wmask, getConstZero());
 
       // Store the read and write information for updating subfield ops.
-      wdataValues[cmemoryPort] = {wdata, wmask, wmode};
-      rdataValues[cmemoryPort] = rdata;
+      wdataValues[cmemoryPort.data()] = {wdata, wmask, wmode};
+      rdataValues[cmemoryPort.data()] = rdata;
     }
 
     // Sequential read only memory ports have "enable inference", which
@@ -438,7 +446,7 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
     // logic that is easily defeated. This behaviour depends on the kind of
     // operation used as the memport index.
     if (portKind == MemOp::PortKind::Read && isSequential) {
-      auto *indexOp = cmemoryPort.index().getDefiningOp();
+      auto *indexOp = cmemoryPortAccess.index().getDefiningOp();
       bool success = false;
       if (!indexOp) {
         // TODO: SFC does not infer any enable when using a module port as the
@@ -453,11 +461,11 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
         auto drivers =
             make_filter_range(indexOp->getUsers(), [&](Operation *op) {
               if (auto connectOp = dyn_cast<ConnectOp>(op)) {
-                if (cmemoryPort.index() == connectOp.dest())
+                if (cmemoryPortAccess.index() == connectOp.dest())
                   return !dyn_cast_or_null<InvalidValueOp>(
                       connectOp.src().getDefiningOp());
               } else if (auto pConnectOp = dyn_cast<PartialConnectOp>(op)) {
-                if (cmemoryPort.index() == pConnectOp.dest())
+                if (cmemoryPortAccess.index() == pConnectOp.dest())
                   return !dyn_cast_or_null<InvalidValueOp>(
                       pConnectOp.src().getDefiningOp());
               }
@@ -498,6 +506,11 @@ void InferMemoriesPass::visitDecl(SeqMemOp seqmem) {
 void InferMemoriesPass::visitStmt(MemoryPortOp memPort) {
   // The memory port is mostly handled while processing the memory.
   opsToDelete.push_back(memPort);
+}
+
+void InferMemoriesPass::visitStmt(MemoryPortAccessOp memPortAccess) {
+  // The memory port access is mostly handled while processing the memory.
+  opsToDelete.push_back(memPortAccess);
 }
 
 void InferMemoriesPass::visitStmt(ConnectOp connect) {
