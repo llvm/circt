@@ -9,7 +9,7 @@ calyx.program {
   // CHECK-LABEL: calyx.component @main
   calyx.component @main(%go : i1, %reset : i1, %clk : i1) -> (%done: i1) {
     %z.go, %z.reset, %z.clk, %z.flag, %z.out, %z.done = calyx.instance "z" @Z : i1, i1, i1, i1, i2, i1
-    %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "fsm" {portNames = ["in", "write_en", "clk", "reset", "out", "done"]} : i2
+    %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "fsm" : i2
 
     calyx.wires {
       // CHECK: %[[FSM_IS_GROUP_A_BEGIN_STATE:.+]] = comb.icmp eq %fsm.out, {{.+}} : i2

@@ -21,8 +21,7 @@ def RegisterOp : CalyxCell<"register", [
     ```
   }];
   let arguments = (
-    ins StrAttr:$instanceName,
-    DefaultValuedAttr<StrArrayAttr, "{\"in\", \"write_en\", \"clk\", \"reset\", \"out\", \"done\"}">:$portNames
+    ins StrAttr:$instanceName
   );
   let results = (outs AnyType:$in, I1:$write_en, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
   let assemblyFormat = "$instanceName attr-dict `:` type($in)";
@@ -30,12 +29,13 @@ def RegisterOp : CalyxCell<"register", [
   let builders = [
     OpBuilder<(ins "StringAttr":$instanceName, "size_t":$width), [{
       $_state.addAttribute("instanceName", instanceName);
-      $_state.addAttribute("portNames", $_builder.getStrArrayAttr(
-        {"in", "write_en", "clk", "reset", "out", "done"}
-      ));
       auto i1Type = $_builder.getI1Type();
       auto widthType = $_builder.getIntegerType(width);
       $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});
     }]>
   ];
+
+  let extraClassDeclaration = [{
+    SmallVector<StringRef> portNames() { return {"in", "write_en", "clk", "reset", "out", "done"}; }
+  }];
 }
