@@ -1375,14 +1375,12 @@ LogicalResult lowerToHandshake(TFuncOp op, MLIRContext *context,
 // Convenience function for running lowerToHandshake with a partial
 // handshake::FuncOp lowering function.
 template <typename TFuncOp>
-std::function<LogicalResult(TFuncOp)> wrapRewriter(
+LogicalResult partiallyLowerFuncOp(
     const std::function<LogicalResult(TFuncOp, ConversionPatternRewriter &)>
         &loweringFunc,
-    MLIRContext *ctx) {
-  return [=](TFuncOp funcOp) {
-    return lowerToHandshake<PartialLowerFuncOp<TFuncOp>>(funcOp, ctx,
-                                                         loweringFunc);
-  };
+    MLIRContext *ctx, TFuncOp funcOp) {
+  return lowerToHandshake<PartialLowerFuncOp<TFuncOp>>(funcOp, ctx,
+                                                       loweringFunc);
 }
 
 /// Rewrite affine.for operations in a handshake.func into its representations
@@ -1558,8 +1556,8 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
 
   // Add control input/output to function arguments/results and create a
   // handshake::FuncOp of appropriate type
-  wrapRewriter<mlir::FuncOp>(
-      [&](mlir::FuncOp funcOp, ConversionPatternRewriter &rewriter) {
+  (void)partiallyLowerFuncOp<mlir::FuncOp>(
+      [&](mlir::FuncOp funcOp, PatternRewriter &rewriter) {
         auto noneType = rewriter.getNoneType();
         argTypes.push_back(noneType);
         resTypes.push_back(noneType);
@@ -1570,43 +1568,46 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
                                     newFuncOp.end());
         return success();
       },
-      ctx)(funcOp);
+      ctx, funcOp);
 
   // Rewrite affine.for operations.
-  if (failed(wrapRewriter<handshake::FuncOp>(rewriteAffineFor, ctx)(newFuncOp)))
+  if (failed(partiallyLowerFuncOp<handshake::FuncOp>(rewriteAffineFor, ctx,
+                                                     newFuncOp)))
     return newFuncOp.emitOpError("failed to rewrite Affine loops");
 
   // Perform dataflow conversion
   MemRefToMemoryAccessOp MemOps;
-  wrapRewriter<handshake::FuncOp>(
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
         MemOps = replaceMemoryOps(nfo, rewriter);
         return success();
       },
-      ctx)(newFuncOp);
+      ctx, newFuncOp);
 
-  wrapRewriter<handshake::FuncOp>(replaceCallOps, ctx)(newFuncOp);
-  wrapRewriter<handshake::FuncOp>(setControlOnlyPath, ctx)(newFuncOp);
-  wrapRewriter<handshake::FuncOp>(addMergeOps, ctx)(newFuncOp);
-  wrapRewriter<handshake::FuncOp>(addBranchOps, ctx)(newFuncOp);
-  wrapRewriter<handshake::FuncOp>(addSinkOps, ctx)(newFuncOp);
-  wrapRewriter<handshake::FuncOp>(connectConstantsToControl, ctx)(newFuncOp);
-  wrapRewriter<handshake::FuncOp>(addForkOps, ctx)(newFuncOp);
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(replaceCallOps, ctx, newFuncOp);
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(setControlOnlyPath, ctx,
+                                                newFuncOp);
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(addMergeOps, ctx, newFuncOp);
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(addBranchOps, ctx, newFuncOp);
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp);
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(connectConstantsToControl, ctx,
+                                                newFuncOp);
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp);
   checkDataflowConversion(newFuncOp);
 
   bool lsq = false;
-  wrapRewriter<handshake::FuncOp>(
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
         connectToMemory(nfo, MemOps, lsq, rewriter);
         return success();
       },
-      ctx)(newFuncOp);
+      ctx, newFuncOp);
 
   // Add  control argument to entry block, replace references to the
   // temporary handshake::StartOp operation, and finally remove the start
   // op.
-  wrapRewriter<handshake::FuncOp>(
-      [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+      [&](handshake::FuncOp nfo, PatternRewriter &rewriter) {
         auto noneType = rewriter.getNoneType();
         auto ctrlArg = nfo.front().addArgument(noneType);
         Operation *startOp = findStartOp(&nfo.getRegion());
@@ -1615,7 +1616,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
         rewriter.eraseOp(funcOp);
         return success();
       },
-      ctx)(newFuncOp);
+      ctx, newFuncOp);
 
   return success();
 }
