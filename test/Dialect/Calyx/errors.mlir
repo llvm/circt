@@ -32,7 +32,7 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
-    // expected-error @+1 {{'calyx.instance' op has a wrong number of results; expected: 5 but got 0}}
+    // expected-error @+1 {{'calyx.instance' op Number of results: 0 does not match the number of port names: 5}}
     calyx.instance "a0" @A
     calyx.wires {}
     calyx.control {}

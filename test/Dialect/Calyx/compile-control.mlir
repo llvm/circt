@@ -7,7 +7,7 @@ calyx.program {
   }
 
   calyx.component @main(%go : i1, %reset : i1, %clk : i1) -> (%done: i1) {
-    // CHECK:  %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "fsm" : i2
+    // CHECK:  %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "fsm" {portNames = ["in", "write_en", "clk", "reset", "out", "done"]} : i2
     %z.go, %z.reset, %z.clk, %z.flag, %z.done = calyx.instance "z" @Z : i1, i1, i1, i1, i1
     calyx.wires {
       %undef = calyx.undef : i1

@@ -161,8 +161,6 @@ def InstanceOp : CalyxCell<"instance", [
     ComponentOp getReferencedComponent();
   }];
 
-  // TODO(Calyx): Add `parameters` attribute for
-  // SystemVerilog-wrapped primitives.
   let arguments = (ins
     StrAttr:$instanceName,
     FlatSymbolRefAttr:$componentName

@@ -36,6 +36,25 @@ LogicalResult calyx::verifyCell(Operation *op) {
   if (!op->hasAttr("instanceName"))
     return op->emitOpError() << "does not have an instance name attribute.";
 
+  unsigned numPortNames;
+  if (auto instance = dyn_cast_or_null<InstanceOp>(op)) {
+    // An InstanceOp gets its port names from the referenced component.
+    auto referencedComponent = instance.getReferencedComponent();
+    numPortNames =
+        referencedComponent ? referencedComponent.portNames().size() : 0;
+  } else {
+    if (!op->hasAttr("portNames"))
+      return op->emitOpError() << "does not have port names attribute.";
+    llvm::errs() << op->getAttrOfType<ArrayAttr>("portNames");
+    numPortNames = op->getAttrOfType<ArrayAttr>("portNames").size();
+  }
+
+  unsigned numResults = op->getNumResults();
+  if (numPortNames != numResults)
+    return op->emitOpError()
+           << "Number of results: " << numResults
+           << " does not match the number of port names: " << numPortNames;
+
   return success();
 }
 
@@ -412,20 +431,26 @@ GroupDoneOp GroupOp::getDoneOp() {
 }
 
 //===----------------------------------------------------------------------===//
-// InstanceOp
+// Utilities for Cell-like operations.
 //===----------------------------------------------------------------------===//
 
 /// Gives each result of the cell a meaningful name in the form:
 /// <prefix>.<port-name>
 static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
-                                  ArrayRef<StringRef> portNames) {
+                                  ArrayAttr portNames) {
   assert(op->hasTrait<Cell>() && "must have the Cell trait");
 
-  auto instanceName = op->getAttr("instanceName").cast<StringAttr>().getValue();
+  auto instanceName = op->getAttrOfType<StringAttr>("instanceName").getValue();
   std::string prefix = instanceName.str() + ".";
-  for (size_t i = 0, e = portNames.size(); i != e; ++i)
-    setNameFn(op->getResult(i), prefix + portNames[i].str());
+  for (size_t i = 0, e = portNames.size(); i != e; ++i) {
+    auto portName = portNames[i].cast<StringAttr>().getValue();
+    setNameFn(op->getResult(i), prefix + portName.str());
+  }
 }
+
+//===----------------------------------------------------------------------===//
+// InstanceOp
+//===----------------------------------------------------------------------===//
 
 /// Lookup the component for the symbol. This returns null on
 /// invalid IR.
@@ -437,14 +462,9 @@ ComponentOp InstanceOp::getReferencedComponent() {
   return program.lookupSymbol<ComponentOp>(componentName());
 }
 
-/// Provide meaningful names to the result values of a InstanceOp.
+/// Provide meaningful names to the result values of an InstanceOp.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  auto ports = getReferencedComponent().portNames();
-  SmallVector<StringRef, 16> portNames;
-  for (size_t i = 0, e = ports.size(); i != e; ++i)
-    portNames.push_back(ports[i].cast<StringAttr>().getValue());
-
-  getCellAsmResultNames(setNameFn, *this, portNames);
+  getCellAsmResultNames(setNameFn, *this, getReferencedComponent().portNames());
 }
 
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
@@ -505,8 +525,7 @@ void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 /// Provide meaningful names to the result values of a RegisterOp.
 void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  getCellAsmResultNames(setNameFn, *this,
-                        {"in", "write_en", "clk", "reset", "out", "done"});
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
 }
 
 //===----------------------------------------------------------------------===//
