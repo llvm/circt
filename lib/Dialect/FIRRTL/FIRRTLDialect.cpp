@@ -147,6 +147,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   void getAsmResultNames(Operation *op,
                          OpAsmSetValueNameFn setNameFn) const override {
+
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       StringRef base;
       if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))

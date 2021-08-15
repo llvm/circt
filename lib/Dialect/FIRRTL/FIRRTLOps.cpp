@@ -1011,6 +1011,13 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   return success();
 }
 
+void MemoryPortOp::build(OpBuilder &builder, OperationState &result,
+                         Type dataType, Value memory, MemDirAttr direction,
+                         StringRef name, ArrayRef<Attribute> annotations) {
+  build(builder, result, CMemoryPortType::get(builder.getContext()), dataType,
+        memory, direction, name, builder.getArrayAttr(annotations));
+}
+
 LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
                                              Optional<Location> loc,
                                              ValueRange operands,
@@ -1025,7 +1032,24 @@ LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
     return failure();
   }
   results.push_back(memType.getElementType());
+  results.push_back(CMemoryPortType::get(context));
   return success();
+}
+
+static LogicalResult verifyMemoryPortOp(MemoryPortOp memoryPort) {
+  // MemoryPorts require exactly 1 access. Right now there are no other
+  // operations that could be using that value due to the types.
+  if (!memoryPort.port().hasOneUse())
+    return memoryPort.emitOpError(
+        "port should be used by a firrtl.memoryport.access");
+  return success();
+}
+
+MemoryPortAccessOp MemoryPortOp::getAccess() {
+  auto uses = port().use_begin();
+  if (uses == port().use_end())
+    return {};
+  return cast<MemoryPortAccessOp>(uses->getOwner());
 }
 
 void MemOp::build(OpBuilder &builder, OperationState &result,
@@ -2497,6 +2521,15 @@ static void printInstanceOp(OpAsmPrinter &p, Operation *op,
 //===----------------------------------------------------------------------===//
 // MemoryPortOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
+
+void MemoryPortOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  StringRef base = name();
+  if (base.empty())
+    base = "memport";
+  setNameFn(data(), base);
+  setNameFn(port(), (base + "_port").str());
+}
 
 static ParseResult parseMemoryPortOp(OpAsmParser &parser,
                                      NamedAttrList &resultAttrs) {

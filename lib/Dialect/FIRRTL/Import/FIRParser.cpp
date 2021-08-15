@@ -2242,7 +2242,6 @@ ParseResult FIRStmtParser::parseAttach() {
 /// mdir ::= 'infer' | 'read' | 'write' | 'rdwr'
 ///
 ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
-  auto mdirIndent = getIndentation();
   auto startTok = consumeToken();
   auto startLoc = startTok.getLoc();
 
@@ -2278,65 +2277,23 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   locationProcessor.setLoc(startLoc);
-  auto resultMemoryPort = builder.create<MemoryPortOp>(
-      resultType, memory, indexExp, clock, direction, name, annotations);
-  Value result = resultMemoryPort;
 
-  // TODO(firrtl scala bug): If the next operation is a skip, just eat it if it
-  // is at the same indent level as us.  This is a horrible hack on top of the
-  // following hack to work around a Scala bug.
-  auto nextIndent = getIndentation();
-
-  if (getToken().is(FIRToken::kw_skip) && mdirIndent.hasValue() &&
-      nextIndent.hasValue() && mdirIndent.getValue() == nextIndent.getValue()) {
-    // End the location for the MemPort, and start the location processing for
-    // the skip op.
-    locationProcessor.endStatement(*this);
-    locationProcessor.startStatement();
-    if (parseSkip())
-      return failure();
-
-    nextIndent = getIndentation();
+  // Create the memory port at the location of the cmemory.
+  Value memoryPort, memoryData;
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointAfterValue(memory);
+    auto memoryPortOp = builder.create<MemoryPortOp>(
+        resultType, CMemoryPortType::get(getContext()), memory, direction, name,
+        annotations);
+    memoryData = memoryPortOp.getResult(0);
+    memoryPort = memoryPortOp.getResult(1);
   }
 
-  // TODO(firrtl scala bug): Chisel is creating invalid IR where the mports
-  // are logically defining their name at the scope of the memory itself.  This
-  // is a problem for us, because the index expression and clock may be defined
-  // in a nested expression.  We can't really tell when this is happening
-  //  without unbounded lookahead either.
-  //
-  // Fortunately, this seems to happen in very idiomatic cases, where the
-  // mport happens at the end of a when block.  We detect this situation by
-  // seeing if the next statement is indented less than our memport - if so,
-  // this is the last statement at the end of the 'when' block.   Trigger a
-  // hacky workaround just in this case.
-  bool insertNameIntoGlobalScope = false;
-  if (mdirIndent.hasValue() && nextIndent.hasValue() &&
-      mdirIndent.getValue() > nextIndent.getValue() &&
-      !isa<FModuleOp>(resultMemoryPort->getParentOp())) {
+  // Create a memory port access in the current scope.
+  builder.create<MemoryPortAccessOp>(memoryPort, indexExp, clock);
 
-    // If we need to inject this name into a parent scope, then we have to do
-    // some IR hackery.  Create a wire for the id name right before
-    // the mem in question, inject its name into that scope, then connect
-    // the output of the mport to it.
-    WireOp wireHack;
-    /* inject the wire into the enclosing firrtl.module*/ {
-      // TODO: Store this in moduleContext.
-      auto curModule = resultMemoryPort->getParentOfType<FModuleOp>();
-      auto insertPoint = builder.saveInsertionPoint();
-      builder.setInsertionPointToStart(curModule.getBodyBlock());
-      wireHack = builder.create<WireOp>(result.getType());
-      builder.restoreInsertionPoint(insertPoint);
-    }
-    builder.create<ConnectOp>(wireHack, result);
-
-    // Inject this the wire's name into the global scope.
-    result = wireHack;
-    insertNameIntoGlobalScope = true;
-  }
-
-  return moduleContext.addSymbolEntry(id, result, startLoc,
-                                      insertNameIntoGlobalScope);
+  return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?

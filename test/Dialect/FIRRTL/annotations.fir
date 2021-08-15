@@ -352,7 +352,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     smem _T_4 : UInt<1>[9] [256]
     ; CHECK: %5 = firrtl.combmem  {annotations = [{a = "a"}]}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: %6 = firrtl.memoryport {{.+}} {annotations = [{a = "a"}]
+    ; CHECK: firrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = ""}
     inst _T_7 of Bar
@@ -402,7 +402,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
     ; CHECK: %_T_5 = firrtl.combmem  {annotations = [
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: %_T_6 = firrtl.memoryport Infer %_T_5, %reset, %clock {annotations =
+    ; CHECK: firrtl.memoryport Infer %_T_5 {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance @Bar  {annotations =

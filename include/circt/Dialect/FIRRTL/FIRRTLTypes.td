@@ -85,9 +85,22 @@ def CMemoryType : TypeDef<FIRRTLDialect, "CMemory"> {
     }]>
   ];
 
-  let printer = "printCMemoryType($_printer, *this);";
-  let parser = "return parseCMemoryType($_parser);";
   let genVerifyDecl = 1;
+}
+
+def CMemoryPortType : TypeDef<FIRRTLDialect, "CMemoryPort"> {
+  let mnemonic = "cmemoryport";
+  let summary = "a behavioral memory port";
+  let description = [{
+    Syntax:
+    ```
+    cmemoryport-type ::= `cmemoryport`
+    ```
+
+    The value of a `cmemoryport` type represents a port which has been
+    declared on a `cmemory`.  This value is used to set the memory port access
+    conditions.
+  }];
 }
 
 //===----------------------------------------------------------------------===//

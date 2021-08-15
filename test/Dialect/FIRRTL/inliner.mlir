@@ -190,7 +190,6 @@ firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b flip: u
 }
 }
 
-
 // Test that all operations with names are renamed.
 firrtl.circuit "renaming" {
 firrtl.module @renaming() {
@@ -201,8 +200,9 @@ firrtl.module @declarations(in %clock : !firrtl.clock, in %u8 : !firrtl.uint<8>,
   %cmem = firrtl.combmem : !firrtl.cmemory<uint<8>, 8>
   // CHECK: %myinst_mem_read = firrtl.mem Undefined {depth = 1 : i64, name = "myinst_mem", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<42>>
   %mem_read = firrtl.mem Undefined {depth = 1 : i64, name = "mem", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: sint<42>>
-  // CHECK: %myinst_memoryport = firrtl.memoryport Infer %myinst_cmem, %myinst_u8, %myinst_clock : (!firrtl.cmemory<uint<8>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.uint<8>
-  %memoryport = firrtl.memoryport Infer %cmem, %u8, %clock : (!firrtl.cmemory<uint<8>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.uint<8>
+  // CHECK:  %myinst_memoryport, %myinst_memoryport_port = firrtl.memoryport Read %myinst_cmem : (!firrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<8>, !firrtl.cmemoryport)
+  %memoryport, %memoryport_port = firrtl.memoryport Read %cmem : (!firrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<8>, !firrtl.cmemoryport)
+  firrtl.memoryport.access %memoryport_port[%u8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
   // CHECK: %myinst_node = firrtl.node %myinst_u8  : !firrtl.uint<8>
   %node = firrtl.node %u8 {name = "node"} : !firrtl.uint<8>
   // CHECK: %myinst_reg = firrtl.reg %myinst_clock : !firrtl.uint<8>

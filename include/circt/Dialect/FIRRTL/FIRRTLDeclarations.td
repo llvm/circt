@@ -84,20 +84,34 @@ def SeqMemOp : FIRRTLOp<"seqmem"> {
   let assemblyFormat = "$ruw custom<SeqMemOp>(attr-dict) `:` type($result)";
 }
 
-def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface]> {
+def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
+                               DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
   let summary = "Access a memory";
 
-  let arguments = (ins CMemoryType:$memory, IntType:$index, ClockType:$clock,
-                    MemDirAttr:$direction, StrAttr:$name,
-                    AnnotationArrayAttr:$annotations);
-  let results = (outs FIRRTLType:$result);
+  let summary = "Defines a memory port on CHIRRTL memory";
+
+  let arguments = (ins CMemoryType:$memory, MemDirAttr:$direction,
+                    StrAttr:$name, AnnotationArrayAttr:$annotations);
+
+  let results = (outs FIRRTLType:$data, CMemoryPortType:$port);
 
   let assemblyFormat = [{
-    $direction $memory `,` $index `,` $clock custom<MemoryPortOp>(attr-dict) `:`
-       functional-type(operands, $result)
+    $direction $memory custom<MemoryPortOp>(attr-dict) `:`
+       functional-type(operands, results)
   }];
 
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$dataType, "::mlir::Value":$memory,
+                   "MemDirAttr":$direction, CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations)>
+  ];
+
+  let verifier = "return ::verifyMemoryPortOp(*this);";
+
   let extraClassDeclaration = [{
+    /// Get the assocated access op.
+    MemoryPortAccessOp getAccess();
+
     /// Infer the return types of this operation.
     static LogicalResult inferReturnTypes(MLIRContext *context,
                                           Optional<Location> loc,
@@ -105,6 +119,21 @@ def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface]> {
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
+  }];
+}
+
+def MemoryPortAccessOp : FIRRTLOp<"memoryport.access"> {
+  let summary = "Enables a memory port and associates it with a clock";
+
+  let description = [{
+    This operation e
+  }];
+
+  let arguments = (ins CMemoryPortType:$port, IntType:$index,
+                     ClockType:$clock);
+
+  let assemblyFormat = [{
+    $port `[` $index `]` `,` $clock attr-dict `:` type(operands)
   }];
 }
 
