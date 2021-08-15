@@ -58,6 +58,14 @@ class CalyxCell<string mnemonic, list<OpTrait> traits = []> :
   ])> {
 }
 
+/// Base class for Calyx primitives.
+class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
+  CalyxCell<mnemonic, traits> {
+    let assemblyFormat = "$instanceName attr-dict `:` type(results)";
+    let arguments = (ins StrAttr:$instanceName, StrArrayAttr:$portNames);
+    let skipDefaultBuilders = 1;
+}
+
 /// Base class for Calyx containers.
 class CalyxContainer<string mnemonic, list<OpTrait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
