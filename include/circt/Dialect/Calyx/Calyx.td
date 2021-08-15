@@ -73,8 +73,8 @@ class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
   let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
 }
 
+include "circt/Dialect/Calyx/CalyxPrimitives.td"
 include "circt/Dialect/Calyx/CalyxStructure.td"
 include "circt/Dialect/Calyx/CalyxControl.td"
-include "circt/Dialect/Calyx/CalyxPrimitives.td"
 
 #endif // CALYX_TD

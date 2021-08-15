@@ -10,11 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO(cgyurgyik): It may be worthwhile to unify component and primitive cells,
-// much in the same way that the native compiler does.
+def Cell : NativeOpTrait<"Cell"> {
+  let cppNamespace = "::circt::calyx";
+}
+
 def RegisterOp : CalyxOp<"register", [
+    Cell,
     DeclareOpInterfaceMethods<OpAsmOpInterface>,
-    HasParent<"ComponentOp">,
     SameTypeConstraint<"in", "out">
   ]> {
   let summary = "Defines a register";

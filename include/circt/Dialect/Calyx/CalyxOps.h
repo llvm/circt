@@ -24,6 +24,16 @@
 namespace circt {
 namespace calyx {
 
+/// A helper function to verify each operation with the Cell trait.
+LogicalResult verifyCell(Operation *op);
+
+/// Signals that the following operation is a cell.
+template <typename ConcreteType>
+class Cell : public mlir::OpTrait::TraitBase<ConcreteType, Cell> {
+public:
+  static LogicalResult verifyTrait(Operation *op) { return verifyCell(op); }
+};
+
 /// A helper function to verify each control-like operation
 /// has a valid parent and, if applicable, body.
 LogicalResult verifyControlLikeOp(Operation *op);

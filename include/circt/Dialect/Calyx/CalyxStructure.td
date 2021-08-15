@@ -143,18 +143,18 @@ def WiresOp : CalyxContainer<"wires", [
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def CellOp : CalyxOp<"cell", [
+def InstanceOp : CalyxOp<"instance", [
     DeclareOpInterfaceMethods<OpAsmOpInterface>,
-    HasParent<"ComponentOp">
+    Cell
   ]> {
-  let summary = "Calyx Cell";
+  let summary = "Calyx Component Instance";
   let description = [{
-    Represents a cell (or instance) of a Calyx component or
-    primitive, which may include state. Some cells may
+    Represents an instance of a Calyx component,
+    which may include state. Some instances may
     optionally have parameters attributed to them.
 
     ```mlir
-      %name.in, %name.out = calyx.cell "name" @MyComponent : i64, i16
+      %name.in, %name.out = calyx.instance "name" @MyComponent : i64, i16
     ```
   }];
 

@@ -28,6 +28,14 @@ using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
 
+LogicalResult calyx::verifyCell(Operation *op) {
+  auto opParent = op->getParentOp();
+  if (!isa<ComponentOp>(opParent))
+    return op->emitOpError()
+           << "has parent: " << opParent << ". This should be ComponentOp.";
+  return success();
+}
+
 LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
   // Operations that may parent other ControlLike operations.
@@ -78,7 +86,7 @@ namespace {
 /// This is a helper function that should only be used to get the WiresOp or
 /// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
 /// the end of a component's body. In the worst case, this will run in linear
-/// time with respect to the number of instances within the cell.
+/// time with respect to the number of instances within the component.
 template <typename Op>
 static Op getControlOrWiresFrom(ComponentOp op) {
   auto body = op.getBody();
@@ -401,12 +409,12 @@ GroupDoneOp GroupOp::getDoneOp() {
 }
 
 //===----------------------------------------------------------------------===//
-// CellOp
+// InstanceOp
 //===----------------------------------------------------------------------===//
 
 /// Lookup the component for the symbol. This returns null on
 /// invalid IR.
-ComponentOp CellOp::getReferencedComponent() {
+ComponentOp InstanceOp::getReferencedComponent() {
   auto program = (*this)->getParentOfType<ProgramOp>();
   if (!program)
     return nullptr;
@@ -414,8 +422,8 @@ ComponentOp CellOp::getReferencedComponent() {
   return program.lookupSymbol<ComponentOp>(componentName());
 }
 
-/// Provide meaningful names to the result values of a CellOp.
-void CellOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+/// Provide meaningful names to the result values of a InstanceOp.
+void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto component = getReferencedComponent();
   auto portNames = component.portNames();
 
@@ -426,40 +434,40 @@ void CellOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   }
 }
 
-static LogicalResult verifyCellOp(CellOp cell) {
-  if (cell.componentName() == "main")
-    return cell.emitOpError("cannot reference the entry point.");
+static LogicalResult verifyInstanceOp(InstanceOp instance) {
+  if (instance.componentName() == "main")
+    return instance.emitOpError("cannot reference the entry point.");
 
   // Verify the referenced component exists in this program.
-  ComponentOp referencedComponent = cell.getReferencedComponent();
+  ComponentOp referencedComponent = instance.getReferencedComponent();
   if (!referencedComponent)
-    return cell.emitOpError()
-           << "is referencing component: " << cell.componentName()
+    return instance.emitOpError()
+           << "is referencing component: " << instance.componentName()
            << ", which does not exist.";
 
   // Verify the referenced component is not instantiating itself.
-  auto parentComponent = cell->getParentOfType<ComponentOp>();
+  auto parentComponent = instance->getParentOfType<ComponentOp>();
   if (parentComponent == referencedComponent)
-    return cell.emitOpError()
+    return instance.emitOpError()
            << "is a recursive instantiation of its parent component: "
-           << cell.componentName();
+           << instance.componentName();
 
   // Verify the instance result ports with those of its referenced component.
   SmallVector<ComponentPortInfo> componentPorts =
       getComponentPortInfo(referencedComponent);
 
-  size_t numResults = cell.getNumResults();
+  size_t numResults = instance.getNumResults();
   if (numResults != componentPorts.size())
-    return cell.emitOpError()
+    return instance.emitOpError()
            << "has a wrong number of results; expected: "
            << componentPorts.size() << " but got " << numResults;
 
   for (size_t i = 0; i != numResults; ++i) {
-    auto resultType = cell.getResult(i).getType();
+    auto resultType = instance.getResult(i).getType();
     auto expectedType = componentPorts[i].type;
     if (resultType == expectedType)
       continue;
-    return cell.emitOpError()
+    return instance.emitOpError()
            << "result type for " << componentPorts[i].name << " must be "
            << expectedType << ", but got " << resultType;
   }
