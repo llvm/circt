@@ -1176,6 +1176,9 @@ OpFoldResult ModSOp::fold(ArrayRef<Attribute> constants) {
 
 // Constant folding
 OpFoldResult ConcatOp::fold(ArrayRef<Attribute> constants) {
+  if (getNumOperands() == 1)
+    return getOperand(0);
+
   // If all the operands are constant, we can fold.
   for (auto attr : constants)
     if (!attr || !attr.isa<IntegerAttr>())
@@ -1676,26 +1679,20 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
   };
 
   if (ICmpOp::isPredicateSigned(op.predicate())) {
-
     // scmp(cat(..x, b), cat(..y, b)) == scmp(cat(..x), cat(..y))
-    if (commonPrefixTotalWidth == 0 && commonSuffixTotalWidth > 0) {
+    if (commonPrefixTotalWidth == 0 && commonSuffixTotalWidth > 0)
       return replaceWithoutReplicatingSignBit();
-    }
 
     // scmp(cat(a, ..x, b), cat(a, ..y, b)) == scmp(cat(sgn(a), ..x),
     // cat(sgn(b), ..y)) Note that we cannot perform this optimization if
     // [width(b) = 0 && width(a) <= 1]. since that common prefix is the sign
     // bit. Doing the rewrite can result in an infinite loop.
-    if (commonPrefixTotalWidth > 1 || commonSuffixTotalWidth > 0) {
+    if (commonPrefixTotalWidth > 1 || commonSuffixTotalWidth > 0)
       return replaceWithReplicatingSignBit();
-    }
 
-  } else {
-
+  } else if (commonPrefixTotalWidth > 0 || commonSuffixTotalWidth > 0) {
     // ucmp(cat(a, ..x, b), cat(a, ..y, b)) = ucmp(cat(..x), cat(..y))
-    if (commonPrefixTotalWidth > 0 || commonSuffixTotalWidth > 0) {
-      return replaceWithoutReplicatingSignBit();
-    }
+    return replaceWithoutReplicatingSignBit();
   }
 
   return failure();
@@ -1715,8 +1712,6 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
 
   // Canonicalize with RHS constant
   if (matchPattern(op.rhs(), m_RConstant(rhs))) {
-    hw::ConstantOp constant;
-
     auto getConstant = [&](APInt constant) -> Value {
       return rewriter.create<hw::ConstantOp>(op.getLoc(), std::move(constant));
     };
@@ -1802,33 +1797,33 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       // x >= c -> x > (c-1)
       return replaceWith(ICmpPredicate::ugt, op.lhs(), getConstant(rhs - 1));
     case ICmpPredicate::eq:
-      if (rhs.getBitWidth() != 1)
-        break;
-      if (rhs.isNullValue()) {
-        // x == 0 -> x ^ 1
-        rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
-                                           getConstant(APInt(1, 1)));
-        return success();
-      }
-      if (rhs.isAllOnesValue()) {
-        // x == 1 -> x
-        rewriter.replaceOp(op, op.lhs());
-        return success();
+      if (rhs.getBitWidth() == 1) {
+        if (rhs.isNullValue()) {
+          // x == 0 -> x ^ 1
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
+                                             getConstant(APInt(1, 1)));
+          return success();
+        }
+        if (rhs.isAllOnesValue()) {
+          // x == 1 -> x
+          rewriter.replaceOp(op, op.lhs());
+          return success();
+        }
       }
       break;
     case ICmpPredicate::ne:
-      if (rhs.getBitWidth() != 1)
-        break;
-      if (rhs.isNullValue()) {
-        // x != 0 -> x
-        rewriter.replaceOp(op, op.lhs());
-        return success();
-      }
-      if (rhs.isAllOnesValue()) {
-        // x != 1 -> x ^ 1
-        rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
-                                           getConstant(APInt(1, 1)));
-        return success();
+      if (rhs.getBitWidth() == 1) {
+        if (rhs.isNullValue()) {
+          // x != 0 -> x
+          rewriter.replaceOp(op, op.lhs());
+          return success();
+        }
+        if (rhs.isAllOnesValue()) {
+          // x != 1 -> x ^ 1
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
+                                             getConstant(APInt(1, 1)));
+          return success();
+        }
       }
       break;
     }

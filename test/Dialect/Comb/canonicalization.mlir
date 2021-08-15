@@ -711,3 +711,11 @@ hw.module @logical_concat_cst2(%value: i8, %v2: i16) -> (%a: i16) {
   // CHECK: %2 = comb.and %v2, %1 : i16
   // CHECK: hw.output %2 : i16
 }
+
+
+// CHECK-LABEL: hw.module @concat_fold
+hw.module @concat_fold(%value: i8) -> (%a: i8) {
+  // CHECK: hw.output %value : i8
+  %0 = comb.concat %value : (i8) -> i8
+  hw.output %0 : i8
+}
