@@ -412,7 +412,7 @@ GroupDoneOp GroupOp::getDoneOp() {
 }
 
 //===----------------------------------------------------------------------===//
-// Utilities for Cell-like operations.
+// Utilities for operations with the Cell trait.
 //===----------------------------------------------------------------------===//
 
 /// Gives each result of the cell a meaningful name in the form:
