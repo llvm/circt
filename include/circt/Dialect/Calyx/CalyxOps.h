@@ -57,7 +57,7 @@ IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
 /// worked with.
 SmallVector<Direction> unpackAttribute(Operation *component);
 
-/// Convenience function for generating an vector of directions
+/// Convenience function for generating a vector of directions.
 SmallVector<Direction> genInOutDirections(size_t nIns, size_t nOuts);
 } // namespace direction
 

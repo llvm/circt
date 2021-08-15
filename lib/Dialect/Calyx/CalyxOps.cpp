@@ -46,20 +46,20 @@ SmallVector<Direction> direction::genInOutDirections(size_t nIns,
 
 IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
                                      MLIRContext *ctx) {
-  const size_t size = directions.size();
   // Pack the array of directions into an APInt.  Input is zero, output is one.
-  APInt portDirections(size, 0);
-  for (size_t i = 0, e = directions.size(); i != e; ++i)
+  size_t numDirections = directions.size();
+  APInt portDirections(numDirections, 0);
+  for (size_t i = 0, e = numDirections; i != e; ++i)
     if (directions[i] == Direction::Output)
       portDirections.setBit(i);
 
-  return IntegerAttr::get(IntegerType::get(ctx, size), portDirections);
+  return IntegerAttr::get(IntegerType::get(ctx, numDirections), portDirections);
 }
 
 /// Turn a packed representation of port attributes into a vector that can be
 /// worked with.
 SmallVector<Direction> direction::unpackAttribute(Operation *component) {
-  const APInt &value =
+  APInt value =
       component->getAttr(direction::attrKey).cast<IntegerAttr>().getValue();
 
   SmallVector<Direction> result;
@@ -277,10 +277,10 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
           direction::genInOutDirections(inPorts.size(), outPorts.size()),
           context));
 
-  llvm::append_range(ports, inPorts);
-  llvm::append_range(ports, outPorts);
-  llvm::append_range(portTypes, inPortTypes);
-  llvm::append_range(portTypes, outPortTypes);
+  ports.append(inPorts);
+  ports.append(outPorts);
+  portTypes.append(inPortTypes);
+  portTypes.append(outPortTypes);
 
   return success();
 }
@@ -353,12 +353,13 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
                               "`clk`, `reset`, and output port `done`";
 }
 
+/// Returns a new vector containing the concatenation of vectors @p a and @p b.
 template <typename T>
 SmallVector<T> concat(const SmallVectorImpl<T> &a,
                       const SmallVectorImpl<T> &b) {
   SmallVector<T> out;
-  out.insert(out.end(), a.begin(), a.end());
-  out.insert(out.end(), b.begin(), b.end());
+  out.append(a);
+  out.append(b);
   return out;
 }
 
@@ -374,12 +375,9 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   // Avoid using llvm::partition or llvm::sort to preserve relative ordering
   // between individual inputs and outputs.
   for (auto &&port : ports) {
-    (port.direction == Direction::Input ? portIOTypes.first
-                                        : portIOTypes.second)
-        .push_back(port.type);
-    (port.direction == Direction::Input ? portIONames.first
-                                        : portIONames.second)
-        .push_back(port.name);
+    bool isInput = port.direction == Direction::Input;
+    (isInput ? portIOTypes.first : portIOTypes.second).push_back(port.type);
+    (isInput ? portIONames.first : portIONames.second).push_back(port.name);
   }
   auto portTypes = concat(portIOTypes.first, portIOTypes.second);
   auto portNames = concat(portIONames.first, portIONames.second);
@@ -387,8 +385,6 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   // Build the function type of the component.
   auto functionType = builder.getFunctionType(portTypes, {});
   result.addAttribute(getTypeAttrName(), TypeAttr::get(functionType));
-
-  functionType.dump();
 
   // Record the port names and number of input ports of the component.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
