@@ -63,8 +63,9 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
       component->getAttr(direction::attrKey).cast<IntegerAttr>().getValue();
 
   SmallVector<Direction> result;
-  result.reserve(value.getBitWidth());
-  for (size_t i = 0, e = value.getBitWidth(); i != e; ++i)
+  auto bitWidth = value.getBitWidth();
+  result.reserve(bitWidth);
+  for (size_t i = 0, e = bitWidth; i != e; ++i)
     result.push_back(direction::get(value[i]));
   return result;
 }
