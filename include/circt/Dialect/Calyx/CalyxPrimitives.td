@@ -36,6 +36,9 @@ def RegisterOp : CalyxCell<"register", [
   ];
 
   let extraClassDeclaration = [{
+    // TODO(Calyx): Use attribute instead. Provide parsing/printing method for CalyxCell.
+    // Something like:
+    // %r.in, ..., %r.out = calyx.register "r" (in: i8, ...) -> (..., out: i8)
     SmallVector<StringRef> portNames() { return {"in", "write_en", "clk", "reset", "out", "done"}; }
   }];
 }
