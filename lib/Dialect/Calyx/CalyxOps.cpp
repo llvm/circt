@@ -32,10 +32,9 @@ LogicalResult calyx::verifyCell(Operation *op) {
   auto opParent = op->getParentOp();
   if (!isa<ComponentOp>(opParent))
     return op->emitOpError()
-           << "has parent: " << opParent << ". This should be ComponentOp.";
+           << "has parent: " << opParent << ", expected ComponentOp.";
   if (!op->hasAttr("instanceName"))
-    return op->emitOpError()
-           << "with Cell trait does not have an instanceName attribute.";
+    return op->emitOpError() << "does not have an instanceName attribute.";
 
   return success();
 }
@@ -417,7 +416,7 @@ GroupDoneOp GroupOp::getDoneOp() {
 //===----------------------------------------------------------------------===//
 
 /// Gives each result of the cell a meaningful name in the form:
-/// <prefix>.<port-name>
+/// <instance-name>.<port-name>
 static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
                                   ArrayRef<StringRef> portNames) {
   assert(op->hasTrait<Cell>() && "must have the Cell trait");
