@@ -128,7 +128,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
   // Operations that may parent other ControlLike operations.
   auto isValidParent = [](Operation *operation) {
-    return isa<ControlOp, SeqOp, IfOp>(operation);
+    return isa<ControlOp, SeqOp, IfOp, WhileOp>(operation);
   };
   if (!isValidParent(parent))
     return op->emitOpError()
@@ -141,7 +141,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp, WhileOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -663,6 +663,31 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
     return ifOp.emitError()
            << "conditional op: '" << valueName(component, ifOp.cond())
            << "' expected to be driven from group: '" << ifOp.groupName()
+           << "' but no driver was found.";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// WhileOp
+//===----------------------------------------------------------------------===//
+static LogicalResult verifyWhileOp(WhileOp whileOp) {
+  auto component = whileOp->getParentOfType<ComponentOp>();
+  auto wiresOp = component.getWiresOp();
+  auto groupName = whileOp.groupName();
+  auto groupOp = wiresOp.lookupSymbol<GroupOp>(groupName);
+
+  if (!groupOp)
+    return whileOp.emitOpError()
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (whileOp.body().front().empty())
+    return whileOp.emitError() << "empty body region.";
+
+  if (failed(isPortDrivenByGroup(whileOp.cond(), groupOp)))
+    return whileOp.emitError()
+           << "conditional op: '" << valueName(component, whileOp.cond())
+           << "' expected to be driven from group: '" << whileOp.groupName()
            << "' but no driver was found.";
 
   return success();
