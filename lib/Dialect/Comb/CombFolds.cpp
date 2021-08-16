@@ -1916,15 +1916,15 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
 
   bool xorMultipleUses = !xorOp->hasOneUse();
 
-  // Replace the comparison.
-  rewriter.replaceOpWithNewOp<ICmpOp>(cmpOp, cmpOp.predicate(), newLHS, newRHS);
-
   // If the xor has multiple uses (not just the compare, then we need/want to
   // replace them as well.
   if (xorMultipleUses) {
     auto newXor = rewriter.create<XorOp>(xorOp.getLoc(), newLHS, xorRHS);
     rewriter.replaceOp(xorOp, newXor->getResult(0));
   }
+
+  // Replace the comparison.
+  rewriter.replaceOpWithNewOp<ICmpOp>(cmpOp, cmpOp.predicate(), newLHS, newRHS);
 }
 
 // Canonicalizes a ICmp with a single constant

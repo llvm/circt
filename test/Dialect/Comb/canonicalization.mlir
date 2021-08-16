@@ -810,6 +810,21 @@ hw.module @xorICmpConstant(%value: i9) -> (%a: i1) {
   // CHECK: hw.output %0 : i1
 }
 
+// CHECK-LABEL: hw.module @xorICmpConstant2
+// This is an integration test for the testcase in Issue #1560.
+hw.module @xorICmpConstant2(%value: i9, %value2: i9) -> (%a: i1, %b: i9) {
+  %c2_i9 = hw.constant 2 : i9
+  %c0_i9 = hw.constant 0 : i9
+  %1 = comb.xor %value, %value2, %c2_i9 : i9
+  %2 = comb.icmp eq %1, %c0_i9 : i9
+  hw.output %2, %1 : i1, i9
+  // CHECK: %0 = comb.xor %value, %value2 : i9
+  // CHECK: %1 = comb.xor %0, %c2_i9 : i9
+  // CHECK: %2 = comb.icmp eq %0, %c2_i9 : i9
+  // CHECK: hw.output %2, %1 : i1, i9
+}
+
+
 // CHECK-LABEL: hw.module @test1560
 // This is an integration test for the testcase in Issue #1560.
 hw.module @test1560(%value: i38) -> (%a: i1) {
