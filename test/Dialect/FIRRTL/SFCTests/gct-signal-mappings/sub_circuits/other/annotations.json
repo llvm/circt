@@ -1,0 +1,10 @@
+[
+  {
+    "class":"firrtl.transforms.DontTouchAnnotation",
+    "target":"~Sub|SubExtern>someInput"
+  },
+  {
+    "class":"firrtl.transforms.DontTouchAnnotation",
+    "target":"~Sub|SubExtern>someOutput"
+  }
+]
