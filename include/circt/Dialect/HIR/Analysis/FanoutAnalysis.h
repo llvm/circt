@@ -9,13 +9,13 @@ public:
   MemrefUseInfo(FuncOp);
 
 private:
-  void addOpToUseList(Operation *, Value, uint64_t, uint64_t);
-  void dispatchOp(Operation *);
-  void visitOp(hir::LoadOp);
-  void visitOp(hir::StoreOp);
-  void visitOp(hir::CallOp);
-  void visitOp(hir::FuncOp);
-  void visitOp(hir::AllocaOp);
+  LogicalResult addOpToUseList(Operation *, Value, uint64_t, uint64_t);
+  LogicalResult dispatchOp(Operation *);
+  LogicalResult visitOp(hir::LoadOp);
+  LogicalResult visitOp(hir::StoreOp);
+  LogicalResult visitOp(hir::FuncOp);
+  LogicalResult visitOp(hir::AllocaOp);
+  LogicalResult visitOp(hir::CallOp);
 
 public:
   llvm::DenseMap<Value, SmallVector<SmallVector<ListOfUses>>>

@@ -37,9 +37,9 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
   if (failed(helper::isConstantIntValue(forOp.step())))
     return forOp.emitError("Expected step to be constant.");
 
-  int64_t lb = helper::getConstantIntValue(forOp.lb());
-  int64_t ub = helper::getConstantIntValue(forOp.ub());
-  int64_t step = helper::getConstantIntValue(forOp.step());
+  int64_t lb = helper::getConstantIntValue(forOp.lb()).getValue();
+  int64_t ub = helper::getConstantIntValue(forOp.ub()).getValue();
+  int64_t step = helper::getConstantIntValue(forOp.step()).getValue();
 
   Block::iterator srcBlockEnd = std::prev(loopBodyBlock.end(), 1);
 
@@ -96,16 +96,9 @@ void LoopUnrollPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
   WalkResult result = funcOp.walk([](Operation *operation) -> WalkResult {
     if (auto forOp = dyn_cast<hir::ForOp>(operation)) {
-      if (Attribute unrollAttr = forOp->getAttr("unroll")) {
-        if (!unrollAttr.dyn_cast<mlir::UnitAttr>()) {
-          forOp.emitError(
-              "We only support full unrolling, i.e. unroll attr should be "
-              "mlir::UnitAttr.");
-          return WalkResult::interrupt();
-        }
+      if (forOp.getInductionVar().getType().isa<IndexType>())
         if (failed(unrollLoopFull(forOp)))
           return WalkResult::interrupt();
-      }
     }
     return WalkResult::advance();
   });

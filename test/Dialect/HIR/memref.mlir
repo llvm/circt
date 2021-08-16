@@ -1,7 +1,7 @@
 #rd = {rd_latency=1}
 #wr = {wr_latency=1}
 #reg_wr = {wr_latency=1}
-#reg_rw = {rd_latency=0, wr_latency=1}
+#reg_rd = {rd_latency=0}
 
 hir.func @test at %t(
 %a :!hir.memref<16x16x(bank 2)x(bank 2)xf32> ports [#rd,#wr],
@@ -27,7 +27,9 @@ hir.func @test2 at %t(){
   %c1_i2 = constant 1:i2
   %c1_f32 = constant 1.0:f32
 
-  %a = hir.alloca("BRAM_2P") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rw,#reg_wr]
+  %a = hir.alloca("BRAM_2P") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd,#reg_wr]
   %v = hir.load %a[port 0][%0,%1,%c1_i1,%c1_i2]  at %t: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
+  %a_w = hir.memref.extract ports [1] from %a :!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_wr]
   hir.store %v to %a[port 1][%0,%0,%c1_i1,%c1_i2] at %t + 1: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
+  hir.return
 }

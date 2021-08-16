@@ -140,9 +140,11 @@ ParseResult parseIntegerAttr(IntegerAttr &value, StringRef attrName,
       result.attributes);
 }
 
-int64_t getConstantIntValue(Value var) {
-  auto constantOp = dyn_cast<mlir::ConstantOp>(var.getDefiningOp());
-  assert(constantOp);
+llvm::Optional<int64_t> getConstantIntValue(Value var) {
+  auto constantOp = dyn_cast_or_null<mlir::ConstantOp>(var.getDefiningOp());
+  if (!constantOp)
+    return llvm::None;
+
   auto integerAttr = constantOp.value().dyn_cast<IntegerAttr>();
   assert(integerAttr);
   return integerAttr.getInt();
@@ -155,14 +157,19 @@ mlir::LogicalResult isConstantIntValue(mlir::Value var) {
   return failure();
 }
 
-int64_t calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
-                        mlir::ArrayRef<int64_t> dims) {
+llvm::Optional<int64_t> calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
+                                        mlir::ArrayRef<int64_t> dims) {
   int64_t linearIdx = 0;
   int64_t stride = 1;
-  assert(indices.size() != 0);
+  // This can happen if there are no BANK(ADDR) indices.
+  if (indices.size() == 0)
+    return 0;
 
   for (int i = indices.size() - 1; i >= 0; i--) {
-    linearIdx += getConstantIntValue(indices[i]) * stride;
+    auto idxConst = getConstantIntValue(indices[i]);
+    if (!idxConst)
+      return llvm::None;
+    linearIdx += idxConst.getValue() * stride;
     stride *= dims[i];
   }
   return linearIdx;
@@ -192,6 +199,22 @@ llvm::Optional<uint64_t> getRdLatency(Attribute port) {
   return llvm::None;
 }
 
+bool isWrite(Attribute port) {
+  auto portDict = port.dyn_cast<DictionaryAttr>();
+  auto wrLatencyAttr = portDict.getNamed("wr_latency");
+  if (wrLatencyAttr)
+    return true;
+  return false;
+}
+
+bool isRead(Attribute port) {
+  auto portDict = port.dyn_cast<DictionaryAttr>();
+  auto rdLatencyAttr = portDict.getNamed("rd_latency");
+  if (rdLatencyAttr)
+    return true;
+  return false;
+}
+
 StringRef extractBusPortFromDict(mlir::DictionaryAttr dict) {
   auto ports =
       dict.getNamed("hir.bus.ports").getValue().second.dyn_cast<ArrayAttr>();
@@ -200,4 +223,10 @@ StringRef extractBusPortFromDict(mlir::DictionaryAttr dict) {
   return ports[0].dyn_cast<StringAttr>().getValue();
 }
 llvm::StringRef getInlineAttrName() { return "inline"; }
+void eraseOps(mlir::ArrayRef<mlir::Operation *> opsToErase) {
+  // Erase the ops in reverse order so that if there are any dependent ops, they
+  // get erased first.
+  for (auto op = opsToErase.rbegin(); op != opsToErase.rend(); op++)
+    (*op)->erase();
+}
 } // namespace helper

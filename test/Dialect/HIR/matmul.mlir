@@ -23,7 +23,7 @@ hir.func @readA at %t(
       %i1 = hir.delay %i by 1  at %tk : i4
       hir.store %v to %A[port 0][%i1, %k] at %tk + 1 : !hir.memref<16x(bank 16)xi32> delay 1
       hir.yield at %tk + 1 
-    }{unroll}
+    }
     hir.yield at %tk_end + 1
   }
   hir.return (%t_done) :(!hir.time)
@@ -60,9 +60,9 @@ hir.func @readB at %t(
       %v =  hir.load %buff[port 0][%c0_i1] at %tk : !hir.memref<1xi32>
       hir.store %v to %Bw[port 0][%k, %j] at %tk : !hir.memref<(bank 16)x(bank 16)xi32>
       hir.yield at %tk + 1
-    }{unroll}
+    }
     hir.yield at %tk_end + 1
-  }{unroll}
+  }
   %t_done = hir.time %t_j_loop_done + 16: !hir.time
   hir.return (%t_done) : (!hir.time)
 }{inline} 
@@ -106,12 +106,12 @@ hir.func @kernel at %t(
         %c_bus_kplus1 = hir.tensor.extract %C_bus[%kPlus1]: tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports["send"]
         hir.send %c to %c_bus_kplus1[0] at %tk + 4  : i32 to !hir.bus<i32>
         hir.yield at %tk + 1 
-      }{unroll}
+      }
         %c_bus_last = hir.tensor.extract %C_bus[%16]: tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports["recv"]
       %acc = hir.recv %c_bus_last[0] at %tk_end + 3 : !hir.bus<i32> -> i32
       hir.store %acc to %C[port 0][%i, %j] at %tk_end + 3 : !hir.memref<16x(bank 16)xi32>
       hir.yield at %tj + 1 
-    }{unroll}
+    }
     hir.yield at %ti + 1 
   } 
   %t_done = hir.time %t_i_loop_done + 32 :!hir.time 
@@ -154,21 +154,28 @@ hir.func @matmul at %t(
   %B = hir.alloca("REG") : !hir.memref<(bank 16)x(bank 16)xi32> ports[#reg_rd,#reg_wr]
   %C = hir.alloca("BRAM_2P") : !hir.memref<16x(bank 16)xi32> ports[#rd,#wr]
 
-  %t1 = hir.call @readA(%Ai,%A) at %t
+  %A_w = hir.memref.extract ports [1] from %A: !hir.memref<16x(bank 16)xi32> ports [#wr]
+  %t1 = hir.call @readA(%Ai,%A_w) at %t
   :!hir.func<(!hir.memref<16x16xi32> ports [#rd],!hir.memref<16x(bank 16)xi32> ports[#wr])->(!hir.time)>
 
-  %t2 = hir.call @readB(%Bi,%B) at %t 
+  %B_w = hir.memref.extract ports [1] from %B : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_wr]
+  %t2 = hir.call @readB(%Bi,%B_w) at %t 
   :!hir.func<(!hir.memref<16x16xi32> ports[#rd],
   !hir.memref<(bank 16)x(bank 16)xi32> ports[#reg_wr]) -> (!hir.time)>
 
   %t_kernel_start = hir.time.max(%t1,%t2):!hir.time
 
-  %t_kernel_done = hir.call @kernel(%A,%B,%C) at %t_kernel_start 
+  %A_r = hir.memref.extract ports [0] from %A : !hir.memref<16x(bank 16)xi32> ports [#rd]
+  %B_r = hir.memref.extract ports [0] from %B : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_rd]
+  %C_w = hir.memref.extract ports [1] from %C : !hir.memref<16x(bank 16)xi32> ports [#wr]
+
+  %t_kernel_done = hir.call @kernel(%A_r,%B_r,%C_w) at %t_kernel_start 
   : !hir.func<(!hir.memref<16x(bank 16)xi32> ports [#rd],
   !hir.memref<(bank 16)x(bank 16)xi32> ports[#reg_rd],
   !hir.memref<16x(bank 16)xi32> ports [#wr]) ->(!hir.time)>
 
-  %t_done = hir.call @writeC(%C,%Co) at %t_kernel_done
+  %C_r = hir.memref.extract ports [0] from %C : !hir.memref<16x(bank 16)xi32> ports [#rd]
+  %t_done = hir.call @writeC(%C_r,%Co) at %t_kernel_done
   :!hir.func<(!hir.memref<16x(bank 16)xi32> ports [#rd], !hir.memref<16x16xi32> ports[#wr]) ->(!hir.time)>
 
   hir.return (%t_done) :(!hir.time)

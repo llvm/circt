@@ -10,7 +10,7 @@ unsigned clog2(int);
 /// A primitive type is integer, float or a tuple/tensor of a primitive type.
 bool isBuiltinSizedType(mlir::Type);
 bool isBusType(mlir::Type);
-int64_t getConstantIntValue(mlir::Value var);
+llvm::Optional<int64_t> getConstantIntValue(mlir::Value var);
 mlir::LogicalResult isConstantIntValue(mlir::Value var);
 mlir::IntegerAttr getI64IntegerAttr(mlir::MLIRContext *context, int value);
 
@@ -31,13 +31,16 @@ mlir::DictionaryAttr getDictionaryAttr(mlir::Builder &builder,
 mlir::DictionaryAttr getDictionaryAttr(mlir::RewriterBase &builder,
                                        mlir::StringRef name,
                                        mlir::Attribute attr);
-int64_t calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
-                        mlir::ArrayRef<int64_t> dims);
+llvm::Optional<int64_t> calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
+                                        mlir::ArrayRef<int64_t> dims);
 
 int64_t extractDelayFromDict(mlir::DictionaryAttr dict);
 llvm::Optional<mlir::ArrayAttr>
 extractMemrefPortsFromDict(mlir::DictionaryAttr dict);
 llvm::Optional<uint64_t> getRdLatency(mlir::Attribute port);
+bool isWrite(mlir::Attribute port);
+bool isRead(mlir::Attribute port);
 llvm::StringRef extractBusPortFromDict(mlir::DictionaryAttr dict);
 llvm::StringRef getInlineAttrName();
+void eraseOps(mlir::ArrayRef<mlir::Operation *> opsToErase);
 } // namespace helper
