@@ -137,7 +137,7 @@ static void addAnnotation(Operation *op, Annotation anno) {
 }
 
 // Returns remainder of path if circuit is the correct circuit
-LogicalResult parseAndCheckCircuit(StringRef &path, CircuitOp circuit) {
+static LogicalResult parseAndCheckCircuit(StringRef &path, CircuitOp circuit) {
   if (path.startswith("~"))
     path = path.drop_front();
 
@@ -148,12 +148,13 @@ LogicalResult parseAndCheckCircuit(StringRef &path, CircuitOp circuit) {
   if (name.empty() || name == circuit.name())
     return success();
   return circuit.emitError("circuit name '")
-         << circuit.name() << "' doesn't match annotation '" << path << "'";
+         << circuit.name() << "' doesn't match annotation '" << name << "'";
 }
 
 // Returns remainder of path if circuit is the correct circuit
-LogicalResult parseAndCheckModule(StringRef &path, Operation *&module,
-                                  CircuitOp circuit, SymbolTable &modules) {
+static LogicalResult parseAndCheckModule(StringRef &path, Operation *&module,
+                                         CircuitOp circuit,
+                                         SymbolTable &modules) {
   StringRef name;
   if (path.contains('/'))
     std::tie(name, path) = path.split('/');
@@ -174,9 +175,9 @@ LogicalResult parseAndCheckModule(StringRef &path, Operation *&module,
 }
 
 // Returns remainder of path if circuit is the correct circuit
-LogicalResult parseAndCheckInstance(StringRef &path, Operation *&module,
-                                    InstanceOp &inst, CircuitOp circuit,
-                                    SymbolTable &modules) {
+static LogicalResult parseAndCheckInstance(StringRef &path, Operation *&module,
+                                           InstanceOp &inst, CircuitOp circuit,
+                                           SymbolTable &modules) {
   StringRef name;
   if (path.contains(':'))
     std::tie(name, path) = path.split(':');
@@ -200,7 +201,7 @@ LogicalResult parseAndCheckInstance(StringRef &path, Operation *&module,
 
 // Some types have been expanded so the first layer of aggregate path is
 // a return value.
-LogicalResult updateExpandedPort(StringRef field, BaseUnion &entity) {
+static LogicalResult updateExpandedPort(StringRef field, BaseUnion &entity) {
   if (auto mem = dyn_cast<MemOp>(entity.op))
     for (size_t p = 0, pe = mem.portNames().size(); p < pe; ++p)
       if (mem.getPortNameStr(p) == field) {
@@ -217,9 +218,9 @@ LogicalResult updateExpandedPort(StringRef field, BaseUnion &entity) {
   return failure();
 }
 
-LogicalResult updateStruct(StringRef field, BaseUnion &entity) {
+static LogicalResult updateStruct(StringRef field, BaseUnion &entity) {
   // The first field for some ops refers to expanded return values.
-  if (isa<MemOp, InstanceOp>(entity.op) && entity.portNum == ~0)
+  if (isa<MemOp, InstanceOp>(entity.op) && entity.portNum == ~0UL)
     return updateExpandedPort(field, entity);
 
   auto bundle = entity.getType().dyn_cast<BundleType>();
@@ -234,7 +235,7 @@ LogicalResult updateStruct(StringRef field, BaseUnion &entity) {
          << field << "' in subtype '" << bundle << "'";
 }
 
-LogicalResult updateArray(unsigned index, BaseUnion &entity) {
+static LogicalResult updateArray(unsigned index, BaseUnion &entity) {
   auto vec = entity.getType().dyn_cast<FVectorType>();
   if (!vec)
     return entity.op->emitError("index access '")
@@ -243,7 +244,7 @@ LogicalResult updateArray(unsigned index, BaseUnion &entity) {
   return success();
 }
 
-LogicalResult parseNextField(StringRef &path, BaseUnion &entity) {
+static LogicalResult parseNextField(StringRef &path, BaseUnion &entity) {
   if (path.empty())
     return entity.op->emitError("empty string for aggregates");
   if (path[0] == '.') {
@@ -265,13 +266,79 @@ LogicalResult parseNextField(StringRef &path, BaseUnion &entity) {
   }
 }
 
-LogicalResult parseAndCheckName(StringRef &path, BaseUnion &entity,
-                                Operation *module) {
+static LogicalResult parseAndCheckName(StringRef &path, BaseUnion &entity,
+                                       Operation *module) {
   StringRef name = path.take_until([](char c) { return c == '.' || c == '['; });
   path = path.drop_front(name.size());
   if ((entity = findNamedThing(name, module)))
     return success();
   return failure();
+}
+
+/// Return an input \p target string in canonical form.  This converts a Legacy
+/// Annotation (e.g., A.B.C) into a modern annotation (e.g., ~A|B>C).  Trailing
+/// subfield/subindex references are preserved.
+static std::string canonicalizeTarget(StringRef target) {
+
+  if (target.empty())
+    return target.str();
+
+  // If this is a normal Target (not a Named), erase that field in the JSON
+  // object and return that Target.
+  if (target[0] == '~')
+    return target.str();
+
+  // This is a legacy target using the firrtl.annotations.Named type.  This
+  // can be trivially canonicalized to a non-legacy target, so we do it with
+  // the following three mappings:
+  //   1. CircuitName => CircuitTarget, e.g., A -> ~A
+  //   2. ModuleName => ModuleTarget, e.g., A.B -> ~A|B
+  //   3. ComponentName => ReferenceTarget, e.g., A.B.C -> ~A|B>C
+  std::string newTarget = "~";
+  llvm::raw_string_ostream s(newTarget);
+  unsigned tokenIdx = 0;
+  for (auto a : target) {
+    if (a == '.') {
+      switch (tokenIdx) {
+      case 0:
+        s << "|";
+        break;
+      case 1:
+        s << ">";
+        break;
+      default:
+        s << ".";
+        break;
+      }
+      ++tokenIdx;
+    } else
+      s << a;
+  }
+  return newTarget;
+}
+
+/// Scatter breadcrumb annotations corrosponding to non-local annotations along
+/// the instance path.
+// FIXME: uniq annotation chain links
+static void scatterNonLocalPath(AnnoPathValue target, Attribute key) {
+  for (auto inst : llvm::enumerate(target.instances)) {
+    SmallVector<NamedAttribute> newAnnoAttrs;
+    newAnnoAttrs.push_back(
+        {Identifier::get("circt.nonlocal.key", key.getContext()), key});
+    if (inst.index() != 0)
+      newAnnoAttrs.push_back(
+          {Identifier::get("circt.nonlocal.parent", key.getContext()),
+           target.instances[inst.index() - 1].nameAttr()});
+    if (inst.index() != target.instances.size() - 1)
+      newAnnoAttrs.push_back(
+          {Identifier::get("circt.nonlocal.child", key.getContext()),
+           target.instances[inst.index() + 1].nameAttr()});
+    newAnnoAttrs.push_back(
+        {Identifier::get("class", key.getContext()),
+         StringAttr::get(key.getContext(), "circt.nonlocal")});
+    addAnnotation(inst.value(),
+                  DictionaryAttr::get(key.getContext(), newAnnoAttrs));
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -287,8 +354,11 @@ static LogicalResult ignoreAnno(AnnoPathValue target, DictionaryAttr anno) {
   return success();
 }
 
-static Optional<AnnoPathValue> stdResolveImpl(StringRef path, CircuitOp circuit,
-                                              SymbolTable &modules) {
+static Optional<AnnoPathValue>
+stdResolveImpl(StringRef rawPath, CircuitOp circuit, SymbolTable &modules) {
+  auto pathStr = canonicalizeTarget(rawPath);
+  StringRef path{pathStr};
+
   if (parseAndCheckCircuit(path, circuit).failed())
     return {};
   if (path.empty())
@@ -340,7 +410,6 @@ stdResolve(DictionaryAttr anno, CircuitOp circuit, SymbolTable &modules) {
 
 static Optional<AnnoPathValue>
 tryResolve(DictionaryAttr anno, CircuitOp circuit, SymbolTable &modules) {
-  anno.dump();
   auto target = anno.getNamed("target");
   if (target)
     return stdResolveImpl(target->second.cast<StringAttr>().getValue(), circuit,
@@ -352,10 +421,13 @@ tryResolve(DictionaryAttr anno, CircuitOp circuit, SymbolTable &modules) {
 // Specific Appliers
 ////////////////////////////////////////////////////////////////////////////////
 
-LogicalResult applyDirFileNormalizeToCircuit(AnnoPathValue target,
-                                             DictionaryAttr anno) {
+static LogicalResult applyDirFileNormalizeToCircuit(AnnoPathValue target,
+                                                    DictionaryAttr anno) {
   if (!target.isOpOfType<CircuitOp>())
     return failure();
+  if (!target.isLocal())
+    return failure();
+
   SmallVector<NamedAttribute> newAnnoAttrs;
 
   // Check all values
@@ -386,44 +458,54 @@ LogicalResult applyDirFileNormalizeToCircuit(AnnoPathValue target,
   return success();
 }
 
-LogicalResult applyWithoutTargetToTarget(AnnoPathValue target,
-                                         DictionaryAttr anno,
-                                         bool allowNonLocal) {
+static LogicalResult applyWithoutTargetToTarget(AnnoPathValue target,
+                                                DictionaryAttr anno,
+                                                bool allowNonLocal) {
   if (!allowNonLocal && !target.isLocal())
     return failure();
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno)
-    if (na.first != "target")
+    if (na.first != "target") {
       newAnnoAttrs.push_back(na);
+    } else if (!target.isLocal()) {
+      newAnnoAttrs.push_back(
+          {Identifier::get("circt.nonlocal.key", anno.getContext()),
+           na.second});
+      newAnnoAttrs.push_back(
+          {Identifier::get("circt.nonlocal.parent", anno.getContext()),
+           target.instances.back().nameAttr()});
+      scatterNonLocalPath(target, na.second);
+    }
   addAnnotation(target.ref.op,
                 DictionaryAttr::get(target.ref.op->getContext(), newAnnoAttrs));
   return success();
 }
 
 template <bool allowNonLocal = false>
-LogicalResult applyWithoutTarget(AnnoPathValue target, DictionaryAttr anno) {
+static LogicalResult applyWithoutTarget(AnnoPathValue target,
+                                        DictionaryAttr anno) {
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
 }
 
 template <bool allowNonLocal = false>
-LogicalResult applyWithoutTargetToModule(AnnoPathValue target,
-                                         DictionaryAttr anno) {
+static LogicalResult applyWithoutTargetToModule(AnnoPathValue target,
+                                                DictionaryAttr anno) {
   if (!target.isOpOfType<FModuleOp>() && !target.isOpOfType<FExtModuleOp>())
     return failure();
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
 }
 
 template <bool allowNonLocal = false>
-LogicalResult applyWithoutTargetToCircuit(AnnoPathValue target,
-                                          DictionaryAttr anno) {
+static LogicalResult applyWithoutTargetToCircuit(AnnoPathValue target,
+                                                 DictionaryAttr anno) {
   if (!target.isOpOfType<CircuitOp>())
     return failure();
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
 }
 
 template <bool allowNonLocal = false>
-LogicalResult applyWithoutTargetToMem(AnnoPathValue target,
-                                      DictionaryAttr anno) {
+static LogicalResult applyWithoutTargetToMem(AnnoPathValue target,
+                                             DictionaryAttr anno) {
   if (!target.isOpOfType<MemOp>())
     return failure();
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
@@ -446,26 +528,27 @@ static Optional<AnnoPathValue> seqMemInstanceResolve(DictionaryAttr anno,
   return stdResolveImpl(path, circuit, modules);
 }
 
-LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno) {
+static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   return success();
 }
 
-LogicalResult applyGrandCentralDataTaps(AnnoPathValue target,
-                                        DictionaryAttr anno) {
+static LogicalResult applyGrandCentralDataTaps(AnnoPathValue target,
+                                               DictionaryAttr anno) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   // TODO: port scatter logic in FIRAnnotations.cpp
   return applyWithoutTargetToCircuit(target, anno);
 }
 
-LogicalResult applyGrandCentralMemTaps(AnnoPathValue target,
-                                       DictionaryAttr anno) {
+static LogicalResult applyGrandCentralMemTaps(AnnoPathValue target,
+                                              DictionaryAttr anno) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   // TODO: port scatter logic in FIRAnnotations.cpp
   return applyWithoutTargetToCircuit(target, anno);
 }
 
-LogicalResult applyGrandCentralView(AnnoPathValue target, DictionaryAttr anno) {
+static LogicalResult applyGrandCentralView(AnnoPathValue target,
+                                           DictionaryAttr anno) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   // TODO: port scatter logic in FIRAnnotations.cpp
   return applyWithoutTargetToCircuit(target, anno);
@@ -582,7 +665,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
      {noResolve, applyGrandCentralView}},
 
     // Testing Annotation
-    {"circt.test", {stdResolve, applyWithoutTarget<>}},
+    {"circt.test", {stdResolve, applyWithoutTarget<true>}},
     {"circt.testNT", {noResolve, applyWithoutTarget<>}},
     {"circt.missing", {tryResolve, applyWithoutTarget<>}},
 

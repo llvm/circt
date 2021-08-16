@@ -89,6 +89,25 @@ circuit Foo: %[[
 
 ; // -----
 
+; A non-local annotation
+; should work.
+circuit Foo: %[[
+{"class":"circt.test","nl":"nl","target":"~Foo|Foo/baz:Baz/bar:Bar>w"}
+]]
+  module Bar:
+    wire w : UInt
+    skip
+  module Baz:
+    inst bar of Bar
+  module Foo:
+    inst baz of Baz
+
+    ; CHECK-LABEL: module {
+    ; CHECK: firrtl.instance @Bar
+    ; CHECK-SAME: annotations = [{a = "a", class = "circt.test"}, {b = "b", class = "circt.test"}, {c = "c", class = "circt.test"}]
+
+; // -----
+
 ; Test result annotations of InstanceOp.
 circuit Foo: %[[{"class":"circt.test","one":null,"target":"~Foo|Foo>bar.a"},
                 {"class":"circt.test","two":null,"target":"~Foo|Foo>bar.b.baz"},
