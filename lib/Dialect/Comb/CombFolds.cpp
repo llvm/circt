@@ -1469,6 +1469,10 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     table[idx] = elt.second;
   }
 
+  // The hw.array_create operation has the operand list in unintuitive order
+  // with a[0] stored as the last element, not the first.
+  std::reverse(table.begin(), table.end());
+
   // Build the array_create and the array_get.
   auto fusedLoc = rewriter.getFusedLoc(locationsFound);
   auto array = rewriter.create<hw::ArrayCreateOp>(fusedLoc, table);

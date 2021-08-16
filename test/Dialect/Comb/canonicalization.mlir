@@ -490,7 +490,7 @@ hw.module @narrowBitwiseOpsInsertionPointRegression(%a: i8) -> (%out: i1) {
 
 // CHECK-LABEL: hw.module @fold_mux_tree1
 hw.module @fold_mux_tree1(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) {
-  // CHECK-NEXT: %0 = hw.array_create %a, %b, %c, %d : i8
+  // CHECK-NEXT: %0 = hw.array_create %d, %c, %b, %a : i8
   // CHECK-NEXT: %1 = hw.array_get %0[%sel]
   // CHECK-NEXT: hw.output %1
   %c2_i2 = hw.constant 2 : i2
@@ -510,7 +510,7 @@ hw.module @fold_mux_tree1(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) 
 // CHECK-LABEL: hw.module @fold_mux_tree2
 // This is a sparse tree with 5/8ths load.
 hw.module @fold_mux_tree2(%sel: i3, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) {
-  // CHECK-NEXT: %0 = hw.array_create %a, %b, %c, %a, %b, %d, %d, %d : i8
+  // CHECK-NEXT: %0 = hw.array_create %d, %d, %d, %b, %a, %c, %b, %a : i8
   // CHECK-NEXT: %1 = hw.array_get %0[%sel]
   // CHECK-NEXT: hw.output %1
   %c2_i2 = hw.constant 2 : i3
@@ -539,7 +539,7 @@ hw.module @fold_mux_tree2(%sel: i3, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) 
 // This has two selectors for the same index value. Make sure we get the
 // right one.  "%c" should not be used.
 hw.module @fold_mux_tree3(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) {
-  // CHECK-NEXT: %0 = hw.array_create %a, %b, %d, %d : i8
+  // CHECK-NEXT: %0 = hw.array_create %d, %d, %b, %a : i8
   // CHECK-NEXT: %1 = hw.array_get %0[%sel]
   // CHECK-NEXT: hw.output %1
   %c2_i2 = hw.constant 0 : i2
@@ -559,7 +559,7 @@ hw.module @fold_mux_tree3(%sel: i2, %a: i8, %b: i8, %c: i8, %d: i8) -> (%y: i8) 
 // CHECK-LABEL: hw.module @fold_mux_tree4
 hw.module @fold_mux_tree4(%sel: i2, %a: i8, %b: i8, %c: i8) -> (%y: i8) {
   // CHECK-NEXT: %c-1_i8 = hw.constant -1 : i8
-  // CHECK-NEXT: %0 = hw.array_create %a, %b, %c, %c-1_i8 : i8 
+  // CHECK-NEXT: %0 = hw.array_create %c-1_i8, %c, %b, %a : i8 
   // CHECK-NEXT: %1 = hw.array_get %0[%sel]
   // CHECK-NEXT: hw.output %1
 
@@ -662,7 +662,7 @@ hw.module @SevenSegmentDecoder(%in: i4) -> (%out: i7) {
   // CHECK: %0 = comb.icmp eq %in, %c1_i4 : i4
   // CHECK: %1 = comb.mux %0, %c6_i6, %c-1_i6 : i6
   // CHECK: %2 = comb.concat %false, %1 : (i1, i6) -> i7
-  // CHECK: %3 = hw.array_create %2, %2, %c-37_i7, %c-49_i7, %c-26_i7, %c-19_i7, %c-3_i7, %c7_i7, %c-1_i7, %c-17_i7, %c-9_i7, %c-4_i7, %c57_i7, %c-34_i7, %c-7_i7, %c-15_i7 : i7
+  // CHECK: %3 = hw.array_create %c-15_i7, %c-7_i7, %c-34_i7, %c57_i7, %c-4_i7, %c-9_i7, %c-17_i7, %c-1_i7, %c7_i7, %c-3_i7, %c-19_i7, %c-26_i7, %c-49_i7, %c-37_i7, %2, %2 : i7
   // CHECK: %4 = hw.array_get %3[%in]
   hw.output %30 : i7
 }
