@@ -299,6 +299,18 @@ firrtl.module @InvalidValueShouldNotConnect(
   firrtl.connect %r1, %sr : !firrtl.reset, !firrtl.uint<1>
 }
 
+// Should properly adjust the type of external modules.
+// CHECK-LABEL: firrtl.extmodule @ShouldAdjustExtModule1
+// CHECK-SAME: in %reset: !firrtl.uint<1>
+firrtl.extmodule @ShouldAdjustExtModule1(in %reset: !firrtl.reset)
+// CHECK-LABEL: firrtl.module @ShouldAdjustExtModule2
+// CHECK: %x_reset = firrtl.instance @ShouldAdjustExtModule1 {name = "x"} : !firrtl.uint<1>
+firrtl.module @ShouldAdjustExtModule2() {
+  %x_reset = firrtl.instance @ShouldAdjustExtModule1 {name = "x"} : !firrtl.reset
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  firrtl.connect %x_reset, %c1_ui1 : !firrtl.reset, !firrtl.uint<1>
+}
+
 
 //===----------------------------------------------------------------------===//
 // Full Async Reset

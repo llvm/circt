@@ -853,6 +853,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   // the module to a module worklist since we need to update its function type.
   SmallSetVector<Operation *, 16> worklist;
   SmallDenseSet<Operation *> moduleWorklist;
+  SmallDenseSet<std::pair<Operation *, Operation *>> extmoduleWorklist;
   for (auto signal : net) {
     Value value = signal.field.getValue();
     if (!value.isa<BlockArgument>() &&
@@ -864,6 +865,10 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
         worklist.insert(user);
       if (auto blockArg = value.dyn_cast<BlockArgument>())
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
+      if (auto instOp = value.getDefiningOp<InstanceOp>())
+        if (auto extmodule =
+                dyn_cast<FExtModuleOp>(instOp.getReferencedModule()))
+          extmoduleWorklist.insert({extmodule, instOp});
     }
   }
 
@@ -913,6 +918,18 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     module->setAttr(FModuleOp::getTypeAttrName(), TypeAttr::get(type));
     LLVM_DEBUG(llvm::dbgs()
                << "- Updated type of module '" << module.getName() << "'\n");
+  }
+
+  // Update extmodule types based on their instantiation.
+  for (auto pair : extmoduleWorklist) {
+    auto module = cast<FExtModuleOp>(pair.first);
+    auto instOp = cast<InstanceOp>(pair.second);
+
+    auto type = FunctionType::get(module->getContext(), instOp.getResultTypes(),
+                                  /*resultTypes*/ {});
+    module->setAttr(FExtModuleOp::getTypeAttrName(), TypeAttr::get(type));
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Updated type of extmodule '" << module.getName() << "'\n");
   }
 
   return success();
