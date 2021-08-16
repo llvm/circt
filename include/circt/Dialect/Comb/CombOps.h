@@ -55,6 +55,9 @@ struct KnownBitAnalysis {
   /// constant" always returns zeros for the zero bits in a constant.
   static KnownBitAnalysis compute(Value v);
 
+  /// Return the bitwidth of the analyzed value.
+  unsigned getWidth() const { return ones.getBitWidth(); }
+
   /// Return true if any bits are known about this value.
   bool areAnyKnown() const { return !(ones | zeros).isNullValue(); }
 

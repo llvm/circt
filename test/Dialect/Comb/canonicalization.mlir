@@ -762,6 +762,23 @@ hw.module @combine_icmp_compare_concat2(%thing: i3) -> (%a: i1) {
   // CHECK: hw.output %1 : i1
 }
 
+// CHECK-LABEL: hw.module @combine_icmp_compare_known_bits0
+hw.module @combine_icmp_compare_known_bits0(%thing: i4) -> (%a: i1) {
+  %c5 = hw.constant 13 : i4
+  %0 = comb.and %thing, %c5 : i4
+  %c0 = hw.constant 0 : i4
+  %1 = comb.icmp eq %0, %c0 : i4
+  hw.output %1 : i1
+
+  // CHECK:   %0 = comb.and %thing, %c-3_i4 : i4
+  // CHECK:   %1 = comb.extract %0 from 2 : (i4) -> i2
+  // CHECK:   %2 = comb.extract %0 from 0 : (i4) -> i1
+  // CHECK:   %3 = comb.concat %1, %2 : (i2, i1) -> i3
+  // CHECK:   %4 = comb.icmp eq %3, %c0_i3 : i3
+  // CHECK:   hw.output %4 : i1
+  // CHECK: }
+}
+
 // CHECK-LABEL: hw.module @not_icmp
 hw.module @not_icmp(%a: i3, %b: i4, %c: i1) -> (%x: i1, %y: i1) {
   %true = hw.constant true
