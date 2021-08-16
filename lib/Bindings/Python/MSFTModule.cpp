@@ -79,7 +79,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
           },
           "Create a physical location attribute", py::arg(),
           py::arg("dev_type"), py::arg("x"), py::arg("y"), py::arg("num"),
-          py::arg("ctxt"))
+          py::arg("ctxt") = py::none())
       .def_property_readonly(
           "devtype",
           [](MlirAttribute self) {

@@ -39,11 +39,7 @@ with Context() as ctx, Location.unknown():
 
   m.operation.print()
 
-  physAttr = msft.PhysLocationAttr.get(msft.M20K,
-                                       x=2,
-                                       y=6,
-                                       num=1,
-                                       ctxt=Context.current)
+  physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)
 
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
   print(physAttr)
