@@ -2974,15 +2974,8 @@ ParseResult FIRStmtParser::parseNode() {
 
   // Ignore useless names like _T.
   auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-
-  // The entire point of a node declaration is to carry a name.  If it got
-  // dropped, then we don't even need to create a result unless it is annotated.
-  Value result;
-  if (!name.empty() || !annotations.empty()) {
-    result = builder.create<NodeOp>(initializer.getType(), initializer, name,
-                                    annotations);
-  } else
-    result = initializer;
+  Value result = builder.create<NodeOp>(initializer.getType(), initializer,
+                                        name, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
