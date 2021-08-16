@@ -550,6 +550,21 @@ ResetSignal InferResetsPass::guessRoot(ResetNetwork net) {
 // Reset Tracing
 //===----------------------------------------------------------------------===//
 
+/// Check whether a type contains a `ResetType`.
+static bool typeContainsReset(FIRRTLType type) {
+  return TypeSwitch<FIRRTLType, bool>(type)
+      .Case<BundleType>([](auto type) {
+        for (auto e : type.getElements())
+          if (typeContainsReset(e.type))
+            return true;
+        return false;
+      })
+      .Case<FVectorType>(
+          [](auto type) { return typeContainsReset(type.getElementType()); })
+      .Case<ResetType>([](auto) { return true; })
+      .Default([](auto) { return false; });
+}
+
 /// Iterate over a circuit and follow all signals with `ResetType`, aggregating
 /// them into reset nets. After this function returns, the `resetMap` is
 /// populated with the reset networks in the circuit, alongside information on
@@ -561,7 +576,27 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
     TypeSwitch<Operation *>(op)
         .Case<ConnectOp, PartialConnectOp>(
             [&](auto op) { traceResets(op.dest(), op.src(), op.getLoc()); })
-        .Case<InstanceOp>([&](auto op) { traceResets(op); });
+        .Case<InstanceOp>([&](auto op) { traceResets(op); })
+
+        .Case<InvalidValueOp>([&](auto op) {
+          // Uniquify `InvalidValueOp`s that are contributing to multiple reset
+          // networks. These are tricky to handle because passes like CSE will
+          // generally ensure that there is only a single `InvalidValueOp` per
+          // type. However, a `reset` invalid value may be connected to two
+          // reset networks that end up being inferred as `asyncreset` and
+          // `uint<1>`. In that case, we need a distinct `InvalidValueOp` for
+          // each reset network in order to assign it the correct type.
+          auto type = op.getType();
+          if (!typeContainsReset(type) || op->hasOneUse() || op->use_empty())
+            return;
+          LLVM_DEBUG(llvm::dbgs() << "Uniquify " << op << "\n");
+          ImplicitLocOpBuilder builder(op->getLoc(), op);
+          for (auto &use : llvm::drop_begin(op->getUses())) {
+            // `drop_begin` such that the first use can keep the original op.
+            auto newOp = builder.create<InvalidValueOp>(type);
+            use.set(newOp);
+          }
+        });
   });
 }
 
@@ -832,7 +867,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     }
   }
 
-  // Process the owrklist of operations that have their type changed, pushing
+  // Process the worklist of operations that have their type changed, pushing
   // types down the SSA dataflow graph. This is important because we change the
   // reset types in aggregates, and then need all the subindex, subfield, and
   // subaccess operations to be updated as appropriate.
