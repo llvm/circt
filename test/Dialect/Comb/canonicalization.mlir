@@ -798,6 +798,18 @@ hw.module @not_icmp(%a: i3, %b: i4, %c: i1) -> (%x: i1, %y: i1) {
   // CHECK: hw.output %0, %2 : i1, i1
 }
 
+// CHECK-LABEL: hw.module @xorICmpConstant
+// This is an integration test for the testcase in Issue #1560.
+hw.module @xorICmpConstant(%value: i9) -> (%a: i1) {
+  %c2_i9 = hw.constant 2 : i9
+  %c0_i9 = hw.constant 0 : i9
+  %1 = comb.xor %value, %c2_i9 : i9
+  %2 = comb.icmp eq %1, %c0_i9 : i9
+  hw.output %2 : i1
+  // CHECK: %0 = comb.icmp eq %value, %c2_i9 : i9
+  // CHECK: hw.output %0 : i1
+}
+
 // CHECK-LABEL: hw.module @test1560
 // This is an integration test for the testcase in Issue #1560.
 hw.module @test1560(%value: i38) -> (%a: i1) {
@@ -817,8 +829,7 @@ hw.module @test1560(%value: i38) -> (%a: i1) {
   hw.output %257: i1
 
   // CHECK:   %0 = comb.extract %value from 29 : (i38) -> i9
-  // CHECK:   %1 = comb.xor %0, %c2_i9 : i9
-  // CHECK:   %2 = comb.icmp eq %1, %c0_i9 : i9
-  // CHECK:   hw.output %2 : i1
+  // CHECK:   %1 = comb.icmp eq %1, %c2_i9 : i9
+  // CHECK:   hw.output %1 : i1
   // CHECK: }
 }

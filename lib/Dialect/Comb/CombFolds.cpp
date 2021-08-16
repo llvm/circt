@@ -1888,6 +1888,45 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
                                       newConstantOp);
 }
 
+// Simplify icmp eq(xor(a,b,cst1), cst2) -> icmp eq(xor(a,b), cst1^cst2).
+static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
+                                                 const APInt &rhs,
+                                                 PatternRewriter &rewriter) {
+  auto xorRHS = xorOp.getOperands().back().getDefiningOp<hw::ConstantOp>();
+  auto newRHS = rewriter.create<hw::ConstantOp>(xorRHS->getLoc(),
+                                                xorRHS.getValue() ^ rhs);
+  Value newLHS;
+  switch (xorOp.getNumOperands()) {
+  case 1:
+    // This isn't common but is defined so we need to handle it.
+    newLHS = rewriter.create<hw::ConstantOp>(xorOp.getLoc(),
+                                             APInt(rhs.getBitWidth(), 0));
+    break;
+  case 2:
+    // The binary case is the most common.
+    newLHS = xorOp.getOperand(0);
+    break;
+  default:
+    // The general case forces us to form a new xor with the remaining operands.
+    SmallVector<Value> newOperands(xorOp.getOperands());
+    newOperands.pop_back();
+    newLHS = rewriter.create<XorOp>(xorOp.getLoc(), newOperands);
+    break;
+  }
+
+  bool xorMultipleUses = !xorOp->hasOneUse();
+
+  // Replace the comparison.
+  rewriter.replaceOpWithNewOp<ICmpOp>(cmpOp, cmpOp.predicate(), newLHS, newRHS);
+
+  // If the xor has multiple uses (not just the compare, then we need/want to
+  // replace them as well.
+  if (xorMultipleUses) {
+    auto newXor = rewriter.create<XorOp>(xorOp.getLoc(), newLHS, xorRHS);
+    rewriter.replaceOp(xorOp, newXor->getResult(0));
+  }
+}
+
 // Canonicalizes a ICmp with a single constant
 LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
   APInt lhs, rhs;
@@ -2018,15 +2057,25 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       break;
     }
 
-    // Simplify `icmp(value_with_known_bits, rhscst)` into some extracts with
-    // a smaller constant.  We only support equality comparisons for this.
+    // We have some specific optimizations for comparison with a constant that
+    // are only supported for equality comparisons.
     if (op.predicate() == ICmpPredicate::eq ||
         op.predicate() == ICmpPredicate::ne) {
+      // Simplify `icmp(value_with_known_bits, rhscst)` into some extracts
+      // with a smaller constant.  We only support equality comparisons for
+      // this.
       auto knownBits = KnownBitAnalysis::compute(op.lhs());
       if (knownBits.areAnyKnown())
         return combineEqualityICmpWithKnownBitsAndConstant(op, knownBits, rhs,
                                                            rewriter),
                success();
+
+      // Simplify icmp eq(xor(a,b,cst1), cst2) -> icmp eq(xor(a,b),
+      // cst1^cst2).
+      if (auto xorOp = op.lhs().getDefiningOp<XorOp>())
+        if (xorOp.getOperands().back().getDefiningOp<hw::ConstantOp>())
+          return combineEqualityICmpWithXorOfConstant(op, xorOp, rhs, rewriter),
+                 success();
     }
   }
 
