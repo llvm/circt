@@ -117,22 +117,37 @@ void circtQueryDeleteFilterResult(CirctQueryFilterResult result) {
 
 CirctQueryAttributeDump circtQueryDumpAttributes(CirctQueryFilterResult result, size_t count, char **filter) {
   auto &results = *(std::vector<Operation *> *) result.ptr;
-  std::vector<std::string> filters;
+  llvm::StringRef filters[count];
 
   for (size_t i = 0; i < count; ++i) {
-    filters.push_back(std::string(filter[i]));
+    filters[i] = llvm::StringRef(filter[i]);
   }
+  auto array = llvm::ArrayRef<llvm::StringRef>(filters, count);
 
-  auto dump = dumpAttributes(results, filters);
+  auto dump = dumpAttributes(results, array);
   return {new std::vector(dump)};
 }
 
-CirctQueryOperationAttributesPair circtQueryGetFromAttributeDump(CirctQueryAttributeDump dump, size_t i) {
-  auto &vec = *(std::vector<std::pair<Operation *, std::vector<Attribute>>> *) dump.ptr;
-  if (i < vec.size()) {
+CirctQueryOperationAttributesPair circtQueryGetFromAttributeDumpByOp(CirctQueryAttributeDump dump, MlirOperation op) {
+  auto &map = *(op_attr_map *) dump.ptr;
+  for (auto &elem : map) {
+    if (elem.first == unwrap(op)) {
+      return {
+        .op = op,
+        .map = {&elem.second}
+      };
+    }
+  }
+
+  return {{nullptr}, {nullptr}};
+}
+
+CirctQueryOperationAttributesPair circtQueryGetFromAttributeDumpByIndex(CirctQueryAttributeDump dump, size_t i) {
+  auto &map = *(op_attr_map *) dump.ptr;
+  if (i < map.size()) {
     return {
-      wrap(vec[i].first),
-      {&vec[i].second}
+      .op = wrap(map[i].first),
+      .map = {&map[i].second}
     };
   }
 
@@ -140,18 +155,39 @@ CirctQueryOperationAttributesPair circtQueryGetFromAttributeDump(CirctQueryAttri
 }
 
 bool circtQueryIsOperationAttributePairNull(CirctQueryOperationAttributesPair pair) {
-  return pair.op.ptr == nullptr || pair.list.ptr == nullptr;
+  return pair.op.ptr == nullptr || pair.map.ptr == nullptr;
 }
 
-MlirAttribute circtQueryGetFromOperationAttributePair(CirctQueryOperationAttributesPair pair, size_t i) {
-  auto &vec = *(std::vector<Attribute> *) pair.list.ptr;
-  if (i < vec.size()) {
-    return wrap(vec[i]);
+CirctQueryIdentifierAttributePair circtQueryGetFromOperationAttributePairByKey(CirctQueryOperationAttributesPair pair, char *key) {
+  auto &map = *(attr_map *) pair.map.ptr;
+  for (auto &elem : map) {
+    if (elem.first == key) {
+      return {
+        .ident = wrap(elem.first),
+        .attr = wrap(elem.second)
+      };
+    }
   }
 
-  return {nullptr};
+  return {{nullptr, 0}, {nullptr}};
+}
+
+CirctQueryIdentifierAttributePair circtQueryGetFromOperationAttributePairByIndex(CirctQueryOperationAttributesPair pair, size_t i) {
+  auto &map = *(attr_map *) pair.map.ptr;
+  if (i < map.size()) {
+    return {
+      .ident = wrap(map[i].first),
+      .attr = wrap(map[i].second)
+    };
+  }
+
+  return {{nullptr, 0}, {nullptr}};
+}
+
+bool circtQueryIsIdentifierAttributePairNull(CirctQueryIdentifierAttributePair pair) {
+  return pair.ident.data == nullptr || pair.attr.ptr == nullptr;
 }
 
 void circtQueryDeleteAttributeDump(CirctQueryAttributeDump dump) {
-  delete (std::vector<std::pair<Operation *, std::vector<Attribute>>> *) dump.ptr;
+  delete (op_attr_map *) dump.ptr;
 }

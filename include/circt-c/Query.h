@@ -18,11 +18,16 @@ typedef struct { void *ptr; } CirctQueryFilterType;
 typedef struct { void *ptr; } CirctQueryFilterData;
 typedef struct { void *ptr; } CirctQueryFilter;
 typedef struct { void *ptr; } CirctQueryFilterResult;
-typedef struct { void *ptr; } CirctQueryAttributeList;
+typedef struct {
+  MlirStringRef ident;
+  MlirAttribute attr;
+} CirctQueryIdentifierAttributePair;
+typedef struct { void *ptr; } CirctQueryAttributeMap;
 typedef struct {
   MlirOperation op;
-  CirctQueryAttributeList list;
+  CirctQueryAttributeMap map;
 } CirctQueryOperationAttributesPair;
+typedef struct { void *ptr; } CirctQueryAttributeDumpIter;
 typedef struct { void *ptr; } CirctQueryAttributeDump;
 
 CirctQueryFilterType circtQueryNewGlobFilterType();
@@ -40,8 +45,8 @@ CirctQueryFilter circtQueryNewOperatorFilter(CirctQueryFilterType type);
 CirctQueryFilter circtQueryNewAndFilter(size_t count, CirctQueryFilter *filters);
 CirctQueryFilter circtQueryNewOrFilter(size_t count, CirctQueryFilter *filters);
 CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter, CirctQueryFilter child);
-CirctQueryFilter circtQueryCloneFilter(CirctQueryFilter filter);
 CirctQueryFilter circtQueryNewUsageFilter(CirctQueryFilter filter);
+CirctQueryFilter circtQueryCloneFilter(CirctQueryFilter filter);
 void circtQueryDeleteFilter(CirctQueryFilter filter);
 
 CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root, CirctQueryFilterData data);
@@ -50,10 +55,16 @@ MlirOperation circtQueryGetFromFilterResult(CirctQueryFilterResult result, size_
 void circtQueryDeleteFilterResult(CirctQueryFilterResult result);
 
 CirctQueryAttributeDump circtQueryDumpAttributes(CirctQueryFilterResult result, size_t count, char **filter);
-CirctQueryOperationAttributesPair circtQueryGetFromAttributeDump(CirctQueryAttributeDump dump, size_t i);
+CirctQueryOperationAttributesPair circtQueryGetFromAttributeDumpByOp(CirctQueryAttributeDump dump, MlirOperation op);
+CirctQueryOperationAttributesPair circtQueryGetFromAttributeDumpByIndex(CirctQueryAttributeDump dump, size_t i);
 bool circtQueryIsOperationAttributePairNull(CirctQueryOperationAttributesPair pair);
-MlirAttribute circtQueryGetFromOperationAttributePair(CirctQueryOperationAttributesPair pair, size_t i);
+
+CirctQueryIdentifierAttributePair circtQueryGetFromOperationAttributePairByKey(CirctQueryOperationAttributesPair pair, char *key);
+CirctQueryIdentifierAttributePair circtQueryGetFromOperationAttributePairByIndex(CirctQueryOperationAttributesPair pair, size_t i);
+bool circtQueryIsIdentifierAttributePairNull(CirctQueryIdentifierAttributePair pair);
+
 void circtQueryDeleteAttributeDump(CirctQueryAttributeDump dump);
+
 
 #ifdef __cplusplus
 }

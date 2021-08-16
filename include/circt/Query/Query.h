@@ -1,6 +1,7 @@
 #include <iostream>
 #include <regex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "circt/Dialect/Comb/CombDialect.h"
@@ -186,7 +187,10 @@ private:
   Filter *filter;
 };
 
-std::vector<std::pair<Operation *, std::vector<Attribute>>> dumpAttributes(std::vector<Operation *> results, std::vector<std::string> filters);
+typedef std::vector<std::pair<StringRef, Attribute>> attr_map;
+typedef std::vector<std::pair<Operation *, attr_map>> op_attr_map;
+
+op_attr_map dumpAttributes(std::vector<Operation *> &results, ArrayRef<StringRef> filters);
 
 } /* namespace query */
 } /* namespace circt */

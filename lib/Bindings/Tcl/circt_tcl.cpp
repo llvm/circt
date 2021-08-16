@@ -399,6 +399,97 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
   return TCL_OK;
 }
 
+static Tcl_Obj *createTclObjFromAttr(Tcl_Interp *interp, mlir::Attribute attr) {
+  return mlir::TypeSwitch<mlir::Attribute, Tcl_Obj *>(attr)
+    .Case<mlir::StringAttr>([&](auto &attr) {
+      auto str = attr.getValue();
+      return Tcl_NewStringObj(str.data(), str.size());
+    })
+    .Case<mlir::IntegerAttr>([&](auto &attr) {
+      auto i = attr.getInt();
+      return Tcl_NewIntObj(i);
+    })
+    .Case<mlir::ArrayAttr>([&](auto &attr) {
+      auto array = attr.getValue();
+      auto *obj = Tcl_NewListObj(0, nullptr);
+      for (auto attr : array) {
+        Tcl_ListObjAppendElement(interp, obj, createTclObjFromAttr(interp, attr));
+      }
+      return obj;
+    })
+    .Case<mlir::DictionaryAttr>([&](mlir::DictionaryAttr &attr) {
+      auto dict = attr.getValue();
+      auto *obj = Tcl_NewDictObj();
+      for (auto pair : dict) {
+        auto *key = Tcl_NewStringObj(pair.first.c_str(), pair.first.size());
+        auto *value = createTclObjFromAttr(interp, pair.second);
+        Tcl_DictObjPut(interp, obj, key, value);
+      }
+      return obj;
+    })
+    .Default([&](auto &op) {
+      std::cerr << "warning: unsupported attribute type\n";
+      auto *str = "<unknown attribute>";
+      return Tcl_NewStringObj(str, sizeof(str) - 1);
+    });
+}
+
+static int dumpAttributes(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+  if (objc < 2) {
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: attrs [modules] [attributes]*");
+    return TCL_ERROR;
+  }
+
+  std::vector<mlir::Operation *> ops;
+  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("MlirOperation")) == TCL_OK) {
+    ops.push_back(unwrap((MlirOperation){objv[1]->internalRep.twoPtrValue.ptr1}));
+  } else {
+    int length;
+    Tcl_Obj **rawList;
+    if (Tcl_ListObjGetElements(interp, objv[1], &length, &rawList)) {
+      return TCL_ERROR;
+    }
+
+    for (int i = 0; i < length; ++i) {
+      if (Tcl_ConvertToType(interp, rawList[i], Tcl_GetObjType("MlirOperation")) == TCL_ERROR) {
+        return returnErrorStr(interp, "expected operation");
+      }
+
+      ops.push_back(unwrap((MlirOperation){rawList[i]->internalRep.twoPtrValue.ptr1}));
+    }
+  }
+
+  auto filtered = (CirctQueryFilterResult) { &ops };
+  char *attrNames[objc - 2];
+  for (int i = 2; i < objc; ++i) {
+    attrNames[i - 2] = Tcl_GetString(objv[i]);
+  }
+  auto attrs = circtQueryDumpAttributes(filtered, objc - 2, attrNames);
+
+  auto *root = Tcl_NewDictObj();
+  CirctQueryOperationAttributesPair pair;
+  for (size_t i = 0; !circtQueryIsOperationAttributePairNull(pair = circtQueryGetFromAttributeDumpByIndex(attrs, i)); ++i) {
+    std::string keyString;
+    llvm::raw_string_ostream stream(keyString);
+    unwrap(pair.op)->print(stream);
+    auto *key = Tcl_NewStringObj(keyString.c_str(), keyString.size());
+
+    auto *value = Tcl_NewDictObj();
+    CirctQueryIdentifierAttributePair attr;
+    for (size_t i = 0; !circtQueryIsIdentifierAttributePairNull(attr = circtQueryGetFromOperationAttributePairByIndex(pair, i)); ++i) {
+      auto *key = Tcl_NewStringObj(attr.ident.data, attr.ident.length);
+      auto *attrObj = createTclObjFromAttr(interp, unwrap(attr.attr));
+      Tcl_DictObjPut(interp, value, key, attrObj);
+    }
+
+    Tcl_DictObjPut(interp, root, key, value);
+  }
+
+  circtQueryDeleteAttributeDump(attrs);
+  Tcl_SetObjResult(interp, root);
+  return TCL_OK;
+}
+
 static int dumpModuleName(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
   if (objc != 2) {
     Tcl_WrongNumArgs(interp, objc, objv, "usage: modname [module]");
@@ -448,6 +539,9 @@ static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
     auto *str = Tcl_GetString(objv[2]);
     if (!strcmp("modname", str))
       return dumpModuleName(cdata, interp, objc - 2, objv + 2);
+
+    if (!strcmp("attrs", str))
+      return dumpAttributes(cdata, interp, objc - 2, objv + 2);
 
     return returnErrorStr(interp, "usage: circt get [modname|attrs]");
   }

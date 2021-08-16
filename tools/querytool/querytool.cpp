@@ -193,16 +193,6 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   std::vector<std::string> attrs;
   attrs.push_back(std::string("argNames"));
   attrs.push_back(std::string("resultNames"));
-  auto attrsMapping = dumpAttributes(ops, attrs);
-
-  for (auto pair : attrsMapping) {
-    auto *op = pair.first;
-    op->dump();
-    auto attrs = pair.second;
-    for (auto attr : attrs) {
-      attr.dump();
-    }
-  }
 
   return success();
 }

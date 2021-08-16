@@ -313,19 +313,21 @@ std::vector<Operation *> UsageFilter::nextOperations(Operation *op, FilterData &
   return ops;
 }
 
-std::vector<std::pair<Operation *, std::vector<Attribute>>> dumpAttributes(std::vector<Operation *> results, std::vector<std::string> filters) {
-  std::vector<std::pair<Operation *, std::vector<Attribute>>> result;
-
-  if (filters.empty()) {
-    return result;
-  }
+op_attr_map dumpAttributes(std::vector<Operation *> &results, ArrayRef<StringRef> filters) {
+  op_attr_map result;
 
   for (auto *op : results) {
-    std::vector<Attribute> attrs;
+    attr_map attrs;
 
-    for (auto attrName : filters) {
-      if (op->hasAttr(attrName)) {
-        attrs.push_back(op->getAttr(attrName));
+    if (filters.empty()) {
+      for (auto attr : op->getAttrs()) {
+        attrs.push_back(std::make_pair(attr.first.strref(), attr.second));
+      }
+    } else {
+      for (auto attrName : filters) {
+        if (op->hasAttr(attrName)) {
+          attrs.push_back(std::make_pair(attrName, op->getAttr(attrName)));
+        }
       }
     }
 
