@@ -829,7 +829,7 @@ hw.module @test1560(%value: i38) -> (%a: i1) {
   hw.output %257: i1
 
   // CHECK:   %0 = comb.extract %value from 29 : (i38) -> i9
-  // CHECK:   %1 = comb.icmp eq %1, %c2_i9 : i9
+  // CHECK:   %1 = comb.icmp eq %0, %c2_i9 : i9
   // CHECK:   hw.output %1 : i1
   // CHECK: }
 }
