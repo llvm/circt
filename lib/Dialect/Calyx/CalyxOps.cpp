@@ -356,8 +356,8 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
 
 /// Returns a new vector containing the concatenation of vectors @p a and @p b.
 template <typename T>
-SmallVector<T> concat(const SmallVectorImpl<T> &a,
-                      const SmallVectorImpl<T> &b) {
+static SmallVector<T> concat(const SmallVectorImpl<T> &a,
+                             const SmallVectorImpl<T> &b) {
   SmallVector<T> out;
   out.append(a);
   out.append(b);
