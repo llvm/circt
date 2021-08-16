@@ -738,3 +738,13 @@ hw.module @Issue1563(%a: i32) -> (%out : i32) {
   hw.output %0 : i32
   // CHECK: endmodule
 }
+
+// CHECK-LABEL: module Foo1587
+// Issue #1587: https://github.com/llvm/circt/issues/1587
+hw.module @Foo1587(%idx: i2, %a_0: i4, %a_1: i4, %a_2: i4, %a_3: i4) -> (%b: i4) {
+  %0 = hw.array_create %a_0, %a_1, %a_2, %a_3 : i4
+  %1 = hw.array_get %0[%idx] : !hw.array<4xi4>
+  hw.output %1 : i4
+  // CHECK: wire [3:0][3:0] [[WIRE:.+]] = {{[{}][{}]}}a_0}, {a_1}, {a_2}, {a_3}};
+  // CHECK-NEXT: assign b = [[WIRE]][idx];
+}

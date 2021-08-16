@@ -1482,6 +1482,20 @@ static bool isExpressionUnableToInline(Operation *op) {
       if (!isOkToBitSelectFrom(op->getResult(0)))
         return true;
 
+    // Indexing into an array cannot be done in the same line as the array
+    // creation.
+    //
+    // This is done to avoid creating incorrect constructs like the following
+    // (which is a bit extract):
+    //
+    //     assign bar = {{a}, {b}, {c}, {d}}[idx];
+    //
+    // And illegal constructs like:
+    //
+    //     assign bar = ({{a}, {b}, {c}, {d}})[idx];
+    if (isa<ArrayCreateOp>(op) && isa<ArrayGetOp>(user))
+      return true;
+
     // Sign extend (when the operand isn't a single bit) requires a bitselect
     // syntactically.
     if (auto sext = dyn_cast<SExtOp>(user)) {

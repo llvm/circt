@@ -796,7 +796,8 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (%aa: i3, %bb: i3){
 
   // We should directly use a/b/c/d here instead of emitting temporary wires.
 
-  // CHECK: assign aa = ({{.}}{a}, {b}, {c}, {d}})[auto_in_ar_bits_id];
+  // CHECK: wire [3:0][2:0] [[WIRE:.+]] = {{.}}{a}, {b}, {c}, {d}};
+  // CHECK-NEXT: assign aa = [[WIRE]][auto_in_ar_bits_id];
   %127 = hw.array_create %124, %123, %125, %126 : i3
   %128 = hw.array_get %127[%auto_in_ar_bits_id] : !hw.array<4xi3>
 
