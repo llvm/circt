@@ -49,7 +49,7 @@ def IfOp : CalyxContainer<"if", [
     is a boolean value and the group under which this value is evaluated.
 
     ```mlir
-      calyx.if (%1, @G1) {
+      calyx.if %1, @G1 {
         calyx.enable @G2
         ...
       } else {
