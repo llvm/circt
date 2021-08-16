@@ -54,11 +54,64 @@ LogicalResult verifyFuncOp(hir::FuncOp op) {
   if (!funcTy)
     return op.emitError("OpVerifier failed. hir::FuncOp::funcTy must be of "
                         "type hir::FuncType.");
-  for (Type arg : funcTy.getInputTypes())
+  for (Type arg : funcTy.getInputTypes()) {
     if (arg.isa<IndexType>())
       return op.emitError(
           "hir.func op does not support index type in argument location.");
+  }
+  for (uint64_t i = 0; i < op.getFuncBody().getNumArguments(); i++) {
+    Value arg = op.getFuncBody().getArguments()[i];
+    if (arg.getType().isa<hir::MemrefType>()) {
+      for (auto &use : arg.getUses()) {
+        if (auto loadOp = dyn_cast<hir::LoadOp>(use.getOwner())) {
+          auto port = loadOp.port();
+          if (!port)
+            continue;
+          auto ports = helper::extractMemrefPortsFromDict(
+              op.getFuncType().getInputAttrs()[i]);
+          auto loadOpPort = ports.getValue()[port.getValue()];
+          if (!helper::isRead(loadOpPort))
+            return use.getOwner()->emitError()
+                   << "specified port is not a read port.";
+        } else if (auto storeOp = dyn_cast<hir::StoreOp>(use.getOwner())) {
+          auto port = storeOp.port();
+          if (!port)
+            continue;
+          auto ports = helper::extractMemrefPortsFromDict(
+              op.getFuncType().getInputAttrs()[i]);
+          auto storeOpPort = ports.getValue()[port.getValue()];
+          if (!helper::isWrite(storeOpPort))
+            return use.getOwner()->emitError()
+                   << "specified port is not a write port.";
+        }
+      }
+    }
+  }
+  return success();
+}
 
+LogicalResult verifyAllocaOp(hir::AllocaOp op) {
+  auto res = op.res();
+  auto ports = op.ports();
+  for (auto &use : res.getUses()) {
+    if (auto loadOp = dyn_cast<hir::LoadOp>(use.getOwner())) {
+      auto port = loadOp.port();
+      if (!port)
+        continue;
+      auto loadOpPort = ports[port.getValue()];
+      if (!helper::isRead(loadOpPort))
+        return use.getOwner()->emitError()
+               << "specified port is not a read port.";
+    } else if (auto storeOp = dyn_cast<hir::StoreOp>(use.getOwner())) {
+      auto port = storeOp.port();
+      if (!port)
+        continue;
+      auto storeOpPort = ports.getValue()[port.getValue()];
+      if (!helper::isWrite(storeOpPort))
+        return use.getOwner()->emitError()
+               << "specified port is not a write port.";
+    }
+  }
   return success();
 }
 
@@ -118,6 +171,7 @@ LogicalResult verifyForOp(hir::ForOp op) {
           "hir::TimeType can not be captured in a 'latch' operand.");
   if (failed(checkRegionCaptures(op.getLoopBody())))
     return failure();
+
   return success();
 }
 
