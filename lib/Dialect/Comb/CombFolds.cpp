@@ -1732,6 +1732,59 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
   return failure();
 }
 
+/// Given an integer SSA value, check to see if we know anything about the
+/// result of the computation.  For example, we know that "and with a constant"
+/// always returns zeros for the zero bits in a constant.
+///
+/// Expression trees can be very large, so we need ot make sure to cap our
+/// recursion, this is controlled by `depth`.
+static KnownBitAnalysis computeKnownBits(Value v, unsigned depth) {
+  Operation *op = v.getDefiningOp();
+  if (!op || depth == 5)
+    return KnownBitAnalysis::getUnknown(v);
+
+  // A constant has all bits known!
+  if (auto constant = dyn_cast<hw::ConstantOp>(op))
+    return KnownBitAnalysis::getConstant(constant.getValue());
+
+  // TODO: Handle concat here and simplify all the logic below!  There is no
+  // reason for any of this to be bound up on concats: icmp(eq, x, cst) should
+  // trigger this for any x, allowing simplification of and etc.
+
+  // `and(x, y, z)` has whatever is known about the operands intersected.
+  if (auto andOp = dyn_cast<AndOp>(op)) {
+    auto result = computeKnownBits(andOp.getOperand(0), depth + 1);
+    for (size_t i = 1, e = andOp.getNumOperands(); i != e; ++i) {
+      auto otherBits = computeKnownBits(andOp.getOperand(i), depth + 1);
+      result.zeros |= otherBits.zeros;
+      result.ones &= otherBits.ones;
+    }
+    return result;
+  }
+
+  // `or(x, y, z)` has whatever is known about the operands unioned.
+  if (auto orOp = dyn_cast<OrOp>(op)) {
+    auto result = computeKnownBits(orOp.getOperand(0), depth + 1);
+    for (size_t i = 1, e = orOp.getNumOperands(); i != e; ++i) {
+      auto otherBits = computeKnownBits(orOp.getOperand(i), depth + 1);
+      result.zeros &= otherBits.zeros;
+      result.ones |= otherBits.ones;
+    }
+    return result;
+  }
+
+  // TODO: Handle xor(x, cst) by inverting known bits.
+
+  return KnownBitAnalysis::getUnknown(v);
+}
+
+/// Given an integer SSA value, check to see if we know anything about the
+/// result of the computation.  For example, we know that "and with a
+/// constant" always returns zeros for the zero bits in a constant.
+KnownBitAnalysis KnownBitAnalysis::compute(Value v) {
+  return computeKnownBits(v, 0);
+}
+
 /// Given a comparison of a concat and a constant value, see if we can simplify
 /// the comparison to check a subset of the concat inputs.  We can do this when
 /// we know something about the concat operands, e.g. if they are constants.
@@ -1746,11 +1799,9 @@ static bool combineICmpWithConcatAndConstant(ICmpOp cmpOp, ConcatOp concatOp,
       cmpOp.predicate() != ICmpPredicate::ne)
     return false;
 
-  // Check to see if any operands are constant.
-  // TODO: We need a "compute masked bits" sort of function that can handle more
-  // general expressions that just constants.
+  // Check to see if any operands have known bits.
   if (!llvm::any_of(concatOp.getOperands(), [](Value operand) -> bool {
-        return operand.getDefiningOp<hw::ConstantOp>() != nullptr;
+        return KnownBitAnalysis::compute(operand).areAnyKnown();
       }))
     return false;
 
@@ -1771,25 +1822,62 @@ static bool combineICmpWithConcatAndConstant(ICmpOp cmpOp, ConcatOp concatOp,
 
     // If this has known bits then either the comparison isn't necessary or this
     // refudiates the whole comparison.
-    if (auto operandCst = operand.getDefiningOp<hw::ConstantOp>()) {
-      // If the known bits equal the part of the constant we have, then it isn't
-      // contributing anything to the comparison.
-      if (operandCst.getValue() == cstSlice)
-        continue;
+    auto bitAnalysis = KnownBitAnalysis::compute(operand);
+    if (!bitAnalysis.areAnyKnown()) {
+      // If nothing known, we add this constant slice and the operand to the new
+      // concat.
+      newConcatOperands.push_back(operand);
+      newConstant = (newConstant.zext(newConstant.getBitWidth() + operandWidth)
+                     << operandWidth);
+      newConstant |= cstSlice.zext(newConstant.getBitWidth());
+      continue;
+    }
 
-      // If we discover a mismatch then we know an "eq" comparison is false and
-      // a "ne" comparison is true!
+    // If any of the known bits disagree with any of the comparison bits, then
+    // we can constant fold this comparison right away.
+    APInt bitsKnown = bitAnalysis.getBitsKnown();
+    if ((bitsKnown & cstSlice) != bitAnalysis.ones) {
+      // If we discover a mismatch then we know an "eq" comparison is false
+      // and a "ne" comparison is true!
       bool result = cmpOp.predicate() == ICmpPredicate::ne;
       rewriter.replaceOpWithNewOp<hw::ConstantOp>(cmpOp, APInt(1, result));
       return true;
     }
 
-    // Otherwise, we add this constant slice and the operand to the new concat.
-    newConcatOperands.push_back(operand);
+    // Ok, some (maybe all) bits are known and some others may be unknown.
+    // Extract out segments of the operand and compare against the
+    // corresponding bits.
+    unsigned knownMSB = bitsKnown.countLeadingOnes();
 
-    newConstant = (newConstant.zext(newConstant.getBitWidth() + operandWidth)
-                   << operandWidth);
-    newConstant |= cstSlice.zext(newConstant.getBitWidth());
+    // Ok, some bits are known but others are not.  Extract out sequences of
+    // bits that are unknown and compare just those bits.
+    while (knownMSB != bitsKnown.getBitWidth()) {
+      // Drop any high bits that are known.
+      if (knownMSB)
+        bitsKnown = bitsKnown.trunc(bitsKnown.getBitWidth() - knownMSB);
+
+      // Find the span of unknown bits, and extract it.
+      unsigned unknownBits = bitsKnown.countLeadingZeros();
+      unsigned lowBit = bitsKnown.getBitWidth() - unknownBits;
+      auto spanOperand = rewriter.createOrFold<ExtractOp>(
+          operand.getLoc(), operand, /*lowBit=*/lowBit,
+          /*bitWidth=*/unknownBits);
+      auto spanConstant = cstSlice.lshr(lowBit).trunc(unknownBits);
+
+      // Add this info to the concat we're generating.
+      newConcatOperands.push_back(spanOperand);
+      newConstant = (newConstant.zext(newConstant.getBitWidth() + unknownBits)
+                     << unknownBits);
+      newConstant |= spanConstant.zext(newConstant.getBitWidth());
+
+      // Drop the unknown bits in prep for the next chunk.  Dance around APInts
+      // limitation of not being able to do zero bit things.
+      unsigned newWidth = bitsKnown.getBitWidth() - unknownBits;
+      if (newWidth)
+        break;
+      bitsKnown = bitsKnown.trunc(newWidth);
+      knownMSB = bitsKnown.countLeadingOnes();
+    }
   }
 
   // If all the operands to the concat are foldable then we have an identity

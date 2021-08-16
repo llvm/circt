@@ -780,3 +780,28 @@ hw.module @not_icmp(%a: i3, %b: i4, %c: i1) -> (%x: i1, %y: i1) {
   hw.output %3, %5 : i1, i1
   // CHECK: hw.output %0, %2 : i1, i1
 }
+
+// CHECK-LABEL: hw.module @test1560
+// This is an integration test for the testcase in Issue #1560.
+hw.module @test1560(%value: i38) -> (%a: i1) {
+  %c1073741824_i38 = hw.constant 1073741824 : i38
+  %253 = comb.xor %value, %c1073741824_i38 : i38
+
+  %false = hw.constant false
+  %true = hw.constant true
+  %254 = comb.concat %false, %253 : (i1, i38) -> i39
+
+  %c-536870912_i39 = hw.constant -536870912 : i39
+  %255 = comb.and %254, %c-536870912_i39 : i39
+
+  %c0_i39 = hw.constant 0 : i39
+  %256 = comb.icmp ne %255, %c0_i39 : i39
+  %257 = comb.xor %256, %true : i1
+  hw.output %257: i1
+
+  // CHECK:   %0 = comb.extract %value from 29 : (i38) -> i9
+  // CHECK:   %1 = comb.xor %0, %c2_i9 : i9
+  // CHECK:   %2 = comb.icmp eq %1, %c0_i9 : i9
+  // CHECK:   hw.output %2 : i1
+  // CHECK: }
+}
