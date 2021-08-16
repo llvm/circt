@@ -269,6 +269,7 @@ def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
 
   let assemblyFormat = [{`(`$mem_type`)` attr-dict 
     `:` type($res) `ports` $ports}];
+  let verifier =[{return verify$cppClass(*this);}];
 }
 
 def BusInstantiateOp :HIR_Op<"bus.instantiate",[NoSideEffect]> {
@@ -640,7 +641,7 @@ def MulFOp: HIR_Op<"mulf",[NoSideEffect]>{
   let hasCanonicalizeMethod = true;
 }
 
-def TensorExtract :HIR_Op<"tensor.extract",[NoSideEffect]>{
+def TensorExtractOp :HIR_Op<"tensor.extract",[NoSideEffect]>{
   let summary = "Extract a bus from a tensor";
   let description = [{
     This op extracts a single bus from a tensor of busses.
@@ -653,6 +654,21 @@ def TensorExtract :HIR_Op<"tensor.extract",[NoSideEffect]>{
 
   let assemblyFormat = [{ $tensor `[`$indices`]` attr-dict `:`
     type($tensor) `->` type($res) `ports` $ports}];
+}
+
+def MemrefExtractOp :HIR_Op<"memref.extract",[NoSideEffect]>{
+  let summary = "Extract a memref port from a memref";
+  let description = [{
+    This op extracts a memref (with fewer ports) from another memref.
+      Examples:
+      ```mlir %1 = hir.memref.extract %x[ports 1,0] : hir.memref<1xf32> -> hir.memref<1xf32> ports [#wr, #rd]```
+  }];
+
+  let arguments = (ins HIR_MemrefType: $mem, ArrayAttr: $portNums, ArrayAttr: $ports);
+  let results = (outs HIR_MemrefType: $res);
+
+  let assemblyFormat = [{`ports`  $portNums `from` $mem  attr-dict `:`
+    type($res) `ports` $ports  custom<CopyType>(type($mem),ref(type($res)))}];
 }
 
 def CreateTupleOp:HIR_Op<"create_tuple",[NoSideEffect]>{
