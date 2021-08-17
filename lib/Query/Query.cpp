@@ -160,7 +160,7 @@ Filter *AttributeFilter::clone() {
 
 bool NameFilter::matches(Operation *op, FilterData &data) {
   std::string name;
-  for (size_t nameIndex = 0; !(name = getNameFromOp(op, nameIndex)).empty(); nameIndex++) {
+  for (size_t nameIndex = 0; nameIndex == 0 || !(name = getNameFromOp(op, nameIndex)).empty(); nameIndex++) {
     if (type->valueMatches(name)) {
       return true;
     }
