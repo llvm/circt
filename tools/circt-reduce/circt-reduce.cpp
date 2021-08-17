@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/InitAllDialects.h"
 #include "mlir/IR/AsmState.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -73,12 +74,19 @@ struct Reduction {
 
   /// Return a human-readable name for this reduction pattern.
   virtual std::string getName() const = 0;
+
+  /// Return true if the tool should accept the transformation this reduction
+  /// performs on the module even if the overall size of the output increases.
+  /// This can be handy for patterns that reduce the complexity of the IR at the
+  /// cost of some verbosity.
+  virtual bool acceptSizeIncrease() const { return false; }
 };
 
 /// A reduction pattern that applies an `mlir::Pass`.
 struct PassReduction : public Reduction {
-  PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass)
-      : context(context) {
+  PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
+                bool canIncreaseSize = false)
+      : context(context), canIncreaseSize(canIncreaseSize) {
     passName = pass->getArgument();
     if (passName.empty())
       passName = pass->getName();
@@ -94,11 +102,13 @@ struct PassReduction : public Reduction {
   }
   LogicalResult rewrite(Operation *op) const override { return pm->run(op); }
   std::string getName() const override { return passName.str(); }
+  bool acceptSizeIncrease() const override { return canIncreaseSize; }
 
 protected:
   MLIRContext *const context;
   std::unique_ptr<PassManager> pm;
   StringRef passName;
+  bool canIncreaseSize;
 };
 
 /// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
@@ -120,6 +130,22 @@ struct ModuleExternalizer : public Reduction {
   std::string getName() const override { return "module-externalizer"; }
 };
 
+/// Starting at the given `op`, traverse through it and its operands and erase
+/// operations that have no more uses.
+static void pruneUnusedOps(Operation *initialOp) {
+  SmallVector<Operation *> worklist;
+  worklist.push_back(initialOp);
+  while (!worklist.empty()) {
+    auto op = worklist.pop_back_val();
+    if (!op->use_empty())
+      continue;
+    for (auto arg : op->getOperands())
+      if (auto argOp = arg.getDefiningOp())
+        worklist.push_back(argOp);
+    op->erase();
+  }
+}
+
 /// A sample reduction pattern that replaces the right-hand-side of
 /// `firrtl.connect` and `firrtl.partialconnect` operations with a
 /// `firrtl.invalidvalue`. This removes uses from the fanin cone to these
@@ -136,20 +162,8 @@ struct ConnectInvalidator : public Reduction {
     auto invOp =
         builder.create<firrtl::InvalidValueOp>(rhs.getLoc(), rhs.getType());
     op->setOperand(1, invOp);
-
-    SmallVector<Operation *> worklist;
     if (auto rhsOp = rhs.getDefiningOp())
-      worklist.push_back(rhsOp);
-    while (!worklist.empty()) {
-      auto op = worklist.pop_back_val();
-      if (!op->use_empty())
-        continue;
-      for (auto arg : op->getOperands())
-        if (auto argOp = arg.getDefiningOp())
-          worklist.push_back(argOp);
-      op->erase();
-    }
-
+      pruneUnusedOps(rhsOp);
     return success();
   }
   std::string getName() const override { return "connect-invalidator"; }
@@ -165,10 +179,40 @@ struct OperationPruner : public Reduction {
   }
   LogicalResult rewrite(Operation *op) const override {
     assert(match(op));
-    op->erase();
+    pruneUnusedOps(op);
     return success();
   }
   std::string getName() const override { return "operation-pruner"; }
+};
+
+/// A sample reduction pattern that replaces instances of `firrtl.extmodule`
+/// with wires.
+struct ExtmoduleInstanceRemover : public Reduction {
+  bool match(Operation *op) const override {
+    if (auto instOp = dyn_cast<firrtl::InstanceOp>(op))
+      return isa<firrtl::FExtModuleOp>(instOp.getReferencedModule());
+    return false;
+  }
+  LogicalResult rewrite(Operation *op) const override {
+    auto instOp = cast<firrtl::InstanceOp>(op);
+    auto portInfo = firrtl::getModulePortInfo(instOp.getReferencedModule());
+    ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
+    SmallVector<Value> replacementWires;
+    for (firrtl::ModulePortInfo info : portInfo) {
+      auto wire = builder.create<firrtl::WireOp>(
+          info.type, (Twine(instOp.name()) + "_" + info.getName()).str());
+      if (info.isOutput()) {
+        auto inv = builder.create<firrtl::InvalidValueOp>(info.type);
+        builder.create<firrtl::ConnectOp>(wire, inv);
+      }
+      replacementWires.push_back(wire);
+    }
+    instOp.replaceAllUsesWith(std::move(replacementWires));
+    instOp->erase();
+    return success();
+  }
+  std::string getName() const override { return "extmodule-instance-remover"; }
+  bool acceptSizeIncrease() const override { return true; }
 };
 
 /// Helper function that writes the current MLIR module to the configured output
@@ -235,6 +279,7 @@ static LogicalResult execute(MLIRContext &context) {
       std::make_unique<PassReduction>(&context, createCSEPass()));
   patterns.push_back(std::make_unique<ConnectInvalidator>());
   patterns.push_back(std::make_unique<OperationPruner>());
+  patterns.push_back(std::make_unique<ExtmoduleInstanceRemover>());
 
   // Iteratively reduce the input module by applying the current reduction
   // pattern to successively smaller subsets of the operations until we find one
@@ -270,7 +315,7 @@ static LogicalResult execute(MLIRContext &context) {
       // LLVM_DEBUG(llvm::dbgs() << "Trying: " << **newModule << "\n");
       auto test = tester.isInteresting(newModule.get());
       if (test.first == Tester::Interestingness::True &&
-          test.second < bestSize) {
+          (test.second < bestSize || pattern.acceptSizeIncrease())) {
         // Make this reduced module the new baseline and reset our search
         // strategy to start again from the beginning, since this reduction may
         // have created additional opportunities.
