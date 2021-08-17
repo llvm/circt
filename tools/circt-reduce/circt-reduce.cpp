@@ -120,6 +120,57 @@ struct ModuleExternalizer : public Reduction {
   std::string getName() const override { return "module-externalizer"; }
 };
 
+/// A sample reduction pattern that replaces the right-hand-side of
+/// `firrtl.connect` and `firrtl.partialconnect` operations with a
+/// `firrtl.invalidvalue`. This removes uses from the fanin cone to these
+/// connects and creates opportunities for reduction in DCE/CSE.
+struct ConnectInvalidator : public Reduction {
+  bool match(Operation *op) const override {
+    return isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op) &&
+           !op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>();
+  }
+  LogicalResult rewrite(Operation *op) const override {
+    assert(match(op));
+    auto rhs = op->getOperand(1);
+    OpBuilder builder(op);
+    auto invOp =
+        builder.create<firrtl::InvalidValueOp>(rhs.getLoc(), rhs.getType());
+    op->setOperand(1, invOp);
+
+    SmallVector<Operation *> worklist;
+    if (auto rhsOp = rhs.getDefiningOp())
+      worklist.push_back(rhsOp);
+    while (!worklist.empty()) {
+      auto op = worklist.pop_back_val();
+      if (!op->use_empty())
+        continue;
+      for (auto arg : op->getOperands())
+        if (auto argOp = arg.getDefiningOp())
+          worklist.push_back(argOp);
+      op->erase();
+    }
+
+    return success();
+  }
+  std::string getName() const override { return "connect-invalidator"; }
+};
+
+/// A sample reduction pattern that removes operations which either produce no
+/// results or their results have no users.
+struct OperationPruner : public Reduction {
+  bool match(Operation *op) const override {
+    return !isa<ModuleOp>(op) &&
+           !op->hasAttr(SymbolTable::getSymbolAttrName()) &&
+           (op->getNumResults() == 0 || op->use_empty());
+  }
+  LogicalResult rewrite(Operation *op) const override {
+    assert(match(op));
+    op->erase();
+    return success();
+  }
+  std::string getName() const override { return "operation-pruner"; }
+};
+
 /// Helper function that writes the current MLIR module to the configured output
 /// file. Called for intermediate states if the `keepBest` options has been set,
 /// or at least at the very end of the run.
@@ -182,6 +233,8 @@ static LogicalResult execute(MLIRContext &context) {
       &context, createSimpleCanonicalizerPass()));
   patterns.push_back(
       std::make_unique<PassReduction>(&context, createCSEPass()));
+  patterns.push_back(std::make_unique<ConnectInvalidator>());
+  patterns.push_back(std::make_unique<OperationPruner>());
 
   // Iteratively reduce the input module by applying the current reduction
   // pattern to successively smaller subsets of the operations until we find one
@@ -195,15 +248,6 @@ static LogicalResult execute(MLIRContext &context) {
     size_t rangeLength = -1;
     bool patternDidReduce = false;
     while (rangeLength > 0) {
-      LLVM_DEBUG({
-        llvm::dbgs() << "- Trying";
-        if (rangeLength == (size_t)-1)
-          llvm::dbgs() << " all ops\n";
-        else
-          llvm::dbgs() << " op range " << rangeBase << " to "
-                       << (rangeBase + rangeLength) << "\n";
-      });
-
       // Apply the pattern to the subset of operations selected by `rangeBase`
       // and `rangeLength`.
       size_t opIdx = 0;
@@ -256,8 +300,11 @@ static LogicalResult execute(MLIRContext &context) {
         rangeBase += rangeLength;
         if (rangeBase >= opIdx) {
           // Exhausted all subsets of this size. Try to go smaller.
-          rangeLength = opIdx / 2;
+          rangeLength = std::min(rangeLength, opIdx) / 2;
           rangeBase = 0;
+          if (rangeLength > 0)
+            LLVM_DEBUG(llvm::dbgs()
+                       << "- Trying " << rangeLength << " ops at once\n");
         }
       }
     }
