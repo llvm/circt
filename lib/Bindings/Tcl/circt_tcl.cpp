@@ -430,7 +430,7 @@ static Tcl_Obj *createTclObjFromAttr(Tcl_Interp *interp, mlir::Attribute attr) {
     .Default([&](auto &op) {
       std::cerr << "warning: unsupported attribute type\n";
       auto *str = "<unknown attribute>";
-      return Tcl_NewStringObj(str, sizeof(str) - 1);
+      return Tcl_NewStringObj(str, strlen(str));
     });
 }
 

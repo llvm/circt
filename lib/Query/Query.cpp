@@ -37,7 +37,7 @@ std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
         filtered.push_back(op);
       }
     } else {
-      if (filter->matches(op)) {
+      if (!llvm::dyn_cast_or_null<mlir::ModuleOp>(op) && filter->matches(op, data)) {
         opStack.push_back(std::make_pair(op, filter->nextFilter()));
       }
 
@@ -46,7 +46,7 @@ std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
           for (auto &op : block) {
             auto *next = getNextOpFromOp(&op);
 
-            if (filter->matches(next)) {
+            if (filter->matches(next, data)) {
               auto vec = filter->nextOperations(next, data);
 
               if (filter->addSelf()) {
@@ -136,16 +136,16 @@ bool filterAttribute(Attribute &attr, FilterType *type) {
         return false;
     })
     .Case<mlir::DictionaryAttr>([&](auto &attr) {
-        std::cout << "warning: unknown attribute type\n";
+        std::cerr << "warning: unknown attribute type\n";
         return false;
     })
     .Default([&](auto &attr) {
-        std::cout << "warning: unknown attribute type\n";
+        std::cerr << "warning: unknown attribute type\n";
         return false;
     });
 }
 
-bool AttributeFilter::matches(Operation *op) {
+bool AttributeFilter::matches(Operation *op, FilterData &data) {
   if (!op->hasAttr(StringRef(key))) {
     return false;
   }
@@ -158,7 +158,7 @@ Filter *AttributeFilter::clone() {
   return new AttributeFilter(key, type->clone());
 }
 
-bool NameFilter::matches(Operation *op) {
+bool NameFilter::matches(Operation *op, FilterData &data) {
   std::string name;
   for (size_t nameIndex = 0; !(name = getNameFromOp(op, nameIndex)).empty(); nameIndex++) {
     if (type->valueMatches(name)) {
@@ -172,7 +172,7 @@ Filter *NameFilter::clone() {
   return new NameFilter(type->clone());
 }
 
-bool OpFilter::matches(Operation *op) {
+bool OpFilter::matches(Operation *op, FilterData &data) {
   std::string s(op->getName().stripDialect().str());
   return type->valueMatches(s);
 }
@@ -181,48 +181,9 @@ Filter *OpFilter::clone() {
   return new OpFilter(type->clone());
 }
 
-bool AndFilter::matches(Operation *op) {
+bool AndFilter::matches(Operation *op, FilterData &data) {
   for (auto *filter : filters) {
-    if (!filter->matches(op)) {
-      return false;
-    }
-
-    std::vector<std::pair<Operation *, Filter *>> opStack;
-    if (filter->getType()->addSelf()) {
-      opStack.push_back(std::make_pair(op, filter));
-    }
-    opStack.push_back(std::make_pair(op, filter->nextFilter()));
-
-    bool found = false;
-    while (!opStack.empty()) {
-      auto pair = opStack.back();
-      opStack.pop_back();
-      auto *op = pair.first;
-      auto *filter = pair.second;
-
-      if (!filter) {
-        found = true;
-        break;
-      }
-
-      for (auto &region : op->getRegions()) {
-        for (auto &block : region) {
-          for (auto &op : block) {
-            auto *next = getNextOpFromOp(&op);
-
-            if (filter->matches(next)) {
-              if (filter->getType()->addSelf()) {
-                opStack.push_back(std::make_pair(next, filter));
-              }
-
-              opStack.push_back(std::make_pair(next, filter->nextFilter()));
-            }
-          }
-        }
-      }
-    }
-
-    if (!found) {
+    if (filter->filter(op, data).empty()) {
       return false;
     }
   }
@@ -234,43 +195,10 @@ Filter *AndFilter::clone() {
   return new AndFilter(filters);
 }
 
-bool OrFilter::matches(Operation *op) {
+bool OrFilter::matches(Operation *op, FilterData &data) {
   for (auto *filter : filters) {
-    if (!filter->matches(op)) {
-      continue;
-    }
-
-    std::vector<std::pair<Operation *, Filter *>> opStack;
-    if (filter->getType()->addSelf()) {
-      opStack.push_back(std::make_pair(op, filter));
-    }
-    opStack.push_back(std::make_pair(op, filter->nextFilter()));
-
-    while (!opStack.empty()) {
-      auto pair = opStack.back();
-      opStack.pop_back();
-      auto *op = pair.first;
-      auto *filter = pair.second;
-
-      if (!filter) {
-        return true;
-      }
-
-      for (auto &region : op->getRegions()) {
-        for (auto &block : region) {
-          for (auto &op : block) {
-            auto *next = getNextOpFromOp(&op);
-
-            if (filter->matches(next)) {
-              if (filter->getType()->addSelf()) {
-                opStack.push_back(std::make_pair(next, filter));
-              }
-
-              opStack.push_back(std::make_pair(next, filter->nextFilter()));
-            }
-          }
-        }
-      }
+    if (!filter->filter(op, data).empty()) {
+      return true;
     }
   }
 
@@ -281,8 +209,8 @@ Filter *OrFilter::clone() {
   return new OrFilter(filters);
 }
 
-bool InstanceFilter::matches(Operation *op) {
-  return filter->matches(op);
+bool InstanceFilter::matches(Operation *op, FilterData &data) {
+  return !filter->filter(op, data).empty();
 }
 
 bool InstanceFilter::addSelf() {

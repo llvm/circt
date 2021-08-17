@@ -78,7 +78,7 @@ public:
     delete type;
   }
 
-  virtual bool matches(Operation *op) { return false; }
+  virtual bool matches(Operation *op, FilterData &data) { return false; }
   virtual bool addSelf() { return type->addSelf(); }
   virtual Filter *nextFilter() { return nullptr; };
   virtual Filter *clone() { return nullptr; }
@@ -99,7 +99,7 @@ class AttributeFilter : public Filter {
 public:
   AttributeFilter(std::string &key, FilterType *type) : Filter(type), key (key) { }
 
-  bool matches(Operation *op) override;
+  bool matches(Operation *op, FilterData &data) override;
   Filter *clone() override;
 
 private:
@@ -110,7 +110,7 @@ class NameFilter : public Filter {
 public:
   NameFilter(FilterType *type) : Filter(type) { }
 
-  bool matches(Operation *op) override;
+  bool matches(Operation *op, FilterData &data) override;
   Filter *clone() override;
 };
 
@@ -118,7 +118,7 @@ class OpFilter : public Filter {
 public:
   OpFilter(FilterType *type) : Filter(type) { }
 
-  bool matches(Operation *op) override;
+  bool matches(Operation *op, FilterData &data) override;
   Filter *clone() override;
 };
 
@@ -132,7 +132,7 @@ public:
     }
   }
 
-  bool matches(Operation *op) override;
+  bool matches(Operation *op, FilterData &data) override;
   Filter *clone() override;
 
 private:
@@ -149,7 +149,7 @@ public:
     }
   }
 
-  bool matches(Operation *op) override;
+  bool matches(Operation *op, FilterData &data) override;
   Filter *clone() override;
 
 private:
@@ -164,7 +164,7 @@ public:
     delete child;
   }
 
-  bool matches(Operation *op) override;
+  bool matches(Operation *op, FilterData &data) override;
   bool addSelf() override;
   Filter *clone() override;
 
@@ -180,7 +180,7 @@ class UsageFilter : public Filter {
 public:
   UsageFilter(Filter *filter) : Filter(new FilterType), filter (filter) { }
 
-  bool matches(Operation *op) override { return filter->matches(op); }
+  bool matches(Operation *op, FilterData &data) override { return !filter->filter(op, data).empty(); }
   std::vector<Operation *> nextOperations(Operation *op, FilterData &data) override;
 
 private:
