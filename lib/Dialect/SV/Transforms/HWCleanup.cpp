@@ -31,7 +31,10 @@ namespace {
 struct SimpleOperationInfo : public llvm::DenseMapInfo<Operation *> {
   static unsigned getHashValue(const Operation *opC) {
     return mlir::OperationEquivalence::computeHash(
-        const_cast<Operation *>(opC));
+        const_cast<Operation *>(opC),
+        /*hashOperands=*/mlir::OperationEquivalence::directHashValue,
+        /*hashResults=*/mlir::OperationEquivalence::ignoreHashValue,
+        mlir::OperationEquivalence::IgnoreLocations);
   }
   static bool isEqual(const Operation *lhsC, const Operation *rhsC) {
     auto *lhs = const_cast<Operation *>(lhsC);
@@ -41,8 +44,11 @@ struct SimpleOperationInfo : public llvm::DenseMapInfo<Operation *> {
     if (lhs == getTombstoneKey() || lhs == getEmptyKey() ||
         rhs == getTombstoneKey() || rhs == getEmptyKey())
       return false;
-    return mlir::OperationEquivalence::isEquivalentTo(lhs, rhs, nullptr,
-                                                      nullptr);
+    return mlir::OperationEquivalence::isEquivalentTo(
+        const_cast<Operation *>(lhsC), const_cast<Operation *>(rhsC),
+        /*mapOperands=*/mlir::OperationEquivalence::exactValueMatch,
+        /*mapResults=*/mlir::OperationEquivalence::ignoreValueEquivalence,
+        mlir::OperationEquivalence::IgnoreLocations);
   }
 };
 
