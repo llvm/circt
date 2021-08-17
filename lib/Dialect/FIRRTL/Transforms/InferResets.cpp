@@ -592,8 +592,11 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             return;
           LLVM_DEBUG(llvm::dbgs() << "Uniquify " << op << "\n");
           ImplicitLocOpBuilder builder(op->getLoc(), op);
-          for (auto &use : llvm::drop_begin(op->getUses())) {
-            // `drop_begin` such that the first use can keep the original op.
+          for (auto &use :
+               llvm::make_early_inc_range(llvm::drop_begin(op->getUses()))) {
+            // - `make_early_inc_range` since `getUses()` is invalidated upon
+            //   `use.set(...)`.
+            // - `drop_begin` such that the first use can keep the original op.
             auto newOp = builder.create<InvalidValueOp>(type);
             use.set(newOp);
           }

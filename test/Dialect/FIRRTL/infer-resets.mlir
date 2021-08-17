@@ -291,22 +291,30 @@ firrtl.module @NoCrashOnCombLoop(in %in: !firrtl.asyncreset, out %out: !firrtl.r
   firrtl.connect %out, %in : !firrtl.reset, !firrtl.asyncreset
 }
 
-// Should not treat a single `invalidvalue` connected to different resets as
-// a connection of the resets themselves.
+// Should not treat a single `invalidvalue` connected to different resets as a
+// connection of the resets themselves.
 // CHECK-LABEL: firrtl.module @InvalidValueShouldNotConnect
 // CHECK-SAME: out %r0: !firrtl.asyncreset
-// CHECK-SAME: out %r1: !firrtl.uint<1>
+// CHECK-SAME: out %r1: !firrtl.asyncreset
+// CHECK-SAME: out %r2: !firrtl.uint<1>
+// CHECK-SAME: out %r3: !firrtl.uint<1>
 firrtl.module @InvalidValueShouldNotConnect(
   in %ar: !firrtl.asyncreset,
   in %sr: !firrtl.uint<1>,
   out %r0: !firrtl.reset,
-  out %r1: !firrtl.reset
+  out %r1: !firrtl.reset,
+  out %r2: !firrtl.reset,
+  out %r3: !firrtl.reset
 ) {
   %invalid_reset = firrtl.invalidvalue : !firrtl.reset
   firrtl.connect %r0, %invalid_reset : !firrtl.reset, !firrtl.reset
   firrtl.connect %r1, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r2, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r3, %invalid_reset : !firrtl.reset, !firrtl.reset
   firrtl.connect %r0, %ar : !firrtl.reset, !firrtl.asyncreset
-  firrtl.connect %r1, %sr : !firrtl.reset, !firrtl.uint<1>
+  firrtl.connect %r1, %ar : !firrtl.reset, !firrtl.asyncreset
+  firrtl.connect %r2, %sr : !firrtl.reset, !firrtl.uint<1>
+  firrtl.connect %r3, %sr : !firrtl.reset, !firrtl.uint<1>
 }
 
 // Should properly adjust the type of external modules.
