@@ -1,4 +1,4 @@
-// RUN: circt-reduce %s --test %S/trivial.sh | FileCheck %s
+// RUN: circt-reduce %s --test %S/trivial.sh --test-arg firtool | FileCheck %s
 
 firrtl.circuit "Foo" {
   // CHECK: firrtl.extmodule @FooFooFoo
