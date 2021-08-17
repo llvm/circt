@@ -804,15 +804,15 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
       diag << " \"" << fieldName << "\"";
     diag << " simultaneously connected to async and sync resets";
     diag.attachNote(root.field.getValue().getLoc())
-        << "did you intend for the reset to be "
-        << (majorityAsync ? "async?" : "sync?");
+        << "majority of connections to this reset are "
+        << (majorityAsync ? "async" : "sync");
     for (auto &drive : getResetDrives(net)) {
       if ((drive.dst.type.isa<AsyncResetType>() && !majorityAsync) ||
           (drive.src.type.isa<AsyncResetType>() && !majorityAsync) ||
           (drive.dst.type.isa<UIntType>() && majorityAsync) ||
           (drive.src.type.isa<UIntType>() && majorityAsync))
         diag.attachNote(drive.loc)
-            << "offending " << (majorityAsync ? "sync" : "async")
+            << (drive.src.type.isa<AsyncResetType>() ? "async" : "sync")
             << " drive here:";
     }
     return failure();

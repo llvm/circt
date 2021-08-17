@@ -14,13 +14,13 @@
 
 // Should NOT allow last connect semantics to pick the right type for Reset
 firrtl.circuit "top" {
-  // expected-error @+2 {{reset network simultaneously connected to async and sync resets}}
-  // expected-note @+1 {{did you intend for the reset to be async?}}
+  // expected-error @+2 {{reset network "reset0" simultaneously connected to async and sync resets}}
+  // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, out %out: !firrtl.reset) {
     %w0 = firrtl.wire : !firrtl.reset
     %w1 = firrtl.wire : !firrtl.reset
     firrtl.connect %w0, %reset0 : !firrtl.reset, !firrtl.asyncreset
-    // expected-note @+1 {{offending sync drive here:}}
+    // expected-note @+1 {{sync drive here:}}
     firrtl.connect %w1, %reset1 : !firrtl.reset, !firrtl.uint<1>
     firrtl.connect %out, %w0 : !firrtl.reset, !firrtl.reset
     firrtl.connect %out, %w1 : !firrtl.reset, !firrtl.reset
@@ -30,15 +30,15 @@ firrtl.circuit "top" {
 // -----
 // Should NOT support last connect semantics across whens
 firrtl.circuit "top" {
-  // expected-error @+2 {{reset network simultaneously connected to async and sync resets}}
-  // expected-note @+1 {{did you intend for the reset to be async?}}
+  // expected-error @+2 {{reset network "reset2" simultaneously connected to async and sync resets}}
+  // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.asyncreset, in %reset2: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.reset) {
     %w0 = firrtl.wire : !firrtl.reset
     %w1 = firrtl.wire : !firrtl.reset
     %w2 = firrtl.wire : !firrtl.reset
     firrtl.connect %w0, %reset0 : !firrtl.reset, !firrtl.asyncreset
     firrtl.connect %w1, %reset1 : !firrtl.reset, !firrtl.asyncreset
-    // expected-note @+1 {{offending sync drive here:}}
+    // expected-note @+1 {{sync drive here:}}
     firrtl.connect %w2, %reset2 : !firrtl.reset, !firrtl.uint<1>
     firrtl.connect %out, %w2 : !firrtl.reset, !firrtl.reset
     firrtl.when %en  {
@@ -52,13 +52,13 @@ firrtl.circuit "top" {
 // -----
 // Should not allow different Reset Types to drive a single Reset
 firrtl.circuit "top" {
-  // expected-error @+2 {{reset network simultaneously connected to async and sync resets}}
-  // expected-note @+1 {{did you intend for the reset to be async?}}
+  // expected-error @+2 {{reset network "reset0" simultaneously connected to async and sync resets}}
+  // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, in %en: !firrtl.uint<1>, out %out: !firrtl.reset) {
     %w1 = firrtl.wire : !firrtl.reset
     %w2 = firrtl.wire : !firrtl.reset
     firrtl.connect %w1, %reset0 : !firrtl.reset, !firrtl.asyncreset
-    // expected-note @+1 {{offending sync drive here:}}
+    // expected-note @+1 {{sync drive here:}}
     firrtl.connect %w2, %reset1 : !firrtl.reset, !firrtl.uint<1>
     firrtl.connect %out, %w1 : !firrtl.reset, !firrtl.reset
     firrtl.when %en  {
@@ -70,12 +70,12 @@ firrtl.circuit "top" {
 // -----
 // Should error if a ResetType driving UInt<1> infers to AsyncReset
 firrtl.circuit "top" {
-  // expected-error @+2 {{reset network simultaneously connected to async and sync resets}}
-  // expected-note @+1 {{did you intend for the reset to be async?}}
+  // expected-error @+2 {{reset network "in" simultaneously connected to async and sync resets}}
+  // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %in: !firrtl.asyncreset, out %out: !firrtl.uint<1>) {
     %w = firrtl.wire  : !firrtl.reset
     firrtl.connect %w, %in : !firrtl.reset, !firrtl.asyncreset
-    // expected-note @+1 {{offending sync drive here:}}
+    // expected-note @+1 {{sync drive here:}}
     firrtl.connect %out, %w : !firrtl.uint<1>, !firrtl.reset
   }
 }
@@ -83,11 +83,11 @@ firrtl.circuit "top" {
 // -----
 // Should error if a ResetType driving AsyncReset infers to UInt<1>
 firrtl.circuit "top"   {
-  // expected-error @+2 {{reset network simultaneously connected to async and sync resets}}
-  // expected-note @+1 {{did you intend for the reset to be async?}}
+  // expected-error @+2 {{reset network "in" simultaneously connected to async and sync resets}}
+  // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %in: !firrtl.uint<1>, out %out: !firrtl.asyncreset) {
     %w = firrtl.wire  : !firrtl.reset
-    // expected-note @+1 {{offending sync drive here:}}
+    // expected-note @+1 {{sync drive here:}}
     firrtl.connect %w, %in : !firrtl.reset, !firrtl.uint<1>
     firrtl.connect %out, %w : !firrtl.asyncreset, !firrtl.reset
   }
@@ -118,13 +118,13 @@ firrtl.circuit "top" {
 // -----
 // Should not allow Vecs to infer different Reset Types
 firrtl.circuit "top" {
-  // expected-error @+2 {{reset network simultaneously connected to async and sync resets}}
-  // expected-note @+1 {{did you intend for the reset to be async?}}
+  // expected-error @+2 {{reset network "out[0]" simultaneously connected to async and sync resets}}
+  // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %reset0: !firrtl.asyncreset, in %reset1: !firrtl.uint<1>, out %out: !firrtl.vector<reset, 2>) {
     %0 = firrtl.subindex %out[0] : !firrtl.vector<reset, 2>
     %1 = firrtl.subindex %out[1] : !firrtl.vector<reset, 2>
     firrtl.connect %0, %reset0 : !firrtl.reset, !firrtl.asyncreset
-    // expected-note @+1 {{offending sync drive here:}}
+    // expected-note @+1 {{sync drive here:}}
     firrtl.connect %1, %reset1 : !firrtl.reset, !firrtl.uint<1>
   }
 }
@@ -132,8 +132,8 @@ firrtl.circuit "top" {
 // -----
 // Should not allow an invalidated Wire to drive both a UInt<1> and an AsyncReset
 firrtl.circuit "top" {
-  // expected-error @+2 {{reset network simultaneously connected to async and sync resets}}
-  // expected-note @+1 {{did you intend for the reset to be async?}}
+  // expected-error @+2 {{reset network "in0" simultaneously connected to async and sync resets}}
+  // expected-note @+1 {{majority of connections to this reset are async}}
   firrtl.module @top(in %in0: !firrtl.asyncreset, in %in1: !firrtl.uint<1>, out %out0: !firrtl.reset, out %out1: !firrtl.reset) {
     %w = firrtl.wire  : !firrtl.reset
     %invalid_reset = firrtl.invalidvalue : !firrtl.reset
@@ -141,7 +141,7 @@ firrtl.circuit "top" {
     firrtl.connect %out0, %w : !firrtl.reset, !firrtl.reset
     firrtl.connect %out1, %w : !firrtl.reset, !firrtl.reset
     firrtl.connect %out0, %in0 : !firrtl.reset, !firrtl.asyncreset
-    // expected-note @+1 {{offending sync drive here:}}
+    // expected-note @+1 {{sync drive here:}}
     firrtl.connect %out1, %in1 : !firrtl.reset, !firrtl.uint<1>
   }
 }
