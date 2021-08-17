@@ -6,7 +6,9 @@ firrtl.module @NoInferredEnables(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<
   %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
   %r = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
   // expected-warning @+1 {{memory port is never enabled}}
-  %data, %port = firrtl.memoryport Read %ram, %r, %clock  : (!firrtl.cmemory<uint<32>, 16>, !firrtl.uint<4>, !firrtl.clock) -> !firrtl.uint<32>
-  firrtl.connect %v, %ramport : !firrtl.uint<32>, !firrtl.uint<32>
+  %ramport_data, %ramport_port = firrtl.memoryport Read %ram {name = "ramport"} : (!firrtl.cmemory<uint<32>, 16>) -> (!firrtl.uint<32>, !firrtl.cmemoryport)
+  firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<4>, !firrtl.clock
+
+  firrtl.connect %v, %ramport_data : !firrtl.uint<32>, !firrtl.uint<32>
 }
 }
