@@ -402,7 +402,7 @@ firrtl.circuit "MemoryPortInvalidReturnType" {
   firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
     %mem = firrtl.combmem : !firrtl.cmemory<uint<8>, 8>
     // expected-error @+1 {{'firrtl.memoryport' op port should be used by a firrtl.memoryport.access}}
-    %memoryport, %port = firrtl.memoryport Infer %mem : (!firrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<8>, !firrtl.cmemoryport)
+    %memoryport_data, %memoryport_port = firrtl.memoryport Infer %mem {name = "memoryport"} : (!firrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<8>, !firrtl.cmemoryport)
   }
 }
 
@@ -412,7 +412,7 @@ firrtl.circuit "MemoryPortInvalidReturnType" {
   firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
     %mem = firrtl.combmem : !firrtl.cmemory<uint<8>, 8>
     // expected-error @+1 {{'firrtl.memoryport' op inferred type(s) '!firrtl.uint<8>', '!firrtl.cmemoryport' are incompatible with return type(s) of operation '!firrtl.uint<9>', '!firrtl.cmemoryport'}}
-    %memoryport, %port = firrtl.memoryport Infer %mem : (!firrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<9>, !firrtl.cmemoryport)
+    %memoryport_data, %memoryport_port = firrtl.memoryport Infer %mem {name = "memoryport"} : (!firrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<9>, !firrtl.cmemoryport)
   }
 }
 

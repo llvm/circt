@@ -304,6 +304,59 @@ result value of the `firrtl.mem` operation.  Also, the `firrtl.mem` node does
 not allow zero port memories for simplicity.  Zero port memories are dropped
 by the .fir file parser.
 
+### CHIRRTL Memories
+
+FIRRTL has two different representations of memories: Chisel `cmemory`
+operations `smem` and `cmem`, and the standard FIRRTL `mem` operation.  Chisel
+memory operations exist to make it easy to produce FIRRTL code from Chisel, and
+are intended to be replaced with standard FIRRTL memories early in the
+pipeline. On the surface they are quite similar: Chisel memories have an
+operation to add a memory port to a memory, while FIRRTL memories require all
+ports to be defined up front. The set of operations related to Chisel memories
+are often referred to as CHIRRTL.
+
+Unfortunately, Chisel memories have other strange behaviour which has lead to
+many discussions about how to remove or redesign them.  For some current
+discussion about this see [^0], [^1]. Since CIRCT is attempting to be a drop in
+replacement FIRRTL compiler, we are not attempting to implement these new ideas
+for Chisel memories.
+
+There is, however, a major compatibility issue with the existing implementation
+Chisel memories which made them difficult to support in CIRCT. The FIRRTL
+specification disallows using any declaration outside of the scope where it is
+created.  This means that a Chisel memory port declared inside of a `when`
+block can only be used inside the scope of the `when` block. Unfortunately,
+this invariant is not enforced for memory ports, and this leniency has been
+abused by the Chisel standard library.
+
+To support escaping memory port definitions, we had to split the memory port
+operation into two operations.  We created a `firrtl.memoryport` operation to
+declare the memory port, and a `firrtl.memoryport.access` operation to enable
+the memory port. The following is an example of how FIRRTL translates into the
+CIRCT dialect:
+
+```firrtl
+smem mymem : UInt<1>[8]
+when cond:
+  infer mport myport = mymem[addr], clock
+out <= r
+```
+
+```mlir
+%mymem = firrtl.seqmem Undefined  : !firrtl.cmemory<uint<1>, 8>
+%myport_data, %myport_port = firrtl.memoryport Infer %mymem {name = "myport"}  : (!firrtl.cmemory<uint<1>, 8>) -> (!firrtl.uint<1>, !firrtl.cmemoryport)
+firrtl.when %cond  {
+  firrtl.memoryport.access %myport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
+}
+firrtl.connect %out, %myport_data : !firrtl.uint<1>, !firrtl.uint<1
+```
+
+For a historical discussion of this issue and its development see
+[`llvm/circt#1561`](https://github.com/llvm/circt/issues/1561).
+
+[^0]: https://github.com/chipsalliance/firrtl/issues/727
+[^1]: https://github.com/chipsalliance/firrtl/pull/1821
+
 ### More things are represented as primitives
 
 We describe the `mux` expression as "primitive", whereas the IR

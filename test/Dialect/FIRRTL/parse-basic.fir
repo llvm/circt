@@ -338,7 +338,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %myMem = firrtl.combmem : !firrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
-    ; CHECK: %memValue, %memValue_port = firrtl.memoryport Infer %myMem  : (!firrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>) -> (!firrtl.bundle<id: uint<4>, resp: uint<2>>, !firrtl.cmemoryport)
+    ; CHECK: %memValue_data, %memValue_port = firrtl.memoryport Infer %myMem {name = "memValue"} : (!firrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>) -> (!firrtl.bundle<id: uint<4>, resp: uint<2>>, !firrtl.cmemoryport)
     ; CHECK: firrtl.memoryport.access %memValue_port[%i8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     infer mport memValue = myMem[i8], clock
     auto11 <= memValue.id
@@ -348,7 +348,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %base_table_1 = firrtl.seqmem Old : !firrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_1 : UInt<1>[9] [256] old
 
-    ; CHECK: %tableValue, %tableValue_port = firrtl.memoryport Read %base_table_1  : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
+    ; CHECK: %tableValue_data, %tableValue_port = firrtl.memoryport Read %base_table_1 {name = "tableValue"} : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
     ; CHECK: firrtl.memoryport.access %tableValue_port[%i8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     read mport tableValue = base_table_1[i8], clock
 
@@ -498,7 +498,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: %memory = firrtl.seqmem Undefined  : !firrtl.cmemory<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 
-    ; CHECK: %xyz0, %xyz0_port = firrtl.memoryport Read %memory  : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
+    ; CHECK: %xyz0_data, %xyz0_port = firrtl.memoryport Read %memory {name = "xyz0"} : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
     ; CHECK: firrtl.when %cond  {
     ; CHECK:    firrtl.memoryport.access %xyz0_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint, !firrtl.clock
     ; CHECK: }
@@ -506,12 +506,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       read mport xyz0 = memory[addr], clock
 
     ; CHECK: firrtl.when %cond  {
-    ; CHECK:    %n0 = firrtl.node %xyz0  : !firrtl.vector<uint<1>, 9>
+    ; CHECK:    %n0 = firrtl.node %xyz0_data  : !firrtl.vector<uint<1>, 9>
     ; CHECK: }
     when cond :
       node n0 = xyz0
 
-    ; CHECK: %n1 = firrtl.node %xyz0  : !firrtl.vector<uint<1>, 9>
+    ; CHECK: %n1 = firrtl.node %xyz0_data  : !firrtl.vector<uint<1>, 9>
     node n1 = xyz0
 
 
@@ -833,7 +833,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     infer mport r = a[rAddr], clock
     rData <= r
 
-    ; CHECK: firrtl.connect %w, %wData
+    ; CHECK: firrtl.connect %w_data, %wData
     infer mport w = a[wAddr], clock
     w <= wData
 

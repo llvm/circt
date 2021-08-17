@@ -65,7 +65,7 @@ def CombMemOp : FIRRTLOp<"combmem"> {
   let summary = "Define a new combinational memory";
   let description = [{
     Define a new behavioral combinational memory. Combinational memories have a
-    write latency of 1 and a read latency of 0.
+    write latency of 1 and a read latency of 0. This memory should be used by
   }];
   let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs CMemoryType:$result);
@@ -86,9 +86,17 @@ def SeqMemOp : FIRRTLOp<"seqmem"> {
 
 def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
                                DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
-  let summary = "Access a memory";
+  let summary = "Declares a memory port on a memory";
 
   let summary = "Defines a memory port on CHIRRTL memory";
+  let description = [{
+    This operation defines a new memory port on a `seqmem` or `combmem`CHISEL.
+    `data` is the data returned from the memory port.  
+
+    The memory port requires an access point, which sets the enable  condition
+    of the port, the clock, and the address.  This is done by passing the the
+    `port` argument to a `firrtl.memoryport.access operation`.
+  }];
 
   let arguments = (ins CMemoryType:$memory, MemDirAttr:$direction,
                     StrAttr:$name, AnnotationArrayAttr:$annotations);
@@ -123,14 +131,18 @@ def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
 }
 
 def MemoryPortAccessOp : FIRRTLOp<"memoryport.access"> {
-  let summary = "Enables a memory port and associates it with a clock";
+  let summary = "Enables a memory port";
 
   let description = [{
-    This operation e
+    This operation is used to conditionally enable a memory port, and associate
+    it with a `clock` and `index`.  The memory port will be actuve on the
+    positive edge of the clock. The index is the address of the memory
+    accessed. See the FIRRTL rational for more information about why this
+    operation exists.
   }];
 
   let arguments = (ins CMemoryPortType:$port, IntType:$index,
-                     ClockType:$clock);
+                   ClockType:$clock);
 
   let assemblyFormat = [{
     $port `[` $index `]` `,` $clock attr-dict `:` type(operands)

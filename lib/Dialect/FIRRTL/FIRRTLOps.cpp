@@ -2527,13 +2527,13 @@ void MemoryPortOp::getAsmResultNames(
   StringRef base = name();
   if (base.empty())
     base = "memport";
-  setNameFn(data(), base);
+  setNameFn(data(), (base + "_data").str());
   setNameFn(port(), (base + "_port").str());
 }
 
 static ParseResult parseMemoryPortOp(OpAsmParser &parser,
                                      NamedAttrList &resultAttrs) {
-  return parseImplicitSSAName(parser, resultAttrs);
+  return parseElideAnnotations(parser, resultAttrs);
 }
 
 /// Always elide "direction" and elide "annotations" if it exists or
@@ -2541,7 +2541,7 @@ static ParseResult parseMemoryPortOp(OpAsmParser &parser,
 static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
                               DictionaryAttr attr) {
   // "direction" is always elided.
-  printImplicitSSAName(p, op, attr, {"direction"});
+  printElideAnnotations(p, op, attr, {"direction"});
 }
 
 //===----------------------------------------------------------------------===//
