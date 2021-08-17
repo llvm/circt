@@ -506,8 +506,12 @@ void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 //===----------------------------------------------------------------------===//
 
 /// Provide meaningful names to the result values of a RegisterOp.
+
+SmallVector<StringRef> RegisterOp::portNames() {
+  return {"in", "write_en", "clk", "reset", "out", "done"};
+}
 void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  getCellAsmResultNames(setNameFn, *this, this->portNames());
+  getCellAsmResultNames(setNameFn, *this, {} /*this->portNames()*/);
 }
 
 //===----------------------------------------------------------------------===//

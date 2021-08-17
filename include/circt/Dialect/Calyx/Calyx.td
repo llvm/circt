@@ -45,6 +45,23 @@ class SameTypeConstraint<string lhs, string rhs>
 class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
   Op<CalyxDialect, mnemonic, traits>;
 
+/// Op Interface for cells.
+def CellInterface : OpInterface<"CellInterface"> {
+  let cppNamespace = "::circt::calyx";
+  let description = [{
+    This is an op interface for Calyx Cells. Cells consist
+    of primitives and instances of components.
+  }];
+  let methods = [
+    InterfaceMethod<
+      "This returns the port names associated with the cell.",
+      "SmallVector<StringRef>", "portNames"
+    >
+    // TODO(Calyx): Add interface method for port directions
+    // after #1556 is merged.
+  ];
+}
+
 /// Trait used to annotate instances of components and primitives.
 def Cell : NativeOpTrait<"Cell"> {
   let cppNamespace = "::circt::calyx";
@@ -54,7 +71,8 @@ def Cell : NativeOpTrait<"Cell"> {
 class CalyxCell<string mnemonic, list<OpTrait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
     Cell,
-    DeclareOpInterfaceMethods<OpAsmOpInterface>
+    DeclareOpInterfaceMethods<OpAsmOpInterface>,
+    DeclareOpInterfaceMethods<CellInterface>
   ])> {
 }
 

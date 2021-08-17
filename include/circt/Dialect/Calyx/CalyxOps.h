@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "mlir/IR/FunctionSupport.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/RegionKindInterface.h"
 #include "mlir/IR/SymbolTable.h"
@@ -24,6 +25,8 @@
 namespace circt {
 namespace calyx {
 
+class CellInterface;
+
 /// A helper function to verify each operation with the Cell trait.
 LogicalResult verifyCell(Operation *op);
 
@@ -32,6 +35,7 @@ template <typename ConcreteType>
 class Cell : public mlir::OpTrait::TraitBase<ConcreteType, Cell> {
 public:
   static LogicalResult verifyTrait(Operation *op) { return verifyCell(op); }
+  SmallVector<StringRef> portNames();
 };
 
 /// A helper function to verify each control-like operation
