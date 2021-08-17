@@ -797,9 +797,12 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
   if (asyncDrives > 0 && syncDrives > 0) {
     ResetSignal root = guessRoot(net);
     bool majorityAsync = asyncDrives >= syncDrives;
-    auto diag =
-        mlir::emitError(root.field.getValue().getLoc())
-        << "reset network simultaneously connected to async and sync resets";
+    auto diag = mlir::emitError(root.field.getValue().getLoc())
+                << "reset network";
+    auto fieldName = getFieldName(root.field);
+    if (!fieldName.empty())
+      diag << " \"" << fieldName << "\"";
+    diag << " simultaneously connected to async and sync resets";
     diag.attachNote(root.field.getValue().getLoc())
         << "did you intend for the reset to be "
         << (majorityAsync ? "async?" : "sync?");
