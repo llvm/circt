@@ -66,6 +66,10 @@ static cl::opt<std::string>
                    cl::value_desc("filename"), cl::init("-"));
 
 static cl::opt<bool>
+    parseOnly("parse-only",
+              cl::desc("Stop after parsing inputs and annotations"));
+
+static cl::opt<bool>
     splitInputFile("split-input-file",
                    cl::desc("Split the input file into pieces and process each "
                             "chunk independently"),
@@ -218,6 +222,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   }
   if (!module)
     return failure();
+
+  // If the user asked for just a parse, stop here.
+  if (parseOnly) {
+    auto outputTimer = ts.nest("Output");
+    return callback(module.release());
+  }
 
   // Apply any pass manager command line options.
   PassManager pm(&context);
