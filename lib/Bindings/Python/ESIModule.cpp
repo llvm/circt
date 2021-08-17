@@ -38,23 +38,11 @@ public:
   void loadMlir(std::string filename) {
     circtESIAppendMlirFile(cModuleOp,
                            mlirStringRefCreateFromCString(filename.c_str()));
-    // auto loadedMod = mlir::parseSourceFile(filename, ctxt());
-    // Block *loadedBlock = loadedMod->getBody();
-    // ModuleOp modOp = mod();
-    // assert(!modOp->getRegions().empty());
-    // if (modOp.body().empty()) {
-    //   modOp.body().push_back(loadedBlock);
-    //   return;
-    // }
-    // auto &ops = modOp.getBody()->getOperations();
-    // ops.splice(ops.end(), loadedBlock->getOperations());
   }
 
   MlirOperation lookup(std::string symbol) {
     return circtESILookup(cModuleOp,
                           mlirStringRefCreateFromCString(symbol.c_str()));
-    // Operation *found = SymbolTable::lookupSymbolIn(mod(), symbol);
-    // return wrap(found);
   }
 
   void printCapnpSchema(py::object fileObject) {
