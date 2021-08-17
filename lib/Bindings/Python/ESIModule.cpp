@@ -9,17 +9,11 @@
 #include "DialectModules.h"
 
 #include "circt-c/Dialect/ESI.h"
-#include "circt/Dialect/ESI/ESIDialect.h"
-#include "circt/Dialect/ESI/ESITypes.h"
-#include "circt/Support/LLVM.h"
 #include "mlir-c/Bindings/Python/Interop.h"
 
 #include "mlir/Bindings/Python/PybindAdaptors.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
-#include "mlir/IR/Builders.h"
-#include "mlir/Parser.h"
-#include "mlir/Support/FileUtilities.h"
 
 #include "llvm/ADT/SmallVector.h"
 
@@ -27,9 +21,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 namespace py = pybind11;
-
-using namespace circt;
-using namespace circt::esi;
 
 //===----------------------------------------------------------------------===//
 // The main entry point into the ESI Assembly API.
@@ -45,21 +36,25 @@ public:
 
   /// Load the contents of an MLIR asm file into the system module.
   void loadMlir(std::string filename) {
-    auto loadedMod = mlir::parseSourceFile(filename, ctxt());
-    Block *loadedBlock = loadedMod->getBody();
-    ModuleOp modOp = mod();
-    assert(!modOp->getRegions().empty());
-    if (modOp.body().empty()) {
-      modOp.body().push_back(loadedBlock);
-      return;
-    }
-    auto &ops = modOp.getBody()->getOperations();
-    ops.splice(ops.end(), loadedBlock->getOperations());
+    circtESIAppendMlirFile(cModuleOp,
+                           mlirStringRefCreateFromCString(filename.c_str()));
+    // auto loadedMod = mlir::parseSourceFile(filename, ctxt());
+    // Block *loadedBlock = loadedMod->getBody();
+    // ModuleOp modOp = mod();
+    // assert(!modOp->getRegions().empty());
+    // if (modOp.body().empty()) {
+    //   modOp.body().push_back(loadedBlock);
+    //   return;
+    // }
+    // auto &ops = modOp.getBody()->getOperations();
+    // ops.splice(ops.end(), loadedBlock->getOperations());
   }
 
   MlirOperation lookup(std::string symbol) {
-    Operation *found = SymbolTable::lookupSymbolIn(mod(), symbol);
-    return wrap(found);
+    return circtESILookup(cModuleOp,
+                          mlirStringRefCreateFromCString(symbol.c_str()));
+    // Operation *found = SymbolTable::lookupSymbolIn(mod(), symbol);
+    // return wrap(found);
   }
 
   void printCapnpSchema(py::object fileObject) {
@@ -70,9 +65,6 @@ public:
   }
 
 private:
-  MLIRContext *ctxt() { return unwrap(cCtxt); }
-  ModuleOp mod() { return unwrap(cModuleOp); }
-
   MlirContext cCtxt;
   MlirModule cModuleOp;
 };
