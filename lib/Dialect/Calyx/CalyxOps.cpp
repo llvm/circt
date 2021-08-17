@@ -604,6 +604,10 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   if (ifOp.thenRegion().front().empty())
     return ifOp.emitError() << "empty 'then' region.";
 
+  if (ifOp.elseRegion().getBlocks().size() != 0 &&
+      ifOp.elseRegion().front().empty())
+    return ifOp.emitError() << "empty 'else' region.";
+
   return success();
 }
 
