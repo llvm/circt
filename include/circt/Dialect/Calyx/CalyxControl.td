@@ -48,8 +48,11 @@ def IfOp : CalyxContainer<"if", [
     conditionally executing two calyx groups. The operands to an if operation
     is a boolean value and the group under which this value is evaluated.
 
+    Note: The native and CIRCT calyx IRs may diverge wrt. 'with' execution, see:
+    https://github.com/cucapra/calyx/discussions/588
+
     ```mlir
-      calyx.if %1, @G1 {
+      calyx.if %1 with @G1 {
         calyx.enable @G2
         ...
       } else {
