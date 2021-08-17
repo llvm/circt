@@ -12,12 +12,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/InitAllDialects.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Parser.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Reducer/Tester.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Transforms/Passes.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
@@ -55,13 +59,54 @@ static cl::list<std::string>
 // Tool Implementation
 //===----------------------------------------------------------------------===//
 
-/// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
-struct ModuleExternalizer {
-  LogicalResult match(Operation *op) const {
-    return success(isa<firrtl::FModuleOp>(op));
-  }
+/// An abstract reduction pattern.
+struct Reduction {
+  virtual ~Reduction() {}
 
-  void rewrite(Operation *op) const {
+  /// Check if the reduction can apply to a specific operation.
+  virtual bool match(Operation *op) const = 0;
+
+  /// Apply the reduction to a specific operation. If the returned result
+  /// indicates that the application failed, the resulting module is treated the
+  /// same as if the tester marked it as uninteresting.
+  virtual LogicalResult rewrite(Operation *op) const = 0;
+
+  /// Return a human-readable name for this reduction pattern.
+  virtual std::string getName() const = 0;
+};
+
+/// A reduction pattern that applies an `mlir::Pass`.
+struct PassReduction : public Reduction {
+  PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass)
+      : context(context) {
+    passName = pass->getArgument();
+    if (passName.empty())
+      passName = pass->getName();
+
+    if (auto opName = pass->getOpName())
+      pm = std::make_unique<PassManager>(context, *opName);
+    else
+      pm = std::make_unique<PassManager>(context);
+    pm->addPass(std::move(pass));
+  }
+  bool match(Operation *op) const override {
+    return op->getName().getIdentifier() == pm->getOpName(*context);
+  }
+  LogicalResult rewrite(Operation *op) const override { return pm->run(op); }
+  std::string getName() const override { return passName.str(); }
+
+protected:
+  MLIRContext *const context;
+  std::unique_ptr<PassManager> pm;
+  StringRef passName;
+};
+
+/// A sample reduction pattern that maps `firrtl.module` to `firrtl.extmodule`.
+struct ModuleExternalizer : public Reduction {
+  bool match(Operation *op) const override {
+    return isa<firrtl::FModuleOp>(op);
+  }
+  LogicalResult rewrite(Operation *op) const override {
     auto module = cast<firrtl::FModuleOp>(op);
     OpBuilder builder(module);
     builder.create<firrtl::FExtModuleOp>(
@@ -70,7 +115,9 @@ struct ModuleExternalizer {
         firrtl::getModulePortInfo(module), StringRef(),
         module.annotationsAttr());
     module->erase();
+    return success();
   }
+  std::string getName() const override { return "module-externalizer"; }
 };
 
 /// Helper function that writes the current MLIR module to the configured output
@@ -90,6 +137,13 @@ static LogicalResult writeOutput(ModuleOp module) {
   return success();
 }
 
+static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
+  GreedyRewriteConfig config;
+  config.useTopDownTraversal = true;
+  config.enableRegionSimplification = false;
+  return createCanonicalizerPass(config);
+}
+
 /// Execute the main chunk of work of the tool. This function reads the input
 /// module and iteratively applies the reduction strategies until no options
 /// make it smaller.
@@ -103,7 +157,7 @@ static LogicalResult execute(MLIRContext &context) {
     return failure();
 
   // Evaluate the unreduced input.
-  LLVM_DEBUG(llvm::dbgs() << "Evaluating initial input\n");
+  LLVM_DEBUG(llvm::dbgs() << "Testing input\n");
   LLVM_DEBUG(llvm::dbgs() << "The test is `" << testerCommand << "`\n");
   for (auto &arg : testerArgs)
     LLVM_DEBUG(llvm::dbgs() << "  with argument `" << arg << "`\n");
@@ -116,62 +170,107 @@ static LogicalResult execute(MLIRContext &context) {
   auto bestSize = initialTest.second;
   LLVM_DEBUG(llvm::dbgs() << "Initial module has size " << bestSize << "\n");
 
+  // Gather a list of reduction patterns that we should try. Ideally these are
+  // sorted by decreasing reduction potential/benefit. For example, things that
+  // can knock out entire modules while being cheap should be tried first,
+  // before trying to tweak operands of individual arithmetic ops.
+  SmallVector<std::unique_ptr<Reduction>> patterns;
+  patterns.push_back(std::make_unique<ModuleExternalizer>());
+  patterns.push_back(
+      std::make_unique<PassReduction>(&context, firrtl::createInlinerPass()));
+  patterns.push_back(std::make_unique<PassReduction>(
+      &context, createSimpleCanonicalizerPass()));
+  patterns.push_back(
+      std::make_unique<PassReduction>(&context, createCSEPass()));
+
   // Iteratively reduce the input module by applying the current reduction
   // pattern to successively smaller subsets of the operations until we find one
   // that retains the interesting behavior.
-  ModuleExternalizer pattern;
-  size_t rangeBase = 0;
-  size_t rangeLength = -1;
-  while (rangeLength > 0) {
-    LLVM_DEBUG(llvm::dbgs() << "Trying op range " << rangeBase << " to "
-                            << (rangeBase + rangeLength) << "\n");
+  // ModuleExternalizer pattern;
+  for (unsigned patternIdx = 0; patternIdx < patterns.size();) {
+    Reduction &pattern = *patterns[patternIdx];
+    LLVM_DEBUG(llvm::dbgs()
+               << "Trying reduction `" << pattern.getName() << "`\n");
+    size_t rangeBase = 0;
+    size_t rangeLength = -1;
+    bool patternDidReduce = false;
+    while (rangeLength > 0) {
+      LLVM_DEBUG({
+        llvm::dbgs() << "- Trying";
+        if (rangeLength == (size_t)-1)
+          llvm::dbgs() << " all ops\n";
+        else
+          llvm::dbgs() << " op range " << rangeBase << " to "
+                       << (rangeBase + rangeLength) << "\n";
+      });
 
-    // Apply the pattern to the subset of operations selected by `rangeBase` and
-    // `rangeLength`.
-    size_t opIdx = 0;
-    OwningModuleRef newModule = module->clone();
-    newModule->walk([&](Operation *op) {
-      if (failed(pattern.match(op)))
-        return;
-      auto i = opIdx++;
-      if (i < rangeBase || i - rangeBase >= rangeLength)
-        return;
-      pattern.rewrite(op);
-    });
-    if (opIdx == 0) {
-      LLVM_DEBUG(llvm::dbgs() << "No more ops where the pattern applies\n");
-      break;
+      // Apply the pattern to the subset of operations selected by `rangeBase`
+      // and `rangeLength`.
+      size_t opIdx = 0;
+      OwningModuleRef newModule = module->clone();
+      newModule->walk([&](Operation *op) {
+        if (!pattern.match(op))
+          return;
+        auto i = opIdx++;
+        if (i < rangeBase || i - rangeBase >= rangeLength)
+          return;
+        (void)pattern.rewrite(op);
+      });
+      if (opIdx == 0) {
+        LLVM_DEBUG(llvm::dbgs() << "- No more ops where the pattern applies\n");
+        break;
+      }
+
+      // Check if this reduced module is still interesting, and its overall size
+      // is smaller than what we had before.
+      // LLVM_DEBUG(llvm::dbgs() << "Trying: " << **newModule << "\n");
+      auto test = tester.isInteresting(newModule.get());
+      if (test.first == Tester::Interestingness::True &&
+          test.second < bestSize) {
+        // Make this reduced module the new baseline and reset our search
+        // strategy to start again from the beginning, since this reduction may
+        // have created additional opportunities.
+        patternDidReduce = true;
+        bestSize = test.second;
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Accepting module of size " << bestSize << "\n");
+        module = std::move(newModule);
+
+        // If this was already a run across all operations, no need to restart
+        // again at the top. We're done at this point.
+        if (rangeLength == (size_t)-1) {
+          rangeLength = 0;
+        } else {
+          rangeBase = 0;
+          rangeLength = -1;
+        }
+
+        // Write the current state to disk if the user asked for it.
+        if (keepBest)
+          if (failed(writeOutput(module.get())))
+            return failure();
+      } else {
+        // Try the pattern on the next `rangeLength` number of operations. If we
+        // go past the end of the input, reduce the size of the chunk of
+        // operations we're reducing and start again from the top.
+        rangeBase += rangeLength;
+        if (rangeBase >= opIdx) {
+          // Exhausted all subsets of this size. Try to go smaller.
+          rangeLength = opIdx / 2;
+          rangeBase = 0;
+        }
+      }
     }
 
-    // Check if this reduced module is still interesting, and its overall size
-    // is smaller than what we had before.
-    // LLVM_DEBUG(llvm::dbgs() << "Trying: " << **newModule << "\n");
-    auto test = tester.isInteresting(newModule.get());
-    if (test.first == Tester::Interestingness::True && test.second < bestSize) {
-      // Make this reduced module the new baseline and reset our search strategy
-      // to start again from the beginning, since this reduction may have
-      // created additional opportunities.
-      bestSize = test.second;
-      module = std::move(newModule);
-      rangeBase = 0;
-      rangeLength = -1;
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Accepting module of size " << bestSize << "\n");
-
-      // Write the current state to disk if the user asked for it.
-      if (keepBest)
-        if (failed(writeOutput(module.get())))
-          return failure();
+    // If the pattern provided a successful reduction, restart with the first
+    // pattern again, since we might have uncovered additional reduction
+    // opportunities. Otherwise we just keep going to try the next pattern.
+    if (patternDidReduce && patternIdx > 0) {
+      LLVM_DEBUG(llvm::dbgs() << "- Reduction `" << pattern.getName()
+                              << "` was successful, starting at the top\n\n");
+      patternIdx = 0;
     } else {
-      // Try the pattern on the next `rangeLength` number of operations. If we
-      // go past the end of the input, reduce the size of the chunk of
-      // operations we're reducing and start again from the top.
-      rangeBase += rangeLength;
-      if (rangeBase >= opIdx) {
-        // Exhausted all subsets of this size. Try to go smaller.
-        rangeLength = opIdx / 2;
-        rangeBase = 0;
-      }
+      ++patternIdx;
     }
   }
 
