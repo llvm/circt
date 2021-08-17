@@ -102,3 +102,22 @@ firrtl.circuit "Foo" attributes {
         tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]}  {
   firrtl.module @Foo() {}
 }
+
+
+
+// -----
+
+// A custom annotation fails to parse because it is missing fields
+
+// comment-xpected-error @+2 {{did not contain required key}}
+// comment-xpected-note @+1 {{}}
+// firrtl.circuit "Foo"  attributes {annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}]}  {
+//  firrtl.module @Foo() {
+//    firrtl.skip
+//  }
+//}
+
+
+
+
+

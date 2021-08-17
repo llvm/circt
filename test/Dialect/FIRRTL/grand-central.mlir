@@ -320,3 +320,55 @@ firrtl.circuit "BindInterfaceTest"  attributes {
 // The interface is added.
 // CHECK: sv.interface @InterfaceName {
 // CHECK-NEXT: sv.interface.signal @_a : i8
+
+
+// -----
+
+  firrtl.circuit "GCTDataTap"  attributes {annotations = [{blackBox = "~GCTDataTap|DataTap", class = "sifive.enterprise.grandcentral.DataTapsAnnotation", keys = [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", portName = "~GCTDataTap|DataTap>_0", source = "~GCTDataTap|GCTDataTap>r"}, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", portName = "~GCTDataTap|DataTap>_1[0]", source = "~GCTDataTap|GCTDataTap>r"}, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", portName = "~GCTDataTap|DataTap>_2", source = "~GCTDataTap|GCTDataTap>w.a"}, {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", portName = "~GCTDataTap|DataTap>_3[0]", source = "~GCTDataTap|GCTDataTap>w.a"}, {class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", internalPath = "baz.qux", module = "~GCTDataTap|BlackBox", portName = "~GCTDataTap|DataTap>_4"}, {class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", internalPath = "baz.quz", module = "~GCTDataTap|BlackBox", portName = "~GCTDataTap|DataTap>_5[0]"}, {class = "sifive.enterprise.grandcentral.DeletedDataTapKey", portName = "~GCTDataTap|DataTap>_6"}, {class = "sifive.enterprise.grandcentral.DeletedDataTapKey", portName = "~GCTDataTap|DataTap>_7[0]"}, {class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)", portName = "~GCTDataTap|DataTap>_8"}, {class = "sifive.enterprise.grandcentral.LiteralDataTapKey", literal = "UInt<16>(\22h2a\22)", portName = "~GCTDataTap|DataTap>_9[0]"}]}, {class = "circt.testNT", unrelatedAnnotation}]}  {
+    firrtl.extmodule @DataTap(out %_0: !firrtl.uint<1>, out %_1: !firrtl.vector<uint<1>, 1>, out %_2: !firrtl.uint<1>, out %_3: !firrtl.vector<uint<1>, 1>, out %_4: !firrtl.uint<1>, out %_5: !firrtl.vector<uint<1>, 1>, out %_6: !firrtl.uint<1>, out %_7: !firrtl.vector<uint<1>, 1>, out %_8: !firrtl.uint<1>, out %_9: !firrtl.vector<uint<1>, 1>) attributes {defname = "DataTap"}
+    firrtl.extmodule @BlackBox() attributes {defname = "BlackBox"}
+    firrtl.module @GCTDataTap(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+      %r = firrtl.reg %clock  : !firrtl.uint<1>
+      %w = firrtl.wire  : !firrtl.bundle<a: uint<1>>
+      %DataTap__0, %DataTap__1, %DataTap__2, %DataTap__3, %DataTap__4, %DataTap__5, %DataTap__6, %DataTap__7, %DataTap__8, %DataTap__9 = firrtl.instance @DataTap  {name = "DataTap"} : !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>
+      firrtl.instance @BlackBox  {name = "BlackBox"}
+    }
+  }
+
+// -----
+
+  firrtl.circuit "GCTMemTap"  attributes {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", source = "~GCTMemTap|GCTMemTap>mem", taps = ["GCTMemTap.MemTap.mem[0]", "GCTMemTap.MemTap.mem[1]"]}, {class = "circt.testNT", unrelatedAnnotation}]}  {
+    firrtl.extmodule @MemTap(out %mem: !firrtl.vector<uint<1>, 2>) attributes {defname = "MemTap"}
+    firrtl.module @GCTMemTap(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+      %mem = firrtl.cmem  {name = "mem"} : !firrtl.vector<uint<1>, 2>
+      %MemTap_mem = firrtl.instance @MemTap  {name = "MemTap"} : !firrtl.vector<uint<1>, 2>
+      %0 = firrtl.subindex %MemTap_mem[0] : !firrtl.vector<uint<1>, 2>
+      %1 = firrtl.subindex %MemTap_mem[1] : !firrtl.vector<uint<1>, 2>
+      %memTap = firrtl.wire  : !firrtl.vector<uint<1>, 2>
+      %2 = firrtl.subindex %memTap[0] : !firrtl.vector<uint<1>, 2>
+      %3 = firrtl.subindex %MemTap_mem[0] : !firrtl.vector<uint<1>, 2>
+      firrtl.connect %2, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+      %4 = firrtl.subindex %memTap[1] : !firrtl.vector<uint<1>, 2>
+      %5 = firrtl.subindex %MemTap_mem[1] : !firrtl.vector<uint<1>, 2>
+      firrtl.connect %4, %5 : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  }
+
+// -----
+
+  firrtl.circuit "GCTInterface"  attributes {annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", companion = "~GCTInterface|view_companion", name = "view", parent = "~GCTInterface|GCTInterface", view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "ViewName", elements = [{description = "the register in GCTInterface", name = "register", tpe = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "register", elements = [{name = "_2", tpe = {class = "sifive.enterprise.grandcentral.AugmentedVectorType", elements = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [{class = "firrtl.annotations.TargetToken$Field", value = "_2"}, {class = "firrtl.annotations.TargetToken$Index", value = 0 : i64}], module = "GCTInterface", path = [], ref = "r"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}, {class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [{class = "firrtl.annotations.TargetToken$Field", value = "_2"}, {class = "firrtl.annotations.TargetToken$Index", value = 1 : i64}], module = "GCTInterface", path = [], ref = "r"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}]}}, {name = "_0", tpe = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "_0", elements = [{name = "_1", tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [{class = "firrtl.annotations.TargetToken$Field", value = "_0"}, {class = "firrtl.annotations.TargetToken$Field", value = "_1"}], module = "GCTInterface", path = [], ref = "r"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}}, {name = "_0", tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [{class = "firrtl.annotations.TargetToken$Field", value = "_0"}, {class = "firrtl.annotations.TargetToken$Field", value = "_0"}], module = "GCTInterface", path = [], ref = "r"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}}]}}]}}, {description = "the port 'a' in GCTInterface", name = "port", tpe = {class = "sifive.enterprise.grandcentral.AugmentedGroundType", ref = {circuit = "GCTInterface", component = [], module = "GCTInterface", path = [], ref = "a"}, tpe = {class = "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"}}}]}}, {class = "circt.testNT", unrelatedAnnotation}]}  {
+    firrtl.module @view_companion() {
+      firrtl.skip
+    }
+    firrtl.module @GCTInterface(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>) {
+      %r = firrtl.reg %clock  : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+      firrtl.instance @view_companion  {name = "view_companion"}
+    }
+  }
+// -----
+  firrtl.circuit "Foo"  attributes {annotations = [{class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation", companion = "~Foo|Bar_companion", name = "Bar", parent = "~Foo|Foo", view = {class = "sifive.enterprise.grandcentral.AugmentedBundleType", defName = "View", elements = [{description = "a string", name = "string", tpe = {class = "sifive.enterprise.grandcentral.AugmentedStringType", value = "hello"}}, {description = "a boolean", name = "boolean", tpe = {class = "sifive.enterprise.grandcentral.AugmentedBooleanType", value = false}}, {description = "an integer", name = "integer", tpe = {class = "sifive.enterprise.grandcentral.AugmentedIntegerType", value = 42 : i64}}, {description = "a double", name = "double", tpe = {class = "sifive.enterprise.grandcentral.AugmentedDoubleType", value = 3.140000e+00 : f64}}]}}]}  {
+    firrtl.extmodule @Bar_companion()
+    firrtl.module @Foo() {
+      firrtl.instance @Bar_companion  {name = "Bar_companion"}
+    }
+  }

@@ -138,6 +138,9 @@ static void addAnnotation(Operation *op, Annotation anno) {
 
 // Returns remainder of path if circuit is the correct circuit
 static LogicalResult parseAndCheckCircuit(StringRef &path, CircuitOp circuit) {
+  if (path.empty())
+    return circuit.emitError("empty target string");
+
   if (path.startswith("~"))
     path = path.drop_front();
 
@@ -364,7 +367,7 @@ stdResolveImpl(StringRef rawPath, CircuitOp circuit, SymbolTable &modules) {
   if (path.empty())
     return AnnoPathValue(circuit);
 
-  Operation *rootMod;
+  Operation *rootMod = nullptr;
   if (parseAndCheckModule(path, rootMod, circuit, modules).failed())
     return {};
   if (path.empty())
@@ -401,7 +404,11 @@ static Optional<AnnoPathValue>
 stdResolve(DictionaryAttr anno, CircuitOp circuit, SymbolTable &modules) {
   auto target = anno.getNamed("target");
   if (!target) {
-    circuit.emitError("No target field in annotation") << anno;
+    circuit.emitError("No target field in annotation ") << anno;
+    return {};
+  }
+  if (!target->second.isa<StringAttr>()) {
+    circuit.emitError("Target field in annotation doesn't contain string ") << anno;
     return {};
   }
   return stdResolveImpl(target->second.cast<StringAttr>().getValue(), circuit,
