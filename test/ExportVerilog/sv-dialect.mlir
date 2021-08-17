@@ -711,7 +711,7 @@ hw.module @OutOfLineConstantsInAlwaysSensitivity() {
 // CHECK-LABEL: module TooLongConstExpr
 hw.module @TooLongConstExpr() {
   %myreg = sv.reg : !hw.inout<i4200>
-  // CHECK: always @*
+  // CHECK: always @* begin
   sv.always {
     // CHECK-NEXT: localparam [4199:0] _tmp = 4200'h
     // CHECK-NEXT: myreg <= _tmp + _tmp;
@@ -719,6 +719,7 @@ hw.module @TooLongConstExpr() {
     %1 = comb.add %0, %0 : i4200
     sv.passign %myreg, %1 : i4200
   }
+  // CHECK-NEXT: end
 }
 
 // Constants defined before use should be emitted in-place.
