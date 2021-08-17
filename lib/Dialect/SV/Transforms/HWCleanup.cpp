@@ -41,7 +41,8 @@ struct SimpleOperationInfo : public llvm::DenseMapInfo<Operation *> {
     if (lhs == getTombstoneKey() || lhs == getEmptyKey() ||
         rhs == getTombstoneKey() || rhs == getEmptyKey())
       return false;
-    return mlir::OperationEquivalence::isEquivalentTo(lhs, rhs);
+    return mlir::OperationEquivalence::isEquivalentTo(lhs, rhs, nullptr,
+                                                      nullptr);
   }
 };
 
