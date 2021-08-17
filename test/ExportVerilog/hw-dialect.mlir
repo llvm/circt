@@ -420,8 +420,8 @@ hw.module @casts(%in1: i7, %in2: !hw.array<8xi4>) -> (%r1: !hw.array<7xi1>, %r2:
 // CHECK-NEXT:      input  [3:0]               a,
 // CHECK-NEXT:   // input  /*Zero Width*/      zeroBit,
 // CHECK-NEXT:   // input  [2:0]/*Zero Width*/ arrZero,
-// CHECK-NEXT:      output [3:0]               r0,
-// CHECK-NEXT:   // output /*Zero Width*/      rZero,
+// CHECK-NEXT:      output [3:0]               r0
+// CHECK-NEXT:   // output /*Zero Width*/      rZero
 // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero_0
 // CHECK-NEXT:    );
 // CHECK-EMPTY:
@@ -692,7 +692,8 @@ hw.module.extern @San(%san_input : i0) -> ()
 hw.module @Ichi() -> (%Ichi_output : i0) {
   %0 = hw.instance "ni" @Ni() : () -> (i0)
   // CHECK: Ni ni (
-  // CHECK: //.ni_output (Ichi_output));
+  // CHECK: //.ni_output (Ichi_output)
+  // CHECK-NEXT: );
 
   hw.output %0 : i0
   // CHECK: endmodule
@@ -702,11 +703,13 @@ hw.module @Ichi() -> (%Ichi_output : i0) {
 hw.module @Chi() -> (%Chi_output : i0) {
   %0 = hw.instance "ni" @Ni() : () -> (i0)
   // CHECK: Ni ni (
-  // CHECK: //.ni_output (ni_ni_output));
+  // CHECK: //.ni_output (ni_ni_output)
+  // CHECK-NEXT: );
 
   hw.instance "san" @San(%0) : (i0) -> ()
   // CHECK: San san (
-  // CHECK: //.san_input (ni_ni_output));
+  // CHECK: //.san_input (ni_ni_output)
+  // CHECK-NEXT: );
 
   // CHECK: // Zero width: assign Chi_output = ni_ni_output;
   hw.output %0 : i0
