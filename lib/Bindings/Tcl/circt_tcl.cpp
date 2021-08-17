@@ -514,6 +514,23 @@ static int dumpModuleName(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Ob
   return TCL_OK;
 }
 
+static int dumpOpName(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+  if (objc != 2) {
+    Tcl_WrongNumArgs(interp, objc, objv, "usage: opname [module]");
+    return TCL_ERROR;
+  }
+
+  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("MlirOperation")) == TCL_ERROR) {
+    return returnErrorStr(interp, "expected operation");
+  }
+
+  auto *op = unwrap((MlirOperation){objv[1]->internalRep.twoPtrValue.ptr1});
+  auto name = op->getName().stripDialect();
+  auto *result = Tcl_NewStringObj(name.data(), name.size());
+  Tcl_SetObjResult(interp, result);
+  return TCL_OK;
+}
+
 static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
                             Tcl_Obj *const objv[]) {
   if (objc < 2) {
@@ -532,7 +549,7 @@ static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
 
   if (!strcmp("get", str)) {
     if (objc < 3) {
-      Tcl_WrongNumArgs(interp, objc, objv, "usage: circt get [modname|attrs]");
+      Tcl_WrongNumArgs(interp, objc, objv, "usage: circt get [modname|attrs|opname]");
       return TCL_ERROR;
     }
 
@@ -540,10 +557,13 @@ static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
     if (!strcmp("modname", str))
       return dumpModuleName(cdata, interp, objc - 2, objv + 2);
 
+    if (!strcmp("opname", str))
+      return dumpOpName(cdata, interp, objc - 2, objv + 2);
+
     if (!strcmp("attrs", str))
       return dumpAttributes(cdata, interp, objc - 2, objv + 2);
 
-    return returnErrorStr(interp, "usage: circt get [modname|attrs]");
+    return returnErrorStr(interp, "usage: circt get [modname|attrs|opname]");
   }
 
   return returnErrorStr(interp, "usage: circt [load|query|get]");

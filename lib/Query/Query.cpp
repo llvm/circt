@@ -37,7 +37,7 @@ std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
         filtered.push_back(op);
       }
     } else {
-      if (!llvm::dyn_cast_or_null<mlir::ModuleOp>(op) && filter->matches(op, data)) {
+      if (filter->addSelf() && !llvm::dyn_cast_or_null<mlir::ModuleOp>(op) && filter->matches(op, data)) {
         opStack.push_back(std::make_pair(op, filter->nextFilter()));
       }
 
