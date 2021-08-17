@@ -140,7 +140,7 @@ calyx.program {
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{empty 'then' region.}}
-        calyx.if %c0.out, @Group1 {} else {}
+        calyx.if %c0.out with @Group1 {} else {}
       }
     }
   }
@@ -159,7 +159,7 @@ calyx.program {
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{'calyx.if' op with group 'Group1', which does not exist.}}
-        calyx.if %c0.out, @Group1 {} else {}
+        calyx.if %c0.out with @Group1 {} else {}
       }
     }
   }

@@ -59,7 +59,7 @@ def IfOp : CalyxContainer<"if", [
     ```
   }];
 
-  let assemblyFormat = "$cond`,` $groupName $thenRegion (`else` $elseRegion^)? attr-dict";
+  let assemblyFormat = "$cond `with` $groupName $thenRegion (`else` $elseRegion^)? attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
 
