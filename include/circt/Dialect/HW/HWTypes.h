@@ -92,6 +92,21 @@ BaseTy type_dyn_cast(Type type) {
   return type_cast<BaseTy>(type);
 }
 
+template <typename BaseTy>
+class TypeAliasOr
+    : public ::mlir::Type::TypeBase<TypeAliasOr<BaseTy>, mlir::Type,
+                                    mlir::TypeStorage> {
+  using mlir::Type::TypeBase<TypeAliasOr<BaseTy>, mlir::Type,
+                             mlir::TypeStorage>::Base::Base;
+
+public:
+  // Support LLVM isa/cast/dyn_cast to BaseTy.
+  static bool classof(Type other) { return type_isa<BaseTy>(other); }
+
+  // Support C++ implicit conversions to BaseTy.
+  operator BaseTy() const { return type_cast<BaseTy>(*this); }
+};
+
 } // namespace hw
 } // namespace circt
 

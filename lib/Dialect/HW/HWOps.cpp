@@ -918,16 +918,21 @@ static ParseResult parseStructCreateOp(OpAsmParser &parser,
                                        OperationState &result) {
   llvm::SMLoc inputOperandsLoc = parser.getCurrentLocation();
   llvm::SmallVector<OpAsmParser::OperandType, 4> operands;
-  StructType declType;
+  Type declOrAliasType;
 
   if (parser.parseLParen() || parser.parseOperandList(operands) ||
       parser.parseRParen() || parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseColonType(declType))
+      parser.parseColonType(declOrAliasType))
     return failure();
+
+  auto declType = type_dyn_cast<StructType>(declOrAliasType);
+  if (!declType)
+    return parser.emitError(parser.getNameLoc(),
+                            "expected !hw.struct type or alias");
 
   llvm::SmallVector<Type, 4> structInnerTypes;
   declType.getInnerTypes(structInnerTypes);
-  result.addTypes(declType);
+  result.addTypes(declOrAliasType);
 
   if (parser.resolveOperands(operands, structInnerTypes, inputOperandsLoc,
                              result.operands))
@@ -1090,7 +1095,7 @@ static void printStructInjectOp(OpAsmPrinter &printer, hw::StructInjectOp op) {
 
 static ParseResult parseUnionCreateOp(OpAsmParser &parser,
                                       OperationState &result) {
-  UnionType declType;
+  Type declOrAliasType;
   StringAttr field;
   OpAsmParser::OperandType input;
   llvm::SMLoc fieldLoc = parser.getCurrentLocation();
@@ -1098,8 +1103,13 @@ static ParseResult parseUnionCreateOp(OpAsmParser &parser,
   if (parser.parseAttribute(field, "field", result.attributes) ||
       parser.parseComma() || parser.parseOperand(input) ||
       parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseColonType(declType))
+      parser.parseColonType(declOrAliasType))
     return failure();
+
+  auto declType = type_dyn_cast<UnionType>(declOrAliasType);
+  if (!declType)
+    return parser.emitError(parser.getNameLoc(),
+                            "expected !hw.union type or alias");
 
   Type inputType = declType.getFieldType(field.getValue());
   if (!inputType) {
@@ -1110,7 +1120,7 @@ static ParseResult parseUnionCreateOp(OpAsmParser &parser,
 
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
-  result.addTypes({declType});
+  result.addTypes({declOrAliasType});
   return success();
 }
 

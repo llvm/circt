@@ -2,9 +2,10 @@ name: Windows build and test
 
 # Run on request and every day at 12 noon UTC
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-  schedule:
-    - cron: 0 12 * * *
 
 jobs:
   # Build CIRCT and run its tests.

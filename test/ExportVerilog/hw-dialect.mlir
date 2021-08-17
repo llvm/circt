@@ -411,8 +411,8 @@ hw.module @casts(%in1: i7, %in2: !hw.array<8xi4>) -> (%r1: !hw.array<7xi1>, %r2:
   %r1 = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>
   %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
 
-  // CHECK-NEXT: wire [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
   // CHECK-NEXT: assign r1 = in1;
+  // CHECK-NEXT: assign r2 = /*cast(bit[31:0])*/in2;
   hw.output %r1, %r2 : !hw.array<7xi1>, i32
 }
 
@@ -420,8 +420,8 @@ hw.module @casts(%in1: i7, %in2: !hw.array<8xi4>) -> (%r1: !hw.array<7xi1>, %r2:
 // CHECK-NEXT:      input  [3:0]               a,
 // CHECK-NEXT:   // input  /*Zero Width*/      zeroBit,
 // CHECK-NEXT:   // input  [2:0]/*Zero Width*/ arrZero,
-// CHECK-NEXT:      output [3:0]               r0,
-// CHECK-NEXT:   // output /*Zero Width*/      rZero,
+// CHECK-NEXT:      output [3:0]               r0
+// CHECK-NEXT:   // output /*Zero Width*/      rZero
 // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero_0
 // CHECK-NEXT:    );
 // CHECK-EMPTY:
@@ -692,7 +692,8 @@ hw.module.extern @San(%san_input : i0) -> ()
 hw.module @Ichi() -> (%Ichi_output : i0) {
   %0 = hw.instance "ni" @Ni() : () -> (i0)
   // CHECK: Ni ni (
-  // CHECK: //.ni_output (Ichi_output));
+  // CHECK: //.ni_output (Ichi_output)
+  // CHECK-NEXT: );
 
   hw.output %0 : i0
   // CHECK: endmodule
@@ -702,11 +703,13 @@ hw.module @Ichi() -> (%Ichi_output : i0) {
 hw.module @Chi() -> (%Chi_output : i0) {
   %0 = hw.instance "ni" @Ni() : () -> (i0)
   // CHECK: Ni ni (
-  // CHECK: //.ni_output (ni_ni_output));
+  // CHECK: //.ni_output (ni_ni_output)
+  // CHECK-NEXT: );
 
   hw.instance "san" @San(%0) : (i0) -> ()
   // CHECK: San san (
-  // CHECK: //.san_input (ni_ni_output));
+  // CHECK: //.san_input (ni_ni_output)
+  // CHECK-NEXT: );
 
   // CHECK: // Zero width: assign Chi_output = ni_ni_output;
   hw.output %0 : i0
@@ -730,3 +733,21 @@ hw.module @Chi() -> (%Chi_output : i0) {
    hw.output
  }
  hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}
+
+// CHECK-LABEL: module Issue1563(
+hw.module @Issue1563(%a: i32) -> (%out : i32) {
+  // CHECK: assign out = a + a;{{.*}}//{{.*}}XX.scala:123:19, YY.haskell:309:14, ZZ.swift:3:4
+  %0 = comb.add %a, %a : i32 loc(fused["XX.scala":123:19, "YY.haskell":309:14, "ZZ.swift":3:4])
+  hw.output %0 : i32
+  // CHECK: endmodule
+}
+
+// CHECK-LABEL: module Foo1587
+// Issue #1587: https://github.com/llvm/circt/issues/1587
+hw.module @Foo1587(%idx: i2, %a_0: i4, %a_1: i4, %a_2: i4, %a_3: i4) -> (%b: i4) {
+  %0 = hw.array_create %a_0, %a_1, %a_2, %a_3 : i4
+  %1 = hw.array_get %0[%idx] : !hw.array<4xi4>
+  hw.output %1 : i4
+  // CHECK: wire [3:0][3:0] [[WIRE:.+]] = {{[{}][{}]}}a_0}, {a_1}, {a_2}, {a_3}};
+  // CHECK-NEXT: assign b = [[WIRE]][idx];
+}

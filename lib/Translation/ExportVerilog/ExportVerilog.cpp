@@ -52,7 +52,7 @@ using namespace sv;
 /// expression.
 static bool isExpressionAlwaysInline(Operation *op) {
   // We need to emit array indexes inline per verilog "lvalue" semantics.
-  if (isa<ArrayIndexInOutOp>(op))
+  if (isa<ArrayIndexInOutOp>(op) || isa<ReadInOutOp>(op))
     return true;
 
   // An SV interface modport is a symbolic name that is always inlined.
@@ -373,6 +373,18 @@ enum VerilogPrecedence {
 };
 } // end anonymous namespace
 
+/// Pull any FileLineCol locs out of the specified location and add it to the
+/// specified set.
+static void collectFileLineColLocs(Location loc,
+                                   SmallPtrSet<Attribute, 8> &locationSet) {
+  if (auto fileLoc = loc.dyn_cast<FileLineColLoc>())
+    locationSet.insert(fileLoc);
+
+  if (auto fusedLoc = loc.dyn_cast<FusedLoc>())
+    for (auto loc : fusedLoc.getLocations())
+      collectFileLineColLocs(loc, locationSet);
+}
+
 /// Return the location information as a (potentially empty) string.
 static std::string
 getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
@@ -381,11 +393,9 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
 
   // Multiple operations may come from the same location or may not have useful
   // location info.  Unique it now.
-  SmallPtrSet<Attribute, 8> locations;
-  for (auto *op : ops) {
-    if (auto loc = op->getLoc().dyn_cast<FileLineColLoc>())
-      locations.insert(loc);
-  }
+  SmallPtrSet<Attribute, 8> locationSet;
+  for (auto *op : ops)
+    collectFileLineColLocs(op->getLoc(), locationSet);
 
   auto printLoc = [&](FileLineColLoc loc) {
     sstr << loc.getFilename();
@@ -396,9 +406,10 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
     }
   };
 
-  switch (locations.size()) {
+  // Fast pass some common cases.
+  switch (locationSet.size()) {
   case 1:
-    printLoc((*locations.begin()).cast<FileLineColLoc>());
+    printLoc((*locationSet.begin()).cast<FileLineColLoc>());
     LLVM_FALLTHROUGH;
   case 0:
     return sstr.str();
@@ -408,8 +419,8 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
 
   // Sort the entries.
   SmallVector<FileLineColLoc, 8> locVector;
-  locVector.reserve(locations.size());
-  for (auto loc : locations)
+  locVector.reserve(locationSet.size());
+  for (auto loc : locationSet)
     locVector.push_back(loc.cast<FileLineColLoc>());
 
   llvm::array_pod_sort(
@@ -1423,11 +1434,18 @@ SubExprInfo ExprEmitter::visitUnhandledExpr(Operation *op) {
 /// result of this expression.  It is conservatively correct to return false.
 static bool isOkToBitSelectFrom(Value v) {
   // Module ports are always ok to bit select from.
-  if (v.getDefiningOp())
-    // TODO: We could handle concat and other operators here.
-    return false;
+  if (v.isa<BlockArgument>())
+    return true;
 
-  return true;
+  // Uses of a wire or register can be done inline.
+  if (auto read = v.getDefiningOp<ReadInOutOp>()) {
+    if (read.input().getDefiningOp<WireOp>() ||
+        read.input().getDefiningOp<RegOp>())
+      return true;
+  }
+
+  // TODO: We could handle concat and other operators here.
+  return false;
 }
 
 /// Return true if we are unable to ever inline the specified operation.  This
@@ -1464,6 +1482,20 @@ static bool isExpressionUnableToInline(Operation *op) {
       if (!isOkToBitSelectFrom(op->getResult(0)))
         return true;
 
+    // Indexing into an array cannot be done in the same line as the array
+    // creation.
+    //
+    // This is done to avoid creating incorrect constructs like the following
+    // (which is a bit extract):
+    //
+    //     assign bar = {{a}, {b}, {c}, {d}}[idx];
+    //
+    // And illegal constructs like:
+    //
+    //     assign bar = ({{a}, {b}, {c}, {d}})[idx];
+    if (isa<ArrayCreateOp>(op) && isa<ArrayGetOp>(user))
+      return true;
+
     // Sign extend (when the operand isn't a single bit) requires a bitselect
     // syntactically.
     if (auto sext = dyn_cast<SExtOp>(user)) {
@@ -1478,8 +1510,14 @@ static bool isExpressionUnableToInline(Operation *op) {
       return true;
 
     // Always blocks must have a name in their sensitivity list, not an expr.
-    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user))
+    if (isa<AlwaysOp>(user) || isa<AlwaysFFOp>(user)) {
+      // Anything other than a read of a wire must be out of line.
+      if (auto read = dyn_cast<ReadInOutOp>(op))
+        if (read.input().getDefiningOp<WireOp>() ||
+            read.input().getDefiningOp<RegOp>())
+          continue;
       return true;
+    }
   }
   return false;
 }
@@ -1487,6 +1525,11 @@ static bool isExpressionUnableToInline(Operation *op) {
 /// Return true if this expression should be emitted inline into any statement
 /// that uses it.
 static bool isExpressionEmittedInline(Operation *op) {
+  // Never create a temporary which is only going to be assigned to an output
+  // port.
+  if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
+    return true;
+
   // If it isn't structurally possible to inline this expression, emit it out
   // of line.
   if (isExpressionUnableToInline(op))
@@ -2488,6 +2531,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
   bool isFirst = true; // True until we print a port.
+  bool isZeroWidth = false;
   SmallVector<Value, 32> portValues;
   for (auto &elt : portInfo) {
     // Figure out which value we are emitting.
@@ -2499,7 +2543,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     // Figure out which value we are emitting.
     auto &elt = portInfo[portNum];
     Value portVal = portValues[portNum];
-    bool isZeroWidth = isZeroBitType(portVal.getType());
+    isZeroWidth = isZeroBitType(portVal.getType());
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.
@@ -2557,7 +2601,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     }
     os << ')';
   }
-  if (!isFirst) {
+  if (!isFirst || isZeroWidth) {
     emitLocationInfoAndNewLine(ops);
     ops.clear();
     indent() << prefix;
@@ -3118,12 +3162,16 @@ void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false, hasZeroWidth = false;
-  size_t maxTypeWidth = 0;
+  size_t maxTypeWidth = 0, lastNonZeroPort = -1;
   SmallVector<SmallString<8>, 16> portTypeStrings;
 
-  for (auto &port : portInfo) {
+  for (size_t i = 0, e = portInfo.size(); i < e; ++i) {
+    auto port = portInfo[i];
     hasOutputs |= port.isOutput();
     hasZeroWidth |= isZeroBitType(port.type);
+    if (!isZeroBitType(port.type)) {
+      lastNonZeroPort = i;
+    }
 
     // Convert the port's type to a string and measure it.
     portTypeStrings.push_back({});
@@ -3203,9 +3251,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
       ++portIdx;
     }
 
-    if (portIdx != e)
-      os << ',';
-    else if (isZeroWidth)
+    if (portIdx != e) {
+      if (portIdx <= lastNonZeroPort)
+        os << ',';
+    } else if (isZeroWidth)
       os << "\n   );\n";
     else
       os << ");\n";
@@ -3352,12 +3401,13 @@ static void prepareHWModule(Block &block, ModuleNameManager &names,
     // a trivial wire, if the corresponding option is set.
     if (!options.allowExprInEventControl) {
       auto enforceWire = [&](Value expr) {
-        auto definingOp = expr.getDefiningOp();
-        if (!definingOp ||
-            (isa<ReadInOutOp>(definingOp) &&
-             isa_and_nonnull<WireOp>(
-                 cast<ReadInOutOp>(definingOp).input().getDefiningOp())))
+        // Direct port uses are fine.
+        if (expr.isa<BlockArgument>())
           return;
+        // If this is a read from a wire, we're fine.
+        if (auto read = expr.getDefiningOp<ReadInOutOp>())
+          if (read.input().getDefiningOp<WireOp>())
+            return;
         auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);
         auto newWire = builder.create<WireOp>(expr.getType());
         builder.setInsertionPoint(&op);

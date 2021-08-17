@@ -132,6 +132,11 @@ static cl::opt<bool>
                 cl::desc("run the width inference pass on firrtl"),
                 cl::init(true));
 
+static cl::opt<bool>
+    inferResets("infer-resets",
+                cl::desc("run the reset inference pass on firrtl"),
+                cl::init(true));
+
 static cl::opt<bool> extractTestCode("extract-test-code",
                                      cl::desc("run the extract test code pass"),
                                      cl::init(false));
@@ -241,6 +246,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inferWidths)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
+  if (inferResets)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (lowerTypes) {
@@ -256,10 +264,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
-  if (!disableOptimization) {
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    modulePM.addPass(createSimpleCanonicalizerPass());
-  }
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
 
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
@@ -284,6 +291,13 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     circuitPM.addPass(firrtl::createGrandCentralPass());
     circuitPM.addPass(firrtl::createGrandCentralTapsPass());
   }
+
+  // The above passes, IMConstProp in particular, introduce additional
+  // canonicalization opportunities that we should pick up here before we
+  // proceed to output-specific pipelines.
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||

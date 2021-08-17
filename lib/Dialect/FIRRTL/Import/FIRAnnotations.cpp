@@ -71,7 +71,7 @@ splitTarget(StringRef target, MLIRContext *context) {
       APInt subIndex;
       if (!temp.str().getAsInteger(10, subIndex))
         annotationVec.push_back(IntegerAttr::get(IntegerType::get(context, 64),
-                                                 subIndex.getSExtValue()));
+                                                 subIndex.getZExtValue()));
       else
         // We don't have a good way to emit error here. This will be reported as
         // an error in the FIRRTL parser.

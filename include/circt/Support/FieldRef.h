@@ -52,6 +52,14 @@ public:
     return value == other.value && id == other.id;
   }
 
+  bool operator<(const FieldRef &other) const {
+    if (value.getImpl() < other.value.getImpl())
+      return true;
+    if (value.getImpl() > other.value.getImpl())
+      return false;
+    return id < other.id;
+  }
+
   operator bool() const { return bool(value); }
 
 private:

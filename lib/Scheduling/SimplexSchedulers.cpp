@@ -1,4 +1,4 @@
-//===- SimplexScheduler.cpp - Linear programming-based scheduler ----------===//
+//===- SimplexSchedulers.cpp - Linear programming-based schedulers --------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Implementation of a scheduler that applies the simplex algorithm to a linear
-// program formulation of the resource-free cyclic scheduling problem.
+// Implementation of linear programming-based schedulers with a built-in simplex
+// solver.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +19,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
 
-#define DEBUG_TYPE "simplex-scheduler"
+#define DEBUG_TYPE "simplex-schedulers"
 
 using namespace circt;
 using namespace circt::scheduling;
@@ -29,30 +29,23 @@ using llvm::format;
 
 namespace {
 
-/// This class models the cyclic scheduling problem as a lexico-parametric
-/// linear program (LP), and solves it with an extended version of the dual
-/// simplex algorithm.
+/// This class provides a framework to model certain scheduling problems as
+/// lexico-parametric linear programs (LP), which are then solved with an
+/// extended version of the dual simplex algorithm.
 ///
 /// The approach is described in:
 ///   B. D. de Dinechin, "Simplex Scheduling: More than Lifetime-Sensitive
 ///   Instruction Scheduling", PRISM 1994.22, 1994.
 ///
-/// Our `CyclicProblem` corresponds to de Dinechin's initial, resource-free
-/// "central problem", and results in an *integer* linear programming
-/// formulation with a totally unimodular constraint matrix. Such ILPs can
-/// however be solved optimally in polynomial time with a (non-integer) LP
-/// solver (such as the simplex algorithm), as the LP solution is guaranteed to
-/// be integer.
-/// (Note that this is the same idea as used by SDC-based schedulers.)
-///
-/// The LP's objective is to minimize the start time of the client-provided
-/// "last" operation. The optimal initiation interval (II) is determined as a
-/// side product of solving the parametric problem, and corresponds to the
-/// "RecMII" (= recurrence-constrained minimum II) usually considered as one
-/// component in the lower II bound used by modulo schedulers.
-class SimplexScheduler {
-private:
-  CyclicProblem &prob;
+/// Resource-free scheduling problems (called "central problems" in the paper)
+/// have an *integer* linear programming formulation with a totally unimodular
+/// constraint matrix. Such ILPs can however be solved optimally in polynomial
+/// time with a (non-integer) LP solver (such as the simplex algorithm), as the
+/// LP solution is guaranteed to be integer. Note that this is the same idea as
+/// used by SDC-based schedulers.
+class SimplexSchedulerBase {
+protected:
+  /// The objective is to minimize the start time of this operation.
   Operation *lastOp;
 
   /// The minimally-feasible initiation interval is computed by the algorithm.
@@ -117,24 +110,84 @@ private:
   /// All other (explicitly stored) columns represent non-basic variables.
   static constexpr unsigned firstNonBasicVariableColumn = 2;
 
+  virtual Problem &getProblem() = 0;
+  virtual void
+  fillConstraintRow(SmallVector<int> &row, detail::Dependence dep,
+                    SmallDenseMap<Operation *, unsigned> opColumns);
   void buildTableau();
   Optional<unsigned> findPivotRow();
   Optional<unsigned> findPivotColumn(unsigned pivotRow);
   void multiplyRow(unsigned row, int factor);
   void addMultipleOfRow(unsigned sourceRow, int factor, unsigned targetRow);
   void pivot(unsigned pivotRow, unsigned pivotColumn);
+  LogicalResult solveTableau();
+  void storeStartTimes();
 
   void dumpTableau();
 
 public:
-  SimplexScheduler(CyclicProblem &prob, Operation *lastOp)
-      : prob(prob), lastOp(lastOp) {}
-  LogicalResult schedule();
+  explicit SimplexSchedulerBase(Operation *lastOp) : lastOp(lastOp) {}
+  virtual ~SimplexSchedulerBase() = default;
+  virtual LogicalResult schedule() = 0;
+};
+
+/// This class solves the basic, acyclic `Problem`.
+class SimplexScheduler : public SimplexSchedulerBase {
+private:
+  Problem &prob;
+
+protected:
+  Problem &getProblem() override { return prob; }
+
+public:
+  SimplexScheduler(Problem &prob, Operation *lastOp)
+      : SimplexSchedulerBase(lastOp), prob(prob) {}
+
+  LogicalResult schedule() override;
+};
+
+/// This class solves the resource-free `CyclicProblem`.  The optimal initiation
+/// interval (II) is determined as a side product of solving the parametric
+/// problem, and corresponds to the "RecMII" (= recurrence-constrained minimum
+/// II) usually considered as one component in the lower II bound used by modulo
+/// schedulers.
+class CyclicSimplexScheduler : public SimplexSchedulerBase {
+private:
+  CyclicProblem &prob;
+
+protected:
+  Problem &getProblem() override { return prob; }
+  void
+  fillConstraintRow(SmallVector<int> &row, detail::Dependence dep,
+                    SmallDenseMap<Operation *, unsigned> opColumns) override;
+
+public:
+  CyclicSimplexScheduler(CyclicProblem &prob, Operation *lastOp)
+      : SimplexSchedulerBase(lastOp), prob(prob) {}
+  LogicalResult schedule() override;
 };
 
 } // anonymous namespace
 
-void SimplexScheduler::buildTableau() {
+//===----------------------------------------------------------------------===//
+// SimplexSchedulerBase
+//===----------------------------------------------------------------------===//
+
+void SimplexSchedulerBase::fillConstraintRow(
+    SmallVector<int> &row, detail::Dependence dep,
+    SmallDenseMap<Operation *, unsigned> opColumns) {
+  auto &prob = getProblem();
+  Operation *src = dep.getSource();
+  Operation *dst = dep.getDestination();
+  unsigned latency = *prob.getLatency(*prob.getLinkedOperatorType(src));
+  row[parameterOneColumn] = -latency; // note the negation
+  row[opColumns[src]] = 1;
+  row[opColumns[dst]] = -1;
+}
+
+void SimplexSchedulerBase::buildTableau() {
+  auto &prob = getProblem();
+
   // Helper map to lookup an operation's column number in the tableau.
   SmallDenseMap<Operation *, unsigned> opCols;
 
@@ -169,15 +222,7 @@ void SimplexScheduler::buildTableau() {
       auto &consRowVec = addRow();
       basicVariables.push_back(varNum);
       ++varNum;
-
-      Operation *src = dep.getSource();
-      Operation *dst = dep.getDestination();
-      unsigned latency = *prob.getLatency(*prob.getLinkedOperatorType(src));
-      unsigned distance = prob.getDistance(dep).getValueOr(0);
-      consRowVec[parameterOneColumn] = -latency; // note the negation
-      consRowVec[parameterIIColumn] = distance;
-      consRowVec[opCols[src]] = 1;
-      consRowVec[opCols[dst]] = -1;
+      fillConstraintRow(consRowVec, dep, opCols);
     }
   }
 
@@ -185,7 +230,7 @@ void SimplexScheduler::buildTableau() {
   nRows = tableau.size();
 }
 
-Optional<unsigned> SimplexScheduler::findPivotRow() {
+Optional<unsigned> SimplexSchedulerBase::findPivotRow() {
   // Find the first row for which the dot product "~B_p u" is negative.
   for (unsigned row = firstConstraintRow; row < nRows; ++row) {
     int rowVal = tableau[row][parameterOneColumn] +
@@ -197,7 +242,7 @@ Optional<unsigned> SimplexScheduler::findPivotRow() {
   return None;
 }
 
-Optional<unsigned> SimplexScheduler::findPivotColumn(unsigned pivotRow) {
+Optional<unsigned> SimplexSchedulerBase::findPivotColumn(unsigned pivotRow) {
   Optional<int> maxQuot;
   Optional<unsigned> pivotCol;
   // Look for negative entries in the ~A part of the tableau. If multiple
@@ -220,7 +265,7 @@ Optional<unsigned> SimplexScheduler::findPivotColumn(unsigned pivotRow) {
   return pivotCol;
 }
 
-void SimplexScheduler::multiplyRow(unsigned row, int factor) {
+void SimplexSchedulerBase::multiplyRow(unsigned row, int factor) {
   assert(factor != 0);
   for (unsigned col = 0; col < nColumns; ++col)
     tableau[row][col] *= factor;
@@ -228,8 +273,8 @@ void SimplexScheduler::multiplyRow(unsigned row, int factor) {
   implicitBasicVariableColumnVector[row] *= factor;
 }
 
-void SimplexScheduler::addMultipleOfRow(unsigned sourceRow, int factor,
-                                        unsigned targetRow) {
+void SimplexSchedulerBase::addMultipleOfRow(unsigned sourceRow, int factor,
+                                            unsigned targetRow) {
   assert(factor != 0 && sourceRow != targetRow);
   for (unsigned col = 0; col < nColumns; ++col)
     tableau[targetRow][col] += tableau[sourceRow][col] * factor;
@@ -243,7 +288,7 @@ void SimplexScheduler::addMultipleOfRow(unsigned sourceRow, int factor,
 /// unit vector (only the \p pivotRow'th entry is 1). Then, a basis exchange is
 /// performed: the non-basic variable is swapped with the basic variable
 /// associated with the pivot row.
-void SimplexScheduler::pivot(unsigned pivotRow, unsigned pivotColumn) {
+void SimplexSchedulerBase::pivot(unsigned pivotRow, unsigned pivotColumn) {
   // The implicit columns are part of an identity matrix.
   implicitBasicVariableColumnVector[pivotRow] = 1;
 
@@ -280,46 +325,7 @@ void SimplexScheduler::pivot(unsigned pivotRow, unsigned pivotColumn) {
             basicVariables[pivotRow - firstConstraintRow]);
 }
 
-void SimplexScheduler::dumpTableau() {
-  for (unsigned j = 0; j < nColumns; ++j)
-    dbgs() << "====";
-  dbgs() << "==\n";
-  for (unsigned i = 0; i < nRows; ++i) {
-    if (i == firstConstraintRow) {
-      for (unsigned j = 0; j < nColumns; ++j) {
-        if (j == firstNonBasicVariableColumn)
-          dbgs() << "-+";
-        dbgs() << "----";
-      }
-      dbgs() << '\n';
-    }
-    for (unsigned j = 0; j < nColumns; ++j) {
-      if (j == firstNonBasicVariableColumn)
-        dbgs() << " |";
-      dbgs() << format(" %3d", tableau[i][j]);
-    }
-    if (i >= firstConstraintRow)
-      dbgs() << format(" |< %2d", basicVariables[i - firstConstraintRow]);
-    dbgs() << '\n';
-  }
-  for (unsigned j = 0; j < nColumns; ++j)
-    dbgs() << "====";
-  dbgs() << "==\n";
-  dbgs() << "          ";
-  for (unsigned j = firstNonBasicVariableColumn; j < nColumns; ++j)
-    dbgs() << format(" %2d^",
-                     nonBasicVariables[j - firstNonBasicVariableColumn]);
-  dbgs() << '\n';
-}
-
-LogicalResult SimplexScheduler::schedule() {
-  // Initialize data structures.
-  parameterII = 1;
-  buildTableau();
-
-  LLVM_DEBUG(dbgs() << "Initial tableau:\n");
-  LLVM_DEBUG(dumpTableau());
-
+LogicalResult SimplexSchedulerBase::solveTableau() {
   // Iterate as long as we find rows to pivot on (~B_p u is negative), otherwise
   // an optimal solution has been found.
   while (auto pivotRow = findPivotRow()) {
@@ -353,19 +359,19 @@ LogicalResult SimplexScheduler::schedule() {
       continue;
     }
 
-    // Otherwise, there is nothing we can do.
-    return prob.getContainingOp()->emitError("problem is infeasible");
+    // Otherwise, the linear program is infeasible.
+    return failure();
   }
 
-  LLVM_DEBUG(dbgs() << "Optimal solution found with II = " << parameterII
-                    << " and start time of last operation = "
-                    << -tableau[objectiveRow][parameterOneColumn] << '\n');
+  // Optimal solution found!
+  return success();
+}
 
-  // Store solution in the problem object.
-  prob.setInitiationInterval(parameterII);
-
+void SimplexSchedulerBase::storeStartTimes() {
+  auto &prob = getProblem();
   auto &ops = prob.getOperations();
   unsigned nOps = ops.size();
+
   // For the start time variables currently in basis, we look up the solution
   // in the ~B part of the tableau. The slack variables (IDs >= |ops|) are
   // ignored.
@@ -385,12 +391,105 @@ LogicalResult SimplexScheduler::schedule() {
     if (varNum < nOps)
       prob.setStartTime(ops[varNum], 0);
   }
+}
 
+void SimplexSchedulerBase::dumpTableau() {
+  for (unsigned j = 0; j < nColumns; ++j)
+    dbgs() << "====";
+  dbgs() << "==\n";
+  for (unsigned i = 0; i < nRows; ++i) {
+    if (i == firstConstraintRow) {
+      for (unsigned j = 0; j < nColumns; ++j) {
+        if (j == firstNonBasicVariableColumn)
+          dbgs() << "-+";
+        dbgs() << "----";
+      }
+      dbgs() << '\n';
+    }
+    for (unsigned j = 0; j < nColumns; ++j) {
+      if (j == firstNonBasicVariableColumn)
+        dbgs() << " |";
+      dbgs() << format(" %3d", tableau[i][j]);
+    }
+    if (i >= firstConstraintRow)
+      dbgs() << format(" |< %2d", basicVariables[i - firstConstraintRow]);
+    dbgs() << '\n';
+  }
+  for (unsigned j = 0; j < nColumns; ++j)
+    dbgs() << "====";
+  dbgs() << "==\n";
+  dbgs() << "          ";
+  for (unsigned j = firstNonBasicVariableColumn; j < nColumns; ++j)
+    dbgs() << format(" %2d^",
+                     nonBasicVariables[j - firstNonBasicVariableColumn]);
+  dbgs() << '\n';
+}
+
+//===----------------------------------------------------------------------===//
+// SimplexScheduler
+//===----------------------------------------------------------------------===//
+
+LogicalResult SimplexScheduler::schedule() {
+  parameterII = 0;
+  buildTableau();
+
+  LLVM_DEBUG(dbgs() << "Initial tableau:\n");
+  LLVM_DEBUG(dumpTableau());
+
+  if (failed(solveTableau()))
+    return prob.getContainingOp()->emitError() << "problem is infeasible";
+
+  assert(parameterII == 0);
+  LLVM_DEBUG(
+      dbgs() << "Optimal solution found with start time of last operation = "
+             << -tableau[objectiveRow][parameterOneColumn] << '\n');
+
+  storeStartTimes();
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// CyclicSimplexScheduler
+//===----------------------------------------------------------------------===//
+
+void CyclicSimplexScheduler::fillConstraintRow(
+    SmallVector<int> &row, detail::Dependence dep,
+    SmallDenseMap<Operation *, unsigned> opColumns) {
+  SimplexSchedulerBase::fillConstraintRow(row, dep, opColumns);
+  if (auto dist = prob.getDistance(dep))
+    row[parameterIIColumn] = *dist;
+}
+
+LogicalResult CyclicSimplexScheduler::schedule() {
+  parameterII = 1;
+  buildTableau();
+
+  LLVM_DEBUG(dbgs() << "Initial tableau:\n");
+  LLVM_DEBUG(dumpTableau());
+
+  if (failed(solveTableau()))
+    return prob.getContainingOp()->emitError() << "problem is infeasible";
+
+  LLVM_DEBUG(dbgs() << "Optimal solution found with II = " << parameterII
+                    << " and start time of last operation = "
+                    << -tableau[objectiveRow][parameterOneColumn] << '\n');
+
+  prob.setInitiationInterval(parameterII);
+  storeStartTimes();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Public API
+//===----------------------------------------------------------------------===//
+
+LogicalResult scheduling::scheduleSimplex(Problem &prob, Operation *lastOp) {
+  SimplexScheduler simplex(prob, lastOp);
+  return simplex.schedule();
 }
 
 LogicalResult scheduling::scheduleSimplex(CyclicProblem &prob,
                                           Operation *lastOp) {
-  SimplexScheduler simplex(prob, lastOp);
+  CyclicSimplexScheduler simplex(prob, lastOp);
   return simplex.schedule();
 }

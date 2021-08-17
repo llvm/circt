@@ -1850,10 +1850,25 @@ FIRRTLType DShlPrimOp::inferBinaryReturnType(FIRRTLType lhs, FIRRTLType rhs,
   // If the left or right has unknown result type, then the operation does
   // too.
   auto width = lhsi.getWidthOrSentinel();
-  if (width == -1 || !rhsui.getWidth().hasValue())
+  if (width == -1 || !rhsui.getWidth().hasValue()) {
     width = -1;
-  else
-    width = width + (1 << rhsui.getWidth().getValue()) - 1;
+  } else {
+    auto amount = rhsui.getWidth().getValue();
+    if (amount >= 32) {
+      if (loc)
+        mlir::emitError(*loc, "shift amount too large: second operand of dshl "
+                              "is wider than 31 bits");
+      return {};
+    }
+    int64_t newWidth = (int64_t)width + ((int64_t)1 << amount) - 1;
+    if (newWidth > INT32_MAX) {
+      if (loc)
+        mlir::emitError(*loc, "shift amount too large: first operand shifted "
+                              "by maximum amount exceeds maximum width");
+      return {};
+    }
+    width = newWidth;
+  }
   return IntType::get(lhs.getContext(), lhsi.isSigned(), width);
 }
 

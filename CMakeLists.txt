@@ -78,13 +78,9 @@ else()
   set(CMAKE_VISIBILITY_INLINES_HIDDEN ON CACHE BOOL "Hide inlines")
 
   # The -fvisibility=hidden option only works for static builds.
-  if (NOT BUILD_SHARED_LIBS)
-    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
-  else()
-    if (CMAKE_CXX_VISIBILITY_PRESET STREQUAL "hidden")
-      message(FATAL_ERROR "CMAKE_CXX_VISIBILITY_PRESET=hidden is incompatible \
-                           with BUILD_SHARED_LIBS.")
-    endif()
+  if (BUILD_SHARED_LIBS AND (CMAKE_CXX_VISIBILITY_PRESET STREQUAL "hidden"))
+    message(FATAL_ERROR "CMAKE_CXX_VISIBILITY_PRESET=hidden is incompatible \
+                         with BUILD_SHARED_LIBS.")
   endif()
 
   set(MLIR_MAIN_SRC_DIR ${LLVM_MAIN_SRC_DIR}/../mlir ) # --src-root
@@ -334,6 +330,21 @@ if(CIRCT_BINDINGS_PYTHON_ENABLED)
                  "extension = '${PYTHON_MODULE_EXTENSION}'")
 else()
   message(STATUS "CIRCT Python bindings are disabled.")
+endif()
+
+#-------------------------------------------------------------------------------
+# Tcl bindings
+#-------------------------------------------------------------------------------
+option(CIRCT_BINDINGS_TCL_ENABLED "Enables CIRCT Tcl bindings." OFF)
+
+llvm_canonicalize_cmake_booleans(CIRCT_BINDINGS_TCL_ENABLED)
+if(CIRCT_BINDINGS_TCL_ENABLED)
+  message(STATUS "CIRCT Tcl bindings are enabled")
+  find_package(TCL 8.6 REQUIRED)
+  find_package(TCLStub 8.6 REQUIRED)
+  message(STATUS "Found TCL include path: ${TCL_INCLUDE_PATH}")
+  message(STATUS "Found TCL library: ${TCL_LIBRARY}")
+  message(STATUS "Found TCL executable: ${TCL_TCLSH}")
 endif()
 
 #-------------------------------------------------------------------------------

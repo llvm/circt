@@ -177,6 +177,43 @@ LogicalResult CyclicProblem::verifyProblem() {
 }
 
 //===----------------------------------------------------------------------===//
+// SharedPipelinedOperatorsProblem
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SharedPipelinedOperatorsProblem::checkOperatorType(OperatorType opr) {
+  if (failed(Problem::checkOperatorType(opr)))
+    return failure();
+
+  auto limit = getLimit(opr);
+  if (limit && *limit > 0 && *getLatency(opr) == 0)
+    return getContainingOp()->emitError()
+           << "Limited operator type '" << opr << "' has zero latency.";
+  return success();
+}
+
+LogicalResult
+SharedPipelinedOperatorsProblem::verifyOperatorType(OperatorType opr) {
+  auto limit = getLimit(opr);
+  if (!limit)
+    return success();
+
+  llvm::SmallDenseMap<unsigned, unsigned> nOpsPerTimeStep;
+  for (auto *op : getOperations())
+    if (opr == *getLinkedOperatorType(op))
+      ++nOpsPerTimeStep[*getStartTime(op)];
+
+  for (auto &kv : nOpsPerTimeStep)
+    if (kv.second > *limit)
+      return getContainingOp()->emitError()
+             << "Operator type '" << opr << "' is oversubscribed."
+             << "\n  time step: " << kv.first
+             << "\n  #operations: " << kv.second << "\n  limit: " << *limit;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Dependence
 //===----------------------------------------------------------------------===//
 

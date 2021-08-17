@@ -1892,4 +1892,81 @@ firrtl.module @dshifts_to_ishifts(in %a_in: !firrtl.sint<58>,
   firrtl.connect %c_out, %2 : !firrtl.sint<58>, !firrtl.sint<58>
 }
 
+// CHECK-LABEL: firrtl.module @constReg
+firrtl.module @constReg(in %clock: !firrtl.clock,
+              in %en: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  %r1 = firrtl.reg %clock  : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %0 = firrtl.mux(%en, %c1_ui1, %r1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:  %[[C11:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+  // CHECK:  firrtl.connect %out, %[[C11]] 
+}
+
+// CHECK-LABEL: firrtl.module @constReg
+firrtl.module @constReg2(in %clock: !firrtl.clock,
+              in %en: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  %r1 = firrtl.reg %clock  : !firrtl.uint<1>
+  %r2 = firrtl.reg %clock  : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %0 = firrtl.mux(%en, %c1_ui1, %r1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %1 = firrtl.mux(%en, %r2, %c0_ui1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  %2 = firrtl.xor %r1, %r2 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %out, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:  %[[C12:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+  // CHECK:  firrtl.connect %out, %[[C12]] 
+}
+
+// CHECK-LABEL: firrtl.module @constReg3
+firrtl.module @constReg3(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %reset, %c11_ui8  : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+  firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK:  %[[C14:.+]] = firrtl.constant 11
+  // CHECK: firrtl.connect %z, %[[C14]]
+  firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
+}
+
+// CHECK-LABEL: firrtl.module @constReg4
+firrtl.module @constReg4(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
+  %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+  firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK:  %[[C13:.+]] = firrtl.constant 11
+  // CHECK: firrtl.connect %z, %[[C13]]
+  firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
+}
+
+// CHECK-LABEL: firrtl.module @constReg6
+firrtl.module @constReg6(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
+  %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
+  %resCond = firrtl.and %reset, %cond : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %r = firrtl.regreset %clock, %resCond, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+  firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK:  %[[C13:.+]] = firrtl.constant 11
+  // CHECK: firrtl.connect %z, %[[C13]]
+  firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
+}
+
+// Cannot optimize if bit mismatch with constant reset.
+// CHECK-LABEL: firrtl.module @constReg5
+firrtl.module @constReg5(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
+  %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
+  %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>
+  // CHECK: %0 = firrtl.mux(%cond, %c11_ui8, %r)
+  %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
+  // CHECK: firrtl.connect %r, %0
+  firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
+  firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
+}
 }

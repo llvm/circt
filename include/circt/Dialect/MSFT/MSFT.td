@@ -57,6 +57,17 @@ class MSFT_Attr<string name, list<Trait> traits = [],
   let mnemonic = ?;
 }
 
+def SwitchInstance : MSFT_Attr<"SwitchInstance"> {
+  let summary = "Select an attribute to be use based on the instance";
+  let mnemonic = "switch.inst";
+  let parameters = (ins
+    ArrayRefParameter<"InstIDAttrPair">:$instPairs);
+
+  let extraClassDeclaration = [{
+    Attribute lookup(InstanceIDAttr);
+  }];
+}
+
 def PhysLocation : MSFT_Attr<"PhysLocation"> {
   let summary = "Descibes a physical location on a device";
   let description = [{

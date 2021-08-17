@@ -259,6 +259,34 @@ protected:
   virtual LogicalResult verifyProblem() override;
 };
 
+/// This class models a resource-constrained scheduling problem. An optional,
+/// non-zero *limit* marks operator types to be *shared* by the operations using
+/// them. In an HLS setting, this corresponds to multiplexing multiple
+/// operations onto a pre-allocated number of operator instances. These
+/// instances are assumed to be *fully pipelined*, meaning each instance can
+/// accept new operands (coming from a distinct operation) in each time step.
+///
+/// A solution to this problem is feasible iff the number of operations that use
+/// a certain limited operator type, and start in the same time step, does not
+/// exceed the operator type's limit. These constraints do not apply to operator
+/// types without a limit (not set, or 0).
+class SharedPipelinedOperatorsProblem : public virtual Problem {
+private:
+  OperatorTypeProperty<unsigned> limit;
+
+public:
+  using Problem::Problem;
+
+  /// The limit is the maximum number of operations using \p opr that are
+  /// allowed to start in the same time step.
+  Optional<unsigned> getLimit(OperatorType opr) { return limit.lookup(opr); }
+  void setLimit(OperatorType opr, unsigned val) { limit[opr] = val; }
+
+protected:
+  virtual LogicalResult checkOperatorType(OperatorType opr) override;
+  virtual LogicalResult verifyOperatorType(OperatorType opr) override;
+};
+
 } // namespace scheduling
 } // namespace circt
 

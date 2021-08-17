@@ -219,9 +219,11 @@ struct FIRParser {
   /// Parse 'intLit' into the specified value.
   ParseResult parseIntLit(APInt &result, const Twine &message);
   ParseResult parseIntLit(int64_t &result, const Twine &message);
+  ParseResult parseIntLit(int32_t &result, const Twine &message);
 
   // Parse ('<' intLit '>')? setting result to -1 if not present.
-  ParseResult parseOptionalWidth(int64_t &result);
+  template <typename T>
+  ParseResult parseOptionalWidth(T &result);
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringRef &result, const Twine &message);
@@ -659,7 +661,19 @@ ParseResult FIRParser::parseIntLit(int64_t &result, const Twine &message) {
   if (parseIntLit(value, message))
     return failure();
 
-  result = (int64_t)value.getLimitedValue();
+  result = (int64_t)value.getLimitedValue(INT64_MAX);
+  if (result != value)
+    return emitError(loc, "value is too big to handle"), failure();
+  return success();
+}
+
+ParseResult FIRParser::parseIntLit(int32_t &result, const Twine &message) {
+  APInt value;
+  auto loc = getToken().getLoc();
+  if (parseIntLit(value, message))
+    return failure();
+
+  result = (int32_t)value.getLimitedValue(INT32_MAX);
   if (result != value)
     return emitError(loc, "value is too big to handle"), failure();
   return success();
@@ -668,7 +682,8 @@ ParseResult FIRParser::parseIntLit(int64_t &result, const Twine &message) {
 // optional-width ::= ('<' intLit '>')?
 //
 // This returns with result equal to -1 if not present.
-ParseResult FIRParser::parseOptionalWidth(int64_t &result) {
+template <typename T>
+ParseResult FIRParser::parseOptionalWidth(T &result) {
   if (!consumeIf(FIRToken::less))
     return result = -1, success();
 
@@ -774,7 +789,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     consumeToken();
 
     // Parse a width specifier if present.
-    int64_t width;
+    int32_t width;
     if (parseOptionalWidth(width))
       return failure();
 
@@ -816,7 +831,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   // Handle postfix vector sizes.
   while (consumeIf(FIRToken::l_square)) {
     auto sizeLoc = getToken().getLoc();
-    int64_t size;
+    int32_t size;
     if (parseIntLit(size, "expected width") ||
         parseToken(FIRToken::r_square, "expected ]"))
       return failure();
@@ -917,7 +932,7 @@ Optional<unsigned> FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
       }
 
       // Token should be a valid index of the vector.
-      auto subIndex = subIndexAttr.getValue().getSExtValue();
+      auto subIndex = subIndexAttr.getValue().getZExtValue();
       if (subIndex < 0 || subIndex >= vectorType.getNumElements()) {
         emitError(loc, getMessage(tokenIdx) + " is out of range in the vector");
         return None;
@@ -1701,7 +1716,7 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
 ///
 ParseResult FIRStmtParser::parsePostFixIntSubscript(Value &result) {
   auto loc = getToken().getLoc();
-  int64_t indexNo;
+  int32_t indexNo;
   if (parseIntLit(indexNo, "expected index") ||
       parseToken(FIRToken::r_square, "expected ']'"))
     return failure();
@@ -1908,7 +1923,7 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
   consumeToken();
 
   // Parse a width specifier if present.
-  int64_t width;
+  int32_t width;
   APInt value;
   if (parseOptionalWidth(width) ||
       parseToken(FIRToken::l_paren, "expected '(' in integer expression") ||
