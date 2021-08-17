@@ -129,26 +129,6 @@ calyx.program {
 // -----
 
 calyx.program {
-  calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
-    calyx.wires {}
-    calyx.control {}
-  }
-  calyx.component @B(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
-    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.cell "c0" @A : i1, i1, i1, i8, i1
-    calyx.wires { calyx.group @Group1 {} }
-    calyx.control {
-      calyx.seq {
-        // expected-error @+2 {{use of value '%c0.out' expects different type than prior uses: 'i1' vs 'i8'}}
-        // expected-note @-5 {{prior use here}}
-        calyx.if %c0.out, @Group1 { } else { }
-      }
-    }
-  }
-}
-
-// -----
-
-calyx.program {
   calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
     calyx.wires {}
     calyx.control {}
@@ -161,25 +141,6 @@ calyx.program {
       calyx.seq {
         // expected-error @+1 {{empty 'then' region.}}
         calyx.if %c0.out, @Group1 {} else {}
-      }
-    }
-  }
-}
-
-// -----
-
-calyx.program {
-  calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
-    calyx.wires {}
-    calyx.control {}
-  }
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
-    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.cell "c0" @A : i1, i1, i1, i1, i1
-    calyx.wires { }
-    calyx.control {
-      calyx.seq {
-        // expected-error @+1 {{expected ','}}
-        calyx.if %c0.out {} else {}
       }
     }
   }
