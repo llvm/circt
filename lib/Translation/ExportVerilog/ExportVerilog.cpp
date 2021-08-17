@@ -1890,7 +1890,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
     // Constants have their value emitted directly in the corresponding
     // `localparam` declaration. Don't try to reassign these.
     if (isConstantExpression(op)) {
-      --numStatementsEmitted;
+      ++numStatementsEmitted;
       return;
     }
     indent() << names.getName(op->getResult(0)) << " = ";
