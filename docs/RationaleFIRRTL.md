@@ -322,7 +322,7 @@ replacement FIRRTL compiler, we are not attempting to implement these new ideas
 for Chisel memories.
 
 There is, however, a major compatibility issue with the existing implementation
-Chisel memories which made them difficult to support in CIRCT. The FIRRTL
+of Chisel memories which made them difficult to support in CIRCT. The FIRRTL
 specification disallows using any declaration outside of the scope where it is
 created.  This means that a Chisel memory port declared inside of a `when`
 block can only be used inside the scope of the `when` block. Unfortunately,
@@ -339,7 +339,7 @@ CIRCT dialect:
 smem mymem : UInt<1>[8]
 when cond:
   infer mport myport = mymem[addr], clock
-out <= r
+out <= myport
 ```
 
 ```mlir
