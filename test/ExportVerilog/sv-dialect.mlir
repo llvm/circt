@@ -164,7 +164,7 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
       // CHECK-NEXT: Emit some stuff in verilog
       // CHECK-NEXT: Great power and responsibility!
-      sv.verbatim "Emit some stuff in verilog\nGreat power and responsibility!"
+      sv.verbatim "// Emit some stuff in verilog\n// Great power and responsibility!"
 
       %c42 = hw.constant 42 : i8
       %add = comb.add %val, %c42 : i8

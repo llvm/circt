@@ -3254,8 +3254,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
     if (portIdx != e) {
       if (portIdx <= lastNonZeroPort)
         os << ',';
-    }
-    else if (isZeroWidth)
+    } else if (isZeroWidth)
       os << "\n   );\n";
     else
       os << ");\n";

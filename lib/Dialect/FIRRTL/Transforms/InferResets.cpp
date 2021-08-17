@@ -592,8 +592,11 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             return;
           LLVM_DEBUG(llvm::dbgs() << "Uniquify " << op << "\n");
           ImplicitLocOpBuilder builder(op->getLoc(), op);
-          for (auto &use : llvm::drop_begin(op->getUses())) {
-            // `drop_begin` such that the first use can keep the original op.
+          for (auto &use :
+               llvm::make_early_inc_range(llvm::drop_begin(op->getUses()))) {
+            // - `make_early_inc_range` since `getUses()` is invalidated upon
+            //   `use.set(...)`.
+            // - `drop_begin` such that the first use can keep the original op.
             auto newOp = builder.create<InvalidValueOp>(type);
             use.set(newOp);
           }
@@ -797,19 +800,22 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
   if (asyncDrives > 0 && syncDrives > 0) {
     ResetSignal root = guessRoot(net);
     bool majorityAsync = asyncDrives >= syncDrives;
-    auto diag =
-        mlir::emitError(root.field.getValue().getLoc())
-        << "reset network simultaneously connected to async and sync resets";
+    auto diag = mlir::emitError(root.field.getValue().getLoc())
+                << "reset network";
+    auto fieldName = getFieldName(root.field);
+    if (!fieldName.empty())
+      diag << " \"" << fieldName << "\"";
+    diag << " simultaneously connected to async and sync resets";
     diag.attachNote(root.field.getValue().getLoc())
-        << "did you intend for the reset to be "
-        << (majorityAsync ? "async?" : "sync?");
+        << "majority of connections to this reset are "
+        << (majorityAsync ? "async" : "sync");
     for (auto &drive : getResetDrives(net)) {
       if ((drive.dst.type.isa<AsyncResetType>() && !majorityAsync) ||
           (drive.src.type.isa<AsyncResetType>() && !majorityAsync) ||
           (drive.dst.type.isa<UIntType>() && majorityAsync) ||
           (drive.src.type.isa<UIntType>() && majorityAsync))
         diag.attachNote(drive.loc)
-            << "offending " << (majorityAsync ? "sync" : "async")
+            << (drive.src.type.isa<AsyncResetType>() ? "async" : "sync")
             << " drive here:";
     }
     return failure();
