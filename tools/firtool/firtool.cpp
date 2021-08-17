@@ -299,8 +299,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     // If enabled, run the optimizer.
     if (!disableOptimization) {
       auto &modulePM = pm.nest<hw::HWModuleOp>();
-      modulePM.addPass(sv::createHWCleanupPass());
       modulePM.addPass(createCSEPass());
+      modulePM.addPass(sv::createHWCleanupPass());
       modulePM.addPass(createSimpleCanonicalizerPass());
     }
   }
