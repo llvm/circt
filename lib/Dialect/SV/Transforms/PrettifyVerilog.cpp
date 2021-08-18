@@ -151,6 +151,17 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   return true;
 }
 
+// Return the depth of the specified block in the region tree, stopping at
+// 'topBlock'.
+static unsigned getBlockDepth(Block *block, Block *topBlock) {
+  unsigned result = 0;
+  while (block != topBlock) {
+    block = block->getParentOp()->getBlock();
+    ++result;
+  }
+  return result;
+}
+
 /// This method is called on expressions to see if we can sink them down the
 /// region tree.  This is a good thing to do to reduce scope of the expression.
 void PrettifyVerilogPass::sinkExpression(Operation *op) {
@@ -168,6 +179,49 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
     }
     return;
   }
+
+  // Find the nearest common ancestor of all the users.
+  auto userIt = op->user_begin();
+  Block *ncaBlock = userIt->getBlock();
+  ++userIt;
+  unsigned ncaBlockDepth = getBlockDepth(ncaBlock, curOpBlock);
+  if (ncaBlockDepth == 0)
+    return; // Have a user in the current block.
+
+  for (auto e = op->user_end(); userIt != e; ++userIt) {
+    auto *userBlock = userIt->getBlock();
+    if (userBlock == curOpBlock)
+      return; // Op has a user in it own block, can't sink it.
+    if (userBlock == ncaBlock)
+      continue;
+
+    // Get the region depth of the user block so we can march up the region tree
+    // to a common ancestor.
+    unsigned userBlockDepth = getBlockDepth(userBlock, curOpBlock);
+    while (userBlock != ncaBlock) {
+      if (ncaBlockDepth < userBlockDepth) {
+        userBlock = userBlock->getParentOp()->getBlock();
+        --userBlockDepth;
+      } else if (userBlockDepth < ncaBlockDepth) {
+        ncaBlock = ncaBlock->getParentOp()->getBlock();
+        --ncaBlockDepth;
+      } else {
+        userBlock = userBlock->getParentOp()->getBlock();
+        --userBlockDepth;
+        ncaBlock = ncaBlock->getParentOp()->getBlock();
+        --ncaBlockDepth;
+      }
+    }
+
+    if (ncaBlockDepth == 0)
+      return; // Have a user in the current block.
+  }
+
+  // Ok, we found a common ancestor between all the users that is deeper than
+  // the current op.  Sink it into the start of that block.
+  assert(ncaBlock != curOpBlock && "should have bailed out earlier");
+  op->moveBefore(&ncaBlock->front());
+  anythingChanged = true;
 }
 
 void PrettifyVerilogPass::processPostOrder(Block &body) {

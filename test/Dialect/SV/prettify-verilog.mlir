@@ -109,12 +109,13 @@ hw.module @sink_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
   // This or is used in one place.
   %0 = comb.or %a2, %a3 : i1
   // This and/xor chain is used in two.  Both should be sunk.
-  // CHECK: [[AND:%.*]] = comb.and %a2, %a3 : i1
-  // CHECK: [[XOR:%.*]] = comb.xor [[AND]], %a4 : i1
   %1 = comb.and %a2, %a3 : i1
   %2 = comb.xor %1, %a4 : i1
   // CHECK: sv.always
   sv.always posedge %clock  {
+    // CHECK: [[AND:%.*]] = comb.and %a2, %a3 : i1
+    // CHECK: [[XOR:%.*]] = comb.xor [[AND]], %a4 : i1
+
     // CHECK: sv.ifdef.procedural
     sv.ifdef.procedural "SOMETHING"  {
       // CHECK: [[OR:%.*]] = comb.or %a2, %a3 : i1
