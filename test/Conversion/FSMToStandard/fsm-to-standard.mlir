@@ -1,63 +1,69 @@
 // RUN: circt-opt -convert-fsm-to-standard %s | FileCheck %s
 
-// CHECK: func @foo([[ARG0:%.+]]: i1, [[ARG1:%.+]]: i8, [[ARG2:%.+]]: memref<i1>, [[ARG3:%.+]]: memref<i8>, [[ARG4:%.+]]: memref<i2>) -> i1 {
-// CHECK:   [[VAL0:%.+]] = memref.load [[ARG2]][] : memref<i1>
-// CHECK:   [[VAL1:%.+]] = memref.load [[ARG3]][] : memref<i8>
-// CHECK:   %true = constant true
-// CHECK:   %false = constant false
+// CHECK: func @foo(%arg0: i1, %arg1: i8, %arg2: memref<i8>, %arg3: memref<i2>) -> i1 {
+// CHECK:   %0 = memref.load %arg2[] : memref<i8>
 // CHECK:   %c0_i2 = constant 0 : i2
 // CHECK:   %c1_i2 = constant 1 : i2
-// CHECK:   [[VAL2:%.+]] = memref.load [[ARG4]][] : memref<i2>
-// CHECK:   [[VAL3:%.+]] = cmpi eq, [[VAL2]], %c0_i2 : i2
-// CHECK:   scf.if [[VAL3]] {
-// CHECK:     scf.if [[ARG0]] {
-// CHECK:       memref.store %c1_i2, [[ARG4]][] : memref<i2>
-// CHECK:       memref.store %false, [[ARG2]][] : memref<i1>
-// CHECK:       memref.store [[ARG1]], [[ARG3]][] : memref<i8>
+// CHECK:   %1 = memref.load %arg3[] : memref<i2>
+// CHECK:   %2 = cmpi eq, %1, %c0_i2 : i2
+// CHECK:   scf.if %2 {
+// CHECK:     scf.if %arg0 {
+// CHECK:       memref.store %c1_i2, %arg3[] : memref<i2>
+// CHECK:       memref.store %arg1, %arg2[] : memref<i8>
 // CHECK:     } else {
-// CHECK:       memref.store %c0_i2, [[ARG4]][] : memref<i2>
-// CHECK:       memref.store %false, [[ARG2]][] : memref<i1>
-// CHECK:       memref.store %true, [[ARG2]][] : memref<i1>
+// CHECK:       memref.store %c0_i2, %arg3[] : memref<i2>
 // CHECK:     }
 // CHECK:   } else {
-// CHECK:     [[VAL4:%.+]] = cmpi eq, [[VAL2]], %c1_i2 : i2
-// CHECK:     scf.if [[VAL4]] {
-// CHECK:       memref.store %c1_i2, [[ARG4:%.+]][] : memref<i2>
+// CHECK:     %6 = cmpi eq, %1, %c1_i2 : i2
+// CHECK:     scf.if %6 {
+// CHECK:       memref.store %c1_i2, %arg3[] : memref<i2>
+// CHECK:     } else {
+// CHECK:       %true = constant true
+// CHECK:       assert %true, "invalid state"
 // CHECK:     }
 // CHECK:   }
-// CHECK:   [[ARG4:%.+]] = memref.load [[ARG2]][] : memref<i1>
-// CHECK:   return [[ARG4]] : i1
+// CHECK:   %3 = memref.load %arg3[] : memref<i2>
+// CHECK:   %4 = cmpi eq, %3, %c0_i2 : i2
+// CHECK:   %5 = scf.if %4 -> (i1) {
+// CHECK:     %true = constant true
+// CHECK:     scf.yield %true : i1
+// CHECK:   } else {
+// CHECK:     %6 = cmpi eq, %3, %c1_i2 : i2
+// CHECK:     %7 = scf.if %6 -> (i1) {
+// CHECK:       %false = constant false
+// CHECK:       scf.yield %false : i1
+// CHECK:     } else {
+// CHECK:       %true = constant true
+// CHECK:       assert %true, "invalid state"
+// CHECK:       %false = constant false
+// CHECK:       scf.yield %false : i1
+// CHECK:     }
+// CHECK:     scf.yield %7 : i1
+// CHECK:   }
+// CHECK:   return %5 : i1
 // CHECK: }
 // CHECK: func @bar() {
-// CHECK:   [[VAL0:%.+]] = memref.alloca() : memref<i1>
-// CHECK:   %true = constant true
-// CHECK:   memref.store %true, [[VAL0]][] : memref<i1>
-// CHECK:   [[VAL1:%.+]] = memref.alloca() : memref<i8>
+// CHECK:   %0 = memref.alloca() : memref<i8>
 // CHECK:   %c0_i8 = constant 0 : i8
-// CHECK:   memref.store %c0_i8, [[VAL1]][] : memref<i8>
-// CHECK:   [[VAL2:%.+]] = memref.alloca() : memref<i2>
+// CHECK:   memref.store %c0_i8, %0[] : memref<i8>
+// CHECK:   %1 = memref.alloca() : memref<i2>
 // CHECK:   %c0_i2 = constant 0 : i2
-// CHECK:   memref.store %c0_i2, [[VAL2]][] : memref<i2>
-// CHECK:   %true_0 = constant true
+// CHECK:   memref.store %c0_i2, %1[] : memref<i2>
+// CHECK:   %true = constant true
 // CHECK:   %c16_i8 = constant 16 : i8
-// CHECK:   [[VAL3:%.+]] = call @foo(%true_0, %c16_i8, [[VAL0]], [[VAL1]], [[VAL2]]) : (i1, i8, memref<i1>, memref<i8>, memref<i2>) -> i1
+// CHECK:   %2 = call @foo(%true, %c16_i8, %0, %1) : (i1, i8, memref<i8>, memref<i2>) -> i1
 // CHECK:   %false = constant false
-// CHECK:   %c0_i8_1 = constant 0 : i8
-// CHECK:   [[VAL4:%.+]] = call @foo(%false, %c0_i8_1, [[VAL0]], [[VAL1]], [[VAL2]]) : (i1, i8, memref<i1>, memref<i8>, memref<i2>) -> i1
+// CHECK:   %c0_i8_0 = constant 0 : i8
+// CHECK:   %3 = call @foo(%false, %c0_i8_0, %0, %1) : (i1, i8, memref<i8>, memref<i2>) -> i1
 // CHECK:   return
 // CHECK: }
 
 fsm.machine @foo(%i_valid: i1, %i_len: i8) -> i1 attributes {stateType = i2} {
-  %o_ready = fsm.variable "o_ready" {initValue = true} : i1
   %counter = fsm.variable "counter" {initValue = 0 : i8} : i8
 
-  %true = constant true
-  %false = constant false
-
-  fsm.state "IDLE" entry  {
-    fsm.update %o_ready, %true : i1
-  } exit  {
-    fsm.update %o_ready, %false : i1
+  fsm.state "IDLE" output  {
+    %true = constant true
+    fsm.output %true : i1
   } transitions  {
     fsm.transition @BUSY guard  {
       fsm.return %i_valid : i1
@@ -69,14 +75,14 @@ fsm.machine @foo(%i_valid: i1, %i_len: i8) -> i1 attributes {stateType = i2} {
     }
   }
 
-  fsm.state "BUSY" entry  {
-  } exit  {
+  fsm.state "BUSY" output  {
+    %false = constant false
+    fsm.output %false : i1
   } transitions  {
     fsm.transition @BUSY guard  {
     } action  {
     }
   }
-  fsm.output %o_ready : i1
 }
 
 func @bar() {

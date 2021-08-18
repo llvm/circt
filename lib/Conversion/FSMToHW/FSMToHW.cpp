@@ -59,8 +59,8 @@ static void convertStdOp(StdType stdOp, OpBuilder &b) {
   stdOp.getResult().replaceAllUsesWith(combOp);
 }
 
-static bool dispatchStdOps(Operation *op, OpBuilder &b) {
-  return TypeSwitch<Operation *, bool>(op)
+static bool dispatchStdOps(Operation &op, OpBuilder &b) {
+  return TypeSwitch<Operation *, bool>(&op)
       .Case<mlir::AddIOp>(
           [&](auto op) { return convertStdOp<comb::AddOp>(op, b), true; })
       .Case<mlir::SubIOp>(
@@ -90,38 +90,81 @@ static bool dispatchStdOps(Operation *op, OpBuilder &b) {
       .Default([&](auto) { return false; });
 }
 
-static std::pair<sv::IfOp, bool> convertGuardRegion(TransitionOp transition,
-                                                    OpBuilder &b) {
-  // If the transition is always taken, we don't need if statement.
-  if (transition.isAlwaysTaken())
-    return {nullptr, true};
-
-  sv::IfOp guardIfOp = nullptr;
-  for (auto &op : transition.guard().front()) {
-    if (dispatchStdOps(&op, b))
+static sv::IfOp convertGuardRegion(Region &region, OpBuilder &b) {
+  for (auto &op : region.front()) {
+    if (dispatchStdOps(op, b))
       continue;
 
     if (auto returnOp = dyn_cast<fsm::ReturnOp>(op))
-      guardIfOp = b.create<sv::IfOp>(returnOp.getLoc(), returnOp.getOperand(0));
-    else {
-      op.emitOpError("found unsupported op in the guard region");
-      return {guardIfOp, false};
-    }
+      return b.create<sv::IfOp>(returnOp.getLoc(), returnOp.getOperand(0));
+    else
+      return op.emitOpError("unsupported op in the guard region"), nullptr;
   }
-  return {guardIfOp, true};
+  return nullptr;
 }
 
-// FIXME: As the entry and exit region of state can be converted multiple times,
-// the current implementation will cause some bugs.
 static bool convertActionRegion(Region &region, OpBuilder &b) {
   for (auto &op : region.front()) {
-    if (dispatchStdOps(&op, b))
+    if (dispatchStdOps(op, b))
       continue;
 
     if (auto update = dyn_cast<UpdateOp>(op))
       b.create<sv::PAssignOp>(update.getLoc(), update.dst(), update.src());
     else if (!isa<fsm::ReturnOp>(op))
-      return op.emitOpError("found unsupported op in the action region"), false;
+      return op.emitOpError("unsupported op in the action region"), false;
+  }
+  return true;
+}
+
+static bool convertOutputRegion(Region &region, OpBuilder &b,
+                                SmallVectorImpl<sv::RegOp> &outputWires) {
+  for (auto &op : region.front()) {
+    if (dispatchStdOps(op, b))
+      continue;
+
+    if (auto output = dyn_cast<fsm::OutputOp>(op)) {
+      unsigned wireIndex = 0;
+      for (auto wire : outputWires)
+        b.create<sv::BPAssignOp>(output.getLoc(), wire,
+                                 output.getOperand(wireIndex++));
+    } else
+      return op.emitOpError("unsupported op in the output region"), false;
+  }
+  return true;
+}
+
+static bool
+convertTransitionsRegion(Region &region, OpBuilder &b, Value stateReg,
+                         SmallDenseMap<Operation *, Value> &stateEncodeMap) {
+  // Build an `if-else` chain for `transition` ops.
+  auto transRange = region.getOps<TransitionOp>();
+  for (auto it = transRange.begin(), e = transRange.end(); it != e; ++it) {
+    auto trans = *it;
+
+    // Convert the guard region and create `if` op if transition is not
+    // always taken. Then, set insertion point to the then block of `if` op.
+    sv::IfOp guardIfOp = nullptr;
+    if (!trans.isAlwaysTaken()) {
+      guardIfOp = convertGuardRegion(trans.guard(), b);
+      if (!guardIfOp)
+        return trans.emitOpError("failed to convert the guard region"), false;
+      b.setInsertionPointToStart(guardIfOp.getThenBlock());
+    }
+
+    // Procedural assign state register to the next state.
+    auto nextState = trans.getReferencedNextState();
+    b.create<sv::PAssignOp>(trans.getLoc(), stateReg,
+                            stateEncodeMap[nextState]);
+
+    // Convert action regions accordingly.
+    if (!convertActionRegion(trans.action(), b))
+      return trans.emitOpError("failed to convert the action region"), false;
+
+    // If the current transition is not the last one, create `else` block.
+    if (guardIfOp && std::next(it) != e)
+      b.setInsertionPointToStart(&guardIfOp.elseRegion().emplaceBlock());
+    else
+      break;
   }
   return true;
 }
@@ -197,7 +240,7 @@ void FSMToHWPass::runOnOperation() {
     // We encode each machine state with binary encoding and use `hw.constant`
     // to store the encoded value of each state. This is used to map each state
     // op to its corresponding `hw.constant`.
-    SmallDenseMap<Operation *, Value> stateValMap;
+    SmallDenseMap<Operation *, Value> stateEncodeMap;
     // Store the encoded pattern as an attribute for each state. This will be
     // used to construct the `sv.casez` statement later.
     SmallVector<Attribute, 16> stateCases;
@@ -205,7 +248,7 @@ void FSMToHWPass::runOnOperation() {
     unsigned stateIndex = 0;
     // Traverse all operations in the machine.
     for (auto &op : machine.front()) {
-      if (dispatchStdOps(&op, b))
+      if (dispatchStdOps(op, b))
         continue;
 
       if (auto variable = dyn_cast<fsm::VariableOp>(op)) {
@@ -213,7 +256,7 @@ void FSMToHWPass::runOnOperation() {
         auto reg = b.create<sv::RegOp>(variable.getLoc(), variable.getType(),
                                        variable.nameAttr());
         auto initValue = b.create<hw::ConstantOp>(
-            reg.getLoc(), variable.initValue().dyn_cast<IntegerAttr>());
+            reg.getLoc(), variable.initValue().cast<IntegerAttr>());
         auto regElem = b.create<sv::ReadInOutOp>(op.getLoc(), reg);
         regInfoList.push_back(RegInfo(reg, initValue, regElem));
 
@@ -232,7 +275,7 @@ void FSMToHWPass::runOnOperation() {
         // Create an `hw.constant` to store the encoded value and insert it into
         // the map.
         auto width = stateType.getWidth();
-        stateValMap[state] =
+        stateEncodeMap[state] =
             b.create<hw::ConstantOp>(state.getLoc(), APInt(width, stateIndex));
 
         // Generate a case pattern (see the definition of `sv.casez` op) as an
@@ -246,101 +289,102 @@ void FSMToHWPass::runOnOperation() {
             b.getIntegerAttr(b.getIntegerType(width * 2), pattern));
         ++stateIndex;
 
-      } else if (auto output = dyn_cast<fsm::OutputOp>(op)) {
-        hwModule.front().getTerminator()->setOperands(output.getOperands());
       } else {
-        op.emitOpError("found unsupported op in the state machine");
+        op.emitOpError("unsupported op in the state machine");
         signalPassFailure();
         return;
       }
     }
 
-    // We adopt a 1-always FSM coding style. Create the `always_ff` statement.
+    // We adopt a 2-always FSM coding style. Create the `always_ff` statement to
+    // perform the transition.
     auto clock = hwModule.getArgument(hwModule.getNumArguments() - 2);
     auto reset = hwModule.getArgument(hwModule.getNumArguments() - 1);
-    auto alwaysff = b.create<sv::AlwaysFFOp>(
+    auto alwaysFF = b.create<sv::AlwaysFFOp>(
         machineLoc, sv::EventControl::AtPosEdge, clock, ResetType::AsyncReset,
         sv::EventControl::AtNegEdge, reset);
 
     // Generate the reset block of `always_ff`. Reset internal registers and the
     // state register.
     auto defaultState = machine.getDefaultState();
-    b.setInsertionPointToStart(alwaysff.getResetBlock());
-    b.create<sv::PAssignOp>(machineLoc, stateReg, stateValMap[defaultState]);
+    b.setInsertionPointToStart(alwaysFF.getResetBlock());
+    b.create<sv::PAssignOp>(machineLoc, stateReg, stateEncodeMap[defaultState]);
     for (auto regInfo : regInfoList)
       b.create<sv::PAssignOp>(regInfo.reg.getLoc(), regInfo.reg,
                               regInfo.initValue);
 
-    if (!convertActionRegion(defaultState.entry(), b)) {
-      defaultState.emitOpError("failed to convert the entry region");
-      signalPassFailure();
-      return;
-    }
-
     // Begin to generate the body block of `always_ff`. By default, we assign
     // internal registers and state to themselves.
-    b.setInsertionPointToStart(alwaysff.getBodyBlock());
+    b.setInsertionPointToStart(alwaysFF.getBodyBlock());
     b.create<sv::PAssignOp>(machineLoc, stateReg, stateRegElem);
     for (auto regInfo : regInfoList)
       b.create<sv::PAssignOp>(regInfo.reg.getLoc(), regInfo.reg,
                               regInfo.element);
 
     // Create a `casez` statement with the state register as condition.
-    auto casez =
+    auto transCasez =
         b.create<sv::CaseZOp>(machineLoc, stateRegElem,
                               b.getArrayAttr(stateCases), stateCases.size());
 
-    // In the `casez` statement, we build one block for each `state` op.
+    // In the `casez` statement, we build a block for each `transitions` region.
     stateIndex = 0;
     for (auto state : machine.getOps<StateOp>()) {
-      b.setInsertionPointToStart(&casez.getRegion(stateIndex++).emplaceBlock());
-
-      // Build an `if-else` chain for `transition` ops.
-      auto transRange = state.transitions().getOps<TransitionOp>();
-      for (auto it = transRange.begin(), e = transRange.end(); it != e; ++it) {
-        auto transition = *it;
-        // Convert the guard region and create `if` op if applicable.
-        auto ifOpAndSucceeded = convertGuardRegion(transition, b);
-        if (!ifOpAndSucceeded.second) {
-          transition.emitOpError("failed to convert the guard region");
-          signalPassFailure();
-          return;
-        }
-
-        // Set insertion point to the then block of `if` op if applicable.
-        auto guardIfOp = ifOpAndSucceeded.first;
-        if (guardIfOp)
-          b.setInsertionPointToStart(guardIfOp.getThenBlock());
-
-        // Procedural assign state register to the next state.
-        auto nextState = transition.getReferencedNextState();
-        b.create<sv::PAssignOp>(transition.getLoc(), stateReg,
-                                stateValMap[nextState]);
-
-        // Convert action regions accordingly.
-        if (!convertActionRegion(state.exit(), b)) {
-          state.emitOpError("failed to convert the exit region");
-          signalPassFailure();
-          return;
-        }
-        if (!convertActionRegion(transition.action(), b)) {
-          transition.emitOpError("failed to convert the action region");
-          signalPassFailure();
-          return;
-        }
-        if (!convertActionRegion(nextState.entry(), b)) {
-          nextState.emitOpError("failed to convert the entry region");
-          signalPassFailure();
-          return;
-        }
-
-        // If the current transition is not the last one, create `else` block.
-        if (guardIfOp && std::next(it) != e)
-          b.setInsertionPointToStart(&guardIfOp.elseRegion().emplaceBlock());
-        else
-          break;
+      b.setInsertionPointToStart(
+          &transCasez.getRegion(stateIndex++).emplaceBlock());
+      if (!convertTransitionsRegion(state.transitions(), b, stateReg,
+                                    stateEncodeMap)) {
+        state.emitOpError("failed to convert the transition region");
+        signalPassFailure();
+        return;
       }
     }
+
+    // Create a tmporary wire for each machine output.
+    b.setInsertionPoint(hwModule.front().getTerminator());
+    SmallVector<sv::RegOp, 8> outputWires;
+    unsigned wireIndex = 0;
+    for (auto outputType : machine.getType().getResults()) {
+      auto wire = b.create<sv::RegOp>(
+          machineLoc, outputType,
+          b.getStringAttr("w_out" + std::to_string(wireIndex++)));
+      outputWires.push_back(wire);
+    }
+
+    // We adopt a 2-always FSM coding style. Create the `always_comb` statement
+    // to generate outputs.
+    auto alwaysComb = b.create<sv::AlwaysCombOp>(machineLoc);
+    b.setInsertionPointToStart(alwaysComb.getBodyBlock());
+
+    for (auto wire : outputWires) {
+      auto zeroValue = b.create<hw::ConstantOp>(
+          wire.getLoc(), b.getIntegerAttr(wire.getElementType(), 0));
+      b.create<sv::BPAssignOp>(wire.getLoc(), wire, zeroValue);
+    }
+
+    // Create a `casez` statement with the state register as condition.
+    auto outputCasez =
+        b.create<sv::CaseZOp>(machineLoc, stateRegElem,
+                              b.getArrayAttr(stateCases), stateCases.size());
+
+    // In the `casez` statement, we build a block for each `output` region.
+    stateIndex = 0;
+    for (auto state : machine.getOps<StateOp>()) {
+      b.setInsertionPointToStart(
+          &outputCasez.getRegion(stateIndex++).emplaceBlock());
+      if (!convertOutputRegion(state.output(), b, outputWires)) {
+        state.emitOpError("failed to convert the output region");
+        signalPassFailure();
+        return;
+      }
+    }
+
+    // Connect wires to outputs.
+    b.setInsertionPoint(hwModule.front().getTerminator());
+    SmallVector<Value, 8> outputWireElems;
+    for (auto wire : outputWires)
+      outputWireElems.push_back(b.create<sv::ReadInOutOp>(wire.getLoc(), wire));
+    hwModule.front().getTerminator()->setOperands(outputWireElems);
+
     // Erase the original machine op.
     opToErase.push_back(machine);
   }

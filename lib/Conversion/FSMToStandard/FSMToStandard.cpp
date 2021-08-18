@@ -29,43 +29,90 @@ std::unique_ptr<mlir::Pass> circt::createConvertFSMToStandardPass() {
   return std::make_unique<FSMToStandardPass>();
 }
 
-static std::pair<scf::IfOp, bool> convertGuardRegion(TransitionOp transition,
-                                                     OpBuilder &b) {
-  // If the transition is always taken, we don't need if statement.
-  if (transition.isAlwaysTaken())
-    return {nullptr, true};
-
-  scf::IfOp guardIfOp = nullptr;
-  for (auto &op : transition.guard().front()) {
-    if (op.getDialect()->getNamespace() == "std") {
-      auto cloneStdOp = b.clone(op);
-      cloneStdOp->remove();
-      op.replaceAllUsesWith(b.insert(cloneStdOp));
-
-    } else if (auto returnOp = dyn_cast<fsm::ReturnOp>(op)) {
-      guardIfOp = b.create<scf::IfOp>(returnOp.getLoc(), returnOp.getOperand(0),
-                                      /*withElseRegion=*/true);
-    } else {
-      op.emitOpError("found unsupported op in the guard region");
-      return {guardIfOp, false};
-    }
+static bool dispatchStdOps(Operation &op, OpBuilder &b) {
+  if (op.getDialect()->getNamespace() == "std") {
+    auto cloneStdOp = b.clone(op);
+    cloneStdOp->remove();
+    op.replaceAllUsesWith(b.insert(cloneStdOp));
+    return true;
   }
-  return {guardIfOp, true};
+  return false;
 }
 
-// FIXME: As the entry and exit region of state can be converted multiple times,
-// the current implementation will cause some bugs.
+static scf::IfOp convertGuardRegion(Region &region, OpBuilder &b) {
+  for (auto &op : region.front()) {
+    if (dispatchStdOps(op, b))
+      continue;
+
+    if (auto returnOp = dyn_cast<fsm::ReturnOp>(op))
+      return b.create<scf::IfOp>(returnOp.getLoc(), returnOp.getOperand(0),
+                                 true);
+    else
+      return op.emitOpError("unsupported op in the guard region"), nullptr;
+  }
+  return nullptr;
+}
+
 static bool convertActionRegion(Region &region, OpBuilder &b) {
   for (auto &op : region.front()) {
-    if (op.getDialect()->getNamespace() == "std") {
-      auto cloneStdOp = b.clone(op);
-      cloneStdOp->remove();
-      op.replaceAllUsesWith(b.insert(cloneStdOp));
+    if (dispatchStdOps(op, b))
+      continue;
 
-    } else if (auto update = dyn_cast<UpdateOp>(op))
+    if (auto update = dyn_cast<UpdateOp>(op))
       b.create<memref::StoreOp>(update.getLoc(), update.src(), update.dst());
     else if (!isa<fsm::ReturnOp>(op))
-      return op.emitOpError("found unsupported op in the action region"), false;
+      return op.emitOpError("unsupported op in the action region"), false;
+  }
+  return true;
+}
+
+static bool convertOutputRegion(Region &region, OpBuilder &b) {
+  for (auto &op : region.front()) {
+    if (dispatchStdOps(op, b))
+      continue;
+
+    if (auto output = dyn_cast<fsm::OutputOp>(op))
+      b.create<scf::YieldOp>(output.getLoc(), output.getOperands());
+    else
+      return op.emitOpError("unsupported op in the output region"), false;
+  }
+  return true;
+}
+
+static bool
+convertTransitionsRegion(Region &region, OpBuilder &b, Value stateMemRef,
+                         SmallDenseMap<Operation *, Value> &stateEncodeMap) {
+  // Build an `if-else` chain for `transition` ops.
+  auto transRange = region.getOps<TransitionOp>();
+  for (auto transIt = transRange.begin(), transEnd = transRange.end();
+       transIt != transEnd; ++transIt) {
+    auto trans = *transIt;
+
+    // Convert the guard region and create `if` op if transition is not always
+    // taken. Then, set insertion point to the then block of `if` op.
+    scf::IfOp guardIfOp = nullptr;
+    if (!trans.isAlwaysTaken()) {
+      guardIfOp = convertGuardRegion(trans.guard(), b);
+      if (!guardIfOp)
+        return trans.emitOpError("failed to convert the guard region"), false;
+      b.setInsertionPointToStart(guardIfOp.thenBlock());
+    }
+
+    // Store the next state to the state memref.
+    auto nextState = trans.getReferencedNextState();
+    b.create<memref::StoreOp>(trans.getLoc(), stateEncodeMap[nextState],
+                              stateMemRef);
+
+    // Convert the action region.
+    if (!convertActionRegion(trans.action(), b))
+      return trans.emitOpError("failed to convert the action region"), false;
+
+    // If the current transition is not always taken and is not the last
+    // one, switch to the next transition.
+    if (guardIfOp && std::next(transIt) != transEnd)
+      b.setInsertionPointToStart(guardIfOp.elseBlock());
+    else
+      break;
   }
   return true;
 }
@@ -75,8 +122,9 @@ void FSMToStandardPass::runOnOperation() {
   auto module = getOperation();
   auto b = OpBuilder(module);
   SmallVector<Operation *, 16> opToErase;
-  DenseMap<Value, SmallVector<Value>> memRefMap;
 
+  // Store the memref type values of all `fsm.variable`s of each `fsm.machine`.
+  DenseMap<Value, SmallVector<Value>> memRefMap;
   // Traverse all instances and triggers.
   module.walk([&](Operation *op) {
     if (auto instance = dyn_cast<fsm::InstanceOp>(op)) {
@@ -85,8 +133,8 @@ void FSMToStandardPass::runOnOperation() {
       auto stateType = machine.stateType();
       auto &memRefs = memRefMap[instance];
 
-      // Alloca memrefs for the state and all variables. Then, store the
-      // initial value into them.
+      // Alloca memrefs for the state and all variables. Then, store the initial
+      // value into them.
       for (auto variable : machine.getOps<VariableOp>()) {
         auto varMemRef = b.create<memref::AllocaOp>(
             variable.getLoc(), MemRefType::get({}, variable.getType()));
@@ -155,17 +203,15 @@ void FSMToStandardPass::runOnOperation() {
     // We encode each machine state with binary encoding and use `constant` to
     // store the encoded value of each state. This is used to map each state op
     // to its corresponding `constant`.
-    SmallDenseMap<Operation *, Value> stateValMap;
+    SmallDenseMap<Operation *, Value> stateEncodeMap;
 
     unsigned stateIndex = 0;
     // Traverse all operations in the machine.
     for (auto &op : machine.front()) {
-      if (op.getDialect()->getNamespace() == "std") {
-        auto cloneStdOp = b.clone(op);
-        cloneStdOp->remove();
-        op.replaceAllUsesWith(b.insert(cloneStdOp));
+      if (dispatchStdOps(op, b))
+        continue;
 
-      } else if (auto variable = dyn_cast<fsm::VariableOp>(op)) {
+      if (auto variable = dyn_cast<fsm::VariableOp>(op)) {
         auto varMemRef = func.getArgument(argIndex);
         auto varValue = b.create<memref::LoadOp>(variable.getLoc(), varMemRef);
 
@@ -187,11 +233,11 @@ void FSMToStandardPass::runOnOperation() {
         // Create an `constant` to store the encoded value and insert it into
         // the map.
         auto encode = APInt(stateType.getWidth(), stateIndex);
-        stateValMap[state] = b.create<ConstantOp>(
+        stateEncodeMap[state] = b.create<ConstantOp>(
             state.getLoc(), b.getIntegerAttr(stateType, encode));
         ++stateIndex;
 
-      } else if (!isa<fsm::OutputOp>(op)) {
+      } else {
         op.emitOpError("found unsupported op in the state machine");
         signalPassFailure();
         return;
@@ -202,80 +248,71 @@ void FSMToStandardPass::runOnOperation() {
     auto stateMemRef = func.getArguments().back();
     auto stateValue = b.create<memref::LoadOp>(machineLoc, stateMemRef);
 
-    // Build an `if-else` chain for all `state` ops.
-    stateIndex = 0;
-    auto stateRange = machine.getOps<StateOp>();
-    for (auto stateIt = stateRange.begin(), stateEnd = stateRange.end();
-         stateIt != stateEnd; ++stateIt) {
-      auto state = *stateIt;
+    // Build an `if-else` chain for all `state`s to perform the transition.
+    for (auto state : machine.getOps<StateOp>()) {
       // Create `scf.if` op for the current `state` op.
       auto stateCond = b.create<CmpIOp>(state.getLoc(), CmpIPredicate::eq,
-                                        stateValue, stateValMap[state]);
-      auto stateIfOp = b.create<scf::IfOp>(state.getLoc(), stateCond,
-                                           std::next(stateIt) != stateEnd);
+                                        stateValue, stateEncodeMap[state]);
+      auto stateIfOp = b.create<scf::IfOp>(state.getLoc(), stateCond, true);
+
+      // Convert the `transtions` region.
       b.setInsertionPointToStart(stateIfOp.thenBlock());
-
-      // Build an `if-else` chain for `transition` ops.
-      auto transRange = state.transitions().getOps<TransitionOp>();
-      for (auto transIt = transRange.begin(), transEnd = transRange.end();
-           transIt != transEnd; ++transIt) {
-        auto transition = *transIt;
-        // Convert the guard region and create `if` op if applicable.
-        auto ifOpAndSucceeded = convertGuardRegion(transition, b);
-        if (!ifOpAndSucceeded.second) {
-          transition.emitOpError("failed to convert the guard region");
-          signalPassFailure();
-          return;
-        }
-
-        // Set insertion point to the then block of `if` op if applicable.
-        auto guardIfOp = ifOpAndSucceeded.first;
-        if (guardIfOp)
-          b.setInsertionPointToStart(guardIfOp.thenBlock());
-
-        // Procedural assign state register to the next state.
-        auto nextState = transition.getReferencedNextState();
-        b.create<memref::StoreOp>(transition.getLoc(), stateValMap[nextState],
-                                  stateMemRef);
-
-        // Convert action regions accordingly.
-        if (!convertActionRegion(state.exit(), b)) {
-          state.emitOpError("failed to convert the exit region");
-          signalPassFailure();
-          return;
-        }
-        if (!convertActionRegion(transition.action(), b)) {
-          transition.emitOpError("failed to convert the action region");
-          signalPassFailure();
-          return;
-        }
-        if (!convertActionRegion(nextState.entry(), b)) {
-          nextState.emitOpError("failed to convert the entry region");
-          signalPassFailure();
-          return;
-        }
-
-        // If the current transition is not always taken and is not the last
-        // one, switch to the next transition.
-        if (guardIfOp && std::next(transIt) != transEnd)
-          b.setInsertionPointToStart(guardIfOp.elseBlock());
-        else
-          break;
+      if (!convertTransitionsRegion(state.transitions(), b, stateMemRef,
+                                    stateEncodeMap)) {
+        state.emitOpError("failed to convert the transition region");
+        signalPassFailure();
+        return;
       }
-
       // Switch to the next state.
-      if (std::next(stateIt) != stateEnd)
-        b.setInsertionPointToStart(stateIfOp.elseBlock());
+      b.setInsertionPointToStart(stateIfOp.elseBlock());
     }
 
-    // Convert output operation. Load values from memrefs and return them.
-    b.setInsertionPointToEnd(&func.front());
-    auto outputOp = machine.front().getTerminator();
+    auto transTrueOp =
+        b.create<mlir::ConstantOp>(machineLoc, b.getBoolAttr(true));
+    b.create<AssertOp>(machineLoc, transTrueOp,
+                       b.getStringAttr("invalid state"));
 
-    SmallVector<Value, 8> operands;
-    for (auto memref : outputOp->getOperands())
-      operands.push_back(b.create<memref::LoadOp>(outputOp->getLoc(), memref));
-    b.create<mlir::ReturnOp>(outputOp->getLoc(), operands);
+    // Get the new state value after transition.
+    b.setInsertionPointToEnd(&func.front());
+    auto newStateValue = b.create<memref::LoadOp>(machineLoc, stateMemRef);
+
+    // Build an `if-else` chain for all `state`s to generate outputs.
+    stateIndex = 0;
+    for (auto state : machine.getOps<StateOp>()) {
+      // Create `scf.if` op for the current `state` op.
+      auto stateCond = b.create<CmpIOp>(state.getLoc(), CmpIPredicate::eq,
+                                        newStateValue, stateEncodeMap[state]);
+      auto stateIfOp = b.create<scf::IfOp>(
+          state.getLoc(), machine.getType().getResults(), stateCond, true);
+
+      // Return or yield for the results of `scf.if` op.
+      if (stateIndex++ == 0)
+        b.create<mlir::ReturnOp>(state.getLoc(), stateIfOp.getResults());
+      else
+        b.create<scf::YieldOp>(state.getLoc(), stateIfOp.getResults());
+
+      // Convert the `output` region.
+      b.setInsertionPointToStart(stateIfOp.thenBlock());
+      if (!convertOutputRegion(state.output(), b)) {
+        state.emitOpError("failed to convert the output region");
+        signalPassFailure();
+        return;
+      }
+      // Switch to the next state.
+      b.setInsertionPointToStart(stateIfOp.elseBlock());
+    }
+
+    // Default case should always assert.
+    auto outputTrueOp =
+        b.create<mlir::ConstantOp>(machineLoc, b.getBoolAttr(true));
+    b.create<AssertOp>(machineLoc, outputTrueOp,
+                       b.getStringAttr("invalid state"));
+
+    SmallVector<Value, 8> zeroValues;
+    for (auto outputType : machine.getType().getResults())
+      zeroValues.push_back(
+          b.create<mlir::ConstantOp>(machineLoc, b.getZeroAttr(outputType)));
+    b.create<scf::YieldOp>(machineLoc, zeroValues);
 
     // Erase the original machine op.
     opToErase.push_back(machine);

@@ -2,14 +2,10 @@
 // RUN: circt-opt -fsm-print-state-graph %s -o %t 2>&1 | FileCheck --check-prefix=PRINT %s
 
 // BASIC: fsm.machine @foo([[ARG0:%.+]]: i1, [[ARG1:%.+]]: i8) -> i1 attributes {stateType = i2} {
-// BASIC:   %o_ready = fsm.variable "o_ready" {initValue = true} : i1
 // BASIC:   %counter = fsm.variable "counter" {initValue = 0 : i8} : i8
-// BASIC:   %true = constant true
-// BASIC:   %false = constant false
-// BASIC:   fsm.state "IDLE" entry  {
-// BASIC:     fsm.update %o_ready, %true : i1
-// BASIC:   } exit  {
-// BASIC:     fsm.update %o_ready, %false : i1
+// BASIC:   fsm.state "IDLE" output  {
+// BASIC:     %true = constant true
+// BASIC:     fsm.output %true : i1
 // BASIC:   } transitions  {
 // BASIC:     fsm.transition @BUSY guard  {
 // BASIC:       fsm.return [[ARG0]] : i1
@@ -20,15 +16,16 @@
 // BASIC:     } action  {
 // BASIC:     }
 // BASIC:   }
-// BASIC:   fsm.state "BUSY" entry  {
-// BASIC:   } exit  {
+// BASIC:   fsm.state "BUSY" output  {
+// BASIC:     %false = constant false
+// BASIC:     fsm.output %false : i1
 // BASIC:   } transitions  {
 // BASIC:     fsm.transition @BUSY guard  {
 // BASIC:     } action  {
 // BASIC:     }
 // BASIC:   }
-// BASIC:   fsm.output %o_ready : i1
 // BASIC: }
+
 // BASIC: func @bar() {
 // BASIC:   %foo_inst = fsm.instance "foo_inst" @foo
 // BASIC:   %true = constant true
@@ -39,6 +36,7 @@
 // BASIC:   [[VAL1:%.+]] = fsm.trigger %foo_inst(%false, %c0_i8) : (i1, i8) -> i1
 // BASIC:   return
 // BASIC: }
+
 // BASIC: hw.module @qux(%clock: i1, %reset: i1) {
 // BASIC:   %true = hw.constant true
 // BASIC:   %c16_i8 = hw.constant 16 : i8
@@ -56,16 +54,11 @@
 // PRINT: }
 
 fsm.machine @foo(%i_valid: i1, %i_len: i8) -> i1 attributes {stateType = i2} {
-  %o_ready = fsm.variable "o_ready" {initValue = true} : i1
   %counter = fsm.variable "counter" {initValue = 0 : i8} : i8
 
-  %true = constant true
-  %false = constant false
-
-  fsm.state "IDLE" entry  {
-    fsm.update %o_ready, %true : i1
-  } exit  {
-    fsm.update %o_ready, %false : i1
+  fsm.state "IDLE" output  {
+    %true = constant true
+    fsm.output %true : i1
   } transitions  {
     fsm.transition @BUSY guard  {
       fsm.return %i_valid : i1
@@ -77,14 +70,14 @@ fsm.machine @foo(%i_valid: i1, %i_len: i8) -> i1 attributes {stateType = i2} {
     }
   }
 
-  fsm.state "BUSY" entry  {
-  } exit  {
+  fsm.state "BUSY" output  {
+    %false = constant false
+    fsm.output %false : i1
   } transitions  {
     fsm.transition @BUSY guard  {
     } action  {
     }
   }
-  fsm.output %o_ready : i1
 }
 
 func @bar() {

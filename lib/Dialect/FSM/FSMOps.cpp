@@ -39,8 +39,10 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
                                            /*resultAttrs=*/llvm::None);
 }
 
+/// Get the default state of the machine.
 StateOp MachineOp::getDefaultState() { return *getOps<StateOp>().begin(); }
 
+/// Get the port information of the machine.
 void MachineOp::getHWPortInfo(
     SmallVectorImpl<circt::hw::ModulePortInfo> &ports) {
   ports.clear();
@@ -101,40 +103,23 @@ static LogicalResult verify(MachineOp op) {
       return op.emitOpError("type of entry block argument #")
              << i << '(' << entryBlock.getArgument(i).getType()
              << ") must match the type of the corresponding argument in "
-             << "function signature(" << fnInputTypes[i] << ')';
+             << "machine signature(" << fnInputTypes[i] << ')';
 
   // Verify that the machine only has one block terminated with OutputOp. The
   // SingleBlockImplicitTerminator trait has duplicated definitions of
   // the `front()` method with the FunctionLike interface.
   if (!llvm::hasSingleElement(op))
     return op.emitOpError("must only have a single block");
-  auto output = dyn_cast<OutputOp>(op.front().getTerminator());
-  if (!output)
-    return op.emitOpError("must be terminated with the OutputOp");
-
-  // Verify that the result list of the function and the operand list of the
-  // terminator line up.
-  if (output.getNumOperands() != op.getNumResults())
-    return op.emitOpError("result number doesn't match with the number of "
-                          "operands of the terminator");
-
-  auto fnOutputTypes = op.getType().getResults();
-  for (unsigned i = 0, e = op.getNumResults(); i != e; ++i)
-    if (fnOutputTypes[i] != output.getOperand(i).getType())
-      return op.emitOpError("type of the terminator #")
-             << i << '(' << output.getOperand(i).getType()
-             << ") must match the type of the corresponding result in function "
-             << "signature(" << fnOutputTypes[i] << ')';
 
   return success();
 }
 
 //===----------------------------------------------------------------------===//
-// HWInstanceOp
+// InstanceOp
 //===----------------------------------------------------------------------===//
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
-MachineOp HWInstanceOp::getReferencedMachine() {
+MachineOp InstanceOp::getReferencedMachine() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
@@ -146,11 +131,27 @@ MachineOp HWInstanceOp::getReferencedMachine() {
   return dyn_cast<MachineOp>(referencedMachine);
 }
 
-static LogicalResult verifyHWInstanceOp(HWInstanceOp op) {
+static LogicalResult verifyInstanceOp(InstanceOp op) {
   auto referencedMachine = op.getReferencedMachine();
   if (referencedMachine == nullptr)
     return op.emitError("Cannot find machine definition '")
            << op.machine() << "'";
+
+  return success();
+}
+
+void InstanceOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  setNameFn(instance(), sym_name());
+}
+
+//===----------------------------------------------------------------------===//
+// TriggerOp
+//===----------------------------------------------------------------------===//
+
+template <typename OpType>
+static LogicalResult verifyCallerTypes(OpType op) {
+  auto referencedMachine = op.getReferencedMachine();
 
   // Check operand types first.
   auto numOperands = op.inputs().size();
@@ -211,12 +212,25 @@ static LogicalResult verifyHWInstanceOp(HWInstanceOp op) {
   return success();
 }
 
+/// Lookup the machine for the symbol.  This returns null on invalid IR.
+MachineOp TriggerOp::getReferencedMachine() {
+  auto instanceOp = dyn_cast<InstanceOp>(instance().getDefiningOp());
+  if (!instanceOp)
+    return nullptr;
+
+  return instanceOp.getReferencedMachine();
+}
+
+static LogicalResult verifyTriggerOp(TriggerOp op) {
+  return verifyCallerTypes(op);
+}
+
 //===----------------------------------------------------------------------===//
-// InstanceOp
+// HWInstanceOp
 //===----------------------------------------------------------------------===//
 
 /// Lookup the machine for the symbol.  This returns null on invalid IR.
-MachineOp InstanceOp::getReferencedMachine() {
+MachineOp HWInstanceOp::getReferencedMachine() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
     return nullptr;
@@ -228,89 +242,8 @@ MachineOp InstanceOp::getReferencedMachine() {
   return dyn_cast<MachineOp>(referencedMachine);
 }
 
-static LogicalResult verifyInstanceOp(InstanceOp op) {
-  auto referencedMachine = op.getReferencedMachine();
-  if (referencedMachine == nullptr)
-    return op.emitError("Cannot find machine definition '")
-           << op.machine() << "'";
-
-  return success();
-}
-
-void InstanceOp::getAsmResultNames(
-    function_ref<void(Value, StringRef)> setNameFn) {
-  setNameFn(instance(), sym_name());
-}
-
-//===----------------------------------------------------------------------===//
-// TriggerOp
-//===----------------------------------------------------------------------===//
-
-/// Lookup the machine for the symbol.  This returns null on invalid IR.
-MachineOp TriggerOp::getReferencedMachine() {
-  return cast<InstanceOp>(instance().getDefiningOp()).getReferencedMachine();
-}
-
-static LogicalResult verifyTriggerOp(TriggerOp op) {
-  auto referencedMachine = op.getReferencedMachine();
-
-  // Check operand types first.
-  auto numOperands = op.inputs().size();
-  auto expectedOperandTypes = referencedMachine.getType().getInputs();
-
-  if (expectedOperandTypes.size() != numOperands) {
-    auto diag = op.emitOpError()
-                << "has a wrong number of operands; expected "
-                << expectedOperandTypes.size() << " but got " << numOperands;
-    diag.attachNote(referencedMachine->getLoc())
-        << "original machine declared here";
-
-    return failure();
-  }
-
-  for (size_t i = 0; i != numOperands; ++i) {
-    auto expectedType = expectedOperandTypes[i];
-    auto operandType = op.inputs()[i].getType();
-    if (operandType != expectedType) {
-      auto diag = op.emitOpError()
-                  << "#" << i + 1 << " operand type must be " << expectedType
-                  << ", but got " << operandType;
-
-      diag.attachNote(referencedMachine->getLoc())
-          << "original machine declared here";
-      return failure();
-    }
-  }
-
-  // Check result types.
-  auto numResults = op->getNumResults();
-  auto expectedResultTypes = referencedMachine.getType().getResults();
-
-  if (expectedResultTypes.size() != numResults) {
-    auto diag = op.emitOpError()
-                << "has a wrong number of results; expected "
-                << expectedResultTypes.size() << " but got " << numResults;
-    diag.attachNote(referencedMachine->getLoc())
-        << "original machine declared here";
-
-    return failure();
-  }
-
-  for (size_t i = 0; i != numResults; ++i) {
-    auto expectedType = expectedResultTypes[i];
-    auto resultType = op.getResult(i).getType();
-    if (resultType != expectedType) {
-      auto diag = op.emitOpError()
-                  << "#" << i << " result type must be " << expectedType
-                  << ", but got " << resultType;
-
-      diag.attachNote(referencedMachine->getLoc())
-          << "original machine declared here";
-      return failure();
-    }
-  }
-
-  return success();
+static LogicalResult verifyHWInstanceOp(HWInstanceOp op) {
+  return verifyCallerTypes(op);
 }
 
 //===----------------------------------------------------------------------===//
@@ -319,28 +252,51 @@ static LogicalResult verifyTriggerOp(TriggerOp op) {
 
 LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
   bool hasAlwaysTakenTransition = false;
-  bool canonicalized = false;
   SmallVector<TransitionOp, 4> transitionsToErase;
-  // Remove all transitions after the "always-taken" transition.
+  // Remove all transitions after an "always-taken" transition.
   for (auto transition : op.transitions().getOps<TransitionOp>()) {
     if (!hasAlwaysTakenTransition)
       hasAlwaysTakenTransition = transition.isAlwaysTaken();
-    else {
+    else
       transitionsToErase.push_back(transition);
-      canonicalized = true;
-    }
   }
+
   for (auto transition : transitionsToErase)
     rewriter.eraseOp(transition);
 
-  return canonicalized ? success() : failure();
+  return failure(transitionsToErase.empty());
 }
 
 static LogicalResult verifyStateOp(StateOp op) {
-  if (op.entry().front().getTerminator()->getNumOperands() != 0 ||
-      op.exit().front().getTerminator()->getNumOperands() != 0 ||
-      op.transitions().front().getTerminator()->getNumOperands() != 0)
-    return op.emitOpError("any region should not return any value");
+  if (op.transitions().front().getTerminator()->getNumOperands() != 0)
+    return op.emitOpError("transitions region should not return any value");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// OutputOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyOutputOp(OutputOp op) {
+  if (op->getParentRegion() != &op->getParentOfType<StateOp>().output())
+    return success();
+
+  auto machine = op->getParentOfType<MachineOp>();
+
+  // Verify that the result list of the machine and the operand list of the
+  // OutputOp line up.
+  if (op.getNumOperands() != machine.getNumResults())
+    return op.emitOpError("the number of operands doesn't match with the "
+                          "result number of the machine");
+
+  auto outputTypes = machine.getType().getResults();
+  for (unsigned i = 0, e = machine.getNumResults(); i != e; ++i)
+    if (outputTypes[i] != op.getOperand(i).getType())
+      return op.emitOpError("type of the terminator #")
+             << i << '(' << op.getOperand(i).getType()
+             << ") must match the type of the corresponding result in machine "
+             << "signature(" << outputTypes[i] << ')';
 
   return success();
 }
@@ -405,12 +361,6 @@ static LogicalResult verifyTransitionOp(TransitionOp op) {
     return op.emitOpError("cannot find the definition of the next state `")
            << op.nextState() << "`";
 
-  auto isBool = [&](Type type) {
-    if (auto intTy = type.dyn_cast<IntegerType>())
-      return intTy.getWidth() == 1 && intTy.isSignless();
-    return false;
-  };
-
   // Verify the action and guard region.
   if (op.action().front().getTerminator()->getNumOperands() != 0)
     return op.emitOpError("action region should not return any value");
@@ -419,13 +369,18 @@ static LogicalResult verifyTransitionOp(TransitionOp op) {
   if (guardReturn.getNumOperands() > 1)
     return op.emitOpError("guard region should only return zero or one result");
 
+  auto isBoolType = [&](Type type) {
+    if (auto intTy = type.dyn_cast<IntegerType>())
+      return intTy.getWidth() == 1 && intTy.isSignless();
+    return false;
+  };
+
   if (guardReturn.getNumOperands() == 1)
-    if (!isBool(guardReturn.getOperandTypes().front()))
+    if (!isBoolType(guardReturn.getOperandTypes().front()))
       return op.emitOpError("guard region should return bool result");
 
   // Verify the transition is located in the correct region.
-  auto currentState = op.getCurrentState();
-  if (op->getParentRegion() != &currentState.transitions())
+  if (op->getParentRegion() != &op.getCurrentState().transitions())
     return op.emitOpError("should only be located in the transitions region");
 
   return success();
@@ -446,19 +401,19 @@ void VariableOp::getAsmResultNames(
 
 /// Get the targeted variable operation. This returns null on invalid IR.
 VariableOp UpdateOp::getDstVariable() {
-  if (auto dstDefOp = dst().getDefiningOp())
-    return dyn_cast<VariableOp>(dstDefOp);
-  else
+  auto dstDefOp = dst().getDefiningOp();
+  if (!dstDefOp)
     return nullptr;
+
+  return dyn_cast<VariableOp>(dstDefOp);
 }
 
 static LogicalResult verifyUpdateOp(UpdateOp op) {
   if (!op.getDstVariable())
     return op.emitOpError("destination is not a variable operation");
 
-  if (auto transition = dyn_cast<TransitionOp>(op->getParentOp()))
-    if (op->getParentRegion() == &transition.guard())
-      return op.emitOpError("guard region should not update machine variables");
+  if (op->getParentRegion() != &op->getParentOfType<TransitionOp>().action())
+    return op.emitOpError("should only be located in the action region");
 
   return success();
 }
