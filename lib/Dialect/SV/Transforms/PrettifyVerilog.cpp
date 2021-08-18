@@ -34,8 +34,10 @@ struct PrettifyVerilogPass
   void runOnOperation() override;
 
 private:
-  void prettifyUnaryOperator(Operation *op);
-  void sinkOpToUses(Operation *op);
+  void processPostOrder(Block &block);
+  bool prettifyUnaryOperator(Operation *op);
+  void sinkOrCloneOpToUses(Operation *op);
+  void sinkExpression(Operation *op);
 
   bool anythingChanged;
 };
@@ -59,7 +61,7 @@ static bool isVerilogUnaryOperator(Operation *op) {
 /// Sink an operation into the same block where it is used.  This will clone the
 /// operation so it can be sunk into multiple blocks. If there are no more uses
 /// in the current block, the op will be removed.
-void PrettifyVerilogPass::sinkOpToUses(Operation *op) {
+void PrettifyVerilogPass::sinkOrCloneOpToUses(Operation *op) {
   assert(mlir::MemoryEffectOpInterface::hasNoEffect(op) &&
          "Op with side effects cannot be sunk to its uses.");
   auto block = op->getBlock();
@@ -89,8 +91,9 @@ void PrettifyVerilogPass::sinkOpToUses(Operation *op) {
   }
 }
 
-/// This is called on unary operators.
-void PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
+/// This is called on unary operators.  This returns true if the operator is
+/// moved.
+bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   // If this is a multiple use unary operator, duplicate it and move it into the
   // block corresponding to the user.  This avoids emitting a temporary just for
   // a unary operator.  Instead of:
@@ -106,7 +109,7 @@ void PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   // This is particularly helpful when the operand of the unary op has multiple
   // uses as well.
   if (op->use_empty() || op->hasOneUse())
-    return;
+    return false;
 
   // Duplicating unary operations can move them across blocks (down the region
   // tree).  Make sure to keep referenced constants local.
@@ -145,6 +148,61 @@ void PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   cloneConstantOperandsIfNeeded(op);
 
   anythingChanged = true;
+  return true;
+}
+
+/// This method is called on expressions to see if we can sink them down the
+/// region tree.  This is a good thing to do to reduce scope of the expression.
+void PrettifyVerilogPass::sinkExpression(Operation *op) {
+  // Ignore expressions with no users.
+  if (op->use_empty())
+    return;
+
+  Block *curOpBlock = op->getBlock();
+
+  // Single-used expressions are the most common and simple to handle.
+  if (op->hasOneUse()) {
+    if (curOpBlock != op->user_begin()->getBlock()) {
+      op->moveBefore(*op->user_begin());
+      anythingChanged = true;
+    }
+    return;
+  }
+}
+
+void PrettifyVerilogPass::processPostOrder(Block &body) {
+  // Walk the block bottom-up, processing the region tree inside out.
+  for (auto &op :
+       llvm::make_early_inc_range(llvm::reverse(body.getOperations()))) {
+    if (op.getNumRegions()) {
+      for (auto &region : op.getRegions())
+        for (auto &regionBlock : region.getBlocks())
+          processPostOrder(regionBlock);
+    }
+
+    // Sink and duplicate unary operators.
+    if (isVerilogUnaryOperator(&op) && prettifyUnaryOperator(&op))
+      continue;
+
+    // Sink or duplicate constant ops and invisible "free" ops into the same
+    // block as their use.  This will allow the verilog emitter to inline
+    // constant expressions and avoids ReadInOutOp from preventing motion.
+    if (matchPattern(&op, mlir::m_Constant()) ||
+        isa<sv::ReadInOutOp, sv::ArrayIndexInOutOp>(op)) {
+      sinkOrCloneOpToUses(&op);
+      continue;
+    }
+
+    // Sink normal expressions down the region tree if they aren't used within
+    // their current block.  This allows them to be folded into the using
+    // expression inline in the best case, and better scopes the temporary wire
+    // they generate in the worst case.  Our overall traversal order is
+    // post-order here which means all users will already be sunk.
+    if (hw::isCombinatorial(&op) || sv::isExpression(&op)) {
+      sinkExpression(&op);
+      continue;
+    }
+  }
 }
 
 void PrettifyVerilogPass::runOnOperation() {
@@ -153,18 +211,7 @@ void PrettifyVerilogPass::runOnOperation() {
   anythingChanged = false;
 
   // Walk the operations in post-order, transforming any that are interesting.
-  getOperation()->walk([&](Operation *op) {
-    if (isVerilogUnaryOperator(op))
-      return prettifyUnaryOperator(op);
-    // Sink or duplicate constant ops into the same block as their use.  This
-    // will allow the verilog emitter to inline constant expressions.
-    if (matchPattern(op, mlir::m_Constant()))
-      return sinkOpToUses(op);
-
-    // Sink "free" operations which make Verilog prettier.
-    if (isa<sv::ReadInOutOp>(op))
-      return sinkOpToUses(op);
-  });
+  processPostOrder(*getOperation().getBodyBlock());
 
   // If we did not change anything in the graph mark all analysis as
   // preserved.

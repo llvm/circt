@@ -53,8 +53,8 @@ hw.module @sink_constants(%clock :i1) -> (%out : i1){
   /// Simple constant sinking.
   sv.ifdef "FOO" {
     sv.initial {
-      // CHECK: [[TRUE:%.*]] = hw.constant true
       // CHECK: [[FALSE:%.*]] = hw.constant false
+      // CHECK: [[TRUE:%.*]] = hw.constant true
       // CHECK: sv.fwrite "%x"([[TRUE]]) : i1
       sv.fwrite "%x"(%true) : i1
       // CHECK: sv.fwrite "%x"([[FALSE]]) : i1
@@ -102,3 +102,36 @@ hw.module @sinkReadInOut(%clk: i1) {
 // VERILOG:  reg [47:0] myreg;
 // VERILOG:  always @(posedge clk)
 // VERILOG:    myreg <= myreg;
+
+
+// CHECK-LABEL: @sink_expression
+hw.module @sink_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
+  // This or is used in one place.
+  %0 = comb.or %a2, %a3 : i1
+  // This and/xor chain is used in two.  Both should be sunk.
+  // CHECK: [[AND:%.*]] = comb.and %a2, %a3 : i1
+  // CHECK: [[XOR:%.*]] = comb.xor [[AND]], %a4 : i1
+  %1 = comb.and %a2, %a3 : i1
+  %2 = comb.xor %1, %a4 : i1
+  // CHECK: sv.always
+  sv.always posedge %clock  {
+    // CHECK: sv.ifdef.procedural
+    sv.ifdef.procedural "SOMETHING"  {
+      // CHECK: [[OR:%.*]] = comb.or %a2, %a3 : i1
+      // CHECK: sv.if [[OR]]
+      sv.if %0  {
+        sv.fatal
+      }
+      // CHECK: sv.if [[XOR]]
+      sv.if %2  {
+        sv.fatal
+      }
+    }
+
+    // CHECK: sv.if [[XOR]]
+    sv.if %2  {
+      sv.fatal
+    }
+  }
+  hw.output
+}
