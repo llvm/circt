@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_PASSES_H
 #define CIRCT_DIALECT_FIRRTL_PASSES_H
 
+#include "mlir/Pass/PassRegistry.h"
 #include "llvm/ADT/Optional.h"
 #include <memory>
 
