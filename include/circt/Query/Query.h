@@ -165,7 +165,6 @@ public:
   }
 
   bool matches(Operation *op, FilterData &data) override;
-  bool addSelf() override;
   Filter *clone() override;
 
 protected:
@@ -180,7 +179,7 @@ class UsageFilter : public Filter {
 public:
   UsageFilter(Filter *filter) : Filter(new FilterType), filter (filter) { }
 
-  bool matches(Operation *op, FilterData &data) override { return !filter->filter(op, data).empty(); }
+  bool matches(Operation *op, FilterData &data) override;
   std::vector<Operation *> nextOperations(Operation *op, FilterData &data) override;
 
 private:

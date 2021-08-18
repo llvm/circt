@@ -13,6 +13,54 @@ Operation *getNextOpFromOp(Operation *op) {
     });
 }
 
+bool testForMatch(Filter *filter, FilterData &data, Operation *op) {
+  if (!filter->matches(op, data)) {
+   return false;
+  }
+
+  std::vector<std::pair<Operation *, Filter *>> opStack;
+  if (filter->addSelf()) {
+    opStack.push_back(std::make_pair(op, filter));
+  }
+  opStack.push_back(std::make_pair(op, filter->nextFilter()));
+
+  while (!opStack.empty()) {
+   auto pair = opStack.back();
+   opStack.pop_back();
+   auto *op = pair.first;
+   auto *filter = pair.second;
+
+   if (!filter) {
+     return true;
+   }
+
+   for (auto &region : op->getRegions()) {
+     for (auto &block : region) {
+       for (auto &op : block) {
+         auto *next = getNextOpFromOp(&op);
+
+         if (filter->matches(next, data)) {
+            auto vec = filter->nextOperations(next, data);
+
+            if (filter->addSelf()) {
+              for (auto *op : vec) {
+                opStack.push_back(std::make_pair(op, filter));
+              }
+            }
+
+            auto *child = filter->nextFilter();
+            for (auto *op : vec) {
+              opStack.push_back(std::make_pair(op, child));
+            }
+         }
+       }
+     }
+   }
+  }
+
+  return false;
+}
+
 std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
   std::vector<Operation *> filtered;
   std::vector<std::pair<Operation *, Filter *>> opStack;
@@ -25,16 +73,18 @@ std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
     opStack.pop_back();
 
     if (filter == nullptr) {
-      bool contained = false;
-      for (auto *o : filtered) {
-        if (o == op) {
-          contained = true;
-          break;
+      if (root != op) {
+        bool contained = false;
+        for (auto *o : filtered) {
+          if (o == op) {
+            contained = true;
+            break;
+          }
         }
-      }
 
-      if (!contained) {
-        filtered.push_back(op);
+        if (!contained) {
+          filtered.push_back(op);
+        }
       }
     } else {
       if (filter->addSelf() && !llvm::dyn_cast_or_null<mlir::ModuleOp>(op) && filter->matches(op, data)) {
@@ -160,7 +210,7 @@ Filter *AttributeFilter::clone() {
 
 bool NameFilter::matches(Operation *op, FilterData &data) {
   std::string name;
-  for (size_t nameIndex = 0; nameIndex == 0 || !(name = getNameFromOp(op, nameIndex)).empty(); nameIndex++) {
+  for (size_t nameIndex = 0; !(name = getNameFromOp(op, nameIndex)).empty() || nameIndex == 0; nameIndex++) {
     if (type->valueMatches(name)) {
       return true;
     }
@@ -183,7 +233,7 @@ Filter *OpFilter::clone() {
 
 bool AndFilter::matches(Operation *op, FilterData &data) {
   for (auto *filter : filters) {
-    if (filter->filter(op, data).empty()) {
+    if (!testForMatch(filter, data, op)) {
       return false;
     }
   }
@@ -197,7 +247,7 @@ Filter *AndFilter::clone() {
 
 bool OrFilter::matches(Operation *op, FilterData &data) {
   for (auto *filter : filters) {
-    if (!filter->filter(op, data).empty()) {
+    if (testForMatch(filter, data, op)) {
       return true;
     }
   }
@@ -210,11 +260,7 @@ Filter *OrFilter::clone() {
 }
 
 bool InstanceFilter::matches(Operation *op, FilterData &data) {
-  return !filter->filter(op, data).empty();
-}
-
-bool InstanceFilter::addSelf() {
-  return filter->getType()->addSelf();
+  return testForMatch(filter, data, op);
 }
 
 Filter *InstanceFilter::clone() {
@@ -225,11 +271,14 @@ Filter *InstanceFilter::nextFilter() {
   return child;
 }
 
+bool UsageFilter::matches(Operation *op, FilterData &data) {
+  return testForMatch(filter, data, op);
+}
+
 std::vector<Operation *> UsageFilter::nextOperations(Operation *op, FilterData &data) {
   std::vector<Operation *> ops;
   TypeSwitch<Operation *>(op)
-    .Case<hw::HWModuleOp>([&](auto &op) {
-      std::vector<Operation *> ops;
+    .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
       auto users = data.userMap.getUsers(op);
       ops.insert(ops.end(), users.begin(), users.end());
     })
@@ -238,6 +287,7 @@ std::vector<Operation *> UsageFilter::nextOperations(Operation *op, FilterData &
         ops.push_back(use.getOwner());
       }
     });
+
   return ops;
 }
 
