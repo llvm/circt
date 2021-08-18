@@ -11,10 +11,12 @@
 #include "mlir/CAPI/Registration.h"
 #include "mlir/CAPI/Support.h"
 #include "mlir/CAPI/Utils.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(MSFT, msft, circt::msft::MSFTDialect)
 
+using namespace circt;
 using namespace circt::msft;
 
 void mlirMSFTRegisterPasses() { circt::msft::registerMSFTPasses(); }
@@ -76,4 +78,33 @@ uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute attr) {
 }
 uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute attr) {
   return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getNum();
+}
+
+bool circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute attr) {
+  return unwrap(attr).isa<SwitchInstanceAttr>();
+}
+MlirAttribute circtMSFTSwitchInstanceAttrGet(
+    MlirContext cCtxt, CirctMSFTInstIDAttrPair *listOfCases, size_t numCases) {
+  SmallVector<InstIDAttrPair, 64> cases;
+  for (size_t i = 0; i < numCases; ++i) {
+    CirctMSFTInstIDAttrPair pair = listOfCases[i];
+    auto instance = unwrap(pair.instance).cast<SymbolRefAttr>();
+    auto attr = unwrap(pair.instance);
+    cases.push_back(std::make_pair(instance, attr));
+  }
+  return wrap(SwitchInstanceAttr::get(unwrap(cCtxt), cases));
+}
+size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute attr) {
+  return unwrap(attr).cast<SwitchInstanceAttr>().getCases().size();
+}
+void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute attr,
+                                         CirctMSFTInstIDAttrPair *dstArray,
+                                         size_t space) {
+  auto sw = unwrap(attr).cast<SwitchInstanceAttr>();
+  ArrayRef<InstIDAttrPair> cases = sw.getCases();
+  assert(space >= cases.size());
+  for (size_t i = 0, e = cases.size(); i < e; ++i) {
+    auto c = cases[i];
+    dstArray[i] = {wrap(c.first), wrap(c.second)};
+  }
 }

@@ -53,16 +53,28 @@ MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
 
 // Values represented in `MSFT.td`.
 typedef uint32_t CirctMSFTDevType;
+
 bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
 MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTDevType,
                                            uint64_t x, uint64_t y,
                                            uint64_t num);
-
 CirctMSFTDevType circtMSFTPhysLocationAttrGetDeviceType(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
 
+typedef struct {
+  MlirAttribute instance;
+  MlirAttribute attr;
+} CirctMSFTInstIDAttrPair;
+
+bool circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute);
+MlirAttribute circtMSFTSwitchInstanceAttrGet(
+    MlirContext, CirctMSFTInstIDAttrPair *listOfCases, size_t numCases);
+size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute);
+void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute,
+                                         CirctMSFTInstIDAttrPair *dstArray,
+                                         size_t space);
 #ifdef __cplusplus
 }
 #endif

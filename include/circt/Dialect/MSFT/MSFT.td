@@ -61,7 +61,7 @@ def SwitchInstance : MSFT_Attr<"SwitchInstance"> {
   let summary = "Select an attribute to be use based on the instance";
   let mnemonic = "switch.inst";
   let parameters = (ins
-    ArrayRefParameter<"InstIDAttrPair">:$instPairs);
+    ArrayRefParameter<"InstIDAttrPair">:$cases);
 
   let extraClassDeclaration = [{
     Attribute lookup(InstanceIDAttr);

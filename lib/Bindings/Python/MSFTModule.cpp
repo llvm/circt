@@ -98,4 +98,32 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly("num", [](MlirAttribute self) {
         return (DeviceType)circtMSFTPhysLocationAttrGetNum(self);
       });
+
+  mlir_attribute_subclass(m, "SwitchInstance",
+                          circtMSFTAttributeIsASwitchInstanceAttribute)
+      .def_classmethod(
+          "get",
+          [](py::object cls,
+             std::vector<std::tuple<MlirAttribute, MlirAttribute>> listOfCases,
+             MlirContext ctxt) {
+            std::vector<CirctMSFTInstIDAttrPair> cases;
+            for (auto p : listOfCases)
+              cases.push_back({std::get<0>(p), std::get<1>(p)});
+            return cls(circtMSFTSwitchInstanceAttrGet(ctxt, cases.data(),
+                                                      cases.size()));
+          },
+          "Create an instance switch attribute", py::arg(),
+          py::arg("list_of_cases"), py::arg("ctxt") = py::none())
+      .def_property_readonly(
+          "cases",
+          [](MlirAttribute self) {
+            size_t numCases = circtMSFTSwitchInstanceAttrGetNumCases(self);
+            std::vector<CirctMSFTInstIDAttrPair> cases(numCases);
+            circtMSFTSwitchInstanceAttrGetCases(self, cases.data(),
+                                                cases.max_size());
+            return cases;
+          })
+      .def_property_readonly("num_cases", [](MlirAttribute self) {
+        return circtMSFTSwitchInstanceAttrGetNumCases(self);
+      });
 }

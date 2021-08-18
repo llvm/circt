@@ -5,16 +5,16 @@ import circt
 from circt import msft
 from circt.dialects import hw, seq
 
-from mlir.ir import *
+import mlir.ir as ir
 import sys
 
-with Context() as ctx, Location.unknown():
+with ir.Context() as ctx, ir.Location.unknown():
   circt.register_dialects(ctx)
-  i32 = IntegerType.get_signless(32)
-  i1 = IntegerType.get_signless(1)
+  i32 = ir.IntegerType.get_signless(32)
+  i1 = ir.IntegerType.get_signless(1)
 
-  m = Module.create()
-  with InsertionPoint(m.body):
+  m = ir.Module.create()
+  with ir.InsertionPoint(m.body):
     # CHECK: hw.module @MyWidget()
     # CHECK:   hw.output
     op = hw.HWModuleOp(name='MyWidget',
@@ -26,7 +26,7 @@ with Context() as ctx, Location.unknown():
                         output_ports=[],
                         body_builder=lambda module: hw.OutputOp([]))
 
-  with InsertionPoint.at_block_terminator(top.body.blocks[0]):
+  with ir.InsertionPoint.at_block_terminator(top.body.blocks[0]):
     inst = op.create("inst1")
     msft.locate(inst.operation, "mem", devtype=msft.M20K, x=50, y=100, num=1)
     # CHECK: hw.instance "inst1" @MyWidget() {"loc:mem" = #msft.physloc<M20K, 50, 100, 1>, parameters = {}} : () -> ()
@@ -43,6 +43,12 @@ with Context() as ctx, Location.unknown():
 
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
   print(physAttr)
+
+  inst = ir.Attribute.parse("@foo::@bar")
+  inst2 = ir.Attribute.parse("@foo::@bar2")
+  # CHECK-NEXT: #msft.switch.inst<>
+  instSwitch = msft.SwitchInstance.get([(inst, inst2)])
+  print(instSwitch)
 
   # CHECK-LABEL: === tcl ===
   print("=== tcl ===")
