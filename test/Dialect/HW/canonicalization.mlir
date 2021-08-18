@@ -56,16 +56,6 @@ hw.module @xor_cstfold(%arg0: i7) -> (i7) {
   hw.output %0 : i7
 }
 
-// CHECK-LABEL: hw.module @merge_fold
-// CHECK-NEXT:    %0 = comb.merge %arg0, %arg0, %arg1 : i7
-// CHECK-NEXT:    hw.output %arg0, %arg0, %0 : i7, i7, i7
-hw.module @merge_fold(%arg0: i7, %arg1: i7) -> (i7, i7, i7) {
-  %a = comb.merge %arg0 : i7
-  %b = comb.merge %arg0, %arg0, %arg0 : i7
-  %c = comb.merge %arg0, %arg0, %arg1 : i7
-  hw.output %a, %b, %c: i7, i7, i7
-}
-
 // CHECK-LABEL: hw.module @add_cstfold(%arg0: i7) -> (i7) {
 // CHECK-NEXT:    %c15_i7 = hw.constant 15 : i7
 // CHECK-NEXT:    %0 = comb.add %arg0, %c15_i7 : i7

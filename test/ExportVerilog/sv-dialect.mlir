@@ -361,35 +361,6 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
   }
 }
 
-// CHECK-LABEL: module issue439(
-// https://github.com/llvm/circt/issues/439
-hw.module @issue439(%in1: i1, %in2: i1) {
-  // CHECK: wire _T;
-  // CHECK: wire _T_0 = in1 | in2;
-  %clock = comb.or %in1, %in2 : i1
-
-  // CHECK-NEXT: always @(posedge _T_0)
-  sv.always posedge %clock {
-    // CHECK-NEXT: _T <= in1;
-    // CHECK-NEXT: _T <= in2;
-    %merged = comb.merge %in1, %in2 : i1
-    // CHECK-NEXT: $fwrite(32'h80000002, "Bye %x\n", _T);
-    sv.fwrite "Bye %x\n"(%merged) : i1
-  }
-}
-
-// CHECK-LABEL: module issue726(
-// https://github.com/llvm/circt/issues/726
-hw.module @issue726(%in1: i1, %in2: i1) -> (%out: i1) {
-  // CHECK: wire _T;
-  // CHECK: assign _T = in1;
-  // CHECK: assign _T = in2;
-  %merged = comb.merge %in1, %in2 : i1
-
-  // CHECK: assign out = _T;
-  hw.output %merged : i1
-}
-
 // https://github.com/llvm/circt/issues/595
 // CHECK-LABEL: module issue595
 hw.module @issue595(%arr: !hw.array<128xi1>) {

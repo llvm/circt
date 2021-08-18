@@ -779,19 +779,21 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   if (flipValue.getType().isa<AnalogType>())
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
 
-  SmallVector<ConnectOp, 2> connects;
+  ConnectOp theConnect;
   for (auto *use : flipValue.getUsers()) {
     // We only know about 'connect' uses, where this is the destination.
     auto connect = dyn_cast<ConnectOp>(use);
-    if (!connect || connect.src() == flipValue)
+    if (!connect || connect.src() == flipValue ||
+        // We only support things with a single connect.
+        theConnect)
       return {};
 
-    connects.push_back(connect);
+    theConnect = connect;
   }
 
   // We don't have an HW equivalent of "poison" so just don't special case
   // the case where there are no connects other uses of an output.
-  if (connects.empty())
+  if (!theConnect)
     return {}; // TODO: Emit an sv.constantz here since it is unconnected.
 
   // Don't special case zero-bit results.
@@ -801,40 +803,31 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 
   // Convert each connect into an extended version of its operand being
   // output.
-  SmallVector<Value, 2> results;
   ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
 
-  for (auto connect : connects) {
-    auto connectSrc = connect.src();
+  auto connectSrc = theConnect.src();
 
-    // Convert fliped sources to passive sources.
-    if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
-      connectSrc = builder.createOrFold<AsPassivePrimOp>(connectSrc);
+  // Convert fliped sources to passive sources.
+  if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
+    connectSrc = builder.createOrFold<AsPassivePrimOp>(connectSrc);
 
-    // We know it must be the destination operand due to the types, but the
-    // source may not match the destination width.
-    auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
-    if (destTy.getBitWidthOrSentinel() !=
-        connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
-      // The only type mismatchs we care about is due to integer width
-      // differences.
-      auto destWidth = destTy.getBitWidthOrSentinel();
-      assert(destWidth != -1 && "must know integer widths");
-      connectSrc =
-          builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
-    }
-
-    // Remove the connect and use its source as the value for the output.
-    connect.erase();
-    results.push_back(connectSrc);
+  // We know it must be the destination operand due to the types, but the
+  // source may not match the destination width.
+  auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
+  if (destTy.getBitWidthOrSentinel() !=
+      connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
+    // The only type mismatchs we care about is due to integer width
+    // differences.
+    auto destWidth = destTy.getBitWidthOrSentinel();
+    assert(destWidth != -1 && "must know integer widths");
+    connectSrc = builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
   }
 
-  // Convert from FIRRTL type to builtin type to do the merge.
-  for (auto &result : results)
-    result = castFromFIRRTLType(result, loweredType, builder);
+  // Remove the connect and use its source as the value for the output.
+  theConnect.erase();
 
-  // Folding merge of one value just returns the value.
-  return builder.createOrFold<comb::MergeOp>(results);
+  // Convert from FIRRTL type to builtin type.
+  return castFromFIRRTLType(connectSrc, loweredType, builder);
 }
 
 static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,

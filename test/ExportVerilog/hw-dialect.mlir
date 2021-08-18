@@ -351,21 +351,6 @@ hw.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
   hw.output %wireout, %memout1, %memout2 : i4, i8, i8
 }
 
-// CHECK-LABEL: module merge
-hw.module @merge(%in1: i4, %in2: i4, %in3: i4, %in4: i4) -> (%x: i4) {
-  // CHECK: wire [3:0] _T;
-  // CHECK: assign _T = in1 + in2;
-  %a = comb.add %in1, %in2 : i4
-
-  // CHECK-NEXT: assign _T = in2;
-  // CHECK-NEXT: assign _T = in3;
-  %b = comb.merge %a, %in2, %in3 : i4
-
-  // CHECK: assign x = _T + in4 + in4;
-  %c = comb.add %b, %in4, %in4 : i4
-  hw.output %c : i4
-}
-
 // CHECK-LABEL: module signs
 hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %awire = sv.wire : !hw.inout<i4>

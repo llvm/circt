@@ -962,14 +962,6 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
-OpFoldResult MergeOp::fold(ArrayRef<Attribute> constants) {
-  // hw.merge(x, x, x) -> x.
-  if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
-    return inputs()[0];
-
-  return {};
-}
-
 OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
   APInt value;
   // sub(x - 0) -> x

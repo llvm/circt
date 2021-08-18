@@ -85,21 +85,6 @@ def XorOp : UTVariadicOp<"xor", [Commutative]> {
   }];
 }
 
-def MergeOp : UTVariadicOp<"merge", [Commutative]> {
-  let summary ="Electrically merge signals together as if connected by a wire.";
-  let description = [{
-    This operation merges multiple signals together as if they were connected to
-    a single wire.  Presumably at most one of them should be a Z state at any
-    given time otherwise you'd get a short circuit.
-
-    This operation allows modeling multiconnect semantics in SSA.
-    ```
-      %result = hw.merge %a, %b, %c : t1
-    ```
-    }];
-  let hasCanonicalizeMethod = false;
-}
-
 //===----------------------------------------------------------------------===//
 // Comparisons
 //===----------------------------------------------------------------------===//

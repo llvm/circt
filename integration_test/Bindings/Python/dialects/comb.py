@@ -172,9 +172,6 @@ with Context() as ctx, Location.unknown():
       # CHECK: comb.xor %[[CONST]], %[[CONST]]
       comb.XorOp.create(const.result, const.result)
 
-      # CHECK: comb.merge %[[CONST]], %[[CONST]]
-      comb.MergeOp.create(const.result, const.result)
-
       # CHECK: comb.concat %[[CONST]], %[[CONST]]
       comb.ConcatOp.create(i32, const.result, const.result)
 

@@ -3063,29 +3063,6 @@ static void lowerAlwaysInlineOperation(Operation *op) {
   return;
 }
 
-/// We lower the Merge operation to a wire at the top level along with
-/// assigns to it and a ReadInOut.
-static Value lowerMergeOp(MergeOp merge) {
-  auto module = merge->getParentOfType<HWModuleOp>();
-  assert(module && "merges should only be in a module");
-
-  // Start with the wire at the top level.
-  ImplicitLocOpBuilder b(merge.getLoc(), &module.getBodyBlock()->front());
-  auto wire = b.create<WireOp>(merge.getType());
-
-  // Each of the operands is an assign or passign into the wire.
-  b.setInsertionPoint(merge);
-  if (merge->getParentOp()->hasTrait<sv::ProceduralRegion>()) {
-    for (auto op : merge.getOperands())
-      b.create<PAssignOp>(wire, op);
-  } else {
-    for (auto op : merge.getOperands())
-      b.create<AssignOp>(wire, op);
-  }
-
-  return b.create<ReadInOutOp>(wire);
-}
-
 /// Lower a commutative operation into an expression tree.  This enables
 /// long-line splitting to work with them.
 static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
@@ -3350,14 +3327,6 @@ static void prepareHWModule(Block &block, ModuleNameManager &names,
     // them to be next to their users.
     if (isExpressionAlwaysInline(&op)) {
       lowerAlwaysInlineOperation(&op);
-      continue;
-    }
-
-    // Lower 'merge' operations to wires and connects.
-    if (auto merge = dyn_cast<MergeOp>(op)) {
-      auto result = lowerMergeOp(merge);
-      op.getResult(0).replaceAllUsesWith(result);
-      op.erase();
       continue;
     }
 
