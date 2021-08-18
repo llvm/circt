@@ -74,6 +74,35 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Checks whether @p port is driven from within @p groupOp.
+static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp,
+                                         bool checkInstanceOp = true) {
+  // Check if the port is driven by an assignOp from within @p groupOp
+  for (auto &use : port.getUses()) {
+    if (auto assignOp = dyn_cast<AssignOp>(use.getOwner()))
+      if (assignOp->getParentOfType<GroupOp>() == groupOp)
+        return success();
+  }
+
+  if (checkInstanceOp) {
+    // If the port is the result of an InstanceOp, and if any input port of
+    // this InstanceOp is driven within @p groupOp, we'll assume that @p port
+    // is sensitive to the driven input port.
+    if (auto instanceOp = dyn_cast<InstanceOp>(port.getDefiningOp())) {
+      auto compOp = instanceOp.getReferencedComponent();
+      auto compOpPortInfo = getComponentPortInfo(compOp);
+      for (auto portInfo : enumerate(compOpPortInfo)) {
+        if (portInfo.value().direction == Direction::Input)
+          if (succeeded(isPortDrivenByGroup(
+                  instanceOp->getResult(portInfo.index()), groupOp, false)))
+            return success();
+      }
+    }
+  }
+
+  return failure();
+}
+
 LogicalResult calyx::verifyCell(Operation *op) {
   auto opParent = op->getParentOp();
   if (!isa<ComponentOp>(opParent))
@@ -596,8 +625,9 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   auto component = ifOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
   auto groupName = ifOp.groupName();
+  auto groupOp = wiresOp.lookupSymbol<GroupOp>(groupName);
 
-  if (!wiresOp.lookupSymbol<GroupOp>(groupName))
+  if (!groupOp)
     return ifOp.emitOpError()
            << "with group '" << groupName << "', which does not exist.";
 
@@ -607,6 +637,10 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   if (ifOp.elseRegion().getBlocks().size() != 0 &&
       ifOp.elseRegion().front().empty())
     return ifOp.emitError() << "empty 'else' region.";
+
+  if (failed(isPortDrivenByGroup(ifOp.cond(), groupOp)))
+    return ifOp.emitError() << "conditional port expected to be driven from "
+                               "the 'with' group but no driver was found.";
 
   return success();
 }

@@ -186,3 +186,25 @@ calyx.program {
     }
   }
 }
+
+// -----
+
+calyx.program {
+  calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
+    calyx.wires {}
+    calyx.control {}
+  }
+  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
+    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
+    %c1_1 = constant 1 : i1
+    calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
+    calyx.control {
+      calyx.seq {
+        // expected-error @+1 {{conditional port expected to be driven from the 'with' group but no driver was found.}}
+        calyx.if %c0.out with @Group1 {
+          calyx.enable @Group1
+        }
+      }
+    }
+  }
+}
