@@ -45,8 +45,8 @@ def IfOp : CalyxContainer<"if", [
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let description = [{
     The "calyx.if" operation represents and if-then-else construct for
-    conditionally executing two Calyx groups. The operands to an if operation
-    is a boolean value and the group under which this value is evaluated.
+    conditionally executing two Calyx groups. The operands to an if operation is
+    a 1-bit port and the group under which this port is driven.
 
     Note: The native and CIRCT Calyx IRs may diverge wrt. 'with' execution, see:
     https://github.com/cucapra/calyx/discussions/588
