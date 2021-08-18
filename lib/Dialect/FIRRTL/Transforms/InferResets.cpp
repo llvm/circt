@@ -404,7 +404,7 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
 
   // Copy creates a new empty pass (because ResetMap has no copy constructor).
   using InferResetsBase::InferResetsBase;
-  InferResetsPass(const InferResetsPass &) {}
+  InferResetsPass(const InferResetsPass &other) : InferResetsBase(other) {}
 
   //===--------------------------------------------------------------------===//
   // Reset type inference
