@@ -80,9 +80,8 @@ static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp) {
   // Check if the port is driven by an assignOp from within @p groupOp.
   for (auto &use : port.getUses()) {
     if (auto assignOp = dyn_cast<AssignOp>(use.getOwner())) {
-      if (assignOp.dest() != port)
-        continue;
-      if (assignOp->getParentOfType<GroupOp>() != groupOp)
+      if (assignOp.dest() != port ||
+          assignOp->getParentOfType<GroupOp>() != groupOp)
         continue;
       return success();
     }
@@ -95,21 +94,19 @@ static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp) {
   // easily access the input and output ports of a component
   if (auto instanceOp = dyn_cast<InstanceOp>(port.getDefiningOp())) {
     auto compOp = instanceOp.getReferencedComponent();
-    auto compOpPortInfo = getComponentPortInfo(compOp);
+    auto compOpPortInfo = llvm::enumerate(getComponentPortInfo(compOp));
 
-    bool isOutputPort =
-        llvm::any_of(enumerate(compOpPortInfo), [&](auto portInfo) {
-          return port == instanceOp->getResult(portInfo.index()) &&
-                 portInfo.value().direction == Direction::Output;
-        });
+    bool isOutputPort = llvm::any_of(compOpPortInfo, [&](auto portInfo) {
+      return port == instanceOp->getResult(portInfo.index()) &&
+             portInfo.value().direction == Direction::Output;
+    });
 
     if (isOutputPort) {
-      return success(
-          llvm::any_of(llvm::enumerate(compOpPortInfo), [&](auto portInfo) {
-            return portInfo.value().direction == Direction::Input &&
-                   succeeded(isPortDrivenByGroup(
-                       instanceOp->getResult(portInfo.index()), groupOp));
-          }));
+      return success(llvm::any_of(compOpPortInfo, [&](auto portInfo) {
+        return portInfo.value().direction == Direction::Input &&
+               succeeded(isPortDrivenByGroup(
+                   instanceOp->getResult(portInfo.index()), groupOp));
+      }));
     }
   }
 
@@ -157,6 +154,8 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   return success();
 }
 
+// Convenience function for getting the SSA name of @p v under the scope of
+// operation @p scopeOp
 static std::string valueName(Operation *scopeOp, Value v) {
   std::string s;
   llvm::raw_string_ostream os(s);
