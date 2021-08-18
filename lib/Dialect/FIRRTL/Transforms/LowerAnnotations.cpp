@@ -128,23 +128,51 @@ static ArrayAttr getAnnotationsFrom(Operation *op) {
   return ArrayAttr::get(op->getContext(), {});
 }
 
+static ArrayAttr appendArrayAttr(ArrayAttr array, Attribute a) {
+  if (!array)
+    return ArrayAttr::get(a.getContext(), ArrayRef{a});
+  SmallVector<Attribute> old(array.begin(), array.end());
+  old.push_back(a);
+  return ArrayAttr::get(a.getContext(), old);
+}
+
+static ArrayAttr replaceArrayAttrElement(ArrayAttr array, size_t elem,
+                                         Attribute newVal) {
+  SmallVector<Attribute> old(array.begin(), array.end());
+  old[elem] = newVal;
+  return ArrayAttr::get(array.getContext(), old);
+}
+
 static void addAnnotation(BaseUnion ref, ArrayRef<NamedAttribute> anno) {
-  SmallVector<Attribute> newAnnos;
-  for (auto old : getAnnotationsFrom(ref.op))
-    newAnnos.push_back(old);
+  DictionaryAttr annotation;
   if (ref.fieldIdx) {
-    SmallVector<NamedAttribute> anno2(anno.begin(), anno.end());
-    anno2.emplace_back(
+    SmallVector<NamedAttribute> annoField(anno.begin(), anno.end());
+    annoField.emplace_back(
         Identifier::get("circt.fieldID", ref.op->getContext()),
         IntegerAttr::get(
             IntegerType::get(ref.op->getContext(), 32, IntegerType::Signless),
             ref.fieldIdx));
-    newAnnos.push_back(DictionaryAttr::get(ref.op->getContext(), anno2));
+    annotation = DictionaryAttr::get(ref.op->getContext(), annoField);
   } else {
-    newAnnos.push_back(DictionaryAttr::get(ref.op->getContext(), anno));
+    annotation = DictionaryAttr::get(ref.op->getContext(), anno);
   }
-  ref.op->setAttr(getAnnotationAttrName(),
-                  ArrayAttr::get(ref.op->getContext(), newAnnos));
+
+  if (!ref.isPort()) {
+    auto newAnno = appendArrayAttr(getAnnotationsFrom(ref.op), annotation);
+    ref.op->setAttr(getAnnotationAttrName(), newAnno);
+    return;
+  }
+
+  auto portAnnoRaw = ref.op->getAttr("portAnnotations");
+  ArrayAttr portAnno = portAnnoRaw.dyn_cast<ArrayAttr>();
+  if (!portAnno || portAnno.size() != ref.op->getNumResults()) {
+    SmallVector<Attribute> emptyPortAttr(ref.op->getNumResults());
+    portAnno = ArrayAttr::get(ref.op->getContext(), emptyPortAttr);
+  }
+  portAnno = replaceArrayAttrElement(
+      portAnno, ref.portNum,
+      appendArrayAttr(portAnno[ref.portNum].dyn_cast<ArrayAttr>(), annotation));
+  ref.op->setAttr("portAnnotations", portAnno);
 }
 
 // Returns remainder of path if circuit is the correct circuit

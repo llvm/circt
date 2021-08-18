@@ -114,10 +114,9 @@ firrtl.circuit "FooNL"  attributes {annotations = [{class = "circt.test", nl = "
 
 // CHECK-LABEL: firrtl.circuit "FooIR"
 // CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance @BarIR
-// CHECK-SAME: [{class = "circt.test", one}],
-// CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {class = "circt.test", two}>,
-// CHECK-SAME:  #firrtl.subAnno<fieldID = 2, {class = "circt.test", three}>],
-// CHECK-SAME: [{class = "circt.test", four}]
+// CHECK-SAME: {class = "circt.test", one}
+// CHECK-SAME: {circt.fieldID = 1 : i32, class = "circt.test", two}, 
+// CHECK-SAME: {class = "circt.test", four}
 firrtl.circuit "FooIR"  attributes {annotations = [{class = "circt.test", one, target = "~FooIR|FooIR>bar.a"}, {class = "circt.test", target = "~FooIR|FooIR>bar.b.baz", two}, {class = "circt.test", four, target = "FooIR.FooIR.bar.c"}]}  {
   firrtl.module @BarIR(in %a: !firrtl.uint<1>, out %b: !firrtl.bundle<baz: uint<1>, qux: uint<1>>, out %c: !firrtl.uint<1>) {
   }
@@ -159,8 +158,8 @@ firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test",
 // CHECK-LABEL: module {
 // CHECK: firrtl.mem
 // CHECK-SAME: portAnnotations = [
-// CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 5, {b}>],
-// CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 6, {d}>]
+// CHECK-SAME: [{a, class = "circt.test"}, #firrtl.subAnno<fieldID = 5, {b, class = "circt.test"}>],
+// CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c, class = "circt.test"}>, #firrtl.subAnno<fieldID = 6, {d, class = "circt.test"}>]
 firrtl.circuit "Foo"  attributes {annotations = [{a, class = "circt.test", target = "~Foo|Foo>bar.r"}, {b, class = "circt.test", target = "~Foo|Foo>bar.r.data.baz"}, {c, class = "circt.test", target = "~Foo|Foo>bar.w.en"}, {class = "circt.test", d, target = "~Foo|Foo>bar.w.data.qux"}]}  {
   firrtl.module @Foo() {
     %bar_r, %bar_w = firrtl.mem Undefined  {depth = 16 : i64, name = "bar", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<baz: uint<8>, qux: uint<8>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<baz: uint<8>, qux: uint<8>>, mask: bundle<baz: uint<1>, qux: uint<1>>>
@@ -174,9 +173,9 @@ firrtl.circuit "Foo"  attributes {annotations = [{a, class = "circt.test", targe
 
 // CHECK-LABEL: module {
 // CHECK: %bar = firrtl.node
-// CHECK-SAME: annotations = [{a = "a"}
+// CHECK-SAME: annotations = [{a = "a", class = "circt.test"}
 // CHECK: %baz = firrtl.node
-// CHECK-SAME: annotations = [{b = "b"}]
+// CHECK-SAME: annotations = [{b = "b", class = "circt.test"}]
 firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test", target = "~Foo|Foo>bar"}, {b = "b", class = "circt.test", target = "Foo.Foo.baz"}]}  {
   firrtl.module @Foo(in %cond: !firrtl.vector<uint<1>, 2>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -196,7 +195,7 @@ firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test",
 
 // CHECK-LABEL: module {
 // CHECK: %bar = firrtl.wire
-// CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+// CHECK-SAME: annotations = [{a = "a", class = "circt.test"}, {b = "b", class = "circt.test"}]
 firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test", target = "~Foo|Foo>bar"}, {b = "b", class = "circt.test", target = "Foo.Foo.bar"}]}  {
   firrtl.module @Foo() {
     %bar = firrtl.wire  : !firrtl.uint<1>
@@ -208,9 +207,9 @@ firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test",
 
 // CHECK-LABEL: module {
 // CHECK: %bar = firrtl.reg
-// CHECK-SAME: annotations = [{a = "a"}]
+// CHECK-SAME: annotations = [{a = "a", class = "circt.test"}]
 // CHECK: %baz = firrtl.regreset
-// CHECK-SAME: annotations = [{b = "b"}]
+// CHECK-SAME: annotations = [{b = "b", class = "circt.test"}]
 firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test", target = "~Foo|Foo>bar"}, {b = "b", class = "circt.test", target = "Foo.Foo.baz"}]}  {
   firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
     %bar = firrtl.reg %clock  : !firrtl.uint<1>
@@ -223,9 +222,8 @@ firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test",
 
 // A ReferenceTarget/ComponentName pointing at an SMem should work.
 
-// CHECK-LABEL: module {
-// CHECK: firrtl.smem
-// CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
+// CHECK-LABEL: firrtl.smem
+// CHECK-SAME: annotations = [{a = "a", class = "circt.test"}, {b = "b", class = "circt.test"}]
 firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test", target = "~Foo|Foo>bar"}, {b = "b", class = "circt.test", target = "Foo.Foo.bar"}]}  {
   firrtl.module @Foo() {
     %bar = firrtl.smem Undefined  {name = "bar"} : !firrtl.vector<uint<1>, 8>
@@ -236,10 +234,10 @@ firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test",
 
 // A ReferenceTarget/ComponentName pointing at a module/extmodule port should work.
 
-// CHECK: firrtl.extmodule @Bar
-// CHECK-SAME: [[_:.+]] {firrtl.annotations = [{a = "a"}]}
+// CHECK-LABEL: firrtl.extmodule @Bar
+// CHECK-SAME: {annotations = [{a = "a", class = "circt.test"}]}
 // CHECK: firrtl.module @Foo
-// CHECK-SAME: %foo: [[_:.+]] {firrtl.annotations = [{b = "b"}]}
+// CHECK-SAME: %foo: {firrtl.annotations = [{b = "b", class = "circt.test"}]}
 firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test", target = "~Foo|Bar>bar"}, {b = "b", class = "circt.test", target = "Foo.Foo.foo"}]}  {
   firrtl.extmodule @Bar(in %bar: !firrtl.uint<1>)
   firrtl.module @Foo(in %foo: !firrtl.uint<1>) {
@@ -252,10 +250,9 @@ firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test",
 
 // Subfield/Subindex annotations should be parsed correctly on wires
 
-// CHECK-LABEL: module {
-// CHECK: %bar = firrtl.wire  {annotations =
-// CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
-// CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
+// CHECK-LABEL: %bar = firrtl.wire  {annotations =
+// CHECK-SAME: {circt.fieldID = 1 : i32, class = "circt.test", one}
+// CHECK-SAME: {circt.fieldID = 5 : i32, class = "circt.test", two}
 firrtl.circuit "Foo"  attributes {annotations = [{class = "circt.test", one, target = "~Foo|Foo>bar[0]"}, {class = "circt.test", target = "~Foo|Foo>bar[1].baz", two}]}  {
   firrtl.module @Foo() {
     %bar = firrtl.wire  : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
@@ -266,10 +263,9 @@ firrtl.circuit "Foo"  attributes {annotations = [{class = "circt.test", one, tar
 
 // Subfield/Subindex annotations should be parsed correctly on registers
 
-// CHECK-LABEL: module {
-// CHECK: %bar = firrtl.reg %clock  {annotations =
-// CHECK-SAME: #firrtl.subAnno<fieldID = 1, {one}>
-// CHECK-SAME: #firrtl.subAnno<fieldID = 5, {two}>
+// CHECK-LABEL: %bar = firrtl.reg %clock  {annotations =
+// CHECK-SAME: {circt.fieldID = 1 : i32, class = "circt.test", one}
+// CHECK-SAME: {circt.fieldID = 5 : i32, class = "circt.test", two}
 firrtl.circuit "Foo"  attributes {annotations = [{class = "circt.test", one, target = "~Foo|Foo>bar[0]"}, {class = "circt.test", target = "~Foo|Foo>bar[1].baz", two}]}  {
   firrtl.module @Foo(in %clock: !firrtl.clock) {
     %bar = firrtl.reg %clock  : !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
@@ -281,9 +277,8 @@ firrtl.circuit "Foo"  attributes {annotations = [{class = "circt.test", one, tar
 // Subindices should not get sign-extended and cause problems.  This circuit has
 // caused bugs in the past.
 
-// CHECK-LABEL: module {
-// CHECK: %w = firrtl.wire {annotations =
-// CHECK-SAME: #firrtl.subAnno<fieldID = 10, {a}
+// CHECK-LABEL: %w = firrtl.wire {annotations =
+// CHECK-SAME: {a, circt.fieldID = 10 : i32, class = "circt.test"}
 firrtl.circuit "Foo"  attributes {annotations = [{a, class = "circt.test", target = "~Foo|Foo>w[9]"}]}  {
   firrtl.module @Foo(in %a: !firrtl.vector<uint<1>, 18>, out %b: !firrtl.vector<uint<1>, 18>) {
     %w = firrtl.wire  : !firrtl.vector<uint<1>, 18>
