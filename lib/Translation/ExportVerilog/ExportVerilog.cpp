@@ -881,9 +881,6 @@ private:
                          const char *syntax,
                          SubExprSignRequirement operandSignReq = NoRequirement);
 
-  SubExprInfo emitVariadic(Operation *op, VerilogPrecedence prec,
-                           const char *syntax);
-
   SubExprInfo emitUnary(Operation *op, const char *syntax,
                         bool resultAlwaysUnsigned = false);
 
@@ -916,9 +913,15 @@ private:
   // Comb Dialect Operations
   using CombinationalVisitor::visitComb;
   SubExprInfo visitComb(MuxOp op);
-  SubExprInfo visitComb(AddOp op) { return emitVariadic(op, Addition, "+"); }
+  SubExprInfo visitComb(AddOp op) {
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, Addition, "+");
+  }
   SubExprInfo visitComb(SubOp op) { return emitBinary(op, Addition, "-"); }
-  SubExprInfo visitComb(MulOp op) { return emitVariadic(op, Multiply, "*"); }
+  SubExprInfo visitComb(MulOp op) {
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, Multiply, "*");
+  }
   SubExprInfo visitComb(DivUOp op) {
     return emitBinary(op, Multiply, "/", RequireUnsigned);
   }
@@ -941,13 +944,19 @@ private:
     // Otherwise it does a logical shift.
     return emitBinary(op, Shift, ">>>", RequireSigned);
   }
-  SubExprInfo visitComb(AndOp op) { return emitVariadic(op, And, "&"); }
-  SubExprInfo visitComb(OrOp op) { return emitVariadic(op, Or, "|"); }
+  SubExprInfo visitComb(AndOp op) {
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, And, "&");
+  }
+  SubExprInfo visitComb(OrOp op) {
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, Or, "|");
+  }
   SubExprInfo visitComb(XorOp op) {
     if (op.isBinaryNot())
       return emitUnary(op, "~");
-
-    return emitVariadic(op, Xor, "^");
+    assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
+    return emitBinary(op, Xor, "^");
   }
 
   // SystemVerilog spec 11.8.1: "Reduction operator results are unsigned,
@@ -991,9 +1000,13 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   os << ' ' << syntax << ' ';
 
   // Right associative operators are already generally variadic, we need to
-  // handle things like: (a<4> == b<4>) == (c<3> == d<3>).
-  // When processing the top operation of the tree, the rhs needs parens.
-  auto rhsPrec = VerilogPrecedence(prec - 1);
+  // handle things like: (a<4> == b<4>) == (c<3> == d<3>).  When processing the
+  // top operation of the tree, the rhs needs parens.  When processing
+  // known-reassociative operators like +, ^, etc we don't need parens.
+  // TODO: MLIR should have general "Associative" trait.
+  auto rhsPrec = prec;
+  if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
+    rhsPrec = VerilogPrecedence(prec - 1);
   auto rhsInfo =
       emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq);
 
@@ -1004,21 +1017,6 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
     signedness = IsSigned;
 
   return {prec, signedness};
-}
-
-SubExprInfo ExprEmitter::emitVariadic(Operation *op, VerilogPrecedence prec,
-                                      const char *syntax) {
-  // The result is signed if all the subexpressions are signed.
-  SubExprSignResult sign = IsSigned;
-  interleave(
-      op->getOperands().begin(), op->getOperands().end(),
-      [&](Value v1) {
-        if (emitSubExpr(v1, prec, OOLBinary).signedness != IsSigned)
-          sign = IsUnsigned;
-      },
-      [&] { os << ' ' << syntax << ' '; });
-
-  return {prec, sign};
 }
 
 SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
