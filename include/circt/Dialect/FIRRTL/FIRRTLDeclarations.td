@@ -65,7 +65,7 @@ def CombMemOp : FIRRTLOp<"combmem"> {
   let summary = "Define a new combinational memory";
   let description = [{
     Define a new behavioral combinational memory. Combinational memories have a
-    write latency of 1 and a read latency of 0. This memory should be used by
+    write latency of 1 and a read latency of 0.
   }];
   let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs CMemoryType:$result);
@@ -75,7 +75,7 @@ def CombMemOp : FIRRTLOp<"combmem"> {
 def SeqMemOp : FIRRTLOp<"seqmem"> {
   let summary = "Define a new sequential memory";
   let description = [{
-    Define a new behavioral sequential memories.  Sequential memories have a
+    Define a new behavioral sequential memory.  Sequential memories have a
     write latency and a read latency of 1.
   }];
   let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
@@ -93,9 +93,10 @@ def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
     This operation defines a new memory port on a `seqmem` or `combmem`CHISEL.
     `data` is the data returned from the memory port.  
 
-    The memory port requires an access point, which sets the enable  condition
+    The memory port requires an access point, which sets the enable condition
     of the port, the clock, and the address.  This is done by passing the the
     `port` argument to a `firrtl.memoryport.access operation`.
+
   }];
 
   let arguments = (ins CMemoryType:$memory, MemDirAttr:$direction,
