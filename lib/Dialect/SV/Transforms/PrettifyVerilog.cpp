@@ -225,6 +225,8 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
 }
 
 void PrettifyVerilogPass::processPostOrder(Block &body) {
+  SmallVector<Operation *> instances;
+
   // Walk the block bottom-up, processing the region tree inside out.
   for (auto &op :
        llvm::make_early_inc_range(llvm::reverse(body.getOperations()))) {
@@ -255,6 +257,20 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
     if (hw::isCombinatorial(&op) || sv::isExpression(&op)) {
       sinkExpression(&op);
       continue;
+    }
+
+    if (isa<hw::InstanceOp>(op))
+      instances.push_back(&op);
+  }
+
+  // If we have any instances, keep their relative order but shift them to the
+  // end of the module.  Any outputs will be writing to a wire or an output port
+  // of the enclosing module anyway, and this allows inputs to be inlined into
+  // the operand list as parameters.
+  if (!instances.empty()) {
+    for (Operation *instance : llvm::reverse(instances)) {
+      if (instance != &body.back())
+        instance->moveBefore(&body.back());
     }
   }
 }

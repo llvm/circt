@@ -73,13 +73,13 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:    input  [1:0] b,
 ; VERILOG-NEXT:    output       c);
 ; VERILOG-EMPTY:
-; VERILOG-NEXT:    wire [4:0] _T;
 ; VERILOG-NEXT:    wire [9:0] prettifyExample_out1;
 ; VERILOG-NEXT:    wire [9:0] prettifyExample_out2;
 ; VERILOG-NEXT:    wire [2:0] implicitTrunc_out1;
 ; VERILOG-NEXT:    wire [2:0] implicitTrunc_out2;
 ; VERILOG-NEXT:    wire [5:0] cat_d;
 ; VERILOG-EMPTY:
+; VERILOG-NEXT:    wire [4:0] _T = cat_d[4:0];
 ; VERILOG-NEXT:    Cat cat (
 ; VERILOG-NEXT:      .a (b),
 ; VERILOG-NEXT:      .b (b),
@@ -92,7 +92,6 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:      .out1  (implicitTrunc_out1),
 ; VERILOG-NEXT:      .out2  (implicitTrunc_out2)
 ; VERILOG-NEXT:    );
-; VERILOG-NEXT:    assign _T = cat_d[4:0];
 ; VERILOG-NEXT:    PrettifyExample prettifyExample (
 ; VERILOG-NEXT:      .inp_1 (_T),
 ; VERILOG-NEXT:      .inp_2 (_T),

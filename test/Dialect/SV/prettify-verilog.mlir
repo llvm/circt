@@ -42,6 +42,7 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
 
 /// The pass should sink constants in to the block where they are used.
 // CHECK-LABEL: @sink_constants
+// VERILOG-LABEL: sink_constants
 hw.module @sink_constants(%clock :i1) -> (%out : i1){
   // CHECK: %false = hw.constant false
   %false = hw.constant false
@@ -88,6 +89,7 @@ hw.module @sink_constants(%clock :i1) -> (%out : i1){
 
 // Prettify should always sink ReadInOut to its usage.
 // CHECK-LABEL: @sinkReadInOut
+// VERILOG-LABEL: sinkReadInOut
 hw.module @sinkReadInOut(%clk: i1) {
   %myreg = sv.reg  : !hw.inout<i48>
   %1 = sv.read_inout %myreg : !hw.inout<i48>
@@ -105,6 +107,7 @@ hw.module @sinkReadInOut(%clk: i1) {
 
 
 // CHECK-LABEL: @sink_expression
+// VERILOG-LABEL: sink_expression
 hw.module @sink_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
   // This or is used in one place.
   %0 = comb.or %a2, %a3 : i1
@@ -135,4 +138,19 @@ hw.module @sink_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
     }
   }
   hw.output
+}
+
+hw.module.extern @MyExtModule(%in: i8)
+
+// CHECK-LABEL: hw.module @MoveInstances
+// VERILOG-LABEL: module MoveInstances
+hw.module @MoveInstances(%a_in: i8) {
+  // CHECK: %0 = comb.add %a_in, %a_in : i8
+  // CHECK: hw.instance "xyz3" @MyExtModule(%0)
+  // VERILOG: MyExtModule xyz3 (
+  // VERILOG:   .in (a_in + a_in)
+  // VERILOG: );
+  hw.instance "xyz3" @MyExtModule(%b) : (i8) -> ()
+
+  %b = comb.add %a_in, %a_in : i8
 }
