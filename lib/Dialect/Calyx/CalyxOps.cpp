@@ -78,7 +78,7 @@ LogicalResult calyx::verifyCell(Operation *op) {
   auto opParent = op->getParentOp();
   if (!isa<ComponentOp>(opParent))
     return op->emitOpError()
-        << "has parent: " << opParent << ", expected ComponentOp.";
+           << "has parent: " << opParent << ", expected ComponentOp.";
   if (!op->hasAttr("instanceName"))
     return op->emitOpError() << "does not have an instanceName attribute.";
 
