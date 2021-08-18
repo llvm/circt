@@ -80,6 +80,11 @@ struct AnnoPathValue {
 
 } // namespace
 
+// Add the annotations to worklist.
+static void addToWorklist(ArrayAttr &annos);
+// Generate a unique ID.
+IntegerAttr newID(MLIRContext *context);
+
 static bool hasName(StringRef name, Operation *op) {
   return TypeSwitch<Operation *, bool>(op)
       .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CMemOp,
@@ -544,14 +549,200 @@ static Optional<AnnoPathValue> seqMemInstanceResolve(DictionaryAttr anno,
   return stdResolveImpl(path, circuit, modules);
 }
 
+/// Implements the same behavior as DictionaryAttr::getAs<A> to return the value
+/// of a specific type associated with a key in a dictionary.  However, this is
+/// specialized to print a useful error message, specific to custom annotation
+/// process, on failure.
+template <typename A>
+static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
+                  Location loc, Twine className, Twine path = Twine()) {
+  // Check that the key exists.
+  auto value = dict.get(key);
+  if (!value) {
+    SmallString<128> msg;
+    if (path.isTriviallyEmpty())
+      msg = ("Annotation '" + className + "' did not contain required key '" +
+             key + "'.")
+                .str();
+    else
+      msg = ("Annotation '" + className + "' with path '" + path +
+             "' did not contain required key '" + key + "'.")
+                .str();
+    mlir::emitError(loc, msg).attachNote()
+        << "The full Annotation is reproduced here: " << root << "\n";
+    return nullptr;
+  }
+  // Check that the value has the correct type.
+  auto valueA = value.dyn_cast_or_null<A>();
+  if (!valueA) {
+    SmallString<128> msg;
+    if (path.isTriviallyEmpty())
+      msg = ("Annotation '" + className +
+             "' did not contain the correct type for key '" + key + "'.")
+                .str();
+    else
+      msg = ("Annotation '" + className + "' with path '" + path +
+             "' did not contain the correct type for key '" + key + "'.")
+                .str();
+    mlir::emitError(loc, msg).attachNote()
+        << "The full Annotation is reproduced here: " << root << "\n";
+    return nullptr;
+  }
+  return valueA;
+}
 static LogicalResult applyDontTouch(AnnoPathValue target, DictionaryAttr anno) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   return success();
 }
 
+// Get a DonotTouch annotation for the given target.
+static DictionaryAttr getDontTouchAnno(MLIRContext *context, StringRef target) {
+  NamedAttrList dontTouchAnn;
+  dontTouchAnn.append(
+      "class",
+      StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+  if (!target.empty())
+    dontTouchAnn.append("target", StringAttr::get(context, target));
+  return DictionaryAttr::getWithSorted(context, dontTouchAnn);
+}
+
+// Get a new annotation with the given target.
+static DictionaryAttr getAnnoWithTarget(MLIRContext *context,
+                                        NamedAttrList attr, StringRef target) {
+  attr.append("target", StringAttr::get(context, target));
+  return DictionaryAttr::get(context, attr);
+}
+
 static LogicalResult applyGrandCentralDataTaps(AnnoPathValue target,
                                                DictionaryAttr anno) {
+
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
+  auto classAttr = anno.getAs<StringAttr>("class");
+  auto clazz = classAttr.getValue();
+  auto loc = target.ref.op->getLoc();
+  auto context = target.ref.op->getContext();
+  auto id = newID(context);
+  SmallVector<Attribute> newAnnos;
+  NamedAttrList attrs;
+  attrs.append("class", classAttr);
+  auto blackBoxAttr = tryGetAs<StringAttr>(anno, anno, "blackBox", loc, clazz);
+  if (!blackBoxAttr)
+    return failure();
+  std::string bbTarget = canonicalizeTarget(blackBoxAttr.getValue());
+  if (bbTarget.empty())
+    return failure();
+  newAnnos.push_back(getDontTouchAnno(context, bbTarget));
+
+  // Process all the taps.
+  auto keyAttr = tryGetAs<ArrayAttr>(anno, anno, "keys", loc, clazz);
+  if (!keyAttr)
+    return failure();
+  for (size_t i = 0, e = keyAttr.size(); i != e; ++i) {
+    auto b = keyAttr[i];
+    auto path = ("keys[" + Twine(i) + "]").str();
+    auto bDict = b.cast<DictionaryAttr>();
+    auto classAttr =
+        tryGetAs<StringAttr>(bDict, anno, "class", loc, clazz, path);
+    if (!classAttr)
+      return failure();
+
+    // The "portName" field is common across all sub-types of DataTapKey.
+    NamedAttrList port;
+    auto portNameAttr =
+        tryGetAs<StringAttr>(bDict, anno, "portName", loc, clazz, path);
+    if (!portNameAttr)
+      return failure();
+    auto maybePortTarget = canonicalizeTarget(portNameAttr.getValue());
+    if (maybePortTarget.empty())
+      return failure();
+    port.append("class", classAttr);
+    port.append("id", id);
+    newAnnos.push_back(getDontTouchAnno(context, maybePortTarget));
+
+    if (classAttr.getValue() ==
+        "sifive.enterprise.grandcentral.ReferenceDataTapKey") {
+      NamedAttrList source;
+      auto portID = newID(context);
+      source.append("class", bDict.get("class"));
+      source.append("id", id);
+      source.append("portID", portID);
+      auto sourceAttr =
+          tryGetAs<StringAttr>(bDict, anno, "source", loc, clazz, path);
+      if (!sourceAttr)
+        return failure();
+      auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
+      if (maybeSourceTarget.empty())
+        return failure();
+      source.append("type", StringAttr::get(context, "source"));
+      newAnnos.push_back(getAnnoWithTarget(context, source, maybeSourceTarget));
+      newAnnos.push_back(getDontTouchAnno(context, maybeSourceTarget));
+
+      // Port Annotations generation.
+      port.append("portID", portID);
+      port.append("type", StringAttr::get(context, "portName"));
+      newAnnos.push_back(getAnnoWithTarget(context, port, maybePortTarget));
+      continue;
+    }
+
+    if (classAttr.getValue() ==
+        "sifive.enterprise.grandcentral.DataTapModuleSignalKey") {
+      NamedAttrList module;
+      auto portID = newID(context);
+      module.append("class", classAttr);
+      module.append("id", id);
+      auto internalPathAttr =
+          tryGetAs<StringAttr>(bDict, anno, "internalPath", loc, clazz, path);
+      auto moduleAttr =
+          tryGetAs<StringAttr>(bDict, anno, "module", loc, clazz, path);
+      if (!internalPathAttr || !moduleAttr)
+        return failure();
+      module.append("internalPath", internalPathAttr);
+      module.append("portID", portID);
+      auto moduleTarget = canonicalizeTarget(moduleAttr.getValue());
+      if (moduleTarget.empty())
+        return failure();
+      newAnnos.push_back(getAnnoWithTarget(context, module, moduleTarget));
+      newAnnos.push_back(getDontTouchAnno(context, moduleTarget));
+
+      // Port Annotations generation.
+      port.append("portID", portID);
+      newAnnos.push_back(getAnnoWithTarget(context, port, maybePortTarget));
+      continue;
+    }
+
+    if (classAttr.getValue() ==
+        "sifive.enterprise.grandcentral.DeletedDataTapKey") {
+      // Port Annotations generation.
+      newAnnos.push_back(getAnnoWithTarget(context, port, maybePortTarget));
+      continue;
+    }
+
+    if (classAttr.getValue() ==
+        "sifive.enterprise.grandcentral.LiteralDataTapKey") {
+      NamedAttrList literal;
+      literal.append("class", classAttr);
+      auto literalAttr =
+          tryGetAs<StringAttr>(bDict, anno, "literal", loc, clazz, path);
+      if (!literalAttr)
+        return failure();
+      literal.append("literal", literalAttr);
+
+      // Port Annotaiton generation.
+      newAnnos.push_back(getAnnoWithTarget(context, literal, maybePortTarget));
+      continue;
+    }
+
+    mlir::emitError(
+        loc, "Annotation '" + Twine(clazz) + "' with path '" + path + ".class" +
+                 +"' contained an unknown/unimplemented DataTapKey class '" +
+                 classAttr.getValue() + "'.")
+            .attachNote()
+        << "The full Annotation is reprodcued here: " << anno << "\n";
+    return failure();
+  }
+  ArrayAttr attr = ArrayAttr::get(context, newAnnos);
+  addToWorklist(attr);
+
   // TODO: port scatter logic in FIRAnnotations.cpp
   return applyWithoutTargetToCircuit(target, anno);
 }
@@ -679,6 +870,16 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
      {noResolve, applyGrandCentralMemTaps}},
     {"sifive.enterprise.grandcentral.ViewAnnotation",
      {noResolve, applyGrandCentralView}},
+    {"sifive.enterprise.grandcentral.ReferenceDataTapKey",
+     {stdResolve, applyWithoutTarget<>}},
+    {"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+     {stdResolve, applyWithoutTarget<>}},
+    {"sifive.enterprise.grandcentral.DeletedDataTapKey",
+     {stdResolve, applyWithoutTarget<>}},
+    {"sifive.enterprise.grandcentral.LiteralDataTapKey",
+     {stdResolve, applyWithoutTarget<>}},
+    {"sifive.enterprise.grandcentral.DeletedDataTapKey",
+     {stdResolve, applyWithoutTarget<>}},
 
     // Testing Annotation
     {"circt.test", {stdResolve, applyWithoutTarget<true>}},
@@ -707,19 +908,38 @@ struct LowerAnnotationsPass
 
   bool ignoreUnhandledAnno = false;
   bool ignoreClasslessAnno = false;
+  static size_t annotationID;
+  static SmallVector<ArrayAttr> worklistAttrs;
 };
 } // end anonymous namespace
+size_t LowerAnnotationsPass::annotationID = 0;
 
+SmallVector<ArrayAttr> LowerAnnotationsPass::worklistAttrs;
+
+// Add the annotations to worklist.
+static void addToWorklist(ArrayAttr &annos) {
+  LowerAnnotationsPass::worklistAttrs.push_back(annos);
+}
+
+// Generate a unique ID.
+IntegerAttr newID(MLIRContext *context) {
+  return IntegerAttr::get(IntegerType::get(context, 64),
+                          LowerAnnotationsPass::annotationID++);
+}
 // This is the main entrypoint for the lowering pass.
 void LowerAnnotationsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
   SymbolTable modules(circuit);
-  ArrayAttr attrs = circuit.annotations();
+  worklistAttrs.push_back(circuit.annotations());
   circuit.annotationsAttr(ArrayAttr::get(circuit.getContext(), {}));
   size_t numFailures = 0;
-  for (auto attr : attrs)
-    if (applyAnnotation(attr.cast<DictionaryAttr>(), circuit, modules).failed())
-      ++numFailures;
+  while (!worklistAttrs.empty()) {
+    auto attrs = worklistAttrs.pop_back_val();
+    for (auto attr : attrs)
+      if (applyAnnotation(attr.cast<DictionaryAttr>(), circuit, modules)
+              .failed())
+        ++numFailures;
+  }
 }
 
 LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
