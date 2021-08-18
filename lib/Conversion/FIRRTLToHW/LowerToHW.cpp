@@ -1556,6 +1556,10 @@ void FIRRTLLowering::addToAlwaysBlock(Value clock,
   auto &op = alwaysBlocks[clock];
   if (op) {
     runWithInsertionPointAtEndOfBlock(fn, op.body());
+    // Move the earlier always block(s) down to where the last would have been
+    // inserted.  This ensures that any values used by the always blocks are
+    // defined ahead of the uses, which leads to better generated Verilog.
+    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
     op = builder.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, fn);
   }
@@ -1571,6 +1575,11 @@ void FIRRTLLowering::addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
   if (op) {
     runWithInsertionPointAtEndOfBlock(body, op.bodyBlk());
     runWithInsertionPointAtEndOfBlock(resetBody, op.resetBlk());
+
+    // Move the earlier always block(s) down to where the last would have been
+    // inserted.  This ensures that any values used by the always blocks are
+    // defined ahead of the uses, which leads to better generated Verilog.
+    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
     if (reset) {
       op = builder.create<sv::AlwaysFFOp>(clockEdge, clock, resetStyle,
@@ -1590,6 +1599,11 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
   if (op) {
     runWithInsertionPointAtEndOfBlock(thenCtor, op.thenRegion());
     runWithInsertionPointAtEndOfBlock(elseCtor, op.elseRegion());
+
+    // Move the earlier #ifdef block(s) down to where the last would have been
+    // inserted.  This ensures that any values used by the #ifdef blocks are
+    // defined ahead of the uses, which leads to better generated Verilog.
+    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
     op = builder.create<sv::IfDefOp>(condAttr, thenCtor, elseCtor);
   }
@@ -1599,6 +1613,11 @@ void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
   auto &op = initialBlocks[builder.getBlock()];
   if (op) {
     runWithInsertionPointAtEndOfBlock(body, op.body());
+
+    // Move the earlier initial block(s) down to where the last would have been
+    // inserted.  This ensures that any values used by the initial blocks are
+    // defined ahead of the uses, which leads to better generated Verilog.
+    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
     op = builder.create<sv::InitialOp>(body);
   }

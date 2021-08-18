@@ -62,10 +62,7 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %xyz#2, %s8 : !firrtl.sint<8>, !firrtl.sint<8>
 
-    // CHECK: sv.fwrite "%x"(%xyz.out4) : i4
     firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.uint<4>
-
-    // CHECK: sv.fwrite "Something interesting! %x"(%myext.out) : i8
 
     // Parameterized module reference.
     // hw.instance carries the parameters, unlike at the FIRRTL layer.
@@ -73,6 +70,9 @@ firrtl.circuit "Simple" {
     // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule(%reset)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.uint<1>, !firrtl.uint<8>
+
+    // CHECK: sv.fwrite "%x"(%xyz.out4) : i4
+    // CHECK: sv.fwrite "Something interesting! %x"(%myext.out) : i8
 
     firrtl.connect %myext#0, %reset : !firrtl.uint<1>, !firrtl.uint<1>
 

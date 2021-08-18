@@ -271,6 +271,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module @Print
   firrtl.module @Print(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>,
                        in %a: !firrtl.uint<4>, in %b: !firrtl.uint<4>) {
+    // CHECK: [[ADD:%.+]] = comb.add
 
     // CHECK: sv.always posedge %clock {
     // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
@@ -289,7 +290,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: }
    firrtl.printf %clock, %reset, "No operands!\0A"
 
-    // CHECK: [[ADD:%.+]] = comb.add
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     firrtl.printf %clock, %reset, "Hi %x %x\0A"(%0, %b) : !firrtl.uint<5>, !firrtl.uint<4>
@@ -552,10 +552,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: %reg = sv.reg : !hw.inout<i32>
     // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
+    // CHECK-NEXT: %reg2 = sv.reg : !hw.inout<i32>
+    // CHECK-NEXT: %1 = sv.read_inout %reg2 : !hw.inout<i32>
     // CHECK-NEXT: sv.alwaysff(posedge %clock) {
-    // CHECK-NEXT:   sv.passign %reg, %6 : i32
-    // CHECK-NEXT: }(asyncreset : posedge %reset) {
-    // CHECK-NEXT:   sv.passign %reg, %c0_i32 : i32
+    // CHECK-NEXT: }(syncreset : posedge %reset) {
+    // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
     // CHECK-NEXT: }
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT: } else {
@@ -572,20 +573,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    // CHECK-NEXT: %reg2 = sv.reg : !hw.inout<i32>
-    // CHECK-NEXT: %1 = sv.read_inout %reg2 : !hw.inout<i32>
-    // CHECK-NEXT: sv.alwaysff(posedge %clock) {
-    // CHECK-NEXT: }(syncreset : posedge %reset) {
-    // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
-    // CHECK-NEXT: }
-    %reg = firrtl.regreset %clock, %4, %c0_ui32 {name = "reg"} : !firrtl.asyncreset, !firrtl.uint<32>, !firrtl.uint<32>
-    %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
-
     // CHECK-NEXT: %2 = comb.concat %false, %0 : (i1, i32) -> i33
     // CHECK-NEXT: %3 = comb.concat %false, %1 : (i1, i32) -> i33
     // CHECK-NEXT: %4 = comb.add %2, %3 : i33
     // CHECK-NEXT: %5 = comb.extract %4 from 1 : (i33) -> i32
     // CHECK-NEXT: %6 = comb.mux %io_en, %io_d, %5 : i32
+    // CHECK-NEXT: sv.alwaysff(posedge %clock) {
+    // CHECK-NEXT:   sv.passign %reg, %6 : i32
+    // CHECK-NEXT: }(asyncreset : posedge %reset) {
+    // CHECK-NEXT:   sv.passign %reg, %c0_i32 : i32
+    // CHECK-NEXT: }
+    %reg = firrtl.regreset %clock, %4, %c0_ui32 {name = "reg"} : !firrtl.asyncreset, !firrtl.uint<32>, !firrtl.uint<32>
+    %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
+
     %sum = firrtl.add %reg, %reg2 : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
     %shorten = firrtl.head %sum, 32 : (!firrtl.uint<33>) -> !firrtl.uint<32>
     %5 = firrtl.mux(%io_en, %io_d, %shorten) : (!firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<32>
