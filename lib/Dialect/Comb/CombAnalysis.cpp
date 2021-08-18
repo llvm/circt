@@ -64,7 +64,32 @@ static KnownBitAnalysis computeKnownBits(Value v, unsigned depth) {
     return result;
   }
 
-  // TODO: Handle xor(x, cst) by inverting known bits.
+  // `xor(x, cst)` inverts known bits and passes through unmodified ones.
+  if (auto xorOp = dyn_cast<XorOp>(op)) {
+    auto result = computeKnownBits(xorOp.getOperand(0), depth + 1);
+    for (size_t i = 1, e = xorOp.getNumOperands(); i != e; ++i) {
+      auto otherBits = computeKnownBits(xorOp.getOperand(i), depth + 1);
+      auto knownOtherBits = otherBits.getBitsKnown();
+      // We can only know anything about bits that are known of all operands.
+      result.zeros &= knownOtherBits;
+      result.ones &= knownOtherBits;
+      if (!result.areAnyKnown())
+        return KnownBitAnalysis::getUnknown(v);
+      otherBits.ones &= result.getBitsKnown();
+      result.zeros ^= otherBits.ones;
+      result.ones ^= otherBits.ones;
+    }
+    return result;
+  }
+
+  // `mux(cond, x, y)` is the intersection of the known bits of `x` and `y`.
+  if (auto muxOp = dyn_cast<MuxOp>(op)) {
+    auto lhs = computeKnownBits(muxOp.trueValue(), depth + 1);
+    auto rhs = computeKnownBits(muxOp.falseValue(), depth + 1);
+    lhs.ones &= rhs.ones;
+    lhs.zeros &= lhs.zeros;
+    return lhs;
+  }
 
   return KnownBitAnalysis::getUnknown(v);
 }
