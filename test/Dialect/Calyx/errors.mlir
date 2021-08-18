@@ -134,7 +134,7 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
-    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.cell "c0" @A : i1, i1, i1, i1, i1
+    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
     %c1_1 = constant 1 : i1
     calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
     calyx.control {
@@ -154,7 +154,7 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
-    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.cell "c0" @A : i1, i1, i1, i1, i1
+    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
     %c1_1 = constant 1 : i1
     calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
     calyx.control {
@@ -176,7 +176,7 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
-    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.cell "c0" @A : i1, i1, i1, i1, i1
+    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
     calyx.wires { }
     calyx.control {
       calyx.seq {
