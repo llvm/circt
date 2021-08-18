@@ -20,6 +20,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "llvm/ADT/APSInt.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -127,13 +128,23 @@ static ArrayAttr getAnnotationsFrom(Operation *op) {
   return ArrayAttr::get(op->getContext(), {});
 }
 
-static void addAnnotation(Operation *op, Annotation anno) {
+static void addAnnotation(BaseUnion ref, ArrayRef<NamedAttribute> anno) {
   SmallVector<Attribute> newAnnos;
-  for (auto old : getAnnotationsFrom(op))
+  for (auto old : getAnnotationsFrom(ref.op))
     newAnnos.push_back(old);
-  newAnnos.push_back(anno.getDict());
-  op->setAttr(getAnnotationAttrName(),
-              ArrayAttr::get(op->getContext(), newAnnos));
+  if (ref.fieldIdx) {
+    SmallVector<NamedAttribute> anno2(anno.begin(), anno.end());
+    anno2.emplace_back(
+        Identifier::get("circt.fieldID", ref.op->getContext()),
+        IntegerAttr::get(
+            IntegerType::get(ref.op->getContext(), 32, IntegerType::Signless),
+            ref.fieldIdx));
+    newAnnos.push_back(DictionaryAttr::get(ref.op->getContext(), anno2));
+  } else {
+    newAnnos.push_back(DictionaryAttr::get(ref.op->getContext(), anno));
+  }
+  ref.op->setAttr(getAnnotationAttrName(),
+                  ArrayAttr::get(ref.op->getContext(), newAnnos));
 }
 
 // Returns remainder of path if circuit is the correct circuit
@@ -339,8 +350,7 @@ static void scatterNonLocalPath(AnnoPathValue target, Attribute key) {
     newAnnoAttrs.push_back(
         {Identifier::get("class", key.getContext()),
          StringAttr::get(key.getContext(), "circt.nonlocal")});
-    addAnnotation(inst.value(),
-                  DictionaryAttr::get(key.getContext(), newAnnoAttrs));
+    addAnnotation(BaseUnion(inst.value()), newAnnoAttrs);
   }
 }
 
@@ -408,7 +418,8 @@ stdResolve(DictionaryAttr anno, CircuitOp circuit, SymbolTable &modules) {
     return {};
   }
   if (!target->second.isa<StringAttr>()) {
-    circuit.emitError("Target field in annotation doesn't contain string ") << anno;
+    circuit.emitError("Target field in annotation doesn't contain string ")
+        << anno;
     return {};
   }
   return stdResolveImpl(target->second.cast<StringAttr>().getValue(), circuit,
@@ -460,8 +471,7 @@ static LogicalResult applyDirFileNormalizeToCircuit(AnnoPathValue target,
         << na.first << "'";
     return failure();
   }
-  addAnnotation(target.ref.op,
-                DictionaryAttr::get(target.ref.op->getContext(), newAnnoAttrs));
+  addAnnotation(target.ref, newAnnoAttrs);
   return success();
 }
 
@@ -483,8 +493,7 @@ static LogicalResult applyWithoutTargetToTarget(AnnoPathValue target,
            target.instances.back().nameAttr()});
       scatterNonLocalPath(target, na.second);
     }
-  addAnnotation(target.ref.op,
-                DictionaryAttr::get(target.ref.op->getContext(), newAnnoAttrs));
+  addAnnotation(target.ref, newAnnoAttrs);
   return success();
 }
 
