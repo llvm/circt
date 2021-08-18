@@ -42,24 +42,66 @@ module {
 }
 ```
 
-### The `circt` command
+### The `circt` procedure
 The `circt` procedure is how you perform actions on MLIR and FIR. The following commands are supported:
  - `circt load <MLIR|FIR> [file]`
 
     Loads an MLIR/FIR file (loading FIR files is currently unimplemented). Returns an operation.
+
  - `circt query [filter] [operation | list of ops]`
 
     Performs a query on an operation or a list of ops. Returns a list of operations.
+
  - `circt get modname [operation]`
 
     Gets the name of the module passed in.
+
  - `circt get opname [operation]`
 
     Gets the name of the operation passed in.
+
  - `circt get attrs [operation | list of ops] [attribute names]*`
 
     Gets the attributes of the given operations that match the list of names. If no names are provided, then all attributes are dumped. Returns a dictionary mapping operations to attributes.
 
 ### Filters
-TODO
+Filters are used by the `circt query` command to perform queries on MLIR. Currently, only the HW dialect is supported. The following filters are implemented:
+ - `*`
 
+    Glob filter; matches any operation.
+
+ - `**`
+
+    Recursive glob filter; matches any operation and their children.
+
+ - `[literal]`
+
+    Name filter; matches any operation with the given name.
+
+ - `/[regex]/`
+
+    Regex filter; matches any operation whose name matches the given regex.
+
+ - `inst [filers]+`
+
+    Instance filter; matches a sequence of filters against an operation based on the instance hierarchy.
+
+ - `usage [filter]`
+
+    Usage filter; matches against a filter and returns all operations that use the resulting operations.
+
+ - `op [literal]`
+
+    Operation filter; matches against an operation if the operation name matches against the literal provided.
+
+ - `attr [literal] [filter]`
+
+    Attribute filter; matches against an operation if it contains the given attribute and the attribute matches against the filter.
+
+ - `and [filter]+`
+
+    And filter; matches against an operation if all child filters match against it.
+
+ - `or [filter]+`
+
+    Or filter; matches against an operation if any of the child filters match against it.
