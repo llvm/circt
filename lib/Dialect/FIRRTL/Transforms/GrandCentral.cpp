@@ -118,7 +118,7 @@ static Optional<AugmentedField> decodeField(Attribute maybeField) {
   if (auto maybeDescription = field.getAs<StringAttr>("description"))
     description = maybeDescription.getValue();
   return Optional<AugmentedField>({name.getValue(), description, tpe});
-};
+}
 
 /// Convert an Annotation into an optional AugmentedBundleType.  Returns None if
 /// the annotation is not an AugmentedBundleType.
@@ -136,7 +136,7 @@ static Optional<AugmentedBundleType> decodeBundleType(Annotation anno) {
     bundle.elements.push_back(field.getValue());
   }
   return Optional<AugmentedBundleType>(bundle);
-};
+}
 
 /// Remove Grand Central Annotations associated with SystemVerilog interfaces
 /// that should emitted.  This pass works in three major phases:
