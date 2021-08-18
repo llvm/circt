@@ -361,13 +361,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ;  Test that _T and _GEN names are ignored by the parser.
     ; CHECK: %{{[0-9]+}} = firrtl.wire
     wire _T_42 : UInt<1>
-
-    ; Test that node decls with ignored names are not generated at all.
-    ; CHECK-NOT: firrtl.node
+    ; CHECK: %{{[0-9]+}} = firrtl.node
     node _GEN_43 = n12
-
-    ; CHECK: firrtl.andr %n12
-    node value = andr(_GEN_43)    ;; Uses n12 directly.
 
     ; CHECK: = firrtl.not %auto : (!firrtl.uint<1>) -> !firrtl.uint<1>
     node n13 = not(auto)
@@ -548,8 +543,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module flip_one :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf(0)
+    ; CHECK: %1 = firrtl.node %0
     node _T = bf.int_1
-    ; CHECK: firrtl.when %0 {
+    ; CHECK: firrtl.when %1 {
     when _T :
       skip
 
