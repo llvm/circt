@@ -500,6 +500,20 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
+// AlwaysCombOp
+//===----------------------------------------------------------------------===//
+
+void AlwaysCombOp::build(OpBuilder &odsBuilder, OperationState &result,
+                         std::function<void()> bodyCtor) {
+  OpBuilder::InsertionGuard guard(odsBuilder);
+
+  odsBuilder.createBlock(result.addRegion());
+
+  if (bodyCtor)
+    bodyCtor();
+}
+
+//===----------------------------------------------------------------------===//
 // InitialOp
 //===----------------------------------------------------------------------===//
 
