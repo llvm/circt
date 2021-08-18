@@ -25,19 +25,6 @@
 namespace circt {
 namespace calyx {
 
-class CellInterface;
-
-/// A helper function to verify each operation with the Cell trait.
-LogicalResult verifyCell(Operation *op);
-
-/// Signals that the following operation is a cell.
-template <typename ConcreteType>
-class Cell : public mlir::OpTrait::TraitBase<ConcreteType, Cell> {
-public:
-  static LogicalResult verifyTrait(Operation *op) { return verifyCell(op); }
-  SmallVector<StringRef> portNames();
-};
-
 /// A helper function to verify each control-like operation
 /// has a valid parent and, if applicable, body.
 LogicalResult verifyControlLikeOp(Operation *op);
@@ -59,6 +46,18 @@ struct ComponentPortInfo {
   StringAttr name;
   Type type;
   PortDirection direction;
+};
+
+/// A helper function to verify each operation with the Cell trait.
+LogicalResult verifyCell(Operation *op);
+
+/// Signals that the following operation is a cell.
+template <typename ConcreteType>
+class Cell : public mlir::OpTrait::TraitBase<ConcreteType, Cell> {
+public:
+  static LogicalResult verifyTrait(Operation *op) { return verifyCell(op); }
+  SmallVector<StringRef> portNames();
+  SmallVector<PortDirection> portDirections();
 };
 
 /// Returns port information about a given component.
