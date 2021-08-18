@@ -1011,6 +1011,47 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   return success();
 }
 
+void MemoryPortOp::build(OpBuilder &builder, OperationState &result,
+                         Type dataType, Value memory, MemDirAttr direction,
+                         StringRef name, ArrayRef<Attribute> annotations) {
+  build(builder, result, CMemoryPortType::get(builder.getContext()), dataType,
+        memory, direction, name, builder.getArrayAttr(annotations));
+}
+
+LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
+                                             Optional<Location> loc,
+                                             ValueRange operands,
+                                             DictionaryAttr attrs,
+                                             mlir::RegionRange regions,
+                                             SmallVectorImpl<Type> &results) {
+  auto inType = operands[0].getType();
+  auto memType = inType.dyn_cast<CMemoryType>();
+  if (!memType) {
+    if (loc)
+      mlir::emitError(*loc, "memory port requires memory operand");
+    return failure();
+  }
+  results.push_back(memType.getElementType());
+  results.push_back(CMemoryPortType::get(context));
+  return success();
+}
+
+static LogicalResult verifyMemoryPortOp(MemoryPortOp memoryPort) {
+  // MemoryPorts require exactly 1 access. Right now there are no other
+  // operations that could be using that value due to the types.
+  if (!memoryPort.port().hasOneUse())
+    return memoryPort.emitOpError(
+        "port should be used by a firrtl.memoryport.access");
+  return success();
+}
+
+MemoryPortAccessOp MemoryPortOp::getAccess() {
+  auto uses = port().use_begin();
+  if (uses == port().use_end())
+    return {};
+  return cast<MemoryPortAccessOp>(uses->getOwner());
+}
+
 void MemOp::build(OpBuilder &builder, OperationState &result,
                   TypeRange resultTypes, uint32_t readLatency,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
@@ -2429,9 +2470,10 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
 }
 
 static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr) {
+                                 DictionaryAttr attr,
+                                 ArrayRef<StringRef> extraElides = {}) {
   // List of attributes to elide when printing the dictionary.
-  SmallVector<StringRef, 2> elides;
+  SmallVector<StringRef, 2> elides(extraElides.begin(), extraElides.end());
 
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
@@ -2480,6 +2522,15 @@ static void printInstanceOp(OpAsmPrinter &p, Operation *op,
 // MemoryPortOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
+void MemoryPortOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  StringRef base = name();
+  if (base.empty())
+    base = "memport";
+  setNameFn(data(), (base + "_data").str());
+  setNameFn(port(), (base + "_port").str());
+}
+
 static ParseResult parseMemoryPortOp(OpAsmParser &parser,
                                      NamedAttrList &resultAttrs) {
   return parseElideAnnotations(parser, resultAttrs);
@@ -2494,17 +2545,17 @@ static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
-// SMemOp Custom attr-dict Directive
+// SeqMemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseSMemOp(OpAsmParser &parser,
-                               NamedAttrList &resultAttrs) {
-  return parseElideAnnotations(parser, resultAttrs);
+static ParseResult parseSeqMemOp(OpAsmParser &parser,
+                                 NamedAttrList &resultAttrs) {
+  return parseImplicitSSAName(parser, resultAttrs);
 }
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
-static void printSMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
-  printElideAnnotations(p, op, attr, {"ruw"});
+static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
+  printImplicitSSAName(p, op, attr, {"ruw"});
 }
 
 //===----------------------------------------------------------------------===//

@@ -7,7 +7,7 @@ add_circt_dialect_library(CIRCTFIRRTL
 
   DEPENDS
   MLIRFIRRTLIncGen
-  MLIRFIRRTLEnumsIncGen
+  CIRCTFIRRTLEnumsIncGen
   CIRCTFIRRTLCanonicalizationIncGen
 
   LINK_COMPONENTS
@@ -21,7 +21,7 @@ add_circt_dialect_library(CIRCTFIRRTL
 
 add_dependencies(circt-headers
   MLIRFIRRTLIncGen
-  MLIRFIRRTLEnumsIncGen
+  CIRCTFIRRTLEnumsIncGen
   CIRCTFIRRTLCanonicalizationIncGen
   )
 
