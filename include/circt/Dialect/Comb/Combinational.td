@@ -208,6 +208,7 @@ def SExtOp : CombOp<"sext", [NoSideEffect]> {
     "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
+  let hasCanonicalizeMethod = true;
   let verifier = "return ::verifySExtOp(*this);";
 }
 

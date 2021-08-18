@@ -215,10 +215,28 @@ OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
     return getIntAttr(input.getValue().sext(destWidth), getContext());
   }
 
-  if (getType().getWidth() == input().getType().cast<IntegerType>().getWidth())
+  if (getType().getWidth() == input().getType().getIntOrFloatBitWidth())
     return input();
 
   return {};
+}
+
+LogicalResult SExtOp::canonicalize(SExtOp op, PatternRewriter &rewriter) {
+  // If the sign bit is known, we can fold this to a simpler operation.
+  auto knownBits = KnownBitAnalysis::compute(op.input());
+  if (knownBits.getBitsKnown().isNegative()) {
+    // Ok, we know the sign bit, strength reduce this into a concat of the
+    // appropriate constant.
+    unsigned numBits =
+        op.getType().getWidth() - op.input().getType().getIntOrFloatBitWidth();
+    APInt cstBits = knownBits.ones.isNegative()
+                        ? APInt::getAllOnesValue(numBits)
+                        : APInt(numBits, 0);
+    auto signBits = rewriter.create<hw::ConstantOp>(op.getLoc(), cstBits);
+    rewriter.replaceOpWithNewOp<ConcatOp>(op, signBits, op.input());
+    return success();
+  }
+  return failure();
 }
 
 OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
@@ -267,7 +285,7 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
 
-  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{extract, zeros});
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, extract, zeros);
   return success();
 }
 
@@ -304,7 +322,7 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
 
-  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{zeros, extract});
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, zeros, extract);
   return success();
 }
 
@@ -338,7 +356,7 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
 
-  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{sext, extract});
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, sext, extract);
   return success();
 }
 
