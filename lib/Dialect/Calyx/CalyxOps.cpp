@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -74,6 +75,44 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Checks whether @p port is driven from within @p groupOp.
+static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp) {
+  // Check if the port is driven by an assignOp from within @p groupOp.
+  for (auto &use : port.getUses()) {
+    if (auto assignOp = dyn_cast<AssignOp>(use.getOwner())) {
+      if (assignOp.dest() != port ||
+          assignOp->getParentOfType<GroupOp>() != groupOp)
+        continue;
+      return success();
+    }
+  }
+
+  // If @p port is an output of an InstanceOp, and if any input port of
+  // this InstanceOp is driven within @p groupOp, we'll assume that @p port
+  // is sensitive to the driven input port.
+  // @TODO: simplify this logic when the calyx.cell interface allows us to more
+  // easily access the input and output ports of a component
+  if (auto instanceOp = dyn_cast<InstanceOp>(port.getDefiningOp())) {
+    auto compOp = instanceOp.getReferencedComponent();
+    auto compOpPortInfo = llvm::enumerate(getComponentPortInfo(compOp));
+
+    bool isOutputPort = llvm::any_of(compOpPortInfo, [&](auto portInfo) {
+      return port == instanceOp->getResult(portInfo.index()) &&
+             portInfo.value().direction == Direction::Output;
+    });
+
+    if (isOutputPort) {
+      return success(llvm::any_of(compOpPortInfo, [&](auto portInfo) {
+        return portInfo.value().direction == Direction::Input &&
+               succeeded(isPortDrivenByGroup(
+                   instanceOp->getResult(portInfo.index()), groupOp));
+      }));
+    }
+  }
+
+  return failure();
+}
+
 LogicalResult calyx::verifyCell(Operation *op) {
   auto opParent = op->getParentOp();
   if (!isa<ComponentOp>(opParent))
@@ -89,7 +128,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
   // Operations that may parent other ControlLike operations.
   auto isValidParent = [](Operation *operation) {
-    return isa<ControlOp, SeqOp>(operation);
+    return isa<ControlOp, SeqOp, IfOp>(operation);
   };
   if (!isValidParent(parent))
     return op->emitOpError()
@@ -102,7 +141,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -113,6 +152,16 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
            << ", which is not allowed in this control-like operation";
   }
   return success();
+}
+
+// Convenience function for getting the SSA name of @p v under the scope of
+// operation @p scopeOp
+static std::string valueName(Operation *scopeOp, Value v) {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  AsmState asmState(scopeOp);
+  v.printAsOperand(os, asmState);
+  return s;
 }
 
 //===----------------------------------------------------------------------===//
@@ -585,6 +634,36 @@ static LogicalResult verifyEnableOp(EnableOp enableOp) {
   if (!wiresOp.lookupSymbol<GroupOp>(groupName))
     return enableOp.emitOpError()
            << "with group: " << groupName << ", which does not exist.";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// IfOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyIfOp(IfOp ifOp) {
+  auto component = ifOp->getParentOfType<ComponentOp>();
+  auto wiresOp = component.getWiresOp();
+  auto groupName = ifOp.groupName();
+  auto groupOp = wiresOp.lookupSymbol<GroupOp>(groupName);
+
+  if (!groupOp)
+    return ifOp.emitOpError()
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (ifOp.thenRegion().front().empty())
+    return ifOp.emitError() << "empty 'then' region.";
+
+  if (ifOp.elseRegion().getBlocks().size() != 0 &&
+      ifOp.elseRegion().front().empty())
+    return ifOp.emitError() << "empty 'else' region.";
+
+  if (failed(isPortDrivenByGroup(ifOp.cond(), groupOp)))
+    return ifOp.emitError()
+           << "conditional op: '" << valueName(component, ifOp.cond())
+           << "' expected to be driven from group: '" << ifOp.groupName()
+           << "' but no driver was found.";
 
   return success();
 }

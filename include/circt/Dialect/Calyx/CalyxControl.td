@@ -34,6 +34,38 @@ def ControlOp : CalyxContainer<"control", [
   let verifier = "return ::verify$cppClass(*this);";
 }
 
+def IfOp : CalyxContainer<"if", [
+    ControlLike
+  ]> {
+  let summary = "Calyx If";
+  let arguments = (ins
+    I1:$cond,
+    FlatSymbolRefAttr:$groupName
+    );
+  let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
+  let description = [{
+    The "calyx.if" operation represents and if-then-else construct for
+    conditionally executing two Calyx groups. The operands to an if operation is
+    a 1-bit port and the group under which this port is driven.
+
+    Note: The native and CIRCT Calyx IRs may diverge wrt. 'with' execution, see:
+    https://github.com/cucapra/calyx/discussions/588
+
+    ```mlir
+      calyx.if %1 with @G1 {
+        calyx.enable @G2
+        ...
+      } else {
+        calyx.enable @G3
+        ...
+      }
+    ```
+  }];
+
+  let assemblyFormat = "$cond `with` $groupName $thenRegion (`else` $elseRegion^)? attr-dict";
+  let verifier = "return ::verify$cppClass(*this);";
+}
+
 def SeqOp : CalyxContainer<"seq", [
     ControlLike
   ]> {
