@@ -14,13 +14,14 @@ hw.module @no_ports() {
 // CHECK-LABEL: module Expressions(
 // CHECK-NEXT:    input  [3:0]  in4,
 // CHECK-NEXT:    input         clock,
-// CHECK-NEXT:    output        out1,
+// CHECK-NEXT:    output        out1a, out1b, out1c,
 // CHECK-NEXT:    output [3:0]  out4, out4s,
 // CHECK-NEXT:    output [15:0] out16, out16s,
 // CHECK-NEXT:    output [16:0] sext17);
 
 hw.module @Expressions(%in4: i4, %clock: i1) ->
-  (%out1: i1, %out4: i4, %out4s: i4, %out16: i16, %out16s: i16, %sext17: i17) {
+  (%out1a: i1, %out1b: i1, %out1c: i1,
+   %out4: i4, %out4s: i4, %out16: i16, %out16s: i16, %sext17: i17) {
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
   %c3_i4 = hw.constant 3 : i4
@@ -32,41 +33,33 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %c0_i6 = hw.constant 0 : i6
   %c0_i10 = hw.constant 0 : i10
 
-  // CHECK: wire [3:0] _T_3 = in4 >> in4;
+  // CHECK: wire [3:0] _T = in4 >> in4;
   %7 = comb.extract %in4 from 2 : (i4) -> i1
 
   %10 = comb.shru %in4, %in4 : i4
 
-  // CHECK: assign _T_2 = ^in4;
-  %0 = comb.parity %in4 : i4
-  // CHECK: assign _T_2 = &in4;
-  %1 = comb.icmp eq %in4, %c-1_i4 : i4
-  // CHECK: assign _T_2 = |in4;
-  %2 = comb.icmp ne %in4, %c0_i4 : i4
-  %24 = comb.merge %0, %1, %2 : i1
+  // CHECK: wire [1:0] _T_0 = in4[1:0];
+  // CHECK: wire [1:0] _T_1 = in4[3:2];
+  // CHECK: wire [8:0] _T_2 = {1'h0, in4, in4};
+  // CHECK: wire [4:0] _T_3 = 5'h0 - {in4[3], in4};
 
-  // CHECK: wire [1:0] _T_4 = in4[1:0];
-  // CHECK: wire [1:0] _T_5 = in4[3:2];
-  // CHECK: wire [8:0] _T_6 = {1'h0, in4, in4};
-  // CHECK: wire [4:0] _T_7 = 5'h0 - {in4[3], in4};
-
-  // CHECK: assign _T_1 = ~in4;
+  // CHECK: assign w1 = ~in4;
   %3 = comb.xor %in4, %c-1_i4 : i4
 
-  // CHECK: assign _T_1 = in4 % 4'h1;
+  // CHECK: assign w1 = in4 % 4'h1;
   %4 = comb.modu %in4, %c1_i4 : i4
 
-  // CHECK: assign _T_1 = {2'h0, _T_4};
+  // CHECK: assign w1 = {2'h0, _T_0};
   %5 = comb.extract %in4 from 0 : (i4) -> i2
 
-  // CHECK: assign _T_1 = {2'h0, _T_5 | {in4[2], 1'h0}};
+  // CHECK: assign w1 = {2'h0, _T_1 | {in4[2], 1'h0}};
   %6 = comb.extract %in4 from 2 : (i4) -> i2
   %8 = comb.concat %7, %false : (i1, i1) -> i2
   %9 = comb.or %6, %8 : i2
 
-  // CHECK: assign _T_1 = _T_3;
-  // CHECK: assign _T_1 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
-  // CHECK: assign _T_1 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
+  // CHECK: assign w1 = _T;
+  // CHECK: assign w1 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
+  // CHECK: assign w1 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
   %11 = comb.shrs %in4, %in4 : i4
   %12 = comb.concat %false, %in4, %in4 : (i1, i4, i4) -> i9
   %13 = comb.mux %clock, %c1_i4, %c2_i4 : i4
@@ -74,12 +67,12 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %15 = comb.mux %clock, %c2_i4, %c3_i4 : i4
   %16 = comb.mux %clock, %c1_i4, %15 : i4
 
-  // CHECK: assign _T_1 = {2'h0, _T_5 | _T_4};
+  // CHECK: assign w1 = {2'h0, _T_1 | _T_0};
   %17 = comb.or %6, %5 : i2
   %18 = comb.concat %c0_i2, %in4 : (i2, i4) -> i6
 
-  // CHECK: assign _T_0 = {6'h0, in4, clock, clock, in4};
-  // CHECK: assign _T_0 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
+  // CHECK: assign w2 = {6'h0, in4, clock, clock, in4};
+  // CHECK: assign w2 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
   %19 = comb.sext %in4 : (i4) -> i6
   %20 = comb.sext %clock : (i1) -> i6
   %21 = comb.xor %18, %19, %20 : i6
@@ -88,21 +81,50 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %25 = comb.concat %c0_i2, %5 : (i2, i2) -> i4
   %26 = comb.concat %c0_i2, %9 : (i2, i2) -> i4
   %27 = comb.concat %c0_i2, %17 : (i2, i2) -> i4
-  %28 = comb.merge %3, %4, %25, %26, %10, %14, %16, %27, %10 : i4
+
+  %w1 = sv.wire : !hw.inout<i4>
+  %w1_use = sv.read_inout %w1 : !hw.inout<i4>
+
+  sv.assign %w1, %3 : i4
+  sv.assign %w1, %4 : i4
+  sv.assign %w1, %25 : i4
+  sv.assign %w1, %26 : i4
+  sv.assign %w1, %10 : i4
+  sv.assign %w1, %14 : i4
+  sv.assign %w1, %16 : i4
+  sv.assign %w1, %27 : i4
+  sv.assign %w1, %10 : i4
+  
   %29 = comb.concat %c0_i6, %in4, %clock, %clock, %in4 : (i6, i4, i1, i1, i4) -> i16
   %30 = comb.concat %c0_i10, %21 : (i10, i6) -> i16
-  %31 = comb.merge %29, %30 : i16
 
-  // CHECK: assign _T = {{..}}7{_T_6[8]}}, _T_6};
-  // CHECK: assign _T = {{..}}11{_T_7[4]}}, _T_7};
+  %w2 = sv.wire : !hw.inout<i16>
+  %w2_use = sv.read_inout %w2 : !hw.inout<i16>
+  sv.assign %w2, %29 : i16
+  sv.assign %w2, %30 : i16
+
+  // CHECK: assign w3 = {{..}}7{_T_2[8]}}, _T_2};
+  // CHECK: assign w3 = {{..}}11{_T_3[4]}}, _T_3};
   %32 = comb.sext %12 : (i9) -> i16
   %33 = comb.sext %23 : (i5) -> i16
-  %34 = comb.merge %32, %33 : i16
+
+  %w3 = sv.wire : !hw.inout<i16>
+  %w3_use = sv.read_inout %w3 : !hw.inout<i16>
+  sv.assign %w3, %32 : i16
+  sv.assign %w3, %33 : i16
+
+
+ // CHECK: assign out1a = ^in4;
+  %0 = comb.parity %in4 : i4
+  // CHECK: assign out1b = &in4;
+  %1 = comb.icmp eq %in4, %c-1_i4 : i4
+  // CHECK: assign out1c = |in4;
+  %2 = comb.icmp ne %in4, %c0_i4 : i4
 
   // CHECK: assign out4s = $signed(in4) >>> $signed(in4);
-  // CHECK: assign sext17 = {_T_8[15], _T_8};
-  %35 = comb.sext %34 : (i16) -> i17
-  hw.output %24, %28, %11, %31, %34, %35 : i1, i4, i4, i16, i16, i17
+  // CHECK: assign sext17 = {w3[15], w3};
+  %35 = comb.sext %w3_use : (i16) -> i17
+  hw.output %0, %1, %2, %w1_use, %11, %w2_use, %w3_use, %35 : i1, i1, i1, i4, i4, i16, i16, i17
 }
 
 // CHECK-LABEL: module Precedence(
@@ -205,71 +227,71 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
 }
 
 // CHECK-LABEL: module CmpSign(
-hw.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) -> (%out: i1) {
-  // CHECK: assign _T = a < b;
+hw.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) ->
+ (%o0: i1, %o1: i1, %o2: i1, %o3: i1, %o4: i1, %o5: i1, %o6: i1, %o7: i1,
+  %o8: i1, %o9: i1, %o10: i1, %o11: i1, %o12: i1, %o13: i1, %o14: i1, %o15: i1) {
+  // CHECK: assign o0 = a < b;
   %0 = comb.icmp ult %a, %b : i4
-  // CHECK-NEXT: assign _T = $signed(c) < $signed(d);
-  // CHECK-NEXT: assign _T = $signed(a) < $signed(b);
+  // CHECK-NEXT: assign o1 = $signed(c) < $signed(d);
   %1 = comb.icmp slt %c, %d : i4
+  // CHECK-NEXT: assign o2 = $signed(a) < $signed(b);
   %2 = comb.icmp slt %a, %b : i4
-  // CHECK-NEXT: assign _T = a <= b;
+  // CHECK-NEXT: assign o3 = a <= b;
   %3 = comb.icmp ule %a, %b : i4
-  // CHECK-NEXT: assign _T = $signed(c) <= $signed(d);
-  // CHECK-NEXT: assign _T = $signed(a) <= $signed(b);
+  // CHECK-NEXT: assign o4 = $signed(c) <= $signed(d);
   %4 = comb.icmp sle %c, %d : i4
+  // CHECK-NEXT: assign o5 = $signed(a) <= $signed(b);
   %5 = comb.icmp sle %a, %b : i4
-  // CHECK-NEXT: assign _T = a > b;
+  // CHECK-NEXT: assign o6 = a > b;
   %6 = comb.icmp ugt %a, %b : i4
-  // CHECK-NEXT: assign _T = $signed(c) > $signed(d);
-  // CHECK-NEXT: assign _T = $signed(a) > $signed(b);
+  // CHECK-NEXT: assign o7 = $signed(c) > $signed(d);
   %7 = comb.icmp sgt %c, %d : i4
+  // CHECK-NEXT: assign o8 = $signed(a) > $signed(b);
   %8 = comb.icmp sgt %a, %b : i4
-  // CHECK-NEXT: assign _T = a >= b;
+  // CHECK-NEXT: assign o9 = a >= b;
   %9 = comb.icmp uge %a, %b : i4
-  // CHECK-NEXT: assign _T = $signed(c) >= $signed(d);
-  // CHECK-NEXT: assign _T = $signed(a) >= $signed(b);
+  // CHECK-NEXT: assign o10 = $signed(c) >= $signed(d);
+  // CHECK-NEXT: assign o11 = $signed(a) >= $signed(b);
   %10 = comb.icmp sge %c, %d : i4
   %11 = comb.icmp sge %a, %b : i4
-  // CHECK-NEXT: assign _T = a == b;
-  // CHECK-NEXT: assign _T = c == d;
+  // CHECK-NEXT: assign o12 = a == b;
   %12 = comb.icmp eq %a, %b : i4
+  // CHECK-NEXT: assign o13 = c == d;
   %13 = comb.icmp eq %c, %d : i4
-  // CHECK-NEXT: assign _T = a != b;
-  // CHECK-NEXT: assign _T = c != d;
+  // CHECK-NEXT: assign o14 = a != b;
   %14 = comb.icmp ne %a, %b : i4
+  // CHECK-NEXT: assign o15 = c != d;
   %15 = comb.icmp ne %c, %d : i4
-  %16 = comb.merge %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15 : i1
-  hw.output %16 : i1
+
+  hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
 
 // CHECK-LABEL: module MultiUseExpr
-hw.module @MultiUseExpr(%a: i4) -> (%b: i1, %b2: i2) {
+hw.module @MultiUseExpr(%a: i4) ->
+ (%b0: i1, %b1: i1, %b2: i1, %b3: i1, %b4: i2) {
   %false = hw.constant false
   %c1_i5 = hw.constant 1 : i5
   %c-1_i5 = hw.constant -1 : i5
   %c-1_i4 = hw.constant -1 : i4
 
-  // CHECK: wire _T_0 = ^a;
-   %0 = comb.parity %a : i4
-  // CHECK-NEXT: wire [4:0] _T_1 = {1'h0, a} << 5'h1;
+  // CHECK: wire _T = ^a;
+  %0 = comb.parity %a : i4
+  // CHECK-NEXT: wire [4:0] _T_0 = {1'h0, a} << 5'h1;
   %1 = comb.concat %false, %a : (i1, i4) -> i5
   %2 = comb.shl %1, %c1_i5 : i5
 
-  // CHECK-NEXT: wire [3:0] _T_2 = ~a;
-  // CHECK-NEXT: assign _T = _T_0;
-  // CHECK-NEXT: assign _T = ^_T_0;
-  // CHECK-NEXT: assign _T = &_T_1;
-  // CHECK-NEXT: assign _T = ^_T_1;
-  // CHECK-NEXT: assign _T = 1'h0;
-  // CHECK-NEXT: assign b = _T;
-  // CHECK-NEXT: assign b2 = _T_2[3:2];
+  // CHECK-NEXT: wire [3:0] _T_1 = ~a;
+  // CHECK-NEXT: assign b0 = _T;
+  // CHECK-NEXT: assign b1 = ^_T;
+  // CHECK-NEXT: assign b2 = &_T_0;
+  // CHECK-NEXT: assign b3 = ^_T_0;
+  // CHECK-NEXT: assign b4 = _T_1[3:2];
   %3 = comb.parity %0 : i1
   %4 = comb.icmp eq %2, %c-1_i5 : i5
   %5 = comb.parity %2 : i5
   %6 = comb.xor %a, %c-1_i4 : i4
   %7 = comb.extract %6 from 2 : (i4) -> i2
-  %8 = comb.merge %0, %3, %4, %5, %false : i1
-  hw.output %8, %7 : i1, i2
+  hw.output %0, %3, %4, %5, %7 : i1, i1, i1, i1, i2
 }
 
 hw.module.extern @MyExtModule(%in: i8) -> (%out: i1) attributes {verilogName = "FooExtModule"}
@@ -288,13 +310,10 @@ hw.module @ExternMods(%a_in: i8) {
 }
 
 // CHECK-LABEL: module UseInstances
-hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
-  // CHECK: wire _T;
-  // CHECK: wire xyz2_out;
-  // CHECK: wire xyz_out;
+hw.module @UseInstances(%a_in: i8) -> (%a_out1: i1, %a_out2: i1) {
   // CHECK: FooExtModule xyz (
   // CHECK:   .in  (a_in),
-  // CHECK:   .out (xyz_out)
+  // CHECK:   .out (a_out1)
   // CHECK: );
   // CHECK: MyParameterizedExtModule #(
   // CHECK:   .DEFAULT(64'd0),
@@ -303,15 +322,11 @@ hw.module @UseInstances(%a_in: i8) -> (%a_out: i1) {
   // CHECK:   .WIDTH(32)
   // CHECK: ) xyz2 (
   // CHECK:   .in  (a_in),
-  // CHECK:   .out (xyz2_out)
+  // CHECK:   .out (a_out2)
   // CHECK: );
-  // CHECK: assign _T = xyz_out;
-  // CHECK: assign _T = xyz2_out;
-  // CHECK: assign a_out = _T;
   %xyz.out = hw.instance "xyz" @MyExtModule(%a_in) : (i8) -> i1
   %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i8) -> i1
-  %0 = comb.merge %xyz.out, %xyz2.out : i1
-  hw.output %0 : i1
+  hw.output %xyz.out, %xyz2.out : i1, i1
 }
 
 // CHECK-LABEL: module Stop(
