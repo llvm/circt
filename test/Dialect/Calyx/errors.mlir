@@ -200,7 +200,7 @@ calyx.program {
     calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
-        // expected-error @+1 {{conditional port expected to be driven from the 'with' group but no driver was found.}}
+        // expected-error @+1 {{conditional op: '%c0.out' expected to be driven from group: 'Group1' but no driver was found.}}
         calyx.if %c0.out with @Group1 {
           calyx.enable @Group1
         }

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -75,28 +76,40 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 //===----------------------------------------------------------------------===//
 
 /// Checks whether @p port is driven from within @p groupOp.
-static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp,
-                                         bool checkInstanceOp = true) {
-  // Check if the port is driven by an assignOp from within @p groupOp
+static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp) {
+  // Check if the port is driven by an assignOp from within @p groupOp.
   for (auto &use : port.getUses()) {
-    if (auto assignOp = dyn_cast<AssignOp>(use.getOwner()))
-      if (assignOp->getParentOfType<GroupOp>() == groupOp)
-        return success();
+    if (auto assignOp = dyn_cast<AssignOp>(use.getOwner())) {
+      if (assignOp.dest() != port)
+        continue;
+      if (assignOp->getParentOfType<GroupOp>() != groupOp)
+        continue;
+      return success();
+    }
   }
 
-  if (checkInstanceOp) {
-    // If the port is the result of an InstanceOp, and if any input port of
-    // this InstanceOp is driven within @p groupOp, we'll assume that @p port
-    // is sensitive to the driven input port.
-    if (auto instanceOp = dyn_cast<InstanceOp>(port.getDefiningOp())) {
-      auto compOp = instanceOp.getReferencedComponent();
-      auto compOpPortInfo = getComponentPortInfo(compOp);
-      for (auto portInfo : enumerate(compOpPortInfo)) {
-        if (portInfo.value().direction == Direction::Input)
-          if (succeeded(isPortDrivenByGroup(
-                  instanceOp->getResult(portInfo.index()), groupOp, false)))
-            return success();
-      }
+  // If @p port is an output of an InstanceOp, and if any input port of
+  // this InstanceOp is driven within @p groupOp, we'll assume that @p port
+  // is sensitive to the driven input port.
+  // @TODO: simplify this logic when the calyx.cell interface allows us to more
+  // easily access the input and output ports of a component
+  if (auto instanceOp = dyn_cast<InstanceOp>(port.getDefiningOp())) {
+    auto compOp = instanceOp.getReferencedComponent();
+    auto compOpPortInfo = getComponentPortInfo(compOp);
+
+    bool isOutputPort =
+        llvm::any_of(enumerate(compOpPortInfo), [&](auto portInfo) {
+          return port == instanceOp->getResult(portInfo.index()) &&
+                 portInfo.value().direction == Direction::Output;
+        });
+
+    if (isOutputPort) {
+      return success(
+          llvm::any_of(llvm::enumerate(compOpPortInfo), [&](auto portInfo) {
+            return portInfo.value().direction == Direction::Input &&
+                   succeeded(isPortDrivenByGroup(
+                       instanceOp->getResult(portInfo.index()), groupOp));
+          }));
     }
   }
 
@@ -142,6 +155,14 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
            << ", which is not allowed in this control-like operation";
   }
   return success();
+}
+
+static std::string valueName(Operation *scopeOp, Value v) {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  AsmState asmState(scopeOp);
+  v.printAsOperand(os, asmState);
+  return s;
 }
 
 //===----------------------------------------------------------------------===//
@@ -621,6 +642,7 @@ static LogicalResult verifyEnableOp(EnableOp enableOp) {
 //===----------------------------------------------------------------------===//
 // IfOp
 //===----------------------------------------------------------------------===//
+
 static LogicalResult verifyIfOp(IfOp ifOp) {
   auto component = ifOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
@@ -639,8 +661,10 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
     return ifOp.emitError() << "empty 'else' region.";
 
   if (failed(isPortDrivenByGroup(ifOp.cond(), groupOp)))
-    return ifOp.emitError() << "conditional port expected to be driven from "
-                               "the 'with' group but no driver was found.";
+    return ifOp.emitError()
+           << "conditional op: '" << valueName(component, ifOp.cond())
+           << "' expected to be driven from group: '" << ifOp.groupName()
+           << "' but no driver was found.";
 
   return success();
 }
