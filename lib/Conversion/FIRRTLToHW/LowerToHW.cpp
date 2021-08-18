@@ -1928,19 +1928,11 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   SmallVector<Value, 8> writeOperands;
   DenseMap<Operation *, size_t> returnHolder;
 
-  size_t readCount = 0;
-  size_t writeCount = 0;
-  size_t readwriteCount = 0;
-
   // Memories return multiple structs, one for each port, which means we have
   // two layers of type to split appart.
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
-
-    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
-                        : portKind == MemOp::PortKind::Write ? writeCount
-                                                             : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
@@ -2000,7 +1992,6 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       addInput(writeOperands, "mask", 1);
       addInput(writeOperands, "data", memSummary.dataWidth);
     }
-    ++portKindNum;
   }
 
   auto memModuleAttr = builder.getSymbolRefAttr(getFirMemoryName(memSummary));
