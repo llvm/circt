@@ -983,7 +983,7 @@ Optional<unsigned> FIRParser::getFieldIDFromTokens(ArrayAttr tokens, SMLoc loc,
 
       // Token should be a valid index of the vector.
       auto subIndex = subIndexAttr.getValue().getZExtValue();
-      if (subIndex < 0 || subIndex >= vectorType.getNumElements()) {
+      if (subIndex >= vectorType.getNumElements()) {
         emitError(loc, getMessage(tokenIdx) + " is out of range in the vector");
         return None;
       }
