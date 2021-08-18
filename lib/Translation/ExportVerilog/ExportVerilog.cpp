@@ -48,8 +48,8 @@ using namespace sv;
 // Helper routines
 //===----------------------------------------------------------------------===//
 
-/// Return true for operations that are always inlined into a containing
-/// expression.
+/// Return true for operations that must always be inlined into a containing
+/// expression for correctness.
 static bool isExpressionAlwaysInline(Operation *op) {
   // We need to emit array indexes inline per verilog "lvalue" semantics.
   if (isa<ArrayIndexInOutOp>(op) || isa<ReadInOutOp>(op))

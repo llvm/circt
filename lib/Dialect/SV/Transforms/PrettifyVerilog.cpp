@@ -108,13 +108,32 @@ void PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   if (op->use_empty() || op->hasOneUse())
     return;
 
+  // Duplicating unary operations can move them across blocks (down the region
+  // tree).  Make sure to keep referenced constants local.
+  auto cloneConstantOperandsIfNeeded = [&](Operation *op) {
+    for (auto &operand : op->getOpOperands()) {
+      auto constant = operand.get().getDefiningOp<hw::ConstantOp>();
+      if (!constant)
+        continue;
+
+      // If the constant is in a different block, clone or move it into the
+      // block.
+      if (constant->getBlock() != op->getBlock()) {
+        if (constant->hasOneUse())
+          constant->moveBefore(op);
+        else
+          operand.set(OpBuilder(op).clone(*constant)->getResult(0));
+      }
+    }
+  };
+
   while (!op->hasOneUse()) {
     OpOperand &use = *op->use_begin();
     Operation *user = use.getOwner();
 
     // Clone the operation and insert before this user.
-    auto *cloned = op->clone();
-    user->getBlock()->getOperations().insert(Block::iterator(user), cloned);
+    auto *cloned = OpBuilder(user).clone(*op);
+    cloneConstantOperandsIfNeeded(cloned);
 
     // Update user's operand to the new value.
     use.set(cloned->getResult(0));
@@ -123,6 +142,8 @@ void PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
   // There is exactly one user left, so move this before it.
   Operation *user = *op->user_begin();
   op->moveBefore(user);
+  cloneConstantOperandsIfNeeded(op);
+
   anythingChanged = true;
 }
 
