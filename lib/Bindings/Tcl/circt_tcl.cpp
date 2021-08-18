@@ -356,7 +356,7 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
 
     auto root = (MlirOperation){objs[i]->internalRep.twoPtrValue.ptr1};
     Tcl_Obj *module;
-    if (auto _ = llvm::dyn_cast_or_null<mlir::ModuleOp>(unwrap(root))) {
+    if (llvm::dyn_cast_or_null<mlir::ModuleOp>(unwrap(root))) {
       module = objs[i];
     } else {
       module = (Tcl_Obj *) objs[i]->internalRep.twoPtrValue.ptr2;
@@ -393,6 +393,8 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
         return TCL_ERROR;
       }
     }
+
+    circtQueryDeleteFilterResult(result);
   }
   Tcl_SetObjResult(interp, list);
 
@@ -407,7 +409,7 @@ static Tcl_Obj *createTclObjFromAttr(Tcl_Interp *interp, mlir::Attribute attr) {
     })
     .Case<mlir::IntegerAttr>([&](auto &attr) {
       auto i = attr.getInt();
-      return Tcl_NewIntObj(i);
+      return Tcl_NewLongObj(i);
     })
     .Case<mlir::ArrayAttr>([&](auto &attr) {
       auto array = attr.getValue();
@@ -428,7 +430,6 @@ static Tcl_Obj *createTclObjFromAttr(Tcl_Interp *interp, mlir::Attribute attr) {
       return obj;
     })
     .Default([&](auto &op) {
-      std::cerr << "warning: unsupported attribute type\n";
       auto *str = "<unknown attribute>";
       return Tcl_NewStringObj(str, strlen(str));
     });
