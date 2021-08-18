@@ -45,14 +45,19 @@ module {
 ### The `circt` command
 The `circt` procedure is how you perform actions on MLIR and FIR. The following commands are supported:
  - `circt load <MLIR|FIR> [file]`
+
     Loads an MLIR/FIR file (loading FIR files is currently unimplemented). Returns an operation.
  - `circt query [filter] [operation | list of ops]`
+
     Performs a query on an operation or a list of ops. Returns a list of operations.
  - `circt get modname [operation]`
+
     Gets the name of the module passed in.
  - `circt get opname [operation]`
+
     Gets the name of the operation passed in.
  - `circt get attrs [operation | list of ops] [attribute names]*`
+
     Gets the attributes of the given operations that match the list of names. If no names are provided, then all attributes are dumped. Returns a dictionary mapping operations to attributes.
 
 ### Filters
