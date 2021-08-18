@@ -386,16 +386,15 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module @foo
   firrtl.module @foo() {
     // CHECK-NEXT:  %io_cpu_flush.wire = sv.wire sym @__foo__io_cpu_flush.wire : !hw.inout<i1>
+    // CHECK-NEXT:  [[IO:%[0-9]+]] = sv.read_inout %io_cpu_flush.wire
     %io_cpu_flush.wire = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
-    // CHECK-NEXT: hw.instance "fetch" @bar([[IO:%[0-9]+]])
+    // CHECK-NEXT: hw.instance "fetch" @bar([[IO]])
     %i = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"]} : !firrtl.uint<1>
     firrtl.connect %i, %io_cpu_flush.wire : !firrtl.uint<1>, !firrtl.uint<1>
 
     %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
-    // CHECK-NEXT:  [[IO]] = sv.read_inout %io_cpu_flush.wire
-    // CHECK-NEXT:  [[IO2:%.+]] = sv.read_inout %io_cpu_flush.wire
     // CHECK-NEXT:  %hits_1_7 = sv.wire sym @__foo__hits_1_7
-    // CHECK-NEXT:  sv.assign %hits_1_7, [[IO2]] : i1
+    // CHECK-NEXT:  sv.assign %hits_1_7, [[IO]] : i1
     %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
   }
 
@@ -456,16 +455,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module @Analog(%a1: !hw.inout<i1>, %b1: !hw.inout<i1>,
   // CHECK:                          %c1: !hw.inout<i1>) -> (%outClock: i1) {
+  // CHECK-NEXT:   %0 = sv.read_inout %c1 : !hw.inout<i1>
+  // CHECK-NEXT:   %1 = sv.read_inout %b1 : !hw.inout<i1>
+  // CHECK-NEXT:   %2 = sv.read_inout %a1 : !hw.inout<i1>
   // CHECK-NEXT:   sv.ifdef "SYNTHESIS"  {
-  // CHECK-NEXT:     %1 = sv.read_inout %a1 : !hw.inout<i1>
-  // CHECK-NEXT:     %2 = sv.read_inout %b1 : !hw.inout<i1>
-  // CHECK-NEXT:     %3 = sv.read_inout %c1 : !hw.inout<i1>
-  // CHECK-NEXT:     sv.assign %a1, %2 : i1
-  // CHECK-NEXT:     sv.assign %a1, %3 : i1
-  // CHECK-NEXT:     sv.assign %b1, %1 : i1
-  // CHECK-NEXT:     sv.assign %b1, %3 : i1
-  // CHECK-NEXT:     sv.assign %c1, %1 : i1
+  // CHECK-NEXT:     sv.assign %a1, %1 : i1
+  // CHECK-NEXT:     sv.assign %a1, %0 : i1
+  // CHECK-NEXT:     sv.assign %b1, %2 : i1
+  // CHECK-NEXT:     sv.assign %b1, %0 : i1
   // CHECK-NEXT:     sv.assign %c1, %2 : i1
+  // CHECK-NEXT:     sv.assign %c1, %1 : i1
   // CHECK-NEXT:    } else {
   // CHECK-NEXT:     sv.ifdef "verilator" {
   // CHECK-NEXT:       sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
@@ -473,8 +472,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT:       sv.alias %a1, %b1, %c1 : !hw.inout<i1>
   // CHECK-NEXT:     }
   // CHECK-NEXT:    }
-  // CHECK-NEXT:    %0 = sv.read_inout %a1 : !hw.inout<i1>
-  // CHECK-NEXT:    hw.output %0 : i1
+  // CHECK-NEXT:    hw.output %2 : i1
   firrtl.module @Analog(in %a1: !firrtl.analog<1>, in %b1: !firrtl.analog<1>,
                         in %c1: !firrtl.analog<1>, out %outClock: !firrtl.clock) {
     firrtl.attach %a1, %b1, %c1 : !firrtl.analog<1>, !firrtl.analog<1>, !firrtl.analog<1>
@@ -502,6 +500,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %c0_i2 = hw.constant 0 : i2
     %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
     // CHECK-NEXT: %count = sv.reg sym @count : !hw.inout<i2>
+    // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
     %count = firrtl.reg %clock {name = "count", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
 
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
@@ -516,7 +515,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
 
-    // CHECK-NEXT: %0 = sv.read_inout %count : !hw.inout<i2>
     // CHECK-NEXT: %1 = comb.mux %cond, %value, %0 : i2
     // CHECK-NEXT: %2 = comb.mux %reset, %c0_i2, %1 : i2
     %4 = firrtl.mux(%cond, %value, %count) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
@@ -553,6 +551,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %4 = firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
     // CHECK-NEXT: %reg = sv.reg : !hw.inout<i32>
+    // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
     // CHECK-NEXT: sv.alwaysff(posedge %clock) {
     // CHECK-NEXT:   sv.passign %reg, %6 : i32
     // CHECK-NEXT: }(asyncreset : posedge %reset) {
@@ -574,6 +573,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     // CHECK-NEXT: %reg2 = sv.reg : !hw.inout<i32>
+    // CHECK-NEXT: %1 = sv.read_inout %reg2 : !hw.inout<i32>
     // CHECK-NEXT: sv.alwaysff(posedge %clock) {
     // CHECK-NEXT: }(syncreset : posedge %reset) {
     // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
@@ -581,11 +581,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %reg = firrtl.regreset %clock, %4, %c0_ui32 {name = "reg"} : !firrtl.asyncreset, !firrtl.uint<32>, !firrtl.uint<32>
     %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
 
-    // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
-    // CHECK-NEXT: %1 = comb.concat %false, %0 : (i1, i32) -> i33
-    // CHECK-NEXT: %2 = sv.read_inout %reg2 : !hw.inout<i32>
-    // CHECK-NEXT: %3 = comb.concat %false, %2 : (i1, i32) -> i33
-    // CHECK-NEXT: %4 = comb.add %1, %3 : i33
+    // CHECK-NEXT: %2 = comb.concat %false, %0 : (i1, i32) -> i33
+    // CHECK-NEXT: %3 = comb.concat %false, %1 : (i1, i32) -> i33
+    // CHECK-NEXT: %4 = comb.add %2, %3 : i33
     // CHECK-NEXT: %5 = comb.extract %4 from 1 : (i33) -> i32
     // CHECK-NEXT: %6 = comb.mux %io_en, %io_d, %5 : i32
     %sum = firrtl.add %reg, %reg2 : (!firrtl.uint<32>, !firrtl.uint<32>) -> !firrtl.uint<33>
@@ -595,8 +593,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %reg, %5 : !firrtl.uint<32>, !firrtl.uint<32>
     firrtl.connect %io_q, %reg: !firrtl.uint<32>, !firrtl.uint<32>
 
-    // CHECK-NEXT: %7 = sv.read_inout %reg : !hw.inout<i32>
-    // CHECK-NEXT: hw.output %7 : i32
+    // CHECK-NEXT: hw.output %0 : i32
   }
 
   //  module MemSimple :
@@ -733,13 +730,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: IsInvalidIssue572
   // https://github.com/llvm/circt/issues/572
   firrtl.module @IsInvalidIssue572(in %a: !firrtl.analog<1>) {
+    // CHECK-NEXT: %0 = sv.read_inout %a : !hw.inout<i1>
 
     // CHECK-NEXT: %.invalid_analog = sv.wire : !hw.inout<i1>
+    // CHECK-NEXT: %1 = sv.read_inout %.invalid_analog : !hw.inout<i1>
     %0 = firrtl.invalidvalue : !firrtl.analog<1>
 
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
-    // CHECK-NEXT:   %0 = sv.read_inout %a : !hw.inout<i1>
-    // CHECK-NEXT:   %1 = sv.read_inout %.invalid_analog : !hw.inout<i1>
     // CHECK-NEXT:   sv.assign %a, %1 : i1
     // CHECK-NEXT:   sv.assign %.invalid_analog, %0 : i1
     // CHECK-NEXT: } else {
@@ -832,4 +829,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %true = hw.constant true
     // CHECK-NEXT: hw.output %true
   }
+
+  // CHECK-LABEL: issue1594
+  // Make sure LowerToHW's merging of always blocks kicks in for this example.
+  firrtl.module @issue1594(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %reset_n = firrtl.wire  : !firrtl.uint<1>
+    %0 = firrtl.not %reset : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %reset_n, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %reset_n, %c0_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %r, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %b, %r : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: sv.alwaysff(posedge %clock)
+    // CHECK-NOT: sv.alwaysff
+    // CHECK: hw.output
+  }
+
 }

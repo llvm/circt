@@ -101,7 +101,9 @@ firrtl.circuit "Simple" {
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
     // CHECK: [[OUTC:%.+]] = sv.wire : !hw.inout<i4>
+    // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
     // CHECK: [[OUTD:%.+]] = sv.wire : !hw.inout<i4>
+    // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
 
     // Normal
     firrtl.connect %outA, %inA : !firrtl.uint<4>, !firrtl.uint<4>
@@ -117,8 +119,6 @@ firrtl.circuit "Simple" {
     firrtl.connect %outE, %inE : !firrtl.uint<4>, !firrtl.uint<3>
 
     // CHECK: [[OUTBY:%.+]] = comb.merge %inB, %inA : i4
-    // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
-    // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
 
     // Extension for outE
     // CHECK: [[OUTE:%.+]] = comb.concat %false, %inE : (i1, i3) -> i4
@@ -247,6 +247,7 @@ firrtl.circuit "Simple" {
   // https://github.com/llvm/circt/issues/740
   // CHECK-LABEL: hw.module @foo740(%led_0: !hw.inout<i1>) {
   // CHECK:  %.led_0.wire = sv.wire
+  // CHECK-NEXT: sv.read_inout %.led_0.wire
   // CHECK-NEXT:  hw.instance "fpga" @bar740(%.led_0.wire)
   firrtl.extmodule @bar740(in %led_0: !firrtl.analog<1>)
   firrtl.module @foo740(in %led_0: !firrtl.analog<1>) {

@@ -988,6 +988,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
                                          Region &region);
+
+  /// Return an `sv::ReadInOutOp` for the specified value, auto-uniquing them.
+  Value getReadInOutOp(Value v);
+
   void addToAlwaysBlock(Value clock, std::function<void(void)> fn);
   void addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
                           ::ResetType resetStyle, sv::EventControl resetEdge,
@@ -1164,6 +1168,11 @@ private:
   /// This is populated by the getOrCreateIntConstant method.
   DenseMap<Attribute, Value> hwConstantMap;
 
+  /// We auto-unique "ReadInOut" ops from wires and regs, enabling optimizations
+  /// and CSEs of the read values to be more obvious.  This caches a known
+  /// ReadInOutOp for the given value and is managed by `getReadInOutOp(v)`.
+  DenseMap<Value, Value> readInOutCreated;
+
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
   llvm::SmallDenseMap<Value, sv::AlwaysOp> alwaysBlocks;
@@ -1335,7 +1344,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   // If we got an inout value, implicitly read it.  FIRRTL allows direct use
   // of wires and other things that lower to inout type.
   if (result.getType().isa<hw::InOutType>())
-    return builder.createOrFold<sv::ReadInOutOp>(result);
+    return getReadInOutOp(result);
 
   return result;
 }
@@ -1521,6 +1530,27 @@ void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
   builder.setInsertionPointToEnd(&region.front());
   fn();
   builder.restoreInsertionPoint(oldIP);
+}
+
+/// Return an `sv::ReadInOutOp` for the specified value, auto-uniquing them.
+Value FIRRTLLowering::getReadInOutOp(Value v) {
+  Value &result = readInOutCreated[v];
+  if (result)
+    return result;
+
+  // Make sure to put the "ReadInOut" at the correct scope so it dominates all
+  // future uses.
+  auto oldIP = builder.saveInsertionPoint();
+  if (auto *vOp = v.getDefiningOp()) {
+    builder.setInsertionPointAfter(vOp);
+  } else {
+    // For reads of ports, just put the ReadInOut at the top of the module.
+    builder.setInsertionPoint(&theModule.getBodyBlock()->front());
+  }
+
+  result = builder.createOrFold<sv::ReadInOutOp>(v);
+  builder.restoreInsertionPoint(oldIP);
+  return result;
 }
 
 void FIRRTLLowering::addToAlwaysBlock(Value clock,
@@ -1915,10 +1945,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
 
-    auto &portKindNum =
-        portKind == MemOp::PortKind::Read
-            ? readCount
-            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
+    auto &portKindNum = portKind == MemOp::PortKind::Read    ? readCount
+                        : portKind == MemOp::PortKind::Write ? writeCount
+                                                             : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
@@ -1939,8 +1968,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           a->eraseOperand(0);
       }
 
-      wire = builder.create<sv::ReadInOutOp>(wire);
-      operands.push_back(wire);
+      operands.push_back(getReadInOutOp(wire));
     };
     auto addOutput = [&](StringRef field, size_t width) {
       auto portType =
@@ -2061,7 +2089,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     // inout ports directly use the wire, but normal inputs read it.
     if (!port.isInOut())
-      wire = builder.create<sv::ReadInOutOp>(wire);
+      wire = getReadInOutOp(wire);
 
     operands.push_back(wire);
   }
@@ -2802,8 +2830,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       [&]() {
         SmallVector<Value, 4> values;
         for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
-          values.push_back(
-              builder.createOrFold<sv::ReadInOutOp>(inoutValues[i]));
+          values.push_back(getReadInOutOp(inoutValues[i]));
 
         for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
           for (size_t i2 = 0; i2 != e; ++i2)
