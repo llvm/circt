@@ -3061,9 +3061,10 @@ static void lowerAlwaysInlineOperation(Operation *op) {
   return;
 }
 
-/// Lower a commutative operation into an expression tree.  This enables
-/// long-line splitting to work with them.
-static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
+/// Lower a variadic fully-associative operation into an expression tree.  This
+/// enables long-line splitting to work with them.
+static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
+                                     SmallVector<Operation *> &newOps) {
   Value lhs, rhs;
   switch (operands.size()) {
   case 0:
@@ -3077,8 +3078,8 @@ static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
     break;
   default:
     auto firstHalf = operands.size() / 2;
-    lhs = lowerVariadicCommutativeOp(op, operands.take_front(firstHalf));
-    rhs = lowerVariadicCommutativeOp(op, operands.drop_front(firstHalf));
+    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps);
+    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps);
     break;
   }
 
@@ -3087,6 +3088,7 @@ static Value lowerVariadicCommutativeOp(Operation &op, OperandRange operands) {
   state.addTypes(op.getResult(0).getType());
   auto *newOp = Operation::create(state);
   op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
+  newOps.push_back(newOp);
   return newOp->getResult(0);
 }
 
@@ -3310,11 +3312,28 @@ struct RootEmitterBase {
 
 } // namespace
 
+/// Transform "a + -cst" ==> "a - cst" for prettier output.
+static void rewriteAddWithNegativeConstant(comb::AddOp add,
+                                           hw::ConstantOp rhsCst) {
+  ImplicitLocOpBuilder builder(add.getLoc(), add);
+
+  // Get the positive constant.
+  auto negCst = builder.create<hw::ConstantOp>(-rhsCst.getValue());
+  auto sub = builder.create<comb::SubOp>(add.getOperand(0), negCst);
+  add.getResult().replaceAllUsesWith(sub);
+  add.erase();
+  if (rhsCst.use_empty())
+    rhsCst.erase();
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 static void prepareHWModule(Block &block, ModuleNameManager &names,
                             const LoweringOptions &options) {
-  for (auto &op : llvm::make_early_inc_range(block)) {
+  for (Block::iterator opIterator = block.begin(), e = block.end();
+       opIterator != e;) {
+    auto &op = *opIterator++;
+
     // If the operations has regions, lower each of the regions.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
@@ -3328,19 +3347,37 @@ static void prepareHWModule(Block &block, ModuleNameManager &names,
       continue;
     }
 
-    // Lower commutative variadic operations with more than two operands into
-    // balanced operand trees so we can split long lines across multiple
+    // Lower variadic fully-associative operations with more than two operands
+    // into balanced operand trees so we can split long lines across multiple
     // statements.
+    // TODO: This is checking the Commutative property, which doesn't seem
+    // right in general.  MLIR doesn't have a "fully associative" property.
+    //
     if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
         op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
         op.getAttrs().empty()) {
       // Lower this operation to a balanced binary tree of the same operation.
-      auto result = lowerVariadicCommutativeOp(op, op.getOperands());
+      SmallVector<Operation *> newOps;
+      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
       op.getResult(0).replaceAllUsesWith(result);
       op.erase();
+
+      // Make sure we revisit the newly inserted operations.
+      opIterator = Block::iterator(newOps.front());
       continue;
+    }
+
+    // Turn a + -cst  ==> a - cst
+    if (auto addOp = dyn_cast<comb::AddOp>(op)) {
+      if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
+        assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
+        if (cst.getValue().isNegative()) {
+          rewriteAddWithNegativeConstant(addOp, cst);
+          continue;
+        }
+      }
     }
 
     // Name legalization should have happened in a different pass for these sv

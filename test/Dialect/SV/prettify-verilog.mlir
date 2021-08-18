@@ -102,19 +102,3 @@ hw.module @sinkReadInOut(%clk: i1) {
 // VERILOG:  reg [47:0] myreg;
 // VERILOG:  always @(posedge clk)
 // VERILOG:    myreg <= myreg;
-
-
-// CHECK-LABEL:   hw.module @AddNegLiteral
-// Issue #1324: https://github.com/llvm/circt/issues/1324
-hw.module @AddNegLiteral(%a: i8) -> (%x: i8) {
-
-  // CHECK-NEXT: %c4_i8 = hw.constant 4 : i8
-  %c = hw.constant -4 : i8
-  // CHECK-NEXT: %0 = comb.sub %a, %c4_i8 : i8
-  %1 = comb.add %a, %c : i8
-
-  // CHECK-NEXT: hw.output %0
-  hw.output %1 : i8
-}
-// VERILOG-LABEL: module AddNegLiteral(
-// VERILOG: assign x = a - 8'h4;

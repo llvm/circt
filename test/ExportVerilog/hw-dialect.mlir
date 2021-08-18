@@ -736,3 +736,18 @@ hw.module @Foo1587(%idx: i2, %a_0: i4, %a_1: i4, %a_2: i4, %a_3: i4) -> (%b: i4)
   // CHECK: wire [3:0][3:0] [[WIRE:.+]] = {{[{}][{}]}}a_0}, {a_1}, {a_2}, {a_3}};
   // CHECK-NEXT: assign b = [[WIRE]][idx];
 }
+
+// CHECK-LABEL:   module AddNegLiteral(
+// Issue #1324: https://github.com/llvm/circt/issues/1324
+hw.module @AddNegLiteral(%a: i8, %x: i8, %y: i8) -> (%o1: i8, %o2: i8) {
+
+  // CHECK: assign o1 = a - 8'h4;
+  %c = hw.constant -4 : i8
+  %1 = comb.add %a, %c : i8
+
+  // CHECK: assign o2 = x + y - 8'h4;
+  %2 = comb.add %x, %y, %c : i8
+
+  hw.output %1, %2 : i8, i8
+}
+
