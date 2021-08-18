@@ -288,12 +288,12 @@ firrtl.module @nested2(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %
 //CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 //CHECK-NEXT:   %1 = firrtl.not %p1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 //CHECK-NEXT:   %2 = firrtl.and %p0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-//CHECK-NEXT:   %3 = firrtl.mux(%0, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+//CHECK-NEXT:   %3 = firrtl.mux(%p1, %c0_ui2, %c1_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 //CHECK-NEXT:   %4 = firrtl.not %p0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 //CHECK-NEXT:   %5 = firrtl.and %4, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 //CHECK-NEXT:   %6 = firrtl.not %p1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 //CHECK-NEXT:   %7 = firrtl.and %4, %6 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-//CHECK-NEXT:   %8 = firrtl.mux(%5, %c2_ui2, %c3_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+//CHECK-NEXT:   %8 = firrtl.mux(%p1, %c2_ui2, %c3_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 //CHECK-NEXT:   %9 = firrtl.mux(%p0, %3, %8) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 //CHECK-NEXT:   firrtl.connect %out, %9 : !firrtl.uint<2>, !firrtl.uint<2>
 //CHECK-NEXT: }

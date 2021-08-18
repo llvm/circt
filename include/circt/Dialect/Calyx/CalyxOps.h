@@ -38,14 +38,35 @@ public:
   }
 };
 
-/// The direction of a Calyx port.
-enum PortDirection { INPUT = 0, OUTPUT = 1 };
+/// The port direction attribute follows the implementation style of FIRRTL
+/// module port direction attributes.
+enum Direction { Input = 0, Output };
+namespace direction {
+
+/// The key in a components's attribute dictionary used to find the direction.
+constexpr const char *attrKey = "portDirections";
+
+/// Return an output direction if \p isOutput is true, otherwise return an
+/// input direction.
+Direction get(bool isOutput);
+
+/// Return a \p IntegerAttr containing the packed representation of an array
+/// of directions.
+IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
+
+/// Turn a packed representation of port attributes into a vector that can be
+/// worked with.
+SmallVector<Direction> unpackAttribute(Operation *component);
+
+/// Convenience function for generating a vector of directions.
+SmallVector<Direction> genInOutDirections(size_t nIns, size_t nOuts);
+} // namespace direction
 
 /// This holds the name and type that describes the component's ports.
 struct ComponentPortInfo {
   StringAttr name;
   Type type;
-  PortDirection direction;
+  Direction direction;
 };
 
 /// A helper function to verify each operation with the Cell trait.
@@ -56,8 +77,6 @@ template <typename ConcreteType>
 class Cell : public mlir::OpTrait::TraitBase<ConcreteType, Cell> {
 public:
   static LogicalResult verifyTrait(Operation *op) { return verifyCell(op); }
-  SmallVector<StringRef> portNames();
-  SmallVector<PortDirection> portDirections();
 };
 
 /// Returns port information about a given component.

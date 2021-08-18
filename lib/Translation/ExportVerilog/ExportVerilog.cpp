@@ -1482,6 +1482,20 @@ static bool isExpressionUnableToInline(Operation *op) {
       if (!isOkToBitSelectFrom(op->getResult(0)))
         return true;
 
+    // Indexing into an array cannot be done in the same line as the array
+    // creation.
+    //
+    // This is done to avoid creating incorrect constructs like the following
+    // (which is a bit extract):
+    //
+    //     assign bar = {{a}, {b}, {c}, {d}}[idx];
+    //
+    // And illegal constructs like:
+    //
+    //     assign bar = ({{a}, {b}, {c}, {d}})[idx];
+    if (isa<ArrayCreateOp>(op) && isa<ArrayGetOp>(user))
+      return true;
+
     // Sign extend (when the operand isn't a single bit) requires a bitselect
     // syntactically.
     if (auto sext = dyn_cast<SExtOp>(user)) {
@@ -1876,7 +1890,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
     // Constants have their value emitted directly in the corresponding
     // `localparam` declaration. Don't try to reassign these.
     if (isConstantExpression(op)) {
-      --numStatementsEmitted;
+      ++numStatementsEmitted;
       return;
     }
     indent() << names.getName(op->getResult(0)) << " = ";
@@ -2517,6 +2531,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto opArgs = op.inputs();
   auto opResults = op.getResults();
   bool isFirst = true; // True until we print a port.
+  bool isZeroWidth = false;
   SmallVector<Value, 32> portValues;
   for (auto &elt : portInfo) {
     // Figure out which value we are emitting.
@@ -2528,7 +2543,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     // Figure out which value we are emitting.
     auto &elt = portInfo[portNum];
     Value portVal = portValues[portNum];
-    bool isZeroWidth = isZeroBitType(portVal.getType());
+    isZeroWidth = isZeroBitType(portVal.getType());
 
     // Decide if we should print a comma.  We can't do this if we're the first
     // port or if all the subsequent ports are zero width.
@@ -2586,7 +2601,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     }
     os << ')';
   }
-  if (!isFirst) {
+  if (!isFirst || isZeroWidth) {
     emitLocationInfoAndNewLine(ops);
     ops.clear();
     indent() << prefix;
@@ -3147,12 +3162,16 @@ void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
   bool hasOutputs = false, hasZeroWidth = false;
-  size_t maxTypeWidth = 0;
+  size_t maxTypeWidth = 0, lastNonZeroPort = -1;
   SmallVector<SmallString<8>, 16> portTypeStrings;
 
-  for (auto &port : portInfo) {
+  for (size_t i = 0, e = portInfo.size(); i < e; ++i) {
+    auto port = portInfo[i];
     hasOutputs |= port.isOutput();
     hasZeroWidth |= isZeroBitType(port.type);
+    if (!isZeroBitType(port.type)) {
+      lastNonZeroPort = i;
+    }
 
     // Convert the port's type to a string and measure it.
     portTypeStrings.push_back({});
@@ -3232,9 +3251,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
       ++portIdx;
     }
 
-    if (portIdx != e)
-      os << ',';
-    else if (isZeroWidth)
+    if (portIdx != e) {
+      if (portIdx <= lastNonZeroPort)
+        os << ',';
+    } else if (isZeroWidth)
       os << "\n   );\n";
     else
       os << ");\n";

@@ -381,7 +381,7 @@ void WhenOpVisitor::visitStmt(WhenOp whenOp) {
     mergeBlock(*parentBlock, Block::iterator(whenOp), elseBlock);
   }
 
-  mergeScopes(thenScope, elseScope, thenCondition);
+  mergeScopes(thenScope, elseScope, condition);
 
   // Delete the now empty WhenOp.
   whenOp.erase();

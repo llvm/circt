@@ -182,7 +182,7 @@ void Emitter::emitComponent(ComponentOp op) {
 void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
   std::vector<ComponentPortInfo> inPorts, outPorts;
   for (auto &&port : ports) {
-    if (port.direction == PortDirection::INPUT)
+    if (port.direction == Direction::Input)
       inPorts.push_back(port);
     else
       outPorts.push_back(port);

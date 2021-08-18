@@ -80,8 +80,7 @@ def ComponentOp : CalyxOp<"component", [
 
   // TODO(Calyx): Allow explicit port naming?
   let arguments = (ins
-    ArrayAttr:$portNames,
-    I64Attr:$numInPorts
+    ArrayAttr:$portNames
   );
   let results = (outs);
   let regions = (region SizedRegion<1>: $body);

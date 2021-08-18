@@ -83,6 +83,34 @@ bool ICmpOp::isPredicateSigned(ICmpPredicate predicate) {
   llvm_unreachable("unknown comparison predicate");
 }
 
+/// Returns the predicate for a logically negated comparison, e.g. mapping
+/// EQ => NE and SLE => SGT.
+ICmpPredicate ICmpOp::getNegatedPredicate(ICmpPredicate predicate) {
+  switch (predicate) {
+  case ICmpPredicate::eq:
+    return ICmpPredicate::ne;
+  case ICmpPredicate::ne:
+    return ICmpPredicate::eq;
+  case ICmpPredicate::slt:
+    return ICmpPredicate::sge;
+  case ICmpPredicate::sle:
+    return ICmpPredicate::sgt;
+  case ICmpPredicate::sgt:
+    return ICmpPredicate::sle;
+  case ICmpPredicate::sge:
+    return ICmpPredicate::slt;
+  case ICmpPredicate::ult:
+    return ICmpPredicate::uge;
+  case ICmpPredicate::ule:
+    return ICmpPredicate::ugt;
+  case ICmpPredicate::ugt:
+    return ICmpPredicate::ule;
+  case ICmpPredicate::uge:
+    return ICmpPredicate::ult;
+  }
+  llvm_unreachable("unknown comparison predicate");
+}
+
 /// Return true if this is an equality test with -1, which is a "reduction
 /// and" operation in Verilog.
 bool ICmpOp::isEqualAllOnes() {

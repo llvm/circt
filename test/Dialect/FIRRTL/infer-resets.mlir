@@ -108,6 +108,16 @@ firrtl.module @NestedAggregates(out %buzz: !firrtl.bundle<foo flip: vector<bundl
   firrtl.partialconnect %0, %1 : !firrtl.vector<bundle<a: reset, b flip: asyncreset, c: uint<8>>, 2>, !firrtl.vector<bundle<a: asyncreset, c: uint<1>, b flip: reset>, 2>
 }
 
+// Should work with deeply nested aggregates.
+// CHECK-LABEL: firrtl.module @DeeplyNestedAggregates(in %reset: !firrtl.uint<1>, out %buzz: !firrtl.bundle<a: bundle<b: uint<1>>>) {
+firrtl.module @DeeplyNestedAggregates(in %reset: !firrtl.uint<1>, out %buzz: !firrtl.bundle<a: bundle<b: reset>>) {
+  %0 = firrtl.subfield %buzz(0) : (!firrtl.bundle<a: bundle<b : reset>>) -> !firrtl.bundle<b: reset>
+  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<b: reset>) -> !firrtl.reset
+  // CHECK: firrtl.connect %1, %reset : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %1, %reset : !firrtl.reset, !firrtl.uint<1>
+}
+
+
 // Should not crash if a ResetType has no drivers
 // CHECK-LABEL: firrtl.module @DontCrashIfNoDrivers
 // CHECK-SAME: out %out: !firrtl.uint<1>
@@ -279,6 +289,44 @@ firrtl.module @NoCrashOnCombLoop(in %in: !firrtl.asyncreset, out %out: !firrtl.r
   firrtl.connect %w0, %w1 : !firrtl.reset, !firrtl.reset
   firrtl.connect %w1, %w0 : !firrtl.reset, !firrtl.reset
   firrtl.connect %out, %in : !firrtl.reset, !firrtl.asyncreset
+}
+
+// Should not treat a single `invalidvalue` connected to different resets as a
+// connection of the resets themselves.
+// CHECK-LABEL: firrtl.module @InvalidValueShouldNotConnect
+// CHECK-SAME: out %r0: !firrtl.asyncreset
+// CHECK-SAME: out %r1: !firrtl.asyncreset
+// CHECK-SAME: out %r2: !firrtl.uint<1>
+// CHECK-SAME: out %r3: !firrtl.uint<1>
+firrtl.module @InvalidValueShouldNotConnect(
+  in %ar: !firrtl.asyncreset,
+  in %sr: !firrtl.uint<1>,
+  out %r0: !firrtl.reset,
+  out %r1: !firrtl.reset,
+  out %r2: !firrtl.reset,
+  out %r3: !firrtl.reset
+) {
+  %invalid_reset = firrtl.invalidvalue : !firrtl.reset
+  firrtl.connect %r0, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r1, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r2, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r3, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r0, %ar : !firrtl.reset, !firrtl.asyncreset
+  firrtl.connect %r1, %ar : !firrtl.reset, !firrtl.asyncreset
+  firrtl.connect %r2, %sr : !firrtl.reset, !firrtl.uint<1>
+  firrtl.connect %r3, %sr : !firrtl.reset, !firrtl.uint<1>
+}
+
+// Should properly adjust the type of external modules.
+// CHECK-LABEL: firrtl.extmodule @ShouldAdjustExtModule1
+// CHECK-SAME: in %reset: !firrtl.uint<1>
+firrtl.extmodule @ShouldAdjustExtModule1(in %reset: !firrtl.reset)
+// CHECK-LABEL: firrtl.module @ShouldAdjustExtModule2
+// CHECK: %x_reset = firrtl.instance @ShouldAdjustExtModule1 {name = "x"} : !firrtl.uint<1>
+firrtl.module @ShouldAdjustExtModule2() {
+  %x_reset = firrtl.instance @ShouldAdjustExtModule1 {name = "x"} : !firrtl.reset
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  firrtl.connect %x_reset, %c1_ui1 : !firrtl.reset, !firrtl.uint<1>
 }
 
 

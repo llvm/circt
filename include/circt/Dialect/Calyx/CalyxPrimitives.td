@@ -34,8 +34,8 @@ def RegisterOp : CalyxPrimitive<"register", [
     SmallVector<StringRef> portNames() {
       return {"in", "write_en", "clk", "reset", "out", "done"};
     }
-    SmallVector<PortDirection> portDirections() {
-      return { INPUT, INPUT, INPUT, INPUT, OUTPUT, OUTPUT };
+    SmallVector<Direction> portDirections() {
+      return { Input, Input, Input, Input, Output, Output };
     }
   }];
 

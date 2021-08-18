@@ -164,15 +164,17 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
       // CHECK-NEXT: Emit some stuff in verilog
       // CHECK-NEXT: Great power and responsibility!
-      sv.verbatim "Emit some stuff in verilog\nGreat power and responsibility!"
+      sv.verbatim "// Emit some stuff in verilog\n// Great power and responsibility!"
 
       %c42 = hw.constant 42 : i8
       %add = comb.add %val, %c42 : i8
       %c42_2 = hw.constant 42 : i8
       %xor = comb.xor %val, %c42_2 : i8
-      %text = sv.verbatim.expr "MACRO({{0}}, {{1}})" (%add, %xor): (i8,i8) -> i8
+      sv.verbatim "`define MACRO(a, b) a + b"
+      // CHECK-NEXT: `define MACRO
+      %text = sv.verbatim.expr "`MACRO({{0}}, {{1}})" (%add, %xor): (i8,i8) -> i8
 
-      // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", MACRO(val + 8'h2A, val ^ 8'h2A));
+      // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", `MACRO(val + 8'h2A, val ^ 8'h2A));
       sv.fwrite "M: %x\n"(%text) : i8
 
     }// CHECK-NEXT:   {{end$}}
@@ -203,8 +205,10 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK-NEXT: initial begin
   sv.initial {
-    %thing = sv.verbatim.expr "THING" : () -> i42
-    // CHECK-NEXT: wire42 = THING;
+    sv.verbatim "`define THING 1"
+    // CHECK-NEXT: `define THING
+    %thing = sv.verbatim.expr "`THING" : () -> i42
+    // CHECK-NEXT: wire42 = `THING;
     sv.bpassign %wire42, %thing : i42
 
     sv.ifdef.procedural "FOO" {
@@ -217,8 +221,8 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT: `endif
     }
 
-    // CHECK-NEXT: wire42 <= THING;
-    sv.passign %wire42, %thing : i42
+    // CHECK-NEXT: wire42 = `THING;
+    sv.bpassign %wire42, %thing : i42
 
     // CHECK-NEXT: casez (val)
     sv.casez %val : i8
@@ -711,7 +715,7 @@ hw.module @OutOfLineConstantsInAlwaysSensitivity() {
 // CHECK-LABEL: module TooLongConstExpr
 hw.module @TooLongConstExpr() {
   %myreg = sv.reg : !hw.inout<i4200>
-  // CHECK: always @*
+  // CHECK: always @* begin
   sv.always {
     // CHECK-NEXT: localparam [4199:0] _tmp = 4200'h
     // CHECK-NEXT: myreg <= _tmp + _tmp;
@@ -719,6 +723,7 @@ hw.module @TooLongConstExpr() {
     %1 = comb.add %0, %0 : i4200
     sv.passign %myreg, %1 : i4200
   }
+  // CHECK-NEXT: end
 }
 
 // Constants defined before use should be emitted in-place.
@@ -796,7 +801,8 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (%aa: i3, %bb: i3){
 
   // We should directly use a/b/c/d here instead of emitting temporary wires.
 
-  // CHECK: assign aa = ({{.}}{a}, {b}, {c}, {d}})[auto_in_ar_bits_id];
+  // CHECK: wire [3:0][2:0] [[WIRE:.+]] = {{.}}{a}, {b}, {c}, {d}};
+  // CHECK-NEXT: assign aa = [[WIRE]][auto_in_ar_bits_id];
   %127 = hw.array_create %124, %123, %125, %126 : i3
   %128 = hw.array_get %127[%auto_in_ar_bits_id] : !hw.array<4xi3>
 

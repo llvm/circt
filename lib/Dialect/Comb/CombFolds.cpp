@@ -878,6 +878,27 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
       constants, [](APInt &a, const APInt &b) { a ^= b; });
 }
 
+// xor(icmp, a, b, 1) -> xor(icmp, a, b) if icmp has one user.
+static void canonicalizeXorIcmpTrue(XorOp op, unsigned icmpOperand,
+                                    PatternRewriter &rewriter) {
+  auto icmp = op.getOperand(icmpOperand).getDefiningOp<ICmpOp>();
+  auto negatedPred = ICmpOp::getNegatedPredicate(icmp.predicate());
+
+  Value result = rewriter.create<ICmpOp>(
+      icmp.getLoc(), negatedPred, icmp.getOperand(0), icmp.getOperand(1));
+
+  // If the xor had other operands, rebuild it.
+  if (op.getNumOperands() > 2) {
+    SmallVector<Value, 4> newOperands(op.getOperands());
+    newOperands.pop_back();
+    newOperands.erase(newOperands.begin() + icmpOperand);
+    newOperands.push_back(result);
+    result = rewriter.create<XorOp>(op.getLoc(), newOperands);
+  }
+
+  rewriter.replaceOp(op, result);
+}
+
 LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   auto inputs = op.inputs();
   auto size = inputs.size();
@@ -911,13 +932,26 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
       return success();
     }
 
-    // xor(concat(x, cst1), a, b, c, cst2)
-    //    ==> xor(a, b, c, concat(xor(x,cst2'), xor(cst1,cst2'')).
-    // We do this for even more multi-use concats since they are "just wiring".
+    bool isSingleBit = value.getBitWidth() == 1;
+
+    // Check for subexpressions that we can simplify.
     for (size_t i = 0; i < size - 1; ++i) {
-      if (auto concat = inputs[i].getDefiningOp<ConcatOp>())
+      Value operand = inputs[i];
+
+      // xor(concat(x, cst1), a, b, c, cst2)
+      //    ==> xor(a, b, c, concat(xor(x,cst2'), xor(cst1,cst2'')).
+      // We do this for even more multi-use concats since they are "just
+      // wiring".
+      if (auto concat = operand.getDefiningOp<ConcatOp>())
         if (canonicalizeLogicalCstWithConcat(op, i, value, rewriter))
           return success();
+
+      // xor(icmp, a, b, 1) -> xor(icmp, a, b) if icmp has one user.
+      if (isSingleBit && operand.hasOneUse()) {
+        assert(value == 1 && "single bit constant has to be one if not zero");
+        if (auto icmp = operand.getDefiningOp<ICmpOp>())
+          return canonicalizeXorIcmpTrue(op, i, rewriter), success();
+      }
     }
   }
 
@@ -1435,6 +1469,10 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
     table[idx] = elt.second;
   }
 
+  // The hw.array_create operation has the operand list in unintuitive order
+  // with a[0] stored as the last element, not the first.
+  std::reverse(table.begin(), table.end());
+
   // Build the array_create and the array_get.
   auto fusedLoc = rewriter.getFusedLoc(locationsFound);
   auto array = rewriter.create<hw::ArrayCreateOp>(fusedLoc, table);
@@ -1698,64 +1736,134 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
   return failure();
 }
 
-/// Given a comparison of a concat and a constant value, see if we can simplify
-/// the comparison to check a subset of the concat inputs.  We can do this when
-/// we know something about the concat operands, e.g. if they are constants.
+/// Given an integer SSA value, check to see if we know anything about the
+/// result of the computation.  For example, we know that "and with a constant"
+/// always returns zeros for the zero bits in a constant.
+///
+/// Expression trees can be very large, so we need ot make sure to cap our
+/// recursion, this is controlled by `depth`.
+static KnownBitAnalysis computeKnownBits(Value v, unsigned depth) {
+  Operation *op = v.getDefiningOp();
+  if (!op || depth == 5)
+    return KnownBitAnalysis::getUnknown(v);
+
+  // A constant has all bits known!
+  if (auto constant = dyn_cast<hw::ConstantOp>(op))
+    return KnownBitAnalysis::getConstant(constant.getValue());
+
+  // `concat(x, y, z)` has whatever is known about the operands concat'd.
+  if (auto concatOp = dyn_cast<ConcatOp>(op)) {
+    auto result = computeKnownBits(concatOp.getOperand(0), depth + 1);
+    for (size_t i = 1, e = concatOp.getNumOperands(); i != e; ++i) {
+      auto otherBits = computeKnownBits(concatOp.getOperand(i), depth + 1);
+      unsigned width = otherBits.getWidth();
+      unsigned newWidth = result.getWidth() + width;
+      result.zeros = (result.zeros.zext(newWidth) << width) |
+                     otherBits.zeros.zext(newWidth);
+      result.ones =
+          (result.ones.zext(newWidth) << width) | otherBits.ones.zext(newWidth);
+    }
+    return result;
+  }
+
+  // `and(x, y, z)` has whatever is known about the operands intersected.
+  if (auto andOp = dyn_cast<AndOp>(op)) {
+    auto result = computeKnownBits(andOp.getOperand(0), depth + 1);
+    for (size_t i = 1, e = andOp.getNumOperands(); i != e; ++i) {
+      auto otherBits = computeKnownBits(andOp.getOperand(i), depth + 1);
+      result.zeros |= otherBits.zeros;
+      result.ones &= otherBits.ones;
+    }
+    return result;
+  }
+
+  // `or(x, y, z)` has whatever is known about the operands unioned.
+  if (auto orOp = dyn_cast<OrOp>(op)) {
+    auto result = computeKnownBits(orOp.getOperand(0), depth + 1);
+    for (size_t i = 1, e = orOp.getNumOperands(); i != e; ++i) {
+      auto otherBits = computeKnownBits(orOp.getOperand(i), depth + 1);
+      result.zeros &= otherBits.zeros;
+      result.ones |= otherBits.ones;
+    }
+    return result;
+  }
+
+  // TODO: Handle xor(x, cst) by inverting known bits.
+
+  return KnownBitAnalysis::getUnknown(v);
+}
+
+/// Given an integer SSA value, check to see if we know anything about the
+/// result of the computation.  For example, we know that "and with a
+/// constant" always returns zeros for the zero bits in a constant.
+KnownBitAnalysis KnownBitAnalysis::compute(Value v) {
+  return computeKnownBits(v, 0);
+}
+
+/// Given an equality comparison with a constant value and some operand that has
+/// known bits, simplify the comparison to check only the unknown bits of the
+/// input.
 ///
 /// One simple example of this is that `concat(0, stuff) == 0` can be simplified
-/// to `stuff == 0`.
-static bool combineICmpWithConcatAndConstant(ICmpOp cmpOp, ConcatOp concatOp,
-                                             const APInt &rhsCst,
-                                             PatternRewriter &rewriter) {
-  // We only support equality comparisons right now.
-  if (cmpOp.predicate() != ICmpPredicate::eq &&
-      cmpOp.predicate() != ICmpPredicate::ne)
-    return false;
+/// to `stuff == 0`, or `and(x, 3) == 0` can be simplified to
+/// `extract x[1:0] == 0`
+static void combineEqualityICmpWithKnownBitsAndConstant(
+    ICmpOp cmpOp, const KnownBitAnalysis &bitAnalysis, const APInt &rhsCst,
+    PatternRewriter &rewriter) {
 
-  // Check to see if any operands are constant.
-  // TODO: We need a "compute masked bits" sort of function that can handle more
-  // general expressions that just constants.
-  if (!llvm::any_of(concatOp.getOperands(), [](Value operand) -> bool {
-        return operand.getDefiningOp<hw::ConstantOp>() != nullptr;
-      }))
-    return false;
+  // If any of the known bits disagree with any of the comparison bits, then
+  // we can constant fold this comparison right away.
+  APInt bitsKnown = bitAnalysis.getBitsKnown();
+  if ((bitsKnown & rhsCst) != bitAnalysis.ones) {
+    // If we discover a mismatch then we know an "eq" comparison is false
+    // and a "ne" comparison is true!
+    bool result = cmpOp.predicate() == ICmpPredicate::ne;
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(cmpOp, APInt(1, result));
+    return;
+  }
 
-  // Okay, the concat has at least one operand that has known bits.  Check to
-  // see if we can prove the result entirely of the comparison (in which we bail
-  // out early), otherwise build a smaller list of values to concat + smaller
-  // constant.
+  // Check to see if we can prove the result entirely of the comparison (in
+  // which we bail out early), otherwise build a list of values to concat and a
+  // smaller constant to compare against.
   SmallVector<Value> newConcatOperands;
   APInt newConstant;
 
-  // Work from MSB to LSB.
-  size_t nextOperandBit = concatOp.getType().getIntOrFloatBitWidth();
-  for (Value operand : concatOp->getOperands()) {
-    size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
-    nextOperandBit -= operandWidth;
-    // Take a slice of the constant we are comparing against.
-    auto cstSlice = rhsCst.lshr(nextOperandBit).trunc(operandWidth);
+  // Ok, some (maybe all) bits are known and some others may be unknown.
+  // Extract out segments of the operand and compare against the
+  // corresponding bits.
+  unsigned knownMSB = bitsKnown.countLeadingOnes();
 
-    // If this has known bits then either the comparison isn't necessary or this
-    // refudiates the whole comparison.
-    if (auto operandCst = operand.getDefiningOp<hw::ConstantOp>()) {
-      // If the known bits equal the part of the constant we have, then it isn't
-      // contributing anything to the comparison.
-      if (operandCst.getValue() == cstSlice)
-        continue;
+  Value operand = cmpOp.lhs();
 
-      // If we discover a mismatch then we know an "eq" comparison is false and
-      // a "ne" comparison is true!
-      bool result = cmpOp.predicate() == ICmpPredicate::ne;
-      rewriter.replaceOpWithNewOp<hw::ConstantOp>(cmpOp, APInt(1, result));
-      return true;
-    }
+  // Ok, some bits are known but others are not.  Extract out sequences of
+  // bits that are unknown and compare just those bits.  We work from MSB to
+  // LSB.
+  while (knownMSB != bitsKnown.getBitWidth()) {
+    // Drop any high bits that are known.
+    if (knownMSB)
+      bitsKnown = bitsKnown.trunc(bitsKnown.getBitWidth() - knownMSB);
 
-    // Otherwise, we add this constant slice and the operand to the new concat.
-    newConcatOperands.push_back(operand);
+    // Find the span of unknown bits, and extract it.
+    unsigned unknownBits = bitsKnown.countLeadingZeros();
+    unsigned lowBit = bitsKnown.getBitWidth() - unknownBits;
+    auto spanOperand = rewriter.createOrFold<ExtractOp>(
+        operand.getLoc(), operand, /*lowBit=*/lowBit,
+        /*bitWidth=*/unknownBits);
+    auto spanConstant = rhsCst.lshr(lowBit).trunc(unknownBits);
 
-    newConstant = (newConstant.zext(newConstant.getBitWidth() + operandWidth)
-                   << operandWidth);
-    newConstant |= cstSlice.zext(newConstant.getBitWidth());
+    // Add this info to the concat we're generating.
+    newConcatOperands.push_back(spanOperand);
+    newConstant = (newConstant.zext(newConstant.getBitWidth() + unknownBits)
+                   << unknownBits);
+    newConstant |= spanConstant.zext(newConstant.getBitWidth());
+
+    // Drop the unknown bits in prep for the next chunk.  Dance around APInts
+    // limitation of not being able to do zero bit things.
+    unsigned newWidth = bitsKnown.getBitWidth() - unknownBits;
+    if (newWidth == 0)
+      break;
+    bitsKnown = bitsKnown.trunc(newWidth);
+    knownMSB = bitsKnown.countLeadingOnes();
   }
 
   // If all the operands to the concat are foldable then we have an identity
@@ -1764,13 +1872,12 @@ static bool combineICmpWithConcatAndConstant(ICmpOp cmpOp, ConcatOp concatOp,
   if (newConcatOperands.empty()) {
     bool result = cmpOp.predicate() == ICmpPredicate::eq;
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(cmpOp, APInt(1, result));
-    return true;
+    return;
   }
 
-  // If the concat has a single operand remaining, just use it, otherwise form a
-  // new smaller concat.
+  // If we have a single operand remaining, use it, otherwise form a concat.
   Value concatResult =
-      rewriter.createOrFold<ConcatOp>(concatOp.getLoc(), newConcatOperands);
+      rewriter.createOrFold<ConcatOp>(operand.getLoc(), newConcatOperands);
 
   // The default APInt constructor adds an extra bit to the top of the APInt
   // constructor, trim it off now.
@@ -1783,7 +1890,45 @@ static bool combineICmpWithConcatAndConstant(ICmpOp cmpOp, ConcatOp concatOp,
 
   rewriter.replaceOpWithNewOp<ICmpOp>(cmpOp, cmpOp.predicate(), concatResult,
                                       newConstantOp);
-  return true;
+}
+
+// Simplify icmp eq(xor(a,b,cst1), cst2) -> icmp eq(xor(a,b), cst1^cst2).
+static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
+                                                 const APInt &rhs,
+                                                 PatternRewriter &rewriter) {
+  auto xorRHS = xorOp.getOperands().back().getDefiningOp<hw::ConstantOp>();
+  auto newRHS = rewriter.create<hw::ConstantOp>(xorRHS->getLoc(),
+                                                xorRHS.getValue() ^ rhs);
+  Value newLHS;
+  switch (xorOp.getNumOperands()) {
+  case 1:
+    // This isn't common but is defined so we need to handle it.
+    newLHS = rewriter.create<hw::ConstantOp>(xorOp.getLoc(),
+                                             APInt(rhs.getBitWidth(), 0));
+    break;
+  case 2:
+    // The binary case is the most common.
+    newLHS = xorOp.getOperand(0);
+    break;
+  default:
+    // The general case forces us to form a new xor with the remaining operands.
+    SmallVector<Value> newOperands(xorOp.getOperands());
+    newOperands.pop_back();
+    newLHS = rewriter.create<XorOp>(xorOp.getLoc(), newOperands);
+    break;
+  }
+
+  bool xorMultipleUses = !xorOp->hasOneUse();
+
+  // If the xor has multiple uses (not just the compare, then we need/want to
+  // replace them as well.
+  if (xorMultipleUses) {
+    auto newXor = rewriter.create<XorOp>(xorOp.getLoc(), newLHS, xorRHS);
+    rewriter.replaceOp(xorOp, newXor->getResult(0));
+  }
+
+  // Replace the comparison.
+  rewriter.replaceOpWithNewOp<ICmpOp>(cmpOp, cmpOp.predicate(), newLHS, newRHS);
 }
 
 // Canonicalizes a ICmp with a single constant
@@ -1916,10 +2061,25 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       break;
     }
 
-    // Simplify `icmp(concat(...), rhscst)` when the concat has constants in it.
-    if (auto concatLHS = op.lhs().getDefiningOp<ConcatOp>()) {
-      if (combineICmpWithConcatAndConstant(op, concatLHS, rhs, rewriter))
-        return success();
+    // We have some specific optimizations for comparison with a constant that
+    // are only supported for equality comparisons.
+    if (op.predicate() == ICmpPredicate::eq ||
+        op.predicate() == ICmpPredicate::ne) {
+      // Simplify `icmp(value_with_known_bits, rhscst)` into some extracts
+      // with a smaller constant.  We only support equality comparisons for
+      // this.
+      auto knownBits = KnownBitAnalysis::compute(op.lhs());
+      if (knownBits.areAnyKnown())
+        return combineEqualityICmpWithKnownBitsAndConstant(op, knownBits, rhs,
+                                                           rewriter),
+               success();
+
+      // Simplify icmp eq(xor(a,b,cst1), cst2) -> icmp eq(xor(a,b),
+      // cst1^cst2).
+      if (auto xorOp = op.lhs().getDefiningOp<XorOp>())
+        if (xorOp.getOperands().back().getDefiningOp<hw::ConstantOp>())
+          return combineEqualityICmpWithXorOfConstant(op, xorOp, rhs, rewriter),
+                 success();
     }
   }
 

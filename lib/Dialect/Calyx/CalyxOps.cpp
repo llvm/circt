@@ -28,11 +28,57 @@ using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
 
+//===----------------------------------------------------------------------===//
+// Utilities related to Direction
+//===----------------------------------------------------------------------===//
+
+Direction direction::get(bool a) { return static_cast<Direction>(a); }
+
+SmallVector<Direction> direction::genInOutDirections(size_t nIns,
+                                                     size_t nOuts) {
+  SmallVector<Direction> dirs;
+  std::generate_n(std::back_inserter(dirs), nIns,
+                  [] { return Direction::Input; });
+  std::generate_n(std::back_inserter(dirs), nOuts,
+                  [] { return Direction::Output; });
+  return dirs;
+}
+
+IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
+                                     MLIRContext *ctx) {
+  // Pack the array of directions into an APInt.  Input is zero, output is one.
+  size_t numDirections = directions.size();
+  APInt portDirections(numDirections, 0);
+  for (size_t i = 0, e = numDirections; i != e; ++i)
+    if (directions[i] == Direction::Output)
+      portDirections.setBit(i);
+
+  return IntegerAttr::get(IntegerType::get(ctx, numDirections), portDirections);
+}
+
+/// Turn a packed representation of port attributes into a vector that can be
+/// worked with.
+SmallVector<Direction> direction::unpackAttribute(Operation *component) {
+  APInt value =
+      component->getAttr(direction::attrKey).cast<IntegerAttr>().getValue();
+
+  SmallVector<Direction> result;
+  auto bitWidth = value.getBitWidth();
+  result.reserve(bitWidth);
+  for (size_t i = 0, e = bitWidth; i != e; ++i)
+    result.push_back(direction::get(value[i]));
+  return result;
+}
+
+//===----------------------------------------------------------------------===//
+// Utilities
+//===----------------------------------------------------------------------===//
+
 LogicalResult calyx::verifyCell(Operation *op) {
   auto opParent = op->getParentOp();
   if (!isa<ComponentOp>(opParent))
     return op->emitOpError()
-           << "has parent: " << opParent << ", expected ComponentOp.";
+        << "has parent: " << opParent << ", expected ComponentOp.";
   if (!op->hasAttr("instanceName"))
     return op->emitOpError() << "does not have an instanceName attribute.";
 
@@ -142,12 +188,13 @@ SmallVector<ComponentPortInfo> calyx::getComponentPortInfo(Operation *op) {
   auto component = dyn_cast<ComponentOp>(op);
   auto portTypes = getComponentType(component).getInputs();
   auto portNamesAttr = component.portNames();
-  uint64_t numInPorts = component.numInPorts();
+  auto portDirectionsAttr =
+      component->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
 
   SmallVector<ComponentPortInfo> results;
   for (uint64_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
-    auto dir = i < numInPorts ? PortDirection::INPUT : PortDirection::OUTPUT;
-    results.push_back({portNamesAttr[i].cast<StringAttr>(), portTypes[i], dir});
+    results.push_back({portNamesAttr[i].cast<StringAttr>(), portTypes[i],
+                       direction::get(portDirectionsAttr.getValue()[i])});
   }
   return results;
 }
@@ -162,7 +209,7 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto ports = getComponentPortInfo(op);
   SmallVector<ComponentPortInfo, 8> inPorts, outPorts;
   for (auto &&port : ports) {
-    if (port.direction == PortDirection::INPUT)
+    if (port.direction == Direction::Input)
       inPorts.push_back(port);
     else
       outPorts.push_back(port);
@@ -212,30 +259,40 @@ static ParseResult
 parseComponentSignature(OpAsmParser &parser, OperationState &result,
                         SmallVectorImpl<OpAsmParser::OperandType> &ports,
                         SmallVectorImpl<Type> &portTypes) {
-  if (parsePortDefList(parser, result, ports, portTypes))
+  SmallVector<OpAsmParser::OperandType> inPorts, outPorts;
+  SmallVector<Type> inPortTypes, outPortTypes;
+
+  if (parsePortDefList(parser, result, inPorts, inPortTypes))
     return failure();
 
-  // Record the number of input ports.
-  size_t numInPorts = ports.size();
-
-  if (parser.parseArrow() || parsePortDefList(parser, result, ports, portTypes))
+  if (parser.parseArrow() ||
+      parsePortDefList(parser, result, outPorts, outPortTypes))
     return failure();
 
   auto *context = parser.getBuilder().getContext();
   // Add attribute for port names; these are currently
   // just inferred from the SSA names of the component.
-  SmallVector<Attribute> portNames(ports.size());
-  llvm::transform(ports, portNames.begin(), [&](auto port) -> StringAttr {
+  SmallVector<Attribute> portNames;
+  auto getPortName = [context](const auto &port) -> StringAttr {
     StringRef name = port.name;
     if (name.startswith("%"))
       name = name.drop_front();
     return StringAttr::get(context, name);
-  });
-  result.addAttribute("portNames", ArrayAttr::get(context, portNames));
+  };
+  llvm::transform(inPorts, std::back_inserter(portNames), getPortName);
+  llvm::transform(outPorts, std::back_inserter(portNames), getPortName);
 
-  // Record the number of input ports.
-  result.addAttribute("numInPorts",
-                      parser.getBuilder().getI64IntegerAttr(numInPorts));
+  result.addAttribute("portNames", ArrayAttr::get(context, portNames));
+  result.addAttribute(
+      direction::attrKey,
+      direction::packAttribute(
+          direction::genInOutDirections(inPorts.size(), outPorts.size()),
+          context));
+
+  ports.append(inPorts);
+  ports.append(outPorts);
+  portTypes.append(inPortTypes);
+  portTypes.append(outPortTypes);
 
   return success();
 }
@@ -283,17 +340,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     return op.emitOpError() << "requires exactly one of each: "
                                "'calyx.wires', 'calyx.control'.";
 
-  // Verify the number of input ports.
   SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
-  uint64_t expectedNumInPorts =
-      op->getAttrOfType<IntegerAttr>("numInPorts").getInt();
-  uint64_t actualNumInPorts = llvm::count_if(componentPorts, [](auto port) {
-    return port.direction == PortDirection::INPUT;
-  });
-  if (expectedNumInPorts != actualNumInPorts)
-    return op.emitOpError()
-           << "has mismatched number of in ports. Expected: "
-           << expectedNumInPorts << ", actual: " << actualNumInPorts;
 
   // Verify the component has the following ports.
   // TODO(Calyx): Eventually, we want to attach attributes to these arguments.
@@ -304,7 +351,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
       continue;
 
     StringRef portName = port.name.getValue();
-    if (port.direction == PortDirection::OUTPUT) {
+    if (port.direction == Direction::Output) {
       done |= (portName == "done");
     } else {
       go |= (portName == "go");
@@ -318,21 +365,34 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
                               "`clk`, `reset`, and output port `done`";
 }
 
+/// Returns a new vector containing the concatenation of vectors @p a and @p b.
+template <typename T>
+static SmallVector<T> concat(const SmallVectorImpl<T> &a,
+                             const SmallVectorImpl<T> &b) {
+  SmallVector<T> out;
+  out.append(a);
+  out.append(b);
+  return out;
+}
+
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ComponentPortInfo> ports) {
   using namespace mlir::function_like_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
-  SmallVector<Type, 8> portTypes;
-  SmallVector<Attribute, 8> portNames;
-  uint64_t numInPorts = 0;
+  std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
+  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
+  SmallVector<Direction, 8> portDirections;
+  // Avoid using llvm::partition or llvm::sort to preserve relative ordering
+  // between individual inputs and outputs.
   for (auto &&port : ports) {
-    if (port.direction == PortDirection::INPUT)
-      ++numInPorts;
-    portNames.push_back(port.name);
-    portTypes.push_back(port.type);
+    bool isInput = port.direction == Direction::Input;
+    (isInput ? portIOTypes.first : portIOTypes.second).push_back(port.type);
+    (isInput ? portIONames.first : portIONames.second).push_back(port.name);
   }
+  auto portTypes = concat(portIOTypes.first, portIOTypes.second);
+  auto portNames = concat(portIONames.first, portIONames.second);
 
   // Build the function type of the component.
   auto functionType = builder.getFunctionType(portTypes, {});
@@ -340,7 +400,11 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 
   // Record the port names and number of input ports of the component.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("numInPorts", builder.getI64IntegerAttr(numInPorts));
+  result.addAttribute(direction::attrKey,
+                      direction::packAttribute(direction::genInOutDirections(
+                                                   portIOTypes.first.size(),
+                                                   portIOTypes.second.size()),
+                                               builder.getContext()));
 
   // Create a single-blocked region.
   result.addRegion();
