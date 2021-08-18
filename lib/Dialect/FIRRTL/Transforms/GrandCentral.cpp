@@ -263,7 +263,6 @@ void GrandCentralVisitor::handleRefLike(mlir::Operation *op,
   if (annotations.empty())
     return;
 
-  bool foundAnnotations = false;
   for (auto anno : annotations) {
     if (!anno.isClass("sifive.enterprise.grandcentral.AugmentedGroundType"))
       continue;
@@ -321,7 +320,6 @@ void GrandCentralVisitor::handleRefLike(mlir::Operation *op,
       break;
     }
     annotations.removeAnnotation(anno);
-    foundAnnotations = true;
   }
 }
 
