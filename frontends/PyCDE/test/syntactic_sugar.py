@@ -88,7 +88,7 @@ sys.print()
 # CHECK:    [[REGR1:%.+]] = seq.compreg [[REG0]], %clk {name = "data_in_0_reg1"} : i32
 # CHECK:    [[REGR2:%.+]] = seq.compreg [[REGR1]], %clk {name = "data_in_0_reg2"} : i32
 # CHECK:    [[REG1:%.+]] = hw.array_get %data_in[%sel] : !hw.array<3xi32>
-# CHECK:    [[REG2:%.+]] = hw.struct_extract %struct_data_in["foo"] : !hw.struct<foo: i32>
+# CHECK:    [[REG2:%.+]] = hw.struct_extract %struct_data_in["foo"] {name = "struct_data_in_foo"} : !hw.struct<foo: i32>
 # CHECK:    hw.output [[REGR2]], [[REG1]], [[REG2]] : i32, i32, i32
 
 sys.print_verilog()

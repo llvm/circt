@@ -118,5 +118,8 @@ class StructValue(Value):
     fields = ty.get_fields()
     if attr in [name for name, _ in fields]:
       with get_user_loc():
-        return Value.get(hw.StructExtractOp.create(self.value, attr))
+        v = Value.get(hw.StructExtractOp.create(self.value, attr))
+        if self.name:
+          v.name = f"{self.name}_{attr}"
+        return v
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
