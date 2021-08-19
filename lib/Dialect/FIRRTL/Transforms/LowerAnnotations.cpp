@@ -169,13 +169,14 @@ static void addAnnotation(BaseUnion ref, ArrayRef<NamedAttribute> anno) {
   auto portAnnoRaw = ref.op->getAttr("portAnnotations");
   ArrayAttr portAnno = portAnnoRaw.dyn_cast_or_null<ArrayAttr>();
   size_t numResults = ref.op->getNumResults();
-  if (auto fE = dyn_cast<FExtModuleOp>( ref.op))
+  if (auto fE = dyn_cast<FExtModuleOp>(ref.op))
     numResults = fE.getPorts().size();
   if (!portAnno || portAnno.size() != numResults) {
     // If portAnno empty, then create an array of ArrayAttr attributes.
     SmallVector<Attribute> emptyPortAttr(numResults);
-    for (auto &a : emptyPortAttr){
-      // Each element of the array needs to be initialized with an empty ArrayAttr, otherwise it is null.
+    for (auto &a : emptyPortAttr) {
+      // Each element of the array needs to be initialized with an empty
+      // ArrayAttr, otherwise it is null.
       a = ArrayAttr::get(ref.op->getContext(), {});
     }
     portAnno = ArrayAttr::get(ref.op->getContext(), emptyPortAttr);
@@ -404,7 +405,7 @@ static Optional<AnnoPathValue> noResolve(DictionaryAttr anno, CircuitOp circuit,
 
 static LogicalResult
 ignoreAnno(AnnoPathValue target, DictionaryAttr anno,
-           llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+           llvm::function_ref<void(ArrayAttr)> addToWorklist) {
   return success();
 }
 
@@ -482,7 +483,7 @@ tryResolve(DictionaryAttr anno, CircuitOp circuit, SymbolTable &modules) {
 
 static LogicalResult applyDirFileNormalizeToCircuit(
     AnnoPathValue target, DictionaryAttr anno,
-    llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+    llvm::function_ref<void(ArrayAttr)> addToWorklist) {
   if (!target.isOpOfType<CircuitOp>())
     return failure();
   if (!target.isLocal())
@@ -542,23 +543,23 @@ static LogicalResult applyWithoutTargetToTarget(AnnoPathValue target,
 template <bool allowNonLocal = false>
 static LogicalResult
 applyWithoutTarget(AnnoPathValue target, DictionaryAttr anno,
-                   llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+                   llvm::function_ref<void(ArrayAttr)> addToWorklist) {
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
 }
 
 template <bool allowNonLocal = false>
-static LogicalResult applyWithoutTargetToModule(
-    AnnoPathValue target, DictionaryAttr anno,
-    llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+static LogicalResult
+applyWithoutTargetToModule(AnnoPathValue target, DictionaryAttr anno,
+                           llvm::function_ref<void(ArrayAttr)> addToWorklist) {
   if (!target.isOpOfType<FModuleOp>() && !target.isOpOfType<FExtModuleOp>())
     return failure();
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
 }
 
 template <bool allowNonLocal = false>
-static LogicalResult applyWithoutTargetToCircuit(
-    AnnoPathValue target, DictionaryAttr anno,
-    llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+static LogicalResult
+applyWithoutTargetToCircuit(AnnoPathValue target, DictionaryAttr anno,
+                            llvm::function_ref<void(ArrayAttr)> addToWorklist) {
   if (!target.isOpOfType<CircuitOp>())
     return failure();
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
@@ -567,7 +568,7 @@ static LogicalResult applyWithoutTargetToCircuit(
 template <bool allowNonLocal = false>
 static LogicalResult
 applyWithoutTargetToMem(AnnoPathValue target, DictionaryAttr anno,
-                        llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+                        llvm::function_ref<void(ArrayAttr)> addToWorklist) {
   if (!target.isOpOfType<MemOp>())
     return failure();
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
@@ -633,7 +634,7 @@ static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
 }
 static LogicalResult
 applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
-               llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+               llvm::function_ref<void(ArrayAttr)> addToWorklist) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   return success();
 }
@@ -658,7 +659,7 @@ static DictionaryAttr getAnnoWithTarget(MLIRContext *context,
 
 static LogicalResult
 applyGrandCentralDataTaps(AnnoPathValue target, DictionaryAttr anno,
-                          llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+                          llvm::function_ref<void(ArrayAttr)> addToWorklist) {
 
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   auto classAttr = anno.getAs<StringAttr>("class");
@@ -793,7 +794,7 @@ applyGrandCentralDataTaps(AnnoPathValue target, DictionaryAttr anno,
 
 static LogicalResult
 applyGrandCentralMemTaps(AnnoPathValue target, DictionaryAttr anno,
-                         llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+                         llvm::function_ref<void(ArrayAttr)> addToWorklist) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   // TODO: port scatter logic in FIRAnnotations.cpp
   return applyWithoutTargetToCircuit(target, anno, addToWorklist);
@@ -801,7 +802,7 @@ applyGrandCentralMemTaps(AnnoPathValue target, DictionaryAttr anno,
 
 static LogicalResult
 applyGrandCentralView(AnnoPathValue target, DictionaryAttr anno,
-                      llvm::function_ref<void(ArrayAttr )> addToWorklist) {
+                      llvm::function_ref<void(ArrayAttr)> addToWorklist) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   // TODO: port scatter logic in FIRAnnotations.cpp
   return applyWithoutTargetToCircuit(target, anno, addToWorklist);
@@ -817,7 +818,7 @@ struct AnnoRecord {
                                              SymbolTable &)>
       resolver;
   llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr,
-                                   llvm::function_ref<void(ArrayAttr )>)>
+                                   llvm::function_ref<void(ArrayAttr)>)>
       applier;
 };
 }; // namespace
@@ -961,7 +962,6 @@ struct LowerAnnotationsPass
 };
 } // end anonymous namespace
 size_t LowerAnnotationsPass::annotationID = 0;
-
 
 // Generate a unique ID.
 IntegerAttr newID(MLIRContext *context) {
