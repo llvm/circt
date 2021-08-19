@@ -843,12 +843,300 @@ applyGrandCentralMemTaps(AnnoPathValue target, DictionaryAttr dict,
   return success();
 }
 
+/// Recursively walk a sifive.enterprise.grandcentral.AugmentedType to extract
+/// any annotations it may contain.  This is going to generate two types of
+/// annotations:
+///   1) Annotations necessary to build interfaces and store them at "~"
+///   2) Scattered annotations for how components bind to interfaces
+static bool
+parseAugmentedType(MLIRContext *context, DictionaryAttr augmentedType,
+                   DictionaryAttr root, SmallVector<Attribute> &newAnnos,
+                   StringRef companion, StringAttr name, StringAttr defName,
+                   Location loc, Twine clazz, Twine path = {}) {
+
+  /// Optionally unpack a ReferenceTarget encoded as a DictionaryAttr.  Return
+  /// either a pair containing the Target string (up to the reference) and an
+  /// array of components or none if the input is malformed.  The input
+  /// DicionaryAttr encoding is a JSON object of a serialized ReferenceTarget
+  /// Scala class.  By example, this is converting:
+  ///   ~Foo|Foo>a.b[0]
+  /// To:
+  ///   {"~Foo|Foo>a", {".b", "[0]"}}
+  /// The format of a ReferenceTarget object like:
+  ///   circuit: String
+  ///   module: String
+  ///   path: Seq[(Instance, OfModule)]
+  ///   ref: String
+  ///   component: Seq[TargetToken]
+  auto refTargetToString = [&](DictionaryAttr refTarget) -> std::string {
+    auto circuitAttr =
+        tryGetAs<StringAttr>(refTarget, refTarget, "circuit", loc, clazz, path);
+    auto moduleAttr =
+        tryGetAs<StringAttr>(refTarget, refTarget, "module", loc, clazz, path);
+    auto pathAttr =
+        tryGetAs<ArrayAttr>(refTarget, refTarget, "path", loc, clazz, path);
+    auto componentAttr = tryGetAs<ArrayAttr>(refTarget, refTarget, "component",
+                                             loc, clazz, path);
+    if (!circuitAttr || !moduleAttr || !pathAttr || !componentAttr)
+      return "";
+
+    // TODO: Enable support for non-local annotations.
+    if (!pathAttr.empty()) {
+      auto diag = mlir::emitError(
+          loc,
+          "Annotation '" + clazz + "' with path '" + path +
+              "' encodes an unsupported non-local target via the 'path' key.");
+
+      diag.attachNote() << "The encoded target is: " << refTarget;
+      return "";
+    }
+
+    auto refAttr =
+        tryGetAs<StringAttr>(refTarget, refTarget, "ref", loc, clazz, path);
+    std::string componentStr;
+    for (size_t i = 0, e = componentAttr.size(); i != e; ++i) {
+      auto cPath = (path + ".component[" + Twine(i) + "]").str();
+      auto component = componentAttr[i];
+      auto dict = component.dyn_cast_or_null<DictionaryAttr>();
+      if (!dict) {
+        mlir::emitError(loc,
+                        "Annotation '" + clazz + "' with path '" + cPath +
+                            " has invalid type (expected DictionaryAttr).");
+        return "";
+      }
+      auto classAttr =
+          tryGetAs<StringAttr>(dict, refTarget, "class", loc, clazz, cPath);
+      if (!classAttr)
+        return "";
+
+      auto value = dict.get("value");
+
+      // A subfield like "bar" in "~Foo|Foo>foo.bar".
+      if (auto field = value.dyn_cast<StringAttr>()) {
+        assert(classAttr.getValue() == "firrtl.annotations.TargetToken$Field" &&
+               "A StringAttr target token must be found with a subfield target "
+               "token.");
+        componentStr += "." + field.getValue().str();
+        continue;
+      }
+
+      // A subindex like "42" in "~Foo|Foo>foo[42]".
+      if (auto index = value.dyn_cast<IntegerAttr>()) {
+        assert(classAttr.getValue() == "firrtl.annotations.TargetToken$Index" &&
+               "An IntegerAttr target token must be found with a subindex "
+               "target token.");
+        componentStr += "[" + std::to_string(index.getInt()) + "]";
+        continue;
+      }
+
+      mlir::emitError(loc,
+                      "Annotation '" + clazz + "' with path '" + cPath +
+                          ".value has unexpected type (should be StringAttr "
+                          "for subfield  or IntegerAttr for subindex).")
+              .attachNote()
+          << "The value received was: " << value << "\n";
+      return "";
+    }
+
+    return (Twine("~" + circuitAttr.getValue() + "|" + moduleAttr.getValue() +
+                  ">" + refAttr.getValue() + componentStr))
+        .str();
+  };
+
+  auto classAttr =
+      tryGetAs<StringAttr>(augmentedType, root, "class", loc, clazz, path);
+  if (!classAttr)
+    return false;
+  StringRef classBase = classAttr.getValue();
+  if (!classBase.consume_front("sifive.enterprise.grandcentral.Augmented")) {
+    mlir::emitError(loc,
+                    "the 'class' was expected to start with "
+                    "'sifive.enterprise.grandCentral.Augmented*', but was '" +
+                        classAttr.getValue() + "' (Did you misspell it?)")
+            .attachNote()
+        << "see annotation: " << augmentedType;
+    return false;
+  }
+
+  // An AugmentedBundleType looks like:
+  //   "defName": String
+  //   "elements": Seq[AugmentedField]
+  if (classBase == "BundleType") {
+    defName =
+        tryGetAs<StringAttr>(augmentedType, root, "defName", loc, clazz, path);
+    if (!defName)
+      return false;
+
+    // Each element is an AugmentedField with members:
+    //   "name": String
+    //   "description": Option[String]
+    //   "tpe": AugmenetedType
+    SmallVector<Attribute> elements;
+    auto elementsAttr =
+        tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
+    if (!elementsAttr)
+      return false;
+    for (size_t i = 0, e = elementsAttr.size(); i != e; ++i) {
+      auto field = elementsAttr[i].dyn_cast_or_null<DictionaryAttr>();
+      if (!field) {
+        mlir::emitError(
+            loc,
+            "Annotation '" + Twine(clazz) + "' with path '.elements[" +
+                Twine(i) +
+                "]' contained an unexpected type (expected a DictionaryAttr).")
+                .attachNote()
+            << "The received element was: " << elementsAttr[i] << "\n";
+        return false;
+      }
+      auto ePath = (path + ".elements[" + Twine(i) + "]").str();
+      auto name = tryGetAs<StringAttr>(field, root, "name", loc, clazz, ePath);
+      auto tpe =
+          tryGetAs<DictionaryAttr>(field, root, "tpe", loc, clazz, ePath);
+      if (!name || !tpe ||
+          !parseAugmentedType(context, tpe, root, newAnnos, companion, name,
+                              defName, loc, clazz, path))
+        return false;
+
+      // Collect information necessary to build a module with this view later.
+      // This includes the optional description and name.
+      NamedAttrList attrs;
+      if (auto maybeDescription = field.get("description"))
+        attrs.append("description", maybeDescription.cast<StringAttr>());
+      attrs.append("name", name);
+      attrs.append("tpe", tpe.getAs<StringAttr>("class"));
+      elements.push_back(DictionaryAttr::getWithSorted(context, attrs));
+    }
+    // Add an annotation that stores information necessary to construct the
+    // module for the view.  This needs the name of the module (defName) and the
+    // names of the components inside it.
+    NamedAttrList attrs;
+    attrs.append("class", classAttr);
+    attrs.append("defName", defName);
+    attrs.append("elements", ArrayAttr::get(context, elements));
+    // newAnnotations["~"].push_back(
+    //    DictionaryAttr::getWithSorted(context, attrs));
+    newAnnos.push_back(getAnnoWithTarget(context, attrs, "~"));
+    return true;
+  }
+
+  // An AugmentedGroundType looks like:
+  //   "ref": ReferenceTarget
+  //   "tpe": GroundType
+  // The ReferenceTarget is not serialized to a string.  The GroundType will
+  // either be an actual FIRRTL ground type or a GrandCentral uninferred type.
+  // This can be ignored for us.
+  if (classBase == "GroundType") {
+    auto maybeTarget =
+        refTargetToString(augmentedType.getAs<DictionaryAttr>("ref"));
+
+    if (maybeTarget.empty()) {
+      mlir::emitError(loc, "Failed to parse ReferenceTarget").attachNote()
+          << "See the full Annotation here: " << root;
+      return false;
+    }
+    auto target = maybeTarget;
+    NamedAttrList attr, dontTouchAnn;
+    attr.append("class", classAttr);
+    attr.append("defName", defName);
+    attr.append("name", name);
+    dontTouchAnn.append(
+        "class",
+        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+    // newAnnotations[target.first].push_back(
+    //    DictionaryAttr::getWithSorted(context, attr));
+    newAnnos.push_back(getAnnoWithTarget(context, attr, target));
+    newAnnos.push_back(getDontTouchAnno(context, target));
+    // newAnnotations[target.first].push_back(
+    //    DictionaryAttr::getWithSorted(context, dontTouchAnn));
+    return true;
+  }
+
+  // An AugmentedVectorType looks like:
+  //   "elements": Seq[AugmentedType]
+  if (classBase == "VectorType") {
+    auto elementsAttr =
+        tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
+    if (!elementsAttr)
+      return false;
+    for (auto elt : elementsAttr)
+      if (!parseAugmentedType(context, elt.cast<DictionaryAttr>(), root,
+                              newAnnos, companion, name, defName, loc, clazz,
+                              path))
+        return false;
+    return true;
+  }
+
+  // Any of the following are known and expected, but are legacy AugmentedTypes
+  // do not have a target:
+  //   - AugmentedStringType
+  //   - AugmentedBooleanType
+  //   - AugmentedIntegerType
+  //   - AugmentedDoubleType
+  bool isIgnorable =
+      llvm::StringSwitch<bool>(classBase)
+          .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
+          .Default(false);
+  if (isIgnorable)
+    return true;
+
+  // Anything else is unexpected or a user error if they manually wrote
+  // annotations.  Print an error and error out.
+  mlir::emitError(loc, "found unknown AugmentedType '" + classAttr.getValue() +
+                           "' (Did you misspell it?)")
+          .attachNote()
+      << "see annotation: " << augmentedType;
+  return false;
+}
+
 static LogicalResult
-applyGrandCentralView(AnnoPathValue target, DictionaryAttr anno,
+applyGrandCentralView(AnnoPathValue target, DictionaryAttr dict,
                       llvm::function_ref<void(ArrayAttr)> addToWorklist) {
-  addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
-  // TODO: port scatter logic in FIRAnnotations.cpp
-  return applyWithoutTargetToCircuit(target, anno, addToWorklist);
+
+  auto context = target.ref.op->getContext();
+  auto classAttr = dict.getAs<StringAttr>("class");
+  auto clazz = classAttr.getValue();
+  auto loc = target.ref.op->getLoc();
+  SmallVector<Attribute> newAnnos;
+  auto viewAnnotationClass =
+      StringAttr::get(context, "sifive.enterprise.grandcentral.ViewAnnotation");
+  auto id = newID(context);
+  NamedAttrList companionAttrs, parentAttrs;
+  companionAttrs.append("class", viewAnnotationClass);
+  companionAttrs.append("id", id);
+  companionAttrs.append("type", StringAttr::get(context, "companion"));
+  auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
+  if (!viewAttr)
+    return failure();
+  auto defName =
+      tryGetAs<StringAttr>(viewAttr, viewAttr, "defName", loc, clazz);
+  if (!defName)
+    return failure();
+  companionAttrs.append("defName", defName);
+  auto companionAttr =
+      tryGetAs<StringAttr>(dict, dict, "companion", loc, clazz);
+  if (!companionAttr)
+    return failure();
+  auto companion = companionAttr.getValue();
+  newAnnos.push_back(getAnnoWithTarget(context, companionAttrs, companion));
+  auto parentAttr = tryGetAs<StringAttr>(dict, dict, "parent", loc, clazz);
+  if (!parentAttr)
+    return failure();
+  parentAttrs.append("class", viewAnnotationClass);
+  parentAttrs.append("id", id);
+  auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
+  if (!name)
+    return failure();
+  parentAttrs.append("name", name);
+  parentAttrs.append("type", StringAttr::get(context, "parent"));
+  parentAttrs.append("defName", defName);
+  newAnnos.push_back(
+      getAnnoWithTarget(context, parentAttrs, parentAttr.getValue()));
+  if (!parseAugmentedType(context, viewAttr, dict, newAnnos, companion, {}, {},
+                          loc, clazz, "view"))
+    return failure();
+  ArrayAttr attr = ArrayAttr::get(context, newAnnos);
+  addToWorklist(attr);
+  return success();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -960,7 +1248,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
      {noResolve, applyGrandCentralDataTaps}},
     {"sifive.enterprise.grandcentral.MemTapAnnotation",
      {tryResolve, applyGrandCentralMemTaps}},
-    {"sifive.enterprise.grandcentral.ViewAnnotation",
+    {"sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
      {noResolve, applyGrandCentralView}},
     {"sifive.enterprise.grandcentral.ReferenceDataTapKey",
      {stdResolve, applyWithoutTarget<>}},
@@ -971,6 +1259,12 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
     {"sifive.enterprise.grandcentral.LiteralDataTapKey",
      {stdResolve, applyWithoutTarget<>}},
     {"sifive.enterprise.grandcentral.DeletedDataTapKey",
+     {stdResolve, applyWithoutTarget<>}},
+    {"sifive.enterprise.grandcentral.ViewAnnotation",
+     {stdResolve, applyWithoutTarget<>}},
+    {"sifive.enterprise.grandcentral.AugmentedGroundType",
+     {stdResolve, applyWithoutTarget<>}},
+    {"sifive.enterprise.grandcentral.AugmentedBundleType",
      {stdResolve, applyWithoutTarget<>}},
 
     // Testing Annotation
