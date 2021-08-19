@@ -30,6 +30,9 @@ hir.func @test2 at %t(){
   %a = hir.alloca("BRAM_2P") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd,#reg_wr]
   %v = hir.load %a[port 0][%0,%1,%c1_i1,%c1_i2]  at %t: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
   %a_w = hir.memref.extract ports [1] from %a :!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_wr]
-  hir.store %v to %a[port 1][%0,%0,%c1_i1,%c1_i2] at %t + 1: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
+  hir.for %i:index = %0 to %1 step %1 iter_time(%ti=%t){
+    hir.store %v to %a_w[port 0][%0,%0,%c1_i1,%c1_i2] at %ti + 1: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
+    hir.yield at %ti+1
+  }
   hir.return
 }

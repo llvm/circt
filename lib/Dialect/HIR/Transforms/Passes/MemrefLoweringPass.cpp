@@ -864,8 +864,9 @@ LogicalResult MemrefLoweringPass::replaceMemrefArgUses(hir::FuncOp op) {
 // MemrefLoweringPass methods.
 //------------------------------------------------------------------------------
 LogicalResult MemrefLoweringPass::visitOp(hir::FuncOp op) {
-  insertBusArguments(op, mapMemrefPortToBuses);
   tstartRegion = op.getTimeVar();
+  insertBusArguments(op, mapMemrefPortToBuses);
+
   if (failed(visitRegion(op.getFuncBody())))
     return failure();
 
@@ -878,9 +879,11 @@ LogicalResult MemrefLoweringPass::visitOp(hir::FuncOp op) {
 }
 
 LogicalResult MemrefLoweringPass::visitOp(hir::ForOp op) {
+  auto oldTstartRegion = tstartRegion;
   tstartRegion = op.getIterTimeVar();
   if (failed(visitRegion(op.getLoopBody())))
     return failure();
+  tstartRegion = oldTstartRegion;
   return success();
 }
 
@@ -906,9 +909,16 @@ LogicalResult MemrefLoweringPass::visitRegion(Region &region) {
     } else if (auto op = dyn_cast<hir::ForOp>(operation)) {
       if (failed(visitOp(op)))
         return failure();
+    } else if (auto op = dyn_cast<hir::BlockOp>(operation)) {
+      if (failed(visitRegion(op.body())))
+        return failure();
     } else if (auto op = dyn_cast<hir::AllocaOp>(operation)) {
       if (failed(visitOp(op)))
         return failure();
+    } else {
+      if (operation.getNumRegions() > 0)
+        return operation.emitError()
+               << "Unsupported op with region for HIR MemrefLoweringPass.";
     }
   }
   return success();
