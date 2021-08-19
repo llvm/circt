@@ -80,8 +80,6 @@ struct AnnoPathValue {
 
 } // namespace
 
-// Add the annotations to worklist.
-static void addToWorklist(ArrayAttr &annos);
 // Generate a unique ID.
 IntegerAttr newID(MLIRContext *context);
 
@@ -398,7 +396,7 @@ static Optional<AnnoPathValue> noResolve(DictionaryAttr anno, CircuitOp circuit,
 
 static LogicalResult
 ignoreAnno(AnnoPathValue target, DictionaryAttr anno,
-           llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+           llvm::function_ref<void(ArrayAttr )> addToWorklist) {
   return success();
 }
 
@@ -476,7 +474,7 @@ tryResolve(DictionaryAttr anno, CircuitOp circuit, SymbolTable &modules) {
 
 static LogicalResult applyDirFileNormalizeToCircuit(
     AnnoPathValue target, DictionaryAttr anno,
-    llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+    llvm::function_ref<void(ArrayAttr )> addToWorklist) {
   if (!target.isOpOfType<CircuitOp>())
     return failure();
   if (!target.isLocal())
@@ -536,14 +534,14 @@ static LogicalResult applyWithoutTargetToTarget(AnnoPathValue target,
 template <bool allowNonLocal = false>
 static LogicalResult
 applyWithoutTarget(AnnoPathValue target, DictionaryAttr anno,
-                   llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+                   llvm::function_ref<void(ArrayAttr )> addToWorklist) {
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
 }
 
 template <bool allowNonLocal = false>
 static LogicalResult applyWithoutTargetToModule(
     AnnoPathValue target, DictionaryAttr anno,
-    llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+    llvm::function_ref<void(ArrayAttr )> addToWorklist) {
   if (!target.isOpOfType<FModuleOp>() && !target.isOpOfType<FExtModuleOp>())
     return failure();
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
@@ -552,7 +550,7 @@ static LogicalResult applyWithoutTargetToModule(
 template <bool allowNonLocal = false>
 static LogicalResult applyWithoutTargetToCircuit(
     AnnoPathValue target, DictionaryAttr anno,
-    llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+    llvm::function_ref<void(ArrayAttr )> addToWorklist) {
   if (!target.isOpOfType<CircuitOp>())
     return failure();
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
@@ -561,7 +559,7 @@ static LogicalResult applyWithoutTargetToCircuit(
 template <bool allowNonLocal = false>
 static LogicalResult
 applyWithoutTargetToMem(AnnoPathValue target, DictionaryAttr anno,
-                        llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+                        llvm::function_ref<void(ArrayAttr )> addToWorklist) {
   if (!target.isOpOfType<MemOp>())
     return failure();
   return applyWithoutTargetToTarget(target, anno, allowNonLocal);
@@ -627,7 +625,7 @@ static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
 }
 static LogicalResult
 applyDontTouch(AnnoPathValue target, DictionaryAttr anno,
-               llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+               llvm::function_ref<void(ArrayAttr )> addToWorklist) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   return success();
 }
@@ -652,7 +650,7 @@ static DictionaryAttr getAnnoWithTarget(MLIRContext *context,
 
 static LogicalResult
 applyGrandCentralDataTaps(AnnoPathValue target, DictionaryAttr anno,
-                          llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+                          llvm::function_ref<void(ArrayAttr )> addToWorklist) {
 
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   auto classAttr = anno.getAs<StringAttr>("class");
@@ -787,7 +785,7 @@ applyGrandCentralDataTaps(AnnoPathValue target, DictionaryAttr anno,
 
 static LogicalResult
 applyGrandCentralMemTaps(AnnoPathValue target, DictionaryAttr anno,
-                         llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+                         llvm::function_ref<void(ArrayAttr )> addToWorklist) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   // TODO: port scatter logic in FIRAnnotations.cpp
   return applyWithoutTargetToCircuit(target, anno, addToWorklist);
@@ -795,7 +793,7 @@ applyGrandCentralMemTaps(AnnoPathValue target, DictionaryAttr anno,
 
 static LogicalResult
 applyGrandCentralView(AnnoPathValue target, DictionaryAttr anno,
-                      llvm::function_ref<void(ArrayAttr &)> addToWorklist) {
+                      llvm::function_ref<void(ArrayAttr )> addToWorklist) {
   addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
   // TODO: port scatter logic in FIRAnnotations.cpp
   return applyWithoutTargetToCircuit(target, anno, addToWorklist);
@@ -811,7 +809,7 @@ struct AnnoRecord {
                                              SymbolTable &)>
       resolver;
   llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr,
-                                   llvm::function_ref<void(ArrayAttr &)>)>
+                                   llvm::function_ref<void(ArrayAttr )>)>
       applier;
 };
 }; // namespace
@@ -947,7 +945,6 @@ struct LowerAnnotationsPass
   void runOnOperation() override;
   LogicalResult applyAnnotation(DictionaryAttr anno, CircuitOp circuit,
                                 SymbolTable &modules);
-  void addToWorklist(ArrayAttr &annos);
 
   bool ignoreUnhandledAnno = false;
   bool ignoreClasslessAnno = false;
@@ -957,10 +954,6 @@ struct LowerAnnotationsPass
 } // end anonymous namespace
 size_t LowerAnnotationsPass::annotationID = 0;
 
-// Add the annotations to worklist.
-void LowerAnnotationsPass::addToWorklist(ArrayAttr &annos) {
-  LowerAnnotationsPass::worklistAttrs.push_back(annos);
-}
 
 // Generate a unique ID.
 IntegerAttr newID(MLIRContext *context) {
@@ -1002,7 +995,7 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
       return circuit.emitWarning("Unhandled annotation: ") << anno;
   }
 
-  auto addToWorklist = [&](ArrayAttr &ann) { worklistAttrs.push_back(ann); };
+  auto addToWorklist = [&](ArrayAttr ann) { worklistAttrs.push_back(ann); };
   auto target = record->resolver(anno, circuit, modules);
   if (!target)
     return circuit.emitError("Unable to resolve target of annotation: ")
