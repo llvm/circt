@@ -169,7 +169,7 @@ static void addAnnotation(BaseUnion ref, ArrayRef<NamedAttribute> anno) {
   }
 
   auto portAnnoRaw = ref.op->getAttr("portAnnotations");
-  ArrayAttr portAnno = portAnnoRaw.dyn_cast<ArrayAttr>();
+  ArrayAttr portAnno = portAnnoRaw.dyn_cast_or_null<ArrayAttr>();
   if (!portAnno || portAnno.size() != ref.op->getNumResults()) {
     SmallVector<Attribute> emptyPortAttr(ref.op->getNumResults());
     portAnno = ArrayAttr::get(ref.op->getContext(), emptyPortAttr);
