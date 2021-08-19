@@ -30,21 +30,40 @@ class Value:
       return StructValue(value, type)
     return RegularValue(value, type)
 
-  _reg_name = re.compile("_reg(\\d+)$")
+  _reg_name = re.compile(r"^(.*)_reg(\d+)$")
 
   def reg(self, clk, rst=None, name=None):
-    # owner = support.get_value(self.value).owner
-    # if name is None and "name" in owner.attributes:
-    # pass
-    # name = owner.attributes["name"]
-    # m = Value._reg_name.match(name)
-    # if m:
-    #   reg_num = m.group(2)
-    #   basename = name[0:-(len(reg_num) + 4)]
-    #   name = f"{basename}{int(reg_num)+1}"
-    # else:
-    #   name = name + "_reg1"
+    if name is None:
+      name = self.name
+    if name is not None:
+      m = Value._reg_name.match(name)
+      if m:
+        basename = m.group(1)
+        reg_num = m.group(2)
+        name = f"{basename}_reg{int(reg_num)+1}"
+      else:
+        name = name + "_reg1"
     return Value.get(seq.reg(self.value, clock=clk, reset=rst, name=name))
+
+  @property
+  def name(self):
+    owner = self.value.owner
+    if hasattr(owner, "attributes") and "name" in owner.attributes:
+      return ir.StringAttr(owner.attributes["name"]).value
+    if isinstance(owner, ir.Block) and isinstance(owner.owner, hw.HWModuleOp):
+      mod = owner.owner
+      return ir.StringAttr(
+          ir.ArrayAttr(mod.attributes["argNames"])[self.value.arg_number]).value
+    if hasattr(self, "_name"):
+      return self._name
+
+  @name.setter
+  def name(self, new: str):
+    owner = self.value.owner
+    if hasattr(owner, "attributes"):
+      owner.attributes["name"] = ir.StringAttr.get(new)
+    else:
+      self._name = new
 
 
 class RegularValue(Value):
@@ -72,7 +91,10 @@ class ListValue(Value):
         raise TypeError("Subscript on array must be either int or MLIR int"
                         f" Value, not {type(sub)}.")
     with get_user_loc():
-      return Value.get(hw.ArrayGetOp.create(self.value, idx))
+      v = Value.get(hw.ArrayGetOp.create(self.value, idx))
+      if self.name and isinstance(idx, int):
+        v.name = self.name + f"_{idx}"
+      return v
 
   def __len__(self):
     return self.type.strip.size
