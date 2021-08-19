@@ -106,7 +106,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
           [](py::object cls,
              std::vector<std::tuple<MlirAttribute, MlirAttribute>> listOfCases,
              MlirContext ctxt) {
-            std::vector<CirctMSFTInstIDAttrPair> cases;
+            std::vector<CirctMSFTSwitchInstanceCase> cases;
             for (auto p : listOfCases)
               cases.push_back({std::get<0>(p), std::get<1>(p)});
             return cls(circtMSFTSwitchInstanceAttrGet(ctxt, cases.data(),
@@ -118,7 +118,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
           "cases",
           [](MlirAttribute self) {
             size_t numCases = circtMSFTSwitchInstanceAttrGetNumCases(self);
-            std::vector<CirctMSFTInstIDAttrPair> cases(numCases);
+            std::vector<CirctMSFTSwitchInstanceCase> cases(numCases);
             circtMSFTSwitchInstanceAttrGetCases(self, cases.data(),
                                                 cases.max_size());
             return cases;

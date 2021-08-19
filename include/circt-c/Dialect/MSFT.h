@@ -66,14 +66,14 @@ uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
 typedef struct {
   MlirAttribute instance;
   MlirAttribute attr;
-} CirctMSFTInstIDAttrPair;
+} CirctMSFTSwitchInstanceCase;
 
 bool circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute);
 MlirAttribute circtMSFTSwitchInstanceAttrGet(
-    MlirContext, CirctMSFTInstIDAttrPair *listOfCases, size_t numCases);
+    MlirContext, CirctMSFTSwitchInstanceCase *listOfCases, size_t numCases);
 size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute);
 void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute,
-                                         CirctMSFTInstIDAttrPair *dstArray,
+                                         CirctMSFTSwitchInstanceCase *dstArray,
                                          size_t space);
 #ifdef __cplusplus
 }

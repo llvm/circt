@@ -83,11 +83,13 @@ uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute attr) {
 bool circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute attr) {
   return unwrap(attr).isa<SwitchInstanceAttr>();
 }
-MlirAttribute circtMSFTSwitchInstanceAttrGet(
-    MlirContext cCtxt, CirctMSFTInstIDAttrPair *listOfCases, size_t numCases) {
-  SmallVector<InstIDAttrPair, 64> cases;
+MlirAttribute
+circtMSFTSwitchInstanceAttrGet(MlirContext cCtxt,
+                               CirctMSFTSwitchInstanceCase *listOfCases,
+                               size_t numCases) {
+  SmallVector<SwitchInstanceCase, 64> cases;
   for (size_t i = 0; i < numCases; ++i) {
-    CirctMSFTInstIDAttrPair pair = listOfCases[i];
+    CirctMSFTSwitchInstanceCase pair = listOfCases[i];
     auto instance = unwrap(pair.instance).cast<SymbolRefAttr>();
     auto attr = unwrap(pair.attr);
     cases.push_back(std::make_pair(instance, attr));
@@ -98,10 +100,10 @@ size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute attr) {
   return unwrap(attr).cast<SwitchInstanceAttr>().getCases().size();
 }
 void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute attr,
-                                         CirctMSFTInstIDAttrPair *dstArray,
+                                         CirctMSFTSwitchInstanceCase *dstArray,
                                          size_t space) {
   auto sw = unwrap(attr).cast<SwitchInstanceAttr>();
-  ArrayRef<InstIDAttrPair> cases = sw.getCases();
+  ArrayRef<SwitchInstanceCase> cases = sw.getCases();
   assert(space >= cases.size());
   for (size_t i = 0, e = cases.size(); i < e; ++i) {
     auto c = cases[i];

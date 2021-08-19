@@ -29,7 +29,7 @@ Attribute SwitchInstanceAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
   if (!p.parseOptionalGreater())
     return SwitchInstanceAttr::get(ctxt, {});
 
-  SmallVector<InstIDAttrPair> instPairs;
+  SmallVector<SwitchInstanceCase> instPairs;
   do {
     SymbolRefAttr instId;
     Attribute attr;
