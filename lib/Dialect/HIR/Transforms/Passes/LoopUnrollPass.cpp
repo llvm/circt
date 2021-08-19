@@ -27,7 +27,8 @@ Value lookupOrOriginal(BlockAndValueMapping &mapper, Value originalValue) {
 
 LogicalResult unrollLoopFull(hir::ForOp forOp) {
   Block &loopBodyBlock = forOp.getLoopBody().front();
-  auto builder = OpBuilder::atBlockTerminator(&loopBodyBlock);
+  // auto builder = OpBuilder::atBlockTerminator(&loopBodyBlock);
+  auto builder = OpBuilder(forOp);
   builder.setInsertionPointAfter(forOp);
 
   if (failed(helper::isConstantIntValue(forOp.lb())))

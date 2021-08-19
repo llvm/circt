@@ -915,6 +915,11 @@ LogicalResult MemrefLoweringPass::visitRegion(Region &region) {
     } else if (auto op = dyn_cast<hir::AllocaOp>(operation)) {
       if (failed(visitOp(op)))
         return failure();
+    } else if (auto op = dyn_cast<hir::IfOp>(operation)) {
+      if (failed(visitRegion(op.if_region())))
+        return failure();
+      if (failed(visitRegion(op.else_region())))
+        return failure();
     } else {
       if (operation.getNumRegions() > 0)
         return operation.emitError()
