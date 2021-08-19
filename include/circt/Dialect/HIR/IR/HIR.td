@@ -669,6 +669,7 @@ def MemrefExtractOp :HIR_Op<"memref.extract",[NoSideEffect]>{
 
   let assemblyFormat = [{`ports`  $portNums `from` $mem  attr-dict `:`
     type($res) `ports` $ports  custom<CopyType>(type($mem),ref(type($res)))}];
+  let hasCanonicalizeMethod = true;
 }
 
 def CreateTupleOp:HIR_Op<"create_tuple",[NoSideEffect]>{

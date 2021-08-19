@@ -112,6 +112,16 @@ LogicalResult YieldOp::canonicalize(YieldOp op,
 // return success();
 //}
 
+LogicalResult MemrefExtractOp::canonicalize(MemrefExtractOp op,
+                                            ::mlir::PatternRewriter &rewriter) {
+  auto uses = op.res().getUses();
+  bool hasUseInCallOp;
+  for (auto use : uses) {
+    if (use.)
+  }
+  return success();
+}
+
 OpFoldResult TimeOp::fold(ArrayRef<Attribute> operands) {
   auto timeVar = this->timevar();
   auto delay = this->delay();
