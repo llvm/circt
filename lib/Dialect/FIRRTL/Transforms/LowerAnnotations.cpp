@@ -171,6 +171,8 @@ static void addAnnotation(BaseUnion ref, ArrayRef<NamedAttribute> anno) {
   size_t numResults = ref.op->getNumResults();
   if (auto fE = dyn_cast<FExtModuleOp>(ref.op))
     numResults = fE.getPorts().size();
+  else if (auto fE = dyn_cast<FModuleOp>(ref.op))
+    numResults = fE.getPorts().size();
   if (!portAnno || portAnno.size() != numResults) {
     // If portAnno empty, then create an array of ArrayAttr attributes.
     SmallVector<Attribute> emptyPortAttr(numResults);
