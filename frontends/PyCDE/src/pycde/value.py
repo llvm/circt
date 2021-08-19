@@ -30,7 +30,7 @@ class Value:
       return StructValue(value, type)
     return RegularValue(value, type)
 
-  _reg_name = re.compile(r"^(.*)_reg(\d+)$")
+  _reg_name = re.compile(r"^(.*)__reg(\d+)$")
 
   def reg(self, clk, rst=None, name=None):
     if name is None:
@@ -40,9 +40,9 @@ class Value:
       if m:
         basename = m.group(1)
         reg_num = m.group(2)
-        name = f"{basename}_reg{int(reg_num)+1}"
+        name = f"{basename}__reg{int(reg_num)+1}"
       else:
-        name = name + "_reg1"
+        name = name + "__reg1"
     return Value.get(seq.reg(self.value, clock=clk, reset=rst, name=name))
 
   @property
@@ -93,7 +93,7 @@ class ListValue(Value):
     with get_user_loc():
       v = Value.get(hw.ArrayGetOp.create(self.value, idx))
       if self.name and isinstance(idx, int):
-        v.name = self.name + f"_{idx}"
+        v.name = self.name + f"__{idx}"
       return v
 
   def __len__(self):
@@ -120,6 +120,6 @@ class StructValue(Value):
       with get_user_loc():
         v = Value.get(hw.StructExtractOp.create(self.value, attr))
         if self.name:
-          v.name = f"{self.name}_{attr}"
+          v.name = f"{self.name}__{attr}"
         return v
     raise AttributeError(f"'Value' object has no attribute '{attr}'")
