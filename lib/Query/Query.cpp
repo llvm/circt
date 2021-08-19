@@ -87,8 +87,11 @@ std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
         }
       }
     } else {
-      if (filter->addSelf() && !llvm::dyn_cast_or_null<mlir::ModuleOp>(op) && filter->matches(op, data)) {
-        opStack.push_back(std::make_pair(op, filter->nextFilter()));
+      if (!llvm::dyn_cast_or_null<mlir::ModuleOp>(op) && filter->matches(op, data)) {
+        auto vec = filter->nextOperations(op, data);
+        for (auto *op : vec) {
+          opStack.push_back(std::make_pair(op, filter->nextFilter()));
+        }
       }
 
       for (auto &region : op->getRegions()) {
