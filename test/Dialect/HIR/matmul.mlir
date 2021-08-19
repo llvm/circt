@@ -82,12 +82,12 @@ hir.func @kernel at %t(
   %c15_i4 = constant 15:i4  
 
   %t_i_loop_done = hir.for %i : i4 = %c0_i4 to %c15_i4 step %c1_i4 iter_time(%ti = %t + 1){
-  hir.for %j : index = %0 to %3 step %1 iter_time(%tj = %ti){
+  hir.for %j : index = %0 to %ub step %1 iter_time(%tj = %ti){
       %C_bus = hir.bus.instantiate : tensor<17x!hir.bus<i32>>
       %c_bus = hir.tensor.extract %C_bus[%0] : tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports ["send"]
       hir.send %c0_i32 to %c_bus[0] at %tj + 3 : i32 to !hir.bus<i32>
 
-      %tk_end = hir.for %k:index = %0 to %3 step %1 iter_time(%tk = %tj){
+      %tk_end = hir.for %k:index = %0 to %ub step %1 iter_time(%tk = %tj){
         %isFirstCol = cmpi "eq", %k , %0 : index
         %a = hir.if %isFirstCol at %tk -> (i32 delay 1){
           %a = hir.load %A[port 0][%i, %k] at %tk  : !hir.memref<16x(bank 16)xi32>
