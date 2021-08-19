@@ -115,7 +115,7 @@ def WhileOp : CalyxContainer<"while", [
   let arguments = (ins
     I1:$cond,
     FlatSymbolRefAttr:$groupName
-    );
+  );
   let description = [{
     The "calyx.while" operation represents a construct for continuously
     executing the inner groups of the 'while' operation while the condition port
