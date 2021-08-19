@@ -89,7 +89,7 @@ MlirAttribute circtMSFTSwitchInstanceAttrGet(
   for (size_t i = 0; i < numCases; ++i) {
     CirctMSFTInstIDAttrPair pair = listOfCases[i];
     auto instance = unwrap(pair.instance).cast<SymbolRefAttr>();
-    auto attr = unwrap(pair.instance);
+    auto attr = unwrap(pair.attr);
     cases.push_back(std::make_pair(instance, attr));
   }
   return wrap(SwitchInstanceAttr::get(unwrap(cCtxt), cases));

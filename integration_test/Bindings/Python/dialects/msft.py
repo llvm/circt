@@ -45,9 +45,8 @@ with ir.Context() as ctx, ir.Location.unknown():
   print(physAttr)
 
   inst = ir.Attribute.parse("@foo::@bar")
-  inst2 = ir.Attribute.parse("@foo::@bar2")
-  # CHECK-NEXT: #msft.switch.inst<>
-  instSwitch = msft.SwitchInstance.get([(inst, inst2)])
+  # CHECK-NEXT: #msft.switch.inst<@foo::@bar=#msft.physloc<M20K, 2, 6, 1>>
+  instSwitch = msft.SwitchInstance.get([(inst, physAttr)])
   print(instSwitch)
 
   # CHECK-LABEL: === tcl ===
