@@ -133,7 +133,7 @@ static ArrayAttr getAnnotationsFrom(Operation *op) {
 
 static ArrayAttr appendArrayAttr(ArrayAttr array, Attribute a) {
   if (!array)
-    return ArrayAttr::get(a.getContext(), ArrayRef{a});
+    return ArrayAttr::get(a.getContext(), ArrayRef<Attribute>{a});
   SmallVector<Attribute> old(array.begin(), array.end());
   old.push_back(a);
   return ArrayAttr::get(a.getContext(), old);
@@ -167,9 +167,17 @@ static void addAnnotation(BaseUnion ref, ArrayRef<NamedAttribute> anno) {
   }
 
   auto portAnnoRaw = ref.op->getAttr("portAnnotations");
-  ArrayAttr portAnno = portAnnoRaw.dyn_cast<ArrayAttr>();
-  if (!portAnno || portAnno.size() != ref.op->getNumResults()) {
-    SmallVector<Attribute> emptyPortAttr(ref.op->getNumResults());
+  ArrayAttr portAnno = portAnnoRaw.dyn_cast_or_null<ArrayAttr>();
+  size_t numResults = ref.op->getNumResults();
+  if (auto fE = dyn_cast<FExtModuleOp>( ref.op))
+    numResults = fE.getPorts().size();
+  if (!portAnno || portAnno.size() != numResults) {
+    // If portAnno empty, then create an array of ArrayAttr attributes.
+    SmallVector<Attribute> emptyPortAttr(numResults);
+    for (auto &a : emptyPortAttr){
+      // Each element of the array needs to be initialized with an empty ArrayAttr, otherwise it is null.
+      a = ArrayAttr::get(ref.op->getContext(), {});
+    }
     portAnno = ArrayAttr::get(ref.op->getContext(), emptyPortAttr);
   }
   portAnno = replaceArrayAttrElement(
