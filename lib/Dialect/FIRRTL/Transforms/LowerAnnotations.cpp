@@ -790,16 +790,57 @@ applyGrandCentralDataTaps(AnnoPathValue target, DictionaryAttr anno,
   ArrayAttr attr = ArrayAttr::get(context, newAnnos);
   addToWorklist(attr);
 
-  // TODO: port scatter logic in FIRAnnotations.cpp
-  return applyWithoutTargetToCircuit(target, anno, addToWorklist);
+  return success();
 }
 
 static LogicalResult
-applyGrandCentralMemTaps(AnnoPathValue target, DictionaryAttr anno,
+applyGrandCentralMemTaps(AnnoPathValue target, DictionaryAttr dict,
                          llvm::function_ref<void(ArrayAttr)> addToWorklist) {
-  addNamedAttr(target.ref.op, "firrtl.DoNotTouch");
-  // TODO: port scatter logic in FIRAnnotations.cpp
-  return applyWithoutTargetToCircuit(target, anno, addToWorklist);
+  if (!isa<CircuitOp>(target.ref.op)) {
+    // If not a module, then apply the annotation.
+    return applyWithoutTarget<true>(target, dict, addToWorklist);
+  }
+  auto classAttr = dict.getAs<StringAttr>("class");
+  auto clazz = classAttr.getValue();
+  auto loc = target.ref.op->getLoc();
+  auto context = target.ref.op->getContext();
+  auto id = newID(context);
+  SmallVector<Attribute> newAnnos;
+  NamedAttrList attrs;
+  auto sourceAttr = tryGetAs<StringAttr>(dict, dict, "source", loc, clazz);
+  if (!sourceAttr)
+    return failure();
+  auto srcTarget = canonicalizeTarget(sourceAttr.getValue());
+  if (srcTarget.empty())
+    return failure();
+  attrs.append(dict.getNamed("class").getValue());
+  attrs.append("id", id);
+  newAnnos.push_back(getAnnoWithTarget(context, attrs, srcTarget));
+  auto tapsAttr = tryGetAs<ArrayAttr>(dict, dict, "taps", loc, clazz);
+  if (tapsAttr.empty())
+    return failure();
+  for (size_t i = 0, e = tapsAttr.size(); i != e; ++i) {
+    auto tap = tapsAttr[i].dyn_cast_or_null<StringAttr>();
+    if (!tap) {
+      mlir::emitError(
+          loc, "Annotation '" + Twine(clazz) + "' with path '.taps[" +
+                   Twine(i) +
+                   "]' contained an unexpected type (expected a string).")
+              .attachNote()
+          << "The full Annotation is reprodcued here: " << dict << "\n";
+      return failure();
+    }
+    NamedAttrList foo;
+    foo.append("class", dict.get("class"));
+    foo.append("id", id);
+    auto canonTarget = canonicalizeTarget(tap.getValue());
+    if (canonTarget.empty())
+      return failure();
+    newAnnos.push_back(getAnnoWithTarget(context, foo, canonTarget));
+  }
+  ArrayAttr attr = ArrayAttr::get(context, newAnnos);
+  addToWorklist(attr);
+  return success();
 }
 
 static LogicalResult
@@ -918,7 +959,7 @@ static const llvm::StringMap<AnnoRecord> annotationRecords{
     {"sifive.enterprise.grandcentral.DataTapsAnnotation",
      {noResolve, applyGrandCentralDataTaps}},
     {"sifive.enterprise.grandcentral.MemTapAnnotation",
-     {noResolve, applyGrandCentralMemTaps}},
+     {tryResolve, applyGrandCentralMemTaps}},
     {"sifive.enterprise.grandcentral.ViewAnnotation",
      {noResolve, applyGrandCentralView}},
     {"sifive.enterprise.grandcentral.ReferenceDataTapKey",
