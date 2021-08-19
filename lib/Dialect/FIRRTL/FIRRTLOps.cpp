@@ -448,15 +448,20 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   // Drop the direction markers for dead ports.
   SmallVector<Direction> directions = direction::unpackAttribute(*this);
   ArrayRef<Attribute> portNames = this->portNames().getValue();
+  ArrayRef<Attribute> portAnno = this->portAnnotations().getValue();
   assert(directions.size() == portNames.size());
 
   SmallVector<Direction> newDirections =
       removeElementsAtIndices<Direction>(directions, portIndices);
   SmallVector<Attribute> newPortNames =
       removeElementsAtIndices(portNames, portIndices);
+  SmallVector<Attribute> newPortAnno =
+      removeElementsAtIndices(portAnno, portIndices);
   (*this)->setAttr(direction::attrKey,
                    direction::packAttribute(newDirections, getContext()));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newPortNames));
+  (*this)->setAttr("portAnnotations",
+                   ArrayAttr::get(getContext(), newPortAnno));
 
   // Erase the common function-like stuff, including the block arguments, and
   // argument attributes (incl port annotations).
@@ -465,7 +470,7 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports,
-                        ArrayAttr annotations) {
+                        ArrayAttr annotations, ArrayAttr portAnnotations) {
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
@@ -500,13 +505,17 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     annotations = builder.getArrayAttr({});
   result.addAttribute("annotations", annotations);
 
+  if (!portAnnotations)
+    portAnnotations = builder.getArrayAttr({});
+  result.addAttribute("portAnnotations", portAnnotations);
+
   result.addRegion();
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayRef<ModulePortInfo> ports,
-                      ArrayAttr annotations) {
-  buildModule(builder, result, name, ports, annotations);
+                      ArrayAttr annotations, ArrayAttr portAnnotations) {
+  buildModule(builder, result, name, ports, annotations, portAnnotations);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -520,8 +529,9 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<ModulePortInfo> ports,
-                         StringRef defnameAttr, ArrayAttr annotations) {
-  buildModule(builder, result, name, ports, annotations);
+                         StringRef defnameAttr, ArrayAttr annotations,
+                         ArrayAttr portAnnotations) {
+  buildModule(builder, result, name, ports, annotations, portAnnotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
 }
@@ -721,6 +731,8 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
     omittedAttrs.push_back("portNames");
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
+  if (op->getAttrOfType<ArrayAttr>("portAnnotations").empty())
+    omittedAttrs.push_back("portAnnotations");
 
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
@@ -816,6 +828,11 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // The annotations attribute is always present, but not printed when empty.
   if (!result.attributes.get("annotations"))
     result.addAttribute("annotations", builder.getArrayAttr({}));
+
+  // The portAnnotations attribute is always present, but not printed when
+  // empty.
+  if (!result.attributes.get("portAnnotations"))
+    result.addAttribute("portAnnotations", builder.getArrayAttr({}));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
