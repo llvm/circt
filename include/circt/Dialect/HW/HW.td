@@ -20,6 +20,8 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
 
+include "circt/Dialect/HW/HWInterfaces.td"
+
 def HWDialect : Dialect {
   let name = "hw";
 

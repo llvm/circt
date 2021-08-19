@@ -23,6 +23,8 @@
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+#include "circt/Dialect/HW/HWOpInterfaces.h.inc"
+
 namespace circt {
 namespace hw {
 

@@ -12,3 +12,10 @@ mlir_tablegen(HWStructs.h.inc -gen-struct-attr-decls)
 mlir_tablegen(HWStructs.cpp.inc -gen-struct-attr-defs)
 add_public_tablegen_target(MLIRHWStructsIncGen)
 add_dependencies(circt-headers MLIRHWStructsIncGen)
+
+set(LLVM_TARGET_DEFINITIONS HWInterfaces.td)
+
+mlir_tablegen(HWOpInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(HWOpInterfaces.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(MLIRHWOpInterfacesIncGen)
+add_dependencies(circt-headers MLIRHWOpInterfacesIncGen)

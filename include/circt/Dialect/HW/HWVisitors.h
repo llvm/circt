@@ -79,7 +79,7 @@ public:
   ResultType dispatchStmtVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<OutputOp, InstanceOp>([&](auto expr) -> ResultType {
+        .template Case<OutputOp, InstanceLike>([&](auto expr) -> ResultType {
           return thisCast->visitStmt(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {

@@ -1583,7 +1583,7 @@ void NameCollector::collectNames(Block &block) {
     bool isExpr = isVerilogExpression(&op);
 
     // Instances and interface instances are handled in prepareHWModule
-    if (isa<InstanceOp, InterfaceInstanceOp>(op))
+    if (isa<InstanceLike, InterfaceInstanceOp>(op))
       continue;
 
     for (auto result : op.getResults()) {
@@ -1764,7 +1764,7 @@ private:
   LogicalResult visitSV(AliasOp op);
   LogicalResult visitSV(InterfaceInstanceOp op);
   LogicalResult visitStmt(OutputOp op);
-  LogicalResult visitStmt(InstanceOp op);
+  LogicalResult visitStmt(InstanceLike op);
 
   LogicalResult emitIfDef(Operation *op, StringRef cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }
@@ -1910,7 +1910,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
 LogicalResult StmtEmitter::visitSV(AssignOp op) {
   // prepare assigns wires to instance outputs, but these are logically handled
   // in the port binding list when outputing an instance.
-  if (dyn_cast_or_null<InstanceOp>(op.src().getDefiningOp()))
+  if (dyn_cast_or_null<InstanceLike>(op.src().getDefiningOp()))
     return success();
 
   SmallPtrSet<Operation *, 8> ops;
@@ -2025,7 +2025,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
 
     auto operand = op.getOperand(operandIndex);
     if (operand.hasOneUse() &&
-        dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
+        dyn_cast_or_null<InstanceLike>(operand.getDefiningOp())) {
       ++operandIndex;
       continue;
     }
@@ -2438,7 +2438,7 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
+LogicalResult StmtEmitter::visitStmt(InstanceLike op) {
   StringRef prefix = "";
   if (op->hasAttr("doNotPrint")) {
     prefix = "// ";
@@ -2527,7 +2527,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   // Emit the argument and result ports.
   auto opArgs = op.inputs();
-  auto opResults = op.getResults();
+  auto opResults = op->getResults();
   bool isFirst = true; // True until we print a port.
   bool isZeroWidth = false;
   SmallVector<Value, 32> portValues;
@@ -2962,7 +2962,7 @@ static bool onlyUseIsAssign(Value v) {
 }
 
 // Ensure that each output of an instance are used only by a wire
-static void lowerInstanceResults(InstanceOp op) {
+static void lowerInstanceResults(InstanceLike op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -2975,7 +2975,7 @@ static void lowerInstanceResults(InstanceOp op) {
     if (!port.isOutput())
       continue;
 
-    auto result = op.getResult(nextResultNo);
+    auto result = op->getResult(nextResultNo);
     ++nextResultNo;
 
     if (onlyUseIsAssign(result))
@@ -3385,13 +3385,14 @@ static void prepareHWModule(Block &block, ModuleNameManager &names,
     // (e.g. letting a temporary take the name of an unvisited wire). Adding
     // them now ensures any temporary generated will not use one of the names
     // previously declared.
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
+    if (auto instanceLike = dyn_cast<InstanceLike>(op)) {
       // Anchor return values to wires early
-      lowerInstanceResults(instance);
+      lowerInstanceResults(instanceLike);
       // Anchor ports of bound instances
+      auto instance = dyn_cast<InstanceOp>(op);
       if (instance->hasAttr("doNotPrint"))
         lowerBoundInstance(instance);
-      names.addLegalName(&op, instance.instanceName(), &op);
+      names.addLegalName(&op, instanceLike.instanceName(), &op);
     } else if (auto wire = dyn_cast<WireOp>(op))
       names.addLegalName(op.getResult(0), wire.name(), &op);
     else if (auto regOp = dyn_cast<RegOp>(op))
