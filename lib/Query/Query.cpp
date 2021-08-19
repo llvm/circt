@@ -119,6 +119,12 @@ std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
     }
   }
 
+  for (size_t i = 0; i < filtered.size() / 2; ++i) {
+    auto *temp = filtered[i];
+    filtered[i] = filtered[filtered.size() - i - 1];
+    filtered[filtered.size() - i - 1] = temp;
+  }
+
   return filtered;
 }
 

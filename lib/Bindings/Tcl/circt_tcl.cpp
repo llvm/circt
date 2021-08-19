@@ -382,8 +382,10 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
       auto *unwrappedOp = unwrap(op);
       bool contained = false;
       for (int k = 0; k < length; ++k) {
-        if (unwrap((MlirOperation){list[k].internalRep.twoPtrValue.ptr1}) == unwrappedOp) {
+        if (unwrap((MlirOperation){listRaw[k]->internalRep.twoPtrValue.ptr1}) == unwrappedOp) {
           contained = true;
+          std::cout << "oh no";
+          unwrappedOp->dump();
           break;
         }
       }
