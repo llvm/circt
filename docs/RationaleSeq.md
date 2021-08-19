@@ -106,3 +106,42 @@ information.
 - Initial value: this register is uninitialized. Using an uninitialized value
 results in undefined behavior. We will add an `initialValue` attribute if
 this proves insufficient.
+
+## The Flip Flop Operation
+
+`seq.ff` models a D-Flip Flop operation, with support for various features,
+namely:
+
+- clock edge sensitivity: posedge, negedge or edge-triggered
+- explicit enable signals
+- an optional synchronous & asynchronus reset
+
+This is an abstract general-purpose operation that can be targetted by other
+dialects. It should be further lowered down to either vendor-specific primtives
+or to the SV dialect.
+
+`seq.ff` has the following MLIR format:
+
+```mlir
+%q = seq.ff %input, (posedge|negedge) %clk , %enable, %syncReset, %asyncReset,
+%syncResetValue, %asyncResetValue  : $type(input)
+```
+
+### Rationale
+
+The ordering of operands are as such, as reset values need not be supplied if
+`syncReset` or `asyncReset` is tied to `hw.constant 0`. the `seq.ff` operation
+will be verified such that this operand holds.
+
+The common case in this operation would be to set `enable` to `hw.constant 1`.
+However, we do not make this operand optional despite the slight benefit of
+making the IR smaller, as it will complicate parsing, and make analysis harder
+as we would need to deal with an additional null case.
+
+The reset values are not optional in this operation. When as they are not used,
+they will be populated with dummy values (eg: zeros). Analysis can statically
+determine that they are not used by checking if `%syncReset` is `hw.constant
+0`. The presence of optional operands will somewhat complicate parsing. For
+example, if `%syncResetValue` and `%asyncResetValue` are optional, when a FF
+has both an asynchronous reset, but not a synchronous one, `%syncResetValue`
+will need to populated with a dummy value anyway.
