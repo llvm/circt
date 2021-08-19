@@ -469,15 +469,12 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
 static bool narrowExtractWidth(ExtractOp outerExtractOp,
                                PatternRewriter &rewriter) {
   auto *innerArg = outerExtractOp.input().getDefiningOp();
-
-  if (!innerArg) {
+  if (!innerArg)
     return false;
-  }
 
   // In calls to narrowOperationWidth below, innerOp is guranteed to have at
   // least one use (ie: this extract operation). So we don't need to handle
   // innerOp with no uses.
-
   return llvm::TypeSwitch<Operation *, bool>(innerArg)
       // The unreferenced leading bits of Add, Sub and Mul can be stripped of,
       // but not the trailing bits. The trailing bits is used to compute the
@@ -523,9 +520,10 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
 }
 
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
+  auto *inputOp = op.input().getDefiningOp();
+
   // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
-  if (auto innerExtract =
-          dyn_cast_or_null<ExtractOp>(op.input().getDefiningOp())) {
+  if (auto innerExtract = dyn_cast_or_null<ExtractOp>(inputOp)) {
     rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(),
                                            innerExtract.input(),
                                            innerExtract.lowBit() + op.lowBit());
@@ -533,15 +531,30 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   }
 
   // extract(lo, cat(a, b, c, d, e)) = cat(extract(lo1, b), c, extract(lo2, d))
-  if (auto innerCat = dyn_cast_or_null<ConcatOp>(op.input().getDefiningOp())) {
+  if (auto innerCat = dyn_cast_or_null<ConcatOp>(inputOp))
     return extractConcatToConcatExtract(op, innerCat, rewriter);
-  }
 
   // extract(f(a, b)) = f(extract(a), extract(b)). This is performed only when
   // the number of bits to operation f can be reduced. See documentation of
   // narrowExtractWidth for more information.
   if (narrowExtractWidth(op, rewriter))
     return success();
+
+  // `extract(and(a, cst))` -> `extract(a)` when the relevant bits of the
+  // and/or/xor are not modifying the extracted bits.
+  if (inputOp && inputOp->getNumOperands() == 2 &&
+      isa<AndOp, OrOp, XorOp>(inputOp)) {
+    if (auto cstRHS = inputOp->getOperand(1).getDefiningOp<hw::ConstantOp>()) {
+      auto extractedCst =
+          cstRHS.getValue().lshr(op.lowBit()).trunc(op.getType().getWidth());
+      if ((isa<AndOp>(inputOp) && extractedCst.isAllOnesValue()) ||
+          (isa<OrOp, XorOp>(inputOp) && extractedCst.isNullValue())) {
+        rewriter.replaceOpWithNewOp<ExtractOp>(
+            op, op.getType(), inputOp->getOperand(0), op.lowBit());
+        return success();
+      }
+    }
+  }
 
   return failure();
 }

@@ -770,12 +770,11 @@ hw.module @combine_icmp_compare_known_bits0(%thing: i4) -> (%a: i1) {
   %1 = comb.icmp eq %0, %c0 : i4
   hw.output %1 : i1
 
-  // CHECK:   %0 = comb.and %thing, %c-3_i4 : i4
-  // CHECK:   %1 = comb.extract %0 from 2 : (i4) -> i2
-  // CHECK:   %2 = comb.extract %0 from 0 : (i4) -> i1
-  // CHECK:   %3 = comb.concat %1, %2 : (i2, i1) -> i3
-  // CHECK:   %4 = comb.icmp eq %3, %c0_i3 : i3
-  // CHECK:   hw.output %4 : i1
+  // CHECK:   %0 = comb.extract %thing from 2 : (i4) -> i2
+  // CHECK:   %1 = comb.extract %thing from 0 : (i4) -> i1
+  // CHECK:   %2 = comb.concat %0, %1 : (i2, i1) -> i3
+  // CHECK:   %3 = comb.icmp eq %2, %c0_i3 : i3
+  // CHECK:   hw.output %3 : i1
   // CHECK: }
 }
 
