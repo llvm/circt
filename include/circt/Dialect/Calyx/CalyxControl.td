@@ -107,3 +107,32 @@ def EnableOp : CalyxOp<"enable", [
   let assemblyFormat = "$groupName attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
+
+def WhileOp : CalyxContainer<"while", [
+    ControlLike
+  ]> {
+  let summary = "Calyx While";
+  let arguments = (ins
+    I1:$cond,
+    FlatSymbolRefAttr:$groupName
+  );
+  let description = [{
+    The "calyx.while" operation represents a construct for continuously
+    executing the inner groups of the 'while' operation while the condition port
+    evaluates to true. The operands to a while operation is a 1-bit port and the
+    group under which this port is driven.
+
+    Note: The native and CIRCT Calyx IRs may diverge wrt. 'with' execution, see:
+    https://github.com/cucapra/calyx/discussions/588
+
+    ```mlir
+      calyx.while %1 with @G1 {
+        calyx.enable @G2
+        ...
+      }
+    ```
+  }];
+
+  let assemblyFormat = "$cond `with` $groupName $body attr-dict";
+  let verifier = "return ::verify$cppClass(*this);";
+}
