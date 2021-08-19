@@ -556,6 +556,20 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
     }
   }
 
+  // `extract(lowBit, shl(1, x))` -> `x == lowBit` when a single bit is
+  // extracted.
+  if (op.getType().getWidth() == 1 && inputOp)
+    if (auto shlOp = dyn_cast<ShlOp>(inputOp))
+      if (auto lhsCst = shlOp.getOperand(0).getDefiningOp<hw::ConstantOp>())
+        if (lhsCst.getValue().isOneValue()) {
+          auto newCst = rewriter.create<hw::ConstantOp>(
+              shlOp.getLoc(),
+              APInt(lhsCst.getValue().getBitWidth(), op.lowBit()));
+          rewriter.replaceOpWithNewOp<ICmpOp>(op, ICmpPredicate::eq,
+                                              shlOp->getOperand(1), newCst);
+          return success();
+        }
+
   return failure();
 }
 

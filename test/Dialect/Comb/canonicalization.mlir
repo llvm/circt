@@ -886,3 +886,18 @@ hw.module @test_sext(%value: i8, %v9: i9) -> (%a: i10, %b: i11, %c: i10) {
   // CHECK: hw.output %1, %3, %6
   hw.output %1, %3, %5: i10, i11, i10
 }
+
+// CHECK-LABEL: hw.module @extractShift
+hw.module @extractShift(%arg0: i4) -> (%o1 : i1, %o2: i1) {
+  %c1 = hw.constant 1: i4
+  %0 = comb.shl %c1, %arg0 : i4
+
+  // CHECK:  %0 = comb.icmp eq %arg0, %c0_i4 : i4
+  %1 = comb.extract %0 from 0 : (i4) -> i1
+
+  // CHECK: %1 = comb.icmp eq %arg0, %c2_i4 : i4
+  %2 = comb.extract %0 from 2 : (i4) -> i1
+  // CHECK: hw.output %0, %1
+  hw.output %1, %2: i1, i1
+}
+

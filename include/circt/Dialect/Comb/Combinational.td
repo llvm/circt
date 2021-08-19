@@ -28,7 +28,7 @@ class BinOp<string mnemonic, list<OpTrait> traits = []> :
 class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
       BinOp<mnemonic,
                traits # [SameTypeOperands, SameOperandsAndResultType]> {
-  let assemblyFormat = "$lhs `,` $rhs  attr-dict `:` type($result)";
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
 }
 
 // Base class for variadic operators.
