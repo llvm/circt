@@ -41,6 +41,8 @@ static void registerGenerator(MlirContext ctxt, std::string opName,
                             parameters);
 }
 
+using namespace mlir::python::adaptors;
+
 /// Populate the msft python module.
 void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   mlirMSFTRegisterPasses();
@@ -65,4 +67,63 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
 
   m.def("register_generator", &::registerGenerator,
         "Register a generator for a design module");
+
+  mlir_attribute_subclass(m, "PhysLocationAttr",
+                          circtMSFTAttributeIsAPhysLocationAttribute)
+      .def_classmethod(
+          "get",
+          [](py::object cls, DeviceType devType, uint64_t x, uint64_t y,
+             uint64_t num, MlirContext ctxt) {
+            return cls(circtMSFTPhysLocationAttrGet(ctxt, (uint64_t)devType, x,
+                                                    y, num));
+          },
+          "Create a physical location attribute", py::arg(),
+          py::arg("dev_type"), py::arg("x"), py::arg("y"), py::arg("num"),
+          py::arg("ctxt") = py::none())
+      .def_property_readonly(
+          "devtype",
+          [](MlirAttribute self) {
+            return (DeviceType)circtMSFTPhysLocationAttrGetDeviceType(self);
+          })
+      .def_property_readonly("x",
+                             [](MlirAttribute self) {
+                               return (DeviceType)circtMSFTPhysLocationAttrGetX(
+                                   self);
+                             })
+      .def_property_readonly("y",
+                             [](MlirAttribute self) {
+                               return (DeviceType)circtMSFTPhysLocationAttrGetY(
+                                   self);
+                             })
+      .def_property_readonly("num", [](MlirAttribute self) {
+        return (DeviceType)circtMSFTPhysLocationAttrGetNum(self);
+      });
+
+  mlir_attribute_subclass(m, "SwitchInstance",
+                          circtMSFTAttributeIsASwitchInstanceAttribute)
+      .def_classmethod(
+          "get",
+          [](py::object cls,
+             std::vector<std::tuple<MlirAttribute, MlirAttribute>> listOfCases,
+             MlirContext ctxt) {
+            std::vector<CirctMSFTSwitchInstanceCase> cases;
+            for (auto p : listOfCases)
+              cases.push_back({std::get<0>(p), std::get<1>(p)});
+            return cls(circtMSFTSwitchInstanceAttrGet(ctxt, cases.data(),
+                                                      cases.size()));
+          },
+          "Create an instance switch attribute", py::arg(),
+          py::arg("list_of_cases"), py::arg("ctxt") = py::none())
+      .def_property_readonly(
+          "cases",
+          [](MlirAttribute self) {
+            size_t numCases = circtMSFTSwitchInstanceAttrGetNumCases(self);
+            std::vector<CirctMSFTSwitchInstanceCase> cases(numCases);
+            circtMSFTSwitchInstanceAttrGetCases(self, cases.data(),
+                                                cases.max_size());
+            return cases;
+          })
+      .def_property_readonly("num_cases", [](MlirAttribute self) {
+        return circtMSFTSwitchInstanceAttrGetNumCases(self);
+      });
 }
