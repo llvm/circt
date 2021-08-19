@@ -28,20 +28,38 @@ namespace {
 /// Check the equivalence of operations by doing a deep comparison of operands
 /// and attributes, but does not compare the content of any regions attached to
 /// each op.
-struct SimpleOperationInfo : public llvm::DenseMapInfo<Operation *> {
+struct AlwaysLikeOpInfo : public llvm::DenseMapInfo<Operation *> {
   static unsigned getHashValue(const Operation *opC) {
     return mlir::OperationEquivalence::computeHash(
-        const_cast<Operation *>(opC));
+        const_cast<Operation *>(opC),
+        /*hashOperands=*/mlir::OperationEquivalence::directHashValue,
+        /*hashResults=*/mlir::OperationEquivalence::ignoreHashValue,
+        mlir::OperationEquivalence::IgnoreLocations);
   }
   static bool isEqual(const Operation *lhsC, const Operation *rhsC) {
     auto *lhs = const_cast<Operation *>(lhsC);
     auto *rhs = const_cast<Operation *>(rhsC);
+    // Trivially the same.
     if (lhs == rhs)
       return true;
+    // Filter out tombstones and empty ops.
     if (lhs == getTombstoneKey() || lhs == getEmptyKey() ||
         rhs == getTombstoneKey() || rhs == getEmptyKey())
       return false;
-    return mlir::OperationEquivalence::isEquivalentTo(lhs, rhs);
+    // Compare attributes.
+    if (lhs->getName() != rhs->getName() ||
+        lhs->getAttrDictionary() != rhs->getAttrDictionary() ||
+        lhs->getNumOperands() != rhs->getNumOperands())
+      return false;
+    // Compare operands.
+    for (auto operandPair : llvm::zip(lhs->getOperands(), rhs->getOperands())) {
+      Value lhsOperand = std::get<0>(operandPair);
+      Value rhsOperand = std::get<1>(operandPair);
+      if (lhsOperand != rhsOperand)
+        return false;
+    }
+    // The two AlwaysOps are similar enough to be combined.
+    return true;
   }
 };
 
@@ -135,7 +153,7 @@ void HWCleanupPass::runOnGraphRegion(Region &region, bool shallow) {
   // A set of operations in the current block which are mergable. Any
   // operation in this set is a candidate for another similar operation to
   // merge in to.
-  DenseSet<Operation *, SimpleOperationInfo> alwaysFFOpsSeen;
+  DenseSet<Operation *, AlwaysLikeOpInfo> alwaysFFOpsSeen;
   llvm::SmallDenseMap<Attribute, Operation *, 4> ifdefOps;
   sv::InitialOp initialOpSeen;
   sv::AlwaysCombOp alwaysCombOpSeen;

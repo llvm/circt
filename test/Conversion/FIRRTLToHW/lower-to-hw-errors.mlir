@@ -15,7 +15,7 @@ firrtl.circuit "InvalidBundle" {
     %0 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
   }
 
-  // expected-error @+1 {{unexpected operation 'func' in a firrtl.circuit}}
+  // expected-error @+1 {{unexpected operation 'builtin.func' in a firrtl.circuit}}
   func private @UnknownFunction() {
     return
   }
