@@ -82,7 +82,7 @@ Filters are used by the `circt query` command to perform queries on MLIR. Curren
 
     Regex filter; matches any operation whose name matches the given regex.
 
- - `inst [filers]+`
+ - `inst [filter]+`
 
     Instance filter; matches a sequence of filters against an operation based on the instance hierarchy.
 

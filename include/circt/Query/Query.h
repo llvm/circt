@@ -1,3 +1,6 @@
+#ifndef CIRCT_QUERY_API_H
+#define CIRCT_QUERY_API_H
+
 #include <iostream>
 #include <regex>
 #include <string>
@@ -194,3 +197,4 @@ op_attr_map dumpAttributes(std::vector<Operation *> &results, ArrayRef<StringRef
 } /* namespace query */
 } /* namespace circt */
 
+#endif /* CIRCT_QUERY_API_H */
