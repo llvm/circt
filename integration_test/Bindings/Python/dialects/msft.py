@@ -15,6 +15,9 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   m = ir.Module.create()
   with ir.InsertionPoint(m.body):
+    extmod = hw.HWModuleExternOp(name='MyExternMod',
+                                 input_ports=[],
+                                 output_ports=[])
     # CHECK: hw.module @MyWidget()
     # CHECK:   hw.output
     op = hw.HWModuleOp(name='MyWidget',
@@ -25,6 +28,9 @@ with ir.Context() as ctx, ir.Location.unknown():
                         input_ports=[],
                         output_ports=[],
                         body_builder=lambda module: hw.OutputOp([]))
+
+  with ir.InsertionPoint.at_block_terminator(op.body.blocks[0]):
+    ext_inst = extmod.create("ext1")
 
   with ir.InsertionPoint.at_block_terminator(top.body.blocks[0]):
     inst = op.create("inst1")
@@ -39,9 +45,16 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   m.operation.print()
 
-  physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)
+  resolved_inst = msft.get_instance(top.operation,
+                                    ir.Attribute.parse("@inst1::@ext1"))
+  assert(resolved_inst == ext_inst.operation)
+
+  not_found_inst = msft.get_instance(top.operation,
+                                     ir.Attribute.parse("@inst_none::@ext1"))
+  assert (not_found_inst is None)
 
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
+  physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)
   print(physAttr)
 
   inst = ir.Attribute.parse("@foo::@bar")

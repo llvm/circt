@@ -75,6 +75,9 @@ size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute);
 void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute,
                                          CirctMSFTSwitchInstanceCase *dstArray,
                                          size_t space);
+
+MlirOperation circtMSFTGetInstance(MlirOperation root, MlirAttribute path);
+
 #ifdef __cplusplus
 }
 #endif
