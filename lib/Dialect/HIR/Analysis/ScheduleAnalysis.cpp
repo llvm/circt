@@ -145,20 +145,21 @@ LogicalResult ScheduleInfoImpl::visitRegion(Region &region) {
 }
 
 LogicalResult ScheduleInfoImpl::visitOp(FuncOp op) {
-  scheduleInfo.setOfRootTimeVars.insert(op.getTimeVar());
-  scheduleInfo.mapValueToRootTimeVar[op.getTimeVar()] = op.getTimeVar();
-  scheduleInfo.mapValueToOffset[op.getTimeVar()] = 0;
+  scheduleInfo.setOfRootTimeVars.insert(op.getRegionTimeVar());
+  scheduleInfo.mapValueToRootTimeVar[op.getRegionTimeVar()] =
+      op.getRegionTimeVar();
+  scheduleInfo.mapValueToOffset[op.getRegionTimeVar()] = 0;
   auto operands = op.getFuncBody().front().getArguments();
   auto inputAttrs = op.funcTy().dyn_cast<hir::FuncType>().getInputAttrs();
   for (size_t i = 0; i < operands.size(); i++) {
     Value operand = operands[i];
     if (helper::isBuiltinSizedType(operand.getType())) {
-      scheduleInfo.mapValueToRootTimeVar[operand] = op.getTimeVar();
+      scheduleInfo.mapValueToRootTimeVar[operand] = op.getRegionTimeVar();
       scheduleInfo.mapValueToOffset[operand] =
           helper::extractDelayFromDict(inputAttrs[i]);
     } else if (operand.getType().isa<TimeType>()) {
       scheduleInfo.setOfRootTimeVars.insert(operand);
-      scheduleInfo.mapValueToRootTimeVar[operand] = op.getTimeVar();
+      scheduleInfo.mapValueToRootTimeVar[operand] = op.getRegionTimeVar();
       scheduleInfo.mapValueToOffset[operand] = 0;
     }
   }

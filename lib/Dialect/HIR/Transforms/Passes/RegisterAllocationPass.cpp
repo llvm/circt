@@ -11,6 +11,7 @@
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/StringExtras.h"
 
 using namespace circt;
 using namespace hir;
@@ -57,6 +58,7 @@ private:
   template <typename T>
   LogicalResult visitOpWithNoOperandsDelay(T);
   LogicalResult visitOp(hir::ReturnOp);
+  LogicalResult visitOp(hir::YieldOp);
   LogicalResult visitOp(hir::CallOp);
   LogicalResult dispatch(Operation *);
 
@@ -151,8 +153,12 @@ LogicalResult RegisterAllocationPass::visitOp(hir::ReturnOp op) {
   auto parentFuncTy = parentFuncOp.funcTy().dyn_cast<hir::FuncType>();
   auto resultAttrs = parentFuncTy.getResultAttrs();
   assert(parentFuncOp);
-  Value tstartFuncOp = parentFuncOp.getTimeVar();
+  Value tstartFuncOp = parentFuncOp.getRegionTimeVar();
   for (size_t i = 0; i < operands.size(); i++) {
+    if (operands[i].getType().isa<hir::TimeType>()) {
+      operandsNew.push_back(operands[i]);
+      continue;
+    }
     int64_t argDelay = helper::extractDelayFromDict(resultAttrs[i]);
     Value operandNew;
     if (failed(getPipelineBalancedValue(builder, operandNew, operands[i],
@@ -160,6 +166,37 @@ LogicalResult RegisterAllocationPass::visitOp(hir::ReturnOp op) {
       return failure();
     operandsNew.push_back(operandNew);
   }
+  op.operandsMutable().assign(operandsNew);
+  return success();
+}
+
+LogicalResult RegisterAllocationPass::visitOp(hir::YieldOp op) {
+  ImplicitLocOpBuilder builder(op.getLoc(), OpBuilder(op));
+  auto operands = op.operands();
+  SmallVector<Value> operandsNew;
+  ArrayAttr resultAttrs;
+  Value tstartRegion;
+  if (auto parentIfOp = dyn_cast<hir::IfOp>(op->getParentOp())) {
+    resultAttrs = parentIfOp.result_attrs();
+    tstartRegion = parentIfOp.getRegionTimeVar();
+  }
+
+  for (size_t i = 0; i < operands.size(); i++) {
+    if (operands[i].getType().isa<hir::TimeType>()) {
+      operandsNew.push_back(operands[i]);
+      continue;
+    }
+
+    int64_t argDelay =
+        helper::extractDelayFromDict(resultAttrs[i].dyn_cast<DictionaryAttr>());
+
+    Value operandNew;
+    if (failed(getPipelineBalancedValue(builder, operandNew, operands[i],
+                                        tstartRegion, argDelay)))
+      return failure();
+    operandsNew.push_back(operandNew);
+  }
+
   op.operandsMutable().assign(operandsNew);
   return success();
 }
@@ -223,10 +260,10 @@ LogicalResult RegisterAllocationPass::dispatch(Operation *operation) {
   } else if (auto op = dyn_cast<hir::LatchOp>(operation)) {
     if (failed(visitOpWithNoOperandsDelay(op)))
       return failure();
-  } else if (auto op = dyn_cast<hir::YieldOp>(operation)) {
-    if (failed(visitOpWithNoOperandsDelay(op)))
-      return failure();
   } else if (auto op = dyn_cast<hir::ReturnOp>(operation)) {
+    if (failed(visitOp(op)))
+      return failure();
+  } else if (auto op = dyn_cast<hir::YieldOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
   } else if (auto op = dyn_cast<hir::CallOp>(operation)) {

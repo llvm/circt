@@ -41,46 +41,75 @@ class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
 
 
-//def TerminatorOp : HIR_Op<"terminator", [ParentOneOf<["BlockOp"]>,Terminator] > {
-//  let summary = "Terminator op";
-//}
-
-def BlockYieldOp : HIR_Op<"block.yield", [ParentOneOf<["BlockOp"]>,Terminator] > {
-  let summary = "Yield from hir.block";
-  let arguments = (ins Variadic<AnyType> : $operands);
-
-  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? }];
-}
-
-def YieldOp : HIR_Op<"yield", [ParentOneOf<["ForOp","UnrollForOp","IfOp"]>,Terminator,AttrSizedOperandSegments] > {
-  let summary = "Yield from loops";
+def ForNextIterOp : HIR_Op<"for.next_iter", [ParentOneOf<["ForOp"]>,Terminator] > {
+  let summary = "specifies the time at which the next iteration of for loop starts.";
   let description = [{
-    This Op yields from a loop.
+    This op specifies when the next iteration of the hir.for loop starts.
+    If the current iteration is the last iteration then it specifies the time 
+    returned by the hir.for op.
+
+    This instruction must be the last instruction in for loop body.
+
       Example:
 
-      ```mlir hir.yield (%x, %A) at %t offset %3 : (!hir.val,!hir.val)```
+      ```mlir hir.for.next_iter at %t```
   }];
 
-  let arguments = (ins Variadic<AnyType> : $operands, Optional<HIR_TimeType>: $tstart,
-      OptionalAttr<I64Attr>: $offset,OptionalAttr<ArrayAttr>: $operand_attrs);
+  let arguments = (ins Optional<HIR_TimeType> : $tstart, 
+    OptionalAttr<I64Attr>: $offset);
+
   let results = (outs );
 
+  let assemblyFormat = [{ attr-dict custom<TimeAndOffset>($tstart ,$offset) }];
+}
+
+def WhileNextIterOp : HIR_Op<"while.next_iter", [ParentOneOf<["WhileOp"]>,Terminator] > {
+  let summary = "specifies the time at which the next iteration of while loop starts.";
+  let description = [{
+    This op specifies when the next iteration of the hir.while loop starts.
+    If the current iteration is the last iteration then it specifies the time 
+    returned by the hir.while op.
+
+    This instruction must be the last instruction in while loop body.
+
+      Example:
+
+      ```mlir hir.while.next_iter at %t```
+  }];
+
+  let arguments = (ins I1:$condition, Optional<HIR_TimeType> : $tstart, 
+    OptionalAttr<I64Attr>: $offset);
+
+  let results = (outs );
+
+  let assemblyFormat = [{ `condition` `(` $condition `)` attr-dict custom<TimeAndOffset>($tstart ,$offset) }];
+}
+
+def YieldOp : HIR_Op<"yield", [ParentOneOf<["IfOp"]>,Terminator] > {
+  let summary = "Yield from loops";
+  let description = [{
+    This Op yields values out of an hir.if.
+    This instruction must be the last instruction in if/else bodies.
+      Example:
+
+      ```mlir hir.yield (%x, %A) : (f32, !hir.time)```
+  }];
+
+  let arguments = (ins Variadic<AnyType> : $operands);
+  let results = (outs );
+  
   let builders = [OpBuilder<(ins),[{
-    build($_builder,$_state,SmallVector<Value>(),Value(),IntegerAttr(), ArrayAttr());
+    build($_builder,$_state,SmallVector<Value>());
   }]>];
-
-  let parser = [{return parse$cppClass(parser,result);}];
-  let printer = [{return print$cppClass(p,*this);}];
-
-  let hasCanonicalizeMethod = true;
+  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? }];
 }
 
 def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
   let summary = "Return from function";
 
   let description = [{
+    This op returns the output of the function.
     This instruction must be the last instruction in the function.
-      If hir.yield is specified for the function then return must be specified.
       ```mlir hir.return (%x, %y): (i32, !hir.const<i1>)```
   }];
 
@@ -88,8 +117,7 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
   let builders = [OpBuilder<(ins),[{
     build($_builder,$_state,SmallVector<Value>());
   }]>];
-
-  let assemblyFormat = "(`(`$operands^`)` `:` `(`type($operands)`)`)? attr-dict";
+  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? }];
 }
 
 def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbove, CallableOpInterface]> {
@@ -133,7 +161,7 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbov
       Region& getFuncBody(){ return body();}
       ///Get the function arguments (excluding tstart).
       SmallVector<Value,4> getOperands();
-      Value getTimeVar(){
+      Value getRegionTimeVar(){
         return getFuncBody().getArguments().back();
       }
       void updateArguments(ArrayRef<DictionaryAttr>);
@@ -142,19 +170,17 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbov
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def BlockOp : HIR_Op<"block", [SingleBlock, RecursiveSideEffects]> {
-  let summary = "code block";
+def CommentOp : HIR_Op<"comment", [NoSideEffect]> {
+  let summary = "comment";
   let description = [{
-    This op is used for arranging code in a program. It helps the codegen pass to generate human readable Verilog.```
+    This op is used to add comments. This comments are output by the verilog-generator.```
   }];
 
-  let arguments = (ins );
-  let regions = (region SizedRegion<1>:$body);
-  let results = (outs Variadic<AnyType>:$results);
+  let arguments = (ins StrAttr:$comment );
+  let results = (outs );
 
-  let assemblyFormat = [{(`->` `(` type($results)^`)`)? attr-dict-with-keyword regions  }];
+  let assemblyFormat = [{$comment attr-dict}];
 }
-
 
 def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
   let summary = "if operation";
@@ -170,6 +196,9 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
   let results = (outs Variadic<AnyType>:$results);
 
   let extraClassDeclaration = [{
+      Value getRegionTimeVar(){
+        return if_region().getArguments().back();
+      }
   }];
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
@@ -227,6 +256,13 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
   }];
   let hasCanonicalizeMethod = true; 
   let verifier =[{return verify$cppClass(*this);}];
+}
+
+def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects]> {
+  let summary = "for operation";
+  let arguments = (ins I1:$cond, Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+  let results = (outs HIR_TimeType:$res);
+  let regions = (region SizedRegion<1>:$region);
 }
 
 def UnrollForOp : HIR_Op<"unroll_for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {

@@ -17,7 +17,7 @@ public:
   void runOnOperation() override {
     hir::FuncOp funcOp = getOperation();
 
-    this->currentTimeVar = funcOp.getTimeVar();
+    this->currentTimeVar = funcOp.getRegionTimeVar();
     this->nextFreeOffset = 0;
     if (failed(updateRegion(funcOp.getFuncBody())))
       signalPassFailure();
@@ -64,7 +64,7 @@ private:
         continue;
       } else if (auto op = dyn_cast<hir::ReturnOp>(operation)) {
         continue;
-      } else if (auto op = dyn_cast<hir::YieldOp>(operation)) {
+      } else if (auto op = dyn_cast<hir::ForNextIterOp>(operation)) {
         if (failed(updateOp(op)))
           return failure();
       } else
@@ -95,7 +95,7 @@ private:
   LogicalResult updateOp(hir::AddFOp);
   LogicalResult updateOp(hir::SubFOp);
   LogicalResult updateOp(hir::MulFOp);
-  LogicalResult updateOp(hir::YieldOp);
+  LogicalResult updateOp(hir::ForNextIterOp);
   LogicalResult updateOp(hir::CallOp);
 
 private:
@@ -194,7 +194,7 @@ LogicalResult SeqSchedulerPass::updateOp(hir::MulFOp op) {
   return success();
 }
 
-LogicalResult SeqSchedulerPass::updateOp(hir::YieldOp op) {
+LogicalResult SeqSchedulerPass::updateOp(hir::ForNextIterOp op) {
   if (failed(populateSchedule(op)))
     return failure();
   return success();

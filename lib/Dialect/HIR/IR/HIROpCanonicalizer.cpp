@@ -92,26 +92,6 @@ LogicalResult CallInstanceOp::canonicalize(CallInstanceOp op,
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
 
-LogicalResult YieldOp::canonicalize(YieldOp op,
-                                    ::mlir::PatternRewriter &rewriter) {
-  return splitOffsetIntoSeparateOp(op, rewriter);
-}
-
-// LogicalResult TimeOp::canonicalize(TimeOp op,
-//                                   ::mlir::PatternRewriter &rewriter) {
-// ImplicitLocOpBuilder builder(op.getLoc(), op);
-//// If there is a chain of TimeOps then replace it with one TimeOp.
-// auto timeVar = op.timevar();
-// auto delay = op.delay();
-// while (auto timeOp = dyn_cast_or_null<TimeOp>(timeVar.getDefiningOp())) {
-//  timeVar = timeOp.timevar();
-//  delay += timeOp.delay();
-//}
-// op.timevarMutable().assign(timeVar);
-// op.delayAttr(builder.getI64IntegerAttr(delay));
-// return success();
-//}
-
 LogicalResult MemrefExtractOp::canonicalize(MemrefExtractOp op,
                                             ::mlir::PatternRewriter &rewriter) {
   auto uses = op.res().getUses();

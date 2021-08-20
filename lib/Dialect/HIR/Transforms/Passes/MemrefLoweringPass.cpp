@@ -235,11 +235,9 @@ LogicalResult createBusInstantiationsAndCallOp(
   Type funcTy = hir::FuncType::get(builder.getContext(), inputBusTypes,
                                    inputBusAttrs, {}, {});
 
-  auto blockOp = builder.create<hir::BlockOp>(
-      op.getLoc(), SmallVector<Type>({op.res().getType()}));
-  blockOp->setAttr("comment", builder.getStringAttr("AllocaOp"));
-  blockOp.body().push_back(new Block);
-  builder.setInsertionPointToStart(blockOp.getBody(0));
+  // Add comment.
+  builder.create<hir::CommentOp>(op.getLoc(),
+                                 builder.getStringAttr("AllocaOp start"));
 
   auto callOp = builder.create<hir::CallOp>(
       builder.getUnknownLoc(), SmallVector<Type>(),
@@ -256,9 +254,9 @@ LogicalResult createBusInstantiationsAndCallOp(
   callOp->setAttr("NUM_ELEMENTS",
                   builder.getI64IntegerAttr(memrefTy.getNumElementsPerBank()));
 
-  builder.create<hir::BlockYieldOp>(builder.getUnknownLoc(),
-                                    SmallVector<Value>());
   mapMemrefPortToBuses[op.res()] = memrefPortInterfaces;
+  builder.create<hir::CommentOp>(op.getLoc(),
+                                 builder.getStringAttr("AllocaOp end"));
   return success();
 }
 
@@ -639,11 +637,8 @@ LogicalResult convertOp(hir::LoadOp op, MemrefPortInterface useInterface,
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
 
-  auto blockOp = builder.create<hir::BlockOp>(
-      op.getLoc(), SmallVector<Type>({op.res().getType()}));
-  blockOp->setAttr("comment", builder.getStringAttr("LoadOp"));
-  blockOp.body().push_back(new Block);
-  builder.setInsertionPointToStart(blockOp.getBody(0));
+  builder.create<hir::CommentOp>(op.getLoc(),
+                                 builder.getStringAttr("LoadOp start"));
 
   Value cUse = builder
                    .create<mlir::ConstantOp>(op.getLoc(),
@@ -712,16 +707,13 @@ LogicalResult convertOp(hir::LoadOp op, MemrefPortInterface useInterface,
       useInterface.rdDataBus, cUse, builder.getStrArrayAttr({"send"}));
 
   // Receive the data from the rdDataBus.
-  Value receivedValue =
-      builder
-          .create<hir::RecvOp>(op.getLoc(), op.res().getType(), rdDataBus,
-                               builder.getI64IntegerAttr(0), op.tstart(),
-                               recvOffset)
-          .getResult();
-  builder.create<hir::BlockYieldOp>(builder.getUnknownLoc(),
-                                    SmallVector<Value>({receivedValue}));
+  Operation *receiveOp = builder.create<hir::RecvOp>(
+      op.getLoc(), op.res().getType(), rdDataBus, builder.getI64IntegerAttr(0),
+      op.tstart(), recvOffset);
   // Remove the LoadOp.
-  op.replaceAllUsesWith((Operation *)blockOp);
+  op.replaceAllUsesWith(receiveOp);
+  builder.create<hir::CommentOp>(op.getLoc(),
+                                 builder.getStringAttr("LoadOp end"));
   op.erase();
   return success();
 }
@@ -731,11 +723,8 @@ LogicalResult convertOp(hir::StoreOp op, MemrefPortInterface useInterface,
 
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
-  auto blockOp = builder.create<hir::BlockOp>(op.getLoc(), SmallVector<Type>());
-
-  blockOp->setAttr("comment", builder.getStringAttr("StoreOp"));
-  blockOp.body().push_back(new Block);
-  builder.setInsertionPointToStart(blockOp.getBody(0));
+  builder.create<hir::CommentOp>(op.getLoc(),
+                                 builder.getStringAttr("StoreOp start"));
 
   Value cUse = builder
                    .create<mlir::ConstantOp>(op.getLoc(),
@@ -800,10 +789,10 @@ LogicalResult convertOp(hir::StoreOp op, MemrefPortInterface useInterface,
                               builder.getI64IntegerAttr(0), op.tstart(),
                               op.offsetAttr());
 
-  builder.create<hir::BlockYieldOp>(builder.getUnknownLoc(),
-                                    SmallVector<Value>());
   // Remove the StoreOp.
   op.erase();
+  builder.create<hir::CommentOp>(op.getLoc(),
+                                 builder.getStringAttr("StoreOp end"));
   return success();
 }
 
@@ -864,7 +853,7 @@ LogicalResult MemrefLoweringPass::replaceMemrefArgUses(hir::FuncOp op) {
 // MemrefLoweringPass methods.
 //------------------------------------------------------------------------------
 LogicalResult MemrefLoweringPass::visitOp(hir::FuncOp op) {
-  tstartRegion = op.getTimeVar();
+  tstartRegion = op.getRegionTimeVar();
   insertBusArguments(op, mapMemrefPortToBuses);
 
   if (failed(visitRegion(op.getFuncBody())))
@@ -909,17 +898,17 @@ LogicalResult MemrefLoweringPass::visitRegion(Region &region) {
     } else if (auto op = dyn_cast<hir::ForOp>(operation)) {
       if (failed(visitOp(op)))
         return failure();
-    } else if (auto op = dyn_cast<hir::BlockOp>(operation)) {
-      if (failed(visitRegion(op.body())))
-        return failure();
     } else if (auto op = dyn_cast<hir::AllocaOp>(operation)) {
       if (failed(visitOp(op)))
         return failure();
     } else if (auto op = dyn_cast<hir::IfOp>(operation)) {
+      auto tstartRegionOld = tstartRegion;
+      tstartRegion = op.getRegionTimeVar();
       if (failed(visitRegion(op.if_region())))
         return failure();
       if (failed(visitRegion(op.else_region())))
         return failure();
+      tstartRegion = tstartRegionOld;
     } else {
       if (operation.getNumRegions() > 0)
         return operation.emitError()

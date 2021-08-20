@@ -157,7 +157,7 @@ private:
   bool inspectOp(UnrollForOp op);
   bool inspectOp(hir::LoadOp op);
   bool inspectOp(hir::StoreOp op);
-  bool inspectOp(hir::YieldOp op);
+  bool inspectOp(hir::ForNextIterOp op);
   bool inspectOp(hir::SendOp op);
   bool inspectOp(hir::RecvOp op);
   bool inspectOp(hir::AllocaOp op);
@@ -332,7 +332,7 @@ bool ScheduleVerifier::inspectOp(hir::StoreOp op) {
   return ok;
 }
 
-bool ScheduleVerifier::inspectOp(hir::YieldOp op) {
+bool ScheduleVerifier::inspectOp(hir::ForNextIterOp op) {
   Value tstart = op.tstart();
   unsigned offset = op.offset() ? op.offset().getValue() : 0;
   yieldPoints.top().t = tstart;
@@ -406,7 +406,7 @@ bool ScheduleVerifier::inspectOp(Operation *inst) {
     return inspectOp(op);
   if (auto op = dyn_cast<hir::SendOp>(inst))
     return inspectOp(op);
-  if (auto op = dyn_cast<hir::YieldOp>(inst))
+  if (auto op = dyn_cast<hir::ForNextIterOp>(inst))
     return inspectOp(op);
   emitError(inst->getLoc(), "Unsupported Operation for verification!");
   return false;
