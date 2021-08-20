@@ -677,10 +677,10 @@ static Optional<DictionaryAttr> parseAugmentedType(
       return None;
     SmallVector<Attribute> elements;
     for (auto elt : elementsAttr) {
-      auto eltAttr = parseAugmentedType(
-          context, elt.cast<DictionaryAttr>(), root, newAnnotations, companion,
-          name, StringAttr::get(context, ""), id, defName, loc, annotationID,
-          clazz, path);
+      auto eltAttr = parseAugmentedType(context, elt.cast<DictionaryAttr>(),
+                                        root, newAnnotations, companion, name,
+                                        StringAttr::get(context, ""), id, None,
+                                        loc, annotationID, clazz, path);
       if (!eltAttr)
         return None;
       elements.push_back(eltAttr.getValue());

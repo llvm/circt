@@ -755,11 +755,9 @@ circuit GCTInterface : %[
     ; CHECK-SAME:       {class = "sifive.enterprise.grandcentral.AugmentedVectorType",
     ; CHECK-SAME:        elements = [
     ; CHECK-SAME:          {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-    ; CHECK-SAME:           description = "register",
     ; CHECK-SAME:           id = [[ID_2_0:[0-9]+]] : i64,
     ; CHECK-SAME:           name = "_2"},
     ; CHECK-SAME:          {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-    ; CHECK-SAME:           description = "register",
     ; CHECK-SAME:           id = [[ID_2_1:[0-9]+]] : i64,
     ; CHECK-SAME:           name = "_2"}],
     ; CHECK-SAME:        name = "_2"},
