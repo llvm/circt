@@ -1,3 +1,5 @@
+; RUN: true
+
 circuit Top :
   module Foo :
     input clock : Clock

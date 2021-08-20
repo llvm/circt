@@ -9,7 +9,7 @@
       {
         "_1":"~Top|Foo>dataIn.a.b.c",
         "_2":"~Sub|Sub>data_sink"
-      },
+      }
     ],
     "sourceTargets":[
       {
@@ -19,7 +19,7 @@
       {
         "_1":"~Top|Foo>dataOut.x.y.z",
         "_2":"~Sub|Sub>data_source"
-      },
+      }
     ],
     "circuit": "circuit empty :\n  module empty :\n\n    skip\n",
     "annotations": [],

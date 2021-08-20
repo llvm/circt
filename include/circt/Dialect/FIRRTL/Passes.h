@@ -60,6 +60,8 @@ std::unique_ptr<mlir::Pass> createGrandCentralPass();
 
 std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
 
+std::unique_ptr<mlir::Pass> createGrandCentralSignalMappingsPass();
+
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 
 /// Generate the code for registering passes.
