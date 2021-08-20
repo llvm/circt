@@ -34,6 +34,10 @@ namespace detail {
 struct Generators;
 } // namespace detail
 
+/// Find the instance in the instance hierarchy as specified by the instance
+/// names in 'path'.
+circt::hw::InstanceOp getInstance(circt::hw::HWModuleOp root,
+                                  SymbolRefAttr path);
 } // namespace msft
 } // namespace circt
 

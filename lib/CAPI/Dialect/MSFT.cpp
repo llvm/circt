@@ -110,3 +110,9 @@ void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute attr,
     dstArray[i] = {wrap(c.first), wrap(c.second)};
   }
 }
+
+MlirOperation circtMSFTGetInstance(MlirOperation cRoot, MlirAttribute cPath) {
+  auto root = cast<circt::hw::HWModuleOp>(unwrap(cRoot));
+  auto path = unwrap(cPath).cast<SymbolRefAttr>();
+  return wrap(getInstance(root, path));
+}

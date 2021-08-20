@@ -54,6 +54,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
         py::arg("op_to_locate"), py::arg("entity_within"), py::arg("devtype"),
         py::arg("x"), py::arg("y"), py::arg("num"));
 
+  m.def("get_instance", circtMSFTGetInstance, py::arg("root"), py::arg("path"));
+
   py::enum_<DeviceType>(m, "DeviceType")
       .value("M20K", DeviceType::M20K)
       .value("DSP", DeviceType::DSP)
