@@ -465,23 +465,30 @@ static void printCallInstanceOp(OpAsmPrinter &printer, CallInstanceOp op) {
 /// IfOp
 static void printIfOp(OpAsmPrinter &printer, IfOp op) {
 
-  printer << "hir.if " << op.cond() << " at ";
+  printer << "hir.if " << op.cond();
+
+  printer << " at time(" << op.if_region().getArgument(0) << " = ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
+  printer << ")";
+
   if (op.results().size() > 0) {
     printer << " -> (";
     printTypeAndDelayList(printer, op->getResultTypes(), op.result_attrs());
     printer << ")";
   }
+
   printer.printRegion(op.if_region(),
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/true);
+
   printer << "else";
-  printer.printRegion(op->getRegion(1));
+  printer.printRegion(op.else_region(), false, true);
 }
 
 static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType cond;
   llvm::Optional<OpAsmParser::OperandType> tstart;
+  OpAsmParser::OperandType timevar;
   IntegerAttr offsetAttr;
   SmallVector<Type> resultTypes;
   ArrayAttr resultAttrs;
@@ -490,11 +497,15 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
   if (parser.parseOperand(cond))
     return failure();
 
-  // parse tstart.
-  if (parser.parseKeyword("at"))
+  // parse time.
+  if (parser.parseKeyword("at") || parser.parseKeyword("time") ||
+      parser.parseLParen() || parser.parseRegionArgument(timevar) ||
+      parser.parseEqual())
     return failure();
 
   parseTimeAndOffset(parser, tstart, offsetAttr);
+  if (parser.parseRParen())
+    return failure();
 
   if (succeeded(parser.parseOptionalArrow()))
     if (parser.parseLParen() ||
@@ -510,6 +521,7 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
     if (parser.resolveOperand(tstart.getValue(), TimeType::get(context),
                               result.operands))
       return failure();
+
   if (offsetAttr)
     result.addAttribute("offset", offsetAttr);
   if (resultTypes.size() > 0)
@@ -520,11 +532,12 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
 
   Region *ifBody = result.addRegion();
   Region *elseBody = result.addRegion();
-  if (parser.parseRegion(*ifBody, {}, {}))
+
+  if (parser.parseRegion(*ifBody, {timevar}, {hir::TimeType::get(context)}))
     return failure();
   if (parser.parseKeyword("else"))
     return failure();
-  if (parser.parseRegion(*elseBody, {}, {}))
+  if (parser.parseRegion(*elseBody, {timevar}, {hir::TimeType::get(context)}))
     return failure();
 
   // IfOp::ensureTerminator(*ifBody, builder, result.location);

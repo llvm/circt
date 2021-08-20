@@ -26,15 +26,10 @@ LogicalResult checkRegionCaptures(Region &region) {
     if (ty.isa<hir::TimeType>())
       errorMsgs.push_back(
           operand->getOwner()->emitError()
-          << "hir::TimeType can not be captured by a region. Only the region's "
+          << "hir::TimeType can not be captured by this region. Only the "
+             "region's "
              "own time-var (and any other time-var derived from it) is "
              "available inside the region.");
-    // else if (!dyn_cast_or_null<mlir::ConstantOp>(
-    //             operand->get().getDefiningOp()))
-    //  errorMsgs.push_back(operand->getOwner()->emitError()
-    //                      << "Values of type " << ty
-    //                      << " can not be directly captured by a region. "
-    //                         "Use 'latch' operands to capture it.");
     return;
   });
   if (!errorMsgs.empty())
@@ -183,6 +178,16 @@ LogicalResult verifyLoadOp(hir::LoadOp op) {
 LogicalResult verifyStoreOp(hir::StoreOp op) {
   if (failed(verifyTimeAndOffset(op.tstart(), op.offset())))
     return op.emitError("Invalid offset.");
+  return success();
+}
+
+LogicalResult verifyIfOp(hir::IfOp op) {
+  if (failed(verifyTimeAndOffset(op.tstart(), op.offset())))
+    return op.emitError("Invalid offset.");
+  if (failed(checkRegionCaptures(op.if_region())))
+    return failure();
+  if (failed(checkRegionCaptures(op.else_region())))
+    return failure();
   return success();
 }
 //-----------------------------------------------------------------------------

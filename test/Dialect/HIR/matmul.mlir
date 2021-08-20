@@ -89,11 +89,11 @@ hir.func @kernel at %t(
 
       %tk_end = hir.for %k:index = %0 to %ub step %1 iter_time(%tk = %tj){
         %isFirstCol = cmpi "eq", %k , %0 : index
-        %a = hir.if %isFirstCol at %tk -> (i32 delay 1){
-          %a = hir.load %A[port 0][%i, %k] at %tk  : !hir.memref<16x(bank 16)xi32>
-          hir.yield (%a) at %tk : (i32 delay 1)
+        %a = hir.if %isFirstCol at time( %tif = %tk) -> (i32 delay 1){
+          %a = hir.load %A[port 0][%i, %k] at %tif  : !hir.memref<16x(bank 16)xi32>
+          hir.yield (%a) at %tif : (i32 delay 1)
         }else{
-          hir.yield (%c0_i32) at %tk : (i32 delay 1) //FIXME
+          hir.yield (%c0_i32) at %tif : (i32 delay 1)
         }
 
         %b = hir.load %B[port 0][%k, %j] at %tk : !hir.memref<(bank 16)x(bank 16)xi32>

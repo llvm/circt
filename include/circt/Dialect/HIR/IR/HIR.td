@@ -173,6 +173,7 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
   }];
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
+  let verifier =[{return verify$cppClass(*this);}];
 }
 
 def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments]> {

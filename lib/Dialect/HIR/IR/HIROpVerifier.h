@@ -14,6 +14,7 @@ LogicalResult verifyTimeOp(hir::TimeOp op);
 LogicalResult verifyForOp(hir::ForOp op);
 LogicalResult verifyLoadOp(hir::LoadOp op);
 LogicalResult verifyStoreOp(hir::StoreOp op);
+LogicalResult verifyIfOp(hir::IfOp op);
 } // namespace hir
 } // namespace circt
 
