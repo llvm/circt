@@ -47,7 +47,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   resolved_inst = msft.get_instance(top.operation,
                                     ir.Attribute.parse("@inst1::@ext1"))
-  assert(resolved_inst == ext_inst.operation)
+  assert (resolved_inst == ext_inst.operation)
 
   not_found_inst = msft.get_instance(top.operation,
                                      ir.Attribute.parse("@inst_none::@ext1"))
