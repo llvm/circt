@@ -172,7 +172,9 @@ firrtl.circuit "Issue1188"  {
 // DontTouch annotation should block constant propagation.
 firrtl.circuit "testDontTouch"  {
   // CHECK-LABEL: firrtl.module @blockProp
-  firrtl.module @blockProp1(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}, out %b: !firrtl.uint<1>) {
+  firrtl.module @blockProp1(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) attributes {
+    portAnnotations = [[], [{class = "firrtl.transforms.DontTouchAnnotation"}],[]]
+  }{
     //CHECK: %c = firrtl.reg
     %c = firrtl.reg %clock : !firrtl.uint<1>
     firrtl.connect %c, %a : !firrtl.uint<1>, !firrtl.uint<1>
@@ -222,7 +224,8 @@ firrtl.circuit "testDontTouch"  {
 }
 
 firrtl.circuit "OutPortTop" {
-    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}) {
+    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1>) attributes {
+      portAnnotations =[[{class = "firrtl.transforms.DontTouchAnnotation"}]]} {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
@@ -250,7 +253,9 @@ firrtl.circuit "InputPortTop"   {
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   // CHECK-LABEL: firrtl.module @InputPortChild
-  firrtl.module @InputPortChild(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}, out %out: !firrtl.uint<1>) {
+  firrtl.module @InputPortChild(in %in0: !firrtl.uint<1>, in %in1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) attributes {
+    portAnnotations = [[], [{class = "firrtl.transforms.DontTouchAnnotation"}], []]
+  } {
     // CHECK: %0 = firrtl.and %in0, %in1
     %0 = firrtl.and %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %out, %0 : !firrtl.uint<1>, !firrtl.uint<1>
