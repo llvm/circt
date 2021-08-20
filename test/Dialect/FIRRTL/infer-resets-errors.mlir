@@ -162,7 +162,7 @@ firrtl.circuit "top" {
 // Ignore reset annotation cannot target port
 firrtl.circuit "top" {
   // expected-error @+1 {{IgnoreFullAsyncResetAnnotation' cannot target port; must target module instead}}
-  firrtl.module @top(in %reset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation"}]}) {
+  firrtl.module @top(in %reset: !firrtl.asyncreset) attributes {portAnnotations =[[{class = "sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation"}]]} {
   }
 }
 
@@ -186,7 +186,7 @@ firrtl.circuit "top" {
 firrtl.circuit "top" {
   // expected-error @+2 {{multiple reset annotations on module 'top'}}
   // expected-note @+1 {{conflicting "sifive.enterprise.firrtl.FullAsyncResetAnnotation":}}
-  firrtl.module @top(in %outerReset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @top(in %outerReset: !firrtl.asyncreset) attributes {portAnnotations = [[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // expected-note @+1 {{conflicting "sifive.enterprise.firrtl.FullAsyncResetAnnotation":}}
     %innerReset = firrtl.wire {annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]} : !firrtl.asyncreset
     // expected-note @+1 {{conflicting "sifive.enterprise.firrtl.FullAsyncResetAnnotation":}}
@@ -202,7 +202,7 @@ firrtl.circuit "Top" {
     %reg = firrtl.reg %clock : !firrtl.uint<8>
   }
   // expected-note @+1 {{reset domain 'otherReset' of module 'Child' declared here:}}
-  firrtl.module @Child(in %clock: !firrtl.clock, in %otherReset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @Child(in %clock: !firrtl.clock, in %otherReset: !firrtl.asyncreset) attributes {portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // expected-note @+1 {{instance 'child/inst' is in reset domain rooted at 'otherReset' of module 'Child'}}
     %inst_clock = firrtl.instance @Foo {name = "inst"} : !firrtl.clock
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
@@ -213,7 +213,7 @@ firrtl.circuit "Top" {
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
   }
   // expected-note @+1 {{reset domain 'reset' of module 'Top' declared here:}}
-  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     %child_clock, %child_otherReset = firrtl.instance @Child {name = "child"} : !firrtl.clock, !firrtl.asyncreset
     %other_clock = firrtl.instance @Other {name = "other"} : !firrtl.clock
     // expected-note @+1 {{instance 'foo' is in reset domain rooted at 'reset' of module 'Top'}}

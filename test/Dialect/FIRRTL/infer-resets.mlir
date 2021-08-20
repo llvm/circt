@@ -342,7 +342,7 @@ firrtl.module @ConsumeIgnoreAnno() attributes {annotations = [{class = "sifive.e
 
 // CHECK-LABEL: firrtl.module @ConsumeResetAnnoPort
 // CHECK-NOT: FullAsyncResetAnnotation
-firrtl.module @ConsumeResetAnnoPort(in %outerReset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+firrtl.module @ConsumeResetAnnoPort(in %outerReset: !firrtl.asyncreset) attributes {portAnnotations = [[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
 }
 
 // CHECK-LABEL: firrtl.module @ConsumeResetAnnoWire
@@ -358,7 +358,8 @@ firrtl.module @ConsumeResetAnnoWire(in %outerReset: !firrtl.asyncreset) {
 // Reset-less registers should inherit the annotated async reset signal.
 firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top
-  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset ) attributes {
+    portAnnotations = [[],[],[],[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
     // CHECK: %reg1 = firrtl.regreset %clock, %extraReset, %c0_ui8
     %reg1 = firrtl.reg %clock : !firrtl.uint<8>
@@ -422,7 +423,8 @@ firrtl.circuit "Top" {
 // types.
 firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top
-  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
+    portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // CHECK: %c0_ui = firrtl.constant 0 : !firrtl.uint
     // CHECK: %reg_uint = firrtl.regreset %clock, %reset, %c0_ui
     %reg_uint = firrtl.reg %clock : !firrtl.uint
@@ -484,7 +486,8 @@ firrtl.circuit "ReusePorts" {
     %reg = firrtl.reg %clock : !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @ReusePorts
-  firrtl.module @ReusePorts(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @ReusePorts(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
+    portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // CHECK: %child_clock, %child_reset = firrtl.instance @Child
     // CHECK: firrtl.connect %child_reset, %reset
     // CHECK: %badName_reset, %badName_clock, %badName_existingReset = firrtl.instance @BadName
@@ -522,7 +525,8 @@ firrtl.circuit "FullAsyncNested" {
     firrtl.connect %io_out, %1 : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @FullAsyncNested
-  firrtl.module @FullAsyncNested(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>) {
+  firrtl.module @FullAsyncNested(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>) attributes {
+    portAnnotations=[[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}], [], []] } {
     %inst_clock, %inst_reset, %inst_io_in, %inst_io_out = firrtl.instance @FullAsyncNestedChild  {name = "inst"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %inst_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
@@ -545,7 +549,8 @@ firrtl.circuit "FullAsyncExcluded" {
     firrtl.connect %io_out, %io_out_REG : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @FullAsyncExcluded
-  firrtl.module @FullAsyncExcluded(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @FullAsyncExcluded(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset) attributes {
+     portAnnotations = [[],[],[],[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // CHECK: %inst_clock, %inst_reset, %inst_io_in, %inst_io_out = firrtl.instance @FullAsyncExcludedChild
     %inst_clock, %inst_reset, %inst_io_in, %inst_io_out = firrtl.instance @FullAsyncExcludedChild  {name = "inst"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock

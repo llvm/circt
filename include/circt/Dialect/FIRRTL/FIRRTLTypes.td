@@ -178,8 +178,19 @@ def SubAnnotationAttr
   let parameters = (ins "int64_t":$fieldID, "DictionaryAttr":$annotations);
 }
 
-def PortAnnotationsAttr : TypedArrayAttrBase<AnnotationArrayAttr,
-                                             "FIRRTL port annotations">;
+def PortAnnotationsAttr : ArrayAttrBase<
+    And<[
+      // Guarantee this is an ArrayAttr first
+      CPred<"$_self.isa<::mlir::ArrayAttr>()">,
+      // Guarantee all elements are DictionaryAttr or SubAnnotationAttr
+      CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
+            "[&](::mlir::Attribute attr) { return attr.isa<"
+            "::mlir::ArrayAttr,"
+            "::mlir::DictionaryAttr>();})">]>,
+    ""> {
+  let constBuilderCall = "$_builder.getArrayAttr($0)";
+}
+
 
 def InvalidValueAttr
   : AttrDef<FIRRTLDialect, "InvalidValue", [], "::mlir::Attribute"> {

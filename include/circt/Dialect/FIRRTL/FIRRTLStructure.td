@@ -61,7 +61,7 @@ def FModuleOp : FIRRTLOp<"module",
   let arguments =
             (ins StrArrayAttr:$portNames,
                  DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$portAnnotations);
+                 DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
 
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
@@ -142,7 +142,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
                        OptionalAttr<StrAttr>:$defname,
                        OptionalAttr<DictionaryAttr>:$parameters,
                        DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-                       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$portAnnotations);
+                       DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
