@@ -107,41 +107,47 @@ information.
 results in undefined behavior. We will add an `initialValue` attribute if
 this proves insufficient.
 
-## The Flip Flop Operation
+## The Register Operation
 
-`seq.ff` models a D-Flip Flop operation, with support for various features,
-namely:
+`seq.reg` abstractly models a generic memory element that can be implemented
+as various physical memory elements. This attempts to capture most behaviours
+expressable by a `reg` in SystemVerilog.
 
-- clock edge sensitivity: posedge, negedge or edge-triggered
-- explicit enable signals
-- an optional synchronous & asynchronus reset
+This is an abstract operation that should be further lowered down to either
+vendor-specific primtives or to the SV dialect.
 
-This is an abstract general-purpose operation that can be targetted by other
-dialects. It should be further lowered down to either vendor-specific primtives
-or to the SV dialect.
+The register operation contains the following operands:
 
-`seq.ff` has the following MLIR format:
+- clock and its edge sensitivity: posedge, negedge, edge-triggered, or
+  unclocked. An unclocked register can be used to express a latch.
+- enable signals
+- input value
+- synchronous & asynchronus reset and reset values
+
+`seq.reg` has the following MLIR format:
 
 ```mlir
-%q = seq.ff %input, (posedge|negedge) %clk , %enable, %syncReset, %asyncReset,
-%syncResetValue, %asyncResetValue  : $type(input)
+%q = seq.reg [posedge %clk | negedge %clk | edge %clk | unclocked],
+               %input, %enable,
+               %syncReset, %syncResetValue,
+               %asyncReset, %asyncResetValue
+               : $type(input)
 ```
 
 ### Rationale
 
-The ordering of operands are as such, as reset values need not be supplied if
-`syncReset` or `asyncReset` is tied to `hw.constant 0`. the `seq.ff` operation
-will be verified such that this operand holds.
+- Clock edges:
+  As a general-purpose register operation, this operation captures all possible
+  clock edge semantics that we will need in representing physical memory
+  elements.
 
-The common case in this operation would be to set `enable` to `hw.constant 1`.
-However, we do not make this operand optional despite the slight benefit of
-making the IR smaller, as it will complicate parsing, and make analysis harder
-as we would need to deal with an additional null case.
+- Enable signal:
+  The enable signal is not optional. While the common-case is to set this to
+  vdd, this can be easily detected from analysis passes by checking if its
+  equal to `hw.constant 1`.
 
-The reset values are not optional in this operation. When as they are not used,
-they will be populated with dummy values (eg: zeros). Analysis can statically
-determine that they are not used by checking if `%syncReset` is `hw.constant
-0`. The presence of optional operands will somewhat complicate parsing. For
-example, if `%syncResetValue` and `%asyncResetValue` are optional, when a FF
-has both an asynchronous reset, but not a synchronous one, `%syncResetValue`
-will need to populated with a dummy value anyway.
+- Non-optional syncReset and asyncReset:
+  Both synchronous reset and asynchronous resets are available as operands as
+  it is possible for flip flops to have both forms of reset. In the event that
+  these resets are not required, that can simply be tied to `hw.constant 0`,
+  and the resetValue operands can be populated with dummy values (eg: zeros)
