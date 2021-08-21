@@ -16,6 +16,7 @@
 
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
@@ -35,6 +36,9 @@ inline void registerAllPasses() {
   llhd::initLLHDTransformationPasses();
   seq::registerSeqPasses();
   sv::registerPasses();
+
+  // Analysis passes
+  comb::registerCombPasses();
 }
 
 } // namespace circt

@@ -68,6 +68,12 @@ struct KnownBitAnalysis {
   APInt getBitsKnown() const { return ones | zeros; }
 };
 
+/// Register Comb passes to print analysis information.
+void registerCombAnalysisPasses();
+
+/// Register all Comb-related passes.
+void registerCombPasses();
+
 } // namespace comb
 } // namespace circt
 

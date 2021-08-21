@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "mlir/Pass/Pass.h"
 
 using namespace circt;
 using namespace comb;
@@ -99,4 +100,64 @@ static KnownBitAnalysis computeKnownBits(Value v, unsigned depth) {
 /// constant" always returns zeros for the zero bits in a constant.
 KnownBitAnalysis KnownBitAnalysis::compute(Value v) {
   return computeKnownBits(v, 0);
+}
+
+namespace {
+
+class KnownBitsAnalysisPass
+    : public mlir::PassWrapper<KnownBitsAnalysisPass,
+                               OperationPass<mlir::ModuleOp>> {
+public:
+  KnownBitsAnalysisPass(mlir::raw_ostream &os) : os(os) {}
+
+  void runOnOperation();
+
+  StringRef getArgument() const { return "known-bits-analysis"; }
+
+private:
+  raw_ostream &os;
+};
+
+} // namespace
+
+void KnownBitsAnalysisPass::runOnOperation() {
+  ModuleOp topLevelModule = getOperation();
+
+  for (auto hwModule :
+       topLevelModule.getBody()->getOps<circt::hw::HWModuleOp>()) {
+    os << "module " << hwModule.getName() << "\n";
+    for (Operation &op : hwModule.getBodyBlock()->getOperations()) {
+      os << "  " << op << "\n";
+      unsigned int numResults = op.getNumResults();
+
+      for (unsigned i = 0; i < numResults; i++) {
+        auto result = op.getOpResult(i);
+        KnownBitAnalysis resultKnownBits = KnownBitAnalysis::compute(result);
+        os << "    "
+           << "result[" << i << "]: ";
+
+        if (!resultKnownBits.areAnyKnown()) {
+          os << "Unknown!\n";
+          continue;
+        }
+
+        os << "\n";
+        llvm::SmallString<10> one;
+        llvm::SmallString<10> zero;
+
+        resultKnownBits.ones.toString(one, 16, /* Signed= */ false,
+                                      /* formatAsCLiteral= */ true);
+        resultKnownBits.zeros.toString(zero, 16, /* Signed= */ false,
+                                       /* formatAsCLiteral= */ true);
+
+        os << "      One  bits: " << one << "\n";
+        os << "      Zero bits: " << zero << "\n";
+      }
+    }
+  }
+}
+
+void circt::comb::registerCombAnalysisPasses() {
+  mlir::PassRegistration<KnownBitsAnalysisPass> knownBitsAnalysisPass(
+      [&] { return std::make_unique<KnownBitsAnalysisPass>(llvm::errs()); });
 }
