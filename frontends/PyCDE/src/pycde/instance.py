@@ -79,8 +79,12 @@ class Instance:
     cases.append((self.pathAttr, attr))
     self.module.attributes[attr_key] = msft.SwitchInstanceAttr.get(cases)
 
-  def place(self, subpath: Union[str, list[str]], devtype: msft.DeviceType,
-            x: int, y: int, num: int):
+  def place(self,
+            subpath: Union[str, list[str]],
+            devtype: msft.DeviceType,
+            x: int,
+            y: int,
+            num: int = 0):
     loc = msft.PhysLocationAttr.get(devtype, x, y, num)
     if isinstance(subpath, list):
       subpath = "|".join(subpath)
