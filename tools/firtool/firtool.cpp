@@ -279,7 +279,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
-  if (imconstprop)
+  if (imconstprop && !disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
 
   if (blackBoxMemory)
@@ -329,6 +329,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
     // Legalize the module names.
     pm.addPass(sv::createHWLegalizeNamesPass());
+
+    // Legalize unsupported operations within the modules.
+    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
     // Tidy up the IR to improve verilog emission quality.
     if (!disableOptimization) {
@@ -503,11 +506,6 @@ int main(int argc, char **argv) {
   registerLoweringCLOptions();
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL compiler\n");
-
-  // -disable-opt turns off constant propagation (unless it was explicitly
-  // enabled).
-  if (disableOptimization && imconstprop.getNumOccurrences() == 0)
-    imconstprop = false;
 
   MLIRContext context;
 

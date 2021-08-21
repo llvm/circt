@@ -43,6 +43,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       useAlwaysFF = true;
     } else if (option == "exprInEventControl") {
       allowExprInEventControl = true;
+    } else if (option == "disallowPackedArrays") {
+      disallowPackedArrays = true;
     } else if (option.startswith("emittedLineLength=")) {
       option = option.drop_front(strlen("emittedLineLength="));
       if (option.getAsInteger(10, emittedLineLength)) {
@@ -74,16 +76,18 @@ std::string LoweringOptions::toString() const {
   return options;
 }
 
+StringAttr LoweringOptions::getAttributeFrom(ModuleOp module) {
+  return module->getAttrOfType<StringAttr>("circt.loweringOptions");
+}
+
 void LoweringOptions::setAsAttribute(ModuleOp module) {
   module->setAttr("circt.loweringOptions",
                   StringAttr::get(module.getContext(), toString()));
 }
 
 void LoweringOptions::parseFromAttribute(ModuleOp module) {
-  if (auto styleAttr =
-          module->getAttrOfType<StringAttr>("circt.loweringOptions")) {
+  if (auto styleAttr = getAttributeFrom(module))
     parse(styleAttr.getValue(), [&](Twine error) { module.emitError(error); });
-  }
 }
 
 //===----------------------------------------------------------------------===//
