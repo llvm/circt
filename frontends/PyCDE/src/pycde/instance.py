@@ -3,6 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+from typing import Union
 
 import circt.dialects.hw as hw
 from circt import msft
@@ -23,6 +24,13 @@ class Instance:
     self.parent = parent
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
+
+  @property
+  def modname(self) -> str:
+    modname: str = ir.StringAttr(self.module.attributes["sym_name"]).value
+    if modname.startswith("pycde.") or modname.startswith("pycde_"):
+      return modname[6:]
+    return modname
 
   @property
   def path(self) -> list[Instance]:
@@ -71,6 +79,9 @@ class Instance:
     cases.append((self.pathAttr, attr))
     self.module.attributes[attr_key] = msft.SwitchInstanceAttr.get(cases)
 
-  def place(self, subpath: str, devtype: msft.DeviceType, x: int, y: int, num: int):
+  def place(self, subpath: Union[str, list[str]], devtype: msft.DeviceType,
+            x: int, y: int, num: int):
     loc = msft.PhysLocationAttr.get(devtype, x, y, num)
+    if isinstance(subpath, list):
+      subpath = "|".join(subpath)
     self.attach_attribute(f"loc:{subpath}", loc)
