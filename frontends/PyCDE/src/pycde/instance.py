@@ -60,7 +60,7 @@ class Instance:
       tgt_modname = ir.FlatSymbolRefAttr(op.attributes["moduleName"]).value
       tgt_mod = self.sys.get_module(tgt_modname)
       if tgt_mod is None:
-        raise ValueError(f"Could not find module {tgt_modname}")
+        continue
       inst = Instance(tgt_mod, op, self, self.sys)
       callback(inst)
       inst.walk_instances(callback)
