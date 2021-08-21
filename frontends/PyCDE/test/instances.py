@@ -4,6 +4,7 @@ import pycde
 import circt.dialects.hw
 
 from circt import msft
+from pycde.appid import AppIDIndex
 
 
 @pycde.externmodule
@@ -54,16 +55,23 @@ print("=== Hierarchy")
 t.walk_instances("pycde_Test", lambda inst: print(inst))
 
 
+locs = pycde.AppIDIndex()
+locs.lookup(pycde.AppID("pycde_UnParameterized"))["loc"] = \
+  (["memory", "bank"], msft.M20K, 15, 25, 0)
+locs.lookup(pycde.AppID(["pycde_UnParameterized_0"]))["loc"] = \
+  (["memory", "bank"], msft.M20K, 39, 25, 0)
+
+
 def place_inst(inst):
   global x, y
   if inst.modname == "Nothing":
     inst.place("dsp_inst", msft.DSP, x, y)
     x += 1
     y += 2
-  elif inst.appid == pycde.AppID("pycde_UnParameterized"):
-    inst.place(["memory", "bank"], msft.M20K, 15, 25, 0)
-  elif inst.appid == pycde.AppID(["pycde_UnParameterized_0"]):
-    inst.place(["memory", "bank"], msft.M20K, 39, 25, 0)
+  else:
+    props = locs.lookup(inst.appid)
+    if "loc" in props:
+      inst.place(*props["loc"])
 
 
 x = 0
