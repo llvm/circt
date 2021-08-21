@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 from typing import Union
+from .appid import AppID
 
 import circt.dialects.hw as hw
 from circt import msft
@@ -57,6 +58,10 @@ class Instance:
   @property
   def is_root(self):
     return self.parent is None
+
+  @property
+  def appid(self):
+    return AppID([i.name for i in self.path])
 
   def __repr__(self):
     path_names = map(lambda i: i.name, self.path)
