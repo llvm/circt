@@ -5,6 +5,7 @@ import circt.dialects.hw
 
 from circt import msft
 from pycde.appid import AppIDIndex
+import pycde.attributes as attrs
 
 
 @pycde.externmodule
@@ -56,8 +57,6 @@ t.walk_instances("pycde_Test", lambda inst: print(inst))
 
 
 locs = pycde.AppIDIndex()
-locs.lookup(pycde.AppID("pycde_UnParameterized"))["loc"] = \
-  (["memory", "bank"], msft.M20K, 15, 25, 0)
 locs.lookup(pycde.AppID(["pycde_UnParameterized_0"]))["loc"] = \
   (["memory", "bank"], msft.M20K, 39, 25, 0)
 
@@ -77,6 +76,14 @@ def place_inst(inst):
 x = 0
 y = 10
 t.walk_instances("pycde_Test", place_inst)
+
+
+instance_attrs = pycde.AppIDIndex()
+loc = attrs.placement(["memory", "bank"], msft.M20K, 15, 25, 0)
+instance_attrs.lookup(pycde.AppID("pycde_UnParameterized")).add_attribute(loc)
+
+t.walk_instances("pycde_Test", instance_attrs.apply_attributes_visitor)
+
 t.print()
 
 # CHECK-LABEL: === Tcl

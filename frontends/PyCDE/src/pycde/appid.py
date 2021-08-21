@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from typing import Union
+import mlir.ir as ir
+
+from typing import Union, Tuple
 
 
 class AppID:
@@ -44,3 +46,17 @@ class AppIDIndex(dict):
     if appid.head not in self._children:
       self._children[appid.head] = AppIDIndex()
     return self._children[appid.head].lookup(appid.tail)
+
+  def add_attribute(self, attr: Tuple[str, ir.Attribute]) -> None:
+    self[attr[0]] = attr[1]
+
+  @property
+  def apply_attributes_visitor(self):
+    from .instance import Instance
+
+    def _visit(idx, inst: Instance):
+      attrs = idx.lookup(inst.appid)
+      for (akey, attr) in attrs.items():
+        inst.attach_attribute(akey, attr)
+
+    return lambda i, idx=self: _visit(idx, i)
