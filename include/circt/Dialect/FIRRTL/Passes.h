@@ -28,6 +28,8 @@ std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass();
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
+std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
+
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
 
 std::unique_ptr<mlir::Pass> createInlinerPass();

@@ -123,6 +123,11 @@ static cl::opt<bool>
                        cl::init(false));
 
 static cl::opt<bool>
+    lowerCHIRRTL("lower-chirrtl",
+                 cl::desc("lower CHIRRTL memories to FIRRTL memories"),
+                 cl::init(true));
+
+static cl::opt<bool>
     inferWidths("infer-widths",
                 cl::desc("run the width inference pass on firrtl"),
                 cl::init(true));
@@ -240,6 +245,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
   }
+
+  if (lowerCHIRRTL)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createLowerCHIRRTLPass());
 
   // Width inference creates canonicalization opportunities.
   if (inferWidths)
