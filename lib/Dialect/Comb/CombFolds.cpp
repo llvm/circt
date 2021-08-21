@@ -12,6 +12,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/KnownBits.h"
 
 using namespace mlir;
 using namespace circt;
@@ -223,15 +224,14 @@ OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
 
 LogicalResult SExtOp::canonicalize(SExtOp op, PatternRewriter &rewriter) {
   // If the sign bit is known, we can fold this to a simpler operation.
-  auto knownBits = KnownBitAnalysis::compute(op.input());
-  if (knownBits.getBitsKnown().isNegative()) {
+  auto knownBits = computeKnownBits(op.input());
+  if (knownBits.isNegative() || knownBits.isNonNegative()) {
     // Ok, we know the sign bit, strength reduce this into a concat of the
     // appropriate constant.
     unsigned numBits =
         op.getType().getWidth() - op.input().getType().getIntOrFloatBitWidth();
-    APInt cstBits = knownBits.ones.isNegative()
-                        ? APInt::getAllOnesValue(numBits)
-                        : APInt(numBits, 0);
+    APInt cstBits = knownBits.isNegative() ? APInt::getAllOnesValue(numBits)
+                                           : APInt(numBits, 0);
     auto signBits = rewriter.create<hw::ConstantOp>(op.getLoc(), cstBits);
     rewriter.replaceOpWithNewOp<ConcatOp>(op, signBits, op.input());
     return success();
@@ -1781,13 +1781,13 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
 /// to `stuff == 0`, or `and(x, 3) == 0` can be simplified to
 /// `extract x[1:0] == 0`
 static void combineEqualityICmpWithKnownBitsAndConstant(
-    ICmpOp cmpOp, const KnownBitAnalysis &bitAnalysis, const APInt &rhsCst,
+    ICmpOp cmpOp, const KnownBits &bitAnalysis, const APInt &rhsCst,
     PatternRewriter &rewriter) {
 
   // If any of the known bits disagree with any of the comparison bits, then
   // we can constant fold this comparison right away.
-  APInt bitsKnown = bitAnalysis.getBitsKnown();
-  if ((bitsKnown & rhsCst) != bitAnalysis.ones) {
+  APInt bitsKnown = bitAnalysis.Zero | bitAnalysis.One;
+  if ((bitsKnown & rhsCst) != bitAnalysis.One) {
     // If we discover a mismatch then we know an "eq" comparison is false
     // and a "ne" comparison is true!
     bool result = cmpOp.predicate() == ICmpPredicate::ne;
@@ -2041,8 +2041,8 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       // Simplify `icmp(value_with_known_bits, rhscst)` into some extracts
       // with a smaller constant.  We only support equality comparisons for
       // this.
-      auto knownBits = KnownBitAnalysis::compute(op.lhs());
-      if (knownBits.areAnyKnown())
+      auto knownBits = computeKnownBits(op.lhs());
+      if (!knownBits.isUnknown())
         return combineEqualityICmpWithKnownBitsAndConstant(op, knownBits, rhs,
                                                            rewriter),
                success();
