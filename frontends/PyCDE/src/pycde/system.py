@@ -88,7 +88,7 @@ class System:
   def get_module(self, mod_name: str) -> hw.HWModuleOp:
     """Find the hw.module op with the specified name."""
     for op in self.mod.body:
-      if not isinstance(op, hw.HWModuleOp):
+      if not isinstance(op, (hw.HWModuleOp, hw.HWModuleExternOp)):
         continue
       op_modname = ir.StringAttr(op.attributes["sym_name"]).value
       # if self.passed:

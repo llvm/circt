@@ -6,12 +6,9 @@ import circt.dialects.hw
 from circt import msft
 
 
-@pycde.module
+@pycde.externmodule
 class Nothing:
-
-  @pycde.generator
-  def construct(mod):
-    return {}
+  pass
 
 
 @pycde.module
@@ -77,8 +74,8 @@ t.print()
 print("=== Tcl")
 
 # CHECK-LABEL: proc pycde_Test_config { parent }
-# CHECK-NEXT:  set_location_assignment M20K_X0_Y10_N0 -to $parent|pycde_UnParameterized|memory|bank
 # CHECK-NEXT:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|dsp_inst
-# CHECK-NEXT:  set_location_assignment M20K_X2_Y14_N0 -to $parent|pycde_UnParameterized_0|memory|bank
+# CHECK-NEXT:  set_location_assignment M20K_X0_Y10_N0 -to $parent|pycde_UnParameterized|memory|bank
 # CHECK-NEXT:  set_location_assignment MPDSP_X3_Y16_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
+# CHECK-NEXT:  set_location_assignment M20K_X2_Y14_N0 -to $parent|pycde_UnParameterized_0|memory|bank
 t.print_tcl()

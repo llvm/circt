@@ -44,14 +44,27 @@ class Instance:
     return ir.Attribute.parse("::".join(symrefs))
 
   @property
+  def pathToAttr(self) -> ir.MlirAttribute:
+    symrefs = [f"@{i.name}" for i in self.path]
+    if len(symrefs) <= 1:
+      return None
+    return ir.Attribute.parse("::".join(symrefs[:-1]))
+
+  @property
   def name(self):
     return ir.StringAttr(self.instOp.instanceName).value
+
+  @property
+  def is_root(self):
+    return self.parent is None
 
   def __repr__(self):
     path_names = map(lambda i: i.name, self.path)
     return "<instance: [" + ", ".join(path_names) + "]>"
 
   def walk_instances(self, callback):
+    if isinstance(self.module, hw.HWModuleExternOp):
+      return
     for op in self.module.entry_block:
       if not isinstance(op, hw.InstanceOp):
         continue
@@ -66,18 +79,24 @@ class Instance:
       inst.walk_instances(callback)
 
   def attach_attribute(self, attr_key: str, attr: ir.Attribute):
-    if attr_key not in self.module.attributes:
+    # In the case where this instance sits in the 'top' or 'root' module, we
+    # don't need a switch attr.
+    if self.parent.is_root:
+      self.instOp.attributes[attr_key] = attr
+      return
+
+    if attr_key not in self.instOp.attributes:
       cases = []
     else:
-      existing_attr = self.module.attributes[attr_key]
+      existing_attr = self.instOp.attributes[attr_key]
       try:
         inst_switch = msft.SwitchInstanceAttr(existing_attr)
         cases = inst_switch.cases
       except TypeError:
         raise ValueError(
             f"Existing attribute ({existing_attr}) is not msft.switch.inst.")
-    cases.append((self.pathAttr, attr))
-    self.module.attributes[attr_key] = msft.SwitchInstanceAttr.get(cases)
+    cases.append((self.pathToAttr, attr))
+    self.instOp.attributes[attr_key] = msft.SwitchInstanceAttr.get(cases)
 
   def place(self,
             subpath: Union[str, list[str]],
