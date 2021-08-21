@@ -3,8 +3,10 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
+from typing import Union
 
 import circt.dialects.hw as hw
+from circt import msft
 
 import mlir.ir as ir
 
@@ -24,10 +26,22 @@ class Instance:
     self.sys = sys
 
   @property
+  def modname(self) -> str:
+    modname: str = ir.StringAttr(self.module.attributes["sym_name"]).value
+    if modname.startswith("pycde.") or modname.startswith("pycde_"):
+      return modname[6:]
+    return modname
+
+  @property
   def path(self) -> list[Instance]:
     if self.parent is None:
       return []
     return self.parent.path + [self]
+
+  @property
+  def pathAttr(self) -> ir.MlirAttribute:
+    symrefs = [f"@{i.name}" for i in self.path]
+    return ir.Attribute.parse("::".join(symrefs))
 
   @property
   def name(self):
@@ -50,3 +64,28 @@ class Instance:
       inst = Instance(tgt_mod, op, self, self.sys)
       callback(inst)
       inst.walk_instances(callback)
+
+  def attach_attribute(self, attr_key: str, attr: ir.Attribute):
+    if attr_key not in self.module.attributes:
+      cases = []
+    else:
+      existing_attr = self.module.attributes[attr_key]
+      try:
+        inst_switch = msft.SwitchInstanceAttr(existing_attr)
+        cases = inst_switch.cases
+      except TypeError:
+        raise ValueError(
+            f"Existing attribute ({existing_attr}) is not msft.switch.inst.")
+    cases.append((self.pathAttr, attr))
+    self.module.attributes[attr_key] = msft.SwitchInstanceAttr.get(cases)
+
+  def place(self,
+            subpath: Union[str, list[str]],
+            devtype: msft.DeviceType,
+            x: int,
+            y: int,
+            num: int = 0):
+    loc = msft.PhysLocationAttr.get(devtype, x, y, num)
+    if isinstance(subpath, list):
+      subpath = "|".join(subpath)
+    self.attach_attribute(f"loc:{subpath}", loc)
