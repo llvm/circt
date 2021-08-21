@@ -100,7 +100,7 @@ def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createExpandWhensPass()";
 }
 
-def InferMemories : Pass<"firrtl-infer-memories", "firrtl::FModuleOp"> {
+def LowerCHIRRTL : Pass<"firrtl-lower-chirrtl", "firrtl::FModuleOp"> {
   let summary = "Infer the memory ports of SeqMem and CombMem";
   let description = [{
       This pass finds the CHIRRTL behavioral memories and their ports, and
@@ -130,7 +130,7 @@ def InferMemories : Pass<"firrtl-infer-memories", "firrtl::FModuleOp"> {
       compilation error.
 
   }];
-  let constructor = "circt::firrtl::createInferMemoriesPass()";
+  let constructor = "circt::firrtl::createLowerCHIRRTLPass()";
 }
 
 def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
