@@ -3,6 +3,8 @@
 import pycde
 import circt.dialects.hw
 
+from circt import msft
+
 
 @pycde.module
 class Nothing:
@@ -53,3 +55,26 @@ print("=== Hierarchy")
 # CHECK-NEXT: <instance: [pycde_UnParameterized_0]>
 # CHECK-NEXT: <instance: [pycde_UnParameterized_0, pycde_Nothing]>
 t.walk_instances("Test", lambda inst: print(inst))
+
+
+def place_inst(inst):
+  global x, y
+  inst.place("dsp_inst", msft.DSP, x, y, 0)
+  x += 1
+  y += 2
+
+
+x = 0
+y = 10
+t.walk_instances("Test", place_inst)
+t.print()
+
+# CHECK-LABEL: === Tcl
+print("=== Tcl")
+
+# CHECK-LABEL: proc pycde_Test_config { parent }
+# CHECK-NEXT:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|pycde_UnParameterized|dsp_inst
+# CHECK-NEXT:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|dsp_inst
+# CHECK-NEXT:  set_location_assignment MPDSP_X2_Y14_N0 -to $parent|pycde_UnParameterized_0|dsp_inst
+# CHECK-NEXT:  set_location_assignment MPDSP_X3_Y16_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
+t.print_tcl()

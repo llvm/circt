@@ -2,9 +2,8 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from ctypes import Union
 from .pycde_types import types
-from .module import ModuleDefinition, module
+from .module import ModuleDefinition
 from .instance import Instance
 
 import mlir
@@ -14,6 +13,7 @@ import mlir.passmanager
 import circt
 import circt.support
 from circt.dialects import hw
+from circt import msft
 
 import gc
 import sys
@@ -118,3 +118,7 @@ class System:
   def print_verilog(self, out_stream: typing.TextIO = sys.stdout):
     self.run_passes()
     circt.export_verilog(self.mod, out_stream)
+
+  def print_tcl(self, out_stream: typing.TextIO = sys.stdout):
+    self.run_passes()
+    msft.export_tcl(self.mod, out_stream)

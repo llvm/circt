@@ -101,12 +101,12 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
         return (DeviceType)circtMSFTPhysLocationAttrGetNum(self);
       });
 
-  mlir_attribute_subclass(m, "SwitchInstance",
+  mlir_attribute_subclass(m, "SwitchInstanceAttr",
                           circtMSFTAttributeIsASwitchInstanceAttribute)
       .def_classmethod(
           "get",
           [](py::object cls,
-             std::vector<std::tuple<MlirAttribute, MlirAttribute>> listOfCases,
+             std::vector<std::pair<MlirAttribute, MlirAttribute>> listOfCases,
              MlirContext ctxt) {
             std::vector<CirctMSFTSwitchInstanceCase> cases;
             for (auto p : listOfCases)
@@ -123,7 +123,10 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
             std::vector<CirctMSFTSwitchInstanceCase> cases(numCases);
             circtMSFTSwitchInstanceAttrGetCases(self, cases.data(),
                                                 cases.max_size());
-            return cases;
+            std::vector<std::pair<MlirAttribute, MlirAttribute>> pyCases;
+            for (auto c : cases)
+              pyCases.push_back(std::make_pair(c.instance, c.attr));
+            return pyCases;
           })
       .def_property_readonly("num_cases", [](MlirAttribute self) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import circt.dialects.hw as hw
+from circt import msft
 
 import mlir.ir as ir
 
@@ -30,6 +31,11 @@ class Instance:
     return self.parent.path + [self]
 
   @property
+  def pathAttr(self) -> ir.MlirAttribute:
+    symrefs = [f"@{i.name}" for i in self.path]
+    return ir.Attribute.parse("::".join(symrefs))
+
+  @property
   def name(self):
     return ir.StringAttr(self.instOp.instanceName).value
 
@@ -50,3 +56,21 @@ class Instance:
       inst = Instance(tgt_mod, op, self, self.sys)
       callback(inst)
       inst.walk_instances(callback)
+
+  def attach_attribute(self, attr_key: str, attr: ir.Attribute):
+    if attr_key not in self.module.attributes:
+      cases = []
+    else:
+      existing_attr = self.module.attributes[attr_key]
+      try:
+        inst_switch = msft.SwitchInstanceAttr(existing_attr)
+        cases = inst_switch.cases
+      except TypeError:
+        raise ValueError(
+            f"Existing attribute ({existing_attr}) is not msft.switch.inst.")
+    cases.append((self.pathAttr, attr))
+    self.module.attributes[attr_key] = msft.SwitchInstanceAttr.get(cases)
+
+  def place(self, subpath: str, devtype: msft.DeviceType, x: int, y: int, num: int):
+    loc = msft.PhysLocationAttr.get(devtype, x, y, num)
+    self.attach_attribute(f"loc:{subpath}", loc)
