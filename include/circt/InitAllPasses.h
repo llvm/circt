@@ -31,14 +31,12 @@ inline void registerAllPasses() {
 
   // Standard Passes
   calyx::registerPasses();
+  comb::registerCombPasses();
   esi::registerESIPasses();
   firrtl::registerPasses();
   llhd::initLLHDTransformationPasses();
   seq::registerSeqPasses();
   sv::registerPasses();
-
-  // Analysis passes
-  comb::registerCombPasses();
 }
 
 } // namespace circt
