@@ -47,43 +47,21 @@ struct InferMemoriesPass : public InferMemoriesBase<InferMemoriesPass>,
 
   /// Get a the constant 0.  This constant is inserted at the beginning of the
   /// module.
-  Value getConstZero() {
-    if (!constZero) {
-      auto builder = OpBuilder::atBlockBegin(getOperation().getBodyBlock());
+  Value getConst(unsigned c) {
+    auto &value = constCache[c];
+    if (!value) {
+      auto module = getOperation();
+      auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
       auto u1Type = UIntType::get(builder.getContext(), /*width*/ 1);
-      constZero = builder.create<ConstantOp>(builder.getUnknownLoc(), u1Type,
-                                             APInt(1, 0, false));
+      value = builder.create<ConstantOp>(module.getLoc(), u1Type,
+                                         APInt(/*bitWidth*/ 1, c, false));
     }
-    return constZero;
-  }
-
-  /// Get the constant 1.  This constant is inserted at the beginning of the
-  /// module.
-  Value getConstOne() {
-    if (!constOne) {
-      auto builder = OpBuilder::atBlockBegin(getOperation().getBodyBlock());
-      auto u1Type = UIntType::get(builder.getContext(), /*width*/ 1);
-      constOne = builder.create<ConstantOp>(builder.getUnknownLoc(), u1Type,
-                                            APInt(1, 1, false));
-    }
-    return constOne;
-  }
-
-  /// Get an invalid value of a certain type.  This will try to minimize the
-  /// number of invalid values created by this pass.
-  Value getInvalid(Type type) {
-    auto &invalid = invalidCache[type];
-    if (!invalid) {
-      auto builder = OpBuilder::atBlockBegin(getOperation().getBodyBlock());
-      invalid = builder.create<InvalidValueOp>(builder.getUnknownLoc(), type);
-    }
-    return invalid;
+    return value;
   }
 
   //// Clear out any stale data.
   void clear() {
-    constOne = nullptr;
-    constZero = nullptr;
+    constCache.clear();
     invalidCache.clear();
     opsToDelete.clear();
     subfieldDirs.clear();
@@ -102,14 +80,13 @@ struct InferMemoriesPass : public InferMemoriesBase<InferMemoriesPass>,
   void cloneSubindexOpForMemory(OpType op, Value input, T... operands);
 
   void emitPartialConnectMask(
-      ImplicitLocOpBuilder builder, Type destType, Type srcType,
+      ImplicitLocOpBuilder &builder, Type destType, Type srcType,
       llvm::function_ref<Value(ImplicitLocOpBuilder &)> getSubAccess);
 
   void runOnOperation() override;
 
   /// Cached constants.
-  Value constOne;
-  Value constZero;
+  DenseMap<unsigned, Value> constCache;
   DenseMap<Type, Value> invalidCache;
 
   /// List of operations to delete at the end of the pass.
@@ -169,30 +146,13 @@ static void connectLeafsTo(ImplicitLocOpBuilder &builder, Value bundle,
 /// aggregates with flip types.
 void InferMemoriesPass::emitInvalid(ImplicitLocOpBuilder &builder,
                                     Value value) {
-  forEachLeaf(builder, value, [&](Value leaf) {
-    builder.create<ConnectOp>(leaf, getInvalid(leaf.getType()));
-  });
-}
-
-/// Combines two MemDirAttrs into a new one which maintains the union of the
-/// Read and Write options.
-static MemDirAttr mergeDirection(MemDirAttr a, MemDirAttr b) {
-  if (a == MemDirAttr::ReadWrite || b == MemDirAttr::ReadWrite)
-    return MemDirAttr::ReadWrite;
-  if (a == MemDirAttr::Write) {
-    if (b == MemDirAttr::Read)
-      return MemDirAttr::ReadWrite;
-    // b == Write || b == Infer
-    return MemDirAttr::Write;
+  auto type = value.getType();
+  auto &invalid = invalidCache[type];
+  if (!invalid) {
+    auto builder = OpBuilder::atBlockBegin(getOperation().getBodyBlock());
+    invalid = builder.create<InvalidValueOp>(getOperation().getLoc(), type);
   }
-  if (a == MemDirAttr::Read) {
-    if (b == MemDirAttr::Write)
-      return MemDirAttr::ReadWrite;
-    // b == Read || b == Infer
-    return MemDirAttr::Read;
-  }
-  // a == Infer
-  return b;
+  builder.create<ConnectOp>(value, invalid);
 }
 
 /// Converts a CHIRRTL memory port direction to a MemoryOp port type.  The
@@ -230,20 +190,22 @@ MemDirAttr InferMemoriesPass::inferMemoryPortKind(MemoryPortOp memPort) {
   // operation we store how it is used into a global hashtable for later use.
   // This records how both the MemoryPort and Subfield operations are used.
   struct StackElement {
+    StackElement(Value value, Value::use_iterator iterator, MemDirAttr mode)
+        : value(value), iterator(iterator), mode(mode) {}
     Value value;
     Value::use_iterator iterator;
     MemDirAttr mode;
   };
 
   SmallVector<StackElement> stack;
-  stack.push_back(
-      {memPort.data(), memPort.data().use_begin(), memPort.direction()});
+  stack.emplace_back(memPort.data(), memPort.data().use_begin(),
+                     memPort.direction());
   MemDirAttr mode = MemDirAttr::Infer;
 
   while (!stack.empty()) {
     auto *iter = &stack.back().iterator;
     auto end = stack.back().value.use_end();
-    stack.back().mode = mergeDirection(stack.back().mode, mode);
+    stack.back().mode |= mode;
 
     while (*iter != end) {
       auto &element = stack.back();
@@ -253,7 +215,7 @@ MemDirAttr InferMemoriesPass::inferMemoryPortKind(MemoryPortOp memPort) {
       if (isa<SubindexOp, SubfieldOp>(user)) {
         // We recurse into Subindex ops to find the leaf-uses.
         auto input = user->getResult(0);
-        stack.push_back({input, input.use_begin(), MemDirAttr::Infer});
+        stack.emplace_back(input, input.use_begin(), MemDirAttr::Infer);
         mode = MemDirAttr::Infer;
         iter = &stack.back().iterator;
         end = input.use_end();
@@ -265,29 +227,29 @@ MemDirAttr InferMemoriesPass::inferMemoryPortKind(MemoryPortOp memPort) {
         // the memory as the vector, we need to recurse.
         auto input = subaccessOp.input();
         if (use.get() == input) {
-          stack.push_back({input, input.use_begin(), MemDirAttr::Infer});
+          stack.emplace_back(input, input.use_begin(), MemDirAttr::Infer);
           mode = MemDirAttr::Infer;
           iter = &stack.back().iterator;
           end = input.use_end();
           continue;
         }
         // Otherwise we are reading from a memory for the index.
-        element.mode = mergeDirection(element.mode, MemDirAttr::Read);
+        element.mode |= MemDirAttr::Read;
       } else if (auto connectOp = dyn_cast<ConnectOp>(user)) {
         if (use.get() == connectOp.dest()) {
-          element.mode = mergeDirection(element.mode, MemDirAttr::Write);
+          element.mode |= MemDirAttr::Write;
         } else {
-          element.mode = mergeDirection(element.mode, MemDirAttr::Read);
+          element.mode |= MemDirAttr::Read;
         }
       } else if (auto partialConnectOp = dyn_cast<PartialConnectOp>(user)) {
         if (use.get() == partialConnectOp.dest()) {
-          element.mode = mergeDirection(element.mode, MemDirAttr::Write);
+          element.mode |= MemDirAttr::Write;
         } else {
-          element.mode = mergeDirection(element.mode, MemDirAttr::Read);
+          element.mode |= MemDirAttr::Read;
         }
       } else {
         // Every other use of a memory is a read operation.
-        element.mode = mergeDirection(element.mode, MemDirAttr::Read);
+        element.mode |= MemDirAttr::Read;
       }
     }
     mode = stack.back().mode;
@@ -393,7 +355,7 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
     auto address = memBuilder.create<SubfieldOp>(memoryPort, "addr");
     emitInvalid(memBuilder, address);
     auto enable = memBuilder.create<SubfieldOp>(memoryPort, "en");
-    memBuilder.create<ConnectOp>(enable, getConstZero());
+    memBuilder.create<ConnectOp>(enable, getConst(0));
     auto clock = memBuilder.create<SubfieldOp>(memoryPort, "clk");
     emitInvalid(memBuilder, clock);
 
@@ -402,7 +364,7 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
     // Sequential+Read ports have a more complicated "enable inference".
     // Everything else sets the enable to true.
     if (!(portKind == MemOp::PortKind::Read && isSequential)) {
-      portBuilder.create<ConnectOp>(enable, getConstOne());
+      portBuilder.create<ConnectOp>(enable, getConst(1));
     }
     portBuilder.create<ConnectOp>(clock, cmemoryPortAccess.clock());
 
@@ -418,7 +380,7 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
       emitInvalid(memBuilder, mask);
 
       // Initialization at the MemoryPortOp.
-      connectLeafsTo(portBuilder, mask, getConstZero());
+      connectLeafsTo(portBuilder, mask, getConst(0));
 
       // Store the write information for updating subfield ops.
       wdataValues[cmemoryPort.data()] = {data, mask, nullptr};
@@ -426,14 +388,14 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
       // Initialization at the MemoryOp.
       auto rdata = memBuilder.create<SubfieldOp>(memoryPort, "rdata");
       auto wmode = memBuilder.create<SubfieldOp>(memoryPort, "wmode");
-      memBuilder.create<ConnectOp>(wmode, getConstZero());
+      memBuilder.create<ConnectOp>(wmode, getConst(0));
       auto wdata = memBuilder.create<SubfieldOp>(memoryPort, "wdata");
       emitInvalid(memBuilder, wdata);
       auto wmask = memBuilder.create<SubfieldOp>(memoryPort, "wmask");
       emitInvalid(memBuilder, wmask);
 
       // Initialization at the MemoryPortOp.
-      connectLeafsTo(portBuilder, wmask, getConstZero());
+      connectLeafsTo(portBuilder, wmask, getConst(0));
 
       // Store the read and write information for updating subfield ops.
       wdataValues[cmemoryPort.data()] = {wdata, wmask, wmode};
@@ -475,14 +437,14 @@ void InferMemoriesPass::replaceMem(Operation *cmem, StringRef name,
         // At each location where we drive a value to the index, set the enable.
         for (auto *driver : drivers) {
           OpBuilder(driver).create<ConnectOp>(driver->getLoc(), enable,
-                                              getConstOne());
+                                              getConst(1));
           success = true;
         }
       } else if (isa<NodeOp>(indexOp)) {
         // If using a Node for the address, then the we place the enable at the
         // Node op's
         OpBuilder(indexOp).create<ConnectOp>(indexOp->getLoc(), enable,
-                                             getConstOne());
+                                             getConst(1));
         success = true;
       }
 
@@ -522,10 +484,10 @@ void InferMemoriesPass::visitStmt(ConnectOp connect) {
     connect.destMutable().assign(writeData.data);
     // Assign the write mask.
     ImplicitLocOpBuilder builder(connect.getLoc(), connect);
-    connectLeafsTo(builder, writeData.mask, getConstOne());
+    connectLeafsTo(builder, writeData.mask, getConst(1));
     // Only ReadWrite memories have a write mode.
     if (writeData.mode)
-      builder.create<ConnectOp>(writeData.mode, getConstOne());
+      builder.create<ConnectOp>(writeData.mode, getConst(1));
   }
   // Check if we are reading from a memory and, if we are, replace the
   // source.
@@ -542,7 +504,7 @@ void InferMemoriesPass::visitStmt(ConnectOp connect) {
 /// connect. This uses lambdas to lazily emit subfield operations on the mask
 /// only when there is a valid pair-wise connection point.
 void InferMemoriesPass::emitPartialConnectMask(
-    ImplicitLocOpBuilder builder, Type destType, Type srcType,
+    ImplicitLocOpBuilder &builder, Type destType, Type srcType,
     llvm::function_ref<Value(ImplicitLocOpBuilder &)> getSubaccess) {
   if (auto destBundle = destType.dyn_cast<BundleType>()) {
     // Partial connect will connect together any two fields with the same name.
@@ -595,7 +557,7 @@ void InferMemoriesPass::emitPartialConnectMask(
   } else {
     // Connect the mask to 1, forcing the creation of any required subfield and
     // subindex operations.
-    builder.create<ConnectOp>(getSubaccess(builder), getConstOne());
+    builder.create<ConnectOp>(getSubaccess(builder), getConst(1));
   }
 }
 
@@ -615,12 +577,12 @@ void InferMemoriesPass::visitStmt(PartialConnectOp partialConnect) {
     emitPartialConnectMask(
         builder, partialConnect.dest().getType(),
         partialConnect.src().getType(),
-        [&](ImplicitLocOpBuilder builder) { return writeData.mask; });
+        [&](ImplicitLocOpBuilder &builder) { return writeData.mask; });
 
     // Only ReadWrite memories have a write mode, so this field can sometimes be
     // null.
     if (writeData.mode)
-      builder.create<ConnectOp>(writeData.mode, getConstOne());
+      builder.create<ConnectOp>(writeData.mode, getConst(1));
   }
 
   // Check if we are reading from a memory and, if we are, replace the

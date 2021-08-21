@@ -129,18 +129,9 @@ firrtl.module @InferReadWrite(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8
 firrtl.module @PartialConnectWriteMask(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %data : !firrtl.bundle<c: vector<uint<3>, 2>, a: uint<1>>) {
   // CHECK: %ram_ramport = firrtl.mem Undefined {depth = 256 : i64, name = "ram", portNames = ["ramport"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<8>, en: uint<1>, clk: clock, data: bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, mask: bundle<a: uint<1>, b: uint<1>, c: vector<uint<1>, 3>>>
   // CHECK: [[DATA:%.*]] = firrtl.subfield %ram_ramport(3)
+  // CHECK: firrtl.connect [[DATA]], %invalid
   // CHECK: [[MASK:%.*]] = firrtl.subfield %ram_ramport(4)
-  // CHECK: [[A:%.*]] = firrtl.subfield [[MASK]](0)
-  // CHECK: firrtl.connect [[A]], %invalid_ui1 
-  // CHECK: [[B:%.*]] = firrtl.subfield [[MASK]](1)
-  // CHECK: firrtl.connect [[B]], %invalid_ui1 
-  // CHECK: [[C:%.*]] = firrtl.subfield [[MASK]](2)
-  // CHECK: [[C_0:%.*]] = firrtl.subindex [[C]][0]
-  // CHECK: firrtl.connect [[C_0]], %invalid_ui1 
-  // CHECK: [[C_1:%.*]] = firrtl.subindex [[C]][1]
-  // CHECK: firrtl.connect [[C_1]], %invalid_ui1 
-  // CHECK: [[C_2:%.*]] = firrtl.subindex [[C]][2]
-  // CHECK: firrtl.connect [[C_2]], %invalid_ui1 
+  // CHECK: firrtl.connect [[MASK]], %invalid
   %ram = firrtl.combmem : !firrtl.cmemory<bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, 256>
 
   // CHECK: [[A:%.*]] = firrtl.subfield [[MASK]](0)
@@ -156,7 +147,6 @@ firrtl.module @PartialConnectWriteMask(in %clock: !firrtl.clock, in %addr: !firr
   // CHECK: firrtl.connect [[C_2]], %c0_ui1 
   %ramport_data, %ramport_port = firrtl.memoryport Infer %ram {name = "ramport"} : (!firrtl.cmemory<bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<2>, c: vector<uint<3>, 3>>, !firrtl.cmemoryport)
   firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
-
 
   // CHECK: [[A:%.*]] = firrtl.subfield [[MASK]](0) : (!firrtl.bundle<a: uint<1>, b: uint<1>, c: vector<uint<1>, 3>>) -> !firrtl.uint<1>
   // CHECK: firrtl.connect [[A]], %c1_ui1 
@@ -212,7 +202,7 @@ firrtl.module @ReadAndWriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrt
 }
 
 // Check that ports are sorted in alphabetical order.
-firrtl.module @SortedPorts(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>, out %out: !firrtl.uint<1>) {
+firrtl.module @SortedPorts(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>) {
   // CHECK: portNames = ["a", "b", "c"]
   %ram = firrtl.combmem : !firrtl.cmemory<vector<uint<1>, 2>, 256>
   %c_data, %c_port = firrtl.memoryport Read %ram {name = "c"} : (!firrtl.cmemory<vector<uint<1>, 2>, 256>) -> (!firrtl.vector<uint<1>, 2>, !firrtl.cmemoryport)
@@ -224,7 +214,7 @@ firrtl.module @SortedPorts(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>,
 }
 
 // Check that annotations are preserved.
-firrtl.module @Annotations(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>, out %out: !firrtl.uint<1>) {
+firrtl.module @Annotations(in %clock: !firrtl.clock, in %addr : !firrtl.uint<8>) {
   // CHECK: firrtl.mem Undefined 
   // CHECK-SAME: annotations = [{a = "a"}]
   // CHECK-SAME: portAnnotations = [
