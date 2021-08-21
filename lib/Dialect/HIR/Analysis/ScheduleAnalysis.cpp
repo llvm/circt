@@ -180,8 +180,8 @@ LogicalResult ScheduleInfoImpl::visitOp(ForOp op) {
     scheduleInfo.mapValueToRootTimeVar[operand] = op.getIterTimeVar();
     scheduleInfo.mapValueToOffset[operand] = 0;
   }
-  for (Value latchedOperand : op.getLatchedInputs()) {
-    scheduleInfo.setOfAlwaysValidValues.insert(latchedOperand);
+  for (Value capturedValue : op.getCapturedValues()) {
+    scheduleInfo.setOfAlwaysValidValues.insert(capturedValue);
   }
   return visitRegion(op.getLoopBody());
 }

@@ -160,10 +160,6 @@ LogicalResult verifyForOp(hir::ForOp op) {
   if (!op.getIterTimeVar().getType().isa<hir::TimeType>())
     return op.emitError("Expected time var to be of !hir.time type.");
 
-  for (Value capture : op.captures())
-    if (capture.getType().isa<hir::TimeType>())
-      return op.emitError(
-          "hir::TimeType can not be captured in a 'latch' operand.");
   if (failed(checkRegionCaptures(op.getLoopBody())))
     return failure();
 

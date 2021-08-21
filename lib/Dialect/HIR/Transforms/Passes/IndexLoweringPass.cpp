@@ -132,15 +132,6 @@ Value replaceIndexCastWithIntegerCast(mlir::ImplicitLocOpBuilder &builder,
   return out;
 }
 
-void updateLatchedInputTypes(hir::ForOp op) {
-  auto captures = op.captures();
-  auto latchedInputs = op.getLatchedInputs();
-  for (size_t i = 0; i < captures.size(); i++) {
-    if (latchedInputs[i].getType() != captures[i].getType()) {
-      op.setLatchedInput(i, captures[i].getType());
-    }
-  }
-}
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
@@ -174,8 +165,6 @@ LogicalResult IndexLoweringPass::updateOp(mlir::IndexCastOp op) {
 
 LogicalResult IndexLoweringPass::updateOp(hir::ForOp op) {
 
-  updateLatchedInputTypes(op);
-
   // There is nothing to do for unroll loops.
   if (op->getAttr("unroll")) {
     if (failed(updateRegion(op.getLoopBody())))
@@ -193,8 +182,8 @@ LogicalResult IndexLoweringPass::updateOp(hir::ForOp op) {
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   op.setInductionVar(builder.getIntegerType(MACHINE_WORD_SIZE));
 
-  // Cast the bounds to IntegerType if they still IndexType (which means they
-  // are constants).
+  // Cast the bounds to IntegerType if they are still IndexType (which means
+  // they are constants).
   if (op.lb().getType().isIndex()) {
     Value newLb = builder
                       .create<mlir::IndexCastOp>(

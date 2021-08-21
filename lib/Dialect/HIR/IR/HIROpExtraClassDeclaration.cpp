@@ -6,6 +6,8 @@
 
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
+#include "circt/Dialect/HIR/IR/helper.h"
+#include "mlir/Transforms/RegionUtils.h"
 
 using namespace circt;
 using namespace hir;
@@ -49,13 +51,6 @@ SmallVector<Value, 4> hir::FuncOp::getOperands() {
   return operands;
 }
 
-SmallVector<Value, 4> hir::CallOp::getOperands() {
-  SmallVector<Value, 4> operands;
-  for (Value arg : this->operands().slice(0, this->getNumOperands() - 1))
-    operands.push_back(arg);
-  return operands;
-}
-
 void hir::FuncOp::updateArguments(ArrayRef<DictionaryAttr> inputAttrs) {
   auto &entryBlock = this->getFuncBody().front();
   SmallVector<Type> inputTypes;
@@ -74,4 +69,50 @@ void hir::FuncOp::updateArguments(ArrayRef<DictionaryAttr> inputAttrs) {
   this->typeAttr(TypeAttr::get(newFuncTy.getFunctionType()));
   this->funcTyAttr(TypeAttr::get(newFuncTy));
   this->setAllArgAttrs(inputAttrs);
+}
+
+SmallVector<Value, 4> hir::CallOp::getOperands() {
+  SmallVector<Value, 4> operands;
+  for (Value arg : this->operands().slice(0, this->getNumOperands() - 1))
+    operands.push_back(arg);
+  return operands;
+}
+
+SmallVector<Value> ForOp::getCapturedValues() {
+  SmallVector<Value> capturedValues;
+  mlir::visitUsedValuesDefinedAbove(
+      body(), [&capturedValues](OpOperand *operand) {
+        if (helper::isBuiltinSizedType(operand->get().getType()))
+          capturedValues.push_back(operand->get());
+        return;
+      });
+  return capturedValues;
+}
+
+Block *ForOp::addEntryBlock(MLIRContext *context, Type inductionVarTy) {
+  Block *entry = new Block;
+  entry->addArgument(inductionVarTy);              // induction var
+  entry->addArgument(hir::TimeType::get(context)); // iter time
+  getLoopBody().push_back(entry);
+  return entry;
+}
+
+void ForOp::beginRegion(OpBuilder &builder) {
+  builder.setInsertionPointToStart(&getLoopBody().front());
+}
+
+void ForOp::endRegion(OpBuilder &builder) {
+  builder.create<hir::YieldOp>(builder.getUnknownLoc());
+  builder.setInsertionPointAfter(*this);
+}
+
+SmallVector<Value> WhileOp::getCapturedValues() {
+  SmallVector<Value> capturedValues;
+  mlir::visitUsedValuesDefinedAbove(
+      body(), [&capturedValues](OpOperand *operand) {
+        if (helper::isBuiltinSizedType(operand->get().getType()))
+          capturedValues.push_back(operand->get());
+        return;
+      });
+  return capturedValues;
 }

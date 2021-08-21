@@ -60,7 +60,7 @@ def ForNextIterOp : HIR_Op<"for.next_iter", [ParentOneOf<["ForOp"]>,Terminator] 
 
   let results = (outs );
 
-  let assemblyFormat = [{ attr-dict custom<TimeAndOffset>($tstart ,$offset) }];
+  let assemblyFormat = [{ `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict }];
 }
 
 def WhileNextIterOp : HIR_Op<"while.next_iter", [ParentOneOf<["WhileOp"]>,Terminator] > {
@@ -82,7 +82,7 @@ def WhileNextIterOp : HIR_Op<"while.next_iter", [ParentOneOf<["WhileOp"]>,Termin
 
   let results = (outs );
 
-  let assemblyFormat = [{ `condition` `(` $condition `)` attr-dict custom<TimeAndOffset>($tstart ,$offset) }];
+  let assemblyFormat = [{ `condition` `(` $condition `)` `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict }];
 }
 
 def YieldOp : HIR_Op<"yield", [ParentOneOf<["IfOp"]>,Terminator] > {
@@ -101,7 +101,7 @@ def YieldOp : HIR_Op<"yield", [ParentOneOf<["IfOp"]>,Terminator] > {
   let builders = [OpBuilder<(ins),[{
     build($_builder,$_state,SmallVector<Value>());
   }]>];
-  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? }];
+  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` `(` type($operands) `)`)? }];
 }
 
 def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
@@ -117,7 +117,7 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
   let builders = [OpBuilder<(ins),[{
     build($_builder,$_state,SmallVector<Value>());
   }]>];
-  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` type($operands))? }];
+  let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` `(` type($operands) `)`)? }];
 }
 
 def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbove, CallableOpInterface]> {
@@ -170,7 +170,7 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbov
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def CommentOp : HIR_Op<"comment", [NoSideEffect]> {
+def CommentOp : HIR_Op<"comment", []> {
   let summary = "comment";
   let description = [{
     This op is used to add comments. This comments are output by the verilog-generator.```
@@ -205,7 +205,7 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>,AttrSizedOperandSegments]> {
+def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
   let summary = "for operation";
   let description = [{
     This op implements a sequential for loop.
@@ -221,18 +221,14 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
     ```
   }];
 
-  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step, Variadic<AnyType>: $captures,
+  let arguments = (ins AnyType: $lb, AnyType: $ub, AnyType: $step,
       Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
-  let regions = (region SizedRegion<1>:$region);
+  let regions = (region SizedRegion<1>:$body);
   let results = (outs HIR_TimeType:$res);
 
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
-  let builders = [OpBuilder<(ins "Value":$lb, "Value":$ub, "Value":$step, "ValueRange":$captures,
-      "Value":$tstart, "IntegerAttr":$offset,"Type":$inductionVarTy),[{
-    build($_builder,$_state,hir::TimeType::get($_builder.getContext()),lb,ub,step,captures,tstart,offset);
-
-  }]>];
+  
   let extraClassDeclaration = [{
     Value getInductionVar() { return getBody()->getArgument(0); }
     Value setInductionVar(Type ty) { 
@@ -242,17 +238,12 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
       getBody()->eraseArgument(1);
       return newInductionVar;
     }
-    ArrayRef<BlockArgument> getLatchedInputs(){return getBody()->getArguments().slice(1,captures().size());}
-    Value setLatchedInput(unsigned i, Type ty) { 
-      Value newArg = getBody()->insertArgument(1+i,ty);
-      getBody()->getArgument(2+i).replaceAllUsesWith(newArg);
-      getBody()->eraseArgument(2+i);
-      return newArg;
-    }
-    Value getIterTimeVar() { return getBody()->getArgument(captures().size()+1); }
+    
+    Value getIterTimeVar() { return getBody()->getArguments().back(); }
     Block* addEntryBlock(MLIRContext *context, Type inductionVarTy);
     void beginRegion(mlir::OpBuilder &builder);        
     void endRegion(mlir::OpBuilder &builder);
+    SmallVector<Value> getCapturedValues();
   }];
   let hasCanonicalizeMethod = true; 
   let verifier =[{return verify$cppClass(*this);}];
@@ -260,37 +251,16 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
 
 def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects]> {
   let summary = "for operation";
-  let arguments = (ins I1:$cond, Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
+  let arguments = (ins I1:$condition, Optional<HIR_TimeType>:$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs HIR_TimeType:$res);
-  let regions = (region SizedRegion<1>:$region);
-}
-
-def UnrollForOp : HIR_Op<"unroll_for", [SingleBlockImplicitTerminator<"YieldOp">, RecursiveSideEffects, DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
-  let summary = "for operation";
-  let description = [{
-    This op implements a sequential for loop.
-      Example:
-      ```
-      mlir %tdone=hir.for %i = 0 to %N step 1 at iter_time(%ti = %t)
-      {}
-    ```
-  }];
-
-  let arguments = (ins I32Attr: $lb, I32Attr: $ub, I32Attr: $step, 
-      HIR_TimeType:$tstart, OptionalAttr<I64Attr>: $offset);
-  let regions = (region SizedRegion<1>:$region);
-  let results = (outs HIR_TimeType:$tlast);
-
-  let extraClassDeclaration = [{
-    Value getInductionVar() { return getBody()->getArgument(0); }
-    Value getIterTimeVar() { return getBody()->getArgument(1); }
-    Block* addEntryBlock(MLIRContext *context);
-    void beginRegion(mlir::OpBuilder &builder);        
-    void endRegion(mlir::OpBuilder &builder);
-  }];
+  let regions = (region SizedRegion<1>:$body);
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
-  let hasCanonicalizeMethod = true;
+
+  let extraClassDeclaration = [{
+    Value getIterTimeVar() { return body().getArguments().back(); }
+    SmallVector<Value> getCapturedValues();
+  }];
 }
 
 def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {

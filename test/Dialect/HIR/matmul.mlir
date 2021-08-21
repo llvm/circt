@@ -23,7 +23,7 @@ hir.func @readA at %t(
       %i1 = hir.delay %i by 1  at %tk : i4
       hir.store %v to %A[port 0][%i1, %k] at %tk + 1 : !hir.memref<16x(bank 16)xi32> delay 1
       hir.for.next_iter at %tk + 1
-    }
+    }{unroll}
     hir.for.next_iter at %tk_end + 1
   }
   hir.return (%t_done) :(!hir.time)
@@ -60,9 +60,9 @@ hir.func @readB at %t(
       %v =  hir.load %buff[port 0][%c0_i1] at %tk : !hir.memref<1xi32>
       hir.store %v to %Bw[port 0][%k, %j] at %tk : !hir.memref<(bank 16)x(bank 16)xi32>
       hir.for.next_iter at %tk + 1
-    }
+    }{unroll}
     hir.for.next_iter at %tk_end + 1
-  }
+  }{unroll}
   %t_done = hir.time %t_j_loop_done + 16: !hir.time
   hir.return (%t_done) : (!hir.time)
 }{inline} 
@@ -106,12 +106,12 @@ hir.func @kernel at %t(
         %c_bus_kplus1 = hir.tensor.extract %C_bus[%kPlus1]: tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports["send"]
         hir.send %c to %c_bus_kplus1[0] at %tk + 4  : i32 to !hir.bus<i32>
         hir.for.next_iter at %tk + 1 
-      }
+      }{unroll}
         %c_bus_last = hir.tensor.extract %C_bus[%16]: tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports["recv"]
       %acc = hir.recv %c_bus_last[0] at %tk_end + 3 : !hir.bus<i32> -> i32
       hir.store %acc to %C[port 0][%i, %j] at %tk_end + 3 : !hir.memref<16x(bank 16)xi32>
       hir.for.next_iter at %tj + 1 
-    }
+    }{unroll}
     hir.for.next_iter at %ti + 1 
   } 
   %t_done = hir.time %t_i_loop_done + 32 :!hir.time 
@@ -136,7 +136,7 @@ hir.func @writeC at %t(
       %j_i4 = index_cast %j : index to i4
       hir.store %v to %Co[port 0][%i, %j_i4] at %tj + 1  : !hir.memref<16x16xi32>
       hir.for.next_iter at %tj + 1 
-    }
+    }{unroll}
     hir.for.next_iter at %tnext + 1
   }
   %t_done = hir.time %t_i_loop_done + 16:!hir.time

@@ -78,11 +78,6 @@ LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
 
-LogicalResult UnrollForOp::canonicalize(UnrollForOp op,
-                                        PatternRewriter &rewriter) {
-  return splitOffsetIntoSeparateOp(op, rewriter);
-}
-
 LogicalResult CallOp::canonicalize(CallOp op, PatternRewriter &rewriter) {
   return splitOffsetIntoSeparateOp(op, rewriter);
 }

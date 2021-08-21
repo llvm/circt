@@ -50,10 +50,7 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
   auto *context = builder.getContext();
 
   // insert the unrolled body.
-  // captures must be a new SmallVector since we update it later.
-  SmallVector<Value> captures = forOp.captures();
 
-  auto latcheInputs = forOp.getLatchedInputs();
   for (int i = lb; i < ub; i += step) {
     Value loopIV = builder
                        .create<mlir::ConstantOp>(builder.getUnknownLoc(),
@@ -64,12 +61,12 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
     BlockAndValueMapping operandMap;
     // Latch the captures and update them as the new captures for the next
     // iteration.
-    for (size_t i = 0; i < captures.size(); i++) {
-      captures[i] = builder.create<hir::LatchOp>(
-          builder.getUnknownLoc(), captures[i].getType(), captures[i],
-          iterTStart, builder.getI64IntegerAttr(0));
+    for (auto capture : forOp.getCapturedValues()) {
+      operandMap.map(capture,
+                     builder.create<hir::LatchOp>(
+                         builder.getUnknownLoc(), capture.getType(), capture,
+                         iterTStart, builder.getI64IntegerAttr(0)));
     }
-    operandMap.map(latcheInputs, captures);
     operandMap.map(iterTimeVar, iterTStart);
     operandMap.map(forOp.getInductionVar(), loopIV);
 
@@ -97,7 +94,7 @@ void LoopUnrollPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
   WalkResult result = funcOp.walk([](Operation *operation) -> WalkResult {
     if (auto forOp = dyn_cast<hir::ForOp>(operation)) {
-      if (forOp.getInductionVar().getType().isa<IndexType>())
+      if (forOp->getAttr("unroll"))
         if (failed(unrollLoopFull(forOp)))
           return WalkResult::interrupt();
     }

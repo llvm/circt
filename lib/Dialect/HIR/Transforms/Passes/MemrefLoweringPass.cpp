@@ -790,9 +790,9 @@ LogicalResult convertOp(hir::StoreOp op, MemrefPortInterface useInterface,
                               op.offsetAttr());
 
   // Remove the StoreOp.
-  op.erase();
   builder.create<hir::CommentOp>(op.getLoc(),
                                  builder.getStringAttr("StoreOp end"));
+  op.erase();
   return success();
 }
 

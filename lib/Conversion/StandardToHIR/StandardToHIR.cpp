@@ -313,44 +313,23 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   assert(lb);
   assert(ub);
   assert(step);
+  // We do not support iter_args so scf.for should not have any results.
+  assert(op.getNumResults() == 0);
 
-  auto forOp = builder.create<hir::ForOp>(
-      op.getLoc(), lb, ub, step, SmallVector<Value>(), Value(), IntegerAttr(),
-      IndexType::get(builder.getContext()));
+  auto forOp = builder.create<hir::ForOp>(op.getLoc(),
+                                          hir::TimeType::get(op.getContext()),
+                                          lb, ub, step, Value(), IntegerAttr());
   BlockAndValueMapping mapper;
   op.getLoopBody().cloneInto(&forOp.getLoopBody(), mapper);
   if (Attribute unrollAttr = op->getAttr("hir.unroll"))
     forOp->setAttr("unroll", unrollAttr);
-  // We do not support iter_args.
-  assert(op.getNumResults() == 0);
-  llvm::DenseMap<Value, Value> mapCapturesToLatchedInputs;
 
-  // Replace all builtin-sized-types that are captured from parent region with a
-  // latched input.
   auto regionOperandTypes =
       SmallVector<Type>({IndexType::get(builder.getContext())});
-  mlir::visitUsedValuesDefinedAbove(
-      forOp.getLoopBody(), [&forOp, &mapCapturesToLatchedInputs,
-                            &regionOperandTypes](OpOperand *operand) {
-        Value capture = operand->get();
-        if (helper::isBuiltinSizedType(capture.getType()) ||
-            capture.getType().isIndex()) {
-          Value latchedInput;
-          if (mapCapturesToLatchedInputs.find(capture) ==
-              mapCapturesToLatchedInputs.end()) {
-            latchedInput = forOp.getBody()->addArgument(capture.getType());
-            forOp.capturesMutable().append(capture);
-            regionOperandTypes.push_back(capture.getType());
-            mapCapturesToLatchedInputs[capture] = latchedInput;
-          } else {
-            latchedInput = mapCapturesToLatchedInputs[capture];
-          }
-          operand->set(latchedInput);
-        }
-      });
 
   opsToErase.push_back(op);
-  return convertRegion(forOp.getLoopBody(), regionOperandTypes,
+  return convertRegion(forOp.getLoopBody(),
+                       {IndexType::get(builder.getContext())},
                        {helper::getDictionaryAttr(
                            builder, "hir.delay", builder.getI64IntegerAttr(0))},
                        /*tstartRequired*/ true);

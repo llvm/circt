@@ -237,7 +237,7 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
   Type calleeTy;
   SmallVector<OpAsmParser::OperandType, 4> operands;
   llvm::Optional<OpAsmParser::OperandType> tstart;
-  IntegerAttr offsetAttr;
+  IntegerAttr offset;
 
   if (parser.parseAttribute(calleeAttr))
     return failure();
@@ -252,7 +252,7 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
     return failure();
   if (parser.parseKeyword("at"))
     return failure();
-  parseTimeAndOffset(parser, tstart, offsetAttr);
+  parseTimeAndOffset(parser, tstart, offset);
 
   if (parser.parseOptionalAttrDict(result.attributes))
     return failure();
@@ -287,8 +287,8 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
 
   result.addAttribute("callee", calleeAttr);
   result.addAttribute("funcTy", TypeAttr::get(calleeTy));
-  if (offsetAttr)
-    result.addAttribute("offset", offsetAttr);
+  if (offset)
+    result.addAttribute("offset", offset);
   result.addTypes(funcTy.getFunctionType().getResults());
 
   return success();
@@ -461,256 +461,150 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-/// ForOp.
-/// Example:
-/// hir.for %i = %l to %u step %s iter_time(%ti = %t){...}
+// WhileOp
+// Example:
+// hir.while(%b) at iter_time(%tw = %t + 1){}
+static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::OperandType iterTimeVar;
+  OpAsmParser::OperandType conditionVar;
+  llvm::Optional<OpAsmParser::OperandType> tstart;
+  IntegerAttr offset;
+  if (parser.parseLParen() || parser.parseOperand(conditionVar) ||
+      parser.parseRParen())
+    return failure();
+
+  if (parser.parseKeyword("at") || parser.parseKeyword("iter_time") ||
+      parser.parseLParen() || parser.parseRegionArgument(iterTimeVar) ||
+      parser.parseEqual())
+    return failure();
+
+  if (parseTimeAndOffset(parser, tstart, offset) || parser.parseRParen())
+    return failure();
+
+  if (parser.resolveOperand(conditionVar, parser.getBuilder().getI1Type(),
+                            result.operands))
+    return failure();
+
+  if (tstart.hasValue())
+    if (parser.resolveOperand(
+            tstart.getValue(),
+            hir::TimeType::get(parser.getBuilder().getContext()),
+            result.operands))
+      return failure();
+
+  if (offset)
+    result.addAttribute("offset", offset);
+
+  Region *body = result.addRegion();
+  if (parser.parseRegion(
+          *body, {iterTimeVar},
+          {hir::TimeType::get(parser.getBuilder().getContext())}))
+    return failure();
+  result.addTypes(TimeType::get(parser.getBuilder().getContext()));
+  return success();
+}
+
+static void printWhileOp(OpAsmPrinter &printer, WhileOp op) {
+  printer << "hir.while (" << op.condition() << ")";
+  printer << " at iter_time(" << op.getIterTimeVar() << " = ";
+  printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
+  printer << ")";
+  printer.printRegion(op->getRegion(0),
+                      /*printEntryBlockArgs=*/false,
+                      /*printBlockTerminators=*/true);
+
+  printer.printOptionalAttrDict(op->getAttrs(),
+                                SmallVector<StringRef>({"offset"}));
+}
+
+// ForOp.
+// Example:
+// hir.for %i = %l to %u step %s iter_time(%ti = %t + 1){...}
+static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
+  auto *context = parser.getBuilder().getContext();
+  Type inductionVarTy;
+
+  OpAsmParser::OperandType iterTimeVar;
+  OpAsmParser::OperandType inductionVar;
+  OpAsmParser::OperandType lb;
+  OpAsmParser::OperandType ub;
+  OpAsmParser::OperandType step;
+  llvm::Optional<OpAsmParser::OperandType> tstart;
+  IntegerAttr offset;
+
+  // Parse the induction variable followed by '='.
+  if (parser.parseRegionArgument(inductionVar) ||
+      parser.parseColonType(inductionVarTy) || parser.parseEqual())
+    return failure();
+  // Parse loop bounds.
+  if (parser.parseOperand(lb) || parser.parseKeyword("to") ||
+      parser.parseOperand(ub) || parser.parseKeyword("step") ||
+      parser.parseOperand(step))
+    return failure();
+
+  // Parse iter-time.
+  if (parser.parseKeyword("iter_time") || parser.parseLParen() ||
+      parser.parseRegionArgument(iterTimeVar) || parser.parseEqual())
+    return failure();
+
+  if (parseTimeAndOffset(parser, tstart, offset) || parser.parseRParen())
+    return failure();
+
+  // resolve the loop bounds.
+  if (parser.resolveOperand(lb, inductionVarTy, result.operands) ||
+      parser.resolveOperand(ub, inductionVarTy, result.operands) ||
+      parser.resolveOperand(step, inductionVarTy, result.operands))
+    return failure();
+
+  // resolve optional tstart and offset.
+  if (tstart.hasValue())
+    if (parser.resolveOperand(tstart.getValue(), TimeType::get(context),
+                              result.operands))
+      return failure();
+  if (offset)
+    result.addAttribute("offset", offset);
+
+  // Parse the body region.
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, {inductionVar, iterTimeVar},
+                         {inductionVarTy, TimeType::get(context)}))
+    return failure();
+
+  // Parse the attr-dict
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  // ForOp result is the time at which last iteration calls next_iter.
+  result.addTypes(TimeType::get(context));
+
+  // ForOp::ensureTerminator(*body, builder, result.location);
+  return success();
+}
 
 static void printForOp(OpAsmPrinter &printer, ForOp op) {
   printer << "hir.for " << op.getInductionVar() << " : "
           << op.getInductionVar().getType() << " = " << op.lb() << " to "
           << op.ub() << " step " << op.step();
 
-  if (!op.captures().empty()) {
-    printer << " latch(";
-    auto latchedInputs = op.getLatchedInputs();
-    auto captures = op.captures();
-    for (size_t i = 0; i < op.captures().size(); i++) {
-      if (i > 0)
-        printer << ", ";
-      printer << latchedInputs[i] << " = " << captures[i] << " : "
-              << captures[i].getType();
-    }
-    printer << ")";
-  }
-
   printer << " iter_time( " << op.getIterTimeVar() << " = ";
-  if (op.tstart()) {
-    printer << op.tstart();
-    if (op.offset() && op.offset().getValue() != 0)
-      printer << " + " << op.offset();
-  } else
-    printer << "?";
+  printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
   printer << ")";
 
   printer.printRegion(op->getRegion(0),
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/true);
 
-  printer.printOptionalAttrDict(
-      op->getAttrs(),
-      SmallVector<StringRef>({"offset", "operand_segment_sizes"}));
+  printer.printOptionalAttrDict(op->getAttrs(),
+                                SmallVector<StringRef>({"offset"}));
 }
 
-static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
-  auto *context = parser.getBuilder().getContext();
-  Type ivTy;
-  SmallVector<Type> regionOperandTypes;
-
-  OpAsmParser::OperandType lbRawOperand;
-  OpAsmParser::OperandType ubRawOperand;
-  IntegerAttr offsetAttr;
-  OpAsmParser::OperandType stepRawOperand;
-  OpAsmParser::OperandType tstartRawOperand;
-  OpAsmParser::OperandType iterTimeVar;
-  OpAsmParser::OperandType inductionVar;
-
-  SmallVector<OpAsmParser::OperandType> regionOperands;
-  // Parse the induction variable followed by '='.
-  if (parser.parseRegionArgument(inductionVar) || parser.parseColonType(ivTy) ||
-      parser.parseEqual())
-    return failure();
-  regionOperands.push_back(inductionVar);
-  regionOperandTypes.push_back(ivTy);
-  // Parse loop bounds.
-  if (parser.parseOperand(lbRawOperand) || parser.parseKeyword("to") ||
-      parser.parseOperand(ubRawOperand) || parser.parseKeyword("step") ||
-      parser.parseOperand(stepRawOperand))
-    return failure();
-
-  // parse latch'ed inputs.
-  SmallVector<OpAsmParser::OperandType> latchInputs;
-  SmallVector<Type> latchedInputTypes;
-  if (succeeded(parser.parseOptionalKeyword("latch"))) {
-    if (parser.parseLParen())
-      return failure();
-    do {
-      OpAsmParser::OperandType latchInput;
-      OpAsmParser::OperandType latchedValue;
-      Type latchedTy;
-      if (parser.parseRegionArgument(latchedValue) || parser.parseEqual() ||
-          parser.parseOperand(latchInput) || parser.parseColonType(latchedTy))
-        return failure();
-      latchInputs.push_back(latchInput);
-      latchedInputTypes.push_back(latchedTy);
-      regionOperands.push_back(latchedValue);
-      regionOperandTypes.push_back(latchedTy);
-
-    } while (succeeded(parser.parseOptionalComma()));
-    if (parser.parseRParen())
-      return failure();
-  }
-
-  // Parse iter-time.
-  if (parser.parseKeyword("iter_time") || parser.parseLParen() ||
-      parser.parseRegionArgument(iterTimeVar) || parser.parseEqual())
-    return failure();
-  regionOperands.push_back(iterTimeVar);
-  regionOperandTypes.push_back(TimeType::get(context));
-
-  bool tstartPresent = false;
-  if (failed(parser.parseOptionalQuestion())) {
-    if (parser.parseOperand(tstartRawOperand))
-      return failure();
-    tstartPresent = true;
-    if (succeeded(parser.parseOptionalPlus())) {
-      if (parser.parseAttribute(offsetAttr, "offset", result.attributes))
-        return failure();
-    } else {
-      result.addAttribute("offset", helper::getI64IntegerAttr(context, 0));
-    }
-  }
-  if (parser.parseRParen())
-    return failure();
-
-  // resolve the loop bounds.
-  if (parser.resolveOperand(lbRawOperand, ivTy, result.operands) ||
-      parser.resolveOperand(ubRawOperand, ivTy, result.operands) ||
-      parser.resolveOperand(stepRawOperand, ivTy, result.operands))
-    return failure();
-
-  if (!latchInputs.empty())
-    if (parser.resolveOperands(latchInputs, latchedInputTypes,
-                               latchInputs[0].location, result.operands))
-      return failure();
-  // resolve optional tstart and offset.
-  if (tstartPresent)
-    if (parser.resolveOperand(tstartRawOperand, TimeType::get(context),
-                              result.operands))
-      return failure();
-
-  result.addAttribute(
-      "operand_segment_sizes",
-      parser.getBuilder().getI32VectorAttr({1, // lb
-                                            1, // ub
-                                            1, // step
-                                            (int32_t)latchInputs.size(),
-                                            tstartPresent ? 1 : 0}));
-
-  // Parse the body region.
-  Region *body = result.addRegion();
-  if (parser.parseRegion(*body, regionOperands, regionOperandTypes))
-    return failure();
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-  // First result is the time at which last iteration yields.
-  result.addTypes(TimeType::get(context));
-  // ForOp::ensureTerminator(*body, builder, result.location);
-  return success();
-}
-
-Region &ForOp::getLoopBody() { return region(); }
+Region &ForOp::getLoopBody() { return body(); }
 
 bool ForOp::isDefinedOutsideOfLoop(Value value) {
-  return !region().isAncestor(value.getParentRegion());
+  return !getLoopBody().isAncestor(value.getParentRegion());
 }
 
 LogicalResult ForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
-  for (auto *op : ops)
-    op->moveBefore(*this);
-  return success();
-}
-
-/// UnrollForOp.
-/// Example:
-/// hir.unroll_for %i = 0 to 100 step 3 iter_time(%ti = %t){...}
-static void printUnrollForOp(OpAsmPrinter &printer, UnrollForOp op) {
-  printer << "hir.unroll_for"
-          << " " << op.getInductionVar() << " = " << op.lb() << " to "
-          << op.ub() << " step " << op.step() << " iter_time( "
-          << op.getIterTimeVar() << " = " << op.tstart();
-  if (op.offset())
-    printer << " + " << op.offset();
-  printer << ")";
-
-  printer.printRegion(op.region(),
-                      /*printEntryBlockArgs=*/false,
-                      /*printBlockTerminators=*/true);
-}
-
-static ParseResult parseUnrollForOp(OpAsmParser &parser,
-                                    OperationState &result) {
-  // auto &builder = parser.getBuilder();
-  auto *context = parser.getBuilder().getContext();
-  Type timeTypeVar = helper::getTimeType(context);
-  Type tstartRawType = timeTypeVar;
-  Type offsetType = IndexType::get(context);
-
-  Type regionRawOperandTypes[2];
-  ArrayRef<Type> regionOperandTypes(regionRawOperandTypes);
-  regionRawOperandTypes[0] = IndexType::get(context);
-  regionRawOperandTypes[1] = timeTypeVar;
-
-  IntegerAttr lbAttr;
-  IntegerAttr ubAttr;
-  IntegerAttr stepAttr;
-  OpAsmParser::OperandType tstartRawOperand;
-  OpAsmParser::OperandType offsetRawOperand;
-  OpAsmParser::OperandType regionRawOperands[2];
-
-  ArrayRef<OpAsmParser::OperandType> regionOperands(regionRawOperands);
-  // Parse the induction variable followed by '='.
-  if (parser.parseRegionArgument(regionRawOperands[0]) || parser.parseEqual())
-    return failure();
-
-  // Parse loop bounds.
-
-  if (helper::parseIntegerAttr(lbAttr, "lb", parser, result) ||
-      parser.parseKeyword("to") ||
-      helper::parseIntegerAttr(ubAttr, "ub", parser, result) ||
-      parser.parseKeyword("step") ||
-      helper::parseIntegerAttr(stepAttr, "step", parser, result))
-    return failure();
-
-  // Parse iter time.
-  if (parser.parseKeyword("iter_time") || parser.parseLParen() ||
-      parser.parseRegionArgument(regionRawOperands[1]) || parser.parseEqual() ||
-      parser.parseOperand(tstartRawOperand))
-    return failure();
-  bool offsetIsPresent = false;
-  if (!parser.parseOptionalPlus()) {
-    if (parser.parseOperand(offsetRawOperand))
-      return failure();
-    offsetIsPresent = true;
-  }
-
-  if (parser.parseRParen())
-    return failure();
-
-  // resolve operands.
-  if (parser.resolveOperand(tstartRawOperand, tstartRawType, result.operands))
-    return failure();
-
-  if (offsetIsPresent &&
-      parser.resolveOperand(offsetRawOperand, offsetType, result.operands))
-    return failure();
-
-  // Parse the body region.
-  Region *body = result.addRegion();
-
-  if (parser.parseRegion(*body, regionOperands, regionOperandTypes))
-    return failure();
-  // UnrollForOp::ensureTerminator(*body, builder, result.location);
-  result.addTypes(helper::getTimeType(context));
-  return success();
-}
-
-Region &UnrollForOp::getLoopBody() { return region(); }
-
-bool UnrollForOp::isDefinedOutsideOfLoop(Value value) {
-  return !region().isAncestor(value.getParentRegion());
-}
-
-LogicalResult UnrollForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
   for (auto *op : ops)
     op->moveBefore(*this);
   return success();
@@ -722,7 +616,6 @@ LogicalResult UnrollForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
 static ParseResult
 parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
                    SmallVectorImpl<OpAsmParser::OperandType> &entryArgs) {
-
   SmallVector<DictionaryAttr> inputAttrs;
   SmallVector<Type, 4> inputTypes;
   SmallVector<DictionaryAttr> resultAttrs;

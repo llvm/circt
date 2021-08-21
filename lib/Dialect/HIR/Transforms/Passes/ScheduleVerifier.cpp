@@ -154,7 +154,6 @@ private:
   bool inspectOp(hir::FuncOp op);
   bool inspectOp(mlir::ConstantOp op);
   bool inspectOp(ForOp op);
-  bool inspectOp(UnrollForOp op);
   bool inspectOp(hir::LoadOp op);
   bool inspectOp(hir::StoreOp op);
   bool inspectOp(hir::ForNextIterOp op);
@@ -272,27 +271,6 @@ bool ScheduleVerifier::inspectOp(ForOp op) {
   return ok;
 } // namespace
 
-bool ScheduleVerifier::inspectOp(UnrollForOp op) {
-  Value tloop = op.getIterTimeVar();
-  Value idx = op.getInductionVar();
-  Value tstart = op.tstart();
-  mapValueToDefiningLoc.insert(std::make_pair(idx, op.getLoc()));
-  mapValueToDefiningLoc.insert(std::make_pair(tloop, op.getLoc()));
-  schedule.insert(tloop, tstart, 0);
-  yieldPoints.push(TimeInstant());
-  bool ok = true;
-  for (unsigned i = op.lb(); i < op.ub(); i += op.step()) {
-    setIntegerConst(idx, i);
-    ok &= inspectBody(op.getLoopBody().front());
-    TimeInstant yieldPoint = yieldPoints.top();
-    schedule.insert(tloop, yieldPoint.t, yieldPoint.delay);
-    if (!ok)
-      break;
-  }
-  yieldPoints.pop();
-  return ok;
-}
-
 bool ScheduleVerifier::inspectOp(hir::LoadOp op) {
   auto indices = op.indices();
   Value result = op.res();
@@ -395,8 +373,6 @@ bool ScheduleVerifier::inspectOp(Operation *inst) {
   if (auto op = dyn_cast<hir::DelayOp>(inst))
     return inspectOp(op);
   if (auto op = dyn_cast<hir::ForOp>(inst))
-    return inspectOp(op);
-  if (auto op = dyn_cast<hir::UnrollForOp>(inst))
     return inspectOp(op);
   if (auto op = dyn_cast<hir::LoadOp>(inst))
     return inspectOp(op);
