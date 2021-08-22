@@ -190,10 +190,10 @@ void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // RegOp
 //===----------------------------------------------------------------------===//
 
-void RegOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+void RegOp::build(OpBuilder &builder, OperationState &odsState,
                   Type elementType, StringAttr name, StringAttr sym_name) {
   if (!name)
-    name = odsBuilder.getStringAttr("");
+    name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (sym_name)
     odsState.addAttribute("sym_name", sym_name);
@@ -236,21 +236,21 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 // IfDefOp
 
-void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
-                    StringRef cond, std::function<void()> thenCtor,
+void IfDefOp::build(OpBuilder &builder, OperationState &result, StringRef cond,
+                    std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
-  build(odsBuilder, result, odsBuilder.getStringAttr(cond), thenCtor, elseCtor);
+  build(builder, result, builder.getStringAttr(cond), thenCtor, elseCtor);
 }
 
-void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
-                    StringAttr cond, std::function<void()> thenCtor,
+void IfDefOp::build(OpBuilder &builder, OperationState &result, StringAttr cond,
+                    std::function<void()> thenCtor,
                     std::function<void()> elseCtor) {
   assert(!cond.getValue().empty() && cond.getValue().front() != '!' &&
          "Should only use simple Verilog identifiers in ifdef conditions");
-  OpBuilder::InsertionGuard guard(odsBuilder);
+  OpBuilder::InsertionGuard guard(builder);
 
   result.addAttribute("cond", cond);
-  odsBuilder.createBlock(result.addRegion());
+  builder.createBlock(result.addRegion());
 
   // Fill in the body of the #ifdef.
   if (thenCtor)
@@ -258,7 +258,7 @@ void IfDefOp::build(OpBuilder &odsBuilder, OperationState &result,
 
   Region *elseRegion = result.addRegion();
   if (elseCtor) {
-    odsBuilder.createBlock(elseRegion);
+    builder.createBlock(elseRegion);
     elseCtor();
   }
 }
@@ -283,23 +283,23 @@ LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
 //===----------------------------------------------------------------------===//
 // IfDefProceduralOp
 
-void IfDefProceduralOp::build(OpBuilder &odsBuilder, OperationState &result,
+void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
                               StringRef cond, std::function<void()> thenCtor,
                               std::function<void()> elseCtor) {
-  IfDefOp::build(odsBuilder, result, cond, std::move(thenCtor),
+  IfDefOp::build(builder, result, cond, std::move(thenCtor),
                  std::move(elseCtor));
 }
 
 //===----------------------------------------------------------------------===//
 // IfOp
 
-void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
+void IfOp::build(OpBuilder &builder, OperationState &result, Value cond,
                  std::function<void()> thenCtor,
                  std::function<void()> elseCtor) {
-  OpBuilder::InsertionGuard guard(odsBuilder);
+  OpBuilder::InsertionGuard guard(builder);
 
   result.addOperands(cond);
-  odsBuilder.createBlock(result.addRegion());
+  builder.createBlock(result.addRegion());
 
   // Fill in the body of the #ifdef.
   if (thenCtor)
@@ -307,7 +307,7 @@ void IfOp::build(OpBuilder &odsBuilder, OperationState &result, Value cond,
 
   Region *elseRegion = result.addRegion();
   if (elseCtor) {
-    odsBuilder.createBlock(elseRegion);
+    builder.createBlock(elseRegion);
     elseCtor();
   }
 }
@@ -373,22 +373,22 @@ AlwaysOp::Condition AlwaysOp::getCondition(size_t idx) {
                    getOperand(idx)};
 }
 
-void AlwaysOp::build(OpBuilder &odsBuilder, OperationState &result,
+void AlwaysOp::build(OpBuilder &builder, OperationState &result,
                      ArrayRef<EventControl> events, ArrayRef<Value> clocks,
                      std::function<void()> bodyCtor) {
   assert(events.size() == clocks.size() &&
          "mismatch between event and clock list");
-  OpBuilder::InsertionGuard guard(odsBuilder);
+  OpBuilder::InsertionGuard guard(builder);
 
   SmallVector<Attribute> eventAttrs;
   for (auto event : events)
     eventAttrs.push_back(
-        odsBuilder.getI32IntegerAttr(static_cast<int32_t>(event)));
-  result.addAttribute("events", odsBuilder.getArrayAttr(eventAttrs));
+        builder.getI32IntegerAttr(static_cast<int32_t>(event)));
+  result.addAttribute("events", builder.getArrayAttr(eventAttrs));
   result.addOperands(clocks);
 
   // Set up the body.  Moves the insert point
-  odsBuilder.createBlock(result.addRegion());
+  builder.createBlock(result.addRegion());
 
   // Fill in the body of the #ifdef.
   if (bodyCtor)
@@ -448,20 +448,20 @@ static void printEventList(OpAsmPrinter &p, AlwaysOp op, ArrayAttr portsAttr,
 //===----------------------------------------------------------------------===//
 // AlwaysFFOp
 
-void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
+void AlwaysFFOp::build(OpBuilder &builder, OperationState &result,
                        EventControl clockEdge, Value clock,
                        std::function<void()> bodyCtor) {
-  OpBuilder::InsertionGuard guard(odsBuilder);
+  OpBuilder::InsertionGuard guard(builder);
 
-  result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(
-                                       static_cast<int32_t>(clockEdge)));
+  result.addAttribute(
+      "clockEdge", builder.getI32IntegerAttr(static_cast<int32_t>(clockEdge)));
   result.addOperands(clock);
   result.addAttribute(
       "resetStyle",
-      odsBuilder.getI32IntegerAttr(static_cast<int32_t>(ResetType::NoReset)));
+      builder.getI32IntegerAttr(static_cast<int32_t>(ResetType::NoReset)));
 
   // Set up the body.  Moves Insert Point
-  odsBuilder.createBlock(result.addRegion());
+  builder.createBlock(result.addRegion());
 
   if (bodyCtor)
     bodyCtor();
@@ -470,30 +470,30 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
   result.addRegion();
 }
 
-void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
+void AlwaysFFOp::build(OpBuilder &builder, OperationState &result,
                        EventControl clockEdge, Value clock,
                        ResetType resetStyle, EventControl resetEdge,
                        Value reset, std::function<void()> bodyCtor,
                        std::function<void()> resetCtor) {
-  OpBuilder::InsertionGuard guard(odsBuilder);
+  OpBuilder::InsertionGuard guard(builder);
 
-  result.addAttribute("clockEdge", odsBuilder.getI32IntegerAttr(
-                                       static_cast<int32_t>(clockEdge)));
+  result.addAttribute(
+      "clockEdge", builder.getI32IntegerAttr(static_cast<int32_t>(clockEdge)));
   result.addOperands(clock);
-  result.addAttribute("resetStyle", odsBuilder.getI32IntegerAttr(
+  result.addAttribute("resetStyle", builder.getI32IntegerAttr(
                                         static_cast<int32_t>(resetStyle)));
-  result.addAttribute("resetEdge", odsBuilder.getI32IntegerAttr(
-                                       static_cast<int32_t>(resetEdge)));
+  result.addAttribute(
+      "resetEdge", builder.getI32IntegerAttr(static_cast<int32_t>(resetEdge)));
   result.addOperands(reset);
 
   // Set up the body.  Moves Insert Point.
-  odsBuilder.createBlock(result.addRegion());
+  builder.createBlock(result.addRegion());
 
   if (bodyCtor)
     bodyCtor();
 
   // Set up the reset.  Moves Insert Point.
-  odsBuilder.createBlock(result.addRegion());
+  builder.createBlock(result.addRegion());
 
   if (resetCtor)
     resetCtor();
@@ -503,11 +503,11 @@ void AlwaysFFOp::build(OpBuilder &odsBuilder, OperationState &result,
 // AlwaysCombOp
 //===----------------------------------------------------------------------===//
 
-void AlwaysCombOp::build(OpBuilder &odsBuilder, OperationState &result,
+void AlwaysCombOp::build(OpBuilder &builder, OperationState &result,
                          std::function<void()> bodyCtor) {
-  OpBuilder::InsertionGuard guard(odsBuilder);
+  OpBuilder::InsertionGuard guard(builder);
 
-  odsBuilder.createBlock(result.addRegion());
+  builder.createBlock(result.addRegion());
 
   if (bodyCtor)
     bodyCtor();
@@ -517,11 +517,11 @@ void AlwaysCombOp::build(OpBuilder &odsBuilder, OperationState &result,
 // InitialOp
 //===----------------------------------------------------------------------===//
 
-void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
+void InitialOp::build(OpBuilder &builder, OperationState &result,
                       std::function<void()> bodyCtor) {
-  OpBuilder::InsertionGuard guard(odsBuilder);
+  OpBuilder::InsertionGuard guard(builder);
 
-  odsBuilder.createBlock(result.addRegion());
+  builder.createBlock(result.addRegion());
 
   // Fill in the body of the #ifdef.
   if (bodyCtor)
@@ -933,10 +933,10 @@ Operation *InterfaceInstanceOp::getReferencedInterface() {
 // WireOp
 //===----------------------------------------------------------------------===//
 
-void WireOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+void WireOp::build(OpBuilder &builder, OperationState &odsState,
                    Type elementType, StringAttr name, StringAttr sym_name) {
   if (!name)
-    name = odsBuilder.getStringAttr("");
+    name = builder.getStringAttr("");
   if (sym_name)
     odsState.addAttribute("sym_name", sym_name);
 
