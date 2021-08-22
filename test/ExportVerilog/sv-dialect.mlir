@@ -782,6 +782,28 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (%aa: i3, %bb: i3){
   hw.output %128, %xx : i3, i3
 }
 
+// CHECK-LABEL: module DontDuplicateSideEffectingVerbatim(
+hw.module @DontDuplicateSideEffectingVerbatim() {
+  %a = sv.reg : !hw.inout<i42>
+
+  sv.initial {
+    // CHECK: automatic logic [41:0] _T;
+    // CHECK: _T = SIDEEFFECT;
+    %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
+    // CHECK: a = _T;
+    sv.bpassign %a, %tmp : i42
+    // CHECK: a = _T;
+    sv.bpassign %a, %tmp : i42
+
+    %tmp2 = sv.verbatim.expr "NO_EFFECT_" : () -> i42
+    // CHECK: a = NO_EFFECT_;
+    sv.bpassign %a, %tmp2 : i42
+    // CHECK: a = NO_EFFECT_;
+    sv.bpassign %a, %tmp2 : i42
+  }
+}
+
+
 // CHECK-LABEL: module InlineAutomaticLogicInit(
 // Issue #1567: https://github.com/llvm/circt/issues/1567
 hw.module @InlineAutomaticLogicInit() {

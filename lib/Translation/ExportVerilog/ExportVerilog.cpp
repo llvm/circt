@@ -78,8 +78,9 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
   if (isConstantExpression(op))
     return true;
 
-  // If this is a small verbatim expression, keep it inline.
-  if (isa<VerbatimExprOp, VerbatimExprSEOp>(op)) {
+  // If this is a small verbatim expression with no side effects, duplicate it
+  // inline.
+  if (isa<VerbatimExprOp>(op)) {
     if (op->getNumOperands() == 0 &&
         op->getAttrOfType<StringAttr>("string").getValue().size() <= 16)
       return true;
