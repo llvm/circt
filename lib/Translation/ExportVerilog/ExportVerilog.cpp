@@ -769,6 +769,12 @@ public:
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
   SmallPtrSet<Operation *, 16> outOfLineExpressions;
+
+  /// This set keeps track of expressions that were emitted into their
+  /// 'automatic logic' or 'localparam' declaration.  This is only used for
+  /// expressions in a procedural region, because we otherwise just emit wires
+  /// on demand.
+  SmallPtrSet<Operation *, 16> expressionsEmittedIntoDecl;
 };
 
 } // end anonymous namespace
@@ -1064,7 +1070,7 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
 /// temporaries.  This handles the bookkeeping.
 void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
   assert(isVerilogExpression(op) && !emitter.outOfLineExpressions.count(op) &&
-         "Should only be called on expressions though to be inlined");
+         "Should only be called on expressions thought to be inlined");
 
   emitter.outOfLineExpressions.insert(op);
   names.addName(op->getResult(0), "_tmp");
@@ -1666,12 +1672,12 @@ void NameCollector::collectNames(Block &block) {
       if (isExpr) {
         // Procedural blocks always emit out of line variable declarations,
         // because Verilog requires that they all be at the top of a block.
-        // TODO: Improve this, at least in the simple cases.
         if (!isBlockProcedural)
           continue;
       }
 
-      // Emit this value.
+      // Measure this name and the length of its type, and ensure it is emitted
+      // later.
       valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
       auto &typeString = valuesToEmit.back().typeString;
 
@@ -1774,8 +1780,11 @@ public:
       os << ' ';
     os << names.getName(op->getResult(0));
 
+    // Constants can (and have to) be emitted into their declarations directly.
     if (!isConstantExpression(op))
       return false;
+
+    emitter.expressionsEmittedIntoDecl.insert(op);
 
     // If this is a constant, we have to immediately assign its value as
     // required by the `localparam` construct.
@@ -1905,6 +1914,23 @@ void StmtEmitter::emitExpression(Value exp,
                        outBuffer.end());
   outBuffer.resize(statementBeginningIndex);
 
+  // If we are working on a procedural statement, we need to emit the
+  // declarations for each variable separately from the assignments to them.
+  // Otherwise we just emit inline 'wire' declarations.
+  if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
+    std::string stuffAfterDeclarations(
+        outBuffer.begin() + blockDeclarationInsertPointIndex, outBuffer.end());
+    outBuffer.resize(blockDeclarationInsertPointIndex);
+    for (auto *expr : tooLargeSubExpressions) {
+      if (!emitDeclarationForTemporary(expr))
+        os << ";\n";
+      ++numStatementsEmitted;
+    }
+    blockDeclarationInsertPointIndex = outBuffer.size();
+    outBuffer.append(stuffAfterDeclarations.begin(),
+                     stuffAfterDeclarations.end());
+  }
+
   // Emit each stmt expression in turn.
   for (auto *expr : tooLargeSubExpressions) {
     statementBeginningIndex = outBuffer.size();
@@ -1914,22 +1940,6 @@ void StmtEmitter::emitExpression(Value exp,
 
   // Re-add this statement now that all the preceeding ones are out.
   outBuffer.append(thisStmt.begin(), thisStmt.end());
-
-  // If we are working on a procedural statement, we need to emit the
-  // declarations for each variable separately from the assignments to them.
-  // We do this after inserting the assign statements because we don't want to
-  // invalidate the index.
-  if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
-    thisStmt.assign(outBuffer.begin() + blockDeclarationInsertPointIndex,
-                    outBuffer.end());
-    outBuffer.resize(blockDeclarationInsertPointIndex);
-    for (auto *expr : tooLargeSubExpressions) {
-      if (!emitDeclarationForTemporary(expr))
-        os << ";\n";
-    }
-    blockDeclarationInsertPointIndex = outBuffer.size();
-    outBuffer.append(thisStmt.begin(), thisStmt.end());
-  }
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
@@ -1942,10 +1952,11 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
     indent() << "// Zero width: ";
     --numStatementsEmitted;
   } else if (op->getParentOp()->hasTrait<ProceduralRegion>()) {
-    // Constants have their value emitted directly in the corresponding
-    // `localparam` declaration. Don't try to reassign these.
-    if (isConstantExpression(op)) {
-      ++numStatementsEmitted;
+    // Some expressions in procedural regions can be emitted inline into their
+    // "automatic logic" or "localparam" definitions.  Don't redundantly emit
+    // them.
+    if (emitter.expressionsEmittedIntoDecl.count(op)) {
+      --numStatementsEmitted;
       return;
     }
     indent() << names.getName(op->getResult(0)) << " = ";
@@ -2749,23 +2760,29 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
   collector.collectNames(block);
 
   auto &valuesToEmit = collector.getValuesToEmit();
+  if (valuesToEmit.empty())
+    return;
+
   size_t maxDeclNameWidth = collector.getMaxDeclNameWidth();
   size_t maxTypeWidth = collector.getMaxTypeWidth();
 
   if (maxTypeWidth > 0) // add a space if any type exists
     maxTypeWidth += 1;
 
-  SmallPtrSet<Operation *, 8> ops;
+  SmallPtrSet<Operation *, 8> opsForLocation;
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (const auto &record : valuesToEmit) {
-    auto *decl = record.value.getDefiningOp();
-    ops.clear();
-    ops.insert(decl);
+    // We have two different sorts of things that we proactively emit:
+    // declarations (wires, regs, localpamarams, etc) and expressions that
+    // cannot be emitted inline (e.g. because of limitations around subscripts).
+    auto *op = record.value.getDefiningOp();
+    opsForLocation.clear();
+    opsForLocation.insert(op);
 
     // Emit the leading word, like 'wire' or 'reg'.
     auto type = record.value.getType();
-    auto word = getVerilogDeclWord(decl);
+    auto word = getVerilogDeclWord(op);
     if (!isZeroBitType(type)) {
       indent() << word;
       auto extraIndent = word.empty() ? 0 : 1;
@@ -2790,23 +2807,23 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
       printUnpackedTypePostfix(type, os);
     }
 
-    if (auto localparam = dyn_cast<LocalParamOp>(decl)) {
+    if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
-      emitExpression(localparam.input(), ops, ForceEmitMultiUse);
+      emitExpression(localparam.input(), opsForLocation, ForceEmitMultiUse);
     }
 
     // Constants carry their assignment directly in the declaration.
-    if (isConstantExpression(decl)) {
+    if (isConstantExpression(op)) {
       os << " = ";
-      emitExpression(decl->getResult(0), ops, ForceEmitMultiUse);
+      emitExpression(op->getResult(0), opsForLocation, ForceEmitMultiUse);
+      emitter.expressionsEmittedIntoDecl.insert(op);
     }
 
     os << ';';
-    emitLocationInfoAndNewLine(ops);
+    emitLocationInfoAndNewLine(opsForLocation);
   }
 
-  if (!valuesToEmit.empty())
-    os << '\n';
+  os << '\n';
 }
 
 void StmtEmitter::emitStatementBlock(Block &body) {
