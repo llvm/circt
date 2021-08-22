@@ -65,6 +65,8 @@ std::string LoweringOptions::toString() const {
     options += "alwaysFF,";
   if (allowExprInEventControl)
     options += "exprInEventControl,";
+  if (disallowPackedArrays)
+    options += "disallowPackedArrays,";
   if (emittedLineLength != 90)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
 
