@@ -19,7 +19,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
-#include "mlir/IR/Matchers.h"
+#include "mlir/IR/Builders.h"
 
 using namespace circt;
 
@@ -34,6 +34,10 @@ struct HWLegalizeModulesPass
 
 private:
   void processPostOrder(Block &block);
+  Operation *tryLoweringArrayGet(hw::ArrayGetOp getOp);
+
+  /// This is the current hw.module being processed.
+  hw::HWModuleOp thisHWModule;
 
   bool anythingChanged;
 
@@ -48,21 +52,110 @@ private:
 };
 } // end anonymous namespace
 
+/// Try to lower a hw.array_get in module that doesn't support packed arrays.
+/// This returns a replacement operation if lowering was successful, null
+/// otherwise.
+Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
+  // If the operand is an array_create, then we can lower this into a casez.
+  auto createOp = getOp.input().getDefiningOp<hw::ArrayCreateOp>();
+  if (!createOp)
+    return nullptr;
+
+  // array_get(idx, array_create(a,b,c,d)) ==> casez(idx).
+  Value index = getOp.index();
+
+  // Create the wire for the result of the casez in the hw.module.
+  OpBuilder builder(&thisHWModule.getBodyBlock()->front());
+
+  auto theWire = builder.create<sv::WireOp>(getOp.getLoc(), getOp.getType());
+  builder.setInsertionPoint(getOp);
+
+  // A casez is a procedural operation, so if we're in a non-procedural region
+  // we need to inject an always_comb block.
+  if (!getOp->getParentOp()->hasTrait<sv::ProceduralRegion>()) {
+    auto alwaysComb = builder.create<sv::AlwaysCombOp>(createOp.getLoc());
+    builder.setInsertionPointToEnd(alwaysComb.getBodyBlock());
+  }
+
+  // If we are missing elements in the array (it is non-power of two), then
+  // add a default.
+  Value defaultValue;
+  if (1ULL << index.getType().getIntOrFloatBitWidth() !=
+      createOp.getNumOperands())
+    defaultValue =
+        builder.create<sv::ConstantXOp>(getOp.getLoc(), getOp.getType());
+
+  APInt caseValue(index.getType().getIntOrFloatBitWidth(), 0);
+  auto *context = builder.getContext();
+
+  using sv::CaseZPattern;
+
+  // Create the casez itself.
+  builder.create<sv::CaseZOp>(
+      createOp.getLoc(), index, createOp.getNumOperands() + !!defaultValue,
+      [&](size_t caseIdx) -> CaseZPattern {
+        bool isDefault = caseIdx >= createOp.getNumOperands();
+        Value theValue =
+            isDefault ? defaultValue : createOp.getOperand(caseIdx);
+        sv::CaseZPattern thePattern =
+            isDefault
+                ? CaseZPattern::getDefault(caseValue.getBitWidth(), context)
+                : CaseZPattern(caseValue, context);
+        ++caseValue;
+        builder.create<sv::PAssignOp>(createOp.getLoc(), theWire, theValue);
+        return thePattern;
+      });
+
+  // Ok, emit the read from the wire to get the value out.
+  builder.setInsertionPoint(getOp);
+  auto readWire = builder.create<sv::ReadInOutOp>(getOp.getLoc(), theWire);
+  getOp.getResult().replaceAllUsesWith(readWire);
+  getOp->erase();
+  return readWire;
+}
+
 void HWLegalizeModulesPass::processPostOrder(Block &body) {
+  if (body.empty())
+    return;
 
   // Walk the block bottom-up, processing the region tree inside out.
-  for (auto &op :
-       llvm::make_early_inc_range(llvm::reverse(body.getOperations()))) {
+  Block::iterator it = std::prev(body.end());
+  while (it != body.end()) {
+    auto &op = *it;
+
+    // Advance the iterator, using the end iterator as a sentinel that we're at
+    // the top of the block.
+    if (it == body.begin())
+      it = body.end();
+    else
+      --it;
+
     if (op.getNumRegions()) {
       for (auto &region : op.getRegions())
         for (auto &regionBlock : region.getBlocks())
           processPostOrder(regionBlock);
     }
 
-    // If we aren't allowing multi-dimensional arrays, reject the IR as invalid.
-    // TODO: We should eventually implement a "lower types" like feature in this
-    // pass.
     if (options.disallowPackedArrays) {
+      // Try idioms for lowering array_get operations.
+      if (auto getOp = dyn_cast<hw::ArrayGetOp>(op))
+        if (auto *replacement = tryLoweringArrayGet(getOp)) {
+          it = Block::iterator(replacement);
+          anythingChanged = true;
+          continue;
+        }
+
+      // If this is a dead array_create, then we can just delete it.  This is
+      // probably left over from get/create lowering.
+      if (isa<hw::ArrayCreateOp>(op) && op.use_empty()) {
+        op.erase();
+        continue;
+      }
+
+      // Otherwise, if we aren't allowing multi-dimensional arrays, reject the
+      // IR as invalid.
+      // TODO: We should eventually implement a "lower types" like feature in
+      // this pass.
       for (auto value : op.getResults()) {
         if (value.getType().isa<hw::ArrayType>()) {
           op.emitError("unsupported packed array expression");
@@ -73,15 +166,15 @@ void HWLegalizeModulesPass::processPostOrder(Block &body) {
 }
 
 void HWLegalizeModulesPass::runOnOperation() {
-  hw::HWModuleOp thisModule = getOperation();
+  thisHWModule = getOperation();
 
   // Parse the lowering options if necessary.
   auto optionsAttr = LoweringOptions::getAttributeFrom(
-      cast<ModuleOp>(thisModule->getParentOp()));
+      cast<ModuleOp>(thisHWModule->getParentOp()));
   if (optionsAttr != lastParsedOptions) {
     if (optionsAttr)
       options = LoweringOptions(optionsAttr.getValue(), [&](Twine error) {
-        thisModule.emitError(error);
+        thisHWModule.emitError(error);
       });
     else
       options = LoweringOptions();
@@ -93,7 +186,7 @@ void HWLegalizeModulesPass::runOnOperation() {
   anythingChanged = false;
 
   // Walk the operations in post-order, transforming any that are interesting.
-  processPostOrder(*thisModule.getBodyBlock());
+  processPostOrder(*thisHWModule.getBodyBlock());
 
   // If we did not change anything in the IR mark all analysis as preserved.
   if (!anythingChanged)
