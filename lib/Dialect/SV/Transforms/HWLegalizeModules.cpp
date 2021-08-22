@@ -67,7 +67,8 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
   // Create the wire for the result of the casez in the hw.module.
   OpBuilder builder(&thisHWModule.getBodyBlock()->front());
 
-  auto theWire = builder.create<sv::WireOp>(getOp.getLoc(), getOp.getType());
+  auto theWire =
+      builder.create<sv::WireOp>(getOp.getLoc(), getOp.getType(), "casez_tmp");
   builder.setInsertionPoint(getOp);
 
   // A casez is a procedural operation, so if we're in a non-procedural region
