@@ -782,6 +782,19 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (%aa: i3, %bb: i3){
   hw.output %128, %xx : i3, i3
 }
 
+// CHECK-LABEL: module InlineAutomaticLogicInit(
+// Issue #1567: https://github.com/llvm/circt/issues/1567
+hw.module @InlineAutomaticLogicInit() {
+  %a = sv.reg : !hw.inout<i42>
+  sv.initial {
+    // CHECK: automatic logic [63:0] _T = `THING;
+    %thing = sv.verbatim.expr "`THING" : () -> i64
+    // CHECK: a = _T[44:3];
+    %v = comb.extract %thing from 3 : (i64) -> i42
+    sv.bpassign %a, %v : i42
+  }
+}
+
 
 // CHECK-LABEL: module extInst
 hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()

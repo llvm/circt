@@ -1798,6 +1798,7 @@ public:
 
 private:
   void collectNamesEmitDecls(Block &block);
+  bool isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op);
 
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
@@ -2753,6 +2754,27 @@ void StmtEmitter::emitStatement(Operation *op) {
   indent() << "unknown MLIR operation " << op->getName().getStringRef() << "\n";
 }
 
+/// Given an operation corresponding to a VerilogExpression, determine whether
+/// it is safe to emit inline into a 'localparam' or 'automatic logic' varaible
+/// initializer in a procedural region.
+///
+/// We can't emit exprs inline when they refer to something else that can't be
+/// emitted inline, when they're in a general #ifdef region,
+bool StmtEmitter::isExpressionEmittedInlineIntoProceduralDeclaration(
+    Operation *op) {
+  if (!isVerilogExpression(op))
+    return false;
+
+  // If the expression exists in an #ifdef region, then bail.  Emitting it
+  // inline would cause it to be executed unconditionally, because the
+  // declarations are outside the #ifdef.
+  if (isa<IfDefProceduralOp>(op->getParentOp()))
+    return false;
+
+  // Emit constants and verbatim exprs like `RANDOM inline.
+  return isDuplicatableNullaryExpression(op);
+}
+
 void StmtEmitter::collectNamesEmitDecls(Block &block) {
   // In the first pass, we fill in the symbol table, calculate the max width
   // of the declaration words and the max type width.
@@ -2813,14 +2835,19 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     }
 
     // Constants carry their assignment directly in the declaration.
-    if (isConstantExpression(op)) {
+    if (isExpressionEmittedInlineIntoProceduralDeclaration(op)) {
       os << " = ";
       emitExpression(op->getResult(0), opsForLocation, ForceEmitMultiUse);
+
+      // Remember that we emitted this inline into the declaration so we don't
+      // emit it and we know the value is available for other declaration
+      // expressions who might want to reference it.
       emitter.expressionsEmittedIntoDecl.insert(op);
     }
 
     os << ';';
     emitLocationInfoAndNewLine(opsForLocation);
+    ++numStatementsEmitted;
   }
 
   os << '\n';
