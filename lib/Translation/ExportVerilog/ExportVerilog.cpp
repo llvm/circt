@@ -1772,34 +1772,10 @@ public:
   /// a constant, emit no initializer and no semicolon, e.g. `wire foo`, and
   /// return false. If the operation *is* a constant, also emit the initializer
   /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
-  bool emitDeclarationForTemporary(Operation *op) {
-    StringRef declWord = getVerilogDeclWord(op);
-    indent() << declWord;
-    if (!declWord.empty())
-      os << ' ';
-    if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op))
-      os << ' ';
-    os << names.getName(op->getResult(0));
-
-    // Constants can (and have to) be emitted into their declarations directly.
-    if (!isConstantExpression(op))
-      return false;
-
-    emitter.expressionsEmittedIntoDecl.insert(op);
-
-    // If this is a constant, we have to immediately assign its value as
-    // required by the `localparam` construct.
-    os << " = ";
-    SmallPtrSet<Operation *, 8> emittedExprs;
-    emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
-    os << ';';
-    emitLocationInfoAndNewLine(emittedExprs);
-    return true;
-  }
+  bool emitDeclarationForTemporary(Operation *op);
 
 private:
   void collectNamesEmitDecls(Block &block);
-  bool isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op);
 
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
@@ -1900,6 +1876,8 @@ private:
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
+  assert(statementBeginningIndex >= blockDeclarationInsertPointIndex &&
+         "indexes out of order");
   SmallVector<Operation *> tooLargeSubExpressions;
   ExprEmitter(emitter, outBuffer, emittedExprs, tooLargeSubExpressions, names)
       .emitExpression(exp, parenthesizeIfLooserThan);
@@ -1941,6 +1919,7 @@ void StmtEmitter::emitExpression(Value exp,
   }
 
   // Re-add this statement now that all the preceeding ones are out.
+  statementBeginningIndex = outBuffer.size();
   outBuffer.append(thisStmt.begin(), thisStmt.end());
 }
 
@@ -2297,7 +2276,7 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   emitLocationInfoAndNewLine(locationOps);
 
   // Change the blockDeclarationInsertPointIndex for the statements in this
-  // block.
+  // block, and restore it back when we move on to code after the block.
   llvm::SaveAndRestore<size_t> X(blockDeclarationInsertPointIndex,
                                  outBuffer.size());
   auto numEmittedBefore = getNumStatementsEmitted();
@@ -2761,8 +2740,9 @@ void StmtEmitter::emitStatement(Operation *op) {
 ///
 /// We can't emit exprs inline when they refer to something else that can't be
 /// emitted inline, when they're in a general #ifdef region,
-bool StmtEmitter::isExpressionEmittedInlineIntoProceduralDeclaration(
-    Operation *op) {
+static bool
+isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
+                                                   StmtEmitter &stmtEmitter) {
   if (!isVerilogExpression(op))
     return false;
 
@@ -2772,8 +2752,68 @@ bool StmtEmitter::isExpressionEmittedInlineIntoProceduralDeclaration(
   if (isa<IfDefProceduralOp>(op->getParentOp()))
     return false;
 
-  // Emit constants and verbatim exprs like `RANDOM inline.
-  return isDuplicatableNullaryExpression(op);
+  // This expression tree can be emitted into the initializer if all leaf
+  // references are safe to refer to from here.  They are only safe if they are
+  // defined in an enclosing scope (guaranteed to already be live by now) or if
+  // they are defined in this block and already emitted to an inline automatic
+  // logic variable.
+  SmallVector<Value, 8> exprsToScan(op->getOperands());
+
+  // This loop is guaranteed to terminate because we're only scanning up
+  // single-use expressions and other things that 'isExpressionEmittedInline'
+  // returns success for.  Cycles won't get in here.
+  while (!exprsToScan.empty()) {
+    Operation *expr = exprsToScan.pop_back_val().getDefiningOp();
+    if (!expr)
+      continue; // Ports are always safe to reference.
+
+    // If this is an internal node in the expression tree, process its operands.
+    if (isExpressionEmittedInline(expr)) {
+      exprsToScan.append(expr->getOperands().begin(),
+                         expr->getOperands().end());
+      continue;
+    }
+
+    // Otherwise, this isn't an inlinable expression.  If it is defined outside
+    // this block, then it is live-in.
+    if (expr->getBlock() != op->getBlock())
+      continue;
+
+    // Otherwise, if it is defined in this block then it is only ok to reference
+    // if it has already been emitted into an automatic logic.
+    if (!stmtEmitter.emitter.expressionsEmittedIntoDecl.count(expr))
+      return false;
+  }
+
+  return true;
+}
+
+/// Emit the declaration for the temporary operation. If the operation is not
+/// a constant, emit no initializer and no semicolon, e.g. `wire foo`, and
+/// return false. If the operation *is* a constant, also emit the initializer
+/// and semicolon, e.g. `localparam K = 1'h0`, and return true.
+bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
+  StringRef declWord = getVerilogDeclWord(op);
+  indent() << declWord;
+  if (!declWord.empty())
+    os << ' ';
+  if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op))
+    os << ' ';
+  os << names.getName(op->getResult(0));
+
+  // Emit the initializer expression for this declaration inline if safe.
+  if (!isExpressionEmittedInlineIntoProceduralDeclaration(op, *this))
+    return false;
+
+  // Keep track that we emitted this.
+  emitter.expressionsEmittedIntoDecl.insert(op);
+
+  os << " = ";
+  SmallPtrSet<Operation *, 8> emittedExprs;
+  emitExpression(op->getResult(0), emittedExprs, ForceEmitMultiUse);
+  os << ';';
+  emitLocationInfoAndNewLine(emittedExprs);
+  return true;
 }
 
 void StmtEmitter::collectNamesEmitDecls(Block &block) {
@@ -2796,6 +2836,8 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (const auto &record : valuesToEmit) {
+    statementBeginningIndex = outBuffer.size();
+
     // We have two different sorts of things that we proactively emit:
     // declarations (wires, regs, localpamarams, etc) and expressions that
     // cannot be emitted inline (e.g. because of limitations around subscripts).
@@ -2836,7 +2878,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     }
 
     // Constants carry their assignment directly in the declaration.
-    if (isExpressionEmittedInlineIntoProceduralDeclaration(op)) {
+    if (isExpressionEmittedInlineIntoProceduralDeclaration(op, *this)) {
       os << " = ";
       emitExpression(op->getResult(0), opsForLocation, ForceEmitMultiUse);
 
@@ -2849,6 +2891,12 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     os << ';';
     emitLocationInfoAndNewLine(opsForLocation);
     ++numStatementsEmitted;
+
+    // If any sub-expressions are too large to fit on a line and need a
+    // temporary declaration, put it after the already-emitted declarations.
+    // This is important to maintain incrementally after each statement, because
+    // each statement can generate spills when they are overly-long.
+    blockDeclarationInsertPointIndex = outBuffer.size();
   }
 
   os << '\n';
