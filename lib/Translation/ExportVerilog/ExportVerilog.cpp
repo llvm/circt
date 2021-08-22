@@ -853,10 +853,16 @@ private:
     OOLBinary    //< Binary expressions split easily.
   };
 
-  /// Emit the specified value as a subexpression to the stream.
+  /// Emit the specified value `exp` as a subexpression to the stream.  The
+  /// `parenthesizeIfLooserThan` parameter indicates when parentheses should be
+  /// added aroun the subexpression.  The `signReq` flag can cause emitSubExpr
+  /// to emit a subexpression that is guaranteed to be signed or unsigned, and
+  /// the `isSelfDeterminedUnsignedValue` flag indicates whether the value is
+  /// known to be have "self determined" width, allowing us to omit extensions.
   SubExprInfo emitSubExpr(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
                           SubExprOutOfLineBehavior outOfLineBehavior,
-                          SubExprSignRequirement signReq = NoRequirement);
+                          SubExprSignRequirement signReq = NoRequirement,
+                          bool isSelfDeterminedUnsignedValue = false);
 
   void retroactivelyEmitExpressionIntoTemporary(Operation *op);
 
@@ -877,9 +883,22 @@ private:
 
   using Visitor::visitSV;
 
+  /// These are flags that control `emitBinary`.
+  enum EmitBinaryFlags {
+    EB_RequireSignedOperands = RequireSigned,     /* 0x1*/
+    EB_RequireUnsignedOperands = RequireUnsigned, /* 0x2*/
+    EB_OperandSignRequirementMask = 0x3,
+
+    /// This flag indicates that the RHS operand is an unsigned value that has
+    /// "self determined" width.  This means that we can omit explicit zero
+    /// extensions from it.
+    EB_RHS_UnsignedWithSelfDeterminedWidth = 0x4,
+  };
+
+  /// Emit a binary expression.  The "emitBinaryFlags" are a bitset from
+  /// EmitBinaryFlags.
   SubExprInfo emitBinary(Operation *op, VerilogPrecedence prec,
-                         const char *syntax,
-                         SubExprSignRequirement operandSignReq = NoRequirement);
+                         const char *syntax, unsigned emitBinaryFlags = 0);
 
   SubExprInfo emitUnary(Operation *op, const char *syntax,
                         bool resultAlwaysUnsigned = false);
@@ -923,26 +942,30 @@ private:
     return emitBinary(op, Multiply, "*");
   }
   SubExprInfo visitComb(DivUOp op) {
-    return emitBinary(op, Multiply, "/", RequireUnsigned);
+    return emitBinary(op, Multiply, "/", EB_RequireUnsignedOperands);
   }
   SubExprInfo visitComb(DivSOp op) {
-    return emitBinary(op, Multiply, "/", RequireSigned);
+    return emitBinary(op, Multiply, "/", EB_RequireSignedOperands);
   }
   SubExprInfo visitComb(ModUOp op) {
-    return emitBinary(op, Multiply, "%", RequireUnsigned);
+    return emitBinary(op, Multiply, "%", EB_RequireUnsignedOperands);
   }
   SubExprInfo visitComb(ModSOp op) {
-    return emitBinary(op, Multiply, "%", RequireSigned);
+    return emitBinary(op, Multiply, "%", EB_RequireSignedOperands);
   }
-  SubExprInfo visitComb(ShlOp op) { return emitBinary(op, Shift, "<<"); }
+  SubExprInfo visitComb(ShlOp op) {
+    return emitBinary(op, Shift, "<<", EB_RHS_UnsignedWithSelfDeterminedWidth);
+  }
   SubExprInfo visitComb(ShrUOp op) {
     // >> in Verilog is always an unsigned right shift.
-    return emitBinary(op, Shift, ">>");
+    return emitBinary(op, Shift, ">>", EB_RHS_UnsignedWithSelfDeterminedWidth);
   }
   SubExprInfo visitComb(ShrSOp op) {
     // >>> is only an arithmetic shift right when both operands are signed.
     // Otherwise it does a logical shift.
-    return emitBinary(op, Shift, ">>>", RequireSigned);
+    return emitBinary(op, Shift, ">>>",
+                      EB_RequireSignedOperands |
+                          EB_RHS_UnsignedWithSelfDeterminedWidth);
   }
   SubExprInfo visitComb(AndOp op) {
     assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
@@ -994,7 +1017,9 @@ private:
 
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
-                                    SubExprSignRequirement operandSignReq) {
+                                    unsigned emitBinaryFlags) {
+  auto operandSignReq =
+      SubExprSignRequirement(emitBinaryFlags & EB_OperandSignRequirementMask);
   auto lhsInfo =
       emitSubExpr(op->getOperand(0), prec, OOLBinary, operandSignReq);
   os << ' ' << syntax << ' ';
@@ -1007,8 +1032,14 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   auto rhsPrec = prec;
   if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
     rhsPrec = VerilogPrecedence(prec - 1);
+
+  // If the RHS operand has self-determined width, inform emitSubExpr of this.
+  bool rhsIsUnsignedValueWithSelfDeterminedWidth =
+      (emitBinaryFlags & EB_RHS_UnsignedWithSelfDeterminedWidth) != 0;
+
   auto rhsInfo =
-      emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq);
+      emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq,
+                  rhsIsUnsignedValueWithSelfDeterminedWidth);
 
   // SystemVerilog 11.8.1 says that the result of a binary expression is signed
   // only if both operands are signed.
@@ -1042,11 +1073,37 @@ void ExprEmitter::retroactivelyEmitExpressionIntoTemporary(Operation *op) {
   tooLargeSubExpressions.push_back(op);
 }
 
-/// Emit the specified value as a subexpression to the stream.
+/// If the specified extension is a zero extended version of another value,
+/// return the shorter value, otherwise return null.
+static Value isZeroExtension(Value value) {
+  auto concat = value.getDefiningOp<ConcatOp>();
+  if (!concat || concat.getNumOperands() != 2)
+    return {};
+
+  auto constant = concat.getOperand(0).getDefiningOp<ConstantOp>();
+  if (constant && constant.getValue().isNullValue())
+    return concat.getOperand(1);
+  return {};
+}
+
+/// Emit the specified value `exp` as a subexpression to the stream.  The
+/// `parenthesizeIfLooserThan` parameter indicates when parentheses should be
+/// added aroun the subexpression.  The `signReq` flag can cause emitSubExpr
+/// to emit a subexpression that is guaranteed to be signed or unsigned, and
+/// the `isSelfDeterminedUnsignedValue` flag indicates whether the value is
+/// known to be have "self determined" width, allowing us to omit extensions.
 SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                                      VerilogPrecedence parenthesizeIfLooserThan,
                                      SubExprOutOfLineBehavior outOfLineBehavior,
-                                     SubExprSignRequirement signRequirement) {
+                                     SubExprSignRequirement signRequirement,
+                                     bool isSelfDeterminedUnsignedValue) {
+  // If this is a self-determined unsigned value, look through any inline zero
+  // extensions.  This occurs on the RHS of a shift operation for example.
+  if (isSelfDeterminedUnsignedValue && exp.hasOneUse()) {
+    if (auto smaller = isZeroExtension(exp))
+      exp = smaller;
+  }
+
   auto *op = exp.getDefiningOp();
   bool shouldEmitInlineExpr = op && isVerilogExpression(op);
 

@@ -751,3 +751,25 @@ hw.module @AddNegLiteral(%a: i8, %x: i8, %y: i8) -> (%o1: i8, %o2: i8) {
   hw.output %1, %2 : i8, i8
 }
 
+
+// CHECK-LABEL:   module ShiftAmountZext(
+// Issue #1569: https://github.com/llvm/circt/issues/1569
+hw.module @ShiftAmountZext(%a: i8, %b1: i4, %b2: i4, %b3: i4)
+ -> (%o1: i8, %o2: i8, %o3: i8) {
+
+  %c = hw.constant 0 : i4
+  %B1 = comb.concat %c, %b1 : (i4, i4) -> i8
+  %B2 = comb.concat %c, %b2 : (i4, i4) -> i8
+  %B3 = comb.concat %c, %b3 : (i4, i4) -> i8
+
+  // CHECK: assign o1 = a << b1;
+  %r1 = comb.shl %a, %B1 : i8
+
+  // CHECK: assign o2 = a >> b2;
+  %r2 = comb.shru %a, %B2 : i8
+
+  // CHECK: assign o3 = $signed(a) >>> $signed(b3);
+  %r3 = comb.shrs %a, %B3 : i8
+  hw.output %r1, %r2, %r3 : i8, i8, i8
+}
+

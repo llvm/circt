@@ -146,7 +146,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:   input  [4:0] inp_2,
 ; VERILOG-NEXT:   output [2:0] out1, out2);
 ; VERILOG-EMPTY:
-; VERILOG-NEXT:   wire [5:0] _T = {inp_2[4], inp_2} << {5'h0, inp_1};
+; VERILOG-NEXT:   wire [5:0] _T = {inp_2[4], inp_2} << inp_1;
 ; VERILOG-NEXT:   assign out1 = _T[2:0];
 ; VERILOG-NEXT:   assign out2 = inp_2[2:0];
 ; VERILOG-NEXT: endmodule
