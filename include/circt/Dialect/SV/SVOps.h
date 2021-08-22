@@ -21,12 +21,61 @@
 
 namespace circt {
 namespace hw {
-  class InstanceOp;
+class InstanceOp;
 }
 namespace sv {
 
 /// Return true if the specified operation is an expression.
 bool isExpression(Operation *op);
+
+//===----------------------------------------------------------------------===//
+// CaseZOp Support
+//===----------------------------------------------------------------------===//
+
+/// This describes the bit in a pattern, 0/1/x.
+enum class CaseZPatternBit { Zero = 0, One = 1, Any = 2 };
+
+/// Return the letter for the specified pattern bit, e.g. "0", "1", "?" or "x".
+/// isVerilog indicates whether we should use "?" (verilog syntax) or "x" (mlir
+/// operation syntax.
+char getLetter(CaseZPatternBit bit, bool isVerilog);
+
+// This is provides convenient access to encode and decode a pattern.
+struct CaseZPattern {
+  IntegerAttr attr;
+
+  // Return the number of bits in the pattern.
+  size_t getWidth() const { return attr.getValue().getBitWidth() / 2; }
+
+  /// Return the specified bit, bit 0 is the least significant bit.
+  CaseZPatternBit getBit(size_t bitNumber) const;
+
+  /// Return true if this pattern always matches.
+  bool isDefault() const;
+
+  /// Get a CaseZPattern from a specified list of CaseZPatternBit.  Bits are
+  /// specified in most least significant order - element zero is the least
+  /// significant bit.
+  CaseZPattern(ArrayRef<CaseZPatternBit> bits, MLIRContext *context);
+
+  /// Get a CaseZPattern for the specified constant value.
+  CaseZPattern(const APInt &value, MLIRContext *context);
+
+  /// Get a CaseZPattern with a correctly encoded attribute.
+  CaseZPattern(IntegerAttr attr) : attr(attr) {}
+
+  static CaseZPattern getDefault(unsigned width, MLIRContext *context);
+};
+// This provides information about one case.
+struct CaseZInfo {
+  CaseZPattern pattern;
+  Block *block;
+};
+
+//===----------------------------------------------------------------------===//
+// Other Supporting Logic
+//===----------------------------------------------------------------------===//
+
 /// Return true if the specified operation is in a procedural region.
 LogicalResult verifyInProceduralRegion(Operation *op);
 /// Return true if the specified operation is not in a procedural region.

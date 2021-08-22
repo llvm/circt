@@ -532,24 +532,59 @@ void InitialOp::build(OpBuilder &odsBuilder, OperationState &result,
 // CaseZOp
 //===----------------------------------------------------------------------===//
 
-/// Return the specified bit, bit 0 is the least significant bit.
-auto CaseZOp::CasePattern::getBit(size_t bitNumber) const -> PatternBit {
-  return PatternBit(unsigned(attr.getValue()[bitNumber * 2]) +
-                    2 * unsigned(attr.getValue()[bitNumber * 2 + 1]));
+/// Return the letter for the specified pattern bit, e.g. "0", "1", "?" or "x".
+/// isVerilog indicates whether we should use "?" (verilog syntax) or "x" (mlir
+/// operation syntax.
+char sv::getLetter(CaseZPatternBit bit, bool isVerilog) {
+  switch (bit) {
+  case CaseZPatternBit::Zero:
+    return '0';
+  case CaseZPatternBit::One:
+    return '1';
+  case CaseZPatternBit::Any:
+    return isVerilog ? '?' : 'x';
+  }
+  llvm_unreachable("invalid casez PatternBit");
 }
 
-bool CaseZOp::CasePattern::isDefault() const {
+/// Return the specified bit, bit 0 is the least significant bit.
+auto CaseZPattern::getBit(size_t bitNumber) const -> CaseZPatternBit {
+  return CaseZPatternBit(unsigned(attr.getValue()[bitNumber * 2]) +
+                         2 * unsigned(attr.getValue()[bitNumber * 2 + 1]));
+}
+
+bool CaseZPattern::isDefault() const {
   for (size_t i = 0, e = getWidth(); i != e; ++i)
-    if (getBit(i) != PatternAny)
+    if (getBit(i) != CaseZPatternBit::Any)
       return false;
   return true;
 }
 
-// Get a CasePattern from a specified list of PatternBits.  Bits are
+static SmallVector<CaseZPatternBit> getPatternBitsForValue(const APInt &value) {
+  SmallVector<CaseZPatternBit> result;
+  result.reserve(value.getBitWidth());
+  for (size_t i = 0, e = value.getBitWidth(); i != e; ++i)
+    result.push_back(CaseZPatternBit(value[i]));
+
+  return result;
+}
+
+// Get a CaseZPattern from a specified list of PatternBits.  Bits are
 // specified in most least significant order - element zero is the least
 // significant bit.
-CaseZOp::CasePattern::CasePattern(ArrayRef<PatternBit> bits,
-                                  MLIRContext *context) {
+CaseZPattern::CaseZPattern(const APInt &value, MLIRContext *context)
+    : CaseZPattern(getPatternBitsForValue(value), context) {}
+
+CaseZPattern CaseZPattern::getDefault(unsigned width, MLIRContext *context) {
+  return CaseZPattern(SmallVector<CaseZPatternBit>(width, CaseZPatternBit::Any),
+                      context);
+}
+
+// Get a CaseZPattern from a specified list of PatternBits.  Bits are
+// specified in most least significant order - element zero is the least
+// significant bit.
+CaseZPattern::CaseZPattern(ArrayRef<CaseZPatternBit> bits,
+                           MLIRContext *context) {
   APInt pattern(bits.size() * 2, 0);
   for (auto elt : llvm::reverse(bits)) {
     pattern <<= 2;
@@ -559,13 +594,13 @@ CaseZOp::CasePattern::CasePattern(ArrayRef<PatternBit> bits,
   attr = IntegerAttr::get(patternType, pattern);
 }
 
-auto CaseZOp::getCases() -> SmallVector<CaseInfo, 4> {
-  SmallVector<CaseInfo, 4> result;
+auto CaseZOp::getCases() -> SmallVector<CaseZInfo, 4> {
+  SmallVector<CaseZInfo, 4> result;
   assert(casePatterns().size() == getNumRegions() &&
          "case pattern / region count mismatch");
   size_t nextRegion = 0;
   for (auto elt : casePatterns()) {
-    result.push_back({CasePattern(elt.cast<IntegerAttr>()),
+    result.push_back({CaseZPattern(elt.cast<IntegerAttr>()),
                       &getRegion(nextRegion++).front()});
   }
 
@@ -591,11 +626,11 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
 
   // Parse all the cases.
   SmallVector<Attribute> casePatterns;
-  SmallVector<CaseZOp::PatternBit, 16> caseBits;
+  SmallVector<CaseZPatternBit, 16> caseBits;
   while (1) {
     if (succeeded(parser.parseOptionalKeyword("default"))) {
       // Fill the pattern with Any.
-      caseBits.assign(condWidth, CaseZOp::PatternAny);
+      caseBits.assign(condWidth, CaseZPatternBit::Any);
     } else if (failed(parser.parseOptionalKeyword("case"))) {
       // Not default or case, must be the end of the cases.
       break;
@@ -612,16 +647,16 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
 
       // Parse and decode each bit, we reverse the list later for MSB->LSB.
       for (; !caseVal.empty(); caseVal = caseVal.drop_front()) {
-        CaseZOp::PatternBit bit;
+        CaseZPatternBit bit;
         switch (caseVal.front()) {
         case '0':
-          bit = CaseZOp::PatternZero;
+          bit = CaseZPatternBit::Zero;
           break;
         case '1':
-          bit = CaseZOp::PatternOne;
+          bit = CaseZPatternBit::One;
           break;
         case 'x':
-          bit = CaseZOp::PatternAny;
+          bit = CaseZPatternBit::Any;
           break;
         default:
           return parser.emitError(loc, "unexpected case bit '")
@@ -636,10 +671,10 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
 
       // High zeros may be missing.
       if (caseBits.size() < condWidth)
-        caseBits.append(condWidth - caseBits.size(), CaseZOp::PatternZero);
+        caseBits.append(condWidth - caseBits.size(), CaseZPatternBit::Zero);
     }
 
-    auto resultPattern = CaseZOp::CasePattern(caseBits, builder.getContext());
+    auto resultPattern = CaseZPattern(caseBits, builder.getContext());
     casePatterns.push_back(resultPattern.attr);
     caseBits.clear();
 
@@ -666,8 +701,8 @@ static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
     } else {
       p << "case b";
       for (size_t i = 0, e = pattern.getWidth(); i != e; ++i)
-        p << CaseZOp::getLetter(pattern.getBit(e - i - 1),
-                                /*isVerilog=*/false);
+        p << getLetter(pattern.getBit(e - i - 1),
+                       /*isVerilog=*/false);
     }
 
     p << ':';
@@ -681,6 +716,25 @@ static LogicalResult verifyCaseZOp(CaseZOp op) {
   if (op.casePatterns().size() != op.getNumRegions())
     return op.emitOpError("case pattern / region count mismatch");
   return success();
+}
+
+/// This ctor allows you to build a CaseZ with some number of cases, getting
+/// a callback for each case.
+void CaseZOp::build(OpBuilder &builder, OperationState &result, Value cond,
+                    size_t numCases,
+                    std::function<CaseZPattern(size_t)> caseCtor) {
+  result.addOperands(cond);
+  SmallVector<Attribute> casePatterns;
+
+  OpBuilder::InsertionGuard guard(builder);
+
+  // Fill in the cases with the callback.
+  for (size_t i = 0, e = numCases; i != e; ++i) {
+    builder.createBlock(result.addRegion());
+    casePatterns.push_back(caseCtor(i).attr);
+  }
+
+  result.addAttribute("casePatterns", builder.getArrayAttr(casePatterns));
 }
 
 //===----------------------------------------------------------------------===//
