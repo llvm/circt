@@ -856,6 +856,10 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
     // CHECK: automatic logic [41:0] _tmp_6 = [[THING]] * [[THING]]
     // CHECK: automatic logic [41:0] _tmp_7 = [[THING]] * [[THING]]
     // CHECK: automatic logic [41:0] [[MANYTHING:.+]] = _tmp_6 * _tmp_7;
+
+    // Check the indentation level of temporaries.  Issue #1625
+    // CHECK: {{^    }}automatic logic [41:0] _tmp_8;
+    // CHECK: {{^    }}automatic logic [41:0] _tmp_9;
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
 
     %thing2 = comb.sext %really_really_long_port : (i11) -> i42
@@ -878,6 +882,19 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
     sv.bpassign %regValue, %manyThing : i42
     // CHECK: regValue = [[MANYTHING]];
     sv.bpassign %regValue, %manyThing : i42
+
+    // CHECK: `ifdef FOO
+    sv.ifdef.procedural "FOO" {
+      sv.ifdef.procedural "BAR" {
+        // Check that the temporary is inserted at the right level, not at the
+        // level of the #ifdef.
+        %manyMixed = comb.xor %thing, %thing, %thing, %thing, %thing, %thing,
+                              %thing, %thing, %thing, %thing, %thing, %thing,
+                              %thing, %thing, %thing, %thing, %thing, %thing,
+                              %thing, %thing, %thing, %thing, %thing, %thing : i42
+        sv.bpassign %regValue, %manyMixed : i42
+      }
+    }
   }
 }
 

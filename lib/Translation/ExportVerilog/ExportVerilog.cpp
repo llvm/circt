@@ -44,6 +44,8 @@ using namespace sv;
 
 #define DEBUG_TYPE "export-verilog"
 
+constexpr int INDENT_AMOUNT = 2;
+
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
@@ -656,8 +658,8 @@ public:
 
   raw_ostream &indent() { return os.indent(state.currentIndent); }
 
-  void addIndent() { state.currentIndent += 2; }
-  void reduceIndent() { state.currentIndent -= 2; }
+  void addIndent() { state.currentIndent += INDENT_AMOUNT; }
+  void reduceIndent() { state.currentIndent -= INDENT_AMOUNT; }
 
   /// If we have location information for any of the specified operations,
   /// aggregate it together and print a pretty comment specifying where the
@@ -2548,7 +2550,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       llvm::interleave(
           paramDict, os,
           [&](NamedAttribute elt) {
-            os.indent(state.currentIndent + 2)
+            os.indent(state.currentIndent + INDENT_AMOUNT)
                 << prefix << '.' << elt.first << '(';
             printParmValue(elt.first, elt.second);
             os << ')';
@@ -2794,7 +2796,19 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
 /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
 bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
   StringRef declWord = getVerilogDeclWord(op);
-  indent() << declWord;
+
+  // If we're emitting a declaration inside of an ifdef region, we'll insert
+  // the declaration outside of it.  This means we need to unindent a bit due
+  // to the indent level.
+  unsigned ifdefDepth = 0;
+  Operation *parentOp = op->getParentOp();
+  while (isa<IfDefProceduralOp>(parentOp) || isa<IfDefOp>(parentOp)) {
+    ++ifdefDepth;
+    parentOp = parentOp->getParentOp();
+  }
+
+  os.indent(state.currentIndent - ifdefDepth * INDENT_AMOUNT);
+  os << declWord;
   if (!declWord.empty())
     os << ' ';
   if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op))
