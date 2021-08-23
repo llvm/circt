@@ -22,7 +22,7 @@ class FilterType {
 public:
   virtual ~FilterType() { }
 
-  virtual bool valueMatches(std::string &value) { return false; }
+  virtual bool valueMatches(llvm::StringRef value) { return false; }
   virtual bool addSelf() { return false; }
   virtual FilterType *clone() { return nullptr; }
 };
@@ -31,7 +31,7 @@ class GlobFilterType : public FilterType {
 public:
   GlobFilterType() { }
 
-  bool valueMatches(std::string &value) override { return true; }
+  bool valueMatches(llvm::StringRef value) override { return true; }
   FilterType *clone() override { return new GlobFilterType; }
 };
 
@@ -39,7 +39,7 @@ class RecursiveGlobFilterType : public FilterType {
 public:
   RecursiveGlobFilterType() { }
 
-  bool valueMatches(std::string &value) override { return true; }
+  bool valueMatches(llvm::StringRef value) override { return true; }
   bool addSelf() override { return true; }
   FilterType *clone() override { return new RecursiveGlobFilterType; }
 };
@@ -48,7 +48,7 @@ class LiteralFilterType : public FilterType {
 public:
   LiteralFilterType(std::string &literal) : literal (literal) { }
 
-  bool valueMatches(std::string &value) override { return value == literal; }
+  bool valueMatches(llvm::StringRef value) override { return value == literal; }
   FilterType *clone() override { return new LiteralFilterType(literal); }
 
 private:
@@ -60,7 +60,14 @@ public:
   RegexFilterType(std::string &regex) : regex (std::regex(regex)) { }
   RegexFilterType(std::regex &regex) : regex (regex) { }
 
-  bool valueMatches(std::string &value) override { return std::regex_match(value, regex); }
+  bool valueMatches(llvm::StringRef value) override {
+    if (value.data()[value.size()] == '\0') {
+      return std::regex_match(value.data(), regex);
+    }
+
+    std::string str(value.data(), value.size());
+    return std::regex_match(str, regex);
+  }
   FilterType *clone() override { return new RegexFilterType(regex); }
 
 private:

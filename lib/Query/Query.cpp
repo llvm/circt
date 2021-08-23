@@ -173,17 +173,17 @@ bool filterAttribute(Attribute &attr, FilterType *type) {
   return TypeSwitch<Attribute, bool>(attr)
     .Case<mlir::BoolAttr>([&](auto &attr) {
         std::string value(attr.getValue() ? "true" : "false");
-        return type->valueMatches(value);
+        return type->valueMatches(llvm::StringRef(value));
     })
     .Case<mlir::IntegerAttr>([&](auto &attr) {
         std::stringstream stream;
         stream << attr.getValue().getZExtValue();
         std::string s;
         stream.str(s);
-        return type->valueMatches(s);
+        return type->valueMatches(llvm::StringRef(s));
     })
     .Case<mlir::StringAttr>([&](StringAttr &attr) {
-        auto s = attr.getValue().str();
+        auto s = attr.getValue();
         return type->valueMatches(s);
     })
     .Case<mlir::ArrayAttr>([&](ArrayAttr &attr) {
