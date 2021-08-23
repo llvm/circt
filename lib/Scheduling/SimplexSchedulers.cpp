@@ -19,6 +19,8 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
 
+#include <algorithm>
+
 #define DEBUG_TYPE "simplex-schedulers"
 
 using namespace circt;
@@ -186,6 +188,20 @@ protected:
 
 public:
   CyclicSimplexScheduler(CyclicProblem &prob, Operation *lastOp)
+      : SimplexSchedulerBase(lastOp), prob(prob) {}
+  LogicalResult schedule() override;
+};
+
+class SharedPipelinedOperatorsSimplexScheduler : public SimplexSchedulerBase {
+private:
+  SharedPipelinedOperatorsProblem &prob;
+
+protected:
+  Problem &getProblem() override { return prob; }
+
+public:
+  SharedPipelinedOperatorsSimplexScheduler(
+      SharedPipelinedOperatorsProblem &prob, Operation *lastOp)
       : SimplexSchedulerBase(lastOp), prob(prob) {}
   LogicalResult schedule() override;
 };
@@ -606,6 +622,94 @@ LogicalResult CyclicSimplexScheduler::schedule() {
 }
 
 //===----------------------------------------------------------------------===//
+// SharedPipelinedOperatorsSimplexScheduler
+//===----------------------------------------------------------------------===//
+
+LogicalResult SharedPipelinedOperatorsSimplexScheduler::schedule() {
+  parameterS = 0;
+  parameterT = 0;
+  buildTableau();
+
+  LLVM_DEBUG(dbgs() << "Initial tableau:\n"; dumpTableau());
+
+  if (failed(solveTableau()))
+    return prob.getContainingOp()->emitError() << "problem is infeasible";
+
+  LLVM_DEBUG(dbgs() << "After solving resource-free problem:\n"; dumpTableau());
+
+  storeStartTimes();
+
+  // The *heuristic* part of this scheduler starts here:
+  // We will now *choose* start times for operations using a shared operator
+  // type, in a way that respects the allocation limits, and consecutively solve
+  // the LP with these added constraints. The individual LPs are still solved to
+  // optimality (meaning: the start times of the "last" operation is still
+  // optimal w.r.t. the already fixed operations), however the heuristic choice
+  // means we cannot guarantee the optimality for the overall problem.
+
+  // Determine which operations are subject to resource constraints.
+  auto &ops = prob.getOperations();
+  SmallVector<Operation *> limitedOps;
+  for (auto *op : ops)
+    if (prob.getLimit(*prob.getLinkedOperatorType(op)).getValueOr(0) > 0)
+      limitedOps.push_back(op);
+
+  // Build a priority list of the limited operations.
+  //
+  // We sort by the resource-free start times to produce a topological order of
+  // the operations. Better priority functions are known, but require computing
+  // additional properties, e.g. ASAP and ALAP times for mobility, or graph
+  // analysis for height. Assigning operators (=resources) in this order at
+  // least ensures that the (acyclic!) problem remains feasible throughout the
+  // process.
+  //
+  // TODO: Implement more sophisticated priority function.
+  std::stable_sort(limitedOps.begin(), limitedOps.end(),
+                   [&](Operation *a, Operation *b) {
+                     return *prob.getStartTime(a) < *prob.getStartTime(b);
+                   });
+
+  // Store the number of operations using an operator type in a particular time
+  // step.
+  SmallDenseMap<Problem::OperatorType, SmallDenseMap<unsigned, unsigned>>
+      reservationTable;
+
+  for (auto *op : limitedOps) {
+    auto opr = *prob.getLinkedOperatorType(op);
+    unsigned limit = prob.getLimit(opr).getValueOr(0);
+    assert(limit > 0);
+
+    // Find the first time step (beginning at the current start time in the
+    // partial schedule) in which an operator instance is available.
+    unsigned candTime = *prob.getStartTime(op);
+    while (reservationTable[opr].lookup(candTime) == limit)
+      ++candTime;
+
+    // Fix the start time. As explained above, this cannot make the problem
+    // infeasible.
+    unsigned startTimeVar = startTimeVariables[op];
+    auto res = scheduleAt(startTimeVar, candTime);
+    assert(succeeded(res));
+
+    // Retrieve updated start times, and record the operator use.
+    storeStartTimes();
+    ++reservationTable[opr][candTime];
+
+    LLVM_DEBUG(dbgs() << "After scheduling " << startTimeVar
+                      << " to t=" << candTime << ":\n";
+               dumpTableau());
+  }
+
+  assert(parameterT == 0);
+  LLVM_DEBUG(
+      dbgs() << "Final tableau:\n"; dumpTableau();
+      dbgs() << "Feasible solution found with start time of last operation = "
+             << -tableau[objectiveRow][parameter1Column] << '\n');
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Public API
 //===----------------------------------------------------------------------===//
 
@@ -622,7 +726,6 @@ LogicalResult scheduling::scheduleSimplex(CyclicProblem &prob,
 
 LogicalResult scheduling::scheduleSimplex(SharedPipelinedOperatorsProblem &prob,
                                           Operation *lastOp) {
-  (void)prob;
-  (void)lastOp;
-  return failure();
+  SharedPipelinedOperatorsSimplexScheduler simplex(prob, lastOp);
+  return simplex.schedule();
 }
