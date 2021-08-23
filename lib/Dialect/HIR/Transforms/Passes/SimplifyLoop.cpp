@@ -46,11 +46,13 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
 
   if (forOp->hasAttr("unroll"))
     return success();
+  Type ivTy = forOp.getInductionVar().getType();
+  if (ivTy.isIndex())
+    return success();
 
   OpBuilder builder(forOp);
   auto *context = builder.getContext();
   builder.setInsertionPoint(forOp);
-  Type ivTy = forOp.getInductionVar().getType();
   Value initialCondition;
   if (forOp.lb().getType().isSignedInteger())
     initialCondition = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(),
@@ -60,16 +62,6 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
     initialCondition = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(),
                                                     mlir::CmpIPredicate::ult,
                                                     forOp.lb(), forOp.ub());
-  auto rdPort = helper::getDictionaryAttr(builder, "rd_latency",
-                                          builder.getI64IntegerAttr(0));
-  auto wrPort = helper::getDictionaryAttr(builder, "wr_latency",
-                                          builder.getI64IntegerAttr(1));
-
-  auto ivRegTy = hir::MemrefType::get(context, {1}, ivTy, {BANK});
-
-  auto ivReg = builder.create<hir::AllocaOp>(
-      builder.getUnknownLoc(), ivRegTy, builder.getStringAttr("REG"),
-      builder.getArrayAttr({rdPort, wrPort}));
   auto whileOp = builder.create<hir::WhileOp>(
       forOp.getLoc(), initialCondition, forOp.tstart(), forOp.offsetAttr());
   auto forNextIterOp = dyn_cast<NextIterOp>(&forOp.body().begin()->back());
@@ -79,50 +71,37 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
   builder.setInsertionPointToStart(whileOp.getBody(0));
 
   {
-    Value c0 = builder.create<mlir::ConstantOp>(builder.getUnknownLoc(),
-                                                builder.getIndexType(),
-                                                builder.getIndexAttr(0));
-    Value iv = builder.create<hir::LoadOp>(
-        builder.getUnknownLoc(), ivTy, ivReg, c0, builder.getI64IntegerAttr(0),
-        builder.getI64IntegerAttr(0), whileOp.getIterTimeVar(),
-        builder.getI64IntegerAttr(0));
+    Value isFirstIter = builder.create<hir::IsFirstIterOp>(
+        builder.getUnknownLoc(), builder.getI1Type());
     auto zeroDelayAttr = helper::getDictionaryAttr(
         builder, "hir.delay", builder.getI64IntegerAttr(0));
 
     auto funcTy = hir::FuncType::get(
-        context, {ivTy, ivTy, ivTy, ivTy},
+        context, {builder.getI1Type(), ivTy, ivTy, ivTy},
         {zeroDelayAttr, zeroDelayAttr, zeroDelayAttr, zeroDelayAttr},
         {builder.getI1Type(), ivTy}, {zeroDelayAttr, zeroDelayAttr});
 
-    auto conditionAndNextIV =
-        builder
-            .create<hir::CallOp>(
-                builder.getUnknownLoc(),
-                SmallVector<Type>(
-                    {builder.getI1Type(), forOp.getInductionVar().getType()}),
-                FlatSymbolRefAttr::get(context, "HIR_ForOp_entry"),
-                TypeAttr::get(funcTy),
-                SmallVector<Value>({iv, forOp.lb(), forOp.ub(), forOp.step()}),
-                whileOp.getIterTimeVar(), builder.getI64IntegerAttr(0))
-            .getResults();
-
-    builder.create<hir::StoreOp>(
-        builder.getUnknownLoc(), conditionAndNextIV[1], ivReg, c0,
-        builder.getI64IntegerAttr(1), builder.getI64IntegerAttr(1),
+    auto forOpEntry = builder.create<hir::CallOp>(
+        builder.getUnknownLoc(),
+        SmallVector<Type>(
+            {builder.getI1Type(), forOp.getInductionVar().getType()}),
+        FlatSymbolRefAttr::get(context, "HIR_ForOp_entry"),
+        TypeAttr::get(funcTy),
+        SmallVector<Value>({isFirstIter, forOp.lb(), forOp.ub(), forOp.step()}),
         whileOp.getIterTimeVar(), builder.getI64IntegerAttr(0));
-
+    forOpEntry->setAttr(
+        "WIDTH", builder.getI64IntegerAttr(ivTy.getIntOrFloatBitWidth()));
+    auto condition = forOpEntry.getResult(0);
+    auto iv = forOpEntry.getResult(1);
     BlockAndValueMapping operandMap;
-    // Latch the captures and update them as the new captures for the next
-    // iteration.
 
     operandMap.map(forOp.getInductionVar(), iv);
     operandMap.map(forOp.getIterTimeVar(), whileOp.getIterTimeVar());
 
     // Copy the loop body.
     for (auto &operation : forOp.getLoopBody().front()) {
-      if (auto forNextIterOp = dyn_cast<hir::NextIterOp>(&operation)) {
-        builder.create<hir::ConditionOp>(builder.getUnknownLoc(),
-                                         conditionAndNextIV[0]);
+      if (llvm::isa<hir::NextIterOp>(operation)) {
+        builder.create<hir::ConditionOp>(builder.getUnknownLoc(), condition);
       }
       builder.clone(operation, operandMap);
     }

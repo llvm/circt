@@ -67,7 +67,7 @@ def IsFirstIterOp :HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>,NoSi
   let summary = "Returns true if this is the first iteration.";
   let results = (outs I1:$res);
 
-  let assemblyFormat = [{ attr-dict }];
+  let assemblyFormat = [{ attr-dict `:` type($res)}];
 }
 
 def ConditionOp : HIR_Op<"condition", [ParentOneOf<["WhileOp"]>] > {

@@ -282,7 +282,9 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
           if (failed(parseResult.getValue()))
             return Type();
         } else {
-          resultAttrs.push_back(DictionaryAttr());
+          resultAttrs.push_back(helper::getDictionaryAttr(
+              parser.getBuilder(), "hir.delay",
+              parser.getBuilder().getI64IntegerAttr(0)));
         }
 
         if (parser.parseOptionalComma())

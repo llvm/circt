@@ -110,6 +110,8 @@ ParseResult parseBusPortsAttr(OpAsmParser &parser,
 static LogicalResult
 verifyDelayAttribute(mlir::function_ref<InFlightDiagnostic()> emitError,
                      DictionaryAttr attrDict) {
+  if (!attrDict)
+    return failure();
   auto delayNameAndAttr = attrDict.getNamed("hir.delay");
   if (!delayNameAndAttr.hasValue())
     return failure();
