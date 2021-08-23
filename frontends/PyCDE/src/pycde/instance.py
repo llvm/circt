@@ -61,7 +61,7 @@ class Instance:
 
   @property
   def appid(self):
-    return AppID([i.name for i in self.path])
+    return AppID(*[i.name for i in self.path])
 
   def __repr__(self):
     path_names = map(lambda i: i.name, self.path)

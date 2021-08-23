@@ -6,20 +6,17 @@ from __future__ import annotations
 
 import mlir.ir as ir
 
-from typing import Union, Tuple
+from typing import Tuple
 
 
 class AppID:
 
-  def __init__(self, appid: Union[list[str], str]):
-    if isinstance(appid, list):
-      assert len(appid) > 0
-      self._parts = appid
-    elif isinstance(appid, str):
-      self._parts = appid.split(".")
-      assert len(self._parts) > 0
-    else:
-      assert False, f"Don't know how to interpret {type(appid)} into AppID"
+  def __init__(self, *appid: Tuple[str]):
+    assert len(appid) > 0
+    self._parts = list()
+    for p in appid:
+      assert isinstance(p, str)
+      self._parts.extend(p.split("."))
 
   @property
   def head(self):
@@ -28,11 +25,14 @@ class AppID:
   @property
   def tail(self):
     if len(self._parts) > 1:
-      return AppID(self._parts[1:])
+      return AppID(*self._parts[1:])
     return None
 
   def __eq__(self, o: object) -> bool:
     return isinstance(o, AppID) and o._parts == self._parts
+
+  def __add__(self, part: str) -> AppID:
+    return AppID(*self._parts, part)
 
 
 class AppIDIndex(dict):

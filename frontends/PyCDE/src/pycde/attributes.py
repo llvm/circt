@@ -3,12 +3,11 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-
-from .instance import Instance
-
 from circt import msft
-
 from typing import Union
+
+DSP = msft.DSP
+M20K = msft.M20K
 
 
 def placement(subpath: Union[str, list[str]],
