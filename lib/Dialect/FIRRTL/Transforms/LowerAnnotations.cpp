@@ -85,8 +85,8 @@ IntegerAttr newID(MLIRContext *context);
 
 static bool hasName(StringRef name, Operation *op) {
   return TypeSwitch<Operation *, bool>(op)
-      .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CMemOp,
-            SMemOp, MemoryPortOp>([&](auto nop) {
+      .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
+            SeqMemOp, MemoryPortOp>([&](auto nop) {
         if (nop.name() == name)
           return true;
         return false;
@@ -168,8 +168,8 @@ static void addAnnotation(BaseUnion ref, ArrayRef<NamedAttribute> anno) {
 
   auto portAnnoRaw = ref.op->getAttr("portAnnotations");
   ArrayAttr portAnno = portAnnoRaw.dyn_cast_or_null<ArrayAttr>();
-  if (!portAnno || portAnno.size() != ref.op->getNumResults()) {
-    SmallVector<Attribute> emptyPortAttr(ref.op->getNumResults());
+  if (!portAnno || portAnno.size() != getNumPorts(ref.op)) {
+    SmallVector<Attribute> emptyPortAttr(getNumPorts(ref.op), ArrayAttr::get(ref.op->getContext(), {}));
     portAnno = ArrayAttr::get(ref.op->getContext(), emptyPortAttr);
   }
   portAnno = replaceArrayAttrElement(

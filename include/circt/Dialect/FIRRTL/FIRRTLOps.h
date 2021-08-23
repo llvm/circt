@@ -116,95 +116,106 @@ IntegerAttr getModulePortDirections(Operation *module);
 /// number.
 Direction getModulePortDirection(Operation *op, size_t portIndex);
 
-/// Returns true if the value results from an expression with duplex flow.
-/// Duplex values have special treatment in bundle connect operations, and their
-/// flip orientation is not used to determine the direction of each pairwise
-/// connect.
-bool isDuplexValue(Value val);
+/// Return the number of ports in a module-like thing (modules, memories, etc)
+size_t getNumPorts(Operation *op);
 
-enum class Flow { Source, Sink, Duplex };
+  /// Returns true if the value results from an expression with duplex flow.
+  /// Duplex values have special treatment in bundle connect operations, and
+  /// their flip orientation is not used to determine the direction of each
+  /// pairwise connect.
+  bool isDuplexValue(Value val);
 
-/// Get a flow's reverse.
-Flow swapFlow(Flow flow);
+  enum class Flow { Source, Sink, Duplex };
 
-/// Compute the flow for a Value, \p val, as determined by the FIRRTL
-/// specification.  This recursively walks backwards from \p val to the
-/// declaration.  The resulting flow is a combination of the declaration flow
-/// (output ports and instance inputs are sinks, registers and wires are duplex,
-/// anything else is a source) and the number of intermediary flips.  An even
-/// number of flips will result in the same flow as the declaration.  An odd
-/// number of flips will result in reversed flow being returned.  The reverse of
-/// source is sink.  The reverse of sink is source.  The reverse of duplex is
-/// duplex.  The \p accumulatedFlow parameter sets the initial flow.  A user
-/// should normally \a not have to change this from its default of \p
-/// Flow::Source.
-Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
+  /// Get a flow's reverse.
+  Flow swapFlow(Flow flow);
 
-enum class DeclKind { Port, Instance, Other };
+  /// Compute the flow for a Value, \p val, as determined by the FIRRTL
+  /// specification.  This recursively walks backwards from \p val to the
+  /// declaration.  The resulting flow is a combination of the declaration flow
+  /// (output ports and instance inputs are sinks, registers and wires are
+  /// duplex, anything else is a source) and the number of intermediary flips.
+  /// An even number of flips will result in the same flow as the declaration.
+  /// An odd number of flips will result in reversed flow being returned.  The
+  /// reverse of source is sink.  The reverse of sink is source.  The reverse of
+  /// duplex is duplex.  The \p accumulatedFlow parameter sets the initial flow.
+  /// A user should normally \a not have to change this from its default of \p
+  /// Flow::Source.
+  Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 
-DeclKind getDeclarationKind(Value val);
+  enum class DeclKind { Port, Instance, Other };
 
-enum class ReadPortSubfield { addr, en, clk, data };
-enum class WritePortSubfield { addr, en, clk, data, mask };
-enum class ReadWritePortSubfield { addr, en, clk, rdata, wmode, wdata, wmask };
+  DeclKind getDeclarationKind(Value val);
 
-/// Allow 'or'ing MemDirAttr.  This allows combining Read and Write into
-/// ReadWrite.
-inline MemDirAttr operator|(MemDirAttr lhs, MemDirAttr rhs) {
-  return static_cast<MemDirAttr>(
-      static_cast<std::underlying_type<MemDirAttr>::type>(lhs) |
-      static_cast<std::underlying_type<MemDirAttr>::type>(rhs));
-}
+  enum class ReadPortSubfield { addr, en, clk, data };
+  enum class WritePortSubfield { addr, en, clk, data, mask };
+  enum class ReadWritePortSubfield {
+    addr,
+    en,
+    clk,
+    rdata,
+    wmode,
+    wdata,
+    wmask
+  };
 
-inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
-  lhs = lhs | rhs;
-  return lhs;
-}
+  /// Allow 'or'ing MemDirAttr.  This allows combining Read and Write into
+  /// ReadWrite.
+  inline MemDirAttr operator|(MemDirAttr lhs, MemDirAttr rhs) {
+    return static_cast<MemDirAttr>(
+        static_cast<std::underlying_type<MemDirAttr>::type>(lhs) |
+        static_cast<std::underlying_type<MemDirAttr>::type>(rhs));
+  }
 
-// Out-of-line implementation of various trait verification methods and
-// functions commonly used among operations.
-namespace impl {
-LogicalResult verifySameOperandsIntTypeKind(Operation *op);
+  inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
+    lhs = lhs | rhs;
+    return lhs;
+  }
 
-// Type inference adaptor for FIRRTL operations.
-LogicalResult inferReturnTypes(
-    MLIRContext *context, Optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::RegionRange regions,
-    SmallVectorImpl<Type> &results,
-    llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
-                                  Optional<Location>)>
-        callback);
+  // Out-of-line implementation of various trait verification methods and
+  // functions commonly used among operations.
+  namespace impl {
+  LogicalResult verifySameOperandsIntTypeKind(Operation *op);
 
-// Common type inference functions.
-FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
-                             Optional<Location> loc);
-FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
-                              Optional<Location> loc);
-FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
-                                 Optional<Location> loc);
-FIRRTLType inferReductionResult(FIRRTLType arg, Optional<Location> loc);
+  // Type inference adaptor for FIRRTL operations.
+  LogicalResult inferReturnTypes(
+      MLIRContext *context, Optional<Location> loc, ValueRange operands,
+      DictionaryAttr attrs, mlir::RegionRange regions,
+      SmallVectorImpl<Type> &results,
+      llvm::function_ref<FIRRTLType(ValueRange, ArrayRef<NamedAttribute>,
+                                    Optional<Location>)>
+          callback);
 
-// Common parsed argument validation functions.
-LogicalResult validateBinaryOpArguments(ValueRange operands,
-                                        ArrayRef<NamedAttribute> attrs,
-                                        Location loc);
-LogicalResult validateUnaryOpArguments(ValueRange operands,
-                                       ArrayRef<NamedAttribute> attrs,
-                                       Location loc);
-LogicalResult validateOneOperandOneConst(ValueRange operands,
+  // Common type inference functions.
+  FIRRTLType inferAddSubResult(FIRRTLType lhs, FIRRTLType rhs,
+                               Optional<Location> loc);
+  FIRRTLType inferBitwiseResult(FIRRTLType lhs, FIRRTLType rhs,
+                                Optional<Location> loc);
+  FIRRTLType inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
+                                   Optional<Location> loc);
+  FIRRTLType inferReductionResult(FIRRTLType arg, Optional<Location> loc);
+
+  // Common parsed argument validation functions.
+  LogicalResult validateBinaryOpArguments(ValueRange operands,
+                                          ArrayRef<NamedAttribute> attrs,
+                                          Location loc);
+  LogicalResult validateUnaryOpArguments(ValueRange operands,
                                          ArrayRef<NamedAttribute> attrs,
                                          Location loc);
-} // namespace impl
+  LogicalResult validateOneOperandOneConst(ValueRange operands,
+                                           ArrayRef<NamedAttribute> attrs,
+                                           Location loc);
+  } // namespace impl
 
-/// A binary operation where the operands have the same integer kind.
-template <typename ConcreteOp>
-class SameOperandsIntTypeKind
-    : public OpTrait::TraitBase<ConcreteOp, SameOperandsIntTypeKind> {
-public:
-  static LogicalResult verifyTrait(Operation *op) {
-    return impl::verifySameOperandsIntTypeKind(op);
-  }
-};
+  /// A binary operation where the operands have the same integer kind.
+  template <typename ConcreteOp>
+  class SameOperandsIntTypeKind
+      : public OpTrait::TraitBase<ConcreteOp, SameOperandsIntTypeKind> {
+  public:
+    static LogicalResult verifyTrait(Operation *op) {
+      return impl::verifySameOperandsIntTypeKind(op);
+    }
+  };
 
 } // namespace firrtl
 } // namespace circt

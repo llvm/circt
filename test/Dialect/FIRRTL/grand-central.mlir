@@ -342,7 +342,7 @@ firrtl.circuit "BindInterfaceTest"  attributes {
   firrtl.circuit "GCTMemTap"  attributes {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", source = "~GCTMemTap|GCTMemTap>mem", taps = ["GCTMemTap.MemTap.mem[0]", "GCTMemTap.MemTap.mem[1]"]}, {class = "circt.testNT", unrelatedAnnotation}]}  {
     firrtl.extmodule @MemTap(out %mem: !firrtl.vector<uint<1>, 2>) attributes {defname = "MemTap"}
     firrtl.module @GCTMemTap(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-      %mem = firrtl.cmem  {name = "mem"} : !firrtl.vector<uint<1>, 2>
+      %mem = firrtl.combmem  {name = "mem"} : !firrtl.cmemory<uint<1>, 2>
       %MemTap_mem = firrtl.instance @MemTap  {name = "MemTap"} : !firrtl.vector<uint<1>, 2>
       %0 = firrtl.subindex %MemTap_mem[0] : !firrtl.vector<uint<1>, 2>
       %1 = firrtl.subindex %MemTap_mem[1] : !firrtl.vector<uint<1>, 2>

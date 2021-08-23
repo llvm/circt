@@ -1529,14 +1529,14 @@ void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::DropNameWire>(context);
 }
 
-void CMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
+void CombMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<patterns::DropNameCMem>(context);
+  results.insert<patterns::DropNameCombMem>(context);
 }
 
-void SMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
+void SeqMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<patterns::DropNameSMem>(context);
+  results.insert<patterns::DropNameSeqMem>(context);
 }
 
 void MemoryPortOp::getCanonicalizationPatterns(RewritePatternSet &results,

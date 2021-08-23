@@ -385,6 +385,14 @@ Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
   return direction::get(getModulePortDirections(op).getValue()[portIndex]);
 }
 
+size_t firrtl::getNumPorts(Operation* op) {
+  if (isa<FExtModuleOp>(op))
+    return getModuleType(op).getInputs().size();
+    if (auto mod = dyn_cast<FModuleOp>(op))
+    return mod.getBodyBlock()->getArguments().size();
+    return op->getNumResults();
+}
+
 // Return the port with the specified name.
 BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);

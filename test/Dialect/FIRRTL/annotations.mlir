@@ -127,14 +127,14 @@ firrtl.circuit "FooIR"  attributes {annotations = [{class = "circt.test", one, t
 
 // -----
 
-// A ReferenceTarget/ComponentName pointing at a CMem should work.
+// A ReferenceTarget/ComponentName pointing at a CombMem should work.
 
 // CHECK-LABEL: firrtl.module @Foo7
-// CHECK: firrtl.cmem
+// CHECK: firrtl.combmem
 // CHECK-SAME: annotations = [{a = "a", class = "circt.test"}, {b = "b", class = "circt.test"}]
 firrtl.circuit "Foo7"  attributes {annotations = [{a = "a", class = "circt.test", target = "~Foo7|Foo7>bar"}, {b = "b", class = "circt.test", target = "Foo7.Foo7.bar"}]}  {
   firrtl.module @Foo7() {
-    %bar = firrtl.cmem  {name = "bar"} : !firrtl.vector<uint<1>, 8>
+    %bar = firrtl.combmem  {name = "bar"} : !firrtl.cmemory<uint<1>, 8>
   }
 }
 
@@ -222,11 +222,11 @@ firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test",
 
 // A ReferenceTarget/ComponentName pointing at an SMem should work.
 
-// CHECK-LABEL: firrtl.smem
+// CHECK-LABEL: firrtl.seqmem
 // CHECK-SAME: annotations = [{a = "a", class = "circt.test"}, {b = "b", class = "circt.test"}]
 firrtl.circuit "Foo"  attributes {annotations = [{a = "a", class = "circt.test", target = "~Foo|Foo>bar"}, {b = "b", class = "circt.test", target = "Foo.Foo.bar"}]}  {
   firrtl.module @Foo() {
-    %bar = firrtl.smem Undefined  {name = "bar"} : !firrtl.vector<uint<1>, 8>
+    %bar = firrtl.seqmem Undefined  {name = "bar"} : !firrtl.cmemory<uint<1>, 8>
   }
 }
 
@@ -378,7 +378,7 @@ firrtl.circuit "Foo"  attributes {annotations = [{a, class = "circt.test", targe
   firrtl.circuit "GCTMemTap"  attributes {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", source = "~GCTMemTap|GCTMemTap>mem", taps = ["GCTMemTap.MemTap.mem[0]", "GCTMemTap.MemTap.mem[1]"]}, {class = "circt.testNT", unrelatedAnnotation}]}  {
     firrtl.extmodule @MemTap(out %mem: !firrtl.vector<uint<1>, 2>) attributes {defname = "MemTap"}
     firrtl.module @GCTMemTap(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-      %mem = firrtl.cmem  {name = "mem"} : !firrtl.vector<uint<1>, 2>
+      %mem = firrtl.combmem  {name = "mem"} : !firrtl.cmemory<uint<1>, 2>
       %MemTap_mem = firrtl.instance @MemTap  {name = "MemTap"} : !firrtl.vector<uint<1>, 2>
       %0 = firrtl.subindex %MemTap_mem[0] : !firrtl.vector<uint<1>, 2>
       %1 = firrtl.subindex %MemTap_mem[1] : !firrtl.vector<uint<1>, 2>
@@ -404,7 +404,7 @@ firrtl.circuit "Foo"  attributes {annotations = [{a, class = "circt.test", targe
 // CHECK-SAME: class = "sifive.enterprise.grandcentral.MemTapAnnotation"
 // CHECK-SAME:      id = [[ID]] : i64
 // CHECK: firrtl.module @GCTMemTap
-// CHECK: %mem = firrtl.cmem
+// CHECK: %mem = firrtl.combmem
 // CHECK-SAME: annotations = [
 // CHECK-SAME:   class = "sifive.enterprise.grandcentral.MemTapAnnotation",
 // CHECK-SAME:    id = [[ID]] : i64

@@ -195,22 +195,22 @@ def DropNameMem : Pat<
   (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations, $portAnno),
   [(uselessNameAttr $name), (NoDontTouch $annotations), (NoPortsDontTouch $portAnno)]>;
 
-// CMem(name),!dnt -> CMem("")
-def DropNameCMem : Pat<
-  (CMemOp $name, $annotations),
-  (CMemOp (GetEmptyString), $annotations),
+// CombMem(name),!dnt -> CombMem("")
+def DropNameCombMem : Pat<
+  (CombMemOp $name, $annotations),
+  (CombMemOp (GetEmptyString), $annotations),
   [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
 
-// SMem(ruw, name),!dnt -> SMem(ruw, "")
-def DropNameSMem : Pat<
-  (SMemOp $ruw, $name, $annotations),
-  (SMemOp $ruw, (GetEmptyString), $annotations),
+// SeqMem(ruw, name),!dnt -> SeqMem(ruw, "")
+def DropNameSeqMem : Pat<
+  (SeqMemOp $ruw, $name, $annotations),
+  (SeqMemOp $ruw, (GetEmptyString), $annotations),
   [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
 
 // memoryport(..., name),!dnt -> memoryport(..., "")
 def DropNameMemoryPort : Pat<
-  (MemoryPortOp $memory, $index, $clock, $direction, $name, $annotations),
-  (MemoryPortOp $memory, $index, $clock, $direction, (GetEmptyString), $annotations),
+  (MemoryPortOp  $memory, $direction, $name, $annotations),
+  (MemoryPortOp  $memory, $direction, (GetEmptyString), $annotations),
   [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
 
 

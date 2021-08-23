@@ -2230,8 +2230,8 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointAfterValue(memory);
     auto memoryPortOp = builder.create<MemoryPortOp>(
-        resultType, CMemoryPortType::get(getContext()), memory, direction, name,
-        annotations);
+        resultType, CMemoryPortType::get(getContext()), memory, direction, id,
+        getConstants().emptyArrayAttr);
     memoryData = memoryPortOp.getResult(0);
     memoryPort = memoryPortOp.getResult(1);
   }
@@ -2639,12 +2639,8 @@ ParseResult FIRStmtParser::parseCombMem() {
   auto memType = CMemoryType::get(vectorType.getElementType(),
                                   vectorType.getNumElements());
 
-  auto annotations =
-      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                     moduleContext.targetsInModule, type);
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-
-  auto result = builder.create<CombMemOp>(memType, name, annotations);
+  auto result =
+      builder.create<CombMemOp>(memType, id, getConstants().emptyArrayAttr);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2677,12 +2673,8 @@ ParseResult FIRStmtParser::parseSeqMem() {
   auto memType = CMemoryType::get(getContext(), vectorType.getElementType(),
                                   vectorType.getNumElements());
 
-  auto annotations =
-      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                     moduleContext.targetsInModule, type);
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-
-  auto result = builder.create<SeqMemOp>(memType, ruw, name, annotations);
+  auto result =
+      builder.create<SeqMemOp>(memType, ruw, id, getConstants().emptyArrayAttr);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 

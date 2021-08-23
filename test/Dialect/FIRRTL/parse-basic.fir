@@ -361,7 +361,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ;  Names are preserved by the parser and not removed until annotations are scattered.
     ; CHECK: %_T_42 = firrtl.wire
     wire _T_42 : UInt<1>
-    ; CHECK: %{{[0-9]+}} = firrtl.node
+    ; CHECK: %_GEN_43 = firrtl.node %n12
     node _GEN_43 = n12
 
     ; CHECK: = firrtl.not %auto : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -543,9 +543,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module flip_one :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf(0)
-    ; CHECK: %1 = firrtl.node %0
+    ; CHECK: %_T = firrtl.node %0
     node _T = bf.int_1
-    ; CHECK: firrtl.when %1 {
+    ; CHECK: firrtl.when %_T {
     when _T :
       skip
 

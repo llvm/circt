@@ -2,6 +2,8 @@
 
 firrtl.circuit "MyModule" {
 
+firrtl.nla @SomeName
+
 // Constant op supports different return types.
 firrtl.module @Constants() {
   // CHECK: %c4_ui8 = firrtl.constant 4 : !firrtl.uint<8>
