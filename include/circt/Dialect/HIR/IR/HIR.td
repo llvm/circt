@@ -83,6 +83,7 @@ def WhileNextIterOp : HIR_Op<"while.next_iter", [ParentOneOf<["WhileOp"]>,Termin
   let results = (outs );
 
   let assemblyFormat = [{ `condition` `(` $condition `)` `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict }];
+
 }
 
 def YieldOp : HIR_Op<"yield", [ParentOneOf<["IfOp"]>,Terminator] > {
@@ -260,7 +261,12 @@ def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects]> {
   let extraClassDeclaration = [{
     Value getIterTimeVar() { return body().getArguments().back(); }
     SmallVector<Value> getCapturedValues();
+    Block* addEntryBlock();
   }];
+
+  let builders = [OpBuilder<(ins "Value":$condition, "Value":$tstart, "IntegerAttr":$offset),[{
+    build($_builder,$_state,hir::TimeType::get($_builder.getContext()), condition, tstart, offset);
+  }]>];
 }
 
 def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
@@ -411,7 +417,7 @@ def CallOp : HIR_Op<"call", [CallOpInterface,AttrSizedOperandSegments] > {
       Optional<HIR_TimeType>:$tstart,
       OptionalAttr<I64Attr>: $offset
       );
-  let results = (outs Variadic<AnyType> : $res);
+  let results = (outs Variadic<AnyType> : $results);
 
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];

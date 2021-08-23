@@ -2,6 +2,12 @@
 #define CIRCT_DIALECT_HIR_TRANSFORMS_PASSES
 include "mlir/Pass/PassBase.td"
 
+def SimplifyLoop : Pass<"hir-simplify-loop", "hir::FuncOp"> {
+  let summary = "Converts ForOp to WhileOp.";
+
+  let constructor = "circt::hir::createSimplifyLoopPass()";
+}
+
 def IndexLowering : Pass<"hir-lower-index", "hir::FuncOp"> {
   let summary = "Converts the IndexType to an IntegerType of concrete size.";
   let description = [{IndexType of for loops (except unrolled for loops) is converted to a concrete type.}];

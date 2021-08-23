@@ -17,7 +17,7 @@ hir.func @test at %t(){
   %tt2 = hir.for %i:i4 = %c0 to %c15 step %c1 iter_time(%ti = %t+1){
     %c2  = constant 2 : i4
     %res = hir.addi (%i, %c2) at %ti:i4
-    hir.for.next_iter at %ti 
+    hir.for.next_iter at %ti+1 
   }
   %b = constant 1:i1
   hir.while(%b) at iter_time(%tw = %t + 2){

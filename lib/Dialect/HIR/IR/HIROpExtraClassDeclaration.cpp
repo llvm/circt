@@ -97,12 +97,21 @@ Block *ForOp::addEntryBlock(MLIRContext *context, Type inductionVarTy) {
   return entry;
 }
 
+Block *WhileOp::addEntryBlock() {
+  auto *context = this->getContext();
+  Block *entry = new Block;
+  entry->addArgument(hir::TimeType::get(context)); // iter time
+  body().push_back(entry);
+  return entry;
+}
+
 void ForOp::beginRegion(OpBuilder &builder) {
   builder.setInsertionPointToStart(&getLoopBody().front());
 }
 
 void ForOp::endRegion(OpBuilder &builder) {
-  builder.create<hir::YieldOp>(builder.getUnknownLoc());
+  builder.create<hir::ForNextIterOp>(builder.getUnknownLoc(), Value(),
+                                     IntegerAttr());
   builder.setInsertionPointAfter(*this);
 }
 

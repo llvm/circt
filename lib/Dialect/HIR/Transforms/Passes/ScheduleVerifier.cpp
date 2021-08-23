@@ -342,7 +342,7 @@ bool ScheduleVerifier::inspectOp(hir::DelayOp op) {
 }
 
 bool ScheduleVerifier::inspectOp(hir::CallOp op) {
-  mlir::ResultRange results = op.res();
+  mlir::ResultRange results = op.results();
   auto operands = op.operands();
   unsigned tstartDelay = op.offset() ? op.offset().getValue() : 0;
   ArrayAttr inputDelays = op->getAttrOfType<ArrayAttr>("inputDelays");
