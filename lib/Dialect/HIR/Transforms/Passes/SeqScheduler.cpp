@@ -64,7 +64,7 @@ private:
         continue;
       } else if (auto op = dyn_cast<hir::ReturnOp>(operation)) {
         continue;
-      } else if (auto op = dyn_cast<hir::ForNextIterOp>(operation)) {
+      } else if (auto op = dyn_cast<hir::NextIterOp>(operation)) {
         if (failed(updateOp(op)))
           return failure();
       } else
@@ -95,7 +95,7 @@ private:
   LogicalResult updateOp(hir::AddFOp);
   LogicalResult updateOp(hir::SubFOp);
   LogicalResult updateOp(hir::MulFOp);
-  LogicalResult updateOp(hir::ForNextIterOp);
+  LogicalResult updateOp(hir::NextIterOp);
   LogicalResult updateOp(hir::CallOp);
 
 private:
@@ -194,7 +194,7 @@ LogicalResult SeqSchedulerPass::updateOp(hir::MulFOp op) {
   return success();
 }
 
-LogicalResult SeqSchedulerPass::updateOp(hir::ForNextIterOp op) {
+LogicalResult SeqSchedulerPass::updateOp(hir::NextIterOp op) {
   if (failed(populateSchedule(op)))
     return failure();
   return success();

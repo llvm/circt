@@ -72,7 +72,7 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
 
     // Copy the loop body.
     for (auto it = loopBodyBlock.begin(); it != srcBlockEnd; it++) {
-      if (auto forNextIterOp = dyn_cast<hir::ForNextIterOp>(it)) {
+      if (auto forNextIterOp = dyn_cast<hir::NextIterOp>(it)) {
         assert(forNextIterOp.offset().getValue() == 0);
         iterTStart = {lookupOrOriginal(operandMap, forNextIterOp.tstart())};
         continue;

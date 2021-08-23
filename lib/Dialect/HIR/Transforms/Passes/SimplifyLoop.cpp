@@ -65,17 +65,14 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
   auto wrPort = helper::getDictionaryAttr(builder, "wr_latency",
                                           builder.getI64IntegerAttr(1));
 
-  auto ivRegTy = hir::MemrefType::get(
-      context, {1}, builder.getIntegerType(ivTy.getIntOrFloatBitWidth()),
-      {BANK});
+  auto ivRegTy = hir::MemrefType::get(context, {1}, ivTy, {BANK});
 
   auto ivReg = builder.create<hir::AllocaOp>(
       builder.getUnknownLoc(), ivRegTy, builder.getStringAttr("REG"),
       builder.getArrayAttr({rdPort, wrPort}));
-
   auto whileOp = builder.create<hir::WhileOp>(
       forOp.getLoc(), initialCondition, forOp.tstart(), forOp.offsetAttr());
-  auto forNextIterOp = dyn_cast<ForNextIterOp>(&forOp.body().begin()->back());
+  auto forNextIterOp = dyn_cast<NextIterOp>(&forOp.body().begin()->back());
   assert(forNextIterOp);
 
   whileOp.addEntryBlock();
@@ -103,7 +100,7 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
                 builder.getUnknownLoc(),
                 SmallVector<Type>(
                     {builder.getI1Type(), forOp.getInductionVar().getType()}),
-                FlatSymbolRefAttr::get(context, "HIR_for_op_entry"),
+                FlatSymbolRefAttr::get(context, "HIR_ForOp_entry"),
                 TypeAttr::get(funcTy),
                 SmallVector<Value>({iv, forOp.lb(), forOp.ub(), forOp.step()}),
                 whileOp.getIterTimeVar(), builder.getI64IntegerAttr(0))
@@ -123,12 +120,9 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
 
     // Copy the loop body.
     for (auto &operation : forOp.getLoopBody().front()) {
-      if (auto forNextIterOp = dyn_cast<hir::ForNextIterOp>(&operation)) {
-        builder.create<hir::WhileNextIterOp>(
-            builder.getUnknownLoc(), conditionAndNextIV[0],
-            operandMap.lookup(forNextIterOp.tstart()),
-            forNextIterOp.offsetAttr());
-        continue;
+      if (auto forNextIterOp = dyn_cast<hir::NextIterOp>(&operation)) {
+        builder.create<hir::ConditionOp>(builder.getUnknownLoc(),
+                                         conditionAndNextIV[0]);
       }
       builder.clone(operation, operandMap);
     }

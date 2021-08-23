@@ -41,7 +41,7 @@ class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
 
 
-def ForNextIterOp : HIR_Op<"for.next_iter", [ParentOneOf<["ForOp"]>,Terminator] > {
+def NextIterOp : HIR_Op<"next_iter", [ParentOneOf<["ForOp","WhileOp"]>,Terminator] > {
   let summary = "specifies the time at which the next iteration of for loop starts.";
   let description = [{
     This op specifies when the next iteration of the hir.for loop starts.
@@ -63,27 +63,29 @@ def ForNextIterOp : HIR_Op<"for.next_iter", [ParentOneOf<["ForOp"]>,Terminator] 
   let assemblyFormat = [{ `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict }];
 }
 
-def WhileNextIterOp : HIR_Op<"while.next_iter", [ParentOneOf<["WhileOp"]>,Terminator] > {
-  let summary = "specifies the time at which the next iteration of while loop starts.";
+def IsFirstIterOp :HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>,NoSideEffect]>{
+  let summary = "Returns true if this is the first iteration.";
+  let results = (outs I1:$res);
+
+  let assemblyFormat = [{ attr-dict }];
+}
+
+def ConditionOp : HIR_Op<"condition", [ParentOneOf<["WhileOp"]>] > {
+  let summary = "specifies the condition for hir.while.";
   let description = [{
-    This op specifies when the next iteration of the hir.while loop starts.
-    If the current iteration is the last iteration then it specifies the time 
-    returned by the hir.while op.
+    This op specifies the condition for the hir.while loop. 
+    If the condition is zero then the loop breaks.
 
-    This instruction must be the last instruction in while loop body.
+    Example:
 
-      Example:
-
-      ```mlir hir.while.next_iter at %t```
+      ```mlir hir.condition %b ```
   }];
 
-  let arguments = (ins I1:$condition, Optional<HIR_TimeType> : $tstart, 
-    OptionalAttr<I64Attr>: $offset);
+  let arguments = (ins I1:$condition);
 
   let results = (outs );
 
-  let assemblyFormat = [{ `condition` `(` $condition `)` `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict }];
-
+  let assemblyFormat = [{ $condition attr-dict }];
 }
 
 def YieldOp : HIR_Op<"yield", [ParentOneOf<["IfOp"]>,Terminator] > {
