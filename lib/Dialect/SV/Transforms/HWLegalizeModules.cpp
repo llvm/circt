@@ -92,12 +92,13 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
   using sv::CaseZPattern;
 
   // Create the casez itself.
+  auto lastIndex = createOp.getNumOperands() - 1;
   builder.create<sv::CaseZOp>(
       createOp.getLoc(), index, createOp.getNumOperands() + !!defaultValue,
       [&](size_t caseIdx) -> CaseZPattern {
         bool isDefault = caseIdx >= createOp.getNumOperands();
         Value theValue =
-            isDefault ? defaultValue : createOp.getOperand(caseIdx);
+            isDefault ? defaultValue : createOp.getOperand(lastIndex - caseIdx);
         sv::CaseZPattern thePattern =
             isDefault
                 ? CaseZPattern::getDefault(caseValue.getBitWidth(), context)

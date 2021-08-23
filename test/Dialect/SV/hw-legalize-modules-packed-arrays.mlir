@@ -40,7 +40,7 @@ hw.module @array_create_get_comb(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
   // CHECK:     sv.bpassign %casez_tmp, %arg3 : i8
   // CHECK:   }
   // CHECK: }
-  %0 = hw.array_create %arg0, %arg1, %arg2, %arg3 : i8
+  %0 = hw.array_create %arg3, %arg2, %arg1, %arg0 : i8
 
   // CHECK: %0 = sv.read_inout %casez_tmp : !hw.inout<i8>
   %1 = hw.array_get %0[%sel] : !hw.array<4xi8>
@@ -69,7 +69,7 @@ hw.module @array_create_get_default(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
     // CHECK:   default: {
     // CHECK:     sv.bpassign %casez_tmp, %x_i8 : i8
     // CHECK:   }
-    %three_array = hw.array_create %arg0, %arg1, %arg2 : i8
+    %three_array = hw.array_create %arg2, %arg1, %arg0 : i8
 
     // CHECK:   %0 = sv.read_inout %casez_tmp : !hw.inout<i8>
     %2 = hw.array_get %three_array[%sel] : !hw.array<3xi8>
