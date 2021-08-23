@@ -258,12 +258,10 @@ void ModuleSignalMappings::emitMappingsModule() {
     }
 
     if (mapping.dir == MappingDirection::DriveRemote) {
-      auto xmr = builder.create<VerbatimExprOp>(mapping.type, remoteXmrName,
-                                                ValueRange{});
+      auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
       builder.create<ForceOp>(xmr, mappingsModule.getArgument(portIdx));
     } else {
-      auto xmr = builder.create<VerbatimExprOp>(mapping.type, remoteXmrName,
-                                                ValueRange{});
+      auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
       builder.create<ConnectOp>(mappingsModule.getArgument(portIdx), xmr);
     }
     ++portIdx;
