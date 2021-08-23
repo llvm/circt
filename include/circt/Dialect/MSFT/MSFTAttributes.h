@@ -21,7 +21,7 @@
 namespace circt {
 namespace msft {
 using InstanceIDAttr = mlir::SymbolRefAttr;
-using InstIDAttrPair = std::pair<InstanceIDAttr, Attribute>;
+using SwitchInstanceCase = std::pair<InstanceIDAttr, Attribute>;
 } // namespace msft
 } // namespace circt
 

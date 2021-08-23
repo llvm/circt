@@ -9,8 +9,12 @@
 #include "mlir/CAPI/Support.h"
 #include "mlir/CAPI/Utils.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/SymbolTable.h"
+#include "mlir/Parser.h"
+#include "mlir/Support/FileUtilities.h"
 
 using namespace circt::esi;
+using namespace mlir;
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(ESI, esi, circt::esi::ESIDialect)
 
@@ -47,4 +51,20 @@ MlirOperation circtESIWrapModule(MlirOperation cModOp, long numPorts,
   mlir::OpBuilder b(modOp);
   mlir::Operation *wrapper = buildESIWrapper(b, modOp, portTriples);
   return wrap(wrapper);
+}
+
+void circtESIAppendMlirFile(MlirModule cMod, MlirStringRef filename) {
+  ModuleOp modOp = unwrap(cMod);
+  auto loadedMod = parseSourceFile(unwrap(filename), modOp.getContext());
+  Block *loadedBlock = loadedMod->getBody();
+  assert(!modOp->getRegions().empty());
+  if (modOp.body().empty()) {
+    modOp.body().push_back(loadedBlock);
+    return;
+  }
+  auto &ops = modOp.getBody()->getOperations();
+  ops.splice(ops.end(), loadedBlock->getOperations());
+}
+MlirOperation circtESILookup(MlirModule mod, MlirStringRef symbol) {
+  return wrap(SymbolTable::lookupSymbolIn(unwrap(mod), unwrap(symbol)));
 }

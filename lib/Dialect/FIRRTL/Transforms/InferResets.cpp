@@ -404,7 +404,7 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
 
   // Copy creates a new empty pass (because ResetMap has no copy constructor).
   using InferResetsBase::InferResetsBase;
-  InferResetsPass(const InferResetsPass &) {}
+  InferResetsPass(const InferResetsPass &other) : InferResetsBase(other) {}
 
   //===--------------------------------------------------------------------===//
   // Reset type inference
@@ -550,6 +550,21 @@ ResetSignal InferResetsPass::guessRoot(ResetNetwork net) {
 // Reset Tracing
 //===----------------------------------------------------------------------===//
 
+/// Check whether a type contains a `ResetType`.
+static bool typeContainsReset(FIRRTLType type) {
+  return TypeSwitch<FIRRTLType, bool>(type)
+      .Case<BundleType>([](auto type) {
+        for (auto e : type.getElements())
+          if (typeContainsReset(e.type))
+            return true;
+        return false;
+      })
+      .Case<FVectorType>(
+          [](auto type) { return typeContainsReset(type.getElementType()); })
+      .Case<ResetType>([](auto) { return true; })
+      .Default([](auto) { return false; });
+}
+
 /// Iterate over a circuit and follow all signals with `ResetType`, aggregating
 /// them into reset nets. After this function returns, the `resetMap` is
 /// populated with the reset networks in the circuit, alongside information on
@@ -561,7 +576,58 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
     TypeSwitch<Operation *>(op)
         .Case<ConnectOp, PartialConnectOp>(
             [&](auto op) { traceResets(op.dest(), op.src(), op.getLoc()); })
-        .Case<InstanceOp>([&](auto op) { traceResets(op); });
+
+        .Case<InstanceOp>([&](auto op) { traceResets(op); })
+
+        .Case<InvalidValueOp>([&](auto op) {
+          // Uniquify `InvalidValueOp`s that are contributing to multiple reset
+          // networks. These are tricky to handle because passes like CSE will
+          // generally ensure that there is only a single `InvalidValueOp` per
+          // type. However, a `reset` invalid value may be connected to two
+          // reset networks that end up being inferred as `asyncreset` and
+          // `uint<1>`. In that case, we need a distinct `InvalidValueOp` for
+          // each reset network in order to assign it the correct type.
+          auto type = op.getType();
+          if (!typeContainsReset(type) || op->hasOneUse() || op->use_empty())
+            return;
+          LLVM_DEBUG(llvm::dbgs() << "Uniquify " << op << "\n");
+          ImplicitLocOpBuilder builder(op->getLoc(), op);
+          for (auto &use :
+               llvm::make_early_inc_range(llvm::drop_begin(op->getUses()))) {
+            // - `make_early_inc_range` since `getUses()` is invalidated upon
+            //   `use.set(...)`.
+            // - `drop_begin` such that the first use can keep the original op.
+            auto newOp = builder.create<InvalidValueOp>(type);
+            use.set(newOp);
+          }
+        })
+
+        .Case<SubfieldOp>([&](auto op) {
+          // Associate the input bundle's resets with the output field's resets.
+          auto bundleType = op.input().getType().template cast<BundleType>();
+          auto index = op.fieldIndex();
+          traceResets(op.getType(), op.getResult(), 0,
+                      bundleType.getElements()[index].type, op.input(),
+                      bundleType.getFieldID(index), op.getLoc());
+        })
+
+        .Case<SubindexOp, SubaccessOp>([&](auto op) {
+          // Associate the input vector's resets with the output field's resets.
+          //
+          // This collapses all elements in vectors into one shared element
+          // which will ensure that reset inference provides a uniform result
+          // for all elements.
+          //
+          // CAVEAT: This may infer reset networks that are too big, since
+          // unrelated resets in the same vector end up looking as if they were
+          // connected. However for the sake of type inference, this is
+          // indistinguishable from them having to share the same type (namely
+          // the vector element type).
+          auto vectorType = op.input().getType().template cast<FVectorType>();
+          traceResets(op.getType(), op.getResult(), 0,
+                      vectorType.getElementType(), op.input(),
+                      vectorType.getFieldID(0), op.getLoc());
+        });
   });
 }
 
@@ -589,47 +655,10 @@ void InferResetsPass::traceResets(InstanceOp inst) {
 /// Analyze a connect or partial connect of one (possibly aggregate) value to
 /// another. Each drive involving a `ResetType` is recorded.
 void InferResetsPass::traceResets(Value dst, Value src, Location loc) {
-  // Trace through any subfield/subindex/subaccess ops on both sides of the
-  // connect.
-  traceResets(dst);
-  traceResets(src);
-
   // Analyze the actual connection.
   auto dstType = dst.getType().cast<FIRRTLType>();
   auto srcType = src.getType().cast<FIRRTLType>();
   traceResets(dstType, dst, 0, srcType, src, 0, loc);
-}
-
-/// Trace a value through a possible subfield/subindex/subaccess op. This is
-/// used when analyzing connects and partial connects, to ensure we actually
-/// track down which subfields of larger aggregate values these drives refer to.
-void InferResetsPass::traceResets(Value value) {
-  auto op = value.getDefiningOp();
-  if (!op)
-    return;
-  TypeSwitch<Operation *>(op)
-      .Case<SubfieldOp>([&](auto op) {
-        auto bundleType = op.input().getType().template cast<BundleType>();
-        auto index = op.fieldIndex();
-        traceResets(op.getType(), op.getResult(), 0,
-                    bundleType.getElements()[index].type, op.input(),
-                    bundleType.getFieldID(index), value.getLoc());
-      })
-      .Case<SubindexOp, SubaccessOp>([&](auto op) {
-        // Collapse all elements in vectors into one shared element which will
-        // ensure that reset inference provides a uniform result for all
-        // elements.
-        //
-        // CAVEAT: This may infer reset networks that are too big, since
-        // unrelated resets in the same vector end up looking as if they were
-        // connected. However for the sake of type inference, this is
-        // indistinguishable from them having to share the same type (namely the
-        // vector element type).
-        auto vectorType = op.input().getType().template cast<FVectorType>();
-        traceResets(op.getType(), op.getResult(), 0,
-                    vectorType.getElementType(), op.input(),
-                    vectorType.getFieldID(0), value.getLoc());
-      });
 }
 
 /// Analyze a connect or partial connect of one (possibly aggregate) value to
@@ -771,19 +800,22 @@ FailureOr<ResetKind> InferResetsPass::inferReset(ResetNetwork net) {
   if (asyncDrives > 0 && syncDrives > 0) {
     ResetSignal root = guessRoot(net);
     bool majorityAsync = asyncDrives >= syncDrives;
-    auto diag =
-        mlir::emitError(root.field.getValue().getLoc())
-        << "reset network simultaneously connected to async and sync resets";
+    auto diag = mlir::emitError(root.field.getValue().getLoc())
+                << "reset network";
+    auto fieldName = getFieldName(root.field);
+    if (!fieldName.empty())
+      diag << " \"" << fieldName << "\"";
+    diag << " simultaneously connected to async and sync resets";
     diag.attachNote(root.field.getValue().getLoc())
-        << "did you intend for the reset to be "
-        << (majorityAsync ? "async?" : "sync?");
+        << "majority of connections to this reset are "
+        << (majorityAsync ? "async" : "sync");
     for (auto &drive : getResetDrives(net)) {
       if ((drive.dst.type.isa<AsyncResetType>() && !majorityAsync) ||
           (drive.src.type.isa<AsyncResetType>() && !majorityAsync) ||
           (drive.dst.type.isa<UIntType>() && majorityAsync) ||
           (drive.src.type.isa<UIntType>() && majorityAsync))
         diag.attachNote(drive.loc)
-            << "offending " << (majorityAsync ? "sync" : "async")
+            << (drive.src.type.isa<AsyncResetType>() ? "async" : "sync")
             << " drive here:";
     }
     return failure();
@@ -818,6 +850,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
   // the module to a module worklist since we need to update its function type.
   SmallSetVector<Operation *, 16> worklist;
   SmallDenseSet<Operation *> moduleWorklist;
+  SmallDenseSet<std::pair<Operation *, Operation *>> extmoduleWorklist;
   for (auto signal : net) {
     Value value = signal.field.getValue();
     if (!value.isa<BlockArgument>() &&
@@ -829,10 +862,14 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
         worklist.insert(user);
       if (auto blockArg = value.dyn_cast<BlockArgument>())
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
+      if (auto instOp = value.getDefiningOp<InstanceOp>())
+        if (auto extmodule =
+                dyn_cast<FExtModuleOp>(instOp.getReferencedModule()))
+          extmoduleWorklist.insert({extmodule, instOp});
     }
   }
 
-  // Process the owrklist of operations that have their type changed, pushing
+  // Process the worklist of operations that have their type changed, pushing
   // types down the SSA dataflow graph. This is important because we change the
   // reset types in aggregates, and then need all the subindex, subfield, and
   // subaccess operations to be updated as appropriate.
@@ -878,6 +915,18 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     module->setAttr(FModuleOp::getTypeAttrName(), TypeAttr::get(type));
     LLVM_DEBUG(llvm::dbgs()
                << "- Updated type of module '" << module.getName() << "'\n");
+  }
+
+  // Update extmodule types based on their instantiation.
+  for (auto pair : extmoduleWorklist) {
+    auto module = cast<FExtModuleOp>(pair.first);
+    auto instOp = cast<InstanceOp>(pair.second);
+
+    auto type = FunctionType::get(module->getContext(), instOp.getResultTypes(),
+                                  /*resultTypes*/ {});
+    module->setAttr(FExtModuleOp::getTypeAttrName(), TypeAttr::get(type));
+    LLVM_DEBUG(llvm::dbgs()
+               << "- Updated type of extmodule '" << module.getName() << "'\n");
   }
 
   return success();

@@ -185,13 +185,13 @@ firrtl.circuit "InterfacePort" attributes {
        {description = "description of foo",
         name = "foo",
         tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}]} {
-  firrtl.module @InterfacePort(in %a : !firrtl.uint<4> {
-    firrtl.annotations = [
+  firrtl.module @InterfacePort(in %a : !firrtl.uint<4>) attributes {
+    portAnnotations = [[
       {a},
       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
        defName = "Foo",
        name = "foo",
-       target = []}]}) {
+       target = []}]] } {
   }
 }
 
@@ -279,21 +279,23 @@ firrtl.circuit "BindInterfaceTest"  attributes {
     }]
   }]} {
   firrtl.module @BindInterfaceTest(
-    in %a: !firrtl.uint<8> {
-      firrtl.annotations = [
-        #firrtl.subAnno<fieldID = 0, {
-          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-          defName = "InterfaceName",
-          name = "_a"}>
-      ]},
-    out %b: !firrtl.uint<8>) attributes {
+    in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) attributes {
       annotations = [{
         class = "sifive.enterprise.grandcentral.ViewAnnotation",
         defName = "InterfaceName",
         id = 0 : i64,
         name = "instanceName",
         type = "parent"
-      }]} {
+      }],
+      portAnnotations = [[
+        #firrtl.subAnno<fieldID = 0, {
+          class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+          defName = "InterfaceName",
+          name = "_a"}>
+      ], []
+      ]
+    }
+      {
     firrtl.connect %b, %a : !firrtl.uint<8>, !firrtl.uint<8>
   }
 }

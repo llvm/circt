@@ -29,7 +29,7 @@ Attribute SwitchInstanceAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
   if (!p.parseOptionalGreater())
     return SwitchInstanceAttr::get(ctxt, {});
 
-  SmallVector<InstIDAttrPair> instPairs;
+  SmallVector<SwitchInstanceCase> instPairs;
   do {
     SymbolRefAttr instId;
     Attribute attr;
@@ -45,7 +45,7 @@ Attribute SwitchInstanceAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
 
 void SwitchInstanceAttr::print(DialectAsmPrinter &p) const {
   p << "switch.inst<";
-  llvm::interleaveComma(getInstPairs(), p, [&](auto instPair) {
+  llvm::interleaveComma(getCases(), p, [&](auto instPair) {
     p << instPair.first << '=';
     p.printAttribute(instPair.second);
   });
@@ -54,7 +54,7 @@ void SwitchInstanceAttr::print(DialectAsmPrinter &p) const {
 
 Attribute SwitchInstanceAttr::lookup(InstanceIDAttr id) {
   // TODO: This is obviously very slow. Speed this up by using a sorted list.
-  for (auto pair : getInstPairs())
+  for (auto pair : getCases())
     if (pair.first == id)
       return pair.second;
   return Attribute();

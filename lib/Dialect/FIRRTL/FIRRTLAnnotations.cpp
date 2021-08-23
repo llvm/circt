@@ -59,10 +59,9 @@ AnnotationSet::AnnotationSet(Operation *op)
 
 /// Get an annotation set for the specified module port.
 AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
-  for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo)) {
-    if (a.first == getDialectAnnotationAttrName())
-      return AnnotationSet(a.second.cast<ArrayAttr>());
-  }
+  auto ports = module->getAttr("portAnnotations").dyn_cast_or_null<ArrayAttr>();
+  if (ports && !ports.empty())
+    return AnnotationSet(ports[portNo].cast<ArrayAttr>());
   return AnnotationSet(ArrayAttr::get(module->getContext(), {}));
 }
 
@@ -71,14 +70,9 @@ AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
 AnnotationSet
 AnnotationSet::forPort(Operation *module, size_t portNo,
                        SmallVectorImpl<NamedAttribute> &otherAttributes) {
-  ArrayAttr annotations;
-  for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo)) {
-    if (a.first == getDialectAnnotationAttrName())
-      annotations = a.second.cast<ArrayAttr>();
-    else
-      otherAttributes.push_back(a);
-  }
-  return AnnotationSet(annotations, module->getContext());
+  for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo))
+    otherAttributes.push_back(a);
+  return forPort(module, portNo);
 }
 
 /// Get an annotation set for the specified value.
@@ -367,41 +361,32 @@ bool AnnotationSet::removeAnnotations(Operation *op, StringRef className) {
 bool AnnotationSet::removePortAnnotations(
     Operation *module,
     llvm::function_ref<bool(unsigned, Annotation)> predicate) {
-  // We need to reserve some space to gather the remaining attributes, without
-  // the removed ones.
-  SmallVector<DictionaryAttr, 8> filteredArgAttrs;
-  FunctionType moduleF = mlir::function_like_impl::getFunctionType(module);
-  filteredArgAttrs.reserve(moduleF.getNumInputs());
+  auto ports = module->getAttr("portAnnotations").dyn_cast_or_null<ArrayAttr>();
+  if (!ports || ports.empty())
+    return false;
+
+  // Collect results
+  SmallVector<Attribute> newAnnos;
 
   // Filter the annotations on each argument.
   bool changed = false;
-  for (unsigned argNum = 0, argNumEnd = moduleF.getNumInputs();
-       argNum < argNumEnd; ++argNum) {
-    auto annos = AnnotationSet::forPort(module, argNum);
-
-    // Fast path if there are no annotations that we could possibly remove.
-    if (annos.empty()) {
-      filteredArgAttrs.push_back(getArgAttrDict(module, argNum));
-      continue;
-    }
+  for (unsigned argNum = 0, argNumEnd = ports.size(); argNum < argNumEnd;
+       ++argNum) {
+    AnnotationSet annos(AnnotationSet(ports[argNum].cast<ArrayAttr>()));
 
     // Go through all annotations on this port and extract the interesting
     // ones. If any modifications were done, keep a reduced set of attributes
     // around for the port, otherwise just stick with the existing ones.
-    bool argChanged = annos.removeAnnotations(
-        [&](Annotation anno) { return predicate(argNum, anno); });
-    if (argChanged) {
-      changed = true;
-      filteredArgAttrs.push_back(
-          annos.applyToPortDictionaryAttr(getArgAttrDict(module, argNum)));
-    } else {
-      filteredArgAttrs.push_back(getArgAttrDict(module, argNum));
-    }
+    if (!annos.empty())
+      changed |= annos.removeAnnotations(
+          [&](Annotation anno) { return predicate(argNum, anno); });
+    newAnnos.push_back(annos.getArrayAttr());
   }
 
   // If we have made any changes, apply them to the operation.
   if (changed)
-    setAllArgAttrDicts(module, filteredArgAttrs);
+    module->setAttr("portAnnotations",
+                    ArrayAttr::get(module->getContext(), newAnnos));
   return changed;
 }
 

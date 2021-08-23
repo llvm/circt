@@ -108,6 +108,16 @@ firrtl.module @NestedAggregates(out %buzz: !firrtl.bundle<foo flip: vector<bundl
   firrtl.partialconnect %0, %1 : !firrtl.vector<bundle<a: reset, b flip: asyncreset, c: uint<8>>, 2>, !firrtl.vector<bundle<a: asyncreset, c: uint<1>, b flip: reset>, 2>
 }
 
+// Should work with deeply nested aggregates.
+// CHECK-LABEL: firrtl.module @DeeplyNestedAggregates(in %reset: !firrtl.uint<1>, out %buzz: !firrtl.bundle<a: bundle<b: uint<1>>>) {
+firrtl.module @DeeplyNestedAggregates(in %reset: !firrtl.uint<1>, out %buzz: !firrtl.bundle<a: bundle<b: reset>>) {
+  %0 = firrtl.subfield %buzz(0) : (!firrtl.bundle<a: bundle<b : reset>>) -> !firrtl.bundle<b: reset>
+  %1 = firrtl.subfield %0(0) : (!firrtl.bundle<b: reset>) -> !firrtl.reset
+  // CHECK: firrtl.connect %1, %reset : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %1, %reset : !firrtl.reset, !firrtl.uint<1>
+}
+
+
 // Should not crash if a ResetType has no drivers
 // CHECK-LABEL: firrtl.module @DontCrashIfNoDrivers
 // CHECK-SAME: out %out: !firrtl.uint<1>
@@ -281,6 +291,44 @@ firrtl.module @NoCrashOnCombLoop(in %in: !firrtl.asyncreset, out %out: !firrtl.r
   firrtl.connect %out, %in : !firrtl.reset, !firrtl.asyncreset
 }
 
+// Should not treat a single `invalidvalue` connected to different resets as a
+// connection of the resets themselves.
+// CHECK-LABEL: firrtl.module @InvalidValueShouldNotConnect
+// CHECK-SAME: out %r0: !firrtl.asyncreset
+// CHECK-SAME: out %r1: !firrtl.asyncreset
+// CHECK-SAME: out %r2: !firrtl.uint<1>
+// CHECK-SAME: out %r3: !firrtl.uint<1>
+firrtl.module @InvalidValueShouldNotConnect(
+  in %ar: !firrtl.asyncreset,
+  in %sr: !firrtl.uint<1>,
+  out %r0: !firrtl.reset,
+  out %r1: !firrtl.reset,
+  out %r2: !firrtl.reset,
+  out %r3: !firrtl.reset
+) {
+  %invalid_reset = firrtl.invalidvalue : !firrtl.reset
+  firrtl.connect %r0, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r1, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r2, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r3, %invalid_reset : !firrtl.reset, !firrtl.reset
+  firrtl.connect %r0, %ar : !firrtl.reset, !firrtl.asyncreset
+  firrtl.connect %r1, %ar : !firrtl.reset, !firrtl.asyncreset
+  firrtl.connect %r2, %sr : !firrtl.reset, !firrtl.uint<1>
+  firrtl.connect %r3, %sr : !firrtl.reset, !firrtl.uint<1>
+}
+
+// Should properly adjust the type of external modules.
+// CHECK-LABEL: firrtl.extmodule @ShouldAdjustExtModule1
+// CHECK-SAME: in %reset: !firrtl.uint<1>
+firrtl.extmodule @ShouldAdjustExtModule1(in %reset: !firrtl.reset)
+// CHECK-LABEL: firrtl.module @ShouldAdjustExtModule2
+// CHECK: %x_reset = firrtl.instance @ShouldAdjustExtModule1 {name = "x"} : !firrtl.uint<1>
+firrtl.module @ShouldAdjustExtModule2() {
+  %x_reset = firrtl.instance @ShouldAdjustExtModule1 {name = "x"} : !firrtl.reset
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  firrtl.connect %x_reset, %c1_ui1 : !firrtl.reset, !firrtl.uint<1>
+}
+
 
 //===----------------------------------------------------------------------===//
 // Full Async Reset
@@ -294,7 +342,7 @@ firrtl.module @ConsumeIgnoreAnno() attributes {annotations = [{class = "sifive.e
 
 // CHECK-LABEL: firrtl.module @ConsumeResetAnnoPort
 // CHECK-NOT: FullAsyncResetAnnotation
-firrtl.module @ConsumeResetAnnoPort(in %outerReset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+firrtl.module @ConsumeResetAnnoPort(in %outerReset: !firrtl.asyncreset) attributes {portAnnotations = [[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
 }
 
 // CHECK-LABEL: firrtl.module @ConsumeResetAnnoWire
@@ -310,7 +358,8 @@ firrtl.module @ConsumeResetAnnoWire(in %outerReset: !firrtl.asyncreset) {
 // Reset-less registers should inherit the annotated async reset signal.
 firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top
-  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset ) attributes {
+    portAnnotations = [[],[],[],[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
     // CHECK: %reg1 = firrtl.regreset %clock, %extraReset, %c0_ui8
     %reg1 = firrtl.reg %clock : !firrtl.uint<8>
@@ -374,7 +423,8 @@ firrtl.circuit "Top" {
 // types.
 firrtl.circuit "Top" {
   // CHECK-LABEL: firrtl.module @Top
-  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
+    portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // CHECK: %c0_ui = firrtl.constant 0 : !firrtl.uint
     // CHECK: %reg_uint = firrtl.regreset %clock, %reset, %c0_ui
     %reg_uint = firrtl.reg %clock : !firrtl.uint
@@ -436,7 +486,8 @@ firrtl.circuit "ReusePorts" {
     %reg = firrtl.reg %clock : !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @ReusePorts
-  firrtl.module @ReusePorts(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset {firrtl.annotations = [{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @ReusePorts(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {
+    portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // CHECK: %child_clock, %child_reset = firrtl.instance @Child
     // CHECK: firrtl.connect %child_reset, %reset
     // CHECK: %badName_reset, %badName_clock, %badName_existingReset = firrtl.instance @BadName
@@ -474,7 +525,8 @@ firrtl.circuit "FullAsyncNested" {
     firrtl.connect %io_out, %1 : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @FullAsyncNested
-  firrtl.module @FullAsyncNested(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>) {
+  firrtl.module @FullAsyncNested(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>) attributes {
+    portAnnotations=[[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}], [], []] } {
     %inst_clock, %inst_reset, %inst_io_in, %inst_io_out = firrtl.instance @FullAsyncNestedChild  {name = "inst"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %inst_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
@@ -497,7 +549,8 @@ firrtl.circuit "FullAsyncExcluded" {
     firrtl.connect %io_out, %io_out_REG : !firrtl.uint<8>, !firrtl.uint<8>
   }
   // CHECK-LABEL: firrtl.module @FullAsyncExcluded
-  firrtl.module @FullAsyncExcluded(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]}) {
+  firrtl.module @FullAsyncExcluded(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_in: !firrtl.uint<8>, out %io_out: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset) attributes {
+     portAnnotations = [[],[],[],[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // CHECK: %inst_clock, %inst_reset, %inst_io_in, %inst_io_out = firrtl.instance @FullAsyncExcludedChild
     %inst_clock, %inst_reset, %inst_io_in, %inst_io_out = firrtl.instance @FullAsyncExcludedChild  {name = "inst"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock

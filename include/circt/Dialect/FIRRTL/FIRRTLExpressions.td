@@ -167,6 +167,15 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
   let assemblyFormat =
     "$input `(` $fieldIndex `)` attr-dict `:` functional-type($input, $result)";
 
+  let builders = [
+    OpBuilder<(ins "Value":$input, "StringRef":$fieldName), [{
+      auto bundleType = input.getType().cast<BundleType>();
+      auto fieldIndex = bundleType.getElementIndex(fieldName);
+      assert(fieldIndex.hasValue() && "subfield operation to unknown field");
+      return build($_builder, $_state, input, *fieldIndex);
+    }]>
+  ];
+
   let firrtlExtraClassDeclaration = [{
     /// Return true if the specified field is flipped.
     bool isFieldFlipped();

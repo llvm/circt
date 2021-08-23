@@ -34,11 +34,23 @@ jobs:
           fetch-depth: 1
           submodules: true
 
-      # Install Ccache
-      - name: Ccache for C++ compilation
-        uses: hendrikmuhs/ccache-action@v1
+      # Setup Ccache
+      - name: Ccache setup
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}/.ccache
+          ccache --set-config=cache_dir=$GITHUB_WORKSPACE/${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}/.ccache
+          ccache --set-config=max_size=300M
+          ccache --set-config=compression=true
+          ccache -p
+          ccache -z
+
+      - name: Cache Ccache directory
+        uses: actions/cache@v2
         with:
-          key: ${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
+          path: ${{ github.workspace }}/${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}/.ccache
+          key: ${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}-${{ github.sha }}
+          restore-keys: |
+            ${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}-
 
       # --------
       # Build and test CIRCT
@@ -73,3 +85,7 @@ jobs:
       - name: Integration Test CIRCT
         run: |
           ninja -C build check-circt-integration -j$(nproc)
+
+      - name: Ccache stats
+        run: |
+          ccache -s

@@ -1039,10 +1039,10 @@ static void printStructExtractOp(OpAsmPrinter &printer,
   printExtractOp(printer, op);
 }
 
-void StructExtractOp::build(::mlir::OpBuilder &odsBuilder,
+void StructExtractOp::build(::mlir::OpBuilder &builder,
                             ::mlir::OperationState &odsState, Value input,
                             StructType::FieldInfo field) {
-  build(odsBuilder, odsState, field.type, input, field.name);
+  build(builder, odsState, field.type, input, field.name);
 }
 
 //===----------------------------------------------------------------------===//

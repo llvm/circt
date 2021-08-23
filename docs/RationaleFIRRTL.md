@@ -304,6 +304,93 @@ result value of the `firrtl.mem` operation.  Also, the `firrtl.mem` node does
 not allow zero port memories for simplicity.  Zero port memories are dropped
 by the .fir file parser.
 
+### CHIRRTL Memories
+
+FIRRTL has two different representations of memories: Chisel `cmemory`
+operations, `smem` and `cmem`, and the standard FIRRTL `mem` operation.  Chisel
+memory operations exist to make it easy to produce FIRRTL code from Chisel, and
+closely match the Chisel API for memories. Chisel memories are intended to be
+replaced with standard FIRRTL memories early in the pipeline.  The set of
+operations related to Chisel memories are often referred to as CHIRRTL.
+
+The main difference between Chisel and FIRRTL memories is that Chisel memories
+have an operation to add a memory port to a memory, while FIRRTL memories
+require all ports to be defined up front. Another difference is that Chisel
+memories have "enable inferrence", and are usually inferred to be enabled where
+they are declared. The following example shows a CHIRRTL memory declaration,
+and the standard FIRRTL memory equivalent.
+
+```firrtl
+smem mymemory : UInt<4>[8]
+when p:
+  read mport port0 = mymemory[address], clock
+```
+
+```firrtl
+mem mymemory:
+    data-type => UInt<4>
+    depth => 8
+    read-latency => 0
+    write-latency => 1
+    reader => port0
+    read-under-write => undefined
+
+mymemory.port0.en <= p
+mymemory.port0.clk <= clock
+mymemory.port0.addr <= address
+```
+
+FIRRTL memory operations were created because it was thought that a concrete
+memory primitive, that looks like an instance, is a better design for a
+compiler IR.  It was originally intended that Chisel would be modified to emit
+FIRRTL memory operations directly, and the CHIRRTL operations would be retired.
+The lowering from Chisel memories to FIRRTL memories proved far more
+complicated than originally envisioned, specifically surrounding the type of
+ports, inference of enable signals, and inference of clocks.
+
+CHIRRTL operations have since stuck around, but their strange behavior has lead
+to discussions to remove, improve, or totally redesign them.  For some current
+discussion about this see [^0], [^1]. Since CIRCT is attempting to be a drop in
+replacement FIRRTL compiler, we are not attempting to implement these new ideas
+for Chisel memories. Instead, we are trying to implement what exists today.
+
+There is, however, a major compatibility issue with the existing implementation
+of Chisel memories which made them difficult to support in CIRCT.  The FIRRTL
+specification disallows using any declaration outside of the scope where it is
+created.  This means that a Chisel memory port declared inside of a `when`
+block can only be used inside the scope of the `when` block.  Unfortunately,
+this invariant is not enforced for memory ports, and this leniency has been
+abused by the Chisel standard library. Due to the way clock and enable
+inference works, we couldn't just hoist the declaration into the outer scope.
+
+To support escaping memory port definitions, we decided to split the memory
+port operation into two operations.  We created a `firrtl.memoryport` operation
+to declare the memory port, and a `firrtl.memoryport.access` operation to
+enable the memory port. The following is an example of how FIRRTL translates
+into the CIRCT dialect:
+
+```firrtl
+smem mymem : UInt<1>[8]
+when cond:
+  infer mport myport = mymem[addr], clock
+out <= myport
+```
+
+```mlir
+%mymem = firrtl.seqmem Undefined  : !firrtl.cmemory<uint<1>, 8>
+%myport_data, %myport_port = firrtl.memoryport Infer %mymem {name = "myport"}  : (!firrtl.cmemory<uint<1>, 8>) -> (!firrtl.uint<1>, !firrtl.cmemoryport)
+firrtl.when %cond  {
+  firrtl.memoryport.access %myport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
+}
+firrtl.connect %out, %myport_data : !firrtl.uint<1>, !firrtl.uint<1
+```
+
+For a historical discussion of this issue and its development see
+[`llvm/circt#1561`](https://github.com/llvm/circt/issues/1561).
+
+[^0]: https://github.com/chipsalliance/firrtl/issues/727
+[^1]: https://github.com/chipsalliance/firrtl/pull/1821
+
 ### More things are represented as primitives
 
 We describe the `mux` expression as "primitive", whereas the IR

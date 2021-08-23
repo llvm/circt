@@ -335,20 +335,22 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%auto] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
     auto <= _t[auto]
 
-    ; CHECK: %myMem = firrtl.cmem {name = "myMem"} : !firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>
+    ; CHECK: %myMem = firrtl.combmem : !firrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
-    ; CHECK: %memValue = firrtl.memoryport Infer %myMem, %i8, %clock  {name = "memValue"} : (!firrtl.vector<bundle<id: uint<4>, resp: uint<2>>, 8>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.bundle<id: uint<4>, resp: uint<2>>
+    ; CHECK: %memValue_data, %memValue_port = firrtl.memoryport Infer %myMem {name = "memValue"} : (!firrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>) -> (!firrtl.bundle<id: uint<4>, resp: uint<2>>, !firrtl.cmemoryport)
+    ; CHECK: firrtl.memoryport.access %memValue_port[%i8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     infer mport memValue = myMem[i8], clock
     auto11 <= memValue.id
 
-    ; CHECK: %base_table_0 = firrtl.smem Undefined {name = "base_table_0"} : !firrtl.vector<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_0 = firrtl.seqmem Undefined : !firrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_0 : UInt<1>[9] [256]
-    ; CHECK: %base_table_1 = firrtl.smem Old {name = "base_table_1"} : !firrtl.vector<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_1 = firrtl.seqmem Old : !firrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_1 : UInt<1>[9] [256] old
 
-    ; CHECK: %tableValue = firrtl.memoryport Read %base_table_0, %i8, %clock {name = "tableValue"} : (!firrtl.vector<vector<uint<1>, 9>, 256>, !firrtl.uint<8>, !firrtl.clock) -> !firrtl.vector<uint<1>, 9>
-    read mport tableValue = base_table_0[i8], clock
+    ; CHECK: %tableValue_data, %tableValue_port = firrtl.memoryport Read %base_table_1 {name = "tableValue"} : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
+    ; CHECK: firrtl.memoryport.access %tableValue_port[%i8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    read mport tableValue = base_table_1[i8], clock
 
     ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
     node n11 = pad(i8, 10)
@@ -359,13 +361,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ;  Test that _T and _GEN names are ignored by the parser.
     ; CHECK: %{{[0-9]+}} = firrtl.wire
     wire _T_42 : UInt<1>
-
-    ; Test that node decls with ignored names are not generated at all.
-    ; CHECK-NOT: firrtl.node
+    ; CHECK: %{{[0-9]+}} = firrtl.node
     node _GEN_43 = n12
-
-    ; CHECK: firrtl.andr %n12
-    node value = andr(_GEN_43)    ;; Uses n12 directly.
 
     ; CHECK: = firrtl.not %auto : (!firrtl.uint<1>) -> !firrtl.uint<1>
     node n13 = not(auto)
@@ -487,56 +484,33 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   ; CHECK-LABEL: firrtl.module @chisel_when_mport_bug(
   module chisel_when_mport_bug :
     input cond : UInt<1>
-    input foo : UInt
+    input addr : UInt
     input clock : Clock
 
-    ; CHECK: [[HACKWIRE2:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
-    ; CHECK: [[HACKWIRE1:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
-    ; CHECK: [[HACKWIRE0:%.+]] = firrtl.wire : !firrtl.vector<uint<1>, 9>
-    ; CHECK: %memory = firrtl.smem Undefined {name = "memory"} : !firrtl.vector<vector<uint<1>, 9>, 256>
+    ; Memory ports should be declared in the scope of the cmemory, but should
+    ; be enabled at the location of the mport.
+
+    ; CHECK: %memory = firrtl.seqmem Undefined  : !firrtl.cmemory<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 
-    ; CHECK: firrtl.when %cond {
-    when cond :
-      node idx = foo
-      ; CHECK: %xyz0 = firrtl.memoryport Read %memory, %idx
-      ; CHECK: firrtl.connect [[HACKWIRE0]], %xyz
-      read mport xyz0 = memory[idx], clock
+    ; CHECK: %xyz0_data, %xyz0_port = firrtl.memoryport Read %memory {name = "xyz0"} : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
+    ; CHECK: firrtl.when %cond  {
+    ; CHECK:    firrtl.memoryport.access %xyz0_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint, !firrtl.clock
     ; CHECK: }
-    node sometest = eq(foo, UInt(42))
-
-    ; This tests that the location parsing from mport doesn't crash when the
-    ; skip op is eaten as a substatement.
-    ; CHECK: firrtl.when %cond {
     when cond :
-      ; CHECK: %xyz1 = firrtl.memoryport Read %memory, %foo
-      ; CHECK: firrtl.connect [[HACKWIRE1]], %xyz
-      read mport xyz1 = memory[foo], clock  @[SRAM.scala 321:27]
-      skip
-    ; CHECK: }
+      read mport xyz0 = memory[addr], clock
 
-    ; CHECK: firrtl.when %cond {
+    ; CHECK: firrtl.when %cond  {
+    ; CHECK:    %n0 = firrtl.node %xyz0_data  : !firrtl.vector<uint<1>, 9>
+    ; CHECK: }
     when cond :
-      node idx = foo
-      ; CHECK: %xyz2 = firrtl.memoryport Read %memory, %idx
-      ; CHECK: firrtl.skip
-      ; CHECK: firrtl.connect [[HACKWIRE2]], %xyz2
-      read mport xyz2 = memory[idx], clock
-      skip @[Debug.scala 1176:37]
-    ; CHECK: }
-    node sometest2 = eq(foo, UInt(42))
+      node n0 = xyz0
 
-    ; CHECK: firrtl.when %sometest {
-    when sometest :
-      ; CHECK: %awesome0 = firrtl.node [[HACKWIRE0]]
-      ; CHECK: %awesome1 = firrtl.node [[HACKWIRE1]]
-      ; CHECK: %awesome2 = firrtl.node [[HACKWIRE2]]
-      node awesome0 = xyz0
-      node awesome1 = xyz1
-      node awesome2 = xyz2
+    ; CHECK: %n1 = firrtl.node %xyz0_data  : !firrtl.vector<uint<1>, 9>
+    node n1 = xyz0
 
 
-   ; CHECK-LABEL: firrtl.module @constant_implicit_cse(
+  ; CHECK-LABEL: firrtl.module @constant_implicit_cse(
   module constant_implicit_cse :
     input cond : UInt<1>
 
@@ -569,8 +543,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module flip_one :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf(0)
+    ; CHECK: %1 = firrtl.node %0
     node _T = bf.int_1
-    ; CHECK: firrtl.when %0 {
+    ; CHECK: firrtl.when %1 {
     when _T :
       skip
 
@@ -850,13 +825,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     cmem a: UInt<1>[8]
 
-    ; CHECK: %r = firrtl.memoryport Infer %a
-    ; CHECK-NEXT: firrtl.connect %rData, %r
+    ; CHECK: firrtl.connect %rData, %r
     infer mport r = a[rAddr], clock
     rData <= r
 
-    ; CHECK: %w = firrtl.memoryport Infer %a
-    ; CHECK-NEXT: firrtl.connect %w, %wData
+    ; CHECK: firrtl.connect %w_data, %wData
     infer mport w = a[wAddr], clock
     w <= wData
 

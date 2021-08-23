@@ -133,7 +133,7 @@ class module:
     if self.extern_mod is None:
       # Find the top MLIR module.
       mod = op
-      while mod.name != "module":
+      while mod.parent is not None:
         mod = mod.parent
 
       input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
@@ -363,7 +363,7 @@ class _Generate:
 
     # Find the top MLIR module.
     mod = op
-    while mod.name != "module":
+    while mod.parent is not None:
       mod = mod.parent
 
     # Assemble the parameters.

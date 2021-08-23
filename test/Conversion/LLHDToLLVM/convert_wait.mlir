@@ -33,7 +33,7 @@
 // CHECK:           %[[VAL_19:.*]] = llvm.extractvalue %[[VAL_11]][0 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_20:.*]] = llvm.extractvalue %[[VAL_11]][1 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_21:.*]] = llvm.extractvalue %[[VAL_11]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_22:.*]] = llvm.call @llhdSuspend(%[[VAL_0]], %[[VAL_18]], %[[VAL_19]], %[[VAL_20]], %[[VAL_21]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, i64, i64, i64) -> !llvm.void
+// CHECK:           llvm.call @llhdSuspend(%[[VAL_0]], %[[VAL_18]], %[[VAL_19]], %[[VAL_20]], %[[VAL_21]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, i64, i64, i64) -> ()
 // CHECK:           llvm.return
 // CHECK:         ^bb4:
 // CHECK:           %[[VAL_23:.*]] = llvm.mlir.constant(0 : i32) : i32
@@ -168,7 +168,7 @@ llhd.proc @convert_resume_observe_partial (%in0 : !llhd.sig<i1>, %in1 : !llhd.si
 // CHECK:           %[[VAL_25:.*]] = llvm.extractvalue %[[VAL_13]][0 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_26:.*]] = llvm.extractvalue %[[VAL_13]][1 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_27:.*]] = llvm.extractvalue %[[VAL_13]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_28:.*]] = llvm.call @llhdSuspend(%[[VAL_0]], %[[VAL_24]], %[[VAL_25]], %[[VAL_26]], %[[VAL_27]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, i64, i64, i64) -> !llvm.void
+// CHECK:           llvm.call @llhdSuspend(%[[VAL_0]], %[[VAL_24]], %[[VAL_25]], %[[VAL_26]], %[[VAL_27]]) : (!llvm.ptr<i8>, !llvm.ptr<i8>, i64, i64, i64) -> ()
 // CHECK:           llvm.return
 // CHECK:         ^bb4:
 // CHECK:           %[[VAL_29:.*]] = llvm.mlir.constant(0 : i32) : i32

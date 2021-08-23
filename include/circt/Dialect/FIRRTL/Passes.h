@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_PASSES_H
 #define CIRCT_DIALECT_FIRRTL_PASSES_H
 
+#include "mlir/Pass/PassRegistry.h"
 #include "llvm/ADT/Optional.h"
 #include <memory>
 
@@ -26,6 +27,8 @@ namespace firrtl {
 std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass();
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
+
+std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
 
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
 
