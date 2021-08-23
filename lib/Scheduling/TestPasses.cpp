@@ -267,7 +267,7 @@ struct TestSimplexSchedulerPass
     : public PassWrapper<TestSimplexSchedulerPass, FunctionPass> {
   TestSimplexSchedulerPass() = default;
   TestSimplexSchedulerPass(const TestSimplexSchedulerPass &) {}
-  Option<bool> acyclicMode{*this, "acyclic"};
+  Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
   void runOnFunction() override;
 };
 } // anonymous namespace
@@ -277,7 +277,7 @@ void TestSimplexSchedulerPass::runOnFunction() {
   Operation *lastOp = func.getBlocks().front().getTerminator();
   OpBuilder builder(func.getContext());
 
-  if (acyclicMode) {
+  if (problemToTest == "Problem") {
     Problem prob(func);
     constructProblem(prob, func);
     assert(succeeded(prob.check()));
@@ -296,23 +296,48 @@ void TestSimplexSchedulerPass::runOnFunction() {
     return;
   }
 
-  CyclicProblem prob(func);
-  constructCyclicProblem(prob, func);
-  assert(succeeded(prob.check()));
+  if (problemToTest == "CyclicProblem") {
+    CyclicProblem prob(func);
+    constructCyclicProblem(prob, func);
+    assert(succeeded(prob.check()));
 
-  if (failed(scheduleSimplex(prob, lastOp))) {
-    func->emitError("scheduling failed");
-    return signalPassFailure();
+    if (failed(scheduleSimplex(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    func->setAttr("simplexInitiationInterval",
+                  builder.getI32IntegerAttr(*prob.getInitiationInterval()));
+    emitSchedule(prob, "simplexStartTime", builder);
+    return;
   }
 
-  if (failed(prob.verify())) {
-    func->emitError("schedule verification failed");
-    return signalPassFailure();
+  if (problemToTest == "SharedPipelinedOperatorsProblem") {
+    SharedPipelinedOperatorsProblem prob(func);
+    constructProblem(prob, func);
+    constructSPOProblem(prob, func);
+    assert(succeeded(prob.check()));
+
+    if (failed(scheduleSimplex(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    emitSchedule(prob, "simplexStartTime", builder);
+    return;
   }
 
-  func->setAttr("simplexInitiationInterval",
-                builder.getI32IntegerAttr(*prob.getInitiationInterval()));
-  emitSchedule(prob, "simplexStartTime", builder);
+  llvm_unreachable("Unsupported scheduling problem");
 }
 
 //===----------------------------------------------------------------------===//
@@ -334,7 +359,7 @@ void registerSchedulingTestPasses() {
       "test-asap-scheduler", "Emit ASAP scheduler's solution as attributes");
   PassRegistration<TestSimplexSchedulerPass> simplexTester(
       "test-simplex-scheduler",
-      "Emit simplex scheduler's solution as attributes");
+      "Emit a simplex scheduler's solution as attributes");
 }
 } // namespace test
 } // namespace circt

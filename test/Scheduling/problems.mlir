@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -test-scheduling-problem -allow-unregistered-dialect
 // RUN: circt-opt %s -test-asap-scheduler -allow-unregistered-dialect | FileCheck %s -check-prefix=ASAP
-// RUN: circt-opt %s -test-simplex-scheduler=acyclic -allow-unregistered-dialect | FileCheck %s -check-prefix=SIMPLEX
+// RUN: circt-opt %s -test-simplex-scheduler=with=Problem -allow-unregistered-dialect | FileCheck %s -check-prefix=SIMPLEX
 
 // ASAP-LABEL: unit_latencies
 // SIMPLEX-LABEL: unit_latencies
