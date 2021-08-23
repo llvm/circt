@@ -2323,6 +2323,25 @@ void VerbatimExprOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
+// VerbatimWireOp
+//===----------------------------------------------------------------------===//
+
+void VerbatimWireOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  // If the text is macro like, then use a pretty name.  We only take the
+  // text up to a weird character (like a paren) and currently ignore
+  // parenthesized expressions.
+  auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
+  auto name = text();
+  // Ignore a leading ` in macro name.
+  if (name.startswith("`"))
+    name = name.drop_front();
+  name = name.take_while(isOkCharacter);
+  if (!name.empty())
+    setNameFn(getResult(), name);
+}
+
+//===----------------------------------------------------------------------===//
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//
 

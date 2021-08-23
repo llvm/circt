@@ -1040,6 +1040,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(RegResetOp op);
   LogicalResult visitDecl(MemOp op);
   LogicalResult visitDecl(InstanceOp op);
+  LogicalResult visitDecl(VerbatimWireOp op);
 
   // Unary Ops.
   LogicalResult lowerNoopCast(Operation *op);
@@ -1772,6 +1773,25 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
+}
+
+LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
+  auto resultTy = lowerType(op.getType());
+  if (!resultTy)
+    return failure();
+  resultTy = sv::InOutType::get(op.getContext(), resultTy);
+
+  SmallVector<Value, 4> operands;
+  operands.reserve(op.operands().size());
+  for (auto operand : op.operands()) {
+    auto lowered = getLoweredValue(operand);
+    if (!lowered)
+      return failure();
+    operands.push_back(lowered);
+  }
+
+  return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.textAttr(),
+                                           operands);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {

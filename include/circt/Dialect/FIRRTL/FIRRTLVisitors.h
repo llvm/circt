@@ -209,9 +209,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<CombMemOp, InstanceOp, MemOp, NodeOp, RegOp, SeqMemOp,
-                       RegResetOp, WireOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitDecl(opNode, args...);
-        })
+                       RegResetOp, WireOp, VerbatimWireOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitDecl(opNode, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidDecl(op, args...);
         });
@@ -242,6 +243,7 @@ public:
   HANDLE(RegResetOp);
   HANDLE(SeqMemOp);
   HANDLE(WireOp);
+  HANDLE(VerbatimWireOp);
 #undef HANDLE
 };
 
