@@ -35,6 +35,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
@@ -64,6 +65,10 @@ static cl::opt<std::string>
     outputFilename("o",
                    cl::desc("Output filename, or directory for split output"),
                    cl::value_desc("filename"), cl::init("-"));
+
+static cl::opt<bool>
+    parseOnly("parse-only",
+              cl::desc("Stop after parsing inputs and annotations"));
 
 static cl::opt<bool>
     splitInputFile("split-input-file",
@@ -126,6 +131,11 @@ static cl::opt<bool>
     ignoreFIRLocations("ignore-fir-locators",
                        cl::desc("ignore the @info locations in the .fir file"),
                        cl::init(false));
+
+static cl::opt<bool>
+    lowerCHIRRTL("lower-chirrtl",
+                 cl::desc("lower CHIRRTL memories to FIRRTL memories"),
+                 cl::init(true));
 
 static cl::opt<bool>
     inferWidths("infer-widths",
@@ -229,6 +239,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (!module)
     return failure();
 
+  // If the user asked for just a parse, stop here.
+  if (parseOnly) {
+    auto outputTimer = ts.nest("Output");
+    return callback(module.release());
+  }
+
   // Apply any pass manager command line options.
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
@@ -242,12 +258,19 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         createCSEPass());
   }
 
+  if (lowerCHIRRTL)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createLowerCHIRRTLPass());
+
   // Width inference creates canonicalization opportunities.
   if (inferWidths)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
 
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+
+  if (blackBoxMemory)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
@@ -271,11 +294,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
-  if (imconstprop)
+  if (imconstprop && !disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
-
-  if (blackBoxMemory)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
@@ -319,6 +339,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    // Legalize unsupported operations within the modules.
+    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+
     // Legalize the module names.
     pm.addPass(sv::createHWLegalizeNamesPass());
 
@@ -495,11 +518,6 @@ int main(int argc, char **argv) {
   registerLoweringCLOptions();
   // Parse pass names in main to ensure static initialization completed.
   cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL compiler\n");
-
-  // -disable-opt turns off constant propagation (unless it was explicitly
-  // enabled).
-  if (disableOptimization && imconstprop.getNumOccurrences() == 0)
-    imconstprop = false;
 
   MLIRContext context;
 

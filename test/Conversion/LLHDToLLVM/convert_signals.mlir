@@ -83,7 +83,7 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!llhd.array<3x
 // CHECK:           %[[VAL_18:.*]] = llvm.extractvalue %[[VAL_13]][0 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_19:.*]] = llvm.extractvalue %[[VAL_13]][1 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_20:.*]] = llvm.extractvalue %[[VAL_13]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_21:.*]] = llvm.call @driveSignal(%[[VAL_0]], %[[VAL_4]], %[[VAL_17]], %[[VAL_14]], %[[VAL_18]], %[[VAL_19]], %[[VAL_20]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> !llvm.void
+// CHECK:           llvm.call @driveSignal(%[[VAL_0]], %[[VAL_4]], %[[VAL_17]], %[[VAL_14]], %[[VAL_18]], %[[VAL_19]], %[[VAL_20]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> ()
 // CHECK:           %[[VAL_22:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_23:.*]] = llvm.mlir.constant(8 : i64) : i64
 // CHECK:           %[[VAL_24:.*]] = llvm.mlir.null : !llvm.ptr<array<3 x i5>>
@@ -97,7 +97,7 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!llhd.array<3x
 // CHECK:           %[[VAL_31:.*]] = llvm.extractvalue %[[VAL_13]][0 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_32:.*]] = llvm.extractvalue %[[VAL_13]][1 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_33:.*]] = llvm.extractvalue %[[VAL_13]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_34:.*]] = llvm.call @driveSignal(%[[VAL_0]], %[[VAL_6]], %[[VAL_30]], %[[VAL_27]], %[[VAL_31]], %[[VAL_32]], %[[VAL_33]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> !llvm.void
+// CHECK:           llvm.call @driveSignal(%[[VAL_0]], %[[VAL_6]], %[[VAL_30]], %[[VAL_27]], %[[VAL_31]], %[[VAL_32]], %[[VAL_33]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> ()
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!llhd.array<3xi5>>) -> () {
@@ -116,7 +116,7 @@ llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!llhd.array<3x
 // CHECK:           llvm.cond_br %[[VAL_19]], ^bb1, ^bb2
 // CHECK:         ^bb1:
 
-// CHECK:           %{{.*}} = llvm.call @driveSignal
+// CHECK:           llvm.call @driveSignal
 // CHECK:           llvm.br ^bb2
 // CHECK:         ^bb2:
 // CHECK:           llvm.return
@@ -195,7 +195,7 @@ llhd.entity @convert_drv_enable (%sI1 : !llhd.sig<i1>) -> () {
 // CHECK:           %[[VAL_49:.*]] = llvm.extractvalue %[[VAL_41]][0 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_50:.*]] = llvm.extractvalue %[[VAL_41]][1 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_51:.*]] = llvm.extractvalue %[[VAL_41]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_52:.*]] = llvm.call @driveSignal(%[[VAL_0]], %[[VAL_6]], %[[VAL_48]], %[[VAL_43]], %[[VAL_49]], %[[VAL_50]], %[[VAL_51]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> !llvm.void
+// CHECK:           llvm.call @driveSignal(%[[VAL_0]], %[[VAL_6]], %[[VAL_48]], %[[VAL_43]], %[[VAL_49]], %[[VAL_50]], %[[VAL_51]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> ()
 // CHECK:           llvm.br ^bb8
 // CHECK:         ^bb8:
 // CHECK:           llvm.br ^bb9

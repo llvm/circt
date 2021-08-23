@@ -11,6 +11,8 @@ from circt.dialects import hw, seq
 
 import mlir.ir as ir
 
+import re
+
 
 class Value:
 
@@ -28,8 +30,40 @@ class Value:
       return StructValue(value, type)
     return RegularValue(value, type)
 
-  def reg(self, clk, rst=None):
-    return seq.reg(self.value, clk, rst)
+  _reg_name = re.compile(r"^(.*)__reg(\d+)$")
+
+  def reg(self, clk, rst=None, name=None):
+    if name is None:
+      name = self.name
+    if name is not None:
+      m = Value._reg_name.match(name)
+      if m:
+        basename = m.group(1)
+        reg_num = m.group(2)
+        name = f"{basename}__reg{int(reg_num)+1}"
+      else:
+        name = name + "__reg1"
+    return Value.get(seq.reg(self.value, clock=clk, reset=rst, name=name))
+
+  @property
+  def name(self):
+    owner = self.value.owner
+    if hasattr(owner, "attributes") and "name" in owner.attributes:
+      return ir.StringAttr(owner.attributes["name"]).value
+    if isinstance(owner, ir.Block) and isinstance(owner.owner, hw.HWModuleOp):
+      mod = owner.owner
+      return ir.StringAttr(
+          ir.ArrayAttr(mod.attributes["argNames"])[self.value.arg_number]).value
+    if hasattr(self, "_name"):
+      return self._name
+
+  @name.setter
+  def name(self, new: str):
+    owner = self.value.owner
+    if hasattr(owner, "attributes"):
+      owner.attributes["name"] = ir.StringAttr.get(new)
+    else:
+      self._name = new
 
 
 class RegularValue(Value):
@@ -57,7 +91,10 @@ class ListValue(Value):
         raise TypeError("Subscript on array must be either int or MLIR int"
                         f" Value, not {type(sub)}.")
     with get_user_loc():
-      return Value.get(hw.ArrayGetOp.create(self.value, idx))
+      v = Value.get(hw.ArrayGetOp.create(self.value, idx))
+      if self.name and isinstance(idx, int):
+        v.name = self.name + f"__{idx}"
+      return v
 
   def __len__(self):
     return self.type.strip.size
@@ -81,5 +118,8 @@ class StructValue(Value):
     fields = ty.get_fields()
     if attr in [name for name, _ in fields]:
       with get_user_loc():
-        return Value.get(hw.StructExtractOp.create(self.value, attr))
+        v = Value.get(hw.StructExtractOp.create(self.value, attr))
+        if self.name:
+          v.name = f"{self.name}__{attr}"
+        return v
     raise AttributeError(f"'Value' object has no attribute '{attr}'")

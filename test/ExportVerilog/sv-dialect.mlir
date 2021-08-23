@@ -170,9 +170,11 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
       %add = comb.add %val, %c42 : i8
       %c42_2 = hw.constant 42 : i8
       %xor = comb.xor %val, %c42_2 : i8
-      %text = sv.verbatim.expr "MACRO({{0}}, {{1}})" (%add, %xor): (i8,i8) -> i8
+      sv.verbatim "`define MACRO(a, b) a + b"
+      // CHECK-NEXT: `define MACRO
+      %text = sv.verbatim.expr "`MACRO({{0}}, {{1}})" (%add, %xor): (i8,i8) -> i8
 
-      // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", MACRO(val + 8'h2A, val ^ 8'h2A));
+      // CHECK-NEXT: $fwrite(32'h80000002, "M: %x\n", `MACRO(val + 8'h2A, val ^ 8'h2A));
       sv.fwrite "M: %x\n"(%text) : i8
 
     }// CHECK-NEXT:   {{end$}}
@@ -203,8 +205,10 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
 
   // CHECK-NEXT: initial begin
   sv.initial {
-    %thing = sv.verbatim.expr "THING" : () -> i42
-    // CHECK-NEXT: wire42 = THING;
+    sv.verbatim "`define THING 1"
+    // CHECK-NEXT: `define THING
+    %thing = sv.verbatim.expr "`THING" : () -> i42
+    // CHECK-NEXT: wire42 = `THING;
     sv.bpassign %wire42, %thing : i42
 
     sv.ifdef.procedural "FOO" {
@@ -217,8 +221,8 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT: `endif
     }
 
-    // CHECK-NEXT: wire42 <= THING;
-    sv.passign %wire42, %thing : i42
+    // CHECK-NEXT: wire42 = `THING;
+    sv.bpassign %wire42, %thing : i42
 
     // CHECK-NEXT: casez (val)
     sv.casez %val : i8
@@ -347,43 +351,13 @@ hw.module @exprInlineTestIssue439(%clk: i1) {
     %c = hw.constant 0 : i32
 
     // CHECK: localparam      [31:0] _T = 32'h0;
-    // CHECK: automatic logic [15:0] _T_0;
-    // CHECK: _T_0 = _T[15:0];
+    // CHECK: automatic logic [15:0] _T_0 = _T[15:0];
     %e = comb.extract %c from 0 : (i32) -> i16
     %f = comb.add %e, %e : i16
     sv.fwrite "%d"(%f) : i16
     // CHECK: $fwrite(32'h80000002, "%d", _T_0 + _T_0);
     // CHECK: end // always @(posedge)
   }
-}
-
-// CHECK-LABEL: module issue439(
-// https://github.com/llvm/circt/issues/439
-hw.module @issue439(%in1: i1, %in2: i1) {
-  // CHECK: wire _T;
-  // CHECK: wire _T_0 = in1 | in2;
-  %clock = comb.or %in1, %in2 : i1
-
-  // CHECK-NEXT: always @(posedge _T_0)
-  sv.always posedge %clock {
-    // CHECK-NEXT: _T <= in1;
-    // CHECK-NEXT: _T <= in2;
-    %merged = comb.merge %in1, %in2 : i1
-    // CHECK-NEXT: $fwrite(32'h80000002, "Bye %x\n", _T);
-    sv.fwrite "Bye %x\n"(%merged) : i1
-  }
-}
-
-// CHECK-LABEL: module issue726(
-// https://github.com/llvm/circt/issues/726
-hw.module @issue726(%in1: i1, %in2: i1) -> (%out: i1) {
-  // CHECK: wire _T;
-  // CHECK: assign _T = in1;
-  // CHECK: assign _T = in2;
-  %merged = comb.merge %in1, %in2 : i1
-
-  // CHECK: assign out = _T;
-  hw.output %merged : i1
 }
 
 // https://github.com/llvm/circt/issues/595
@@ -461,8 +435,7 @@ hw.module @if_multi_line_expr1(%clock: i1, %reset: i1, %really_long_port: i11) {
   // CHECK:      if (reset)
   // CHECK-NEXT:   tmp6 <= 25'h0;
   // CHECK-NEXT: else begin
-  // CHECK-NEXT:   automatic logic [24:0] _tmp;
-  // CHECK-NEXT:   _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
+  // CHECK-NEXT:   automatic logic [24:0] _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
   // CHECK-NEXT:   tmp6 <= _tmp & 25'h3039;
   // CHECK-NEXT: end
   sv.alwaysff(posedge %clock)  {
@@ -506,7 +479,7 @@ hw.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 
   // CHECK: always @(posedge clock) begin
   sv.always posedge %clock  {
-    // CHECK:   automatic logic _T;
+    // CHECK:   automatic logic _T = arg1 & arg2;
 
     // CHECK:   if (arg1)
     // CHECK:     $fatal;
@@ -514,7 +487,6 @@ hw.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
       sv.fatal
     }
 
-    // CHECK:   _T = arg1 & arg2;
     // CHECK:   if (_T)
     // CHECK:     $fatal;
 
@@ -578,11 +550,9 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 hw.module @issue728(%clock: i1, %a: i1, %b: i1)
 attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"] } {
   // CHECK:  always @(posedge clock) begin
-  // CHECK:    automatic logic _tmp;
-  // CHECK:    automatic logic _tmp_0;
+  // CHECK:    automatic logic _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
+  // CHECK:    automatic logic _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
   // CHECK:    $fwrite(32'h80000002, "force output");
-  // CHECK:    _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
-  // CHECK:    _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
   // CHECK:    if (_tmp & _tmp_0)
   // CHECK:      $fwrite(32'h80000002, "this cond is split");
   // CHECK:  end // always @(posedge)
@@ -711,7 +681,7 @@ hw.module @OutOfLineConstantsInAlwaysSensitivity() {
 // CHECK-LABEL: module TooLongConstExpr
 hw.module @TooLongConstExpr() {
   %myreg = sv.reg : !hw.inout<i4200>
-  // CHECK: always @*
+  // CHECK: always @* begin
   sv.always {
     // CHECK-NEXT: localparam [4199:0] _tmp = 4200'h
     // CHECK-NEXT: myreg <= _tmp + _tmp;
@@ -719,6 +689,7 @@ hw.module @TooLongConstExpr() {
     %1 = comb.add %0, %0 : i4200
     sv.passign %myreg, %1 : i4200
   }
+  // CHECK-NEXT: end
 }
 
 // Constants defined before use should be emitted in-place.
@@ -804,6 +775,127 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (%aa: i3, %bb: i3){
   // CHECK: assign bb = b + a;
   %xx = comb.add %123, %124 : i3
   hw.output %128, %xx : i3, i3
+}
+
+// CHECK-LABEL: module DontDuplicateSideEffectingVerbatim(
+hw.module @DontDuplicateSideEffectingVerbatim() {
+  %a = sv.reg : !hw.inout<i42>
+
+  sv.initial {
+    // CHECK: automatic logic [41:0] _T = SIDEEFFECT;
+    %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
+    // CHECK: a = _T;
+    sv.bpassign %a, %tmp : i42
+    // CHECK: a = _T;
+    sv.bpassign %a, %tmp : i42
+
+    %tmp2 = sv.verbatim.expr "NO_EFFECT_" : () -> i42
+    // CHECK: a = NO_EFFECT_;
+    sv.bpassign %a, %tmp2 : i42
+    // CHECK: a = NO_EFFECT_;
+    sv.bpassign %a, %tmp2 : i42
+  }
+}
+
+
+// CHECK-LABEL: module InlineAutomaticLogicInit(
+// Issue #1567: https://github.com/llvm/circt/issues/1567
+hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port: i11) {
+  %regValue = sv.reg : !hw.inout<i42>
+  // CHECK: initial begin
+  sv.initial {
+    // CHECK: automatic logic [63:0] _T = `THING;
+    // CHECK: automatic logic [41:0] _T_0 = a + a;
+    // CHECK: automatic logic [41:0] _T_1 = _T_0 + b;
+    // CHECK: automatic logic [41:0] _T_2;
+    %thing = sv.verbatim.expr "`THING" : () -> i64
+
+    // CHECK: regValue = _T[44:3];
+    %v = comb.extract %thing from 3 : (i64) -> i42
+    sv.bpassign %regValue, %v : i42
+
+    // tmp is multi-use, so it needs an 'automatic logic'.  This can be emitted
+    // inline because it just references ports.
+    %tmp = comb.add %a, %a : i42
+    sv.bpassign %regValue, %tmp : i42
+    // CHECK: regValue = _T_0;
+
+    // tmp2 is as well.  This can be emitted inline because it just references
+    // a port and an already-emitted-inline variable 'a'.
+    %tmp2 = comb.add %tmp, %b : i42
+    sv.bpassign %regValue, %tmp2 : i42
+    // CHECK: regValue = _T_1;
+
+    %tmp3 = comb.add %tmp2, %b : i42
+    sv.bpassign %regValue, %tmp3 : i42
+    // CHECK: regValue = _T_1 + b;
+
+    // CHECK: `ifdef FOO
+    sv.ifdef.procedural "FOO" {
+      // CHECK: _T_2 = a + a;
+      // tmp is multi-use so it needs a temporary, but cannot be emitted inline
+      // because it is in an ifdef.
+      %tmp4 = comb.add %a, %a : i42
+      sv.bpassign %regValue, %tmp4 : i42
+      // CHECK: regValue = _T_2;
+
+      %tmp5 = comb.add %tmp4, %b : i42
+      sv.bpassign %regValue, %tmp5 : i42
+      // CHECK: regValue = _T_2 + b;
+    }
+  }
+
+  // Check that inline initializer things can have too-long-line-length
+  // temporaries and that they are generated correctly.
+  
+  // CHECK: initial begin
+  sv.initial {
+    // CHECK: automatic logic [41:0] [[THING:.+]] = `THING;
+    // CHECK: automatic logic [41:0] _tmp = {{..}}31{really_really_long_port[10]}}, really_really_long_port};
+    // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + _tmp;
+    // CHECK: automatic logic [41:0] _tmp_6 = [[THING]] * [[THING]]
+    // CHECK: automatic logic [41:0] _tmp_7 = [[THING]] * [[THING]]
+    // CHECK: automatic logic [41:0] [[MANYTHING:.+]] = _tmp_6 * _tmp_7;
+
+    // Check the indentation level of temporaries.  Issue #1625
+    // CHECK: {{^    }}automatic logic [41:0] _tmp_8;
+    // CHECK: {{^    }}automatic logic [41:0] _tmp_9;
+    %thing = sv.verbatim.expr.se "`THING" : () -> i42
+
+    %thing2 = comb.sext %really_really_long_port : (i11) -> i42
+    %thing3 = comb.add %thing, %thing2 : i42  // multiuse.
+
+    // multiuse, refers to other 'automatic logic' thing so must be emitted in
+    // the proper order.
+    %manyThing = comb.mul %thing, %thing, %thing, %thing, %thing, %thing,
+                          %thing, %thing, %thing, %thing, %thing, %thing,
+                          %thing, %thing, %thing, %thing, %thing, %thing,
+                          %thing, %thing, %thing, %thing, %thing, %thing : i42
+
+    // CHECK: regValue = [[THING]];
+    sv.bpassign %regValue, %thing : i42
+    // CHECK: regValue = [[THING3]];
+    sv.bpassign %regValue, %thing3 : i42
+    // CHECK: regValue = [[THING3]];
+    sv.bpassign %regValue, %thing3 : i42
+    // CHECK: regValue = [[MANYTHING]];
+    sv.bpassign %regValue, %manyThing : i42
+    // CHECK: regValue = [[MANYTHING]];
+    sv.bpassign %regValue, %manyThing : i42
+
+    // CHECK: `ifdef FOO
+    sv.ifdef.procedural "FOO" {
+      sv.ifdef.procedural "BAR" {
+        // Check that the temporary is inserted at the right level, not at the
+        // level of the #ifdef.
+        %manyMixed = comb.xor %thing, %thing, %thing, %thing, %thing, %thing,
+                              %thing, %thing, %thing, %thing, %thing, %thing,
+                              %thing, %thing, %thing, %thing, %thing, %thing,
+                              %thing, %thing, %thing, %thing, %thing, %thing : i42
+        sv.bpassign %regValue, %manyMixed : i42
+      }
+    }
+  }
 }
 
 

@@ -246,7 +246,7 @@ Dependence::TupleRepr Dependence::getAsTuple() const {
 
 bool Dependence::operator==(const Dependence &other) const {
   return getAsTuple() == other.getAsTuple();
-};
+}
 
 //===----------------------------------------------------------------------===//
 // DependenceIterator

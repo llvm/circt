@@ -13,6 +13,7 @@ set(CIRCT_TEST_DEPENDS
   circt-capi-ir-test
   circt-opt
   circt-translate
+  circt-reduce
   esi-tester
   handshake-runner
   firtool

@@ -459,15 +459,20 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   // Drop the direction markers for dead ports.
   SmallVector<Direction> directions = direction::unpackAttribute(*this);
   ArrayRef<Attribute> portNames = this->portNames().getValue();
+  ArrayRef<Attribute> portAnno = this->portAnnotations().getValue();
   assert(directions.size() == portNames.size());
 
   SmallVector<Direction> newDirections =
       removeElementsAtIndices<Direction>(directions, portIndices);
   SmallVector<Attribute> newPortNames =
       removeElementsAtIndices(portNames, portIndices);
+  SmallVector<Attribute> newPortAnno =
+      removeElementsAtIndices(portAnno, portIndices);
   (*this)->setAttr(direction::attrKey,
                    direction::packAttribute(newDirections, getContext()));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newPortNames));
+  (*this)->setAttr("portAnnotations",
+                   ArrayAttr::get(getContext(), newPortAnno));
 
   // Erase the common function-like stuff, including the block arguments, and
   // argument attributes (incl port annotations).
@@ -476,7 +481,7 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports,
-                        ArrayAttr annotations) {
+                        ArrayAttr annotations, ArrayAttr portAnnotations) {
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
@@ -511,13 +516,17 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     annotations = builder.getArrayAttr({});
   result.addAttribute("annotations", annotations);
 
+  if (!portAnnotations)
+    portAnnotations = builder.getArrayAttr({});
+  result.addAttribute("portAnnotations", portAnnotations);
+
   result.addRegion();
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayRef<ModulePortInfo> ports,
-                      ArrayAttr annotations) {
-  buildModule(builder, result, name, ports, annotations);
+                      ArrayAttr annotations, ArrayAttr portAnnotations) {
+  buildModule(builder, result, name, ports, annotations, portAnnotations);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -531,8 +540,9 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<ModulePortInfo> ports,
-                         StringRef defnameAttr, ArrayAttr annotations) {
-  buildModule(builder, result, name, ports, annotations);
+                         StringRef defnameAttr, ArrayAttr annotations,
+                         ArrayAttr portAnnotations) {
+  buildModule(builder, result, name, ports, annotations, portAnnotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
 }
@@ -732,6 +742,8 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
     omittedAttrs.push_back("portNames");
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
+  if (op->getAttrOfType<ArrayAttr>("portAnnotations").empty())
+    omittedAttrs.push_back("portAnnotations");
 
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
@@ -827,6 +839,11 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // The annotations attribute is always present, but not printed when empty.
   if (!result.attributes.get("annotations"))
     result.addAttribute("annotations", builder.getArrayAttr({}));
+
+  // The portAnnotations attribute is always present, but not printed when
+  // empty.
+  if (!result.attributes.get("portAnnotations"))
+    result.addAttribute("portAnnotations", builder.getArrayAttr({}));
 
   // Parse the optional function body.
   auto *body = result.addRegion();
@@ -1020,6 +1037,47 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
                                 "equal to the number of results");
 
   return success();
+}
+
+void MemoryPortOp::build(OpBuilder &builder, OperationState &result,
+                         Type dataType, Value memory, MemDirAttr direction,
+                         StringRef name, ArrayRef<Attribute> annotations) {
+  build(builder, result, CMemoryPortType::get(builder.getContext()), dataType,
+        memory, direction, name, builder.getArrayAttr(annotations));
+}
+
+LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
+                                             Optional<Location> loc,
+                                             ValueRange operands,
+                                             DictionaryAttr attrs,
+                                             mlir::RegionRange regions,
+                                             SmallVectorImpl<Type> &results) {
+  auto inType = operands[0].getType();
+  auto memType = inType.dyn_cast<CMemoryType>();
+  if (!memType) {
+    if (loc)
+      mlir::emitError(*loc, "memory port requires memory operand");
+    return failure();
+  }
+  results.push_back(memType.getElementType());
+  results.push_back(CMemoryPortType::get(context));
+  return success();
+}
+
+static LogicalResult verifyMemoryPortOp(MemoryPortOp memoryPort) {
+  // MemoryPorts require exactly 1 access. Right now there are no other
+  // operations that could be using that value due to the types.
+  if (!memoryPort.port().hasOneUse())
+    return memoryPort.emitOpError(
+        "port should be used by a firrtl.memoryport.access");
+  return success();
+}
+
+MemoryPortAccessOp MemoryPortOp::getAccess() {
+  auto uses = port().use_begin();
+  if (uses == port().use_end())
+    return {};
+  return cast<MemoryPortAccessOp>(uses->getOwner());
 }
 
 void MemOp::build(OpBuilder &builder, OperationState &result,
@@ -2440,9 +2498,10 @@ static ParseResult parseImplicitSSAName(OpAsmParser &parser,
 }
 
 static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
-                                 DictionaryAttr attr) {
+                                 DictionaryAttr attr,
+                                 ArrayRef<StringRef> extraElides = {}) {
   // List of attributes to elide when printing the dictionary.
-  SmallVector<StringRef, 2> elides;
+  SmallVector<StringRef, 2> elides(extraElides.begin(), extraElides.end());
 
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
@@ -2491,6 +2550,15 @@ static void printInstanceOp(OpAsmPrinter &p, Operation *op,
 // MemoryPortOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
+void MemoryPortOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  StringRef base = name();
+  if (base.empty())
+    base = "memport";
+  setNameFn(data(), (base + "_data").str());
+  setNameFn(port(), (base + "_port").str());
+}
+
 static ParseResult parseMemoryPortOp(OpAsmParser &parser,
                                      NamedAttrList &resultAttrs) {
   return parseElideAnnotations(parser, resultAttrs);
@@ -2505,17 +2573,17 @@ static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
-// SMemOp Custom attr-dict Directive
+// SeqMemOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
-static ParseResult parseSMemOp(OpAsmParser &parser,
-                               NamedAttrList &resultAttrs) {
-  return parseElideAnnotations(parser, resultAttrs);
+static ParseResult parseSeqMemOp(OpAsmParser &parser,
+                                 NamedAttrList &resultAttrs) {
+  return parseImplicitSSAName(parser, resultAttrs);
 }
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
-static void printSMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
-  printElideAnnotations(p, op, attr, {"ruw"});
+static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
+  printImplicitSSAName(p, op, attr, {"ruw"});
 }
 
 //===----------------------------------------------------------------------===//

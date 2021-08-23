@@ -1110,10 +1110,6 @@ public:
   /// Get the expr associated with a specific field in a value.
   Expr *getExpr(FieldRef fieldRef);
 
-  /// Get the expr associated with the value. If value is NULL, then this
-  /// returns NULL. The value must be a non-aggregate type.
-  Expr *getExprOrNull(Value value);
-
   /// Get the expr associated with a specific field in a value. If value is
   /// NULL, then this returns NULL.
   Expr *getExprOrNull(FieldRef fieldRef);
@@ -1696,13 +1692,6 @@ Expr *InferenceMapping::getExpr(FieldRef fieldRef) {
   auto expr = getExprOrNull(fieldRef);
   assert(expr && "constraint expr should have been constructed for value");
   return expr;
-}
-
-/// Get the constraint expression for a value, or null if no expression exists
-/// for the value.
-Expr *InferenceMapping::getExprOrNull(Value value) {
-  assert(value.getType().cast<FIRRTLType>().isGround());
-  return getExprOrNull(FieldRef(value, 0));
 }
 
 Expr *InferenceMapping::getExprOrNull(FieldRef fieldRef) {

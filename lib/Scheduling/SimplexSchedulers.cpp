@@ -48,8 +48,9 @@ protected:
   /// The objective is to minimize the start time of this operation.
   Operation *lastOp;
 
-  /// The minimally-feasible initiation interval is computed by the algorithm.
-  int parameterII;
+  /// T represents the initiation interval (II). Its minimally-feasible value is
+  /// computed by the algorithm.
+  int parameterT;
 
   /// The simplex tableau is the algorithm's main data structure.
   /// The dashed parts always contain the zero respectively the identity matrix,
@@ -65,8 +66,8 @@ protected:
   ///                         │. .│. . . . . .│      1  │   │
   ///                         │. .│. . . . . .│        1    ▼
   ///                         └───┴───────────┴ ─ ─ ─ ─ ┘
-  ///       parameterOneColumn ^
-  ///          parameterIIColumn ^
+  ///         parameter1Column ^
+  ///           parameterTColumn ^
   ///  firstNonBasicVariableColumn ^
   ///                              ─────────── ──────────
   ///                       nonBasicVariables   basicVariables
@@ -78,7 +79,7 @@ protected:
 
   /// The linear program models the operations' start times as variables, which
   /// we identify here as 0, ..., |ops|-1.
-  /// Additionally, for each depedence (precisely, the inequality modeling the
+  /// Additionally, for each dependence (precisely, the inequality modeling the
   /// precedence constraint), a slack variable is required; these are identified
   /// as |ops|, ..., |ops|+|deps|-1.
   ///
@@ -103,10 +104,10 @@ protected:
   static constexpr unsigned firstConstraintRow = 1;
 
   /// The first column corresponds to the always-one "parameter" in u = (1,S,T).
-  static constexpr unsigned parameterOneColumn = 0;
-  /// The second column corresponds to the parameter T, i.e. the initiation
-  /// interval. Note that we do not model the parameter S yet.
-  static constexpr unsigned parameterIIColumn = 1;
+  static constexpr unsigned parameter1Column = 0;
+  /// The second column corresponds to the parameter T, i.e. the current II.
+  /// Note that we do not model the parameter S yet.
+  static constexpr unsigned parameterTColumn = 1;
   /// All other (explicitly stored) columns represent non-basic variables.
   static constexpr unsigned firstNonBasicVariableColumn = 2;
 
@@ -180,7 +181,7 @@ void SimplexSchedulerBase::fillConstraintRow(
   Operation *src = dep.getSource();
   Operation *dst = dep.getDestination();
   unsigned latency = *prob.getLatency(*prob.getLinkedOperatorType(src));
-  row[parameterOneColumn] = -latency; // note the negation
+  row[parameter1Column] = -latency; // note the negation
   row[opColumns[src]] = 1;
   row[opColumns[dst]] = -1;
 }
@@ -203,7 +204,7 @@ void SimplexSchedulerBase::buildTableau() {
     ++varNum;
   }
 
-  // `parameterOneColumn` + `parameterIIColumn` + one column per operation
+  // `parameter1Column` + `parameterTColumn` + one column per operation
   nColumns = 2 + nonBasicVariables.size();
 
   // Helper to grow both the tableau and the implicit column vector.
@@ -231,10 +232,10 @@ void SimplexSchedulerBase::buildTableau() {
 }
 
 Optional<unsigned> SimplexSchedulerBase::findPivotRow() {
-  // Find the first row for which the dot product "~B_p u" is negative.
+  // Find the first row for which the dot product ~B_p u is negative.
   for (unsigned row = firstConstraintRow; row < nRows; ++row) {
-    int rowVal = tableau[row][parameterOneColumn] +
-                 tableau[row][parameterIIColumn] * parameterII;
+    int rowVal = tableau[row][parameter1Column] +
+                 tableau[row][parameterTColumn] * parameterT;
     if (rowVal < 0)
       return row;
   }
@@ -342,19 +343,19 @@ LogicalResult SimplexSchedulerBase::solveTableau() {
 
     // If we did not find a pivot column, then the entire row contained only
     // positive entries, and the problem is in principle infeasible. However, if
-    // the entry in the `parameterIIColumn` is positive, we can make the LP
+    // the entry in the `parameterTColumn` is positive, we can make the LP
     // feasible again by increasing the II.
-    int entryOneCol = tableau[*pivotRow][parameterOneColumn];
-    int entryIICol = tableau[*pivotRow][parameterIIColumn];
-    if (entryIICol > 0) {
-      // The negation of `entryOneCol` is not in the paper. I think this is an
-      // oversight, because `entryOneCol` certainly is negative (otherwise the
-      // row would not have been a valid pivot row), and without the negation,
-      // the new II would be negative.
-      assert(entryOneCol < 0);
-      parameterII = (-entryOneCol - 1) / entryIICol + 1;
+    int entry1Col = tableau[*pivotRow][parameter1Column];
+    int entryTCol = tableau[*pivotRow][parameterTColumn];
+    if (entryTCol > 0) {
+      // The negation of `entry1Col` is not in the paper. I think this is an
+      // oversight, because `entry1Col` certainly is negative (otherwise the row
+      // would not have been a valid pivot row), and without the negation, the
+      // new II would be negative.
+      assert(entry1Col < 0);
+      parameterT = (-entry1Col - 1) / entryTCol + 1;
 
-      LLVM_DEBUG(dbgs() << "Increased II to " << parameterII << '\n');
+      LLVM_DEBUG(dbgs() << "Increased II to " << parameterT << '\n');
 
       continue;
     }
@@ -379,8 +380,8 @@ void SimplexSchedulerBase::storeStartTimes() {
     unsigned varNum = basicVariables[i];
     if (varNum < nOps) {
       unsigned startTime =
-          tableau[firstConstraintRow + i][parameterOneColumn] +
-          tableau[firstConstraintRow + i][parameterIIColumn] * parameterII;
+          tableau[firstConstraintRow + i][parameter1Column] +
+          tableau[firstConstraintRow + i][parameterTColumn] * parameterT;
       prob.setStartTime(ops[varNum], startTime);
     }
   }
@@ -430,7 +431,7 @@ void SimplexSchedulerBase::dumpTableau() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult SimplexScheduler::schedule() {
-  parameterII = 0;
+  parameterT = 0;
   buildTableau();
 
   LLVM_DEBUG(dbgs() << "Initial tableau:\n");
@@ -439,10 +440,10 @@ LogicalResult SimplexScheduler::schedule() {
   if (failed(solveTableau()))
     return prob.getContainingOp()->emitError() << "problem is infeasible";
 
-  assert(parameterII == 0);
+  assert(parameterT == 0);
   LLVM_DEBUG(
       dbgs() << "Optimal solution found with start time of last operation = "
-             << -tableau[objectiveRow][parameterOneColumn] << '\n');
+             << -tableau[objectiveRow][parameter1Column] << '\n');
 
   storeStartTimes();
   return success();
@@ -457,11 +458,11 @@ void CyclicSimplexScheduler::fillConstraintRow(
     SmallDenseMap<Operation *, unsigned> opColumns) {
   SimplexSchedulerBase::fillConstraintRow(row, dep, opColumns);
   if (auto dist = prob.getDistance(dep))
-    row[parameterIIColumn] = *dist;
+    row[parameterTColumn] = *dist;
 }
 
 LogicalResult CyclicSimplexScheduler::schedule() {
-  parameterII = 1;
+  parameterT = 1;
   buildTableau();
 
   LLVM_DEBUG(dbgs() << "Initial tableau:\n");
@@ -470,11 +471,11 @@ LogicalResult CyclicSimplexScheduler::schedule() {
   if (failed(solveTableau()))
     return prob.getContainingOp()->emitError() << "problem is infeasible";
 
-  LLVM_DEBUG(dbgs() << "Optimal solution found with II = " << parameterII
+  LLVM_DEBUG(dbgs() << "Optimal solution found with II = " << parameterT
                     << " and start time of last operation = "
-                    << -tableau[objectiveRow][parameterOneColumn] << '\n');
+                    << -tableau[objectiveRow][parameter1Column] << '\n');
 
-  prob.setInitiationInterval(parameterII);
+  prob.setInitiationInterval(parameterT);
   storeStartTimes();
   return success();
 }

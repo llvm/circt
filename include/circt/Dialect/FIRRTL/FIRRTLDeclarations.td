@@ -62,42 +62,97 @@ def InstanceOp : FIRRTLOp<"instance"> {
   }];
 }
 
-def CMemOp : FIRRTLOp<"cmem", [/*MemAlloc*/]> {
-  let summary = "Define a new cmem";
+def CombMemOp : FIRRTLOp<"combmem"> {
+  let summary = "Define a new combinational memory";
+  let description = [{
+    Define a new behavioral combinational memory. Combinational memories have a
+    write latency of 1 and a read latency of 0.
+  }];
   let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
-  let results = (outs FIRRTLType:$result);
-
-  let assemblyFormat = "custom<ElideAnnotations>(attr-dict) `:` type($result)";
-  let hasCanonicalizer = true;
+  let results = (outs CMemoryType:$result);
+  let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
 }
 
-def SMemOp : FIRRTLOp<"smem", [/*MemAlloc*/]> {
-  let summary = "Define a new smem";
+def SeqMemOp : FIRRTLOp<"seqmem"> {
+  let summary = "Define a new sequential memory";
+  let description = [{
+    Define a new behavioral sequential memory.  Sequential memories have a
+    write latency and a read latency of 1.
+  }];
   let arguments = (ins RUWAttr:$ruw, StrAttr:$name,
                        AnnotationArrayAttr:$annotations);
-  let results = (outs FIRRTLType:$result);
-
-  let assemblyFormat =
-    "$ruw custom<SMemOp>(attr-dict) `:` type($result)";
-  let hasCanonicalizer = true;
+  let results = (outs CMemoryType:$result);
+  let assemblyFormat = "$ruw custom<SeqMemOp>(attr-dict) `:` type($result)";
 }
 
-def MemoryPortOp : FIRRTLOp<"memoryport"> {
-  let summary = "Access a memory";
+def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
+                               DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+  let summary = "Declares a memory port on a memory";
 
-  let arguments = (ins FIRRTLType:$memory, IntType:$index, ClockType:$clock,
-                    MemDirAttr:$direction, StrAttr:$name,
-                    AnnotationArrayAttr:$annotations);
-  let results = (outs FIRRTLType:$result);
+  let summary = "Defines a memory port on CHIRRTL memory";
+  let description = [{
+    This operation defines a new memory port on a `seqmem` or `combmem`CHISEL.
+    `data` is the data returned from the memory port.  
+
+    The memory port requires an access point, which sets the enable condition
+    of the port, the clock, and the address.  This is done by passing the the
+    `port` argument to a `firrtl.memoryport.access operation`.
+
+  }];
+
+  let arguments = (ins CMemoryType:$memory, MemDirAttr:$direction,
+                    StrAttr:$name, AnnotationArrayAttr:$annotations);
+
+  let results = (outs FIRRTLType:$data, CMemoryPortType:$port);
 
   let assemblyFormat = [{
-    $direction $memory `,` $index `,` $clock custom<MemoryPortOp>(attr-dict) `:`
-       functional-type(operands, $result)
+    $direction $memory custom<MemoryPortOp>(attr-dict) `:`
+       functional-type(operands, results)
+  }];
+
+  let builders = [
+    OpBuilder<(ins "::mlir::Type":$dataType, "::mlir::Value":$memory,
+                   "MemDirAttr":$direction, CArg<"StringRef", "{}">:$name,
+                   CArg<"ArrayRef<Attribute>","{}">:$annotations)>
+  ];
+
+  let verifier = "return ::verifyMemoryPortOp(*this);";
+
+  let extraClassDeclaration = [{
+    /// Get the assocated access op.
+    MemoryPortAccessOp getAccess();
+
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
+}
+
+def MemoryPortAccessOp : FIRRTLOp<"memoryport.access"> {
+  let summary = "Enables a memory port";
+
+  let description = [{
+    This operation is used to conditionally enable a memory port, and associate
+    it with a `clock` and `index`.  The memory port will be actuve on the
+    positive edge of the clock. The index is the address of the memory
+    accessed. See the FIRRTL rational for more information about why this
+    operation exists.
+  }];
+
+  let arguments = (ins CMemoryPortType:$port, IntType:$index,
+                   ClockType:$clock);
+
+  let assemblyFormat = [{
+    $port `[` $index `]` `,` $clock attr-dict `:` type(operands)
   }];
   let hasCanonicalizer = true;
 }
 
-def MemOp : FIRRTLOp<"mem", [/*MemAlloc*/]> {
+def MemOp : FIRRTLOp<"mem"> {
   let summary = "Define a new mem";
   let arguments =
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,

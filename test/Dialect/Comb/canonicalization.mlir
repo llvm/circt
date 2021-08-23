@@ -770,12 +770,11 @@ hw.module @combine_icmp_compare_known_bits0(%thing: i4) -> (%a: i1) {
   %1 = comb.icmp eq %0, %c0 : i4
   hw.output %1 : i1
 
-  // CHECK:   %0 = comb.and %thing, %c-3_i4 : i4
-  // CHECK:   %1 = comb.extract %0 from 2 : (i4) -> i2
-  // CHECK:   %2 = comb.extract %0 from 0 : (i4) -> i1
-  // CHECK:   %3 = comb.concat %1, %2 : (i2, i1) -> i3
-  // CHECK:   %4 = comb.icmp eq %3, %c0_i3 : i3
-  // CHECK:   hw.output %4 : i1
+  // CHECK:   %0 = comb.extract %thing from 2 : (i4) -> i2
+  // CHECK:   %1 = comb.extract %thing from 0 : (i4) -> i1
+  // CHECK:   %2 = comb.concat %0, %1 : (i2, i1) -> i3
+  // CHECK:   %3 = comb.icmp eq %2, %c0_i3 : i3
+  // CHECK:   hw.output %3 : i1
   // CHECK: }
 }
 
@@ -799,15 +798,23 @@ hw.module @not_icmp(%a: i3, %b: i4, %c: i1) -> (%x: i1, %y: i1) {
 }
 
 // CHECK-LABEL: hw.module @xorICmpConstant
-// This is an integration test for the testcase in Issue #1560.
-hw.module @xorICmpConstant(%value: i9) -> (%a: i1) {
+hw.module @xorICmpConstant(%value: i9, %bit: i1) -> (%a: i1, %b: i1) {
+  // This is an integration test for the testcase in Issue #1560.
   %c2_i9 = hw.constant 2 : i9
   %c0_i9 = hw.constant 0 : i9
   %1 = comb.xor %value, %c2_i9 : i9
   %2 = comb.icmp eq %1, %c0_i9 : i9
-  hw.output %2 : i1
   // CHECK: %0 = comb.icmp eq %value, %c2_i9 : i9
-  // CHECK: hw.output %0 : i1
+
+  // Check KnownBitAnalysis for mux.
+  %6 = comb.and %value, %c2_i9 : i9
+  %7 = comb.mux %bit, %6, %c0_i9 : i9
+  %8 = comb.icmp eq %7, %c2_i9 : i9
+  // CHECK: %1 = comb.extract %value from 1 : (i9) -> i1
+  // CHECK: %2 = comb.and %bit, %1 : i1
+
+  hw.output %2, %8 : i1, i1
+  // CHECK: hw.output %0, %2 : i1
 }
 
 // CHECK-LABEL: hw.module @xorICmpConstant2
@@ -848,3 +855,49 @@ hw.module @test1560(%value: i38) -> (%a: i1) {
   // CHECK:   hw.output %1 : i1
   // CHECK: }
 }
+
+// CHECK-LABEL: hw.module @test_sext
+// Test sext folds.
+hw.module @test_sext(%value: i8, %v9: i9) -> (%a: i10, %b: i11, %c: i10) {
+  // Known zero sign bit.
+  %false = hw.constant false
+  %0 = comb.concat %false, %value : (i1, i8) -> i9
+  // CHECK: %0 = comb.concat %false, %value
+  %1 = comb.sext %0 : (i9) -> i10
+  // CHECK: %1 = comb.concat %c0_i2, %value
+
+  // Known one sign bit.
+  %c128 = hw.constant 128 : i8
+  %2 = comb.or %value, %c128 : i8
+  %3 = comb.sext %2 : (i8) -> i11
+  // CHECK: %2 = comb.or %value, %c-128_i8 : i8
+  // CHECK: %3 = comb.concat %c-1_i3, %2 : (i3, i8) -> i11
+
+  // Check KnownBitAnalysis for xor.
+  %c256 = hw.constant 256 : i9
+  %a = comb.and %v9, %0 : i9
+  %4 = comb.xor %a, %c256 : i9
+  %5 = comb.sext %4 : (i9) -> i10
+
+  // CHECK: %4 = comb.and %v9, %0 : i9
+  // CHECK: %5 = comb.xor %4, %c-256_i9 : i9
+  // CHECK: %6 = comb.concat %true, %5 : (i1, i9) -> i10
+ 
+  // CHECK: hw.output %1, %3, %6
+  hw.output %1, %3, %5: i10, i11, i10
+}
+
+// CHECK-LABEL: hw.module @extractShift
+hw.module @extractShift(%arg0: i4) -> (%o1 : i1, %o2: i1) {
+  %c1 = hw.constant 1: i4
+  %0 = comb.shl %c1, %arg0 : i4
+
+  // CHECK:  %0 = comb.icmp eq %arg0, %c0_i4 : i4
+  %1 = comb.extract %0 from 0 : (i4) -> i1
+
+  // CHECK: %1 = comb.icmp eq %arg0, %c2_i4 : i4
+  %2 = comb.extract %0 from 2 : (i4) -> i1
+  // CHECK: hw.output %0, %1
+  hw.output %1, %2: i1, i1
+}
+

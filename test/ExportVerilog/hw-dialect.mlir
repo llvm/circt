@@ -351,21 +351,6 @@ hw.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
   hw.output %wireout, %memout1, %memout2 : i4, i8, i8
 }
 
-// CHECK-LABEL: module merge
-hw.module @merge(%in1: i4, %in2: i4, %in3: i4, %in4: i4) -> (%x: i4) {
-  // CHECK: wire [3:0] _T;
-  // CHECK: assign _T = in1 + in2;
-  %a = comb.add %in1, %in2 : i4
-
-  // CHECK-NEXT: assign _T = in2;
-  // CHECK-NEXT: assign _T = in3;
-  %b = comb.merge %a, %in2, %in3 : i4
-
-  // CHECK: assign x = _T + in4 + in4;
-  %c = comb.add %b, %in4, %in4 : i4
-  hw.output %c : i4
-}
-
 // CHECK-LABEL: module signs
 hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %awire = sv.wire : !hw.inout<i4>
@@ -751,3 +736,40 @@ hw.module @Foo1587(%idx: i2, %a_0: i4, %a_1: i4, %a_2: i4, %a_3: i4) -> (%b: i4)
   // CHECK: wire [3:0][3:0] [[WIRE:.+]] = {{[{}][{}]}}a_0}, {a_1}, {a_2}, {a_3}};
   // CHECK-NEXT: assign b = [[WIRE]][idx];
 }
+
+// CHECK-LABEL:   module AddNegLiteral(
+// Issue #1324: https://github.com/llvm/circt/issues/1324
+hw.module @AddNegLiteral(%a: i8, %x: i8, %y: i8) -> (%o1: i8, %o2: i8) {
+
+  // CHECK: assign o1 = a - 8'h4;
+  %c = hw.constant -4 : i8
+  %1 = comb.add %a, %c : i8
+
+  // CHECK: assign o2 = x + y - 8'h4;
+  %2 = comb.add %x, %y, %c : i8
+
+  hw.output %1, %2 : i8, i8
+}
+
+
+// CHECK-LABEL:   module ShiftAmountZext(
+// Issue #1569: https://github.com/llvm/circt/issues/1569
+hw.module @ShiftAmountZext(%a: i8, %b1: i4, %b2: i4, %b3: i4)
+ -> (%o1: i8, %o2: i8, %o3: i8) {
+
+  %c = hw.constant 0 : i4
+  %B1 = comb.concat %c, %b1 : (i4, i4) -> i8
+  %B2 = comb.concat %c, %b2 : (i4, i4) -> i8
+  %B3 = comb.concat %c, %b3 : (i4, i4) -> i8
+
+  // CHECK: assign o1 = a << b1;
+  %r1 = comb.shl %a, %B1 : i8
+
+  // CHECK: assign o2 = a >> b2;
+  %r2 = comb.shru %a, %B2 : i8
+
+  // CHECK: assign o3 = $signed(a) >>> $signed(b3);
+  %r3 = comb.shrs %a, %B3 : i8
+  hw.output %r1, %r2, %r3 : i8, i8, i8
+}
+

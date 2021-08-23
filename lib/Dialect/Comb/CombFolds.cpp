@@ -12,6 +12,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/KnownBits.h"
 
 using namespace mlir;
 using namespace circt;
@@ -215,10 +216,27 @@ OpFoldResult SExtOp::fold(ArrayRef<Attribute> constants) {
     return getIntAttr(input.getValue().sext(destWidth), getContext());
   }
 
-  if (getType().getWidth() == input().getType().cast<IntegerType>().getWidth())
+  if (getType().getWidth() == input().getType().getIntOrFloatBitWidth())
     return input();
 
   return {};
+}
+
+LogicalResult SExtOp::canonicalize(SExtOp op, PatternRewriter &rewriter) {
+  // If the sign bit is known, we can fold this to a simpler operation.
+  auto knownBits = computeKnownBits(op.input());
+  if (knownBits.isNegative() || knownBits.isNonNegative()) {
+    // Ok, we know the sign bit, strength reduce this into a concat of the
+    // appropriate constant.
+    unsigned numBits =
+        op.getType().getWidth() - op.input().getType().getIntOrFloatBitWidth();
+    APInt cstBits = knownBits.isNegative() ? APInt::getAllOnesValue(numBits)
+                                           : APInt(numBits, 0);
+    auto signBits = rewriter.create<hw::ConstantOp>(op.getLoc(), cstBits);
+    rewriter.replaceOpWithNewOp<ConcatOp>(op, signBits, op.input());
+    return success();
+  }
+  return failure();
 }
 
 OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
@@ -267,7 +285,7 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
 
-  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{extract, zeros});
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, extract, zeros);
   return success();
 }
 
@@ -304,7 +322,7 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
 
-  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{zeros, extract});
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, zeros, extract);
   return success();
 }
 
@@ -338,7 +356,7 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   auto extract =
       rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
 
-  rewriter.replaceOpWithNewOp<ConcatOp>(op, ArrayRef<Value>{sext, extract});
+  rewriter.replaceOpWithNewOp<ConcatOp>(op, sext, extract);
   return success();
 }
 
@@ -451,15 +469,12 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
 static bool narrowExtractWidth(ExtractOp outerExtractOp,
                                PatternRewriter &rewriter) {
   auto *innerArg = outerExtractOp.input().getDefiningOp();
-
-  if (!innerArg) {
+  if (!innerArg)
     return false;
-  }
 
   // In calls to narrowOperationWidth below, innerOp is guranteed to have at
   // least one use (ie: this extract operation). So we don't need to handle
   // innerOp with no uses.
-
   return llvm::TypeSwitch<Operation *, bool>(innerArg)
       // The unreferenced leading bits of Add, Sub and Mul can be stripped of,
       // but not the trailing bits. The trailing bits is used to compute the
@@ -505,9 +520,10 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
 }
 
 LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
+  auto *inputOp = op.input().getDefiningOp();
+
   // extract(olo, extract(ilo, x)) = extract(olo + ilo, x)
-  if (auto innerExtract =
-          dyn_cast_or_null<ExtractOp>(op.input().getDefiningOp())) {
+  if (auto innerExtract = dyn_cast_or_null<ExtractOp>(inputOp)) {
     rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(),
                                            innerExtract.input(),
                                            innerExtract.lowBit() + op.lowBit());
@@ -515,15 +531,44 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   }
 
   // extract(lo, cat(a, b, c, d, e)) = cat(extract(lo1, b), c, extract(lo2, d))
-  if (auto innerCat = dyn_cast_or_null<ConcatOp>(op.input().getDefiningOp())) {
+  if (auto innerCat = dyn_cast_or_null<ConcatOp>(inputOp))
     return extractConcatToConcatExtract(op, innerCat, rewriter);
-  }
 
   // extract(f(a, b)) = f(extract(a), extract(b)). This is performed only when
   // the number of bits to operation f can be reduced. See documentation of
   // narrowExtractWidth for more information.
   if (narrowExtractWidth(op, rewriter))
     return success();
+
+  // `extract(and(a, cst))` -> `extract(a)` when the relevant bits of the
+  // and/or/xor are not modifying the extracted bits.
+  if (inputOp && inputOp->getNumOperands() == 2 &&
+      isa<AndOp, OrOp, XorOp>(inputOp)) {
+    if (auto cstRHS = inputOp->getOperand(1).getDefiningOp<hw::ConstantOp>()) {
+      auto extractedCst =
+          cstRHS.getValue().lshr(op.lowBit()).trunc(op.getType().getWidth());
+      if ((isa<AndOp>(inputOp) && extractedCst.isAllOnesValue()) ||
+          (isa<OrOp, XorOp>(inputOp) && extractedCst.isNullValue())) {
+        rewriter.replaceOpWithNewOp<ExtractOp>(
+            op, op.getType(), inputOp->getOperand(0), op.lowBit());
+        return success();
+      }
+    }
+  }
+
+  // `extract(lowBit, shl(1, x))` -> `x == lowBit` when a single bit is
+  // extracted.
+  if (op.getType().getWidth() == 1 && inputOp)
+    if (auto shlOp = dyn_cast<ShlOp>(inputOp))
+      if (auto lhsCst = shlOp.getOperand(0).getDefiningOp<hw::ConstantOp>())
+        if (lhsCst.getValue().isOneValue()) {
+          auto newCst = rewriter.create<hw::ConstantOp>(
+              shlOp.getLoc(),
+              APInt(lhsCst.getValue().getBitWidth(), op.lowBit()));
+          rewriter.replaceOpWithNewOp<ICmpOp>(op, ICmpPredicate::eq,
+                                              shlOp->getOperand(1), newCst);
+          return success();
+        }
 
   return failure();
 }
@@ -960,14 +1005,6 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
     return success();
 
   return failure();
-}
-
-OpFoldResult MergeOp::fold(ArrayRef<Attribute> constants) {
-  // hw.merge(x, x, x) -> x.
-  if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
-    return inputs()[0];
-
-  return {};
 }
 
 OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
@@ -1736,70 +1773,6 @@ static LogicalResult matchAndRewriteCompareConcat(ICmpOp op, ConcatOp lhs,
   return failure();
 }
 
-/// Given an integer SSA value, check to see if we know anything about the
-/// result of the computation.  For example, we know that "and with a constant"
-/// always returns zeros for the zero bits in a constant.
-///
-/// Expression trees can be very large, so we need ot make sure to cap our
-/// recursion, this is controlled by `depth`.
-static KnownBitAnalysis computeKnownBits(Value v, unsigned depth) {
-  Operation *op = v.getDefiningOp();
-  if (!op || depth == 5)
-    return KnownBitAnalysis::getUnknown(v);
-
-  // A constant has all bits known!
-  if (auto constant = dyn_cast<hw::ConstantOp>(op))
-    return KnownBitAnalysis::getConstant(constant.getValue());
-
-  // `concat(x, y, z)` has whatever is known about the operands concat'd.
-  if (auto concatOp = dyn_cast<ConcatOp>(op)) {
-    auto result = computeKnownBits(concatOp.getOperand(0), depth + 1);
-    for (size_t i = 1, e = concatOp.getNumOperands(); i != e; ++i) {
-      auto otherBits = computeKnownBits(concatOp.getOperand(i), depth + 1);
-      unsigned width = otherBits.getWidth();
-      unsigned newWidth = result.getWidth() + width;
-      result.zeros = (result.zeros.zext(newWidth) << width) |
-                     otherBits.zeros.zext(newWidth);
-      result.ones =
-          (result.ones.zext(newWidth) << width) | otherBits.ones.zext(newWidth);
-    }
-    return result;
-  }
-
-  // `and(x, y, z)` has whatever is known about the operands intersected.
-  if (auto andOp = dyn_cast<AndOp>(op)) {
-    auto result = computeKnownBits(andOp.getOperand(0), depth + 1);
-    for (size_t i = 1, e = andOp.getNumOperands(); i != e; ++i) {
-      auto otherBits = computeKnownBits(andOp.getOperand(i), depth + 1);
-      result.zeros |= otherBits.zeros;
-      result.ones &= otherBits.ones;
-    }
-    return result;
-  }
-
-  // `or(x, y, z)` has whatever is known about the operands unioned.
-  if (auto orOp = dyn_cast<OrOp>(op)) {
-    auto result = computeKnownBits(orOp.getOperand(0), depth + 1);
-    for (size_t i = 1, e = orOp.getNumOperands(); i != e; ++i) {
-      auto otherBits = computeKnownBits(orOp.getOperand(i), depth + 1);
-      result.zeros &= otherBits.zeros;
-      result.ones |= otherBits.ones;
-    }
-    return result;
-  }
-
-  // TODO: Handle xor(x, cst) by inverting known bits.
-
-  return KnownBitAnalysis::getUnknown(v);
-}
-
-/// Given an integer SSA value, check to see if we know anything about the
-/// result of the computation.  For example, we know that "and with a
-/// constant" always returns zeros for the zero bits in a constant.
-KnownBitAnalysis KnownBitAnalysis::compute(Value v) {
-  return computeKnownBits(v, 0);
-}
-
 /// Given an equality comparison with a constant value and some operand that has
 /// known bits, simplify the comparison to check only the unknown bits of the
 /// input.
@@ -1808,13 +1781,13 @@ KnownBitAnalysis KnownBitAnalysis::compute(Value v) {
 /// to `stuff == 0`, or `and(x, 3) == 0` can be simplified to
 /// `extract x[1:0] == 0`
 static void combineEqualityICmpWithKnownBitsAndConstant(
-    ICmpOp cmpOp, const KnownBitAnalysis &bitAnalysis, const APInt &rhsCst,
+    ICmpOp cmpOp, const KnownBits &bitAnalysis, const APInt &rhsCst,
     PatternRewriter &rewriter) {
 
   // If any of the known bits disagree with any of the comparison bits, then
   // we can constant fold this comparison right away.
-  APInt bitsKnown = bitAnalysis.getBitsKnown();
-  if ((bitsKnown & rhsCst) != bitAnalysis.ones) {
+  APInt bitsKnown = bitAnalysis.Zero | bitAnalysis.One;
+  if ((bitsKnown & rhsCst) != bitAnalysis.One) {
     // If we discover a mismatch then we know an "eq" comparison is false
     // and a "ne" comparison is true!
     bool result = cmpOp.predicate() == ICmpPredicate::ne;
@@ -2068,8 +2041,8 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       // Simplify `icmp(value_with_known_bits, rhscst)` into some extracts
       // with a smaller constant.  We only support equality comparisons for
       // this.
-      auto knownBits = KnownBitAnalysis::compute(op.lhs());
-      if (knownBits.areAnyKnown())
+      auto knownBits = computeKnownBits(op.lhs());
+      if (!knownBits.isUnknown())
         return combineEqualityICmpWithKnownBitsAndConstant(op, knownBits, rhs,
                                                            rewriter),
                success();

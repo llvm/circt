@@ -142,18 +142,15 @@ def WiresOp : CalyxContainer<"wires", [
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def CellOp : CalyxOp<"cell", [
-    DeclareOpInterfaceMethods<OpAsmOpInterface>,
-    HasParent<"ComponentOp">
+def InstanceOp : CalyxCell<"instance", [
   ]> {
-  let summary = "Calyx Cell";
+  let summary = "Calyx Component Instance";
   let description = [{
-    Represents a cell (or instance) of a Calyx component or
-    primitive, which may include state. Some cells may
-    optionally have parameters attributed to them.
+    Represents an instance of a Calyx component,
+    which may include state.
 
     ```mlir
-      %name.in, %name.out = calyx.cell "name" @MyComponent : i64, i16
+      %name.in, %name.out = calyx.instance "name" @MyComponent : i64, i16
     ```
   }];
 
@@ -163,8 +160,6 @@ def CellOp : CalyxOp<"cell", [
     ComponentOp getReferencedComponent();
   }];
 
-  // TODO(Calyx): Add `parameters` attribute for
-  // SystemVerilog-wrapped primitives.
   let arguments = (ins
     StrAttr:$instanceName,
     FlatSymbolRefAttr:$componentName

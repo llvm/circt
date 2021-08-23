@@ -147,6 +147,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
   /// OpAsmInterface.td#getAsmResultNames for usage details and documentation.
   void getAsmResultNames(Operation *op,
                          OpAsmSetValueNameFn setNameFn) const override {
+
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       StringRef base;
       if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
@@ -283,10 +284,6 @@ void FIRRTLDialect::initialize() {
 
   // Register interface implementations.
   addInterfaces<FIRRTLOpAsmDialectInterface>();
-}
-
-void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
-  type.cast<FIRRTLType>().print(os.getStream());
 }
 
 /// Registered hook to materialize a single constant operation from a given

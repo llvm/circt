@@ -833,7 +833,7 @@ firrtl.circuit "TopLevel" {
 // matching fieldIDs.  Any other arg attributes should be copied.
     // The annotation should be copied to just a.a.  The firrtl.hello arg
     // attribute should be copied to each new port.
-    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.annotations = [{circt.fieldID = 1, a}], firrtl.hello}) {}
+    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.hello}) attributes {portAnnotations = [[#firrtl.subAnno<fieldID = 1, {a}>]]} {}
     // CHECK-LABEL: firrtl.module @PortBundle
     // CHECK-COUNT-1: firrtl.annotations = [{a}]
     // CHECK-COUNT-2: firrtl.hello
@@ -842,7 +842,7 @@ firrtl.circuit "TopLevel" {
 
     // The annotation should be copied to just a[0].  The firrtl.world arg
     // attribute should be copied to each port.
-    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{circt.fieldID = 1, b}], firrtl.world})
+    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.world}) attributes {portAnnotations = [[#firrtl.subAnno<fieldID = 1, {b}>]]}
     // CHECK-LABEL: firrtl.extmodule @PortVector
     // CHECK-COUNT-1: firrtl.annotations = [{b}]
     // CHECK-COUNT-2: firrtl.world

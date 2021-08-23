@@ -28,7 +28,7 @@ class BinOp<string mnemonic, list<OpTrait> traits = []> :
 class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
       BinOp<mnemonic,
                traits # [SameTypeOperands, SameOperandsAndResultType]> {
-  let assemblyFormat = "$lhs `,` $rhs  attr-dict `:` type($result)";
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
 }
 
 // Base class for variadic operators.
@@ -83,21 +83,6 @@ def XorOp : UTVariadicOp<"xor", [Commutative]> {
     /// its RHS operand.
     bool isBinaryNot();
   }];
-}
-
-def MergeOp : UTVariadicOp<"merge", [Commutative]> {
-  let summary ="Electrically merge signals together as if connected by a wire.";
-  let description = [{
-    This operation merges multiple signals together as if they were connected to
-    a single wire.  Presumably at most one of them should be a Z state at any
-    given time otherwise you'd get a short circuit.
-
-    This operation allows modeling multiconnect semantics in SSA.
-    ```
-      %result = hw.merge %a, %b, %c : t1
-    ```
-    }];
-  let hasCanonicalizeMethod = false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -223,6 +208,7 @@ def SExtOp : CombOp<"sext", [NoSideEffect]> {
     "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
+  let hasCanonicalizeMethod = true;
   let verifier = "return ::verifySExtOp(*this);";
 }
 

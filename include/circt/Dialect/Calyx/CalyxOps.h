@@ -68,6 +68,16 @@ struct ComponentPortInfo {
   Direction direction;
 };
 
+/// A helper function to verify each operation with the Cell trait.
+LogicalResult verifyCell(Operation *op);
+
+/// Signals that the following operation is a cell.
+template <typename ConcreteType>
+class Cell : public mlir::OpTrait::TraitBase<ConcreteType, Cell> {
+public:
+  static LogicalResult verifyTrait(Operation *op) { return verifyCell(op); }
+};
+
 /// Returns port information about a given component.
 SmallVector<ComponentPortInfo> getComponentPortInfo(Operation *op);
 

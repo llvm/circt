@@ -148,6 +148,19 @@ enum class ReadPortSubfield { addr, en, clk, data };
 enum class WritePortSubfield { addr, en, clk, data, mask };
 enum class ReadWritePortSubfield { addr, en, clk, rdata, wmode, wdata, wmask };
 
+/// Allow 'or'ing MemDirAttr.  This allows combining Read and Write into
+/// ReadWrite.
+inline MemDirAttr operator|(MemDirAttr lhs, MemDirAttr rhs) {
+  return static_cast<MemDirAttr>(
+      static_cast<std::underlying_type<MemDirAttr>::type>(lhs) |
+      static_cast<std::underlying_type<MemDirAttr>::type>(rhs));
+}
+
+inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
+  lhs = lhs | rhs;
+  return lhs;
+}
+
 // Out-of-line implementation of various trait verification methods and
 // functions commonly used among operations.
 namespace impl {

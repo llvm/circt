@@ -104,13 +104,17 @@ module multibit_mux(
   input  [2:0]  idx,
   output [31:0] out);
 
-  assign out = ({{a}, {b}, {32'bx}, {b}, {c}, {32'bx}})[idx];
+  wire [5:0][31:0] _T = {{a}, {b}, {32'bx}, {b}, {c}, {32'bx}};
+  assign out = _T[idx];
 endmodule
 ```
 
-We believe that synthesis tools handle the correctly and generate efficient
-netlists.  In this example, the last X element could be dropped and generate
+In this example, the last X element could be dropped and generate
 equivalent code.
+
+We believe that synthesis tools handle the correctly and generate efficient
+netlists.  For those that don't (e.g. Yosys), we have a `disallowPackedArrays`
+LoweringOption that legalizes away multi-dimensional arrays as part of lowering.
 
 While we could use the same approach for single-bit muxes, we choose to have a
 single bit `comb.mux` operation for a few reasons:

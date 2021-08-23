@@ -2,7 +2,7 @@
 
 // The firrtl.circuit should be removed, the main module name moved to an
 // attribute on the module.
-// CHECK-LABEL: {{^}}module attributes {firrtl.mainModule = "Simple"} {
+// CHECK-LABEL: {{^}}builtin.module attributes {firrtl.mainModule = "Simple"} {
 // CHECK-NOT: firrtl.circuit
 
 // We should get a large header boilerplate.
@@ -62,10 +62,7 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %xyz#2, %s8 : !firrtl.sint<8>, !firrtl.sint<8>
 
-    // CHECK: sv.fwrite "%x"(%xyz.out4) : i4
     firrtl.printf %clock, %reset, "%x"(%xyz#3) : !firrtl.uint<4>
-
-    // CHECK: sv.fwrite "Something interesting! %x"(%myext.out) : i8
 
     // Parameterized module reference.
     // hw.instance carries the parameters, unlike at the FIRRTL layer.
@@ -73,6 +70,9 @@ firrtl.circuit "Simple" {
     // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule(%reset)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.uint<1>, !firrtl.uint<8>
+
+    // CHECK: sv.fwrite "%x"(%xyz.out4) : i4
+    // CHECK: sv.fwrite "Something interesting! %x"(%myext.out) : i8
 
     firrtl.connect %myext#0, %reset : !firrtl.uint<1>, !firrtl.uint<1>
 
@@ -100,15 +100,21 @@ firrtl.circuit "Simple" {
                              out %outD: !firrtl.uint<4>,
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
+    // CHECK: %.outB.output = sv.wire : !hw.inout<i4>
+    // CHECK: [[OUTBR:%.+]] = sv.read_inout %.outB.output
     // CHECK: [[OUTC:%.+]] = sv.wire : !hw.inout<i4>
+    // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
     // CHECK: [[OUTD:%.+]] = sv.wire : !hw.inout<i4>
+    // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
 
     // Normal
     firrtl.connect %outA, %inA : !firrtl.uint<4>, !firrtl.uint<4>
 
     // Multi connect
     firrtl.connect %outB, %inA : !firrtl.uint<4>, !firrtl.uint<4>
+    // CHECK: sv.assign %.outB.output, %inA : i4
     firrtl.connect %outB, %inB : !firrtl.uint<4>, !firrtl.uint<4>
+    // CHECK: sv.assign %.outB.output, %inB : i4
 
     %0 = firrtl.sub %inA, %outC : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
@@ -116,13 +122,9 @@ firrtl.circuit "Simple" {
 
     firrtl.connect %outE, %inE : !firrtl.uint<4>, !firrtl.uint<3>
 
-    // CHECK: [[OUTBY:%.+]] = comb.merge %inB, %inA : i4
-    // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
-    // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
-
     // Extension for outE
     // CHECK: [[OUTE:%.+]] = comb.concat %false, %inE : (i1, i3) -> i4
-    // CHECK: hw.output %inA, [[OUTBY]], [[OUTCR]], [[OUTDR]], [[OUTE]]
+    // CHECK: hw.output %inA, [[OUTBR]], [[OUTCR]], [[OUTDR]], [[OUTE]]
   }
 
   // CHECK-LABEL: hw.module @Analog(%a1: !hw.inout<i1>) -> (%outClock: i1) {
@@ -247,6 +249,7 @@ firrtl.circuit "Simple" {
   // https://github.com/llvm/circt/issues/740
   // CHECK-LABEL: hw.module @foo740(%led_0: !hw.inout<i1>) {
   // CHECK:  %.led_0.wire = sv.wire
+  // CHECK-NEXT: sv.read_inout %.led_0.wire
   // CHECK-NEXT:  hw.instance "fpga" @bar740(%.led_0.wire)
   firrtl.extmodule @bar740(in %led_0: !firrtl.analog<1>)
   firrtl.module @foo740(in %led_0: !firrtl.analog<1>) {
