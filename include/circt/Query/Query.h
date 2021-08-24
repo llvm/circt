@@ -20,7 +20,7 @@ namespace query {
 
 class FilterType {
 public:
-  virtual ~FilterType() { }
+  virtual ~FilterType() {}
 
   virtual bool valueMatches(llvm::StringRef value) { return false; }
   virtual bool addSelf() { return false; }
@@ -29,7 +29,7 @@ public:
 
 class GlobFilterType : public FilterType {
 public:
-  GlobFilterType() { }
+  GlobFilterType() {}
 
   bool valueMatches(llvm::StringRef value) override { return true; }
   FilterType *clone() override { return new GlobFilterType; }
@@ -37,7 +37,7 @@ public:
 
 class RecursiveGlobFilterType : public FilterType {
 public:
-  RecursiveGlobFilterType() { }
+  RecursiveGlobFilterType() {}
 
   bool valueMatches(llvm::StringRef value) override { return true; }
   bool addSelf() override { return true; }
@@ -46,7 +46,7 @@ public:
 
 class LiteralFilterType : public FilterType {
 public:
-  LiteralFilterType(std::string &literal) : literal (literal) { }
+  LiteralFilterType(std::string &literal) : literal(literal) {}
 
   bool valueMatches(llvm::StringRef value) override { return value == literal; }
   FilterType *clone() override { return new LiteralFilterType(literal); }
@@ -57,8 +57,8 @@ private:
 
 class RegexFilterType : public FilterType {
 public:
-  RegexFilterType(std::string &regex) : regex (std::regex(regex)) { }
-  RegexFilterType(std::regex &regex) : regex (regex) { }
+  RegexFilterType(std::string &regex) : regex(std::regex(regex)) {}
+  RegexFilterType(std::regex &regex) : regex(regex) {}
 
   bool valueMatches(llvm::StringRef value) override {
     if (value.data()[value.size()] == '\0') {
@@ -76,7 +76,9 @@ private:
 
 class FilterData {
 public:
-  FilterData(Operation *root) : tables (mlir::SymbolTableCollection()), userMap (mlir::SymbolUserMap(tables, root)) { }
+  FilterData(Operation *root)
+      : tables(mlir::SymbolTableCollection()),
+        userMap(mlir::SymbolUserMap(tables, root)) {}
 
   mlir::SymbolTableCollection tables;
   mlir::SymbolUserMap userMap;
@@ -84,30 +86,35 @@ public:
 
 class Filter {
 public:
-  virtual ~Filter() {
-    delete type;
-  }
+  virtual ~Filter() { delete type; }
 
   virtual bool matches(Operation *op, FilterData &data) { return false; }
   virtual bool addSelf() { return type->addSelf(); }
   virtual Filter *nextFilter() { return nullptr; };
   virtual Filter *clone() { return nullptr; }
-  virtual std::vector<Operation *> nextOperations(Operation *op, FilterData &data) { std::vector<Operation *> ops; ops.push_back(op); return ops; }
+  virtual std::vector<Operation *> nextOperations(Operation *op,
+                                                  FilterData &data) {
+    std::vector<Operation *> ops;
+    ops.push_back(op);
+    return ops;
+  }
 
   FilterType *getType() { return type; }
 
   std::vector<Operation *> filter(Operation *root, FilterData &data);
-  std::vector<Operation *> filter(std::vector<Operation *> &results, FilterData &data);
+  std::vector<Operation *> filter(std::vector<Operation *> &results,
+                                  FilterData &data);
 
 protected:
-  Filter(FilterType *type) : type (type) { }
+  Filter(FilterType *type) : type(type) {}
 
   FilterType *type;
 };
 
 class AttributeFilter : public Filter {
 public:
-  AttributeFilter(std::string &key, FilterType *type) : Filter(type), key (key) { }
+  AttributeFilter(std::string &key, FilterType *type)
+      : Filter(type), key(key) {}
 
   bool matches(Operation *op, FilterData &data) override;
   Filter *clone() override;
@@ -118,7 +125,7 @@ private:
 
 class NameFilter : public Filter {
 public:
-  NameFilter(FilterType *type) : Filter(type) { }
+  NameFilter(FilterType *type) : Filter(type) {}
 
   bool matches(Operation *op, FilterData &data) override;
   Filter *clone() override;
@@ -126,7 +133,7 @@ public:
 
 class OpFilter : public Filter {
 public:
-  OpFilter(FilterType *type) : Filter(type) { }
+  OpFilter(FilterType *type) : Filter(type) {}
 
   bool matches(Operation *op, FilterData &data) override;
   Filter *clone() override;
@@ -134,7 +141,8 @@ public:
 
 class AndFilter : public Filter {
 public:
-  AndFilter(std::vector<Filter *> &filters) : Filter(new FilterType), filters (filters) { }
+  AndFilter(std::vector<Filter *> &filters)
+      : Filter(new FilterType), filters(filters) {}
 
   ~AndFilter() {
     for (auto *f : filters) {
@@ -151,7 +159,8 @@ private:
 
 class OrFilter : public Filter {
 public:
-  OrFilter(std::vector<Filter *> &filters) : Filter(new FilterType), filters (filters) { }
+  OrFilter(std::vector<Filter *> &filters)
+      : Filter(new FilterType), filters(filters) {}
 
   ~OrFilter() {
     for (auto *f : filters) {
@@ -168,7 +177,8 @@ private:
 
 class InstanceFilter : public Filter {
 public:
-  InstanceFilter(Filter *filter, Filter *child) : Filter(new FilterType), filter (filter), child (child) { }
+  InstanceFilter(Filter *filter, Filter *child)
+      : Filter(new FilterType), filter(filter), child(child) {}
   ~InstanceFilter() {
     delete filter;
     delete child;
@@ -187,10 +197,11 @@ private:
 
 class UsageFilter : public Filter {
 public:
-  UsageFilter(Filter *filter) : Filter(new FilterType), filter (filter) { }
+  UsageFilter(Filter *filter) : Filter(new FilterType), filter(filter) {}
 
   bool matches(Operation *op, FilterData &data) override;
-  std::vector<Operation *> nextOperations(Operation *op, FilterData &data) override;
+  std::vector<Operation *> nextOperations(Operation *op,
+                                          FilterData &data) override;
 
 private:
   Filter *filter;
@@ -199,7 +210,8 @@ private:
 typedef std::vector<std::pair<StringRef, Attribute>> attr_map;
 typedef std::vector<std::pair<Operation *, attr_map>> op_attr_map;
 
-op_attr_map dumpAttributes(std::vector<Operation *> &results, ArrayRef<StringRef> filters);
+op_attr_map dumpAttributes(std::vector<Operation *> &results,
+                           ArrayRef<StringRef> filters);
 
 } /* namespace query */
 } /* namespace circt */

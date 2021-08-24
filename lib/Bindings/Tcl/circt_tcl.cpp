@@ -4,7 +4,6 @@
 #include "circt-c/Query.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
-#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "mlir/CAPI/IR.h"
@@ -33,7 +32,8 @@ static CirctQueryFilterType createFilterType(Tcl_Obj *obj) {
   } else {
     for (size_t i = 0; i < length; i++) {
       char c = str[i];
-      if (!(('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9') || c == '_')) {
+      if (!(('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') ||
+            ('0' <= c && c <= '9') || c == '_')) {
         return {nullptr};
       }
     }
@@ -69,15 +69,19 @@ static void filterTypeUpdateStringProc(Tcl_Obj *obj) {
 }
 
 static void filterTypeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
-  dup->internalRep.otherValuePtr = circtQueryCloneFilter((CirctQueryFilter){src->internalRep.otherValuePtr}).ptr;
+  dup->internalRep.otherValuePtr =
+      circtQueryCloneFilter((CirctQueryFilter){src->internalRep.otherValuePtr})
+          .ptr;
 }
 
 static void filterTypeFreeIntRepProc(Tcl_Obj *obj) {
   circtQueryDeleteFilter((CirctQueryFilter){obj->internalRep.otherValuePtr});
 }
 
-static int createAndOrFilter(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[],
-                             const char* usage, CirctQueryFilter (*createFunc)(size_t, CirctQueryFilter *)) {
+static int
+createAndOrFilter(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[],
+                  const char *usage,
+                  CirctQueryFilter (*createFunc)(size_t, CirctQueryFilter *)) {
   if (objc <= 1) {
     Tcl_WrongNumArgs(interp, objc, objv, usage);
     return TCL_ERROR;
@@ -104,7 +108,7 @@ static int createAndOrFilter(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]
       void *ptr = objv[i]->internalRep.otherValuePtr;
       objv[i]->internalRep.otherValuePtr = nullptr;
       objv[i]->typePtr = nullptr;
-      filters[i - 1] = { ptr };
+      filters[i - 1] = {ptr};
     } else {
       for (int j = 0; j < i - 1; ++j) {
         circtQueryDeleteFilter(filters[j]);
@@ -122,18 +126,20 @@ static int createAndOrFilter(Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]
   return TCL_OK;
 }
 
-static int createOrFilter(ClientData cdata, Tcl_Interp *interp,
-                           int objc, Tcl_Obj *const objv[]) {
-  return createAndOrFilter(interp, objc, objv, "usage: or [filter]+", circtQueryNewOrFilter);
+static int createOrFilter(ClientData cdata, Tcl_Interp *interp, int objc,
+                          Tcl_Obj *const objv[]) {
+  return createAndOrFilter(interp, objc, objv, "usage: or [filter]+",
+                           circtQueryNewOrFilter);
 }
 
-static int createAndFilter(ClientData cdata, Tcl_Interp *interp,
-                           int objc, Tcl_Obj *const objv[]) {
-  return createAndOrFilter(interp, objc, objv, "usage: and [filter]+", circtQueryNewAndFilter);
+static int createAndFilter(ClientData cdata, Tcl_Interp *interp, int objc,
+                           Tcl_Obj *const objv[]) {
+  return createAndOrFilter(interp, objc, objv, "usage: and [filter]+",
+                           circtQueryNewAndFilter);
 }
 
-static int createInstanceFilter(ClientData cdata, Tcl_Interp *interp,
-                           int objc, Tcl_Obj *const objv[]) {
+static int createInstanceFilter(ClientData cdata, Tcl_Interp *interp, int objc,
+                                Tcl_Obj *const objv[]) {
   if (objc <= 1) {
     Tcl_WrongNumArgs(interp, objc, objv, "usage: inst [filter]+");
     return TCL_ERROR;
@@ -182,8 +188,8 @@ static int createInstanceFilter(ClientData cdata, Tcl_Interp *interp,
   return TCL_OK;
 }
 
-static int createAttributeFilter(ClientData cdata, Tcl_Interp *interp,
-                                 int objc, Tcl_Obj *const objv[]) {
+static int createAttributeFilter(ClientData cdata, Tcl_Interp *interp, int objc,
+                                 Tcl_Obj *const objv[]) {
   if (objc != 3) {
     Tcl_WrongNumArgs(interp, objc, objv, "usage: attr [key] [filter type]");
     return TCL_ERROR;
@@ -203,8 +209,8 @@ static int createAttributeFilter(ClientData cdata, Tcl_Interp *interp,
   return TCL_OK;
 }
 
-static int createOpFilter(ClientData cdata, Tcl_Interp *interp,
-                                 int objc, Tcl_Obj *const objv[]) {
+static int createOpFilter(ClientData cdata, Tcl_Interp *interp, int objc,
+                          Tcl_Obj *const objv[]) {
   if (objc != 2) {
     Tcl_WrongNumArgs(interp, objc, objv, "usage: op [key]");
     return TCL_ERROR;
@@ -219,8 +225,8 @@ static int createOpFilter(ClientData cdata, Tcl_Interp *interp,
   return TCL_OK;
 }
 
-static int createUsageFilter(ClientData cdata, Tcl_Interp *interp,
-                                 int objc, Tcl_Obj *const objv[]) {
+static int createUsageFilter(ClientData cdata, Tcl_Interp *interp, int objc,
+                             Tcl_Obj *const objv[]) {
   if (objc != 2) {
     Tcl_WrongNumArgs(interp, objc, objv, "usage: usage [filter]");
     return TCL_ERROR;
@@ -238,7 +244,8 @@ static int createUsageFilter(ClientData cdata, Tcl_Interp *interp,
 
   auto *result = Tcl_NewObj();
   result->typePtr = type;
-  result->internalRep.otherValuePtr = circtQueryNewUsageFilter({obj->internalRep.otherValuePtr}).ptr;
+  result->internalRep.otherValuePtr =
+      circtQueryNewUsageFilter({obj->internalRep.otherValuePtr}).ptr;
   obj->internalRep.otherValuePtr = nullptr;
   obj->typePtr = nullptr;
   Tcl_SetObjResult(interp, result);
@@ -269,7 +276,7 @@ static void operationTypeDupIntRepProc(Tcl_Obj *src, Tcl_Obj *dup) {
     dup->internalRep.twoPtrValue.ptr2 = circtQueryNewFilterData(result).ptr;
   } else {
     result = wrap(op);
-    auto *module = (Tcl_Obj *) src->internalRep.twoPtrValue.ptr2;
+    auto *module = (Tcl_Obj *)src->internalRep.twoPtrValue.ptr2;
     Tcl_IncrRefCount(module);
     dup->internalRep.twoPtrValue.ptr2 = module;
   }
@@ -281,9 +288,10 @@ static void operationTypeFreeIntRepProc(Tcl_Obj *obj) {
   auto *op = unwrap((MlirOperation){obj->internalRep.twoPtrValue.ptr1});
   if (auto mod = llvm::dyn_cast_or_null<mlir::ModuleOp>(op)) {
     mod.erase();
-    circtQueryDeleteFilterData((CirctQueryFilterData){obj->internalRep.twoPtrValue.ptr2});
+    circtQueryDeleteFilterData(
+        (CirctQueryFilterData){obj->internalRep.twoPtrValue.ptr2});
   } else {
-    Tcl_DecrRefCount((Tcl_Obj *) obj->internalRep.twoPtrValue.ptr2);
+    Tcl_DecrRefCount((Tcl_Obj *)obj->internalRep.twoPtrValue.ptr2);
   }
 }
 
@@ -330,14 +338,16 @@ static int loadFirMlirFile(mlir::MLIRContext *context, Tcl_Interp *interp,
   return TCL_OK;
 }
 
-static int filter(ClientData cdata, Tcl_Interp *interp,
-                           int objc, Tcl_Obj *const objv[]) {
+static int filter(ClientData cdata, Tcl_Interp *interp, int objc,
+                  Tcl_Obj *const objv[]) {
   if (objc != 3) {
-    Tcl_WrongNumArgs(interp, objc, objv, "usage: circt query [filter] [operation|filter result]");
+    Tcl_WrongNumArgs(interp, objc, objv,
+                     "usage: circt query [filter] [operation|filter result]");
     return TCL_ERROR;
   }
 
-  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("Filter")) == TCL_ERROR) {
+  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("Filter")) ==
+      TCL_ERROR) {
     return returnErrorStr(interp, "expected filter");
   }
 
@@ -346,9 +356,10 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
   int length = 0;
   auto *type = Tcl_GetObjType("MlirOperation");
   if (Tcl_ConvertToType(interp, objv[2], type) == TCL_OK) {
-    objs = (Tcl_Obj **) &objv[2];
+    objs = (Tcl_Obj **)&objv[2];
     length = 1;
-  } else if (Tcl_ListObjGetElements(interp, objv[2], &length, &objs) != TCL_OK) {
+  } else if (Tcl_ListObjGetElements(interp, objv[2], &length, &objs) !=
+             TCL_OK) {
     return returnErrorStr(interp, "expected operation or list of operations");
   }
 
@@ -363,13 +374,15 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
     if (llvm::dyn_cast_or_null<mlir::ModuleOp>(unwrap(root))) {
       module = objs[i];
     } else {
-      module = (Tcl_Obj *) objs[i]->internalRep.twoPtrValue.ptr2;
+      module = (Tcl_Obj *)objs[i]->internalRep.twoPtrValue.ptr2;
     }
 
     auto data = (CirctQueryFilterData){module->internalRep.twoPtrValue.ptr2};
     auto result = circtQueryFilterFromRoot(filter, root, data);
     MlirOperation op;
-    for (size_t j = 0; !mlirOperationIsNull(op = circtQueryGetFromFilterResult(result, j)); ++j) {
+    for (size_t j = 0;
+         !mlirOperationIsNull(op = circtQueryGetFromFilterResult(result, j));
+         ++j) {
       auto *obj = Tcl_NewObj();
       obj->typePtr = type;
       obj->internalRep.twoPtrValue.ptr1 = op.ptr;
@@ -386,7 +399,8 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
       auto *unwrappedOp = unwrap(op);
       bool contained = false;
       for (int k = 0; k < length; ++k) {
-        if (unwrap((MlirOperation){listRaw[k]->internalRep.twoPtrValue.ptr1}) == unwrappedOp) {
+        if (unwrap((MlirOperation){listRaw[k]->internalRep.twoPtrValue.ptr1}) ==
+            unwrappedOp) {
           contained = true;
           std::cout << "oh no";
           unwrappedOp->dump();
@@ -409,47 +423,52 @@ static int filter(ClientData cdata, Tcl_Interp *interp,
 
 static Tcl_Obj *createTclObjFromAttr(Tcl_Interp *interp, mlir::Attribute attr) {
   return mlir::TypeSwitch<mlir::Attribute, Tcl_Obj *>(attr)
-    .Case<mlir::StringAttr>([&](auto &attr) {
-      auto str = attr.getValue();
-      return Tcl_NewStringObj(str.data(), str.size());
-    })
-    .Case<mlir::IntegerAttr>([&](auto &attr) {
-      auto i = attr.getInt();
-      return Tcl_NewLongObj(i);
-    })
-    .Case<mlir::ArrayAttr>([&](auto &attr) {
-      auto array = attr.getValue();
-      auto *obj = Tcl_NewListObj(0, nullptr);
-      for (auto attr : array) {
-        Tcl_ListObjAppendElement(interp, obj, createTclObjFromAttr(interp, attr));
-      }
-      return obj;
-    })
-    .Case<mlir::DictionaryAttr>([&](mlir::DictionaryAttr &attr) {
-      auto dict = attr.getValue();
-      auto *obj = Tcl_NewDictObj();
-      for (auto pair : dict) {
-        auto *key = Tcl_NewStringObj(pair.first.c_str(), pair.first.size());
-        auto *value = createTclObjFromAttr(interp, pair.second);
-        Tcl_DictObjPut(interp, obj, key, value);
-      }
-      return obj;
-    })
-    .Default([&](auto &op) {
-      auto *str = "<unknown attribute>";
-      return Tcl_NewStringObj(str, strlen(str));
-    });
+      .Case<mlir::StringAttr>([&](auto &attr) {
+        auto str = attr.getValue();
+        return Tcl_NewStringObj(str.data(), str.size());
+      })
+      .Case<mlir::IntegerAttr>([&](auto &attr) {
+        auto i = attr.getInt();
+        return Tcl_NewLongObj(i);
+      })
+      .Case<mlir::ArrayAttr>([&](auto &attr) {
+        auto array = attr.getValue();
+        auto *obj = Tcl_NewListObj(0, nullptr);
+        for (auto attr : array) {
+          Tcl_ListObjAppendElement(interp, obj,
+                                   createTclObjFromAttr(interp, attr));
+        }
+        return obj;
+      })
+      .Case<mlir::DictionaryAttr>([&](mlir::DictionaryAttr &attr) {
+        auto dict = attr.getValue();
+        auto *obj = Tcl_NewDictObj();
+        for (auto pair : dict) {
+          auto *key = Tcl_NewStringObj(pair.first.c_str(), pair.first.size());
+          auto *value = createTclObjFromAttr(interp, pair.second);
+          Tcl_DictObjPut(interp, obj, key, value);
+        }
+        return obj;
+      })
+      .Default([&](auto &op) {
+        auto *str = "<unknown attribute>";
+        return Tcl_NewStringObj(str, strlen(str));
+      });
 }
 
-static int dumpAttributes(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+static int dumpAttributes(ClientData cdata, Tcl_Interp *interp, int objc,
+                          Tcl_Obj *const objv[]) {
   if (objc < 2) {
-    Tcl_WrongNumArgs(interp, objc, objv, "usage: attrs [modules] [attributes]*");
+    Tcl_WrongNumArgs(interp, objc, objv,
+                     "usage: attrs [modules] [attributes]*");
     return TCL_ERROR;
   }
 
   std::vector<mlir::Operation *> ops;
-  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("MlirOperation")) == TCL_OK) {
-    ops.push_back(unwrap((MlirOperation){objv[1]->internalRep.twoPtrValue.ptr1}));
+  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("MlirOperation")) ==
+      TCL_OK) {
+    ops.push_back(
+        unwrap((MlirOperation){objv[1]->internalRep.twoPtrValue.ptr1}));
   } else {
     int length;
     Tcl_Obj **rawList;
@@ -458,15 +477,17 @@ static int dumpAttributes(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Ob
     }
 
     for (int i = 0; i < length; ++i) {
-      if (Tcl_ConvertToType(interp, rawList[i], Tcl_GetObjType("MlirOperation")) == TCL_ERROR) {
+      if (Tcl_ConvertToType(interp, rawList[i],
+                            Tcl_GetObjType("MlirOperation")) == TCL_ERROR) {
         return returnErrorStr(interp, "expected operation");
       }
 
-      ops.push_back(unwrap((MlirOperation){rawList[i]->internalRep.twoPtrValue.ptr1}));
+      ops.push_back(
+          unwrap((MlirOperation){rawList[i]->internalRep.twoPtrValue.ptr1}));
     }
   }
 
-  auto filtered = (CirctQueryFilterResult) { &ops };
+  auto filtered = (CirctQueryFilterResult){&ops};
   char *attrNames[objc - 2];
   for (int i = 2; i < objc; ++i) {
     attrNames[i - 2] = Tcl_GetString(objv[i]);
@@ -475,7 +496,9 @@ static int dumpAttributes(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Ob
 
   auto *root = Tcl_NewDictObj();
   CirctQueryOperationAttributesPair pair;
-  for (size_t i = 0; !circtQueryIsOperationAttributePairNull(pair = circtQueryGetFromAttributeDumpByIndex(attrs, i)); ++i) {
+  for (size_t i = 0; !circtQueryIsOperationAttributePairNull(
+           pair = circtQueryGetFromAttributeDumpByIndex(attrs, i));
+       ++i) {
     std::string keyString;
     llvm::raw_string_ostream stream(keyString);
     unwrap(pair.op)->print(stream);
@@ -483,7 +506,9 @@ static int dumpAttributes(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Ob
 
     auto *value = Tcl_NewDictObj();
     CirctQueryIdentifierAttributePair attr;
-    for (size_t i = 0; !circtQueryIsIdentifierAttributePairNull(attr = circtQueryGetFromOperationAttributePairByIndex(pair, i)); ++i) {
+    for (size_t i = 0; !circtQueryIsIdentifierAttributePairNull(
+             attr = circtQueryGetFromOperationAttributePairByIndex(pair, i));
+         ++i) {
       auto *key = Tcl_NewStringObj(attr.ident.data, attr.ident.length);
       auto *attrObj = createTclObjFromAttr(interp, unwrap(attr.attr));
       Tcl_DictObjPut(interp, value, key, attrObj);
@@ -497,37 +522,41 @@ static int dumpAttributes(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Ob
   return TCL_OK;
 }
 
-static int dumpModuleName(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+static int dumpModuleName(ClientData cdata, Tcl_Interp *interp, int objc,
+                          Tcl_Obj *const objv[]) {
   if (objc != 2) {
     Tcl_WrongNumArgs(interp, objc, objv, "usage: modname [module]");
     return TCL_ERROR;
   }
 
-  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("MlirOperation")) == TCL_ERROR) {
+  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("MlirOperation")) ==
+      TCL_ERROR) {
     return returnErrorStr(interp, "expected operation");
   }
 
   auto *op = unwrap((MlirOperation){objv[1]->internalRep.twoPtrValue.ptr1});
-  auto *result = mlir::TypeSwitch<mlir::Operation *, Tcl_Obj *>(op)
-    .Case<circt::hw::HWModuleOp, circt::hw::HWModuleExternOp>([&](auto &mod) {
-      auto name = mod.getNameAttr().getValue();
-      return Tcl_NewStringObj(name.data(), name.size());
-    })
-    .Default([&](auto &op) {
-      return Tcl_NewStringObj("", 0);
-    });
+  auto *result =
+      mlir::TypeSwitch<mlir::Operation *, Tcl_Obj *>(op)
+          .Case<circt::hw::HWModuleOp, circt::hw::HWModuleExternOp>(
+              [&](auto &mod) {
+                auto name = mod.getNameAttr().getValue();
+                return Tcl_NewStringObj(name.data(), name.size());
+              })
+          .Default([&](auto &op) { return Tcl_NewStringObj("", 0); });
 
   Tcl_SetObjResult(interp, result);
   return TCL_OK;
 }
 
-static int dumpOpName(ClientData cdata, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
+static int dumpOpName(ClientData cdata, Tcl_Interp *interp, int objc,
+                      Tcl_Obj *const objv[]) {
   if (objc != 2) {
     Tcl_WrongNumArgs(interp, objc, objv, "usage: opname [module]");
     return TCL_ERROR;
   }
 
-  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("MlirOperation")) == TCL_ERROR) {
+  if (Tcl_ConvertToType(interp, objv[1], Tcl_GetObjType("MlirOperation")) ==
+      TCL_ERROR) {
     return returnErrorStr(interp, "expected operation");
   }
 
@@ -545,7 +574,7 @@ static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
     return TCL_ERROR;
   }
 
-  auto *context = (mlir::MLIRContext *) cdata;
+  auto *context = (mlir::MLIRContext *)cdata;
   auto *str = Tcl_GetString(objv[1]);
 
   if (!strcmp("load", str))
@@ -556,7 +585,8 @@ static int circtTclFunction(ClientData cdata, Tcl_Interp *interp, int objc,
 
   if (!strcmp("get", str)) {
     if (objc < 3) {
-      Tcl_WrongNumArgs(interp, objc, objv, "usage: circt get [modname|attrs|opname]");
+      Tcl_WrongNumArgs(interp, objc, objv,
+                       "usage: circt get [modname|attrs|opname]");
       return TCL_ERROR;
     }
 
