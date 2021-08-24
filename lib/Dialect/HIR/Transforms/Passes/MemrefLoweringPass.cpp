@@ -95,6 +95,7 @@ private:
   LogicalResult visitOp(hir::FuncOp);
   LogicalResult visitOp(hir::AllocaOp);
   LogicalResult visitOp(hir::ForOp);
+  LogicalResult visitOp(hir::WhileOp);
 
 private:
   DenseMap<Value, SmallVector<MemrefPortInterface>> mapMemrefPortToBuses;
@@ -710,6 +711,8 @@ LogicalResult convertOp(hir::LoadOp op, MemrefPortInterface useInterface,
   Operation *receiveOp = builder.create<hir::RecvOp>(
       op.getLoc(), op.res().getType(), rdDataBus, builder.getI64IntegerAttr(0),
       op.tstart(), recvOffset);
+  if (op->hasAttrOfType<ArrayAttr>("names"))
+    receiveOp->setAttr("names", op->getAttr("names"));
   // Remove the LoadOp.
   op.replaceAllUsesWith(receiveOp);
   builder.create<hir::CommentOp>(op.getLoc(),
@@ -875,7 +878,14 @@ LogicalResult MemrefLoweringPass::visitOp(hir::ForOp op) {
   tstartRegion = oldTstartRegion;
   return success();
 }
-
+LogicalResult MemrefLoweringPass::visitOp(hir::WhileOp op) {
+  auto oldTstartRegion = tstartRegion;
+  tstartRegion = op.getIterTimeVar();
+  if (failed(visitRegion(op.body())))
+    return failure();
+  tstartRegion = oldTstartRegion;
+  return success();
+}
 LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
   if (failed(createBusInstantiationsAndCallOp(op, mapMemrefPortToBuses,
                                               tstartRegion)))
@@ -896,6 +906,9 @@ LogicalResult MemrefLoweringPass::visitRegion(Region &region) {
       if (failed(visitOp(op)))
         return failure();
     } else if (auto op = dyn_cast<hir::ForOp>(operation)) {
+      if (failed(visitOp(op)))
+        return failure();
+    } else if (auto op = dyn_cast<hir::WhileOp>(operation)) {
       if (failed(visitOp(op)))
         return failure();
     } else if (auto op = dyn_cast<hir::AllocaOp>(operation)) {

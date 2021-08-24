@@ -19,12 +19,6 @@ public:
 };
 } // end anonymous namespace
 
-Value lookupOrOriginal(BlockAndValueMapping &mapper, Value originalValue) {
-  if (mapper.contains(originalValue))
-    return mapper.lookup(originalValue);
-  return originalValue;
-}
-
 LogicalResult unrollLoopFull(hir::ForOp forOp) {
   Block &loopBodyBlock = forOp.getLoopBody().front();
   // auto builder = OpBuilder::atBlockTerminator(&loopBodyBlock);
@@ -41,8 +35,6 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
   int64_t lb = helper::getConstantIntValue(forOp.lb()).getValue();
   int64_t ub = helper::getConstantIntValue(forOp.ub()).getValue();
   int64_t step = helper::getConstantIntValue(forOp.step()).getValue();
-
-  Block::iterator srcBlockEnd = std::prev(loopBodyBlock.end(), 1);
 
   Value iterTimeVar = forOp.getIterTimeVar();
   assert(forOp.offset().getValue() == 0);
@@ -71,13 +63,14 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
     operandMap.map(forOp.getInductionVar(), loopIV);
 
     // Copy the loop body.
-    for (auto it = loopBodyBlock.begin(); it != srcBlockEnd; it++) {
-      if (auto forNextIterOp = dyn_cast<hir::NextIterOp>(it)) {
-        assert(forNextIterOp.offset().getValue() == 0);
-        iterTStart = {lookupOrOriginal(operandMap, forNextIterOp.tstart())};
+    for (auto &operation : loopBodyBlock) {
+      if (auto nextIterOp = dyn_cast<hir::NextIterOp>(operation)) {
+        assert(nextIterOp.offset().getValue() == 0);
+        iterTStart = {
+            helper::lookupOrOriginal(operandMap, nextIterOp.tstart())};
         continue;
       }
-      builder.clone(*it, operandMap);
+      builder.clone(operation, operandMap);
     }
   }
 

@@ -229,4 +229,10 @@ void eraseOps(mlir::ArrayRef<mlir::Operation *> opsToErase) {
   for (auto op = opsToErase.rbegin(); op != opsToErase.rend(); op++)
     (*op)->erase();
 }
+
+Value lookupOrOriginal(BlockAndValueMapping &mapper, Value originalValue) {
+  if (mapper.contains(originalValue))
+    return mapper.lookup(originalValue);
+  return originalValue;
+}
 } // namespace helper

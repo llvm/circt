@@ -8,23 +8,24 @@ hir.func @readA at %t(
 %Ai :!hir.memref<16x16xi32> ports [#rd],
 %A : !hir.memref<16x(bank 16)xi32> ports[#wr]) ->(!hir.time){
 
+  hir.comment "readA"
   %0  = constant 0  :index
   %1  = constant 1:index
-  %ub = constant 15 :index
+  %ub = constant 2 :index
   %c0_i4  = constant 0:i4
   %c1_i4  = constant 1 :i4
-  %c15_i4 = constant 15:i4
+  %ub_i4 = constant 2:i4
 
   //Write to block ram A.
-  %t_done = hir.for %i : i4 = %c0_i4 to %c15_i4 step %c1_i4 iter_time(%ti = %t + 1){
+  %t_done = hir.for %i : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%ti = %t + 1){
     %tk_end=hir.for %k : index = %0 to %ub step %1 iter_time(%tk = %ti){
       %k_i4 = index_cast %k :index to i4
       %v =  hir.load %Ai[port 0][%i, %k_i4] at %tk : !hir.memref<16x16xi32> delay 1
       %i1 = hir.delay %i by 1  at %tk : i4
       hir.store %v to %A[port 0][%i1, %k] at %tk + 1 : !hir.memref<16x(bank 16)xi32> delay 1
-      hir.for.next_iter at %tk + 1
+      hir.next_iter at %tk + 1
     }{unroll}
-    hir.for.next_iter at %tk_end + 1
+    hir.next_iter at %tk_end + 1
   }
   hir.return (%t_done) :(!hir.time)
 }{inline}
@@ -32,25 +33,26 @@ hir.func @readA at %t(
 hir.func @readB at %t(
 %Bi : !hir.memref<16x16xi32> ports [#rd], 
 %Bw : !hir.memref<(bank 16)x(bank 16)xi32> ports [#wr]) -> (!hir.time){
+  hir.comment "readB"
 
   %0  = constant 0:index
   %1  = constant 1:index
-  %ub = constant 15:index
+  %ub = constant 2:index
   %c0_i4  = constant 0:i4
   %c1_i4  = constant 1 :i4
-  %c15_i4 = constant 15:i4
+  %ub_i4 = constant 2:i4
   %c0_i1  = constant 0:i1
 
   //Write to register array B.
   %buff = hir.alloca("reg") : !hir.memref<1xi32> ports [#reg_rd,#reg_wr]
 
-  hir.for %j : i4 = %c0_i4  to %c15_i4 step %c1_i4 iter_time(%tj = %t + 1){
-    %tk_end =hir.for %k : i4 = %c0_i4 to %c15_i4 step %c1_i4 iter_time(%tk = %tj + 1){
+  hir.for %j : i4 = %c0_i4  to %ub_i4 step %c1_i4 iter_time(%tj = %t + 1){
+    %tk_end =hir.for %k : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%tk = %tj + 1){
       %v =  hir.load %Bi[port 0][%k,%j] at %tk : !hir.memref<16x16xi32> delay 1
       hir.store %v to %buff[port 1][%c0_i1] at %tk + 1 : !hir.memref<1xi32>
-      hir.for.next_iter at %tk + 1 
+      hir.next_iter at %tk + 1 
     }
-    hir.for.next_iter at %tk_end + 1 
+    hir.next_iter at %tk_end + 1 
   }
 
   %tt = hir.time %t + 3 : !hir.time
@@ -59,9 +61,9 @@ hir.func @readB at %t(
     %tk_end=hir.for %k:index = %0 to %ub step %1 iter_time(%tk = %tj+1){
       %v =  hir.load %buff[port 0][%c0_i1] at %tk : !hir.memref<1xi32>
       hir.store %v to %Bw[port 0][%k, %j] at %tk : !hir.memref<(bank 16)x(bank 16)xi32>
-      hir.for.next_iter at %tk + 1
+      hir.next_iter at %tk + 1
     }{unroll}
-    hir.for.next_iter at %tk_end + 1
+    hir.next_iter at %tk_end + 1
   }{unroll}
   %t_done = hir.time %t_j_loop_done + 16: !hir.time
   hir.return (%t_done) : (!hir.time)
@@ -72,25 +74,28 @@ hir.func @kernel at %t(
 %B : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_rd],
 %C: !hir.memref<16x(bank 16)xi32> ports [#wr])->(!hir.time){
 
+  hir.comment "kernel"
   %0  = constant 0 :index 
   %1  = constant 1 :index 
-  %ub = constant 15:index  
+  %ub = constant 2:index  
   %16 = constant 16:index  
   %c0_i4  = constant 0 :i4 
   %c0_i32  = constant 0 :i32 
   %c1_i4  = constant 1 :i4 
-  %c15_i4 = constant 15:i4  
+  %ub_i4 = constant 2:i4  
 
-  %t_i_loop_done = hir.for %i : i4 = %c0_i4 to %c15_i4 step %c1_i4 iter_time(%ti = %t + 1){
-  hir.for %j : index = %0 to %ub step %1 iter_time(%tj = %ti){
+  %t_i_loop_done = hir.for %i : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%ti = %t + 1){
+    hir.for %j : index = %0 to %ub step %1 iter_time(%tj = %ti){
+      hir.comment "j loop"
       %C_bus = hir.bus.instantiate : tensor<17x!hir.bus<i32>>
       %c_bus = hir.tensor.extract %C_bus[%0] : tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports ["send"]
       hir.send %c0_i32 to %c_bus[0] at %tj + 3 : i32 to !hir.bus<i32>
 
       %tk_end = hir.for %k:index = %0 to %ub step %1 iter_time(%tk = %tj){
+        hir.comment "k loop"
         %isFirstCol = cmpi "eq", %k , %0 : index
         %a = hir.if %isFirstCol at time( %tif = %tk) -> (i32 delay 1){
-          %a = hir.load %A[port 0][%i, %k] at %tif  : !hir.memref<16x(bank 16)xi32>
+          %a = hir.load %A[port 0][%i, %k] at %tif  {names=["a"]}: !hir.memref<16x(bank 16)xi32>
           hir.yield (%a) : (i32)
         }else{
           hir.yield (%c0_i32) : (i32)
@@ -105,14 +110,14 @@ hir.func @kernel at %t(
         %kPlus1 = addi %k, %1 :index
         %c_bus_kplus1 = hir.tensor.extract %C_bus[%kPlus1]: tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports["send"]
         hir.send %c to %c_bus_kplus1[0] at %tk + 4  : i32 to !hir.bus<i32>
-        hir.for.next_iter at %tk + 1 
+        hir.next_iter at %tk + 1 
       }{unroll}
-        %c_bus_last = hir.tensor.extract %C_bus[%16]: tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports["recv"]
+      %c_bus_last = hir.tensor.extract %C_bus[%16]: tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports["recv"]
       %acc = hir.recv %c_bus_last[0] at %tk_end + 3 : !hir.bus<i32> -> i32
       hir.store %acc to %C[port 0][%i, %j] at %tk_end + 3 : !hir.memref<16x(bank 16)xi32>
-      hir.for.next_iter at %tj + 1 
+      hir.next_iter at %tj + 1 
     }{unroll}
-    hir.for.next_iter at %ti + 1 
+    hir.next_iter at %ti + 1 
   } 
   %t_done = hir.time %t_i_loop_done + 32 :!hir.time 
 
@@ -123,21 +128,22 @@ hir.func @writeC at %t(
 %Ci: !hir.memref<16x(bank 16)xi32> ports [#rd],
 %Co : !hir.memref<16x16xi32> ports [#wr]) -> (!hir.time){
 
+  hir.comment "writeC"
   %0  = constant 0 :index 
   %1  = constant 1 :index 
-  %ub = constant 15:index  
+  %ub = constant 2:index  
   %c0_i4  = constant 0:i4
   %c1_i4  = constant 1:i4
-  %c15_i4 = constant 15:i4
+  %ub_i4 = constant 2:i4
 
-  %t_i_loop_done = hir.for %i : i4 = %c0_i4 to %c15_i4 step %c1_i4 iter_time(%ti = %t){
+  %t_i_loop_done = hir.for %i : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%ti = %t){
     %tnext = hir.for %j:index = %0 to %ub step %1 iter_time(%tj = %ti){
       %v = hir.load %Ci[port 0][%i, %j] at %tj : !hir.memref<16x(bank 16)xi32>
       %j_i4 = index_cast %j : index to i4
       hir.store %v to %Co[port 0][%i, %j_i4] at %tj + 1  : !hir.memref<16x16xi32>
-      hir.for.next_iter at %tj + 1 
+      hir.next_iter at %tj + 1 
     }{unroll}
-    hir.for.next_iter at %tnext + 1
+    hir.next_iter at %tnext + 1
   }
   %t_done = hir.time %t_i_loop_done + 16:!hir.time
   hir.return (%t_done):(!hir.time)

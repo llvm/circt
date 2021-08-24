@@ -1,7 +1,9 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
+#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/PatternMatch.h"
+
 // returns the bitwidth of the type.
 namespace helper {
 llvm::Optional<uint64_t> getBitWidth(mlir::Type);
@@ -43,4 +45,6 @@ bool isRead(mlir::Attribute port);
 llvm::StringRef extractBusPortFromDict(mlir::DictionaryAttr dict);
 llvm::StringRef getInlineAttrName();
 void eraseOps(mlir::ArrayRef<mlir::Operation *> opsToErase);
+mlir::Value lookupOrOriginal(mlir::BlockAndValueMapping &mapper,
+                             mlir::Value originalValue);
 } // namespace helper
