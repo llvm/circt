@@ -92,9 +92,10 @@ firrtl.circuit "FooI"  attributes {annotations = [{a = "a", class = "circt.test"
 
 // CHECK-LABEL: firrtl.circuit "FooNL"
 // CHECK: firrtl.module @BarNL
-// CHECK: firrtl.wire {annotations = [{circt.nonlocal.key = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w", circt.nonlocal.parent = "bar", class = "circt.test", nl = "nl"}]}
-// CHECK: firrtl.instance @BarNL {annotations = [{circt.nonlocal.key = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w", circt.nonlocal.parent = "baz", class = "circt.nonlocal"}], name = "bar"}
-// CHECK: firrtl.instance @BazNL {annotations = [{circt.nonlocal.child = "bar", circt.nonlocal.key = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w", class = "circt.nonlocal"}], name = "baz"
+// CHECK: firrtl.wire {annotations = [{circt.nonlocal = @"~FooNL|FooNL/baz:BazNL/bar:BarNL>w_NA_0", class = "circt.test", nl = "nl"}]}
+// CHECK: firrtl.instance @BarNL {annotations = [{circt.nonlocal = @"~FooNL|FooNL/baz:BazNL/bar:BarNL>w_NA_0", class = "circt.nonlocal"}], name = "bar"}
+// CHECK: firrtl.instance @BazNL {annotations = [{circt.nonlocal = @"~FooNL|FooNL/baz:BazNL/bar:BarNL>w_NA_0", class = "circt.nonlocal"}], name = "baz"
+// CHECK: firrtl.nla @"~FooNL|FooNL/baz:BazNL/bar:BarNL>w_NA_0"
 firrtl.circuit "FooNL"  attributes {annotations = [{class = "circt.test", nl = "nl", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w"}]}  {
   firrtl.module @BarNL() {
     %w = firrtl.wire  : !firrtl.uint
