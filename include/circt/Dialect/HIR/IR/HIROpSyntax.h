@@ -66,3 +66,6 @@ void printBinOpOperandsAndResultType(mlir::OpAsmPrinter &, Operation *, Type,
 
 ParseResult parseCopyType(mlir::OpAsmParser &parser, Type &destTy, Type srcTy);
 void printCopyType(mlir::OpAsmPrinter &, Operation *, Type, Type);
+
+ParseResult parseWithSSANames(mlir::OpAsmParser &, mlir::NamedAttrList &);
+void printWithSSANames(mlir::OpAsmPrinter &, Operation *, mlir::DictionaryAttr);

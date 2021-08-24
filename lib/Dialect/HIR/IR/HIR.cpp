@@ -256,7 +256,7 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
     return failure();
   parseTimeAndOffset(parser, tstart, offset);
 
-  if (parser.parseOptionalAttrDict(result.attributes))
+  if (parseWithSSANames(parser, result.attributes))
     return failure();
 
   // parse arg types and delays.
@@ -300,9 +300,7 @@ static void printCallOp(OpAsmPrinter &printer, CallOp op) {
   printer << "hir.call @" << op.callee();
   printer << "(" << op.operands() << ") at ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
-  printer.printOptionalAttrDict(
-      op->getAttrs(), SmallVector<StringRef>({"operand_segment_sizes", "callee",
-                                              "funcTy", "offset"}));
+  printWithSSANames(printer, op, op->getAttrDictionary());
   printer << " : ";
   printer << op.funcTy();
 }
@@ -384,7 +382,7 @@ static void printCallInstanceOp(OpAsmPrinter &printer, CallInstanceOp op) {
 /// IfOp
 static void printIfOp(OpAsmPrinter &printer, IfOp op) {
 
-  printer << "hir.if " << op.cond();
+  printer << "hir.if " << op.condition();
 
   printer << " at time(" << op.if_region().getArgument(0) << " = ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
@@ -402,6 +400,7 @@ static void printIfOp(OpAsmPrinter &printer, IfOp op) {
 
   printer << "else";
   printer.printRegion(op.else_region(), false, true);
+  printWithSSANames(printer, op, op->getAttrDictionary());
 }
 
 static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
@@ -459,6 +458,8 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
   if (parser.parseRegion(*elseBody, {timevar}, {hir::TimeType::get(context)}))
     return failure();
 
+  parseWithSSANames(parser, result.attributes);
+
   // IfOp::ensureTerminator(*ifBody, builder, result.location);
   return success();
 }
@@ -502,6 +503,9 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
           *body, {iterTimeVar},
           {hir::TimeType::get(parser.getBuilder().getContext())}))
     return failure();
+  // Parse the attr-dict
+  if (parseWithSSANames(parser, result.attributes))
+    return failure();
   result.addTypes(TimeType::get(parser.getBuilder().getContext()));
   return success();
 }
@@ -515,8 +519,7 @@ static void printWhileOp(OpAsmPrinter &printer, WhileOp op) {
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/true);
 
-  printer.printOptionalAttrDict(op->getAttrs(),
-                                SmallVector<StringRef>({"offset"}));
+  printWithSSANames(printer, op, op->getAttrDictionary());
 }
 
 // ForOp.
@@ -573,7 +576,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // Parse the attr-dict
-  if (parser.parseOptionalAttrDict(result.attributes))
+  if (parseWithSSANames(parser, result.attributes))
     return failure();
 
   // ForOp result is the time at which last iteration calls next_iter.
@@ -596,8 +599,7 @@ static void printForOp(OpAsmPrinter &printer, ForOp op) {
                       /*printEntryBlockArgs=*/false,
                       /*printBlockTerminators=*/true);
 
-  printer.printOptionalAttrDict(op->getAttrs(),
-                                SmallVector<StringRef>({"offset"}));
+  printWithSSANames(printer, op, op->getAttrDictionary());
 }
 
 Region &ForOp::getLoopBody() { return body(); }

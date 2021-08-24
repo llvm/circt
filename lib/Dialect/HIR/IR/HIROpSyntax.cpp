@@ -260,3 +260,71 @@ ParseResult parseCopyType(mlir::OpAsmParser &parser, Type &destTy, Type srcTy) {
   return success();
 }
 void printCopyType(mlir::OpAsmPrinter &, Operation *, Type, Type) {}
+
+ParseResult parseWithSSANames(mlir::OpAsmParser &parser,
+                              mlir::NamedAttrList &attrDict) {
+
+  if (parser.parseOptionalAttrDict(attrDict))
+    return failure();
+
+  // If the attribute dictionary contains no 'names' attribute, infer it from
+  // the SSA name (if specified).
+  bool hadNames = llvm::any_of(
+      attrDict, [](NamedAttribute attr) { return attr.first == "names"; });
+
+  // If there was no name specified, check to see if there was a useful name
+  // specified in the asm file.
+  if (hadNames || parser.getNumResults() == 0)
+    return success();
+
+  SmallVector<StringRef, 4> names;
+  auto *context = parser.getBuilder().getContext();
+
+  for (size_t i = 0, e = parser.getNumResults(); i != e; ++i) {
+    auto resultName = parser.getResultName(i);
+    StringRef nameStr;
+    if (!resultName.first.empty() && !isdigit(resultName.first[0]))
+      nameStr = resultName.first;
+
+    names.push_back(nameStr);
+  }
+
+  auto namesAttr = parser.getBuilder().getStrArrayAttr(names);
+  attrDict.push_back({Identifier::get("names", context), namesAttr});
+  return success();
+}
+
+void printWithSSANames(mlir::OpAsmPrinter &printer, Operation *op,
+                       mlir::DictionaryAttr attrDict) {
+
+  // Note that we only need to print the "name" attribute if the asmprinter
+  // result name disagrees with it.  This can happen in strange cases, e.g.
+  // when there are conflicts.
+  auto names = op->getAttrOfType<ArrayAttr>("names");
+  bool namesDisagree;
+  if (names)
+    namesDisagree = names.size() != op->getNumResults();
+  else
+    namesDisagree = true;
+
+  SmallString<32> resultNameStr;
+  for (size_t i = 0, e = op->getNumResults(); i != e && !namesDisagree; ++i) {
+    resultNameStr.clear();
+    llvm::raw_svector_ostream tmpStream(resultNameStr);
+    printer.printOperand(op->getResult(i), tmpStream);
+
+    auto expectedName = names[i].dyn_cast<StringAttr>();
+    if (!expectedName ||
+        tmpStream.str().drop_front() != expectedName.getValue()) {
+      namesDisagree = true;
+    }
+  }
+  SmallVector<StringRef, 10> elidedAttrs = {
+      "offset", "delay",        "ports",
+      "port",   "result_attrs", "callee",
+      "funcTy", "portNums",     "operand_segment_sizes",
+      "index"};
+  if (!namesDisagree)
+    elidedAttrs.push_back("names");
+  printer.printOptionalAttrDict(op->getAttrs(), elidedAttrs);
+}

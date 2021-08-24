@@ -65,6 +65,21 @@ struct HIRInlinerInterface : public mlir::DialectInlinerInterface {
       valuesToRepl[it.index()].replaceAllUsesWith(it.value());
   }
 };
+struct HIROpAsmDialectInterface : public mlir::OpAsmDialectInterface {
+  using mlir::OpAsmDialectInterface::OpAsmDialectInterface;
+  void getAsmResultNames(Operation *operation,
+                         mlir::OpAsmSetValueNameFn setNameFn) const override {
+    auto value = operation->getAttr("names").dyn_cast_or_null<ArrayAttr>();
+
+    if (!value || operation->getNumResults() != value.size())
+      return;
+
+    for (size_t i = 0, e = value.size(); i != e; ++i)
+      if (auto str = value[i].dyn_cast<StringAttr>())
+        if (!str.getValue().empty())
+          setNameFn(operation->getResult(i), str.getValue());
+  }
+};
 } // end anonymous namespace
 
 //-----------------------------------------------------------------------------
@@ -76,7 +91,7 @@ void HIRDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/IR/HIR.cpp.inc"
       >();
-  addInterfaces<HIRInlinerInterface>();
+  addInterfaces<HIRInlinerInterface, HIROpAsmDialectInterface>();
 }
 
 Operation *HIRDialect::materializeConstant(OpBuilder &builder, Attribute value,
