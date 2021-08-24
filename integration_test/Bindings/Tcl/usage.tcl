@@ -6,6 +6,13 @@ set circuit [circt load MLIR [lindex $argv 2]/integration_test/Bindings/Tcl/Inpu
 
 foreach op [circt query [usage *] [circt query [inst * [op wire]] $circuit]] {
   puts $op
+# CHECK: sv.passign %0, %false : i1
 }
 
-# CHECK: sv.passign %0, %false : i1
+foreach op [circt query [usage *] $circuit] {
+  puts $op
+# CHECK: %owo1.owo_result = hw.instance "owo1" @owo() : () -> i32
+# CHECK: hw.instance "uwu1" @uwu() : () -> ()
+# CHECK: hw.instance "nya1" @nya(%owo1.owo_result) : (i32) -> ()
+}
+
