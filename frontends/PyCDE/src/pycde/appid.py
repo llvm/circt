@@ -8,8 +8,13 @@ import mlir.ir as ir
 
 from typing import Tuple
 
+# TODO: consider moving this functionality into C++.
+
 
 class AppID:
+  """AppID models the instance hierarchy which the architect cares about.
+  Specifically, AppIDs can skip levels in the instances hierarchy and persist
+  through hierarchy changes."""
 
   def __init__(self, *appid: Tuple[str]):
     assert len(appid) > 0
@@ -36,6 +41,9 @@ class AppID:
 
 
 class AppIDIndex(dict):
+  """Model the AppID hierarchy. Provides the ability to attach attributes to
+  AppIDs rather than instances, to get applied once the design is fully
+  generated."""
 
   def __init__(self):
     self._children: dict[str, AppIDIndex] = dict()

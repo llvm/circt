@@ -57,7 +57,7 @@ t.walk_instances("pycde_Test", lambda inst: print(inst))
 
 
 locs = pycde.AppIDIndex()
-locs.lookup(pycde.AppID(["pycde_UnParameterized_0"]))["loc"] = \
+locs.lookup(pycde.AppID("pycde_UnParameterized_0"))["loc"] = \
   (["memory", "bank"], msft.M20K, 39, 25, 0)
 
 
