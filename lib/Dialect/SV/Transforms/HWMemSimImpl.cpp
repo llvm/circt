@@ -126,24 +126,23 @@ void HWMemSimImplPass::generateMemory(hw::HWModuleOp op, FirMemory mem) {
     auto rWire = b.create<sv::WireOp>(wdata.getType());
     Value rdata = b.create<sv::ReadInOutOp>(rWire);
 
-    // RW logic
+    // Read logic.
+    Value rcond = b.createOrFold<comb::AndOp>(
+        en, b.createOrFold<comb::ICmpOp>(
+                comb::ICmpPredicate::eq, wmode,
+                b.createOrFold<hw::ConstantOp>(wmode.getType(), 0)));
+    Value slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
+    Value x = b.create<sv::ConstantXOp>(dataType);
+    b.create<sv::AssignOp>(
+        rWire,
+        b.create<comb::MuxOp>(rcond, b.create<sv::ReadInOutOp>(slot), x));
+
+    // Write logic.
     b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clock, [&]() {
-      auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
-      auto rcond = b.createOrFold<comb::AndOp>(
-          en, b.createOrFold<comb::ICmpOp>(
-                  comb::ICmpPredicate::eq, wmode,
-                  b.createOrFold<hw::ConstantOp>(wmode.getType(), 0)));
       auto wcond = b.createOrFold<comb::AndOp>(
           en, b.createOrFold<comb::AndOp>(wmask, wmode));
-
-      b.create<sv::PAssignOp>(rWire, b.create<sv::ConstantXOp>(dataType));
-      b.create<sv::IfOp>(
-          wcond, [&]() { b.create<sv::PAssignOp>(slot, wdata); },
-          [&]() {
-            b.create<sv::IfOp>(rcond, [&]() {
-              b.create<sv::PAssignOp>(rWire, b.create<sv::ReadInOutOp>(slot));
-            });
-          });
+      b.create<sv::IfOp>(wcond,
+                         [&]() { b.create<sv::PAssignOp>(slot, wdata); });
     });
     outputs.push_back(rdata);
   }

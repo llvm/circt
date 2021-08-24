@@ -28,22 +28,19 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0, @FIRRTLMem(%ro_clock_0: i1, %r
 //CHECK-NEXT:  %[[readres:.+]] = comb.mux %ro_en_0, %[[read]], %[[x]]
 //CHECK-NEXT:  %[[rwtmp:.+]] = sv.wire
 //CHECK-NEXT:  %[[rwres:.+]] = sv.read_inout %[[rwtmp]]
+//CHECK-NEXT:  %false = hw.constant false
+//CHECK-NEXT:  %[[rwrcondpre:.+]] = comb.icmp eq %rw_wmode_0, %false
+//CHECK-NEXT:  %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]
+//CHECK-NEXT:  %[[rwslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
+//CHECK-NEXT:  %[[x2:.+]] = sv.constantX
+//CHECK-NEXT:  %[[rwdata:.+]] = sv.read_inout %[[rwslot]]
+//CHECK-NEXT:  %[[rwdata2:.+]] = comb.mux %[[rwrcond]], %[[rwdata]], %[[x2]]
+//CHECK-NEXT:  sv.assign %[[rwtmp]], %[[rwdata2:.+]]
 //CHECK-NEXT:    sv.alwaysff(posedge %rw_clock_0)  {
-//CHECK-NEXT:      %[[rwslot:.+]] = sv.array_index_inout %Memory[%rw_addr_0]
-//CHECK-NEXT:      %false = hw.constant false
-//CHECK-NEXT:      %[[rwrcondpre:.+]] = comb.icmp eq %rw_wmode_0, %false
-//CHECK-NEXT:      %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]
 //CHECK-NEXT:      %[[rwwcondpre:.+]] = comb.and %rw_wmask_0, %rw_wmode_0
 //CHECK-NEXT:      %[[rwwcond:.+]] = comb.and %rw_en_0, %[[rwwcondpre]]
-//CHECK-NEXT:      %[[x2:.+]] = sv.constantX
-//CHECK-NEXT:      sv.passign %[[rwtmp]], %[[x2]]
 //CHECK-NEXT:      sv.if %[[rwwcond]]  {
 //CHECK-NEXT:        sv.passign %[[rwslot]], %rw_wdata_0
-//CHECK-NEXT:      } else  {
-//CHECK-NEXT:        sv.if %[[rwrcond]]  {
-//CHECK-NEXT:          %[[rwdata:.+]] = sv.read_inout %[[rwslot]]
-//CHECK-NEXT:          sv.passign %[[rwtmp]], %[[rwdata]]
-//CHECK-NEXT:        }
 //CHECK-NEXT:      }
 //CHECK-NEXT:    }
 //CHECK-NEXT:  sv.alwaysff(posedge %wo_clock_0)  {
