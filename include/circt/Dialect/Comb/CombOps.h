@@ -20,11 +20,29 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+namespace llvm {
+struct KnownBits;
+}
+
 namespace mlir {
 class PatternRewriter;
 }
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Comb/Comb.h.inc"
+
+namespace circt {
+namespace comb {
+
+using llvm::KnownBits;
+
+/// Compute "known bits" information about the specified value - the set of bits
+/// that are guaranteed to always be zero, and the set of bits that are
+/// guaranteed to always be one (these must be exclusive!).  A bit that exists
+/// in neither set is unknown.
+KnownBits computeKnownBits(Value value);
+
+} // namespace comb
+} // namespace circt
 
 #endif // CIRCT_DIALECT_COMB_COMBOPS_H

@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_PASSES_H
 #define CIRCT_DIALECT_FIRRTL_PASSES_H
 
+#include "mlir/Pass/PassRegistry.h"
 #include "llvm/ADT/Optional.h"
 #include <memory>
 
@@ -27,6 +28,8 @@ std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass();
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
+std::unique_ptr<mlir::Pass> createLowerCHIRRTLPass();
+
 std::unique_ptr<mlir::Pass> createIMConstPropPass();
 
 std::unique_ptr<mlir::Pass> createInlinerPass();
@@ -36,6 +39,8 @@ std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 
 std::unique_ptr<mlir::Pass> createInferWidthsPass();
+
+std::unique_ptr<mlir::Pass> createInferResetsPass();
 
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 

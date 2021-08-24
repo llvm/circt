@@ -32,7 +32,7 @@
 // CHECK:           %[[VAL_24:.*]] = llvm.extractvalue %[[VAL_19]][0 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_25:.*]] = llvm.extractvalue %[[VAL_19]][1 : i32] : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_26:.*]] = llvm.extractvalue %[[VAL_19]][2 : i32] : !llvm.array<3 x i64>
-// CHECK:           %[[VAL_27:.*]] = llvm.call @driveSignal(%[[VAL_0]], %[[VAL_5]], %[[VAL_23]], %[[VAL_20]], %[[VAL_24]], %[[VAL_25]], %[[VAL_26]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> !llvm.void
+// CHECK:           llvm.call @driveSignal(%[[VAL_0]], %[[VAL_5]], %[[VAL_23]], %[[VAL_20]], %[[VAL_24]], %[[VAL_25]], %[[VAL_26]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> ()
 // CHECK:           llvm.return
 // CHECK:         }
 

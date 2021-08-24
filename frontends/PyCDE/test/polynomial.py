@@ -95,7 +95,7 @@ class PolynomialSystem:
 poly = pycde.System([PolynomialSystem])
 
 print("Generating 1...")
-poly.generate()
+poly.generate(iters=1)
 
 print("Printing...")
 poly.print()
@@ -107,7 +107,7 @@ poly.print()
 # CHECK:    hw.output [[REG0]] : i32
 
 print("Generating 2...")
-poly.generate()
+poly.generate(iters=1)
 
 print("Printing...")
 poly.print()

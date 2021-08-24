@@ -30,8 +30,8 @@ using namespace firrtl;
 /// operation's name.
 static void rename(StringRef prefix, Operation *op) {
   llvm::TypeSwitch<Operation *>(op)
-      .Case<CMemOp, InstanceOp, MemOp, MemoryPortOp, NodeOp, RegOp, RegResetOp,
-            SMemOp, WireOp>([&](auto op) {
+      .Case<CombMemOp, InstanceOp, MemOp, MemoryPortOp, NodeOp, RegOp,
+            RegResetOp, SeqMemOp, WireOp>([&](auto op) {
         op.nameAttr(
             StringAttr::get(op.getContext(), (prefix + op.name()).str()));
       });

@@ -60,14 +60,17 @@ def FModuleOp : FIRRTLOp<"module",
   }];
   let arguments =
             (ins StrArrayAttr:$portNames,
-                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+                 DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
+
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
-               CArg<"ArrayAttr","{}">:$annotations)>
+               CArg<"ArrayAttr","ArrayAttr()">:$annotations,
+               CArg<"ArrayAttr","ArrayAttr()">:$portAnnotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -138,8 +141,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let arguments = (ins StrArrayAttr:$portNames,
                        OptionalAttr<StrAttr>:$defname,
                        OptionalAttr<DictionaryAttr>:$parameters,
-                       DefaultValuedAttr<AnnotationArrayAttr,
-                                         "{}">:$annotations);
+                       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+                       DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -148,7 +151,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
-                      CArg<"ArrayAttr", "{}">:$annotations)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+                      CArg<"ArrayAttr","ArrayAttr()">:$portAnnotations)>
   ];
 
   let extraClassDeclaration = [{

@@ -141,8 +141,8 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
     }
   }
 
-  // CHECK-NEXT: %combWire = sv.wire : !hw.inout<i1>
-  %combWire = sv.wire : !hw.inout<i1>
+  // CHECK-NEXT: %combWire = sv.reg : !hw.inout<i1>
+  %combWire = sv.reg : !hw.inout<i1>
   // CHECK-NEXT: %combWire2 = sv.wire : !hw.inout<i1>
   %combWire2 = sv.wire : !hw.inout<i1>
   // CHECK-NEXT: %regForce = sv.reg : !hw.inout<i1>

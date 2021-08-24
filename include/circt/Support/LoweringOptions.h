@@ -40,6 +40,10 @@ struct LoweringOptions {
   /// ModuleOp.
   LoweringOptions(mlir::ModuleOp module);
 
+  /// Return the value of the `circt.loweringOptions` in the specified module
+  /// if present, or a null attribute if not.
+  static StringAttr getAttributeFrom(ModuleOp module);
+
   /// Read in options from a string, overriding only the set options in the
   /// string.
   void parse(StringRef options, ErrorHandlerT callback);
@@ -62,6 +66,10 @@ struct LoweringOptions {
   /// `always` statements, instead of forcing them to be simple wires. Some EDA
   /// tools rely on these being simple wires.
   bool allowExprInEventControl = false;
+
+  /// If true, lowering will eliminate packed arrays for tools that don't
+  /// support them (e.g. Yosys).
+  bool disallowPackedArrays = false;
 
   /// This is the target width of lines in an emitted verilog source file in
   /// columns.

@@ -4,6 +4,9 @@
 #include "circt-c/Query.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/Parser.h"
 #include "mlir/Support/FileUtilities.h"
@@ -249,6 +252,7 @@ static int operationTypeSetFromAnyProc(Tcl_Interp *interp, Tcl_Obj *obj) {
 static void operationTypeUpdateStringProc(Tcl_Obj *obj) {
   std::string str;
   auto *op = unwrap((MlirOperation){obj->internalRep.twoPtrValue.ptr1});
+
   llvm::raw_string_ostream stream(str);
   op->print(stream);
   obj->length = str.length();

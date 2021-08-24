@@ -48,25 +48,48 @@ namespace {
 /// particular instance in the module-instance hierarchy.
 struct Entity {
   Entity(TclOutputState &s)
-      : s(s), parent(nullptr), name("$parent"), insideEmittedModule(false) {}
-  Entity(Entity *parent, StringRef name, bool insideEmittedModule)
-      : s(parent->s), parent(parent), name(name),
+      : s(s), parent(nullptr), insideEmittedModule(false) {}
+  Entity(Entity *parent, InstanceOp inst, bool insideEmittedModule)
+      : s(parent->s), parent(parent), inst(inst),
         insideEmittedModule(insideEmittedModule) {}
 
   /// Return the entity inside this instance.
   Optional<Entity> enter(InstanceOp inst);
   /// Emit a physical location tcl command.
-  LogicalResult emit(Operation *, StringRef attrName, StringRef instName,
-                     PhysLocationAttr);
+  LogicalResult emit(Operation *, StringRef attrName, PhysLocationAttr);
   /// Emit the entity hierarchy.
   void emitPath();
 
   TclOutputState &s;
   Entity *parent;
-  StringRef name;
+  InstanceOp inst;
   bool insideEmittedModule;
 
   StringSet<> emittedAttrKeys;
+
+  StringRef name() {
+    if (inst == nullptr)
+      return "$parent";
+    return inst.instanceName();
+  }
+
+  Optional<InstanceIDAttr> instID() {
+    SmallVector<FlatSymbolRefAttr> stack;
+    return _instID(stack);
+  }
+
+private:
+  Optional<InstanceIDAttr> _instID(SmallVectorImpl<FlatSymbolRefAttr> &stack) {
+    if (parent == nullptr)
+      return {};
+    if (parent->parent == nullptr) {
+      SmallVector<FlatSymbolRefAttr, 32> reverseStack(llvm::reverse(stack));
+      return SymbolRefAttr::get(inst.getContext(), inst.instanceName(),
+                                reverseStack);
+    }
+    stack.push_back(SymbolRefAttr::get(inst.getContext(), inst.instanceName()));
+    return parent->_instID(stack);
+  }
 };
 } // anonymous namespace
 
@@ -78,17 +101,13 @@ Optional<Entity> Entity::enter(InstanceOp inst) {
                     s.modulesEmitted.find(mod) != s.modulesEmitted.end();
   s.modulesEmitted.insert(mod);
 
-  return Entity(this, inst.instanceName(), modEmitted);
+  return Entity(this, inst, modEmitted);
 }
 
 /// Emit tcl in the form of:
 /// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
-LogicalResult Entity::emit(Operation *op, StringRef attrKey, StringRef instName,
+LogicalResult Entity::emit(Operation *op, StringRef attrKey,
                            PhysLocationAttr pla) {
-  if (insideEmittedModule)
-    op->emitWarning(
-        "The placement information for this module has already been emitted. "
-        "Modules are required to only be instantiated once.");
 
   if (!attrKey.startswith_insensitive("loc:"))
     return op->emitError("Error in '")
@@ -124,8 +143,8 @@ LogicalResult Entity::emit(Operation *op, StringRef attrKey, StringRef instName,
   emitPath();
   // If instance name is specified, add it in between the parent entity path and
   // the child entity patch.
-  if (!instName.empty())
-    s.os << instName << '|';
+  if (auto inst = dyn_cast<hw::InstanceOp>(op))
+    s.os << inst.instanceName() << '|';
   else if (auto name = op->getAttrOfType<StringAttr>("name"))
     s.os << name.getValue() << '|';
   s.os << childEntity << '\n';
@@ -138,7 +157,15 @@ void Entity::emitPath() {
   if (parent)
     parent->emitPath();
   // Names are separated by '|'.
-  s.os << name << "|";
+  s.os << name() << "|";
+}
+
+static LogicalResult emitAttr(Entity &entity, Operation *op, StringRef key,
+                              Attribute attr) {
+  if (auto loc = attr.dyn_cast<PhysLocationAttr>())
+    if (failed(entity.emit(op, key, loc)))
+      return failure();
+  return success();
 }
 
 /// Export the TCL for a particular entity, corresponding to op. Do this
@@ -148,9 +175,7 @@ void Entity::emitPath() {
 static LogicalResult exportTcl(Entity &entity, Operation *op) {
   // Instances require a new child entity and trigger a descent of the
   // instantiated module in the new entity.
-  StringRef instName;
   if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
-    instName = inst.instanceName();
     Optional<Entity> inModule = entity.enter(inst);
     if (inModule && failed(exportTcl(*inModule, inst.getReferencedModule())))
       return failure();
@@ -162,10 +187,21 @@ static LogicalResult exportTcl(Entity &entity, Operation *op) {
     if (entity.emittedAttrKeys.find(attr.first) != entity.emittedAttrKeys.end())
       op->emitWarning("Attribute has already been emitted: '")
           << attr.first << "'";
+    if (failed(emitAttr(entity, op, attr.first, attr.second)))
+      return failure();
+  }
 
-    if (auto loc = attr.second.dyn_cast<PhysLocationAttr>())
-      if (failed(entity.emit(op, attr.first, instName, loc)))
+  // Iterate again through the attributes, looking for instance-specific
+  // attributes.
+  for (NamedAttribute attr : op->getAttrs()) {
+    if (auto instSwitch = attr.second.dyn_cast<SwitchInstanceAttr>()) {
+      auto instID = entity.instID();
+      if (!instID)
+        continue;
+      Attribute instAttr = instSwitch.lookup(*instID);
+      if (instAttr && failed(emitAttr(entity, op, attr.first, instAttr)))
         return failure();
+    }
   }
 
   auto result = op->walk([&](Operation *innerOp) {

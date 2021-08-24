@@ -11,7 +11,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     // CHECK: cells {
     // CHECK-NEXT:   c0 = A();
-    %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.cell "c0" @A : i8, i1, i1, i1, i8, i1
+    %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i8, i1, i1, i1, i8, i1
 
     // CHECK: wires {
     calyx.wires {

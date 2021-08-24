@@ -32,6 +32,11 @@ MLIR_CAPI_EXPORTED MlirOperation circtESIWrapModule(MlirOperation cModOp,
                                                     long numPorts,
                                                     const MlirStringRef *ports);
 
+MLIR_CAPI_EXPORTED void circtESIAppendMlirFile(MlirModule,
+                                               MlirStringRef fileName);
+MLIR_CAPI_EXPORTED MlirOperation circtESILookup(MlirModule,
+                                                MlirStringRef symbol);
+
 #ifdef __cplusplus
 }
 #endif

@@ -31,9 +31,11 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/Timing.h"
+#include "mlir/Support/ToolUtilities.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
@@ -63,6 +65,22 @@ static cl::opt<std::string>
     outputFilename("o",
                    cl::desc("Output filename, or directory for split output"),
                    cl::value_desc("filename"), cl::init("-"));
+
+static cl::opt<bool>
+    parseOnly("parse-only",
+              cl::desc("Stop after parsing inputs and annotations"));
+
+static cl::opt<bool>
+    splitInputFile("split-input-file",
+                   cl::desc("Split the input file into pieces and process each "
+                            "chunk independently"),
+                   cl::init(false), cl::Hidden);
+
+static cl::opt<bool>
+    verifyDiagnostics("verify-diagnostics",
+                      cl::desc("Check that emitted diagnostics match "
+                               "expected-* lines on the corresponding line"),
+                      cl::init(false), cl::Hidden);
 
 static cl::opt<bool> disableOptimization("disable-opt",
                                          cl::desc("disable optimizations"));
@@ -105,8 +123,18 @@ static cl::opt<bool>
                        cl::init(false));
 
 static cl::opt<bool>
+    lowerCHIRRTL("lower-chirrtl",
+                 cl::desc("lower CHIRRTL memories to FIRRTL memories"),
+                 cl::init(true));
+
+static cl::opt<bool>
     inferWidths("infer-widths",
                 cl::desc("run the width inference pass on firrtl"),
+                cl::init(true));
+
+static cl::opt<bool>
+    inferResets("infer-resets",
+                cl::desc("run the reset inference pass on firrtl"),
                 cl::init(true));
 
 static cl::opt<bool> extractTestCode("extract-test-code",
@@ -172,29 +200,21 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 
 /// Process a single buffer of the input.
 static LogicalResult
-processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
-              StringRef annotationFilename, TimingScope &ts,
-              MLIRContext &context,
-              std::function<LogicalResult(ModuleOp)> callback) {
-  // Register our dialects.
-  context.loadDialect<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
-                      sv::SVDialect>();
-
-  llvm::SourceMgr sourceMgr;
-  sourceMgr.AddNewSourceBuffer(std::move(ownedBuffer), llvm::SMLoc());
-  SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
-
+processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
+              llvm::function_ref<LogicalResult(ModuleOp)> callback) {
   // Add the annotation file if one was explicitly specified.
   std::string annotationFilenameDetermined;
-  if (!annotationFilename.empty()) {
-    if (!(sourceMgr.AddIncludeFile(annotationFilename.str(), llvm::SMLoc(),
+  if (!inputAnnotationFilename.empty()) {
+    if (!(sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
                                    annotationFilenameDetermined))) {
       llvm::errs() << "cannot open input annotation file '"
-                   << annotationFilename << "': No such file or directory\n";
+                   << inputAnnotationFilename
+                   << "': No such file or directory\n";
       return failure();
     }
   }
 
+  // Parse the input.
   OwningModuleRef module;
   if (inputFormat == InputFIRFile) {
     auto parserTimer = ts.nest("FIR Parser");
@@ -209,6 +229,12 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   if (!module)
     return failure();
 
+  // If the user asked for just a parse, stop here.
+  if (parseOnly) {
+    auto outputTimer = ts.nest("Output");
+    return callback(module.release());
+  }
+
   // Apply any pass manager command line options.
   PassManager pm(&context);
   pm.enableVerifier(verifyPasses);
@@ -220,9 +246,19 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
         createCSEPass());
   }
 
+  if (lowerCHIRRTL)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        firrtl::createLowerCHIRRTLPass());
+
   // Width inference creates canonicalization opportunities.
   if (inferWidths)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidthsPass());
+
+  if (inferResets)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+
+  if (blackBoxMemory)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
@@ -239,19 +275,15 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCheckCombCyclesPass());
 
   // If we parsed a FIRRTL file and have optimizations enabled, clean it up.
-  if (!disableOptimization) {
-    auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
-    modulePM.addPass(createSimpleCanonicalizerPass());
-  }
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
 
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
-  if (imconstprop)
+  if (imconstprop && !disableOptimization)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
-
-  if (blackBoxMemory)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
@@ -267,6 +299,13 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
     circuitPM.addPass(firrtl::createGrandCentralPass());
     circuitPM.addPass(firrtl::createGrandCentralTapsPass());
   }
+
+  // The above passes, IMConstProp in particular, introduce additional
+  // canonicalization opportunities that we should pick up here before we
+  // proceed to output-specific pipelines.
+  if (!disableOptimization)
+    pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
+        createSimpleCanonicalizerPass());
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
@@ -288,6 +327,9 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
 
   // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    // Legalize unsupported operations within the modules.
+    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+
     // Legalize the module names.
     pm.addPass(sv::createHWLegalizeNamesPass());
 
@@ -311,6 +353,58 @@ processBuffer(std::unique_ptr<llvm::MemoryBuffer> ownedBuffer,
   // of deallocating it.  There is no need to deallocate it right before
   // process exit.
   return callback(module.release());
+}
+
+/// Process a single split of the input. This allocates a source manager and
+/// creates a regular or verifying diagnostic handler, depending on whether the
+/// user set the verifyDiagnostics option.
+static LogicalResult
+processInputSplit(MLIRContext &context, TimingScope &ts,
+                  std::unique_ptr<llvm::MemoryBuffer> buffer,
+                  llvm::function_ref<LogicalResult(ModuleOp)> emitCallback) {
+  llvm::SourceMgr sourceMgr;
+  sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
+  if (verifyDiagnostics) {
+    SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
+    context.printOpOnDiagnostic(false);
+    (void)processBuffer(context, ts, sourceMgr, emitCallback);
+    return sourceMgrHandler.verify();
+  } else {
+    SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
+    return processBuffer(context, ts, sourceMgr, emitCallback);
+  }
+}
+
+/// Process the entire input provided by the user, splitting it up if the
+/// corresponding option was specified.
+static LogicalResult
+processInput(MLIRContext &context, TimingScope &ts,
+             std::unique_ptr<llvm::MemoryBuffer> input,
+             llvm::function_ref<LogicalResult(ModuleOp)> emitCallback) {
+  if (splitInputFile) {
+    // Emit an error if the user provides a separate annotation file alongside
+    // split input. This is technically not a problem, but the user likely
+    // expects the annotation file to be split as well, which is not the case.
+    // To prevent any frustration, we detect this constellation and emit an
+    // error here. The user can provide annotations for each split using the
+    // inline JSON syntax in FIRRTL.
+    if (!inputAnnotationFilename.empty()) {
+      llvm::errs() << "annotation file cannot be used with split input: "
+                      "use inline JSON syntax on FIRRTL `circuit` to specify "
+                      "per-split annotations\n";
+      return failure();
+    }
+
+    return splitAndProcessBuffer(
+        std::move(input),
+        [&](std::unique_ptr<MemoryBuffer> buffer, raw_ostream &) {
+          return processInputSplit(context, ts, std::move(buffer),
+                                   emitCallback);
+        },
+        llvm::outs());
+  } else {
+    return processInputSplit(context, ts, std::move(input), emitCallback);
+  }
 }
 
 /// This implements the top-level logic for the firtool command, invoked once
@@ -382,9 +476,12 @@ static LogicalResult executeFirtool(MLIRContext &context) {
     return failure();
   };
 
-  auto result = processBuffer(std::move(input), inputAnnotationFilename, ts,
-                              context, std::move(emitCallback));
-  if (failed(result))
+  // Register our dialects.
+  context.loadDialect<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
+                      sv::SVDialect>();
+
+  // Process the input.
+  if (failed(processInput(context, ts, std::move(input), emitCallback)))
     return failure();
 
   // If the result succeeded and we're emitting a file, close it.
@@ -408,12 +505,7 @@ int main(int argc, char **argv) {
   registerAsmPrinterCLOptions();
   registerLoweringCLOptions();
   // Parse pass names in main to ensure static initialization completed.
-  cl::ParseCommandLineOptions(argc, argv, "circt modular optimizer driver\n");
-
-  // -disable-opt turns off constant propagation (unless it was explicitly
-  // enabled).
-  if (disableOptimization && imconstprop.getNumOccurrences() == 0)
-    imconstprop = false;
+  cl::ParseCommandLineOptions(argc, argv, "MLIR-based FIRRTL compiler\n");
 
   MLIRContext context;
 

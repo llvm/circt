@@ -25,17 +25,3 @@ hw.module @top() {
   // expected-warning @+1 {{Attribute has already been emitted: 'loc:memBank1'}}
   hw.instance "foo2" @Foo() {"loc:memBank1" = #msft.physloc<DSP, 1, 0, 0> } : () -> ()
 }
-
-// -----
-
-hw.module.extern @Foo()
-
-hw.module @bar() {
-  // expected-warning @+1 {{The placement information for this module has already been emitted. Modules are required to only be instantiated once.}}
-  hw.instance "foo1" @Foo() {"loc:memBank" = #msft.physloc<DSP, 0, 0, 0> } : () -> ()
-}
-
-hw.module @top() {
-  hw.instance "bar1" @bar() : () -> ()
-  hw.instance "bar2" @bar() : () -> ()
-}

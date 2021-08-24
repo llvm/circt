@@ -1,59 +1,9 @@
-from typing import Type
 import circt.support as support
-from circt.dialects import hw, seq
+from circt.dialects import hw
 
 import mlir.ir as ir
 
 import os
-
-
-class Value:
-
-  def __init__(self, value, type=None):
-    from .pycde_types import PyCDEType
-    self.value = support.get_value(value)
-    if type is None:
-      self.type = PyCDEType(self.value.type)
-    else:
-      self.type = PyCDEType(type)
-
-  def __getitem__(self, sub):
-    ty = self.type.inner
-    if isinstance(ty, hw.ArrayType):
-      if isinstance(sub, int):
-        idx = int(sub)
-        if idx >= self.type.size:
-          raise ValueError("Subscript out-of-bounds")
-      else:
-        idx = support.get_value(sub)
-        if idx is None or not isinstance(support.type_to_pytype(idx.type),
-                                         ir.IntegerType):
-          raise TypeError("Subscript on array must be either int or MLIR int"
-                          f" Value, not {type(sub)}.")
-      with get_user_loc():
-        return Value(hw.ArrayGetOp.create(self.value, idx))
-
-    if isinstance(ty, hw.StructType):
-      fields = ty.get_fields()
-      if sub not in [name for name, _ in fields]:
-        raise ValueError(f"Struct field '{sub}' not found in {ty}")
-      with get_user_loc():
-        return Value(hw.StructExtractOp.create(self.value, sub))
-
-    raise TypeError(
-        "Subscripting only supported on hw.array and hw.struct types")
-
-  def __getattr__(self, attr):
-    ty = self.type.inner
-    if isinstance(ty, hw.StructType):
-      fields = ty.get_fields()
-      if attr in [name for name, _ in fields]:
-        with get_user_loc():
-          return Value(hw.StructExtractOp.create(self.value, attr))
-    raise AttributeError(f"'Value' object has no attribute '{attr}'")
-
-  def reg(self, clk, rst=None):
-    return seq.reg(self.value, clk, rst)
 
 
 # PyCDE needs a custom version of this to support python classes.
@@ -112,6 +62,7 @@ class OpOperandConnect(support.OpOperand):
 
 def obj_to_value(x, type, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
+  assert x is not None
 
   type = support.type_to_pytype(type)
   if isinstance(type, hw.TypeAliasType):
