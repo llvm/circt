@@ -36,7 +36,7 @@ hw.module @array_create_get_comb(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
   // CHECK:   case b10: {
   // CHECK:     sv.bpassign %casez_tmp, %arg2 : i8
   // CHECK:   }
-  // CHECK:   case b11: {
+  // CHECK:   default: {
   // CHECK:     sv.bpassign %casez_tmp, %arg3 : i8
   // CHECK:   }
   // CHECK: }
