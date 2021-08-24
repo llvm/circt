@@ -7,6 +7,8 @@
 #include "circt/Dialect/HIR/IR//helper.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/PatternMatch.h"
 
@@ -122,6 +124,38 @@ LogicalResult MemrefExtractOp::canonicalize(MemrefExtractOp op,
   return success();
 }
 
+LogicalResult IfOp::canonicalize(IfOp op, mlir::PatternRewriter &rewriter) {
+  LogicalResult result = splitOffsetIntoSeparateOp(op, rewriter);
+
+  auto constantOp =
+      dyn_cast_or_null<mlir::ConstantOp>(op.condition().getDefiningOp());
+  if (!constantOp)
+    return result;
+
+  int condition = constantOp.getValue().dyn_cast<IntegerAttr>().getInt();
+  BlockAndValueMapping operandMap;
+  SmallVector<Value> yieldedValues;
+  operandMap.map(op.getRegionTimeVar(), op.tstart());
+  Region &selectedRegion = condition ? op.if_region() : op.else_region();
+  for (Operation &operation : selectedRegion.front()) {
+    if (auto yieldOp = dyn_cast<hir::YieldOp>(operation)) {
+      assert(yieldOp.operands().size() == op.results().size());
+      for (Value value : yieldOp.operands())
+        yieldedValues.push_back(helper::lookupOrOriginal(operandMap, value));
+      continue;
+    }
+    rewriter.clone(operation, operandMap);
+  }
+  if (yieldedValues.size() > 0)
+    rewriter.replaceOp(op, yieldedValues);
+  return success();
+}
+
+LogicalResult NextIterOp::canonicalize(NextIterOp op,
+                                       mlir::PatternRewriter &rewriter) {
+
+  return splitOffsetIntoSeparateOp(op, rewriter);
+}
 OpFoldResult TimeOp::fold(ArrayRef<Attribute> operands) {
   auto timeVar = this->timevar();
   auto delay = this->delay();
@@ -139,10 +173,15 @@ OpFoldResult TimeOp::fold(ArrayRef<Attribute> operands) {
 
 OpFoldResult LatchOp::fold(ArrayRef<Attribute> operands) {
   auto input = this->input();
+  // If its a chain of latch ops then remove this op.
   if (auto latchOp = dyn_cast_or_null<hir::LatchOp>(input.getDefiningOp())) {
     if (this->tstart() == latchOp.tstart() &&
         this->offset() == latchOp.offset())
       return input;
   }
+  // If prev op is a constant then this latch op is unnecessary.
+  if (auto constantOp =
+          dyn_cast_or_null<mlir::ConstantOp>(input.getDefiningOp()))
+    return input;
   return {};
 }
