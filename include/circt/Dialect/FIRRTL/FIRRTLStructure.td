@@ -197,8 +197,8 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     annotations to anchor to in the global scope.  This let's components of the
     path point to a common entity.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins SymbolNameAttr:$sym_name, SymbolArrayAttr:$modpath, StringArrayAttr:$namepath);
   let results = (outs);
-  let assemblyFormat = [{ $sym_name attr-dict}];
+  let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
 }
 

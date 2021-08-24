@@ -12,7 +12,7 @@
 // CHECK: firrtl.wire {annotations = [{circt.nonlocal = @"~FooNL|FooNL/baz:BazNL/bar:BarNL>w_NA_0", class = "circt.test", nl = "nl"}]}
 // CHECK: firrtl.instance @BarNL {annotations = [{circt.nonlocal = @"~FooNL|FooNL/baz:BazNL/bar:BarNL>w_NA_0", class = "circt.nonlocal"}], name = "bar"}
 // CHECK: firrtl.instance @BazNL {annotations = [{circt.nonlocal = @"~FooNL|FooNL/baz:BazNL/bar:BarNL>w_NA_0", class = "circt.nonlocal"}], name = "baz"
-// CHECK: firrtl.nla @"~FooNL|FooNL/baz:BazNL/bar:BarNL>w_NA_0"
+// CHECK: firrtl.nla @"~FooNL|FooNL/baz:BazNL/bar:BarNL>w_NA_0" [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
 firrtl.circuit "FooNL"  attributes {annotations = [{class = "circt.test", nl = "nl", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w"}]}  {
   firrtl.module @BarNL() {
     %w = firrtl.wire  : !firrtl.uint
