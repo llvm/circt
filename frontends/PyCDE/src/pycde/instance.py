@@ -40,12 +40,7 @@ class Instance:
     return self.parent.path + [self]
 
   @property
-  def pathAttr(self) -> ir.MlirAttribute:
-    symrefs = [f"@{i.name}" for i in self.path]
-    return ir.Attribute.parse("::".join(symrefs))
-
-  @property
-  def pathToAttr(self) -> ir.MlirAttribute:
+  def path_attr(self) -> ir.MlirAttribute:
     symrefs = [f"@{i.name}" for i in self.path]
     if len(symrefs) <= 1:
       return None
@@ -100,7 +95,7 @@ class Instance:
       except TypeError:
         raise ValueError(
             f"Existing attribute ({existing_attr}) is not msft.switch.inst.")
-    cases.append((self.pathToAttr, attr))
+    cases.append((self.path_attr, attr))
     self.instOp.attributes[attr_key] = msft.SwitchInstanceAttr.get(cases)
 
   def place(self,
