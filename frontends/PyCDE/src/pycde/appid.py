@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import mlir.ir as ir
 
-from typing import Tuple
+from typing import Dict, Tuple, Union
 
 # TODO: consider moving this functionality into C++.
 
@@ -24,7 +24,7 @@ class AppID:
       self._parts.extend(p.split("."))
 
   @property
-  def head(self):
+  def head(self) -> str:
     return self._parts[0]
 
   @property
@@ -47,6 +47,7 @@ class AppIDIndex(dict):
 
   def __init__(self):
     self._children: dict[str, AppIDIndex] = dict()
+    self._used = False
 
   def lookup(self, appid: AppID) -> AppIDIndex:
     if appid is None:
@@ -58,12 +59,23 @@ class AppIDIndex(dict):
   def add_attribute(self, attr: Tuple[str, ir.Attribute]) -> None:
     self[attr[0]] = attr[1]
 
+  def find_unused(self) -> Union[AppIDIndex, Dict[str, AppIDIndex]]:
+    if not self._used and len(self) > 0:
+      return self
+    unused = {}
+    for (name, child) in self._children.items():
+      child_unused = child.find_unused()
+      if child_unused is not None:
+        unused[name] = child_unused
+    return None if len(unused) == 0 else unused
+
   @property
   def apply_attributes_visitor(self):
     from .instance import Instance
 
     def _visit(idx, inst: Instance):
       attrs = idx.lookup(inst.appid)
+      attrs._used = True
       for (akey, attr) in attrs.items():
         inst.attach_attribute(akey, attr)
 

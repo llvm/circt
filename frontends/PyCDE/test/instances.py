@@ -81,8 +81,13 @@ t.walk_instances("pycde_Test", place_inst)
 instance_attrs = pycde.AppIDIndex()
 loc = attrs.placement(["memory", "bank"], msft.M20K, 15, 25, 0)
 instance_attrs.lookup(pycde.AppID("pycde_UnParameterized")).add_attribute(loc)
-
+instance_attrs.lookup(pycde.AppID("pycde_UnParameterized",
+                                  "pycde_Nothing")).add_attribute(loc)
 t.walk_instances("pycde_Test", instance_attrs.apply_attributes_visitor)
+
+assert instance_attrs.find_unused() is None
+instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
+assert (len(instance_attrs.find_unused()) == 1)
 
 t.print()
 
@@ -91,6 +96,7 @@ print("=== Tcl")
 
 # CHECK-LABEL: proc pycde_Test_config { parent }
 # CHECK-NEXT:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|dsp_inst
+# CHECK-NEXT:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|memory|bank
 # CHECK-NEXT:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|memory|bank
 # CHECK-NEXT:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
 # CHECK-NEXT:  set_location_assignment M20K_X39_Y25_N0 -to $parent|pycde_UnParameterized_0|memory|bank
