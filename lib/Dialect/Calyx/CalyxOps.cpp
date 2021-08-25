@@ -19,6 +19,7 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/Support/LLVM.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
@@ -621,6 +622,68 @@ void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 /// Provide meaningful names to the result values of a RegisterOp.
 void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+//===----------------------------------------------------------------------===//
+// MemoryOp
+//===----------------------------------------------------------------------===//
+
+/// Provide meaningful names to the result values of a MemoryOp.
+void MemoryOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  SmallVector<StringRef> portNames;
+  SmallVector<SmallString<8>> addrNames;
+  for (size_t i = 0, e = addrSizes().size(); i != e; ++i) {
+    addrNames.emplace_back("addr" + std::to_string(i));
+    portNames.push_back(addrNames[i]);
+  }
+  portNames.push_back("write_data");
+  portNames.push_back("write_en");
+  portNames.push_back("read_data");
+  portNames.push_back("done");
+  getCellAsmResultNames(setNameFn, *this, portNames);
+}
+
+void MemoryOp::build(OpBuilder &builder, OperationState &state,
+                     Twine instanceName, int64_t width, ArrayRef<int64_t> sizes,
+                     ArrayRef<int64_t> addrSizes) {
+  state.addAttribute("name", builder.getStringAttr(instanceName));
+  state.addAttribute("width", builder.getI64IntegerAttr(width));
+  state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
+  state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
+  SmallVector<Type> types;
+  for (int64_t size : addrSizes)
+    types.push_back(builder.getIntegerType(size));
+  types.push_back(builder.getIntegerType(width));
+  types.push_back(builder.getI1Type());
+  types.push_back(builder.getIntegerType(width));
+  types.push_back(builder.getI1Type());
+  state.addTypes(types);
+}
+
+static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
+  auto sizes = memoryOp.sizes().getValue();
+  auto addrSizes = memoryOp.addrSizes().getValue();
+  size_t numDims = memoryOp.sizes().size();
+  size_t numAddrs = memoryOp.addrSizes().size();
+  if (numDims != numAddrs)
+    return memoryOp.emitOpError("mismatched number of dimensions (")
+           << numDims << ") and address sizes (" << numAddrs << ")";
+
+  size_t numExtraPorts = 4; // write data/enable and read data/done.
+  if (memoryOp.getNumResults() != numAddrs + numExtraPorts)
+    return memoryOp.emitOpError("incorrect number of address ports, expected ")
+           << numAddrs;
+
+  for (size_t i = 0; i < numDims; ++i) {
+    int64_t size = sizes[i].cast<IntegerAttr>().getInt();
+    int64_t addrSize = addrSizes[i].cast<IntegerAttr>().getInt();
+    if (llvm::Log2_64_Ceil(size) > addrSize)
+      return memoryOp.emitOpError("address size (")
+             << addrSize << ") for dimension " << i
+             << " can't address the entire range (" << size << ")";
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
