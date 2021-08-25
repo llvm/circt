@@ -282,8 +282,9 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   auto zeros =
       rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
 
+  // Remove the high bits which would be removed by the Shl.
   auto extract =
-      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
 
   rewriter.replaceOpWithNewOp<ConcatOp>(op, extract, zeros);
   return success();
@@ -319,8 +320,9 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   auto zeros =
       rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
 
+  // Remove the low bits which would be removed by the Shr.
   auto extract =
-      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
 
   rewriter.replaceOpWithNewOp<ConcatOp>(op, zeros, extract);
   return success();
@@ -344,7 +346,7 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
-  auto topbit = rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, 1);
+  auto topbit = rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), width - 1, 1);
   auto sext = rewriter.create<SExtOp>(op.getLoc(),
                                       rewriter.getIntegerType(shift), topbit);
 
@@ -354,7 +356,7 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   }
 
   auto extract =
-      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
 
   rewriter.replaceOpWithNewOp<ConcatOp>(op, sext, extract);
   return success();
