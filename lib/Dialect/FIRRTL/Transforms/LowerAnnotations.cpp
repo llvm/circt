@@ -66,7 +66,7 @@ struct AnnoPathValue {
 
   AnnoPathValue() = default;
   AnnoPathValue(CircuitOp op) : ref(op) {}
-  AnnoPathValue(Operation *op) : ref(op) {}\
+  AnnoPathValue(Operation *op) : ref(op) {}
   AnnoPathValue(const SmallVectorImpl<InstanceOp> &insts, BaseUnion b)
       : instances(insts.begin(), insts.end()), ref(b) {}
 
@@ -170,7 +170,8 @@ static void addAnnotation(BaseUnion ref, ArrayRef<NamedAttribute> anno) {
   auto portAnnoRaw = ref.op->getAttr("portAnnotations");
   ArrayAttr portAnno = portAnnoRaw.dyn_cast_or_null<ArrayAttr>();
   if (!portAnno || portAnno.size() != getNumPorts(ref.op)) {
-    SmallVector<Attribute> emptyPortAttr(getNumPorts(ref.op), ArrayAttr::get(ref.op->getContext(), {}));
+    SmallVector<Attribute> emptyPortAttr(
+        getNumPorts(ref.op), ArrayAttr::get(ref.op->getContext(), {}));
     portAnno = ArrayAttr::get(ref.op->getContext(), emptyPortAttr);
   }
   portAnno = replaceArrayAttrElement(
@@ -363,21 +364,26 @@ static std::string canonicalizeTarget(StringRef target) {
   return newTarget;
 }
 
-    /// Scatter breadcrumb annotations corresponding to non-local annotations
-    /// along the instance path.  Returns symbol name used to anchor annotations to path.
-    // FIXME: uniq annotation chain links
-    static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target, StringAttr key) {
+/// Scatter breadcrumb annotations corresponding to non-local annotations
+/// along the instance path.  Returns symbol name used to anchor annotations to
+/// path.
+// FIXME: uniq annotation chain links
+static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target,
+                                             StringAttr key) {
   auto circuit = target.ref.op->getParentOfType<CircuitOp>();
   OpBuilder builder = circuit.getBodyBuilder();
-  auto sym = FlatSymbolRefAttr::get(circuit->getContext(), (key.getValue() + "_" + (target.ref.portNum == ~0UL ? "NA" : llvm::itostr(target.ref.portNum)) + "_" +
-              llvm::itostr(target.ref.fieldIdx))
-                 .str());
+  auto sym = FlatSymbolRefAttr::get(
+      circuit->getContext(),
+      (key.getValue() + "_" +
+       (target.ref.portNum == ~0UL ? "NA" : llvm::itostr(target.ref.portNum)) +
+       "_" + llvm::itostr(target.ref.fieldIdx))
+          .str());
 
-                  auto nla = builder.create<NonLocalAnchor>(
-      target.ref.op->getLoc(), sym.getValue());
+  auto nla =
+      builder.create<NonLocalAnchor>(target.ref.op->getLoc(), sym.getValue());
   SmallVector<NamedAttribute> newAnnoAttrs;
   newAnnoAttrs.push_back({Identifier::get("circt.nonlocal", key.getContext()),
-                         sym}); // FlatSymbolRefAttr
+                          sym}); // FlatSymbolRefAttr
   newAnnoAttrs.push_back({Identifier::get("class", key.getContext()),
                           StringAttr::get(key.getContext(), "circt.nonlocal")});
   for (auto inst : llvm::enumerate(target.instances)) {
@@ -522,8 +528,7 @@ static LogicalResult applyWithoutTargetToTarget(AnnoPathValue target,
     } else if (!target.isLocal()) {
       auto sym = scatterNonLocalPath(target, na.second.cast<StringAttr>());
       newAnnoAttrs.push_back(
-          {Identifier::get("circt.nonlocal", anno.getContext()),
-           sym});
+          {Identifier::get("circt.nonlocal", anno.getContext()), sym});
     }
   addAnnotation(target.ref, newAnnoAttrs);
   return success();
