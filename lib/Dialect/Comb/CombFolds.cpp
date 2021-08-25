@@ -490,7 +490,7 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
                                     /* narrowTrailingBits= */ false, rewriter);
       })
       // Bit-wise operations and muxes can be narrowed more aggressively.
-      // Trailing bits that are not referenced in the use-sits can all be
+      // Trailing bits that are not referenced in the use-sites can all be
       // removed.
       .Case<AndOp, OrOp, XorOp>([&](auto innerOp) {
         return narrowOperationWidth(innerOp, innerOp.inputs(),
@@ -571,6 +571,26 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                               shlOp->getOperand(1), newCst);
           return success();
         }
+
+  if (auto sext = dyn_cast_or_null<SExtOp>(inputOp)) {
+    // `extract(lowBit, sext(x))` -> `extract(lowBit, x)`.
+    auto neededBits = op.getType().getIntOrFloatBitWidth() + op.lowBit();
+    if (neededBits <= sext.input().getType().getIntOrFloatBitWidth()) {
+      rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(), sext.input(),
+                                             op.lowBit());
+      return success();
+    }
+    // `extract(lowBit, sext(x))` -> `extract(lowBit, smaller_sext(x))`.
+    if (neededBits < sext.getType().getIntOrFloatBitWidth() &&
+        sext->hasOneUse()) {
+      auto newSExtType = rewriter.getIntegerType(neededBits);
+      auto newSExt =
+          rewriter.create<SExtOp>(sext.getLoc(), newSExtType, sext.input());
+      rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(), newSExt,
+                                             op.lowBit());
+      return success();
+    }
+  }
 
   return failure();
 }
