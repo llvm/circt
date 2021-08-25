@@ -91,7 +91,6 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
 
   OpBuilder builder(component->getRegion(0));
   auto fsmRegister = createRegister(builder, component, fsmBitWidth, "fsm");
-  // TODO(Calyx): Add methods to RegisterOp to access ports.
   Value fsmIn = fsmRegister.inPort();
   Value fsmWriteEn = fsmRegister.writeEnPort();
   Value fsmOut = fsmRegister.outPort();
