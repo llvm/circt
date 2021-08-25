@@ -435,7 +435,6 @@ hw.module @xor_idempotent_two_arguments(%arg0: i11) -> (i11) {
 // CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @add_reduction1(%arg0: i11, %arg1: i11) -> (i11) {
-  %c1_i11 = hw.constant 1 : i11
   %0 = comb.add %arg1, %arg1 : i11
   hw.output %0 : i11
 }
@@ -446,7 +445,6 @@ hw.module @add_reduction1(%arg0: i11, %arg1: i11) -> (i11) {
 // CHECK-NEXT:    hw.output [[RES]]
 
 hw.module @add_reduction2(%arg0: i11, %arg1: i11) -> (i11) {
-  %c3_i11 = hw.constant 3 : i11
   %0 = comb.add %arg1, %arg1, %arg1 : i11
   hw.output %0 : i11
 }
@@ -458,7 +456,6 @@ hw.module @add_reduction2(%arg0: i11, %arg1: i11) -> (i11) {
 // CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (i11) {
-  %c3_i11 = hw.constant 3 : i11
   %c7_i11 = hw.constant 7 : i11
   %0 = comb.mul %arg1, %c7_i11 : i11
   %1 = comb.add %arg1, %0 : i11
@@ -474,7 +471,6 @@ hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (i11) {
 // CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @multiply_reduction(%arg0: i11, %arg1: i11) -> (i11) {
-  %c1_i11 = hw.constant 1 : i11
   %c2_i11 = hw.constant 2 : i11
   %0 = comb.mul %arg1, %c2_i11 : i11
   hw.output %0 : i11
