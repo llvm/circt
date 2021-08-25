@@ -345,6 +345,7 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+  let verifier = "return ::verifyBPAssignOp(*this);";
 }
 
 def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
@@ -359,6 +360,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+  let verifier = "return ::verifyPAssignOp(*this);";
 }
 
 
