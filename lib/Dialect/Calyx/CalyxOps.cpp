@@ -885,6 +885,83 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 }
 
 //===----------------------------------------------------------------------===//
+// PrimOp
+//===----------------------------------------------------------------------===//
+void PrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  SmallVector<StringRef> portNames;
+  SmallVector<SmallString<8>> inNames;
+  for (size_t i = 0, e = getNumResults() - 1; i != e; ++i) {
+    inNames.emplace_back("in" + std::to_string(i));
+    portNames.push_back(inNames.back());
+  }
+  portNames.push_back("out");
+  getCellAsmResultNames(setNameFn, *this, portNames);
+}
+
+void PrimOp::build(OpBuilder &builder, OperationState &state,
+                   Twine instanceName, PrimOpFunc func,
+                   ::mlir::TypeRange resultTypes) {
+  state.addAttribute("name", builder.getStringAttr(instanceName));
+  state.addAttribute(
+      "func", circt::calyx::PrimOpFuncAttr::get(builder.getContext(), func));
+  state.addTypes(resultTypes);
+}
+
+namespace {
+enum class PrimOpTypeConstraint { AllIdentical, OpsIdenticalBoolRes };
+}
+// clang-format off
+static PrimOpTypeConstraint primFuncTypeConstraint(PrimOpFunc func) {
+  switch (func) {
+  case PrimOpFunc::add: case PrimOpFunc::sub: case PrimOpFunc::shru:
+  case PrimOpFunc::shl: case PrimOpFunc::AND: case PrimOpFunc::NOT:
+  case PrimOpFunc::OR: case PrimOpFunc::XOR:
+    return PrimOpTypeConstraint::AllIdentical;
+
+  case PrimOpFunc::lt: case PrimOpFunc::gt: case PrimOpFunc::eq:
+  case PrimOpFunc::neq: case PrimOpFunc::ge: case PrimOpFunc::le:
+    return PrimOpTypeConstraint::OpsIdenticalBoolRes;
+  }
+  llvm_unreachable("Unknown primitive op function");
+}
+// clang-format on
+
+static LogicalResult verifyPrimOp(PrimOp primOp) {
+  auto resTypes = primOp.getResultTypes();
+
+  // # of results verification - currently, all operators are binary operators.
+  if (resTypes.size() != 3)
+    return primOp.emitOpError()
+           << "expected 3 return types for binary operator.";
+
+  // Type verification
+  switch (primFuncTypeConstraint(primOp.func())) {
+    // Identical input types + return type.
+  case PrimOpTypeConstraint::AllIdentical: {
+    bool AllIdenticalType = llvm::all_of(resTypes, [&](auto type) {
+      return type == primOp->getResultTypes()[0];
+    });
+    if (!AllIdenticalType)
+      return primOp.emitOpError()
+             << "expected identical input and output types.";
+    break;
+  }
+    // Identical input types, return type is 1 bit.
+  case PrimOpTypeConstraint::OpsIdenticalBoolRes: {
+    if (!resTypes[resTypes.size() - 1].isInteger(1))
+      return primOp.emitOpError() << "expected 1-bit return type.";
+    if (!llvm::all_of(
+            llvm::make_range(resTypes.begin() + 0, resTypes.end() - 1),
+            [&](auto type) { return type == primOp->getResultTypes()[0]; }))
+      return primOp.emitOpError() << "expected identical input types.";
+    break;
+  }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

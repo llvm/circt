@@ -115,3 +115,66 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     Value done()      { return getResult(getNumDimensions() + 3); }
   }];
 }
+
+
+// Primitive operation functions
+def PrimOpFuncNOT  : I64EnumAttrCase<"NOT", 0, "not">;
+def PrimOpFuncAND  : I64EnumAttrCase<"AND", 1, "and">;
+def PrimOpFuncOR   : I64EnumAttrCase<"OR", 2, "or">;
+def PrimOpFuncXOR  : I64EnumAttrCase<"XOR", 3, "xor">;
+def PrimOpFuncADD  : I64EnumAttrCase<"add", 4>;
+def PrimOpFuncSUB  : I64EnumAttrCase<"sub", 5>;
+def PrimOpFuncGT   : I64EnumAttrCase<"gt", 6>;
+def PrimOpFuncLT   : I64EnumAttrCase<"lt", 7>;
+def PrimOpFuncEQ   : I64EnumAttrCase<"eq", 8>;
+def PrimOpFuncNEQ  : I64EnumAttrCase<"neq", 9>;
+def PrimOpFuncGE   : I64EnumAttrCase<"ge", 10>;
+def PrimOpFuncLE   : I64EnumAttrCase<"le", 11>;
+def PrimOpFuncSHL  : I64EnumAttrCase<"shl", 12>;
+def PrimOpFuncSHRU : I64EnumAttrCase<"shru", 13>;
+
+let cppNamespace = "circt::calyx" in
+def PrimOpFunc : I64EnumAttr<
+    "PrimOpFunc",
+    "calyx.prim function type",
+    [PrimOpFuncNOT, PrimOpFuncAND, PrimOpFuncOR, PrimOpFuncXOR, PrimOpFuncADD,
+     PrimOpFuncSUB, PrimOpFuncGT, PrimOpFuncLT, PrimOpFuncEQ, PrimOpFuncNEQ,
+     PrimOpFuncGE, PrimOpFuncLE, PrimOpFuncSHL, PrimOpFuncSHRU]>;
+
+def PrimOp : CalyxPrimitive<"prim", [
+    HasParent<"ComponentOp">
+  ]> {
+  let summary = "Defines a primitive arithmetic operation";
+  let description = [{
+    This operation represents an instance of a circuit primitive. The operation
+    function is specified by the `$func` parameter. The result types of the
+    parameter must match the natural type constraints of the provided `$func`.
+    I.e. for binary arithmetic operations the result and input types are
+    expected to be the identical, whereas for boolean comparison operators
+    input types should be identical with a 1-bit wide output type.
+
+    ```mlir
+      // A 32-bit adder.
+       %adder.in0, %adder.in1, %adder.out = calyx.prim "adder" add : i8, i8, i8
+      // An 8-bit greater-than comparison.
+      %gt.in0, %gt.in1, %gt.out = calyx.prim "gt" gt : i8, i8, i1
+    ```
+  }];
+
+  let arguments = (ins StrAttr:$instanceName, PrimOpFunc:$func);
+  let results = (outs Variadic<AnySignlessInteger>:$results);
+
+  let assemblyFormat = [{
+    $instanceName $func attr-dict `:` type($results)
+  }];
+
+  let verifier = "return ::verify$cppClass(*this);";
+
+  let builders = [
+    OpBuilder<(ins
+      "Twine":$instanceName,
+      "PrimOpFunc":$func,
+      "::mlir::TypeRange":$resultTypes
+    )>
+  ];
+}
