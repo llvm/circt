@@ -194,7 +194,7 @@ def NonLocalAnchor : FIRRTLOp<"nla",
   let summary = "Anchor for non-local annotations";
   let description = [{
     The "firrtl.nla" operation represents a common point for non-local (path)
-    annotations to anchor to in the global scope.  This let's components of the
+    annotations to anchor to in the global scope.  This lets components of the
     path point to a common entity.
   }];
   let arguments = (ins SymbolNameAttr:$sym_name, SymbolArrayAttr:$modpath, StringArrayAttr:$namepath);
