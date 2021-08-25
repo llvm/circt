@@ -47,7 +47,6 @@ def RegisterOp : CalyxPrimitive<"register", [
 }
 
 def MemoryOp : CalyxPrimitive<"memory", [
-    DeclareOpInterfaceMethods<OpAsmOpInterface>,
     HasParent<"ComponentOp">
   ]> {
   let summary = "Defines a memory";

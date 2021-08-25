@@ -651,7 +651,7 @@ void MemoryOp::build(OpBuilder &builder, OperationState &state,
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
   SmallVector<Type> types;
-  for (auto size : addrSizes)
+  for (int64_t size : addrSizes)
     types.push_back(builder.getIntegerType(size));
   types.push_back(builder.getIntegerType(width));
   types.push_back(builder.getI1Type());
