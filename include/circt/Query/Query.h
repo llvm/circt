@@ -2,7 +2,6 @@
 #define CIRCT_QUERY_API_H
 
 #include <iostream>
-#include <regex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -14,6 +13,7 @@
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
+#include "llvm/Support/Regex.h"
 
 namespace circt {
 namespace query {
@@ -69,21 +69,16 @@ private:
 
 class RegexFilterType : public FilterType {
 public:
-  RegexFilterType(std::string &regex) : regex(std::regex(regex)) {}
-  RegexFilterType(std::regex &regex) : regex(regex) {}
+  RegexFilterType(llvm::StringRef regex) : repr(regex.str()), regex(llvm::Regex(regex)) {}
 
   virtual bool valueMatches(llvm::StringRef value) override {
-    if (value.data()[value.size()] == '\0') {
-      return std::regex_match(value.data(), regex);
-    }
-
-    std::string str(value.data(), value.size());
-    return std::regex_match(str, regex);
+    return regex.match(value);
   }
-  virtual FilterType *clone() override { return new RegexFilterType(regex); }
+  virtual FilterType *clone() override { return new RegexFilterType(repr); }
 
 private:
-  std::regex regex;
+  std::string repr;
+  llvm::Regex regex;
 };
 
 class FilterData {
