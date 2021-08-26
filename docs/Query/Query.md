@@ -7,48 +7,48 @@ Filters and filter types are the foundation of the query API. Filters allow you 
 ### List of Filters
  - `AttributeFilter`
 
-  Filters based on if the given attribute matches.
+    Filters based on if the given attribute matches.
 
  - `NameFilter`
 
-  Filters based on if the operation's result name or module name matches.
+    Filters based on if the operation's result name or module name matches.
 
  - `OpFilter`
 
-  Filters based on if the operation's name matches.
+    Filters based on if the operation's name matches.
 
  - `AndFilter`
 
-  Filters based on if all child filters match.
+    Filters based on if all child filters match.
 
  - `OrFilter`
 
-  Filters based on if any child filter matches.
+    Filters based on if any child filter matches.
 
  - `InstanceFilter`
 
-  Filters based on if the operation matches the given instance hierarchy.
+    Filters based on if the operation matches the given instance hierarchy.
 
  - `UsageFilter`
 
-  Filters based on the given child filter and returns all usages of the operation.
+    Filters based on the given child filter and returns all usages of the operation.
 
 ### List of Filter Types
  - `GlobFilterType`
 
-  Always matches against a given property.
+    Always matches against a given property.
 
  - `RecursiveGlobFilterType`
 
-  Always matches against the given property and tells the filter to recursively apply itself.
+    Always matches against the given property and tells the filter to recursively apply itself.
 
  - `LiteralFilterType`
 
-  Matches if the given property matches the literal provided.
+    Matches if the given property matches the literal provided.
 
  - `RegexFilterType`
 
-  Matches if the given property matches the regex provided.
+    Matches if the given property matches the regex provided.
 
 ## Extending the Query API
 Extending the query API may be useful if you:
@@ -60,7 +60,7 @@ Extending the query API may be useful if you:
 Adding a new filter is as easy as extending the `Filter` class (and possibly the `FilterType` class as well).
 
 ### Subclasses of `Filter`
-```c
+```cpp
 class Filter {
 public:
   virtual ~Filter() {
@@ -87,26 +87,26 @@ protected:
 
  - `virtual bool matches(Operation *, FilterData &)` (REQUIRED)
 
-  Determines whether the given operation matches the filter.
+    Determines whether the given operation matches the filter.
 
  - `virtual bool addSelf()` (optional)
 
-  Determines if the filter should add itself paired with child operations (useful for filters such as recursive globs).
+    Determines if the filter should add itself paired with child operations (useful for filters such as recursive globs).
 
  - `virtual Filter *nextFilter()` (optional)
 
-  Returns the next filter to follow.
+    Returns the next filter to follow.
 
  - `virtual Filter *clone()` (REQUIRED)
 
   Clones the filter.
 
- `virtual std::vector<Operation *> nextOperations(Operation *, FilterData &)` (optional)
+ - `virtual std::vector<Operation *> nextOperations(Operation *, FilterData &)` (optional)
 
-  Gets the next operations to continue filtering on.
+    Gets the next operations to continue filtering on.
 
 ### Subclasses of `FilterType`
-```c
+```cpp
 class FilterType {
 public:
   virtual ~FilterType() { }
@@ -119,15 +119,15 @@ public:
 
  - `virtual bool valueMatches(StringRef)` (REQUIRED)
 
-  Determines if some passed in property matches the filter type.
+    Determines if some passed in property matches the filter type.
 
  - `virtual bool addSelf()` (optional)
 
-  Determines if the filter type should add itself paired with child operations (useful for filter types such as recursive globs).
+    Determines if the filter type should add itself paired with child operations (useful for filter types such as recursive globs).
 
  - `virtual FilterType *clone()` (REQUIRED)
 
-  Clones the filter type.
+    Clones the filter type.
 
 ### Adding Support for a New Dialect
 There are a few places where HW specific code occurs in the query API. Namely:
