@@ -575,20 +575,31 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (auto sext = dyn_cast_or_null<SExtOp>(inputOp)) {
     // `extract(lowBit, sext(x))` -> `extract(lowBit, x)`.
     auto neededBits = op.getType().getIntOrFloatBitWidth() + op.lowBit();
-    if (neededBits <= sext.input().getType().getIntOrFloatBitWidth()) {
+    auto sextInputWidth = sext.input().getType().getIntOrFloatBitWidth();
+    if (neededBits <= sextInputWidth) {
       rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(), sext.input(),
                                              op.lowBit());
       return success();
     }
-    // `extract(lowBit, sext(x))` -> `extract(lowBit, smaller_sext(x))`.
-    if (neededBits < sext.getType().getIntOrFloatBitWidth() &&
-        sext->hasOneUse()) {
-      auto newSExtType = rewriter.getIntegerType(neededBits);
-      auto newSExt =
-          rewriter.create<SExtOp>(sext.getLoc(), newSExtType, sext.input());
-      rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(), newSExt,
-                                             op.lowBit());
-      return success();
+    if (sext->hasOneUse()) {
+      // `extract(lowbit, sext(x))` when extracted bits are all sign bits.
+      if (op.lowBit() >= sextInputWidth - 1) {
+        auto int1Type = rewriter.getI1Type();
+        auto signBit = rewriter.create<ExtractOp>(
+            sext.getLoc(), int1Type, sext.input(), sextInputWidth - 1);
+        rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), signBit);
+        return success();
+      }
+
+      // `extract(lowBit, sext(x))` -> `extract(lowBit, smaller_sext(x))`.
+      if (neededBits < sext.getType().getIntOrFloatBitWidth()) {
+        auto newSExtType = rewriter.getIntegerType(neededBits);
+        auto newSExt =
+            rewriter.create<SExtOp>(sext.getLoc(), newSExtType, sext.input());
+        rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(), newSExt,
+                                               op.lowBit());
+        return success();
+      }
     }
   }
 

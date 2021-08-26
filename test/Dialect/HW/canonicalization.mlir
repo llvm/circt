@@ -1035,6 +1035,16 @@ hw.module @sext_extract2(%arg0: i4) -> (%a: i3) {
   hw.output %1 : i3
 }
 
+// CHECK-LABEL: hw.module @sext_extract3
+hw.module @sext_extract3(%arg0: i4) -> (%a: i3) {
+  // CHECK-NEXT: %0 = comb.extract %arg0 from 3 : (i4) -> i1
+  %0 = comb.sext %arg0 : (i4) -> (i8)
+  // CHECK-NEXT: %1 = comb.sext %0 : (i1) -> i3
+  %1 = comb.extract %0 from 3 : (i8) -> i3
+  // CHECK: hw.output %1
+  hw.output %1 : i3
+}
+
 // == Begin: test cases from LowerToHW ==
 
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (%out0: i8) {
