@@ -69,7 +69,8 @@ private:
 
 class RegexFilterType : public FilterType {
 public:
-  RegexFilterType(llvm::StringRef regex) : repr(regex.str()), regex(llvm::Regex(regex)) {}
+  RegexFilterType(llvm::StringRef regex)
+      : repr(regex.str()), regex(llvm::Regex(regex)) {}
 
   virtual bool valueMatches(llvm::StringRef value) override {
     return regex.match(value);
