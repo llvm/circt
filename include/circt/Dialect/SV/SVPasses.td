@@ -27,6 +27,19 @@ def HWCleanup : Pass<"hw-cleanup", "hw::HWModuleOp"> {
   let constructor = "circt::sv::createHWCleanupPass()";
 }
 
+def HWLegalizeModules : Pass<"hw-legalize-modules", "hw::HWModuleOp"> {
+  let summary = "Eliminate features marked unsupported in LoweringOptions";
+  let description = [{
+      This pass lowers away features in the SV/Comb/HW dialects that are
+      unsupported by some tools, e.g. multidimensional arrays.  This pass is
+      run relatively late in the pipeline in preparation for emission.  Any
+      passes run after this must be aware they cannot introduce new invalid
+      constructs.
+  }];
+
+  let constructor = "circt::sv::createHWLegalizeModulesPass()";
+}
+
 def PrettifyVerilog : Pass<"prettify-verilog", "hw::HWModuleOp"> {
   let summary = "Transformations to improve quality of ExportVerilog output";
   let description = [{

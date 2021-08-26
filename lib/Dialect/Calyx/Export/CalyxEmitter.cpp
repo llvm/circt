@@ -49,8 +49,8 @@ struct Emitter {
   void emitComponent(ComponentOp op);
   void emitComponentPorts(ArrayRef<ComponentPortInfo> ports);
 
-  // Cell emission
-  void emitCell(CellOp op);
+  // Instance emission
+  void emitInstance(InstanceOp op);
 
   // Wires emission
   void emitWires(WiresOp op);
@@ -96,7 +96,7 @@ private:
   void emitValue(Value value, bool isIndented) {
     auto definingOp = value.getDefiningOp();
     TypeSwitch<Operation *>(definingOp)
-        .Case<CellOp>([&](auto op) {
+        .Case<InstanceOp>([&](auto op) {
           // A cell port should be defined as <instance-name>.<port-name>
           auto opResult = value.cast<OpResult>();
           unsigned portIndex = opResult.getResultNumber();
@@ -165,7 +165,7 @@ void Emitter::emitComponent(ComponentOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<WiresOp>([&](auto op) { wires = op; })
           .Case<ControlOp>([&](auto op) { control = op; })
-          .Case<CellOp>([&](auto op) { emitCell(op); })
+          .Case<InstanceOp>([&](auto op) { emitInstance(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });
@@ -182,7 +182,7 @@ void Emitter::emitComponent(ComponentOp op) {
 void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
   std::vector<ComponentPortInfo> inPorts, outPorts;
   for (auto &&port : ports) {
-    if (port.direction == PortDirection::INPUT)
+    if (port.direction == Direction::Input)
       inPorts.push_back(port);
     else
       outPorts.push_back(port);
@@ -207,7 +207,7 @@ void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
   emitPorts(outPorts);
 }
 
-void Emitter::emitCell(CellOp op) {
+void Emitter::emitInstance(InstanceOp op) {
   indent() << op.instanceName() << " = " << op.componentName() << "();\n";
 }
 

@@ -2,6 +2,7 @@
 ; RUN: firtool %s --format=fir -mlir --annotation-file %s.anno.json | circt-opt | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --format=fir -mlir -lower-to-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 ; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
+; RUN: firtool %s --annotation-file %s.anno.json --mlir --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
 
 circuit test_mod : %[[{"a": "a"}]]
 
@@ -72,13 +73,13 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:    input  [1:0] b,
 ; VERILOG-NEXT:    output       c);
 ; VERILOG-EMPTY:
-; VERILOG-NEXT:    wire [4:0] _T;
 ; VERILOG-NEXT:    wire [9:0] prettifyExample_out1;
 ; VERILOG-NEXT:    wire [9:0] prettifyExample_out2;
 ; VERILOG-NEXT:    wire [2:0] implicitTrunc_out1;
 ; VERILOG-NEXT:    wire [2:0] implicitTrunc_out2;
 ; VERILOG-NEXT:    wire [5:0] cat_d;
 ; VERILOG-EMPTY:
+; VERILOG-NEXT:    wire [4:0] _T = cat_d[4:0];
 ; VERILOG-NEXT:    Cat cat (
 ; VERILOG-NEXT:      .a (b),
 ; VERILOG-NEXT:      .b (b),
@@ -91,8 +92,6 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:      .out1  (implicitTrunc_out1),
 ; VERILOG-NEXT:      .out2  (implicitTrunc_out2)
 ; VERILOG-NEXT:    );
-; VERILOG-NEXT:    wire [5:0] _T_0 = cat_d;
-; VERILOG-NEXT:    assign _T = _T_0[4:0];
 ; VERILOG-NEXT:    PrettifyExample prettifyExample (
 ; VERILOG-NEXT:      .inp_1 (_T),
 ; VERILOG-NEXT:      .inp_2 (_T),
@@ -147,7 +146,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; VERILOG-NEXT:   input  [4:0] inp_2,
 ; VERILOG-NEXT:   output [2:0] out1, out2);
 ; VERILOG-EMPTY:
-; VERILOG-NEXT:   wire [5:0] _T = {inp_2[4], inp_2} << {5'h0, inp_1};
+; VERILOG-NEXT:   wire [5:0] _T = {inp_2[4], inp_2} << inp_1;
 ; VERILOG-NEXT:   assign out1 = _T[2:0];
 ; VERILOG-NEXT:   assign out2 = inp_2[2:0];
 ; VERILOG-NEXT: endmodule

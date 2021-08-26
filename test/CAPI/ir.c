@@ -40,7 +40,7 @@ int registerOnlyHW() {
     return 2;
 
   mlirDialectHandleRegisterDialect(hwHandle, ctx);
-  if (mlirContextGetNumRegisteredDialects(ctx) != 1)
+  if (mlirContextGetNumRegisteredDialects(ctx) != 2)
     return 3;
   if (mlirContextGetNumLoadedDialects(ctx) != 1)
     return 4;

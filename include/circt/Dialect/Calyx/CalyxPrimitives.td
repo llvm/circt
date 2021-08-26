@@ -10,30 +10,93 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO(cgyurgyik): It may be worthwhile to unify component and primitive cells,
-// much in the same way that the native compiler does.
-def RegisterOp : CalyxOp<"register", [
-    DeclareOpInterfaceMethods<OpAsmOpInterface>,
-    HasParent<"ComponentOp">,
+def RegisterOp : CalyxPrimitive<"register", [
     SameTypeConstraint<"in", "out">
   ]> {
   let summary = "Defines a register";
   let description = [{
     The "calyx.register" op defines a register.
-    ```
-      %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i32
+    ```mlir
+      // A 32-bit register.
+      %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i32, i1, i1, i1, i32, i1
     ```
   }];
-  let arguments = (ins StrAttr:$name);
   let results = (outs AnyType:$in, I1:$write_en, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
-  let assemblyFormat = "$name attr-dict `:` type($in)";
-
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "size_t":$width), [{
-      $_state.addAttribute("name", name);
+    OpBuilder<(ins "StringAttr":$instanceName, "size_t":$width), [{
+      $_state.addAttribute("instanceName", instanceName);
       auto i1Type = $_builder.getI1Type();
       auto widthType = $_builder.getIntegerType(width);
       $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});
+    }]>,
+    OpBuilder<(ins "StringAttr":$name, "Type":$type), [{
+      $_state.addAttribute("name", name);
+      auto i1Type = $_builder.getI1Type();
+      $_state.addTypes({type, i1Type, i1Type, i1Type, type, i1Type});
     }]>
+  ];
+  let extraClassDeclaration = [{
+    SmallVector<StringRef> portNames() {
+      return {"in", "write_en", "clk", "reset", "out", "done"};
+    }
+    SmallVector<Direction> portDirections() {
+      return { Input, Input, Input, Input, Output, Output };
+    }
+
+    Value inPort()      { return getResult(0); }
+    Value writeEnPort() { return getResult(1); }
+    Value clkPort()     { return getResult(2); }
+    Value resetPort()   { return getResult(3); }
+    Value outPort()     { return getResult(4); }
+    Value donePort()    { return getResult(5); }
+  }];
+
+}
+
+def MemoryOp : CalyxPrimitive<"memory", [
+    HasParent<"ComponentOp">
+  ]> {
+  let summary = "Defines a memory";
+  let description = [{
+    The "calyx.memory" op defines a memory. Memories can have any number of
+    dimensions, as specified by the length of the `$sizes` and `$addrSizes`
+    arrays. The `$addrSizes` specify the bitwidth of each dimension's address,
+    and should be wide enough to address the range of the corresponding
+    dimension in `$sizes`. The `$width` attribute dictates the width of a single
+    element.
+
+    See https://capra.cs.cornell.edu/docs/calyx/libraries/core.html#memories for
+    more information.
+
+    ```mlir
+      // A 2-dimensional, 8-bit memory.
+      %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i8, i1
+    ```
+  }];
+
+  let arguments = (ins
+    StrAttr:$instanceName,
+    I64Attr:$width,
+    ArrayAttr:$sizes,
+    ArrayAttr:$addrSizes
+  );
+
+  let results = (outs
+    Variadic<AnySignlessInteger>:$results
+  );
+
+  let assemblyFormat = [{
+    $instanceName `<` $sizes `x` $width `>` $addrSizes attr-dict `:` type($results)
+  }];
+
+  let verifier = "return ::verify$cppClass(*this);";
+
+  let builders = [
+    OpBuilder<(ins
+      "Twine":$instanceName,
+      "int64_t":$width,
+      "ArrayRef<int64_t>":$sizes,
+      "ArrayRef<int64_t>":$addrSizes
+    )>
   ];
 }

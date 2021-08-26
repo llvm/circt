@@ -21,9 +21,6 @@ hw.module @always() -> () {
   %clock = hw.constant 1 : i1
   %3 = sv.wire : !hw.inout<i1>
   %false = hw.constant 0 : i1
-  sv.alwaysff(posedge %clock)  {
-    sv.passign %3, %false : i1
-  }
   hw.output
 }
 

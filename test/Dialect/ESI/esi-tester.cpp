@@ -11,12 +11,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/InitAllDialects.h"
-#include "circt/InitAllPasses.h"
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/MlirOptMain.h"
-#include "mlir/Transforms/Passes.h"
 
 using namespace circt;
 using namespace circt::esi;

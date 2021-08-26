@@ -304,47 +304,15 @@ def CaseZOp : SVOp<"casez", [SingleBlock, NoTerminator, NoRegionArguments,
   let printer = "printCaseZOp(p, *this);";
   let verifier = "return ::verifyCaseZOp(*this);";
 
+  let builders = [
+    /// This ctor allows you to build a CaseZ with some number of cases, getting
+    /// a callback for each case.
+    OpBuilder<(ins "Value":$cond, "size_t":$numCases,
+               "std::function<CaseZPattern(size_t)>":$caseCtor)>
+  ];
+
   let extraClassDeclaration = [{
-    /// This describes the bit in a pattern, 0/1/x.
-    enum PatternBit { PatternZero = 0, PatternOne = 1, PatternAny = 2 };
-
-    static char getLetter(PatternBit bit, bool isVerilog) {
-      switch (bit) {
-      case PatternZero: return '0';
-      case PatternOne: return '1';
-      case PatternAny: return isVerilog ? '?' : 'x';
-      }
-      llvm_unreachable("invalid casez PatternBit");
-    }
-
-    // This is provides convenient access to encode and decode a pattern.
-    struct CasePattern {
-      IntegerAttr attr;
-
-      // Return the number of bits in the pattern.
-      size_t getWidth() const {
-        return attr.getValue().getBitWidth()/2;
-      }
-
-      /// Return the specified bit, bit 0 is the least significant bit.
-      PatternBit getBit(size_t bitNumber) const;
-
-      /// Return true if this pattern always matches.
-      bool isDefault() const;
-
-      // Get a CasePattern from a specified list of PatternBits.  Bits are
-      // specified in most least significant order - element zero is the least
-      // significant bit.
-      CasePattern(ArrayRef<PatternBit> bits, MLIRContext *context);
-      CasePattern(IntegerAttr attr) : attr(attr) {}
-    };
-    // This provides information about one case.
-    struct CaseInfo {
-      CasePattern pattern;
-      Block *block;
-    };
-
-    SmallVector<CaseInfo, 4> getCases();
+    SmallVector<CaseZInfo, 4> getCases();
 
     // void addCase(...)
   }];
@@ -377,6 +345,7 @@ def BPAssignOp : SVOp<"bpassign", [InOutTypeConstraint<"src", "dest">,
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+  let verifier = "return ::verifyBPAssignOp(*this);";
 }
 
 def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
@@ -391,6 +360,7 @@ def PAssignOp : SVOp<"passign", [InOutTypeConstraint<"src", "dest">,
   let arguments = (ins InOutType:$dest, InOutElementType:$src);
   let results = (outs);
   let assemblyFormat = "$dest `,` $src  attr-dict `:` type($src)";
+  let verifier = "return ::verifyPAssignOp(*this);";
 }
 
 

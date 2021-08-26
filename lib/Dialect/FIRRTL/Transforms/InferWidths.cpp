@@ -723,12 +723,12 @@ LinIneq ConstraintSolver::checkCycles(VarExpr *var, Expr *expr,
           })
           .Case<PowExpr>([&](auto *expr) {
             // If we can evaluate `2**arg` to a sensible constant, do
-            // so. This is the case if a == 0 and if c <= 32 such that 2**c is
+            // so. This is the case if a == 0 and c < 31 such that 2**c is
             // representable.
             auto arg =
                 checkCycles(var, expr->arg, seenVars, reportInto, indent + 1);
             if (arg.rec_scale != 0 || arg.nonrec_bias < 0 ||
-                arg.nonrec_bias >= 32)
+                arg.nonrec_bias >= 31)
               return LinIneq::unsat();
             return LinIneq(1 << arg.nonrec_bias); // x >= 2**arg
           })
@@ -1110,10 +1110,6 @@ public:
   /// Get the expr associated with a specific field in a value.
   Expr *getExpr(FieldRef fieldRef);
 
-  /// Get the expr associated with the value. If value is NULL, then this
-  /// returns NULL. The value must be a non-aggregate type.
-  Expr *getExprOrNull(Value value);
-
   /// Get the expr associated with a specific field in a value. If value is
   /// NULL, then this returns NULL.
   Expr *getExprOrNull(FieldRef fieldRef);
@@ -1456,13 +1452,13 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // A helper function that returns the indeces of the "data", "rdata",
         // and "wdata" fields in the bundle corresponding to a memory port.
         auto dataFieldIndices = [](MemOp::PortKind kind) {
-          static const unsigned indices[] = {3, 4, 5};
+          static const unsigned indices[] = {3, 5};
           switch (kind) {
           case MemOp::PortKind::Read:
           case MemOp::PortKind::Write:
             return ArrayRef<unsigned>(indices, 1); // {3}
           case MemOp::PortKind::ReadWrite:
-            return ArrayRef<unsigned>(indices + 1, 2); // {4, 5}
+            return ArrayRef<unsigned>(indices); // {3, 5}
           }
         };
 
@@ -1696,13 +1692,6 @@ Expr *InferenceMapping::getExpr(FieldRef fieldRef) {
   auto expr = getExprOrNull(fieldRef);
   assert(expr && "constraint expr should have been constructed for value");
   return expr;
-}
-
-/// Get the constraint expression for a value, or null if no expression exists
-/// for the value.
-Expr *InferenceMapping::getExprOrNull(Value value) {
-  assert(value.getType().cast<FIRRTLType>().isGround());
-  return getExprOrNull(FieldRef(value, 0));
 }
 
 Expr *InferenceMapping::getExprOrNull(FieldRef fieldRef) {

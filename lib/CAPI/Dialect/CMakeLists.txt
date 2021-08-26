@@ -4,6 +4,7 @@ set(LLVM_OPTIONAL_SOURCES
   ESI.cpp
   MSFT.cpp
   HW.cpp
+  LLHD.cpp
   Seq.cpp
   SV.cpp
 )
@@ -55,6 +56,18 @@ add_circt_library(CIRCTCAPIHW
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTHW
+  )
+
+add_circt_library(CIRCTCAPILLHD
+
+  LLHD.cpp
+
+  ADDITIONAL_HEADER_DIRS
+  ${MLIR_MAIN_INCLUDE_DIR}/mlir-c
+
+  LINK_LIBS PUBLIC
+  MLIRCAPIIR
+  CIRCTLLHD
   )
 
 add_circt_library(CIRCTCAPISeq

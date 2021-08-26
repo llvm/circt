@@ -779,19 +779,21 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
   if (flipValue.getType().isa<AnalogType>())
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
 
-  SmallVector<ConnectOp, 2> connects;
+  ConnectOp theConnect;
   for (auto *use : flipValue.getUsers()) {
     // We only know about 'connect' uses, where this is the destination.
     auto connect = dyn_cast<ConnectOp>(use);
-    if (!connect || connect.src() == flipValue)
+    if (!connect || connect.src() == flipValue ||
+        // We only support things with a single connect.
+        theConnect)
       return {};
 
-    connects.push_back(connect);
+    theConnect = connect;
   }
 
   // We don't have an HW equivalent of "poison" so just don't special case
   // the case where there are no connects other uses of an output.
-  if (connects.empty())
+  if (!theConnect)
     return {}; // TODO: Emit an sv.constantz here since it is unconnected.
 
   // Don't special case zero-bit results.
@@ -801,40 +803,31 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 
   // Convert each connect into an extended version of its operand being
   // output.
-  SmallVector<Value, 2> results;
   ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
 
-  for (auto connect : connects) {
-    auto connectSrc = connect.src();
+  auto connectSrc = theConnect.src();
 
-    // Convert fliped sources to passive sources.
-    if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
-      connectSrc = builder.createOrFold<AsPassivePrimOp>(connectSrc);
+  // Convert fliped sources to passive sources.
+  if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
+    connectSrc = builder.createOrFold<AsPassivePrimOp>(connectSrc);
 
-    // We know it must be the destination operand due to the types, but the
-    // source may not match the destination width.
-    auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
-    if (destTy.getBitWidthOrSentinel() !=
-        connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
-      // The only type mismatchs we care about is due to integer width
-      // differences.
-      auto destWidth = destTy.getBitWidthOrSentinel();
-      assert(destWidth != -1 && "must know integer widths");
-      connectSrc =
-          builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
-    }
-
-    // Remove the connect and use its source as the value for the output.
-    connect.erase();
-    results.push_back(connectSrc);
+  // We know it must be the destination operand due to the types, but the
+  // source may not match the destination width.
+  auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
+  if (destTy.getBitWidthOrSentinel() !=
+      connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
+    // The only type mismatchs we care about is due to integer width
+    // differences.
+    auto destWidth = destTy.getBitWidthOrSentinel();
+    assert(destWidth != -1 && "must know integer widths");
+    connectSrc = builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
   }
 
-  // Convert from FIRRTL type to builtin type to do the merge.
-  for (auto &result : results)
-    result = castFromFIRRTLType(result, loweredType, builder);
+  // Remove the connect and use its source as the value for the output.
+  theConnect.erase();
 
-  // Folding merge of one value just returns the value.
-  return builder.createOrFold<comb::MergeOp>(results);
+  // Convert from FIRRTL type to builtin type.
+  return castFromFIRRTLType(connectSrc, loweredType, builder);
 }
 
 static SmallVector<SubfieldOp> getAllFieldAccesses(Value structValue,
@@ -988,6 +981,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   void runWithInsertionPointAtEndOfBlock(std::function<void(void)> fn,
                                          Region &region);
+
+  /// Return an `sv::ReadInOutOp` for the specified value, auto-uniquing them.
+  Value getReadInOutOp(Value v);
+
   void addToAlwaysBlock(Value clock, std::function<void(void)> fn);
   void addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
                           ::ResetType resetStyle, sv::EventControl resetEdge,
@@ -1164,6 +1161,11 @@ private:
   /// This is populated by the getOrCreateIntConstant method.
   DenseMap<Attribute, Value> hwConstantMap;
 
+  /// We auto-unique "ReadInOut" ops from wires and regs, enabling optimizations
+  /// and CSEs of the read values to be more obvious.  This caches a known
+  /// ReadInOutOp for the given value and is managed by `getReadInOutOp(v)`.
+  DenseMap<Value, Value> readInOutCreated;
+
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
   llvm::SmallDenseMap<Value, sv::AlwaysOp> alwaysBlocks;
@@ -1335,7 +1337,7 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   // If we got an inout value, implicitly read it.  FIRRTL allows direct use
   // of wires and other things that lower to inout type.
   if (result.getType().isa<hw::InOutType>())
-    return builder.createOrFold<sv::ReadInOutOp>(result);
+    return getReadInOutOp(result);
 
   return result;
 }
@@ -1523,6 +1525,27 @@ void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
   builder.restoreInsertionPoint(oldIP);
 }
 
+/// Return an `sv::ReadInOutOp` for the specified value, auto-uniquing them.
+Value FIRRTLLowering::getReadInOutOp(Value v) {
+  Value &result = readInOutCreated[v];
+  if (result)
+    return result;
+
+  // Make sure to put the "ReadInOut" at the correct scope so it dominates all
+  // future uses.
+  auto oldIP = builder.saveInsertionPoint();
+  if (auto *vOp = v.getDefiningOp()) {
+    builder.setInsertionPointAfter(vOp);
+  } else {
+    // For reads of ports, just put the ReadInOut at the top of the module.
+    builder.setInsertionPoint(&theModule.getBodyBlock()->front());
+  }
+
+  result = builder.createOrFold<sv::ReadInOutOp>(v);
+  builder.restoreInsertionPoint(oldIP);
+  return result;
+}
+
 void FIRRTLLowering::addToAlwaysBlock(Value clock,
                                       std::function<void(void)> fn) {
   // This isn't uniquing the parent region in.  This can be added as a key to
@@ -1533,6 +1556,10 @@ void FIRRTLLowering::addToAlwaysBlock(Value clock,
   auto &op = alwaysBlocks[clock];
   if (op) {
     runWithInsertionPointAtEndOfBlock(fn, op.body());
+    // Move the earlier always block(s) down to where the last would have been
+    // inserted.  This ensures that any values used by the always blocks are
+    // defined ahead of the uses, which leads to better generated Verilog.
+    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
     op = builder.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, fn);
   }
@@ -1548,6 +1575,11 @@ void FIRRTLLowering::addToAlwaysFFBlock(sv::EventControl clockEdge, Value clock,
   if (op) {
     runWithInsertionPointAtEndOfBlock(body, op.bodyBlk());
     runWithInsertionPointAtEndOfBlock(resetBody, op.resetBlk());
+
+    // Move the earlier always block(s) down to where the last would have been
+    // inserted.  This ensures that any values used by the always blocks are
+    // defined ahead of the uses, which leads to better generated Verilog.
+    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
     if (reset) {
       op = builder.create<sv::AlwaysFFOp>(clockEdge, clock, resetStyle,
@@ -1567,6 +1599,11 @@ void FIRRTLLowering::addToIfDefBlock(StringRef cond,
   if (op) {
     runWithInsertionPointAtEndOfBlock(thenCtor, op.thenRegion());
     runWithInsertionPointAtEndOfBlock(elseCtor, op.elseRegion());
+
+    // Move the earlier #ifdef block(s) down to where the last would have been
+    // inserted.  This ensures that any values used by the #ifdef blocks are
+    // defined ahead of the uses, which leads to better generated Verilog.
+    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
     op = builder.create<sv::IfDefOp>(condAttr, thenCtor, elseCtor);
   }
@@ -1576,6 +1613,11 @@ void FIRRTLLowering::addToInitialBlock(std::function<void(void)> body) {
   auto &op = initialBlocks[builder.getBlock()];
   if (op) {
     runWithInsertionPointAtEndOfBlock(body, op.body());
+
+    // Move the earlier initial block(s) down to where the last would have been
+    // inserted.  This ensures that any values used by the initial blocks are
+    // defined ahead of the uses, which leads to better generated Verilog.
+    op->moveBefore(builder.getInsertionBlock(), builder.getInsertionPoint());
   } else {
     op = builder.create<sv::InitialOp>(body);
   }
@@ -1905,20 +1947,11 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   SmallVector<Value, 8> writeOperands;
   DenseMap<Operation *, size_t> returnHolder;
 
-  size_t readCount = 0;
-  size_t writeCount = 0;
-  size_t readwriteCount = 0;
-
   // Memories return multiple structs, one for each port, which means we have
   // two layers of type to split appart.
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto portName = op.getPortName(i).getValue();
     auto portKind = op.getPortKind(i);
-
-    auto &portKindNum =
-        portKind == MemOp::PortKind::Read
-            ? readCount
-            : portKind == MemOp::PortKind::Write ? writeCount : readwriteCount;
 
     auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
                         size_t width) {
@@ -1939,8 +1972,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
           a->eraseOperand(0);
       }
 
-      wire = builder.create<sv::ReadInOutOp>(wire);
-      operands.push_back(wire);
+      operands.push_back(getReadInOutOp(wire));
     };
     auto addOutput = [&](StringRef field, size_t width) {
       auto portType =
@@ -1979,7 +2011,6 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       addInput(writeOperands, "mask", 1);
       addInput(writeOperands, "data", memSummary.dataWidth);
     }
-    ++portKindNum;
   }
 
   auto memModuleAttr = builder.getSymbolRefAttr(getFirMemoryName(memSummary));
@@ -2061,7 +2092,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
     // inout ports directly use the wire, but normal inputs read it.
     if (!port.isInOut())
-      wire = builder.create<sv::ReadInOutOp>(wire);
+      wire = getReadInOutOp(wire);
 
     operands.push_back(wire);
   }
@@ -2802,8 +2833,7 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
       [&]() {
         SmallVector<Value, 4> values;
         for (size_t i = 0, e = inoutValues.size(); i != e; ++i)
-          values.push_back(
-              builder.createOrFold<sv::ReadInOutOp>(inoutValues[i]));
+          values.push_back(getReadInOutOp(inoutValues[i]));
 
         for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
           for (size_t i2 = 0; i2 != e; ++i2)

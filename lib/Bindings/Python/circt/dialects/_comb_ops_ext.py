@@ -185,11 +185,6 @@ class XorOp:
   pass
 
 
-@VariadicOp
-class MergeOp:
-  pass
-
-
 # Sugar classes for miscellaneous ops.
 class ConcatOp:
 

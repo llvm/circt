@@ -138,6 +138,23 @@ enum class DeclKind { Port, Instance, Other };
 
 DeclKind getDeclarationKind(Value val);
 
+enum class ReadPortSubfield { addr, en, clk, data };
+enum class WritePortSubfield { addr, en, clk, data, mask };
+enum class ReadWritePortSubfield { addr, en, clk, rdata, wmode, wdata, wmask };
+
+/// Allow 'or'ing MemDirAttr.  This allows combining Read and Write into
+/// ReadWrite.
+inline MemDirAttr operator|(MemDirAttr lhs, MemDirAttr rhs) {
+  return static_cast<MemDirAttr>(
+      static_cast<std::underlying_type<MemDirAttr>::type>(lhs) |
+      static_cast<std::underlying_type<MemDirAttr>::type>(rhs));
+}
+
+inline MemDirAttr &operator|=(MemDirAttr &lhs, MemDirAttr rhs) {
+  lhs = lhs | rhs;
+  return lhs;
+}
+
 // Out-of-line implementation of various trait verification methods and
 // functions commonly used among operations.
 namespace impl {
@@ -188,5 +205,31 @@ public:
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/FIRRTL/FIRRTL.h.inc"
+
+//===----------------------------------------------------------------------===//
+// Traits
+//===----------------------------------------------------------------------===//
+
+namespace llvm {
+template <>
+struct DenseMapInfo<circt::firrtl::FModuleOp> {
+  using Operation = mlir::Operation;
+  using FModuleOp = circt::firrtl::FModuleOp;
+  static inline FModuleOp getEmptyKey() {
+    return FModuleOp::getFromOpaquePointer(
+        DenseMapInfo<Operation *>::getEmptyKey());
+  }
+  static inline FModuleOp getTombstoneKey() {
+    return FModuleOp::getFromOpaquePointer(
+        DenseMapInfo<Operation *>::getTombstoneKey());
+  }
+  static unsigned getHashValue(const FModuleOp &val) {
+    return DenseMapInfo<Operation *>::getHashValue(val);
+  }
+  static bool isEqual(const FModuleOp &lhs, const FModuleOp &rhs) {
+    return lhs == rhs;
+  }
+};
+} // end namespace llvm
 
 #endif // CIRCT_DIALECT_FIRRTL_OPS_H

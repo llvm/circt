@@ -107,29 +107,10 @@ firrtl.module @Foo() {
 // -----
 
 firrtl.circuit "Foo" {
-  firrtl.module @Foo(in %clk: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
-    // expected-error @+1 {{'firrtl.reg' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
-    %a = firrtl.reg %clk {name = "a"} : (!firrtl.uint<1>) -> !firrtl.uint<1>
-  }
-}
-
-// -----
-
-firrtl.circuit "Foo" {
-  firrtl.module @Foo(in %clk: !firrtl.uint<1>, in %reset: !firrtl.uint<1>) {
-    %zero = firrtl.constant 0 : !firrtl.uint<1>
-    // expected-error @+1 {{'firrtl.regreset' op operand #0 must be clock, but got '!firrtl.uint<1>'}}
-    %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  }
-}
-
-// -----
-
-firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk: !firrtl.clock, in %reset: !firrtl.uint<2>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @+1 {{'firrtl.regreset' op operand #1 must be Reset, but got '!firrtl.uint<2>'}}
-    %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : (!firrtl.clock, !firrtl.uint<2>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : !firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -381,6 +362,62 @@ firrtl.circuit "OutOfOrder" {
 
 // -----
 
+firrtl.circuit "CombMemInvalidReturnType" {
+  firrtl.module @CombMemInvalidReturnType() {
+    // expected-error @+1 {{'firrtl.combmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
+    %mem = firrtl.combmem : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "CombMemNonPassiveReturnType" {
+  firrtl.module @CombMemNonPassiveReturnType() {
+    // expected-error @+1 {{behavioral memory element type must be passive}}
+    %mem = firrtl.combmem : !firrtl.cmemory<bundle<a flip : uint<1>>, 1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SeqMemInvalidReturnType" {
+  firrtl.module @SeqMemInvalidReturnType() {
+    // expected-error @+1 {{'firrtl.seqmem' op result #0 must be a behavioral memory, but got '!firrtl.uint<1>'}}
+    %mem = firrtl.seqmem Undefined : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+firrtl.circuit "SeqMemNonPassiveReturnType" {
+  firrtl.module @SeqMemNonPassiveReturnType() {
+    // expected-error @+1 {{behavioral memory element type must be passive}}
+    %mem = firrtl.seqmem Undefined : !firrtl.cmemory<bundle<a flip : uint<1>>, 1>
+  }
+}
+
+// -----
+
+firrtl.circuit "MemoryPortInvalidReturnType" {
+  firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
+    %mem = firrtl.combmem : !firrtl.cmemory<uint<8>, 8>
+    // expected-error @+1 {{'firrtl.memoryport' op port should be used by a firrtl.memoryport.access}}
+    %memoryport_data, %memoryport_port = firrtl.memoryport Infer %mem {name = "memoryport"} : (!firrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<8>, !firrtl.cmemoryport)
+  }
+}
+
+// -----
+
+firrtl.circuit "MemoryPortInvalidReturnType" {
+  firrtl.module @MemoryPortInvalidReturnType(in %sel : !firrtl.uint<8>, in %clock : !firrtl.clock) {
+    %mem = firrtl.combmem : !firrtl.cmemory<uint<8>, 8>
+    // expected-error @+1 {{'firrtl.memoryport' op inferred type(s) '!firrtl.uint<8>', '!firrtl.cmemoryport' are incompatible with return type(s) of operation '!firrtl.uint<9>', '!firrtl.cmemoryport'}}
+    %memoryport_data, %memoryport_port = firrtl.memoryport Infer %mem {name = "memoryport"} : (!firrtl.cmemory<uint<8>, 8>) -> (!firrtl.uint<9>, !firrtl.cmemoryport)
+  }
+}
+
+// -----
+
 firrtl.circuit "MemoryNegativeReadLatency" {
   firrtl.module @MemoryNegativeReadLatency() {
     // expected-error @+1 {{'firrtl.mem' op attribute 'readLatency' failed to satisfy constraint}}
@@ -447,7 +484,7 @@ firrtl.circuit "MemoryMissingDataField" {
 firrtl.circuit "MemoryMissingDataField2" {
   firrtl.module @MemoryMissingDataField2() {
     // expected-error @+1 {{'firrtl.mem' op has no data field on port "rw" (expected to see "data" for a read or write port or "rdata" for a read/write port)}}
-    %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory2", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, writedata: uint<8>, wmask: uint<1>>
+    %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory2", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, writedata: uint<8>, wmask: uint<1>>
   }
 }
 
@@ -491,8 +528,8 @@ firrtl.circuit "MemoryPortInvalidWriteKind" {
 
 firrtl.circuit "MemoryPortInvalidReadWriteKind" {
   firrtl.module @MemoryPortInvalidReadWriteKind() {
-    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "rw" of determined kind "readwrite" (expected '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, wdata: uint<8>, wmask: uint<1>>', but got '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, wdata: uint<8>, BAD: uint<1>>')}}
-    %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, wmode: uint<1>, rdata flip: uint<8>, wdata: uint<8>, BAD: uint<1>>
+    // expected-error @+1 {{'firrtl.mem' op has an invalid type for port "rw" of determined kind "readwrite" (expected '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>', but got '!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, BAD: uint<1>>')}}
+    %memory_r= firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, BAD: uint<1>>
   }
 }
 

@@ -28,9 +28,6 @@ puts $circuit
 # CHECK:     %true = hw.constant true
 # CHECK:     %0 = sv.wire  : !hw.inout<i1>
 # CHECK:     %false = hw.constant false
-# CHECK:     sv.alwaysff(posedge %true)  {
-# CHECK:       sv.passign %0, %false : i1
-# CHECK:     }
 # CHECK:     hw.output
 # CHECK:   }
 # CHECK: }

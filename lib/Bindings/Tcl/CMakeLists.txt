@@ -4,7 +4,6 @@ add_library(circt-tcl
 )
 target_link_libraries(circt-tcl
   PUBLIC
-    CIRCTCAPIQuery
     CIRCTCAPIComb
     CIRCTCAPIESI
     CIRCTCAPIMSFT

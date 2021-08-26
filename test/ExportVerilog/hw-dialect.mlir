@@ -351,21 +351,6 @@ hw.module @wires(%in4: i4, %in8: i8) -> (%a: i4, %b: i8, %c: i8) {
   hw.output %wireout, %memout1, %memout2 : i4, i8, i8
 }
 
-// CHECK-LABEL: module merge
-hw.module @merge(%in1: i4, %in2: i4, %in3: i4, %in4: i4) -> (%x: i4) {
-  // CHECK: wire [3:0] _T;
-  // CHECK: assign _T = in1 + in2;
-  %a = comb.add %in1, %in2 : i4
-
-  // CHECK-NEXT: assign _T = in2;
-  // CHECK-NEXT: assign _T = in3;
-  %b = comb.merge %a, %in2, %in3 : i4
-
-  // CHECK: assign x = _T + in4 + in4;
-  %c = comb.add %b, %in4, %in4 : i4
-  hw.output %c : i4
-}
-
 // CHECK-LABEL: module signs
 hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %awire = sv.wire : !hw.inout<i4>
@@ -411,8 +396,8 @@ hw.module @casts(%in1: i7, %in2: !hw.array<8xi4>) -> (%r1: !hw.array<7xi1>, %r2:
   %r1 = hw.bitcast %in1 : (i7) -> !hw.array<7xi1>
   %r2 = hw.bitcast %in2 : (!hw.array<8xi4>) -> i32
 
-  // CHECK-NEXT: wire [31:0] {{.+}} = /*cast(bit[31:0])*/in2;
   // CHECK-NEXT: assign r1 = in1;
+  // CHECK-NEXT: assign r2 = /*cast(bit[31:0])*/in2;
   hw.output %r1, %r2 : !hw.array<7xi1>, i32
 }
 
@@ -420,8 +405,8 @@ hw.module @casts(%in1: i7, %in2: !hw.array<8xi4>) -> (%r1: !hw.array<7xi1>, %r2:
 // CHECK-NEXT:      input  [3:0]               a,
 // CHECK-NEXT:   // input  /*Zero Width*/      zeroBit,
 // CHECK-NEXT:   // input  [2:0]/*Zero Width*/ arrZero,
-// CHECK-NEXT:      output [3:0]               r0,
-// CHECK-NEXT:   // output /*Zero Width*/      rZero,
+// CHECK-NEXT:      output [3:0]               r0
+// CHECK-NEXT:   // output /*Zero Width*/      rZero
 // CHECK-NEXT:   // output [2:0]/*Zero Width*/ arrZero_0
 // CHECK-NEXT:    );
 // CHECK-EMPTY:
@@ -692,7 +677,8 @@ hw.module.extern @San(%san_input : i0) -> ()
 hw.module @Ichi() -> (%Ichi_output : i0) {
   %0 = hw.instance "ni" @Ni() : () -> (i0)
   // CHECK: Ni ni (
-  // CHECK: //.ni_output (Ichi_output));
+  // CHECK: //.ni_output (Ichi_output)
+  // CHECK-NEXT: );
 
   hw.output %0 : i0
   // CHECK: endmodule
@@ -702,11 +688,13 @@ hw.module @Ichi() -> (%Ichi_output : i0) {
 hw.module @Chi() -> (%Chi_output : i0) {
   %0 = hw.instance "ni" @Ni() : () -> (i0)
   // CHECK: Ni ni (
-  // CHECK: //.ni_output (ni_ni_output));
+  // CHECK: //.ni_output (ni_ni_output)
+  // CHECK-NEXT: );
 
   hw.instance "san" @San(%0) : (i0) -> ()
   // CHECK: San san (
-  // CHECK: //.san_input (ni_ni_output));
+  // CHECK: //.san_input (ni_ni_output)
+  // CHECK-NEXT: );
 
   // CHECK: // Zero width: assign Chi_output = ni_ni_output;
   hw.output %0 : i0
@@ -730,3 +718,58 @@ hw.module @Chi() -> (%Chi_output : i0) {
    hw.output
  }
  hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}
+
+// CHECK-LABEL: module Issue1563(
+hw.module @Issue1563(%a: i32) -> (%out : i32) {
+  // CHECK: assign out = a + a;{{.*}}//{{.*}}XX.scala:123:19, YY.haskell:309:14, ZZ.swift:3:4
+  %0 = comb.add %a, %a : i32 loc(fused["XX.scala":123:19, "YY.haskell":309:14, "ZZ.swift":3:4])
+  hw.output %0 : i32
+  // CHECK: endmodule
+}
+
+// CHECK-LABEL: module Foo1587
+// Issue #1587: https://github.com/llvm/circt/issues/1587
+hw.module @Foo1587(%idx: i2, %a_0: i4, %a_1: i4, %a_2: i4, %a_3: i4) -> (%b: i4) {
+  %0 = hw.array_create %a_0, %a_1, %a_2, %a_3 : i4
+  %1 = hw.array_get %0[%idx] : !hw.array<4xi4>
+  hw.output %1 : i4
+  // CHECK: wire [3:0][3:0] [[WIRE:.+]] = {{[{}][{}]}}a_0}, {a_1}, {a_2}, {a_3}};
+  // CHECK-NEXT: assign b = [[WIRE]][idx];
+}
+
+// CHECK-LABEL:   module AddNegLiteral(
+// Issue #1324: https://github.com/llvm/circt/issues/1324
+hw.module @AddNegLiteral(%a: i8, %x: i8, %y: i8) -> (%o1: i8, %o2: i8) {
+
+  // CHECK: assign o1 = a - 8'h4;
+  %c = hw.constant -4 : i8
+  %1 = comb.add %a, %c : i8
+
+  // CHECK: assign o2 = x + y - 8'h4;
+  %2 = comb.add %x, %y, %c : i8
+
+  hw.output %1, %2 : i8, i8
+}
+
+
+// CHECK-LABEL:   module ShiftAmountZext(
+// Issue #1569: https://github.com/llvm/circt/issues/1569
+hw.module @ShiftAmountZext(%a: i8, %b1: i4, %b2: i4, %b3: i4)
+ -> (%o1: i8, %o2: i8, %o3: i8) {
+
+  %c = hw.constant 0 : i4
+  %B1 = comb.concat %c, %b1 : (i4, i4) -> i8
+  %B2 = comb.concat %c, %b2 : (i4, i4) -> i8
+  %B3 = comb.concat %c, %b3 : (i4, i4) -> i8
+
+  // CHECK: assign o1 = a << b1;
+  %r1 = comb.shl %a, %B1 : i8
+
+  // CHECK: assign o2 = a >> b2;
+  %r2 = comb.shru %a, %B2 : i8
+
+  // CHECK: assign o3 = $signed(a) >>> $signed(b3);
+  %r3 = comb.shrs %a, %B3 : i8
+  hw.output %r1, %r2, %r3 : i8, i8, i8
+}
+

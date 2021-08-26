@@ -17,6 +17,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace calyx;
@@ -48,14 +49,33 @@ static RegisterOp createRegister(OpBuilder &builder, ComponentOp &component,
                                     StringAttr::get(context, name), width);
 }
 
-/// Generates a latency-insensitive FSM to realize a sequential operation. This
-/// is done by initializing GroupGoOp values for the enabled groups in the
-/// SeqOp, and then creating a new Seq GroupOp with the given FSM. Each step in
-/// the FSM is guarded by the done operation of the group currently being
-/// executed. After the group is complete, the FSM is incremented. This SeqOp is
-/// then replaced in the control with an Enable statement referring to the new
-/// Seq GroupOp.
-static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
+class CompileControlVisitor {
+public:
+  void dispatch(Operation *op, ComponentOp component) {
+    TypeSwitch<Operation *>(op)
+        .template Case<SeqOp, EnableOp>(
+            [&](auto opNode) { visit(opNode, component); })
+        .Default([&](auto) {
+          op->emitError() << "Operation '" << op->getName()
+                          << "' not supported for control compilation";
+        });
+  }
+
+private:
+  void visit(SeqOp seqOp, ComponentOp &component);
+  void visit(EnableOp, ComponentOp &) {
+    // nothing to do
+  }
+};
+
+/// Generates a latency-insensitive FSM to realize a sequential operation.
+/// This is done by initializing GroupGoOp values for the enabled groups in
+/// the SeqOp, and then creating a new Seq GroupOp with the given FSM. Each
+/// step in the FSM is guarded by the done operation of the group currently
+/// being executed. After the group is complete, the FSM is incremented. This
+/// SeqOp is then replaced in the control with an Enable statement referring
+/// to the new Seq GroupOp.
+void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   auto wires = component.getWiresOp();
   Block *wiresBody = wires.getBody();
 
@@ -71,10 +91,9 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
 
   OpBuilder builder(component->getRegion(0));
   auto fsmRegister = createRegister(builder, component, fsmBitWidth, "fsm");
-  // TODO(Calyx): Add methods to RegisterOp to access ports.
-  auto fsmIn = fsmRegister.getResult(0);
-  auto fsmWriteEn = fsmRegister.getResult(1);
-  auto fsmOut = fsmRegister.getResult(4);
+  Value fsmIn = fsmRegister.inPort();
+  Value fsmWriteEn = fsmRegister.writeEnPort();
+  Value fsmOut = fsmRegister.outPort();
 
   builder.setInsertionPointToStart(wiresBody);
   auto oneConstant = createConstant(builder, wires->getLoc(), 1, 1);
@@ -145,8 +164,8 @@ static void visitSeqOp(SeqOp &seq, ComponentOp &component) {
     ++fsmIndex;
   });
 
-  // Build the final guard for the new Seq group's GroupDoneOp. This is defined
-  // by the fsm's final state.
+  // Build the final guard for the new Seq group's GroupDoneOp. This is
+  // defined by the fsm's final state.
   builder.setInsertionPoint(seqGroup);
   auto isFinalState = builder.create<comb::ICmpOp>(
       wires->getLoc(), comb::ICmpPredicate::eq, fsmOut, fsmNextState);
@@ -182,10 +201,12 @@ struct CompileControlPass : public CompileControlBase<CompileControlPass> {
 
 void CompileControlPass::runOnOperation() {
   ComponentOp component = getOperation();
-  component.getControlOp().walk([&](SeqOp seq) { visitSeqOp(seq, component); });
+  CompileControlVisitor CompileControlVisitor;
+  component.getControlOp().walk(
+      [&](Operation *op) { CompileControlVisitor.dispatch(op, component); });
 
-  // A post-condition of this pass is that all undefined GroupGoOps, created in
-  // the Go Insertion pass, are now defined.
+  // A post-condition of this pass is that all undefined GroupGoOps, created
+  // in the Go Insertion pass, are now defined.
   component.getWiresOp().walk([&](UndefinedOp op) { op->erase(); });
 }
 

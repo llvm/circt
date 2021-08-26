@@ -7,8 +7,9 @@ from __future__ import annotations
 from pycde.support import obj_to_value
 
 from .pycde_types import types
-from .support import (Value, get_user_loc, var_to_attribute, OpOperandConnect,
+from .support import (get_user_loc, var_to_attribute, OpOperandConnect,
                       create_type_string)
+from .value import Value
 
 from circt import support
 from circt.dialects import hw
@@ -132,7 +133,7 @@ class module:
     if self.extern_mod is None:
       # Find the top MLIR module.
       mod = op
-      while mod.name != "module":
+      while mod.parent is not None:
         mod = mod.parent
 
       input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
@@ -315,8 +316,8 @@ def _module_base(cls, extern: bool, params={}):
   for (idx, (name, type)) in enumerate(mod._output_ports):
     setattr(
         mod, name,
-        property(
-            lambda self, idx=idx, type=type: Value(self.results[idx], type)))
+        property(lambda self, idx=idx, type=type: Value.get(
+            self.results[idx], type)))
     cls._dont_touch.add(name)
   mod._output_ports_lookup = dict(mod._output_ports)
 
@@ -362,7 +363,7 @@ class _Generate:
 
     # Find the top MLIR module.
     mod = op
-    while mod.name != "module":
+    while mod.parent is not None:
       mod = mod.parent
 
     # Assemble the parameters.
@@ -505,5 +506,5 @@ class ModuleDefinition(hw.HWModuleOp):
         ty = self.modcls._input_ports_lookup[name]
       else:
         ty = support.type_to_pytype(val.type)
-      return Value(val, ty)
+      return Value.get(val, ty)
     raise AttributeError(f"unknown input port name {name}")

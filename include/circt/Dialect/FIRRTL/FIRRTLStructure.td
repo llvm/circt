@@ -60,14 +60,17 @@ def FModuleOp : FIRRTLOp<"module",
   }];
   let arguments =
             (ins StrArrayAttr:$portNames,
-                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
+                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+                 DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
+
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
-               CArg<"ArrayAttr","{}">:$annotations)>
+               CArg<"ArrayAttr","ArrayAttr()">:$annotations,
+               CArg<"ArrayAttr","ArrayAttr()">:$portAnnotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -138,8 +141,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let arguments = (ins StrArrayAttr:$portNames,
                        OptionalAttr<StrAttr>:$defname,
                        OptionalAttr<DictionaryAttr>:$parameters,
-                       DefaultValuedAttr<AnnotationArrayAttr,
-                                         "{}">:$annotations);
+                       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+                       DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -148,7 +151,8 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
-                      CArg<"ArrayAttr", "{}">:$annotations)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
+                      CArg<"ArrayAttr","ArrayAttr()">:$portAnnotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -184,3 +188,17 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyFExtModuleOp(*this);";
 }
+
+def NonLocalAnchor : FIRRTLOp<"nla",
+      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">]> {
+  let summary = "Anchor for non-local annotations";
+  let description = [{
+    The "firrtl.nla" operation represents a common point for non-local (path)
+    annotations to anchor to in the global scope.  This lets components of the
+    path point to a common entity.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, SymbolArrayAttr:$modpath, StringArrayAttr:$namepath);
+  let results = (outs);
+  let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
+}
+

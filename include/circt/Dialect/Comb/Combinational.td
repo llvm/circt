@@ -28,7 +28,7 @@ class BinOp<string mnemonic, list<OpTrait> traits = []> :
 class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
       BinOp<mnemonic,
                traits # [SameTypeOperands, SameOperandsAndResultType]> {
-  let assemblyFormat = "$lhs `,` $rhs  attr-dict `:` type($result)";
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
 }
 
 // Base class for variadic operators.
@@ -67,12 +67,12 @@ let hasFolder = true in {
   def DivSOp : UTBinOp<"divs">;
   def ModUOp : UTBinOp<"modu">;
   def ModSOp : UTBinOp<"mods">;
-  def ShlOp : UTBinOp<"shl">;
-  def ShrUOp : UTBinOp<"shru">;
-  def ShrSOp : UTBinOp<"shrs">;
-
-  let hasCanonicalizeMethod = true in
-  def SubOp : UTBinOp<"sub">;
+  let hasCanonicalizeMethod = true in {
+    def ShlOp : UTBinOp<"shl">;
+    def ShrUOp : UTBinOp<"shru">;
+    def ShrSOp : UTBinOp<"shrs">;
+    def SubOp : UTBinOp<"sub">;
+  }
 }
 
 def AndOp : UTVariadicOp<"and", [Commutative]>;
@@ -83,21 +83,6 @@ def XorOp : UTVariadicOp<"xor", [Commutative]> {
     /// its RHS operand.
     bool isBinaryNot();
   }];
-}
-
-def MergeOp : UTVariadicOp<"merge", [Commutative]> {
-  let summary ="Electrically merge signals together as if connected by a wire.";
-  let description = [{
-    This operation merges multiple signals together as if they were connected to
-    a single wire.  Presumably at most one of them should be a Z state at any
-    given time otherwise you'd get a short circuit.
-
-    This operation allows modeling multiconnect semantics in SSA.
-    ```
-      %result = hw.merge %a, %b, %c : t1
-    ```
-    }];
-  let hasCanonicalizeMethod = false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -156,6 +141,10 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
     /// Returns true if the predicate is signed.
     static bool isPredicateSigned(ICmpPredicate predicate);
 
+    /// Returns the predicate for a logically negated comparison, e.g. mapping
+    /// EQ => NE and SLE => SGT.
+    static ICmpPredicate getNegatedPredicate(ICmpPredicate predicate);
+
     /// Return true if this is an equality test with -1, which is a "reduction
     /// and" operation in Verilog.
     bool isEqualAllOnes();
@@ -200,6 +189,13 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
   let hasFolder = true;
   let verifier = "return ::verifyExtractOp(*this);";
   let hasCanonicalizeMethod = true;
+
+  let builders = [
+    OpBuilder<(ins "Value":$lhs, "int32_t":$lowBit, "int32_t":$bitWidth), [{
+      auto resultType = $_builder.getIntegerType(bitWidth);
+      return build($_builder, $_state, resultType, lhs, lowBit);
+    }]>
+  ];
 }
 
 def SExtOp : CombOp<"sext", [NoSideEffect]> {
@@ -212,6 +208,7 @@ def SExtOp : CombOp<"sext", [NoSideEffect]> {
     "$input attr-dict `:` functional-type($input, $result)";
 
   let hasFolder = true;
+  let hasCanonicalizeMethod = true;
   let verifier = "return ::verifySExtOp(*this);";
 }
 

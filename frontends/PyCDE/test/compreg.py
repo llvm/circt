@@ -6,6 +6,7 @@ from pycde import types, module, Input, Output
 from circt.dialects import seq
 from pycde.module import generator
 
+
 @module
 class CompReg:
   clk = Input(types.i1)

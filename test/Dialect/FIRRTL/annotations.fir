@@ -107,13 +107,13 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
 
 ; // -----
 
-; A ReferenceTarget/ComponentName pointing at a CMem should work.
+; A ReferenceTarget/ComponentName pointing at a CombMem should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     cmem bar: UInt<1>[8]
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.cmem
+    ; CHECK: firrtl.combmem
     ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
 
 ; // -----
@@ -204,13 +204,13 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.baz
 
 ; // -----
 
-; A ReferenceTarget/ComponentName pointing at an SMem should work.
+; A ReferenceTarget/ComponentName pointing at an SeqMem should work.
 circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar"}]]
   module Foo:
     smem bar: UInt<1>[8]
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.smem
+    ; CHECK: firrtl.seqmem
     ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
 
 ; // -----
@@ -305,6 +305,24 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar[0]"},{"two":null,"target":"~F
 
 ; // -----
 
+; Subindices should not get sign-extended and cause problems.  This circuit has
+; caused bugs in the past.
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo>w[9]"}]]
+  module Foo:
+    input a: UInt<1>[18]
+    output b: UInt<1>[18]
+
+    wire w: UInt<1>[18]
+
+    w <= a
+    b <= w
+
+    ; CHECK-LABEL: module {
+    ; CHECK: %w = firrtl.wire {annotations =
+    ; CHECK-SAME: #firrtl.subAnno<fieldID = 10, {a}
+
+; // -----
+
 ; Annotations should apply even when the target's name is dropped.
 circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
                 {"target": "~Foo|Foo>_T_1", "a": "a"},
@@ -330,11 +348,11 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     ; CHECK: %3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %4 = firrtl.smem Undefined {annotations = [{a = "a"}]
+    ; CHECK: %4 = firrtl.seqmem Undefined {annotations = [{a = "a"}]}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %5 = firrtl.cmem  {annotations = [{a = "a"}], name = ""}
+    ; CHECK: %5 = firrtl.combmem  {annotations = [{a = "a"}]}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: %6 = firrtl.memoryport {{.+}} {annotations = [{a = "a"}]
+    ; CHECK: firrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = ""}
     inst _T_7 of Bar
@@ -378,13 +396,13 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = firrtl.smem Undefined  {annotations =
+    ; CHECK: %_T_4 = firrtl.seqmem Undefined  {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = firrtl.cmem  {annotations = [
+    ; CHECK: %_T_5 = firrtl.combmem  {annotations = [
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: %_T_6 = firrtl.memoryport Infer %_T_5, %reset, %clock {annotations =
+    ; CHECK: firrtl.memoryport Infer %_T_5 {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance @Bar  {annotations =
@@ -660,7 +678,7 @@ circuit GCTMemTap : %[
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
     ; CHECK-SAME:      id = [[ID]] : i64}>
     ; CHECK: firrtl.module @GCTMemTap
-    ; CHECK: %mem = firrtl.cmem
+    ; CHECK: %mem = firrtl.combmem
     ; CHECK-SAME: annotations = [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
     ; CHECK-SAME:    id = [[ID]] : i64}]
