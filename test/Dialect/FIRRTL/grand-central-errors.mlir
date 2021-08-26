@@ -1,18 +1,5 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-grand-central)' -split-input-file -verify-diagnostics %s
 
-// expected-error @+1 {{an 'ExtractGrandCentralAnnotation' must be provided to the Grand Central pass, but no such annotation was found}}
-firrtl.circuit "NoExtractGrandCentralAnnotation" attributes {
-  annotations = [
-    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-     defName = "Foo",
-     elements = [
-       {name = "foo",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]}] } {
-  firrtl.module @NoExtractGrandCentralAnnotation() {}
-}
-
-// -----
-
 // expected-error @+1 {{more than one 'ExtractGrandCentralAnnotation' was found, but exactly one must be provided}}
 firrtl.circuit "MoreThanOneExtractGrandCentralAnnotation" attributes {
   annotations = [
@@ -37,28 +24,43 @@ firrtl.circuit "NonGroundType" attributes {
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "Foo",
      elements = [
-       {name = "foo",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64,
+        name = "foo"}],
+     id = 0 : i64},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
-  firrtl.module @NonGroundType() {
-    // expected-error @+2 {{'firrtl.wire' op cannot be added to interface 'Foo', component 'foo' because it is not a ground type.}}
-    // expected-note @+1 {{"sifive.enterprise.grandcentral.AugmentedGroundType"}}
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    // expected-error @+1 {{'firrtl.wire' op cannot be added to interface with id '0' because it is not a ground type}}
     %a = firrtl.wire {
       annotations = [
         {a},
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-         defName = "Foo",
-         name = "foo",
-         target = []}]} : !firrtl.vector<uint<2>, 1>
+         id = 1 : i64}]} : !firrtl.vector<uint<2>, 1>
+    firrtl.instance @View_companion { name = "View_companion" }
+  }
+  firrtl.module @NonGroundType() {
+    firrtl.instance @DUT {name = "dut"}
   }
 }
 
 // -----
 
-// expected-error @+2 {{'firrtl.circuit' op contained an 'AugmentedBundleType' Annotation which did not conform to the expected format}}
-// expected-note @+1 {{the problematic 'AugmentedBundleType' is:}}
+// expected-error @+1 {{missing 'id' in root-level BundleType}}
 firrtl.circuit "NonGroundType" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType"},
@@ -75,28 +77,37 @@ firrtl.circuit "Foo" attributes {
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "View",
      elements = [
-       {name = "sub_port",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64}],
+     id = 0 : i64},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]}  {
-  firrtl.module @Bar(in %a: !firrtl.uint<1>) {}
-  firrtl.module @Foo(in %a: !firrtl.uint<1>) attributes {
+  firrtl.module @View_companion() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
        id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @Bar(in %a: !firrtl.uint<1>) {}
+  firrtl.module @DUT(in %a: !firrtl.uint<1>) attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "View",
        type = "parent"}]} {
-    // expected-error @+2 {{'firrtl.instance' op is marked as a an interface element}}
-    // expected-note @+1 {{{class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "View", name = "sub_port", target = [".a"]}}}
+    // expected-error @+1 {{'firrtl.instance' op is marked as an interface element, but this should be impossible due to how the Chisel Grand Central API works}}
     %bar_a = firrtl.instance @Bar {
-      annotations = [
-        {a},
+      portAnnotations = [[
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-         defName = "View",
-         name = "sub_port",
-         target = [".a"]}],
+         id = 1 : i64}]],
       name = "bar"} : !firrtl.uint<1>
     firrtl.connect %bar_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.instance @View_companion { name = "View_companion" }
+  }
+  firrtl.module @Foo() {
+    %dut_a = firrtl.instance @DUT {name = "dut"} : !firrtl.uint<1>
   }
 }
 
@@ -107,45 +118,75 @@ firrtl.circuit "Foo" attributes {
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "View",
      elements = [
-       {name = "sub_port",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 1 : i64,
+        name = "foo"}],
+     id = 0 : i64},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]}  {
-  firrtl.module @Foo(in %a: !firrtl.uint<1>) attributes {
+  firrtl.module @View_companion() attributes {
     annotations = [
-      {class = "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
        id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @DUT(in %a: !firrtl.uint<1>) attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "View",
        type = "parent"}]} {
-    // expected-error @+2 {{'firrtl.mem' op is marked as a an interface element}}
-    // expected-note @+1 {{{class = "sifive.enterprise.grandcentral.AugmentedGroundType", defName = "View", name = "some_mem", target = []}}}
+    // expected-error @+1 {{'firrtl.mem' op is marked as an interface element, but this does not make sense (is there a scattering bug or do you have a malformed hand-crafted MLIR circuit?)}}
     %memory_b_r = firrtl.mem Undefined {
       annotations = [
         {a},
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-         defName = "View",
-         name = "some_mem",
-         target = []}],
+         id = 1 : i64}],
       depth = 16 : i64,
       name = "memory_b",
       portNames = ["r"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.instance @View_companion { name = "View_companion" }
+  }
+  firrtl.module @Foo() {
+    %dut_a = firrtl.instance @DUT {name = "dut"} : !firrtl.uint<1>
   }
 }
 
 // -----
 
-// expected-error @+1 {{'firrtl.circuit' op contained a Grand Central Interface 'Bar' that had an element 'baz' which did not have a scattered companion annotation}}
+// expected-error @+1 {{'firrtl.circuit' op has an AugmentedGroundType with 'id == 42' that does not have a scattered leaf to connect to in the circuit}}
 firrtl.circuit "Foo" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "Bar",
      elements = [
-       {name = "baz",
-        tpe = "sifive.enterprise.grandcentral.AugmentedGroundType"}]},
+       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        id = 42 : i64,
+        name = "baz"}],
+     id = 0 : i64},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]}  {
-  firrtl.module @Foo() {}
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "View",
+       type = "parent"}]} {
+    firrtl.instance @View_companion {name = "View_companion"}
+  }
+  firrtl.module @Foo() {
+    firrtl.instance @DUT {name = "dut"}
+  }
 }
