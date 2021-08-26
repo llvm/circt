@@ -14,13 +14,13 @@ hir.func @test at %t() -> (i4){
   %c1 = constant 1   : i4
   %c15 = constant 15 : i4
 
-  %tt2 = hir.for %i:i4 = %c0 to %c15 step %c1 iter_time(%ti = %t+1){
+  %tt2 = hir.for %i:i4 = %c0 to %c15 step %c1 iter_time(%ti = %tt1+1){
     %c2  = constant 2 : i4
     %res1 = hir.addi (%i, %c2) at %ti :i4
     hir.next_iter at %ti+1 
   }
   %b = constant 1:i1
-  %t_end = hir.while(%b) at iter_time(%tw = %t + 2){
+  %t_end = hir.while(%b) at iter_time(%tw = %tt2 + 2){
     %bb = constant 1:i1
     hir.condition %bb 
     hir.next_iter at %tw+1

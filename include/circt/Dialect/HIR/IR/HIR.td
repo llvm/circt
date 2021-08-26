@@ -68,7 +68,7 @@ def IsFirstIterOp :HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>,NoSi
   let summary = "Returns true if this is the first iteration.";
   let results = (outs I1:$res);
 
-  let assemblyFormat = [{ attr-dict `:` type($res)}];
+  let assemblyFormat = [{ custom<WithSSANames>(attr-dict) `:` type($res)}];
 }
 
 def ConditionOp : HIR_Op<"condition", [ParentOneOf<["WhileOp"]>] > {
@@ -284,7 +284,7 @@ def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
   let arguments = (ins StrAttr:$mem_type, ArrayAttr: $ports);
   let results = (outs HIR_MemrefType:$res);
 
-  let assemblyFormat = [{`(`$mem_type`)` attr-dict 
+  let assemblyFormat = [{`(`$mem_type`)` custom<WithSSANames>(attr-dict) 
     `:` type($res) `ports` $ports}];
   let verifier =[{return verify$cppClass(*this);}];
 }
@@ -301,9 +301,7 @@ def BusInstantiateOp :HIR_Op<"bus.instantiate",[NoSideEffect]> {
   let arguments = (ins);
   let results = (outs AnyType:$res);
 
-  let assemblyFormat = [{attr-dict 
-    `:` type($res)
-  }];
+  let assemblyFormat = [{custom<WithSSANames>(attr-dict) `:` type($res) }];
 }
 
 def LoadOp : HIR_Op<"load", [NoSideEffect, AttrSizedOperandSegments]> {
@@ -669,7 +667,7 @@ def TensorExtractOp :HIR_Op<"tensor.extract",[NoSideEffect]>{
   let arguments = (ins AnyType: $tensor, Variadic<Index>: $indices, ArrayAttr: $ports);
   let results = (outs HIR_BusType: $res);
 
-  let assemblyFormat = [{ $tensor `[`$indices`]` attr-dict `:`
+  let assemblyFormat = [{ $tensor `[`$indices`]` custom<WithSSANames>(attr-dict) `:`
     type($tensor) `->` type($res) `ports` $ports}];
 }
 
@@ -700,7 +698,7 @@ def CreateTupleOp:HIR_Op<"create_tuple",[NoSideEffect]>{
   let arguments = (ins Variadic<AnyType>: $args);
   let results = (outs AnyType: $res);
 
-  let assemblyFormat = [{ `(` $args`)` attr-dict `:` 
+  let assemblyFormat = [{ `(` $args`)` custom<WithSSANames>(attr-dict) `:` 
     `(` type($args) `)` `->` type($res) }];
 }
 
@@ -715,7 +713,7 @@ def UnpackTupleOp:HIR_Op<"unpack_tuple",[NoSideEffect]>{
   let arguments = (ins AnyType: $tuple);
   let results = (outs Variadic<AnyType>: $res);
 
-  let assemblyFormat = [{ `(` $tuple`)` attr-dict `:` 
+  let assemblyFormat = [{ `(` $tuple`)` custom<WithSSANames>(attr-dict) `:` 
     type($tuple) `->` `(` type($res) `)`}];
 }
 
