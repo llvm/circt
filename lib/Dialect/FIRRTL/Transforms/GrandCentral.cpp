@@ -340,12 +340,10 @@ void GrandCentralVisitor::handlePorts(Operation *op) {
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     auto port = ports[i];
     handleRefLike(op, port.annotations, port.type);
-
-    newArgAttrs.push_back(port.annotations.applyToPortDictionaryAttr(
-        DictionaryAttr::get(op->getContext(), {})));
+    newArgAttrs.push_back(port.annotations.getArrayAttr());
   }
 
-  mlir::function_like_impl::setAllArgAttrDicts(op, newArgAttrs);
+  op->setAttr("portAnnotations", ArrayAttr::get(op->getContext(), newArgAttrs));
 }
 
 void GrandCentralVisitor::visitDecl(InstanceOp op) {
