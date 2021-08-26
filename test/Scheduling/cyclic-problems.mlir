@@ -1,5 +1,5 @@
 // RUN: circt-opt %s -test-cyclic-problem
-// RUN: circt-opt %s -test-simplex-scheduler | FileCheck %s -check-prefix=SIMPLEX
+// RUN: circt-opt %s -test-simplex-scheduler=with=CyclicProblem | FileCheck %s -check-prefix=SIMPLEX
 
 // SIMPLEX-LABEL: cyclic
 // SIMPLEX-SAME: simplexInitiationInterval = 2

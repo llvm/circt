@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -test-simplex-scheduler -verify-diagnostics -split-input-file
+// RUN: circt-opt %s -test-simplex-scheduler=with=CyclicProblem -verify-diagnostics -split-input-file
 
 // expected-error@+2 {{problem is infeasible}}
 // expected-error@+1 {{scheduling failed}}

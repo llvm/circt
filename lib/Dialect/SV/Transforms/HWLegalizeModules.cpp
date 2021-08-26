@@ -67,8 +67,8 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
   // Create the wire for the result of the casez in the hw.module.
   OpBuilder builder(&thisHWModule.getBodyBlock()->front());
 
-  auto theWire =
-      builder.create<sv::WireOp>(getOp.getLoc(), getOp.getType(), "casez_tmp");
+  auto theWire = builder.create<sv::RegOp>(getOp.getLoc(), getOp.getType(),
+                                           builder.getStringAttr("casez_tmp"));
   builder.setInsertionPoint(getOp);
 
   // A casez is a procedural operation, so if we're in a non-procedural region
@@ -92,18 +92,19 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
   using sv::CaseZPattern;
 
   // Create the casez itself.
+  auto lastIndex = createOp.getNumOperands() - 1;
   builder.create<sv::CaseZOp>(
       createOp.getLoc(), index, createOp.getNumOperands() + !!defaultValue,
       [&](size_t caseIdx) -> CaseZPattern {
         bool isDefault = caseIdx >= createOp.getNumOperands();
         Value theValue =
-            isDefault ? defaultValue : createOp.getOperand(caseIdx);
+            isDefault ? defaultValue : createOp.getOperand(lastIndex - caseIdx);
         sv::CaseZPattern thePattern =
             isDefault
                 ? CaseZPattern::getDefault(caseValue.getBitWidth(), context)
                 : CaseZPattern(caseValue, context);
         ++caseValue;
-        builder.create<sv::PAssignOp>(createOp.getLoc(), theWire, theValue);
+        builder.create<sv::BPAssignOp>(createOp.getLoc(), theWire, theValue);
         return thePattern;
       });
 
