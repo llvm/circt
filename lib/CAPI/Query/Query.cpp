@@ -18,105 +18,119 @@ using namespace circt;
 using namespace query;
 
 CirctQueryFilterType circtQueryNewGlobFilterType() {
-  return { new GlobFilterType };
+  return {new GlobFilterType};
 }
 
 CirctQueryFilterType circtQueryNewRecursiveGlobFilterType() {
-  return { new RecursiveGlobFilterType };
+  return {new RecursiveGlobFilterType};
 }
 
 CirctQueryFilterType circtQueryNewLiteralFilterType(char *literal) {
   std::string s(literal);
-  return { new LiteralFilterType(s) };
+  return {new LiteralFilterType(s)};
 }
 
 CirctQueryFilterType circtQueryNewRegexFilterType(char *regex) {
   std::string s(regex);
-  return { new RegexFilterType(s) };
+  return {new RegexFilterType(s)};
 }
 
 void circtQueryDeleteFilterType(CirctQueryFilterType type) {
-  delete (FilterType *) type.ptr;
+  delete (FilterType *)type.ptr;
 }
 
 CirctQueryFilterData circtQueryNewFilterData(MlirOperation root) {
-  return { new FilterData(unwrap(root)) };
+  return {new FilterData(unwrap(root))};
 }
 
 void circtQueryDeleteFilterData(CirctQueryFilterData data) {
-  delete (FilterData *) data.ptr;
+  delete (FilterData *)data.ptr;
 }
 
-CirctQueryFilter circtQueryNewAttributeFilter(char *key, CirctQueryFilterType type) {
+CirctQueryFilter circtQueryNewAttributeFilter(char *key,
+                                              CirctQueryFilterType type) {
   std::string s(key);
-  return { new AttributeFilter(s, (FilterType *) type.ptr) };
+  return {new AttributeFilter(s, (FilterType *)type.ptr)};
 }
 
 CirctQueryFilter circtQueryNewNameFilter(CirctQueryFilterType type) {
-  return { new NameFilter((FilterType *) type.ptr) };
+  return {new NameFilter((FilterType *)type.ptr)};
 }
 
 CirctQueryFilter circtQueryNewOperatorFilter(CirctQueryFilterType type) {
-  return { new OpFilter((FilterType *) type.ptr) };
+  return {new OpFilter((FilterType *)type.ptr)};
 }
 
-CirctQueryFilter circtQueryNewAndFilter(size_t count, CirctQueryFilter *filters) {
+CirctQueryFilter circtQueryNewAndFilter(size_t count,
+                                        CirctQueryFilter *filters) {
   std::vector<Filter *> fs;
   for (size_t i = 0; i < count; i++) {
-    fs.push_back((Filter *) filters[i].ptr);
+    fs.push_back((Filter *)filters[i].ptr);
   }
 
-  return { new AndFilter(fs) };
+  return {new AndFilter(fs)};
 }
 
-CirctQueryFilter circtQueryNewOrFilter(size_t count, CirctQueryFilter *filters) {
+CirctQueryFilter circtQueryNewOrFilter(size_t count,
+                                       CirctQueryFilter *filters) {
   std::vector<Filter *> fs;
   for (size_t i = 0; i < count; i++) {
-    fs.push_back((Filter *) filters[i].ptr);
+    fs.push_back((Filter *)filters[i].ptr);
   }
 
-  return { new OrFilter(fs) };
+  return {new OrFilter(fs)};
 }
 
-CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter, CirctQueryFilter child) {
-  return { new InstanceFilter((Filter *) filter.ptr, (Filter *) child.ptr) };
+CirctQueryFilter circtQueryNewInstanceFilter(CirctQueryFilter filter,
+                                             CirctQueryFilter child) {
+  return {new InstanceFilter((Filter *)filter.ptr, (Filter *)child.ptr)};
 }
 
 CirctQueryFilter circtQueryNewUsageFilter(CirctQueryFilter filter) {
-  return { new UsageFilter((Filter *) filter.ptr) };
+  return {new UsageFilter((Filter *)filter.ptr)};
 }
 
 CirctQueryFilter circtQueryCloneFilter(CirctQueryFilter filter) {
-  return { ((Filter *) filter.ptr)->clone() };
+  return {((Filter *)filter.ptr)->clone()};
 }
 
 void circtQueryDeleteFilter(CirctQueryFilter filter) {
-  delete (Filter *) filter.ptr;
+  delete (Filter *)filter.ptr;
 }
 
-CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter, MlirOperation root, CirctQueryFilterData data) {
-  return { new std::vector<Operation *>(((Filter *) filter.ptr)->filter(unwrap(root), *(FilterData *) data.ptr)) };
+CirctQueryFilterResult circtQueryFilterFromRoot(CirctQueryFilter filter,
+                                                MlirOperation root,
+                                                CirctQueryFilterData data) {
+  return {new std::vector<Operation *>(
+      ((Filter *)filter.ptr)->filter(unwrap(root), *(FilterData *)data.ptr))};
 }
 
-CirctQueryFilterResult circtQueryFilterFromResult(CirctQueryFilter filter, CirctQueryFilterResult result, CirctQueryFilterData data) {
-  return { new std::vector<Operation *>(((Filter *) filter.ptr)->filter(*(std::vector<Operation *> *) result.ptr, *(FilterData *) data.ptr)) };
+CirctQueryFilterResult circtQueryFilterFromResult(CirctQueryFilter filter,
+                                                  CirctQueryFilterResult result,
+                                                  CirctQueryFilterData data) {
+  return {new std::vector<Operation *>(
+      ((Filter *)filter.ptr)
+          ->filter(*(std::vector<Operation *> *)result.ptr,
+                   *(FilterData *)data.ptr))};
 }
 
-MlirOperation circtQueryGetFromFilterResult(CirctQueryFilterResult result, size_t index) {
-  auto &vec = *(std::vector<Operation *> *) result.ptr;
+MlirOperation circtQueryGetFromFilterResult(CirctQueryFilterResult result,
+                                            size_t index) {
+  auto &vec = *(std::vector<Operation *> *)result.ptr;
   if (index < vec.size()) {
     return wrap(vec[index]);
   }
 
-  return { nullptr };
+  return {nullptr};
 }
 
 void circtQueryDeleteFilterResult(CirctQueryFilterResult result) {
-  delete (std::vector<Operation *> *) result.ptr;
+  delete (std::vector<Operation *> *)result.ptr;
 }
 
-CirctQueryAttributeDump circtQueryDumpAttributes(CirctQueryFilterResult result, size_t count, char **filter) {
-  auto &results = *(std::vector<Operation *> *) result.ptr;
+CirctQueryAttributeDump circtQueryDumpAttributes(CirctQueryFilterResult result,
+                                                 size_t count, char **filter) {
+  auto &results = *(std::vector<Operation *> *)result.ptr;
   llvm::StringRef filters[count];
 
   for (size_t i = 0; i < count; ++i) {
@@ -128,66 +142,62 @@ CirctQueryAttributeDump circtQueryDumpAttributes(CirctQueryFilterResult result, 
   return {new std::vector(dump)};
 }
 
-CirctQueryOperationAttributesPair circtQueryGetFromAttributeDumpByOp(CirctQueryAttributeDump dump, MlirOperation op) {
-  auto &map = *(op_attr_map *) dump.ptr;
+CirctQueryOperationAttributesPair
+circtQueryGetFromAttributeDumpByOp(CirctQueryAttributeDump dump,
+                                   MlirOperation op) {
+  auto &map = *(op_attr_map *)dump.ptr;
   for (auto &elem : map) {
     if (elem.first == unwrap(op)) {
-      return {
-        .op = op,
-        .map = {&elem.second}
-      };
+      return {.op = op, .map = {&elem.second}};
     }
   }
 
   return {{nullptr}, {nullptr}};
 }
 
-CirctQueryOperationAttributesPair circtQueryGetFromAttributeDumpByIndex(CirctQueryAttributeDump dump, size_t i) {
-  auto &map = *(op_attr_map *) dump.ptr;
+CirctQueryOperationAttributesPair
+circtQueryGetFromAttributeDumpByIndex(CirctQueryAttributeDump dump, size_t i) {
+  auto &map = *(op_attr_map *)dump.ptr;
   if (i < map.size()) {
-    return {
-      .op = wrap(map[i].first),
-      .map = {&map[i].second}
-    };
+    return {.op = wrap(map[i].first), .map = {&map[i].second}};
   }
 
   return {{nullptr}, {nullptr}};
 }
 
-bool circtQueryIsOperationAttributePairNull(CirctQueryOperationAttributesPair pair) {
+bool circtQueryIsOperationAttributePairNull(
+    CirctQueryOperationAttributesPair pair) {
   return pair.op.ptr == nullptr || pair.map.ptr == nullptr;
 }
 
-CirctQueryIdentifierAttributePair circtQueryGetFromOperationAttributePairByKey(CirctQueryOperationAttributesPair pair, char *key) {
-  auto &map = *(attr_map *) pair.map.ptr;
+CirctQueryIdentifierAttributePair circtQueryGetFromOperationAttributePairByKey(
+    CirctQueryOperationAttributesPair pair, char *key) {
+  auto &map = *(attr_map *)pair.map.ptr;
   for (auto &elem : map) {
     if (elem.first == key) {
-      return {
-        .ident = wrap(elem.first),
-        .attr = wrap(elem.second)
-      };
+      return {.ident = wrap(elem.first), .attr = wrap(elem.second)};
     }
   }
 
   return {{nullptr, 0}, {nullptr}};
 }
 
-CirctQueryIdentifierAttributePair circtQueryGetFromOperationAttributePairByIndex(CirctQueryOperationAttributesPair pair, size_t i) {
-  auto &map = *(attr_map *) pair.map.ptr;
+CirctQueryIdentifierAttributePair
+circtQueryGetFromOperationAttributePairByIndex(
+    CirctQueryOperationAttributesPair pair, size_t i) {
+  auto &map = *(attr_map *)pair.map.ptr;
   if (i < map.size()) {
-    return {
-      .ident = wrap(map[i].first),
-      .attr = wrap(map[i].second)
-    };
+    return {.ident = wrap(map[i].first), .attr = wrap(map[i].second)};
   }
 
   return {{nullptr, 0}, {nullptr}};
 }
 
-bool circtQueryIsIdentifierAttributePairNull(CirctQueryIdentifierAttributePair pair) {
+bool circtQueryIsIdentifierAttributePairNull(
+    CirctQueryIdentifierAttributePair pair) {
   return pair.ident.data == nullptr || pair.attr.ptr == nullptr;
 }
 
 void circtQueryDeleteAttributeDump(CirctQueryAttributeDump dump) {
-  delete (op_attr_map *) dump.ptr;
+  delete (op_attr_map *)dump.ptr;
 }

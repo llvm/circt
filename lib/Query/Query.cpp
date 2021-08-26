@@ -5,17 +5,13 @@ namespace query {
 
 Operation *getNextOpFromOp(Operation *op) {
   return TypeSwitch<Operation *, Operation *>(op)
-    .Case<hw::InstanceOp>([&](auto &op) {
-        return op.getReferencedModule();
-    })
-    .Default([&](auto *op) {
-      return op;
-    });
+      .Case<hw::InstanceOp>([&](auto &op) { return op.getReferencedModule(); })
+      .Default([&](auto *op) { return op; });
 }
 
 bool testForMatch(Filter *filter, FilterData &data, Operation *op) {
   if (!filter->matches(op, data)) {
-   return false;
+    return false;
   }
 
   std::vector<std::pair<Operation *, Filter *>> opStack;
@@ -25,21 +21,21 @@ bool testForMatch(Filter *filter, FilterData &data, Operation *op) {
   opStack.push_back(std::make_pair(op, filter->nextFilter()));
 
   while (!opStack.empty()) {
-   auto pair = opStack.back();
-   opStack.pop_back();
-   auto *op = pair.first;
-   auto *filter = pair.second;
+    auto pair = opStack.back();
+    opStack.pop_back();
+    auto *op = pair.first;
+    auto *filter = pair.second;
 
-   if (!filter) {
-     return true;
-   }
+    if (!filter) {
+      return true;
+    }
 
-   for (auto &region : op->getRegions()) {
-     for (auto &block : region) {
-       for (auto &op : block) {
-         auto *next = getNextOpFromOp(&op);
+    for (auto &region : op->getRegions()) {
+      for (auto &block : region) {
+        for (auto &op : block) {
+          auto *next = getNextOpFromOp(&op);
 
-         if (filter->matches(next, data)) {
+          if (filter->matches(next, data)) {
             auto vec = filter->nextOperations(next, data);
 
             if (filter->addSelf()) {
@@ -52,10 +48,10 @@ bool testForMatch(Filter *filter, FilterData &data, Operation *op) {
             for (auto *op : vec) {
               opStack.push_back(std::make_pair(op, child));
             }
-         }
-       }
-     }
-   }
+          }
+        }
+      }
+    }
   }
 
   return false;
@@ -87,7 +83,8 @@ std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
         }
       }
     } else {
-      if (!llvm::dyn_cast_or_null<mlir::ModuleOp>(op) && filter->matches(op, data)) {
+      if (!llvm::dyn_cast_or_null<mlir::ModuleOp>(op) &&
+          filter->matches(op, data)) {
         auto vec = filter->nextOperations(op, data);
         for (auto *op : vec) {
           opStack.push_back(std::make_pair(op, filter->nextFilter()));
@@ -128,7 +125,8 @@ std::vector<Operation *> Filter::filter(Operation *root, FilterData &data) {
   return filtered;
 }
 
-std::vector<Operation *> Filter::filter(std::vector<Operation *> &results, FilterData &data) {
+std::vector<Operation *> Filter::filter(std::vector<Operation *> &results,
+                                        FilterData &data) {
   std::vector<Operation *> result;
   for (auto *op : results) {
     auto vec = filter(op, data);
@@ -152,56 +150,56 @@ std::vector<Operation *> Filter::filter(std::vector<Operation *> &results, Filte
 
 std::string getNameFromOp(Operation *op, size_t nameIndex) {
   return TypeSwitch<Operation *, std::string>(op)
-    .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
-      if (nameIndex == 0) {
-        return op.getNameAttr().getValue().str();
-      }
-      return std::string();
-    })
-    .Default([&](auto *op) {
-      if (nameIndex < op->getNumResults()) {
-        std::string str;
-        llvm::raw_string_ostream stream(str);
-        op->getResult(nameIndex).print(stream);
-        return str;
-      }
-      return std::string();
-    });
+      .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
+        if (nameIndex == 0) {
+          return op.getNameAttr().getValue().str();
+        }
+        return std::string();
+      })
+      .Default([&](auto *op) {
+        if (nameIndex < op->getNumResults()) {
+          std::string str;
+          llvm::raw_string_ostream stream(str);
+          op->getResult(nameIndex).print(stream);
+          return str;
+        }
+        return std::string();
+      });
 }
 
 bool filterAttribute(Attribute &attr, FilterType *type) {
   return TypeSwitch<Attribute, bool>(attr)
-    .Case<mlir::BoolAttr>([&](auto &attr) {
+      .Case<mlir::BoolAttr>([&](auto &attr) {
         std::string value(attr.getValue() ? "true" : "false");
         return type->valueMatches(llvm::StringRef(value));
-    })
-    .Case<mlir::IntegerAttr>([&](auto &attr) {
+      })
+      .Case<mlir::IntegerAttr>([&](auto &attr) {
         std::stringstream stream;
         stream << attr.getValue().getZExtValue();
         std::string s;
         stream.str(s);
         return type->valueMatches(llvm::StringRef(s));
-    })
-    .Case<mlir::StringAttr>([&](StringAttr &attr) {
+      })
+      .Case<mlir::StringAttr>([&](StringAttr &attr) {
         auto s = attr.getValue();
         return type->valueMatches(s);
-    })
-    .Case<mlir::ArrayAttr>([&](ArrayAttr &attr) {
+      })
+      .Case<mlir::ArrayAttr>([&](ArrayAttr &attr) {
         for (auto v : attr) {
           if (filterAttribute(v, type)) {
             return true;
           }
         }
         return false;
-    })
-    .Case<mlir::DictionaryAttr>([&](auto &attr) {
+      })
+      .Case<mlir::DictionaryAttr>([&](auto &attr) {
         std::cerr << "warning: unknown attribute type\n";
         return false;
-    })
-    .Default([&](auto &attr) {
+      })
+      .Default([&](auto &attr) {
         std::cerr << "warning: unknown attribute type\n";
         return false;
-    });
+      });
 }
 
 bool AttributeFilter::matches(Operation *op, FilterData &data) {
@@ -219,7 +217,9 @@ Filter *AttributeFilter::clone() {
 
 bool NameFilter::matches(Operation *op, FilterData &data) {
   std::string name;
-  for (size_t nameIndex = 0; !(name = getNameFromOp(op, nameIndex)).empty() || nameIndex == 0; nameIndex++) {
+  for (size_t nameIndex = 0;
+       !(name = getNameFromOp(op, nameIndex)).empty() || nameIndex == 0;
+       nameIndex++) {
     if (type->valueMatches(name)) {
       return true;
     }
@@ -227,18 +227,14 @@ bool NameFilter::matches(Operation *op, FilterData &data) {
   return false;
 }
 
-Filter *NameFilter::clone() {
-  return new NameFilter(type->clone());
-}
+Filter *NameFilter::clone() { return new NameFilter(type->clone()); }
 
 bool OpFilter::matches(Operation *op, FilterData &data) {
   std::string s(op->getName().stripDialect().str());
   return type->valueMatches(s);
 }
 
-Filter *OpFilter::clone() {
-  return new OpFilter(type->clone());
-}
+Filter *OpFilter::clone() { return new OpFilter(type->clone()); }
 
 bool AndFilter::matches(Operation *op, FilterData &data) {
   for (auto &filter : filters) {
@@ -284,36 +280,33 @@ Filter *InstanceFilter::clone() {
   return new InstanceFilter(&*filter, &*child);
 }
 
-Filter *InstanceFilter::nextFilter() {
-  return &*child;
-}
+Filter *InstanceFilter::nextFilter() { return &*child; }
 
-
-Filter *UsageFilter::clone() {
-  return new UsageFilter(&*filter);
-}
+Filter *UsageFilter::clone() { return new UsageFilter(&*filter); }
 
 bool UsageFilter::matches(Operation *op, FilterData &data) {
   return testForMatch(&*filter, data, op);
 }
 
-std::vector<Operation *> UsageFilter::nextOperations(Operation *op, FilterData &data) {
+std::vector<Operation *> UsageFilter::nextOperations(Operation *op,
+                                                     FilterData &data) {
   std::vector<Operation *> ops;
   TypeSwitch<Operation *>(op)
-    .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
-      auto users = data.userMap.getUsers(op);
-      ops.insert(ops.end(), users.begin(), users.end());
-    })
-    .Default([&](auto *op) {
-      for (auto &use : op->getUses()) {
-        ops.push_back(use.getOwner());
-      }
-    });
+      .Case<hw::HWModuleOp, hw::HWModuleExternOp>([&](auto &op) {
+        auto users = data.userMap.getUsers(op);
+        ops.insert(ops.end(), users.begin(), users.end());
+      })
+      .Default([&](auto *op) {
+        for (auto &use : op->getUses()) {
+          ops.push_back(use.getOwner());
+        }
+      });
 
   return ops;
 }
 
-op_attr_map dumpAttributes(std::vector<Operation *> &results, ArrayRef<StringRef> filters) {
+op_attr_map dumpAttributes(std::vector<Operation *> &results,
+                           ArrayRef<StringRef> filters) {
   op_attr_map result;
 
   for (auto *op : results) {
