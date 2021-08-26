@@ -210,7 +210,7 @@ bool AttributeFilter::matches(Operation *op, FilterData &data) {
   }
 
   auto attr = op->getAttr(StringRef(key));
-  return filterAttribute(attr, type);
+  return filterAttribute(attr, &*type);
 }
 
 Filter *AttributeFilter::clone() {
@@ -241,8 +241,8 @@ Filter *OpFilter::clone() {
 }
 
 bool AndFilter::matches(Operation *op, FilterData &data) {
-  for (auto *filter : filters) {
-    if (!testForMatch(filter, data, op)) {
+  for (auto &filter : filters) {
+    if (!testForMatch(&*filter, data, op)) {
       return false;
     }
   }
@@ -251,12 +251,16 @@ bool AndFilter::matches(Operation *op, FilterData &data) {
 }
 
 Filter *AndFilter::clone() {
-  return new AndFilter(filters);
+  std::vector<Filter *> fs;
+  for (auto &f : filters) {
+    fs.push_back(&*f);
+  }
+  return new AndFilter(fs);
 }
 
 bool OrFilter::matches(Operation *op, FilterData &data) {
-  for (auto *filter : filters) {
-    if (testForMatch(filter, data, op)) {
+  for (auto &filter : filters) {
+    if (testForMatch(&*filter, data, op)) {
       return true;
     }
   }
@@ -265,23 +269,32 @@ bool OrFilter::matches(Operation *op, FilterData &data) {
 }
 
 Filter *OrFilter::clone() {
-  return new OrFilter(filters);
+  std::vector<Filter *> fs;
+  for (auto &f : filters) {
+    fs.push_back(&*f);
+  }
+  return new OrFilter(fs);
 }
 
 bool InstanceFilter::matches(Operation *op, FilterData &data) {
-  return testForMatch(filter, data, op);
+  return testForMatch(&*filter, data, op);
 }
 
 Filter *InstanceFilter::clone() {
-  return new InstanceFilter(filter, child);
+  return new InstanceFilter(&*filter, &*child);
 }
 
 Filter *InstanceFilter::nextFilter() {
-  return child;
+  return &*child;
+}
+
+
+Filter *UsageFilter::clone() {
+  return new UsageFilter(&*filter);
 }
 
 bool UsageFilter::matches(Operation *op, FilterData &data) {
-  return testForMatch(filter, data, op);
+  return testForMatch(&*filter, data, op);
 }
 
 std::vector<Operation *> UsageFilter::nextOperations(Operation *op, FilterData &data) {

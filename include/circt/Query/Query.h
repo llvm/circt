@@ -22,34 +22,42 @@ class FilterType {
 public:
   virtual ~FilterType() { }
 
-  virtual bool valueMatches(llvm::StringRef value) { return false; }
+  virtual bool valueMatches(llvm::StringRef value) = 0;
   virtual bool addSelf() { return false; }
-  virtual FilterType *clone() { return nullptr; }
+  virtual FilterType *clone() = 0;
+
+protected:
+  FilterType() { }
+};
+
+class EmptyFilterType : public FilterType {
+public:
+  virtual bool valueMatches(llvm::StringRef value) override { return false; }
+  virtual FilterType *clone() override { return new EmptyFilterType; }
 };
 
 class GlobFilterType : public FilterType {
 public:
   GlobFilterType() { }
 
-  bool valueMatches(llvm::StringRef value) override { return true; }
-  FilterType *clone() override { return new GlobFilterType; }
+  virtual bool valueMatches(llvm::StringRef value) override { return true; }
+  virtual FilterType *clone() override { return new GlobFilterType; }
 };
 
-class RecursiveGlobFilterType : public FilterType {
+class RecursiveGlobFilterType : public GlobFilterType {
 public:
   RecursiveGlobFilterType() { }
 
-  bool valueMatches(llvm::StringRef value) override { return true; }
-  bool addSelf() override { return true; }
-  FilterType *clone() override { return new RecursiveGlobFilterType; }
+  virtual bool addSelf() override { return true; }
+  virtual FilterType *clone() override { return new RecursiveGlobFilterType; }
 };
 
 class LiteralFilterType : public FilterType {
 public:
   LiteralFilterType(std::string &literal) : literal (literal) { }
 
-  bool valueMatches(llvm::StringRef value) override { return value == literal; }
-  FilterType *clone() override { return new LiteralFilterType(literal); }
+  virtual bool valueMatches(llvm::StringRef value) override { return value == literal; }
+  virtual FilterType *clone() override { return new LiteralFilterType(literal); }
 
 private:
   std::string literal;
@@ -60,7 +68,7 @@ public:
   RegexFilterType(std::string &regex) : regex (std::regex(regex)) { }
   RegexFilterType(std::regex &regex) : regex (regex) { }
 
-  bool valueMatches(llvm::StringRef value) override {
+  virtual bool valueMatches(llvm::StringRef value) override {
     if (value.data()[value.size()] == '\0') {
       return std::regex_match(value.data(), regex);
     }
@@ -68,7 +76,7 @@ public:
     std::string str(value.data(), value.size());
     return std::regex_match(str, regex);
   }
-  FilterType *clone() override { return new RegexFilterType(regex); }
+  virtual FilterType *clone() override { return new RegexFilterType(regex); }
 
 private:
   std::regex regex;
@@ -84,17 +92,15 @@ public:
 
 class Filter {
 public:
-  virtual ~Filter() {
-    delete type;
-  }
+  virtual ~Filter() { }
 
-  virtual bool matches(Operation *op, FilterData &data) { return false; }
+  virtual bool matches(Operation *op, FilterData &data) = 0;
   virtual bool addSelf() { return type->addSelf(); }
-  virtual Filter *nextFilter() { return nullptr; };
-  virtual Filter *clone() { return nullptr; }
+  virtual Filter *nextFilter() { return nullptr; }
+  virtual Filter *clone() = 0;
   virtual std::vector<Operation *> nextOperations(Operation *op, FilterData &data) { std::vector<Operation *> ops; ops.push_back(op); return ops; }
 
-  FilterType *getType() { return type; }
+  FilterType const &getType() { return *type; }
 
   std::vector<Operation *> filter(Operation *root, FilterData &data);
   std::vector<Operation *> filter(std::vector<Operation *> &results, FilterData &data);
@@ -102,15 +108,15 @@ public:
 protected:
   Filter(FilterType *type) : type (type) { }
 
-  FilterType *type;
+  std::unique_ptr<FilterType> type;
 };
 
 class AttributeFilter : public Filter {
 public:
   AttributeFilter(std::string &key, FilterType *type) : Filter(type), key (key) { }
 
-  bool matches(Operation *op, FilterData &data) override;
-  Filter *clone() override;
+  virtual bool matches(Operation *op, FilterData &data) override;
+  virtual Filter *clone() override;
 
 private:
   std::string key;
@@ -120,80 +126,71 @@ class NameFilter : public Filter {
 public:
   NameFilter(FilterType *type) : Filter(type) { }
 
-  bool matches(Operation *op, FilterData &data) override;
-  Filter *clone() override;
+  virtual bool matches(Operation *op, FilterData &data) override;
+  virtual Filter *clone() override;
 };
 
 class OpFilter : public Filter {
 public:
   OpFilter(FilterType *type) : Filter(type) { }
 
-  bool matches(Operation *op, FilterData &data) override;
-  Filter *clone() override;
+  virtual bool matches(Operation *op, FilterData &data) override;
+  virtual Filter *clone() override;
 };
 
 class AndFilter : public Filter {
 public:
-  AndFilter(std::vector<Filter *> &filters) : Filter(new FilterType), filters (filters) { }
-
-  ~AndFilter() {
-    for (auto *f : filters) {
-      delete f;
+  AndFilter(std::vector<Filter *> const &filters) : Filter(new EmptyFilterType) {
+    for (auto *filter : filters) {
+      this->filters.push_back(std::unique_ptr<Filter>(filter));
     }
   }
 
-  bool matches(Operation *op, FilterData &data) override;
-  Filter *clone() override;
+  virtual bool matches(Operation *op, FilterData &data) override;
+  virtual Filter *clone() override;
 
 private:
-  std::vector<Filter *> filters;
+  std::vector<std::unique_ptr<Filter>> filters;
 };
 
 class OrFilter : public Filter {
 public:
-  OrFilter(std::vector<Filter *> &filters) : Filter(new FilterType), filters (filters) { }
-
-  ~OrFilter() {
-    for (auto *f : filters) {
-      delete f;
+  OrFilter(std::vector<Filter *> const &filters) : Filter(new EmptyFilterType) {
+    for (auto *filter : filters) {
+      this->filters.push_back(std::unique_ptr<Filter>(filter));
     }
   }
 
-  bool matches(Operation *op, FilterData &data) override;
-  Filter *clone() override;
+  virtual bool matches(Operation *op, FilterData &data) override;
+  virtual Filter *clone() override;
 
 private:
-  std::vector<Filter *> filters;
+  std::vector<std::unique_ptr<Filter>> filters;
 };
 
 class InstanceFilter : public Filter {
 public:
-  InstanceFilter(Filter *filter, Filter *child) : Filter(new FilterType), filter (filter), child (child) { }
-  ~InstanceFilter() {
-    delete filter;
-    delete child;
-  }
+  InstanceFilter(Filter *filter, Filter *child) : Filter(new EmptyFilterType), filter (filter), child (child) { }
 
-  bool matches(Operation *op, FilterData &data) override;
-  Filter *clone() override;
-
-protected:
-  Filter *nextFilter() override;
+  virtual bool matches(Operation *op, FilterData &data) override;
+  virtual Filter *clone() override;
+  virtual Filter *nextFilter() override;
 
 private:
-  Filter *filter;
-  Filter *child;
+  std::unique_ptr<Filter> filter;
+  std::unique_ptr<Filter> child;
 };
 
 class UsageFilter : public Filter {
 public:
-  UsageFilter(Filter *filter) : Filter(new FilterType), filter (filter) { }
+  UsageFilter(Filter *filter) : Filter(new EmptyFilterType), filter (filter) { }
 
-  bool matches(Operation *op, FilterData &data) override;
-  std::vector<Operation *> nextOperations(Operation *op, FilterData &data) override;
+  virtual bool matches(Operation *op, FilterData &data) override;
+  virtual Filter *clone() override;
+  virtual std::vector<Operation *> nextOperations(Operation *op, FilterData &data) override;
 
 private:
-  Filter *filter;
+  std::unique_ptr<Filter> filter;
 };
 
 typedef std::vector<std::pair<StringRef, Attribute>> attr_map;
