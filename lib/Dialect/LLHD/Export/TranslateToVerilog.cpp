@@ -37,8 +37,6 @@ private:
   LogicalResult printType(Type type);
   LogicalResult printUnaryOp(Operation *op, StringRef opSymbol,
                              unsigned indentAmount = 0);
-  LogicalResult printBinaryOp(Operation *op, StringRef opSymbol,
-                              unsigned indentAmount = 0);
   LogicalResult printVariadicOp(Operation *op, StringRef opSymbol,
                                 unsigned indentAmount = 0);
   LogicalResult printSignedBinaryOp(Operation *op, StringRef opSymbol,
@@ -97,30 +95,6 @@ LogicalResult VerilogPrinter::printModule(ModuleOp module) {
   });
   // if printing of a single operation failed, fail the whole translation
   return failure(result.wasInterrupted());
-}
-
-LogicalResult VerilogPrinter::printBinaryOp(Operation *inst, StringRef opSymbol,
-                                            unsigned indentAmount) {
-  // Check that the operation is indeed a binary operation
-  if (inst->getNumOperands() != 2) {
-    return emitError(inst->getLoc(),
-                     "This operation does not have two operands!");
-  }
-  if (inst->getNumResults() != 1) {
-    return emitError(inst->getLoc(),
-                     "This operation does not have one result!");
-  }
-
-  // Print the operation
-  out.PadToColumn(indentAmount);
-  out << "wire ";
-  if (failed(printType(inst->getResult(0).getType())))
-    return failure();
-  out << " ";
-  printVariableName(inst->getResult(0)) << " = ";
-  printVariableName(inst->getOperand(0)) << " " << opSymbol << " ";
-  printVariableName(inst->getOperand(1)) << ";\n";
-  return success();
 }
 
 LogicalResult VerilogPrinter::printVariadicOp(Operation *inst,
@@ -342,23 +316,23 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     return printUnaryOp(inst, "-", indentAmount);
   }
   if (auto op = dyn_cast<AddIOp>(inst)) {
-    return printBinaryOp(inst, "+", indentAmount);
+    return printVariadicOp(inst, "+", indentAmount);
   }
   if (auto op = dyn_cast<SubIOp>(inst)) {
-    return printBinaryOp(inst, "-", indentAmount);
+    return printVariadicOp(inst, "-", indentAmount);
   }
   if (auto op = dyn_cast<MulIOp>(inst)) {
-    return printBinaryOp(inst, "*", indentAmount);
+    return printVariadicOp(inst, "*", indentAmount);
   }
   if (auto op = dyn_cast<UnsignedDivIOp>(inst)) {
-    return printBinaryOp(inst, "/", indentAmount);
+    return printVariadicOp(inst, "/", indentAmount);
   }
   if (auto op = dyn_cast<SignedDivIOp>(inst)) {
     return printSignedBinaryOp(inst, "/", indentAmount);
   }
   if (auto op = dyn_cast<UnsignedRemIOp>(inst)) {
     // % in Verilog is the remainder in LLHD semantics
-    return printBinaryOp(inst, "%", indentAmount);
+    return printVariadicOp(inst, "%", indentAmount);
   }
   if (auto op = dyn_cast<SignedRemIOp>(inst)) {
     // % in Verilog is the remainder in LLHD semantics
@@ -367,9 +341,9 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   if (auto op = dyn_cast<CmpIOp>(inst)) {
     switch (op.getPredicate()) {
     case mlir::CmpIPredicate::eq:
-      return printBinaryOp(inst, "==", indentAmount);
+      return printVariadicOp(inst, "==", indentAmount);
     case mlir::CmpIPredicate::ne:
-      return printBinaryOp(inst, "!=", indentAmount);
+      return printVariadicOp(inst, "!=", indentAmount);
     case mlir::CmpIPredicate::sge:
       return printSignedBinaryOp(inst, ">=", indentAmount);
     case mlir::CmpIPredicate::sgt:
@@ -379,13 +353,13 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     case mlir::CmpIPredicate::slt:
       return printSignedBinaryOp(inst, "<", indentAmount);
     case mlir::CmpIPredicate::uge:
-      return printBinaryOp(inst, ">=", indentAmount);
+      return printVariadicOp(inst, ">=", indentAmount);
     case mlir::CmpIPredicate::ugt:
-      return printBinaryOp(inst, ">", indentAmount);
+      return printVariadicOp(inst, ">", indentAmount);
     case mlir::CmpIPredicate::ule:
-      return printBinaryOp(inst, "<=", indentAmount);
+      return printVariadicOp(inst, "<=", indentAmount);
     case mlir::CmpIPredicate::ult:
-      return printBinaryOp(inst, "<", indentAmount);
+      return printVariadicOp(inst, "<", indentAmount);
     }
     return failure();
   }
