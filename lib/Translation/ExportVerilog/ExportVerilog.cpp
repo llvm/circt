@@ -11,13 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Translation/ExportVerilog.h"
+#include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVAttributes.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
@@ -41,6 +40,7 @@ using namespace circt;
 using namespace comb;
 using namespace hw;
 using namespace sv;
+using namespace ExportVerilog;
 
 #define DEBUG_TYPE "export-verilog"
 
@@ -49,25 +49,6 @@ constexpr int INDENT_AMOUNT = 2;
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
-
-/// Return true for operations that must always be inlined into a containing
-/// expression for correctness.
-static bool isExpressionAlwaysInline(Operation *op) {
-  // We need to emit array indexes inline per verilog "lvalue" semantics.
-  if (isa<ArrayIndexInOutOp>(op) || isa<ReadInOutOp>(op))
-    return true;
-
-  // An SV interface modport is a symbolic name that is always inlined.
-  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
-    return true;
-
-  return false;
-}
-
-/// Return whether an operation is a constant.
-static bool isConstantExpression(Operation *op) {
-  return isa<ConstantOp, ConstantXOp, ConstantZOp>(op);
-}
 
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
@@ -498,6 +479,24 @@ static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
 }
 
 //===----------------------------------------------------------------------===//
+// ModuleNameManager Implementation
+//===----------------------------------------------------------------------===//
+
+/// Add the specified name to the name table, auto-uniquing the name if
+/// required.  If the name is empty, then this creates a unique temp name.
+///
+/// "valueOrOp" is typically the Value for an intermediate wire etc, but it
+/// can also be an op for an instance, since we want the instances op uniqued
+/// and tracked.  It can also be null for things like outputs which are not
+/// tracked in the nameTable.
+StringRef ModuleNameManager::addName(ValueOrOp valueOrOp, StringRef name) {
+  auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
+  if (valueOrOp)
+    nameTable[valueOrOp] = updatedName;
+  return updatedName;
+}
+
+//===----------------------------------------------------------------------===//
 // VerilogEmitter
 //===----------------------------------------------------------------------===//
 
@@ -522,110 +521,6 @@ public:
 private:
   VerilogEmitterState(const VerilogEmitterState &) = delete;
   void operator=(const VerilogEmitterState &) = delete;
-};
-} // namespace
-
-//===----------------------------------------------------------------------===//
-// NameManager
-//===----------------------------------------------------------------------===//
-
-namespace {
-struct ModuleNameManager {
-  ModuleNameManager() : encounteredError(false) {}
-
-  StringRef addName(Value value, StringRef name) {
-    return addName(ValueOrOp(value), name);
-  }
-  StringRef addName(Operation *op, StringRef name) {
-    return addName(ValueOrOp(op), name);
-  }
-  StringRef addName(Value value, StringAttr name) {
-    return addName(ValueOrOp(value), name);
-  }
-  StringRef addName(Operation *op, StringAttr name) {
-    return addName(ValueOrOp(op), name);
-  }
-
-  StringRef addLegalName(Value value, StringRef name, Operation *errOp) {
-    return addLegalName(ValueOrOp(value), name, errOp);
-  }
-  StringRef addLegalName(Operation *op, StringRef name, Operation *errOp) {
-    return addLegalName(ValueOrOp(op), name, errOp);
-  }
-
-  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
-  StringRef getName(Operation *op) { return getName(ValueOrOp(op)); }
-
-  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
-
-  void addOutputNames(StringRef name, Operation *module) {
-    outputNames.push_back(addLegalName(nullptr, name, module));
-  }
-
-  StringRef getOutputName(size_t portNum) { return outputNames[portNum]; }
-
-  bool hadError() { return encounteredError; }
-
-private:
-  using ValueOrOp = PointerUnion<Value, Operation *>;
-
-  /// Retrieve a name from the name table.  The name must already have been
-  /// added.
-  StringRef getName(ValueOrOp valueOrOp) {
-    auto entry = nameTable.find(valueOrOp);
-    assert(entry != nameTable.end() &&
-           "value expected a name but doesn't have one");
-    return entry->getSecond();
-  }
-
-  /// Add the specified name to the name table, auto-uniquing the name if
-  /// required.  If the name is empty, then this creates a unique temp name.
-  ///
-  /// "valueOrOp" is typically the Value for an intermediate wire etc, but it
-  /// can also be an op for an instance, since we want the instances op uniqued
-  /// and tracked.  It can also be null for things like outputs which are not
-  /// tracked in the nameTable.
-  StringRef addName(ValueOrOp valueOrOp, StringRef name) {
-    auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
-    if (valueOrOp)
-      nameTable[valueOrOp] = updatedName;
-    return updatedName;
-  }
-
-  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
-    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
-  }
-  /// Add the specified name to the name table, emitting an error message if the
-  /// name empty or is changed by uniqing.
-  StringRef addLegalName(ValueOrOp valueOrOp, StringRef name, Operation *op) {
-    auto updatedName = addName(valueOrOp, name);
-    if (name.empty())
-      emitOpError(op, "should have non-empty name");
-    else if (updatedName != name)
-      emitOpError(op, "name '") << name << "' changed during emission";
-    return updatedName;
-  }
-
-  InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {
-    encounteredError = true;
-    return op->emitOpError(message);
-  }
-
-  // Track whether a name error ocurred
-  bool encounteredError;
-
-  /// nameTable keeps track of mappings from Value's and operations (for
-  /// instances) to their string table entry.
-  llvm::DenseMap<ValueOrOp, StringRef> nameTable;
-
-  /// outputNames tracks the uniquified names for output ports, which don't
-  /// have
-  /// a Value or Op representation.
-  SmallVector<StringRef> outputNames;
-
-  llvm::StringSet<> usedNames;
-
-  size_t nextGeneratedNameID = 0;
 };
 } // namespace
 
@@ -1649,7 +1544,7 @@ void NameCollector::collectNames(Block &block) {
   for (auto &op : block) {
     bool isExpr = isVerilogExpression(&op);
 
-    // Instances and interface instances are handled in prepareHWModule
+    // Instances and interface instances are handled in prepareHWModule.
     if (isa<InstanceOp, InterfaceInstanceOp>(op))
       continue;
 
@@ -3065,218 +2960,6 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
      << " (.*);\n\n";
 }
 
-// Check if the value is from read of a wire or reg or is a port.
-static bool isSimpleReadOrPort(Value v) {
-  if (v.isa<BlockArgument>())
-    return true;
-  auto vOp = v.getDefiningOp();
-  if (!vOp)
-    return false;
-  auto read = dyn_cast<ReadInOutOp>(vOp);
-  if (!read)
-    return false;
-  auto readSrc = read.input().getDefiningOp();
-  if (!readSrc)
-    return false;
-  return isa<WireOp, RegOp>(readSrc);
-}
-
-// Given an invisible instance, make sure all inputs are driven from
-// wires or ports.
-static void lowerBoundInstance(InstanceOp op) {
-  Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
-
-  SmallString<32> nameTmp;
-  nameTmp = (op.instanceName() + "_").str();
-  auto namePrefixSize = nameTmp.size();
-
-  size_t nextOpNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule())) {
-    if (port.isOutput())
-      continue;
-
-    auto src = op.getOperand(nextOpNo);
-    ++nextOpNo;
-
-    if (isSimpleReadOrPort(src))
-      continue;
-
-    nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
-    else
-      nameTmp += std::to_string(nextOpNo - 1);
-
-    auto newWire = builder.create<WireOp>(src.getType(), nameTmp);
-    auto newWireRead = builder.create<ReadInOutOp>(newWire);
-    auto connect = builder.create<AssignOp>(newWire, src);
-    newWireRead->moveBefore(op);
-    connect->moveBefore(op);
-    op.setOperand(nextOpNo - 1, newWireRead);
-  }
-}
-
-static bool onlyUseIsAssign(Value v) {
-  if (!v.hasOneUse())
-    return false;
-  if (!dyn_cast_or_null<AssignOp>(v.getDefiningOp()))
-    return false;
-  return true;
-}
-
-// Ensure that each output of an instance are used only by a wire
-static void lowerInstanceResults(InstanceOp op) {
-  Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
-
-  SmallString<32> nameTmp;
-  nameTmp = (op.instanceName() + "_").str();
-  auto namePrefixSize = nameTmp.size();
-
-  size_t nextResultNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule())) {
-    if (!port.isOutput())
-      continue;
-
-    auto result = op.getResult(nextResultNo);
-    ++nextResultNo;
-
-    if (onlyUseIsAssign(result))
-      continue;
-
-    bool isOneUseOutput = false;
-    if (result.hasOneUse()) {
-      OpOperand &use = *result.getUses().begin();
-      isOneUseOutput = dyn_cast_or_null<OutputOp>(use.getOwner()) != nullptr;
-    }
-
-    if (!isOneUseOutput) {
-      nameTmp.resize(namePrefixSize);
-      if (port.name)
-        nameTmp += port.name.getValue().str();
-      else
-        nameTmp += std::to_string(nextResultNo - 1);
-
-      auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
-      while (!result.use_empty()) {
-        auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        OpOperand &use = *result.getUses().begin();
-        use.set(newWireRead);
-        newWireRead->moveBefore(use.getOwner());
-      }
-
-      auto connect = builder.create<AssignOp>(newWire, result);
-      connect->moveAfter(op);
-    }
-  }
-}
-
-// Given a side effect free "always inline" operation, make sure that it
-// exists in the same block as its users and that it has one use for each one.
-static void lowerAlwaysInlineOperation(Operation *op) {
-  assert(op->getNumResults() == 1 &&
-         "only support 'always inline' ops with one result");
-
-  // Nuke use-less operations.
-  if (op->use_empty()) {
-    op->erase();
-    return;
-  }
-
-  // Moving/cloning an op should pull along its operand tree with it if they
-  // are always inline.  This happens when an array index has a constant
-  // operand for example.
-  auto recursivelyHandleOperands = [](Operation *op) {
-    for (auto operand : op->getOperands()) {
-      if (auto *operandOp = operand.getDefiningOp())
-        if (isExpressionAlwaysInline(operandOp))
-          lowerAlwaysInlineOperation(operandOp);
-    }
-  };
-
-  // If this operation has multiple uses, duplicate it into N-1 of them in
-  // turn.
-  while (!op->hasOneUse()) {
-    OpOperand &use = *op->getUses().begin();
-    Operation *user = use.getOwner();
-
-    // Clone the op before the user.
-    auto *newOp = op->clone();
-    user->getBlock()->getOperations().insert(Block::iterator(user), newOp);
-    // Change the user to use the new op.
-    use.set(newOp->getResult(0));
-
-    // If any of the operations of the moved op are always inline, recursively
-    // handle them too.
-    recursivelyHandleOperands(newOp);
-  }
-
-  // Finally, ensures the op is in the same block as its user so it can be
-  // inlined.
-  Operation *user = *op->getUsers().begin();
-  if (op->getBlock() != user->getBlock()) {
-    op->moveBefore(user);
-
-    // If any of the operations of the moved op are always inline, recursively
-    // move/clone them too.
-    recursivelyHandleOperands(op);
-  }
-  return;
-}
-
-/// Lower a variadic fully-associative operation into an expression tree.  This
-/// enables long-line splitting to work with them.
-static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
-                                     SmallVector<Operation *> &newOps) {
-  Value lhs, rhs;
-  switch (operands.size()) {
-  case 0:
-    assert(0 && "cannot be called with empty operand range");
-    break;
-  case 1:
-    return operands[0];
-  case 2:
-    lhs = operands[0];
-    rhs = operands[1];
-    break;
-  default:
-    auto firstHalf = operands.size() / 2;
-    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps);
-    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps);
-    break;
-  }
-
-  OperationState state(op.getLoc(), op.getName());
-  state.addOperands(ValueRange{lhs, rhs});
-  state.addTypes(op.getResult(0).getType());
-  auto *newOp = Operation::create(state);
-  op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
-  newOps.push_back(newOp);
-  return newOp->getResult(0);
-}
-
-/// When we find that an operation is used before it is defined in a graph
-/// region, we emit an explicit wire to resolve the issue.
-static void lowerUsersToTemporaryWire(Operation &op) {
-  Block *block = op.getBlock();
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
-
-  for (auto result : op.getResults()) {
-    auto newWire = builder.create<WireOp>(result.getType());
-
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
-      OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
-    }
-
-    auto connect = builder.create<AssignOp>(newWire, result);
-    connect->moveAfter(&op);
-  }
-}
-
 void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo> portInfo = module.getPorts();
@@ -3413,7 +3096,11 @@ void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
 }
 
 //===----------------------------------------------------------------------===//
-// Common functionality for root module emitters
+// Preparation Pass to make IR emission easier
+//===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// Common functionality for top level file emitters
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -3477,178 +3164,6 @@ struct SharedEmitterState {
 };
 
 } // namespace
-
-/// Transform "a + -cst" ==> "a - cst" for prettier output.
-static void rewriteAddWithNegativeConstant(comb::AddOp add,
-                                           hw::ConstantOp rhsCst) {
-  ImplicitLocOpBuilder builder(add.getLoc(), add);
-
-  // Get the positive constant.
-  auto negCst = builder.create<hw::ConstantOp>(-rhsCst.getValue());
-  auto sub = builder.create<comb::SubOp>(add.getOperand(0), negCst);
-  add.getResult().replaceAllUsesWith(sub);
-  add.erase();
-  if (rhsCst.use_empty())
-    rhsCst.erase();
-}
-
-/// For each module we emit, do a prepass over the structure, pre-lowering and
-/// otherwise rewriting operations we don't want to emit.
-static void prepareHWModule(Block &block, ModuleNameManager &names,
-                            const LoweringOptions &options) {
-  for (Block::iterator opIterator = block.begin(), e = block.end();
-       opIterator != e;) {
-    auto &op = *opIterator++;
-
-    // If the operations has regions, prepare each of the region bodies.
-    for (auto &region : op.getRegions()) {
-      if (!region.empty())
-        prepareHWModule(region.front(), names, options);
-    }
-
-    // Duplicate "always inline" expression for each of their users and move
-    // them to be next to their users.
-    if (isExpressionAlwaysInline(&op)) {
-      lowerAlwaysInlineOperation(&op);
-      continue;
-    }
-
-    // Lower variadic fully-associative operations with more than two operands
-    // into balanced operand trees so we can split long lines across multiple
-    // statements.
-    // TODO: This is checking the Commutative property, which doesn't seem
-    // right in general.  MLIR doesn't have a "fully associative" property.
-    //
-    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
-        op.hasTrait<mlir::OpTrait::IsCommutative>() &&
-        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
-        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
-        op.getAttrs().empty()) {
-      // Lower this operation to a balanced binary tree of the same operation.
-      SmallVector<Operation *> newOps;
-      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
-      op.getResult(0).replaceAllUsesWith(result);
-      op.erase();
-
-      // Make sure we revisit the newly inserted operations.
-      opIterator = Block::iterator(newOps.front());
-      continue;
-    }
-
-    // Turn a + -cst  ==> a - cst
-    if (auto addOp = dyn_cast<comb::AddOp>(op)) {
-      if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
-        assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
-        if (cst.getValue().isNegative()) {
-          rewriteAddWithNegativeConstant(addOp, cst);
-          continue;
-        }
-      }
-    }
-
-    // Name legalization should have happened in a different pass for these sv
-    // elements and we don't want to change their name through re-legalization
-    // (e.g. letting a temporary take the name of an unvisited wire). Adding
-    // them now ensures any temporary generated will not use one of the names
-    // previously declared.
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
-      // Anchor return values to wires early
-      lowerInstanceResults(instance);
-      // Anchor ports of bound instances
-      if (instance->hasAttr("doNotPrint"))
-        lowerBoundInstance(instance);
-      names.addLegalName(&op, instance.instanceName(), &op);
-    } else if (auto wire = dyn_cast<WireOp>(op))
-      names.addLegalName(op.getResult(0), wire.name(), &op);
-    else if (auto regOp = dyn_cast<RegOp>(op))
-      names.addLegalName(op.getResult(0), regOp.name(), &op);
-    else if (auto localParamOp = dyn_cast<LocalParamOp>(op))
-      names.addLegalName(op.getResult(0), localParamOp.name(), &op);
-    else if (auto interfaceInstanceOp = dyn_cast<InterfaceInstanceOp>(op))
-      names.addLegalName(op.getResult(0), interfaceInstanceOp.name(), &op);
-
-    // Force any expression used in the event control of an always process to be
-    // a trivial wire, if the corresponding option is set.
-    if (!options.allowExprInEventControl) {
-      auto enforceWire = [&](Value expr) {
-        // Direct port uses are fine.
-        if (expr.isa<BlockArgument>())
-          return;
-        // If this is a read from a wire, we're fine.
-        if (auto read = expr.getDefiningOp<ReadInOutOp>())
-          if (read.input().getDefiningOp<WireOp>())
-            return;
-        auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);
-        auto newWire = builder.create<WireOp>(expr.getType());
-        builder.setInsertionPoint(&op);
-        builder.create<AssignOp>(newWire, expr);
-        auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        op.replaceUsesOfWith(expr, newWireRead);
-      };
-      if (auto always = dyn_cast<AlwaysOp>(op)) {
-        for (auto clock : always.clocks())
-          enforceWire(clock);
-        continue;
-      }
-      if (auto always = dyn_cast<AlwaysFFOp>(op)) {
-        enforceWire(always.clock());
-        if (auto reset = always.reset())
-          enforceWire(reset);
-        continue;
-      }
-    }
-  }
-
-  // Now that all the basic ops are settled, check for any use-before def issues
-  // in graph regions.  Lower these into explicit wires to keep the emitter
-  // simple.
-  if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
-    SmallPtrSet<Operation *, 32> seenOperations;
-
-    for (auto &op : llvm::make_early_inc_range(block)) {
-      // Check the users of any expressions to see if they are
-      // lexically below the operation itself.  If so, it is being used out
-      // of order.
-      bool haveAnyOutOfOrderUses = false;
-      for (auto *userOp : op.getUsers()) {
-        // If the user is in a suboperation like an always block, then zip up
-        // to the operation that uses it.
-        while (&block != &userOp->getParentRegion()->front())
-          userOp = userOp->getParentOp();
-
-        if (seenOperations.count(userOp)) {
-          haveAnyOutOfOrderUses = true;
-          break;
-        }
-      }
-
-      // Remember that we've seen this operation.
-      seenOperations.insert(&op);
-
-      // If all the uses of the operation are below this, then we're ok.
-      if (!haveAnyOutOfOrderUses)
-        continue;
-
-      // If this is a reg/wire declaration, then we move it to the top of the
-      // block.  We can't abstract the inout result.
-      if (op.getNumResults() == 1 &&
-          op.getResult(0).getType().isa<InOutType>() &&
-          op.getNumOperands() == 0) {
-        op.moveBefore(&block.front());
-        continue;
-      }
-
-      // If this is a constant, then we move it to the top of the block.
-      if (isConstantExpression(&op)) {
-        op.moveBefore(&block.front());
-        continue;
-      }
-
-      // Otherwise, we need to lower this to a wire to resolve this.
-      lowerUsersToTemporaryWire(op);
-    }
-  }
-}
 
 void SharedEmitterState::prepareAllModules() {
   bool hasError = false;
