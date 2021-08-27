@@ -207,33 +207,6 @@ OpFoldResult llhd::NegOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
-// SModOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::SModOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.smod(x, 1) -> 0
-  if (matchPattern(rhs(), m_One()))
-    return Builder(getContext()).getZeroAttr(getType());
-
-  /// llhd.smod(0, x) -> 0
-  if (matchPattern(lhs(), m_Zero()))
-    return Builder(getContext()).getZeroAttr(getType());
-
-  /// llhs.smod(x,x) -> 0
-  if (lhs() == rhs())
-    return Builder(getContext()).getZeroAttr(getType());
-
-  return constFoldBinaryOp<IntegerAttr>(operands, [](APInt lhs, APInt rhs) {
-    APInt result = lhs.srem(rhs);
-    if ((lhs.isNegative() && rhs.isNonNegative()) ||
-        (lhs.isNonNegative() && rhs.isNegative())) {
-      result += rhs;
-    }
-    return result;
-  });
-}
-
-//===----------------------------------------------------------------------===//
 // EqOp
 //===----------------------------------------------------------------------===//
 
@@ -269,95 +242,6 @@ OpFoldResult llhd::NeqOp::fold(ArrayRef<Attribute> operands) {
     return {};
 
   return BoolAttr::get(getContext(), operands[0] != operands[1]);
-}
-
-//===----------------------------------------------------------------------===//
-// NotOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::NotOp::fold(ArrayRef<Attribute> operands) {
-  // llhd.not(llhd.not(x)) -> x
-  if (auto op = value().getDefiningOp<llhd::NotOp>())
-    return op.value();
-
-  return constFoldUnaryOp<IntegerAttr>(operands, [](APInt a) { return ~a; });
-}
-
-//===----------------------------------------------------------------------===//
-// AndOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::AndOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.and(x, 0) -> 0
-  if (matchPattern(rhs(), m_Zero()))
-    return rhs();
-
-  /// llhd.and(x, all_bits_set) -> x
-  if (matchPattern(rhs(), constant_int_all_ones_matcher()))
-    return lhs();
-
-  // llhd.and(x, x) -> x
-  if (rhs() == lhs())
-    return rhs();
-
-  // llhd.and(x, llhd.not(x)) -> 0
-  // llhd.and(llhd.not(x), x) -> 0
-  if (matchPattern(rhs(), m_Op<llhd::NotOp>(matchers::m_Val(lhs()))) ||
-      matchPattern(lhs(), m_Op<llhd::NotOp>(matchers::m_Val(rhs()))))
-    return IntegerAttr::get(lhs().getType(), 0);
-
-  return constFoldBinaryOp<IntegerAttr>(operands,
-                                        [](APInt a, APInt b) { return a & b; });
-}
-
-//===----------------------------------------------------------------------===//
-// OrOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::OrOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.or(x, 0) -> x
-  if (matchPattern(rhs(), m_Zero()))
-    return lhs();
-
-  /// llhd.or(x, all_bits_set) -> all_bits_set
-  if (matchPattern(rhs(), constant_int_all_ones_matcher()))
-    return rhs();
-
-  // llhd.or(x, x) -> x
-  if (rhs() == lhs())
-    return rhs();
-
-  // llhd.or(x, llhd.not(x)) -> all_bits_set
-  // llhd.or(llhd.not(x), x) -> all_bits_set
-  if (matchPattern(rhs(), m_Op<llhd::NotOp>(matchers::m_Val(lhs()))) ||
-      matchPattern(lhs(), m_Op<llhd::NotOp>(matchers::m_Val(rhs()))))
-    return IntegerAttr::get(lhs().getType(), -1);
-
-  return constFoldBinaryOp<IntegerAttr>(operands,
-                                        [](APInt a, APInt b) { return a | b; });
-}
-
-//===----------------------------------------------------------------------===//
-// XorOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::XorOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.xor(x, 0) -> x
-  if (matchPattern(rhs(), m_Zero()))
-    return lhs();
-
-  /// llhs.xor(x,x) -> 0
-  if (lhs() == rhs())
-    return Builder(getContext()).getZeroAttr(getType());
-
-  // llhd.xor(x, llhd.not(x)) -> all_bits_set
-  // llhd.xor(llhd.not(x), x) -> all_bits_set
-  if (matchPattern(rhs(), m_Op<llhd::NotOp>(matchers::m_Val(lhs()))) ||
-      matchPattern(lhs(), m_Op<llhd::NotOp>(matchers::m_Val(rhs()))))
-    return IntegerAttr::get(lhs().getType(), -1);
-
-  return constFoldBinaryOp<IntegerAttr>(operands,
-                                        [](APInt a, APInt b) { return a ^ b; });
 }
 
 //===----------------------------------------------------------------------===//

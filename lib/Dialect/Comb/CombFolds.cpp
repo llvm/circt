@@ -875,6 +875,17 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
   if (llvm::all_of(inputs(), [&](auto in) { return in == this->inputs()[0]; }))
     return inputs()[0];
 
+  // or(..., x, ..., ~x, ...) -> -1
+  for (Value arg : inputs())
+    if (auto xorOp = dyn_cast_or_null<XorOp>(arg.getDefiningOp()))
+      if (xorOp.isBinaryNot()) {
+        // isBinaryOp checks for the constant on operand 0.
+        auto srcVal = xorOp.getOperand(0);
+        for (Value arg2 : inputs())
+          if (arg2 == srcVal)
+            return getIntAttr(APInt(getType().getWidth(), -1), getContext());
+      }
+
   // Constant fold
   return constFoldVariadicOp<IntegerAttr>(
       constants, [](APInt &a, const APInt &b) { a |= b; });
@@ -1260,6 +1271,13 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
     // If the divisor is zero, do not fold for now.
     if (rhs_value.getValue().isNullValue())
       return {};
+  }
+
+  if (auto lhs_value = constants[0].dyn_cast_or_null<IntegerAttr>()) {
+    // modu(0, x) -> 0, mods(0, x) -> 0
+    if (lhs_value.getValue().isNullValue())
+      return getIntAttr(APInt(op.getType().getIntOrFloatBitWidth(), 0),
+                        op.getContext());
   }
 
   return constFoldBinaryOp<IntegerAttr>(constants, [](APInt a, APInt b) {

@@ -11,7 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
+#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Visitors.h"
@@ -36,6 +38,8 @@ private:
   LogicalResult printUnaryOp(Operation *op, StringRef opSymbol,
                              unsigned indentAmount = 0);
   LogicalResult printBinaryOp(Operation *op, StringRef opSymbol,
+                              unsigned indentAmount = 0);
+  LogicalResult printVariadicOp(Operation *op, StringRef opSymbol,
                               unsigned indentAmount = 0);
   LogicalResult printSignedBinaryOp(Operation *op, StringRef opSymbol,
                                     unsigned indentAmount = 0);
@@ -116,6 +120,36 @@ LogicalResult VerilogPrinter::printBinaryOp(Operation *inst, StringRef opSymbol,
   printVariableName(inst->getResult(0)) << " = ";
   printVariableName(inst->getOperand(0)) << " " << opSymbol << " ";
   printVariableName(inst->getOperand(1)) << ";\n";
+  return success();
+}
+
+LogicalResult VerilogPrinter::printVariadicOp(Operation *inst, StringRef opSymbol,
+                                            unsigned indentAmount) {
+  // Check that the operation is indeed a binary operation
+  if (inst->getNumOperands() < 1) {
+    return emitError(inst->getLoc(),
+                     "This operation does not have at least one operand!");
+  }
+  if (inst->getNumResults() != 1) {
+    return emitError(inst->getLoc(),
+                     "This operation does not have one result!");
+  }
+
+  // Print the operation
+  out.PadToColumn(indentAmount);
+  out << "wire ";
+
+  if (failed(printType(inst->getResult(0).getType())))
+    return failure();
+
+  out << " ";
+  printVariableName(inst->getResult(0)) << " = ";
+
+  for(unsigned i = 0; i < inst->getNumOperands()-1; i++) {
+    printVariableName(inst->getOperand(i)) << " " << opSymbol << " ";
+  }
+  printVariableName(inst->getOperand(inst->getNumOperands()-1)) << ";\n";
+
   return success();
 }
 
@@ -236,17 +270,14 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     }
     return success();
   }
-  if (auto op = dyn_cast<llhd::AndOp>(inst)) {
-    return printBinaryOp(inst, "&", indentAmount);
+  if (auto op = dyn_cast<comb::AndOp>(inst)) {
+    return printVariadicOp(inst, "&", indentAmount);
   }
-  if (auto op = dyn_cast<llhd::OrOp>(inst)) {
-    return printBinaryOp(inst, "|", indentAmount);
+  if (auto op = dyn_cast<comb::OrOp>(inst)) {
+    return printVariadicOp(inst, "|", indentAmount);
   }
-  if (auto op = dyn_cast<llhd::XorOp>(inst)) {
-    return printBinaryOp(inst, "^", indentAmount);
-  }
-  if (auto op = dyn_cast<llhd::NotOp>(inst)) {
-    return printUnaryOp(inst, "~", indentAmount);
+  if (auto op = dyn_cast<comb::XorOp>(inst)) {
+    return printVariadicOp(inst, "^", indentAmount);
   }
   if (auto op = dyn_cast<llhd::ShlOp>(inst)) {
     unsigned baseWidth = inst->getOperand(0).getType().getIntOrFloatBitWidth();
@@ -331,10 +362,6 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
   if (auto op = dyn_cast<SignedRemIOp>(inst)) {
     // % in Verilog is the remainder in LLHD semantics
     return printSignedBinaryOp(inst, "%", indentAmount);
-  }
-  if (auto op = dyn_cast<llhd::SModOp>(inst)) {
-    return emitError(op.getLoc(),
-                     "Signed modulo operation is not yet supported!");
   }
   if (auto op = dyn_cast<CmpIOp>(inst)) {
     switch (op.getPredicate()) {
@@ -429,6 +456,6 @@ LogicalResult circt::llhd::exportVerilog(ModuleOp module, raw_ostream &os) {
 void circt::llhd::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration registration(
       "export-llhd-verilog", exportVerilog, [](DialectRegistry &registry) {
-        registry.insert<mlir::StandardOpsDialect, llhd::LLHDDialect>();
+        registry.insert<mlir::StandardOpsDialect, llhd::LLHDDialect, comb::CombDialect>();
       });
 }

@@ -12,8 +12,10 @@
 
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
 #include "../PassDetail.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
@@ -24,7 +26,9 @@
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/UseDefLists.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
@@ -1814,41 +1818,6 @@ private:
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Convert an `llhd.not` operation. The result is an `llvm.xor` operation,
-/// xor-ing the operand with all ones.
-struct NotOpConversion : public ConvertToLLVMPattern {
-  explicit NotOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::NotOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Get the adapted operands.
-    NotOpAdaptor transformed(operands);
-    // Get the `llhd.not` operation.
-    auto notOp = cast<NotOp>(op);
-    // Get integer width.
-    unsigned width = notOp.getType().getIntOrFloatBitWidth();
-    // Get the used llvm types.
-    auto iTy = IntegerType::get(rewriter.getContext(), width);
-
-    // Get the all-ones mask operand
-    APInt mask(width, 0);
-    mask.setAllBits();
-    auto rhs = rewriter.getIntegerAttr(rewriter.getIntegerType(width), mask);
-    auto rhsConst = rewriter.create<LLVM::ConstantOp>(op->getLoc(), iTy, rhs);
-
-    rewriter.replaceOpWithNewOp<LLVM::XOrOp>(
-        op, typeConverter->convertType(notOp.getType()), transformed.value(),
-        rhsConst);
-
-    return success();
-  }
-};
-} // namespace
-
-namespace {
 /// Convert an `llhd.shr` operation to LLVM dialect. All the operands are
 /// extended to the width obtained by combining the hidden and base values. This
 /// combined value is then shifted (exposing the hidden value) and truncated to
@@ -2000,9 +1969,99 @@ struct ShlOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
-using AndOpConversion = OneToOneConvertToLLVMPattern<llhd::AndOp, LLVM::AndOp>;
-using OrOpConversion = OneToOneConvertToLLVMPattern<llhd::OrOp, LLVM::OrOp>;
-using XorOpConversion = OneToOneConvertToLLVMPattern<llhd::XorOp, LLVM::XOrOp>;
+namespace {
+struct AndOpConversion : public ConvertToLLVMPattern {
+  explicit AndOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(comb::AndOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    comb::AndOpAdaptor transformed(operands);
+    size_t numOperands = transformed.inputs().size();
+    Type type = transformed.inputs().getType().front();
+
+    if (numOperands == 1) {
+      rewriter.replaceOp(op, transformed.inputs().front());
+      return success();
+    }
+
+    auto replacement = rewriter.create<LLVM::AndOp>(op->getLoc(), type, transformed.inputs()[0], transformed.inputs()[1]);
+
+    for (unsigned i = 2; i < numOperands; i++) {
+      replacement = rewriter.create<LLVM::AndOp>(op->getLoc(), type, replacement.res(), transformed.inputs()[i]);
+    }
+
+    rewriter.replaceOp(op, replacement->getResult(0));
+
+    return success();
+  }
+};
+
+} // namespace
+
+namespace {
+struct OrOpConversion : public ConvertToLLVMPattern {
+  explicit OrOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(comb::OrOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    comb::OrOpAdaptor transformed(operands);
+    size_t numOperands = transformed.inputs().size();
+    Type type = transformed.inputs().getType().front();
+
+    if (numOperands == 1) {
+      rewriter.replaceOp(op, transformed.inputs()[0]);
+      return success();
+    }
+
+    auto replacement = rewriter.create<LLVM::OrOp>(op->getLoc(), type, transformed.inputs()[0], transformed.inputs()[1]);
+
+    for (unsigned i = 2; i < numOperands; i++) {
+      replacement = rewriter.create<LLVM::OrOp>(op->getLoc(), type, replacement.res(), transformed.inputs()[i]);
+    }
+
+    rewriter.replaceOp(op, replacement->getResult(0));
+
+    return success();
+  }
+};
+} // namespace
+
+namespace {
+struct XorOpConversion : public ConvertToLLVMPattern {
+  explicit XorOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(comb::XorOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    comb::XorOpAdaptor transformed(operands);
+    size_t numOperands = transformed.inputs().size();
+    Type type = transformed.inputs().getType().front();
+
+    if (numOperands == 1) {
+      rewriter.replaceOp(op, transformed.inputs().front());
+      return success();
+    }
+
+    auto replacement = rewriter.create<LLVM::XOrOp>(op->getLoc(), type, transformed.inputs()[0], transformed.inputs()[1]);
+
+    for (unsigned i = 2; i < numOperands; i++) {
+      replacement = rewriter.create<LLVM::XOrOp>(op->getLoc(), type, replacement.res(), transformed.inputs()[i]);
+    }
+
+    rewriter.replaceOp(op, replacement->getResult(0));
+
+    return success();
+  }
+};
+} // namespace
 
 //===----------------------------------------------------------------------===//
 // Arithmetic conversions
@@ -2122,6 +2181,28 @@ struct ConstOpConversion : public ConvertToLLVMPattern {
 
     // Get the converted llvm type.
     auto intType = typeConverter->convertType(attr.getType());
+    // Replace the operation with an llvm constant op.
+    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, intType,
+                                                  constOp.valueAttr());
+
+    return success();
+  }
+};
+} // namespace
+
+namespace {
+struct HWConstantOpConversion : public ConvertToLLVMPattern {
+  explicit HWConstantOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(hw::ConstantOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operand,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Get the ConstOp.
+    auto constOp = cast<hw::ConstantOp>(op);
+    // Get the converted llvm type.
+    auto intType = typeConverter->convertType(constOp.valueAttr().getType());
     // Replace the operation with an llvm constant op.
     rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, intType,
                                                   constOp.valueAttr());
@@ -2711,7 +2792,7 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
-  patterns.add<ConstOpConversion, ArrayOpConversion, ArrayUniformOpConversion,
+  patterns.add<ConstOpConversion, HWConstantOpConversion, ArrayOpConversion, ArrayUniformOpConversion,
                TupleOpConversion>(ctx, converter);
 
   // Extract conversion patterns.
@@ -2724,9 +2805,9 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
                                                                    converter);
 
   // Bitwise conversion patterns.
-  patterns.add<NotOpConversion, ShrOpConversion, ShlOpConversion>(ctx,
+  patterns.add<ShrOpConversion, ShlOpConversion>(ctx,
                                                                   converter);
-  patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
+  patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(ctx, converter);
 
   // Arithmetic conversion patterns.
   patterns.add<NegOpConversion, EqOpConversion, NeqOpConversion>(ctx,

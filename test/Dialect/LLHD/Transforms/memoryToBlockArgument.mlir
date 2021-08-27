@@ -2,6 +2,7 @@
 // RUN: circt-opt %s -llhd-memory-to-block-argument -split-input-file -verify-diagnostics | FileCheck %s
 
 // CHECK-LABEL:   llhd.proc @check_simple() -> () {
+// CHECK:           %[[ALLSET:.*]] = llhd.const -1 : i32
 // CHECK:           %[[VAL_0:.*]] = llhd.const 5 : i32
 // CHECK:           %[[VAL_1:.*]] = llhd.const true : i1
 // CHECK:           cond_br %[[VAL_1]], ^bb1, ^bb2
@@ -12,10 +13,11 @@
 // CHECK:           %[[VAL_3:.*]] = llhd.const 7 : i32
 // CHECK:           br ^bb3(%[[VAL_3]] : i32)
 // CHECK:         ^bb3(%[[VAL_4:.*]]: i32):
-// CHECK:           %[[VAL_5:.*]] = llhd.not %[[VAL_4]] : i32
+// CHECK:           %[[VAL_5:.*]] = comb.xor %[[VAL_4]], %[[ALLSET]] : i32
 // CHECK:           llhd.halt
 // CHECK:         }
 llhd.proc @check_simple() -> () {
+  %allset = llhd.const -1 : i32
   %c5 = llhd.const 5 : i32
   %cond = llhd.const 1 : i1
   %ptr = llhd.var %c5 : i32
@@ -30,7 +32,7 @@ llhd.proc @check_simple() -> () {
   br ^bb3
 ^bb3:
   %ld = llhd.load %ptr : !llhd.ptr<i32>
-  %res = llhd.not %ld : i32
+  %res = comb.xor %ld, %allset : i32
   llhd.halt
 }
 
@@ -46,6 +48,7 @@ func @allocate_mem() -> !llhd.ptr<i32> {
 }
 
 // CHECK-LABEL:   llhd.proc @pointer_returned_from_call() -> () {
+// CHECK:           %[[ALLSET:.*]] = llhd.const -1 : i32
 // CHECK:           %[[VAL_0:.*]] = llhd.const true : i1
 // CHECK:           %[[VAL_1:.*]] = call @allocate_mem() : () -> !llhd.ptr<i32>
 // CHECK:           cond_br %[[VAL_0]], ^bb1, ^bb2
@@ -59,10 +62,11 @@ func @allocate_mem() -> !llhd.ptr<i32> {
 // CHECK:           br ^bb3
 // CHECK:         ^bb3:
 // CHECK:           %[[VAL_4:.*]] = llhd.load %[[VAL_1]] : !llhd.ptr<i32>
-// CHECK:           %[[VAL_5:.*]] = llhd.not %[[VAL_4]] : i32
+// CHECK:           %[[VAL_5:.*]] = comb.xor %[[VAL_4]], %[[ALLSET]] : i32
 // CHECK:           llhd.halt
 // CHECK:         }
 llhd.proc @pointer_returned_from_call() -> () {
+  %allset = llhd.const -1 : i32
   %cond = llhd.const 1 : i1
   %ptr = call @allocate_mem() : () -> !llhd.ptr<i32>
   cond_br %cond, ^bb1, ^bb2
@@ -76,7 +80,7 @@ llhd.proc @pointer_returned_from_call() -> () {
   br ^bb3
 ^bb3:
   %ld = llhd.load %ptr : !llhd.ptr<i32>
-  %res = llhd.not %ld : i32
+  %res = comb.xor %ld, %allset : i32
   llhd.halt
 }
 
@@ -93,6 +97,7 @@ func @store_something(%ptr : !llhd.ptr<i32>) {
 }
 
 // CHECK-LABEL:   llhd.proc @pointer_passed_to_function() -> () {
+// CHECK:           %[[ALLSET:.*]] = llhd.const -1 : i32
 // CHECK:           %[[VAL_0:.*]] = llhd.const true : i1
 // CHECK:           %[[VAL_1:.*]] = llhd.const 5 : i32
 // CHECK:           %[[VAL_2:.*]] = llhd.var %[[VAL_1]] : i32
@@ -106,10 +111,11 @@ func @store_something(%ptr : !llhd.ptr<i32>) {
 // CHECK:           br ^bb3
 // CHECK:         ^bb3:
 // CHECK:           %[[VAL_4:.*]] = llhd.load %[[VAL_2]] : !llhd.ptr<i32>
-// CHECK:           %[[VAL_5:.*]] = llhd.not %[[VAL_4]] : i32
+// CHECK:           %[[VAL_5:.*]] = comb.xor %[[VAL_4]], %[[ALLSET]] : i32
 // CHECK:           llhd.halt
 // CHECK:         }
 llhd.proc @pointer_passed_to_function() -> () {
+  %allset = llhd.const -1 : i32
   %cond = llhd.const 1 : i1
   %c5 = llhd.const 5 : i32
   %ptr = llhd.var %c5 : i32
@@ -123,11 +129,12 @@ llhd.proc @pointer_passed_to_function() -> () {
   br ^bb3
 ^bb3:
   %ld = llhd.load %ptr : !llhd.ptr<i32>
-  %res = llhd.not %ld : i32
+  %res = comb.xor %ld, %allset : i32
   llhd.halt
 }
 
 // CHECK-LABEL:   llhd.proc @pointer_block_argument() -> () {
+// CHECK:           %[[ALLSET:.*]] = llhd.const -1 : i32
 // CHECK:           %[[VAL_0:.*]] = llhd.const 5 : i32
 // CHECK:           %[[VAL_1:.*]] = llhd.const true : i1
 // CHECK:           %[[VAL_2:.*]] = llhd.var %[[VAL_0]] : i32
@@ -142,10 +149,11 @@ llhd.proc @pointer_passed_to_function() -> () {
 // CHECK:           br ^bb3
 // CHECK:         ^bb3:
 // CHECK:           %[[VAL_6:.*]] = llhd.load %[[VAL_2]] : !llhd.ptr<i32>
-// CHECK:           %[[VAL_7:.*]] = llhd.not %[[VAL_6]] : i32
+// CHECK:           %[[VAL_7:.*]] = comb.xor %[[VAL_6]], %[[ALLSET]] : i32
 // CHECK:           llhd.halt
 // CHECK:         }
 llhd.proc @pointer_block_argument() -> () {
+  %allset = llhd.const -1 : i32
   %c5 = llhd.const 5 : i32
   %cond = llhd.const 1 : i1
   %ptr = llhd.var %c5 : i32
@@ -160,11 +168,12 @@ llhd.proc @pointer_block_argument() -> () {
   br ^bb3
 ^bb3:
   %ld = llhd.load %ptr : !llhd.ptr<i32>
-  %res = llhd.not %ld : i32
+  %res = comb.xor %ld, %allset : i32
   llhd.halt
 }
 
 // CHECK-LABEL:   llhd.proc @two_block_arguments() -> () {
+// CHECK:           %[[ALLSET:.*]] = llhd.const -1 : i32
 // CHECK:           %[[VAL_0:.*]] = llhd.const 5 : i32
 // CHECK:           %[[VAL_1:.*]] = llhd.const true : i1
 // CHECK:           cond_br %[[VAL_1]], ^bb1, ^bb2
@@ -175,11 +184,12 @@ llhd.proc @pointer_block_argument() -> () {
 // CHECK:           %[[VAL_3:.*]] = llhd.const 7 : i32
 // CHECK:           br ^bb3(%[[VAL_3]], %[[VAL_3]] : i32, i32)
 // CHECK:         ^bb3(%[[VAL_4:.*]]: i32, %[[VAL_5:.*]]: i32):
-// CHECK:           %[[VAL_6:.*]] = llhd.not %[[VAL_4]] : i32
-// CHECK:           %[[VAL_7:.*]] = llhd.not %[[VAL_5]] : i32
+// CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_4]], %[[ALLSET]] : i32
+// CHECK:           %[[VAL_7:.*]] = comb.xor %[[VAL_5]], %[[ALLSET]] : i32
 // CHECK:           llhd.halt
 // CHECK:         }
 llhd.proc @two_block_arguments() -> () {
+  %allset = llhd.const -1 : i32
   %c5 = llhd.const 5 : i32
   %cond = llhd.const 1 : i1
   %ptr = llhd.var %c5 : i32
@@ -197,25 +207,27 @@ llhd.proc @two_block_arguments() -> () {
 ^bb3:
   %ld = llhd.load %ptr : !llhd.ptr<i32>
   %ld2 = llhd.load %ptr2 : !llhd.ptr<i32>
-  %res = llhd.not %ld : i32
-  %res2 = llhd.not %ld2 : i32
+  %res = comb.xor %ld, %allset : i32
+  %res2 = comb.xor %ld2, %allset : i32
   llhd.halt
 }
 
 // CHECK-LABEL:   llhd.proc @multiple_store_one_block() -> () {
+// CHECK:           %[[ALLSET:.*]] = llhd.const -1 : i32
 // CHECK:           %[[VAL_0:.*]] = llhd.const 5 : i32
 // CHECK:           %[[VAL_1:.*]] = llhd.const true : i1
 // CHECK:           cond_br %[[VAL_1]], ^bb1, ^bb2(%[[VAL_0]] : i32)
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_2:.*]] = llhd.const 7 : i32
-// CHECK:           %[[VAL_3:.*]] = llhd.not %[[VAL_2]] : i32
+// CHECK:           %[[VAL_3:.*]] = comb.xor %[[VAL_2]], %[[ALLSET]] : i32
 // CHECK:           %[[VAL_4:.*]] = llhd.const 8 : i32
 // CHECK:           br ^bb2(%[[VAL_4]] : i32)
 // CHECK:         ^bb2(%[[VAL_5:.*]]: i32):
-// CHECK:           %[[VAL_6:.*]] = llhd.not %[[VAL_5]] : i32
+// CHECK:           %[[VAL_6:.*]] = comb.xor %[[VAL_5]], %[[ALLSET]] : i32
 // CHECK:           llhd.halt
 // CHECK:         }
 llhd.proc @multiple_store_one_block() -> () {
+  %allset = llhd.const -1 : i32
   %c5 = llhd.const 5 : i32
   %cond = llhd.const 1 : i1
   %ptr = llhd.var %c5 : i32
@@ -224,13 +236,13 @@ llhd.proc @multiple_store_one_block() -> () {
   %c7 = llhd.const 7 : i32
   llhd.store %ptr, %c7 : !llhd.ptr<i32>
   %ld_tmp = llhd.load %ptr : !llhd.ptr<i32>
-  %tmp = llhd.not %ld_tmp : i32
+  %tmp = comb.xor %ld_tmp, %allset : i32
   %c8 = llhd.const 8 : i32
   llhd.store %ptr, %c8 : !llhd.ptr<i32>
   br ^bb2
 ^bb2:
   %ld = llhd.load %ptr : !llhd.ptr<i32>
-  %res = llhd.not %ld : i32
+  %res = comb.xor %ld, %allset : i32
   llhd.halt
 }
 
@@ -275,99 +287,101 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 }
 
 // CHECK-LABEL:   llhd.proc @more_complicated() -> () {
+// CHECK:           %[[ALLSET:.*]] = llhd.const -1 : i8
 // CHECK:           %[[VAL_0:.*]] = llhd.const true : i1
 // CHECK:           %[[VAL_1:.*]] = llhd.const 3 : i8
-// CHECK:           %[[VAL_2:.*]] = llhd.not %[[VAL_1]] : i8
+// CHECK:           %[[VAL_2:.*]] = comb.xor %[[ALLSET]], %[[VAL_1]] : i8
 // CHECK:           br ^bb1(%[[VAL_1]] : i8)
 // CHECK:         ^bb1(%[[VAL_3:.*]]: i8):
-// CHECK:           %[[VAL_4:.*]] = llhd.not %[[VAL_3]] : i8
+// CHECK:           %[[VAL_4:.*]] = comb.xor %[[ALLSET]], %[[VAL_3]] : i8
 // CHECK:           br ^bb2(%[[VAL_3]] : i8)
 // CHECK:         ^bb2(%[[VAL_5:.*]]: i8):
-// CHECK:           %[[VAL_6:.*]] = llhd.not %[[VAL_5]] : i8
+// CHECK:           %[[VAL_6:.*]] = comb.xor %[[ALLSET]], %[[VAL_5]] : i8
 // CHECK:           cond_br %[[VAL_0]], ^bb3, ^bb4
 // CHECK:         ^bb3:
-// CHECK:           %[[VAL_7:.*]] = llhd.not %[[VAL_5]] : i8
+// CHECK:           %[[VAL_7:.*]] = comb.xor %[[ALLSET]], %[[VAL_5]] : i8
 // CHECK:           %[[VAL_8:.*]] = llhd.const 4 : i8
 // CHECK:           br ^bb2(%[[VAL_8]] : i8)
 // CHECK:         ^bb4:
-// CHECK:           %[[VAL_9:.*]] = llhd.not %[[VAL_5]] : i8
+// CHECK:           %[[VAL_9:.*]] = comb.xor %[[ALLSET]], %[[VAL_5]] : i8
 // CHECK:           cond_br %[[VAL_0]], ^bb1(%[[VAL_5]] : i8), ^bb5
 // CHECK:         ^bb5:
-// CHECK:           %[[VAL_10:.*]] = llhd.not %[[VAL_5]] : i8
+// CHECK:           %[[VAL_10:.*]] = comb.xor %[[ALLSET]], %[[VAL_5]] : i8
 // CHECK:           cond_br %[[VAL_0]], ^bb6, ^bb7
 // CHECK:         ^bb6:
-// CHECK:           %[[VAL_11:.*]] = llhd.not %[[VAL_5]] : i8
+// CHECK:           %[[VAL_11:.*]] = comb.xor %[[ALLSET]], %[[VAL_5]] : i8
 // CHECK:           cond_br %[[VAL_0]], ^bb8, ^bb9(%[[VAL_5]] : i8)
 // CHECK:         ^bb7:
-// CHECK:           %[[VAL_12:.*]] = llhd.not %[[VAL_5]] : i8
+// CHECK:           %[[VAL_12:.*]] = comb.xor %[[ALLSET]], %[[VAL_5]] : i8
 // CHECK:           %[[VAL_13:.*]] = llhd.const 5 : i8
 // CHECK:           br ^bb9(%[[VAL_13]] : i8)
 // CHECK:         ^bb8:
-// CHECK:           %[[VAL_14:.*]] = llhd.not %[[VAL_5]] : i8
+// CHECK:           %[[VAL_14:.*]] = comb.xor %[[ALLSET]], %[[VAL_5]] : i8
 // CHECK:           br ^bb10
 // CHECK:         ^bb9(%[[VAL_15:.*]]: i8):
-// CHECK:           %[[VAL_16:.*]] = llhd.not %[[VAL_15]] : i8
+// CHECK:           %[[VAL_16:.*]] = comb.xor %[[ALLSET]], %[[VAL_15]] : i8
 // CHECK:           br ^bb11(%[[VAL_15]] : i8)
 // CHECK:         ^bb10:
-// CHECK:           %[[VAL_17:.*]] = llhd.not %[[VAL_5]] : i8
+// CHECK:           %[[VAL_17:.*]] = comb.xor %[[ALLSET]], %[[VAL_5]] : i8
 // CHECK:           cond_br %[[VAL_0]], ^bb8, ^bb11(%[[VAL_5]] : i8)
 // CHECK:         ^bb11(%[[VAL_18:.*]]: i8):
-// CHECK:           %[[VAL_19:.*]] = llhd.not %[[VAL_18]] : i8
+// CHECK:           %[[VAL_19:.*]] = comb.xor %[[ALLSET]], %[[VAL_18]] : i8
 // CHECK:           llhd.halt
 // CHECK:         }
 llhd.proc @more_complicated() -> () {
+  %allset = llhd.const -1 : i8
   %cond = llhd.const 1 : i1
   %init = llhd.const 3 : i8
   %ptr = llhd.var %init : i8
   %ld = llhd.load %ptr : !llhd.ptr<i8>
-  %res = llhd.not %ld : i8
+  %res = comb.xor %allset,  %ld : i8
   br ^bb1
 ^bb1:
   %ld1 = llhd.load %ptr : !llhd.ptr<i8>
-  %res1 = llhd.not %ld1 : i8
+  %res1 = comb.xor %allset,  %ld1 : i8
   br ^bb2
 ^bb2:
   %ld2 = llhd.load %ptr : !llhd.ptr<i8>
-  %res2 = llhd.not %ld2 : i8
+  %res2 = comb.xor %allset,  %ld2 : i8
   cond_br %cond, ^bb3, ^bb4
 ^bb3:
   %ld3 = llhd.load %ptr : !llhd.ptr<i8>
-  %res3 = llhd.not %ld3 : i8
+  %res3 = comb.xor %allset,  %ld3 : i8
   %c4 = llhd.const 4 : i8
   llhd.store %ptr, %c4 : !llhd.ptr<i8>
   br ^bb2
 ^bb4:
   %ld4 = llhd.load %ptr : !llhd.ptr<i8>
-  %res4 = llhd.not %ld4 : i8
+  %res4 = comb.xor %allset,  %ld4 : i8
   cond_br %cond, ^bb1, ^bb41
 ^bb41:
   %ld5 = llhd.load %ptr : !llhd.ptr<i8>
-  %res5 = llhd.not %ld5 : i8
+  %res5 = comb.xor %allset,  %ld5 : i8
   cond_br %cond, ^bb5, ^bb6
 ^bb5:
   %ld6 = llhd.load %ptr : !llhd.ptr<i8>
-  %res6 = llhd.not %ld6 : i8
+  %res6 = comb.xor %allset,  %ld6 : i8
   cond_br %cond, ^bb7, ^bb8
 ^bb6:
   %ld7 = llhd.load %ptr : !llhd.ptr<i8>
-  %res7 = llhd.not %ld7 : i8
+  %res7 = comb.xor %allset,  %ld7 : i8
   %c5 = llhd.const 5 : i8
   llhd.store %ptr, %c5 : !llhd.ptr<i8>
   br ^bb8
 ^bb7:
   %ld8 = llhd.load %ptr : !llhd.ptr<i8>
-  %res8 = llhd.not %ld8 : i8
+  %res8 = comb.xor %allset,  %ld8 : i8
   br ^bb9
 ^bb8:
   %ld9 = llhd.load %ptr : !llhd.ptr<i8>
-  %res9 = llhd.not %ld9 : i8
+  %res9 = comb.xor %allset,  %ld9 : i8
   br ^bb10
 ^bb9:
   %ld10 = llhd.load %ptr : !llhd.ptr<i8>
-  %res10 = llhd.not %ld10 : i8
+  %res10 = comb.xor %allset,  %ld10 : i8
   cond_br %cond, ^bb7, ^bb10
 ^bb10:
   %ld11 = llhd.load %ptr : !llhd.ptr<i8>
-  %res11 = llhd.not %ld11 : i8
+  %res11 = comb.xor %allset,  %ld11 : i8
   llhd.halt
 }
