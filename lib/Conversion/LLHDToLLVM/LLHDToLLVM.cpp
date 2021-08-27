@@ -1970,103 +1970,36 @@ struct ShlOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
-struct AndOpConversion : public ConvertToLLVMPattern {
-  explicit AndOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(comb::AndOp::getOperationName(), ctx,
-                             typeConverter) {}
+template <typename SourceOp, typename TargetOp>
+class VariadicOpConversion : public ConvertOpToLLVMPattern<SourceOp> {
+public:
+  using ConvertOpToLLVMPattern<SourceOp>::ConvertOpToLLVMPattern;
+  using Super = VariadicOpConversion<SourceOp, TargetOp>;
 
   LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+  matchAndRewrite(SourceOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    comb::AndOpAdaptor transformed(operands);
-    size_t numOperands = transformed.inputs().size();
-    Type type = transformed.inputs().getType().front();
 
-    if (numOperands == 1) {
-      rewriter.replaceOp(op, transformed.inputs().front());
-      return success();
+    size_t numOperands = op.getOperands().size();
+    // All operands have the same type.
+    Type type = op.getOperandTypes().front();
+    auto replacement = op.getOperand(0);
+
+    for (unsigned i = 1; i < numOperands; i++) {
+      replacement = rewriter.create<TargetOp>(op.getLoc(), type, replacement,
+                                              op.getOperand(i));
     }
 
-    auto replacement = rewriter.create<LLVM::AndOp>(
-        op->getLoc(), type, transformed.inputs()[0], transformed.inputs()[1]);
-
-    for (unsigned i = 2; i < numOperands; i++) {
-      replacement = rewriter.create<LLVM::AndOp>(
-          op->getLoc(), type, replacement.res(), transformed.inputs()[i]);
-    }
-
-    rewriter.replaceOp(op, replacement->getResult(0));
+    rewriter.replaceOp(op, replacement);
 
     return success();
   }
 };
 
-} // namespace
+using AndOpConversion = VariadicOpConversion<comb::AndOp, LLVM::AndOp>;
+using OrOpConversion = VariadicOpConversion<comb::OrOp, LLVM::OrOp>;
+using XorOpConversion = VariadicOpConversion<comb::XorOp, LLVM::XOrOp>;
 
-namespace {
-struct OrOpConversion : public ConvertToLLVMPattern {
-  explicit OrOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(comb::OrOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    comb::OrOpAdaptor transformed(operands);
-    size_t numOperands = transformed.inputs().size();
-    Type type = transformed.inputs().getType().front();
-
-    if (numOperands == 1) {
-      rewriter.replaceOp(op, transformed.inputs()[0]);
-      return success();
-    }
-
-    auto replacement = rewriter.create<LLVM::OrOp>(
-        op->getLoc(), type, transformed.inputs()[0], transformed.inputs()[1]);
-
-    for (unsigned i = 2; i < numOperands; i++) {
-      replacement = rewriter.create<LLVM::OrOp>(
-          op->getLoc(), type, replacement.res(), transformed.inputs()[i]);
-    }
-
-    rewriter.replaceOp(op, replacement->getResult(0));
-
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-struct XorOpConversion : public ConvertToLLVMPattern {
-  explicit XorOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(comb::XorOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    comb::XorOpAdaptor transformed(operands);
-    size_t numOperands = transformed.inputs().size();
-    Type type = transformed.inputs().getType().front();
-
-    if (numOperands == 1) {
-      rewriter.replaceOp(op, transformed.inputs().front());
-      return success();
-    }
-
-    auto replacement = rewriter.create<LLVM::XOrOp>(
-        op->getLoc(), type, transformed.inputs()[0], transformed.inputs()[1]);
-
-    for (unsigned i = 2; i < numOperands; i++) {
-      replacement = rewriter.create<LLVM::XOrOp>(
-          op->getLoc(), type, replacement.res(), transformed.inputs()[i]);
-    }
-
-    rewriter.replaceOp(op, replacement->getResult(0));
-
-    return success();
-  }
-};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -2813,8 +2746,7 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
 
   // Bitwise conversion patterns.
   patterns.add<ShrOpConversion, ShlOpConversion>(ctx, converter);
-  patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(ctx,
-                                                                 converter);
+  patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
 
   // Arithmetic conversion patterns.
   patterns.add<NegOpConversion, EqOpConversion, NeqOpConversion>(ctx,
