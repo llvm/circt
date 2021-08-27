@@ -507,10 +507,11 @@ namespace {
 /// various emitters.
 class VerilogEmitterState {
 public:
-  explicit VerilogEmitterState(raw_ostream &os) : os(os) {}
+  explicit VerilogEmitterState(LoweringOptions options, raw_ostream &os)
+      : options(options), os(os) {}
 
   /// The emitter options which control verilog emission.
-  LoweringOptions options;
+  const LoweringOptions options;
 
   /// The stream to emit to.
   raw_ostream &os;
@@ -3497,7 +3498,7 @@ static void prepareHWModule(Block &block, ModuleNameManager &names,
        opIterator != e;) {
     auto &op = *opIterator++;
 
-    // If the operations has regions, lower each of the regions.
+    // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
         prepareHWModule(region.front(), names, options);
@@ -3827,8 +3828,7 @@ struct UnifiedEmitter : public RootEmitterBase {
 
 void UnifiedEmitter::emitMLIRModule() {
   gatherFiles(false);
-  VerilogEmitterState state(os);
-  state.options = options;
+  VerilogEmitterState state(options, os);
 
   // Emit the main file. This is a container for anything not explicitly split
   // out into a separate file.
@@ -3896,8 +3896,7 @@ void SplitEmitter::createFile(Identifier fileName, FileInfo &file) {
 
   // Emit the file, copying the global options into the individual module
   // state.
-  VerilogEmitterState state(output->os());
-  state.options = options;
+  VerilogEmitterState state(options, output->os());
   emitFile(file, state);
   output->keep();
 }

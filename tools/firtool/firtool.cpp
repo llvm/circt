@@ -204,14 +204,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
               Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Add the annotation file if one was explicitly specified.
   std::string annotationFilenameDetermined;
-  if (!inputAnnotationFilename.empty()) {
-    if (!(sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
-                                   annotationFilenameDetermined))) {
-      llvm::errs() << "cannot open input annotation file '"
-                   << inputAnnotationFilename
-                   << "': No such file or directory\n";
-      return failure();
-    }
+  if (!inputAnnotationFilename.empty() &&
+      !sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
+                                annotationFilenameDetermined)) {
+    llvm::errs() << "cannot open input annotation file '"
+                 << inputAnnotationFilename << "': No such file or directory\n";
+    return failure();
   }
 
   // Parse the input.
@@ -395,15 +393,15 @@ processInputSplit(MLIRContext &context, TimingScope &ts,
                   Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
-  if (verifyDiagnostics) {
-    SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
-    context.printOpOnDiagnostic(false);
-    (void)processBuffer(context, ts, sourceMgr, outputFile);
-    return sourceMgrHandler.verify();
-  } else {
+  if (!verifyDiagnostics) {
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
     return processBuffer(context, ts, sourceMgr, outputFile);
   }
+
+  SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
+  context.printOpOnDiagnostic(false);
+  (void)processBuffer(context, ts, sourceMgr, outputFile);
+  return sourceMgrHandler.verify();
 }
 
 /// Process the entire input provided by the user, splitting it up if the
@@ -412,29 +410,28 @@ static LogicalResult
 processInput(MLIRContext &context, TimingScope &ts,
              std::unique_ptr<llvm::MemoryBuffer> input,
              Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
-  if (splitInputFile) {
-    // Emit an error if the user provides a separate annotation file alongside
-    // split input. This is technically not a problem, but the user likely
-    // expects the annotation file to be split as well, which is not the case.
-    // To prevent any frustration, we detect this constellation and emit an
-    // error here. The user can provide annotations for each split using the
-    // inline JSON syntax in FIRRTL.
-    if (!inputAnnotationFilename.empty()) {
-      llvm::errs() << "annotation file cannot be used with split input: "
-                      "use inline JSON syntax on FIRRTL `circuit` to specify "
-                      "per-split annotations\n";
-      return failure();
-    }
-
-    return splitAndProcessBuffer(
-        std::move(input),
-        [&](std::unique_ptr<MemoryBuffer> buffer, raw_ostream &) {
-          return processInputSplit(context, ts, std::move(buffer), outputFile);
-        },
-        llvm::outs());
-  } else {
+  if (!splitInputFile)
     return processInputSplit(context, ts, std::move(input), outputFile);
+
+  // Emit an error if the user provides a separate annotation file alongside
+  // split input. This is technically not a problem, but the user likely
+  // expects the annotation file to be split as well, which is not the case.
+  // To prevent any frustration, we detect this constellation and emit an
+  // error here. The user can provide annotations for each split using the
+  // inline JSON syntax in FIRRTL.
+  if (!inputAnnotationFilename.empty()) {
+    llvm::errs() << "annotation file cannot be used with split input: "
+                    "use inline JSON syntax on FIRRTL `circuit` to specify "
+                    "per-split annotations\n";
+    return failure();
   }
+
+  return splitAndProcessBuffer(
+      std::move(input),
+      [&](std::unique_ptr<MemoryBuffer> buffer, raw_ostream &) {
+        return processInputSplit(context, ts, std::move(buffer), outputFile);
+      },
+      llvm::outs());
 }
 
 /// This implements the top-level logic for the firtool command, invoked once
