@@ -720,10 +720,9 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
     // Implicit none argument
     APInt apnonearg(1, 0);
     valueMap[blockArgs[blockArgs.size() - 1]] = apnonearg;
-  } else {
+  } else
     llvm::report_fatal_error("Function '" + toplevelFunction +
                              "' not supported");
-  }
 
   if (inputArgs.size() != realInputs) {
     errs() << "Toplevel function " << toplevelFunction << " has " << realInputs
