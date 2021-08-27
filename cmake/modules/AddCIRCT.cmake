@@ -7,7 +7,7 @@ endfunction()
 
 function(add_circt_interface interface)
   add_mlir_interface(${ARGV})
-  add_dependencies(circt-headers MLIR${dialect}IncGen)
+  add_dependencies(circt-headers MLIR${interface}IncGen)
 endfunction()
 
 function(add_circt_doc doc_filename command output_file output_directory)
