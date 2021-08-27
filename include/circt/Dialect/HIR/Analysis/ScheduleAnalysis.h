@@ -23,8 +23,8 @@ struct TimeInstant {
 /// The schedule-info contains
 ///   - List of all root time-vars (which can not be expressed as a fixed offset
 ///   from another time-var).
-///   - Mapping from a Value to a pair of time-instants. The value is valid
-///   between these two time instants.
+///   - Mapping from a Value to a time instant. The value is valid at that time
+///   instant.
 class ScheduleInfo {
 public:
   static llvm::Optional<ScheduleInfo> createScheduleInfo(FuncOp);
