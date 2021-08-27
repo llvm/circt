@@ -212,11 +212,11 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
       ++(*iter);
       if (isa<SubindexOp, SubfieldOp>(user)) {
         // We recurse into Subindex ops to find the leaf-uses.
-        auto input = user->getResult(0);
-        stack.emplace_back(input, input.use_begin(), MemDirAttr::Infer);
+        auto output = user->getResult(0);
+        stack.emplace_back(output, output.use_begin(), MemDirAttr::Infer);
         mode = MemDirAttr::Infer;
         iter = &stack.back().iterator;
-        end = input.use_end();
+        end = output.use_end();
         continue;
       }
       if (auto subaccessOp = dyn_cast<SubaccessOp>(user)) {
@@ -225,10 +225,11 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
         // the memory as the vector, we need to recurse.
         auto input = subaccessOp.input();
         if (use.get() == input) {
-          stack.emplace_back(input, input.use_begin(), MemDirAttr::Infer);
+          auto output = subaccessOp.getResult();
+          stack.emplace_back(output, output.use_begin(), MemDirAttr::Infer);
           mode = MemDirAttr::Infer;
           iter = &stack.back().iterator;
-          end = input.use_end();
+          end = output.use_end();
           continue;
         }
         // Otherwise we are reading from a memory for the index.

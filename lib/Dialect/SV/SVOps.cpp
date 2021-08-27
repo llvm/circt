@@ -738,6 +738,26 @@ void CaseZOp::build(OpBuilder &builder, OperationState &result, Value cond,
 }
 
 //===----------------------------------------------------------------------===//
+// Assignment statements
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyBPAssignOp(BPAssignOp op) {
+  if (isa<sv::WireOp>(op.dest().getDefiningOp()))
+    return op.emitOpError(
+        "Verilog disallows procedural assignment to a net type (did you intend "
+        "to use a variable type, e.g., sv.reg?)");
+  return success();
+}
+
+static LogicalResult verifyPAssignOp(PAssignOp op) {
+  if (isa<sv::WireOp>(op.dest().getDefiningOp()))
+    return op.emitOpError(
+        "Verilog disallows procedural assignment to a net type (did you intend "
+        "to use a variable type, e.g., sv.reg?)");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TypeDecl operations
 //===----------------------------------------------------------------------===//
 

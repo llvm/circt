@@ -1,5 +1,5 @@
 // RUN: handshake-runner %s | FileCheck %s
-// BROKEN: circt-opt -create-dataflow %s | handshake-runner | FileCheck %s
+// RUN: circt-opt -create-dataflow %s | handshake-runner | FileCheck %s
 // CHECK: 763 2996
 module {
   func @muladd(%1:index, %2:index, %3:index) -> (index) {

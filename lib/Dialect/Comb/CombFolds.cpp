@@ -282,8 +282,9 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
   auto zeros =
       rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
 
+  // Remove the high bits which would be removed by the Shl.
   auto extract =
-      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
 
   rewriter.replaceOpWithNewOp<ConcatOp>(op, extract, zeros);
   return success();
@@ -319,8 +320,9 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
   auto zeros =
       rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
 
+  // Remove the low bits which would be removed by the Shr.
   auto extract =
-      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
 
   rewriter.replaceOpWithNewOp<ConcatOp>(op, zeros, extract);
   return success();
@@ -344,7 +346,7 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   unsigned width = op.lhs().getType().cast<IntegerType>().getWidth();
   unsigned shift = value.getZExtValue();
 
-  auto topbit = rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, 1);
+  auto topbit = rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), width - 1, 1);
   auto sext = rewriter.create<SExtOp>(op.getLoc(),
                                       rewriter.getIntegerType(shift), topbit);
 
@@ -354,7 +356,7 @@ LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
   }
 
   auto extract =
-      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), 0, width - shift);
+      rewriter.create<ExtractOp>(op.getLoc(), op.lhs(), shift, width - shift);
 
   rewriter.replaceOpWithNewOp<ConcatOp>(op, sext, extract);
   return success();
@@ -488,7 +490,7 @@ static bool narrowExtractWidth(ExtractOp outerExtractOp,
                                     /* narrowTrailingBits= */ false, rewriter);
       })
       // Bit-wise operations and muxes can be narrowed more aggressively.
-      // Trailing bits that are not referenced in the use-sits can all be
+      // Trailing bits that are not referenced in the use-sites can all be
       // removed.
       .Case<AndOp, OrOp, XorOp>([&](auto innerOp) {
         return narrowOperationWidth(innerOp, innerOp.inputs(),
@@ -569,6 +571,37 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
                                               shlOp->getOperand(1), newCst);
           return success();
         }
+
+  if (auto sext = dyn_cast_or_null<SExtOp>(inputOp)) {
+    // `extract(lowBit, sext(x))` -> `extract(lowBit, x)`.
+    auto neededBits = op.getType().getIntOrFloatBitWidth() + op.lowBit();
+    auto sextInputWidth = sext.input().getType().getIntOrFloatBitWidth();
+    if (neededBits <= sextInputWidth) {
+      rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(), sext.input(),
+                                             op.lowBit());
+      return success();
+    }
+    if (sext->hasOneUse()) {
+      // `extract(lowbit, sext(x))` when extracted bits are all sign bits.
+      if (op.lowBit() >= sextInputWidth - 1) {
+        auto int1Type = rewriter.getI1Type();
+        auto signBit = rewriter.create<ExtractOp>(
+            sext.getLoc(), int1Type, sext.input(), sextInputWidth - 1);
+        rewriter.replaceOpWithNewOp<SExtOp>(op, op.getType(), signBit);
+        return success();
+      }
+
+      // `extract(lowBit, sext(x))` -> `extract(lowBit, smaller_sext(x))`.
+      if (neededBits < sext.getType().getIntOrFloatBitWidth()) {
+        auto newSExtType = rewriter.getIntegerType(neededBits);
+        auto newSExt =
+            rewriter.create<SExtOp>(sext.getLoc(), newSExtType, sext.input());
+        rewriter.replaceOpWithNewOp<ExtractOp>(op, op.getType(), newSExt,
+                                               op.lowBit());
+        return success();
+      }
+    }
+  }
 
   return failure();
 }

@@ -79,12 +79,13 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
   }
 
   // If we are missing elements in the array (it is non-power of two), then
-  // add a default.
-  Value defaultValue;
+  // add a default 'X' value.
+  SmallVector<Value> caseValues(llvm::reverse(createOp.getOperands()));
   if (1ULL << index.getType().getIntOrFloatBitWidth() !=
-      createOp.getNumOperands())
-    defaultValue =
-        builder.create<sv::ConstantXOp>(getOp.getLoc(), getOp.getType());
+      createOp.getNumOperands()) {
+    caseValues.push_back(
+        builder.create<sv::ConstantXOp>(getOp.getLoc(), getOp.getType()));
+  }
 
   APInt caseValue(index.getType().getIntOrFloatBitWidth(), 0);
   auto *context = builder.getContext();
@@ -93,11 +94,13 @@ Operation *HWLegalizeModulesPass::tryLoweringArrayGet(hw::ArrayGetOp getOp) {
 
   // Create the casez itself.
   builder.create<sv::CaseZOp>(
-      createOp.getLoc(), index, createOp.getNumOperands() + !!defaultValue,
+      createOp.getLoc(), index, caseValues.size(),
       [&](size_t caseIdx) -> CaseZPattern {
-        bool isDefault = caseIdx >= createOp.getNumOperands();
-        Value theValue =
-            isDefault ? defaultValue : createOp.getOperand(caseIdx);
+        // Use a default pattern for the last value, even if we are complete.
+        // This avoids tools thinking they need to insert a latch due to
+        // potentially incomplete case coverage.
+        bool isDefault = caseIdx == caseValues.size() - 1;
+        Value theValue = caseValues[caseIdx];
         sv::CaseZPattern thePattern =
             isDefault
                 ? CaseZPattern::getDefault(caseValue.getBitWidth(), context)

@@ -188,3 +188,17 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyFExtModuleOp(*this);";
 }
+
+def NonLocalAnchor : FIRRTLOp<"nla",
+      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">]> {
+  let summary = "Anchor for non-local annotations";
+  let description = [{
+    The "firrtl.nla" operation represents a common point for non-local (path)
+    annotations to anchor to in the global scope.  This lets components of the
+    path point to a common entity.
+  }];
+  let arguments = (ins SymbolNameAttr:$sym_name, SymbolArrayAttr:$modpath, StringArrayAttr:$namepath);
+  let results = (outs);
+  let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
+}
+

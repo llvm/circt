@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: module M1(
 hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
-  %wire42 = sv.wire : !hw.inout<i42>
+  %wire42 = sv.reg : !hw.inout<i42>
   %forceWire = sv.wire : !hw.inout<i1>
  
   %c11_i42 = hw.constant 11: i42
@@ -593,8 +593,8 @@ hw.module @issue728ifdef(%clock: i1, %a: i1, %b: i1)
 
 // CHECK-LABEL: module alwayscombTest(
 hw.module @alwayscombTest(%a: i1) -> (%x: i1) {
-  // CHECK: wire combWire;
-  %combWire = sv.wire : !hw.inout<i1>
+  // CHECK: reg combWire;
+  %combWire = sv.reg : !hw.inout<i1>
   // CHECK: always_comb
   sv.alwayscomb {
     // CHECK-NEXT: combWire <= a

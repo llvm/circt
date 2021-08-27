@@ -146,4 +146,7 @@ firrtl.module @LowerToBind() {
   firrtl.instance @InstanceLowerToBind {lowerToBind = true, name = "foo"}
 }
 
+firrtl.nla @NLA1 [] []
+firrtl.nla @NLA2 [@InstanceLowerToBind] ["foo"]
+
 }

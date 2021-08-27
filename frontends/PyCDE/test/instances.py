@@ -4,14 +4,13 @@ import pycde
 import circt.dialects.hw
 
 from circt import msft
+from pycde.appid import AppIDIndex
+import pycde.attributes as attrs
 
 
-@pycde.module
+@pycde.externmodule
 class Nothing:
-
-  @pycde.generator
-  def construct(mod):
-    return {}
+  pass
 
 
 @pycde.module
@@ -43,7 +42,7 @@ t = pycde.System([Test])
 t.generate(["construct"])
 t.print()
 
-mod = t.get_module("Test")
+mod = t.get_module("pycde.Test")
 print(mod)
 
 t.run_passes()
@@ -54,31 +53,51 @@ print("=== Hierarchy")
 # CHECK-NEXT: <instance: [pycde_UnParameterized, pycde_Nothing]>
 # CHECK-NEXT: <instance: [pycde_UnParameterized_0]>
 # CHECK-NEXT: <instance: [pycde_UnParameterized_0, pycde_Nothing]>
-t.walk_instances("Test", lambda inst: print(inst))
+t.walk_instances("pycde_Test", lambda inst: print(inst))
+
+
+locs = pycde.AppIDIndex()
+locs.lookup(pycde.AppID("pycde_UnParameterized_0"))["loc"] = \
+  (["memory", "bank"], msft.M20K, 39, 25, 0)
 
 
 def place_inst(inst):
   global x, y
   if inst.modname == "Nothing":
     inst.place("dsp_inst", msft.DSP, x, y)
-  elif inst.modname == "UnParameterized":
-    inst.place(["memory", "bank"], msft.M20K, x, y, 0)
-
-  x += 1
-  y += 2
+    x += 1
+    y += 2
+  else:
+    props = locs.lookup(inst.appid)
+    if "loc" in props:
+      inst.place(*props["loc"])
 
 
 x = 0
 y = 10
-t.walk_instances("Test", place_inst)
+t.walk_instances("pycde_Test", place_inst)
+
+
+instance_attrs = pycde.AppIDIndex()
+loc = attrs.placement(["memory", "bank"], msft.M20K, 15, 25, 0)
+instance_attrs.lookup(pycde.AppID("pycde_UnParameterized")).add_attribute(loc)
+instance_attrs.lookup(pycde.AppID("pycde_UnParameterized",
+                                  "pycde_Nothing")).add_attribute(loc)
+t.walk_instances("pycde_Test", instance_attrs.apply_attributes_visitor)
+
+assert instance_attrs.find_unused() is None
+instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
+assert (len(instance_attrs.find_unused()) == 1)
+
 t.print()
 
 # CHECK-LABEL: === Tcl
 print("=== Tcl")
 
 # CHECK-LABEL: proc pycde_Test_config { parent }
-# CHECK-NEXT:  set_location_assignment M20K_X0_Y10_N0 -to $parent|pycde_UnParameterized|memory|bank
-# CHECK-NEXT:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|dsp_inst
-# CHECK-NEXT:  set_location_assignment M20K_X2_Y14_N0 -to $parent|pycde_UnParameterized_0|memory|bank
-# CHECK-NEXT:  set_location_assignment MPDSP_X3_Y16_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
+# CHECK-NEXT:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|dsp_inst
+# CHECK-NEXT:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|memory|bank
+# CHECK-NEXT:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|memory|bank
+# CHECK-NEXT:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
+# CHECK-NEXT:  set_location_assignment M20K_X39_Y25_N0 -to $parent|pycde_UnParameterized_0|memory|bank
 t.print_tcl()

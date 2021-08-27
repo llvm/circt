@@ -296,5 +296,4 @@ on:
                 cat clang-tidy.patch
                 echo "================"
               fi
-
     # --- end of build-circt job.

@@ -430,12 +430,11 @@ hw.module @xor_idempotent_two_arguments(%arg0: i11) -> (i11) {
 
 // CHECK-LABEL: hw.module @add_reduction1(%arg0: i11, %arg1: i11) -> (i11) {
 // CHECK-NEXT:    %false = hw.constant false
-// CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 1 : (i11) -> i10
+// CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 0 : (i11) -> i10
 // CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %false : (i10, i1) -> i11
 // CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @add_reduction1(%arg0: i11, %arg1: i11) -> (i11) {
-  %c1_i11 = hw.constant 1 : i11
   %0 = comb.add %arg1, %arg1 : i11
   hw.output %0 : i11
 }
@@ -446,19 +445,17 @@ hw.module @add_reduction1(%arg0: i11, %arg1: i11) -> (i11) {
 // CHECK-NEXT:    hw.output [[RES]]
 
 hw.module @add_reduction2(%arg0: i11, %arg1: i11) -> (i11) {
-  %c3_i11 = hw.constant 3 : i11
   %0 = comb.add %arg1, %arg1, %arg1 : i11
   hw.output %0 : i11
 }
 
 // CHECK-LABEL: hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (i11) {
 // CHECK-NEXT:    %c0_i3 = hw.constant 0 : i3
-// CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 3 : (i11) -> i8
+// CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 0 : (i11) -> i8
 // CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %c0_i3 : (i8, i3) -> i11
 // CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (i11) {
-  %c3_i11 = hw.constant 3 : i11
   %c7_i11 = hw.constant 7 : i11
   %0 = comb.mul %arg1, %c7_i11 : i11
   %1 = comb.add %arg1, %0 : i11
@@ -469,12 +466,11 @@ hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (i11) {
 
 // CHECK-LABEL: hw.module @multiply_reduction(%arg0: i11, %arg1: i11) -> (i11) {
 // CHECK-NEXT:    %false = hw.constant false
-// CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 1 : (i11) -> i10
+// CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 0 : (i11) -> i10
 // CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %false : (i10, i1) -> i11
 // CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @multiply_reduction(%arg0: i11, %arg1: i11) -> (i11) {
-  %c1_i11 = hw.constant 1 : i11
   %c2_i11 = hw.constant 2 : i11
   %0 = comb.mul %arg1, %c2_i11 : i11
   hw.output %0 : i11
@@ -725,7 +721,7 @@ hw.module @shl_fold4(%arg0: i12) -> (i12) {
 
 // CHECK-LABEL: hw.module @shl_shift_to_extract_and_concat(%arg0: i12) -> (i12) {
 // CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
-// CHECK-NEXT:   %0 = comb.extract %arg0 from 2 : (i12) -> i10
+// CHECK-NEXT:   %0 = comb.extract %arg0 from 0 : (i12) -> i10
 // CHECK-NEXT:   %1 = comb.concat %0, %c0_i2 : (i10, i2) -> i12
 // CHECK-NEXT:   hw.output %1
 hw.module @shl_shift_to_extract_and_concat(%arg0: i12) -> (i12) {
@@ -773,7 +769,7 @@ hw.module @shru_fold4(%arg0: i12) -> (i12) {
 
 // CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat(%arg0: i12) -> (i12) {
 // CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
-// CHECK-NEXT:   %0 = comb.extract %arg0 from 0 : (i12) -> i10
+// CHECK-NEXT:   %0 = comb.extract %arg0 from 2 : (i12) -> i10
 // CHECK-NEXT:   %1 = comb.concat %c0_i2, %0 : (i2, i10) -> i12
 // CHECK-NEXT:   hw.output %1
 hw.module @shru_shift_to_extract_and_concat(%arg0: i12) -> (i12) {
@@ -811,7 +807,7 @@ hw.module @shrs_fold3(%arg0: i12) -> (i12) {
 }
 
 // CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (i12) {
-// CHECK-NEXT:   %0 = comb.extract %arg0 from 0 : (i12) -> i1
+// CHECK-NEXT:   %0 = comb.extract %arg0 from 11 : (i12) -> i1
 // CHECK-NEXT:   %1 = comb.sext %0 : (i1) -> i12
 // CHECK-NEXT:   hw.output %1 : i12
 hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (i12) {
@@ -821,8 +817,8 @@ hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (i12) {
 }
 
 // CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (i12) {
-// CHECK-NEXT:   %0 = comb.extract %arg0 from 0 : (i12) -> i1
-// CHECK-NEXT:   %1 = comb.extract %arg0 from 0 : (i12) -> i10
+// CHECK-NEXT:   %0 = comb.extract %arg0 from 11 : (i12) -> i1
+// CHECK-NEXT:   %1 = comb.extract %arg0 from 2 : (i12) -> i10
 // CHECK-NEXT:   %2 = comb.concat %0, %0, %1 : (i1, i1, i10) -> i12
 // CHECK-NEXT:   hw.output %2
 hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (i12) {
@@ -1018,6 +1014,35 @@ hw.module @wire4_1() -> (i1) {
 hw.module @wire5() -> () {
   %wire_with_name = sv.wire sym @wire_with_name : !hw.inout<i1>
   hw.output
+}
+
+// CHECK-LABEL: hw.module @sext_extract1
+hw.module @sext_extract1(%arg0: i4) -> (%a: i4) {
+  // CHECK-NEXT:  %0 = comb.sext %arg0 : (i4) -> i5
+  %0 = comb.sext %arg0 : (i4) -> (i8)
+  // CHECK-NEXT:  = comb.extract %0 from 1 : (i5) -> i4
+  %1 = comb.extract %0 from 1 : (i8) -> i4
+  // CHECK: hw.output %1
+  hw.output %1 : i4
+}
+
+// CHECK-LABEL: hw.module @sext_extract2
+hw.module @sext_extract2(%arg0: i4) -> (%a: i3) {
+  // CHECK-NEXT:  %0 = comb.extract %arg0 from 1 : (i4) -> i3
+  %0 = comb.sext %arg0 : (i4) -> (i8)
+  %1 = comb.extract %0 from 1 : (i8) -> i3
+  // CHECK: hw.output %0
+  hw.output %1 : i3
+}
+
+// CHECK-LABEL: hw.module @sext_extract3
+hw.module @sext_extract3(%arg0: i4) -> (%a: i3) {
+  // CHECK-NEXT: %0 = comb.extract %arg0 from 3 : (i4) -> i1
+  %0 = comb.sext %arg0 : (i4) -> (i8)
+  // CHECK-NEXT: %1 = comb.sext %0 : (i1) -> i3
+  %1 = comb.extract %0 from 3 : (i8) -> i3
+  // CHECK: hw.output %1
+  hw.output %1 : i3
 }
 
 // == Begin: test cases from LowerToHW ==
