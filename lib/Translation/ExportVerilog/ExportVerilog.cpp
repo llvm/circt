@@ -3441,8 +3441,9 @@ struct FileInfo {
   bool addToFilelist = true;
 };
 
-/// A base class for all MLIR module emitters.
-struct RootEmitterBase {
+/// This class tracks the top-level state for the emitters, which is built and
+/// then shared across all per-file emissions that happen in parallel.
+struct SharedEmitterState {
   /// The MLIR module to emit.
   ModuleOp rootOp;
 
@@ -3467,7 +3468,8 @@ struct RootEmitterBase {
   // Emitter options extracted from the top-level module.
   LoweringOptions options;
 
-  explicit RootEmitterBase(ModuleOp rootOp) : rootOp(rootOp), options(rootOp) {}
+  explicit SharedEmitterState(ModuleOp rootOp)
+      : rootOp(rootOp), options(rootOp) {}
   void prepareAllModules();
   void gatherFiles(bool separateModules);
   void emitFile(const FileInfo &fileInfo, VerilogEmitterState &state);
@@ -3648,7 +3650,7 @@ static void prepareHWModule(Block &block, ModuleNameManager &names,
   }
 }
 
-void RootEmitterBase::prepareAllModules() {
+void SharedEmitterState::prepareAllModules() {
   bool hasError = false;
   for (auto op : rootOp.getBody()->getOps<HWModuleOp>()) {
     auto &names = legalizedNames[op];
@@ -3663,7 +3665,7 @@ void RootEmitterBase::prepareAllModules() {
 /// generated. If `separateModules` is true, a handful of top-level
 /// declarations will be split into separate output files even in the absence
 /// of an explicit output file attribute.
-void RootEmitterBase::gatherFiles(bool separateModules) {
+void SharedEmitterState::gatherFiles(bool separateModules) {
   for (auto &op : *rootOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
     auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
@@ -3753,8 +3755,8 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
 
 /// Emit the operations in a `FileInfo` to an output stream. This handles the
 /// correct interpolation of replicated operations.
-void RootEmitterBase::emitFile(const FileInfo &file,
-                               VerilogEmitterState &state) {
+void SharedEmitterState::emitFile(const FileInfo &file,
+                                  VerilogEmitterState &state) {
   size_t lastReplicatedOp = 0;
 
   // Emit each operation in the file preceded by the replicated ops not yet
@@ -3781,7 +3783,8 @@ void RootEmitterBase::emitFile(const FileInfo &file,
     encounteredError = true;
 }
 
-void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
+void SharedEmitterState::emitOperation(VerilogEmitterState &state,
+                                       Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) {
         ModuleEmitter(state).emitHWModule(op, legalizedNames[op]);
@@ -3811,66 +3814,34 @@ void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
-namespace {
+LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
+  SharedEmitterState emitter(module);
+  emitter.prepareAllModules();
 
-/// A Verilog emitter that emits all modules into a single output stream.
-struct UnifiedEmitter : public RootEmitterBase {
-  explicit UnifiedEmitter(llvm::raw_ostream &os, ModuleOp rootOp)
-      : RootEmitterBase(rootOp), os(os) {}
+  emitter.gatherFiles(false);
 
-  /// The output stream to emit into.
-  llvm::raw_ostream &os;
-
-  void emitMLIRModule();
-};
-
-} // namespace
-
-void UnifiedEmitter::emitMLIRModule() {
-  gatherFiles(false);
-  VerilogEmitterState state(options, os);
+  VerilogEmitterState state(emitter.options, os);
 
   // Emit the main file. This is a container for anything not explicitly split
   // out into a separate file.
-  emitFile(rootFile, state);
+  emitter.emitFile(emitter.rootFile, state);
 
   // Emit the separate files.
-  for (const auto &it : files) {
+  for (const auto &it : emitter.files) {
     state.os << "\n// ----- 8< ----- FILE \"" << it.first
              << "\" ----- 8< -----\n\n";
-    emitFile(it.second, state);
+    emitter.emitFile(it.second, state);
   }
+  return failure(emitter.encounteredError);
 }
 
 //===----------------------------------------------------------------------===//
 // Split Emitter
 //===----------------------------------------------------------------------===//
 
-namespace {
-
-/// A Verilog emitter that separates modules into individual output files.
-struct SplitEmitter : public RootEmitterBase {
-  explicit SplitEmitter(StringRef dirname, ModuleOp rootOp)
-      : RootEmitterBase(rootOp), dirname(dirname) {}
-
-  /// The directory to emit files into.
-  StringRef dirname;
-
-  void emitMLIRModule();
-  void createFile(Identifier fileName, FileInfo &file);
-};
-
-} // namespace
-
-void SplitEmitter::emitMLIRModule() {
-  gatherFiles(true);
-
-  // Run in parallel if context enables it.
-  mlir::parallelForEach(rootOp->getContext(), files.begin(), files.end(),
-                        [&](auto &it) { createFile(it.first, it.second); });
-}
-
-void SplitEmitter::createFile(Identifier fileName, FileInfo &file) {
+static void createSplitOutputFile(Identifier fileName, FileInfo &file,
+                                  StringRef dirname,
+                                  SharedEmitterState &emitter) {
   // Determine the output path from the output directory and filename.
   SmallString<128> outputFilename(dirname);
   appendPossiblyAbsolutePath(outputFilename, fileName.strref());
@@ -3882,40 +3853,38 @@ void SplitEmitter::createFile(Identifier fileName, FileInfo &file) {
     mlir::emitError(file.ops[0].op->getLoc(),
                     "cannot create output directory \"" + outputDir +
                         "\": " + error.message());
-    encounteredError = true;
+    emitter.encounteredError = true;
+    return;
   }
 
   // Open the output file.
   std::string errorMessage;
   auto output = mlir::openOutputFile(outputFilename, &errorMessage);
   if (!output) {
-    encounteredError = true;
     llvm::errs() << errorMessage << "\n";
+    emitter.encounteredError = true;
     return;
   }
 
   // Emit the file, copying the global options into the individual module
   // state.
-  VerilogEmitterState state(options, output->os());
-  emitFile(file, state);
+  VerilogEmitterState state(emitter.options, output->os());
+  emitter.emitFile(file, state);
   output->keep();
 }
 
-//===----------------------------------------------------------------------===//
-// MLIRModuleEmitter
-//===----------------------------------------------------------------------===//
-
-LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
-  UnifiedEmitter emitter(os, module);
-  emitter.prepareAllModules();
-  emitter.emitMLIRModule();
-  return failure(emitter.encounteredError);
-}
-
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
-  SplitEmitter emitter(dirname, module);
+  SharedEmitterState emitter(module);
   emitter.prepareAllModules();
-  emitter.emitMLIRModule();
+
+  emitter.gatherFiles(true);
+
+  // Emit each file in parallel if context enables it.
+  mlir::parallelForEach(module->getContext(), emitter.files.begin(),
+                        emitter.files.end(), [&](auto &it) {
+                          createSplitOutputFile(it.first, it.second, dirname,
+                                                emitter);
+                        });
 
   // Write the file list.
   SmallString<128> filelistPath(dirname);
@@ -3936,6 +3905,10 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
 
   return failure(emitter.encounteredError);
 }
+
+//===----------------------------------------------------------------------===//
+// Registration
+//===----------------------------------------------------------------------===//
 
 void circt::registerToVerilogTranslation() {
   // Register the circt emitter command line options.
