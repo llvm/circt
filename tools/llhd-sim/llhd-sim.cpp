@@ -11,8 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -172,8 +172,8 @@ int main(int argc, char **argv) {
 
   MLIRContext context;
   // Load the dialects
-  context
-      .loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, StandardOpsDialect, comb::CombDialect>();
+  context.loadDialect<llhd::LLHDDialect, LLVM::LLVMDialect, StandardOpsDialect,
+                      comb::CombDialect>();
   mlir::registerLLVMDialectTranslation(context);
 
   OwningModuleRef module(parseSourceFile(mgr, &context));

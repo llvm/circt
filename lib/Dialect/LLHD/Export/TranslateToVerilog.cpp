@@ -12,8 +12,8 @@
 
 #include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
 #include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Visitors.h"
@@ -40,7 +40,7 @@ private:
   LogicalResult printBinaryOp(Operation *op, StringRef opSymbol,
                               unsigned indentAmount = 0);
   LogicalResult printVariadicOp(Operation *op, StringRef opSymbol,
-                              unsigned indentAmount = 0);
+                                unsigned indentAmount = 0);
   LogicalResult printSignedBinaryOp(Operation *op, StringRef opSymbol,
                                     unsigned indentAmount = 0);
 
@@ -123,8 +123,9 @@ LogicalResult VerilogPrinter::printBinaryOp(Operation *inst, StringRef opSymbol,
   return success();
 }
 
-LogicalResult VerilogPrinter::printVariadicOp(Operation *inst, StringRef opSymbol,
-                                            unsigned indentAmount) {
+LogicalResult VerilogPrinter::printVariadicOp(Operation *inst,
+                                              StringRef opSymbol,
+                                              unsigned indentAmount) {
   // Check that the operation is indeed a binary operation
   if (inst->getNumOperands() < 1) {
     return emitError(inst->getLoc(),
@@ -145,10 +146,10 @@ LogicalResult VerilogPrinter::printVariadicOp(Operation *inst, StringRef opSymbo
   out << " ";
   printVariableName(inst->getResult(0)) << " = ";
 
-  for(unsigned i = 0; i < inst->getNumOperands()-1; i++) {
+  for (unsigned i = 0; i < inst->getNumOperands() - 1; i++) {
     printVariableName(inst->getOperand(i)) << " " << opSymbol << " ";
   }
-  printVariableName(inst->getOperand(inst->getNumOperands()-1)) << ";\n";
+  printVariableName(inst->getOperand(inst->getNumOperands() - 1)) << ";\n";
 
   return success();
 }
@@ -456,6 +457,7 @@ LogicalResult circt::llhd::exportVerilog(ModuleOp module, raw_ostream &os) {
 void circt::llhd::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration registration(
       "export-llhd-verilog", exportVerilog, [](DialectRegistry &registry) {
-        registry.insert<mlir::StandardOpsDialect, llhd::LLHDDialect, comb::CombDialect>();
+        registry.insert<mlir::StandardOpsDialect, llhd::LLHDDialect,
+                        comb::CombDialect>();
       });
 }
