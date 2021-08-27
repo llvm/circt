@@ -247,17 +247,21 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
 
   // Helpers to simplify collecting taps on the various things.
   void gatherTap(Annotation anno, Port port) {
-    auto it = tappedPorts.insert({getKey(anno), port});
+    auto key = getKey(anno);
+    annos.insert({key, anno});
+    auto it = tappedPorts.insert({key, port});
     assert(it.second && "ambiguous tap annotation");
   }
   void gatherTap(Annotation anno, Operation *op) {
-    auto it = tappedOps.insert({getKey(anno), op});
+    auto key = getKey(anno);
+    annos.insert({key, anno});
+    auto it = tappedOps.insert({key, op});
     assert(it.second && "ambiguous tap annotation");
   }
 
+  DenseMap<Key, Annotation> annos;
   DenseMap<Key, Operation *> tappedOps;
   DenseMap<Key, Port> tappedPorts;
-  SmallDenseMap<Attribute, unsigned, 2> memPortIdx;
   SmallVector<PortWiring, 8> portWiring;
 };
 
@@ -288,8 +292,6 @@ void GrandCentralTapsPass::runOnOperation() {
   //   - ReferenceDataTapKey: relative path with "." + source name
   //   - DataTapModuleSignalKey: relative path with "." + internal path
   // - Generate a body for the blackbox module with the signal mapping
-
-  memPortIdx.clear();
 
   // Gather a list of extmodules that have data or mem tap annotations to be
   // expanded.
@@ -527,11 +529,12 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   LLVM_DEBUG(llvm::dbgs() << "- Processing port " << portAnno.portNum
                           << " anno " << portAnno.anno.getDict() << "\n");
   auto key = getKey(portAnno.anno);
+  auto anno = annos.find(key)->second;
   auto portName = blackBox.extModule.portNames()[portAnno.portNum];
   PortWiring wiring = {portAnno.portNum, {}, {}};
 
   // Handle data taps on signals and ports.
-  if (portAnno.anno.isClass(referenceKeyClass)) {
+  if (anno.isClass(referenceKeyClass)) {
     // Handle ports.
     if (auto port = tappedPorts.lookup(key)) {
       wiring.prefices = instancePaths.getAbsolutePaths(port.first);
@@ -580,25 +583,25 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     blackBox.extModule.emitOpError(
         "ReferenceDataTapKey annotation was not scattered to "
         "an operation: ")
-        << portAnno.anno.getDict();
+        << anno.getDict();
     signalPassFailure();
     return;
   }
 
   // Handle data taps on black boxes.
-  if (portAnno.anno.isClass(internalKeyClass)) {
+  if (anno.isClass(internalKeyClass)) {
     auto op = tappedOps.lookup(key);
     if (!op) {
       blackBox.extModule.emitOpError(
           "DataTapModuleSignalKey annotation was not scattered to "
           "an operation: ")
-          << portAnno.anno.getDict();
+          << anno.getDict();
       signalPassFailure();
       return;
     }
 
     // Extract the internal path we're supposed to append.
-    auto internalPath = portAnno.anno.getMember<StringAttr>("internalPath");
+    auto internalPath = anno.getMember<StringAttr>("internalPath");
     if (!internalPath) {
       blackBox.extModule.emitError("DataTapModuleSignalKey annotation on port ")
           << portName << " missing \"internalPath\" attribute";
@@ -613,7 +616,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle data taps with literals.
-  if (portAnno.anno.isClass(literalKeyClass)) {
+  if (anno.isClass(literalKeyClass)) {
     blackBox.extModule.emitError(
         "LiteralDataTapKey annotations not yet supported (on port ")
         << portName << ")";
@@ -622,13 +625,13 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle memory taps.
-  if (portAnno.anno.isClass(memTapClass)) {
+  if (anno.isClass(memTapClass)) {
     auto op = tappedOps.lookup(key);
     if (!op) {
       blackBox.extModule.emitOpError(
           "MemTapAnnotation annotation was not scattered to "
           "an operation: ")
-          << portAnno.anno.getDict();
+          << anno.getDict();
       signalPassFailure();
       return;
     }
@@ -646,6 +649,15 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
       return;
     }
 
+    // Extract the memory location we're supposed to access.
+    auto word = portAnno.anno.getMember<IntegerAttr>("word");
+    if (!word) {
+      blackBox.extModule.emitError("MemTapAnnotation annotation on port ")
+          << portName << " missing \"word\" attribute";
+      signalPassFailure();
+      return;
+    }
+
     // Formulate a hierarchical reference into the memory.
     // CAVEAT: This just assumes that the memory will map to something that
     // can be indexed in the final Verilog. If the memory gets turned into
@@ -657,7 +669,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     wiring.prefices =
         instancePaths.getAbsolutePaths(op->getParentOfType<FModuleOp>());
     (Twine(name.getValue()) + ".Memory[" +
-     llvm::utostr(memPortIdx[portAnno.anno.getDict()]++) + "]")
+     llvm::utostr(word.getValue().getLimitedValue()) + "]")
         .toVector(wiring.suffix);
     portWiring.push_back(std::move(wiring));
     return;

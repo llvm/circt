@@ -156,46 +156,14 @@ firrtl.circuit "TestHarness" attributes {
       { class = "firrtl.transforms.NoDedupAnnotation" }
     ],
     portAnnotations = [
-      [{
-      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      id = 0 : i64,
-      portID = 8 : i64,
-      type = "portName" }],
-      [{
-      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      id = 0 : i64,
-      portID = 7 : i64,
-      type = "portName" }],
-      [{
-      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      id = 0 : i64,
-      portID = 6 : i64,
-      type = "portName" }],
-      [{
-      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      id = 0 : i64,
-      portID = 5 : i64,
-      type = "portName" }],
-      [{
-      class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey",
-      internalPath = "schwarzschild.no.more",
-      id = 0 : i64,
-      portID = 4 : i64 }],
-      [{
-      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      id = 0 : i64,
-      portID = 3 : i64,
-      type = "portName" }],
-      [{
-      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      id = 0 : i64,
-      portID = 2 : i64,
-      type = "portName" }],
-      [{
-      class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
-      id = 0 : i64,
-      portID = 1 : i64,
-      type = "portName" }]
+      [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 8 : i64, type = "portName"}],
+      [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 7 : i64, type = "portName"}],
+      [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 6 : i64, type = "portName"}],
+      [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 5 : i64, type = "portName"}],
+      [{class = "sifive.enterprise.grandcentral.DataTapModuleSignalKey", id = 0 : i64, portID = 4 : i64}],
+      [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 3 : i64, type = "portName"}],
+      [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 2 : i64, type = "portName"}],
+      [{class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 1 : i64, type = "portName"}]
     ],
     defname = "DataTap"
   }
@@ -217,13 +185,9 @@ firrtl.circuit "TestHarness" attributes {
       {class = "firrtl.transforms.NoDedupAnnotation"}
     ],
     portAnnotations = [
- [{
-      class = "sifive.enterprise.grandcentral.MemTapAnnotation",
-      id = 4 : i64 }],
-    [{
-      class = "sifive.enterprise.grandcentral.MemTapAnnotation",
-      id = 4 : i64 }]
-      ],
+      [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 4 : i64, word = 0 : i64}],
+      [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 4 : i64, word = 1 : i64}]
+    ],
     defname = "MemTap"
   }
 

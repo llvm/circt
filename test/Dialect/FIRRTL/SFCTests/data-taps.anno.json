@@ -1,0 +1,29 @@
+[
+  {
+    "class":"firrtl.transforms.NoDedupAnnotation",
+    "target":"~Top|DataTap_2"
+  },
+  {
+    "class":"sifive.enterprise.grandcentral.DataTapsAnnotation",
+    "blackBox":"~Top|DataTap_2",
+    "keys":[
+      {
+        "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+        "module":"~Top|BlackBox",
+        "internalPath":"foo.bar.in",
+        "portName":"~Top|DataTap_2>_0"
+      },
+      {
+        "class":"sifive.enterprise.grandcentral.DataTapModuleSignalKey",
+        "module":"~Top|BlackBox",
+        "internalPath":"foo.bar.out",
+        "portName":"~Top|DataTap_2>_1"
+      }
+    ]
+  },
+  {
+    "class":"sifive.enterprise.grandcentral.MemTapAnnotation",
+    "source": "~Top|Child>M",
+    "taps":["~Top|MemTap_2>_0", "~Top|MemTap_2>_1"]
+  }
+]
