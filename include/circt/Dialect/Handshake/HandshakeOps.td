@@ -10,32 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifdef HANDSHAKE_OPS
-#else
-#define HANDSHAKE_OPS
-
-#ifdef OP_BASE
-#else
-include "mlir/IR/OpBase.td"
-#endif // OP_BASE
-
-include "HandshakeInterfaces.td"
-include "mlir/IR/SymbolInterfaces.td"
-include "mlir/IR/RegionKindInterface.td"
-include "mlir/Interfaces/CallInterfaces.td"
-include "mlir/Interfaces/SideEffectInterfaces.td"
-
-def HandshakeOps_Dialect : Dialect {
-  let name = "handshake";
-  let cppNamespace = "::circt::handshake";
-}
-
-// Base class for Handshake dialect ops.
-class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
-    : Op<HandshakeOps_Dialect, mnemonic,
-         traits # [HasParent<"handshake::FuncOp">]> {
-}
-
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
@@ -646,23 +620,3 @@ def JoinOp : Handshake_Op<"join", [
 
 def I4 : I<4>;
 def I4Attr : SignlessIntegerAttrBase<I4, "4-bit integer attribute">;
-
-def HasOneOperand : Constraint<CPred<"$_self.size() == 1">, "has one operand">;
-def HasOneResult : Constraint<CPred<"$_self.size() == 1">, "has one result">;
-
-def EliminateSimpleMergesPattern : Pat<(MergeOp $a), (replaceWithValue $a),
-                                       [(HasOneOperand:$a)]>;
-
-def EliminateSimpleBranchesPattern
-    : Pat<(BranchOp $a, $attr), (replaceWithValue $a)>;
-
-def EliminateSimpleForksPattern : Pat<(ForkOp
-                                       : $op $a, $attr),
-                                      (replaceWithValue $a), [(HasOneResult
-                                                               : $op)]>;
-
-def EliminateSunkConstantsPattern
-    : Pat<(SinkOp:$sink (ConstantOp $control, $value)),
-          (replaceWithValue $sink)>;
-
-#endif // HANDSHAKE_OPS

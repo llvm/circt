@@ -1,11 +1,17 @@
-set(LLVM_OPTIONAL_SOURCES
-  DialectRegistration.cpp
+set(srcs
   HandshakeOps.cpp
+  HandshakeDialect.cpp
+  )
+
+
+set(LLVM_OPTIONAL_SOURCES
+  ${srcs}
+  DialectRegistration.cpp
   mlir_std_runner.cpp
   )
 
-add_circt_dialect_library(CIRCTHandshakeOps
-  HandshakeOps.cpp
+add_circt_dialect_library(CIRCTHandshake
+  ${srcs}
 
   ADDITIONAL_HEADER_DIRS
   ${PROJECT_SOURCE_DIR}/include
@@ -16,7 +22,6 @@ add_circt_dialect_library(CIRCTHandshakeOps
   MLIRIR
 
   DEPENDS
-  MLIRHandshakeOpsIncGen
   MLIRHandshakeInterfacesIncGen
-  MLIRHandshakeRewritersIncGen
+  MLIRHandshakeCanonicalizationIncGen
   )

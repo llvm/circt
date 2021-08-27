@@ -34,11 +34,9 @@ using namespace circt::handshake;
 
 #define INDEX_WIDTH 32
 
-#include "circt/Dialect/Handshake/HandshakeOpsDialect.cpp.inc"
-
 namespace circt {
 namespace handshake {
-#include "circt/Dialect/Handshake/HandshakeOps.inc"
+#include "circt/Dialect/Handshake/HandshakeCanonicalization.h.inc"
 }
 } // namespace circt
 
@@ -113,17 +111,6 @@ bool tryToExecute(Operation *op,
     return true;
   } else
     return false;
-}
-
-//===----------------------------------------------------------------------===//
-// HandshakeOpsDialect
-//===----------------------------------------------------------------------===//
-
-void HandshakeOpsDialect::initialize() {
-  addOperations<
-#define GET_OP_LIST
-#include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"
-      >();
 }
 
 void ForkOp::build(OpBuilder &builder, OperationState &result, Value operand,
@@ -902,13 +889,9 @@ static LogicalResult verify(handshake::ReturnOp op) {
   return success();
 }
 
-namespace circt {
-namespace handshake {
-
-#include "circt/Dialect/Handshake/HandshakeInterfaces.cpp.inc"
-
-} // namespace handshake
-} // namespace circt
+//===----------------------------------------------------------------------===//
+// TableGen generated logic.
+//===----------------------------------------------------------------------===//
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/Handshake/HandshakeOps.cpp.inc"
+#include "circt/Dialect/Handshake/Handshake.cpp.inc"
