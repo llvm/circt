@@ -182,7 +182,6 @@ firrtl.module @ReadAndWriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrt
   %ramport_data, %ramport_port = firrtl.memoryport Infer %ram {name = "ramport"} : (!firrtl.cmemory<bundle<a: uint<1>, b:uint<1>>, 256>) -> (!firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.cmemoryport)
   firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
 
-
   // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport(3)
   // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport(4)
   // CHECK: [[WDATA:%.*]] = firrtl.subfield %ram_ramport(5)
@@ -198,6 +197,31 @@ firrtl.module @ReadAndWriteToSubfield(in %clock: !firrtl.clock, in %addr: !firrt
   // CHECK: [[RDATA_B:%.*]] = firrtl.subfield [[RDATA]](1) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
   // CHECK: firrtl.connect %out, [[RDATA_B]] : !firrtl.uint<1>, !firrtl.uint<1>
   %port_b = firrtl.subfield %ramport_data(1) : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<1>
+  firrtl.connect %out, %port_b : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
+// Read and write from different subindex and subaccess of the memory.  The
+// memory as a whole should be inferred to read+write.
+firrtl.module @ReadAndWriteToSubindex(in %clock: !firrtl.clock, in %addr: !firrtl.uint<8>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  %ram = firrtl.combmem : !firrtl.cmemory<vector<uint<1>, 10>, 256>
+  %ramport_data, %ramport_port = firrtl.memoryport Infer %ram {name = "ramport"} : (!firrtl.cmemory<vector<uint<1>, 10>, 256>) -> (!firrtl.vector<uint<1>, 10>, !firrtl.cmemoryport)
+  firrtl.memoryport.access %ramport_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+
+  // CHECK: [[RDATA:%.*]] = firrtl.subfield %ram_ramport(3)
+  // CHECK: [[WMODE:%.*]] = firrtl.subfield %ram_ramport(4)
+  // CHECK: [[WDATA:%.*]] = firrtl.subfield %ram_ramport(5)
+  // CHECK: [[WMASK:%.*]] = firrtl.subfield %ram_ramport(6)
+  // CHECK: [[WDATA_0:%.*]] = firrtl.subindex [[WDATA]][0]
+  // CHECK: [[WMASK_0:%.*]] = firrtl.subindex [[WMASK]][0]
+  // CHECK: firrtl.connect [[WMASK_0]], %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect [[WMODE]], %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect [[WDATA_0]], %in : !firrtl.uint<1>, !firrtl.uint<1>
+  %port_a = firrtl.subindex %ramport_data[0] : !firrtl.vector<uint<1>, 10>
+  firrtl.connect %port_a, %in : !firrtl.uint<1>, !firrtl.uint<1>
+
+  // CHECK: [[RDATA_I:%.*]] = firrtl.subaccess [[RDATA]][%addr]
+  // CHECK: firrtl.connect %out, [[RDATA_I]]
+  %port_b = firrtl.subaccess %ramport_data[%addr] : !firrtl.vector<uint<1>, 10>, !firrtl.uint<8>
   firrtl.connect %out, %port_b : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
