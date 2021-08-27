@@ -80,5 +80,5 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  return simulate(toplevelFunction, inputArgs, module, context);
+  return handshake::simulate(toplevelFunction, inputArgs, module, context);
 }
