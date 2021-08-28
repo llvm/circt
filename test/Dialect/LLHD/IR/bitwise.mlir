@@ -14,17 +14,14 @@ func @check_bitwise(%a : i64, %c : i8,
     %sigarray4: !llhd.sig<!llhd.array<4xi8>>, %sigarray2: !llhd.sig<!llhd.array<2xi8>>,
     %array4: !llhd.array<4xi8>, %array2: !llhd.array<2xi8>) {
 
-  // CHECK-NEXT: %{{.*}} = llhd.not %[[A]] : i64
-  %0 = llhd.not %a : i64
+  // CHECK-NEXT: %{{.*}} = comb.and %[[A]], %[[A]] : i64
+  %1 = comb.and %a, %a : i64
 
-  // CHECK-NEXT: %{{.*}} = llhd.and %[[A]], %[[A]] : i64
-  %1 = llhd.and %a, %a : i64
+  // CHECK-NEXT: %{{.*}} = comb.or %[[A]], %[[A]] : i64
+  %2 = comb.or %a, %a : i64
 
-  // CHECK-NEXT: %{{.*}} = llhd.or %[[A]], %[[A]] : i64
-  %2 = llhd.or %a, %a : i64
-
-  // CHECK-NEXT: %{{.*}} = llhd.xor %[[A]], %[[A]] : i64
-  %3 = llhd.xor %a, %a : i64
+  // CHECK-NEXT: %{{.*}} = comb.xor %[[A]], %[[A]] : i64
+  %3 = comb.xor %a, %a : i64
 
   // CHECK-NEXT: %{{.*}} = llhd.shl %[[A]], %[[A]], %[[C]] : (i64, i64, i8) -> i64
   %4 = llhd.shl %a, %a, %c : (i64, i64, i8) -> i64

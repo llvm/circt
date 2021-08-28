@@ -162,6 +162,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 
 // CHECK-LABEL:   llhd.proc @complicated(
 // CHECK-SAME: %[[VAL_0:.*]] : !llhd.sig<i1>, %[[VAL_1:.*]] : !llhd.sig<i1>, %[[VAL_2:.*]] : !llhd.sig<i1>) -> (%[[VAL_3:.*]] : !llhd.sig<i1>, %[[VAL_4:.*]] : !llhd.sig<i1>) {
+// CHECK:           %[[ALLSET:.*]] = llhd.const true : i1
 // CHECK:           %[[VAL_5:.*]] = llhd.const false : i1
 // CHECK:           %[[VAL_6:.*]] = llhd.const #llhd.time<0s, 1d, 0e> : !llhd.time
 // CHECK:           br ^bb1
@@ -181,13 +182,13 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 // CHECK:           llhd.store %[[VAL_8]], %[[VAL_13]] : !llhd.ptr<i1>
 // CHECK:           %[[VAL_14:.*]] = llhd.prb %[[VAL_1]] : !llhd.sig<i1>
 // CHECK:           %[[VAL_15:.*]] = llhd.neq %[[VAL_14]], %[[VAL_5]] : i1
-// CHECK:           %[[VAL_16:.*]] = llhd.and %[[VAL_11]], %[[VAL_15]] : i1
+// CHECK:           %[[VAL_16:.*]] = comb.and %[[VAL_11]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_17:.*]] = llhd.prb %[[VAL_0]] : !llhd.sig<i1>
 // CHECK:           %[[VAL_18:.*]] = llhd.eq %[[VAL_17]], %[[VAL_5]] : i1
-// CHECK:           %[[VAL_19:.*]] = llhd.and %[[VAL_18]], %[[VAL_12]] : i1
-// CHECK:           %[[VAL_20:.*]] = llhd.or %[[VAL_16]], %[[VAL_19]] : i1
+// CHECK:           %[[VAL_19:.*]] = comb.and %[[VAL_18]], %[[VAL_12]] : i1
+// CHECK:           %[[VAL_20:.*]] = comb.or %[[VAL_16]], %[[VAL_19]] : i1
 // CHECK:           %[[VAL_21:.*]] = llhd.neq %[[VAL_17]], %[[VAL_5]] : i1
-// CHECK:           %[[VAL_22:.*]] = llhd.not %[[VAL_21]] : i1
+// CHECK:           %[[VAL_22:.*]] = comb.xor %[[VAL_21]], %[[ALLSET]] : i1
 // CHECK:           %[[VAL_23:.*]] = llhd.neq %[[VAL_22]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_24:.*]] = llhd.prb %[[VAL_2]] : !llhd.sig<i1>
 // CHECK:           cond_br %[[VAL_20]], ^bb4, ^bb2
@@ -204,6 +205,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 // CHECK:           br ^bb1
 // CHECK:         }
 llhd.proc @complicated(%rst_ni: !llhd.sig<i1>, %clk_i: !llhd.sig<i1>, %async_ack_i: !llhd.sig<i1>) -> (%ack_src_q: !llhd.sig<i1> , %ack_q: !llhd.sig<i1> ) {
+  %allset = llhd.const 1 : i1
   // TR: -1
   br ^0
 ^0:
@@ -225,17 +227,17 @@ llhd.proc @complicated(%rst_ni: !llhd.sig<i1>, %clk_i: !llhd.sig<i1>, %async_ack
   %3 = llhd.const 0 : i1
   %4 = llhd.eq %clk_i_prb, %3 : i1
   %5 = llhd.neq %clk_i_prb1, %3 : i1
-  %posedge = llhd.and %4, %5 : i1
+  %posedge = comb.and %4, %5 : i1
   %rst_ni_prb1 = llhd.prb %rst_ni : !llhd.sig<i1>
   %6 = llhd.neq %rst_ni_prb, %3 : i1
   %7 = llhd.eq %rst_ni_prb1, %3 : i1
-  %negedge = llhd.and %7, %6 : i1
-  %event_or = llhd.or %posedge, %negedge : i1
+  %negedge = comb.and %7, %6 : i1
+  %event_or = comb.or %posedge, %negedge : i1
   cond_br %event_or, ^event, ^init
 ^event:
   // TR: 0
   %8 = llhd.neq %rst_ni_prb1, %3 : i1
-  %9 = llhd.not %8 : i1
+  %9 = comb.xor %8, %allset : i1
   %10 = llhd.neq %9, %3 : i1
   %11 = llhd.const #llhd.time<0s, 1d, 0e> : !llhd.time
   cond_br %10, ^if_true, ^if_false

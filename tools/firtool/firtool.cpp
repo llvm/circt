@@ -201,17 +201,15 @@ static std::unique_ptr<Pass> createSimpleCanonicalizerPass() {
 /// Process a single buffer of the input.
 static LogicalResult
 processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
-              llvm::function_ref<LogicalResult(ModuleOp)> callback) {
+              Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Add the annotation file if one was explicitly specified.
   std::string annotationFilenameDetermined;
-  if (!inputAnnotationFilename.empty()) {
-    if (!(sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
-                                   annotationFilenameDetermined))) {
-      llvm::errs() << "cannot open input annotation file '"
-                   << inputAnnotationFilename
-                   << "': No such file or directory\n";
-      return failure();
-    }
+  if (!inputAnnotationFilename.empty() &&
+      !sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
+                                annotationFilenameDetermined)) {
+    llvm::errs() << "cannot open input annotation file '"
+                 << inputAnnotationFilename << "': No such file or directory\n";
+    return failure();
   }
 
   // Parse the input.
@@ -231,8 +229,21 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // If the user asked for just a parse, stop here.
   if (parseOnly) {
-    auto outputTimer = ts.nest("Output");
-    return callback(module.release());
+    mlir::ModuleOp theModule = module.release();
+    switch (outputFormat) {
+    case OutputMLIR: {
+      auto outputTimer = ts.nest("Print .mlir output");
+      theModule->print(outputFile.getValue()->os());
+      return success();
+    }
+    case OutputDisabled:
+      return success();
+    case OutputVerilog:
+    case OutputSplitVerilog:
+      llvm::errs()
+          << "verilog emission is not supported in -parse-only mode.\n";
+      return failure();
+    }
   }
 
   // Apply any pass manager command line options.
@@ -347,12 +358,30 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (failed(pm.run(module.get())))
     return failure();
 
-  auto outputTimer = ts.nest("Output");
-
   // Note that we intentionally "leak" the Module into the MLIRContext instead
   // of deallocating it.  There is no need to deallocate it right before
   // process exit.
-  return callback(module.release());
+  mlir::ModuleOp theModule = module.release();
+
+  // Emit a single file or multiple files depending on the output format.
+  switch (outputFormat) {
+  case OutputMLIR: {
+    auto outputTimer = ts.nest("Print .mlir output");
+    theModule->print(outputFile.getValue()->os());
+    return success();
+  }
+  case OutputDisabled:
+    return success();
+  case OutputVerilog: {
+    auto outputTimer = ts.nest("ExportVerilog emission");
+    return exportVerilog(theModule, outputFile.getValue()->os());
+  }
+  case OutputSplitVerilog: {
+    auto outputTimer = ts.nest("Split ExportVerilog emission");
+    return exportSplitVerilog(theModule, outputFilename);
+  }
+  }
+  return failure();
 }
 
 /// Process a single split of the input. This allocates a source manager and
@@ -361,18 +390,18 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 static LogicalResult
 processInputSplit(MLIRContext &context, TimingScope &ts,
                   std::unique_ptr<llvm::MemoryBuffer> buffer,
-                  llvm::function_ref<LogicalResult(ModuleOp)> emitCallback) {
+                  Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   llvm::SourceMgr sourceMgr;
   sourceMgr.AddNewSourceBuffer(std::move(buffer), llvm::SMLoc());
-  if (verifyDiagnostics) {
-    SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
-    context.printOpOnDiagnostic(false);
-    (void)processBuffer(context, ts, sourceMgr, emitCallback);
-    return sourceMgrHandler.verify();
-  } else {
+  if (!verifyDiagnostics) {
     SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
-    return processBuffer(context, ts, sourceMgr, emitCallback);
+    return processBuffer(context, ts, sourceMgr, outputFile);
   }
+
+  SourceMgrDiagnosticVerifierHandler sourceMgrHandler(sourceMgr, &context);
+  context.printOpOnDiagnostic(false);
+  (void)processBuffer(context, ts, sourceMgr, outputFile);
+  return sourceMgrHandler.verify();
 }
 
 /// Process the entire input provided by the user, splitting it up if the
@@ -380,31 +409,29 @@ processInputSplit(MLIRContext &context, TimingScope &ts,
 static LogicalResult
 processInput(MLIRContext &context, TimingScope &ts,
              std::unique_ptr<llvm::MemoryBuffer> input,
-             llvm::function_ref<LogicalResult(ModuleOp)> emitCallback) {
-  if (splitInputFile) {
-    // Emit an error if the user provides a separate annotation file alongside
-    // split input. This is technically not a problem, but the user likely
-    // expects the annotation file to be split as well, which is not the case.
-    // To prevent any frustration, we detect this constellation and emit an
-    // error here. The user can provide annotations for each split using the
-    // inline JSON syntax in FIRRTL.
-    if (!inputAnnotationFilename.empty()) {
-      llvm::errs() << "annotation file cannot be used with split input: "
-                      "use inline JSON syntax on FIRRTL `circuit` to specify "
-                      "per-split annotations\n";
-      return failure();
-    }
+             Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
+  if (!splitInputFile)
+    return processInputSplit(context, ts, std::move(input), outputFile);
 
-    return splitAndProcessBuffer(
-        std::move(input),
-        [&](std::unique_ptr<MemoryBuffer> buffer, raw_ostream &) {
-          return processInputSplit(context, ts, std::move(buffer),
-                                   emitCallback);
-        },
-        llvm::outs());
-  } else {
-    return processInputSplit(context, ts, std::move(input), emitCallback);
+  // Emit an error if the user provides a separate annotation file alongside
+  // split input. This is technically not a problem, but the user likely
+  // expects the annotation file to be split as well, which is not the case.
+  // To prevent any frustration, we detect this constellation and emit an
+  // error here. The user can provide annotations for each split using the
+  // inline JSON syntax in FIRRTL.
+  if (!inputAnnotationFilename.empty()) {
+    llvm::errs() << "annotation file cannot be used with split input: "
+                    "use inline JSON syntax on FIRRTL `circuit` to specify "
+                    "per-split annotations\n";
+    return failure();
   }
+
+  return splitAndProcessBuffer(
+      std::move(input),
+      [&](std::unique_ptr<MemoryBuffer> buffer, raw_ostream &) {
+        return processInputSplit(context, ts, std::move(buffer), outputFile);
+      },
+      llvm::outs());
 }
 
 /// This implements the top-level logic for the firtool command, invoked once
@@ -460,28 +487,12 @@ static LogicalResult executeFirtool(MLIRContext &context) {
     }
   }
 
-  // Emit a single file or multiple files depending on the output format.
-  auto emitCallback = [&](ModuleOp module) -> LogicalResult {
-    switch (outputFormat) {
-    case OutputMLIR:
-      module->print(outputFile.getValue()->os());
-      return success();
-    case OutputDisabled:
-      return success();
-    case OutputVerilog:
-      return exportVerilog(module, outputFile.getValue()->os());
-    case OutputSplitVerilog:
-      return exportSplitVerilog(module, outputFilename);
-    }
-    return failure();
-  };
-
   // Register our dialects.
   context.loadDialect<firrtl::FIRRTLDialect, hw::HWDialect, comb::CombDialect,
                       sv::SVDialect>();
 
   // Process the input.
-  if (failed(processInput(context, ts, std::move(input), emitCallback)))
+  if (failed(processInput(context, ts, std::move(input), outputFile)))
     return failure();
 
   // If the result succeeded and we're emitting a file, close it.

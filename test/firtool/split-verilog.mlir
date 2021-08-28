@@ -49,6 +49,7 @@ sv.verbatim "// Bar" {output_file = {name = "custom2.sv", exclude_from_filelist 
 // LIST:      foo.sv
 // LIST-NEXT: bar.sv
 // LIST-NEXT: usb.sv
+// LIST-NEXT: extern_modules.sv
 // LIST-NEXT: inout_3.sv
 // LIST-NEXT: custom1.sv
 // LIST-NOT:  custom2.sv

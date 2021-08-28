@@ -15,7 +15,8 @@ llhd.proc @p () -> (%a : !llhd.sig<i1>) {
   br ^wait
 ^wait:
   %1 = llhd.prb %a : !llhd.sig<i1>
-  %0 = llhd.not %1 : i1
+  %allset = llhd.const 1 : i1
+  %0 = comb.xor %1, %allset : i1
   %wt = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
   llhd.wait for %wt, ^drive
 ^drive:

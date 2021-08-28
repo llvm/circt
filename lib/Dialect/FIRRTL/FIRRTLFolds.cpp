@@ -1502,7 +1502,7 @@ struct foldResetMux : public mlir::RewritePattern {
   LogicalResult matchAndRewrite(Operation *op,
                                 PatternRewriter &rewriter) const override {
     auto reg = cast<RegResetOp>(op);
-    auto reset = dyn_cast<ConstantOp>(reg.resetValue().getDefiningOp());
+    auto reset = dyn_cast_or_null<ConstantOp>(reg.resetValue().getDefiningOp());
     if (!reset)
       return failure();
     // Find the one true connect, or bail

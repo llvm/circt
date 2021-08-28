@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
   // Load the MLIR module.
   mlir::MLIRContext context;
   context.loadDialect<StandardOpsDialect, memref::MemRefDialect,
-                      handshake::HandshakeOpsDialect>();
+                      handshake::HandshakeDialect>();
   SourceMgr source_mgr;
   source_mgr.AddNewSourceBuffer(std::move(*file_or_err), SMLoc());
   mlir::OwningModuleRef module(mlir::parseSourceFile(source_mgr, &context));

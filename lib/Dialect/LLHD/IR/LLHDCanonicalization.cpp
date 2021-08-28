@@ -23,26 +23,6 @@ namespace {
 #include "circt/Dialect/LLHD/IR/LLHDCanonicalization.inc"
 } // namespace
 
-void llhd::XorOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                              MLIRContext *context) {
-  results.insert<XorAllBitsSet>(context);
-}
-
-void llhd::NotOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                              MLIRContext *context) {
-  results.insert<NotOfEq, NotOfNeq>(context);
-}
-
-void llhd::EqOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                             MLIRContext *context) {
-  results.insert<BooleanEqToXor>(context);
-}
-
-void llhd::NeqOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                              MLIRContext *context) {
-  results.insert<BooleanNeqToXor>(context);
-}
-
 void llhd::DynExtractSliceOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
   results.insert<DynExtractSliceWithConstantOpStart,

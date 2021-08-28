@@ -36,7 +36,7 @@ class FModuleOp;
 } // namespace firrtl
 
 namespace handshake {
-class HandshakeOpsDialect;
+class HandshakeDialect;
 class FuncOp;
 } // namespace handshake
 

@@ -22,7 +22,9 @@
 namespace circt {
 namespace hw {
 class InstanceOp;
-}
+class SymbolCache;
+} // namespace hw
+
 namespace sv {
 
 /// Return true if the specified operation is an expression.
