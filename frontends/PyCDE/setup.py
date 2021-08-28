@@ -1,4 +1,4 @@
-# Build/install the pycde python package. Blatenly copied from npcomp.
+# Build/install the pycde python package. Blatantly copied from npcomp.
 # Note that this includes a relatively large build of LLVM (~2400 C++ files)
 # and can take a considerable amount of time, especially with defaults.
 # To install:
@@ -52,11 +52,12 @@ class CMakeBuild(build_py):
     circt_dir = os.path.abspath(os.path.join(_thisdir, "..", ".."))
     src_dir = os.path.abspath(os.path.join(_thisdir, "..", "..", "llvm",
                                            "llvm"))
-    cfg = "Debug"  # Since PyCDE is still experimental, build debug.
+    cfg = "Release"
     cmake_args = [
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
         "-DPython3_EXECUTABLE={}".format(sys.executable),
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
+        "-DLLVM_ENABLE_ASSERTIONS=ON",
         "-DLLVM_ENABLE_PROJECTS=mlir",
         "-DMLIR_ENABLE_BINDINGS_PYTHON=ON",
         "-DLLVM_TARGETS_TO_BUILD=host",
@@ -64,9 +65,6 @@ class CMakeBuild(build_py):
         "-DCIRCT_ENABLE_FRONTENDS=PyCDE",
         "-DLLVM_EXTERNAL_PROJECTS=circt",
         "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR={}".format(circt_dir),
-        "-DCMAKE_CXX_COMPILER=clang++",
-        "-DCMAKE_C_COMPILER=clang",
-        "-DLLVM_USE_LINKER=lld",
     ]
     build_args = []
     os.makedirs(cmake_build_dir, exist_ok=True)
