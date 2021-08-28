@@ -889,9 +889,5 @@ static LogicalResult verify(handshake::ReturnOp op) {
   return success();
 }
 
-//===----------------------------------------------------------------------===//
-// TableGen generated logic.
-//===----------------------------------------------------------------------===//
-
 #define GET_OP_CLASSES
 #include "circt/Dialect/Handshake/Handshake.cpp.inc"
