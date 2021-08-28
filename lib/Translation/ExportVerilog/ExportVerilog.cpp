@@ -311,6 +311,7 @@ static StringRef getVerilogDeclWord(Operation *op) {
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
   return isProcedural ? "automatic logic" : "wire";
 }
+
 /// Return the name of a value without using the name map.  This is needed when
 /// looking into an instance from a different module as happens with bind.  It
 /// may return "" when unable to determine a name.  This works in situations
@@ -321,9 +322,13 @@ static StringRef getNameRemotely(Value value,
     return modulePorts[barg.getArgNumber()].getName();
 
   if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
-    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp()))
+    auto *wireInput = readinout.input().getDefiningOp();
+    if (!wireInput)
+      return {};
+
+    if (auto wire = dyn_cast<WireOp>(wireInput))
       return wire.name();
-    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp()))
+    if (auto reg = dyn_cast<RegOp>(wireInput))
       return reg.name();
   }
   if (auto localparam = dyn_cast<LocalParamOp>(value.getDefiningOp()))
@@ -2909,7 +2914,7 @@ void ModuleEmitter::emitBind(BindOp op) {
       if (shouldPrintComma)
         os << ',';
     }
-    os << "\n";
+    os << '\n';
 
     // Emit the port's name.
     indent();
@@ -2940,7 +2945,7 @@ void ModuleEmitter::emitBind(BindOp op) {
     }
   }
   if (!isFirst) {
-    os << "\n";
+    os << '\n';
     indent();
   }
   os << ");\n";
@@ -3207,6 +3212,10 @@ struct SharedEmitterState {
   // Emitter options extracted from the top-level module.
   const LoweringOptions options;
 
+  /// This is a set is populated at "gather" time, containing the hw.module
+  /// operations that have a sv.bind in them.
+  SmallPtrSet<Operation *, 8> modulesContainingBinds;
+
   explicit SharedEmitterState(ModuleOp rootOp)
       : rootOp(rootOp), options(rootOp) {}
   void gatherFiles(bool separateModules);
@@ -3226,11 +3235,17 @@ struct SharedEmitterState {
 void SharedEmitterState::gatherFiles(bool separateModules) {
 
   /// Collect all the instance symbols from the specified module and add them to
-  /// the IRCache.  Instances only exist at the top level of the module.
-  auto collectInstanceSymbols = [&](HWModuleOp moduleOp) {
-    for (auto op : moduleOp.getBodyBlock()->getOps<InstanceOp>()) {
-      if (auto sym = op.sym_nameAttr())
-        symbolCache.addDefinition(sym, op);
+  /// the IRCache.  Instances only exist at the top level of the module.  Also
+  /// keep track of any modules that contain bind operations.  These are
+  /// non-hierarchical references which we need to be careful about during
+  /// emission.
+  auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
+    for (Operation &op : *moduleOp.getBodyBlock()) {
+      if (auto instance = dyn_cast<InstanceOp>(op))
+        if (auto sym = instance.sym_nameAttr())
+          symbolCache.addDefinition(sym, instance);
+      if (isa<BindOp>(op))
+        modulesContainingBinds.insert(moduleOp);
     }
   };
 
@@ -3290,7 +3305,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<HWModuleOp>([&](auto mod) {
           // Build the IR cache.
           symbolCache.addDefinition(mod.getNameAttr(), mod);
-          collectInstanceSymbols(mod);
+          collectInstanceSymbolsAndBinds(mod);
 
           // Emit into a separate file named after the module.
           if (attr || separateModules)
@@ -3432,9 +3447,9 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
       return; // Ignore things that are already strings.
 
     // BindOp emission reaches into the hw.module of the instance, and that
-    // body may be being transformed by its own emission.  Defer this to the
-    // serial phase.  They are speedy anyway.
-    if (isa<BindOp>(op))
+    // body may be being transformed by its own emission.  Defer their emission
+    // to the serial phase.  They are speedy to emit anyway.
+    if (isa<BindOp>(op) || modulesContainingBinds.count(op))
       return;
 
     SmallString<256> buffer;
