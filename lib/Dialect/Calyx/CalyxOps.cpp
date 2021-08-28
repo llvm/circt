@@ -573,9 +573,11 @@ static LogicalResult hasValidDestination(AssignOp assign) {
   }
 
   Operation *definingOp = dest.getDefiningOp();
-  /// TODO(Calyx): Verify that the destination has Direction::Input for Cells.
-  /// This is simpler with the completion of the Cell Interface.
-  /// See: https://github.com/llvm/circt/issues/1597
+  // TODO(Calyx): Verify for Cells:
+  // (1) The destination has Direction::Input, and
+  // (2) the source has Direction::Output.
+  // This is simpler with the completion of the Cell Interface.
+  // See: https://github.com/llvm/circt/issues/1597
   if (definingOp->hasTrait<Cell>() || isa<GroupGoOp, GroupDoneOp>(definingOp))
     return success();
   return assign->emitOpError(
