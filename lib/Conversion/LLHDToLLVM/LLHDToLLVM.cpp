@@ -1998,11 +1998,37 @@ using AndOpConversion = VariadicOpConversion<comb::AndOp, LLVM::AndOp>;
 using OrOpConversion = VariadicOpConversion<comb::OrOp, LLVM::OrOp>;
 using XorOpConversion = VariadicOpConversion<comb::XorOp, LLVM::XOrOp>;
 
+using CombShlOpConversion =
+    OneToOneConvertToLLVMPattern<comb::ShlOp, LLVM::ShlOp>;
+using CombShrUOpConversion =
+    OneToOneConvertToLLVMPattern<comb::ShrUOp, LLVM::LShrOp>;
+using CombShrSOpConversion =
+    OneToOneConvertToLLVMPattern<comb::ShrSOp, LLVM::AShrOp>;
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
 // Arithmetic conversions
 //===----------------------------------------------------------------------===//
+
+namespace {
+
+using CombAddOpConversion = VariadicOpConversion<comb::AddOp, LLVM::AddOp>;
+using CombMulOpConversion = VariadicOpConversion<comb::MulOp, LLVM::MulOp>;
+using CombSubOpConversion =
+    OneToOneConvertToLLVMPattern<comb::SubOp, LLVM::SubOp>;
+
+using CombDivUOpConversion =
+    OneToOneConvertToLLVMPattern<comb::DivUOp, LLVM::UDivOp>;
+using CombDivSOpConversion =
+    OneToOneConvertToLLVMPattern<comb::DivSOp, LLVM::SDivOp>;
+
+using CombModUOpConversion =
+    OneToOneConvertToLLVMPattern<comb::ModUOp, LLVM::URemOp>;
+using CombModSOpConversion =
+    OneToOneConvertToLLVMPattern<comb::ModSOp, LLVM::SRemOp>;
+
+} // namespace
 
 namespace {
 /// Convert a NegOp to LLVM dialect.
@@ -2745,10 +2771,15 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   // Bitwise conversion patterns.
   patterns.add<ShrOpConversion, ShlOpConversion>(ctx, converter);
   patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
+  patterns.add<CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion>(
+      converter);
 
   // Arithmetic conversion patterns.
   patterns.add<NegOpConversion, EqOpConversion, NeqOpConversion>(ctx,
                                                                  converter);
+  patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
+               CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
+               CombModSOpConversion>(converter);
 
   // Unit conversion patterns.
   patterns.add<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,

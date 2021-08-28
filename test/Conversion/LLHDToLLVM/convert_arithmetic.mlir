@@ -41,3 +41,29 @@ func @convert_neq(%lhs : i32, %rhs: i32) -> i1 {
 
     return %0 : i1
 }
+
+// CHECK-LABEL:   llvm.func @convert_arithmetic
+func @convert_arithmetic(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
+    // CHECK: %[[R0:.*]] = llvm.add %arg0, %arg1 : i32
+    // CHECK: %[[R1:.*]] = llvm.add %[[R0]], %arg2 : i32
+    %0 = comb.add %arg0, %arg1, %arg2 : i32
+    %1 = comb.add %0 : i32
+
+    // CHECK: %[[R2:.*]] = llvm.mul %arg0, %arg1 : i32
+    // CHECK: %[[R3:.*]] = llvm.mul %[[R2]], %arg2 : i32
+    %2 = comb.mul %arg0, %arg1, %arg2 : i32
+    %3 = comb.mul %2 : i32
+
+    // CHECK: %[[R4:.*]] = llvm.udiv %[[R1]], %[[R3]] : i32
+    %4 = comb.divu %1, %3 : i32
+    // CHECK: %[[R5:.*]] = llvm.sdiv %arg0, %[[R4]] : i32
+    %5 = comb.divs %arg0, %4 : i32
+    // CHECK: %[[R6:.*]] = llvm.urem %arg0, %[[R5]] : i32
+    %6 = comb.modu %arg0, %5 : i32
+    // CHECK: %[[R7:.*]] = llvm.srem %arg0, %[[R6]] : i32
+    %7 = comb.mods %arg0, %6 : i32
+    // CHECK: %[[R8:.*]] = llvm.sub %arg0, %[[R7]] : i32
+    %8 = comb.sub %arg0, %7 : i32
+
+    return %8 : i32
+}

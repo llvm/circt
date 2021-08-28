@@ -125,3 +125,15 @@ llhd.entity @convert_shr_sig (%sI32 : !llhd.sig<i32>) -> () {
   %0 = llhd.const 8 : i32
   %1 = llhd.shr %sI32, %sI32, %0 : (!llhd.sig<i32>, !llhd.sig<i32>, i32) -> !llhd.sig<i32>
 }
+
+// CHECK-LABEL: llvm.func @convert_comb_shift
+func @convert_comb_shift(%arg0: i32, %arg1: i32) -> i32 {
+  // CHECK: %[[R0:.*]] = llvm.shl %arg0, %arg1 : i32
+  %0 = comb.shl %arg0, %arg1 : i32
+  // CHECK: %[[R1:.*]] = llvm.lshr %[[R0]], %arg1 : i32
+  %1 = comb.shru %0, %arg1 : i32
+  // CHECK: %[[R2:.*]] = llvm.ashr %[[R1]], %arg1 : i32
+  %2 = comb.shrs %1, %arg1 : i32
+
+  return %2 : i32
+}
