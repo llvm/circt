@@ -506,11 +506,15 @@ namespace {
 /// various emitters.
 class VerilogEmitterState {
 public:
-  explicit VerilogEmitterState(LoweringOptions options, raw_ostream &os)
-      : options(options), os(os) {}
+  explicit VerilogEmitterState(LoweringOptions options,
+                               SymbolCache &symbolCache, raw_ostream &os)
+      : options(options), symbolCache(symbolCache), os(os) {}
 
   /// The emitter options which control verilog emission.
   const LoweringOptions options;
+
+  /// This is a cache of various information about the IR, in frozen state.
+  SymbolCache &symbolCache;
 
   /// The stream to emit to.
   raw_ostream &os;
@@ -1944,7 +1948,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto *interfaceOp = op.getReferencedInterface();
+  auto *interfaceOp = op.getReferencedInterface(&state.symbolCache);
   assert(interfaceOp && "InterfaceInstanceOp has invalid symbol that does not "
                         "point to an interface");
 
@@ -2394,7 +2398,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto *moduleOp = op.getReferencedModule();
+  auto *moduleOp = op.getReferencedModule(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
 
   // Use the specified name or the symbol name as appropriate.
@@ -2864,13 +2868,13 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
 // regs, or ports, with legalized names, so we can lookup up the names through
 // the IR.
 void ModuleEmitter::emitBind(BindOp op) {
-  InstanceOp inst = op.getReferencedInstance();
+  InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
   auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
   verifyModuleName(op, parentVerilogName);
 
-  Operation *childMod = inst.getReferencedModule();
+  Operation *childMod = inst.getReferencedModule(&state.symbolCache);
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
   verifyModuleName(op, childVerilogName);
 
@@ -2951,7 +2955,7 @@ void ModuleEmitter::emitBind(BindOp op) {
 }
 
 void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
-  auto instance = bind.getReferencedInstance();
+  auto instance = bind.getReferencedInstance(&state.symbolCache);
   auto instantiator = instance->getParentOfType<hw::HWModuleOp>().getName();
   auto *interface = bind->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
@@ -3096,11 +3100,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
 }
 
 //===----------------------------------------------------------------------===//
-// Preparation Pass to make IR emission easier
-//===----------------------------------------------------------------------===//
-
-//===----------------------------------------------------------------------===//
-// Common functionality for top level file emitters
+// Top level "file" emitter logic
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -3149,7 +3149,11 @@ struct SharedEmitterState {
   /// Whether any error has been encountered during emission.
   std::atomic<bool> encounteredError = {};
 
-  /// Legalized names for each module
+  /// A cache of symbol -> defining ops built once and used by each of the
+  /// verilog module emitters.  This is built at "gatherFiles" time.
+  SymbolCache symbolCache;
+
+  /// Legalized names for each module.
   llvm::DenseMap<Operation *, ModuleNameManager> legalizedNames;
 
   // Emitter options extracted from the top-level module.
@@ -3159,7 +3163,7 @@ struct SharedEmitterState {
       : rootOp(rootOp), options(rootOp) {}
   void prepareAllModules();
   void gatherFiles(bool separateModules);
-  void emitFile(const FileInfo &fileInfo, VerilogEmitterState &state);
+  void emitOpsForFile(const FileInfo &fileInfo, VerilogEmitterState &state);
   void emitOperation(VerilogEmitterState &state, Operation *op);
 };
 
@@ -3181,6 +3185,16 @@ void SharedEmitterState::prepareAllModules() {
 /// declarations will be split into separate output files even in the absence
 /// of an explicit output file attribute.
 void SharedEmitterState::gatherFiles(bool separateModules) {
+
+  /// Collect all the instance symbols from the specified module and add them to
+  /// the IRCache.  Instances only exist at the top level of the module.
+  auto collectInstanceSymbols = [&](HWModuleOp moduleOp) {
+    for (auto op : moduleOp.getBodyBlock()->getOps<InstanceOp>()) {
+      if (auto sym = op.sym_nameAttr())
+        symbolCache.addDefinition(sym, op);
+    }
+  };
+
   for (auto &op : *rootOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
     auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
@@ -3222,57 +3236,72 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     // Separate the operation into dedicated output file, or emit into the
     // root file, or replicate in all output files.
     TypeSwitch<Operation *>(&op)
-        .Case<HWModuleOp>([&](auto &mod) {
+        .Case<HWModuleOp>([&](auto mod) {
+          // Build the IR cache.
+          symbolCache.addDefinition(mod.getNameAttr(), mod);
+          collectInstanceSymbols(mod);
+
           // Emit into a separate file named after the module.
           if (attr || separateModules)
             separateFile(mod, mod.getName() + ".sv");
           else
             rootFile.ops.push_back(info);
         })
-        .Case<InterfaceOp>([&](auto &intf) {
+        .Case<InterfaceOp>([&](auto intf) {
+          // Build the IR cache.
+          symbolCache.addDefinition(intf.getNameAttr(), intf);
+
           // Emit into a separate file named after the interface.
           if (attr || separateModules)
             separateFile(intf, intf.sym_name() + ".sv");
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefOp, TypeScopeOp, HWModuleExternOp>([&](auto &) {
-          // Emit into a separate file using the specified file name or
-          // replicate the operation in each outputfile.
-          if (attr) {
-            if (!hasFileName) {
-              op.emitError("file name unspecified");
-              encounteredError = true;
-            } else
-              separateFile(&op);
-          } else
-            replicatedOps.push_back(&op);
-        })
-        .Case<HWGeneratorSchemaOp>([&](auto &) {
+        .Case<VerbatimOp, IfDefOp, TypeScopeOp, HWModuleExternOp>(
+            [&](Operation *op) {
+              // Build the IR cache.
+              if (auto externModule = dyn_cast<HWModuleExternOp>(op))
+                symbolCache.addDefinition(externModule.getNameAttr(), op);
+
+              // Emit into a separate file using the specified file name or
+              // replicate the operation in each outputfile.
+              if (!attr) {
+                replicatedOps.push_back(op);
+              } else if (!hasFileName) {
+                op->emitError("file name unspecified");
+                encounteredError = true;
+              } else
+                separateFile(op);
+            })
+        .Case<HWGeneratorSchemaOp>([&](auto) {
           // Empty.
         })
-        .Case<BindOp, BindInterfaceOp>([&](auto &op) {
-          if (attr) {
-            if (!hasFileName) {
-              op.emitError("file name unspecified");
-              encounteredError = true;
-            } else
-              separateFile(op);
-          } else
+        .Case<BindOp, BindInterfaceOp>([&](auto op) {
+          if (!attr) {
             separateFile(op, "bindfile");
+          } else if (!hasFileName) {
+            op.emitError("file name unspecified");
+            encounteredError = true;
+          } else {
+            separateFile(op);
+          }
         })
         .Default([&](auto *) {
           op.emitError("unknown operation");
           encounteredError = true;
         });
   }
+
+  // We've built the whole symbol cache.  Freeze it so things can start querying
+  // it (potentially concurrently).
+  symbolCache.freeze();
 }
 
 /// Emit the operations in a `FileInfo` to an output stream. This handles the
 /// correct interpolation of replicated operations.
-void SharedEmitterState::emitFile(const FileInfo &file,
-                                  VerilogEmitterState &state) {
-  size_t lastReplicatedOp = 0;
+void SharedEmitterState::emitOpsForFile(const FileInfo &file,
+                                        VerilogEmitterState &state) {
+  size_t lastReplicatedOp = 0, numReplicatedOps = replicatedOps.size();
 
   // Emit each operation in the file preceded by the replicated ops not yet
   // printed.
@@ -3280,7 +3309,7 @@ void SharedEmitterState::emitFile(const FileInfo &file,
     // Emit the replicated per-file operations before the main operation's
     // position (if enabled).
     if (file.emitReplicatedOps)
-      for (; lastReplicatedOp < std::min(opInfo.position, replicatedOps.size());
+      for (; lastReplicatedOp < std::min(opInfo.position, numReplicatedOps);
            ++lastReplicatedOp)
         emitOperation(state, replicatedOps[lastReplicatedOp]);
 
@@ -3291,7 +3320,7 @@ void SharedEmitterState::emitFile(const FileInfo &file,
   // Emit the replicated per-file operations after the last operation (if
   // enabled).
   if (file.emitReplicatedOps)
-    for (; lastReplicatedOp < replicatedOps.size(); lastReplicatedOp++)
+    for (; lastReplicatedOp < numReplicatedOps; lastReplicatedOp++)
       emitOperation(state, replicatedOps[lastReplicatedOp]);
 
   if (state.encounteredError)
@@ -3335,17 +3364,17 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
   emitter.gatherFiles(false);
 
-  VerilogEmitterState state(emitter.options, os);
+  VerilogEmitterState state(emitter.options, emitter.symbolCache, os);
 
   // Emit the main file. This is a container for anything not explicitly split
   // out into a separate file.
-  emitter.emitFile(emitter.rootFile, state);
+  emitter.emitOpsForFile(emitter.rootFile, state);
 
   // Emit the separate files.
   for (const auto &it : emitter.files) {
     state.os << "\n// ----- 8< ----- FILE \"" << it.first
              << "\" ----- 8< -----\n\n";
-    emitter.emitFile(it.second, state);
+    emitter.emitOpsForFile(it.second, state);
   }
   return failure(emitter.encounteredError);
 }
@@ -3383,15 +3412,14 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
 
   // Emit the file, copying the global options into the individual module
   // state.
-  VerilogEmitterState state(emitter.options, output->os());
-  emitter.emitFile(file, state);
+  VerilogEmitterState state(emitter.options, emitter.symbolCache, output->os());
+  emitter.emitOpsForFile(file, state);
   output->keep();
 }
 
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   SharedEmitterState emitter(module);
   emitter.prepareAllModules();
-
   emitter.gatherFiles(true);
 
   // Emit each file in parallel if context enables it.
