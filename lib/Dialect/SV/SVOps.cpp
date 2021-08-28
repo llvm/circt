@@ -941,7 +941,8 @@ LogicalResult verifySignalExists(Value ifaceVal, FlatSymbolRefAttr signalName) {
   return success();
 }
 
-Operation *InterfaceInstanceOp::getReferencedInterface(hw::SymbolCache *cache) {
+Operation *
+InterfaceInstanceOp::getReferencedInterface(const hw::SymbolCache *cache) {
   FlatSymbolRefAttr interface = getInterfaceType().getInterface();
   if (cache)
     if (auto *result = cache->getDefinition(interface))
@@ -1131,7 +1132,7 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 // BindOp
 //===----------------------------------------------------------------------===//
 
-hw::InstanceOp BindOp::getReferencedInstance(hw::SymbolCache *cache) {
+hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
   if (cache)
     if (auto *result = cache->getDefinition(bindAttr()))
       return dyn_cast<hw::InstanceOp>(result);
@@ -1186,7 +1187,7 @@ static void printOmitEmptyStringAttr(OpAsmPrinter &p, Operation *op,
 //===----------------------------------------------------------------------===//
 
 sv::InterfaceInstanceOp
-BindInterfaceOp::getReferencedInstance(hw::SymbolCache *cache) {
+BindInterfaceOp::getReferencedInstance(const hw::SymbolCache *cache) {
   if (cache)
     if (auto *result = cache->getDefinition(interfaceAttr()))
       return dyn_cast<sv::InterfaceInstanceOp>(result);

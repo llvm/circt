@@ -649,7 +649,7 @@ static LogicalResult verifyHWModuleGeneratedOp(HWModuleGeneratedOp op) {
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
-Operation *InstanceOp::getReferencedModule(SymbolCache *cache) {
+Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {
   if (cache)
     if (auto *result = cache->getDefinition(moduleNameAttr()))
       return result;
@@ -739,7 +739,8 @@ static LogicalResult verifyInstanceOp(InstanceOp op) {
   return verifyInstanceOpTypes(op, referencedModule);
 }
 
-StringAttr InstanceOp::getResultName(size_t idx, SymbolCache *symbolCache) {
+StringAttr InstanceOp::getResultName(size_t idx,
+                                     const SymbolCache *symbolCache) {
   auto *module = getReferencedModule(symbolCache);
   if (!module)
     return {};
