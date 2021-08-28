@@ -567,9 +567,10 @@ static LogicalResult hasValidDestination(AssignOp assign) {
            "Block argument index should be within range of component's ports.");
     if (ports[blockArgNum].direction == Direction::Output)
       return success();
+
     return assign.emitOpError(
-        "the destination is a component port with the "
-        "incorrect direction; this should be Direction::Output.");
+        "has a component port as the destination with "
+        "the incorrect direction; it should have Direction::Output.");
   }
 
   Operation *definingOp = dest.getDefiningOp();
