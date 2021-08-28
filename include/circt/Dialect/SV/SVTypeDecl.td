@@ -217,7 +217,7 @@ def InterfaceInstanceOp : SVOp<"interface.instance", []> {
 
     /// Lookup the interface that this is an instance of.  This returns null on
     /// invalid IR.
-    Operation *getReferencedInterface();
+    Operation *getReferencedInterface(hw::SymbolCache *cache = nullptr);
   }];
 }
 

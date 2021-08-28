@@ -81,6 +81,39 @@ SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);
 
+/// This stores lookup tables to make manipulating and working with the IR more
+/// efficient.  There are two phases to this object: the "building" phase in
+/// which it is "write only" and then the "using" phase which is read-only (and
+/// thus can be used by multiple threads).  The
+/// "freeze" method transitions between the two states.
+class SymbolCache {
+public:
+  /// In the building phase, add symbols.
+  void addDefinition(StringAttr symbol, Operation *op) {
+    assert(!isFrozen && "cannot mutate a frozen cache");
+    symbolCache[symbol.getValue()] = op;
+  }
+
+  /// Mark the cache as frozen, which allows it to be shared across threads.
+  void freeze() { isFrozen = true; }
+
+  Operation *getDefinition(FlatSymbolRefAttr symbol) const {
+    assert(isFrozen && "cannot read from this cache until it is frozen");
+    auto it = symbolCache.find(symbol.getValue());
+    return it != symbolCache.end() ? it->second : nullptr;
+  }
+
+private:
+  bool isFrozen = false;
+
+  /// This stores a lookup table from symbol attribute to the operation
+  /// (hw.module, hw.instance, etc) that defines it.
+  /// TODO: It is super annoying that symbols are *defined* as StringAttr, but
+  /// are then referenced as FlatSymbolRefAttr.  Why can't we have nice pointer
+  /// uniqued things?? :-(
+  llvm::StringMap<Operation *> symbolCache;
+};
+
 } // namespace hw
 } // namespace circt
 
