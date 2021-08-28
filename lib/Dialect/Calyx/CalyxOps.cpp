@@ -547,25 +547,44 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 
 /// Returns true if `value` is valid destination for an AssignOp, false
 /// otherwise.
-static bool isValidDestination(Value value) {
-  if (value.getImpl()->getKind() == detail::ValueImpl::Kind::BlockArgument)
+static LogicalResult hasValidDestination(AssignOp assign) {
+  Value dest = assign.dest();
+  if (dest.getImpl()->getKind() == detail::ValueImpl::Kind::BlockArgument) {
     // Component ports are defined as Block Arguments, and thus are valid
     // destination ports.
-    return true;
+    auto component = assign->getParentOfType<ComponentOp>();
+    Block *body = component.getBody();
 
-  Operation *definingOp = value.getDefiningOp();
-  return isa<GroupGoOp, GroupDoneOp>(definingOp) ||
-         definingOp->hasTrait<Cell>();
+    // Within the component, we want to drive the component's output ports.
+    // Verify the given port has Direction::Output.
+    auto it = llvm::find_if(body->getArguments(),
+                            [&](auto arg) { return arg == dest; });
+    BlockArgument blockArg = *it;
+    size_t blockArgNum = blockArg.getArgNumber();
+
+    auto ports = getComponentPortInfo(component);
+    assert(blockArgNum < ports.size() &&
+           "Block argument index should be within range of component's ports.");
+    if (ports[blockArgNum].direction == Direction::Output)
+      return success();
+    return assign.emitOpError(
+        "the destination is a component port with the "
+        "incorrect direction; this should be Direction::Output.");
+  }
+
+  Operation *definingOp = dest.getDefiningOp();
+  /// TODO(Calyx): Verify that the destination has Direction::Input for Cells.
+  /// This is simpler with the completion of the Cell Interface.
+  /// See: https://github.com/llvm/circt/issues/1597
+  if (definingOp->hasTrait<Cell>() || isa<GroupGoOp, GroupDoneOp>(definingOp))
+    return success();
+  return assign->emitOpError(
+      "has an invalid destination port. The destination of an AssignOp "
+      "must be driveable.");
 }
 
 static LogicalResult verifyAssignOp(AssignOp assign) {
-  Value dest = assign.dest();
-  if (!isValidDestination(dest))
-    return assign->emitOpError()
-           << "has an invalid destination port, defined by: "
-           << dest.getDefiningOp()
-           << ". The destination of an AssignOp must be driveable.";
-  return success();
+  return hasValidDestination(assign);
 }
 
 //===----------------------------------------------------------------------===//

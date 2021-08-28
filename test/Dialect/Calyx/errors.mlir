@@ -309,8 +309,21 @@ calyx.program {
   calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
     %c1_1 = constant 1 : i1
     calyx.wires {
-      // expected-error @+1 {{'calyx.assign' op has an invalid destination port, defined by: %true = constant true. The destination of an AssignOp must be driveable.}}
+      // expected-error @+1 {{'calyx.assign' op has an invalid destination port. The destination of an AssignOp must be driveable.}}
       calyx.assign %c1_1 = %go : i1
+    }
+    calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
+    %c1_1 = constant 1 : i1
+    calyx.wires {
+      // expected-error @+1 {{'calyx.assign' op the destination is a component port with the incorrect direction; this should be Direction::Output.}}
+      calyx.assign %go = %c1_1 : i1
     }
     calyx.control {}
   }
