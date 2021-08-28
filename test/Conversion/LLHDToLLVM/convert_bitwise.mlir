@@ -4,15 +4,12 @@
 // CHECK-SAME: %[[LHS:.*]]: i1,
 // CHECK-SAME: %[[RHS:.*]]: i1
 func @convert_bitwise_i1(%lhs : i1, %rhs : i1) {
-  // CHECK-NEXT: %[[MASK:.*]] = llvm.mlir.constant(true) : i1
-  // CHECK-NEXT: %{{.*}} = llvm.xor %[[LHS]], %[[MASK]] : i1
-  %0 = llhd.not %lhs : i1
   // CHECK-NEXT: %{{.*}} = llvm.and %[[LHS]], %[[RHS]] : i1
-  %1 = llhd.and %lhs, %rhs : i1
+  %1 = comb.and %lhs, %rhs : i1
   // CHECK-NEXT: %{{.*}} = llvm.or %[[LHS]], %[[RHS]] : i1
-  %2 = llhd.or %lhs, %rhs : i1
+  %2 = comb.or %lhs, %rhs : i1
   // CHECK-NEXT: %{{.*}} = llvm.xor %[[LHS]], %[[RHS]] : i1
-  %3 = llhd.xor %lhs, %rhs : i1
+  %3 = comb.xor %lhs, %rhs : i1
 
   return
 }
@@ -21,15 +18,31 @@ func @convert_bitwise_i1(%lhs : i1, %rhs : i1) {
 // CHECK-SAME: %[[LHS:.*]]: i32,
 // CHECK-SAME: %[[RHS:.*]]: i32
 func @convert_bitwise_i32(%lhs : i32, %rhs : i32) {
-  // CHECK-NEXT: %[[MASK:.*]] = llvm.mlir.constant(-1 : i32) : i32
-  // CHECK-NEXT: %{{.*}} = llvm.xor %[[LHS]], %[[MASK]] : i32
-  llhd.not %lhs : i32
   // CHECK-NEXT: %{{.*}} = llvm.and %[[LHS]], %[[RHS]] : i32
-  llhd.and %lhs, %rhs : i32
+  comb.and %lhs, %rhs : i32
   // CHECK-NEXT: %{{.*}} = llvm.or %[[LHS]], %[[RHS]] : i32
-  llhd.or %lhs, %rhs : i32
+  comb.or %lhs, %rhs : i32
   // CHECK-NEXT: %{{.*}} = llvm.xor %[[LHS]], %[[RHS]] : i32
-  llhd.xor %lhs, %rhs : i32
+  comb.xor %lhs, %rhs : i32
+
+  return
+}
+
+// CHECK-LABEL: convert_bitwise_i32_variadic
+func @convert_bitwise_i32_variadic(%arg0 : i32, %arg1 : i32, %arg2 : i32) {
+  %a = comb.and %arg0 : i32
+  %b = comb.or %arg1 : i32
+  %c = comb.xor %arg2 : i32
+
+  // CHECK-NEXT: %[[AND:.*]] = llvm.and %arg0, %arg1 : i32
+  // CHECK-NEXT: llvm.and %[[AND]], %arg2 : i32
+  comb.and %a, %b, %c : i32
+  // CHECK-NEXT: %[[OR:.*]] = llvm.or %arg0, %arg1 : i32
+  // CHECK-NEXT: llvm.or %[[OR]], %arg2 : i32
+  comb.or %a, %b, %c : i32
+  // CHECK-NEXT: %[[XOR:.*]] = llvm.xor %arg0, %arg1 : i32
+  // CHECK-NEXT: llvm.xor %[[XOR]], %arg2 : i32
+  comb.xor %a, %b, %c : i32
 
   return
 }

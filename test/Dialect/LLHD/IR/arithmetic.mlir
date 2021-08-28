@@ -8,9 +8,6 @@ func @check_arithmetic(%a : i64, %array : !llhd.array<3xi32>, %tup : tuple<i1, i
   // CHECK-NEXT: %{{.*}} = llhd.neg %[[A]] : i64
   %0 = llhd.neg %a : i64
 
-  // CHECK-NEXT: %{{.*}} = llhd.smod %[[A]], %[[A]] : i64
-  %1 = llhd.smod %a, %a : i64
-
   // CHECK-NEXT: %{{.*}} = llhd.neq %[[A]], %[[A]] : i64
   %2 = llhd.neq %a, %a : i64
   // CHECK-NEXT: %{{.*}} = llhd.neq %[[ARR]], %[[ARR]] : !llhd.array<3xi32>

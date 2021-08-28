@@ -9,6 +9,8 @@ add_circt_conversion_library(CIRCTLLHDToLLVM
 
   LINK_LIBS PUBLIC
   CIRCTLLHD
+  CIRCTComb
+  CIRCTHW
   MLIRLLVMIR
   MLIRStandardToLLVM
   MLIRVector
