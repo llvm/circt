@@ -13,6 +13,7 @@
 #ifndef CIRCT_HANDSHAKEOPS_OPS_H_
 #define CIRCT_HANDSHAKEOPS_OPS_H_
 
+#include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
@@ -28,8 +29,6 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/Any.h"
-
-#include "circt/Dialect/Handshake/HandshakeOpsDialect.h.inc"
 
 namespace circt {
 namespace handshake {
@@ -63,6 +62,6 @@ class HasClock : public TraitBase<ConcreteType, HasClock> {};
 } // namespace mlir
 
 #define GET_OP_CLASSES
-#include "circt/Dialect/Handshake/HandshakeOps.h.inc"
+#include "circt/Dialect/Handshake/Handshake.h.inc"
 
 #endif // MLIR_HANDSHAKEOPS_OPS_H_

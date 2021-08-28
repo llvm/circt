@@ -4,13 +4,9 @@ add_circt_library(CIRCTHandshakeToFIRRTL
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/Conversion/HandshakeToFIRRTL
 
-  DEPENDS
-  MLIRHandshakeRewritersIncGen
-  MLIRHandshakeInterfacesIncGen
-
   LINK_LIBS PUBLIC
   CIRCTFIRRTL
-  CIRCTHandshakeOps
+  CIRCTHandshake
   MLIRIR
   MLIRPass
   MLIRStandard
