@@ -433,19 +433,16 @@ void IMConstPropPass::markInvalidValueOp(InvalidValueOp invalid) {
 /// enclosing block is marked live.  This sets up the def-use edges for ports.
 void IMConstPropPass::markInstanceOp(InstanceOp instance) {
   // Get the module being reference or a null pointer if this is an extmodule.
-  auto module =
-      dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instance));
+  auto module = instanceGraph->getReferencedModule(instance);
 
   // If this is an extmodule, just remember that any results and inouts are
   // overdefined.
-  if (!module) {
+  if (auto extModule = dyn_cast<FExtModuleOp>(module)) {
     for (size_t resultNo = 0, e = instance.getNumResults(); resultNo != e;
          ++resultNo) {
       auto portVal = instance.getResult(resultNo);
-      // If this is an input to the extmodule,
-      // we can ignore it.
-      if (getModulePortDirection(instance.getReferencedModule(), resultNo) ==
-          Direction::Input)
+      // If this is an input to the extmodule, we can ignore it.
+      if (getModulePortDirection(extModule, resultNo) == Direction::Input)
         continue;
 
       // Otherwise this is a result from it or an inout, mark it as overdefined.
@@ -454,7 +451,9 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     return;
   }
 
-  markBlockExecutable(module.getBodyBlock());
+  // Otherwise this is a defined module.
+  auto fModule = cast<FModuleOp>(module);
+  markBlockExecutable(fModule.getBodyBlock());
 
   // Ok, it is a normal internal module reference.  Populate
   // resultPortToInstanceResultMapping, and forward any already-computed values.
@@ -463,8 +462,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     auto instancePortVal = instance.getResult(resultNo);
     // If this is an input to the instance, it will
     // get handled when any connects to it are processed.
-    if (getModulePortDirection(instance.getReferencedModule(), resultNo) ==
-        Direction::Input)
+    if (getModulePortDirection(fModule, resultNo) == Direction::Input)
       continue;
     // We only support simple values so far.
     if (!instancePortVal.getType().cast<FIRRTLType>().isGround()) {
@@ -475,7 +473,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
     // Otherwise we have a result from the instance.  We need to forward results
     // from the body to this instance result's SSA value, so remember it.
-    BlockArgument modulePortVal = module.getPortArgument(resultNo);
+    BlockArgument modulePortVal = fModule.getPortArgument(resultNo);
     resultPortToInstanceResultMapping[modulePortVal].push_back(instancePortVal);
 
     // If there is already a value known for modulePortVal make sure to forward
