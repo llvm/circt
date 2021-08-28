@@ -1627,7 +1627,7 @@ struct HandshakeDataflowPass
     ModuleOp m = getOperation();
 
     ConversionTarget target(getContext());
-    target.addLegalDialect<HandshakeOpsDialect, StandardOpsDialect>();
+    target.addLegalDialect<HandshakeDialect, StandardOpsDialect>();
 
     RewritePatternSet patterns(&getContext());
     patterns.insert<FuncOpLowering>(m.getContext());
@@ -1658,7 +1658,7 @@ struct HandshakeCanonicalizePass
           }
     // ConversionTarget target(getContext());
     // // "Legal" function ops should have no interface variable ABI
-    // attributes. target.addDynamicallyLegalDialect<HandshakeOpsDialect,
+    // attributes. target.addDynamicallyLegalDialect<HandshakeDialect,
     // StandardOpsDialect>(
     //         Optional<ConversionTarget::DynamicLegalityCallbackFn>(
     //            [](Operation *op) { return op->hasOneUse(); }));

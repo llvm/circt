@@ -100,7 +100,7 @@ def HandshakeAnalysis : Pass<"analyze-dataflow", "mlir::ModuleOp"> {
 def HandshakeDataflow : Pass<"create-dataflow", "mlir::ModuleOp"> {
   let summary = "Convert standard MLIR into dataflow IR";
   let constructor = "circt::createHandshakeDataflowPass()";
-  let dependentDialects = ["handshake::HandshakeOpsDialect"];
+  let dependentDialects = ["handshake::HandshakeDialect"];
 }
 
 def HandshakeCanonicalize : Pass<"canonicalize-dataflow", "handshake::FuncOp"> {

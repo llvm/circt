@@ -20,14 +20,14 @@ include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "circt/Dialect/Handshake/HandshakeInterfaces.td"
 
-def HandshakeOps_Dialect : Dialect {
+def Handshake_Dialect : Dialect {
   let name = "handshake";
   let cppNamespace = "::circt::handshake";
 }
 
 // Base class for Handshake dialect ops.
 class Handshake_Op<string mnemonic, list<OpTrait> traits = []>
-    : Op<HandshakeOps_Dialect, mnemonic,
+    : Op<Handshake_Dialect, mnemonic,
          traits #[HasParent<"handshake::FuncOp">]> {
 }
 

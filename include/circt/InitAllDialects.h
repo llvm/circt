@@ -37,7 +37,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
     comb::CombDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,
-    handshake::HandshakeOpsDialect,
+    handshake::HandshakeDialect,
     llhd::LLHDDialect,
     msft::MSFTDialect,
     hw::HWDialect,

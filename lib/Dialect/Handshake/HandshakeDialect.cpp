@@ -23,7 +23,7 @@ using namespace circt::handshake;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-void HandshakeOpsDialect::initialize() {
+void HandshakeDialect::initialize() {
   // Register operations.
   addOperations<
 #define GET_OP_LIST

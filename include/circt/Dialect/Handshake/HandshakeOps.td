@@ -13,7 +13,7 @@
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
-def FuncOp : Op<HandshakeOps_Dialect, "func", [
+def FuncOp : Op<Handshake_Dialect, "func", [
    NativeOpTrait<"IsIsolatedFromAbove">,
    NativeOpTrait<"FunctionLike">,
    Symbol,
