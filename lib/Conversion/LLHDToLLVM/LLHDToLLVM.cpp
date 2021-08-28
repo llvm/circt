@@ -2028,6 +2028,9 @@ using CombModUOpConversion =
 using CombModSOpConversion =
     OneToOneConvertToLLVMPattern<comb::ModSOp, LLVM::SRemOp>;
 
+using CombICmpOpConversion =
+    OneToOneConvertToLLVMPattern<comb::ICmpOp, LLVM::ICmpOp>;
+
 } // namespace
 
 namespace {
@@ -2779,7 +2782,7 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
                                                                  converter);
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
-               CombModSOpConversion>(converter);
+               CombModSOpConversion, CombICmpOpConversion>(converter);
 
   // Unit conversion patterns.
   patterns.add<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,

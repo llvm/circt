@@ -14,7 +14,6 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Support/LogicalResult.h"
@@ -339,27 +338,27 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     // TODO: would be better to not print the signed conversion of the second
     // operand.
     return printSignedBinaryOp(inst, ">>>", indentAmount);
-  if (auto op = dyn_cast<CmpIOp>(inst)) {
-    switch (op.getPredicate()) {
-    case mlir::CmpIPredicate::eq:
+  if (auto op = dyn_cast<comb::ICmpOp>(inst)) {
+    switch (op.predicate()) {
+    case comb::ICmpPredicate::eq:
       return printVariadicOp(inst, "==", indentAmount);
-    case mlir::CmpIPredicate::ne:
+    case comb::ICmpPredicate::ne:
       return printVariadicOp(inst, "!=", indentAmount);
-    case mlir::CmpIPredicate::sge:
+    case comb::ICmpPredicate::sge:
       return printSignedBinaryOp(inst, ">=", indentAmount);
-    case mlir::CmpIPredicate::sgt:
+    case comb::ICmpPredicate::sgt:
       return printSignedBinaryOp(inst, ">", indentAmount);
-    case mlir::CmpIPredicate::sle:
+    case comb::ICmpPredicate::sle:
       return printSignedBinaryOp(inst, "<=", indentAmount);
-    case mlir::CmpIPredicate::slt:
+    case comb::ICmpPredicate::slt:
       return printSignedBinaryOp(inst, "<", indentAmount);
-    case mlir::CmpIPredicate::uge:
+    case comb::ICmpPredicate::uge:
       return printVariadicOp(inst, ">=", indentAmount);
-    case mlir::CmpIPredicate::ugt:
+    case comb::ICmpPredicate::ugt:
       return printVariadicOp(inst, ">", indentAmount);
-    case mlir::CmpIPredicate::ule:
+    case comb::ICmpPredicate::ule:
       return printVariadicOp(inst, "<=", indentAmount);
-    case mlir::CmpIPredicate::ult:
+    case comb::ICmpPredicate::ult:
       return printVariadicOp(inst, "<", indentAmount);
     }
     return failure();
@@ -432,7 +431,6 @@ LogicalResult circt::llhd::exportVerilog(ModuleOp module, raw_ostream &os) {
 void circt::llhd::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration registration(
       "export-llhd-verilog", exportVerilog, [](DialectRegistry &registry) {
-        registry.insert<mlir::StandardOpsDialect, llhd::LLHDDialect,
-                        comb::CombDialect>();
+        registry.insert<llhd::LLHDDialect, comb::CombDialect>();
       });
 }

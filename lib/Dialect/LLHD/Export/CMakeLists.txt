@@ -8,6 +8,5 @@ add_circt_translation_library(CIRCTExportLLHD
   CIRCTLLHD
   CIRCTComb
   MLIRMemRef
-  MLIRStandard
   MLIRTranslation
   )
