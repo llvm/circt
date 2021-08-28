@@ -41,4 +41,21 @@ llhd.entity @check_bitwise() -> () {
   %10 = comb.shru %a, %amt64 : i64
   // CHECK-NEXT: wire [63:0] _{{.*}} = $signed(_[[A]]) >>> $signed(_[[AMT64]]);
   %11 = comb.shrs %a, %amt64 : i64
+
+  // CHECK-NEXT: wire _{{.*}} = ^_[[A]];
+  %12 = comb.parity %a : i64
+
+  // CHECK-NEXT: wire [31:0] _[[EXT:.*]] = _[[A]][36:5];
+  %13 = comb.extract %a from 5 : (i64) -> i32
+
+  // CHECK-NEXT: wire [63:0] _[[SEXT:.*]] = {{[{][{]}}32{_[[EXT]][31]{{[}][}]}}, _[[EXT]]};
+  %14 = comb.sext %13 : (i32) -> i64
+
+  // CHECK-NEXT: wire [191:0] _{{.*}} = {_[[A]], _[[SEXT]], _[[A]]};
+  %15 = comb.concat %a, %14, %a : (i64, i64, i64) -> i192
+
+  // CHECK-NEXT: wire _[[COND:.*]] = 1'd1;
+  // CHECK-NEXT: wire [63:0] _{{.*}} = _[[COND]] ? _[[A]] : _[[SEXT]];
+  %cond = llhd.const 1 : i1
+  %16 = comb.mux %cond, %a, %14 : i64
 }

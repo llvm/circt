@@ -2031,6 +2031,38 @@ using CombModSOpConversion =
 using CombICmpOpConversion =
     OneToOneConvertToLLVMPattern<comb::ICmpOp, LLVM::ICmpOp>;
 
+using CombSExtOpConversion =
+    OneToOneConvertToLLVMPattern<comb::SExtOp, LLVM::SExtOp>;
+
+// comb.mux supports any type thus this conversion relies on the type converter
+// to be able to convert the type of the operands and result to an LLVM_Type
+using CombMuxOpConversion =
+    OneToOneConvertToLLVMPattern<comb::MuxOp, LLVM::SelectOp>;
+
+} // namespace
+
+namespace {
+/// Convert a NegOp to LLVM dialect.
+struct CombParityOpConversion : public ConvertToLLVMPattern {
+  explicit CombParityOpConversion(MLIRContext *ctx,
+                                  LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(comb::ParityOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto parityOp = cast<comb::ParityOp>(op);
+
+    auto popCount =
+        rewriter.create<LLVM::CtPopOp>(op->getLoc(), parityOp.input());
+    rewriter.replaceOpWithNewOp<LLVM::TruncOp>(
+        op, IntegerType::get(rewriter.getContext(), 1), popCount);
+
+    return success();
+  }
+};
+
 } // namespace
 
 namespace {
@@ -2574,6 +2606,35 @@ struct DynExtractElementOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
+namespace {
+/// Convert a comb::ExtractOp to LLVM dialect.
+struct CombExtractOpConversion : public ConvertToLLVMPattern {
+  explicit CombExtractOpConversion(MLIRContext *ctx,
+                                   LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(comb::ExtractOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto extractOp = cast<comb::ExtractOp>(op);
+    mlir::Value valueToTrunc = extractOp.input();
+    mlir::Type type = extractOp.input().getType();
+
+    if (extractOp.lowBit() != 0) {
+      mlir::Value amt = rewriter.create<LLVM::ConstantOp>(
+          op->getLoc(), type, extractOp.lowBitAttr());
+      valueToTrunc = rewriter.create<LLVM::LShrOp>(op->getLoc(), type,
+                                                   extractOp.input(), amt);
+    }
+
+    rewriter.replaceOpWithNewOp<LLVM::TruncOp>(op, extractOp.result().getType(),
+                                               valueToTrunc);
+    return success();
+  }
+};
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Insertion operations conversion
 //===----------------------------------------------------------------------===//
@@ -2687,6 +2748,48 @@ struct InsertElementOpConversion : public ConvertToLLVMPattern {
 };
 } // namespace
 
+namespace {
+/// Convert an InsertElementOp to LLVM dialect.
+struct CombConcatOpConversion : public ConvertToLLVMPattern {
+  explicit CombConcatOpConversion(MLIRContext *ctx,
+                                  LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(comb::ConcatOp::getOperationName(), ctx,
+                             typeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto concatOp = cast<comb::ConcatOp>(op);
+    auto numOperands = concatOp->getNumOperands();
+    mlir::Type type = concatOp.result().getType();
+
+    unsigned nextInsertion = type.getIntOrFloatBitWidth();
+    auto aggregate = rewriter
+                         .create<LLVM::ConstantOp>(op->getLoc(), type,
+                                                   IntegerAttr::get(type, 0))
+                         .res();
+
+    for (unsigned i = 0; i < numOperands; i++) {
+      nextInsertion -=
+          concatOp->getOperand(i).getType().getIntOrFloatBitWidth();
+
+      auto nextInsValue = rewriter.create<LLVM::ConstantOp>(
+          op->getLoc(), type, IntegerAttr::get(type, nextInsertion));
+      auto extended = rewriter.create<LLVM::ZExtOp>(op->getLoc(), type,
+                                                    concatOp->getOperand(i));
+      auto shifted = rewriter.create<LLVM::ShlOp>(op->getLoc(), type, extended,
+                                                  nextInsValue);
+      aggregate =
+          rewriter.create<LLVM::OrOp>(op->getLoc(), type, aggregate, shifted)
+              .res();
+    }
+
+    rewriter.replaceOp(op, aggregate);
+    return success();
+  }
+};
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Memory operations
 //===----------------------------------------------------------------------===//
@@ -2767,12 +2870,15 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
                ExtractElementOpConversion, DynExtractElementOpConversion>(
       ctx, converter);
 
+  patterns.add<CombExtractOpConversion, CombConcatOpConversion>(ctx, converter);
+
   // Insert conversion patterns.
   patterns.add<InsertSliceOpConversion, InsertElementOpConversion>(ctx,
                                                                    converter);
 
   // Bitwise conversion patterns.
-  patterns.add<ShrOpConversion, ShlOpConversion>(ctx, converter);
+  patterns.add<ShrOpConversion, ShlOpConversion, CombParityOpConversion>(
+      ctx, converter);
   patterns.add<AndOpConversion, OrOpConversion, XorOpConversion>(converter);
   patterns.add<CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion>(
       converter);
@@ -2782,7 +2888,8 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
                                                                  converter);
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
-               CombModSOpConversion, CombICmpOpConversion>(converter);
+               CombModSOpConversion, CombICmpOpConversion, CombSExtOpConversion,
+               CombMuxOpConversion>(converter);
 
   // Unit conversion patterns.
   patterns.add<TerminatorOpConversion, ProcOpConversion, WaitOpConversion,

@@ -385,6 +385,74 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     out << ";\n";
     return success();
   }
+  if (auto op = dyn_cast<comb::ParityOp>(inst))
+    return printUnaryOp(inst, "^", indentAmount);
+  if (auto op = dyn_cast<comb::ExtractOp>(inst)) {
+    out.PadToColumn(indentAmount);
+    out << "wire ";
+    if (failed(printType(op.result().getType())))
+      return failure();
+    out << " ";
+    printVariableName(op.result());
+    out << " = ";
+    printVariableName(op.input());
+    out << "["
+        << (op.lowBit() + op.result().getType().getIntOrFloatBitWidth() - 1)
+        << ":" << op.lowBit() << "];\n";
+    return success();
+  }
+  if (auto op = dyn_cast<comb::SExtOp>(inst)) {
+    out.PadToColumn(indentAmount);
+    out << "wire ";
+    if (failed(printType(op.result().getType())))
+      return failure();
+    out << " ";
+    printVariableName(op.result());
+    out << " = ";
+    out << "{{"
+        << (op.result().getType().getIntOrFloatBitWidth() -
+            op.input().getType().getIntOrFloatBitWidth())
+        << "{";
+    printVariableName(op.input());
+    out << "[" << (op.input().getType().getIntOrFloatBitWidth() - 1) << "]}}, ";
+    printVariableName(op.input());
+    out << "};\n";
+    return success();
+  }
+  if (auto op = dyn_cast<comb::ConcatOp>(inst)) {
+    out.PadToColumn(indentAmount);
+    out << "wire ";
+    if (failed(printType(op.result().getType())))
+      return failure();
+    out << " ";
+    printVariableName(op.result());
+    out << " = {";
+    bool first = true;
+    for (unsigned i = 0; i < op->getNumOperands(); i++) {
+      if (!first)
+        out << ", ";
+      printVariableName(op.getOperand(i));
+      first = false;
+    }
+    out << "};\n";
+    return success();
+  }
+  if (auto op = dyn_cast<comb::MuxOp>(inst)) {
+    out.PadToColumn(indentAmount);
+    out << "wire ";
+    if (failed(printType(op.result().getType())))
+      return failure();
+    out << " ";
+    printVariableName(op.result());
+    out << " = ";
+    printVariableName(op.cond());
+    out << " ? ";
+    printVariableName(op.trueValue());
+    out << " : ";
+    printVariableName(op.falseValue());
+    out << ";\n";
+    return success();
+  }
   // TODO: insert structural operations here
   return failure();
 }
