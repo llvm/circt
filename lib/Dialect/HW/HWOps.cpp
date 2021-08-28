@@ -547,11 +547,8 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   auto resultTypes = fnType.getResults();
 
   // Print the operation and the function name.
-  auto funcName =
-      op->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
-          .getValue();
   p << op->getName() << ' ';
-  p.printSymbolName(funcName);
+  p.printSymbolName(SymbolTable::getSymbolName(op));
   if (modKind == GenMod) {
     p << ", ";
     p.printSymbolName(cast<HWModuleGeneratedOp>(op).generatorKind());
