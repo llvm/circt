@@ -3184,17 +3184,19 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     }
   };
 
+  SmallString<32> outputPath;
   for (auto &op : *rootOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
-    auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
 
-    SmallString<32> outputPath;
     bool hasFileName = false;
     bool emitReplicatedOps = true;
     bool addToFilelist = true;
 
+    outputPath.clear();
+
     // Check if the operation has an explicit `output_file` attribute set. If
     // it does, extract the information from the attribute.
+    auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
     if (attr) {
       LLVM_DEBUG(llvm::dbgs() << "Found output_file attribute " << attr
                               << " on " << op << "\n";);
@@ -3212,9 +3214,19 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       addToFilelist = !attr.exclude_from_filelist().getValue();
     }
 
-    auto separateFile = [&](Operation *op, Twine fileName = "") {
-      if (!hasFileName)
-        llvm::sys::path::append(outputPath, fileName);
+    auto separateFile = [&](Operation *op, Twine defaultFileName = "") {
+      // If we're emitting to a separate file and the output_file attribute
+      // didn't specify a filename, take the default one if present or emit an
+      // error if not.
+      if (!hasFileName) {
+        if (!defaultFileName.isTriviallyEmpty()) {
+          llvm::sys::path::append(outputPath, defaultFileName);
+        } else {
+          op->emitError("file name unspecified");
+          encounteredError = true;
+          llvm::sys::path::append(outputPath, "error.out");
+        }
+      }
 
       auto &file = files[Identifier::get(outputPath, op->getContext())];
       file.ops.push_back(info);
@@ -3246,31 +3258,28 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefOp, TypeScopeOp, HWModuleExternOp>(
-            [&](Operation *op) {
-              // Build the IR cache.
-              if (auto externModule = dyn_cast<HWModuleExternOp>(op))
-                symbolCache.addDefinition(externModule.getNameAttr(), op);
-
-              // Emit into a separate file using the specified file name or
-              // replicate the operation in each outputfile.
-              if (!attr) {
-                replicatedOps.push_back(op);
-              } else if (!hasFileName) {
-                op->emitError("file name unspecified");
-                encounteredError = true;
-              } else
-                separateFile(op);
-            })
+        .Case<HWModuleExternOp>([&](auto op) {
+          // Build the IR cache.
+          symbolCache.addDefinition(op.getNameAttr(), op);
+          if (separateModules)
+            separateFile(op, "extern_modules.sv");
+          else
+            rootFile.ops.push_back(info);
+        })
+        .Case<VerbatimOp, IfDefOp, TypeScopeOp>([&](Operation *op) {
+          // Emit into a separate file using the specified file name or
+          // replicate the operation in each outputfile.
+          if (!attr) {
+            replicatedOps.push_back(op);
+          } else
+            separateFile(op, "");
+        })
         .Case<HWGeneratorSchemaOp>([&](auto) {
           // Empty.
         })
         .Case<BindOp, BindInterfaceOp>([&](auto op) {
           if (!attr) {
             separateFile(op, "bindfile");
-          } else if (!hasFileName) {
-            op.emitError("file name unspecified");
-            encounteredError = true;
           } else {
             separateFile(op);
           }
