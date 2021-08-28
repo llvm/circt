@@ -542,6 +542,33 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// AssignOp
+//===----------------------------------------------------------------------===//
+
+/// Returns true if `value` is valid destination for an AssignOp, false
+/// otherwise.
+static bool isValidDestination(Value value) {
+  if (value.getImpl()->getKind() == detail::ValueImpl::Kind::BlockArgument)
+    // Component ports are defined as Block Arguments, and thus are valid
+    // destination ports.
+    return true;
+
+  Operation *definingOp = value.getDefiningOp();
+  return isa<GroupGoOp, GroupDoneOp>(definingOp) ||
+         definingOp->hasTrait<Cell>();
+}
+
+static LogicalResult verifyAssignOp(AssignOp assign) {
+  Value dest = assign.dest();
+  if (!isValidDestination(dest))
+    return assign->emitOpError()
+           << "has an invalid destination port, defined by: "
+           << dest.getDefiningOp()
+           << ". The destination of an AssignOp must be driveable.";
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
