@@ -2042,7 +2042,7 @@ using CombMuxOpConversion =
 } // namespace
 
 namespace {
-/// Convert a NegOp to LLVM dialect.
+/// Convert a comb::ParityOp to the LLVM dialect.
 struct CombParityOpConversion : public ConvertToLLVMPattern {
   explicit CombParityOpConversion(MLIRContext *ctx,
                                   LLVMTypeConverter &typeConverter)
@@ -2749,7 +2749,7 @@ struct InsertElementOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
-/// Convert an InsertElementOp to LLVM dialect.
+/// Convert a comb::ConcatOp to the LLVM dialect.
 struct CombConcatOpConversion : public ConvertToLLVMPattern {
   explicit CombConcatOpConversion(MLIRContext *ctx,
                                   LLVMTypeConverter &typeConverter)
