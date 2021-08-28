@@ -551,7 +551,7 @@ static LogicalResult hasValidDestination(AssignOp assign) {
   Value dest = assign.dest();
   if (dest.getImpl()->getKind() == detail::ValueImpl::Kind::BlockArgument) {
     // Component ports are defined as Block Arguments, and thus are valid
-    // destination ports.
+    // for the destination of an assignment.
     auto component = assign->getParentOfType<ComponentOp>();
     Block *body = component.getBody();
 
