@@ -315,18 +315,16 @@ static StringRef getVerilogDeclWord(Operation *op) {
 /// looking into an instance from a different module as happens with bind.  It
 /// may return "" when unable to determine a name.  This works in situations
 /// where names are pre-legalized during prepare.
-static StringRef getNameRemotely(Value &value,
+static StringRef getNameRemotely(Value value,
                                  ArrayRef<ModulePortInfo> modulePorts) {
-  if (auto barg = value.dyn_cast<BlockArgument>()) {
+  if (auto barg = value.dyn_cast<BlockArgument>())
     return modulePorts[barg.getArgNumber()].getName();
-  }
+
   if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
-    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp())) {
+    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp()))
       return wire.name();
-    }
-    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp())) {
+    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp()))
       return reg.name();
-    }
   }
   if (auto localparam = dyn_cast<LocalParamOp>(value.getDefiningOp()))
     return localparam.name();
@@ -506,7 +504,7 @@ namespace {
 /// various emitters.
 class VerilogEmitterState {
 public:
-  explicit VerilogEmitterState(LoweringOptions options,
+  explicit VerilogEmitterState(const LoweringOptions &options,
                                const SymbolCache &symbolCache, raw_ostream &os)
       : options(options), symbolCache(symbolCache), os(os) {}
 
@@ -3137,11 +3135,9 @@ class StringOrOpToEmit {
 public:
   explicit StringOrOpToEmit(Operation *op) : pointerData(op), length(~0ULL) {}
 
-  explicit StringOrOpToEmit(StringRef fixedString) {
-    length = fixedString.size();
-    void *data = malloc(length);
-    memcpy(data, fixedString.data(), length);
-    pointerData = (const void *)data;
+  explicit StringOrOpToEmit(StringRef string) {
+    pointerData = (Operation *)nullptr;
+    setString(string);
   }
 
   ~StringOrOpToEmit() {
@@ -3159,6 +3155,15 @@ public:
     if (const void *ptr = pointerData.dyn_cast<const void *>())
       return StringRef((const char *)ptr, length);
     return StringRef();
+  }
+
+  /// This method transforms the entry from an operation to a string value.
+  void setString(StringRef value) {
+    assert(pointerData.is<Operation *>() && "shouldn't already be a string");
+    length = value.size();
+    void *data = malloc(length);
+    memcpy(data, value.data(), length);
+    pointerData = (const void *)data;
   }
 
   // These move just fine.
@@ -3209,7 +3214,7 @@ struct SharedEmitterState {
   using EmissionList = std::vector<StringOrOpToEmit>;
 
   void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit);
-  void emitOps(EmissionList &thingsToEmit, raw_ostream &os);
+  void emitOps(EmissionList &thingsToEmit, raw_ostream &os, bool parallelize);
 };
 
 } // namespace
@@ -3394,18 +3399,65 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
 
 /// Actually emit the collected list of operations and strings to the specified
 /// file.
-void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os) {
-  VerilogEmitterState state(options, symbolCache, os);
+void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
+                                 bool parallelize) {
+  MLIRContext *context = rootOp->getContext();
 
-  for (auto &entry : thingsToEmit) {
-    if (auto *op = entry.getOperation())
-      emitOperation(state, op);
-    else
-      state.os << entry.getStringData();
+  // Disable parallelization overhead if MLIR threading is disabled.
+  if (parallelize)
+    parallelize &= context->isMultithreadingEnabled();
+
+  // If we aren't parallelizing output, directly output each operation to the
+  // specified stream.
+  if (!parallelize) {
+    VerilogEmitterState state(options, symbolCache, os);
+    for (auto &entry : thingsToEmit) {
+      if (auto *op = entry.getOperation())
+        emitOperation(state, op);
+      else
+        os << entry.getStringData();
+    }
+
+    if (state.encounteredError)
+      encounteredError = true;
+    return;
   }
 
-  if (state.encounteredError)
-    encounteredError = true;
+  // If we are parallelizing emission, we emit each independent operation to a
+  // string buffer in parallel, then concat at the end.
+  //
+  parallelForEach(context, thingsToEmit, [&](StringOrOpToEmit &stringOrOp) {
+    auto *op = stringOrOp.getOperation();
+    if (!op)
+      return; // Ignore things that are already strings.
+
+    // BindOp emission reaches into the hw.module of the instance, and that
+    // body may be being transformed by its own emission.  Defer this to the
+    // serial phase.  They are speedy anyway.
+    if (isa<BindOp>(op))
+      return;
+
+    SmallString<256> buffer;
+    llvm::raw_svector_ostream tmpStream(buffer);
+    VerilogEmitterState state(options, symbolCache, tmpStream);
+    emitOperation(state, op);
+    stringOrOp.setString(buffer);
+  });
+
+  // Finally emit each entry now that we know it is a string.
+  for (auto &entry : thingsToEmit) {
+    // Almost everything is lowered to a string, just concat the strings onto
+    // the output stream.
+    auto *op = entry.getOperation();
+    if (!op) {
+      os << entry.getStringData();
+      continue;
+    }
+
+    // If this wasn't emitted to a string (e.g. it is a bind) do so now.
+    VerilogEmitterState state(options, symbolCache, os);
+    emitOperation(state, op);
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -3430,7 +3482,7 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   }
 
   // Finally, emit all the ops we collected.
-  emitter.emitOps(list, os);
+  emitter.emitOps(list, os, /*parallelize=*/true);
   return failure(emitter.encounteredError);
 }
 
@@ -3469,8 +3521,10 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
   emitter.collectOpsForFile(file, list);
 
   // Emit the file, copying the global options into the individual module
-  // state.
-  emitter.emitOps(list, output->os());
+  // state.  Don't parallelize emission of the ops within this file - we already
+  // parallelize per-file emission and we pay a string copy overhead for
+  // parallelization.
+  emitter.emitOps(list, output->os(), /*parallelize=*/false);
   output->keep();
 }
 
