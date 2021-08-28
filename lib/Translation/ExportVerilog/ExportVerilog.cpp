@@ -507,14 +507,14 @@ namespace {
 class VerilogEmitterState {
 public:
   explicit VerilogEmitterState(LoweringOptions options,
-                               SymbolCache &symbolCache, raw_ostream &os)
+                               const SymbolCache &symbolCache, raw_ostream &os)
       : options(options), symbolCache(symbolCache), os(os) {}
 
   /// The emitter options which control verilog emission.
   const LoweringOptions options;
 
   /// This is a cache of various information about the IR, in frozen state.
-  SymbolCache &symbolCache;
+  const SymbolCache &symbolCache;
 
   /// The stream to emit to.
   raw_ostream &os;
@@ -3173,7 +3173,7 @@ void SharedEmitterState::prepareAllModules() {
   bool hasError = false;
   for (auto op : rootOp.getBody()->getOps<HWModuleOp>()) {
     auto &names = legalizedNames[op];
-    prepareHWModule(*op.getBodyBlock(), names, options);
+    prepareHWModule(*op.getBodyBlock(), names, options, symbolCache);
     hasError |= names.hadError();
   }
   if (hasError)
@@ -3360,9 +3360,8 @@ void SharedEmitterState::emitOperation(VerilogEmitterState &state,
 
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   SharedEmitterState emitter(module);
-  emitter.prepareAllModules();
-
   emitter.gatherFiles(false);
+  emitter.prepareAllModules();
 
   VerilogEmitterState state(emitter.options, emitter.symbolCache, os);
 
@@ -3419,8 +3418,8 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
 
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   SharedEmitterState emitter(module);
-  emitter.prepareAllModules();
   emitter.gatherFiles(true);
+  emitter.prepareAllModules();
 
   // Emit each file in parallel if context enables it.
   mlir::parallelForEach(module->getContext(), emitter.files.begin(),

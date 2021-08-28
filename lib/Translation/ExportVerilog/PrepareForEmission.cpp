@@ -42,7 +42,7 @@ static bool isSimpleReadOrPort(Value v) {
 
 // Given an invisible instance, make sure all inputs are driven from
 // wires or ports.
-static void lowerBoundInstance(InstanceOp op) {
+static void lowerBoundInstance(InstanceOp op, const SymbolCache &cache) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -51,7 +51,7 @@ static void lowerBoundInstance(InstanceOp op) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule())) {
+  for (auto &port : getModulePortInfo(op.getReferencedModule(&cache))) {
     if (port.isOutput())
       continue;
 
@@ -85,7 +85,7 @@ static bool onlyUseIsAssign(Value v) {
 }
 
 // Ensure that each output of an instance are used only by a wire
-static void lowerInstanceResults(InstanceOp op) {
+static void lowerInstanceResults(InstanceOp op, const SymbolCache &cache) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -94,7 +94,7 @@ static void lowerInstanceResults(InstanceOp op) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule())) {
+  for (auto &port : getModulePortInfo(op.getReferencedModule(&cache))) {
     if (!port.isOutput())
       continue;
 
@@ -253,7 +253,8 @@ static void rewriteAddWithNegativeConstant(comb::AddOp add,
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
-                                    const LoweringOptions &options) {
+                                    const LoweringOptions &options,
+                                    const SymbolCache &cache) {
   for (Block::iterator opIterator = block.begin(), e = block.end();
        opIterator != e;) {
     auto &op = *opIterator++;
@@ -261,7 +262,7 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
     // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prepareHWModule(region.front(), names, options);
+        prepareHWModule(region.front(), names, options, cache);
     }
 
     // Duplicate "always inline" expression for each of their users and move
@@ -311,10 +312,10 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
     // previously declared.
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       // Anchor return values to wires early
-      lowerInstanceResults(instance);
+      lowerInstanceResults(instance, cache);
       // Anchor ports of bound instances
       if (instance->hasAttr("doNotPrint"))
-        lowerBoundInstance(instance);
+        lowerBoundInstance(instance, cache);
       names.addLegalName(&op, instance.instanceName(), &op);
     } else if (auto wire = dyn_cast<WireOp>(op))
       names.addLegalName(op.getResult(0), wire.name(), &op);
