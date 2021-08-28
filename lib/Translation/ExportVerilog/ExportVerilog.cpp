@@ -655,7 +655,7 @@ class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
-  void emitHWModule(HWModuleOp module, ModuleNameManager &names);
+  void emitHWModule(HWModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
@@ -2964,7 +2964,15 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
      << " (.*);\n\n";
 }
 
-void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
+void ModuleEmitter::emitHWModule(HWModuleOp module) {
+  // Rewrite the module body into compliance with our emission expectations, and
+  // collect/rename symbols within the body that conflict.
+  ModuleNameManager names;
+  prepareHWModule(*module.getBodyBlock(), names, state.options,
+                  state.symbolCache);
+  if (names.hadError())
+    state.encounteredError = true;
+
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo> portInfo = module.getPorts();
   for (auto &port : portInfo) {
@@ -3315,14 +3323,7 @@ void SharedEmitterState::emitOpsForFile(const FileInfo &file,
 void SharedEmitterState::emitOperation(VerilogEmitterState &state,
                                        Operation *op) {
   TypeSwitch<Operation *>(op)
-      .Case<HWModuleOp>([&](auto op) {
-        ModuleNameManager names;
-        prepareHWModule(*op.getBodyBlock(), names, options, symbolCache);
-        if (names.hadError())
-          encounteredError = true;
-        else
-          ModuleEmitter(state).emitHWModule(op, names);
-      })
+      .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
       .Case<HWModuleExternOp>(
           [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
       .Case<HWModuleGeneratedOp>(
