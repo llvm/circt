@@ -444,7 +444,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
       auto portVal = instance.getResult(resultNo);
       // If this is an input to the extmodule,
       // we can ignore it.
-      if (getModulePortDirection(instance.getReferencedModule(), resultNo) ==
+      if (instance.getReferencedModule().getPortDirection(resultNo) ==
           Direction::Input)
         continue;
 
@@ -463,7 +463,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     auto instancePortVal = instance.getResult(resultNo);
     // If this is an input to the instance, it will
     // get handled when any connects to it are processed.
-    if (getModulePortDirection(instance.getReferencedModule(), resultNo) ==
+    if (instance.getReferencedModule().getPortDirection(resultNo) ==
         Direction::Input)
       continue;
     // We only support simple values so far.

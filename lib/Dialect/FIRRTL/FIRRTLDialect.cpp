@@ -125,16 +125,6 @@ std::string circt::firrtl::getFieldName(const FieldRef &fieldRef,
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-// If the specified module contains the portNames attribute, return it.
-ArrayAttr firrtl::getModulePortNames(Operation *module) {
-  return module->getAttrOfType<ArrayAttr>("portNames");
-}
-
-// If the specified module contains the portDirections attribute, return it.
-mlir::IntegerAttr firrtl::getModulePortDirections(Operation *module) {
-  return module->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
-}
-
 namespace {
 
 // We implement the OpAsmDialectInterface so that FIRRTL dialect operations
@@ -256,7 +246,7 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // Check to see if the operation containing the arguments has 'firrtl.name'
     // attributes for them.  If so, use that as the name.
     auto *parentOp = block->getParentOp();
-    auto argAttr = getModulePortNames(parentOp);
+    auto argAttr = parentOp->getAttrOfType<ArrayAttr>("portNames");
 
     // Do not crash on invalid IR.
     if (!argAttr || argAttr.size() != block->getNumArguments())

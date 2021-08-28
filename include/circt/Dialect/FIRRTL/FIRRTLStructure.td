@@ -50,7 +50,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 }
 
 def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator,
+      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator, DeclareOpInterfaceMethods<FModuleLike>,
        HasParent<"CircuitOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
@@ -77,11 +77,6 @@ def FModuleOp : FIRRTLOp<"module",
     using FunctionLike::end;
     using FunctionLike::front;
     using FunctionLike::getBody;
-
-    // Decode information about the input and output ports on this module.
-    SmallVector<ModulePortInfo> getPorts() {
-      return getModulePortInfo(*this);
-    }
 
     // Return the block argument for the port with the specified index.
     BlockArgument getPortArgument(size_t portNumber);
@@ -132,7 +127,7 @@ def FModuleOp : FIRRTLOp<"module",
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"CircuitOp">]> {
+      [IsolatedFromAbove, FunctionLike, Symbol, DeclareOpInterfaceMethods<FModuleLike>, HasParent<"CircuitOp">]> {
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
@@ -156,17 +151,13 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   ];
 
   let extraClassDeclaration = [{
-     // Decode information about the input and output ports on this module.
-     SmallVector<ModulePortInfo> getPorts() {
-       return getModulePortInfo(*this);
-     }
-
   private:
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<FExtModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+
     /// Returns the number of results, implementing OpTrait::FunctionLike.
     unsigned getNumFuncResults() { return getType().getResults().size(); }
 

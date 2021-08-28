@@ -290,7 +290,7 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
     // Create an instance of the wrapping module.  We have to retrieve the
     // module port information back from the module.
     moduleOp = it->second;
-    modPorts = getModulePortInfo(moduleOp);
+    modPorts = moduleOp.getPorts();
   } else {
     // Get the memory port descriptors. This gives us the name and kind of each
     // memory port created by the MemOp.
@@ -358,7 +358,7 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
     // Create an instance of the wrapping module.  We have to retrieve the
     // module port information back from the module.
     extModuleOp = it->second;
-    extPortList = getModulePortInfo(extModuleOp);
+    extPortList = extModuleOp.getPorts();
   } else {
     // Get the memory port descriptors.  This gives us the name and kind of each
     // memory port created by the MemOp.

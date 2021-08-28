@@ -1999,7 +1999,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   llvm::SmallVector<Type> resultTypes;
 
   // Bundle all ports of the instance into a new flattened bundle type.
-  SmallVector<ModulePortInfo, 8> portInfo = getModulePortInfo(subModuleOp);
+  SmallVector<ModulePortInfo, 8> portInfo = subModuleOp.getPorts();
   for (auto &port : portInfo)
     resultTypes.push_back(port.type);
 
