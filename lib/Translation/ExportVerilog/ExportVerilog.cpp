@@ -3153,32 +3153,17 @@ struct SharedEmitterState {
   /// verilog module emitters.  This is built at "gatherFiles" time.
   SymbolCache symbolCache;
 
-  /// Legalized names for each module.
-  llvm::DenseMap<Operation *, ModuleNameManager> legalizedNames;
-
   // Emitter options extracted from the top-level module.
   LoweringOptions options;
 
   explicit SharedEmitterState(ModuleOp rootOp)
       : rootOp(rootOp), options(rootOp) {}
-  void prepareAllModules();
   void gatherFiles(bool separateModules);
   void emitOpsForFile(const FileInfo &fileInfo, VerilogEmitterState &state);
   void emitOperation(VerilogEmitterState &state, Operation *op);
 };
 
 } // namespace
-
-void SharedEmitterState::prepareAllModules() {
-  bool hasError = false;
-  for (auto op : rootOp.getBody()->getOps<HWModuleOp>()) {
-    auto &names = legalizedNames[op];
-    prepareHWModule(*op.getBodyBlock(), names, options, symbolCache);
-    hasError |= names.hadError();
-  }
-  if (hasError)
-    encounteredError = true;
-}
 
 /// Organize the operations in the root MLIR module into output files to be
 /// generated. If `separateModules` is true, a handful of top-level
@@ -3331,7 +3316,12 @@ void SharedEmitterState::emitOperation(VerilogEmitterState &state,
                                        Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) {
-        ModuleEmitter(state).emitHWModule(op, legalizedNames[op]);
+        ModuleNameManager names;
+        prepareHWModule(*op.getBodyBlock(), names, options, symbolCache);
+        if (names.hadError())
+          encounteredError = true;
+        else
+          ModuleEmitter(state).emitHWModule(op, names);
       })
       .Case<HWModuleExternOp>(
           [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
@@ -3361,7 +3351,6 @@ void SharedEmitterState::emitOperation(VerilogEmitterState &state,
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   SharedEmitterState emitter(module);
   emitter.gatherFiles(false);
-  emitter.prepareAllModules();
 
   VerilogEmitterState state(emitter.options, emitter.symbolCache, os);
 
@@ -3419,7 +3408,6 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   SharedEmitterState emitter(module);
   emitter.gatherFiles(true);
-  emitter.prepareAllModules();
 
   // Emit each file in parallel if context enables it.
   mlir::parallelForEach(module->getContext(), emitter.files.begin(),
