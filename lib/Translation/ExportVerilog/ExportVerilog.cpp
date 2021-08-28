@@ -660,8 +660,7 @@ public:
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
   // Statements.
-  void emitStatement(Operation *op, ModuleNameManager &names);
-  void emitStatementBlock(Block &block, ModuleNameManager &names);
+  void emitStatement(Operation *op);
   void emitBind(BindOp op);
   void emitBindInterface(BindInterfaceOp op);
 
@@ -2833,15 +2832,10 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   reduceIndent();
 }
 
-void ModuleEmitter::emitStatement(Operation *op, ModuleNameManager &names) {
+void ModuleEmitter::emitStatement(Operation *op) {
   SmallString<128> outputBuffer;
+  ModuleNameManager names;
   StmtEmitter(*this, outputBuffer, names).emitStatement(op);
-  os << outputBuffer;
-}
-
-void ModuleEmitter::emitStatementBlock(Block &body, ModuleNameManager &names) {
-  SmallString<128> outputBuffer;
-  StmtEmitter(*this, outputBuffer, names).emitStatementBlock(body);
   os << outputBuffer;
 }
 
@@ -3102,8 +3096,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   reduceIndent();
 
   // Emit the body of the module.
-  emitStatementBlock(*module.getBodyBlock(), names);
-
+  SmallString<128> outputBuffer;
+  StmtEmitter(*this, outputBuffer, names)
+      .emitStatementBlock(*module.getBodyBlock());
+  os << outputBuffer;
   os << "endmodule\n\n";
 }
 
@@ -3332,10 +3328,8 @@ void SharedEmitterState::emitOperation(VerilogEmitterState &state,
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<BindInterfaceOp>(
           [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })
-      .Case<InterfaceOp, VerbatimOp, IfDefOp>([&](auto op) {
-        ModuleNameManager emptyNames;
-        ModuleEmitter(state).emitStatement(op, emptyNames);
-      })
+      .Case<InterfaceOp, VerbatimOp, IfDefOp>(
+          [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
         TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
       })
