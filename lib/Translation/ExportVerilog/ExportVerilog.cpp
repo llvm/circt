@@ -3132,6 +3132,48 @@ struct FileInfo {
   bool addToFilelist = true;
 };
 
+/// This class wraps an operation or a fixed string that should be emitted.
+class StringOrOpToEmit {
+public:
+  explicit StringOrOpToEmit(Operation *op) : pointerData(op), length(~0ULL) {}
+
+  explicit StringOrOpToEmit(StringRef fixedString) {
+    length = fixedString.size();
+    void *data = malloc(length);
+    memcpy(data, fixedString.data(), length);
+    pointerData = (const void *)data;
+  }
+
+  ~StringOrOpToEmit() {
+    if (const void *ptr = pointerData.dyn_cast<const void *>())
+      free(const_cast<void *>(ptr));
+  }
+
+  /// If the value is an Operation*, return it.  Otherwise return null.
+  Operation *getOperation() const {
+    return pointerData.dyn_cast<Operation *>();
+  }
+
+  /// If the value wraps a string, return it.  Otherwise return null.
+  StringRef getStringData() const {
+    if (const void *ptr = pointerData.dyn_cast<const void *>())
+      return StringRef((const char *)ptr, length);
+    return StringRef();
+  }
+
+  // These move just fine.
+  StringOrOpToEmit(StringOrOpToEmit &&rhs)
+      : pointerData(rhs.pointerData), length(rhs.length) {
+    rhs.pointerData = (Operation *)nullptr;
+  }
+
+private:
+  StringOrOpToEmit(const StringOrOpToEmit &) = delete;
+  void operator=(const StringOrOpToEmit &) = delete;
+  PointerUnion<Operation *, const void *> pointerData;
+  size_t length;
+};
+
 /// This class tracks the top-level state for the emitters, which is built and
 /// then shared across all per-file emissions that happen in parallel.
 struct SharedEmitterState {
@@ -3158,13 +3200,16 @@ struct SharedEmitterState {
   SymbolCache symbolCache;
 
   // Emitter options extracted from the top-level module.
-  LoweringOptions options;
+  const LoweringOptions options;
 
   explicit SharedEmitterState(ModuleOp rootOp)
       : rootOp(rootOp), options(rootOp) {}
   void gatherFiles(bool separateModules);
-  void emitOpsForFile(const FileInfo &fileInfo, VerilogEmitterState &state);
-  void emitOperation(VerilogEmitterState &state, Operation *op);
+
+  using EmissionList = std::vector<StringOrOpToEmit>;
+
+  void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit);
+  void emitOps(EmissionList &thingsToEmit, raw_ostream &os);
 };
 
 } // namespace
@@ -3295,38 +3340,37 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   symbolCache.freeze();
 }
 
-/// Emit the operations in a `FileInfo` to an output stream. This handles the
-/// correct interpolation of replicated operations.
-void SharedEmitterState::emitOpsForFile(const FileInfo &file,
-                                        VerilogEmitterState &state) {
-  size_t lastReplicatedOp = 0, numReplicatedOps = replicatedOps.size();
+/// Given a FileInfo, collect all the replicated and designated operations that
+/// go into it and append them to "thingsToEmit".
+void SharedEmitterState::collectOpsForFile(const FileInfo &file,
+                                           EmissionList &thingsToEmit) {
+  // If we're emitting replicated ops, keep track of where we are in the list.
+  size_t lastReplicatedOp = 0;
+  size_t numReplicatedOps = file.emitReplicatedOps ? replicatedOps.size() : 0;
+
+  thingsToEmit.reserve(thingsToEmit.size() + numReplicatedOps +
+                       file.ops.size());
 
   // Emit each operation in the file preceded by the replicated ops not yet
   // printed.
   for (const auto &opInfo : file.ops) {
     // Emit the replicated per-file operations before the main operation's
     // position (if enabled).
-    if (file.emitReplicatedOps)
-      for (; lastReplicatedOp < std::min(opInfo.position, numReplicatedOps);
-           ++lastReplicatedOp)
-        emitOperation(state, replicatedOps[lastReplicatedOp]);
+    for (; lastReplicatedOp < std::min(opInfo.position, numReplicatedOps);
+         ++lastReplicatedOp)
+      thingsToEmit.emplace_back(replicatedOps[lastReplicatedOp]);
 
     // Emit the operation itself.
-    emitOperation(state, opInfo.op);
+    thingsToEmit.emplace_back(opInfo.op);
   }
 
   // Emit the replicated per-file operations after the last operation (if
   // enabled).
-  if (file.emitReplicatedOps)
-    for (; lastReplicatedOp < numReplicatedOps; lastReplicatedOp++)
-      emitOperation(state, replicatedOps[lastReplicatedOp]);
-
-  if (state.encounteredError)
-    encounteredError = true;
+  for (; lastReplicatedOp < numReplicatedOps; lastReplicatedOp++)
+    thingsToEmit.emplace_back(replicatedOps[lastReplicatedOp]);
 }
 
-void SharedEmitterState::emitOperation(VerilogEmitterState &state,
-                                       Operation *op) {
+static void emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
       .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
       .Case<HWModuleExternOp>(
@@ -3343,9 +3387,25 @@ void SharedEmitterState::emitOperation(VerilogEmitterState &state,
         TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
       })
       .Default([&](auto *op) {
-        encounteredError = true;
+        state.encounteredError = true;
         op->emitError("unknown operation");
       });
+}
+
+/// Actually emit the collected list of operations and strings to the specified
+/// file.
+void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os) {
+  VerilogEmitterState state(options, symbolCache, os);
+
+  for (auto &entry : thingsToEmit) {
+    if (auto *op = entry.getOperation())
+      emitOperation(state, op);
+    else
+      state.os << entry.getStringData();
+  }
+
+  if (state.encounteredError)
+    encounteredError = true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -3356,18 +3416,21 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   SharedEmitterState emitter(module);
   emitter.gatherFiles(false);
 
-  VerilogEmitterState state(emitter.options, emitter.symbolCache, os);
+  SharedEmitterState::EmissionList list;
 
-  // Emit the main file. This is a container for anything not explicitly split
-  // out into a separate file.
-  emitter.emitOpsForFile(emitter.rootFile, state);
+  // Collect the contents of the main file. This is a container for anything not
+  // explicitly split out into a separate file.
+  emitter.collectOpsForFile(emitter.rootFile, list);
 
   // Emit the separate files.
   for (const auto &it : emitter.files) {
-    state.os << "\n// ----- 8< ----- FILE \"" << it.first
-             << "\" ----- 8< -----\n\n";
-    emitter.emitOpsForFile(it.second, state);
+    list.emplace_back("\n// ----- 8< ----- FILE \"" + it.first.str() +
+                      "\" ----- 8< -----\n\n");
+    emitter.collectOpsForFile(it.second, list);
   }
+
+  // Finally, emit all the ops we collected.
+  emitter.emitOps(list, os);
   return failure(emitter.encounteredError);
 }
 
@@ -3402,10 +3465,12 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
     return;
   }
 
+  SharedEmitterState::EmissionList list;
+  emitter.collectOpsForFile(file, list);
+
   // Emit the file, copying the global options into the individual module
   // state.
-  VerilogEmitterState state(emitter.options, emitter.symbolCache, output->os());
-  emitter.emitOpsForFile(file, state);
+  emitter.emitOps(list, output->os());
   output->keep();
 }
 
