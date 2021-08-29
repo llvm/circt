@@ -155,12 +155,11 @@ private:
         .Case<hw::ConstantOp>([&](auto op) {
           // A constant is defined as <bit-width>'<base><value>, where the base
           // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
-
-          // Emit the Radix-10 version of the ConstantOp.
           APInt value = op.value();
 
           (isIndented ? indent() : os)
               << std::to_string(value.getBitWidth()) << apostrophe() << "d";
+          // We currently default to the decimal represntation.
           value.print(os, /*isSigned=*/false);
         })
         .Default(
