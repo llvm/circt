@@ -34,7 +34,7 @@ static constexpr std::string_view RSquare() { return "]"; }
 static constexpr std::string_view LParen() { return "("; }
 static constexpr std::string_view RParen() { return ")"; }
 static constexpr std::string_view colon() { return ": "; }
-static constexpr std::string_view Space() { return " "; }
+static constexpr std::string_view space() { return " "; }
 static constexpr std::string_view period() { return "."; }
 static constexpr std::string_view equals() { return " = "; }
 static constexpr std::string_view comma() { return ", "; }
@@ -108,7 +108,7 @@ private:
   /// }
   template <typename Func>
   void emitCalyxBody(Func emitBody) {
-    os << Space() << LBraceEndL();
+    os << space() << LBraceEndL();
     addIndent();
     emitBody();
     reduceIndent();
@@ -121,7 +121,7 @@ private:
                         StringRef symbolName = "") {
     indent() << sectionName;
     if (!symbolName.empty())
-      os << Space() << symbolName;
+      os << space() << symbolName;
     emitCalyxBody(emitBody);
   }
 
@@ -131,7 +131,7 @@ private:
   template <typename Func>
   void emitCalyxSection(Func emitBody, StringRef symbolName = "") {
     if (!symbolName.empty())
-      os << Space() << symbolName;
+      os << space() << symbolName;
     emitCalyxBody(emitBody);
   }
 
@@ -240,7 +240,7 @@ void Emitter::emitComponent(ComponentOp op) {
   // Emit the ports.
   auto ports = getComponentPortInfo(op);
   emitComponentPorts(ports);
-  os << Space() << LBraceEndL();
+  os << space() << LBraceEndL();
   addIndent();
   WiresOp wires;
   ControlOp control;
