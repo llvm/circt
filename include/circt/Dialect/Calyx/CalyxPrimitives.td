@@ -75,11 +75,13 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     more information.
 
     ```mlir
-      // A 1-dimensional, 32-bit memory. Equivalent representation in the native compiler: std_mem_d1(32, 1, 1)
-      %m0.addr0, %m0.write_data, %m0.write_en, %m0.read_data, %m0.done = calyx.memory "m0"<[1] x 32> [1] : i1, i32, i1, i32, i1
+      // A 1-dimensional, 32-bit memory. Equivalent representation in the native compiler:
+      // `m1 = std_mem_d1(32, 1, 1)`
+      %m1.addr0, %m1.write_data, %m1.write_en, %m1.read_data, %m1.done = calyx.memory "m1"<[1] x 32> [1] : i1, i32, i1, i32, i1
 
-      // A 2-dimensional, 8-bit memory. Equivalent representation in the native compiler: std_mem_d2(8, 64, 64, 6, 6)
-      %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i8, i1
+      // A 2-dimensional, 8-bit memory. Equivalent representation in the native compiler:
+      // `m2 = std_mem_d2(8, 64, 64, 6, 6)`
+      %m2.addr0, %m2.addr1, %m2.write_data, %m2.write_en, %m2.read_data, %m2.done = calyx.memory "m2"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i8, i1
     ```
   }];
 

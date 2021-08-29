@@ -17,7 +17,6 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/Support/LLVM.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -87,6 +86,20 @@ private:
     return op->emitOpError(message);
   }
 
+  /// Helper function for emitting a Calyx section. It emits the body in the
+  /// following format:
+  /// {
+  ///   <body>
+  /// }
+  template <typename Func>
+  void emitCalyxBody(Func emitBody) {
+    os << " {\n";
+    addIndent();
+    emitBody();
+    reduceIndent();
+    indent() << "}\n";
+  }
+
   /// Emits a Calyx section.
   template <typename Func>
   void emitCalyxSection(StringRef sectionName, Func emitBody,
@@ -94,12 +107,7 @@ private:
     indent() << sectionName;
     if (!symbolName.empty())
       os << " " << symbolName;
-    os << " {\n";
-    addIndent();
-
-    emitBody();
-    reduceIndent();
-    indent() << "}\n";
+    emitCalyxBody(emitBody);
   }
 
   /// Overloaded version for names that require port emission in the section
@@ -109,12 +117,7 @@ private:
   void emitCalyxSection(Func emitBody, StringRef symbolName = "") {
     if (!symbolName.empty())
       os << " " << symbolName;
-    os << " {\n";
-    addIndent();
-
-    emitBody();
-    reduceIndent();
-    indent() << "}\n";
+    emitCalyxBody(emitBody);
   }
 
   /// Emits the value of a guard or assignment.
