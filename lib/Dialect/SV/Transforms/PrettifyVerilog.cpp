@@ -167,6 +167,9 @@ static unsigned getBlockDepth(Block *block, Block *topBlock) {
 
 /// This method is called on expressions to see if we can sink them down the
 /// region tree.  This is a good thing to do to reduce scope of the expression.
+///
+/// This is called on expressions that may have side effects, and filters out
+/// the side effecting cases late for efficiency.
 void PrettifyVerilogPass::sinkExpression(Operation *op) {
   // Ignore expressions with no users.
   if (op->use_empty())
@@ -177,6 +180,11 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
   // Single-used expressions are the most common and simple to handle.
   if (op->hasOneUse()) {
     if (curOpBlock != op->user_begin()->getBlock()) {
+      // Ok, we're about to make a change, ensure that there are no side
+      // effects.
+      if (!mlir::MemoryEffectOpInterface::hasNoEffect(op))
+        return;
+
       op->moveBefore(*op->user_begin());
       anythingChanged = true;
     }
@@ -219,6 +227,11 @@ void PrettifyVerilogPass::sinkExpression(Operation *op) {
     if (ncaBlockDepth == 0)
       return; // Have a user in the current block.
   }
+
+  // Ok, we're about to make a change, ensure that there are no side
+  // effects.
+  if (!mlir::MemoryEffectOpInterface::hasNoEffect(op))
+    return;
 
   // Ok, we found a common ancestor between all the users that is deeper than
   // the current op.  Sink it into the start of that block.
