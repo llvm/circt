@@ -125,6 +125,10 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   size_t readUnderWrite;
+
+  // Location is carried along but not considered part of the identity of this.
+  Location loc;
+
   bool operator<(const FirMemory &rhs) const {
 #define cmp3way(name)                                                          \
   if (name < rhs.name)                                                         \
@@ -180,12 +184,12 @@ static FirMemory analyzeMemOp(MemOp op) {
     width = 0;
   }
 
-  return {numReadPorts, numWritePorts,    numReadWritePorts, (size_t)width,
-          op.depth(),   op.readLatency(), op.writeLatency(), (size_t)op.ruw()};
+  return {numReadPorts,      numWritePorts,    numReadWritePorts,
+          (size_t)width,     op.depth(),       op.readLatency(),
+          op.writeLatency(), (size_t)op.ruw(), op.getLoc()};
 }
 
-static SmallVector<FirMemory> collectFIRRTLMemories(Operation *op) {
-  auto module = cast<FModuleOp>(op);
+static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
   SmallVector<FirMemory> retval;
   for (auto op : module.getBody().getOps<MemOp>())
     retval.push_back(analyzeMemOp(op));
@@ -329,7 +333,7 @@ private:
   void lowerModuleOperations(hw::HWModuleOp module,
                              CircuitLoweringState &loweringState);
 
-  void lowerMemoryDecls(const SmallVector<FirMemory> &mems, Block *top,
+  void lowerMemoryDecls(ArrayRef<FirMemory> mems,
                         CircuitLoweringState &loweringState);
 };
 
@@ -411,7 +415,7 @@ void FIRRTLModuleLowering::runOnOperation() {
       memories = mergeFIRRTLMemories(memories, collectFIRRTLMemories(m));
   }
   if (!memories.empty())
-    lowerMemoryDecls(memories, topLevelModule, state);
+    lowerMemoryDecls(memories, state);
 
   // Now that we've lowered all of the modules, move the bodies over and update
   // any instances that refer to the old modules.
@@ -444,17 +448,18 @@ void FIRRTLModuleLowering::runOnOperation() {
   circuit.erase();
 }
 
-void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
-                                            Block *top,
+void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                                             CircuitLoweringState &state) {
-  auto b =
-      ImplicitLocOpBuilder::atBlockBegin(UnknownLoc::get(&getContext()), top);
+  assert(!mems.empty());
+  // Insert memories at the bottom of the file.
+  OpBuilder b(state.circuitOp);
+  b.setInsertionPointAfter(state.circuitOp);
   std::array<StringRef, 8> schemaFields = {
       "depth",       "numReadPorts", "numWritePorts", "numReadWritePorts",
       "readLatency", "writeLatency", "width",         "readUnderWrite"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
-  auto schema = b.create<hw::HWGeneratorSchemaOp>("FIRRTLMem", "FIRRTL_Memory",
-                                                  schemaFieldsAttr);
+  auto schema = b.create<hw::HWGeneratorSchemaOp>(
+      mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
   auto memorySchema = b.getSymbolRefAttr(schema);
 
   Type b1Type = IntegerType::get(&getContext(), 1);
@@ -479,12 +484,12 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
     Type bAddrType = IntegerType::get(
         &getContext(), std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
 
-    for (size_t i = 0; i < mem.numReadPorts; ++i) {
+    for (size_t i = 0, e = mem.numReadPorts; i != e; ++i) {
       makePortCommon("ro", i, bAddrType);
-      ports.push_back({b.getStringAttr(("ro_data_" + Twine(i)).str()),
-                       hw::OUTPUT, bDataType, outputPin++});
+      ports.push_back({b.getStringAttr("ro_data_" + Twine(i)), hw::OUTPUT,
+                       bDataType, outputPin++});
     }
-    for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
+    for (size_t i = 0, e = mem.numReadWritePorts; i != e; ++i) {
       makePortCommon("rw", i, bAddrType);
       ports.push_back({b.getStringAttr("rw_wmode_" + Twine(i)), hw::INPUT,
                        b1Type, inputPin++});
@@ -496,14 +501,15 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
                        bDataType, outputPin++});
     }
 
-    for (size_t i = 0; i < mem.numWritePorts; ++i) {
+    for (size_t i = 0, e = mem.numWritePorts; i != e; ++i) {
       makePortCommon("wo", i, bAddrType);
       ports.push_back({b.getStringAttr("wo_mask_" + Twine(i)), hw::INPUT,
                        b1Type, inputPin++});
       ports.push_back({b.getStringAttr("wo_data_" + Twine(i)), hw::INPUT,
                        bDataType, inputPin++});
     }
-    std::array<NamedAttribute, 8> genAttrs = {
+
+    NamedAttribute genAttrs[] = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
         b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
         b.getNamedAttr("numWritePorts",
@@ -518,7 +524,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(const SmallVector<FirMemory> &mems,
 
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));
-    b.create<hw::HWModuleGeneratedOp>(memorySchema, memoryName, ports,
+    b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
                                       StringRef(), genAttrs);
   }
 }
