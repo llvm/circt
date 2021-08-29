@@ -29,6 +29,21 @@ using namespace calyx;
 
 namespace {
 
+static constexpr std::string_view LSquare() { return "["; }
+static constexpr std::string_view RSquare() { return "]"; }
+static constexpr std::string_view LParen() { return "("; }
+static constexpr std::string_view RParen() { return ")"; }
+static constexpr std::string_view colon() { return ": "; }
+static constexpr std::string_view Space() { return " "; }
+static constexpr std::string_view period() { return "."; }
+static constexpr std::string_view equals() { return " = "; }
+static constexpr std::string_view comma() { return ", "; }
+static constexpr std::string_view arrow() { return " -> "; }
+static constexpr std::string_view apostrophe() { return "'"; }
+static constexpr std::string_view LBraceEndL() { return "{\n"; }
+static constexpr std::string_view RBraceEndL() { return "}\n"; }
+static constexpr std::string_view semicolonEndL() { return ";\n"; }
+
 /// An emitter for Calyx dialect operations to .futil output.
 struct Emitter {
   Emitter(llvm::raw_ostream &os) : os(os) {}
@@ -74,25 +89,6 @@ struct Emitter {
   void emitMemory(MemoryOp memory);
 
 private:
-  std::string LBrace() { return "{"; }
-  std::string RBrace() { return "}"; }
-  std::string LSquare() { return "["; }
-  std::string RSquare() { return "]"; }
-  std::string LParen() { return "("; }
-  std::string RParen() { return ")"; }
-  std::string colon() { return ": "; }
-  std::string semicolon() { return ";"; }
-  std::string Space() { return " "; }
-  std::string period() { return "."; }
-  std::string equals() { return " = "; }
-  std::string comma() { return ", "; }
-  std::string arrow() { return " -> "; }
-  std::string apostrophe() { return "'"; }
-  std::string endL() { return "\n"; }
-  std::string LBraceEndL() { return LBrace() + endL(); }
-  std::string RBraceEndL() { return RBrace() + endL(); }
-  std::string semicolonEndL() { return semicolon() + endL(); }
-
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
     encounteredError = true;
