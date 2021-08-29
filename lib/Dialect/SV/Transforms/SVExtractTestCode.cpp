@@ -159,8 +159,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   // Create the module, setting the output path if indicated.
   auto newMod = b.create<hw::HWModuleOp>(
       op.getLoc(),
-      b.getStringAttr((getVerilogModuleNameAttr(op).getValue() + suffix).str()),
-      ports);
+      b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
   if (!path.empty())
     newMod->setAttr("output_file", hw::OutputFileAttr::get(
                                        b.getStringAttr(path),
@@ -182,7 +181,11 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
-  auto bindOp = b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst));
+
+  // FIXME: LLVM PR51665 shouldn't have to rebind symbol here.
+  auto moduleSymbol = b.getSymbolRefAttr(op.getName());
+  auto bindOp =
+      b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst), moduleSymbol);
   if (!fileName.empty())
     bindOp->setAttr(
         "output_file",
