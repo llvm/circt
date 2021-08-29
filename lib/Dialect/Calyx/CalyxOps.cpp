@@ -545,53 +545,79 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 // AssignOp
 //===----------------------------------------------------------------------===//
 
-/// Returns success if `assign` has a valid destination, error otherwise.
-static LogicalResult hasValidDestination(AssignOp assign) {
+/// Returns whether the given value is a port of a component, which are
+/// defined as Block Arguments.
+static bool isComponentPort(Value value) {
+  return value.getImpl()->getKind() == detail::ValueImpl::Kind::BlockArgument;
+}
+
+/// Verifies the given `value` of the AssignOp if it is a component port. The
+/// `isDestination` boolean is used to distinguish whether the value is a source
+/// or a destination.
+static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
+                                                     bool isDestination) {
+  Value value = isDestination ? op.dest() : op.src();
+
+  auto component = op->getParentOfType<ComponentOp>();
+  Block *body = component.getBody();
+  auto it = llvm::find_if(body->getArguments(),
+                          [&](auto arg) { return arg == value; });
+  BlockArgument blockArg = *it;
+  size_t blockArgNum = blockArg.getArgNumber();
+
+  auto ports = getComponentPortInfo(component);
+  assert(blockArgNum < ports.size() &&
+         "Block argument index should be within range of component's ports.");
+  // Within a component, we want to drive component output ports, and be
+  // driven by its input ports.
+  Direction validComponentDirection = isDestination ? Output : Input;
+  return ports[blockArgNum].direction == validComponentDirection
+             ? success()
+             : op.emitOpError()
+                   << "has a component port as the "
+                   << (isDestination ? "destination" : "source")
+                   << " with the incorrect direction. It should be "
+                   << (isDestination ? "Output" : "Input") << ".";
+}
+
+/// Verifies the source of an assignment operation.
+static LogicalResult verifyAssignOpSource(AssignOp assign) {
+  Value src = assign.src();
+  if (isComponentPort(src))
+    return verifyAssignOpWithComponentPort(assign,
+                                           /*isDestination=*/false);
+
+  return success();
+}
+
+/// Verifies the destination of an assignment operation.
+static LogicalResult verifyAssignOpDestination(AssignOp assign) {
   Value dest = assign.dest();
-  if (dest.getImpl()->getKind() == detail::ValueImpl::Kind::BlockArgument) {
-    // Component ports are defined as Block Arguments, and thus are valid
-    // for the destination of an assignment.
-    auto component = assign->getParentOfType<ComponentOp>();
-    Block *body = component.getBody();
-
-    // Within the component, we want to drive the component's output ports.
-    // Verify the given port has Direction::Output.
-    auto it = llvm::find_if(body->getArguments(),
-                            [&](auto arg) { return arg == dest; });
-    BlockArgument blockArg = *it;
-    size_t blockArgNum = blockArg.getArgNumber();
-
-    auto ports = getComponentPortInfo(component);
-    assert(blockArgNum < ports.size() &&
-           "Block argument index should be within range of component's ports.");
-    if (ports[blockArgNum].direction == Direction::Output)
-      return success();
-
-    return assign.emitOpError(
-        "has a component port as the destination with "
-        "the incorrect direction; it should have Direction::Output.");
-  }
+  if (isComponentPort(dest))
+    return verifyAssignOpWithComponentPort(assign,
+                                           /*isDestination=*/true);
 
   Operation *definingOp = dest.getDefiningOp();
-  // TODO(Calyx): Verify for Cells:
+  bool isValidDestination =
+      definingOp->hasTrait<Cell>() || isa<GroupGoOp, GroupDoneOp>(definingOp);
+  if (!isValidDestination)
+    assign->emitOpError(
+        "has an invalid destination port. The destination of an AssignOp "
+        "must be drive-able.");
+
+  return success();
+}
+
+static LogicalResult verifyAssignOp(AssignOp assign) {
+  // TODO(Calyx): Verify for Cells (inverse of components ports):
   // (1) The destination has Direction::Input, and
   // (2) the source has Direction::Output.
   // This is simpler with the completion of the Cell Interface.
   // See: https://github.com/llvm/circt/issues/1597
-  if (definingOp->hasTrait<Cell>() || isa<GroupGoOp, GroupDoneOp>(definingOp))
-    return success();
-  return assign->emitOpError(
-      "has an invalid destination port. The destination of an AssignOp "
-      "must be drive-able.");
-}
-
-static LogicalResult verifyAssignOp(AssignOp assign) {
-  // One thing to note: "if the source of an AssignOp is a component port, it
-  // must have Direction::Input" does not necessarily hold when lowering Calyx.
-  // The inputs of a component may be driven by the compilation group. For a
-  // concrete example, see the RemoveGroups pass.
-
-  return hasValidDestination(assign);
+  return succeeded(verifyAssignOpSource(assign)) &&
+                 succeeded(verifyAssignOpDestination(assign))
+             ? success()
+             : failure();
 }
 
 //===----------------------------------------------------------------------===//
