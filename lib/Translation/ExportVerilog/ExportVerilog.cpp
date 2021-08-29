@@ -72,7 +72,11 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
   return false;
 }
 
-static bool isVerilogExpression(Operation *op) {
+/// This predicate returns true if the specified operation is considered a
+/// potentially inlinable Verilog expression.  These nodes always have a single
+/// result, but may have side effects (e.g. `sv.verbatim.expr.se`).
+/// MemoryEffects should be checked if a client cares.
+bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
     return true;
@@ -1548,12 +1552,11 @@ void NameCollector::collectNames(Block &block) {
   // Loop over all of the results of all of the ops.  Anything that defines a
   // value needs to be noticed.
   for (auto &op : block) {
-    bool isExpr = isVerilogExpression(&op);
-
     // Instances and interface instances are handled in prepareHWModule.
     if (isa<InstanceOp, InterfaceInstanceOp>(op))
       continue;
 
+    bool isExpr = isVerilogExpression(&op);
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
       // name.
