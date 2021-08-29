@@ -2986,11 +2986,14 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       names.addLegalName(module.getArgument(port.argNum), name, module);
   }
 
+  SmallPtrSet<Operation *, 8> moduleOpSet;
+  moduleOpSet.insert(module);
+
   auto moduleNameAttr = module.getNameAttr();
   verifyModuleName(module, moduleNameAttr);
   os << "module " << moduleNameAttr.getValue() << '(';
   if (!portInfo.empty())
-    os << '\n';
+    emitLocationInfoAndNewLine(moduleOpSet);
 
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
@@ -3094,8 +3097,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     os << '\n';
   }
 
-  if (portInfo.empty())
-    os << ");\n";
+  if (portInfo.empty()) {
+    os << ");";
+    emitLocationInfoAndNewLine(moduleOpSet);
+  }
   reduceIndent();
 
   // Emit the body of the module.
