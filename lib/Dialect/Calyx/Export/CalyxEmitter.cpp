@@ -74,6 +74,25 @@ struct Emitter {
   void emitMemory(MemoryOp memory);
 
 private:
+  std::string LBrace() { return "{"; }
+  std::string RBrace() { return "}"; }
+  std::string LSquare() { return "["; }
+  std::string RSquare() { return "]"; }
+  std::string LParen() { return "("; }
+  std::string RParen() { return ")"; }
+  std::string Colon() { return ": "; }
+  std::string Semicolon() { return ";"; }
+  std::string Space() { return " "; }
+  std::string Period() { return "."; }
+  std::string Equals() { return " = "; }
+  std::string Comma() { return ", "; }
+  std::string Arrow() { return " -> "; }
+  std::string Apostrophe() { return "'"; }
+  std::string EndL() { return "\n"; }
+  std::string LBraceEndL() { return LBrace() + EndL(); }
+  std::string RBraceEndL() { return RBrace() + EndL(); }
+  std::string SemicolonEndL() { return Semicolon() + EndL(); }
+
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
     encounteredError = true;
@@ -93,11 +112,11 @@ private:
   /// }
   template <typename Func>
   void emitCalyxBody(Func emitBody) {
-    os << " {\n";
+    os << Space() << LBraceEndL();
     addIndent();
     emitBody();
     reduceIndent();
-    indent() << "}\n";
+    indent() << RBraceEndL();
   }
 
   /// Emits a Calyx section.
@@ -106,7 +125,7 @@ private:
                         StringRef symbolName = "") {
     indent() << sectionName;
     if (!symbolName.empty())
-      os << " " << symbolName;
+      os << Space() << symbolName;
     emitCalyxBody(emitBody);
   }
 
@@ -116,7 +135,7 @@ private:
   template <typename Func>
   void emitCalyxSection(Func emitBody, StringRef symbolName = "") {
     if (!symbolName.empty())
-      os << " " << symbolName;
+      os << Space() << symbolName;
     emitCalyxBody(emitBody);
   }
 
@@ -131,7 +150,7 @@ private:
           auto ports = getComponentPortInfo(op.getReferencedComponent());
           StringAttr portName = ports[portIndex].name;
           (isIndented ? indent() : os)
-              << op.instanceName() << "." << portName.getValue();
+              << op.instanceName() << Period() << portName.getValue();
         })
         .Case<hw::ConstantOp>([&](auto op) {
           // A constant is defined as <bit-width>'<base><value>, where the base
@@ -140,11 +159,9 @@ private:
           // Emit the Radix-10 version of the ConstantOp.
           APInt value = op.value();
 
-          SmallVector<char> stringValue;
-          value.toString(stringValue, /*Radix=*/10, /*Signed=*/false);
-
           (isIndented ? indent() : os)
-              << std::to_string(value.getBitWidth()) << "'d" << stringValue;
+              << std::to_string(value.getBitWidth()) << Apostrophe() << "d";
+          value.print(os, /*isSigned=*/false);
         })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });
@@ -158,9 +175,10 @@ private:
 
     if (op.guard())
       emitOpError(op, "Guards not supported for emission yet.");
-    indent() << group.sym_name() << "[" << portHole << "] = ";
+    indent() << group.sym_name() << LSquare() << portHole << RSquare()
+             << Equals();
     emitValue(op.src(), /*isIndented=*/false);
-    os << ";\n";
+    os << SemicolonEndL();
   }
 
   /// Recursively emits the Calyx control.
@@ -227,7 +245,7 @@ void Emitter::emitComponent(ComponentOp op) {
   // Emit the ports.
   auto ports = getComponentPortInfo(op);
   emitComponentPorts(ports);
-  os << " {\n";
+  os << Space() << LBraceEndL();
   addIndent();
   WiresOp wires;
   ControlOp control;
@@ -250,7 +268,7 @@ void Emitter::emitComponent(ComponentOp op) {
   emitWires(wires);
   emitControl(control);
   reduceIndent();
-  os << "}\n";
+  os << RBraceEndL();
 }
 
 /// Emit the ports of a component.
@@ -264,32 +282,33 @@ void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
   }
 
   auto emitPorts = [&](auto ports) {
-    os << "(";
+    os << LParen();
     for (size_t i = 0, e = ports.size(); i < e; ++i) {
       const auto &port = ports[i];
       auto name = port.name.getValue();
       // We only care about the bit width in the emitted .futil file.
       auto bitWidth = port.type.getIntOrFloatBitWidth();
-      os << name << ": " << bitWidth;
+      os << name << Colon() << bitWidth;
 
       if (i + 1 < e)
-        os << ", ";
+        os << Comma();
     }
-    os << ")";
+    os << RParen();
   };
   emitPorts(inPorts);
-  os << " -> ";
+  os << Arrow();
   emitPorts(outPorts);
 }
 
 void Emitter::emitInstance(InstanceOp op) {
-  indent() << op.instanceName() << " = " << op.componentName() << "();\n";
+  indent() << op.instanceName() << Equals() << op.componentName() << LParen()
+           << RParen() << SemicolonEndL();
 }
 
 void Emitter::emitRegister(RegisterOp reg) {
   size_t bitWidth = reg.inPort().getType().getIntOrFloatBitWidth();
-  indent() << reg.instanceName() << " = "
-           << "std_reg(" << std::to_string(bitWidth) << ");\n";
+  indent() << reg.instanceName() << Equals() << "std_reg" << LParen()
+           << std::to_string(bitWidth) << RParen() << SemicolonEndL();
 }
 
 void Emitter::emitMemory(MemoryOp memory) {
@@ -300,11 +319,12 @@ void Emitter::emitMemory(MemoryOp memory) {
     return;
   }
   indent() << memory.instanceName() << " = std_mem_d"
-           << std::to_string(dimension) << "(" << memory.width() << ", ";
+           << std::to_string(dimension) << LParen() << memory.width()
+           << Comma();
   for (Attribute size : memory.sizes()) {
     APInt memSize = size.cast<IntegerAttr>().getValue();
     memSize.print(os, /*isSigned=*/false);
-    os << ", ";
+    os << Comma();
   }
 
   ArrayAttr addrSizes = memory.addrSizes();
@@ -313,9 +333,9 @@ void Emitter::emitMemory(MemoryOp memory) {
     addrSize.print(os, /*isSigned=*/false);
     if (i + 1 == e)
       continue;
-    os << ", ";
+    os << Comma();
   }
-  os << ");\n";
+  os << RParen() << SemicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {
@@ -324,9 +344,9 @@ void Emitter::emitAssignment(AssignOp op) {
     emitOpError(op, "guard not supported for emission currently");
 
   emitValue(op.dest(), /*isIndented=*/true);
-  os << " = ";
+  os << Equals();
   emitValue(op.src(), /*isIndented=*/false);
-  os << ";\n";
+  os << SemicolonEndL();
 }
 
 void Emitter::emitWires(WiresOp op) {
@@ -360,7 +380,7 @@ void Emitter::emitGroup(GroupOp group) {
 }
 
 void Emitter::emitEnable(EnableOp enable) {
-  indent() << enable.groupName() << ";\n";
+  indent() << enable.groupName() << SemicolonEndL();
 }
 
 void Emitter::emitControl(ControlOp control) {
