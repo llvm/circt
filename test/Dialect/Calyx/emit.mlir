@@ -1,5 +1,8 @@
 // RUN: circt-translate --export-calyx --verify-diagnostics %s | FileCheck %s --strict-whitespace
 
+// CHECK: import "primitives/core.futil";
+// CHECK: import "primitives/binary_operators.futil";
+// CHECK: import "primitives/math.futil";
 calyx.program {
   // CHECK-LABEL: component A(in: 8, go: 1, clk: 1, reset: 1) -> (out: 8, done: 1) {
   calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {

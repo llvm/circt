@@ -39,6 +39,7 @@ static constexpr std::string_view period() { return "."; }
 static constexpr std::string_view equals() { return " = "; }
 static constexpr std::string_view comma() { return ", "; }
 static constexpr std::string_view arrow() { return " -> "; }
+static constexpr std::string_view delimiter() { return "\""; }
 static constexpr std::string_view apostrophe() { return "'"; }
 static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
@@ -59,6 +60,17 @@ struct Emitter {
 
   // Program emission
   void emitProgram(ProgramOp op);
+
+  /// Import emission.
+  /// TODO(Calyx): Only import a library if a primitive is used from it.
+  void emitAllImports() {
+    auto emitImport = [&](StringRef path) {
+      os << "import " << delimiter() << path << delimiter() << semicolonEndL();
+    };
+    emitImport("primitives/core.futil");
+    emitImport("primitives/binary_operators.futil");
+    emitImport("primitives/math.futil");
+  }
 
   // Component emission
   void emitComponent(ComponentOp op);
@@ -390,6 +402,7 @@ void Emitter::emitControl(ControlOp control) {
 mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
                                               llvm::raw_ostream &os) {
   Emitter emitter(os);
+  emitter.emitAllImports();
   for (auto &op : *module.getBody()) {
     if (auto programOp = dyn_cast<ProgramOp>(op))
       emitter.emitProgram(programOp);
