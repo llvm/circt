@@ -10,6 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// Base class for Calyx primitives.
+class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
+  CalyxCell<mnemonic, traits> {
+    let assemblyFormat = "$instanceName attr-dict `:` type(results)";
+    let arguments = (ins StrAttr:$instanceName);
+    let skipDefaultBuilders = 1;
+}
+
 def RegisterOp : CalyxPrimitive<"register", [
     SameTypeConstraint<"in", "out">
   ]> {
@@ -53,9 +61,7 @@ def RegisterOp : CalyxPrimitive<"register", [
 
 }
 
-def MemoryOp : CalyxPrimitive<"memory", [
-    HasParent<"ComponentOp">
-  ]> {
+def MemoryOp : CalyxPrimitive<"memory", []> {
   let summary = "Defines a memory";
   let description = [{
     The "calyx.memory" op defines a memory. Memories can have any number of
@@ -69,7 +75,10 @@ def MemoryOp : CalyxPrimitive<"memory", [
     more information.
 
     ```mlir
-      // A 2-dimensional, 8-bit memory.
+      // A 1-dimensional, 32-bit memory. Equivalent representation in the native compiler: std_mem_d1(32, 1, 1)
+      %m0.addr0, %m0.write_data, %m0.write_en, %m0.read_data, %m0.done = calyx.memory "m0"<[1] x 32> [1] : i1, i32, i1, i32, i1
+
+      // A 2-dimensional, 8-bit memory. Equivalent representation in the native compiler: std_mem_d2(8, 64, 64, 6, 6)
       %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i8, i1
     ```
   }];

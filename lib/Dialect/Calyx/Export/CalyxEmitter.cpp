@@ -17,9 +17,9 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include <type_traits>
 
 using namespace circt;
 using namespace calyx;
@@ -91,8 +91,7 @@ private:
   template <typename Func>
   void emitCalyxSection(StringRef sectionName, Func emitBody,
                         StringRef symbolName = "") {
-    if (!sectionName.empty())
-      indent() << sectionName;
+    indent() << sectionName;
     if (!symbolName.empty())
       os << " " << symbolName;
     os << " {\n";
@@ -104,7 +103,8 @@ private:
   }
 
   /// Overloaded version for names that require port emission in the section
-  /// name as well, e.g. WhileOp, IfOp.
+  /// name as well, e.g. WhileOp has the following section name:
+  ///      while <port-name> with <group-name> { ... }
   template <typename Func>
   void emitCalyxSection(Func emitBody, StringRef symbolName = "") {
     if (!symbolName.empty())
@@ -150,6 +150,9 @@ private:
   /// Emits a port for a Group.
   template <typename OpTy>
   void emitGroupPort(GroupOp group, OpTy op, StringRef portHole) {
+    assert((isa<GroupGoOp>(op) || isa<GroupDoneOp>(op)) &&
+           "Required to be a group port.");
+
     if (op.guard())
       emitOpError(op, "Guards not supported for emission yet.");
     indent() << group.sym_name() << "[" << portHole << "] = ";
@@ -158,8 +161,9 @@ private:
   }
 
   /// Recursively emits the Calyx control.
-  template <typename ControlOpTy>
-  void emitCalyxControl(ControlOpTy controlOp) {
+  template <typename OpTy>
+  void emitCalyxControl(OpTy controlOp) {
+    // Check to see if this is a stand-alone EnableOp.
     if (isa<EnableOp>(controlOp)) {
       emitEnable(cast<EnableOp>(controlOp));
       return;
@@ -282,8 +286,7 @@ void Emitter::emitInstance(InstanceOp op) {
 void Emitter::emitRegister(RegisterOp reg) {
   size_t bitWidth = reg.inPort().getType().getIntOrFloatBitWidth();
   indent() << reg.instanceName() << " = "
-           << "std_reg"
-           << "(" << std::to_string(bitWidth) << ");\n";
+           << "std_reg(" << std::to_string(bitWidth) << ");\n";
 }
 
 void Emitter::emitMemory(MemoryOp memory) {
