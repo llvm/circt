@@ -71,9 +71,14 @@ struct LoweringOptions {
   /// support them (e.g. Yosys).
   bool disallowPackedArrays = false;
 
+  /// If true, lowering will not emit locally scoped "automatic" or logic
+  /// declarations, emitting top level wire and reg's instead.
+  bool disallowLocalVariables = false;
+
   /// This is the target width of lines in an emitted verilog source file in
   /// columns.
-  unsigned emittedLineLength = 90;
+  enum { DEFAULT_LINE_LENGTH = 90 };
+  unsigned emittedLineLength = DEFAULT_LINE_LENGTH;
 };
 
 /// Register commandline options for the verilog emitter.

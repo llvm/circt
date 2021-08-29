@@ -45,11 +45,13 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       allowExprInEventControl = true;
     } else if (option == "disallowPackedArrays") {
       disallowPackedArrays = true;
+    } else if (option == "disallowLocalVariables") {
+      disallowLocalVariables = true;
     } else if (option.startswith("emittedLineLength=")) {
       option = option.drop_front(strlen("emittedLineLength="));
       if (option.getAsInteger(10, emittedLineLength)) {
         errorHandler("expected integer source width");
-        emittedLineLength = 90;
+        emittedLineLength = DEFAULT_LINE_LENGTH;
       }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
@@ -67,7 +69,10 @@ std::string LoweringOptions::toString() const {
     options += "exprInEventControl,";
   if (disallowPackedArrays)
     options += "disallowPackedArrays,";
-  if (emittedLineLength != 90)
+  if (disallowLocalVariables)
+    options += "disallowLocalVariables,";
+
+  if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
 
   // Remove a trailing comma if present.
