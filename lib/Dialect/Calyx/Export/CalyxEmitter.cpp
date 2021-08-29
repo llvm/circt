@@ -19,6 +19,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <type_traits>
 
 using namespace circt;
 using namespace calyx;
@@ -56,13 +57,22 @@ struct Emitter {
   void emitWires(WiresOp op);
 
   // Group emission
-  void emitGroup(GroupOp op);
+  void emitGroup(GroupOp group);
 
   // Control emission
-  void emitControl(ControlOp op);
+  void emitControl(ControlOp control);
 
   // Assignment emission
   void emitAssignment(AssignOp op);
+
+  // Enable emission
+  void emitEnable(EnableOp enable);
+
+  // Register emission
+  void emitRegister(RegisterOp reg);
+
+  // Memory emission
+  void emitMemory(MemoryOp memory);
 
 private:
   /// Emit an error and remark that emission failed.
@@ -81,7 +91,22 @@ private:
   template <typename Func>
   void emitCalyxSection(StringRef sectionName, Func emitBody,
                         StringRef symbolName = "") {
-    indent() << sectionName;
+    if (!sectionName.empty())
+      indent() << sectionName;
+    if (!symbolName.empty())
+      os << " " << symbolName;
+    os << " {\n";
+    addIndent();
+
+    emitBody();
+    reduceIndent();
+    indent() << "}\n";
+  }
+
+  /// Overloaded version for names that require port emission in the section
+  /// name as well, e.g. WhileOp, IfOp.
+  template <typename Func>
+  void emitCalyxSection(Func emitBody, StringRef symbolName = "") {
     if (!symbolName.empty())
       os << " " << symbolName;
     os << " {\n";
@@ -120,6 +145,47 @@ private:
         })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });
+  }
+
+  /// Emits a port for a Group.
+  template <typename OpTy>
+  void emitGroupPort(GroupOp group, OpTy op, StringRef portHole) {
+    if (op.guard())
+      emitOpError(op, "Guards not supported for emission yet.");
+    indent() << group.sym_name() << "[" << portHole << "] = ";
+    emitValue(op.src(), /*isIndented=*/false);
+    os << ";\n";
+  }
+
+  /// Recursively emits the Calyx control.
+  template <typename ControlOpTy>
+  void emitCalyxControl(ControlOpTy controlOp) {
+    if (isa<EnableOp>(controlOp)) {
+      emitEnable(cast<EnableOp>(controlOp));
+      return;
+    }
+    for (auto &&bodyOp : *controlOp.getBody()) {
+      TypeSwitch<Operation *>(&bodyOp)
+          .template Case<SeqOp>([&](auto op) {
+            emitCalyxSection("seq", [&]() { emitCalyxControl(op); });
+          })
+          .template Case<WhileOp>([&](auto op) {
+            indent() << "while ";
+            emitValue(op.cond(), /*isIndented=*/false);
+            os << " with " << op.groupName();
+            emitCalyxSection([&]() { emitCalyxControl(op); });
+          })
+          .template Case<IfOp>([&](auto op) {
+            indent() << "if ";
+            emitValue(op.cond(), /*isIndented=*/false);
+            os << " with " << op.groupName();
+            emitCalyxSection([&]() { emitCalyxControl(op); });
+          })
+          .template Case<EnableOp>([&](auto op) { emitEnable(op); })
+          .Default([&](auto op) {
+            emitOpError(op, "not supported for emission inside control.");
+          });
+    }
   }
 
   /// The stream we are emitting into.
@@ -166,6 +232,8 @@ void Emitter::emitComponent(ComponentOp op) {
           .Case<WiresOp>([&](auto op) { wires = op; })
           .Case<ControlOp>([&](auto op) { control = op; })
           .Case<InstanceOp>([&](auto op) { emitInstance(op); })
+          .Case<RegisterOp>([&](auto op) { emitRegister(op); })
+          .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });
@@ -211,6 +279,39 @@ void Emitter::emitInstance(InstanceOp op) {
   indent() << op.instanceName() << " = " << op.componentName() << "();\n";
 }
 
+void Emitter::emitRegister(RegisterOp reg) {
+  size_t bitWidth = reg.inPort().getType().getIntOrFloatBitWidth();
+  indent() << reg.instanceName() << " = "
+           << "std_reg"
+           << "(" << std::to_string(bitWidth) << ");\n";
+}
+
+void Emitter::emitMemory(MemoryOp memory) {
+  size_t dimension = memory.sizes().size();
+  if (dimension < 1 || dimension > 4) {
+    emitOpError(memory, "Only memories with dimensionality in range [1, 4] are "
+                        "supported by the native Calyx compiler.");
+    return;
+  }
+  indent() << memory.instanceName() << " = std_mem_d"
+           << std::to_string(dimension) << "(" << memory.width() << ", ";
+  for (Attribute size : memory.sizes()) {
+    APInt memSize = size.cast<IntegerAttr>().getValue();
+    memSize.print(os, /*isSigned=*/false);
+    os << ", ";
+  }
+
+  ArrayAttr addrSizes = memory.addrSizes();
+  for (size_t i = 0, e = addrSizes.size(); i != e; ++i) {
+    APInt addrSize = addrSizes[i].cast<IntegerAttr>().getValue();
+    addrSize.print(os, /*isSigned=*/false);
+    if (i + 1 == e)
+      continue;
+    os << ", ";
+  }
+  os << ");\n";
+}
+
 void Emitter::emitAssignment(AssignOp op) {
   // TODO(Calyx): Support guards.
   if (op.guard())
@@ -236,25 +337,28 @@ void Emitter::emitWires(WiresOp op) {
   });
 }
 
-void Emitter::emitGroup(GroupOp op) {
+void Emitter::emitGroup(GroupOp group) {
   auto emitGroupBody = [&]() {
-    for (auto &&bodyOp : *op.getBody()) {
+    for (auto &&bodyOp : *group.getBody()) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<GroupDoneOp>([&](auto op) { /* TODO(Calyx): Unimplemented */ })
-          .Case<GroupGoOp>([&](auto op) { /* TODO(Calyx): Unimplemented */ })
+          .Case<GroupDoneOp>([&](auto op) { emitGroupPort(group, op, "done"); })
+          .Case<GroupGoOp>([&](auto op) { emitGroupPort(group, op, "go"); })
           .Case<hw::ConstantOp>([&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
-            emitOpError(op, "not supported for emission inside group");
+            emitOpError(op, "not supported for emission inside group.");
           });
     }
   };
-  emitCalyxSection("group", emitGroupBody, op.sym_name());
+  emitCalyxSection("group", emitGroupBody, group.sym_name());
 }
 
-void Emitter::emitControl(ControlOp op) {
-  // TODO(Calyx): SeqOp, EnableOp.
-  emitCalyxSection("control", [&]() {});
+void Emitter::emitEnable(EnableOp enable) {
+  indent() << enable.groupName() << ";\n";
+}
+
+void Emitter::emitControl(ControlOp control) {
+  emitCalyxSection("control", [&]() { emitCalyxControl(control); });
 }
 
 //===----------------------------------------------------------------------===//
