@@ -309,7 +309,7 @@ calyx.program {
   calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
     %c1_1 = constant 1 : i1
     calyx.wires {
-      // expected-error @+1 {{'calyx.assign' op has an invalid destination port. The destination of an AssignOp must be driveable.}}
+      // expected-error @+1 {{'calyx.assign' op has an invalid destination port. The destination of an AssignOp must be drive-able.}}
       calyx.assign %c1_1 = %go : i1
     }
     calyx.control {}

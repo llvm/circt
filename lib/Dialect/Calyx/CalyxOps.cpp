@@ -545,8 +545,7 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 // AssignOp
 //===----------------------------------------------------------------------===//
 
-/// Returns true if `value` is valid destination for an AssignOp, false
-/// otherwise.
+/// Returns success if `assign` has a valid destination, error otherwise.
 static LogicalResult hasValidDestination(AssignOp assign) {
   Value dest = assign.dest();
   if (dest.getImpl()->getKind() == detail::ValueImpl::Kind::BlockArgument) {
@@ -583,10 +582,15 @@ static LogicalResult hasValidDestination(AssignOp assign) {
     return success();
   return assign->emitOpError(
       "has an invalid destination port. The destination of an AssignOp "
-      "must be driveable.");
+      "must be drive-able.");
 }
 
 static LogicalResult verifyAssignOp(AssignOp assign) {
+  // One thing to note: "if the source of an AssignOp is a component port, it
+  // must have Direction::Input" does not necessarily hold when lowering Calyx.
+  // The inputs of a component may be driven by the compilation group. For a
+  // concrete example, see the RemoveGroups pass.
+
   return hasValidDestination(assign);
 }
 
