@@ -551,7 +551,7 @@ static bool isComponentPort(Value value) {
   return value.getImpl()->getKind() == detail::ValueImpl::Kind::BlockArgument;
 }
 
-/// Verifies the given `value` of the AssignOp if it is a component port. The
+/// Verifies the given value of the AssignOp if it is a component port. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
 /// or a destination.
 static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
@@ -580,16 +580,6 @@ static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
                    << (isDestination ? "Output" : "Input") << ".";
 }
 
-/// Verifies the source of an assignment operation.
-static LogicalResult verifyAssignOpSource(AssignOp assign) {
-  Value src = assign.src();
-  if (isComponentPort(src))
-    return verifyAssignOpWithComponentPort(assign,
-                                           /*isDestination=*/false);
-
-  return success();
-}
-
 /// Verifies the destination of an assignment operation.
 static LogicalResult verifyAssignOpDestination(AssignOp assign) {
   Value dest = assign.dest();
@@ -608,14 +598,24 @@ static LogicalResult verifyAssignOpDestination(AssignOp assign) {
   return success();
 }
 
+/// Verifies the source of an assignment operation.
+static LogicalResult verifyAssignOpSource(AssignOp assign) {
+  Value src = assign.src();
+  if (isComponentPort(src))
+    return verifyAssignOpWithComponentPort(assign,
+                                           /*isDestination=*/false);
+
+  return success();
+}
+
 static LogicalResult verifyAssignOp(AssignOp assign) {
-  // TODO(Calyx): Verify for Cells (inverse of components ports):
+  // TODO(Calyx): Verification for Cell trait (inverse of components ports):
   // (1) The destination has Direction::Input, and
   // (2) the source has Direction::Output.
   // This is simpler with the completion of the Cell Interface.
   // See: https://github.com/llvm/circt/issues/1597
-  return succeeded(verifyAssignOpSource(assign)) &&
-                 succeeded(verifyAssignOpDestination(assign))
+  return succeeded(verifyAssignOpDestination(assign)) &&
+                 succeeded(verifyAssignOpSource(assign))
              ? success()
              : failure();
 }
