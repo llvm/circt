@@ -486,36 +486,30 @@ static Value adjustBitWidth(Location loc, ConversionPatternRewriter &rewriter,
 
 /// Recursively clone the init origin of a sig operation into the init function,
 /// up to the initial constant value(s). This is required to clone the
-/// initialization of array and tuple signals, where the init operant cannot
+/// initialization of array and struct signals, where the init operant cannot
 /// originate from a constant operation. Integer constants are currently assumed
 /// to come from a constant operation.
 static Operation *recursiveCloneInit(OpBuilder &initBuilder, Operation *op) {
-  if (auto arrayUniformOp = dyn_cast<ArrayUniformOp>(op)) {
-    auto init =
-        recursiveCloneInit(initBuilder, op->getOperand(0).getDefiningOp());
-    auto def = initBuilder.insert(arrayUniformOp.clone());
-    def->setOperand(0, init->getResult(0));
-    return def;
-  }
-
-  if (auto arrayOp = dyn_cast<ArrayOp>(op)) {
-    auto def = cast<ArrayOp>(initBuilder.insert(arrayOp.clone()));
+  if (auto arrayCreateOp = dyn_cast<hw::ArrayCreateOp>(op)) {
+    auto def =
+        cast<hw::ArrayCreateOp>(initBuilder.insert(arrayCreateOp.clone()));
     initBuilder.setInsertionPoint(def.getOperation());
-    for (size_t i = 0, e = def.values().size(); i < e; ++i) {
+    for (size_t i = 0, e = def.inputs().size(); i < e; ++i) {
       auto clone =
-          recursiveCloneInit(initBuilder, def.values()[i].getDefiningOp());
+          recursiveCloneInit(initBuilder, def.inputs()[i].getDefiningOp());
       def.setOperand(i, clone->getResult(0));
     }
     initBuilder.setInsertionPointAfter(def.getOperation());
     return def;
   }
 
-  if (auto tupleOp = dyn_cast<TupleOp>(op)) {
-    auto def = cast<TupleOp>(initBuilder.insert(tupleOp.clone()));
+  if (auto structCreateOp = dyn_cast<hw::StructCreateOp>(op)) {
+    auto def =
+        cast<hw::StructCreateOp>(initBuilder.insert(structCreateOp.clone()));
     initBuilder.setInsertionPoint(def.getOperation());
-    for (size_t i = 0, e = def.values().size(); i < e; ++i) {
+    for (size_t i = 0, e = def.input().size(); i < e; ++i) {
       auto clone =
-          recursiveCloneInit(initBuilder, def.values()[i].getDefiningOp());
+          recursiveCloneInit(initBuilder, def.input()[i].getDefiningOp());
       def.setOperand(i, clone->getResult(0));
     }
     initBuilder.setInsertionPointAfter(def.getOperation());
@@ -525,11 +519,11 @@ static Operation *recursiveCloneInit(OpBuilder &initBuilder, Operation *op) {
   return initBuilder.insert(op->clone());
 }
 
-/// Check if the given type is either of LLHD's ArrayType, TupleType, or LLVM
+/// Check if the given type is either of LLHD's ArrayType, StructType, or LLVM
 /// array or struct type.
-static bool isArrayOrTuple(Type type) {
-  return type
-      .isa<LLVM::LLVMArrayType, LLVM::LLVMStructType, ArrayType, TupleType>();
+static bool isArrayOrStruct(Type type) {
+  return type.isa<LLVM::LLVMArrayType, LLVM::LLVMStructType, hw::ArrayType,
+                  hw::StructType>();
 }
 
 /// Extract a slice from an integer value.
@@ -564,7 +558,7 @@ shiftIntegerSigPointer(Location loc, LLVM::LLVMDialect *dialect,
   return std::make_pair(newPtr, bitOffset);
 }
 
-/// Shift the pointer of a structured-type (array or tuple) signal, to change
+/// Shift the pointer of a structured-type (array or struct) signal, to change
 /// its view as if the desired slice/element was extracted.
 static Value shiftStructuredSigPointer(Location loc,
                                        ConversionPatternRewriter &rewriter,
@@ -707,14 +701,17 @@ static Type convertPtrType(PtrType type, LLVMTypeConverter &converter) {
       converter.convertType(type.getUnderlyingType()));
 }
 
-static Type convertArrayType(ArrayType type, LLVMTypeConverter &converter) {
+static Type convertArrayType(hw::ArrayType type, LLVMTypeConverter &converter) {
   auto elementTy = converter.convertType(type.getElementType());
-  return LLVM::LLVMArrayType::get(elementTy, type.getLength());
+  return LLVM::LLVMArrayType::get(elementTy, type.getSize());
 }
 
-static Type convertTupleType(TupleType type, LLVMTypeConverter &converter) {
+static Type convertStructType(hw::StructType type,
+                              LLVMTypeConverter &converter) {
   llvm::SmallVector<Type, 8> elements;
-  for (auto elemTy : type.getTypes())
+  mlir::SmallVector<mlir::Type> types;
+  type.getInnerTypes(types);
+  for (auto elemTy : types)
     elements.push_back(converter.convertType(elemTy));
   return LLVM::LLVMStructType::getLiteral(&converter.getContext(), elements);
 }
@@ -1548,7 +1545,7 @@ struct PrbOpConversion : public ConvertToLLVMPattern {
       return success();
     }
 
-    if (resTy.isa<ArrayType, TupleType>()) {
+    if (resTy.isa<hw::ArrayType, hw::StructType>()) {
       auto bitcast = rewriter.create<LLVM::BitcastOp>(
           op->getLoc(), LLVM::LLVMPointerType::get(finalTy), sigDetail[0]);
       rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, finalTy, bitcast);
@@ -1603,7 +1600,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
     // Get signal width.
     Value sigWidth;
     auto underlyingTy = drvOp.value().getType();
-    if (isArrayOrTuple(underlyingTy)) {
+    if (isArrayOrStruct(underlyingTy)) {
       auto llvmPtrTy =
           LLVM::LLVMPointerType::get(typeConverter->convertType(underlyingTy));
       auto oneC = rewriter.create<LLVM::ConstantOp>(
@@ -1877,13 +1874,13 @@ struct ShrOpConversion : public ConvertToLLVMPattern {
 
       return success();
     }
-    if (auto arrTy = shrOp.result().getType().dyn_cast<ArrayType>()) {
+    if (auto arrTy = shrOp.result().getType().dyn_cast<hw::ArrayType>()) {
       auto baseTy = typeConverter->convertType(shrOp.base().getType());
       auto hiddenTy = typeConverter->convertType(shrOp.hidden().getType());
-      auto combinedTy = llhd::ArrayType::get(
+      auto combinedTy = hw::ArrayType::get(
+          arrTy.getElementType(),
           baseTy.cast<LLVM::LLVMArrayType>().getNumElements() +
-              hiddenTy.cast<LLVM::LLVMArrayType>().getNumElements(),
-          arrTy.getElementType());
+              hiddenTy.cast<LLVM::LLVMArrayType>().getNumElements());
 
       auto combinedArrayInit = rewriter.create<LLVM::UndefOp>(
           op->getLoc(), typeConverter->convertType(combinedTy));
@@ -2214,21 +2211,22 @@ struct HWConstantOpConversion : public ConvertToLLVMPattern {
 namespace {
 /// Convert an ArrayOp operation to the LLVM dialect. An equivalent and
 /// initialized llvm dialect array type is generated.
-struct ArrayOpConversion : public ConvertToLLVMPattern {
-  explicit ArrayOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::ArrayOp::getOperationName(), ctx,
+struct HWArrayCreateOpConversion : public ConvertToLLVMPattern {
+  explicit HWArrayCreateOpConversion(MLIRContext *ctx,
+                                     LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(hw::ArrayCreateOp::getOperationName(), ctx,
                              typeConverter) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    ArrayOpAdaptor transformed(operands);
+    hw::ArrayCreateOpAdaptor transformed(operands);
     auto arrayTy = typeConverter->convertType(op->getResult(0).getType());
 
     Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
-    for (size_t i = 0, e = transformed.values().size(); i < e; ++i) {
+    for (size_t i = 0, e = transformed.inputs().size(); i < e; ++i) {
       arr = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arrayTy, arr,
-                                                 transformed.values()[i],
+                                                 transformed.inputs()[i],
                                                  rewriter.getI32ArrayAttr(i));
     }
 
@@ -2239,54 +2237,25 @@ struct ArrayOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
-/// Convert an ArrayUniformOp operation to the LLVM dialect. An equivalent llvm
-/// dialect array type is generated, which values are all initialized to the
-/// `init` operand's value.
-struct ArrayUniformOpConversion : public ConvertToLLVMPattern {
-  explicit ArrayUniformOpConversion(MLIRContext *ctx,
-                                    LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::ArrayUniformOp::getOperationName(), ctx,
+/// Convert a StructCreateOp operation to the LLVM dialect. An equivalent and
+/// initialized llvm dialect struct type is generated.
+struct HWStructCreateOpConversion : public ConvertToLLVMPattern {
+  explicit HWStructCreateOpConversion(MLIRContext *ctx,
+                                      LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(hw::StructCreateOp::getOperationName(), ctx,
                              typeConverter) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    ArrayUniformOpAdaptor transformed(operands);
-    auto arrayTy = typeConverter->convertType(op->getResult(0).getType());
-
-    Value arr = rewriter.create<LLVM::UndefOp>(op->getLoc(), arrayTy);
-    for (size_t i = 0, e = arrayTy.cast<LLVM::LLVMArrayType>().getNumElements();
-         i < e; ++i) {
-      arr = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), arrayTy, arr,
-                                                 transformed.init(),
-                                                 rewriter.getI32ArrayAttr(i));
-    }
-
-    rewriter.replaceOp(op, arr);
-    return success();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert a TupleOp operation to the LLVM dialect. An equivalent and
-/// initialized llvm dialect tuple type is generated.
-struct TupleOpConversion : public ConvertToLLVMPattern {
-  explicit TupleOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::TupleOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    TupleOpAdaptor transformed(operands);
+    hw::StructCreateOpAdaptor transformed(operands);
     auto resTy = typeConverter->convertType(op->getResult(0).getType());
 
     Value tup = rewriter.create<LLVM::UndefOp>(op->getLoc(), resTy);
     for (size_t i = 0, e = resTy.cast<LLVM::LLVMStructType>().getBody().size();
          i < e; ++i) {
       tup = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), resTy, tup,
-                                                 transformed.values()[i],
+                                                 transformed.input()[i],
                                                  rewriter.getI32ArrayAttr(i));
     }
 
@@ -2350,7 +2319,8 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
         rewriter.replaceOp(op, createSubSig(&getDialect(), rewriter,
                                             op->getLoc(), sigDetail,
                                             adjusted.first, adjusted.second));
-      } else if (auto arrTy = resTy.getUnderlyingType().dyn_cast<ArrayType>()) {
+      } else if (auto arrTy =
+                     resTy.getUnderlyingType().dyn_cast<hw::ArrayType>()) {
         auto llvmArrTy = typeConverter->convertType(arrTy);
         auto adjustedPtr = shiftArraySigPointer(
             op->getLoc(), rewriter, llvmArrTy, sigDetail[0], startConst);
@@ -2360,7 +2330,7 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
       }
       return success();
     }
-    if (auto arrTy = extsOp.result().getType().dyn_cast<ArrayType>()) {
+    if (auto arrTy = extsOp.result().getType().dyn_cast<hw::ArrayType>()) {
       auto elemTy = typeConverter->convertType(arrTy.getElementType());
       auto llvmArrTy = typeConverter->convertType(arrTy);
       size_t startIndex = extsOp.startAttr().getInt();
@@ -2369,7 +2339,7 @@ struct ExtractSliceOpConversion : public ConvertToLLVMPattern {
           op->getLoc(), typeConverter->convertType(arrTy));
 
       // Insert all affected elements into the new slice.
-      for (size_t i = 0, e = arrTy.getLength(); i < e; ++i) {
+      for (size_t i = 0, e = arrTy.getSize(); i < e; ++i) {
         auto extract = rewriter.create<LLVM::ExtractValueOp>(
             op->getLoc(), elemTy, transformed.target(),
             rewriter.getI32ArrayAttr(i + startIndex));
@@ -2431,7 +2401,8 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
         rewriter.replaceOp(op, createSubSig(&getDialect(), rewriter,
                                             op->getLoc(), sigDetail,
                                             adjusted.first, adjusted.second));
-      } else if (auto arrTy = resTy.getUnderlyingType().dyn_cast<ArrayType>()) {
+      } else if (auto arrTy =
+                     resTy.getUnderlyingType().dyn_cast<hw::ArrayType>()) {
         auto llvmArrTy = typeConverter->convertType(arrTy);
 
         auto adjustedPtr =
@@ -2444,7 +2415,7 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
       return success();
     }
 
-    if (auto arrTy = extsOp.result().getType().dyn_cast<ArrayType>()) {
+    if (auto arrTy = extsOp.result().getType().dyn_cast<hw::ArrayType>()) {
       auto elemTy = typeConverter->convertType(arrTy.getElementType());
       auto llvmArrTy = typeConverter->convertType(arrTy);
       auto targetTy = transformed.target().getType();
@@ -2464,7 +2435,7 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
       rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.target(),
                                      targetPtr);
       Value slice = rewriter.create<LLVM::UndefOp>(op->getLoc(), llvmArrTy);
-      for (size_t i = 0, e = arrTy.getLength(); i < e; ++i) {
+      for (size_t i = 0, e = arrTy.getSize(); i < e; ++i) {
         auto indexC = rewriter.create<LLVM::ConstantOp>(
             op->getLoc(), zextStart.getType(), rewriter.getI64IntegerAttr(i));
         auto adjustedIndex =
@@ -2501,7 +2472,7 @@ struct ExtractElementOpConversion : public ConvertToLLVMPattern {
     auto extOp = cast<llhd::ExtractElementOp>(op);
     llhd::ExtractElementOpAdaptor transformed(operands);
 
-    if (isArrayOrTuple(extOp.target().getType())) {
+    if (isArrayOrStruct(extOp.target().getType())) {
       rewriter.replaceOpWithNewOp<LLVM::ExtractValueOp>(
           op, typeConverter->convertType(extOp.result().getType()),
           transformed.target(), rewriter.getArrayAttr(extOp.indexAttr()));
@@ -2520,7 +2491,7 @@ struct ExtractElementOpConversion : public ConvertToLLVMPattern {
                                                       extOp.indexAttr());
 
       Value adjusted;
-      if (auto arrTy = sigTy.getUnderlyingType().dyn_cast<ArrayType>()) {
+      if (auto arrTy = sigTy.getUnderlyingType().dyn_cast<hw::ArrayType>()) {
         auto llvmArrTy = typeConverter->convertType(arrTy);
         adjusted = shiftArraySigPointer(op->getLoc(), rewriter, llvmArrTy,
                                         sigDetail[0], indexC);
@@ -2560,7 +2531,7 @@ struct DynExtractElementOpConversion : public ConvertToLLVMPattern {
     auto extOp = cast<llhd::DynExtractElementOp>(op);
     DynExtractElementOpAdaptor transformed(operands);
 
-    if (extOp.target().getType().isa<ArrayType, TupleType>()) {
+    if (extOp.target().getType().isa<hw::ArrayType, hw::StructType>()) {
       auto elemTy = typeConverter->convertType(extOp.getResult().getType());
 
       auto zeroC = rewriter.create<LLVM::ConstantOp>(
@@ -2583,7 +2554,7 @@ struct DynExtractElementOpConversion : public ConvertToLLVMPattern {
       return success();
     }
     if (auto sigTy = extOp.target().getType().dyn_cast<SigType>()) {
-      if (auto arrTy = sigTy.getUnderlyingType().dyn_cast<ArrayType>()) {
+      if (auto arrTy = sigTy.getUnderlyingType().dyn_cast<hw::ArrayType>()) {
         auto llvmArrTy = typeConverter->convertType(arrTy);
 
         auto sigDetail =
@@ -2699,7 +2670,7 @@ struct InsertSliceOpConversion : public ConvertToLLVMPattern {
 
       return success();
     }
-    if (auto arrTy = inssOp.result().getType().dyn_cast<ArrayType>()) {
+    if (auto arrTy = inssOp.result().getType().dyn_cast<hw::ArrayType>()) {
       auto elemTy = typeConverter->convertType(arrTy.getElementType());
       auto llvmArrTy = typeConverter->convertType(arrTy);
       auto llvmSliceTy = transformed.slice().getType();
@@ -2862,8 +2833,9 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
-  patterns.add<ConstOpConversion, HWConstantOpConversion, ArrayOpConversion,
-               ArrayUniformOpConversion, TupleOpConversion>(ctx, converter);
+  patterns.add<ConstOpConversion, HWConstantOpConversion,
+               HWArrayCreateOpConversion, HWStructCreateOpConversion>(
+      ctx, converter);
 
   // Extract conversion patterns.
   patterns.add<ExtractSliceOpConversion, DynExtractSliceOpConversion,
@@ -2922,9 +2894,9 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
   converter.addConversion(
       [&](PtrType ptr) { return convertPtrType(ptr, converter); });
   converter.addConversion(
-      [&](ArrayType arr) { return convertArrayType(arr, converter); });
+      [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
   converter.addConversion(
-      [&](TupleType tup) { return convertTupleType(tup, converter); });
+      [&](hw::StructType tup) { return convertStructType(tup, converter); });
 
   // Apply a partial conversion first, lowering only the instances, to generate
   // the init function.

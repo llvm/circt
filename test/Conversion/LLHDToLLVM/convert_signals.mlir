@@ -21,9 +21,9 @@
 // CHECK:         }
 llhd.entity @convert_sig () -> () {
   %init = llhd.const 0 : i1
-  %initArr = llhd.array_uniform %init : !llhd.array<4xi1>
+  %initArr = hw.array_create %init, %init, %init, %init : i1
   %s0 = llhd.sig "sig0" %init : i1
-  %s1 = llhd.sig "sig1" %initArr : !llhd.array<4xi1>
+  %s1 = llhd.sig "sig1" %initArr : !hw.array<4xi1>
 }
 
 // CHECK-LABEL:   llvm.func @convert_prb(
@@ -55,9 +55,9 @@ llhd.entity @convert_sig () -> () {
 // CHECK:           %[[VAL_25:.*]] = llvm.load %[[VAL_24]] : !llvm.ptr<array<3 x i5>>
 // CHECK:           llvm.return
 // CHECK:         }
-llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!llhd.array<3xi5>>) -> () {
+llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5>>) -> () {
   %p0 = llhd.prb %sI1 : !llhd.sig<i1>
-  %p1 = llhd.prb %sArr : !llhd.sig<!llhd.array<3xi5>>
+  %p1 = llhd.prb %sArr : !llhd.sig<!hw.array<3xi5>>
 }
 
 // CHECK-LABEL:   llvm.func @convert_drv(
@@ -100,13 +100,13 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!llhd.array<3x
 // CHECK:           llvm.call @driveSignal(%[[VAL_0]], %[[VAL_6]], %[[VAL_30]], %[[VAL_27]], %[[VAL_31]], %[[VAL_32]], %[[VAL_33]]) : (!llvm.ptr<i8>, !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, !llvm.ptr<i8>, i64, i64, i64, i64) -> ()
 // CHECK:           llvm.return
 // CHECK:         }
-llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!llhd.array<3xi5>>) -> () {
+llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5>>) -> () {
   %cI1 = llhd.const 0 : i1
   %cI5 = llhd.const 0 : i5
-  %cArr = llhd.array_uniform %cI5 : !llhd.array<3xi5>
+  %cArr = hw.array_create %cI5, %cI5, %cI5 : i5
   %t = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
   llhd.drv %sI1, %cI1 after %t : !llhd.sig<i1>
-  llhd.drv %sArr, %cArr after %t : !llhd.sig<!llhd.array<3xi5>>
+  llhd.drv %sArr, %cArr after %t : !llhd.sig<!hw.array<3xi5>>
 }
 
 // CHECK-LABEL:   llvm.func @convert_drv_enable

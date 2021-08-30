@@ -25,7 +25,6 @@ namespace llhd {
 namespace detail {
 struct SigTypeStorage;
 struct TimeAttrStorage;
-struct ArrayTypeStorage;
 struct PtrTypeStorage;
 } // namespace detail
 
@@ -76,37 +75,6 @@ public:
 
   /// Get the keyword for the Ptr type.
   static llvm::StringRef getKeyword() { return "ptr"; }
-};
-
-//===----------------------------------------------------------------------===//
-// ArrayType
-//===----------------------------------------------------------------------===//
-
-class ArrayType
-    : public Type::TypeBase<ArrayType, Type, detail::ArrayTypeStorage> {
-public:
-  using Base::Base;
-
-  /// Get or create a new ArrayType of the provided length and element type.
-  /// Assumes the arguments define a well-formed ArrayType.
-  static ArrayType get(unsigned length, Type elementType);
-
-  /// Get or create a new ArrayType of the provided length and element type
-  /// declared at the given, potentially unknown, location. If the ArrayType
-  /// defined by the arguments would be ill-formed, emit errors and return
-  /// nullptr-wrapping type.
-  static ArrayType getChecked(function_ref<InFlightDiagnostic()> emitError,
-                              unsigned length, Type elementType);
-
-  /// Verify the construction of an array type.
-  static LogicalResult
-  verifyConstructionInvariants(Location loc, unsigned length, Type elementType);
-
-  unsigned getLength() const;
-  Type getElementType() const;
-
-  /// Get the keyword for the array type
-  static llvm::StringRef getKeyword() { return "array"; }
 };
 
 //===----------------------------------------------------------------------===//
