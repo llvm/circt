@@ -6,6 +6,7 @@ set(LIBS
         ${conversion_libs}
         CIRCTLLHD
         CIRCTComb
+        CIRCTHW
         CIRCTLLHDToLLVM
         CIRCTLLHDSimEngine
         )

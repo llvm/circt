@@ -35,6 +35,27 @@ def LLHD_Dialect : Dialect {
   let hasConstantMaterializer = 1;
 }
 
+// Begin Copy-Pasted HWDialect declaration
+def HWDialect : Dialect {
+  let name = "hw";
+
+  let summary = "Types and operations for the hardware dialect";
+  let description = [{
+    This dialect defines the `hw` dialect, which is intended to be a generic
+    representation of HW outside of a particular use-case.
+  }];
+
+  let hasConstantMaterializer = 1;
+  let cppNamespace = "::circt::hw";
+  let extraClassDeclaration = [{
+    /// Register all HW types.
+    void registerTypes();
+  }];
+}
+// End Copy-Paste
+
+include "circt/Dialect/HW/HWTypes.td"
+
 //===----------------------------------------------------------------------===//
 // LLHD type definitions
 //===----------------------------------------------------------------------===//
@@ -44,13 +65,9 @@ def LLHD_TimeType : DialectType<LLHD_Dialect,
     CPred<"$_self.isa<TimeType>()">, "LLHD time type">,
     BuildableType<"TimeType::get($_builder.getContext())">;
 
-// LLHD Array Type
-def LLHD_ArrayType : DialectType<LLHD_Dialect,
-    CPred<"$_self.isa<ArrayType>()">, "LLHD array type">;
-
 // Legal underlying types for signals and pointers.
 def LLHD_AnyUnderlyingType :
-  AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType, AnyTuple]>;
+  AnyTypeOf<[HWIntegerType, ArrayType, StructType]>;
 
 // LLHD sig type
 class LLHD_SigType<list<Type> allowedTypes>
@@ -101,7 +118,7 @@ class LLHD_ArithmeticOrBitwiseOp<string mnemonic, list<OpTrait> traits = []>
     : Op<LLHD_Dialect, mnemonic,
          !listconcat(traits, [NoSideEffect, SameOperandsAndResultType])> {
 
-  let results = (outs AnySignlessInteger);
+  let results = (outs HWIntegerType);
 
   let parser = [{
       return mlir::impl::parseOneResultSameOperandTypeOp(parser, result);

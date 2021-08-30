@@ -1,6 +1,7 @@
 // RUN: circt-opt %s -mlir-print-op-generic -split-input-file -verify-diagnostics | circt-opt | circt-opt | FileCheck %s
 
-llhd.entity @check_sig_inst () -> () {
+// CHECK-LABEL: checkSigInst
+llhd.entity @checkSigInst () -> () {
   // CHECK: %[[CI1:.*]] = llhd.const
   %cI1 = llhd.const 0 : i1
   // CHECK-NEXT: %{{.*}} = llhd.sig "sigI1" %[[CI1]] : i1
@@ -10,56 +11,47 @@ llhd.entity @check_sig_inst () -> () {
   // CHECK-NEXT: %{{.*}} = llhd.sig "sigI64" %[[CI64]] : i64
   %sigI64 = llhd.sig "sigI64" %cI64 : i64
 
-  // CHECK-NEXT: %[[TUP:.*]] = llhd.tuple
-  %tup = llhd.tuple %cI1, %cI64 : tuple<i1, i64>
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigTup" %[[TUP]] : tuple<i1, i64>
-  %sigTup = llhd.sig "sigTup" %tup : tuple<i1, i64>
+  // CHECK-NEXT: %[[TUP:.*]] = hw.struct_create
+  %tup = hw.struct_create (%cI1, %cI64) : !hw.struct<foo: i1, bar: i64>
+  // CHECK-NEXT: %{{.*}} = llhd.sig "sigTup" %[[TUP]] : !hw.struct<foo: i1, bar: i64>
+  %sigTup = llhd.sig "sigTup" %tup : !hw.struct<foo: i1, bar: i64>
 
-  // CHECK-NEXT: %[[ARRAY:.*]] = llhd.array
-  %array = llhd.array %cI1, %cI1 : !llhd.array<2xi1>
-  // CHECK-NEXT: %{{.*}} = llhd.sig "sigArray" %[[ARRAY]] : !llhd.array<2xi1>
-  %sigArray = llhd.sig "sigArray" %array : !llhd.array<2xi1>
+  // CHECK-NEXT: %[[ARRAY:.*]] = hw.array_create
+  %array = hw.array_create %cI1, %cI1 : i1
+  // CHECK-NEXT: %{{.*}} = llhd.sig "sigArray" %[[ARRAY]] : !hw.array<2xi1>
+  %sigArray = llhd.sig "sigArray" %array : !hw.array<2xi1>
 }
 
-// CHECK-LABEL: check_prb
-// CHECK-SAME: %[[SI1:.*]]: !llhd.sig<i1>
-// CHECK-SAME: %[[SI64:.*]]: !llhd.sig<i64>
-// CHECK-SAME: %[[ARRAY:.*]]: !llhd.sig<!llhd.array<3xi8>>
-// CHECK-SAME: %[[TUP:.*]]: !llhd.sig<tuple<i1, i2, i4>>
-func @check_prb(%sigI1 : !llhd.sig<i1>, %sigI64 : !llhd.sig<i64>, %sigArray : !llhd.sig<!llhd.array<3xi8>>, %sigTup : !llhd.sig<tuple<i1, i2, i4>>) {
-  // CHECK: %{{.*}} = llhd.prb %[[SI1]] : !llhd.sig<i1>
-  %0 = llhd.prb %sigI1 : !llhd.sig<i1>
-  // CHECK-NEXT: %{{.*}} = llhd.prb %[[SI64]] : !llhd.sig<i64>
-  %1 = llhd.prb %sigI64 : !llhd.sig<i64>
-  // CHECK-NEXT: %{{.*}} = llhd.prb %[[ARRAY]] : !llhd.sig<!llhd.array<3xi8>>
-  %2 = llhd.prb %sigArray : !llhd.sig<!llhd.array<3xi8>>
-  // CHECK-NEXT: %{{.*}} = llhd.prb %[[TUP]] : !llhd.sig<tuple<i1, i2, i4>>
-  %3 = llhd.prb %sigTup : !llhd.sig<tuple<i1, i2, i4>>
+// CHECK-LABEL: checkPrb
+func @checkPrb(%arg0 : !llhd.sig<i1>, %arg1 : !llhd.sig<i64>, %arg2 : !llhd.sig<!hw.array<3xi8>>, %arg3 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>) {
+  // CHECK: %{{.*}} = llhd.prb %arg0 : !llhd.sig<i1>
+  %0 = llhd.prb %arg0 : !llhd.sig<i1>
+  // CHECK-NEXT: %{{.*}} = llhd.prb %arg1 : !llhd.sig<i64>
+  %1 = llhd.prb %arg1 : !llhd.sig<i64>
+  // CHECK-NEXT: %{{.*}} = llhd.prb %arg2 : !llhd.sig<!hw.array<3xi8>>
+  %2 = llhd.prb %arg2 : !llhd.sig<!hw.array<3xi8>>
+  // CHECK-NEXT: %{{.*}} = llhd.prb %arg3 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>
+  %3 = llhd.prb %arg3 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>
 
   return
 }
 
-// CHECK-LABEL: check_drv
-// CHECK-SAME: %[[SI1:.*]]: !llhd.sig<i1>
-// CHECK-SAME: %[[SI64:.*]]: !llhd.sig<i64>
-// CHECK-SAME: %[[CI1:.*]]: i1
-// CHECK-SAME: %[[CI64:.*]]: i64
-// CHECK-SAME: %[[TIME:.*]]: !llhd.time
-// CHECK-SAME: %[[SARRAY:.*]]: !llhd.sig<!llhd.array<3xi8>>
-// CHECK-SAME: %[[STUP:.*]]: !llhd.sig<tuple<i1, i2, i4>>
-// CHECK-SAME: %[[ARRAY:.*]]: !llhd.array<3xi8>
-// CHECK-SAME: %[[TUP:.*]]: tuple<i1, i2, i4>
-func @check_drv(%sigI1 : !llhd.sig<i1>, %sigI64 : !llhd.sig<i64>, %cI1 : i1, %cI64 : i64, %t : !llhd.time, %sigArray : !llhd.sig<!llhd.array<3xi8>>, %sigTup : !llhd.sig<tuple<i1, i2, i4>>, %array : !llhd.array<3xi8>, %tup : tuple<i1, i2, i4>) {
-  // CHECK-NEXT: llhd.drv %[[SI1]], %[[CI1]] after %[[TIME]] : !llhd.sig<i1>
-  llhd.drv %sigI1, %cI1 after %t : !llhd.sig<i1>
-  // CHECK-NEXT: llhd.drv %[[SI64]], %[[CI64]] after %[[TIME]] : !llhd.sig<i64>
-  llhd.drv %sigI64, %cI64 after %t : !llhd.sig<i64>
-  // CHECK-NEXT: llhd.drv %[[SI64]], %[[CI64]] after %[[TIME]] if %[[CI1]] : !llhd.sig<i64>
-  llhd.drv %sigI64, %cI64 after %t if %cI1 : !llhd.sig<i64>
-  // CHECK-NEXT: llhd.drv %[[SARRAY]], %[[ARRAY]] after %[[TIME]] : !llhd.sig<!llhd.array<3xi8>>
-  llhd.drv %sigArray, %array after %t : !llhd.sig<!llhd.array<3xi8>>
-  // CHECK-NEXT: llhd.drv %[[STUP]], %[[TUP]] after %[[TIME]] : !llhd.sig<tuple<i1, i2, i4>>
-  llhd.drv %sigTup, %tup after %t : !llhd.sig<tuple<i1, i2, i4>>
+// CHECK-LABEL: checkDrv
+func @checkDrv(%arg0 : !llhd.sig<i1>, %arg1 : !llhd.sig<i64>, %arg2 : i1,
+    %arg3 : i64, %arg4 : !llhd.time, %arg5 : !llhd.sig<!hw.array<3xi8>>,
+    %arg6 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>,
+    %arg7 : !hw.array<3xi8>, %arg8 : !hw.struct<foo: i1, bar: i2, baz: i4>) {
+      
+  // CHECK-NEXT: llhd.drv %arg0, %arg2 after %arg4 : !llhd.sig<i1>
+  llhd.drv %arg0, %arg2 after %arg4 : !llhd.sig<i1>
+  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %arg4 : !llhd.sig<i64>
+  llhd.drv %arg1, %arg3 after %arg4 : !llhd.sig<i64>
+  // CHECK-NEXT: llhd.drv %arg1, %arg3 after %arg4 if %arg2 : !llhd.sig<i64>
+  llhd.drv %arg1, %arg3 after %arg4 if %arg2 : !llhd.sig<i64>
+  // CHECK-NEXT: llhd.drv %arg5, %arg7 after %arg4 : !llhd.sig<!hw.array<3xi8>>
+  llhd.drv %arg5, %arg7 after %arg4 : !llhd.sig<!hw.array<3xi8>>
+  // CHECK-NEXT: llhd.drv %arg6, %arg8 after %arg4 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>
+  llhd.drv %arg6, %arg8 after %arg4 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i4>>
 
   return
 }

@@ -21,9 +21,9 @@
 // CHECK:           %[[VAL_16:.*]] = llvm.insertvalue %[[VAL_15]], %[[VAL_14]][2 : i32] : !llvm.array<4 x i5>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_insert_slice(%int : i32, %iSlice : i10, %arr : !llhd.array<4xi5>, %arrSlice : !llhd.array<2xi5>) {
+func @convert_insert_slice(%int : i32, %iSlice : i10, %arr : !hw.array<4xi5>, %arrSlice : !hw.array<2xi5>) {
   %0 = llhd.insert_slice %int, %iSlice, 0 : i32, i10
-  %1 = llhd.insert_slice %arr, %arrSlice, 1 : !llhd.array<4xi5>, !llhd.array<2xi5>
+  %1 = llhd.insert_slice %arr, %arrSlice, 1 : !hw.array<4xi5>, !hw.array<2xi5>
 
   return
 }
@@ -36,9 +36,9 @@ func @convert_insert_slice(%int : i32, %iSlice : i10, %arr : !llhd.array<4xi5>, 
 // CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_2]][1 : index] : !llvm.struct<(i4, i5, i6)>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_insert_element(%int : i5, %arr : !llhd.array<4xi5>, %tup : tuple<i4, i5, i6>) {
-  %0 = llhd.insert_element %arr, %int, 0 : !llhd.array<4xi5>, i5
-  %1 = llhd.insert_element %tup, %int, 1 : tuple<i4, i5, i6>, i5
+func @convert_insert_element(%int : i5, %arr : !hw.array<4xi5>, %tup : !hw.struct<foo: i4, bar: i5, baz: i6>) {
+  %0 = llhd.insert_element %arr, %int, 0 : !hw.array<4xi5>, i5
+  %1 = llhd.insert_element %tup, %int, 1 : !hw.struct<foo: i4, bar: i5, baz: i6>, i5
 
   return
 }

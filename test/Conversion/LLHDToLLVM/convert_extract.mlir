@@ -21,10 +21,10 @@
 // CHECK:           %[[VAL_16:.*]] = llvm.insertvalue %[[VAL_15]], %[[VAL_14]][1 : i32] : !llvm.array<2 x i5>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_extract_slice(%cI32 : i32, %cI100 : i100, %arr : !llhd.array<4xi5>) {
+func @convert_extract_slice(%cI32 : i32, %cI100 : i100, %arr : !hw.array<4xi5>) {
   %0 = llhd.extract_slice %cI32, 0 : i32 -> i10
   %1 = llhd.extract_slice %cI100, 0 : i100 -> i10
-  %2 = llhd.extract_slice %arr, 1 : !llhd.array<4xi5> -> !llhd.array<2xi5>
+  %2 = llhd.extract_slice %arr, 1 : !hw.array<4xi5> -> !hw.array<2xi5>
 
   return
 }
@@ -88,9 +88,9 @@ func @convert_extract_slice(%cI32 : i32, %cI100 : i100, %arr : !llhd.array<4xi5>
 // CHECK:           llvm.store %[[VAL_51]], %[[VAL_53]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_extract_slice_sig (%sI32 : !llhd.sig<i32>, %sArr : !llhd.sig<!llhd.array<4xi4>>) {
+func @convert_extract_slice_sig (%sI32 : !llhd.sig<i32>, %sArr : !llhd.sig<!hw.array<4xi4>>) {
   %0 = llhd.extract_slice %sI32, 0 : !llhd.sig<i32> -> !llhd.sig<i10>
-  %1 = llhd.extract_slice %sArr, 0 : !llhd.sig<!llhd.array<4xi4>> -> !llhd.sig<!llhd.array<2xi4>>
+  %1 = llhd.extract_slice %sArr, 0 : !llhd.sig<!hw.array<4xi4>> -> !llhd.sig<!hw.array<2xi4>>
 
   return
 }
@@ -150,10 +150,10 @@ func @convert_extract_slice_sig (%sI32 : !llhd.sig<i32>, %sArr : !llhd.sig<!llhd
 // CHECK:           %[[VAL_40:.*]] = llvm.insertvalue %[[VAL_39]], %[[VAL_26]][1 : i32] : !llvm.array<2 x i5>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_dyn_extract_slice(%cI32 : i32, %cI100 : i100, %arr : !llhd.array<4xi5>) {
+func @convert_dyn_extract_slice(%cI32 : i32, %cI100 : i100, %arr : !hw.array<4xi5>) {
   %0 = llhd.dyn_extract_slice %cI32, %cI32 : (i32, i32) -> i10
   %1 = llhd.dyn_extract_slice %cI100, %cI32 : (i100, i32) -> i10
-  %2 = llhd.dyn_extract_slice %arr, %cI32 : (!llhd.array<4xi5>, i32) -> !llhd.array<2xi5>
+  %2 = llhd.dyn_extract_slice %arr, %cI32 : (!hw.array<4xi5>, i32) -> !hw.array<2xi5>
 
   return
 }
@@ -217,9 +217,9 @@ func @convert_dyn_extract_slice(%cI32 : i32, %cI100 : i100, %arr : !llhd.array<4
 // CHECK:           llvm.store %[[VAL_51]], %[[VAL_53]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_dyn_extract_slice_sig (%c : i32, %sI32 : !llhd.sig<i32>, %sArr : !llhd.sig<!llhd.array<4xi4>>) {
+func @convert_dyn_extract_slice_sig (%c : i32, %sI32 : !llhd.sig<i32>, %sArr : !llhd.sig<!hw.array<4xi4>>) {
   %0 = llhd.dyn_extract_slice %sI32, %c : (!llhd.sig<i32>, i32) -> !llhd.sig<i10>
-  %1 = llhd.dyn_extract_slice %sArr, %c : (!llhd.sig<!llhd.array<4xi4>>, i32) -> !llhd.sig<!llhd.array<2xi4>>
+  %1 = llhd.dyn_extract_slice %sArr, %c : (!llhd.sig<!hw.array<4xi4>>, i32) -> !llhd.sig<!hw.array<2xi4>>
 
   return
 }
@@ -231,9 +231,9 @@ func @convert_dyn_extract_slice_sig (%c : i32, %sI32 : !llhd.sig<i32>, %sArr : !
 // CHECK:           %[[VAL_3:.*]] = llvm.extractvalue %[[VAL_1]][2 : index] : !llvm.struct<(i1, i2, i3)>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_extract_element(%arr : !llhd.array<4xi5>, %tup : tuple<i1, i2, i3>) {
-  %0 = llhd.extract_element %arr, 1 : !llhd.array<4xi5> -> i5
-  %1 = llhd.extract_element %tup, 2 : tuple<i1, i2, i3> -> i3
+func @convert_extract_element(%arr : !hw.array<4xi5>, %tup : !hw.struct<foo: i1, bar: i2, baz: i3>) {
+  %0 = llhd.extract_element %arr, 1 : !hw.array<4xi5> -> i5
+  %1 = llhd.extract_element %tup, 2 : !hw.struct<foo: i1, bar: i2, baz: i3> -> i3
 
   return
 }
@@ -294,9 +294,9 @@ func @convert_extract_element(%arr : !llhd.array<4xi5>, %tup : tuple<i1, i2, i3>
 // CHECK:           llvm.store %[[VAL_48]], %[[VAL_50]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_extract_element_sig (%sArr : !llhd.sig<!llhd.array<4xi4>>, %sTup : !llhd.sig<tuple<i1, i2, i3>>) {
-  %0 = llhd.extract_element %sArr, 0 : !llhd.sig<!llhd.array<4xi4>> -> !llhd.sig<i4>
-  %1 = llhd.extract_element %sTup, 1 : !llhd.sig<tuple<i1, i2, i3>> -> !llhd.sig<i2>
+func @convert_extract_element_sig (%sArr : !llhd.sig<!hw.array<4xi4>>, %sTup : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i3>>) {
+  %0 = llhd.extract_element %sArr, 0 : !llhd.sig<!hw.array<4xi4>> -> !llhd.sig<i4>
+  %1 = llhd.extract_element %sTup, 1 : !llhd.sig<!hw.struct<foo: i1, bar: i2, baz: i3>> -> !llhd.sig<i2>
 
   return
 }
@@ -313,8 +313,8 @@ func @convert_extract_element_sig (%sArr : !llhd.sig<!llhd.array<4xi4>>, %sTup :
 // CHECK:           %[[VAL_7:.*]] = llvm.load %[[VAL_6]] : !llvm.ptr<i5>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_dyn_extract_element(%arr : !llhd.array<4xi5>, %c : i32) {
-  %2 = llhd.dyn_extract_element %arr, %c : (!llhd.array<4xi5>, i32) -> i5
+func @convert_dyn_extract_element(%arr : !hw.array<4xi5>, %c : i32) {
+  %2 = llhd.dyn_extract_element %arr, %c : (!hw.array<4xi5>, i32) -> i5
 
   return
 }
@@ -349,8 +349,8 @@ func @convert_dyn_extract_element(%arr : !llhd.array<4xi5>, %c : i32) {
 // CHECK:           llvm.store %[[VAL_23]], %[[VAL_25]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
 // CHECK:           llvm.return
 // CHECK:         }
-func @convert_dyn_extract_element_sig(%sArr : !llhd.sig<!llhd.array<4xi4>>, %c : i32) {
-  %1 = llhd.dyn_extract_element %sArr, %c : (!llhd.sig<!llhd.array<4xi4>>, i32) -> !llhd.sig<i4>
+func @convert_dyn_extract_element_sig(%sArr : !llhd.sig<!hw.array<4xi4>>, %c : i32) {
+  %1 = llhd.dyn_extract_element %sArr, %c : (!llhd.sig<!hw.array<4xi4>>, i32) -> !llhd.sig<i4>
 
   return
 }

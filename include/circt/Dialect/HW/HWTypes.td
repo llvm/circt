@@ -19,18 +19,18 @@ class HWType<string name> : TypeDef<HWDialect, name> { }
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
-def HWIntegerType : DialectType<HWDialect, CPred<"isHWIntegerType($_self)">,
+def HWIntegerType : DialectType<HWDialect, CPred<"hw::isHWIntegerType($_self)">,
                                  "an integer bitvector of one or more bits",
                                  "::mlir::IntegerType">;
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
-def HWValueType : DialectType<HWDialect, CPred<"isHWValueType($_self)">,
+def HWValueType : DialectType<HWDialect, CPred<"hw::isHWValueType($_self)">,
                                "a known primitive element">;
 
 // Type constraint that indicates that an operand/result may only be a valid
 // non-directional type.
-def HWNonInOutType : DialectType<HWDialect, CPred<"!hasHWInOutType($_self)">,
+def HWNonInOutType : DialectType<HWDialect, CPred<"!hw::hasHWInOutType($_self)">,
                                   "a type without inout">;
 
 //===----------------------------------------------------------------------===//
@@ -60,7 +60,7 @@ def ArrayTypeImpl : HWType<"Array"> {
 
 // A handle to refer to hw::ArrayType in ODS.
 def ArrayType : DialectType<HWDialect,
-    CPred<"type_isa<ArrayType>($_self)">, "an ArrayType",
+    CPred<"hw::type_isa<hw::ArrayType>($_self)">, "an ArrayType",
     "TypeAliasOr<ArrayType>">;
 
 // An 'unpacked' array of fixed size.
@@ -128,7 +128,7 @@ def StructTypeImpl : HWType<"Struct"> {
 
 // A handle to refer to hw::StructType in ODS.
 def StructType : DialectType<HWDialect,
-    CPred<"type_isa<StructType>($_self)">, "a StructType",
+    CPred<"hw::type_isa<hw::StructType>($_self)">, "a StructType",
     "TypeAliasOr<StructType>">;
 
 // An untagged union. Declares the hw::UnionType in C++.
@@ -152,7 +152,7 @@ def UnionTypeImpl : HWType<"Union"> {
 
 // A handle to refer to hw::UnionType in ODS.
 def UnionType : DialectType<HWDialect,
-    CPred<"type_isa<UnionType>($_self)">, "a UnionType",
+    CPred<"hw::type_isa<hw::UnionType>($_self)">, "a UnionType",
     "TypeAliasOr<UnionType>">;
 
 def TypeAliasType : HWType<"TypeAlias"> {
