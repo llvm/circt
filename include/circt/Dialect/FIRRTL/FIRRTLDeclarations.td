@@ -46,6 +46,7 @@ def InstanceOp : FIRRTLOp<"instance"> {
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     FModuleLike getReferencedModule();
+    FModuleLike getReferencedModule(SymbolTable& symtbl);
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {

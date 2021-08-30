@@ -939,6 +939,10 @@ FModuleLike InstanceOp::getReferencedModule() {
   return circuit.lookupSymbol<FModuleLike>(moduleName());
 }
 
+FModuleLike InstanceOp::getReferencedModule(SymbolTable &symtbl) {
+  return symtbl.lookup<FModuleLike>(moduleName());
+}
+
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
                        StringRef name, ArrayRef<Attribute> annotations,
