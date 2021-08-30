@@ -628,10 +628,12 @@ bool circt::firrtl::scatterCustomAnnotations(
     llvm::StringMap<ArrayAttr> &annotationMap, MLIRContext *context,
     unsigned &annotationID, Location loc) {
 
-  // Exit if not anotations exist that target "~".
-  auto nonSpecificAnnotations = annotationMap["~"];
-  if (!nonSpecificAnnotations)
+  // Exit if no anotations exist that target "~". Also ensure a spurious entry
+  // is not created in the map.
+  if (!annotationMap.count("~"))
     return true;
+  // This adds an entry "~" to the map.
+  auto nonSpecificAnnotations = annotationMap["~"];
 
   // Mutable store of new annotations produced.
   llvm::StringMap<llvm::SmallVector<Attribute>> newAnnotations;
