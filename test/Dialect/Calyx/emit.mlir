@@ -33,11 +33,12 @@ calyx.program {
     // CHECK-LABEL: wires {
     calyx.wires {
       // CHECK-NEXT: group Group1 {
-      // CHECK-NEXT:    Group1[go] = c0.go;
+      // CHECK-NEXT:    Group1[go] = 1'd0;
       // CHECK-NEXT:    c0.in = c0.out;
       // CHECK-NEXT:    Group1[done] = c0.done;
+      %c1 = hw.constant 0 : i1
       calyx.group @Group1 {
-        calyx.group_go %c0.go : i1
+        calyx.group_go %c1 : i1
         calyx.assign %c0.in = %c0.out : i8
         calyx.group_done %c0.done : i1
       }
@@ -49,7 +50,6 @@ calyx.program {
         calyx.group_done %c1.done : i1
       }
       // CHECK:   c0.go = 1'd0;
-      %c1 = hw.constant 0 : i1
       calyx.assign %c0.go = %c1 : i1
     }
     // CHECK-LABEL: control {
