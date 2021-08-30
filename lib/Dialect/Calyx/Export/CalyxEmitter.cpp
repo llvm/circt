@@ -38,6 +38,7 @@ static constexpr std::string_view colon() { return ": "; }
 static constexpr std::string_view space() { return " "; }
 static constexpr std::string_view period() { return "."; }
 static constexpr std::string_view questionMark() { return " ? "; }
+static constexpr std::string_view exclamationMark() { return "!"; }
 static constexpr std::string_view equals() { return " = "; }
 static constexpr std::string_view comma() { return ", "; }
 static constexpr std::string_view arrow() { return " -> "; }
@@ -187,7 +188,7 @@ private:
           }
           // The LHS is the value to be negated, and the RHS is a constant with
           // all ones (guaranteed by isBinaryNot).
-          os << "!";
+          os << exclamationMark();
           emitValue(op.inputs()[0], /*isIndented=*/false);
         })
         .Default(
