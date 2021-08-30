@@ -167,7 +167,7 @@ private:
 
           (isIndented ? indent() : os)
               << std::to_string(value.getBitWidth()) << apostrophe() << "d";
-          // We currently default to the decimal represntation.
+          // We currently default to the decimal representation.
           value.print(os, /*isSigned=*/false);
         })
         .Default(
