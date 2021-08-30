@@ -722,7 +722,7 @@ static void printModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
 
   bool needPortNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
-                          needportNamesAttr, op.getPortDirections().getValue());
+                          needPortNamesAttr, op.getPortDirections().getValue());
   SmallVector<StringRef, 3> omittedAttrs({direction::attrKey});
   if (!needPortNamesAttr)
     omittedAttrs.push_back("portNames");
@@ -860,8 +860,8 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
 }
 
 static LogicalResult verifyModuleSignature(Operation *op) {
-  auto mod = cast<FModuleLike>(op);
-  for (auto argType : mod.moduleType().getInputs()) {
+  auto inputs = cast<FModuleLike>(op).moduleType().getInputs();
+  for (auto argType : inputs) {
     if (!argType.isa<FIRRTLType>())
       return op->emitOpError("all module ports must be firrtl types");
   }
