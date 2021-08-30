@@ -673,10 +673,10 @@ circuit GCTMemTap : %[
     ; CHECK-SAME: %mem: [[A:.+]] {firrtl.annotations =
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 1,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
-    ; CHECK-SAME:      id = [[ID:[0-9]+]] : i64}>
+    ; CHECK-SAME:      id = [[ID:[0-9]+]] : i64, word = 0 : i64}>
     ; CHECK-SAME:   #firrtl.subAnno<fieldID = 2,
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
-    ; CHECK-SAME:      id = [[ID]] : i64}>
+    ; CHECK-SAME:      id = [[ID]] : i64, word = 1 : i64}>
     ; CHECK: firrtl.module @GCTMemTap
     ; CHECK: %mem = firrtl.combmem
     ; CHECK-SAME: annotations = [
