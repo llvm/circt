@@ -56,10 +56,12 @@ calyx.program {
     // CHECK-NEXT:    seq {
     // CHECK-NEXT:      Group1;
     // CHECK-NEXT:      while c1.in with Group2 {
-    // CHECK-NEXT:        Group1;
-    // CHECK-NEXT:        Group1;
-    // CHECK-NEXT:        if c1.in with Group2 {
-    // CHECK-NEXT:          Group2;
+    // CHECK-NEXT:        seq {
+    // CHECK-NEXT:          Group1;
+    // CHECK-NEXT:          Group1;
+    // CHECK-NEXT:          if c1.in with Group2 {
+    // CHECK-NEXT:            Group2;
+    // CHECK-NEXT:          }
     // CHECK-NEXT:        }
     // CHECK-NEXT:      }
     // CHECK-NEXT:    }
@@ -68,10 +70,12 @@ calyx.program {
       calyx.seq {
         calyx.enable @Group1
         calyx.while %c1.in with @Group2 {
-          calyx.enable @Group1
-          calyx.enable @Group1
-          calyx.if %c1.in with @Group2 {
-            calyx.enable @Group2
+          calyx.seq {
+            calyx.enable @Group1
+            calyx.enable @Group1
+            calyx.if %c1.in with @Group2 {
+              calyx.enable @Group2
+            }
           }
         }
       }
