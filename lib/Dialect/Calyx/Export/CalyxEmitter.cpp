@@ -288,11 +288,29 @@ void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
       outPorts.push_back(port);
   }
 
+  // To avoid the native compiler adding each of the required ports twice,
+  // add the @<port-name> attribute here. This is a quick-fix solution.
+  // Eventually we want to add attributes directly to component arguments.
+  // See: https://github.com/llvm/circt/issues/1666
+  llvm::SmallVector<StringRef> requiredPorts = {"go", "clk", "done", "reset",
+                                                "done"};
+  auto requiresNativeCompilerAttribute = [&](StringRef portName) {
+    return llvm::find_if(requiredPorts, [&](StringRef requiredPort) {
+             return requiredPort == portName;
+           }) != requiredPorts.end();
+  };
+
   auto emitPorts = [&](auto ports) {
     os << LParen();
     for (size_t i = 0, e = ports.size(); i < e; ++i) {
       const auto &port = ports[i];
-      auto name = port.name.getValue();
+      std::string name = port.name.getValue().str();
+      if (requiresNativeCompilerAttribute(name)) {
+        // @<port-name> <port-name>
+        name.insert(0, "@");
+        name += " ";
+        name += port.name.getValue();
+      }
       // We only care about the bit width in the emitted .futil file.
       auto bitWidth = port.type.getIntOrFloatBitWidth();
       os << name << colon() << bitWidth;
