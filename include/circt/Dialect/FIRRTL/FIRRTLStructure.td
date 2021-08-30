@@ -70,8 +70,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, FunctionLike, Symbol,
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
-               CArg<"ArrayAttr","ArrayAttr()">:$annotations,
-               CArg<"ArrayAttr","ArrayAttr()">:$portAnnotations)>
+               CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{
@@ -149,8 +148,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     OpBuilder<(ins "StringAttr":$name,
                       "ArrayRef<ModulePortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
-                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-                      CArg<"ArrayAttr","ArrayAttr()">:$portAnnotations)>
+                      CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];
 
   let extraClassDeclaration = [{

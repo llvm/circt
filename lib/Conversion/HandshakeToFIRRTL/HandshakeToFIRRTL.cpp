@@ -2147,7 +2147,7 @@ public:
 
     ConversionTarget target(getContext());
     target.addLegalDialect<FIRRTLDialect>();
-    target.addIllegalDialect<handshake::HandshakeOpsDialect>();
+    target.addIllegalDialect<handshake::HandshakeDialect>();
 
     RewritePatternSet patterns(op.getContext());
     patterns.insert<HandshakeFuncOpLowering>(op.getContext());

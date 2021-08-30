@@ -901,3 +901,24 @@ hw.module @extractShift(%arg0: i4) -> (%o1 : i1, %o2: i1) {
   hw.output %1, %2: i1, i1
 }
 
+// CHECK-LABEL: hw.module @moduloZeroDividend
+hw.module @moduloZeroDividend(%arg0: i32) -> (%o1: i32, %o2: i32) {
+  // CHECK: %[[ZERO:.*]] = hw.constant 0 : i32
+  %zero = hw.constant 0 : i32
+  %0 = comb.mods %zero, %arg0 : i32
+  %1 = comb.modu %zero, %arg0 : i32
+
+  // CHECK: hw.output %[[ZERO]], %[[ZERO]]
+  hw.output %0, %1 : i32, i32
+}
+
+// CHECK-LABEL: hw.module @orWithNegation
+hw.module @orWithNegation(%arg0: i32) -> (%o1: i32) {
+  // CHECK: %[[ALLONES:.*]] = hw.constant -1 : i32
+  %allones = hw.constant -1 : i32
+  %0 = comb.xor %arg0, %allones : i32
+  %1 = comb.or %arg0, %0 : i32
+
+  // CHECK: hw.output %[[ALLONES]]
+  hw.output %1 : i32
+}

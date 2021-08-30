@@ -158,7 +158,12 @@ hw.module @Cover(%arg0: i1) {
 
 // -----
 // expected-error @+1 {{Referenced instance doesn't exist}}
-sv.bind @A
+sv.bind @A in @Assume
+
+// -----
+// expected-error @+1 {{Referenced instance doesn't exist}}
+sv.bind @A in @NotAModule
+
 
 // -----
 hw.module.extern @ExternDestMod()
@@ -167,4 +172,4 @@ hw.module @InternSrcMod() {
   hw.output
 }
 // expected-error @+1 {{Referenced instance isn't marked as doNotPrint}}
-sv.bind @A
+sv.bind @A in @InternSrcMod

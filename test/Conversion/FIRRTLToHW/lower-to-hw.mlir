@@ -398,9 +398,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
   }
 
-  // CHECK: sv.bind @[[bazSymbol:.+]]
+  // CHECK: sv.bind @[[bazSymbol:.+]] in @bindTest
   // CHECK-NOT: output_file
-  // CHECK-NEXT: sv.bind @[[quxSymbol:.+]] {output_file
+  // CHECK-NEXT: sv.bind @[[quxSymbol:.+]] in @bindTest {output_file
   // CHECK-SAME: directory = "outputDir", exclude_from_filelist = true
   // CHECK-SAME: exclude_replicated_ops = true, name = "bindings.sv"
   // CHECK-NEXT: hw.module @bindTest()

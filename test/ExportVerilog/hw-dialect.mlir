@@ -773,3 +773,8 @@ hw.module @ShiftAmountZext(%a: i8, %b1: i4, %b2: i4, %b3: i4)
   hw.output %r1, %r2, %r3 : i8, i8, i8
 }
 
+// CHECK-LABEL: ModuleWithLocInfo
+// CHECK: // Foo.bar:42:13
+hw.module @ModuleWithLocInfo()  {
+} loc("Foo.bar":42:13)
+

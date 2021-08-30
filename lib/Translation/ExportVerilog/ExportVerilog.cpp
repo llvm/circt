@@ -11,13 +11,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Translation/ExportVerilog.h"
+#include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVAttributes.h"
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
@@ -41,6 +40,7 @@ using namespace circt;
 using namespace comb;
 using namespace hw;
 using namespace sv;
+using namespace ExportVerilog;
 
 #define DEBUG_TYPE "export-verilog"
 
@@ -49,25 +49,6 @@ constexpr int INDENT_AMOUNT = 2;
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
-
-/// Return true for operations that must always be inlined into a containing
-/// expression for correctness.
-static bool isExpressionAlwaysInline(Operation *op) {
-  // We need to emit array indexes inline per verilog "lvalue" semantics.
-  if (isa<ArrayIndexInOutOp>(op) || isa<ReadInOutOp>(op))
-    return true;
-
-  // An SV interface modport is a symbolic name that is always inlined.
-  if (isa<GetModportOp>(op) || isa<ReadInterfaceSignalOp>(op))
-    return true;
-
-  return false;
-}
-
-/// Return whether an operation is a constant.
-static bool isConstantExpression(Operation *op) {
-  return isa<ConstantOp, ConstantXOp, ConstantZOp>(op);
-}
 
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
@@ -91,7 +72,11 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
   return false;
 }
 
-static bool isVerilogExpression(Operation *op) {
+/// This predicate returns true if the specified operation is considered a
+/// potentially inlinable Verilog expression.  These nodes always have a single
+/// result, but may have side effects (e.g. `sv.verbatim.expr.se`).
+/// MemoryEffects should be checked if a client cares.
+bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
     return true;
@@ -330,22 +315,25 @@ static StringRef getVerilogDeclWord(Operation *op) {
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
   return isProcedural ? "automatic logic" : "wire";
 }
+
 /// Return the name of a value without using the name map.  This is needed when
 /// looking into an instance from a different module as happens with bind.  It
 /// may return "" when unable to determine a name.  This works in situations
 /// where names are pre-legalized during prepare.
-static StringRef getNameRemotely(Value &value,
+static StringRef getNameRemotely(Value value,
                                  ArrayRef<ModulePortInfo> modulePorts) {
-  if (auto barg = value.dyn_cast<BlockArgument>()) {
+  if (auto barg = value.dyn_cast<BlockArgument>())
     return modulePorts[barg.getArgNumber()].getName();
-  }
+
   if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
-    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp())) {
+    auto *wireInput = readinout.input().getDefiningOp();
+    if (!wireInput)
+      return {};
+
+    if (auto wire = dyn_cast<WireOp>(wireInput))
       return wire.name();
-    }
-    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp())) {
+    if (auto reg = dyn_cast<RegOp>(wireInput))
       return reg.name();
-    }
   }
   if (auto localparam = dyn_cast<LocalParamOp>(value.getDefiningOp()))
     return localparam.name();
@@ -498,6 +486,24 @@ static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
 }
 
 //===----------------------------------------------------------------------===//
+// ModuleNameManager Implementation
+//===----------------------------------------------------------------------===//
+
+/// Add the specified name to the name table, auto-uniquing the name if
+/// required.  If the name is empty, then this creates a unique temp name.
+///
+/// "valueOrOp" is typically the Value for an intermediate wire etc, but it
+/// can also be an op for an instance, since we want the instances op uniqued
+/// and tracked.  It can also be null for things like outputs which are not
+/// tracked in the nameTable.
+StringRef ModuleNameManager::addName(ValueOrOp valueOrOp, StringRef name) {
+  auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
+  if (valueOrOp)
+    nameTable[valueOrOp] = updatedName;
+  return updatedName;
+}
+
+//===----------------------------------------------------------------------===//
 // VerilogEmitter
 //===----------------------------------------------------------------------===//
 
@@ -507,10 +513,15 @@ namespace {
 /// various emitters.
 class VerilogEmitterState {
 public:
-  explicit VerilogEmitterState(raw_ostream &os) : os(os) {}
+  explicit VerilogEmitterState(const LoweringOptions &options,
+                               const SymbolCache &symbolCache, raw_ostream &os)
+      : options(options), symbolCache(symbolCache), os(os) {}
 
   /// The emitter options which control verilog emission.
-  LoweringOptions options;
+  const LoweringOptions options;
+
+  /// This is a cache of various information about the IR, in frozen state.
+  const SymbolCache &symbolCache;
 
   /// The stream to emit to.
   raw_ostream &os;
@@ -521,110 +532,6 @@ public:
 private:
   VerilogEmitterState(const VerilogEmitterState &) = delete;
   void operator=(const VerilogEmitterState &) = delete;
-};
-} // namespace
-
-//===----------------------------------------------------------------------===//
-// NameManager
-//===----------------------------------------------------------------------===//
-
-namespace {
-struct ModuleNameManager {
-  ModuleNameManager() : encounteredError(false) {}
-
-  StringRef addName(Value value, StringRef name) {
-    return addName(ValueOrOp(value), name);
-  }
-  StringRef addName(Operation *op, StringRef name) {
-    return addName(ValueOrOp(op), name);
-  }
-  StringRef addName(Value value, StringAttr name) {
-    return addName(ValueOrOp(value), name);
-  }
-  StringRef addName(Operation *op, StringAttr name) {
-    return addName(ValueOrOp(op), name);
-  }
-
-  StringRef addLegalName(Value value, StringRef name, Operation *errOp) {
-    return addLegalName(ValueOrOp(value), name, errOp);
-  }
-  StringRef addLegalName(Operation *op, StringRef name, Operation *errOp) {
-    return addLegalName(ValueOrOp(op), name, errOp);
-  }
-
-  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
-  StringRef getName(Operation *op) { return getName(ValueOrOp(op)); }
-
-  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
-
-  void addOutputNames(StringRef name, Operation *module) {
-    outputNames.push_back(addLegalName(nullptr, name, module));
-  }
-
-  StringRef getOutputName(size_t portNum) { return outputNames[portNum]; }
-
-  bool hadError() { return encounteredError; }
-
-private:
-  using ValueOrOp = PointerUnion<Value, Operation *>;
-
-  /// Retrieve a name from the name table.  The name must already have been
-  /// added.
-  StringRef getName(ValueOrOp valueOrOp) {
-    auto entry = nameTable.find(valueOrOp);
-    assert(entry != nameTable.end() &&
-           "value expected a name but doesn't have one");
-    return entry->getSecond();
-  }
-
-  /// Add the specified name to the name table, auto-uniquing the name if
-  /// required.  If the name is empty, then this creates a unique temp name.
-  ///
-  /// "valueOrOp" is typically the Value for an intermediate wire etc, but it
-  /// can also be an op for an instance, since we want the instances op uniqued
-  /// and tracked.  It can also be null for things like outputs which are not
-  /// tracked in the nameTable.
-  StringRef addName(ValueOrOp valueOrOp, StringRef name) {
-    auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
-    if (valueOrOp)
-      nameTable[valueOrOp] = updatedName;
-    return updatedName;
-  }
-
-  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
-    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
-  }
-  /// Add the specified name to the name table, emitting an error message if the
-  /// name empty or is changed by uniqing.
-  StringRef addLegalName(ValueOrOp valueOrOp, StringRef name, Operation *op) {
-    auto updatedName = addName(valueOrOp, name);
-    if (name.empty())
-      emitOpError(op, "should have non-empty name");
-    else if (updatedName != name)
-      emitOpError(op, "name '") << name << "' changed during emission";
-    return updatedName;
-  }
-
-  InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {
-    encounteredError = true;
-    return op->emitOpError(message);
-  }
-
-  // Track whether a name error ocurred
-  bool encounteredError;
-
-  /// nameTable keeps track of mappings from Value's and operations (for
-  /// instances) to their string table entry.
-  llvm::DenseMap<ValueOrOp, StringRef> nameTable;
-
-  /// outputNames tracks the uniquified names for output ports, which don't
-  /// have
-  /// a Value or Op representation.
-  SmallVector<StringRef> outputNames;
-
-  llvm::StringSet<> usedNames;
-
-  size_t nextGeneratedNameID = 0;
 };
 } // namespace
 
@@ -755,13 +662,12 @@ class ModuleEmitter : public EmitterBase {
 public:
   explicit ModuleEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
 
-  void emitHWModule(HWModuleOp module, ModuleNameManager &names);
+  void emitHWModule(HWModuleOp module);
   void emitHWExternModule(HWModuleExternOp module);
   void emitHWGeneratedModule(HWModuleGeneratedOp module);
 
   // Statements.
-  void emitStatement(Operation *op, ModuleNameManager &names);
-  void emitStatementBlock(Block &block, ModuleNameManager &names);
+  void emitStatement(Operation *op);
   void emitBind(BindOp op);
   void emitBindInterface(BindInterfaceOp op);
 
@@ -1646,12 +1552,11 @@ void NameCollector::collectNames(Block &block) {
   // Loop over all of the results of all of the ops.  Anything that defines a
   // value needs to be noticed.
   for (auto &op : block) {
-    bool isExpr = isVerilogExpression(&op);
-
-    // Instances and interface instances are handled in prepareHWModule
+    // Instances and interface instances are handled in prepareHWModule.
     if (isa<InstanceOp, InterfaceInstanceOp>(op))
       continue;
 
+    bool isExpr = isVerilogExpression(&op);
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
       // name.
@@ -2048,7 +1953,7 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto *interfaceOp = op.getReferencedInterface();
+  auto *interfaceOp = op.getReferencedInterface(&state.symbolCache);
   assert(interfaceOp && "InterfaceInstanceOp has invalid symbol that does not "
                         "point to an interface");
 
@@ -2498,7 +2403,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  auto *moduleOp = op.getReferencedModule();
+  auto *moduleOp = op.getReferencedModule(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
 
   // Use the specified name or the symbol name as appropriate.
@@ -2933,15 +2838,10 @@ void StmtEmitter::emitStatementBlock(Block &body) {
   reduceIndent();
 }
 
-void ModuleEmitter::emitStatement(Operation *op, ModuleNameManager &names) {
+void ModuleEmitter::emitStatement(Operation *op) {
   SmallString<128> outputBuffer;
+  ModuleNameManager names;
   StmtEmitter(*this, outputBuffer, names).emitStatement(op);
-  os << outputBuffer;
-}
-
-void ModuleEmitter::emitStatementBlock(Block &body, ModuleNameManager &names) {
-  SmallString<128> outputBuffer;
-  StmtEmitter(*this, outputBuffer, names).emitStatementBlock(body);
   os << outputBuffer;
 }
 
@@ -2968,13 +2868,13 @@ void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
 // regs, or ports, with legalized names, so we can lookup up the names through
 // the IR.
 void ModuleEmitter::emitBind(BindOp op) {
-  InstanceOp inst = op.getReferencedInstance();
+  InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
   auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
   verifyModuleName(op, parentVerilogName);
 
-  Operation *childMod = inst.getReferencedModule();
+  Operation *childMod = inst.getReferencedModule(&state.symbolCache);
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
   verifyModuleName(op, childVerilogName);
 
@@ -3017,7 +2917,7 @@ void ModuleEmitter::emitBind(BindOp op) {
       if (shouldPrintComma)
         os << ',';
     }
-    os << "\n";
+    os << '\n';
 
     // Emit the port's name.
     indent();
@@ -3048,14 +2948,14 @@ void ModuleEmitter::emitBind(BindOp op) {
     }
   }
   if (!isFirst) {
-    os << "\n";
+    os << '\n';
     indent();
   }
   os << ");\n";
 }
 
 void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
-  auto instance = bind.getReferencedInstance();
+  auto instance = bind.getReferencedInstance(&state.symbolCache);
   auto instantiator = instance->getParentOfType<hw::HWModuleOp>().getName();
   auto *interface = bind->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
@@ -3064,219 +2964,15 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
      << " (.*);\n\n";
 }
 
-// Check if the value is from read of a wire or reg or is a port.
-static bool isSimpleReadOrPort(Value v) {
-  if (v.isa<BlockArgument>())
-    return true;
-  auto vOp = v.getDefiningOp();
-  if (!vOp)
-    return false;
-  auto read = dyn_cast<ReadInOutOp>(vOp);
-  if (!read)
-    return false;
-  auto readSrc = read.input().getDefiningOp();
-  if (!readSrc)
-    return false;
-  return isa<WireOp, RegOp>(readSrc);
-}
+void ModuleEmitter::emitHWModule(HWModuleOp module) {
+  // Rewrite the module body into compliance with our emission expectations, and
+  // collect/rename symbols within the body that conflict.
+  ModuleNameManager names;
+  prepareHWModule(*module.getBodyBlock(), names, state.options,
+                  state.symbolCache);
+  if (names.hadError())
+    state.encounteredError = true;
 
-// Given an invisible instance, make sure all inputs are driven from
-// wires or ports.
-static void lowerBoundInstance(InstanceOp op) {
-  Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
-
-  SmallString<32> nameTmp;
-  nameTmp = (op.instanceName() + "_").str();
-  auto namePrefixSize = nameTmp.size();
-
-  size_t nextOpNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule())) {
-    if (port.isOutput())
-      continue;
-
-    auto src = op.getOperand(nextOpNo);
-    ++nextOpNo;
-
-    if (isSimpleReadOrPort(src))
-      continue;
-
-    nameTmp.resize(namePrefixSize);
-    if (port.name)
-      nameTmp += port.name.getValue().str();
-    else
-      nameTmp += std::to_string(nextOpNo - 1);
-
-    auto newWire = builder.create<WireOp>(src.getType(), nameTmp);
-    auto newWireRead = builder.create<ReadInOutOp>(newWire);
-    auto connect = builder.create<AssignOp>(newWire, src);
-    newWireRead->moveBefore(op);
-    connect->moveBefore(op);
-    op.setOperand(nextOpNo - 1, newWireRead);
-  }
-}
-
-static bool onlyUseIsAssign(Value v) {
-  if (!v.hasOneUse())
-    return false;
-  if (!dyn_cast_or_null<AssignOp>(v.getDefiningOp()))
-    return false;
-  return true;
-}
-
-// Ensure that each output of an instance are used only by a wire
-static void lowerInstanceResults(InstanceOp op) {
-  Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
-
-  SmallString<32> nameTmp;
-  nameTmp = (op.instanceName() + "_").str();
-  auto namePrefixSize = nameTmp.size();
-
-  size_t nextResultNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule())) {
-    if (!port.isOutput())
-      continue;
-
-    auto result = op.getResult(nextResultNo);
-    ++nextResultNo;
-
-    if (onlyUseIsAssign(result))
-      continue;
-
-    bool isOneUseOutput = false;
-    if (result.hasOneUse()) {
-      OpOperand &use = *result.getUses().begin();
-      isOneUseOutput = dyn_cast_or_null<OutputOp>(use.getOwner()) != nullptr;
-    }
-
-    if (!isOneUseOutput) {
-      nameTmp.resize(namePrefixSize);
-      if (port.name)
-        nameTmp += port.name.getValue().str();
-      else
-        nameTmp += std::to_string(nextResultNo - 1);
-
-      auto newWire = builder.create<WireOp>(result.getType(), nameTmp);
-      while (!result.use_empty()) {
-        auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        OpOperand &use = *result.getUses().begin();
-        use.set(newWireRead);
-        newWireRead->moveBefore(use.getOwner());
-      }
-
-      auto connect = builder.create<AssignOp>(newWire, result);
-      connect->moveAfter(op);
-    }
-  }
-}
-
-// Given a side effect free "always inline" operation, make sure that it
-// exists in the same block as its users and that it has one use for each one.
-static void lowerAlwaysInlineOperation(Operation *op) {
-  assert(op->getNumResults() == 1 &&
-         "only support 'always inline' ops with one result");
-
-  // Nuke use-less operations.
-  if (op->use_empty()) {
-    op->erase();
-    return;
-  }
-
-  // Moving/cloning an op should pull along its operand tree with it if they
-  // are always inline.  This happens when an array index has a constant
-  // operand for example.
-  auto recursivelyHandleOperands = [](Operation *op) {
-    for (auto operand : op->getOperands()) {
-      if (auto *operandOp = operand.getDefiningOp())
-        if (isExpressionAlwaysInline(operandOp))
-          lowerAlwaysInlineOperation(operandOp);
-    }
-  };
-
-  // If this operation has multiple uses, duplicate it into N-1 of them in
-  // turn.
-  while (!op->hasOneUse()) {
-    OpOperand &use = *op->getUses().begin();
-    Operation *user = use.getOwner();
-
-    // Clone the op before the user.
-    auto *newOp = op->clone();
-    user->getBlock()->getOperations().insert(Block::iterator(user), newOp);
-    // Change the user to use the new op.
-    use.set(newOp->getResult(0));
-
-    // If any of the operations of the moved op are always inline, recursively
-    // handle them too.
-    recursivelyHandleOperands(newOp);
-  }
-
-  // Finally, ensures the op is in the same block as its user so it can be
-  // inlined.
-  Operation *user = *op->getUsers().begin();
-  if (op->getBlock() != user->getBlock()) {
-    op->moveBefore(user);
-
-    // If any of the operations of the moved op are always inline, recursively
-    // move/clone them too.
-    recursivelyHandleOperands(op);
-  }
-  return;
-}
-
-/// Lower a variadic fully-associative operation into an expression tree.  This
-/// enables long-line splitting to work with them.
-static Value lowerFullyAssociativeOp(Operation &op, OperandRange operands,
-                                     SmallVector<Operation *> &newOps) {
-  Value lhs, rhs;
-  switch (operands.size()) {
-  case 0:
-    assert(0 && "cannot be called with empty operand range");
-    break;
-  case 1:
-    return operands[0];
-  case 2:
-    lhs = operands[0];
-    rhs = operands[1];
-    break;
-  default:
-    auto firstHalf = operands.size() / 2;
-    lhs = lowerFullyAssociativeOp(op, operands.take_front(firstHalf), newOps);
-    rhs = lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), newOps);
-    break;
-  }
-
-  OperationState state(op.getLoc(), op.getName());
-  state.addOperands(ValueRange{lhs, rhs});
-  state.addTypes(op.getResult(0).getType());
-  auto *newOp = Operation::create(state);
-  op.getBlock()->getOperations().insert(Block::iterator(&op), newOp);
-  newOps.push_back(newOp);
-  return newOp->getResult(0);
-}
-
-/// When we find that an operation is used before it is defined in a graph
-/// region, we emit an explicit wire to resolve the issue.
-static void lowerUsersToTemporaryWire(Operation &op) {
-  Block *block = op.getBlock();
-  auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
-
-  for (auto result : op.getResults()) {
-    auto newWire = builder.create<WireOp>(result.getType());
-
-    while (!result.use_empty()) {
-      auto newWireRead = builder.create<ReadInOutOp>(newWire);
-      OpOperand &use = *result.getUses().begin();
-      use.set(newWireRead);
-      newWireRead->moveBefore(use.getOwner());
-    }
-
-    auto connect = builder.create<AssignOp>(newWire, result);
-    connect->moveAfter(&op);
-  }
-}
-
-void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
   // Add all the ports to the name table.
   SmallVector<ModulePortInfo> portInfo = module.getPorts();
   for (auto &port : portInfo) {
@@ -3293,11 +2989,14 @@ void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
       names.addLegalName(module.getArgument(port.argNum), name, module);
   }
 
+  SmallPtrSet<Operation *, 8> moduleOpSet;
+  moduleOpSet.insert(module);
+
   auto moduleNameAttr = module.getNameAttr();
   verifyModuleName(module, moduleNameAttr);
   os << "module " << moduleNameAttr.getValue() << '(';
   if (!portInfo.empty())
-    os << '\n';
+    emitLocationInfoAndNewLine(moduleOpSet);
 
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
@@ -3401,18 +3100,22 @@ void ModuleEmitter::emitHWModule(HWModuleOp module, ModuleNameManager &names) {
     os << '\n';
   }
 
-  if (portInfo.empty())
-    os << ");\n";
+  if (portInfo.empty()) {
+    os << ");";
+    emitLocationInfoAndNewLine(moduleOpSet);
+  }
   reduceIndent();
 
   // Emit the body of the module.
-  emitStatementBlock(*module.getBodyBlock(), names);
-
+  SmallString<128> outputBuffer;
+  StmtEmitter(*this, outputBuffer, names)
+      .emitStatementBlock(*module.getBodyBlock());
+  os << outputBuffer;
   os << "endmodule\n\n";
 }
 
 //===----------------------------------------------------------------------===//
-// Common functionality for root module emitters
+// Top level "file" emitter logic
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -3440,8 +3143,58 @@ struct FileInfo {
   bool addToFilelist = true;
 };
 
-/// A base class for all MLIR module emitters.
-struct RootEmitterBase {
+/// This class wraps an operation or a fixed string that should be emitted.
+class StringOrOpToEmit {
+public:
+  explicit StringOrOpToEmit(Operation *op) : pointerData(op), length(~0ULL) {}
+
+  explicit StringOrOpToEmit(StringRef string) {
+    pointerData = (Operation *)nullptr;
+    setString(string);
+  }
+
+  ~StringOrOpToEmit() {
+    if (const void *ptr = pointerData.dyn_cast<const void *>())
+      free(const_cast<void *>(ptr));
+  }
+
+  /// If the value is an Operation*, return it.  Otherwise return null.
+  Operation *getOperation() const {
+    return pointerData.dyn_cast<Operation *>();
+  }
+
+  /// If the value wraps a string, return it.  Otherwise return null.
+  StringRef getStringData() const {
+    if (const void *ptr = pointerData.dyn_cast<const void *>())
+      return StringRef((const char *)ptr, length);
+    return StringRef();
+  }
+
+  /// This method transforms the entry from an operation to a string value.
+  void setString(StringRef value) {
+    assert(pointerData.is<Operation *>() && "shouldn't already be a string");
+    length = value.size();
+    void *data = malloc(length);
+    memcpy(data, value.data(), length);
+    pointerData = (const void *)data;
+  }
+
+  // These move just fine.
+  StringOrOpToEmit(StringOrOpToEmit &&rhs)
+      : pointerData(rhs.pointerData), length(rhs.length) {
+    rhs.pointerData = (Operation *)nullptr;
+  }
+
+private:
+  StringOrOpToEmit(const StringOrOpToEmit &) = delete;
+  void operator=(const StringOrOpToEmit &) = delete;
+  PointerUnion<Operation *, const void *> pointerData;
+  size_t length;
+};
+
+/// This class tracks the top-level state for the emitters, which is built and
+/// then shared across all per-file emissions that happen in parallel.
+struct SharedEmitterState {
   /// The MLIR module to emit.
   ModuleOp rootOp;
 
@@ -3460,220 +3213,63 @@ struct RootEmitterBase {
   /// Whether any error has been encountered during emission.
   std::atomic<bool> encounteredError = {};
 
-  /// Legalized names for each module
-  llvm::DenseMap<Operation *, ModuleNameManager> legalizedNames;
+  /// A cache of symbol -> defining ops built once and used by each of the
+  /// verilog module emitters.  This is built at "gatherFiles" time.
+  SymbolCache symbolCache;
 
   // Emitter options extracted from the top-level module.
-  LoweringOptions options;
+  const LoweringOptions options;
 
-  explicit RootEmitterBase(ModuleOp rootOp) : rootOp(rootOp), options(rootOp) {}
-  void prepareAllModules();
+  /// This is a set is populated at "gather" time, containing the hw.module
+  /// operations that have a sv.bind in them.
+  SmallPtrSet<Operation *, 8> modulesContainingBinds;
+
+  explicit SharedEmitterState(ModuleOp rootOp)
+      : rootOp(rootOp), options(rootOp) {}
   void gatherFiles(bool separateModules);
-  void emitFile(const FileInfo &fileInfo, VerilogEmitterState &state);
-  void emitOperation(VerilogEmitterState &state, Operation *op);
+
+  using EmissionList = std::vector<StringOrOpToEmit>;
+
+  void collectOpsForFile(const FileInfo &fileInfo, EmissionList &thingsToEmit);
+  void emitOps(EmissionList &thingsToEmit, raw_ostream &os, bool parallelize);
 };
 
 } // namespace
-
-/// Transform "a + -cst" ==> "a - cst" for prettier output.
-static void rewriteAddWithNegativeConstant(comb::AddOp add,
-                                           hw::ConstantOp rhsCst) {
-  ImplicitLocOpBuilder builder(add.getLoc(), add);
-
-  // Get the positive constant.
-  auto negCst = builder.create<hw::ConstantOp>(-rhsCst.getValue());
-  auto sub = builder.create<comb::SubOp>(add.getOperand(0), negCst);
-  add.getResult().replaceAllUsesWith(sub);
-  add.erase();
-  if (rhsCst.use_empty())
-    rhsCst.erase();
-}
-
-/// For each module we emit, do a prepass over the structure, pre-lowering and
-/// otherwise rewriting operations we don't want to emit.
-static void prepareHWModule(Block &block, ModuleNameManager &names,
-                            const LoweringOptions &options) {
-  for (Block::iterator opIterator = block.begin(), e = block.end();
-       opIterator != e;) {
-    auto &op = *opIterator++;
-
-    // If the operations has regions, lower each of the regions.
-    for (auto &region : op.getRegions()) {
-      if (!region.empty())
-        prepareHWModule(region.front(), names, options);
-    }
-
-    // Duplicate "always inline" expression for each of their users and move
-    // them to be next to their users.
-    if (isExpressionAlwaysInline(&op)) {
-      lowerAlwaysInlineOperation(&op);
-      continue;
-    }
-
-    // Lower variadic fully-associative operations with more than two operands
-    // into balanced operand trees so we can split long lines across multiple
-    // statements.
-    // TODO: This is checking the Commutative property, which doesn't seem
-    // right in general.  MLIR doesn't have a "fully associative" property.
-    //
-    if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
-        op.hasTrait<mlir::OpTrait::IsCommutative>() &&
-        mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
-        op.getNumRegions() == 0 && op.getNumSuccessors() == 0 &&
-        op.getAttrs().empty()) {
-      // Lower this operation to a balanced binary tree of the same operation.
-      SmallVector<Operation *> newOps;
-      auto result = lowerFullyAssociativeOp(op, op.getOperands(), newOps);
-      op.getResult(0).replaceAllUsesWith(result);
-      op.erase();
-
-      // Make sure we revisit the newly inserted operations.
-      opIterator = Block::iterator(newOps.front());
-      continue;
-    }
-
-    // Turn a + -cst  ==> a - cst
-    if (auto addOp = dyn_cast<comb::AddOp>(op)) {
-      if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
-        assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
-        if (cst.getValue().isNegative()) {
-          rewriteAddWithNegativeConstant(addOp, cst);
-          continue;
-        }
-      }
-    }
-
-    // Name legalization should have happened in a different pass for these sv
-    // elements and we don't want to change their name through re-legalization
-    // (e.g. letting a temporary take the name of an unvisited wire). Adding
-    // them now ensures any temporary generated will not use one of the names
-    // previously declared.
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
-      // Anchor return values to wires early
-      lowerInstanceResults(instance);
-      // Anchor ports of bound instances
-      if (instance->hasAttr("doNotPrint"))
-        lowerBoundInstance(instance);
-      names.addLegalName(&op, instance.instanceName(), &op);
-    } else if (auto wire = dyn_cast<WireOp>(op))
-      names.addLegalName(op.getResult(0), wire.name(), &op);
-    else if (auto regOp = dyn_cast<RegOp>(op))
-      names.addLegalName(op.getResult(0), regOp.name(), &op);
-    else if (auto localParamOp = dyn_cast<LocalParamOp>(op))
-      names.addLegalName(op.getResult(0), localParamOp.name(), &op);
-    else if (auto interfaceInstanceOp = dyn_cast<InterfaceInstanceOp>(op))
-      names.addLegalName(op.getResult(0), interfaceInstanceOp.name(), &op);
-
-    // Force any expression used in the event control of an always process to be
-    // a trivial wire, if the corresponding option is set.
-    if (!options.allowExprInEventControl) {
-      auto enforceWire = [&](Value expr) {
-        // Direct port uses are fine.
-        if (expr.isa<BlockArgument>())
-          return;
-        // If this is a read from a wire, we're fine.
-        if (auto read = expr.getDefiningOp<ReadInOutOp>())
-          if (read.input().getDefiningOp<WireOp>())
-            return;
-        auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), &block);
-        auto newWire = builder.create<WireOp>(expr.getType());
-        builder.setInsertionPoint(&op);
-        builder.create<AssignOp>(newWire, expr);
-        auto newWireRead = builder.create<ReadInOutOp>(newWire);
-        op.replaceUsesOfWith(expr, newWireRead);
-      };
-      if (auto always = dyn_cast<AlwaysOp>(op)) {
-        for (auto clock : always.clocks())
-          enforceWire(clock);
-        continue;
-      }
-      if (auto always = dyn_cast<AlwaysFFOp>(op)) {
-        enforceWire(always.clock());
-        if (auto reset = always.reset())
-          enforceWire(reset);
-        continue;
-      }
-    }
-  }
-
-  // Now that all the basic ops are settled, check for any use-before def issues
-  // in graph regions.  Lower these into explicit wires to keep the emitter
-  // simple.
-  if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
-    SmallPtrSet<Operation *, 32> seenOperations;
-
-    for (auto &op : llvm::make_early_inc_range(block)) {
-      // Check the users of any expressions to see if they are
-      // lexically below the operation itself.  If so, it is being used out
-      // of order.
-      bool haveAnyOutOfOrderUses = false;
-      for (auto *userOp : op.getUsers()) {
-        // If the user is in a suboperation like an always block, then zip up
-        // to the operation that uses it.
-        while (&block != &userOp->getParentRegion()->front())
-          userOp = userOp->getParentOp();
-
-        if (seenOperations.count(userOp)) {
-          haveAnyOutOfOrderUses = true;
-          break;
-        }
-      }
-
-      // Remember that we've seen this operation.
-      seenOperations.insert(&op);
-
-      // If all the uses of the operation are below this, then we're ok.
-      if (!haveAnyOutOfOrderUses)
-        continue;
-
-      // If this is a reg/wire declaration, then we move it to the top of the
-      // block.  We can't abstract the inout result.
-      if (op.getNumResults() == 1 &&
-          op.getResult(0).getType().isa<InOutType>() &&
-          op.getNumOperands() == 0) {
-        op.moveBefore(&block.front());
-        continue;
-      }
-
-      // If this is a constant, then we move it to the top of the block.
-      if (isConstantExpression(&op)) {
-        op.moveBefore(&block.front());
-        continue;
-      }
-
-      // Otherwise, we need to lower this to a wire to resolve this.
-      lowerUsersToTemporaryWire(op);
-    }
-  }
-}
-
-void RootEmitterBase::prepareAllModules() {
-  bool hasError = false;
-  for (auto op : rootOp.getBody()->getOps<HWModuleOp>()) {
-    auto &names = legalizedNames[op];
-    prepareHWModule(*op.getBodyBlock(), names, options);
-    hasError |= names.hadError();
-  }
-  if (hasError)
-    encounteredError = true;
-}
 
 /// Organize the operations in the root MLIR module into output files to be
 /// generated. If `separateModules` is true, a handful of top-level
 /// declarations will be split into separate output files even in the absence
 /// of an explicit output file attribute.
-void RootEmitterBase::gatherFiles(bool separateModules) {
+void SharedEmitterState::gatherFiles(bool separateModules) {
+
+  /// Collect all the instance symbols from the specified module and add them to
+  /// the IRCache.  Instances only exist at the top level of the module.  Also
+  /// keep track of any modules that contain bind operations.  These are
+  /// non-hierarchical references which we need to be careful about during
+  /// emission.
+  auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
+    for (Operation &op : *moduleOp.getBodyBlock()) {
+      if (auto instance = dyn_cast<InstanceOp>(op))
+        if (auto sym = instance.sym_nameAttr())
+          symbolCache.addDefinition(sym, instance);
+      if (isa<BindOp>(op))
+        modulesContainingBinds.insert(moduleOp);
+    }
+  };
+
+  SmallString<32> outputPath;
   for (auto &op : *rootOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
-    auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
 
-    SmallString<32> outputPath;
     bool hasFileName = false;
     bool emitReplicatedOps = true;
     bool addToFilelist = true;
 
+    outputPath.clear();
+
     // Check if the operation has an explicit `output_file` attribute set. If
     // it does, extract the information from the attribute.
+    auto attr = op.getAttrOfType<hw::OutputFileAttr>("output_file");
     if (attr) {
       LLVM_DEBUG(llvm::dbgs() << "Found output_file attribute " << attr
                               << " on " << op << "\n";);
@@ -3691,9 +3287,19 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
       addToFilelist = !attr.exclude_from_filelist().getValue();
     }
 
-    auto separateFile = [&](Operation *op, Twine fileName = "") {
-      if (!hasFileName)
-        llvm::sys::path::append(outputPath, fileName);
+    auto separateFile = [&](Operation *op, Twine defaultFileName = "") {
+      // If we're emitting to a separate file and the output_file attribute
+      // didn't specify a filename, take the default one if present or emit an
+      // error if not.
+      if (!hasFileName) {
+        if (!defaultFileName.isTriviallyEmpty()) {
+          llvm::sys::path::append(outputPath, defaultFileName);
+        } else {
+          op->emitError("file name unspecified");
+          encounteredError = true;
+          llvm::sys::path::append(outputPath, "error.out");
+        }
+      }
 
       auto &file = files[Identifier::get(outputPath, op->getContext())];
       file.ops.push_back(info);
@@ -3704,87 +3310,97 @@ void RootEmitterBase::gatherFiles(bool separateModules) {
     // Separate the operation into dedicated output file, or emit into the
     // root file, or replicate in all output files.
     TypeSwitch<Operation *>(&op)
-        .Case<HWModuleOp>([&](auto &mod) {
+        .Case<HWModuleOp>([&](auto mod) {
+          // Build the IR cache.
+          symbolCache.addDefinition(mod.getNameAttr(), mod);
+          collectInstanceSymbolsAndBinds(mod);
+
           // Emit into a separate file named after the module.
           if (attr || separateModules)
             separateFile(mod, mod.getName() + ".sv");
           else
             rootFile.ops.push_back(info);
         })
-        .Case<InterfaceOp>([&](auto &intf) {
+        .Case<InterfaceOp>([&](auto intf) {
+          // Build the IR cache.
+          symbolCache.addDefinition(intf.getNameAttr(), intf);
+
           // Emit into a separate file named after the interface.
           if (attr || separateModules)
             separateFile(intf, intf.sym_name() + ".sv");
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefOp, TypeScopeOp, HWModuleExternOp>([&](auto &) {
+        .Case<HWModuleExternOp>([&](auto op) {
+          // Build the IR cache.
+          symbolCache.addDefinition(op.getNameAttr(), op);
+          if (separateModules)
+            separateFile(op, "extern_modules.sv");
+          else
+            rootFile.ops.push_back(info);
+        })
+        .Case<VerbatimOp, IfDefOp, TypeScopeOp>([&](Operation *op) {
           // Emit into a separate file using the specified file name or
           // replicate the operation in each outputfile.
-          if (attr) {
-            if (!hasFileName) {
-              op.emitError("file name unspecified");
-              encounteredError = true;
-            } else
-              separateFile(&op);
+          if (!attr) {
+            replicatedOps.push_back(op);
           } else
-            replicatedOps.push_back(&op);
+            separateFile(op, "");
         })
-        .Case<HWGeneratorSchemaOp>([&](auto &) {
+        .Case<HWGeneratorSchemaOp>([&](auto) {
           // Empty.
         })
-        .Case<BindOp, BindInterfaceOp>([&](auto &op) {
-          if (attr) {
-            if (!hasFileName) {
-              op.emitError("file name unspecified");
-              encounteredError = true;
-            } else
-              separateFile(op);
-          } else
+        .Case<BindOp, BindInterfaceOp>([&](auto op) {
+          if (!attr) {
             separateFile(op, "bindfile");
+          } else {
+            separateFile(op);
+          }
         })
         .Default([&](auto *) {
           op.emitError("unknown operation");
           encounteredError = true;
         });
   }
+
+  // We've built the whole symbol cache.  Freeze it so things can start querying
+  // it (potentially concurrently).
+  symbolCache.freeze();
 }
 
-/// Emit the operations in a `FileInfo` to an output stream. This handles the
-/// correct interpolation of replicated operations.
-void RootEmitterBase::emitFile(const FileInfo &file,
-                               VerilogEmitterState &state) {
+/// Given a FileInfo, collect all the replicated and designated operations that
+/// go into it and append them to "thingsToEmit".
+void SharedEmitterState::collectOpsForFile(const FileInfo &file,
+                                           EmissionList &thingsToEmit) {
+  // If we're emitting replicated ops, keep track of where we are in the list.
   size_t lastReplicatedOp = 0;
+  size_t numReplicatedOps = file.emitReplicatedOps ? replicatedOps.size() : 0;
+
+  thingsToEmit.reserve(thingsToEmit.size() + numReplicatedOps +
+                       file.ops.size());
 
   // Emit each operation in the file preceded by the replicated ops not yet
   // printed.
   for (const auto &opInfo : file.ops) {
     // Emit the replicated per-file operations before the main operation's
     // position (if enabled).
-    if (file.emitReplicatedOps)
-      for (; lastReplicatedOp < std::min(opInfo.position, replicatedOps.size());
-           ++lastReplicatedOp)
-        emitOperation(state, replicatedOps[lastReplicatedOp]);
+    for (; lastReplicatedOp < std::min(opInfo.position, numReplicatedOps);
+         ++lastReplicatedOp)
+      thingsToEmit.emplace_back(replicatedOps[lastReplicatedOp]);
 
     // Emit the operation itself.
-    emitOperation(state, opInfo.op);
+    thingsToEmit.emplace_back(opInfo.op);
   }
 
   // Emit the replicated per-file operations after the last operation (if
   // enabled).
-  if (file.emitReplicatedOps)
-    for (; lastReplicatedOp < replicatedOps.size(); lastReplicatedOp++)
-      emitOperation(state, replicatedOps[lastReplicatedOp]);
-
-  if (state.encounteredError)
-    encounteredError = true;
+  for (; lastReplicatedOp < numReplicatedOps; lastReplicatedOp++)
+    thingsToEmit.emplace_back(replicatedOps[lastReplicatedOp]);
 }
 
-void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
+static void emitOperation(VerilogEmitterState &state, Operation *op) {
   TypeSwitch<Operation *>(op)
-      .Case<HWModuleOp>([&](auto op) {
-        ModuleEmitter(state).emitHWModule(op, legalizedNames[op]);
-      })
+      .Case<HWModuleOp>([&](auto op) { ModuleEmitter(state).emitHWModule(op); })
       .Case<HWModuleExternOp>(
           [&](auto op) { ModuleEmitter(state).emitHWExternModule(op); })
       .Case<HWModuleGeneratedOp>(
@@ -3793,84 +3409,113 @@ void RootEmitterBase::emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<BindOp>([&](auto op) { ModuleEmitter(state).emitBind(op); })
       .Case<BindInterfaceOp>(
           [&](auto op) { ModuleEmitter(state).emitBindInterface(op); })
-      .Case<InterfaceOp, VerbatimOp, IfDefOp>([&](auto op) {
-        ModuleNameManager emptyNames;
-        ModuleEmitter(state).emitStatement(op, emptyNames);
-      })
+      .Case<InterfaceOp, VerbatimOp, IfDefOp>(
+          [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
         TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
       })
       .Default([&](auto *op) {
-        encounteredError = true;
+        state.encounteredError = true;
         op->emitError("unknown operation");
       });
+}
+
+/// Actually emit the collected list of operations and strings to the specified
+/// file.
+void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
+                                 bool parallelize) {
+  MLIRContext *context = rootOp->getContext();
+
+  // Disable parallelization overhead if MLIR threading is disabled.
+  if (parallelize)
+    parallelize &= context->isMultithreadingEnabled();
+
+  // If we aren't parallelizing output, directly output each operation to the
+  // specified stream.
+  if (!parallelize) {
+    VerilogEmitterState state(options, symbolCache, os);
+    for (auto &entry : thingsToEmit) {
+      if (auto *op = entry.getOperation())
+        emitOperation(state, op);
+      else
+        os << entry.getStringData();
+    }
+
+    if (state.encounteredError)
+      encounteredError = true;
+    return;
+  }
+
+  // If we are parallelizing emission, we emit each independent operation to a
+  // string buffer in parallel, then concat at the end.
+  //
+  parallelForEach(context, thingsToEmit, [&](StringOrOpToEmit &stringOrOp) {
+    auto *op = stringOrOp.getOperation();
+    if (!op)
+      return; // Ignore things that are already strings.
+
+    // BindOp emission reaches into the hw.module of the instance, and that
+    // body may be being transformed by its own emission.  Defer their emission
+    // to the serial phase.  They are speedy to emit anyway.
+    if (isa<BindOp>(op) || modulesContainingBinds.count(op))
+      return;
+
+    SmallString<256> buffer;
+    llvm::raw_svector_ostream tmpStream(buffer);
+    VerilogEmitterState state(options, symbolCache, tmpStream);
+    emitOperation(state, op);
+    stringOrOp.setString(buffer);
+  });
+
+  // Finally emit each entry now that we know it is a string.
+  for (auto &entry : thingsToEmit) {
+    // Almost everything is lowered to a string, just concat the strings onto
+    // the output stream.
+    auto *op = entry.getOperation();
+    if (!op) {
+      os << entry.getStringData();
+      continue;
+    }
+
+    // If this wasn't emitted to a string (e.g. it is a bind) do so now.
+    VerilogEmitterState state(options, symbolCache, os);
+    emitOperation(state, op);
+  }
 }
 
 //===----------------------------------------------------------------------===//
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
-namespace {
+LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
+  SharedEmitterState emitter(module);
+  emitter.gatherFiles(false);
 
-/// A Verilog emitter that emits all modules into a single output stream.
-struct UnifiedEmitter : public RootEmitterBase {
-  explicit UnifiedEmitter(llvm::raw_ostream &os, ModuleOp rootOp)
-      : RootEmitterBase(rootOp), os(os) {}
+  SharedEmitterState::EmissionList list;
 
-  /// The output stream to emit into.
-  llvm::raw_ostream &os;
-
-  void emitMLIRModule();
-};
-
-} // namespace
-
-void UnifiedEmitter::emitMLIRModule() {
-  gatherFiles(false);
-  VerilogEmitterState state(os);
-  state.options = options;
-
-  // Emit the main file. This is a container for anything not explicitly split
-  // out into a separate file.
-  emitFile(rootFile, state);
+  // Collect the contents of the main file. This is a container for anything not
+  // explicitly split out into a separate file.
+  emitter.collectOpsForFile(emitter.rootFile, list);
 
   // Emit the separate files.
-  for (const auto &it : files) {
-    state.os << "\n// ----- 8< ----- FILE \"" << it.first
-             << "\" ----- 8< -----\n\n";
-    emitFile(it.second, state);
+  for (const auto &it : emitter.files) {
+    list.emplace_back("\n// ----- 8< ----- FILE \"" + it.first.str() +
+                      "\" ----- 8< -----\n\n");
+    emitter.collectOpsForFile(it.second, list);
   }
+
+  // Finally, emit all the ops we collected.
+  emitter.emitOps(list, os, /*parallelize=*/true);
+  return failure(emitter.encounteredError);
 }
 
 //===----------------------------------------------------------------------===//
 // Split Emitter
 //===----------------------------------------------------------------------===//
 
-namespace {
-
-/// A Verilog emitter that separates modules into individual output files.
-struct SplitEmitter : public RootEmitterBase {
-  explicit SplitEmitter(StringRef dirname, ModuleOp rootOp)
-      : RootEmitterBase(rootOp), dirname(dirname) {}
-
-  /// The directory to emit files into.
-  StringRef dirname;
-
-  void emitMLIRModule();
-  void createFile(Identifier fileName, FileInfo &file);
-};
-
-} // namespace
-
-void SplitEmitter::emitMLIRModule() {
-  gatherFiles(true);
-
-  // Run in parallel if context enables it.
-  mlir::parallelForEach(rootOp->getContext(), files.begin(), files.end(),
-                        [&](auto &it) { createFile(it.first, it.second); });
-}
-
-void SplitEmitter::createFile(Identifier fileName, FileInfo &file) {
+static void createSplitOutputFile(Identifier fileName, FileInfo &file,
+                                  StringRef dirname,
+                                  SharedEmitterState &emitter) {
   // Determine the output path from the output directory and filename.
   SmallString<128> outputFilename(dirname);
   appendPossiblyAbsolutePath(outputFilename, fileName.strref());
@@ -3882,41 +3527,40 @@ void SplitEmitter::createFile(Identifier fileName, FileInfo &file) {
     mlir::emitError(file.ops[0].op->getLoc(),
                     "cannot create output directory \"" + outputDir +
                         "\": " + error.message());
-    encounteredError = true;
+    emitter.encounteredError = true;
+    return;
   }
 
   // Open the output file.
   std::string errorMessage;
   auto output = mlir::openOutputFile(outputFilename, &errorMessage);
   if (!output) {
-    encounteredError = true;
     llvm::errs() << errorMessage << "\n";
+    emitter.encounteredError = true;
     return;
   }
 
+  SharedEmitterState::EmissionList list;
+  emitter.collectOpsForFile(file, list);
+
   // Emit the file, copying the global options into the individual module
-  // state.
-  VerilogEmitterState state(output->os());
-  state.options = options;
-  emitFile(file, state);
+  // state.  Don't parallelize emission of the ops within this file - we already
+  // parallelize per-file emission and we pay a string copy overhead for
+  // parallelization.
+  emitter.emitOps(list, output->os(), /*parallelize=*/false);
   output->keep();
 }
 
-//===----------------------------------------------------------------------===//
-// MLIRModuleEmitter
-//===----------------------------------------------------------------------===//
-
-LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
-  UnifiedEmitter emitter(os, module);
-  emitter.prepareAllModules();
-  emitter.emitMLIRModule();
-  return failure(emitter.encounteredError);
-}
-
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
-  SplitEmitter emitter(dirname, module);
-  emitter.prepareAllModules();
-  emitter.emitMLIRModule();
+  SharedEmitterState emitter(module);
+  emitter.gatherFiles(true);
+
+  // Emit each file in parallel if context enables it.
+  mlir::parallelForEach(module->getContext(), emitter.files.begin(),
+                        emitter.files.end(), [&](auto &it) {
+                          createSplitOutputFile(it.first, it.second, dirname,
+                                                emitter);
+                        });
 
   // Write the file list.
   SmallString<128> filelistPath(dirname);
@@ -3937,6 +3581,10 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
 
   return failure(emitter.encounteredError);
 }
+
+//===----------------------------------------------------------------------===//
+// Registration
+//===----------------------------------------------------------------------===//
 
 void circt::registerToVerilogTranslation() {
   // Register the circt emitter command line options.

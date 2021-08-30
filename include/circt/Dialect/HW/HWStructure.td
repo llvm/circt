@@ -297,11 +297,11 @@ def InstanceOp : HWOp<"instance",
   let extraClassDeclaration = [{
     // Return the name of the specified result or empty string if it cannot be
     // determined.
-    StringAttr getResultName(size_t i);
+    StringAttr getResultName(size_t i, const SymbolCache *cache = nullptr);
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule();
+    Operation *getReferencedModule(const SymbolCache *cache = nullptr);
 
     /// Get the instances's name as StringAttr.
     StringAttr getNameAttr() {

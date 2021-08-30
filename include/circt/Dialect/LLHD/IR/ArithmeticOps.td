@@ -37,35 +37,6 @@ def LLHD_NegOp : LLHD_ArithmeticOrBitwiseOp<"neg", []> {
   let hasFolder = 1;
 }
 
-def LLHD_SModOp : LLHD_ArithmeticOrBitwiseOp<"smod", []> {
-  let summary = "Signed modulo.";
-  let description = [{
-    This instruction computes the signed modulo of two signless integers of
-    any width, treating the leading bit as sign. The operand and result
-    types always have to be the same.
-    To calculate the signed remainder of two integers, use `remi_signed`
-    from the standard dialect.
-
-    Syntax:
-
-    ```
-    smod-op ::= ssa-id `=` `llhd.smod` ssa-lhs `,` ssa-rhs attr-dict `:` type
-    ```
-
-    Examples:
-
-    ```mlir
-    %0 = llhd.const 9 : i4
-    %1 = llhd.const 4 : i4
-    %2 = llhd.smod %0, %1 : i4
-    ```
-  }];
-
-  let arguments = (ins AnySignlessInteger:$lhs, AnySignlessInteger:$rhs);
-
-  let hasFolder = 1;
-}
-
 def LLHD_EqOp : LLHD_Op<"eq", [
     NoSideEffect,
     Commutative,
@@ -97,7 +68,6 @@ def LLHD_EqOp : LLHD_Op<"eq", [
   let assemblyFormat = "operands attr-dict `:` type($lhs)";
 
   let hasFolder = 1;
-  let hasCanonicalizer = 1;
 }
 
 def LLHD_NeqOp : LLHD_Op<"neq", [
@@ -131,5 +101,4 @@ def LLHD_NeqOp : LLHD_Op<"neq", [
   let assemblyFormat = "operands attr-dict `:` type($lhs)";
 
   let hasFolder = 1;
-  let hasCanonicalizer = 1;
 }

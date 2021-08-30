@@ -124,7 +124,7 @@ computeCloneSet(SmallPtrSetImpl<Operation *> &roots) {
   return results;
 }
 
-StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
+static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
   if (auto readinout = dyn_cast_or_null<ReadInOutOp>(val.getDefiningOp())) {
     if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp()))
       return wire.name();
@@ -144,7 +144,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
                                          BlockAndValueMapping &cutMap,
                                          StringRef suffix, StringRef path,
                                          StringRef fileName) {
-  OpBuilder b(op->getParentOfType<mlir::ModuleOp>()->getRegion(0));
+  // Create the extracted module right next to the original one.
+  OpBuilder b(op);
 
   // Construct the ports, this is just the input Values
   SmallVector<hw::ModulePortInfo> ports;
@@ -155,11 +156,10 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
                        hw::INPUT, port.value().getType(), port.index()});
   }
 
-  // Create the module, setting the output path if indicated
+  // Create the module, setting the output path if indicated.
   auto newMod = b.create<hw::HWModuleOp>(
       op.getLoc(),
-      b.getStringAttr((getVerilogModuleNameAttr(op).getValue() + suffix).str()),
-      ports);
+      b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
   if (!path.empty())
     newMod->setAttr("output_file", hw::OutputFileAttr::get(
                                        b.getStringAttr(path),
@@ -181,7 +181,11 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
-  auto bindOp = b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst));
+
+  // FIXME: LLVM PR51665 shouldn't have to rebind symbol here.
+  auto moduleSymbol = b.getSymbolRefAttr(op.getName());
+  auto bindOp =
+      b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst), moduleSymbol);
   if (!fileName.empty())
     bindOp->setAttr(
         "output_file",

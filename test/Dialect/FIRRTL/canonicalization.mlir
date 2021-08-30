@@ -1969,4 +1969,10 @@ firrtl.module @constReg5(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, i
   firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
 }
+
+// Should not crash when the reset value is a block argument.
+firrtl.module @constReg7(in %v: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
+  %r = firrtl.regreset %clock, %reset, %v  : !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<4>
+}
+
 }

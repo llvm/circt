@@ -13,7 +13,7 @@ target_link_libraries(circt-reduce
   CIRCTESI
   CIRCTFIRRTL
   CIRCTFIRRTLTransforms
-  CIRCTHandshakeOps
+  CIRCTHandshake
   CIRCTLLHD
   CIRCTMSFT
   CIRCTHW

@@ -10,14 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifdef HANDSHAKE_INTERFACES
-#else
-#define HANDSHAKE_INTERFACES
+#ifndef HANDSHAKE_OP_INTERFACES
+#define HANDSHAKE_OP_INTERFACES
 
-#ifdef OP_BASE
-#else
 include "mlir/IR/OpBase.td"
-#endif // OP_BASE
 
 def MergeLikeOpInterface : OpInterface<"MergeLikeOpInterface"> {
   let description = [{
@@ -111,4 +107,4 @@ def MemoryOpInterface : OpInterface<"MemoryOpInterface"> {
 
 def HasClock : NativeOpTrait<"HasClock">;
 
-#endif // HANDSHAKE_INTERFACES
+#endif // HANDSHAKE_OP_INTERFACES

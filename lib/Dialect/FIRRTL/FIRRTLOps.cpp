@@ -462,7 +462,7 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<ModulePortInfo> ports,
-                        ArrayAttr annotations, ArrayAttr portAnnotations) {
+                        ArrayAttr annotations) {
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
@@ -477,17 +477,17 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
   // Record the names of the arguments if present.
-  SmallVector<Attribute, 4> argAttrs;
+  SmallVector<Attribute, 4> portAnnotations;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Direction, 4> portDirections;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
-    argAttrs.push_back(ports[i].annotations.getArgumentAttrDict());
+    portAnnotations.push_back(ports[i].annotations.getArrayAttr());
   }
 
   // Both attributes are added, even if the module has no ports.
-  result.addAttribute(getArgDictAttrName(), builder.getArrayAttr(argAttrs));
+  result.addAttribute("portAnnotations", builder.getArrayAttr(portAnnotations));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute(
       direction::attrKey,
@@ -497,17 +497,13 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     annotations = builder.getArrayAttr({});
   result.addAttribute("annotations", annotations);
 
-  if (!portAnnotations)
-    portAnnotations = builder.getArrayAttr({});
-  result.addAttribute("portAnnotations", portAnnotations);
-
   result.addRegion();
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ArrayRef<ModulePortInfo> ports,
-                      ArrayAttr annotations, ArrayAttr portAnnotations) {
-  buildModule(builder, result, name, ports, annotations, portAnnotations);
+                      ArrayAttr annotations) {
+  buildModule(builder, result, name, ports, annotations);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -521,9 +517,8 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
                          StringAttr name, ArrayRef<ModulePortInfo> ports,
-                         StringRef defnameAttr, ArrayAttr annotations,
-                         ArrayAttr portAnnotations) {
-  buildModule(builder, result, name, ports, annotations, portAnnotations);
+                         StringRef defnameAttr, ArrayAttr annotations) {
+  buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
 }
@@ -533,7 +528,7 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
                                     ArrayRef<Type> argTypes, bool isVariadic,
                                     ArrayRef<Type> resultTypes,
-                                    bool &needportNamesAttr, APInt directions) {
+                                    bool &needPortNamesAttr, APInt directions) {
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
@@ -556,14 +551,20 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
       // If the name wasn't printable in a way that agreed with portName, make
       // sure to print out an explicit portNames attribute.
       if (!portName.empty() && tmpStream.str().drop_front() != portName)
-        needportNamesAttr = true;
+        needPortNamesAttr = true;
       p << tmpStream.str() << ": ";
     } else if (!portName.empty()) {
       p << '%' << portName << ": ";
     }
 
     p.printType(argTypes[i]);
-    p.printOptionalAttrDict(::mlir::function_like_impl::getArgAttrs(op, i));
+
+    // Combine the port's annos in `portAnnotations` with its attributes in
+    // `arg_attrs` to print a uniform attribute dictionary of the form
+    // `{firrtl.annotations = [<annos>], <arg-attrs>}`.
+    auto argAttrs = ::mlir::function_like_impl::getArgAttrs(op, i);
+    auto annos = AnnotationSet::forPort(op, i);
+    p.printOptionalAttrDict(annos.getArgumentAttrDict(argAttrs).getValue());
   }
 
   if (isVariadic) {
@@ -579,6 +580,7 @@ static ParseResult parseFunctionArgumentList2(
     OpAsmParser &parser, bool allowAttributes, bool allowVariadic,
     SmallVectorImpl<OpAsmParser::OperandType> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Direction> &argDirections,
+    SmallVectorImpl<Attribute> &argAnnotations,
     SmallVectorImpl<NamedAttrList> &argAttrs, bool &isVariadic) {
   if (parser.parseLParen())
     return failure();
@@ -625,6 +627,10 @@ static ParseResult parseFunctionArgumentList2(
       return failure();
     if (!allowAttributes && !attrs.empty())
       return parser.emitError(loc, "expected arguments without attributes");
+    Attribute annos = attrs.erase(getDialectAnnotationAttrName());
+    if (!annos)
+      annos = ArrayAttr::get(parser.getBuilder().getContext(), {});
+    argAnnotations.push_back(annos);
     argAttrs.push_back(attrs);
     return success();
   };
@@ -685,12 +691,14 @@ parseFunctionSignature2(OpAsmParser &parser, bool allowVariadic,
                         SmallVectorImpl<OpAsmParser::OperandType> &argNames,
                         SmallVectorImpl<Type> &argTypes,
                         SmallVectorImpl<Direction> &argDirections,
+                        SmallVectorImpl<Attribute> &argAnnotations,
                         SmallVectorImpl<NamedAttrList> &argAttrs,
                         bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
                         SmallVectorImpl<NamedAttrList> &resultAttrs) {
   bool allowArgAttrs = true;
   if (parseFunctionArgumentList2(parser, allowArgAttrs, allowVariadic, argNames,
-                                 argTypes, argDirections, argAttrs, isVariadic))
+                                 argTypes, argDirections, argAnnotations,
+                                 argAttrs, isVariadic))
     return failure();
   if (succeeded(parser.parseOptionalArrow()))
     return parseFunctionResultList2(parser, resultTypes, resultAttrs);
@@ -712,16 +720,17 @@ static void printModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p << op->getName() << ' ';
   p.printSymbolName(funcName);
 
-  bool needportNamesAttr = false;
+  bool needPortNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
                           needportNamesAttr, op.getPortDirections().getValue());
   SmallVector<StringRef, 3> omittedAttrs({direction::attrKey});
-  if (!needportNamesAttr)
+  if (!needPortNamesAttr)
     omittedAttrs.push_back("portNames");
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
-  if (op->getAttrOfType<ArrayAttr>("portAnnotations").empty())
-    omittedAttrs.push_back("portAnnotations");
+
+  // Port annotations are printed in as part of the signature already.
+  omittedAttrs.push_back("portAnnotations");
 
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
@@ -757,6 +766,7 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
   SmallVector<Direction, 4> argDirections;
+  SmallVector<Attribute, 4> argAnnotations;
   auto &builder = parser.getBuilder();
 
   // Parse the name as a symbol.
@@ -767,9 +777,9 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the function signature.
   bool isVariadic = false;
-  if (parseFunctionSignature2(parser, /*allowVariadic*/ false, entryArgs,
-                              argTypes, argDirections, portNamesAttrs,
-                              isVariadic, resultTypes, resultAttrs))
+  if (parseFunctionSignature2(
+          parser, /*allowVariadic*/ false, entryArgs, argTypes, argDirections,
+          argAnnotations, portNamesAttrs, isVariadic, resultTypes, resultAttrs))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -789,6 +799,15 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   // Add the port directions attribute indiciating which port is.
   result.addAttribute(direction::attrKey,
                       direction::packAttribute(argDirections, context));
+
+  // Add the port annotations attribute.
+  if (!result.attributes.get("portAnnotations")) {
+    auto emptyArray = ArrayAttr::get(context, {});
+    if (llvm::any_of(argAnnotations,
+                     [&](auto anno) { return anno != emptyArray; }))
+      result.addAttribute("portAnnotations",
+                          ArrayAttr::get(context, argAnnotations));
+  }
 
   SmallVector<Attribute> portNames;
   if (!result.attributes.get("portNames")) {
@@ -846,6 +865,17 @@ static LogicalResult verifyModuleSignature(Operation *op) {
     if (!argType.isa<FIRRTLType>())
       return op->emitOpError("all module ports must be firrtl types");
   }
+
+  // Arguments must not have a `firrtl.annotations` attribute. The module
+  // overall has a `portAnnotations` attribute that captures these.
+  for (unsigned i = 0, e = inputs.size(); i < e; ++i) {
+    auto dict = mlir::function_like_impl::getArgAttrDict(op, i);
+    if (dict && dict.get("firrtl.annotations"))
+      return op->emitOpError(
+          "port annotations must be in the module's `portAnnotations` attr, "
+          "not the `firrtl.annotations` arg attr");
+  }
+
   return success();
 }
 

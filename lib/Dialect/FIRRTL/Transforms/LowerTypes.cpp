@@ -707,19 +707,21 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
     if (attr.first != "portNames" && attr.first != direction::attrKey &&
+        attr.first != "portAnnotations" &&
         attr.first != mlir::function_like_impl::getArgDictAttrName())
       newModuleAttrs.push_back(attr);
 
   SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute, 8> newArgAttrs;
+  SmallVector<Attribute, 8> newArgAnnotations;
   SmallVector<Type, 8> inputTypes;
 
   for (auto &port : newArgs) {
     newArgNames.push_back(port.first.name);
     newArgDirections.push_back(port.first.direction);
-    newArgAttrs.push_back(
-        port.first.annotations.getArgumentAttrDict(port.second));
+    newArgAttrs.push_back(builder.getDictionaryAttr(port.second));
+    newArgAnnotations.push_back(port.first.annotations.getArrayAttr());
     inputTypes.push_back(port.first.type);
   }
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
@@ -727,6 +729,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get(direction::attrKey, context),
                      direction::packAttribute(newArgDirections, context)));
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get("portAnnotations", context),
+                     builder.getArrayAttr(newArgAnnotations)));
 
   // Attach new argument attributes.
   newModuleAttrs.push_back(NamedAttribute(
@@ -781,23 +786,28 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
     if (attr.first != "portNames" && attr.first != direction::attrKey &&
+        attr.first != "portAnnotations" &&
         attr.first != mlir::function_like_impl::getArgDictAttrName())
       newModuleAttrs.push_back(attr);
 
   SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute, 8> newArgAttrs;
+  SmallVector<Attribute, 8> newArgAnnotations;
   for (auto &port : newArgs) {
     newArgNames.push_back(port.first.name);
     newArgDirections.push_back(port.first.direction);
-    newArgAttrs.push_back(
-        port.first.annotations.getArgumentAttrDict(port.second));
+    newArgAttrs.push_back(builder->getDictionaryAttr(port.second));
+    newArgAnnotations.push_back(port.first.annotations.getArrayAttr());
   }
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder->getArrayAttr(newArgNames)));
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get(direction::attrKey, context),
                      direction::packAttribute(newArgDirections, context)));
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get("portAnnotations", context),
+                     builder->getArrayAttr(newArgAnnotations)));
 
   // Attach new argument attributes.
   newModuleAttrs.push_back(NamedAttribute(

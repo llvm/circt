@@ -559,22 +559,25 @@ def CoverConcurrentOp : ConcurrentAssertionOp<"cover.concurrent"> {
 def BindOp : SVOp<"bind", []> {
   let summary = "indirect instantiation statement";
   let description = [{
-    Indirectly instantiate a module in the context of another module. This
-    operation pairs with rtl.instance which tracks all information except the
-    emission point for the bind.  This requires that the parent module of the
-    bind exist in the IR. See 23.11 of SV 2017 spec.
+    Indirectly instantiate a module from the context of another module. BindOp
+    pairs with a `hw.instance` (identified by a `boundInstance` symbol) which
+    tracks all information except the emission point for the bind.  BindOp also
+    tracks the `instanceModule` symbol for the `hw.module` that contains the
+    `hw.instance` to accelerate symbol lookup.
+
+    See 23.11 of SV 2017 spec for more information about bind.
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$bind);
+  let arguments =
+   (ins FlatSymbolRefAttr:$boundInstance, FlatSymbolRefAttr:$instanceModule);
   let results = (outs);
   let verifier = "return ::verify$cppClass(*this);";
 
-  let assemblyFormat = [{ $bind attr-dict }];
+  let assemblyFormat = "$boundInstance `in` $instanceModule attr-dict";
 
   let extraClassDeclaration = [{
-    /// Lookup the instance for the bind.  This returns null on
-    /// invalid IR.
-    hw::InstanceOp getReferencedInstance();
+    /// Lookup the instance for the bind.  This returns null on invalid IR.
+    hw::InstanceOp getReferencedInstance(const hw::SymbolCache *cache = nullptr);
   }];
 }
 
@@ -589,7 +592,8 @@ def BindInterfaceOp : SVOp<"bind.interface", []> {
   let verifier = "return ::verify$cppClass(*this);";
   let assemblyFormat = [{ $interface attr-dict }];
   let extraClassDeclaration = [{
-    sv::InterfaceInstanceOp getReferencedInstance();
+    sv::InterfaceInstanceOp
+    getReferencedInstance(const hw::SymbolCache *cache = nullptr);
   }];
 
 }

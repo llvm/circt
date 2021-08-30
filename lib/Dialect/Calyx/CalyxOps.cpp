@@ -646,7 +646,7 @@ void MemoryOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      Twine instanceName, int64_t width, ArrayRef<int64_t> sizes,
                      ArrayRef<int64_t> addrSizes) {
-  state.addAttribute("name", builder.getStringAttr(instanceName));
+  state.addAttribute("instanceName", builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));

@@ -7,6 +7,6 @@ llvm_update_compile_flags(handshake-runner)
 target_link_libraries(handshake-runner PRIVATE
   ${dialect_libs}
   ${conversion_libs}
-  CIRCTHandshakeOps
+  CIRCTHandshake
   CIRCTStandardToHandshake
   )
