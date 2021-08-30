@@ -2583,8 +2583,6 @@ static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 // Utilities related to Direction
 //===----------------------------------------------------------------------===//
 
-Direction direction::get(bool a) { return (Direction)a; }
-
 IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
                                      MLIRContext *ctx) {
 

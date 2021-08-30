@@ -35,7 +35,7 @@ static const char *const attrKey = "portDirections";
 
 /// Return an output direction if \p isOutput is true, otherwise return an
 /// input direction.
-Direction get(bool isOutput);
+inline Direction get(bool isOutput) { return (Direction)isOutput; }
 
 /// Return a \p IntegerAttr containing the packed representation of an array
 /// of directions.
