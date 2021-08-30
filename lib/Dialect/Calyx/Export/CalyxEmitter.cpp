@@ -137,16 +137,6 @@ private:
     emitCalyxBody(emitBody);
   }
 
-  /// Overloaded version for names that require port emission in the section
-  /// name as well, e.g. WhileOp has the following section name:
-  ///      while <port-name> with <group-name> { ... }
-  template <typename Func>
-  void emitCalyxSection(Func emitBody, StringRef symbolName = "") {
-    if (!symbolName.empty())
-      os << space() << symbolName;
-    emitCalyxBody(emitBody);
-  }
-
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
     auto definingOp = value.getDefiningOp();
@@ -201,17 +191,11 @@ private:
           .template Case<SeqOp>([&](auto op) {
             emitCalyxSection("seq", [&]() { emitCalyxControl(op); });
           })
-          .template Case<WhileOp>([&](auto op) {
-            indent() << "while ";
+          .template Case<IfOp, WhileOp>([&](auto op) {
+            indent() << (isa<IfOp>(op) ? "if " : "while ");
             emitValue(op.cond(), /*isIndented=*/false);
             os << " with " << op.groupName();
-            emitCalyxSection([&]() { emitCalyxControl(op); });
-          })
-          .template Case<IfOp>([&](auto op) {
-            indent() << "if ";
-            emitValue(op.cond(), /*isIndented=*/false);
-            os << " with " << op.groupName();
-            emitCalyxSection([&]() { emitCalyxControl(op); });
+            emitCalyxBody([&]() { emitCalyxControl(op); });
           })
           .template Case<EnableOp>([&](auto op) { emitEnable(op); })
           .Default([&](auto op) {
