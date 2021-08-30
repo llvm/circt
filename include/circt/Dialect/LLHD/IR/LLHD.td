@@ -35,24 +35,14 @@ def LLHD_Dialect : Dialect {
   let hasConstantMaterializer = 1;
 }
 
-// Begin Copy-Pasted HWDialect declaration
+//===----------------------------------------------------------------------===//
+// Import HW Types
+//===----------------------------------------------------------------------===//
+
 def HWDialect : Dialect {
   let name = "hw";
-
-  let summary = "Types and operations for the hardware dialect";
-  let description = [{
-    This dialect defines the `hw` dialect, which is intended to be a generic
-    representation of HW outside of a particular use-case.
-  }];
-
-  let hasConstantMaterializer = 1;
-  let cppNamespace = "::circt::hw";
-  let extraClassDeclaration = [{
-    /// Register all HW types.
-    void registerTypes();
-  }];
+  let summary = "Types of the hardware dialect used by LLHD";
 }
-// End Copy-Paste
 
 include "circt/Dialect/HW/HWTypes.td"
 
