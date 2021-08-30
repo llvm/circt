@@ -14,7 +14,6 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Support/LogicalResult.h"
@@ -312,53 +311,54 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
 
     return success();
   }
-  if (auto op = dyn_cast<llhd::NegOp>(inst)) {
+  if (auto op = dyn_cast<llhd::NegOp>(inst))
     return printUnaryOp(inst, "-", indentAmount);
-  }
-  if (auto op = dyn_cast<AddIOp>(inst)) {
+  if (auto op = dyn_cast<comb::AddOp>(inst))
     return printVariadicOp(inst, "+", indentAmount);
-  }
-  if (auto op = dyn_cast<SubIOp>(inst)) {
+  if (auto op = dyn_cast<comb::SubOp>(inst))
     return printVariadicOp(inst, "-", indentAmount);
-  }
-  if (auto op = dyn_cast<MulIOp>(inst)) {
+  if (auto op = dyn_cast<comb::MulOp>(inst))
     return printVariadicOp(inst, "*", indentAmount);
-  }
-  if (auto op = dyn_cast<UnsignedDivIOp>(inst)) {
+  if (auto op = dyn_cast<comb::DivUOp>(inst))
     return printVariadicOp(inst, "/", indentAmount);
-  }
-  if (auto op = dyn_cast<SignedDivIOp>(inst)) {
+  if (auto op = dyn_cast<comb::DivSOp>(inst))
     return printSignedBinaryOp(inst, "/", indentAmount);
-  }
-  if (auto op = dyn_cast<UnsignedRemIOp>(inst)) {
-    // % in Verilog is the remainder in LLHD semantics
+  if (auto op = dyn_cast<comb::ModUOp>(inst))
     return printVariadicOp(inst, "%", indentAmount);
-  }
-  if (auto op = dyn_cast<SignedRemIOp>(inst)) {
-    // % in Verilog is the remainder in LLHD semantics
+  if (auto op = dyn_cast<comb::ModSOp>(inst))
+    // The result of % in Verilog takes the sign of the dividend
     return printSignedBinaryOp(inst, "%", indentAmount);
-  }
-  if (auto op = dyn_cast<CmpIOp>(inst)) {
-    switch (op.getPredicate()) {
-    case mlir::CmpIPredicate::eq:
+  if (auto op = dyn_cast<comb::ShlOp>(inst))
+    return printVariadicOp(inst, "<<", indentAmount);
+  if (auto op = dyn_cast<comb::ShrUOp>(inst))
+    return printVariadicOp(inst, ">>", indentAmount);
+  if (auto op = dyn_cast<comb::ShrSOp>(inst))
+    // The right operand is also converted to a signed value, but in Verilog the
+    // amount is always treated as unsigned.
+    // TODO: would be better to not print the signed conversion of the second
+    // operand.
+    return printSignedBinaryOp(inst, ">>>", indentAmount);
+  if (auto op = dyn_cast<comb::ICmpOp>(inst)) {
+    switch (op.predicate()) {
+    case comb::ICmpPredicate::eq:
       return printVariadicOp(inst, "==", indentAmount);
-    case mlir::CmpIPredicate::ne:
+    case comb::ICmpPredicate::ne:
       return printVariadicOp(inst, "!=", indentAmount);
-    case mlir::CmpIPredicate::sge:
+    case comb::ICmpPredicate::sge:
       return printSignedBinaryOp(inst, ">=", indentAmount);
-    case mlir::CmpIPredicate::sgt:
+    case comb::ICmpPredicate::sgt:
       return printSignedBinaryOp(inst, ">", indentAmount);
-    case mlir::CmpIPredicate::sle:
+    case comb::ICmpPredicate::sle:
       return printSignedBinaryOp(inst, "<=", indentAmount);
-    case mlir::CmpIPredicate::slt:
+    case comb::ICmpPredicate::slt:
       return printSignedBinaryOp(inst, "<", indentAmount);
-    case mlir::CmpIPredicate::uge:
+    case comb::ICmpPredicate::uge:
       return printVariadicOp(inst, ">=", indentAmount);
-    case mlir::CmpIPredicate::ugt:
+    case comb::ICmpPredicate::ugt:
       return printVariadicOp(inst, ">", indentAmount);
-    case mlir::CmpIPredicate::ule:
+    case comb::ICmpPredicate::ule:
       return printVariadicOp(inst, "<=", indentAmount);
-    case mlir::CmpIPredicate::ult:
+    case comb::ICmpPredicate::ult:
       return printVariadicOp(inst, "<", indentAmount);
     }
     return failure();
@@ -382,6 +382,74 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
     }
     if (op.inputs().size() > 0 || op.outputs().size() > 0)
       out << ")";
+    out << ";\n";
+    return success();
+  }
+  if (auto op = dyn_cast<comb::ParityOp>(inst))
+    return printUnaryOp(inst, "^", indentAmount);
+  if (auto op = dyn_cast<comb::ExtractOp>(inst)) {
+    out.PadToColumn(indentAmount);
+    out << "wire ";
+    if (failed(printType(op.result().getType())))
+      return failure();
+    out << " ";
+    printVariableName(op.result());
+    out << " = ";
+    printVariableName(op.input());
+    out << "["
+        << (op.lowBit() + op.result().getType().getIntOrFloatBitWidth() - 1)
+        << ":" << op.lowBit() << "];\n";
+    return success();
+  }
+  if (auto op = dyn_cast<comb::SExtOp>(inst)) {
+    out.PadToColumn(indentAmount);
+    out << "wire ";
+    if (failed(printType(op.result().getType())))
+      return failure();
+    out << " ";
+    printVariableName(op.result());
+    out << " = ";
+    out << "{{"
+        << (op.result().getType().getIntOrFloatBitWidth() -
+            op.input().getType().getIntOrFloatBitWidth())
+        << "{";
+    printVariableName(op.input());
+    out << "[" << (op.input().getType().getIntOrFloatBitWidth() - 1) << "]}}, ";
+    printVariableName(op.input());
+    out << "};\n";
+    return success();
+  }
+  if (auto op = dyn_cast<comb::ConcatOp>(inst)) {
+    out.PadToColumn(indentAmount);
+    out << "wire ";
+    if (failed(printType(op.result().getType())))
+      return failure();
+    out << " ";
+    printVariableName(op.result());
+    out << " = {";
+    bool first = true;
+    for (unsigned i = 0; i < op->getNumOperands(); i++) {
+      if (!first)
+        out << ", ";
+      printVariableName(op.getOperand(i));
+      first = false;
+    }
+    out << "};\n";
+    return success();
+  }
+  if (auto op = dyn_cast<comb::MuxOp>(inst)) {
+    out.PadToColumn(indentAmount);
+    out << "wire ";
+    if (failed(printType(op.result().getType())))
+      return failure();
+    out << " ";
+    printVariableName(op.result());
+    out << " = ";
+    printVariableName(op.cond());
+    out << " ? ";
+    printVariableName(op.trueValue());
+    out << " : ";
+    printVariableName(op.falseValue());
     out << ";\n";
     return success();
   }
@@ -431,7 +499,6 @@ LogicalResult circt::llhd::exportVerilog(ModuleOp module, raw_ostream &os) {
 void circt::llhd::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration registration(
       "export-llhd-verilog", exportVerilog, [](DialectRegistry &registry) {
-        registry.insert<mlir::StandardOpsDialect, llhd::LLHDDialect,
-                        comb::CombDialect>();
+        registry.insert<llhd::LLHDDialect, comb::CombDialect>();
       });
 }

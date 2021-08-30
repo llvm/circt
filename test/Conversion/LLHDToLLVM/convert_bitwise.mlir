@@ -125,3 +125,48 @@ llhd.entity @convert_shr_sig (%sI32 : !llhd.sig<i32>) -> () {
   %0 = llhd.const 8 : i32
   %1 = llhd.shr %sI32, %sI32, %0 : (!llhd.sig<i32>, !llhd.sig<i32>, i32) -> !llhd.sig<i32>
 }
+
+// CHECK-LABEL: llvm.func @convert_comb_shift
+func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
+
+  // CHECK: %[[R0:.*]] = llvm.shl %arg0, %arg1 : i32
+  %0 = comb.shl %arg0, %arg1 : i32
+
+  // CHECK: %[[R1:.*]] = llvm.lshr %[[R0]], %arg1 : i32
+  %1 = comb.shru %0, %arg1 : i32
+
+  // CHECK: %[[R2:.*]] = llvm.ashr %[[R1]], %arg1 : i32
+  %2 = comb.shrs %1, %arg1 : i32
+
+  // CHECK: %[[CNT:.*]] = "llvm.intr.ctpop"(%arg0) : (i32) -> i32
+  // CHECK: llvm.trunc %[[CNT]] : i32 to i1 
+  %3 = comb.parity %arg0 : i32
+
+  // CHECK: %[[AMT:.*]] = llvm.mlir.constant(5 : i32) : i32
+  // CHECK: %[[SHIFTED:.*]] = llvm.lshr %arg0, %[[AMT]]  : i32
+  // CHECK: %[[EXT:.*]] = llvm.trunc %[[SHIFTED]] : i32 to i16
+  %4 = comb.extract %arg0 from 5 : (i32) -> i16
+
+  // CHECK: llvm.sext %[[EXT]] : i16 to i32
+  %5 = comb.sext %4 : (i16) -> i32
+
+  // CHECK: %[[INIT:.*]] = llvm.mlir.constant(0 : i96) : i96
+  // CHECK: %[[A1:.*]] = llvm.mlir.constant(64 : i96) : i96
+  // CHECK: %[[ZEXT1:.*]] = llvm.zext %arg0 : i32 to i96
+  // CHECK: %[[SHIFT1:.*]] = llvm.shl %[[ZEXT1]], %[[A1]]  : i96
+  // CHECK: %[[OR1:.*]] = llvm.or %[[INIT]], %[[SHIFT1]]  : i96
+  // CHECK: %[[A2:.*]] = llvm.mlir.constant(32 : i96) : i96
+  // CHECK: %[[ZEXT2:.*]] = llvm.zext %arg1 : i32 to i96
+  // CHECK: %[[SHIFT2:.*]] = llvm.shl %[[ZEXT2]], %[[A2]]  : i96
+  // CHECK: %[[OR2:.*]] = llvm.or %[[OR1]], %[[SHIFT2]]  : i96
+  // CHECK: %[[A3:.*]] = llvm.mlir.constant(0 : i96) : i96
+  // CHECK: %[[ZEXT3:.*]] = llvm.zext %arg0 : i32 to i96
+  // CHECK: %[[SHIFT3:.*]] = llvm.shl %[[ZEXT3]], %[[A3]]  : i96
+  // CHECK: llvm.or %[[OR2]], %[[SHIFT3]]  : i96
+  %6 = comb.concat %arg0, %arg1, %arg0 : (i32, i32, i32) -> i96
+
+  // CHECK: llvm.select %arg2, %arg0, %arg1 : i1, i32
+  %7 = comb.mux %arg2, %arg0, %arg1 : i32
+
+  return %7 : i32
+}
