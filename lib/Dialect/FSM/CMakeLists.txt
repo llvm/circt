@@ -5,4 +5,7 @@ add_circt_dialect_library(CIRCTFSM
 
   DEPENDS
   MLIRFSMIncGen
+
+  LINK_LIBS PUBLIC
+  MLIRIR
   )
