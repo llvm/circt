@@ -99,4 +99,15 @@ def MemoryOp : CalyxPrimitive<"memory", [
       "ArrayRef<int64_t>":$addrSizes
     )>
   ];
+
+  let extraClassDeclaration = [{
+    size_t getNumAddresses() { return addrSizes().size(); }
+
+    ValueRange addrPorts() { return getResults().take_front(getNumAddresses()); }
+    Value addr(size_t i) { assert(i<getNumAddresses()); return getResults()[i]; }
+    Value writeData() { return getResult(getNumAddresses()); }
+    Value writeEn()   { return getResult(getNumAddresses() + 1); }
+    Value readData()  { return getResult(getNumAddresses() + 2); }
+    Value done()      { return getResult(getNumAddresses() + 3); }
+  }];
 }
