@@ -547,9 +547,7 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 
 /// Returns whether the given value is a port of a component, which are
 /// defined as Block Arguments.
-static bool isComponentPort(Value value) {
-  return value.getImpl()->getKind() == detail::ValueImpl::Kind::BlockArgument;
-}
+static bool isComponentPort(Value value) { return value.isa<BlockArgument>(); }
 
 /// Verifies the given value of the AssignOp if it is a component port. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
@@ -562,7 +560,10 @@ static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
   Block *body = component.getBody();
   auto it = llvm::find_if(body->getArguments(),
                           [&](auto arg) { return arg == value; });
+  assert(it != body->getArguments().end() &&
+         "Value not found in the component ports.");
   BlockArgument blockArg = *it;
+
   size_t blockArgNum = blockArg.getArgNumber();
 
   auto ports = getComponentPortInfo(component);
