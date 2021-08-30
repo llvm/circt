@@ -110,6 +110,20 @@ LogicalResult verifyAllocaOp(hir::AllocaOp op) {
   return success();
 }
 
+LogicalResult verifyYieldOp(hir::YieldOp op) {
+  auto *operation = op->getParentRegion()->getParentOp();
+  auto resultTypes = operation->getResultTypes();
+  auto operands = op.operands();
+  if (resultTypes.size() != operands.size())
+    return op.emitError() << "Expected " << resultTypes.size() << " operands.";
+  for (uint64_t i = 0; i < resultTypes.size(); i++) {
+    if (operands[i].getType() != resultTypes[i])
+      return op.emitError()
+             << "Expected type " << resultTypes[i] << ", found "
+             << operands[i].getType() << " for operand " << i << ".";
+  }
+  return success();
+}
 LogicalResult verifyCallOp(hir::CallOp op) {
   auto inputTypes = op.getFuncType().getInputTypes();
   auto operands = op.getOperands();

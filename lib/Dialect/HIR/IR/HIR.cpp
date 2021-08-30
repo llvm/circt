@@ -390,7 +390,8 @@ static void printIfOp(OpAsmPrinter &printer, IfOp op) {
 
   if (op.results().size() > 0) {
     printer << " -> (";
-    printTypeAndDelayList(printer, op->getResultTypes(), op.result_attrs());
+    printTypeAndDelayList(printer, op->getResultTypes(),
+                          op.result_attrs().getValue());
     printer << ")";
   }
 

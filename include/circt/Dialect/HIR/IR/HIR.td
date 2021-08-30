@@ -106,6 +106,7 @@ def YieldOp : HIR_Op<"yield", [ParentOneOf<["IfOp"]>,Terminator] > {
     build($_builder,$_state,SmallVector<Value>());
   }]>];
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` `(` type($operands) `)`)? }];
+  let verifier =[{return verify$cppClass(*this);}];
 }
 
 def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
@@ -195,7 +196,7 @@ def IfOp : HIR_Op<"if", [SingleBlock, RecursiveSideEffects]> {
       hir.if(%b) at %t {...}        ```
   }];
 
-  let arguments = (ins AnyType : $condition, Optional<HIR_TimeType> : $tstart, OptionalAttr<I64Attr>: $offset, ArrayAttr:$result_attrs);
+  let arguments = (ins AnyType : $condition, Optional<HIR_TimeType> : $tstart, OptionalAttr<I64Attr>: $offset, OptionalAttr<ArrayAttr>:$result_attrs);
   let regions = (region SizedRegion<1>:$if_region, SizedRegion<1>:$else_region);
   let results = (outs Variadic<AnyType>:$results);
 
@@ -672,17 +673,17 @@ def TensorExtractOp :HIR_Op<"tensor.extract",[NoSideEffect]>{
 }
 
 def MemrefExtractOp :HIR_Op<"memref.extract",[NoSideEffect]>{
-  let summary = "Extract a memref port from a memref";
+  let summary = "Extract a port from a memref";
   let description = [{
-    This op extracts a memref (with fewer ports) from another memref.
+    This op extracts a port from a memref.
       Examples:
-      ```mlir %1 = hir.memref.extract %x[ports 1,0] : hir.memref<1xf32> -> hir.memref<1xf32> ports [#wr, #rd]```
+      ```mlir %1 = hir.memref.extract %x[port 1] : hir.memref<1xf32> -> hir.memref<1xf32> ports [#wr]```
   }];
 
-  let arguments = (ins HIR_MemrefType: $mem, ArrayAttr: $portNums, ArrayAttr: $ports);
+  let arguments = (ins HIR_MemrefType: $mem, OptionalAttr<I64Attr>: $port, ArrayAttr: $ports);
   let results = (outs HIR_MemrefType: $res);
 
-  let assemblyFormat = [{`ports`  $portNums `from` $mem  custom<WithSSANames>(attr-dict) `:`
+  let assemblyFormat = [{$mem `[` `port` $port `]`  custom<WithSSANames>(attr-dict) `:`
     type($res) `ports` $ports  custom<CopyType>(type($mem),ref(type($res)))}];
   let hasCanonicalizeMethod = true;
 }

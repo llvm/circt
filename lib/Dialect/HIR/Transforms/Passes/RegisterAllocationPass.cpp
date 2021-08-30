@@ -177,7 +177,7 @@ LogicalResult RegisterAllocationPass::visitOp(hir::YieldOp op) {
   ArrayAttr resultAttrs;
   Value tstartRegion;
   if (auto parentIfOp = dyn_cast<hir::IfOp>(op->getParentOp())) {
-    resultAttrs = parentIfOp.result_attrs();
+    resultAttrs = parentIfOp.result_attrs().getValue();
     tstartRegion = parentIfOp.getRegionTimeVar();
   }
 

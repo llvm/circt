@@ -9,6 +9,7 @@ LogicalResult verifyFuncOp(hir::FuncOp op);
 LogicalResult verifyAllocaOp(hir::AllocaOp op);
 LogicalResult verifyCallOp(hir::CallOp op);
 LogicalResult verifyDelayOp(hir::DelayOp op);
+LogicalResult verifyYieldOp(hir::YieldOp op);
 LogicalResult verifyLatchOp(hir::LatchOp op);
 LogicalResult verifyTimeOp(hir::TimeOp op);
 LogicalResult verifyForOp(hir::ForOp op);
