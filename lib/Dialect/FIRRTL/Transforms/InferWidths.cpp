@@ -1069,7 +1069,8 @@ namespace {
 /// variables and constraints to be solved later.
 class InferenceMapping {
 public:
-  InferenceMapping(ConstraintSolver &solver) : solver(solver) {}
+  InferenceMapping(ConstraintSolver &solver, SymbolTable &symtbl)
+      : solver(solver), symtbl(symtbl) {}
 
   LogicalResult map(CircuitOp op);
   LogicalResult mapOperation(Operation *op);
@@ -1137,6 +1138,9 @@ private:
   /// The fully inferred modules that were skipped entirely.
   SmallPtrSet<Operation *, 16> skippedModules;
   bool allModulesSkipped = true;
+
+  /// Cache of module symbols
+  SymbolTable &symtbl;
 };
 
 } // namespace
@@ -1419,7 +1423,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
       // Handle instances of other modules.
       .Case<InstanceOp>([&](auto op) {
-        auto refdModule = op.getReferencedModule();
+        auto refdModule = op.getReferencedModule(symtbl);
         auto module = dyn_cast<FModuleOp>(&*refdModule);
         if (!module) {
           auto diag = mlir::emitError(op.getLoc());
@@ -1987,7 +1991,8 @@ class InferWidthsPass : public InferWidthsBase<InferWidthsPass> {
 void InferWidthsPass::runOnOperation() {
   // Collect variables and constraints
   ConstraintSolver solver;
-  InferenceMapping mapping(solver);
+  SymbolTable symtbl(getOperation());
+  InferenceMapping mapping(solver, symtbl);
   if (failed(mapping.map(getOperation()))) {
     signalPassFailure();
     return;
