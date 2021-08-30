@@ -49,9 +49,10 @@ def CircuitOp : FIRRTLOp<"circuit",
   let verifier = "return ::verifyCircuitOp(*this);";
 }
 
-def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator, DeclareOpInterfaceMethods<FModuleLike>,
-       HasParent<"CircuitOp">]> {
+def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, FunctionLike, Symbol, 
+                                    SingleBlock, NoTerminator, 
+                                    DeclareOpInterfaceMethods<FModuleLike>,
+                                    HasParent<"CircuitOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
@@ -126,18 +127,20 @@ def FModuleOp : FIRRTLOp<"module",
   let verifier = "return ::verifyFModuleOp(*this);";
 }
 
-def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol, DeclareOpInterfaceMethods<FModuleLike>, HasParent<"CircuitOp">]> {
+def FExtModuleOp : FIRRTLOp<"extmodule", 
+      [IsolatedFromAbove, FunctionLike, Symbol, 
+       DeclareOpInterfaceMethods<FModuleLike>, HasParent<"CircuitOp">]> {
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
   }];
   let arguments = (ins StrArrayAttr:$portNames,
-                       OptionalAttr<StrAttr>:$defname,
-                       OptionalAttr<DictionaryAttr>:$parameters,
-                       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-                       DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
+                   OptionalAttr<StrAttr>:$defname,
+                   OptionalAttr<DictionaryAttr>:$parameters,
+                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+                   DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations
+                  );
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -188,7 +191,8 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     annotations to anchor to in the global scope.  This lets components of the
     path point to a common entity.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, SymbolArrayAttr:$modpath, StringArrayAttr:$namepath);
+  let arguments = (ins SymbolNameAttr:$sym_name, SymbolArrayAttr:$modpath, 
+                      StringArrayAttr:$namepath);
   let results = (outs);
   let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
 }
