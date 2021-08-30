@@ -1975,4 +1975,16 @@ firrtl.module @constReg7(in %v: !firrtl.uint<1>, in %clock: !firrtl.clock, in %r
   %r = firrtl.regreset %clock, %reset, %v  : !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<4>
 }
 
+// Check that firrtl.regreset reset mux folding doesn't respects
+// DontTouchAnnotations.
+// CHECK-LABEL: firrtl.module @constReg8
+firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  // CHECK: firrtl.regreset
+  %r = firrtl.regreset %clock, %reset, %c1_ui1  {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  %0 = firrtl.mux(%reset, %c1_ui1, %r) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  firrtl.connect %r, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %out, %r : !firrtl.uint<1>, !firrtl.uint<1>
+}
+
 }
