@@ -542,6 +542,86 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// AssignOp
+//===----------------------------------------------------------------------===//
+
+/// Returns whether the given value is a port of a component, which are
+/// defined as Block Arguments.
+static bool isComponentPort(Value value) { return value.isa<BlockArgument>(); }
+
+/// Verifies the given value of the AssignOp if it is a component port. The
+/// `isDestination` boolean is used to distinguish whether the value is a source
+/// or a destination.
+static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
+                                                     bool isDestination) {
+  Value value = isDestination ? op.dest() : op.src();
+
+  auto component = op->getParentOfType<ComponentOp>();
+  Block *body = component.getBody();
+  auto it = llvm::find_if(body->getArguments(),
+                          [&](auto arg) { return arg == value; });
+  assert(it != body->getArguments().end() &&
+         "Value not found in the component ports.");
+  BlockArgument blockArg = *it;
+
+  size_t blockArgNum = blockArg.getArgNumber();
+
+  auto ports = getComponentPortInfo(component);
+  assert(blockArgNum < ports.size() &&
+         "Block argument index should be within range of component's ports.");
+  // Within a component, we want to drive component output ports, and be
+  // driven by its input ports.
+  Direction validComponentDirection = isDestination ? Output : Input;
+  return ports[blockArgNum].direction == validComponentDirection
+             ? success()
+             : op.emitOpError()
+                   << "has a component port as the "
+                   << (isDestination ? "destination" : "source")
+                   << " with the incorrect direction. It should be "
+                   << (isDestination ? "Output" : "Input") << ".";
+}
+
+/// Verifies the destination of an assignment operation.
+static LogicalResult verifyAssignOpDestination(AssignOp assign) {
+  Value dest = assign.dest();
+  if (isComponentPort(dest))
+    return verifyAssignOpWithComponentPort(assign,
+                                           /*isDestination=*/true);
+
+  Operation *definingOp = dest.getDefiningOp();
+  bool isValidDestination =
+      definingOp->hasTrait<Cell>() || isa<GroupGoOp, GroupDoneOp>(definingOp);
+  if (!isValidDestination)
+    assign->emitOpError(
+        "has an invalid destination port. The destination of an AssignOp "
+        "must be drive-able.");
+
+  return success();
+}
+
+/// Verifies the source of an assignment operation.
+static LogicalResult verifyAssignOpSource(AssignOp assign) {
+  Value src = assign.src();
+  if (isComponentPort(src))
+    return verifyAssignOpWithComponentPort(assign,
+                                           /*isDestination=*/false);
+
+  return success();
+}
+
+static LogicalResult verifyAssignOp(AssignOp assign) {
+  // TODO(Calyx): Verification for Cell trait (inverse of components ports):
+  // (1) The destination has Direction::Input, and
+  // (2) the source has Direction::Output.
+  // This is simpler with the completion of the Cell Interface.
+  // See: https://github.com/llvm/circt/issues/1597
+  return succeeded(verifyAssignOpDestination(assign)) &&
+                 succeeded(verifyAssignOpSource(assign))
+             ? success()
+             : failure();
+}
+
+//===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
 

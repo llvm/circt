@@ -234,6 +234,7 @@ def AssignOp : CalyxOp<"assign", [
     AnyType:$src,
     Optional<I1>:$guard
   );
+  let verifier = "return ::verify$cppClass(*this);";
 
   // TODO(Calyx): Calyx IR typically represents a
   // guarded assignments as `%dest = %guard ? %src`
