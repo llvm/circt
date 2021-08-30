@@ -13,6 +13,7 @@
 
 #include "circt/Dialect/Calyx/CalyxEmitter.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -36,6 +37,7 @@ static constexpr std::string_view RParen() { return ")"; }
 static constexpr std::string_view colon() { return ": "; }
 static constexpr std::string_view space() { return " "; }
 static constexpr std::string_view period() { return "."; }
+static constexpr std::string_view questionMark() { return " ? "; }
 static constexpr std::string_view equals() { return " = "; }
 static constexpr std::string_view comma() { return ", "; }
 static constexpr std::string_view arrow() { return " -> "; }
@@ -137,6 +139,20 @@ private:
     emitCalyxBody(emitBody);
   }
 
+  /// Helper function for emitting combinational operations.
+  template <typename CombinationalOp>
+  void emitCombinationalValue(CombinationalOp value, StringRef logicalSymbol) {
+    auto inputs = value.inputs();
+    os << LParen();
+    for (size_t i = 0, e = inputs.size(); i != e; ++i) {
+      emitValue(inputs[i], /*isIndented=*/false);
+      if (i + 1 == e)
+        continue;
+      os << space() << logicalSymbol << space();
+    }
+    os << RParen();
+  }
+
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
     auto definingOp = value.getDefiningOp();
@@ -160,6 +176,20 @@ private:
           // We currently default to the decimal representation.
           value.print(os, /*isSigned=*/false);
         })
+        .Case<comb::AndOp>([&](auto op) { emitCombinationalValue(op, "&"); })
+        .Case<comb::OrOp>([&](auto op) { emitCombinationalValue(op, "|"); })
+        .Case<comb::XorOp>([&](auto op) {
+          // The XorOp is a bit different, since the Combinational dialect uses
+          // it to represent binary not.
+          if (!op.isBinaryNot()) {
+            emitOpError(op, "Only supporting Binary Not for XOR.");
+            return;
+          }
+          // The LHS is the value to be negated, and the RHS is a constant with
+          // all ones (guaranteed by isBinaryNot).
+          os << "!";
+          emitValue(op.inputs()[0], /*isIndented=*/false);
+        })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });
   }
@@ -169,11 +199,12 @@ private:
   void emitGroupPort(GroupOp group, OpTy op, StringRef portHole) {
     assert((isa<GroupGoOp>(op) || isa<GroupDoneOp>(op)) &&
            "Required to be a group port.");
-
-    if (op.guard())
-      emitOpError(op, "Guards not supported for emission yet.");
     indent() << group.sym_name() << LSquare() << portHole << RSquare()
              << equals();
+    if (op.guard()) {
+      emitValue(op.guard(), /*isIndented=*/false);
+      os << questionMark();
+    }
     emitValue(op.src(), /*isIndented=*/false);
     os << semicolonEndL();
   }
@@ -348,12 +379,13 @@ void Emitter::emitMemory(MemoryOp memory) {
 }
 
 void Emitter::emitAssignment(AssignOp op) {
-  // TODO(Calyx): Support guards.
-  if (op.guard())
-    emitOpError(op, "guard not supported for emission currently");
 
   emitValue(op.dest(), /*isIndented=*/true);
   os << equals();
+  if (op.guard()) {
+    emitValue(op.guard(), /*isIndented=*/false);
+    os << questionMark();
+  }
   emitValue(op.src(), /*isIndented=*/false);
   os << semicolonEndL();
 }
@@ -364,7 +396,8 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupOp>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp>([&](auto op) { /* Do nothing */ })
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+              [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
           });
@@ -379,7 +412,8 @@ void Emitter::emitGroup(GroupOp group) {
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
           .Case<GroupDoneOp>([&](auto op) { emitGroupPort(group, op, "done"); })
           .Case<GroupGoOp>([&](auto op) { emitGroupPort(group, op, "go"); })
-          .Case<hw::ConstantOp>([&](auto op) { /* Do nothing. */ })
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+              [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside group.");
           });

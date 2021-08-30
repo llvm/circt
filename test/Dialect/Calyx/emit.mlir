@@ -36,21 +36,25 @@ calyx.program {
       // CHECK-NEXT:    Group1[go] = 1'd0;
       // CHECK-NEXT:    c0.in = c0.out;
       // CHECK-NEXT:    Group1[done] = c0.done;
-      %c1 = hw.constant 0 : i1
+      %c0 = hw.constant 0 : i1
+      %c1 = hw.constant 1 : i1
       calyx.group @Group1 {
-        calyx.group_go %c1 : i1
+        calyx.group_go %c0 : i1
         calyx.assign %c0.in = %c0.out : i8
         calyx.group_done %c0.done : i1
       }
       // CHECK-LABEL: group Group2 {
-      // CHECK-NEXT:    c1.in = c1.out;
-      // CHECK-NEXT:    Group2[done] = c1.done;
+      // CHECK-NEXT:    c1.in = (c1.out | 1'd0) ? c1.out;
+      // CHECK-NEXT:    Group2[done] = (c1.out & 1'd1 & 1'd0) ? c1.done;
       calyx.group @Group2 {
-        calyx.assign %c1.in = %c1.out : i1
-        calyx.group_done %c1.done : i1
+        %or = comb.or %c1.out, %c0 : i1
+        calyx.assign %c1.in = %c1.out, %or ? : i1
+        %and = comb.and %c1.out, %c1, %c0 : i1
+        calyx.group_done %c1.done, %and ? : i1
       }
-      // CHECK:   c0.go = 1'd0;
-      calyx.assign %c0.go = %c1 : i1
+      %not = comb.xor %c1.out, %c1 : i1
+      // CHECK:   c0.go = !c1.out;
+      calyx.assign %c0.go = %not : i1
     }
     // CHECK-LABEL: control {
     // CHECK-NEXT:    seq {
