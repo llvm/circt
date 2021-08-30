@@ -15,7 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
-#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
@@ -28,92 +28,16 @@
 namespace circt {
 namespace firrtl {
 
-enum class Direction { Input = 0, Output };
-
-template <typename T>
-T &operator<<(T &os, const Direction &dir) {
-  return os << (dir == Direction::Input ? "input" : "output");
-}
-
-namespace direction {
-
-/// The key in a module's attribute dictionary used to find the direction.
-static const char *const attrKey = "portDirections";
-
-/// Return an output direction if \p isOutput is true, otherwise return an
-/// input direction.
-Direction get(bool isOutput);
-
-/// Return a \p IntegerAttr containing the packed representation of an array of
-/// directions.
-IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
-
-/// Turn a packed representation of port attributes into a vector that can be
-/// worked with.
-SmallVector<Direction> unpackAttribute(Operation *module);
-
-} // namespace direction
-
 /// Return true if the specified operation is a firrtl expression.
 bool isExpression(Operation *op);
 
-/// This holds the name and type that describes the module's ports.
-struct ModulePortInfo {
-  StringAttr name;
-  FIRRTLType type;
-  Direction direction;
-  Location loc;
-  AnnotationSet annotations = AnnotationSet(type.getContext());
-
-  StringRef getName() const { return name ? name.getValue() : ""; }
-
-  /// Return true if this is a simple output-only port.  If you want the
-  /// direction of the port, use the \p direction parameter.
-  bool isOutput() {
-    auto flags = type.getRecursiveTypeProperties();
-    return flags.isPassive && !flags.containsAnalog &&
-           direction == Direction::Output;
-  }
-
-  /// Return true if this is a simple input-only port.  If you want the
-  /// direction of the port, use the \p direction parameter.
-  bool isInput() {
-    auto flags = type.getRecursiveTypeProperties();
-    return flags.isPassive && !flags.containsAnalog &&
-           direction == Direction::Input;
-  }
-
-  /// Return true if this is an inout port.  This will be true if the port
-  /// contains either bi-directional signals or analog types.
-  bool isInOut() { return !isOutput() && !isInput(); }
-};
-
-/// Return the function type that corresponds to a module.
-FunctionType getModuleType(Operation *op);
-
-/// This function can extract information about ports from a module and an
-/// extmodule.
-SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
-
-/// Return the portNames attribute for the specified module, which contains the
-/// name for each port.
-ArrayAttr getModulePortNames(Operation *module);
-
-/// Given an FModule or ExtModule, return the name of the specified port number.
-StringAttr getModulePortName(Operation *op, size_t portIndex);
-
-/// Return the portDirections attribute for the specified module, which contains
-/// the direction for each port.
-IntegerAttr getModulePortDirections(Operation *module);
-
-/// Given an FModule or ExtModule, return the direction of the specified port
-/// number.
-Direction getModulePortDirection(Operation *op, size_t portIndex);
+/// Return the number of ports in a module-like thing (modules, memories, etc)
+size_t getNumPorts(Operation *op);
 
 /// Returns true if the value results from an expression with duplex flow.
-/// Duplex values have special treatment in bundle connect operations, and their
-/// flip orientation is not used to determine the direction of each pairwise
-/// connect.
+/// Duplex values have special treatment in bundle connect operations, and
+/// their flip orientation is not used to determine the direction of each
+/// pairwise connect.
 bool isDuplexValue(Value val);
 
 enum class Flow { Source, Sink, Duplex };
@@ -124,13 +48,13 @@ Flow swapFlow(Flow flow);
 /// Compute the flow for a Value, \p val, as determined by the FIRRTL
 /// specification.  This recursively walks backwards from \p val to the
 /// declaration.  The resulting flow is a combination of the declaration flow
-/// (output ports and instance inputs are sinks, registers and wires are duplex,
-/// anything else is a source) and the number of intermediary flips.  An even
-/// number of flips will result in the same flow as the declaration.  An odd
-/// number of flips will result in reversed flow being returned.  The reverse of
-/// source is sink.  The reverse of sink is source.  The reverse of duplex is
-/// duplex.  The \p accumulatedFlow parameter sets the initial flow.  A user
-/// should normally \a not have to change this from its default of \p
+/// (output ports and instance inputs are sinks, registers and wires are
+/// duplex, anything else is a source) and the number of intermediary flips.
+/// An even number of flips will result in the same flow as the declaration.
+/// An odd number of flips will result in reversed flow being returned.  The
+/// reverse of source is sink.  The reverse of sink is source.  The reverse of
+/// duplex is duplex.  The \p accumulatedFlow parameter sets the initial flow.
+/// A user should normally \a not have to change this from its default of \p
 /// Flow::Source.
 Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 

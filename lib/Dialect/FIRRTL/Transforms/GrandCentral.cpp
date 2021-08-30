@@ -336,7 +336,7 @@ void GrandCentralVisitor::handleRef(mlir::Operation *op) {
 void GrandCentralVisitor::handlePorts(Operation *op) {
 
   SmallVector<Attribute> newArgAttrs;
-  auto ports = getModulePortInfo(op);
+  auto ports = cast<FModuleLike>(op).getPorts();
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
     auto port = ports[i];
     handleRefLike(op, port.annotations, port.type);

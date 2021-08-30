@@ -442,7 +442,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
          ++resultNo) {
       auto portVal = instance.getResult(resultNo);
       // If this is an input to the extmodule, we can ignore it.
-      if (getModulePortDirection(extModule, resultNo) == Direction::Input)
+      if (extModule.getPortDirection(resultNo) == Direction::Input)
         continue;
 
       // Otherwise this is a result from it or an inout, mark it as overdefined.
@@ -462,7 +462,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     auto instancePortVal = instance.getResult(resultNo);
     // If this is an input to the instance, it will
     // get handled when any connects to it are processed.
-    if (getModulePortDirection(fModule, resultNo) == Direction::Input)
+    if (fModule.getPortDirection(resultNo) == Direction::Input)
       continue;
     // We only support simple values so far.
     if (!instancePortVal.getType().cast<FIRRTLType>().isGround()) {

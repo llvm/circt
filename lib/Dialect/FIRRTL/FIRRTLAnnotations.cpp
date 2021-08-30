@@ -58,7 +58,7 @@ AnnotationSet::AnnotationSet(Operation *op)
     : AnnotationSet(getAnnotationsFrom(op)) {}
 
 /// Get an annotation set for the specified module port.
-AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
+AnnotationSet AnnotationSet::forPort(FModuleLike module, size_t portNo) {
   auto ports = module->getAttr("portAnnotations").dyn_cast_or_null<ArrayAttr>();
   if (ports && !ports.empty())
     return AnnotationSet(ports[portNo].cast<ArrayAttr>());
@@ -68,7 +68,7 @@ AnnotationSet AnnotationSet::forPort(Operation *module, size_t portNo) {
 /// Get an annotation set for the specified module port, as well as other
 /// argument attributes.
 AnnotationSet
-AnnotationSet::forPort(Operation *module, size_t portNo,
+AnnotationSet::forPort(FModuleLike module, size_t portNo,
                        SmallVectorImpl<NamedAttribute> &otherAttributes) {
   for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo))
     otherAttributes.push_back(a);

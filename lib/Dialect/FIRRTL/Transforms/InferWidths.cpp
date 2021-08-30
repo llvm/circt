@@ -1420,7 +1420,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       // Handle instances of other modules.
       .Case<InstanceOp>([&](auto op) {
         auto refdModule = op.getReferencedModule();
-        auto module = dyn_cast<FModuleOp>(refdModule);
+        auto module = dyn_cast<FModuleOp>(&*refdModule);
         if (!module) {
           auto diag = mlir::emitError(op.getLoc());
           diag << "extern module `" << op.moduleName()

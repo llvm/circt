@@ -2638,7 +2638,8 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts = getModulePortInfo(referencedModule);
+  SmallVector<ModulePortInfo> modulePorts =
+      cast<FModuleLike>(referencedModule).getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
@@ -3415,7 +3416,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
   auto argIt = moduleOp.args_begin();
-  auto portList = getModulePortInfo(moduleOp);
+  auto portList = moduleOp.getPorts();
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
     ModulePortInfo &port = std::get<0>(portAndLoc);
     if (moduleContext.addSymbolEntry(port.getName(), *argIt,

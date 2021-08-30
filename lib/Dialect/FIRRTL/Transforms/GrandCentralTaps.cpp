@@ -527,7 +527,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   LLVM_DEBUG(llvm::dbgs() << "- Processing port " << portAnno.portNum
                           << " anno " << portAnno.anno.getDict() << "\n");
   auto key = getKey(portAnno.anno);
-  auto portName = getModulePortName(blackBox.extModule, portAnno.portNum);
+  auto portName = blackBox.extModule.portNames()[portAnno.portNum];
   PortWiring wiring = {portAnno.portNum, {}, {}};
 
   // Handle data taps on signals and ports.
@@ -535,7 +535,8 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     // Handle ports.
     if (auto port = tappedPorts.lookup(key)) {
       wiring.prefices = instancePaths.getAbsolutePaths(port.first);
-      wiring.suffix = getModulePortName(port.first, port.second).getValue();
+      wiring.suffix =
+          cast<FModuleLike>(port.first).portName(port.second).getValue();
       portWiring.push_back(std::move(wiring));
       return;
     }
