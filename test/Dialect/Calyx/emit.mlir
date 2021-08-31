@@ -45,16 +45,16 @@ calyx.program {
       }
       // CHECK-LABEL: group Group2 {
       // CHECK-NEXT:    c1.in = (c1.out | 1'd0) ? c1.out;
-      // CHECK-NEXT:    Group2[done] = (c1.out & 1'd1 & 1'd0) ? c1.done;
+      // CHECK-NEXT:    Group2[done] = (c1.out & 1'd1 & !c1.out) ? c1.done;
       calyx.group @Group2 {
         %or = comb.or %c1.out, %c0 : i1
         calyx.assign %c1.in = %c1.out, %or ? : i1
-        %and = comb.and %c1.out, %c1, %c0 : i1
+        %not = comb.xor %c1.out, %c1 : i1
+        %and = comb.and %c1.out, %c1, %not : i1
         calyx.group_done %c1.done, %and ? : i1
       }
-      %not = comb.xor %c1.out, %c1 : i1
-      // CHECK:   c0.go = !c1.out;
-      calyx.assign %c0.go = %not : i1
+      // CHECK:   c0.go = c1.out;
+      calyx.assign %c0.go = %c1.out : i1
     }
     // CHECK-LABEL: control {
     // CHECK-NEXT:    seq {
