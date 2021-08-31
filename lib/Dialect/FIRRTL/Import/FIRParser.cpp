@@ -75,11 +75,6 @@ static DictionaryAttr getAnnotationOfClass(MLIRContext *context,
   return DictionaryAttr::getWithSorted(context, {id});
 }
 
-/// Checks the annotations array for a matching annotation.
-static bool hasAnnotation(ArrayAttr annotations, DictionaryAttr annotation) {
-  return llvm::is_contained(annotations, annotation);
-}
-
 //===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
@@ -320,7 +315,7 @@ struct FIRParser {
   /// method is slightly more efficient than other lookup methods, because it
   /// uses a stashed copy of the annotation for lookup.
   bool hasDontTouch(ArrayAttr annotations) {
-    return hasAnnotation(annotations, constants.dontTouchAnnotation);
+    return AnnotationSet(annotations).hasDontTouch();
   }
 
 private:
