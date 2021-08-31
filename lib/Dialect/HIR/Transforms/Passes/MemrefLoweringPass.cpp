@@ -83,10 +83,24 @@ private:
   LogicalResult visitOp(hir::StoreOp);
   LogicalResult visitOp(hir::CallOp);
   LogicalResult visitOp(hir::MemrefExtractOp);
+  Value getEnableSendBusTensor(OpBuilder &, Value &, Value, IntegerAttr,
+                               std::string);
+  Value getDataSendBusTensor(OpBuilder &, Value &, Value, Value, IntegerAttr,
+                             std::string);
+  Value getEnableSendBus(OpBuilder &, Value &, uint64_t, Value, IntegerAttr,
+                         std::string);
+  Value getDataSendBus(OpBuilder &, Value &, Value, uint64_t, Value,
+                       IntegerAttr, std::string);
+  void defineBusesForMemrefPort(OpBuilder &, hir::MemrefType, Attribute,
+                                MemrefPortInterface &);
+  LogicalResult createBusInstantiationsAndCallOp(
+      hir::AllocaOp, DenseMap<Value, SmallVector<MemrefPortInterface>> &,
+      Value);
 
 private:
   DenseMap<Value, SmallVector<MemrefPortInterface>> mapMemrefPortToBuses;
   SmallVector<Operation *, 10> opsToErase;
+  OpBuilder *topLevelBuilder;
 };
 } // end anonymous namespace
 
@@ -123,9 +137,9 @@ mlir::TensorType buildBusTensor(MLIRContext *context, ArrayRef<int64_t> shape,
       shape, hir::BusType::get(context, busElementTypes, busDirections));
 }
 
-void defineBusesForMemrefPort(OpBuilder &builder, hir::MemrefType memrefTy,
-                              Attribute port,
-                              MemrefPortInterface &portInterface) {
+void MemrefLoweringPass::defineBusesForMemrefPort(
+    OpBuilder &builder, hir::MemrefType memrefTy, Attribute port,
+    MemrefPortInterface &portInterface) {
 
   auto *context = memrefTy.getContext();
   Type enableTy = buildBusTensor(context, memrefTy.filterShape(BANK),
@@ -146,28 +160,34 @@ void defineBusesForMemrefPort(OpBuilder &builder, hir::MemrefType memrefTy,
                                {memrefTy.getElementType()});
 
   if (memrefTy.getNumElementsPerBank() > 1) {
-    portInterface.addrEnableBusTensor = builder.create<hir::BusInstantiateOp>(
-        builder.getUnknownLoc(), enableTy);
-    portInterface.addrDataBusTensor = builder.create<hir::BusInstantiateOp>(
-        builder.getUnknownLoc(), addrTupleTy);
+    portInterface.addrEnableBusTensor =
+        topLevelBuilder->create<hir::BusInstantiateOp>(builder.getUnknownLoc(),
+                                                       enableTy);
+    portInterface.addrDataBusTensor =
+        topLevelBuilder->create<hir::BusInstantiateOp>(builder.getUnknownLoc(),
+                                                       addrTupleTy);
   }
 
   if (auto rdLatency = helper::getRdLatency(port)) {
-    portInterface.rdEnableBusTensor = builder.create<hir::BusInstantiateOp>(
-        builder.getUnknownLoc(), enableTy);
+    portInterface.rdEnableBusTensor =
+        topLevelBuilder->create<hir::BusInstantiateOp>(builder.getUnknownLoc(),
+                                                       enableTy);
     portInterface.rdDataBusTensor =
-        builder.create<hir::BusInstantiateOp>(builder.getUnknownLoc(), dataTy);
+        topLevelBuilder->create<hir::BusInstantiateOp>(builder.getUnknownLoc(),
+                                                       dataTy);
     portInterface.rdLatency = rdLatency.getValue();
   }
 
   if (helper::isWrite(port)) {
-    portInterface.wrEnableBusTensor = builder.create<hir::BusInstantiateOp>(
-        builder.getUnknownLoc(), enableTy);
+    portInterface.wrEnableBusTensor =
+        topLevelBuilder->create<hir::BusInstantiateOp>(builder.getUnknownLoc(),
+                                                       enableTy);
     portInterface.wrDataBusTensor =
-        builder.create<hir::BusInstantiateOp>(builder.getUnknownLoc(), dataTy);
+        topLevelBuilder->create<hir::BusInstantiateOp>(builder.getUnknownLoc(),
+                                                       dataTy);
   }
 }
-LogicalResult createBusInstantiationsAndCallOp(
+LogicalResult MemrefLoweringPass::createBusInstantiationsAndCallOp(
     hir::AllocaOp op,
     DenseMap<Value, SmallVector<MemrefPortInterface>> &mapMemrefPortToBuses,
     Value tstartRegion) {
@@ -504,13 +524,15 @@ void createBusMuxCallOp(OpBuilder &builder, Value destBusTensor,
                   builder.getI64IntegerAttr(elementWidth.getValue()));
 }
 
-Value getEnableSendBusTensor(OpBuilder &builder, Value &originalEnableBusTensor,
-                             Value tstart, IntegerAttr offsetAttr,
-                             std::string name) {
-  auto forkedEnableBusTensor = builder.create<hir::BusInstantiateOp>(
+Value MemrefLoweringPass::getEnableSendBusTensor(OpBuilder &builder,
+                                                 Value &originalEnableBusTensor,
+                                                 Value tstart,
+                                                 IntegerAttr offsetAttr,
+                                                 std::string name) {
+  auto forkedEnableBusTensor = topLevelBuilder->create<hir::BusInstantiateOp>(
       builder.getUnknownLoc(), originalEnableBusTensor.getType());
   helper::setNames(forkedEnableBusTensor, {name + "_forked"});
-  auto newEnableBusTensor = builder.create<hir::BusInstantiateOp>(
+  auto newEnableBusTensor = topLevelBuilder->create<hir::BusInstantiateOp>(
       builder.getUnknownLoc(), forkedEnableBusTensor.getType());
   helper::setNames(newEnableBusTensor, {name + "_buses"});
 
@@ -548,13 +570,13 @@ Value getEnableSendBusTensor(OpBuilder &builder, Value &originalEnableBusTensor,
   return forkedEnableBusTensor;
 }
 
-Value getDataSendBusTensor(OpBuilder &builder, Value &originalDataBusTensor,
-                           Value enableBusTensor, Value tstart,
-                           IntegerAttr offsetAttr, std::string name) {
-  auto forkedDataBusTensor = builder.create<hir::BusInstantiateOp>(
+Value MemrefLoweringPass::getDataSendBusTensor(
+    OpBuilder &builder, Value &originalDataBusTensor, Value enableBusTensor,
+    Value tstart, IntegerAttr offsetAttr, std::string name) {
+  auto forkedDataBusTensor = topLevelBuilder->create<hir::BusInstantiateOp>(
       builder.getUnknownLoc(), originalDataBusTensor.getType());
   helper::setNames(forkedDataBusTensor, {name + "_forked"});
-  auto newDataBusTensor = builder.create<hir::BusInstantiateOp>(
+  auto newDataBusTensor = topLevelBuilder->create<hir::BusInstantiateOp>(
       builder.getUnknownLoc(), forkedDataBusTensor.getType());
   helper::setNames(newDataBusTensor, {name + "_buses"});
 
@@ -592,13 +614,15 @@ Value getDataSendBusTensor(OpBuilder &builder, Value &originalDataBusTensor,
   return forkedDataBusTensor;
 }
 
-Value getEnableSendBus(OpBuilder &builder, Value &enableBusTensor,
-                       uint64_t bank, Value tstart, IntegerAttr offsetAttr,
-                       std::string name) {
-  auto forkedEnableBus = builder.create<hir::BusInstantiateOp>(
+Value MemrefLoweringPass::getEnableSendBus(OpBuilder &builder,
+                                           Value &enableBusTensor,
+                                           uint64_t bank, Value tstart,
+                                           IntegerAttr offsetAttr,
+                                           std::string name) {
+  auto forkedEnableBus = topLevelBuilder->create<hir::BusInstantiateOp>(
       builder.getUnknownLoc(), getTensorElementType(enableBusTensor));
   helper::setNames(forkedEnableBus, {name + "_forked"});
-  auto newEnableBusTensor = builder.create<hir::BusInstantiateOp>(
+  auto newEnableBusTensor = topLevelBuilder->create<hir::BusInstantiateOp>(
       builder.getUnknownLoc(), enableBusTensor.getType());
   helper::setNames(newEnableBusTensor, {name + "_buses"});
 
@@ -624,15 +648,17 @@ Value getEnableSendBus(OpBuilder &builder, Value &enableBusTensor,
   return forkedEnableBus;
 }
 
-Value getDataSendBus(OpBuilder &builder, Value &dataBusTensor,
-                     Value enableBusTensor, uint64_t bank, Value tstart,
-                     IntegerAttr offsetAttr, std::string name) {
+Value MemrefLoweringPass::getDataSendBus(OpBuilder &builder,
+                                         Value &dataBusTensor,
+                                         Value enableBusTensor, uint64_t bank,
+                                         Value tstart, IntegerAttr offsetAttr,
+                                         std::string name) {
 
-  auto forkedDataBus = builder.create<hir::BusInstantiateOp>(
+  auto forkedDataBus = topLevelBuilder->create<hir::BusInstantiateOp>(
       builder.getUnknownLoc(), getTensorElementType(dataBusTensor));
   helper::setNames(forkedDataBus, {name + "_forked"});
 
-  auto newDataBusTensor = builder.create<hir::BusInstantiateOp>(
+  auto newDataBusTensor = topLevelBuilder->create<hir::BusInstantiateOp>(
       builder.getUnknownLoc(), dataBusTensor.getType());
   helper::setNames(newDataBusTensor, {name + "_buses"});
   auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
@@ -927,7 +953,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
 }
 
 LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
-  Value tstartRegion = op->getParentRegion()->getArguments().front();
+  Value tstartRegion = op->getParentRegion()->getArguments().back();
   // Add comment.
   OpBuilder builder(op);
   builder.setInsertionPoint(op);
@@ -970,6 +996,8 @@ LogicalResult MemrefLoweringPass::visitOp(hir::MemrefExtractOp op) {
 
 void MemrefLoweringPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
+  topLevelBuilder = new OpBuilder(funcOp);
+  topLevelBuilder->setInsertionPointToStart(&funcOp.body().front());
   insertBusArguments();
   WalkResult result = funcOp.walk([this](Operation *operation) -> WalkResult {
     if (auto op = dyn_cast<hir::AllocaOp>(operation)) {

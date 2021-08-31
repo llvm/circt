@@ -142,7 +142,7 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbov
       TypeAttr:$funcTy 
       );
 
-  let regions = (region SizedRegion<1>:$region);
+  let regions = (region SizedRegion<1>:$body);
   let results = (outs );
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
@@ -154,7 +154,6 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbov
       unsigned getNumFuncArguments() { return getType().getNumInputs(); }
       unsigned getNumFuncResults() { return getType().getNumResults(); }
       LogicalResult verifyType();
-      Region& body(){ return getOperation()->getRegion(0);}
       LogicalResult verifyBody();
       Block *getBodyBlock() { return &body().front(); }
       public:
