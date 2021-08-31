@@ -6,8 +6,7 @@ circuit Foo: %[[{"a":"a"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
@@ -17,8 +16,7 @@ circuit Foo: %[[{"a":"a","target":"Foo"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
@@ -27,8 +25,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
@@ -38,18 +35,18 @@ circuit Foo: %[[{"a":"a","target":"Foo.Foo"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: module {
+    ; CHECK-LABEL: firrtl.circuit "Foo"
     ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
 ; A ModuleTarget Annotation is attached to the correct module.
-circuit FooMt: %[[{"a":"a","target":"~FooMt|FooMt"}]]
-  module FooMt:
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo"}]]
+  module Foo:
     skip
 
-    ; CHECK-LABEL: firrtl.circuit "FooMt" {
-    ; CHECK: firrtl.module @FooMt() attributes {annotations = [{a = "a"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" {
+    ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
@@ -70,21 +67,21 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
 
 ; A ReferenceTarget, ComponentName, or InstanceTarget pointing at an Instance
 ; should work.
-circuit FooRtCmIt: %[[
-{"a":"a","target":"~FooRtCmIt|FooRtCmIt>bar"},
-{"b":"b","target":"FooRtCmIt.FooRtCmIt.bar"},
-{"c":"c","target":"~FooRtCmIt|FooRtCmIt/bar:Bar"}
+circuit Foo: %[[
+{"a":"a","target":"~Foo|Foo>bar"},
+{"b":"b","target":"Foo.Foo.bar"},
+{"c":"c","target":"~Foo|Foo/bar:Bar"}
 ]]
   module Bar:
     skip
-  module FooRtCmIt:
+  module Foo:
     inst bar of Bar
-    ; CHECK-LABEL: firrtl.circuit "FooRtCmIt"
+    ; CHECK-LABEL: firrtl.circuit "Foo"
     ; CHECK: firrtl.module @Bar
     ; CHECK-SAME annotations = [{c = "c"}]
-    ; CHECK: firrtl.module @FooRtCmIt
+    ; CHECK: firrtl.module @Foo
     ; CHECK: firrtl.instance @Bar
-    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {circt.nonlocal = @"~FooRtCmIt|FooRtCmIt/bar:Bar", class = "circt.nonlocal"}]
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {circt.nonlocal = @"~Foo|Foo/bar:Bar", class = "circt.nonlocal"}]
 
 ; // -----
 
@@ -860,13 +857,20 @@ circuit Foo : %[[
 
 ; A non-local Annotation is supported.
 
-circuit FooNLA: %[[{"a":"a","target":"~FooNLA|FooNLA/bar:Bar/baz:Baz"}]]
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
   module Baz :
     skip
   module Bar :
     inst baz of Baz
-  module FooNLA :
+  module Foo :
     inst bar of Bar
-; CHECK-LABEL: firrtl.circuit "FooNLA"
+; CHECK-LABEL: firrtl.circuit "Foo"
+; CHECK: firrtl.nla @"~Foo|Foo/bar:Bar/baz:Baz" [@Foo, @Bar] ["bar", "baz"]
 ; CHECK: firrtl.module @Baz
-; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @"~FooNLA|FooNLA/bar:Bar/baz:Baz"}]
+; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz"}]
+; CHECK: firrtl.module @Bar()
+; CHECK: firrtl.instance @Baz
+; CHECK-SAME: [{circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz", class = "circt.nonlocal"}]
+; CHECK: firrtl.module @Foo()
+; CHECK: firrtl.instance @Bar
+; CHECK-SAME: [{circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz", class = "circt.nonlocal"}]
