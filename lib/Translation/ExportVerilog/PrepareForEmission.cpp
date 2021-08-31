@@ -236,9 +236,10 @@ static void lowerUsersToTemporaryWire(Operation &op) {
   }
 }
 
-/// Transform "a + -cst" ==> "a - cst" for prettier output.
-static void rewriteAddWithNegativeConstant(comb::AddOp add,
-                                           hw::ConstantOp rhsCst) {
+/// Transform "a + -cst" ==> "a - cst" for prettier output.  This returns the
+/// first operation emitted.
+static Operation *rewriteAddWithNegativeConstant(comb::AddOp add,
+                                                 hw::ConstantOp rhsCst) {
   ImplicitLocOpBuilder builder(add.getLoc(), add);
 
   // Get the positive constant.
@@ -248,6 +249,18 @@ static void rewriteAddWithNegativeConstant(comb::AddOp add,
   add.erase();
   if (rhsCst.use_empty())
     rhsCst.erase();
+  return negCst;
+}
+
+/// Given an operation in a procedural region, scan up the region tree to find
+/// the first operation in a graph region (typically an always or initial op).
+static Operation *findParentInNonProceduralRegion(Operation *op) {
+  Operation *parentOp = op->getParentOp();
+  assert(parentOp->hasTrait<ProceduralRegion>() &&
+         "we should only be hoisting from procedural");
+  while (parentOp->getParentOp()->hasTrait<ProceduralRegion>())
+    parentOp = parentOp->getParentOp();
+  return parentOp;
 }
 
 /// This function is invoked on side effecting Verilog expressions when we're in
@@ -259,11 +272,6 @@ static void rewriteAddWithNegativeConstant(comb::AddOp add,
 /// This returns true if the op was rewritten, false otherwise.
 static bool rewriteSideEffectingExpr(Operation *op) {
   assert(op->getNumResults() == 1 && "isn't a verilog expression");
-
-  // If the operation is in a non-procedural region (e.g. top level or in an
-  // `ifdef at the top level), then leave it alone.
-  if (!op->getParentOp()->hasTrait<ProceduralRegion>())
-    return false;
 
   // Check to see if this is already rewritten.
   if (op->hasOneUse()) {
@@ -278,10 +286,7 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   Value opValue = op->getResult(0);
 
   // Scan to the top of the region tree to find out where to insert the reg.
-  Operation *parentOp = op->getParentOp();
-  while (parentOp->getParentOp()->hasTrait<ProceduralRegion>())
-    parentOp = parentOp->getParentOp();
-
+  Operation *parentOp = findParentInNonProceduralRegion(op);
   OpBuilder builder(parentOp);
   auto reg = builder.create<RegOp>(op->getLoc(), opValue.getType());
   builder.setInsertionPointAfter(op);
@@ -295,11 +300,57 @@ static bool rewriteSideEffectingExpr(Operation *op) {
   return true;
 }
 
+/// This function is called for non-side-effecting Verilog expressions when
+/// we're in 'disallowLocalVariables' mode for old Verilog clients.  It hoists
+/// non-constant expressions out to the top level so they don't turn into local
+/// variable declarations.
+static bool hoistNonSideEffectExpr(Operation *op) {
+  // Scan to the top of the region tree to find out where to move the op.
+  Operation *parentOp = findParentInNonProceduralRegion(op);
+
+  // We can typically hoist all the way out to the top level in one step, but
+  // there may be intermediate operands that aren't hoistable.  If so, just
+  // hoist one level.
+  bool cantHoist = false;
+  if (llvm::any_of(op->getOperands(), [&](Value operand) -> bool {
+        // The operand value dominates the original operation, but may be
+        // defined in one of the procedural regions between the operation and
+        // the top level of the module.  We can tell this quite efficiently by
+        // looking for ops in a procedural region - because procedural regions
+        // live in graph regions but not visa-versa.
+        Operation *operandOp = operand.getDefiningOp();
+        if (!operandOp) // References to ports are always ok.
+          return false;
+
+        if (operandOp->getParentOp()->hasTrait<ProceduralRegion>()) {
+          cantHoist |= operandOp->getBlock() == op->getBlock();
+          return true;
+        }
+        return false;
+      })) {
+
+    // If the operand is in the same block as the expression then we can't hoist
+    // this out at all.
+    if (cantHoist)
+      return false;
+
+    // Otherwise, we can hoist it, but not all the way out in one step.  Just
+    // hoist one level out.
+    parentOp = op->getParentOp();
+  }
+
+  op->moveBefore(parentOp);
+  return true;
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
                                     const LoweringOptions &options,
                                     const SymbolCache &cache) {
+  // True if these operations are in a procedural region.
+  bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
+
   for (Block::iterator opIterator = block.begin(), e = block.end();
        opIterator != e;) {
     auto &op = *opIterator++;
@@ -308,13 +359,6 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
     for (auto &region : op.getRegions()) {
       if (!region.empty())
         prepareHWModule(region.front(), names, options, cache);
-    }
-
-    // Duplicate "always inline" expression for each of their users and move
-    // them to be next to their users.
-    if (isExpressionAlwaysInline(&op)) {
-      lowerAlwaysInlineOperation(&op);
-      continue;
     }
 
     // Lower variadic fully-associative operations with more than two operands
@@ -343,7 +387,8 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
       if (auto cst = addOp.getOperand(1).getDefiningOp<hw::ConstantOp>()) {
         assert(addOp.getNumOperands() == 2 && "commutative lowering is done");
         if (cst.getValue().isNegative()) {
-          rewriteAddWithNegativeConstant(addOp, cst);
+          Operation *firstOp = rewriteAddWithNegativeConstant(addOp, cst);
+          opIterator = Block::iterator(firstOp);
           continue;
         }
       }
@@ -401,22 +446,43 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
       }
     }
 
-    // Force any side-effecting expressions in nested regions into a sv.reg
-    // if we aren't allowing local variable declarations.  The Verilog emitter
-    // doesn't want to have to have to know how to synthesize a reg in the case
-    // they have to be spilled for whatever reason.
-    if (options.disallowLocalVariables && op.getNumResults() == 1 &&
-        isVerilogExpression(&op) &&
-        !mlir::MemoryEffectOpInterface::hasNoEffect(&op)) {
-      if (rewriteSideEffectingExpr(&op))
+    // If the target doesn't support local variables, hoist all the expressions
+    // out to the nearest non-procedural region.
+    if (options.disallowLocalVariables && isVerilogExpression(&op) &&
+        isProceduralRegion) {
+
+      // Force any side-effecting expressions in nested regions into a sv.reg
+      // if we aren't allowing local variable declarations.  The Verilog emitter
+      // doesn't want to have to have to know how to synthesize a reg in the
+      // case they have to be spilled for whatever reason.
+      if (!mlir::MemoryEffectOpInterface::hasNoEffect(&op)) {
+        if (rewriteSideEffectingExpr(&op))
+          continue;
+      }
+
+      // Hoist other expressions out to the parent region.
+      //
+      // NOTE: This effectively disables inlining of expressions into if
+      // conditions, $fwrite statements, and instance inputs.  We could be
+      // smarter in ExportVerilog itself, but we'd have to teach it to put
+      // spilled expressions (due to line length, multiple-uses, and
+      // non-inlinable expressions) in the outer scope.
+      if (hoistNonSideEffectExpr(&op))
         continue;
+    }
+
+    // Duplicate "always inline" expression for each of their users and move
+    // them to be next to their users.
+    if (isExpressionAlwaysInline(&op)) {
+      lowerAlwaysInlineOperation(&op);
+      continue;
     }
   }
 
   // Now that all the basic ops are settled, check for any use-before def issues
   // in graph regions.  Lower these into explicit wires to keep the emitter
   // simple.
-  if (!block.getParentOp()->hasTrait<ProceduralRegion>()) {
+  if (!isProceduralRegion) {
     SmallPtrSet<Operation *, 32> seenOperations;
 
     for (auto &op : llvm::make_early_inc_range(block)) {
