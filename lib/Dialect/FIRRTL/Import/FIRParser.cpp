@@ -3091,7 +3091,8 @@ private:
   /// Add annotations from a string to the internal annotation map.  Report
   /// errors using a provided source manager location and with a provided error
   /// message
-  ParseResult importAnnotations(SMLoc loc, StringRef circuitTarget,
+  ParseResult importAnnotations(CircuitOp circuit, SMLoc loc,
+                                StringRef circuitTarget,
                                 StringRef annotationsStr);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
@@ -3123,7 +3124,7 @@ private:
 
 } // end anonymous namespace
 
-ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
+ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
                                                 StringRef circuitTarget,
                                                 StringRef annotationsStr) {
 
@@ -3139,7 +3140,7 @@ ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
   if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
-                getContext())) {
+                circuit)) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3455,6 +3456,10 @@ ParseResult FIRCircuitParser::parseCircuit(
       info.parseOptionalInfo())
     return failure();
 
+  // Create the top-level circuit op in the MLIR module.
+  OpBuilder b(mlirModule.getBodyRegion());
+  auto circuit = b.create<CircuitOp>(info.getLoc(), name);
+
   std::string circuitTarget = "~" + name.getValue().str();
 
   // Deal with any inline annotations, if they exist.  These are processed first
@@ -3462,17 +3467,15 @@ ParseResult FIRCircuitParser::parseCircuit(
   // annotations.  While arbitrary, this makes the annotation file have "append"
   // semantics.
   if (!inlineAnnotations.empty())
-    if (importAnnotations(inlineAnnotationsLoc, circuitTarget,
+    if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
                           inlineAnnotations))
       return failure();
 
   // Deal with the annotation file if one was specified
   for (auto annotationsBuf : annotationsBufs)
-    if (importAnnotations(info.getFIRLoc(), circuitTarget,
+    if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
                           annotationsBuf->getBuffer()))
       return failure();
-
-  OpBuilder b(mlirModule.getBodyRegion());
 
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
@@ -3480,8 +3483,7 @@ ParseResult FIRCircuitParser::parseCircuit(
   ArrayAttr annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
                                          getConstants().targetSet);
 
-  // Create the top-level circuit op in the MLIR module.
-  auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotations);
+  circuit->setAttr("annotations", annotations);
   deferredModules.reserve(16);
 
   // Parse any contained modules.

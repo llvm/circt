@@ -20,16 +20,6 @@ circuit Foo: %[[{"one":null,"target":"~Fooo"}]]
 
 ; // -----
 
-; A non-local Annotation is unsupported.
-
-; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: unsupported non-local target */ "~Foo|Foo/bar:Bar/baz:Baz"}}
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
-  module Foo:
-    skip
-
-; // -----
-
 ; Annotations JSON is not an array.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
@@ -157,7 +147,7 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>x"}]]
 
 ; A target pointing at a non-existent instance should error.
 
-; expected-error @+1 {{unapplied annotations with target '~Foo|Foo/baz:Bar' and payload '[{a}]'}}
+; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>baz' and payload '[{circt.nonlocal = @"~Foo|Foo/baz:Bar", class = "circt.nonlocal"}]'}}
 circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
   module Bar:
     skip

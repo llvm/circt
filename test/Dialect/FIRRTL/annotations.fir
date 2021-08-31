@@ -6,8 +6,7 @@ circuit Foo: %[[{"a":"a"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
@@ -17,8 +16,7 @@ circuit Foo: %[[{"a":"a","target":"Foo"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
@@ -27,8 +25,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: module {
-    ; CHECK: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
+    ; CHECK-LABEL: firrtl.circuit "Foo" attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
@@ -38,7 +35,7 @@ circuit Foo: %[[{"a":"a","target":"Foo.Foo"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: module {
+    ; CHECK-LABEL: firrtl.circuit "Foo"
     ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a"}]}
 
 ; // -----
@@ -48,7 +45,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo"}]]
   module Foo:
     skip
 
-    ; CHECK-LABEL: module {
+    ; CHECK-LABEL: firrtl.circuit "Foo" {
     ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a"}]}
 
 ; // -----
@@ -62,7 +59,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
     inst bar of Bar
     bar.a <= a
 
-    ; CHECK-LABEL: module {
+    ; CHECK-LABEL: firrtl.circuit "Foo" {
     ; CHECK: firrtl.extmodule @Bar
     ; CHECK-SAME: attributes {annotations = [{a = "a"}]}
 
@@ -79,10 +76,13 @@ circuit Foo: %[[
     skip
   module Foo:
     inst bar of Bar
-
-    ; CHECK-LABEL: module {
+    ; CHECK-LABEL: firrtl.circuit "Foo"
+    ; CHECK: firrtl.nla  @"~Foo|Foo/bar:Bar" [@Foo, @Bar] ["bar", "Bar"]
+    ; CHECK: firrtl.module @Bar
+    ; CHECK-SAME annotations = [{c = "c"}]
+    ; CHECK: firrtl.module @Foo
     ; CHECK: firrtl.instance @Bar
-    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {c = "c"}]
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {circt.nonlocal = @"~Foo|Foo/bar:Bar", class = "circt.nonlocal"}]
 
 ; // -----
 
@@ -98,11 +98,13 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
   module Foo:
     inst bar of Bar
 
-    ; CHECK-LABEL: module {
+    ; CHECK-LABEL: firrtl.circuit "Foo"
+    ; CHECK: firrtl.nla @"~Foo|Foo/bar:Bar>b.qux" [@Foo, @Bar] ["bar", "b"]
+    ; CHECK: firrtl.module @Bar
+    ; CHECK-SAME: [#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @\22~Foo|Foo/bar:Bar>b.qux\22, three}>">]
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance @Bar
     ; CHECK-SAME: [{one}],
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>,
-    ; CHECK-SAME:  #firrtl.subAnno<fieldID = 2, {three}>],
+    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>],
     ; CHECK-SAME: [{four}]
 
 ; // -----
@@ -852,3 +854,25 @@ circuit Foo : %[[
     ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedBooleanType"
     ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedIntegerType"
     ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedDoubleType"
+
+; // -----
+
+; A non-local Annotation is supported.
+
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
+  module Baz :
+    skip
+  module Bar :
+    inst baz of Baz
+  module Foo :
+    inst bar of Bar
+; CHECK-LABEL: firrtl.circuit "Foo"
+; CHECK: firrtl.nla @"~Foo|Foo/bar:Bar/baz:Baz" [@Foo, @Bar, @Baz] ["bar", "baz", "Baz"]
+; CHECK: firrtl.module @Baz
+; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz"}]
+; CHECK: firrtl.module @Bar()
+; CHECK: firrtl.instance @Baz
+; CHECK-SAME: [{circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz", class = "circt.nonlocal"}]
+; CHECK: firrtl.module @Foo()
+; CHECK: firrtl.instance @Bar
+; CHECK-SAME: [{circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz", class = "circt.nonlocal"}]
