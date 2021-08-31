@@ -77,6 +77,7 @@ circuit Foo: %[[
   module Foo:
     inst bar of Bar
     ; CHECK-LABEL: firrtl.circuit "Foo"
+    ; CHECK: firrtl.nla  @"~Foo|Foo/bar:Bar" [@Foo, @Bar] ["bar", "Bar"]
     ; CHECK: firrtl.module @Bar
     ; CHECK-SAME annotations = [{c = "c"}]
     ; CHECK: firrtl.module @Foo
@@ -98,6 +99,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     inst bar of Bar
 
     ; CHECK-LABEL: firrtl.circuit "Foo"
+    ; CHECK: firrtl.nla @"~Foo|Foo/bar:Bar>b.qux" [@Foo, @Bar] ["bar", "b"]
     ; CHECK: firrtl.module @Bar
     ; CHECK-SAME: [#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @\22~Foo|Foo/bar:Bar>b.qux\22, three}>">]
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance @Bar
@@ -865,7 +867,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
   module Foo :
     inst bar of Bar
 ; CHECK-LABEL: firrtl.circuit "Foo"
-; CHECK: firrtl.nla @"~Foo|Foo/bar:Bar/baz:Baz" [@Foo, @Bar] ["bar", "baz"]
+; CHECK: firrtl.nla @"~Foo|Foo/bar:Bar/baz:Baz" [@Foo, @Bar, @Baz] ["bar", "baz", "Baz"]
 ; CHECK: firrtl.module @Baz
 ; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz"}]
 ; CHECK: firrtl.module @Bar()

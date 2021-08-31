@@ -106,10 +106,18 @@ expandNonLocal(StringRef target) {
     retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod.str(),
                         inst.str());
   }
-  if (target.empty())
+  if (target.empty()) {
     retval.emplace_back(circuit.str(), "", "");
-  else
-    retval.emplace_back((circuit + "|" + target).str(), "", "");
+  } else {
+    StringRef mod, name;
+    // remove aggregate
+    auto targetBase =
+        target.take_until([](char c) { return c == '.' || c == '['; });
+    std::tie(mod, name) = targetBase.split('>');
+    if (name.empty())
+      name = mod;
+    retval.emplace_back((circuit + "|" + target).str(), mod, name);
+  }
   return retval;
 }
 
@@ -120,8 +128,7 @@ void buildNLA(
   OpBuilder b(circuit.getBodyRegion());
   SmallVector<Attribute> mods;
   SmallVector<Attribute> insts;
-  for (unsigned long i = 0, e = nlas.size() - 1; i < e; ++i) {
-    auto &nla = nlas[i];
+  for (auto &nla : nlas) {
     mods.push_back(
         FlatSymbolRefAttr::get(circuit.getContext(), std::get<1>(nla)));
     insts.push_back(StringAttr::get(circuit.getContext(), std::get<2>(nla)));
