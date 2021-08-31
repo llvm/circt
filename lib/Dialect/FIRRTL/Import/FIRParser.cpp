@@ -3084,7 +3084,8 @@ struct FIRCircuitParser : public FIRParser {
                             ModuleOp mlirModule)
       : FIRParser(state, lexer), mlirModule(mlirModule) {}
 
-  ParseResult parseCircuit(const llvm::MemoryBuffer *annotationsBuf);
+  ParseResult
+  parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf);
 
 private:
   /// Add annotations from a string to the internal annotation map.  Report
@@ -3433,8 +3434,8 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 ///
 /// If non-null, annotationsBuf is a memory buffer containing JSON annotations.
 ///
-ParseResult
-FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
+ParseResult FIRCircuitParser::parseCircuit(
+    SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs) {
   auto indent = getIndentation();
   if (!indent.hasValue())
     return emitError("'circuit' must be first token on its line"), failure();
@@ -3466,11 +3467,10 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
       return failure();
 
   // Deal with the annotation file if one was specified
-  if (annotationsBuf) {
+  for (auto annotationsBuf : annotationsBufs)
     if (importAnnotations(info.getFIRLoc(), circuitTarget,
                           annotationsBuf->getBuffer()))
       return failure();
-  }
 
   OpBuilder b(mlirModule.getBodyRegion());
 
@@ -3570,9 +3570,10 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                                              MLIRContext *context,
                                              FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
-  const llvm::MemoryBuffer *annotationsBuf = nullptr;
-  if (sourceMgr.getNumBuffers() > 1)
-    annotationsBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + 1);
+  SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
+  for (int i = 1, e = sourceMgr.getNumBuffers(); i < e; ++i)
+    annotationsBufs.push_back(
+        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + i));
 
   context->loadDialect<FIRRTLDialect>();
 
@@ -3582,7 +3583,7 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  if (FIRCircuitParser(state, lexer, *module).parseCircuit(annotationsBuf))
+  if (FIRCircuitParser(state, lexer, *module).parseCircuit(annotationsBufs))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by
