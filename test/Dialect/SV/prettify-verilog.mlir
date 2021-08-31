@@ -140,6 +140,29 @@ hw.module @sink_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
   hw.output
 }
 
+// CHECK-LABEL: @dont_sink_se_expression
+hw.module @dont_sink_se_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
+
+  // CHECK: [[DONT_TOUCH:%.*]] = sv.verbatim.expr.se "DONT_TOUCH"
+  %0 = sv.verbatim.expr "SINK_ME" : () -> i1
+  %1 = sv.verbatim.expr.se "DONT_TOUCH" : () -> i1
+
+  // CHECK: sv.always
+  sv.always posedge %clock  {
+    // CHECK: [[SINK:%.*]] = sv.verbatim.expr "SINK_ME"
+    // CHECK: sv.if [[SINK]]
+    sv.if %0  {
+      sv.fatal
+    }
+
+    // CHECK: sv.if [[DONT_TOUCH]]
+    sv.if %1  {
+      sv.fatal
+    }
+  }
+  hw.output
+}
+
 hw.module.extern @MyExtModule(%in: i8)
 
 // CHECK-LABEL: hw.module @MoveInstances

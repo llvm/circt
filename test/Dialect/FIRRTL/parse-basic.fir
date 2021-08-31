@@ -352,6 +352,10 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.memoryport.access %tableValue_port[%i8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     read mport tableValue = base_table_1[i8], clock
 
+    ; Check that we can handle large memory sizes.
+    ; CHECK: %testharness = firrtl.seqmem Undefined : !firrtl.cmemory<vector<uint<8>, 16>, 2147483648>
+    smem testharness : UInt<8>[16][2147483648], undefined
+
     ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
     node n11 = pad(i8, 10)
 

@@ -75,11 +75,6 @@ static DictionaryAttr getAnnotationOfClass(MLIRContext *context,
   return DictionaryAttr::getWithSorted(context, {id});
 }
 
-/// Checks the annotations array for a matching annotation.
-static bool hasAnnotation(ArrayAttr annotations, DictionaryAttr annotation) {
-  return llvm::is_contained(annotations, annotation);
-}
-
 //===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
@@ -320,7 +315,7 @@ struct FIRParser {
   /// method is slightly more efficient than other lookup methods, because it
   /// uses a stashed copy of the annotation for lookup.
   bool hasDontTouch(ArrayAttr annotations) {
-    return hasAnnotation(annotations, constants.dontTouchAnnotation);
+    return AnnotationSet(annotations).hasDontTouch();
   }
 
 private:
@@ -881,7 +876,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   // Handle postfix vector sizes.
   while (consumeIf(FIRToken::l_square)) {
     auto sizeLoc = getToken().getLoc();
-    int32_t size;
+    int64_t size;
     if (parseIntLit(size, "expected width") ||
         parseToken(FIRToken::r_square, "expected ]"))
       return failure();
@@ -2638,7 +2633,8 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts = getModulePortInfo(referencedModule);
+  SmallVector<ModulePortInfo> modulePorts =
+      cast<FModuleLike>(referencedModule).getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
@@ -3088,7 +3084,8 @@ struct FIRCircuitParser : public FIRParser {
                             ModuleOp mlirModule)
       : FIRParser(state, lexer), mlirModule(mlirModule) {}
 
-  ParseResult parseCircuit(const llvm::MemoryBuffer *annotationsBuf);
+  ParseResult
+  parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf);
 
 private:
   /// Add annotations from a string to the internal annotation map.  Report
@@ -3415,7 +3412,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
   auto argIt = moduleOp.args_begin();
-  auto portList = getModulePortInfo(moduleOp);
+  auto portList = moduleOp.getPorts();
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
     ModulePortInfo &port = std::get<0>(portAndLoc);
     if (moduleContext.addSymbolEntry(port.getName(), *argIt,
@@ -3437,8 +3434,8 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 ///
 /// If non-null, annotationsBuf is a memory buffer containing JSON annotations.
 ///
-ParseResult
-FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
+ParseResult FIRCircuitParser::parseCircuit(
+    SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs) {
   auto indent = getIndentation();
   if (!indent.hasValue())
     return emitError("'circuit' must be first token on its line"), failure();
@@ -3470,11 +3467,10 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
       return failure();
 
   // Deal with the annotation file if one was specified
-  if (annotationsBuf) {
+  for (auto annotationsBuf : annotationsBufs)
     if (importAnnotations(info.getFIRLoc(), circuitTarget,
                           annotationsBuf->getBuffer()))
       return failure();
-  }
 
   OpBuilder b(mlirModule.getBodyRegion());
 
@@ -3574,9 +3570,10 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                                              MLIRContext *context,
                                              FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
-  const llvm::MemoryBuffer *annotationsBuf = nullptr;
-  if (sourceMgr.getNumBuffers() > 1)
-    annotationsBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + 1);
+  SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
+  for (int i = 1, e = sourceMgr.getNumBuffers(); i < e; ++i)
+    annotationsBufs.push_back(
+        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + i));
 
   context->loadDialect<FIRRTLDialect>();
 
@@ -3586,7 +3583,7 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  if (FIRCircuitParser(state, lexer, *module).parseCircuit(annotationsBuf))
+  if (FIRCircuitParser(state, lexer, *module).parseCircuit(annotationsBufs))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by

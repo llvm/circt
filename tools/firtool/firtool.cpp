@@ -174,10 +174,10 @@ static cl::opt<bool>
                  cl::desc("Run the verifier after each transformation pass"),
                  cl::init(true));
 
-static cl::opt<std::string>
-    inputAnnotationFilename("annotation-file",
-                            cl::desc("Optional input annotation file"),
-                            cl::value_desc("filename"));
+static cl::list<std::string>
+    inputAnnotationFilenames("annotation-file",
+                             cl::desc("Optional input annotation file"),
+                             cl::CommaSeparated, cl::value_desc("filename"));
 
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
@@ -203,13 +203,15 @@ static LogicalResult
 processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
               Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Add the annotation file if one was explicitly specified.
-  std::string annotationFilenameDetermined;
-  if (!inputAnnotationFilename.empty() &&
-      !sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
-                                annotationFilenameDetermined)) {
-    llvm::errs() << "cannot open input annotation file '"
-                 << inputAnnotationFilename << "': No such file or directory\n";
-    return failure();
+  for (auto inputAnnotationFilename : inputAnnotationFilenames) {
+    std::string annotationFilenameDetermined;
+    if (!sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
+                                  annotationFilenameDetermined)) {
+      llvm::errs() << "cannot open input annotation file '"
+                   << inputAnnotationFilename
+                   << "': No such file or directory\n";
+      return failure();
+    }
   }
 
   // Parse the input.
@@ -419,7 +421,7 @@ processInput(MLIRContext &context, TimingScope &ts,
   // To prevent any frustration, we detect this constellation and emit an
   // error here. The user can provide annotations for each split using the
   // inline JSON syntax in FIRRTL.
-  if (!inputAnnotationFilename.empty()) {
+  if (!inputAnnotationFilenames.empty()) {
     llvm::errs() << "annotation file cannot be used with split input: "
                     "use inline JSON syntax on FIRRTL `circuit` to specify "
                     "per-split annotations\n";

@@ -1132,19 +1132,47 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 // BindOp
 //===----------------------------------------------------------------------===//
 
+/// Instances must be at the top level of the hw.module (or within a `ifdef)
+// and are typically at the end of it, so we scan backwards to find them.
+static hw::InstanceOp findInstanceSymbolInBlock(FlatSymbolRefAttr name,
+                                                Block *body) {
+  for (auto &op : llvm::reverse(body->getOperations())) {
+    if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
+      if (instance.sym_name() &&
+          instance.sym_name().getValue() == name.getValue())
+        return instance;
+    }
+
+    if (auto ifdef = dyn_cast<IfDefOp>(op)) {
+      if (auto result = findInstanceSymbolInBlock(name, ifdef.getThenBlock()))
+        return result;
+      if (ifdef.hasElse())
+        if (auto result = findInstanceSymbolInBlock(name, ifdef.getElseBlock()))
+          return result;
+    }
+  }
+  return {};
+}
+
 hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
+  // If we have a cache, directly look up the referenced instance.
   if (cache)
-    if (auto *result = cache->getDefinition(bindAttr()))
+    if (auto *result = cache->getDefinition(boundInstanceAttr()))
       return dyn_cast<hw::InstanceOp>(result);
 
+  // Otherwise, resolve the instance by looking up the hw.module...
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
   if (!topLevelModuleOp)
-    return nullptr;
+    return {};
 
-  /// Lookup the instance for the symbol.  This returns null on
-  /// invalid IR.
-  auto inst = lookupSymbolInNested(topLevelModuleOp, bind());
-  return dyn_cast_or_null<hw::InstanceOp>(inst);
+  auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
+      topLevelModuleOp.lookupSymbol(instanceModule()));
+  if (!hwModule)
+    return {};
+
+  // ... then look up the instance within it.
+  return findInstanceSymbolInBlock(boundInstanceAttr(),
+                                   hwModule.getBodyBlock());
 }
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.

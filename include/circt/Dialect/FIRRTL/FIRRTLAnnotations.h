@@ -23,7 +23,7 @@ namespace firrtl {
 
 class Annotation;
 class AnnotationSetIterator;
-class FModuleOp;
+class FModuleLike;
 
 /// Return the name of the attribute used for annotations on FIRRTL ops.
 inline StringRef getAnnotationAttrName() { return "annotations"; }
@@ -60,12 +60,12 @@ public:
   explicit AnnotationSet(Operation *op);
 
   /// Get an annotation set for the specified module port.
-  static AnnotationSet forPort(Operation *module, size_t portNo);
+  static AnnotationSet forPort(FModuleLike module, size_t portNo);
 
   /// Get an annotation set for the specified module port, as well as other
   /// argument attributes.
   static AnnotationSet
-  forPort(Operation *module, size_t portNo,
+  forPort(FModuleLike module, size_t portNo,
           SmallVectorImpl<NamedAttribute> &otherAttributes);
 
   /// Get an annotation set for the specified value.

@@ -10,33 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-def LLHD_NegOp : LLHD_ArithmeticOrBitwiseOp<"neg", []> {
-  let summary = "Negate a value.";
-  let description = [{
-    The operand and result always have the same type. The type has to be a
-    signless integer of any width. Although, only signless integers are
-    allowed, this instruction applies two's complement negation of the
-    integer, basically treating it as a signed integer.
-
-    Syntax:
-
-    ```
-    neg-op ::= ssa-id `=` `llhd.neg` ssa-value attr-dict `:` type
-    ```
-
-    Example:
-
-    ```mlir
-    %0 = llhd.const 42 : i32
-    %1 = llhd.neg %0 : i32
-    ```
-  }];
-
-  let arguments = (ins AnySignlessInteger:$value);
-
-  let hasFolder = 1;
-}
-
 def LLHD_EqOp : LLHD_Op<"eq", [
     NoSideEffect,
     Commutative,

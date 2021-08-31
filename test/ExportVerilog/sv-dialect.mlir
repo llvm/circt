@@ -924,7 +924,7 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
 }
 
 hw.module @bindInMod() -> () {
-  sv.bind @bindInst
+  sv.bind @bindInst in @remoteInstDut
 }
 
 // CHECK-LABEL: module bindInMod();
@@ -937,7 +937,7 @@ hw.module @bindInMod() -> () {
 // CHECK-NEXT: );
 // CHECK: endmodule
 
-sv.bind @bindInst2
+sv.bind @bindInst2 in @remoteInstDut
 
 // CHECK-LABEL: bind remoteInstDut extInst a2 (
 // CHECK-NEXT:   ._h (mywire),

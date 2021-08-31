@@ -48,11 +48,11 @@ def LLHD_InsertSliceOp : LLHD_Op<"insert_slice", [
     ```
   }];
 
-  let arguments = (ins AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType]>: $target,
-                       AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType]>: $slice,
+  let arguments = (ins AnyTypeOf<[HWIntegerType, ArrayType]>: $target,
+                       AnyTypeOf<[HWIntegerType, ArrayType]>: $slice,
                        IndexAttr: $start);
 
-  let results = (outs AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType]>: $result);
+  let results = (outs AnyTypeOf<[HWIntegerType, ArrayType]>: $result);
 
   let assemblyFormat = [{
     $target `,` $slice `,` $start attr-dict `:` type($target) `,` type($slice)
@@ -96,11 +96,11 @@ def LLHD_InsertElementOp : LLHD_Op<"insert_element", [
     ```
   }];
 
-  let arguments = (ins AnyTypeOf<[LLHD_ArrayType, AnyTuple]>: $target,
+  let arguments = (ins AnyTypeOf<[ArrayType, StructType]>: $target,
                        AnyType: $element,
                        IndexAttr: $index);
 
-  let results = (outs AnyTypeOf<[LLHD_ArrayType, AnyTuple]>: $result);
+  let results = (outs AnyTypeOf<[ArrayType, StructType]>: $result);
 
   let assemblyFormat = [{
     $target `,` $element `,` $index attr-dict `:`
@@ -112,9 +112,9 @@ def LLHD_InsertElementOp : LLHD_Op<"insert_element", [
 
     Type getElementTypeAtIndex(int64_t index) {
       Type targetType = target().getType();
-      if (auto array = targetType.dyn_cast<llhd::ArrayType>())
+      if (auto array = targetType.dyn_cast<hw::ArrayType>())
         return array.getElementType();
-      return targetType.cast<TupleType>().getTypes()[index];
+      return targetType.cast<hw::StructType>().getElements()[index].type;
     }
   }];
 }

@@ -102,7 +102,8 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
 
   if (auto blockArg = val.dyn_cast<BlockArgument>()) {
     auto op = val.getParentBlock()->getParentOp();
-    auto direction = (Direction)getModulePortDirections(op)
+    auto direction = (Direction)cast<FModuleLike>(op)
+                         .getPortDirections()
                          .getValue()[blockArg.getArgNumber()];
     if (direction == Direction::Output)
       return swap();
@@ -124,8 +125,8 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       .Case<InstanceOp>([&](auto inst) {
         for (auto arg : llvm::enumerate(inst.getResults()))
           if (arg.value() == val) {
-            if (getModulePortDirection(inst.getReferencedModule(),
-                                       arg.index()) == Direction::Output)
+            if (inst.getReferencedModule().getPortDirection(arg.index()) ==
+                Direction::Output)
               return accumulatedFlow;
             else
               return swap();
@@ -324,54 +325,45 @@ Block *CircuitOp::getBody() { return &getBodyRegion().front(); }
 // FExtModuleOp and FModuleOp
 //===----------------------------------------------------------------------===//
 
-FunctionType firrtl::getModuleType(Operation *op) {
-  auto typeAttr = op->getAttrOfType<TypeAttr>(FModuleOp::getTypeAttrName());
-  return typeAttr.getValue().cast<FunctionType>();
-}
-
 /// This function can extract information about ports from a module and an
 /// extmodule.
-SmallVector<ModulePortInfo> firrtl::getModulePortInfo(Operation *op) {
+SmallVector<ModulePortInfo> FModuleOp::getPorts() {
   SmallVector<ModulePortInfo> results;
 
-  auto portNamesAttr = getModulePortNames(op);
-  auto portDirections = getModulePortDirections(op).getValue();
-  if (isa<FExtModuleOp>(op)) {
-    // FExtModuleOp's don't have block arguments or locations for their ports.
-    auto argTypes = getModuleType(op).getInputs();
-    auto loc = op->getLoc();
-    for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-      auto name = portNamesAttr[i].cast<StringAttr>();
-      auto type = argTypes[i].cast<FIRRTLType>();
-      auto direction = direction::get(portDirections[i]);
-      results.push_back(
-          {name, type, direction, loc, AnnotationSet::forPort(op, i)});
-    }
-  } else {
-    // FModuleOp has the ports as the BlockArgument's of the first block.
-    auto moduleBlock = cast<FModuleOp>(op).getBodyBlock();
-    for (auto portArgAndIndex : llvm::enumerate(moduleBlock->getArguments())) {
-      BlockArgument portArg = portArgAndIndex.value();
-      size_t portIdx = portArgAndIndex.index();
-      auto name = portNamesAttr[portIdx].cast<StringAttr>();
-      auto direction = direction::get(portDirections[portIdx]);
-      results.push_back({name, portArg.getType().cast<FIRRTLType>(), direction,
-                         portArg.getLoc(),
-                         AnnotationSet::forPort(op, portIdx)});
-    }
+  auto portNamesAttr = portNames();
+  auto portDirections = getPortDirections().getValue();
+  // FModuleOp has the ports as the BlockArgument's of the first block.
+  auto moduleBlock = getBodyBlock();
+  for (auto portArgAndIndex : llvm::enumerate(moduleBlock->getArguments())) {
+    BlockArgument portArg = portArgAndIndex.value();
+    size_t portIdx = portArgAndIndex.index();
+    auto name = portNamesAttr[portIdx].cast<StringAttr>();
+    auto direction = direction::get(portDirections[portIdx]);
+    results.push_back({name, portArg.getType().cast<FIRRTLType>(), direction,
+                       portArg.getLoc(),
+                       AnnotationSet::forPort(*this, portIdx)});
   }
   return results;
 }
 
-/// Given an FModule or ExtModule, return the name of the specified port number.
-StringAttr firrtl::getModulePortName(Operation *op, size_t portIndex) {
-  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
-  return getModulePortNames(op)[portIndex].cast<StringAttr>();
-}
+/// This function can extract information about ports from a module and an
+/// extmodule.
+SmallVector<ModulePortInfo> FExtModuleOp::getPorts() {
+  SmallVector<ModulePortInfo> results;
 
-Direction firrtl::getModulePortDirection(Operation *op, size_t portIndex) {
-  assert(isa<FModuleOp>(op) || isa<FExtModuleOp>(op));
-  return direction::get(getModulePortDirections(op).getValue()[portIndex]);
+  auto portNamesAttr = portNames();
+  auto portDirections = getPortDirections().getValue();
+  // FExtModuleOp's don't have block arguments or locations for their ports.
+  auto argTypes = moduleType().getInputs();
+  auto loc = getLoc();
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    auto name = portNamesAttr[i].cast<StringAttr>();
+    auto type = argTypes[i].cast<FIRRTLType>();
+    auto direction = direction::get(portDirections[i]);
+    results.push_back(
+        {name, type, direction, loc, AnnotationSet::forPort(*this, i)});
+  }
+  return results;
 }
 
 // Return the port with the specified name.
@@ -542,7 +534,7 @@ static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
   SmallString<32> resultNameStr;
 
   p << '(';
-  auto portNamesAttr = getModulePortNames(op);
+  auto portNamesAttr = cast<FModuleLike>(op).portNames();
   for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
@@ -713,10 +705,10 @@ parseFunctionSignature2(OpAsmParser &parser, bool allowVariadic,
   return success();
 }
 
-static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
+static void printModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   using namespace mlir::function_like_impl;
 
-  FunctionType fnType = getModuleType(op);
+  FunctionType fnType = op.moduleType();
   auto argTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
 
@@ -724,16 +716,13 @@ static void printModuleLikeOp(OpAsmPrinter &p, Operation *op) {
   // allow these customizations.  Need to not print the terminator.
 
   // Print the operation and the function name.
-  auto funcName =
-      op->getAttrOfType<StringAttr>(::mlir::SymbolTable::getSymbolAttrName())
-          .getValue();
+  auto funcName = op.moduleName();
   p << op->getName() << ' ';
   p.printSymbolName(funcName);
 
   bool needPortNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
-                          needPortNamesAttr,
-                          getModulePortDirections(op).getValue());
+                          needPortNamesAttr, op.getPortDirections().getValue());
   SmallVector<StringRef, 3> omittedAttrs({direction::attrKey});
   if (!needPortNamesAttr)
     omittedAttrs.push_back("portNames");
@@ -871,7 +860,7 @@ static ParseResult parseFExtModuleOp(OpAsmParser &parser,
 }
 
 static LogicalResult verifyModuleSignature(Operation *op) {
-  const auto &inputs = getModuleType(op).getInputs();
+  auto inputs = cast<FModuleLike>(op).moduleType().getInputs();
   for (auto argType : inputs) {
     if (!argType.isa<FIRRTLType>())
       return op->emitOpError("all module ports must be firrtl types");
@@ -917,7 +906,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
   if (!llvm::all_of(paramDict, checkParmValue))
     return failure();
-  auto portNamesAttr = getModulePortNames(op);
+  auto portNamesAttr = op.portNames();
 
   auto numPorts = op.getPorts().size();
   if (numPorts != portNamesAttr.size())
@@ -926,7 +915,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
   // Directions are stored in an APInt which cannot have zero bitwidth.  If the
   // module has no ports, then the APInt should be size one.  Otherwise, their
   // sizes should match.
-  auto numDirections = getModulePortDirections(op).getValue().getBitWidth();
+  auto numDirections = op.getPortDirections().getValue().getBitWidth();
   if ((numPorts != numDirections) && (numPorts != 0 || numDirections != 1))
     return op.emitError()
            << "module ports size (" << numPorts
@@ -942,12 +931,16 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
-Operation *InstanceOp::getReferencedModule() {
+FModuleLike InstanceOp::getReferencedModule() {
   auto circuit = (*this)->getParentOfType<CircuitOp>();
   if (!circuit)
     return nullptr;
 
-  return circuit.lookupSymbol(moduleName());
+  return circuit.lookupSymbol<FModuleLike>(moduleName());
+}
+
+FModuleLike InstanceOp::getReferencedModule(SymbolTable &symtbl) {
+  return symtbl.lookup<FModuleLike>(moduleName());
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -1010,7 +1003,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
-  auto *referencedModule = instance.getReferencedModule();
+  auto referencedModule = instance.getReferencedModule();
   if (!referencedModule) {
     instance.emitOpError("invalid symbol reference");
     return failure();
@@ -1025,7 +1018,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts = getModulePortInfo(referencedModule);
+  SmallVector<ModulePortInfo> modulePorts = referencedModule.getPorts();
 
   // Check that result types are consistent with the referenced module's ports.
   size_t numResults = instance.getNumResults();
@@ -2624,8 +2617,6 @@ static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
 // Utilities related to Direction
 //===----------------------------------------------------------------------===//
 
-Direction direction::get(bool a) { return (Direction)a; }
-
 IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
                                      MLIRContext *ctx) {
 
@@ -2656,7 +2647,7 @@ SmallVector<Direction> direction::unpackAttribute(Operation *module) {
 
   // The integer attribute will be a single bit in the case where the module has
   // no ports because APInt can't hold zero bits.
-  if (getModuleType(module).getInputs().empty())
+  if (cast<FModuleLike>(module).moduleType().getInputs().empty())
     return result;
 
   result.reserve(value.getBitWidth());

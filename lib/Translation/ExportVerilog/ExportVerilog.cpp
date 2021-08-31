@@ -72,7 +72,11 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
   return false;
 }
 
-static bool isVerilogExpression(Operation *op) {
+/// This predicate returns true if the specified operation is considered a
+/// potentially inlinable Verilog expression.  These nodes always have a single
+/// result, but may have side effects (e.g. `sv.verbatim.expr.se`).
+/// MemoryEffects should be checked if a client cares.
+bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
   if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
     return true;
@@ -311,6 +315,7 @@ static StringRef getVerilogDeclWord(Operation *op) {
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
   return isProcedural ? "automatic logic" : "wire";
 }
+
 /// Return the name of a value without using the name map.  This is needed when
 /// looking into an instance from a different module as happens with bind.  It
 /// may return "" when unable to determine a name.  This works in situations
@@ -321,9 +326,13 @@ static StringRef getNameRemotely(Value value,
     return modulePorts[barg.getArgNumber()].getName();
 
   if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
-    if (auto wire = dyn_cast<WireOp>(readinout.input().getDefiningOp()))
+    auto *wireInput = readinout.input().getDefiningOp();
+    if (!wireInput)
+      return {};
+
+    if (auto wire = dyn_cast<WireOp>(wireInput))
       return wire.name();
-    if (auto reg = dyn_cast<RegOp>(readinout.input().getDefiningOp()))
+    if (auto reg = dyn_cast<RegOp>(wireInput))
       return reg.name();
   }
   if (auto localparam = dyn_cast<LocalParamOp>(value.getDefiningOp()))
@@ -1543,12 +1552,11 @@ void NameCollector::collectNames(Block &block) {
   // Loop over all of the results of all of the ops.  Anything that defines a
   // value needs to be noticed.
   for (auto &op : block) {
-    bool isExpr = isVerilogExpression(&op);
-
     // Instances and interface instances are handled in prepareHWModule.
     if (isa<InstanceOp, InterfaceInstanceOp>(op))
       continue;
 
+    bool isExpr = isVerilogExpression(&op);
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
       // name.
@@ -2909,7 +2917,7 @@ void ModuleEmitter::emitBind(BindOp op) {
       if (shouldPrintComma)
         os << ',';
     }
-    os << "\n";
+    os << '\n';
 
     // Emit the port's name.
     indent();
@@ -2940,7 +2948,7 @@ void ModuleEmitter::emitBind(BindOp op) {
     }
   }
   if (!isFirst) {
-    os << "\n";
+    os << '\n';
     indent();
   }
   os << ");\n";
@@ -2981,11 +2989,14 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       names.addLegalName(module.getArgument(port.argNum), name, module);
   }
 
+  SmallPtrSet<Operation *, 8> moduleOpSet;
+  moduleOpSet.insert(module);
+
   auto moduleNameAttr = module.getNameAttr();
   verifyModuleName(module, moduleNameAttr);
   os << "module " << moduleNameAttr.getValue() << '(';
   if (!portInfo.empty())
-    os << '\n';
+    emitLocationInfoAndNewLine(moduleOpSet);
 
   // Determine the width of the widest type we have to print so everything
   // lines up nicely.
@@ -3089,8 +3100,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     os << '\n';
   }
 
-  if (portInfo.empty())
-    os << ");\n";
+  if (portInfo.empty()) {
+    os << ");";
+    emitLocationInfoAndNewLine(moduleOpSet);
+  }
   reduceIndent();
 
   // Emit the body of the module.
@@ -3207,6 +3220,10 @@ struct SharedEmitterState {
   // Emitter options extracted from the top-level module.
   const LoweringOptions options;
 
+  /// This is a set is populated at "gather" time, containing the hw.module
+  /// operations that have a sv.bind in them.
+  SmallPtrSet<Operation *, 8> modulesContainingBinds;
+
   explicit SharedEmitterState(ModuleOp rootOp)
       : rootOp(rootOp), options(rootOp) {}
   void gatherFiles(bool separateModules);
@@ -3226,11 +3243,17 @@ struct SharedEmitterState {
 void SharedEmitterState::gatherFiles(bool separateModules) {
 
   /// Collect all the instance symbols from the specified module and add them to
-  /// the IRCache.  Instances only exist at the top level of the module.
-  auto collectInstanceSymbols = [&](HWModuleOp moduleOp) {
-    for (auto op : moduleOp.getBodyBlock()->getOps<InstanceOp>()) {
-      if (auto sym = op.sym_nameAttr())
-        symbolCache.addDefinition(sym, op);
+  /// the IRCache.  Instances only exist at the top level of the module.  Also
+  /// keep track of any modules that contain bind operations.  These are
+  /// non-hierarchical references which we need to be careful about during
+  /// emission.
+  auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
+    for (Operation &op : *moduleOp.getBodyBlock()) {
+      if (auto instance = dyn_cast<InstanceOp>(op))
+        if (auto sym = instance.sym_nameAttr())
+          symbolCache.addDefinition(sym, instance);
+      if (isa<BindOp>(op))
+        modulesContainingBinds.insert(moduleOp);
     }
   };
 
@@ -3290,7 +3313,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<HWModuleOp>([&](auto mod) {
           // Build the IR cache.
           symbolCache.addDefinition(mod.getNameAttr(), mod);
-          collectInstanceSymbols(mod);
+          collectInstanceSymbolsAndBinds(mod);
 
           // Emit into a separate file named after the module.
           if (attr || separateModules)
@@ -3432,9 +3455,9 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
       return; // Ignore things that are already strings.
 
     // BindOp emission reaches into the hw.module of the instance, and that
-    // body may be being transformed by its own emission.  Defer this to the
-    // serial phase.  They are speedy anyway.
-    if (isa<BindOp>(op))
+    // body may be being transformed by its own emission.  Defer their emission
+    // to the serial phase.  They are speedy to emit anyway.
+    if (isa<BindOp>(op) || modulesContainingBinds.count(op))
       return;
 
     SmallString<256> buffer;

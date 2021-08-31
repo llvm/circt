@@ -13,6 +13,7 @@
 
 #include "circt/Dialect/Calyx/CalyxEmitter.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -28,6 +29,24 @@ using namespace calyx;
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+static constexpr std::string_view LSquare() { return "["; }
+static constexpr std::string_view RSquare() { return "]"; }
+static constexpr std::string_view LParen() { return "("; }
+static constexpr std::string_view RParen() { return ")"; }
+static constexpr std::string_view colon() { return ": "; }
+static constexpr std::string_view space() { return " "; }
+static constexpr std::string_view period() { return "."; }
+static constexpr std::string_view questionMark() { return " ? "; }
+static constexpr std::string_view exclamationMark() { return "!"; }
+static constexpr std::string_view equals() { return " = "; }
+static constexpr std::string_view comma() { return ", "; }
+static constexpr std::string_view arrow() { return " -> "; }
+static constexpr std::string_view delimiter() { return "\""; }
+static constexpr std::string_view apostrophe() { return "'"; }
+static constexpr std::string_view LBraceEndL() { return "{\n"; }
+static constexpr std::string_view RBraceEndL() { return "}\n"; }
+static constexpr std::string_view semicolonEndL() { return ";\n"; }
 
 /// An emitter for Calyx dialect operations to .futil output.
 struct Emitter {
@@ -45,6 +64,17 @@ struct Emitter {
   // Program emission
   void emitProgram(ProgramOp op);
 
+  /// Import emission.
+  /// TODO(Calyx): Only import a library if a primitive is used from it.
+  void emitAllImports() {
+    auto emitImport = [&](StringRef path) {
+      os << "import " << delimiter() << path << delimiter() << semicolonEndL();
+    };
+    emitImport("primitives/core.futil");
+    emitImport("primitives/binary_operators.futil");
+    emitImport("primitives/math.futil");
+  }
+
   // Component emission
   void emitComponent(ComponentOp op);
   void emitComponentPorts(ArrayRef<ComponentPortInfo> ports);
@@ -56,13 +86,22 @@ struct Emitter {
   void emitWires(WiresOp op);
 
   // Group emission
-  void emitGroup(GroupOp op);
+  void emitGroup(GroupOp group);
 
   // Control emission
-  void emitControl(ControlOp op);
+  void emitControl(ControlOp control);
 
   // Assignment emission
   void emitAssignment(AssignOp op);
+
+  // Enable emission
+  void emitEnable(EnableOp enable);
+
+  // Register emission
+  void emitRegister(RegisterOp reg);
+
+  // Memory emission
+  void emitMemory(MemoryOp memory);
 
 private:
   /// Emit an error and remark that emission failed.
@@ -77,19 +116,42 @@ private:
     return op->emitOpError(message);
   }
 
+  /// Helper function for emitting a Calyx section. It emits the body in the
+  /// following format:
+  /// {
+  ///   <body>
+  /// }
+  template <typename Func>
+  void emitCalyxBody(Func emitBody) {
+    os << space() << LBraceEndL();
+    addIndent();
+    emitBody();
+    reduceIndent();
+    indent() << RBraceEndL();
+  }
+
   /// Emits a Calyx section.
   template <typename Func>
   void emitCalyxSection(StringRef sectionName, Func emitBody,
                         StringRef symbolName = "") {
     indent() << sectionName;
     if (!symbolName.empty())
-      os << " " << symbolName;
-    os << " {\n";
-    addIndent();
+      os << space() << symbolName;
+    emitCalyxBody(emitBody);
+  }
 
-    emitBody();
-    reduceIndent();
-    indent() << "}\n";
+  /// Helper function for emitting combinational operations.
+  template <typename CombinationalOp>
+  void emitCombinationalValue(CombinationalOp value, StringRef logicalSymbol) {
+    auto inputs = value.inputs();
+    os << LParen();
+    for (size_t i = 0, e = inputs.size(); i != e; ++i) {
+      emitValue(inputs[i], /*isIndented=*/false);
+      if (i + 1 == e)
+        continue;
+      os << space() << logicalSymbol << space();
+    }
+    os << RParen();
   }
 
   /// Emits the value of a guard or assignment.
@@ -103,23 +165,75 @@ private:
           auto ports = getComponentPortInfo(op.getReferencedComponent());
           StringAttr portName = ports[portIndex].name;
           (isIndented ? indent() : os)
-              << op.instanceName() << "." << portName.getValue();
+              << op.instanceName() << period() << portName.getValue();
         })
         .Case<hw::ConstantOp>([&](auto op) {
           // A constant is defined as <bit-width>'<base><value>, where the base
           // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
-
-          // Emit the Radix-10 version of the ConstantOp.
           APInt value = op.value();
 
-          SmallVector<char> stringValue;
-          value.toString(stringValue, /*Radix=*/10, /*Signed=*/false);
-
           (isIndented ? indent() : os)
-              << std::to_string(value.getBitWidth()) << "'d" << stringValue;
+              << std::to_string(value.getBitWidth()) << apostrophe() << "d";
+          // We currently default to the decimal representation.
+          value.print(os, /*isSigned=*/false);
+        })
+        .Case<comb::AndOp>([&](auto op) { emitCombinationalValue(op, "&"); })
+        .Case<comb::OrOp>([&](auto op) { emitCombinationalValue(op, "|"); })
+        .Case<comb::XorOp>([&](auto op) {
+          // The XorOp is a bit different, since the Combinational dialect uses
+          // it to represent binary not.
+          if (!op.isBinaryNot()) {
+            emitOpError(op, "Only supporting Binary Not for XOR.");
+            return;
+          }
+          // The LHS is the value to be negated, and the RHS is a constant with
+          // all ones (guaranteed by isBinaryNot).
+          os << exclamationMark();
+          emitValue(op.inputs()[0], /*isIndented=*/false);
         })
         .Default(
             [&](auto op) { emitOpError(op, "not supported for emission"); });
+  }
+
+  /// Emits a port for a Group.
+  template <typename OpTy>
+  void emitGroupPort(GroupOp group, OpTy op, StringRef portHole) {
+    assert((isa<GroupGoOp>(op) || isa<GroupDoneOp>(op)) &&
+           "Required to be a group port.");
+    indent() << group.sym_name() << LSquare() << portHole << RSquare()
+             << equals();
+    if (op.guard()) {
+      emitValue(op.guard(), /*isIndented=*/false);
+      os << questionMark();
+    }
+    emitValue(op.src(), /*isIndented=*/false);
+    os << semicolonEndL();
+  }
+
+  /// Recursively emits the Calyx control.
+  template <typename OpTy>
+  void emitCalyxControl(OpTy controlOp) {
+    // Check to see if this is a stand-alone EnableOp.
+    if (isa<EnableOp>(controlOp)) {
+      emitEnable(cast<EnableOp>(controlOp));
+      return;
+    }
+    for (auto &&bodyOp : *controlOp.getBody()) {
+      TypeSwitch<Operation *>(&bodyOp)
+          .template Case<SeqOp>([&](auto op) {
+            emitCalyxSection("seq", [&]() { emitCalyxControl(op); });
+          })
+          .template Case<IfOp, WhileOp>([&](auto op) {
+            indent() << (isa<IfOp>(op) ? "if " : "while ");
+            emitValue(op.cond(), /*isIndented=*/false);
+            os << " with " << op.groupName();
+            emitCalyxBody([&]() { emitCalyxControl(op); });
+          })
+          .template Case<EnableOp>([&](auto op) { emitEnable(op); })
+          .Default([&](auto op) {
+            emitOpError(op, "not supported for emission inside control.");
+          });
+    }
   }
 
   /// The stream we are emitting into.
@@ -154,7 +268,7 @@ void Emitter::emitComponent(ComponentOp op) {
   // Emit the ports.
   auto ports = getComponentPortInfo(op);
   emitComponentPorts(ports);
-  os << " {\n";
+  os << space() << LBraceEndL();
   addIndent();
   WiresOp wires;
   ControlOp control;
@@ -166,6 +280,8 @@ void Emitter::emitComponent(ComponentOp op) {
           .Case<WiresOp>([&](auto op) { wires = op; })
           .Case<ControlOp>([&](auto op) { control = op; })
           .Case<InstanceOp>([&](auto op) { emitInstance(op); })
+          .Case<RegisterOp>([&](auto op) { emitRegister(op); })
+          .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });
@@ -175,7 +291,7 @@ void Emitter::emitComponent(ComponentOp op) {
   emitWires(wires);
   emitControl(control);
   reduceIndent();
-  os << "}\n";
+  os << RBraceEndL();
 }
 
 /// Emit the ports of a component.
@@ -188,38 +304,91 @@ void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
       outPorts.push_back(port);
   }
 
+  // To avoid the native compiler adding each of the required ports twice,
+  // add the @<port-name> attribute here. This is a quick-fix solution.
+  // Eventually we want to add attributes directly to component arguments.
+  // See: https://github.com/llvm/circt/issues/1666
+  llvm::SmallVector<StringRef> requiredPorts = {"go", "clk", "done", "reset",
+                                                "done"};
+  auto requiresNativeCompilerAttribute = [&](StringRef portName) {
+    return llvm::find_if(requiredPorts, [&](StringRef requiredPort) {
+             return requiredPort == portName;
+           }) != requiredPorts.end();
+  };
+
   auto emitPorts = [&](auto ports) {
-    os << "(";
+    os << LParen();
     for (size_t i = 0, e = ports.size(); i < e; ++i) {
       const auto &port = ports[i];
-      auto name = port.name.getValue();
+      std::string name = port.name.getValue().str();
+      if (requiresNativeCompilerAttribute(name)) {
+        // @<port-name> <port-name>
+        name.insert(0, "@");
+        name += " ";
+        name += port.name.getValue();
+      }
       // We only care about the bit width in the emitted .futil file.
       auto bitWidth = port.type.getIntOrFloatBitWidth();
-      os << name << ": " << bitWidth;
+      os << name << colon() << bitWidth;
 
       if (i + 1 < e)
-        os << ", ";
+        os << comma();
     }
-    os << ")";
+    os << RParen();
   };
   emitPorts(inPorts);
-  os << " -> ";
+  os << arrow();
   emitPorts(outPorts);
 }
 
 void Emitter::emitInstance(InstanceOp op) {
-  indent() << op.instanceName() << " = " << op.componentName() << "();\n";
+  indent() << op.instanceName() << equals() << op.componentName() << LParen()
+           << RParen() << semicolonEndL();
+}
+
+void Emitter::emitRegister(RegisterOp reg) {
+  size_t bitWidth = reg.inPort().getType().getIntOrFloatBitWidth();
+  indent() << reg.instanceName() << equals() << "std_reg" << LParen()
+           << std::to_string(bitWidth) << RParen() << semicolonEndL();
+}
+
+void Emitter::emitMemory(MemoryOp memory) {
+  size_t dimension = memory.sizes().size();
+  if (dimension < 1 || dimension > 4) {
+    emitOpError(memory, "Only memories with dimensionality in range [1, 4] are "
+                        "supported by the native Calyx compiler.");
+    return;
+  }
+  indent() << memory.instanceName() << " = std_mem_d"
+           << std::to_string(dimension) << LParen() << memory.width()
+           << comma();
+  for (Attribute size : memory.sizes()) {
+    APInt memSize = size.cast<IntegerAttr>().getValue();
+    memSize.print(os, /*isSigned=*/false);
+    os << comma();
+  }
+
+  ArrayAttr addrSizes = memory.addrSizes();
+  for (size_t i = 0, e = addrSizes.size(); i != e; ++i) {
+    APInt addrSize = addrSizes[i].cast<IntegerAttr>().getValue();
+    addrSize.print(os, /*isSigned=*/false);
+    if (i + 1 == e)
+      continue;
+    os << comma();
+  }
+  os << RParen() << semicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {
-  // TODO(Calyx): Support guards.
-  if (op.guard())
-    emitOpError(op, "guard not supported for emission currently");
 
   emitValue(op.dest(), /*isIndented=*/true);
-  os << " = ";
+  os << equals();
+  if (op.guard()) {
+    emitValue(op.guard(), /*isIndented=*/false);
+    os << questionMark();
+  }
   emitValue(op.src(), /*isIndented=*/false);
-  os << ";\n";
+  os << semicolonEndL();
 }
 
 void Emitter::emitWires(WiresOp op) {
@@ -228,7 +397,8 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupOp>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp>([&](auto op) { /* Do nothing */ })
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+              [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
           });
@@ -236,25 +406,29 @@ void Emitter::emitWires(WiresOp op) {
   });
 }
 
-void Emitter::emitGroup(GroupOp op) {
+void Emitter::emitGroup(GroupOp group) {
   auto emitGroupBody = [&]() {
-    for (auto &&bodyOp : *op.getBody()) {
+    for (auto &&bodyOp : *group.getBody()) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<GroupDoneOp>([&](auto op) { /* TODO(Calyx): Unimplemented */ })
-          .Case<GroupGoOp>([&](auto op) { /* TODO(Calyx): Unimplemented */ })
-          .Case<hw::ConstantOp>([&](auto op) { /* Do nothing. */ })
+          .Case<GroupDoneOp>([&](auto op) { emitGroupPort(group, op, "done"); })
+          .Case<GroupGoOp>([&](auto op) { emitGroupPort(group, op, "go"); })
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+              [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
-            emitOpError(op, "not supported for emission inside group");
+            emitOpError(op, "not supported for emission inside group.");
           });
     }
   };
-  emitCalyxSection("group", emitGroupBody, op.sym_name());
+  emitCalyxSection("group", emitGroupBody, group.sym_name());
 }
 
-void Emitter::emitControl(ControlOp op) {
-  // TODO(Calyx): SeqOp, EnableOp.
-  emitCalyxSection("control", [&]() {});
+void Emitter::emitEnable(EnableOp enable) {
+  indent() << enable.groupName() << semicolonEndL();
+}
+
+void Emitter::emitControl(ControlOp control) {
+  emitCalyxSection("control", [&]() { emitCalyxControl(control); });
 }
 
 //===----------------------------------------------------------------------===//
@@ -265,6 +439,7 @@ void Emitter::emitControl(ControlOp op) {
 mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
                                               llvm::raw_ostream &os) {
   Emitter emitter(os);
+  emitter.emitAllImports();
   for (auto &op : *module.getBody()) {
     if (auto programOp = dyn_cast<ProgramOp>(op))
       emitter.emitProgram(programOp);

@@ -76,6 +76,32 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Verifies the body of a ControlLikeOp.
+static LogicalResult verifyControlBody(Operation *op) {
+  if (isa<SeqOp>(op))
+    // This does not apply to sequential and parallel regions.
+    return success();
+
+  // Some ControlLike operations have (possibly) multiple regions, e.g. IfOp.
+  for (auto &region : op->getRegions()) {
+    auto opsIt = region.getOps();
+    size_t numOperations = std::distance(opsIt.begin(), opsIt.end());
+    // A body of a ControlLike operation may have a single EnableOp within it.
+    // However, that must be the only operation.
+    //  E.g. Allowed:  calyx.control { calyx.enable @A }
+    //   Not Allowed:  calyx.control { calyx.enable @A calyx.seq { ... } }
+    bool isInvalidBody =
+        numOperations > 1 && llvm::any_of(region.front(), [](auto &&bodyOp) {
+          return isa<EnableOp>(bodyOp);
+        });
+    if (isInvalidBody)
+      return op->emitOpError(
+          "EnableOp is not a composition operator. It should be nested "
+          "in a control flow operation, such as \"calyx.seq\"");
+  }
+  return success();
+}
+
 /// Checks whether @p port is driven from within @p groupOp.
 static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp) {
   // Check if the port is driven by an assignOp from within @p groupOp.
@@ -152,7 +178,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
            << "has operation: " << bodyOp.getName()
            << ", which is not allowed in this control-like operation";
   }
-  return success();
+  return verifyControlBody(op);
 }
 
 // Convenience function for getting the SSA name of @p v under the scope of
@@ -476,19 +502,7 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 // ControlOp
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyControlOp(ControlOp control) {
-  auto body = control.getBody();
-
-  // A control operation may have a single EnableOp within it. However,
-  // that must be the only operation. E.g.
-  // Allowed:      calyx.control { calyx.enable @A }
-  // Not Allowed:  calyx.control { calyx.enable @A calyx.seq { ... } }
-  if (llvm::any_of(*body, [](auto &&op) { return isa<EnableOp>(op); }) &&
-      body->getOperations().size() > 1)
-    return control->emitOpError(
-        "EnableOp is not a composition operator. It should be nested "
-        "in a control flow operation, such as \"calyx.seq\"");
-
-  return success();
+  return verifyControlBody(control);
 }
 
 //===----------------------------------------------------------------------===//
@@ -539,6 +553,86 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
   std::string prefix = instanceName.str() + ".";
   for (size_t i = 0, e = portNames.size(); i != e; ++i)
     setNameFn(op->getResult(i), prefix + portNames[i].str());
+}
+
+//===----------------------------------------------------------------------===//
+// AssignOp
+//===----------------------------------------------------------------------===//
+
+/// Returns whether the given value is a port of a component, which are
+/// defined as Block Arguments.
+static bool isComponentPort(Value value) { return value.isa<BlockArgument>(); }
+
+/// Verifies the given value of the AssignOp if it is a component port. The
+/// `isDestination` boolean is used to distinguish whether the value is a source
+/// or a destination.
+static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
+                                                     bool isDestination) {
+  Value value = isDestination ? op.dest() : op.src();
+
+  auto component = op->getParentOfType<ComponentOp>();
+  Block *body = component.getBody();
+  auto it = llvm::find_if(body->getArguments(),
+                          [&](auto arg) { return arg == value; });
+  assert(it != body->getArguments().end() &&
+         "Value not found in the component ports.");
+  BlockArgument blockArg = *it;
+
+  size_t blockArgNum = blockArg.getArgNumber();
+
+  auto ports = getComponentPortInfo(component);
+  assert(blockArgNum < ports.size() &&
+         "Block argument index should be within range of component's ports.");
+  // Within a component, we want to drive component output ports, and be
+  // driven by its input ports.
+  Direction validComponentDirection = isDestination ? Output : Input;
+  return ports[blockArgNum].direction == validComponentDirection
+             ? success()
+             : op.emitOpError()
+                   << "has a component port as the "
+                   << (isDestination ? "destination" : "source")
+                   << " with the incorrect direction. It should be "
+                   << (isDestination ? "Output" : "Input") << ".";
+}
+
+/// Verifies the destination of an assignment operation.
+static LogicalResult verifyAssignOpDestination(AssignOp assign) {
+  Value dest = assign.dest();
+  if (isComponentPort(dest))
+    return verifyAssignOpWithComponentPort(assign,
+                                           /*isDestination=*/true);
+
+  Operation *definingOp = dest.getDefiningOp();
+  bool isValidDestination =
+      definingOp->hasTrait<Cell>() || isa<GroupGoOp, GroupDoneOp>(definingOp);
+  if (!isValidDestination)
+    assign->emitOpError(
+        "has an invalid destination port. The destination of an AssignOp "
+        "must be drive-able.");
+
+  return success();
+}
+
+/// Verifies the source of an assignment operation.
+static LogicalResult verifyAssignOpSource(AssignOp assign) {
+  Value src = assign.src();
+  if (isComponentPort(src))
+    return verifyAssignOpWithComponentPort(assign,
+                                           /*isDestination=*/false);
+
+  return success();
+}
+
+static LogicalResult verifyAssignOp(AssignOp assign) {
+  // TODO(Calyx): Verification for Cell trait (inverse of components ports):
+  // (1) The destination has Direction::Input, and
+  // (2) the source has Direction::Output.
+  // This is simpler with the completion of the Cell Interface.
+  // See: https://github.com/llvm/circt/issues/1597
+  return succeeded(verifyAssignOpDestination(assign)) &&
+                 succeeded(verifyAssignOpSource(assign))
+             ? success()
+             : failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -646,7 +740,7 @@ void MemoryOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
                      Twine instanceName, int64_t width, ArrayRef<int64_t> sizes,
                      ArrayRef<int64_t> addrSizes) {
-  state.addAttribute("name", builder.getStringAttr(instanceName));
+  state.addAttribute("instanceName", builder.getStringAttr(instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));

@@ -10,6 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// Base class for Calyx primitives.
+class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
+  CalyxCell<mnemonic, traits> {
+    let assemblyFormat = "$instanceName attr-dict `:` type(results)";
+    let arguments = (ins StrAttr:$instanceName);
+    let skipDefaultBuilders = 1;
+}
+
 def RegisterOp : CalyxPrimitive<"register", [
     SameTypeConstraint<"in", "out">
   ]> {
@@ -53,9 +61,7 @@ def RegisterOp : CalyxPrimitive<"register", [
 
 }
 
-def MemoryOp : CalyxPrimitive<"memory", [
-    HasParent<"ComponentOp">
-  ]> {
+def MemoryOp : CalyxPrimitive<"memory", []> {
   let summary = "Defines a memory";
   let description = [{
     The "calyx.memory" op defines a memory. Memories can have any number of
@@ -69,8 +75,13 @@ def MemoryOp : CalyxPrimitive<"memory", [
     more information.
 
     ```mlir
-      // A 2-dimensional, 8-bit memory.
-      %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i8, i1
+      // A 1-dimensional, 32-bit memory with size dimension 1. Equivalent representation in the native compiler:
+      // `m1 = std_mem_d1(32, 1, 1)`
+      %m1.addr0, %m1.write_data, %m1.write_en, %m1.read_data, %m1.done = calyx.memory "m1"<[1] x 32> [1] : i1, i32, i1, i32, i1
+
+      // A 2-dimensional, 8-bit memory with size dimensions 64 x 64. Equivalent representation in the native compiler:
+      // `m2 = std_mem_d2(8, 64, 64, 6, 6)`
+      %m2.addr0, %m2.addr1, %m2.write_data, %m2.write_en, %m2.read_data, %m2.done = calyx.memory "m2"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i8, i1
     ```
   }];
 
@@ -99,4 +110,15 @@ def MemoryOp : CalyxPrimitive<"memory", [
       "ArrayRef<int64_t>":$addrSizes
     )>
   ];
+
+  let extraClassDeclaration = [{
+    size_t getNumDimensions() { return addrSizes().size(); }
+
+    ValueRange addrPorts() { return getResults().take_front(getNumDimensions()); }
+    Value addrPort(size_t i) { assert(i<getNumDimensions() && "Out of bounds of address ports for this memory."); return getResults()[i]; }
+    Value writeData() { return getResult(getNumDimensions()); }
+    Value writeEn()   { return getResult(getNumDimensions() + 1); }
+    Value readData()  { return getResult(getNumDimensions() + 2); }
+    Value done()      { return getResult(getNumDimensions() + 3); }
+  }];
 }

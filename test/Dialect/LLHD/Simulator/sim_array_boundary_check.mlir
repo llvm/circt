@@ -6,11 +6,11 @@
 // CHECK-NEXT: 0ps 0d 1e  root/sig[1]  0x0000
 llhd.entity @root () -> () {
     %0 = llhd.const -1 : i8
-    %1 = llhd.array_uniform %0 : !llhd.array<2 x i8>
-    %3 = llhd.array_uniform %1 : !llhd.array<2 x !llhd.array<2 x i8>>
-    %2 = llhd.sig "sig" %3 : !llhd.array<2 x !llhd.array<2 x i8>>
+    %1 = hw.array_create %0, %0 : i8
+    %3 = hw.array_create %1, %1 : !hw.array<2 x i8>
+    %2 = llhd.sig "sig" %3 : !hw.array<2 x !hw.array<2 x i8>>
     %index = llhd.const 1 : i1
-    %ext = llhd.dyn_extract_slice %3, %index : (!llhd.array<2 x !llhd.array<2 x i8>>, i1) -> !llhd.array<2 x !llhd.array<2 x i8>>
+    %ext = llhd.dyn_extract_slice %3, %index : (!hw.array<2 x !hw.array<2 x i8>>, i1) -> !hw.array<2 x !hw.array<2 x i8>>
     %time = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
-    llhd.drv %2, %ext after %time : !llhd.sig<!llhd.array<2 x !llhd.array<2 x i8>>>
+    llhd.drv %2, %ext after %time : !llhd.sig<!hw.array<2 x !hw.array<2 x i8>>>
 }

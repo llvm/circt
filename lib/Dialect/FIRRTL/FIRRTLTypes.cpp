@@ -398,6 +398,18 @@ unsigned FIRRTLType::getMaxFieldID() {
       });
 }
 
+FIRRTLType FIRRTLType::getSubTypeByFieldID(unsigned fieldID) {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(*this)
+      .Case<AnalogType, ClockType, ResetType, AsyncResetType, SIntType,
+            UIntType>([](FIRRTLType t) { return t; })
+      .Case<BundleType, FVectorType>(
+          [fieldID](auto type) { return type.getSubTypeByFieldID(fieldID); })
+      .Default([](Type) {
+        llvm_unreachable("unknown FIRRTL type");
+        return FIRRTLType();
+      });
+}
+
 std::pair<unsigned, bool> FIRRTLType::rootChildFieldID(unsigned fieldID,
                                                        unsigned index) {
   return TypeSwitch<FIRRTLType, std::pair<unsigned, bool>>(*this)
@@ -746,6 +758,12 @@ FIRRTLType BundleType::getElementType(StringRef name) {
   return element.hasValue() ? element.getValue().type : FIRRTLType();
 }
 
+FIRRTLType BundleType::getElementType(size_t index) {
+  assert(index < getNumElements() &&
+         "index must be less than number of fields in bundle");
+  return getElements()[index].type;
+}
+
 unsigned BundleType::getFieldID(unsigned index) {
   return getImpl()->fieldIDs[index];
 }
@@ -756,6 +774,15 @@ unsigned BundleType::getIndexForFieldID(unsigned fieldID) {
   auto it =
       std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
   return std::distance(fieldIDs.begin(), it);
+}
+
+FIRRTLType BundleType::getSubTypeByFieldID(unsigned fieldID) {
+  if (fieldID == 0)
+    return *this;
+  auto fieldIDs = getImpl()->fieldIDs;
+  auto it =
+      std::prev(std::upper_bound(fieldIDs.begin(), fieldIDs.end(), fieldID));
+  return getElementType(std::distance(fieldIDs.begin(), it));
 }
 
 unsigned BundleType::getMaxFieldID() { return getImpl()->maxFieldID; }
@@ -847,6 +874,12 @@ unsigned FVectorType::getIndexForFieldID(unsigned fieldID) {
   assert(fieldID && "fieldID must be at least 1");
   // Divide the field ID by the number of fieldID's per element.
   return (fieldID - 1) / (getElementType().getMaxFieldID() + 1);
+}
+
+FIRRTLType FVectorType::getSubTypeByFieldID(unsigned fieldID) {
+  if (fieldID == 0)
+    return *this;
+  return getElementType();
 }
 
 unsigned FVectorType::getMaxFieldID() {

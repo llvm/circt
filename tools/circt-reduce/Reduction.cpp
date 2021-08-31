@@ -81,8 +81,7 @@ struct ModuleExternalizer : public Reduction {
     builder.create<firrtl::FExtModuleOp>(
         module->getLoc(),
         module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()),
-        firrtl::getModulePortInfo(module), StringRef(),
-        module.annotationsAttr());
+        module.getPorts(), StringRef(), module.annotationsAttr());
     module->erase();
     return success();
   }
@@ -154,7 +153,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
   }
   LogicalResult rewrite(Operation *op) const override {
     auto instOp = cast<firrtl::InstanceOp>(op);
-    auto portInfo = firrtl::getModulePortInfo(instOp.getReferencedModule());
+    auto portInfo = instOp.getReferencedModule().getPorts();
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallVector<Value> replacementWires;
     for (firrtl::ModulePortInfo info : portInfo) {

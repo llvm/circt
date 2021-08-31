@@ -250,6 +250,51 @@ static void rewriteAddWithNegativeConstant(comb::AddOp add,
     rhsCst.erase();
 }
 
+/// This function is invoked on side effecting Verilog expressions when we're in
+/// 'disallowLocalVariables' mode for old Verilog clients.  This ensures that
+/// any side effecting expressions are only used by a single BPAssign to a
+/// sv.reg operation.  This ensures that the verilog emitter doesn't have to
+/// worry about spilling them.
+///
+/// This returns true if the op was rewritten, false otherwise.
+static bool rewriteSideEffectingExpr(Operation *op) {
+  assert(op->getNumResults() == 1 && "isn't a verilog expression");
+
+  // If the operation is in a non-procedural region (e.g. top level or in an
+  // `ifdef at the top level), then leave it alone.
+  if (!op->getParentOp()->hasTrait<ProceduralRegion>())
+    return false;
+
+  // Check to see if this is already rewritten.
+  if (op->hasOneUse()) {
+    if (auto assign = dyn_cast<BPAssignOp>(*op->user_begin()))
+      if (assign.dest().getDefiningOp<RegOp>())
+        return false;
+  }
+
+  // Otherwise, we have to transform it.  Insert a reg at the top level, make
+  // everything using the side effecting expression read the reg, then assign to
+  // it after the side effecting operation.
+  Value opValue = op->getResult(0);
+
+  // Scan to the top of the region tree to find out where to insert the reg.
+  Operation *parentOp = op->getParentOp();
+  while (parentOp->getParentOp()->hasTrait<ProceduralRegion>())
+    parentOp = parentOp->getParentOp();
+
+  OpBuilder builder(parentOp);
+  auto reg = builder.create<RegOp>(op->getLoc(), opValue.getType());
+  builder.setInsertionPointAfter(op);
+
+  // Everything using the expr now uses the reg.
+  auto value = builder.create<ReadInOutOp>(op->getLoc(), reg);
+  opValue.replaceAllUsesWith(value);
+
+  // We assign the side effect expr to the reg.
+  builder.create<BPAssignOp>(op->getLoc(), reg, opValue);
+  return true;
+}
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
@@ -277,7 +322,6 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
     // statements.
     // TODO: This is checking the Commutative property, which doesn't seem
     // right in general.  MLIR doesn't have a "fully associative" property.
-    //
     if (op.getNumOperands() > 2 && op.getNumResults() == 1 &&
         op.hasTrait<mlir::OpTrait::IsCommutative>() &&
         mlir::MemoryEffectOpInterface::hasNoEffect(&op) &&
@@ -355,6 +399,17 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
           enforceWire(reset);
         continue;
       }
+    }
+
+    // Force any side-effecting expressions in nested regions into a sv.reg
+    // if we aren't allowing local variable declarations.  The Verilog emitter
+    // doesn't want to have to have to know how to synthesize a reg in the case
+    // they have to be spilled for whatever reason.
+    if (options.disallowLocalVariables && op.getNumResults() == 1 &&
+        isVerilogExpression(&op) &&
+        !mlir::MemoryEffectOpInterface::hasNoEffect(&op)) {
+      if (rewriteSideEffectingExpr(&op))
+        continue;
     }
   }
 

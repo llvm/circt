@@ -130,6 +130,12 @@ static inline bool isConstantExpression(Operation *op) {
   return isa<hw::ConstantOp, sv::ConstantXOp, sv::ConstantZOp>(op);
 }
 
+/// This predicate returns true if the specified operation is considered a
+/// potentially inlinable Verilog expression.  These nodes always have a single
+/// result, but may have side effects (e.g. `sv.verbatim.expr.se`).
+/// MemoryEffects should be checked if a client cares.
+bool isVerilogExpression(Operation *op);
+
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void prepareHWModule(Block &block, ModuleNameManager &names,

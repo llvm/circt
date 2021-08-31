@@ -168,9 +168,9 @@ public:
   void visitDecl(InstanceOp op) {
     // Track any instance inputs which need to be connected to for init
     // coverage.
+    auto ref = op.getReferencedModule();
     for (auto result : llvm::enumerate(op.results()))
-      if (getModulePortDirection(op.getReferencedModule(), result.index()) ==
-          Direction::Output)
+      if (ref.getPortDirection(result.index()) == Direction::Output)
         declareSinks(result.value(), Flow::Source);
       else
         declareSinks(result.value(), Flow::Sink);
@@ -422,7 +422,7 @@ private:
 mlir::FailureOr<bool> ModuleVisitor::run(FModuleOp module) {
   // Track any results (flipped arguments) of the module for init coverage.
   for (auto it : llvm::enumerate(module.getArguments())) {
-    auto flow = getModulePortDirection(module, it.index()) == Direction::Input
+    auto flow = module.getPortDirection(it.index()) == Direction::Input
                     ? Flow::Source
                     : Flow::Sink;
     declareSinks(it.value(), flow);

@@ -49,15 +49,15 @@ def LLHD_ShlOp : LLHD_Op<"shl", [
 
   // TODO: adjust type T and Th to include pointers
   let arguments = (ins
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>:$base,
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>:$hidden,
-    AnySignlessInteger:$amount);
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$base,
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$hidden,
+    HWIntegerType:$amount);
 
   let results = (outs
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>:$result);
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$result);
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
@@ -110,15 +110,15 @@ def LLHD_ShrOp : LLHD_Op<"shr", [
 
   // TODO: adjust type T and Th to include pointers
   let arguments = (ins
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>:$base,
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>:$hidden,
-    AnySignlessInteger:$amount);
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$base,
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$hidden,
+    HWIntegerType:$amount);
 
   let results = (outs
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>:$result);
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>:$result);
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
