@@ -60,6 +60,9 @@ calyx.program {
       // CHECK-NEXT: calyx.while %c2.out with @Group2 {
       // CHECK-NEXT: calyx.while %c2.out with @Group2 {
       // CHECK-NEXT: calyx.enable @Group1
+      // CHECK:      calyx.par {
+      // CHECK-NEXT: calyx.enable @Group1
+      // CHECK-NEXT: calyx.enable @Group2
       calyx.seq {
         calyx.enable @Group1
         calyx.enable @Group2
@@ -78,6 +81,10 @@ calyx.program {
             }
           }
         }
+      }
+      calyx.par {
+        calyx.enable @Group1
+        calyx.enable @Group2
       }
     }
   }
