@@ -47,4 +47,5 @@ llvm::StringRef getInlineAttrName();
 void eraseOps(mlir::ArrayRef<mlir::Operation *> opsToErase);
 mlir::Value lookupOrOriginal(mlir::BlockAndValueMapping &mapper,
                              mlir::Value originalValue);
+void setNames(mlir::Operation *, mlir::ArrayRef<mlir::StringRef>);
 } // namespace helper

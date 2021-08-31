@@ -685,7 +685,6 @@ def MemrefExtractOp :HIR_Op<"memref.extract",[NoSideEffect]>{
 
   let assemblyFormat = [{$mem `[` `port` $port `]`  custom<WithSSANames>(attr-dict) `:`
     type($res) `ports` $ports  custom<CopyType>(type($mem),ref(type($res)))}];
-  let hasCanonicalizeMethod = true;
 }
 
 def CreateTupleOp:HIR_Op<"create_tuple",[NoSideEffect]>{

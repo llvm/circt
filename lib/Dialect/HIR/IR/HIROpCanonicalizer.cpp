@@ -89,41 +89,6 @@ LogicalResult CallInstanceOp::canonicalize(CallInstanceOp op,
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
 
-LogicalResult MemrefExtractOp::canonicalize(MemrefExtractOp op,
-                                            ::mlir::PatternRewriter &rewriter) {
-  auto uses = op.res().getUses();
-  // Check and return if there are any uses in CallOp.
-  for (auto &use : uses) {
-    if (dyn_cast<hir::CallOp>(use.getOwner())) {
-      return failure();
-    }
-  }
-
-  // For each use, update the operand and the port.
-  for (auto &use : uses) {
-    if (auto useOp = dyn_cast<hir::LoadOp>(use.getOwner())) {
-      if (!useOp.port().hasValue())
-        continue;
-      uint64_t mappedPortNum = useOp.port().getValue();
-      uint64_t origPortNum =
-          op.portNums()[mappedPortNum].dyn_cast<IntegerAttr>().getInt();
-      useOp.portAttr(rewriter.getI64IntegerAttr(origPortNum));
-    } else if (auto useOp = dyn_cast<hir::StoreOp>(use.getOwner())) {
-      if (!useOp.port().hasValue())
-        continue;
-      uint64_t mappedPortNum = useOp.port().getValue();
-      uint64_t origPortNum =
-          op.portNums()[mappedPortNum].dyn_cast<IntegerAttr>().getInt();
-      useOp.portAttr(rewriter.getI64IntegerAttr(origPortNum));
-    } else if (auto useOp = dyn_cast<hir::MemrefExtractOp>(use.getOwner())) {
-      return op.emitWarning("Could not canonicalize MemrefExtractOp. "
-                            "Unsupported operation in use list.");
-    }
-  }
-  rewriter.replaceOp(op, op.mem());
-  return success();
-}
-
 LogicalResult IfOp::canonicalize(IfOp op, mlir::PatternRewriter &rewriter) {
   LogicalResult result = splitOffsetIntoSeparateOp(op, rewriter);
 

@@ -235,4 +235,8 @@ Value lookupOrOriginal(BlockAndValueMapping &mapper, Value originalValue) {
     return mapper.lookup(originalValue);
   return originalValue;
 }
+void setNames(Operation *operation, ArrayRef<StringRef> names) {
+  OpBuilder builder(operation);
+  operation->setAttr("names", builder.getStrArrayAttr(names));
+}
 } // namespace helper
