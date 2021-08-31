@@ -20,16 +20,6 @@ circuit Foo: %[[{"one":null,"target":"~Fooo"}]]
 
 ; // -----
 
-; A non-local Annotation is unsupported.
-
-; expected-error @+2 {{Invalid/unsupported annotation format}}
-; expected-note @+1 {{"target": /* error: unsupported non-local target */ "~Foo|Foo/bar:Bar/baz:Baz"}}
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
-  module Foo:
-    skip
-
-; // -----
-
 ; Annotations JSON is not an array.
 
 ; expected-error @+2 {{Invalid/unsupported annotation format}}
@@ -148,18 +138,18 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Bar"}]]
 
 ; A target pointing at a non-existent component should error.
 
-; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>x' and payload '[{a}]'}}
-circuit Foo: %[[{"a":null,"target":"~Foo|Foo>x"}]]
-  module Foo:
+; expected-error @+1 {{unapplied annotations with target '~FooNec|FooNec>x' and payload '[{a}]'}}
+circuit FooNec: %[[{"a":null,"target":"~FooNec|FooNec>x"}]]
+  module FooNec:
     skip
 
 ; // -----
 
 ; A target pointing at a non-existent instance should error.
 
-; expected-error @+1 {{unapplied annotations with target '~Foo|Foo/baz:Bar' and payload '[{a}]'}}
-circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
+; expected-error @+1 {{unapplied annotations with target '~FooNei|FooNei>baz' and payload '[{circt.nonlocal = @"~FooNei|FooNei/baz:Bar", class = "circt.nonlocal"}]'}}
+circuit FooNei: %[[{"a":null,"target":"~FooNei|FooNei/baz:Bar"}]]
   module Bar:
     skip
-  module Foo:
+  module FooNei:
     inst bar of Bar

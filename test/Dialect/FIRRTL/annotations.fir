@@ -44,12 +44,12 @@ circuit Foo: %[[{"a":"a","target":"Foo.Foo"}]]
 ; // -----
 
 ; A ModuleTarget Annotation is attached to the correct module.
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo"}]]
-  module Foo:
+circuit FooMt: %[[{"a":"a","target":"~FooMt|FooMt"}]]
+  module FooMt:
     skip
 
-    ; CHECK-LABEL: module {
-    ; CHECK: firrtl.module @Foo() attributes {annotations = [{a = "a"}]}
+    ; CHECK-LABEL: firrtl.circuit "FooMt" {
+    ; CHECK: firrtl.module @FooMt() attributes {annotations = [{a = "a"}]}
 
 ; // -----
 
@@ -62,7 +62,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
     inst bar of Bar
     bar.a <= a
 
-    ; CHECK-LABEL: module {
+    ; CHECK-LABEL: firrtl.circuit "Foo" {
     ; CHECK: firrtl.extmodule @Bar
     ; CHECK-SAME: attributes {annotations = [{a = "a"}]}
 
@@ -70,19 +70,21 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Bar"}]]
 
 ; A ReferenceTarget, ComponentName, or InstanceTarget pointing at an Instance
 ; should work.
-circuit Foo: %[[
-{"a":"a","target":"~Foo|Foo>bar"},
-{"b":"b","target":"Foo.Foo.bar"},
-{"c":"c","target":"~Foo|Foo/bar:Bar"}
+circuit FooRtCmIt: %[[
+{"a":"a","target":"~FooRtCmIt|FooRtCmIt>bar"},
+{"b":"b","target":"FooRtCmIt.FooRtCmIt.bar"},
+{"c":"c","target":"~FooRtCmIt|FooRtCmIt/bar:Bar"}
 ]]
   module Bar:
     skip
-  module Foo:
+  module FooRtCmIt:
     inst bar of Bar
-
-    ; CHECK-LABEL: module {
+    ; CHECK-LABEL: firrtl.circuit "FooRtCmIt"
+    ; CHECK: firrtl.module @Bar
+    ; CHECK-SAME annotations = [{c = "c"}]
+    ; CHECK: firrtl.module @FooRtCmIt
     ; CHECK: firrtl.instance @Bar
-    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {c = "c"}]
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {circt.nonlocal = @"~FooRtCmIt|FooRtCmIt/bar:Bar", class = "circt.nonlocal"}]
 
 ; // -----
 
@@ -98,11 +100,12 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
   module Foo:
     inst bar of Bar
 
-    ; CHECK-LABEL: module {
+    ; CHECK-LABEL: firrtl.circuit "Foo"
+    ; CHECK: firrtl.module @Bar
+    ; CHECK-SAME: [#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @\22~Foo|Foo/bar:Bar>b.qux\22, three}>">]
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance @Bar
     ; CHECK-SAME: [{one}],
-    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>,
-    ; CHECK-SAME:  #firrtl.subAnno<fieldID = 2, {three}>],
+    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>],
     ; CHECK-SAME: [{four}]
 
 ; // -----
@@ -845,3 +848,18 @@ circuit Foo : %[[
     ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedBooleanType"
     ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedIntegerType"
     ; CHECK-SAME: "sifive.enterprise.grandcentral.AugmentedDoubleType"
+
+; // -----
+
+; A non-local Annotation is supported.
+
+circuit FooNLA: %[[{"a":"a","target":"~FooNLA|FooNLA/bar:Bar/baz:Baz"}]]
+  module Baz :
+    skip
+  module Bar :
+    inst baz of Baz
+  module FooNLA :
+    inst bar of Bar
+; CHECK-LABEL: firrtl.circuit "FooNLA"
+; CHECK: firrtl.module @Baz
+; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @"~FooNLA|FooNLA/bar:Bar/baz:Baz"}]

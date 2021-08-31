@@ -13,6 +13,7 @@
 #ifndef FIRANNOTATIONS_H
 #define FIRANNOTATIONS_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "llvm/ADT/StringMap.h"
 
@@ -32,7 +33,7 @@ namespace firrtl {
 
 bool fromJSON(llvm::json::Value &value, StringRef circuitTarget,
               llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
-              MLIRContext *context);
+              CircuitOp circuit);
 
 bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
                               MLIRContext *context, unsigned &annotationID,
