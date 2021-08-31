@@ -33,30 +33,6 @@ using namespace circt;
 using namespace firrtl;
 
 //===----------------------------------------------------------------------===//
-// Traits
-//===----------------------------------------------------------------------===//
-
-namespace llvm {
-template <>
-struct DenseMapInfo<StringAttr> {
-  static inline StringAttr getEmptyKey() {
-    auto pointer = DenseMapInfo<void *>::getEmptyKey();
-    return StringAttr(static_cast<Attribute::ImplType *>(pointer));
-  }
-  static inline StringAttr getTombstoneKey() {
-    auto pointer = DenseMapInfo<void *>::getTombstoneKey();
-    return StringAttr(static_cast<Attribute::ImplType *>(pointer));
-  }
-  static unsigned getHashValue(const StringAttr &val) {
-    return mlir::hash_value(val);
-  }
-  static bool isEqual(const StringAttr &lhs, const StringAttr &rhs) {
-    return lhs == rhs;
-  }
-};
-} // end namespace llvm
-
-//===----------------------------------------------------------------------===//
 // Static class names
 //===----------------------------------------------------------------------===//
 
@@ -94,6 +70,7 @@ struct ModuleSignalMappings {
 
   FModuleOp module;
   bool anyFailed = false;
+  bool allAnalysesPreserved = false;
   SmallVector<SignalMapping> mappings;
   SmallString<64> mappingsModuleName;
 
@@ -122,10 +99,20 @@ void ModuleSignalMappings::run() {
   AnnotationSet::removeAnnotations(module, [&](Annotation anno) {
     if (!anno.isClass(signalDriverAnnoClass))
       return false;
-    if (auto sinks = anno.getMember<ArrayAttr>("sinkTargets"))
+    if (auto sinks = anno.getMember<ArrayAttr>("sinkTargets")) {
       addTargets(sinks, MappingDirection::DriveRemote);
-    if (auto sources = anno.getMember<ArrayAttr>("sourceTargets"))
+    } else {
+      module.emitError("SignalDriverAnnotation missing "
+                       "\"sinkTargets\" attribute");
+      anyFailed = true;
+    }
+    if (auto sources = anno.getMember<ArrayAttr>("sourceTargets")) {
       addTargets(sources, MappingDirection::ProbeRemote);
+    } else {
+      module.emitError("SignalDriverAnnotation missing "
+                       "\"sourceTargets\" attribute");
+      anyFailed = true;
+    }
     return true;
   });
   if (anyFailed)
@@ -134,6 +121,7 @@ void ModuleSignalMappings::run() {
   // Nothing to do if there are no signal mappings.
   if (mappings.empty()) {
     LLVM_DEBUG(llvm::dbgs() << "- No annotations, nothing left to do\n");
+    allAnalysesPreserved = true;
     return;
   }
 
@@ -147,8 +135,6 @@ void ModuleSignalMappings::run() {
 
   // Gather the types and values for the signal mappings. This may incur
   // additional subfield/subfindex operations to be generated.
-  ImplicitLocOpBuilder builder(module.getLoc(), module);
-  builder.setInsertionPointToEnd(module.getBodyBlock());
   for (auto &mapping : mappings) {
     // Resolve the name locally.
     mapping.localValue = localNames.lookup(mapping.localName);
@@ -245,7 +231,10 @@ void ModuleSignalMappings::emitMappingsModule() {
   unsigned portIdx = 0;
   for (auto &mapping : mappings) {
     // TODO: Actually generate a proper XMR here. For now just do some textual
-    // replacements.
+    // replacements. Generating a real IR node (like a proper XMR op) would be
+    // much better, but the modules that `EmitSignalMappings` interacts with
+    // generally live in a separate circuit. Multiple circuits are not fully
+    // supported at the moment.
     auto circuitSplit = mapping.remoteTarget.getValue().split('|').second;
     auto moduleSplit = circuitSplit.split('>');
     SmallString<32> remoteXmrName(moduleSplit.first.split(':').first);
@@ -256,7 +245,6 @@ void ModuleSignalMappings::emitMappingsModule() {
       else if (c != ']')
         remoteXmrName.push_back(c);
     }
-
     if (mapping.dir == MappingDirection::DriveRemote) {
       auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
       builder.create<ForceOp>(xmr, mappingsModule.getArgument(portIdx));
@@ -277,8 +265,8 @@ void ModuleSignalMappings::instantiateMappingsModule() {
     resultTypes.push_back(mapping.type);
 
   // Create the actual module.
-  ImplicitLocOpBuilder builder(module.getLoc(), module);
-  builder.setInsertionPointToEnd(module.getBodyBlock());
+  auto builder =
+      ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBodyBlock());
   auto inst = builder.create<InstanceOp>(resultTypes, mappingsModuleName,
                                          "signal_mappings");
 
@@ -305,15 +293,19 @@ class GrandCentralSignalMappingsPass
 
 void GrandCentralSignalMappingsPass::runOnOperation() {
   LLVM_DEBUG(llvm::dbgs() << "Running the GCT Signal Mappings pass\n");
+  bool allAnalysesPreserved = true;
   getOperation().walk([&](FModuleOp module) {
     ModuleSignalMappings mapper(module);
     mapper.run();
+    allAnalysesPreserved &= mapper.allAnalysesPreserved;
     if (mapper.anyFailed) {
       signalPassFailure();
       return WalkResult::interrupt();
     }
     return WalkResult::advance();
   });
+  if (allAnalysesPreserved)
+    markAllAnalysesPreserved();
 }
 
 std::unique_ptr<mlir::Pass>
