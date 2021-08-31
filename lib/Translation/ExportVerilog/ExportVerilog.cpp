@@ -280,7 +280,8 @@ static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
 }
 
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
-static StringRef getVerilogDeclWord(Operation *op) {
+static StringRef getVerilogDeclWord(Operation *op,
+                                    const LoweringOptions &options) {
   if (isa<RegOp>(op)) {
     // Check if the type stored in this register is a struct or array of
     // structs. In this case, according to spec section 6.8, the "reg" prefix
@@ -313,6 +314,10 @@ static StringRef getVerilogDeclWord(Operation *op) {
   // If 'op' is in a module, output 'wire'. If 'op' is in a procedural block,
   // fall through to default.
   bool isProcedural = op->getParentOp()->hasTrait<ProceduralRegion>();
+
+  // "automatic logic" values aren't allowed in disallowLocalVariables mode.
+  assert((!isProcedural || !options.disallowLocalVariables) &&
+         "automatic variables not allowed");
   return isProcedural ? "automatic logic" : "wire";
 }
 
@@ -1589,8 +1594,8 @@ void NameCollector::collectNames(Block &block) {
       valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
       auto &typeString = valuesToEmit.back().typeString;
 
-      maxDeclNameWidth =
-          std::max(getVerilogDeclWord(&op).size(), maxDeclNameWidth);
+      StringRef declName = getVerilogDeclWord(&op, moduleEmitter.state.options);
+      maxDeclNameWidth = std::max(declName.size(), maxDeclNameWidth);
 
       // Convert the port's type to a string and measure it.
       {
@@ -2700,7 +2705,7 @@ isExpressionEmittedInlineIntoProceduralDeclaration(Operation *op,
 /// return false. If the operation *is* a constant, also emit the initializer
 /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
 bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
-  StringRef declWord = getVerilogDeclWord(op);
+  StringRef declWord = getVerilogDeclWord(op, state.options);
 
   // If we're emitting a declaration inside of an ifdef region, we'll insert
   // the declaration outside of it.  This means we need to unindent a bit due
@@ -2766,7 +2771,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
     // Emit the leading word, like 'wire' or 'reg'.
     auto type = record.value.getType();
-    auto word = getVerilogDeclWord(op);
+    auto word = getVerilogDeclWord(op, state.options);
     if (!isZeroBitType(type)) {
       indent() << word;
       auto extraIndent = word.empty() ? 0 : 1;

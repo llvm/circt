@@ -379,7 +379,8 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
                 {"target": "~Foo|Foo>_T_5", "class": "firrtl.transforms.DontTouchAnnotation"},
                 {"target": "~Foo|Foo>_T_6", "class": "firrtl.transforms.DontTouchAnnotation"},
                 {"target": "~Foo|Foo>_T_7", "class": "firrtl.transforms.DontTouchAnnotation"},
-                {"target": "~Foo|Foo>_T_8", "class": "firrtl.transforms.DontTouchAnnotation"}]]
+                {"target": "~Foo|Foo>_T_8", "class": "firrtl.transforms.DontTouchAnnotation"},
+                {"target": "~Foo|Foo>_T_9.a", "class": "firrtl.transforms.DontTouchAnnotation"}]]
   module Bar:
     skip
   module Foo:
@@ -420,6 +421,12 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
         read-latency => 0
         write-latency => 1
         read-under-write => undefined
+
+    wire aggregate : { a : UInt<1>}
+    ; CHECK: %_T_9 = firrtl.node
+    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
+    node _T_9 = aggregate
+
 
 ; // -----
 

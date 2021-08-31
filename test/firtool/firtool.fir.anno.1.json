@@ -1,0 +1,10 @@
+[
+    {
+        "info": "a CircuitName Annotation",
+        "target": "test_mod"
+    },
+    {
+        "info": "a ModuleName Annotation",
+        "target": "test_mod.test_mod"
+    }
+]

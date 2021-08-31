@@ -200,14 +200,6 @@ OpFoldResult llhd::ConstOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
-// NegOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::NegOp::fold(ArrayRef<Attribute> operands) {
-  return constFoldUnaryOp<IntegerAttr>(operands, [](APInt a) { return -a; });
-}
-
-//===----------------------------------------------------------------------===//
 // EqOp
 //===----------------------------------------------------------------------===//
 

@@ -311,8 +311,6 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
 
     return success();
   }
-  if (auto op = dyn_cast<llhd::NegOp>(inst))
-    return printUnaryOp(inst, "-", indentAmount);
   if (auto op = dyn_cast<comb::AddOp>(inst))
     return printVariadicOp(inst, "+", indentAmount);
   if (auto op = dyn_cast<comb::SubOp>(inst))
