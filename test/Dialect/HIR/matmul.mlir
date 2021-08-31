@@ -160,27 +160,27 @@ hir.func @matmul at %t(
   %B = hir.alloca("REG") : !hir.memref<(bank 16)x(bank 16)xi32> ports[#reg_rd,#reg_wr]
   %C = hir.alloca("BRAM_2P") : !hir.memref<16x(bank 16)xi32> ports[#rd,#wr]
 
-  %A_w = hir.memref.extract ports [1] from %A: !hir.memref<16x(bank 16)xi32> ports [#wr]
+  %A_w = hir.memref.extract %A[port 1]: !hir.memref<16x(bank 16)xi32> ports [#wr]
   %t1 = hir.call @readA(%Ai,%A_w) at %t
   :!hir.func<(!hir.memref<16x16xi32> ports [#rd],!hir.memref<16x(bank 16)xi32> ports[#wr])->(!hir.time)>
 
-  %B_w = hir.memref.extract ports [1] from %B : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_wr]
+  %B_w = hir.memref.extract %B[port 1] : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_wr]
   %t2 = hir.call @readB(%Bi,%B_w) at %t 
   :!hir.func<(!hir.memref<16x16xi32> ports[#rd],
   !hir.memref<(bank 16)x(bank 16)xi32> ports[#reg_wr]) -> (!hir.time)>
 
   %t_kernel_start = hir.time.max(%t1,%t2):!hir.time
 
-  %A_r = hir.memref.extract ports [0] from %A : !hir.memref<16x(bank 16)xi32> ports [#rd]
-  %B_r = hir.memref.extract ports [0] from %B : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_rd]
-  %C_w = hir.memref.extract ports [1] from %C : !hir.memref<16x(bank 16)xi32> ports [#wr]
+  %A_r = hir.memref.extract %A[port 0]  : !hir.memref<16x(bank 16)xi32> ports [#rd]
+  %B_r = hir.memref.extract %B[port 0]  : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_rd]
+  %C_w = hir.memref.extract %C[port 1]  : !hir.memref<16x(bank 16)xi32> ports [#wr]
 
   %t_kernel_done = hir.call @kernel(%A_r,%B_r,%C_w) at %t_kernel_start 
   : !hir.func<(!hir.memref<16x(bank 16)xi32> ports [#rd],
   !hir.memref<(bank 16)x(bank 16)xi32> ports[#reg_rd],
   !hir.memref<16x(bank 16)xi32> ports [#wr]) ->(!hir.time)>
 
-  %C_r = hir.memref.extract ports [0] from %C : !hir.memref<16x(bank 16)xi32> ports [#rd]
+  %C_r = hir.memref.extract %C[port 0]  : !hir.memref<16x(bank 16)xi32> ports [#rd]
   %t_done = hir.call @writeC(%C_r,%Co) at %t_kernel_done
   :!hir.func<(!hir.memref<16x(bank 16)xi32> ports [#rd], !hir.memref<16x16xi32> ports[#wr]) ->(!hir.time)>
 
