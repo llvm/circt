@@ -38,6 +38,8 @@ static const StringRef assumeAnnoClass =
     "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
 static const StringRef coverAnnoClass =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+static const StringRef SeqMemAnnoClass =
+"sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation";
 
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
@@ -129,6 +131,8 @@ struct FirMemory {
   // Location is carried along but not considered part of the identity of this.
   Location loc;
 
+  DictionaryAttr verifData;
+
   bool operator<(const FirMemory &rhs) const {
 #define cmp3way(name)                                                          \
   if (name < rhs.name)                                                         \
@@ -183,10 +187,14 @@ static FirMemory analyzeMemOp(MemOp op) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
-
+  AnnotationSet anno = AnnotationSet(op);
+  DictionaryAttr verifData;
+  if (auto v = anno.getAnnotation(SeqMemAnnoClass)){
+    verifData = v.get("data").cast<DictionaryAttr>();
+  }
   return {numReadPorts,      numWritePorts,    numReadWritePorts,
           (size_t)width,     op.depth(),       op.readLatency(),
-          op.writeLatency(), (size_t)op.ruw(), op.getLoc()};
+           op.writeLatency(), (size_t)op.ruw(), op.getLoc(), verifData };
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
@@ -301,7 +309,7 @@ void CircuitLoweringState::processRemainingAnnotations(
             "sifive.enterprise.firrtl.MarkDUTAnnotation",
             // The following will be handled while lowering the verification
             // ops.
-            assertAnnoClass, assumeAnnoClass, coverAnnoClass))
+            assertAnnoClass, assumeAnnoClass, coverAnnoClass, SeqMemAnnoClass))
       continue;
 
     mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +
@@ -509,6 +517,12 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                        bDataType, inputPin++});
     }
 
+    DictionaryAttr verifData ;
+    if (mem.verifData)
+      verifData = mem.verifData ;
+    else
+      verifData  = b.getDictionaryAttr({});
+
     NamedAttribute genAttrs[] = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
         b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
@@ -520,8 +534,9 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
         b.getNamedAttr("readUnderWrite",
-                       b.getUI32IntegerAttr(mem.readUnderWrite))};
-
+                       b.getUI32IntegerAttr(mem.readUnderWrite)), 
+        b.getNamedAttr("verificationData", verifData )
+    };
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,

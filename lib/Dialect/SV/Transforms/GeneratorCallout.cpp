@@ -113,6 +113,26 @@ void HWGeneratorCalloutPass::processGenerator(
       return;
     }
   }
+  if (auto verifData = generatedModuleOp->getAttr("verificationData").dyn_cast_or_null<DictionaryAttr>()) {
+    std::string verifStr;
+    for (auto a : verifData){
+      verifStr += a.first.str() + " : " ;
+      generatorArgs.push_back("--"+a.first.str());
+      auto v = a.second;
+      if (auto intV = v.dyn_cast<IntegerAttr>())
+        generatorArgs.push_back(std::to_string(intV.getValue().getZExtValue()));
+      else if (auto strV = v.dyn_cast<StringAttr>())
+        generatorArgs.push_back(strV.getValue().str());
+      else if (auto arrV = v.dyn_cast<ArrayAttr>()) {
+        for (auto i : arrV){
+          if (auto intV = i.dyn_cast<IntegerAttr>())
+            generatorArgs.push_back(std::to_string(intV.getValue().getZExtValue()));
+          else if (auto strV = i.dyn_cast<StringAttr>())
+            generatorArgs.push_back(strV.getValue().str());
+        }
+      }
+    }
+  }
   SmallVector<StringRef> generatorArgStrRef;
   for (const std::string &a : generatorArgs)
     generatorArgStrRef.push_back(a);
