@@ -2063,30 +2063,6 @@ struct CombParityOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
-/// Convert a NegOp to LLVM dialect.
-struct NegOpConversion : public ConvertToLLVMPattern {
-  explicit NegOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::NegOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    NegOpAdaptor transformed(operands);
-
-    auto negOne = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), transformed.value().getType(),
-        rewriter.getI32IntegerAttr(-1));
-    rewriter.replaceOpWithNewOp<LLVM::MulOp>(op, transformed.value().getType(),
-                                             negOne, transformed.value());
-
-    return success();
-  }
-};
-
-} // namespace
-
-namespace {
 /// Convert an EqOp to LLVM dialect.
 struct EqOpConversion : public ConvertToLLVMPattern {
   explicit EqOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
@@ -2856,8 +2832,7 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
       converter);
 
   // Arithmetic conversion patterns.
-  patterns.add<NegOpConversion, EqOpConversion, NeqOpConversion>(ctx,
-                                                                 converter);
+  patterns.add<EqOpConversion, NeqOpConversion>(ctx, converter);
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
                CombModSOpConversion, CombICmpOpConversion, CombSExtOpConversion,

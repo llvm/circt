@@ -4,8 +4,6 @@
 llhd.entity @check_arithmetic() -> () {
   // CHECK-NEXT: wire [63:0] _[[A:.*]] = 64'd42;
   %a = llhd.const 42 : i64
-  // CHECK-NEXT: wire [63:0] _{{.*}} = -_[[A]];
-  %0 = llhd.neg %a : i64
 
   // CHECK-NEXT: wire [63:0] _{{.*}} = _[[A]];
   %1 = comb.add %a : i64
