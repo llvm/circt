@@ -1,15 +1,5 @@
 // RUN: circt-opt %s -canonicalize='top-down=true region-simplify=true' | FileCheck %s
 
-// CHECK-LABEL: @check_neg_folding
-func @check_neg_folding() -> (i16) {
-  // CHECK-NEXT: %[[NEG:.*]] = llhd.const -5 : i16
-  %a = llhd.const 5 : i16
-  %0 = llhd.neg %a : i16
-
-  // CHECK-NEXT: return %[[NEG]] : i16
-  return %0 : i16
-}
-
 // CHECK-LABEL: @check_eq_folding
 // CHECK-SAME: %[[VAL_0:.*]]: i64,
 // CHECK-SAME: %[[VAL_1:.*]]: i1,
