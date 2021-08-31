@@ -76,6 +76,32 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Verifies the body of a ControlLikeOp.
+static LogicalResult verifyControlBody(Operation *op) {
+  if (isa<SeqOp>(op))
+    // This does not apply to sequential and parallel regions.
+    return success();
+
+  // Some ControlLike operations have (possibly) multiple regions, e.g. IfOp.
+  for (auto &region : op->getRegions()) {
+    auto opsIt = region.getOps();
+    size_t numOperations = std::distance(opsIt.begin(), opsIt.end());
+    // A body of a ControlLike operation may have a single EnableOp within it.
+    // However, that must be the only operation.
+    //  E.g. Allowed:  calyx.control { calyx.enable @A }
+    //   Not Allowed:  calyx.control { calyx.enable @A calyx.seq { ... } }
+    bool isInvalidBody =
+        numOperations > 1 && llvm::any_of(region.front(), [](auto &&bodyOp) {
+          return isa<EnableOp>(bodyOp);
+        });
+    if (isInvalidBody)
+      return op->emitOpError(
+          "EnableOp is not a composition operator. It should be nested "
+          "in a control flow operation, such as \"calyx.seq\"");
+  }
+  return success();
+}
+
 /// Checks whether @p port is driven from within @p groupOp.
 static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp) {
   // Check if the port is driven by an assignOp from within @p groupOp.
@@ -152,7 +178,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
            << "has operation: " << bodyOp.getName()
            << ", which is not allowed in this control-like operation";
   }
-  return success();
+  return verifyControlBody(op);
 }
 
 // Convenience function for getting the SSA name of @p v under the scope of
@@ -476,19 +502,7 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 // ControlOp
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyControlOp(ControlOp control) {
-  auto body = control.getBody();
-
-  // A control operation may have a single EnableOp within it. However,
-  // that must be the only operation. E.g.
-  // Allowed:      calyx.control { calyx.enable @A }
-  // Not Allowed:  calyx.control { calyx.enable @A calyx.seq { ... } }
-  if (llvm::any_of(*body, [](auto &&op) { return isa<EnableOp>(op); }) &&
-      body->getOperations().size() > 1)
-    return control->emitOpError(
-        "EnableOp is not a composition operator. It should be nested "
-        "in a control flow operation, such as \"calyx.seq\"");
-
-  return success();
+  return verifyControlBody(control);
 }
 
 //===----------------------------------------------------------------------===//
