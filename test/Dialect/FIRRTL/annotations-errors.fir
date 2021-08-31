@@ -138,18 +138,18 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Bar"}]]
 
 ; A target pointing at a non-existent component should error.
 
-; expected-error @+1 {{unapplied annotations with target '~FooNec|FooNec>x' and payload '[{a}]'}}
-circuit FooNec: %[[{"a":null,"target":"~FooNec|FooNec>x"}]]
-  module FooNec:
+; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>x' and payload '[{a}]'}}
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo>x"}]]
+  module Foo:
     skip
 
 ; // -----
 
 ; A target pointing at a non-existent instance should error.
 
-; expected-error @+1 {{unapplied annotations with target '~FooNei|FooNei>baz' and payload '[{circt.nonlocal = @"~FooNei|FooNei/baz:Bar", class = "circt.nonlocal"}]'}}
-circuit FooNei: %[[{"a":null,"target":"~FooNei|FooNei/baz:Bar"}]]
+; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>baz' and payload '[{circt.nonlocal = @"~Foo|Foo/baz:Bar", class = "circt.nonlocal"}]'}}
+circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
   module Bar:
     skip
-  module FooNei:
+  module Foo:
     inst bar of Bar

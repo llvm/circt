@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "FIRAnnotations.h"
+
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -94,20 +96,20 @@ splitTarget(StringRef target, MLIRContext *context) {
 SmallVector<std::tuple<std::string, std::string, std::string>>
 expandNonLocal(StringRef target) {
   SmallVector<std::tuple<std::string, std::string, std::string>> retval;
-  StringRef prefix;
-  std::tie(prefix, target) = target.split('|');
+  StringRef circuit;
+  std::tie(circuit, target) = target.split('|');
   while (target.count(':')) {
     StringRef nla;
     std::tie(nla, target) = target.split(':');
     StringRef inst, mod;
     std::tie(mod, inst) = nla.split('/');
-    retval.emplace_back((prefix + "|" + mod + ">" + inst).str(), mod.str(),
+    retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod.str(),
                         inst.str());
   }
   if (target.empty())
-    retval.emplace_back(prefix.str(), "", "");
+    retval.emplace_back(circuit.str(), "", "");
   else
-    retval.emplace_back((prefix + "|" + target).str(), "", "");
+    retval.emplace_back((circuit + "|" + target).str(), "", "");
   return retval;
 }
 
