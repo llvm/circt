@@ -880,6 +880,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
     auto ty = funcTy.getInputTypes()[i];
     auto operand = op.operands()[i];
     if (!ty.isa<hir::MemrefType>()) {
+      operands.push_back(operand);
       inputTypes.push_back(funcTy.getInputTypes()[i]);
       inputAttrs.push_back(funcTy.getInputAttrs()[i]);
       continue;
