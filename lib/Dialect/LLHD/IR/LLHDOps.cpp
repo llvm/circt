@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
 #include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Attributes.h"
@@ -134,10 +135,10 @@ struct constant_int_all_ones_matcher {
 unsigned circt::llhd::getLLHDTypeWidth(Type type) {
   if (auto sig = type.dyn_cast<llhd::SigType>())
     type = sig.getUnderlyingType();
-  if (auto array = type.dyn_cast<llhd::ArrayType>())
-    return array.getLength();
-  if (auto tup = type.dyn_cast<TupleType>())
-    return tup.size();
+  if (auto array = type.dyn_cast<hw::ArrayType>())
+    return array.getSize();
+  if (auto tup = type.dyn_cast<hw::StructType>())
+    return tup.getElements().size();
   return type.getIntOrFloatBitWidth();
 }
 
@@ -154,9 +155,9 @@ static bool sameKindArbitraryWidth(Type lhsType, Type rhsType) {
         sig.getUnderlyingType(),
         rhsType.cast<llhd::SigType>().getUnderlyingType());
 
-  if (auto array = lhsType.dyn_cast<llhd::ArrayType>())
+  if (auto array = lhsType.dyn_cast<hw::ArrayType>())
     return array.getElementType() ==
-           rhsType.cast<llhd::ArrayType>().getElementType();
+           rhsType.cast<hw::ArrayType>().getElementType();
 
   return (!lhsType.isa<ShapedType>() ||
           (lhsType.cast<ShapedType>().getElementType() ==
@@ -315,22 +316,17 @@ OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
   }
 
   // llhd.extract_element(llhd.array(a_0, ..., a_n), i) => a_i
-  if (auto arrayOp = target().getDefiningOp<llhd::ArrayOp>()) {
+  if (auto arrayOp = target().getDefiningOp<hw::ArrayCreateOp>()) {
     uint64_t index = indexAttr().getValue().getZExtValue();
     // It is checked during the extract_element verification that the index is
     // within bounds
-    return arrayOp.values()[index];
-  }
-
-  // llhd.extract_element(llhd.array_uniform(arr), i) => arr
-  if (auto arrayUniformOp = target().getDefiningOp<llhd::ArrayUniformOp>()) {
-    return arrayUniformOp.init();
+    return arrayOp.inputs()[index];
   }
 
   // llhd.extract_element(llhd.tuple(a_0, ..., a_n), i) => a_i
-  if (auto tupleOp = target().getDefiningOp<llhd::TupleOp>()) {
+  if (auto structOp = target().getDefiningOp<hw::StructCreateOp>()) {
     uint64_t index = indexAttr().getValue().getZExtValue();
-    return tupleOp.values()[index];
+    return structOp.input()[index];
   }
 
   return nullptr;

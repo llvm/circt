@@ -864,6 +864,7 @@ bool circt::firrtl::scatterCustomAnnotations(
         NamedAttrList foo;
         foo.append("class", dict.get("class"));
         foo.append("id", id);
+        foo.append("word", IntegerAttr::get(IntegerType::get(context, 64), i));
         auto canonTarget = canonicalizeTarget(tap.getValue());
         if (!canonTarget)
           return false;

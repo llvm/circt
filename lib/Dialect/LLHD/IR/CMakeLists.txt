@@ -12,6 +12,7 @@ add_circt_dialect_library(CIRCTLLHD
   MLIRLLHDIncGen
   
   LINK_LIBS PUBLIC
+  CIRCTHW
   MLIRIR
   MLIRSideEffectInterfaces
   MLIRControlFlowInterfaces

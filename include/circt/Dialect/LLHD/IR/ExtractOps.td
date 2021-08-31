@@ -43,13 +43,13 @@ def LLHD_ExtractSliceOp : LLHD_Op<"extract_slice", [
   }];
 
   let arguments = (ins
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>: $target,
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>: $target,
     IndexAttr: $start);
 
   let results = (outs
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>: $result);
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>: $result);
 
   let assemblyFormat = [{
     $target `,` $start attr-dict `:` type($target) `->` type($result)
@@ -92,13 +92,13 @@ def LLHD_DynExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
   }];
 
   let arguments = (ins
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>: $target,
-    AnySignlessInteger: $start);
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>: $target,
+    HWIntegerType: $start);
 
   let results = (outs
-    AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType,
-               LLHD_SigType<[AnySignlessInteger, LLHD_ArrayType]>]>: $result);
+    AnyTypeOf<[HWIntegerType, ArrayType,
+               LLHD_SigType<[HWIntegerType, ArrayType]>]>: $result);
 
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
@@ -153,9 +153,9 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
   }];
 
   let arguments = (ins AnyTypeOf<[
-      LLHD_ArrayType,
-      AnyTuple,
-      LLHD_SigType<[LLHD_ArrayType, AnyTuple]>
+      ArrayType,
+      StructType,
+      LLHD_SigType<[ArrayType, StructType]>
     ]>: $target,
     IndexAttr: $index);
 
@@ -172,9 +172,9 @@ def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
       Type targetType = target().getType();
       if (auto sig = targetType.dyn_cast<llhd::SigType>())
         targetType = sig.getUnderlyingType();
-      if (auto array = targetType.dyn_cast<llhd::ArrayType>())
+      if (auto array = targetType.dyn_cast<hw::ArrayType>())
         return array.getElementType();
-      return targetType.cast<TupleType>().getTypes()[index];
+      return targetType.cast<hw::StructType>().getElements()[index].type;
     }
   }];
 
@@ -215,8 +215,8 @@ def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
   }];
 
   let arguments = (ins
-    AnyTypeOf<[LLHD_ArrayType, LLHD_SigType<[LLHD_ArrayType]>]>: $target,
-    AnySignlessInteger: $index);
+    AnyTypeOf<[ArrayType, LLHD_SigType<[ArrayType]>]>: $target,
+    HWIntegerType: $index);
 
   let results = (outs AnyType: $result);
 
@@ -231,7 +231,7 @@ def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
       Type targetType = target().getType();
       if (auto sig = targetType.dyn_cast<llhd::SigType>())
         targetType = sig.getUnderlyingType();
-      return targetType.cast<llhd::ArrayType>().getElementType();
+      return targetType.cast<hw::ArrayType>().getElementType();
     }
   }];
 

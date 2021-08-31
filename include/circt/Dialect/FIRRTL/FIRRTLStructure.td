@@ -49,9 +49,10 @@ def CircuitOp : FIRRTLOp<"circuit",
   let verifier = "return ::verifyCircuitOp(*this);";
 }
 
-def FModuleOp : FIRRTLOp<"module",
-      [IsolatedFromAbove, FunctionLike, Symbol, SingleBlock, NoTerminator,
-       HasParent<"CircuitOp">]> {
+def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, FunctionLike, Symbol, 
+                                    SingleBlock, NoTerminator, 
+                                    DeclareOpInterfaceMethods<FModuleLike>,
+                                    HasParent<"CircuitOp">]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
@@ -76,11 +77,6 @@ def FModuleOp : FIRRTLOp<"module",
     using FunctionLike::end;
     using FunctionLike::front;
     using FunctionLike::getBody;
-
-    // Decode information about the input and output ports on this module.
-    SmallVector<ModulePortInfo> getPorts() {
-      return getModulePortInfo(*this);
-    }
 
     // Return the block argument for the port with the specified index.
     BlockArgument getPortArgument(size_t portNumber);
@@ -130,18 +126,20 @@ def FModuleOp : FIRRTLOp<"module",
   let verifier = "return ::verifyFModuleOp(*this);";
 }
 
-def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, FunctionLike, Symbol, HasParent<"CircuitOp">]> {
+def FExtModuleOp : FIRRTLOp<"extmodule", 
+      [IsolatedFromAbove, FunctionLike, Symbol, 
+       DeclareOpInterfaceMethods<FModuleLike>, HasParent<"CircuitOp">]> {
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
   }];
   let arguments = (ins StrArrayAttr:$portNames,
-                       OptionalAttr<StrAttr>:$defname,
-                       OptionalAttr<DictionaryAttr>:$parameters,
-                       DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-                       DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
+                   OptionalAttr<StrAttr>:$defname,
+                   OptionalAttr<DictionaryAttr>:$parameters,
+                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+                   DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations
+                  );
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -154,17 +152,13 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   ];
 
   let extraClassDeclaration = [{
-     // Decode information about the input and output ports on this module.
-     SmallVector<ModulePortInfo> getPorts() {
-       return getModulePortInfo(*this);
-     }
-
   private:
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<FExtModuleOp>;
 
     /// Returns the number of arguments, implementing OpTrait::FunctionLike.
     unsigned getNumFuncArguments() { return getType().getInputs().size(); }
+
     /// Returns the number of results, implementing OpTrait::FunctionLike.
     unsigned getNumFuncResults() { return getType().getResults().size(); }
 
@@ -195,7 +189,8 @@ def NonLocalAnchor : FIRRTLOp<"nla",
     annotations to anchor to in the global scope.  This lets components of the
     path point to a common entity.
   }];
-  let arguments = (ins SymbolNameAttr:$sym_name, SymbolArrayAttr:$modpath, StringArrayAttr:$namepath);
+  let arguments = (ins SymbolNameAttr:$sym_name, SymbolArrayAttr:$modpath, 
+                      StringArrayAttr:$namepath);
   let results = (outs);
   let assemblyFormat = [{ $sym_name $modpath $namepath attr-dict}];
 }

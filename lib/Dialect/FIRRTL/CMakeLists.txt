@@ -9,7 +9,8 @@ add_circt_dialect_library(CIRCTFIRRTL
   MLIRFIRRTLIncGen
   CIRCTFIRRTLEnumsIncGen
   CIRCTFIRRTLCanonicalizationIncGen
-
+  CIRCTFIRRTLOpInterfacesIncGen
+  
   LINK_COMPONENTS
   Support
 

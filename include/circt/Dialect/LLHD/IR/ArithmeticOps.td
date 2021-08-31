@@ -32,7 +32,7 @@ def LLHD_NegOp : LLHD_ArithmeticOrBitwiseOp<"neg", []> {
     ```
   }];
 
-  let arguments = (ins AnySignlessInteger:$value);
+  let arguments = (ins HWIntegerType:$value);
 
   let hasFolder = 1;
 }

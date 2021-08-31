@@ -89,7 +89,7 @@ inline bool operator!=(const ResetDomain &a, const ResetDomain &b) {
 static std::pair<StringAttr, FModuleOp> getResetNameAndModule(Value reset) {
   if (auto arg = reset.dyn_cast<BlockArgument>()) {
     auto module = cast<FModuleOp>(arg.getParentRegion()->getParentOp());
-    return {getModulePortName(module, arg.getArgNumber()), module};
+    return {module.portNames()[arg.getArgNumber()].cast<StringAttr>(), module};
   } else {
     auto op = reset.getDefiningOp();
     return {op->getAttrOfType<StringAttr>("name"),
@@ -478,6 +478,9 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   /// the vector for a module contains multiple elements.
   MapVector<FModuleOp, SmallVector<std::pair<ResetDomain, InstancePath>, 1>>
       domains;
+
+  /// Cache of modules symbols
+  std::unique_ptr<SymbolTable> symtbl;
 };
 } // namespace
 
@@ -487,9 +490,12 @@ void InferResetsPass::runOnOperation() {
   resetDrives.clear();
   annotatedResets.clear();
   domains.clear();
+  symtbl.release();
 }
 
 void InferResetsPass::runOnOperationInner() {
+  symtbl = std::make_unique<SymbolTable>(getOperation());
+
   // Trace the uninferred reset networks throughout the design.
   traceResets(getOperation());
 
@@ -635,13 +641,13 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
 /// instance's port values with the target module's port values.
 void InferResetsPass::traceResets(InstanceOp inst) {
   // Lookup the referenced module. Nothing to do if its an extmodule.
-  auto module = dyn_cast<FModuleOp>(inst.getReferencedModule());
+  auto module = dyn_cast<FModuleOp>(&*inst.getReferencedModule(*symtbl));
   if (!module)
     return;
   LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.name() << "\n");
 
   // Establish a connection between the instance ports and module ports.
-  auto dirs = getModulePortDirections(module);
+  auto dirs = module.getPortDirections();
   for (auto it : llvm::enumerate(inst.getResults())) {
     auto dir = direction::get(dirs.getValue()[it.index()]);
     Value dstPort = module.getArgument(it.index());
@@ -864,7 +870,7 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
       if (auto instOp = value.getDefiningOp<InstanceOp>())
         if (auto extmodule =
-                dyn_cast<FExtModuleOp>(instOp.getReferencedModule()))
+                dyn_cast<FExtModuleOp>(&*instOp.getReferencedModule(*symtbl)))
           extmoduleWorklist.insert({extmodule, instOp});
     }
   }
@@ -1111,8 +1117,7 @@ LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
     if (ignore)
       llvm::dbgs() << "no domain\n";
     else if (auto arg = reset.dyn_cast<BlockArgument>())
-      llvm::dbgs() << "port " << getModulePortName(module, arg.getArgNumber())
-                   << "\n";
+      llvm::dbgs() << "port " << module.portNames()[arg.getArgNumber()] << "\n";
     else
       llvm::dbgs() << "wire "
                    << reset.getDefiningOp()->getAttrOfType<StringAttr>("name")
@@ -1283,7 +1288,7 @@ void InferResetsPass::determineImpl(FModuleOp module, ResetDomain &domain) {
   auto neededType = domain.reset.getType();
   LLVM_DEBUG(llvm::dbgs() << "- Looking for existing port " << neededName
                           << "\n");
-  auto portNames = getModulePortNames(module);
+  auto portNames = module.portNames();
   auto ports = llvm::zip(portNames, module.getArguments());
   auto portIt = llvm::find_if(
       ports, [&](auto port) { return std::get<0>(port) == neededName; });
@@ -1401,7 +1406,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // Lookup the reset domain of the instantiated module. If there is no reset
     // domain associated with that module, or the module is explicitly marked as
     // being in no domain, simply skip.
-    auto refModule = dyn_cast<FModuleOp>(instOp.getReferencedModule());
+    auto refModule = dyn_cast<FModuleOp>(&*instOp.getReferencedModule(*symtbl));
     if (!refModule)
       return;
     auto domainIt = domains.find(refModule);

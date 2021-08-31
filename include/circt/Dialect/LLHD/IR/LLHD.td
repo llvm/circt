@@ -36,6 +36,17 @@ def LLHD_Dialect : Dialect {
 }
 
 //===----------------------------------------------------------------------===//
+// Import HW Types
+//===----------------------------------------------------------------------===//
+
+def HWDialect : Dialect {
+  let name = "hw";
+  let summary = "Types of the hardware dialect used by LLHD";
+}
+
+include "circt/Dialect/HW/HWTypes.td"
+
+//===----------------------------------------------------------------------===//
 // LLHD type definitions
 //===----------------------------------------------------------------------===//
 
@@ -44,13 +55,9 @@ def LLHD_TimeType : DialectType<LLHD_Dialect,
     CPred<"$_self.isa<TimeType>()">, "LLHD time type">,
     BuildableType<"TimeType::get($_builder.getContext())">;
 
-// LLHD Array Type
-def LLHD_ArrayType : DialectType<LLHD_Dialect,
-    CPred<"$_self.isa<ArrayType>()">, "LLHD array type">;
-
 // Legal underlying types for signals and pointers.
 def LLHD_AnyUnderlyingType :
-  AnyTypeOf<[AnySignlessInteger, LLHD_ArrayType, AnyTuple]>;
+  AnyTypeOf<[HWIntegerType, ArrayType, StructType]>;
 
 // LLHD sig type
 class LLHD_SigType<list<Type> allowedTypes>
@@ -101,7 +108,7 @@ class LLHD_ArithmeticOrBitwiseOp<string mnemonic, list<OpTrait> traits = []>
     : Op<LLHD_Dialect, mnemonic,
          !listconcat(traits, [NoSideEffect, SameOperandsAndResultType])> {
 
-  let results = (outs AnySignlessInteger);
+  let results = (outs HWIntegerType);
 
   let parser = [{
       return mlir::impl::parseOneResultSameOperandTypeOp(parser, result);

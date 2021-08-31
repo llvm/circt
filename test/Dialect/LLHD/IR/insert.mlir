@@ -13,40 +13,40 @@ func @insert_slice_integers(%cI1 : i1, %cI32 : i32) {
 }
 
 // CHECK-LABEL: @insert_slice_arrays
-// CHECK-SAME: %[[ARRAY2:.*]]: !llhd.array<2xi1>
-// CHECK-SAME: %[[ARRAY5:.*]]: !llhd.array<5xi1>
-func @insert_slice_arrays(%array2 : !llhd.array<2xi1>, %array5 : !llhd.array<5xi1>) -> () {
-  // CHECK-NEXT: %{{.*}} = llhd.insert_slice %[[ARRAY5]], %[[ARRAY2]], 3 : !llhd.array<5xi1>, !llhd.array<2xi1>
-  %0 = llhd.insert_slice %array5, %array2, 3 : !llhd.array<5xi1>, !llhd.array<2xi1>
-  // CHECK-NEXT: %{{.*}} = llhd.insert_slice %[[ARRAY2]], %[[ARRAY2]], 0 :  !llhd.array<2xi1>, !llhd.array<2xi1>
-  %1 = llhd.insert_slice %array2, %array2, 0 : !llhd.array<2xi1>, !llhd.array<2xi1>
+// CHECK-SAME: %[[ARRAY2:.*]]: !hw.array<2xi1>
+// CHECK-SAME: %[[ARRAY5:.*]]: !hw.array<5xi1>
+func @insert_slice_arrays(%array2 : !hw.array<2xi1>, %array5 : !hw.array<5xi1>) -> () {
+  // CHECK-NEXT: %{{.*}} = llhd.insert_slice %[[ARRAY5]], %[[ARRAY2]], 3 : !hw.array<5xi1>, !hw.array<2xi1>
+  %0 = llhd.insert_slice %array5, %array2, 3 : !hw.array<5xi1>, !hw.array<2xi1>
+  // CHECK-NEXT: %{{.*}} = llhd.insert_slice %[[ARRAY2]], %[[ARRAY2]], 0 :  !hw.array<2xi1>, !hw.array<2xi1>
+  %1 = llhd.insert_slice %array2, %array2, 0 : !hw.array<2xi1>, !hw.array<2xi1>
 
   return
 }
 
 // CHECK-LABEL: @insert_element_tuples
-// CHECK-SAME: %[[TUP:.*]]: tuple<i1, i8>,
+// CHECK-SAME: %[[TUP:.*]]: !hw.struct<foo: i1, bar: i8>,
 // CHECK-SAME: %[[I1:.*]]: i1,
 // CHECK-SAME: %[[I8:.*]]: i8
-func @insert_element_tuples(%tup : tuple<i1, i8>, %i1 : i1, %i8 : i8) {
-  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[TUP]], %[[I1]], 0 : tuple<i1, i8>, i1
-  %0 = llhd.insert_element %tup, %i1, 0 : tuple<i1, i8>, i1
-  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[TUP]], %[[I8]], 1 : tuple<i1, i8>, i8
-  %1 = llhd.insert_element %tup, %i8, 1 : tuple<i1, i8>, i8
+func @insert_element_tuples(%tup : !hw.struct<foo: i1, bar: i8>, %i1 : i1, %i8 : i8) {
+  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[TUP]], %[[I1]], 0 : !hw.struct<foo: i1, bar: i8>, i1
+  %0 = llhd.insert_element %tup, %i1, 0 : !hw.struct<foo: i1, bar: i8>, i1
+  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[TUP]], %[[I8]], 1 : !hw.struct<foo: i1, bar: i8>, i8
+  %1 = llhd.insert_element %tup, %i8, 1 : !hw.struct<foo: i1, bar: i8>, i8
 
   return
 }
 
 // CHECK-LABEL: @insert_element_arrays
-// CHECK-SAME: %[[V1:.*]]: !llhd.array<4xi1>,
-// CHECK-SAME: %[[V8:.*]]: !llhd.array<4xi8>,
+// CHECK-SAME: %[[V1:.*]]: !hw.array<4xi1>,
+// CHECK-SAME: %[[V8:.*]]: !hw.array<4xi8>,
 // CHECK-SAME: %[[I1:.*]]: i1,
 // CHECK-SAME: %[[I8:.*]]: i8
-func @insert_element_arrays(%v1 : !llhd.array<4xi1>, %v8 : !llhd.array<4xi8>, %i1 : i1, %i8 : i8) {
-  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[V1]], %[[I1]], 0 : !llhd.array<4xi1>, i1
-  %0 = llhd.insert_element %v1, %i1, 0 : !llhd.array<4xi1>, i1
-  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[V8]], %[[I8]], 2 : !llhd.array<4xi8>, i8
-  %1 = llhd.insert_element %v8, %i8, 2 : !llhd.array<4xi8>, i8
+func @insert_element_arrays(%v1 : !hw.array<4xi1>, %v8 : !hw.array<4xi8>, %i1 : i1, %i8 : i8) {
+  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[V1]], %[[I1]], 0 : !hw.array<4xi1>, i1
+  %0 = llhd.insert_element %v1, %i1, 0 : !hw.array<4xi1>, i1
+  // CHECK-NEXT: %{{.*}} = llhd.insert_element %[[V8]], %[[I8]], 2 : !hw.array<4xi8>, i8
+  %1 = llhd.insert_element %v8, %i8, 2 : !hw.array<4xi8>, i8
 
   return
 }

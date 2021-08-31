@@ -45,11 +45,12 @@ def InstanceOp : FIRRTLOp<"instance"> {
   let extraClassDeclaration = [{
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
-    Operation *getReferencedModule();
+    FModuleLike getReferencedModule();
+    FModuleLike getReferencedModule(SymbolTable& symtbl);
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {
-      return getModulePortName(getReferencedModule(), resultNo);
+      return getReferencedModule().portName(resultNo);
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();

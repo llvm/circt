@@ -33,29 +33,8 @@ llvm.func @convert_const() {
 // CHECK:           llvm.return
 // CHECK:         }
 func @convert_array(%ci1 : i1, %ci32 : i32) {
-  %0 = llhd.array %ci1, %ci1, %ci1 : !llhd.array<3xi1>
-  %1 = llhd.array %ci32, %ci32, %ci32, %ci32 : !llhd.array<4xi32>
-
-  return
-}
-
-// CHECK-LABEL:   llvm.func @convert_array_uniform(
-// CHECK-SAME:                                  %[[VAL_0:.*]]: i1,
-// CHECK-SAME:                                  %[[VAL_1:.*]]: i32) {
-// CHECK:           %[[VAL_2:.*]] = llvm.mlir.undef : !llvm.array<3 x i1>
-// CHECK:           %[[VAL_3:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_2]][0 : i32] : !llvm.array<3 x i1>
-// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_3]][1 : i32] : !llvm.array<3 x i1>
-// CHECK:           %[[VAL_5:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_4]][2 : i32] : !llvm.array<3 x i1>
-// CHECK:           %[[VAL_6:.*]] = llvm.mlir.undef : !llvm.array<4 x i32>
-// CHECK:           %[[VAL_7:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_6]][0 : i32] : !llvm.array<4 x i32>
-// CHECK:           %[[VAL_8:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_7]][1 : i32] : !llvm.array<4 x i32>
-// CHECK:           %[[VAL_9:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_8]][2 : i32] : !llvm.array<4 x i32>
-// CHECK:           %[[VAL_10:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_9]][3 : i32] : !llvm.array<4 x i32>
-// CHECK:           llvm.return
-// CHECK:         }
-func @convert_array_uniform(%ci1 : i1, %ci32 : i32) {
-  %0 = llhd.array_uniform %ci1 : !llhd.array<3xi1>
-  %1 = llhd.array_uniform %ci32 : !llhd.array<4xi32>
+  %0 = hw.array_create %ci1, %ci1, %ci1 : i1
+  %1 = hw.array_create %ci32, %ci32, %ci32, %ci32 : i32
 
   return
 }
@@ -71,7 +50,7 @@ func @convert_array_uniform(%ci1 : i1, %ci32 : i32) {
 // CHECK:           llvm.return
 // CHECK:         }
 func @convert_tuple(%ci1 : i1, %ci2 : i2, %ci3 : i3) {
-  %0 = llhd.tuple %ci1, %ci2, %ci3 : tuple<i1, i2, i3>
+  %0 = hw.struct_create (%ci1, %ci2, %ci3) : !hw.struct<foo: i1, bar: i2, baz: i3>
 
   return
 }

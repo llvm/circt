@@ -75,11 +75,6 @@ static DictionaryAttr getAnnotationOfClass(MLIRContext *context,
   return DictionaryAttr::getWithSorted(context, {id});
 }
 
-/// Checks the annotations array for a matching annotation.
-static bool hasAnnotation(ArrayAttr annotations, DictionaryAttr annotation) {
-  return llvm::is_contained(annotations, annotation);
-}
-
 //===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
@@ -320,7 +315,7 @@ struct FIRParser {
   /// method is slightly more efficient than other lookup methods, because it
   /// uses a stashed copy of the annotation for lookup.
   bool hasDontTouch(ArrayAttr annotations) {
-    return hasAnnotation(annotations, constants.dontTouchAnnotation);
+    return AnnotationSet(annotations).hasDontTouch();
   }
 
 private:
@@ -2638,7 +2633,8 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts = getModulePortInfo(referencedModule);
+  SmallVector<ModulePortInfo> modulePorts =
+      cast<FModuleLike>(referencedModule).getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
@@ -3415,7 +3411,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
   auto argIt = moduleOp.args_begin();
-  auto portList = getModulePortInfo(moduleOp);
+  auto portList = moduleOp.getPorts();
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
     ModulePortInfo &port = std::get<0>(portAndLoc);
     if (moduleContext.addSymbolEntry(port.getName(), *argIt,
