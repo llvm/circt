@@ -11,9 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 def ConstantOp
- : HWOp<"constant",
-          [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
-           DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+ : HWOp<"constant", [NoSideEffect, ConstantLike, FirstAttrDerivedResultType,
+         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Produce a constant value";
   let description = [{
     The constant operation produces a constant value of standard integer type

@@ -818,7 +818,7 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
     auto port = attr.cast<ModportStructAttr>();
     p << port.direction();
     p << ' ';
-    p.printSymbolName(port.signal().getRootReference());
+    p.printSymbolName(port.signal().getRootReference().getValue());
   });
   p << ')';
 }
@@ -886,8 +886,7 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
   assert(ifaceTy && "GetModportOp expects an InterfaceType.");
   auto fieldAttr = SymbolRefAttr::get(builder.getContext(), field);
   auto modportSym =
-      SymbolRefAttr::get(builder.getContext(),
-                         ifaceTy.getInterface().getRootReference(), fieldAttr);
+      SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(), fieldAttr);
   build(builder, state, ModportType::get(builder.getContext(), modportSym),
         value, fieldAttr);
 }
@@ -912,8 +911,8 @@ ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
 
   auto *ctxt = p.getBuilder().getContext();
   ifaceTy = InterfaceType::get(
-      ctxt, FlatSymbolRefAttr::get(ctxt, fullSym.getRootReference()));
-  signalName = FlatSymbolRefAttr::get(ctxt, fullSym.getLeafReference());
+      ctxt, FlatSymbolRefAttr::get(fullSym.getRootReference()));
+  signalName = FlatSymbolRefAttr::get(fullSym.getLeafReference());
   return success();
 }
 
@@ -921,8 +920,7 @@ void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
                              FlatSymbolRefAttr signalName) {
   InterfaceType ifaceTy = type.dyn_cast<InterfaceType>();
   assert(ifaceTy && "Expected an InterfaceType");
-  auto sym = SymbolRefAttr::get(op->getContext(),
-                                ifaceTy.getInterface().getRootReference(),
+  auto sym = SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(),
                                 {signalName});
   p << sym;
 }

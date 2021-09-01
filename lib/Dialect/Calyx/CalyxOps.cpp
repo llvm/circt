@@ -517,7 +517,7 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
     if (!isa<GroupOp>(op))
       continue;
     auto group = cast<GroupOp>(op);
-    StringRef groupName = group.sym_name();
+    auto groupName = group.sym_nameAttr();
     if (SymbolTable::symbolKnownUseEmpty(groupName, control))
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";

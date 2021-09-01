@@ -153,7 +153,7 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
   let builders = [OpBuilder<
     (ins "FuncOp":$module, CArg<"ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
-      $_state.addAttribute("module", $_builder.getSymbolRefAttr(module));
+      $_state.addAttribute("module", SymbolRefAttr::get(module));
       $_state.addTypes(module.getType().getResults());
   }]>, OpBuilder<
     (ins "SymbolRefAttr":$module, "TypeRange":$results,
@@ -164,8 +164,9 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
   }]>, OpBuilder<
     (ins "StringRef":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
-      build($_builder, $_state, $_builder.getSymbolRefAttr(module), results,
-            operands);
+       build($_builder, $_state,
+             SymbolRefAttr::get($_builder.getContext(), module), results,
+             operands);
   }]>];
 
   let extraClassDeclaration = [{

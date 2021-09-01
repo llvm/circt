@@ -100,8 +100,9 @@ void HWLegalizeNamesPass::runOnOperation() {
     if (newName.empty())
       continue;
 
-    symbolUsers.replaceAllUsesWith(&op, newName);
-    SymbolTable::setSymbolName(&op, newName);
+    auto newNameAttr = StringAttr::get(&getContext(), newName);
+    symbolUsers.replaceAllUsesWith(&op, newNameAttr);
+    SymbolTable::setSymbolName(&op, newNameAttr);
     anythingChanged = true;
   }
 
@@ -160,14 +161,14 @@ void HWLegalizeNamesPass::runOnModule(hw::HWModuleOp module) {
     if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       auto newName = nameResolver.getLegalName(instanceOp.getNameAttr());
       if (!newName.empty()) {
-        instanceOp.setName(newName);
+        instanceOp.setName(StringAttr::get(&getContext(), newName));
         anythingChanged = true;
       }
     } else if (isa<RegOp>(op) || isa<WireOp>(op)) {
       auto oldName = op.getAttrOfType<StringAttr>("name");
       auto newName = nameResolver.getLegalName(oldName);
       if (!newName.empty()) {
-        op.setAttr("name", StringAttr::get(op.getContext(), newName));
+        op.setAttr("name", StringAttr::get(&getContext(), newName));
         anythingChanged = true;
       }
     }
@@ -188,8 +189,10 @@ void HWLegalizeNamesPass::runOnInterface(InterfaceOp interface,
     auto newName = localNames.getLegalName(oldName);
     if (newName.empty())
       continue;
-    symbolUsers.replaceAllUsesWith(&op, newName);
-    SymbolTable::setSymbolName(&op, newName);
+
+    auto newNameAttr = StringAttr::get(&getContext(), newName);
+    symbolUsers.replaceAllUsesWith(&op, newNameAttr);
+    SymbolTable::setSymbolName(&op, newNameAttr);
     anythingChanged = true;
   }
 }
