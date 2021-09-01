@@ -815,7 +815,7 @@ private:
 
     /// This flag indicates that the RHS operand is an unsigned value that has
     /// "self determined" width.  This means that we can omit explicit zero
-    /// extensions from it.
+    /// extensions from it, and don't impose a sign on it.
     EB_RHS_UnsignedWithSelfDeterminedWidth = 0x4,
 
     /// This flag indicates that the result should be wrapped in a $signed(x)
@@ -963,9 +963,14 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
     rhsPrec = VerilogPrecedence(prec - 1);
 
-  // If the RHS operand has self-determined width, inform emitSubExpr of this.
-  bool rhsIsUnsignedValueWithSelfDeterminedWidth =
-      (emitBinaryFlags & EB_RHS_UnsignedWithSelfDeterminedWidth) != 0;
+  // If the RHS operand has self-determined width and always treated as
+  // unsigned, inform emitSubExpr of this.  This is true for the shift amount in
+  // a shift operation.
+  bool rhsIsUnsignedValueWithSelfDeterminedWidth = false;
+  if (emitBinaryFlags & EB_RHS_UnsignedWithSelfDeterminedWidth) {
+    rhsIsUnsignedValueWithSelfDeterminedWidth = true;
+    operandSignReq = NoRequirement;
+  }
 
   auto rhsInfo =
       emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq,
