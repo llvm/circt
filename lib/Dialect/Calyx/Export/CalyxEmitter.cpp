@@ -56,45 +56,36 @@ public:
         if (!op.hasTrait<Cell>() || isa<InstanceOp>(op))
           // It is not a primitive.
           continue;
-        appendIfUnique(&op);
+
+        StringRef opLibrary = getLibraryFor(&op);
+        if (llvm::any_of(usedLibraries,
+                         [&](auto library) { return library == opLibrary; }))
+          // This library is already indicated as used.
+          return;
+
+        usedLibraries.push_back(opLibrary);
       }
     });
     return usedLibraries;
   }
 
 private:
-  /// Appends the library for this operation if it is not already included.
-  void appendIfUnique(Operation *op) {
-    StringRef name = op->getName().getStringRef();
-
-    assert(name.size() > 6 &&
-           "Operation names should be prefixed with \"calyx.\".");
-    name = name.drop_front(6);
-
-    auto it = operationToLibrary.find(name);
-    assert(it != operationToLibrary.end() &&
-           "Operation not found. The mapping between primitive operations and "
-           "libraries needs be updated for the Calyx Emitter.");
-
-    StringRef opLibrary = it->second;
-    if (llvm::any_of(usedLibraries,
-                     [&](auto library) { return library == opLibrary; }))
-      // This library is already indicated as used.
-      return;
-
-    usedLibraries.push_back(opLibrary);
+  /// Returns the library name for a given Operation Type.
+  StringRef getLibraryFor(Operation *op) {
+    StringRef library;
+    TypeSwitch<Operation *>(op)
+        .Case<MemoryOp, RegisterOp>([&](auto op) { library = "core"; })
+        /*.Case<>([&](auto op) { library = "binary_operators"; })*/
+        /*.Case<>([&](auto op) { library = "math"; })*/
+        .Default([&](auto op) {
+          llvm_unreachable("Op is not a supported primitive.");
+        });
+    return library;
   }
-
-  /// A mapping from operation name to the library under which it is housed.
-  /// See: https://github.com/cucapra/calyx/tree/master/primitives
-  const llvm::StringMap<StringRef> operationToLibrary{
-      std::pair("register", "core"),
-      std::pair("memory", "core"),
-  };
 
   /// Maintains a unique list of libraries used throughout the lifetime of the
   /// tracker.
-  SmallVector<StringRef, 4> usedLibraries;
+  SmallVector<StringRef> usedLibraries;
 };
 
 //===----------------------------------------------------------------------===//
