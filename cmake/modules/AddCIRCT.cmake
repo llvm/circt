@@ -50,3 +50,8 @@ function(add_circt_translation_library name)
   set_property(GLOBAL APPEND PROPERTY CIRCT_TRANSLATION_LIBS ${name})
   add_circt_library(${ARGV} DEPENDS circt-headers)
 endfunction()
+
+function(add_circt_analysis_library name)
+  set_property(GLOBAL APPEND PROPERTY CIRCT_ANALYSIS_LIBS ${name})
+  add_circt_library(${ARGV} DEPENDS circt-headers)
+endfunction()
