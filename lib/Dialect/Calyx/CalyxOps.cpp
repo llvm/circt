@@ -885,82 +885,48 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 }
 
 //===----------------------------------------------------------------------===//
-// PrimitiveOp
+// Calyx library ops
 //===----------------------------------------------------------------------===//
-void PrimitiveOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+
+// The Calyx library operations implement the OpAsmOpInterface which expects a
+// getAsmResultNames member function to be defined out of line of the
+// tablegen'erated files. Since there is no "extraClassDefinitions" function in
+// the TableGen backend for Op classes, we have to manually define these here.
+static void getBinOpAsmResultNames(Operation *op,
+                                   OpAsmSetValueNameFn setNameFn) {
+  unsigned numResults = op->getNumResults();
+  assert(numResults == 3);
   SmallVector<StringRef> portNames;
   SmallVector<SmallString<8>> inNames;
-  assert(getNumResults() != 0);
-  for (size_t i = 0, e = getNumResults() - 1; i != e; ++i) {
+  for (size_t i = 0, e = numResults - 1; i != e; ++i) {
     inNames.emplace_back("in" + std::to_string(i));
     portNames.push_back(inNames.back());
   }
   portNames.push_back("out");
-  getCellAsmResultNames(setNameFn, *this, portNames);
+  getCellAsmResultNames(setNameFn, op, portNames);
 }
 
-void PrimitiveOp::build(OpBuilder &builder, OperationState &state,
-                        Twine instanceName, PrimitiveOpFunc func,
-                        ::mlir::TypeRange resultTypes) {
-  state.addAttribute("name", builder.getStringAttr(instanceName));
-  state.addAttribute("func", circt::calyx::PrimitiveOpFuncAttr::get(
-                                 builder.getContext(), func));
-  state.addTypes(resultTypes);
-}
-
-namespace {
-enum class PrimitiveOpTypeConstraint { AllIdentical, OpsIdenticalBoolRes };
-}
-// clang-format off
-static PrimitiveOpTypeConstraint primFuncTypeConstraint(PrimitiveOpFunc func) {
-  switch (func) {
-  case PrimitiveOpFunc::add: case PrimitiveOpFunc::sub: case PrimitiveOpFunc::shru:
-  case PrimitiveOpFunc::shl: case PrimitiveOpFunc::AND: case PrimitiveOpFunc::NOT:
-  case PrimitiveOpFunc::OR: case PrimitiveOpFunc::XOR:
-    return PrimitiveOpTypeConstraint::AllIdentical;
-
-  case PrimitiveOpFunc::lt: case PrimitiveOpFunc::gt: case PrimitiveOpFunc::eq:
-  case PrimitiveOpFunc::neq: case PrimitiveOpFunc::ge: case PrimitiveOpFunc::le:
-    return PrimitiveOpTypeConstraint::OpsIdenticalBoolRes;
-  }
-  llvm_unreachable("Unknown primitive op function");
-}
-// clang-format on
-
-static LogicalResult verifyPrimitiveOp(PrimitiveOp primOp) {
-  auto resTypes = primOp.getResultTypes();
-
-  // # of results verification - currently, all operators are binary operators.
-  if (resTypes.size() != 3)
-    return primOp.emitOpError()
-           << "expected 3 return types for binary operator.";
-
-  // Type verification
-  switch (primFuncTypeConstraint(primOp.func())) {
-    // Identical input types + return type.
-  case PrimitiveOpTypeConstraint::AllIdentical: {
-    bool hasAllIdenticalType = llvm::all_of(resTypes, [&](auto type) {
-      return type == primOp->getResultTypes()[0];
-    });
-    if (!hasAllIdenticalType)
-      return primOp.emitOpError()
-             << "expected identical input and output types.";
-    break;
-  }
-    // Identical input types, return type is 1 bit.
-  case PrimitiveOpTypeConstraint::OpsIdenticalBoolRes: {
-    if (!resTypes[resTypes.size() - 1].isInteger(1))
-      return primOp.emitOpError() << "expected 1-bit return type.";
-    if (!llvm::all_of(
-            llvm::make_range(resTypes.begin() + 0, resTypes.end() - 1),
-            [&](auto type) { return type == primOp->getResultTypes()[0]; }))
-      return primOp.emitOpError() << "expected identical input types.";
-    break;
-  }
+#define AsmResultsForLibraryOp(OpType)                                         \
+  void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
+    getBinOpAsmResultNames(*this, setNameFn);                                  \
   }
 
-  return success();
-}
+AsmResultsForLibraryOp(LtLibOp);
+AsmResultsForLibraryOp(GtLibOp);
+AsmResultsForLibraryOp(EqLibOp);
+AsmResultsForLibraryOp(NeqLibOp);
+AsmResultsForLibraryOp(GeLibOp);
+AsmResultsForLibraryOp(LeLibOp);
+
+AsmResultsForLibraryOp(AddLibOp);
+AsmResultsForLibraryOp(SubLibOp);
+AsmResultsForLibraryOp(ShruLibOp);
+AsmResultsForLibraryOp(ShrLibOp);
+AsmResultsForLibraryOp(ShlLibOp);
+AsmResultsForLibraryOp(AndLibOp);
+AsmResultsForLibraryOp(NotLibOp);
+AsmResultsForLibraryOp(OrLibOp);
+AsmResultsForLibraryOp(XorLibOp);
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.

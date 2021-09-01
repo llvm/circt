@@ -116,64 +116,51 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   }];
 }
 
+class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
+  CalyxPrimitive<"lib_" # mnemonic, traits> {
 
-// Primitive operation functions
-def PrimitiveOpFuncNOT  : I64EnumAttrCase<"NOT", 0, "not">;
-def PrimitiveOpFuncAND  : I64EnumAttrCase<"AND", 1, "and">;
-def PrimitiveOpFuncOR   : I64EnumAttrCase<"OR", 2, "or">;
-def PrimitiveOpFuncXOR  : I64EnumAttrCase<"XOR", 3, "xor">;
-def PrimitiveOpFuncADD  : I64EnumAttrCase<"add", 4>;
-def PrimitiveOpFuncSUB  : I64EnumAttrCase<"sub", 5>;
-def PrimitiveOpFuncGT   : I64EnumAttrCase<"gt", 6>;
-def PrimitiveOpFuncLT   : I64EnumAttrCase<"lt", 7>;
-def PrimitiveOpFuncEQ   : I64EnumAttrCase<"eq", 8>;
-def PrimitiveOpFuncNEQ  : I64EnumAttrCase<"neq", 9>;
-def PrimitiveOpFuncGE   : I64EnumAttrCase<"ge", 10>;
-def PrimitiveOpFuncLE   : I64EnumAttrCase<"le", 11>;
-def PrimitiveOpFuncSHL  : I64EnumAttrCase<"shl", 12>;
-def PrimitiveOpFuncSHRU : I64EnumAttrCase<"shru", 13>;
-
-let cppNamespace = "circt::calyx" in
-def PrimitiveOpFunc : I64EnumAttr<
-    "PrimitiveOpFunc",
-    "calyx.prim function type",
-    [PrimitiveOpFuncNOT, PrimitiveOpFuncAND, PrimitiveOpFuncOR, PrimitiveOpFuncXOR, PrimitiveOpFuncADD,
-     PrimitiveOpFuncSUB, PrimitiveOpFuncGT, PrimitiveOpFuncLT, PrimitiveOpFuncEQ, PrimitiveOpFuncNEQ,
-     PrimitiveOpFuncGE, PrimitiveOpFuncLE, PrimitiveOpFuncSHL, PrimitiveOpFuncSHRU]>;
-
-def PrimitiveOp : CalyxPrimitive<"prim"> {
-  let summary = "Defines a primitive arithmetic operation";
+  let summary = "Defines an operation which maps to a Calyx library primitive";
   let description = [{
-    This operation represents an instance of a Calyx arithmetic primitive. The
-    operation function is specified by the `$func` parameter. The result types
-    of the parameter must match the natural type constraints of the provided
-    `$func`.
-    I.e. for binary arithmetic operations the result and input types are
-    expected to be the identical, whereas for boolean comparison operators
-    input types should be identical with a 1-bit wide output type.
-
-    ```mlir
-      // A 32-bit adder.
-       %adder.in0, %adder.in1, %adder.out = calyx.prim "adder" add : i8, i8, i8
-      // An 8-bit greater-than comparison.
-      %gt.in0, %gt.in1, %gt.out = calyx.prim "gt" gt : i8, i8, i1
-    ```
+    This operation represents an instance of a Calyx library primitive.
+    A library primitive maps to some hardware-implemented component within the
+    native Calyx compiler.
   }];
 
-  let arguments = (ins StrAttr:$instanceName, PrimitiveOpFunc:$func);
-  let results = (outs Variadic<AnySignlessInteger>:$results);
-
-  let assemblyFormat = [{
-    $instanceName $func attr-dict `:` type($results)
-  }];
-
-  let verifier = "return ::verify$cppClass(*this);";
-
+  let arguments = (ins StrAttr:$instanceName);
   let builders = [
-    OpBuilder<(ins
-      "Twine":$instanceName,
-      "PrimitiveOpFunc":$func,
-      "::mlir::TypeRange":$resultTypes
-    )>
+    OpBuilder<(ins "StringAttr":$instanceName, "::mlir::TypeRange":$resultTypes), [{
+      $_state.addAttribute("instanceName", instanceName);
+      $_state.addTypes(resultTypes);
+    }]>
   ];
 }
+
+class BoolBinLibOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+    SameTypeConstraint<"left", "right">
+  ]> {
+  let results = (outs AnyType:$left, AnyType:$right, I1:$out);
+}
+
+def LtLibOp  : BoolBinLibOp<"lt"> {}
+def GtLibOp  : BoolBinLibOp<"gt"> {}
+def EqLibOp  : BoolBinLibOp<"eq"> {}
+def NeqLibOp : BoolBinLibOp<"neq"> {}
+def GeLibOp  : BoolBinLibOp<"ge"> {}
+def LeLibOp  : BoolBinLibOp<"le"> {}
+
+class ArithBinLibOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+    SameTypeConstraint<"left", "right">,
+    SameTypeConstraint<"left", "out">
+  ]> {
+  let results = (outs AnyType:$left, AnyType:$right, AnyType:$out);
+}
+
+def AddLibOp  : ArithBinLibOp<"add"> {}
+def SubLibOp  : ArithBinLibOp<"sub"> {}
+def ShruLibOp : ArithBinLibOp<"shru"> {}
+def ShrLibOp  : ArithBinLibOp<"shr"> {}
+def ShlLibOp  : ArithBinLibOp<"shl"> {}
+def AndLibOp  : ArithBinLibOp<"and"> {}
+def NotLibOp  : ArithBinLibOp<"not"> {}
+def OrLibOp   : ArithBinLibOp<"or"> {}
+def XorLibOp  : ArithBinLibOp<"xor"> {}
