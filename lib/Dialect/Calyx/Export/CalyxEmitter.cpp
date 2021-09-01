@@ -78,7 +78,7 @@ private:
         /*.Case<>([&](auto op) { library = "binary_operators"; })*/
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
-          llvm_unreachable("Op is not a supported primitive.");
+          llvm_unreachable("Type matching failed for this operation.");
         });
     return library;
   }
