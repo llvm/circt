@@ -1741,18 +1741,21 @@ private:
   LogicalResult visitSV(FatalOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(VerbatimOp op);
-  LogicalResult emitImmediateAssertion(Operation *op, Twine name,
-                                       StringRef label, Value expression);
+
+  void emitAssertionLabel(Operation *op, StringRef opName);
+  LogicalResult emitImmediateAssertion(Operation *op, StringRef opName,
+                                       Value expression);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
-  LogicalResult visitSV(BindOp op);
-  LogicalResult emitConcurrentAssertion(Operation *op, Twine name,
-                                        StringRef label, EventControl event,
-                                        Value clock, Value property);
+  LogicalResult emitConcurrentAssertion(Operation *op, StringRef opName,
+                                        EventControl event, Value clock,
+                                        Value property);
   LogicalResult visitSV(AssertConcurrentOp op);
   LogicalResult visitSV(AssumeConcurrentOp op);
   LogicalResult visitSV(CoverConcurrentOp op);
+
+  LogicalResult visitSV(BindOp op);
   LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
@@ -2083,15 +2086,28 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op, Twine name,
-                                                  StringRef label,
+/// Emit the `<label>:` portion of an immediate or concurrent verification
+/// operation. If a label has been stored for the operation through
+/// `addLegalName` in the pre-pass, that label is used. Otherwise, if the
+/// `enforceVerifLabels` option is set, a temporary name for the operation is
+/// picked and uniquified through `addName`.
+void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
+  if (names.hasName(op)) {
+    os << names.getName(op) << ": ";
+  } else if (state.options.enforceVerifLabels) {
+    auto name = names.addName(op, opName);
+    os << name << ": ";
+  }
+}
+
+LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op,
+                                                  StringRef opName,
                                                   Value expression) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent();
-  if (!label.empty())
-    os << label << ": ";
-  os << name << "(";
+  emitAssertionLabel(op, opName);
+  os << opName << "(";
   emitExpression(expression, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -2099,27 +2115,27 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op, Twine name,
 }
 
 LogicalResult StmtEmitter::visitSV(AssertOp op) {
-  return emitImmediateAssertion(op, "assert", op.label(), op.expression());
+  return emitImmediateAssertion(op, "assert", op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
-  return emitImmediateAssertion(op, "assume", op.label(), op.expression());
+  return emitImmediateAssertion(op, "assume", op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  return emitImmediateAssertion(op, "cover", op.label(), op.expression());
+  return emitImmediateAssertion(op, "cover", op.expression());
 }
 
-LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
-                                                   StringRef label,
+LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op,
+                                                   StringRef opName,
                                                    EventControl event,
                                                    Value clock,
                                                    Value property) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  if (!label.empty())
-    os << label << ": ";
-  os << name << " property (@(" << stringifyEventControl(event) << " ";
+  indent();
+  emitAssertionLabel(op, opName);
+  os << opName << " property (@(" << stringifyEventControl(event) << " ";
   emitExpression(clock, ops);
   os << ") ";
   emitExpression(property, ops);
@@ -2129,18 +2145,18 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
 }
 
 LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assert", op.label(), op.event(),
-                                 op.clock(), op.property());
+  return emitConcurrentAssertion(op, "assert", op.event(), op.clock(),
+                                 op.property());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assume", op.label(), op.event(),
-                                 op.clock(), op.property());
+  return emitConcurrentAssertion(op, "assume", op.event(), op.clock(),
+                                 op.property());
 }
 
 LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
-  return emitConcurrentAssertion(op, "cover", op.label(), op.event(),
-                                 op.clock(), op.property());
+  return emitConcurrentAssertion(op, "cover", op.event(), op.clock(),
+                                 op.property());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {

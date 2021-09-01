@@ -49,6 +49,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       disallowPackedArrays = true;
     } else if (option == "disallowLocalVariables") {
       disallowLocalVariables = true;
+    } else if (option == "verifLabels") {
+      enforceVerifLabels = true;
     } else if (option.startswith("emittedLineLength=")) {
       option = option.drop_front(strlen("emittedLineLength="));
       if (option.getAsInteger(10, emittedLineLength)) {
@@ -75,6 +77,8 @@ std::string LoweringOptions::toString() const {
     options += "disallowPackedArrays,";
   if (disallowLocalVariables)
     options += "disallowLocalVariables,";
+  if (enforceVerifLabels)
+    options += "verifLabels,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';
