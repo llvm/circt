@@ -19,6 +19,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
@@ -50,20 +51,13 @@ struct ImportTracker {
 public:
   /// Returns the list of library names used for in this program.
   /// E.g. if `primitives/core.futil` is used, returns { "core" }.
-  SmallVector<StringRef> getLibraryNames(ProgramOp program) {
+  llvm::SmallSet<StringRef, 4> getLibraryNames(ProgramOp program) {
     program.walk([&](ComponentOp component) {
       for (auto &op : *component.getBody()) {
         if (!op.hasTrait<Cell>() || isa<InstanceOp>(op))
           // It is not a primitive.
           continue;
-
-        StringRef opLibrary = getLibraryFor(&op);
-        if (llvm::any_of(usedLibraries,
-                         [&](auto library) { return library == opLibrary; }))
-          // This library is already indicated as used.
-          return;
-
-        usedLibraries.push_back(opLibrary);
+        usedLibraries.insert(getLibraryFor(&op));
       }
     });
     return usedLibraries;
@@ -85,7 +79,7 @@ private:
 
   /// Maintains a unique list of libraries used throughout the lifetime of the
   /// tracker.
-  SmallVector<StringRef> usedLibraries;
+  llvm::SmallSet<StringRef, 4> usedLibraries;
 };
 
 //===----------------------------------------------------------------------===//
