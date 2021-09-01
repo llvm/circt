@@ -41,6 +41,8 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       // Empty options are fine.
     } else if (option == "alwaysFF") {
       useAlwaysFF = true;
+    } else if (option == "alwaysComb") {
+      useAlwaysComb = true;
     } else if (option == "exprInEventControl") {
       allowExprInEventControl = true;
     } else if (option == "disallowPackedArrays") {
@@ -65,6 +67,8 @@ std::string LoweringOptions::toString() const {
   // All options should add a trailing comma to simplify the code.
   if (useAlwaysFF)
     options += "alwaysFF,";
+  if (useAlwaysComb)
+    options += "alwaysComb,";
   if (allowExprInEventControl)
     options += "exprInEventControl,";
   if (disallowPackedArrays)
