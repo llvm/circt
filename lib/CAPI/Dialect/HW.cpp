@@ -121,10 +121,10 @@ MlirType hwTypeAliasTypeGetInnerType(MlirType typeAlias) {
 
 MlirStringRef hwTypeAliasTypeGetName(MlirType typeAlias) {
   TypeAliasType type = unwrap(typeAlias).cast<TypeAliasType>();
-  return wrap(type.getRef().getLeafReference());
+  return wrap(type.getRef().getLeafReference().getValue());
 }
 
 MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias) {
   TypeAliasType type = unwrap(typeAlias).cast<TypeAliasType>();
-  return wrap(type.getRef().getRootReference());
+  return wrap(type.getRef().getRootReference().getValue());
 }

@@ -14,9 +14,9 @@
 /// more basic symbol validation can provide more useful error messages.
 def isModuleSymbol : AttrConstraint<
     CPred<"!::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()) || "
+            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>()) || "
           "hw::isAnyModule(::mlir::SymbolTable::lookupNearestSymbolFrom("
-            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>().getValue()))"
+            "&$_op, $_self.cast<::mlir::FlatSymbolRefAttr>()))"
     >, "is module like">;
 
 def HWModuleOp : HWOp<"module",
@@ -277,9 +277,8 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def InstanceOp : HWOp<"instance",
-                       [DeclareOpInterfaceMethods<OpAsmOpInterface>,
-                        HasParent<"HWModuleOp">, Symbol]> {
+def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
+        DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are
@@ -303,24 +302,14 @@ def InstanceOp : HWOp<"instance",
     /// invalid IR.
     Operation *getReferencedModule(const SymbolCache *cache = nullptr);
 
-    /// Get the instances's name as StringAttr.
-    StringAttr getNameAttr() {
+    /// Get the instances's name.
+    StringAttr getName() {
       return (*this)->getAttrOfType<StringAttr>("instanceName");
     }
 
-    /// Set the instance's name as StringAttr.
-    void setNameAttr(StringAttr name) {
-      (*this)->setAttr("instanceName", name);
-    }
-
-    /// Get the instances's name.
-    StringRef getName() {
-      return getNameAttr().getValue();
-    }
-
     /// Set the instance's name.
-    void setName(StringRef name) {
-      setNameAttr(StringAttr::get(getContext(), name));
+    void setName(StringAttr name) {
+      (*this)->setAttr("instanceName", name);
     }
 
     //===------------------------------------------------------------------===//

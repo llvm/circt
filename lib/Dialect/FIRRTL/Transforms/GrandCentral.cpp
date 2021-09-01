@@ -469,8 +469,7 @@ void GrandCentralPass::runOnOperation() {
           builder.setInsertionPointToStart(
               op.getParentOfType<ModuleOp>().getBody());
           auto bind = builder.create<sv::BindInterfaceOp>(
-              circuitOp->getLoc(),
-              builder.getSymbolRefAttr(instance.sym_name().getValue()));
+              circuitOp->getLoc(), SymbolRefAttr::get(instance.sym_nameAttr()));
           bind->setAttr(
               "output_file",
               hw::OutputFileAttr::get(

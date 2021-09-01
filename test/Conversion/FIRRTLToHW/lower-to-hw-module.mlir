@@ -2,7 +2,7 @@
 
 // The firrtl.circuit should be removed, the main module name moved to an
 // attribute on the module.
-// CHECK-LABEL: {{^}}builtin.module attributes {firrtl.mainModule = "Simple"} {
+// CHECK-LABEL: {{^}}module attributes {firrtl.mainModule = "Simple"} {
 // CHECK-NOT: firrtl.circuit
 
 // We should get a large header boilerplate.

@@ -238,8 +238,9 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // Third, create the shell module and also some builders for the inside.
 
   SmallString<64> shellNameBuf;
-  StringAttr shellName = b.getStringAttr(
-      (SymbolTable::getSymbolName(pearl) + "_esi").toStringRef(shellNameBuf));
+  StringAttr shellName =
+      b.getStringAttr((SymbolTable::getSymbolName(pearl).getValue() + "_esi")
+                          .toStringRef(shellNameBuf));
   auto shell = b.create<hw::HWModuleOp>(loc, shellName, shellPorts);
   shell.getBodyBlock()->clear(); // Erase the terminator.
   auto modBuilder =
@@ -306,8 +307,9 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // Fifth, instantiate the pearl module.
 
   auto pearlInst = modBuilder.create<hw::InstanceOp>(
-      modType.getResults(), "pearl", SymbolTable::getSymbolName(pearl),
-      pearlOperands, DictionaryAttr(), StringAttr());
+      modType.getResults(), "pearl",
+      SymbolTable::getSymbolName(pearl).getValue(), pearlOperands,
+      DictionaryAttr(), StringAttr());
 
   // Hookup all the backedges.
   for (size_t i = 0, e = pearlInst.getNumResults(); i < e; ++i) {

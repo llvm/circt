@@ -10,7 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface>;
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
+                         ["getAsmResultNames"]>;
 
 def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
   let summary = "Expression that expands to a value given SystemVerilog text";

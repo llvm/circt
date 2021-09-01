@@ -262,7 +262,7 @@ def GroupDoneOp : CalyxGroupPort<"group_done", [
 }
 
 def GroupGoOp : CalyxGroupPort<"group_go", [
-  DeclareOpInterfaceMethods<OpAsmOpInterface>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
 ]> {
   let summary = "Calyx Group Go Port";
   let description = [{

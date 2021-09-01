@@ -54,7 +54,7 @@ def Cell : NativeOpTrait<"Cell"> {
 class CalyxCell<string mnemonic, list<OpTrait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
     Cell,
-    DeclareOpInterfaceMethods<OpAsmOpInterface>
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
   ])> {}
 
 /// Base class for Calyx containers.

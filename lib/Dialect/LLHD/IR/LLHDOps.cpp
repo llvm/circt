@@ -185,7 +185,7 @@ static ParseResult parseConstOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printConstOp(OpAsmPrinter &printer, llhd::ConstOp op) {
-  printer << op.getOperationName() << " ";
+  printer << " ";
   // The custom time attribute is not printing the attribute type by default for
   // some reason. Work around by printing the attribute without type, explicitly
   // followed by the operation type
@@ -534,7 +534,7 @@ static void printEntityOp(OpAsmPrinter &printer, llhd::EntityOp op) {
   auto entityName =
       op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
           .getValue();
-  printer << op.getOperationName() << " ";
+  printer << " ";
   printer.printSymbolName(entityName);
   printer << " ";
   printArgumentList(printer, ins);
@@ -775,7 +775,7 @@ static void printProcArguments(OpAsmPrinter &p, Operation *op,
 
 static void printProcOp(OpAsmPrinter &printer, llhd::ProcOp op) {
   FunctionType type = op.getType();
-  printer << op.getOperationName() << ' ';
+  printer << ' ';
   printer.printSymbolName(op.getName());
   printProcArguments(printer, op.getOperation(), type.getInputs(),
                      op.insAttr().getInt());
@@ -956,7 +956,7 @@ static ParseResult parseRegOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printRegOp(OpAsmPrinter &printer, llhd::RegOp op) {
-  printer << op.getOperationName() << " " << op.signal();
+  printer << " " << op.signal();
   for (size_t i = 0, e = op.values().size(); i < e; ++i) {
     Optional<llhd::RegMode> mode = llhd::symbolizeRegMode(
         op.modes().getValue()[i].cast<IntegerAttr>().getInt());

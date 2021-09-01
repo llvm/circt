@@ -12,8 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 // Note that net declarations like 'wire' should not appear in an always block.
-def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
-                           NonProceduralOp, Symbol]> {
+def WireOp : SVOp<"wire", [NonProceduralOp, Symbol,
+          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a SystemVerilog Net Declaration of 'wire' type.
@@ -54,8 +54,8 @@ def WireOp : SVOp<"wire", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
   let verifier = [{ return ::verifyWireOp(*this); }];
 }
 
-def RegOp : SVOp<"reg", [DeclareOpInterfaceMethods<OpAsmOpInterface>,
-                         Symbol]> {
+def RegOp : SVOp<"reg", [Symbol,
+          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Define a new `reg` in SystemVerilog";
    let description = [{
      Declare a SystemVerilog Variable Declaration of 'reg' type.

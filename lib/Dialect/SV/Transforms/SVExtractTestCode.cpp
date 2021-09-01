@@ -182,10 +182,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
 
-  // FIXME: LLVM PR51665 shouldn't have to rebind symbol here.
-  auto moduleSymbol = b.getSymbolRefAttr(op.getName());
-  auto bindOp =
-      b.create<sv::BindOp>(op.getLoc(), b.getSymbolRefAttr(inst), moduleSymbol);
+  auto bindOp = b.create<sv::BindOp>(op.getLoc(), SymbolRefAttr::get(inst),
+                                     SymbolRefAttr::get(op.getNameAttr()));
   if (!fileName.empty())
     bindOp->setAttr(
         "output_file",
