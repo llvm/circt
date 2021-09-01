@@ -109,8 +109,8 @@ static LogicalResult emitAttr(TclOutputState &s, RootedInstancePathAttr path,
 static LogicalResult emitAttrs(TclOutputState &s, Operation *root,
                                Operation *op) {
 
-  auto rootName = FlatSymbolRefAttr::get(root->getContext(),
-                                         SymbolTable::getSymbolName(root));
+  auto rootName = FlatSymbolRefAttr::get(
+      root->getContext(), SymbolTable::getSymbolName(root).getValue());
 
   // Iterate again through the attributes, looking for instance-specific
   // attributes.
