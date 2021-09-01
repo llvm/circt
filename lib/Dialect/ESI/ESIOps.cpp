@@ -57,8 +57,7 @@ static ParseResult parseChannelBuffer(OpAsmParser &parser,
 }
 
 static void printChannelBuffer(OpAsmPrinter &p, ChannelBuffer &op) {
-  p << " " << op.clk() << ", " << op.rstn() << ", " << op.input()
-    << " ";
+  p << " " << op.clk() << ", " << op.rstn() << ", " << op.input() << " ";
   p.printAttributeWithoutType(op.options());
   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"options"});
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
@@ -90,8 +89,7 @@ static ParseResult parsePipelineStage(OpAsmParser &parser,
 }
 
 static void printPipelineStage(OpAsmPrinter &p, PipelineStage &op) {
-  p << " " << op.clk() << ", " << op.rstn() << ", " << op.input()
-    << " ";
+  p << " " << op.clk() << ", " << op.rstn() << ", " << op.input() << " ";
   p.printOptionalAttrDict(op->getAttrs());
   p << " : " << op.output().getType().cast<ChannelPort>().getInner();
 }
