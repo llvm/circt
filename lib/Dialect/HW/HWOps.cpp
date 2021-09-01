@@ -35,7 +35,7 @@ bool hw::isCombinatorial(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
-  p << "hw.constant ";
+  p << " ";
   p.printAttribute(op.valueAttr());
   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
 }
@@ -547,7 +547,7 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   auto resultTypes = fnType.getResults();
 
   // Print the operation and the function name.
-  p << op->getName() << ' ';
+  p << ' ';
   p.printSymbolName(SymbolTable::getSymbolName(op).getValue());
   if (modKind == GenMod) {
     p << ", ";
@@ -847,7 +847,7 @@ static ParseResult parseArrayCreateOp(OpAsmParser &parser,
 }
 
 static void printArrayCreateOp(OpAsmPrinter &p, ArrayCreateOp op) {
-  p << "hw.array_create ";
+  p << " ";
   p.printOperands(op.inputs());
   p << " : " << op.inputs()[0].getType();
 }
@@ -943,7 +943,7 @@ static ParseResult parseStructCreateOp(OpAsmParser &parser,
 }
 
 static void printStructCreateOp(OpAsmPrinter &printer, hw::StructCreateOp op) {
-  printer << op.getOperationName() << " (";
+  printer << " (";
   printer.printOperands(op.input());
   printer << ")";
   printer.printOptionalAttrDict(op->getAttrs());
@@ -979,7 +979,7 @@ static ParseResult parseStructExplodeOp(OpAsmParser &parser,
 
 static void printStructExplodeOp(OpAsmPrinter &printer,
                                  hw::StructExplodeOp op) {
-  printer << op.getOperationName() << " ";
+  printer << " ";
   printer.printOperand(op.input());
   printer.printOptionalAttrDict(op->getAttrs());
   printer << " : " << op.input().getType();
@@ -1024,7 +1024,7 @@ static ParseResult parseExtractOp(OpAsmParser &parser, OperationState &result) {
 /// syntax is identical.
 template <typename AggType>
 static void printExtractOp(OpAsmPrinter &printer, AggType op) {
-  printer << op.getOperationName() << " ";
+  printer << " ";
   printer.printOperand(op.input());
   printer << "[\"" << op.field() << "\"]";
   printer.printOptionalAttrDict(op->getAttrs(), {"field"});
@@ -1083,7 +1083,7 @@ static ParseResult parseStructInjectOp(OpAsmParser &parser,
 }
 
 static void printStructInjectOp(OpAsmPrinter &printer, hw::StructInjectOp op) {
-  printer << op.getOperationName() << " ";
+  printer << " ";
   printer.printOperand(op.input());
   printer << "[\"" << op.field() << "\"], ";
   printer.printOperand(op.newValue());
@@ -1127,7 +1127,7 @@ static ParseResult parseUnionCreateOp(OpAsmParser &parser,
 }
 
 static void printUnionCreateOp(OpAsmPrinter &printer, hw::UnionCreateOp op) {
-  printer << op.getOperationName() << " \"" << op.field() << "\", ";
+  printer << " \"" << op.field() << "\", ";
   printer.printOperand(op.input());
   printer.printOptionalAttrDict(op->getAttrs(), {"field"});
   printer << " : " << op.getType();

@@ -117,7 +117,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c1_1 = constant 1 : i1
     calyx.wires {
-      // expected-error @+1 {{'calyx.group' op with name: Group1 is unused in the control execution schedule}}
+      // expected-error @+1 {{'calyx.group' op with name: "Group1" is unused in the control execution schedule}}
       calyx.group @Group1 {
         calyx.group_done %c1_1 : i1
       }

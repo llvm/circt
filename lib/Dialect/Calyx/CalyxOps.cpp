@@ -279,7 +279,7 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto componentName =
       op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
           .getValue();
-  p << "calyx.component ";
+  p << " ";
   p.printSymbolName(componentName);
 
   auto ports = getComponentPortInfo(op);

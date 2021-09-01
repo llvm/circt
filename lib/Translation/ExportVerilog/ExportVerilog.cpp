@@ -2892,7 +2892,8 @@ void ModuleEmitter::emitBind(BindOp op) {
   verifyModuleName(op, childVerilogName);
 
   indent() << "bind " << parentVerilogName.getValue() << " "
-           << childVerilogName.getValue() << ' ' << inst.getName() << " (";
+           << childVerilogName.getValue() << ' ' << inst.getName().getValue()
+           << " (";
 
   SmallVector<ModulePortInfo> parentPortInfo = parentMod.getPorts();
   SmallVector<ModulePortInfo> childPortInfo = getModulePortInfo(childMod);

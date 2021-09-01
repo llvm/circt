@@ -159,7 +159,7 @@ void HWLegalizeNamesPass::runOnModule(hw::HWModuleOp module) {
   // Rename the instances, regs, and wires.
   for (auto &op : *module.getBodyBlock()) {
     if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
-      auto newName = nameResolver.getLegalName(instanceOp.getNameAttr());
+      auto newName = nameResolver.getLegalName(instanceOp.getName());
       if (!newName.empty()) {
         instanceOp.setName(StringAttr::get(&getContext(), newName));
         anythingChanged = true;
