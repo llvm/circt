@@ -897,11 +897,8 @@ static void getBinOpAsmResultNames(Operation *op,
   unsigned numResults = op->getNumResults();
   assert(numResults == 3);
   SmallVector<StringRef> portNames;
-  SmallVector<SmallString<8>> inNames;
-  for (size_t i = 0, e = numResults - 1; i != e; ++i) {
-    inNames.emplace_back("in" + std::to_string(i));
-    portNames.push_back(inNames.back());
-  }
+  portNames.push_back("left");
+  portNames.push_back("right");
   portNames.push_back("out");
   getCellAsmResultNames(setNameFn, op, portNames);
 }

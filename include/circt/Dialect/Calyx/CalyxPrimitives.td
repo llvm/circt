@@ -117,7 +117,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
 }
 
 class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
-  CalyxPrimitive<"lib_" # mnemonic, traits> {
+  CalyxPrimitive<"std_" # mnemonic, traits> {
 
   let summary = "Defines an operation which maps to a Calyx library primitive";
   let description = [{
@@ -135,32 +135,32 @@ class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
   ];
 }
 
-class BoolBinLibOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+class BoolBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
     SameTypeConstraint<"left", "right">
   ]> {
   let results = (outs AnyType:$left, AnyType:$right, I1:$out);
 }
 
-def LtLibOp  : BoolBinLibOp<"lt"> {}
-def GtLibOp  : BoolBinLibOp<"gt"> {}
-def EqLibOp  : BoolBinLibOp<"eq"> {}
-def NeqLibOp : BoolBinLibOp<"neq"> {}
-def GeLibOp  : BoolBinLibOp<"ge"> {}
-def LeLibOp  : BoolBinLibOp<"le"> {}
+def LtLibOp  : BoolBinaryLibraryOp<"lt"> {}
+def GtLibOp  : BoolBinaryLibraryOp<"gt"> {}
+def EqLibOp  : BoolBinaryLibraryOp<"eq"> {}
+def NeqLibOp : BoolBinaryLibraryOp<"neq"> {}
+def GeLibOp  : BoolBinaryLibraryOp<"ge"> {}
+def LeLibOp  : BoolBinaryLibraryOp<"le"> {}
 
-class ArithBinLibOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+class ArithBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
     SameTypeConstraint<"left", "right">,
     SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs AnyType:$left, AnyType:$right, AnyType:$out);
 }
 
-def AddLibOp  : ArithBinLibOp<"add"> {}
-def SubLibOp  : ArithBinLibOp<"sub"> {}
-def ShruLibOp : ArithBinLibOp<"shru"> {}
-def ShrLibOp  : ArithBinLibOp<"shr"> {}
-def ShlLibOp  : ArithBinLibOp<"shl"> {}
-def AndLibOp  : ArithBinLibOp<"and"> {}
-def NotLibOp  : ArithBinLibOp<"not"> {}
-def OrLibOp   : ArithBinLibOp<"or"> {}
-def XorLibOp  : ArithBinLibOp<"xor"> {}
+def AddLibOp  : ArithBinaryLibraryOp<"add"> {}
+def SubLibOp  : ArithBinaryLibraryOp<"sub"> {}
+def ShruLibOp : ArithBinaryLibraryOp<"shru"> {}
+def ShrLibOp  : ArithBinaryLibraryOp<"shr"> {}
+def ShlLibOp  : ArithBinaryLibraryOp<"shl"> {}
+def AndLibOp  : ArithBinaryLibraryOp<"and"> {}
+def NotLibOp  : ArithBinaryLibraryOp<"not"> {}
+def OrLibOp   : ArithBinaryLibraryOp<"or"> {}
+def XorLibOp  : ArithBinaryLibraryOp<"xor"> {}

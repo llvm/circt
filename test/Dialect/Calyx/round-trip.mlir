@@ -20,15 +20,15 @@ calyx.program {
     // CHECK-NEXT: %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i8, i1, i1, i1, i8, i1
     // CHECK-NEXT: %c1.in, %c1.go, %c1.clk, %c1.reset, %c1.out, %c1.done = calyx.instance "c1" @A : i8, i1, i1, i1, i8, i1
     // CHECK-NEXT: %c2.in, %c2.go, %c2.clk, %c2.reset, %c2.out, %c2.done = calyx.instance "c2" @B : i8, i1, i1, i1, i1, i1
-    // CHECK-NEXT: %adder.in0, %adder.in1, %adder.out = calyx.lib_add "adder" : i8, i8, i8
-    // CHECK-NEXT: %gt.in0, %gt.in1, %gt.out = calyx.lib_gt "gt" : i8, i8, i1
+    // CHECK-NEXT: %adder.left, %adder.right, %adder.out = calyx.std_add "adder" : i8, i8, i8
+    // CHECK-NEXT: %gt.left, %gt.right, %gt.out = calyx.std_gt "gt" : i8, i8, i1
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i8, i1
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i8, i1, i1, i1, i8, i1
     %c1.in, %c1.go, %c1.clk, %c1.reset, %c1.out, %c1.done = calyx.instance "c1" @A : i8, i1, i1, i1, i8, i1
     %c2.in, %c2.go, %c2.clk, %c2.reset, %c2.out, %c2.done = calyx.instance "c2" @B : i8, i1, i1, i1, i1, i1
-    %adder.in0, %adder.in1, %adder.out = calyx.lib_add "adder" : i8, i8, i8
-    %gt.in0, %gt.in1, %gt.out = calyx.lib_gt "gt" : i8, i8, i1
+    %adder.left, %adder.right, %adder.out = calyx.std_add "adder" : i8, i8, i8
+    %gt.left, %gt.right, %gt.out = calyx.std_gt "gt" : i8, i8, i1
     %c1_i1 = constant 1 : i1
 
     calyx.wires {
