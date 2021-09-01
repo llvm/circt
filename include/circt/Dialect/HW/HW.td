@@ -37,6 +37,7 @@ def HWDialect : Dialect {
   }];
 }
 
+include "circt/Dialect/HW/HWTypesImpl.td"
 include "circt/Dialect/HW/HWTypes.td"
 
 // Base class for the operation in this dialect.

@@ -39,11 +39,6 @@ def LLHD_Dialect : Dialect {
 // Import HW Types
 //===----------------------------------------------------------------------===//
 
-def HWDialect : Dialect {
-  let name = "hw";
-  let summary = "Types of the hardware dialect used by LLHD";
-}
-
 include "circt/Dialect/HW/HWTypes.td"
 
 //===----------------------------------------------------------------------===//
