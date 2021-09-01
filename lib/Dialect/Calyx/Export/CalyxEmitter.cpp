@@ -54,7 +54,7 @@ public:
   llvm::SmallSet<StringRef, 4> getLibraryNames(ProgramOp program) {
     program.walk([&](ComponentOp component) {
       for (auto &op : *component.getBody()) {
-        if (!op.hasTrait<Cell>() || isa<InstanceOp>(op))
+        if (!isa<CellInterface>(op) || isa<InstanceOp>(op))
           // It is not a primitive.
           continue;
         usedLibraries.insert(getLibraryFor(&op));
