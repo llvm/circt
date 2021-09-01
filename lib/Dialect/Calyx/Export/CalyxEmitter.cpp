@@ -24,10 +24,6 @@
 using namespace circt;
 using namespace calyx;
 
-//===----------------------------------------------------------------------===//
-// Emitter
-//===----------------------------------------------------------------------===//
-
 namespace {
 
 static constexpr std::string_view LSquare() { return "["; }
@@ -48,6 +44,61 @@ static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 
+/// Maintain which imports should be included for a given program.
+struct ImportTracker {
+public:
+  /// Returns the list of used imports for this program.
+  SmallVector<StringRef> getLibraryNames(ProgramOp program) {
+    program.walk([&](ComponentOp component) {
+      for (auto &op : *component.getBody()) {
+        if (!op.hasTrait<Cell>() || isa<InstanceOp>(op))
+          // It is not a primitive.
+          continue;
+        appendIfUnique(&op);
+      }
+    });
+    return usedLibraries;
+  }
+
+private:
+  /// Appends the library for this operation if it is not already included.
+  void appendIfUnique(Operation *op) {
+    StringRef name = op->getName().getStringRef();
+
+    assert(name.size() > 6 &&
+           "Operation names should be prefixed with \"calyx.\".");
+    name = name.drop_front(6);
+
+    auto it = operationToLibrary.find(name);
+    assert(it != operationToLibrary.end() &&
+           "The mapping between primitive operations and imports needs be "
+           "updated.");
+
+    StringRef opLibrary = it->second;
+    if (llvm::any_of(usedLibraries,
+                     [&](auto library) { return library == opLibrary; }))
+      // This library is already indicated as used.
+      return;
+
+    usedLibraries.push_back(opLibrary);
+  }
+
+  /// A mapping from operation name to the library under which it is housed.
+  /// See: https://github.com/cucapra/calyx/tree/master/primitives
+  const llvm::StringMap<StringRef> operationToLibrary{
+      std::pair("register", "core"),
+      std::pair("memory", "core"),
+  };
+
+  /// Maintains a list of used imports throughout the life time of this
+  /// tracker.
+  SmallVector<StringRef, 4> usedLibraries;
+};
+
+//===----------------------------------------------------------------------===//
+// Emitter
+//===----------------------------------------------------------------------===//
+
 /// An emitter for Calyx dialect operations to .futil output.
 struct Emitter {
   Emitter(llvm::raw_ostream &os) : os(os) {}
@@ -65,14 +116,14 @@ struct Emitter {
   void emitProgram(ProgramOp op);
 
   /// Import emission.
-  /// TODO(Calyx): Only import a library if a primitive is used from it.
-  void emitAllImports() {
-    auto emitImport = [&](StringRef path) {
-      os << "import " << delimiter() << path << delimiter() << semicolonEndL();
+  void emitImports(ProgramOp op) {
+    auto emitImport = [&](StringRef library) {
+      os << "import " << delimiter() << "primitives/" << library << period()
+         << "futil" << delimiter() << semicolonEndL();
     };
-    emitImport("primitives/core.futil");
-    emitImport("primitives/binary_operators.futil");
-    emitImport("primitives/math.futil");
+
+    for (StringRef library : importTracker.getLibraryNames(op))
+      emitImport(library);
   }
 
   // Component emission
@@ -104,6 +155,9 @@ struct Emitter {
   void emitMemory(MemoryOp memory);
 
 private:
+  /// Used to track which imports are required for this program.
+  ImportTracker importTracker;
+
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
     encounteredError = true;
@@ -439,10 +493,11 @@ void Emitter::emitControl(ControlOp control) {
 mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
                                               llvm::raw_ostream &os) {
   Emitter emitter(os);
-  emitter.emitAllImports();
   for (auto &op : *module.getBody()) {
-    if (auto programOp = dyn_cast<ProgramOp>(op))
-      emitter.emitProgram(programOp);
+    op.walk([&](ProgramOp program) {
+      emitter.emitImports(program);
+      emitter.emitProgram(program);
+    });
   }
   return emitter.finalize();
 }
