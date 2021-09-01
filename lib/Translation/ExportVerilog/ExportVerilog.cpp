@@ -571,7 +571,11 @@ public:
   raw_ostream &indent() { return os.indent(state.currentIndent); }
 
   void addIndent() { state.currentIndent += INDENT_AMOUNT; }
-  void reduceIndent() { state.currentIndent -= INDENT_AMOUNT; }
+  void reduceIndent() {
+    assert(state.currentIndent >= INDENT_AMOUNT &&
+           "Unintended indent wrap-around.");
+    state.currentIndent -= INDENT_AMOUNT;
+  }
 
   /// If we have location information for any of the specified operations,
   /// aggregate it together and print a pretty comment specifying where the
