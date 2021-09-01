@@ -73,8 +73,8 @@ private:
 
     auto it = operationToLibrary.find(name);
     assert(it != operationToLibrary.end() &&
-           "The mapping between primitive operations and imports needs be "
-           "updated.");
+           "Operation not found. The mapping between primitive operations and "
+           "libraries needs be updated for the Calyx Emitter.");
 
     StringRef opLibrary = it->second;
     if (llvm::any_of(usedLibraries,
