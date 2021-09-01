@@ -11,15 +11,15 @@ hw.module @leaf() {
                                         @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3> > } : () -> ()
 }
 
-// TCL-LABEL: proc realTop_config
+// TCL-LABEL: proc shallow_config
 hw.module @shallow() {
   hw.instance "leaf" @leaf() : () -> ()
-  // TCL: set_location_assignment M20K_X8_Y19_N1 -to $parent|fakeTop|foo3|memBank2
+  // TCL: set_location_assignment M20K_X8_Y19_N1 -to $parent|leaf|foo|memBank2
 }
 
-// TCL-LABEL: proc forRealsiesTop_config
+// TCL-LABEL: proc deeper_config
 hw.module @deeper() {
   hw.instance "branch" @shallow() : () -> ()
   hw.instance "leaf" @leaf() : () -> ()
-  // TCL: set_location_assignment M20K_X15_Y9_N3 -to $parent|realTop|fakeTop|foo3|memBank2
+  // TCL: set_location_assignment M20K_X15_Y9_N3 -to $parent|branch|leaf|foo|memBank2
 }

@@ -28,14 +28,16 @@ static Attribute parseRootedInstancePath(MLIRContext *ctxt,
   if (p.parseAttribute(root) || p.parseLSquare())
     return Attribute();
   SmallVector<StringAttr, 16> path;
-  do {
-    StringAttr instName;
-    if (p.parseAttribute(instName))
+  if (p.parseOptionalRSquare()) {
+    do {
+      StringAttr instName;
+      if (p.parseAttribute(instName))
+        return Attribute();
+      path.push_back(instName);
+    } while (!p.parseOptionalComma());
+    if (p.parseRSquare())
       return Attribute();
-    path.push_back(instName);
-  } while (!p.parseOptionalComma());
-  if (p.parseRSquare())
-    return Attribute();
+  }
   return RootedInstancePathAttr::get(ctxt, root, path);
 }
 
