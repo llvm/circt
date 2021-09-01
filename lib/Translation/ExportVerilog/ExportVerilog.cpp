@@ -355,7 +355,7 @@ enum VerilogPrecedence {
   Unary,           // Unary operators like ~foo
   Multiply,        // * , / , %
   Addition,        // + , -
-  Shift,           // << , >>
+  Shift,           // << , >>, <<<, >>>
   Comparison,      // > , >= , < , <=
   Equality,        // == , !=
   And,             // &
@@ -817,6 +817,10 @@ private:
     /// "self determined" width.  This means that we can omit explicit zero
     /// extensions from it.
     EB_RHS_UnsignedWithSelfDeterminedWidth = 0x4,
+
+    /// This flag indicates that the result should be wrapped in a $signed(x)
+    /// expression to force the result to signed.
+    EB_ForceResultSigned = 0x8,
   };
 
   /// Emit a binary expression.  The "emitBinaryFlags" are a bitset from
@@ -887,8 +891,8 @@ private:
   SubExprInfo visitComb(ShrSOp op) {
     // >>> is only an arithmetic shift right when both operands are signed.
     // Otherwise it does a logical shift.
-    return emitBinary(op, Shift, ">>>",
-                      EB_RequireSignedOperands |
+    return emitBinary(op, LowestPrecedence, ">>>",
+                      EB_RequireSignedOperands | EB_ForceResultSigned |
                           EB_RHS_UnsignedWithSelfDeterminedWidth);
   }
   SubExprInfo visitComb(AndOp op) {
@@ -942,6 +946,8 @@ private:
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
                                     unsigned emitBinaryFlags) {
+  if (emitBinaryFlags & EB_ForceResultSigned)
+    os << "$signed(";
   auto operandSignReq =
       SubExprSignRequirement(emitBinaryFlags & EB_OperandSignRequirementMask);
   auto lhsInfo =
@@ -970,6 +976,11 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   SubExprSignResult signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
     signedness = IsSigned;
+
+  if (emitBinaryFlags & EB_ForceResultSigned) {
+    os << ')';
+    signedness = IsSigned;
+  }
 
   return {prec, signedness};
 }
