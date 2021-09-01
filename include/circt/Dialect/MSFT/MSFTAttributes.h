@@ -20,6 +20,7 @@
 
 namespace circt {
 namespace msft {
+/// Represents a path through the instance hierarchy.
 using InstanceIDAttr = mlir::SymbolRefAttr;
 using SwitchInstanceCase = std::pair<InstanceIDAttr, Attribute>;
 } // namespace msft
