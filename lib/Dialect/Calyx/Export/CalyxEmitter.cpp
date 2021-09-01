@@ -223,6 +223,9 @@ private:
           .template Case<SeqOp>([&](auto op) {
             emitCalyxSection("seq", [&]() { emitCalyxControl(op); });
           })
+          .template Case<ParOp>([&](auto op) {
+            emitCalyxSection("par", [&]() { emitCalyxControl(op); });
+          })
           .template Case<IfOp, WhileOp>([&](auto op) {
             indent() << (isa<IfOp>(op) ? "if " : "while ");
             emitValue(op.cond(), /*isIndented=*/false);

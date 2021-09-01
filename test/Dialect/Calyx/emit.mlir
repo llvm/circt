@@ -57,6 +57,10 @@ calyx.program {
       calyx.assign %c0.go = %c1.out : i1
     }
     // CHECK-LABEL: control {
+    // CHECK-NEXT:    par {
+    // CHECK-NEXT:      Group1;
+    // CHECK-NEXT:      Group2;
+    // CHECK-NEXT:    }
     // CHECK-NEXT:    seq {
     // CHECK-NEXT:      Group1;
     // CHECK-NEXT:      while c1.in with Group2 {
@@ -71,6 +75,10 @@ calyx.program {
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
     calyx.control {
+      calyx.par {
+        calyx.enable @Group1
+        calyx.enable @Group2
+      }
       calyx.seq {
         calyx.enable @Group1
         calyx.while %c1.in with @Group2 {

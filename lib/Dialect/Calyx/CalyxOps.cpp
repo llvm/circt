@@ -78,7 +78,7 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 
 /// Verifies the body of a ControlLikeOp.
 static LogicalResult verifyControlBody(Operation *op) {
-  if (isa<SeqOp>(op))
+  if (isa<SeqOp, ParOp>(op))
     // This does not apply to sequential and parallel regions.
     return success();
 
@@ -155,7 +155,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
   // Operations that may parent other ControlLike operations.
   auto isValidParent = [](Operation *operation) {
-    return isa<ControlOp, SeqOp, IfOp, WhileOp>(operation);
+    return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp>(operation);
   };
   if (!isValidParent(parent))
     return op->emitOpError()
@@ -168,7 +168,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
