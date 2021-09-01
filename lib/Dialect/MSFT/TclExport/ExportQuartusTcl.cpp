@@ -25,6 +25,7 @@ using namespace msft;
 
 // TODO: Currently assumes Stratix 10 and QuartusPro. Make more general.
 
+/*
 namespace {
 /// Utility struct to assist in output and track other relevent state which are
 /// not specific to the entity hierarchy (global WRT to the entity hierarchy).
@@ -211,25 +212,25 @@ static LogicalResult exportTcl(Entity &entity, Operation *op) {
   });
   return failure(result.wasInterrupted());
 }
-
+*/
 /// Write out all the relevant tcl commands. Create one 'proc' per module (since
 /// we don't know which one will be the 'top' module). Said procedure takes the
 /// parent entity name since we don't assume that the created module is the top
 /// level for the entire design.
 LogicalResult circt::msft::exportQuartusTcl(ModuleOp module,
                                             llvm::raw_ostream &os) {
-  TclOutputState state(os);
+  // TclOutputState state(os);
 
-  for (auto &op : module.getBody()->getOperations()) {
-    auto hwMod = dyn_cast<HWModuleOp>(op);
-    if (!hwMod)
-      continue;
-    os << "proc " << hwMod.getName() << "_config { parent } {\n";
-    Entity entity(state);
-    if (failed(exportTcl(entity, hwMod)))
-      return failure();
-    os << "}\n\n";
-  }
+  // for (auto &op : module.getBody()->getOperations()) {
+  //   auto hwMod = dyn_cast<HWModuleOp>(op);
+  //   if (!hwMod)
+  //     continue;
+  //   os << "proc " << hwMod.getName() << "_config { parent } {\n";
+  //   Entity entity(state);
+  //   if (failed(exportTcl(entity, hwMod)))
+  //     return failure();
+  //   os << "}\n\n";
+  // }
   return success();
 }
 
