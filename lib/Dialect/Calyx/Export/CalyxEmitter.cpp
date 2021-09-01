@@ -44,10 +44,12 @@ static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 
-/// Maintain which imports should be included for a given program.
+/// A tracker to determine which libraries should be imported for a given
+/// program.
 struct ImportTracker {
 public:
-  /// Returns the list of used imports for this program.
+  /// Returns the list of library names used for in this program.
+  /// E.g. if `primitives/core.futil` is used, returns { "core" }.
   SmallVector<StringRef> getLibraryNames(ProgramOp program) {
     program.walk([&](ComponentOp component) {
       for (auto &op : *component.getBody()) {
@@ -90,7 +92,7 @@ private:
       std::pair("memory", "core"),
   };
 
-  /// Maintains a list of used imports throughout the life time of this
+  /// Maintains a unique list of libraries used throughout the lifetime of the
   /// tracker.
   SmallVector<StringRef, 4> usedLibraries;
 };
@@ -118,6 +120,8 @@ struct Emitter {
   /// Import emission.
   void emitImports(ProgramOp op) {
     auto emitImport = [&](StringRef library) {
+      // Libraries share a common relative path:
+      //   primitives/<library-name>.futil
       os << "import " << delimiter() << "primitives/" << library << period()
          << "futil" << delimiter() << semicolonEndL();
     };
