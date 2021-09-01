@@ -79,6 +79,12 @@ struct LoweringOptions {
   /// declarations, emitting top level wire and reg's instead.
   bool disallowLocalVariables = false;
 
+  /// If true, verification statements like `assert`, `assume`, and `cover` will
+  /// always be emitted with a label. If the statement has no label in the IR, a
+  /// generic one will be created. Some EDA tools require verification
+  /// statements to be labeled.
+  bool enforceVerifLabels = false;
+
   /// This is the target width of lines in an emitted verilog source file in
   /// columns.
   enum { DEFAULT_LINE_LENGTH = 90 };

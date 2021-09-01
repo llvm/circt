@@ -17,6 +17,7 @@
 #include "circt/Support/LoweringOptions.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace comb;
@@ -399,21 +400,22 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
     // (e.g. letting a temporary take the name of an unvisited wire). Adding
     // them now ensures any temporary generated will not use one of the names
     // previously declared.
-    if (auto instance = dyn_cast<InstanceOp>(op)) {
-      // Anchor return values to wires early
-      lowerInstanceResults(instance, cache);
-      // Anchor ports of bound instances
-      if (instance->hasAttr("doNotPrint"))
-        lowerBoundInstance(instance, cache);
-      names.addLegalName(&op, instance.instanceName(), &op);
-    } else if (auto wire = dyn_cast<WireOp>(op))
-      names.addLegalName(op.getResult(0), wire.name(), &op);
-    else if (auto regOp = dyn_cast<RegOp>(op))
-      names.addLegalName(op.getResult(0), regOp.name(), &op);
-    else if (auto localParamOp = dyn_cast<LocalParamOp>(op))
-      names.addLegalName(op.getResult(0), localParamOp.name(), &op);
-    else if (auto interfaceInstanceOp = dyn_cast<InterfaceInstanceOp>(op))
-      names.addLegalName(op.getResult(0), interfaceInstanceOp.name(), &op);
+    TypeSwitch<Operation *>(&op)
+        .Case<InstanceOp>([&](auto op) {
+          // Anchor return values to wires early
+          lowerInstanceResults(op, cache);
+          // Anchor ports of bound instances
+          if (op->hasAttr("doNotPrint"))
+            lowerBoundInstance(op, cache);
+          names.addLegalName(op, op.instanceName(), op);
+        })
+        .Case<WireOp, RegOp, LocalParamOp, InterfaceInstanceOp>(
+            [&](auto op) { names.addLegalName(op.getResult(), op.name(), op); })
+        .Case<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
+              AssumeConcurrentOp, CoverConcurrentOp>([&](auto op) {
+          if (!op.label().empty())
+            names.addLegalName(op, op.label(), op);
+        });
 
     // Force any expression used in the event control of an always process to be
     // a trivial wire, if the corresponding option is set.
