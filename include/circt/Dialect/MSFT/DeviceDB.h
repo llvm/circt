@@ -52,7 +52,7 @@ public:
   /// Using the operation attributes, add the proper placements to the database.
   /// Return the number of placements which weren't added due to conflicts.
   size_t addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *);
-  /// Walk the entire instance hierarchy adding placements for the top module.
+  /// Walk the entire design adding placements root at the top module.
   size_t addDesignPlacements();
 
   /// Lookup the instance at a particular location.

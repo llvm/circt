@@ -34,6 +34,7 @@ LogicalResult DeviceDB::addPlacement(PhysLocationAttr loc,
   cell = inst;
   return success();
 }
+
 /// Using the operation attributes, add the proper placements to the database.
 /// Return the number of placements which weren't added due to conflicts.
 size_t DeviceDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
@@ -46,13 +47,18 @@ size_t DeviceDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
         .Case([&](SwitchInstanceAttr instSwitch) {
           for (auto caseAttr : instSwitch.getCases()) {
             RootedInstancePathAttr instPath = caseAttr.getInst();
+
+            // Filter out all paths which aren't related to this DB.
             if (instPath.getRootModule() != rootMod)
               continue;
+
+            // If we recognize the type, validate and add it.
             if (auto loc = caseAttr.getAttr().dyn_cast<PhysLocationAttr>()) {
               if (!attrName.startswith("loc:")) {
                 op->emitOpError(
                     "PhysLoc attributes must have names starting with 'loc'");
                 ++numFailed;
+                continue;
               }
               LogicalResult added = addPlacement(
                   loc, PlacedInstance{instPath, attrName.substr(4), op});
@@ -74,7 +80,8 @@ size_t DeviceDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
   }
   return numFailed;
 }
-/// Walk the entire instance hierarchy adding placements.
+
+/// Walk the entire design adding placements.
 size_t DeviceDB::addDesignPlacements() {
   size_t failed = 0;
   FlatSymbolRefAttr rootModule = FlatSymbolRefAttr::get(top);
@@ -94,23 +101,33 @@ DeviceDB::getInstanceAt(PhysLocationAttr loc) {
   return instF->getSecond();
 }
 
+/// Walker for placements.
 void DeviceDB::walkPlacements(
     function_ref<void(PhysLocationAttr, PlacedInstance)> callback) {
+  // X loop.
   for (auto colF = placements.begin(), colE = placements.end(); colF != colE;
        ++colF) {
     size_t x = colF->getFirst();
     DimYMap yMap = colF->getSecond();
+
+    // Y loop.
     for (auto rowF = yMap.begin(), rowE = yMap.end(); rowF != rowE; ++rowF) {
       size_t y = rowF->getFirst();
       DimNumMap numMap = rowF->getSecond();
+
+      // Num loop.
       for (auto numF = numMap.begin(), numE = numMap.end(); numF != numE;
            ++numF) {
         size_t num = numF->getFirst();
         DimDevType devMap = numF->getSecond();
+
+        // DevType loop.
         for (auto devF = devMap.begin(), devE = devMap.end(); devF != devE;
              ++devF) {
           DeviceType devtype = devF->getFirst();
           PlacedInstance inst = devF->getSecond();
+
+          // Marshall and run the callback.
           PhysLocationAttr loc = PhysLocationAttr::get(
               ctxt, DeviceTypeAttr::get(ctxt, devtype), x, y, num);
           callback(loc, inst);
