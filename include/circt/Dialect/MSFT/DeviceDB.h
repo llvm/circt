@@ -32,7 +32,9 @@ namespace msft {
 /// long as it is maintained along with the transformations.
 class DeviceDB {
 public:
-  DeviceDB(MLIRContext *ctxt);
+  /// Create a DB treating 'top' as the root module.
+  DeviceDB(MLIRContext *ctxt, Operation *top);
+
   // TODO: Add calls to model the device primitive locations.
 
   /// In addition to an Operation which is the instance at the level being
@@ -46,12 +48,12 @@ public:
 
   /// Assign an instance to a primitive. Return false if another instance is
   /// already placed at that location.
-  bool addPlacement(PhysLocationAttr, PlacedInstance);
+  LogicalResult addPlacement(PhysLocationAttr, PlacedInstance);
   /// Using the operation attributes, add the proper placements to the database.
   /// Return the number of placements which weren't added due to conflicts.
   size_t addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *);
-  /// Walk the entire instance hierarchy with 'top' as the root module.
-  size_t addDesignPlacements(mlir::Operation *top);
+  /// Walk the entire instance hierarchy adding placements for the top module.
+  size_t addDesignPlacements();
 
   /// Lookup the instance at a particular location.
   Optional<PlacedInstance> getInstanceAt(PhysLocationAttr);
@@ -61,6 +63,7 @@ public:
 
 private:
   MLIRContext *ctxt;
+  Operation *top;
 
   using DimDevType = DenseMap<DeviceType, PlacedInstance>;
   using DimNumMap = DenseMap<size_t, DimDevType>;

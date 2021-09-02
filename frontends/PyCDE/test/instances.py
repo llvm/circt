@@ -81,6 +81,7 @@ t.walk_instances("pycde_Test", place_inst)
 instance_attrs = pycde.AppIDIndex()
 loc = attrs.placement(["memory", "bank"], msft.M20K, 15, 25, 0)
 instance_attrs.lookup(pycde.AppID("pycde_UnParameterized")).add_attribute(loc)
+loc = attrs.placement(["memory", "bank"], msft.DSP, 39, 25, 0)
 instance_attrs.lookup(pycde.AppID("pycde_UnParameterized",
                                   "pycde_Nothing")).add_attribute(loc)
 t.walk_instances("pycde_Test", instance_attrs.apply_attributes_visitor)
@@ -97,8 +98,8 @@ print("=== Tcl")
 
 # CHECK-LABEL: proc pycde_Test_config { parent }
 # CHECK-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|dsp_inst
-# CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|memory|bank
-# CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|memory|bank
-# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
 # CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|pycde_UnParameterized_0|memory|bank
+# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
+# CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|memory|bank
+# CHECK-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|memory|bank
 t.print_tcl("pycde_Test")

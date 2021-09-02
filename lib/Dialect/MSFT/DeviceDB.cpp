@@ -20,22 +20,24 @@ using namespace msft;
 // not an immediate goal.
 //===----------------------------------------------------------------------===//
 
-DeviceDB::DeviceDB(MLIRContext *ctxt) : ctxt(ctxt) {}
+DeviceDB::DeviceDB(MLIRContext *ctxt, Operation *top) : ctxt(ctxt), top(top) {}
 
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
-bool DeviceDB::addPlacement(PhysLocationAttr loc, PlacedInstance inst) {
+LogicalResult DeviceDB::addPlacement(PhysLocationAttr loc,
+                                     PlacedInstance inst) {
   PlacedInstance &cell = placements[loc.getX()][loc.getY()][loc.getNum()]
                                    [loc.getDevType().getValue()];
   if (cell.op != nullptr)
-    return false;
+    return inst.op->emitOpError("Could not apply placement ")
+           << loc << ". Position already occupied by " << cell.op << ".";
   cell = inst;
-  return true;
+  return success();
 }
 /// Using the operation attributes, add the proper placements to the database.
 /// Return the number of placements which weren't added due to conflicts.
 size_t DeviceDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
-  size_t failed = 0;
+  size_t numFailed = 0;
   for (NamedAttribute attr : op->getAttrs()) {
     StringRef attrName = attr.first;
     llvm::TypeSwitch<Attribute>(attr.second)
@@ -50,19 +52,19 @@ size_t DeviceDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
               if (!attrName.startswith("loc:")) {
                 op->emitOpError(
                     "PhysLoc attributes must have names starting with 'loc'");
-                ++failed;
+                ++numFailed;
               }
-              bool added = addPlacement(
+              LogicalResult added = addPlacement(
                   loc, PlacedInstance{instPath, attrName.substr(4), op});
-              if (!added)
-                ++failed;
+              if (failed(added))
+                ++numFailed;
             }
           }
         })
 
         // Physloc outside of a switch instance is not valid.
-        .Case([op, &failed](PhysLocationAttr) {
-          ++failed;
+        .Case([op, &numFailed](PhysLocationAttr) {
+          ++numFailed;
           op->emitOpError("PhysLoc attribute must be inside an "
                           "instance switch attribute");
         })
@@ -70,10 +72,10 @@ size_t DeviceDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
         // Ignore attributes we don't understand.
         .Default([](Attribute) {});
   }
-  return failed;
+  return numFailed;
 }
-/// Walk the entire instance hierarchy with 'top' as the root module.
-size_t DeviceDB::addDesignPlacements(mlir::Operation *top) {
+/// Walk the entire instance hierarchy adding placements.
+size_t DeviceDB::addDesignPlacements() {
   size_t failed = 0;
   FlatSymbolRefAttr rootModule = FlatSymbolRefAttr::get(top);
   auto mlirModule = top->getParentOfType<mlir::ModuleOp>();
