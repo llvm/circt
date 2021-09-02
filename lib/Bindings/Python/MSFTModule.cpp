@@ -49,11 +49,6 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
 
   m.doc() = "MSFT dialect Python native extension";
 
-  m.def("locate", &mlirMSFTAddPhysLocationAttr,
-        "Attach a physical location to an op's entity.",
-        py::arg("op_to_locate"), py::arg("entity_within"), py::arg("devtype"),
-        py::arg("x"), py::arg("y"), py::arg("num"));
-
   m.def("get_instance", circtMSFTGetInstance, py::arg("root"), py::arg("path"));
 
   py::enum_<DeviceType>(m, "DeviceType")
@@ -61,7 +56,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .value("DSP", DeviceType::DSP)
       .export_values();
 
-  m.def("export_tcl", [](MlirModule mod, py::object fileObject) {
+  m.def("export_tcl", [](MlirOperation mod, py::object fileObject) {
     circt::python::PyFileAccumulator accum(fileObject, false);
     py::gil_scoped_release();
     mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
@@ -100,6 +95,19 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly("num", [](MlirAttribute self) {
         return (DeviceType)circtMSFTPhysLocationAttrGetNum(self);
       });
+
+  mlir_attribute_subclass(m, "RootedInstancePathAttr",
+                          circtMSFTAttributeIsARootedInstancePathAttribute)
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirAttribute rootSymbol,
+             std::vector<MlirAttribute> instancePath, MlirContext ctxt) {
+            return cls(circtMSFTRootedInstancePathAttrGet(
+                ctxt, rootSymbol, instancePath.data(), instancePath.size()));
+          },
+          "Create an rooted instance path attribute", py::arg(),
+          py::arg("root_symbol"), py::arg("instance_path"),
+          py::arg("ctxt") = py::none());
 
   mlir_attribute_subclass(m, "SwitchInstanceAttr",
                           circtMSFTAttributeIsASwitchInstanceAttribute)
