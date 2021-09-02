@@ -273,7 +273,7 @@ def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects]> {
   }]>];
 }
 
-def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
+def AllocaOp :HIR_Op<"alloca",[]> {
   let summary = "Instantiate new memory.";
 
   let description = [{
@@ -289,7 +289,7 @@ def AllocaOp :HIR_Op<"alloca",[NoSideEffect]> {
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def BusInstantiateOp :HIR_Op<"bus.instantiate",[NoSideEffect]> {
+def BusInstantiateOp :HIR_Op<"bus.instantiate",[]> {
   let summary = "Instantiate new bus.";
 
   let description = [{ Instantiate a new !hir.bus or tensor<...x!hir.bus>
@@ -304,7 +304,7 @@ def BusInstantiateOp :HIR_Op<"bus.instantiate",[NoSideEffect]> {
   let assemblyFormat = [{custom<WithSSANames>(attr-dict) `:` type($res) }];
 }
 
-def LoadOp : HIR_Op<"load", [NoSideEffect, AttrSizedOperandSegments]> {
+def LoadOp : HIR_Op<"load", [AttrSizedOperandSegments]> {
   let summary = "read from a memory.";
   let description = [{
     This Op reads from a memory interface. 
@@ -383,7 +383,7 @@ def SendOp : HIR_Op<"send", []> {
   let hasCanonicalizeMethod = true;
 }
 
-def RecvOp : HIR_Op<"recv", [NoSideEffect]> {
+def RecvOp : HIR_Op<"recv", []> {
   let summary = "read from a group or array.";
   let description = [{
     This Op Reads from a bus. 

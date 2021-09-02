@@ -8,11 +8,12 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/Builders.h"
+#include "llvm/ADT/DenseSet.h"
 #include <iostream>
 using namespace circt;
 using namespace hir;
 namespace {
-enum MemrefPortKind { RD = 0, WR = 1, RW = 2 };
 struct MemrefPortInterface {
   Value addrDataBusTensor;
   Value addrEnableBusTensor;
@@ -23,50 +24,39 @@ struct MemrefPortInterface {
   Value wrDataBusTensor;
 };
 
-class MultiDimCounter {
+class MapMemrefToPortInterfaces {
 public:
-  MultiDimCounter(ArrayRef<int64_t> shape) : shape(shape) {
-    indices = SmallVector<uint64_t>(shape.size(), 0);
-  }
-  ArrayRef<uint64_t> getIndices() { return indices; }
-  LogicalResult inc() {
-    if (indices.size() == 0)
-      return failure();
-    return inc(indices.size() - 1);
-  }
-  uint64_t getLinearIdx() {
-    if (indices.size() == 0)
-      return 0;
-    uint64_t linearIdx = indices[indices.size() - 1];
-    for (int i = indices.size() - 2; i >= 0; i--) {
-      linearIdx += indices[i] * (uint64_t)shape[i + 1];
+  void insert(Value mem, SmallVector<MemrefPortInterface> memPortInterfaces) {
+    assert(mem.getType().isa<hir::MemrefType>());
+    assert(mapMemref2idx.find(mem) == mapMemref2idx.end());
+    SmallVector<uint64_t> portLocs;
+    for (auto portInterface : memPortInterfaces) {
+      portLocs.push_back(portInterfaceList.size());
+      portInterfaceList.push_back(portInterface);
     }
-    uint64_t size = 1;
-    for (auto s : shape) {
-      size *= s;
-    }
-    if (linearIdx == 12)
-      assert(linearIdx < size);
-    return linearIdx;
+    mapMemref2idx[mem] = portLocs;
+  }
+
+  void remap(Value mem, Value originalMem, uint64_t port) {
+    assert(mem.getType().isa<hir::MemrefType>());
+    assert(originalMem.getType().isa<hir::MemrefType>());
+    assert(mapMemref2idx.find(mem) == mapMemref2idx.end());
+    assert(mapMemref2idx.find(originalMem) != mapMemref2idx.end());
+    mapMemref2idx[mem].push_back(mapMemref2idx[originalMem][port]);
+  }
+
+  uint64_t getNumPorts(Value mem) { return mapMemref2idx[mem].size(); }
+
+  MemrefPortInterface &get(Value mem, uint64_t port) {
+    return portInterfaceList[mapMemref2idx[mem][port]];
+  }
+  ArrayRef<MemrefPortInterface> getAllPortInterfaces() {
+    return portInterfaceList;
   }
 
 private:
-  LogicalResult inc(uint64_t dim) {
-    assert(dim < indices.size());
-    assert(shape[dim] > 0);
-    if (indices[dim] < (uint64_t)shape[dim] - 1) {
-      indices[dim]++;
-      return success();
-    }
-
-    if (dim == 0)
-      return failure();
-    indices[dim] = 0;
-    return inc(dim - 1);
-  }
-
-  ArrayRef<int64_t> shape;
-  SmallVector<uint64_t> indices;
+  DenseMap<Value, SmallVector<uint64_t>> mapMemref2idx;
+  SmallVector<MemrefPortInterface> portInterfaceList;
 };
 
 /// This class lowers a hir::MemrefType to multiple buses.
@@ -91,14 +81,13 @@ private:
                          std::string);
   Value getDataSendBus(OpBuilder &, Value &, Value, uint64_t, Value,
                        IntegerAttr, std::string);
-  void defineBusesForMemrefPort(OpBuilder &, hir::MemrefType, Attribute,
-                                MemrefPortInterface &);
-  LogicalResult createBusInstantiationsAndCallOp(
-      hir::AllocaOp, DenseMap<Value, SmallVector<MemrefPortInterface>> &,
-      Value);
+  MemrefPortInterface defineBusesForMemrefPort(OpBuilder &, hir::MemrefType,
+                                               Attribute);
+  LogicalResult createBusInstantiationsAndCallOp(hir::AllocaOp);
+  void initUnConnectedPorts();
 
 private:
-  DenseMap<Value, SmallVector<MemrefPortInterface>> mapMemrefPortToBuses;
+  MapMemrefToPortInterfaces mapMemrefToPortInterfaces;
   SmallVector<Operation *, 10> opsToErase;
   OpBuilder *topLevelBuilder;
 };
@@ -137,9 +126,9 @@ mlir::TensorType buildBusTensor(MLIRContext *context, ArrayRef<int64_t> shape,
       shape, hir::BusType::get(context, busElementTypes, busDirections));
 }
 
-void MemrefLoweringPass::defineBusesForMemrefPort(
-    OpBuilder &builder, hir::MemrefType memrefTy, Attribute port,
-    MemrefPortInterface &portInterface) {
+MemrefPortInterface MemrefLoweringPass::defineBusesForMemrefPort(
+    OpBuilder &builder, hir::MemrefType memrefTy, Attribute port) {
+  MemrefPortInterface portInterface;
 
   auto *context = memrefTy.getContext();
   Type enableTy = buildBusTensor(context, memrefTy.filterShape(BANK),
@@ -186,11 +175,11 @@ void MemrefLoweringPass::defineBusesForMemrefPort(
         topLevelBuilder->create<hir::BusInstantiateOp>(builder.getUnknownLoc(),
                                                        dataTy);
   }
+  return portInterface;
 }
-LogicalResult MemrefLoweringPass::createBusInstantiationsAndCallOp(
-    hir::AllocaOp op,
-    DenseMap<Value, SmallVector<MemrefPortInterface>> &mapMemrefPortToBuses,
-    Value tstartRegion) {
+LogicalResult
+MemrefLoweringPass::createBusInstantiationsAndCallOp(hir::AllocaOp op) {
+  Value tstartRegion = op->getParentRegion()->getArguments().back();
   hir::MemrefType memrefTy = op.getType().dyn_cast<hir::MemrefType>();
   ArrayAttr ports = op.ports();
   OpBuilder builder(op);
@@ -198,8 +187,7 @@ LogicalResult MemrefLoweringPass::createBusInstantiationsAndCallOp(
   SmallVector<MemrefPortInterface> memrefPortInterfaces;
 
   for (auto port : ports) {
-    MemrefPortInterface portInterface;
-    defineBusesForMemrefPort(builder, memrefTy, port, portInterface);
+    auto portInterface = defineBusesForMemrefPort(builder, memrefTy, port);
     memrefPortInterfaces.push_back(portInterface);
   }
 
@@ -256,8 +244,48 @@ LogicalResult MemrefLoweringPass::createBusInstantiationsAndCallOp(
   callOp->setAttr("NUM_ELEMENTS",
                   builder.getI64IntegerAttr(memrefTy.getNumElementsPerBank()));
 
-  mapMemrefPortToBuses[op.res()] = memrefPortInterfaces;
+  mapMemrefToPortInterfaces.insert(op.res(), memrefPortInterfaces);
   return success();
+}
+
+void initUnconnectedEnBusTensor(OpBuilder &builder, Value busTensor) {
+  if (!busTensor)
+    return;
+  auto *context = builder.getContext();
+  DictionaryAttr sendAttr = helper::getDictionaryAttr(
+      context, "hir.bus.ports",
+      ArrayAttr::get(context, StringAttr::get(context, "send")));
+  auto funcTy =
+      hir::FuncType::get(context, {busTensor.getType()}, {sendAttr}, {}, {});
+  auto tstartRegion = busTensor.getParentRegion()->getArguments().back();
+
+  auto width = builder.getI64IntegerAttr(
+      helper::getBitWidth(
+          busTensor.getType().dyn_cast<mlir::TensorType>().getElementType())
+          .getValue());
+  auto numBanks = builder.getI64IntegerAttr(
+      busTensor.getType().dyn_cast<mlir::TensorType>().getNumElements());
+  auto params =
+      builder.getDictionaryAttr({builder.getNamedAttr("WIDTH", width),
+                                 builder.getNamedAttr("NUM_BANKS", numBanks)});
+  builder
+      .create<hir::CallOp>(
+          builder.getUnknownLoc(), SmallVector<Type>(),
+          FlatSymbolRefAttr::get(builder.getContext(), "hir_en_init"),
+          TypeAttr::get(funcTy), SmallVector<Value>({busTensor}), tstartRegion,
+          IntegerAttr())
+      ->setAttr("params", params);
+}
+
+void MemrefLoweringPass::initUnConnectedPorts() {
+  OpBuilder builder(getOperation());
+  auto *returnOperation = &getOperation().body().front().back();
+  builder.setInsertionPoint(returnOperation);
+  for (auto portInterface : mapMemrefToPortInterfaces.getAllPortInterfaces()) {
+    initUnconnectedEnBusTensor(builder, portInterface.addrEnableBusTensor);
+    initUnconnectedEnBusTensor(builder, portInterface.rdEnableBusTensor);
+    initUnconnectedEnBusTensor(builder, portInterface.wrEnableBusTensor);
+  }
 }
 
 SmallVector<Value> filterMemrefArgs(Block::BlockArgListType args) {
@@ -373,7 +401,7 @@ void MemrefLoweringPass::insertBusArguments() {
             insertBefore, bb, inputAttrs, memrefTy, portDict, portInterface);
         memrefPortInterfaces.push_back(portInterface);
       }
-      mapMemrefPortToBuses[arg] = memrefPortInterfaces;
+      mapMemrefToPortInterfaces.insert(arg, memrefPortInterfaces);
     }
   }
   op.updateArguments(inputAttrs);
@@ -414,23 +442,6 @@ Value extractBusFromTensor(OpBuilder &builder, Value busTensor,
   return builder.create<hir::TensorExtractOp>(builder.getUnknownLoc(), busTy,
                                               busTensor, cIndices, ports);
 }
-void initUnconnectedValidBus(OpBuilder &builder, Value busTensor,
-                             ArrayRef<uint64_t> indices) {
-  if (!busTensor)
-    return;
-
-  assert(busTensor.getType()
-             .dyn_cast<mlir::TensorType>()
-             .getElementType()
-             .dyn_cast<hir::BusType>()
-             .getElementTypes()
-             .size() == 1);
-
-  Value validBus = extractBusFromTensor(builder, busTensor, indices,
-                                        builder.getStrArrayAttr({"send"}));
-  builder.create<hir::AssignOp>(builder.getUnknownLoc(),
-                                builder.getI64IntegerAttr(0), validBus);
-}
 
 void createValidCombineCallOp(OpBuilder &builder, Value destBusTensor,
                               ArrayRef<uint64_t> bankIndices, Value busTensor,
@@ -449,7 +460,7 @@ void createValidCombineCallOp(OpBuilder &builder, Value destBusTensor,
 
   auto callOp = builder.create<hir::CallOp>(
       builder.getUnknownLoc(), SmallVector<Type>(),
-      FlatSymbolRefAttr::get(builder.getContext(), "hir_valid_combine"),
+      FlatSymbolRefAttr::get(builder.getContext(), "hir_en_combine"),
       TypeAttr::get(funcTy), SmallVector<Value>({bus, busTensor}), tstartRegion,
       IntegerAttr());
   auto tensorTy = busTensor.getType().dyn_cast<mlir::TensorType>();
@@ -701,7 +712,8 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
                                  builder.getStringAttr("LoadOp start"));
   if (!op.port().hasValue())
     return op.emitError() << "MemrefLoweringPass requires port number";
-  auto &portInterface = mapMemrefPortToBuses[op.mem()][op.port().getValue()];
+  auto &portInterface =
+      mapMemrefToPortInterfaces.get(op.mem(), op.port().getValue());
 
   Value c1 = builder
                  .create<mlir::ConstantOp>(
@@ -718,9 +730,11 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
         builder.getUnknownLoc(),
         builder.getStringAttr("Send 1 to the addrEnableBus."));
 
-    builder.create<hir::SendOp>(builder.getUnknownLoc(), c1, addrEnableBus,
-                                builder.getI64IntegerAttr(0), op.tstart(),
-                                op.offsetAttr());
+    builder
+        .create<hir::SendOp>(builder.getUnknownLoc(), c1, addrEnableBus,
+                             builder.getI64IntegerAttr(0), op.tstart(),
+                             op.offsetAttr())
+        ->setAttr("default", builder.getI64IntegerAttr(0));
 
     auto addrDataBus =
         getDataSendBus(builder, portInterface.addrDataBusTensor,
@@ -756,9 +770,11 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
   builder.create<hir::CommentOp>(
       builder.getUnknownLoc(),
       builder.getStringAttr("Send 1 to the rdEnableBus."));
-  builder.create<hir::SendOp>(builder.getUnknownLoc(), c1, rdEnableBus,
-                              builder.getI64IntegerAttr(0), op.tstart(),
-                              op.offsetAttr());
+  builder
+      .create<hir::SendOp>(builder.getUnknownLoc(), c1, rdEnableBus,
+                           builder.getI64IntegerAttr(0), op.tstart(),
+                           op.offsetAttr())
+      ->setAttr("default", builder.getI64IntegerAttr(0));
 
   builder.create<hir::CommentOp>(
       builder.getUnknownLoc(),
@@ -795,7 +811,8 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
                                  builder.getStringAttr("StoreOp start"));
   if (!op.port().hasValue())
     return op.emitError() << "MemrefLoweringPass requires port number";
-  auto &portInterface = mapMemrefPortToBuses[op.mem()][op.port().getValue()];
+  auto &portInterface =
+      mapMemrefToPortInterfaces.get(op.mem(), op.port().getValue());
 
   Value c1 = builder
                  .create<mlir::ConstantOp>(
@@ -813,9 +830,11 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
         builder.getUnknownLoc(),
         builder.getStringAttr("Send 1 to the addrEnableBus."));
 
-    builder.create<hir::SendOp>(builder.getUnknownLoc(), c1, addrEnableBus,
-                                builder.getI64IntegerAttr(0), op.tstart(),
-                                op.offsetAttr());
+    builder
+        .create<hir::SendOp>(builder.getUnknownLoc(), c1, addrEnableBus,
+                             builder.getI64IntegerAttr(0), op.tstart(),
+                             op.offsetAttr())
+        ->setAttr("default", builder.getI64IntegerAttr(0));
 
     auto addrDataBus =
         getDataSendBus(builder, portInterface.addrDataBusTensor,
@@ -843,9 +862,11 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
   builder.create<hir::CommentOp>(
       builder.getUnknownLoc(),
       builder.getStringAttr("Send 1 to the wrEnableBus."));
-  builder.create<hir::SendOp>(builder.getUnknownLoc(), c1, wrEnableBus,
-                              builder.getI64IntegerAttr(0), op.tstart(),
-                              op.offsetAttr());
+  builder
+      .create<hir::SendOp>(builder.getUnknownLoc(), c1, wrEnableBus,
+                           builder.getI64IntegerAttr(0), op.tstart(),
+                           op.offsetAttr())
+      ->setAttr("default", builder.getI64IntegerAttr(0));
   builder.create<hir::CommentOp>(builder.getUnknownLoc(),
                                  builder.getStringAttr("Create wrDataBus."));
   auto wrDataBus = getDataSendBus(builder, portInterface.wrDataBusTensor,
@@ -876,6 +897,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
                                             builder.getStrArrayAttr({"send"}));
   auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
                                             builder.getStrArrayAttr({"recv"}));
+  bool hasMemrefArg = false;
   for (uint64_t i = 0; i < funcTy.getInputTypes().size(); i++) {
     auto ty = funcTy.getInputTypes()[i];
     auto operand = op.operands()[i];
@@ -885,13 +907,14 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
       inputAttrs.push_back(funcTy.getInputAttrs()[i]);
       continue;
     }
-    auto &memrefPortInterfaces = mapMemrefPortToBuses[operand];
+    hasMemrefArg = true;
+    auto numPorts = mapMemrefToPortInterfaces.getNumPorts(operand);
     auto ports = helper::extractMemrefPortsFromDict(funcTy.getInputAttrs()[i])
                      .getValue();
-    assert(ports.size() == memrefPortInterfaces.size());
+    assert(ports.size() == numPorts);
 
     for (uint64_t j = 0; j < ports.size(); j++) {
-      auto &portInterface = memrefPortInterfaces[j];
+      auto &portInterface = mapMemrefToPortInterfaces.get(operand, j);
       if (portInterface.addrEnableBusTensor) {
         auto addrEnableBusTensor =
             getEnableSendBusTensor(builder, portInterface.addrEnableBusTensor,
@@ -942,6 +965,8 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
       }
     }
   }
+  if (!hasMemrefArg)
+    return success();
   auto newFuncTy =
       hir::FuncType::get(builder.getContext(), inputTypes, inputAttrs,
                          funcTy.getResultTypes(), funcTy.getResultAttrs());
@@ -954,14 +979,12 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
 }
 
 LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
-  Value tstartRegion = op->getParentRegion()->getArguments().back();
   // Add comment.
   OpBuilder builder(op);
   builder.setInsertionPoint(op);
   builder.create<hir::CommentOp>(op.getLoc(),
                                  builder.getStringAttr("AllocaOp start"));
-  if (failed(createBusInstantiationsAndCallOp(op, mapMemrefPortToBuses,
-                                              tstartRegion)))
+  if (failed(createBusInstantiationsAndCallOp(op)))
     return failure();
   builder.create<hir::CommentOp>(op.getLoc(),
                                  builder.getStringAttr("AllocaOp end"));
@@ -970,27 +993,9 @@ LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
 }
 
 LogicalResult MemrefLoweringPass::visitOp(hir::MemrefExtractOp op) {
-  SmallVector<MemrefPortInterface> memrefPortInterfaces;
-  MemrefPortInterface portInterface;
-  MemrefPortInterface originalPortInterface =
-      mapMemrefPortToBuses[op.mem()][op.port().getValue()];
-
-  portInterface.addrEnableBusTensor = originalPortInterface.addrEnableBusTensor;
-  portInterface.addrDataBusTensor = originalPortInterface.addrDataBusTensor;
-
-  if (helper::isRead(op.ports()[0])) {
-    portInterface.rdEnableBusTensor = originalPortInterface.rdEnableBusTensor;
-    portInterface.rdDataBusTensor = originalPortInterface.rdDataBusTensor;
-  }
-  if (helper::isWrite(op.ports()[0])) {
-    portInterface.wrEnableBusTensor = originalPortInterface.wrEnableBusTensor;
-    portInterface.wrDataBusTensor = originalPortInterface.wrDataBusTensor;
-  }
-
   // port 0 of the op.res() is mapped to op.port() of op.mem().
-  memrefPortInterfaces.push_back(
-      mapMemrefPortToBuses[op.mem()][op.port().getValue()]);
-  mapMemrefPortToBuses[op.res()] = memrefPortInterfaces;
+  mapMemrefToPortInterfaces.remap(op.res(), op.mem(), op.port().getValue());
+
   opsToErase.push_back(op);
   return success();
 }
@@ -1024,6 +1029,8 @@ void MemrefLoweringPass::runOnOperation() {
     signalPassFailure();
     return;
   }
+  OpBuilder builder(funcOp);
+  initUnConnectedPorts();
   helper::eraseOps(opsToErase);
   // removeMemrefArguments(funcOp);
 }
