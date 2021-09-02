@@ -164,3 +164,23 @@ def AndLibOp  : ArithBinaryLibraryOp<"and"> {}
 def NotLibOp  : ArithBinaryLibraryOp<"not"> {}
 def OrLibOp   : ArithBinaryLibraryOp<"or"> {}
 def XorLibOp  : ArithBinaryLibraryOp<"xor"> {}
+
+class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+  ]> {
+  let results = (outs AnyInteger:$in, AnyInteger:$out);
+}
+
+def PadLibOp : UnaryLibraryOp<"pad"> {
+  let verifier = [{
+    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+    return success(inBits < outBits);
+  }];
+}
+
+def SliceLibOp : UnaryLibraryOp<"slice"> {
+  let verifier = [{
+    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+    return success(inBits > outBits);  }];
+}

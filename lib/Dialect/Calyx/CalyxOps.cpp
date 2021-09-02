@@ -888,42 +888,43 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 // Calyx library ops
 //===----------------------------------------------------------------------===//
 
-// The Calyx library operations implement the OpAsmOpInterface which expects a
-// getAsmResultNames member function to be defined out of line of the
-// tablegen'erated files. Since there is no "extraClassDefinitions" function in
-// the TableGen backend for Op classes, we have to manually define these here.
-static void getBinOpAsmResultNames(Operation *op,
-                                   OpAsmSetValueNameFn setNameFn) {
-  unsigned numResults = op->getNumResults();
-  assert(numResults == 3);
-  SmallVector<StringRef> portNames;
-  portNames.push_back("left");
-  portNames.push_back("right");
-  portNames.push_back("out");
-  getCellAsmResultNames(setNameFn, op, portNames);
-}
-
-#define AsmResultsForLibraryOp(OpType)                                         \
+#define ImplUnaryOpCellInterface(OpType)                                       \
+  SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
+  SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
-    getBinOpAsmResultNames(*this, setNameFn);                                  \
+    getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }
 
-AsmResultsForLibraryOp(LtLibOp);
-AsmResultsForLibraryOp(GtLibOp);
-AsmResultsForLibraryOp(EqLibOp);
-AsmResultsForLibraryOp(NeqLibOp);
-AsmResultsForLibraryOp(GeLibOp);
-AsmResultsForLibraryOp(LeLibOp);
+#define ImplBinOpCellInterface(OpType)                                         \
+  SmallVector<StringRef> OpType::portNames() {                                 \
+    return {"left", "right", "out"};                                           \
+  }                                                                            \
+  SmallVector<Direction> OpType::portDirections() {                            \
+    return {Input, Input, Output};                                             \
+  }                                                                            \
+  void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
+    getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }
 
-AsmResultsForLibraryOp(AddLibOp);
-AsmResultsForLibraryOp(SubLibOp);
-AsmResultsForLibraryOp(ShruLibOp);
-AsmResultsForLibraryOp(ShrLibOp);
-AsmResultsForLibraryOp(ShlLibOp);
-AsmResultsForLibraryOp(AndLibOp);
-AsmResultsForLibraryOp(NotLibOp);
-AsmResultsForLibraryOp(OrLibOp);
-AsmResultsForLibraryOp(XorLibOp);
+ImplUnaryOpCellInterface(PadLibOp);
+ImplUnaryOpCellInterface(SliceLibOp);
+
+ImplBinOpCellInterface(LtLibOp);
+ImplBinOpCellInterface(GtLibOp);
+ImplBinOpCellInterface(EqLibOp);
+ImplBinOpCellInterface(NeqLibOp);
+ImplBinOpCellInterface(GeLibOp);
+ImplBinOpCellInterface(LeLibOp);
+
+ImplBinOpCellInterface(AddLibOp);
+ImplBinOpCellInterface(SubLibOp);
+ImplBinOpCellInterface(ShruLibOp);
+ImplBinOpCellInterface(ShrLibOp);
+ImplBinOpCellInterface(ShlLibOp);
+ImplBinOpCellInterface(AndLibOp);
+ImplBinOpCellInterface(NotLibOp);
+ImplBinOpCellInterface(OrLibOp);
+ImplBinOpCellInterface(XorLibOp);
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
