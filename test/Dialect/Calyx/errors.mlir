@@ -309,7 +309,7 @@ calyx.program {
   calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
     %c1_1 = constant 1 : i1
     calyx.wires {
-      // expected-error @+1 {{'calyx.assign' op has an invalid destination port. The destination of an AssignOp must be drive-able.}}
+      // expected-error @+1 {{'calyx.assign' op has an invalid destination port. It must be drive-able.}}
       calyx.assign %c1_1 = %go : i1
     }
     calyx.control {}
@@ -322,7 +322,7 @@ calyx.program {
   calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
     %c1_1 = constant 1 : i1
     calyx.wires {
-      // expected-error @+1 {{'calyx.assign' op has a component port as the destination with the incorrect direction. It should be Output.}}
+      // expected-error @+1 {{'calyx.assign' op has a component port as the destination with the incorrect direction.}}
       calyx.assign %go = %c1_1 : i1
     }
     calyx.control {}
@@ -335,8 +335,34 @@ calyx.program {
   calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%flag: i1, %out: i32, %done: i1) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     calyx.wires {
-      // expected-error @+1 {{'calyx.assign' op has a component port as the source with the incorrect direction. It should be Input.}}
+      // expected-error @+1 {{'calyx.assign' op has a component port as the source with the incorrect direction.}}
       calyx.assign %r.write_en = %done : i1
+    }
+    calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%flag: i1, %out: i32, %done: i1) {
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
+    calyx.wires {
+      // expected-error @+1 {{'calyx.assign' op has a cell port as the source with the incorrect direction.}}
+      calyx.assign %done = %r.write_en : i1
+    }
+    calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%flag: i1, %out: i32, %done: i1) {
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
+    calyx.wires {
+      // expected-error @+1 {{'calyx.assign' op has a cell port as the destination with the incorrect direction.}}
+      calyx.assign %r.done = %go : i1
     }
     calyx.control {}
   }
