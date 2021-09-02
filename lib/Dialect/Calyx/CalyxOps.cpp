@@ -614,8 +614,8 @@ static Direction getComponentDirectionFor(Value value, ComponentOp op) {
 }
 
 /// Verifies the value of a given assignment operation. The boolean
-/// isDestination is used to distinguish whether the destination or source of
-/// the AssignOp is to be verified.
+/// `isDestination` is used to distinguish whether the destination
+/// or source of the AssignOp is to be verified.
 static LogicalResult verifyAssignOpValue(AssignOp assign, bool isDestination) {
   Value value = isDestination ? assign.dest() : assign.src();
   bool isComponentPort = value.isa<BlockArgument>();
