@@ -1,4 +1,4 @@
-//===- BitWidthAnalysis.cpp - Support for building backedges ----*- C++ -*-===//
+//===- BitwidthAnalysis.cpp - Support for building backedges ----*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/BitwidthAnalysis.h"
+#include "mlir/Analysis/DataFlowAnalysis.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Matchers.h"
 #include "llvm/ADT/SmallSet.h"

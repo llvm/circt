@@ -1,4 +1,4 @@
-//===- BitWidthAnalysis.h - Support for building backedges ----------------===//
+//===- BitwidthAnalysis.h - Support for building backedges ----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -13,9 +13,7 @@
 #ifndef CIRCT_ANALYSIS_BITWIDTH_H
 #define CIRCT_ANALYSIS_BITWIDTH_H
 
-#include "mlir/Analysis/DataFlowAnalysis.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/IR/Region.h"
 #include "llvm/ADT/Optional.h"
 
 #include <memory>
