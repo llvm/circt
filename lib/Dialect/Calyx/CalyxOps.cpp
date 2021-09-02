@@ -583,7 +583,7 @@ static LogicalResult verifyPortDirection(AssignOp op, Direction direction,
 }
 
 /// Gets the cell direction for a given value.
-static Direction getCellDirectionForValue(Value value) {
+static Direction getCellDirectionFor(Value value) {
   Operation *parentOp = value.getDefiningOp();
   assert(isa<CellInterface>(parentOp) &&
          "Pre-condition: this is a Cell Interface.");
@@ -596,7 +596,7 @@ static Direction getCellDirectionForValue(Value value) {
 }
 
 /// Gets the port direction for a given argument value of a component.
-static Direction getComponentDirectionForValue(Value value, ComponentOp op) {
+static Direction getComponentDirectionFor(Value value, ComponentOp op) {
 
   Block *body = op.getBody();
   auto it = llvm::find_if(body->getArguments(),
@@ -612,19 +612,22 @@ static Direction getComponentDirectionForValue(Value value, ComponentOp op) {
   return ports[blockArgNum].direction;
 }
 
+/// Verifies the value of a given assignment operation. The boolean
+/// isDestination is used to distinguish whether the destination or source of
+/// the AssignOp is to be verified.
 static LogicalResult verifyAssignOpValue(AssignOp assign, bool isDestination) {
   Value value = isDestination ? assign.dest() : assign.src();
   bool isComponentPort = value.isa<BlockArgument>();
   if (isComponentPort) {
-    Direction componentDir = getComponentDirectionForValue(
-        value, assign->getParentOfType<ComponentOp>());
+    Direction componentDir =
+        getComponentDirectionFor(value, assign->getParentOfType<ComponentOp>());
     return verifyPortDirection(assign, componentDir, isDestination,
                                isComponentPort);
   }
 
   Operation *definingOp = value.getDefiningOp();
   if (isa<CellInterface>(definingOp)) {
-    return verifyPortDirection(assign, getCellDirectionForValue(value),
+    return verifyPortDirection(assign, getCellDirectionFor(value),
                                isDestination, isComponentPort);
   } else if (isDestination && !isa<GroupGoOp, GroupDoneOp>(definingOp))
     // The value's defining operation does not have any other valid matches.
