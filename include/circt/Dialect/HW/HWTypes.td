@@ -35,6 +35,9 @@ def HWValueType : DialectType<HWDialect,
 def HWNonInOutType : DialectType<HWDialect,
     CPred<"!hw::hasHWInOutType($_self)">, "a type without inout">;
 
+def InOutType : DialectType<HWDialect,
+    CPred<"hw::type_isa<hw::InOutType>($_self)">, "InOutType", "InOutType">;
+
 // A handle to refer to hw::ArrayType in ODS.
 def ArrayType : DialectType<HWDialect,
     CPred<"hw::type_isa<hw::ArrayType>($_self)">, "an ArrayType",

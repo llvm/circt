@@ -57,7 +57,7 @@ def UnpackedArrayType : HWType<"UnpackedArray"> {
   }];
 }
 
-def InOutType : HWType<"InOut"> {
+def InOutTypeImpl : HWType<"InOut"> {
   let summary = "inout type";
   let description = [{
     InOut type is used for model operations and values that have "connection"

@@ -16,25 +16,7 @@ class SVType<string name> : TypeDef<SVDialect, name> { }
 // Generic stuff shared with HW Dialect.
 //===----------------------------------------------------------------------===//
 
-// Type constraint that indicates that an operand/result may only be a valid,
-// known, non-directional type.
-def HWIntegerType : Type<CPred<"hw::isHWIntegerType($_self)">,
-                          "an integer bitvector of one or more bits",
-                          "::mlir::IntegerType">;
-
-// Type constraint that indicates that an operand/result may only be a valid,
-// known, non-directional type.
-def HWValueType : Type<CPred<"hw::isHWValueType($_self)">,
-                        "a known primitive element">;
-
-// Type constraint that indicates that an operand/result may only be a valid
-// non-directional type.
-def HWNonInOutType : Type<CPred<"!hw::hasHWInOutType($_self)">,
-                           "a type without inout">;
-
-// FIXME: Shouldn't have to duplicate this from the HW dialect tblgen files.
-def InOutType : Type<CPred<"$_self.isa<hw::InOutType>()">, "InOutType",
-                           "::circt::hw::InOutType">;
+include "circt/Dialect/HW/HWTypes.td"
 
 //===----------------------------------------------------------------------===//
 // InOut type and related helpers.
