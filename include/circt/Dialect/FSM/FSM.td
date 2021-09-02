@@ -29,4 +29,7 @@ class FSMType<string name> : TypeDef<FSMDialect, name> {}
 class FSMOp<string mnemonic, list<OpTrait> traits = []> :
     Op<FSMDialect, mnemonic, traits>;
 
+include "FSMTypes.td"
+include "FSMOps.td"
+
 #endif // CIRCT_DIALECT_FSM_TD
