@@ -559,18 +559,49 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 // AssignOp
 //===----------------------------------------------------------------------===//
 
-/// Returns whether the given value is a port of a component, which are
-/// defined as Block Arguments.
-static bool isComponentPort(Value value) { return value.isa<BlockArgument>(); }
-
-/// Verifies the given value of the AssignOp if it is a component port. The
+/// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
-/// or a destination.
-static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
-                                                     bool isDestination) {
-  Value value = isDestination ? op.dest() : op.src();
+/// or a destination. The `isComponentPort` is used to distinguish whether the
+/// value is defined by a component port or a cell interface port.
+static LogicalResult verifyPortDirection(AssignOp op, Direction direction,
+                                         bool isDestination,
+                                         bool isComponentPort) {
+  bool isCellInterfacePort = !isComponentPort, isSource = !isDestination;
+  // Component output ports and cell interface input ports should be driven.
+  Direction validDirection =
+      (isDestination && isComponentPort) || (isSource && isCellInterfacePort)
+          ? Direction::Output
+          : Direction::Input;
 
+  return direction == validDirection
+             ? success()
+             : op.emitOpError()
+                   << "has a " << (isComponentPort ? "component" : "cell")
+                   << " port as the "
+                   << (isDestination ? "destination" : "source")
+                   << " with the incorrect direction.";
+}
+
+/// Gets the cell direction for a given value.
+static Direction getCellDirectionFor(Value value) {
+  Operation *parentOp = value.getDefiningOp();
+  assert(isa<CellInterface>(parentOp) &&
+         "Pre-condition: this is a Cell Interface.");
+
+  size_t i = 0, numResults = parentOp->getNumResults();
+  for (; i != numResults && value != parentOp->getResult(i); ++i)
+    ;
+  assert(i < numResults && "Value not found in Cell's ports.");
+
+  return cast<CellInterface>(parentOp).portDirections()[i];
+}
+
+/// Gets the port direction for a given Argument from the parent ComponentOp of
+/// `op`.
+static Direction getComponentDirectionFor(Value value, Operation *op) {
   auto component = op->getParentOfType<ComponentOp>();
+  assert(isa<ComponentOp>(component) && "Op not within ComponentOp.");
+
   Block *body = component.getBody();
   auto it = llvm::find_if(body->getArguments(),
                           [&](auto arg) { return arg == value; });
@@ -579,58 +610,36 @@ static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
   BlockArgument blockArg = *it;
 
   size_t blockArgNum = blockArg.getArgNumber();
-
   auto ports = getComponentPortInfo(component);
-  assert(blockArgNum < ports.size() &&
-         "Block argument index should be within range of component's ports.");
-  // Within a component, we want to drive component output ports, and be
-  // driven by its input ports.
-  Direction validComponentDirection = isDestination ? Output : Input;
-  return ports[blockArgNum].direction == validComponentDirection
-             ? success()
-             : op.emitOpError()
-                   << "has a component port as the "
-                   << (isDestination ? "destination" : "source")
-                   << " with the incorrect direction. It should be "
-                   << (isDestination ? "Output" : "Input") << ".";
+  return ports[blockArgNum].direction;
 }
 
-/// Verifies the destination of an assignment operation.
-static LogicalResult verifyAssignOpDestination(AssignOp assign) {
-  Value dest = assign.dest();
-  if (isComponentPort(dest))
-    return verifyAssignOpWithComponentPort(assign,
-                                           /*isDestination=*/true);
+/// Verifies the value of a given assignment operation. The boolean
+/// `isDestination` is used to distinguish whether the destination
+/// or source of the AssignOp is to be verified.
+static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
+  Value value = isDestination ? op.dest() : op.src();
 
-  Operation *definingOp = dest.getDefiningOp();
-  bool isValidDestination =
-      isa<CellInterface>(definingOp) || isa<GroupGoOp, GroupDoneOp>(definingOp);
-  if (!isValidDestination)
-    assign->emitOpError(
-        "has an invalid destination port. The destination of an AssignOp "
-        "must be drive-able.");
-
-  return success();
-}
-
-/// Verifies the source of an assignment operation.
-static LogicalResult verifyAssignOpSource(AssignOp assign) {
-  Value src = assign.src();
-  if (isComponentPort(src))
-    return verifyAssignOpWithComponentPort(assign,
-                                           /*isDestination=*/false);
+  bool isComponentPort = value.isa<BlockArgument>();
+  Operation *definingOp = value.getDefiningOp();
+  // If the defining operation is a Component or Cell, verify its direction.
+  if (isComponentPort || isa<CellInterface>(definingOp)) {
+    Direction direction = isComponentPort ? getComponentDirectionFor(value, op)
+                                          : getCellDirectionFor(value);
+    return verifyPortDirection(op, direction, isDestination, isComponentPort);
+  } else if (isDestination && !isa<GroupGoOp, GroupDoneOp>(definingOp)) {
+    // The value's defining operation does not have any other valid matches.
+    return op->emitOpError(
+        "has an invalid destination port. It must be drive-able.");
+  }
 
   return success();
 }
 
 static LogicalResult verifyAssignOp(AssignOp assign) {
-  // TODO(Calyx): Verification for Cell trait (inverse of components ports):
-  // (1) The destination has Direction::Input, and
-  // (2) the source has Direction::Output.
-  // This is simpler with the completion of the Cell Interface.
-  // See: https://github.com/llvm/circt/issues/1597
-  return succeeded(verifyAssignOpDestination(assign)) &&
-                 succeeded(verifyAssignOpSource(assign))
+  bool isDestination = true, isSource = false;
+  return succeeded(verifyAssignOpValue(assign, isDestination)) &&
+                 succeeded(verifyAssignOpValue(assign, isSource))
              ? success()
              : failure();
 }
