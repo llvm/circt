@@ -45,7 +45,7 @@
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_resume_timed () -> () {
-  %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
+  %t = llhd.constant_time #llhd.time<0ns, 0d, 1e>
   llhd.wait for %t, ^end
 ^end:
   llhd.halt
@@ -184,7 +184,7 @@ llhd.proc @convert_resume_observe_partial (%in0 : !llhd.sig<i1>, %in1 : !llhd.si
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_resume_timed_observe (%in0 : !llhd.sig<i32>) -> () {
-  %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
+  %t = llhd.constant_time #llhd.time<0ns, 0d, 1e>
   llhd.wait for %t, (%in0 : !llhd.sig<i32>), ^end
 ^end:
   llhd.halt

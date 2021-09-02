@@ -10,32 +10,31 @@
 //
 //===----------------------------------------------------------------------===//
 
-def LLHD_ConstOp : LLHD_Op<"const", [ConstantLike, NoSideEffect]> {
-  let summary = "Introduce a new constant.";
+def LLHD_ConstantTimeOp : LLHD_Op<"constant_time",
+                                  [ConstantLike, NoSideEffect]> {
+  let summary = "Introduce a new time constant.";
   let description = [{
-    The `llhd.const` instruction introduces a new constant value as an
-    SSA-operator.
-    Legal types are integers and time. Note: Signals
-    are not legal to define using `llhd.const`, use the `llhd.sig`
-    instruction for that.
-
-    Syntax:
-
-    ```
-    const-op ::= ssa-id `=`
-      `llhd.const` attribute-value attr-dict `:` result-type
-    ```
+    The `llhd.constant_time` instruction introduces a new constant time value as
+    an SSA-operator.
 
     Example:
 
     ```mlir
-    %0 = llhd.const 1 : i64
-    %1 = llhd.const #llhd.time<1ns, 2d, 3d> : !llhd.time
+    %1 = llhd.constant_time #llhd.time<1ns, 2d, 3d>
     ```
   }];
 
-  let arguments = (ins AnyAttr: $value);
-  let results = (outs AnyTypeOf<[HWIntegerType, LLHD_TimeType]>: $out);
+  let assemblyFormat = "$value attr-dict";
+
+  let builders = [
+    /// Build a ConstantTimeOp from an ArrayRef with three values
+    /// (real-time, delta, epsilon) and a string for the real-time unit.
+    OpBuilder<(ins "const ArrayRef<unsigned int> &":$timeValues,
+                   "const StringRef &":$timeUnit)>
+  ];
+
+  let arguments = (ins LLHD_TimeAttr: $value);
+  let results = (outs LLHD_TimeType: $result);
 
   let hasFolder = 1;
 }

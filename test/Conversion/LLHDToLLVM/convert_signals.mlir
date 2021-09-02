@@ -20,7 +20,7 @@
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_sig () -> () {
-  %init = llhd.const 0 : i1
+  %init = hw.constant 0 : i1
   %initArr = hw.array_create %init, %init, %init, %init : i1
   %s0 = llhd.sig "sig0" %init : i1
   %s1 = llhd.sig "sig1" %initArr : !hw.array<4xi1>
@@ -101,10 +101,10 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5>>) -> () {
-  %cI1 = llhd.const 0 : i1
-  %cI5 = llhd.const 0 : i5
+  %cI1 = hw.constant 0 : i1
+  %cI5 = hw.constant 0 : i5
   %cArr = hw.array_create %cI5, %cI5, %cI5 : i5
-  %t = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+  %t = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   llhd.drv %sI1, %cI1 after %t : !llhd.sig<i1>
   llhd.drv %sArr, %cArr after %t : !llhd.sig<!hw.array<3xi5>>
 }
@@ -123,7 +123,7 @@ llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:         }
 llhd.entity @convert_drv_enable (%sI1 : !llhd.sig<i1>) -> () {
     %cI1 = llhd.prb %sI1 : !llhd.sig<i1>
-    %t = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+    %t = llhd.constant_time #llhd.time<1ns, 0d, 0e>
     llhd.drv %sI1, %cI1 after %t if %cI1 : !llhd.sig<i1>
 }
 
@@ -203,8 +203,8 @@ llhd.entity @convert_drv_enable (%sI1 : !llhd.sig<i1>) -> () {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_reg () -> () {
-  %0 = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
-  %1 = llhd.const 0 : i1
+  %0 = llhd.constant_time #llhd.time<1ns, 0d, 0e>
+  %1 = hw.constant 0 : i1
   %2 = llhd.sig "sig" %1: i1
   llhd.reg %2, (%1, "fall" %1 after %0 : i1), (%1, "rise" %1 after %0 : i1), (%1, "low" %1 after %0 : i1), (%1, "high" %1 after %0 : i1), (%1, "both" %1 after %0 : i1) : !llhd.sig<i1>
 }

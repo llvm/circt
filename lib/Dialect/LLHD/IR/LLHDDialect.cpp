@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
@@ -68,7 +69,13 @@ void LLHDDialect::initialize() {
 
 Operation *LLHDDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                             Type type, Location loc) {
-  return builder.create<llhd::ConstOp>(loc, type, value);
+  if (auto timeAttr = value.dyn_cast<TimeAttr>())
+    return builder.create<llhd::ConstantTimeOp>(loc, type, timeAttr);
+
+  if (auto intAttr = value.dyn_cast<IntegerAttr>())
+    return builder.create<hw::ConstantOp>(loc, type, intAttr);
+
+  return nullptr;
 }
 
 #include "circt/Dialect/LLHD/IR/LLHDDialect.cpp.inc"

@@ -3,7 +3,7 @@
 // CHECK-LABEL: _check_bitwise
 llhd.entity @check_bitwise() -> () {
   // CHECK-NEXT: wire [63:0] _[[A:.*]] = 64'd42;
-  %a = llhd.const 42 : i64
+  %a = hw.constant 42 : i64
 
   // CHECK-NEXT: wire [63:0] _{{.*}} = _[[A]];
   %1 = comb.and %a : i64
@@ -20,11 +20,11 @@ llhd.entity @check_bitwise() -> () {
   %6 = comb.xor %a, %a, %a : i64
 
   // CHECK-NEXT: wire [4:0] _[[HIDDEN:.*]] = 5'd0;
-  %hidden = llhd.const 0 : i5
+  %hidden = hw.constant 0 : i5
   // CHECK-NEXT: wire [1:0] _[[AMT:.*]] = 2'd3;
-  %amt = llhd.const 3 : i2
+  %amt = hw.constant 3 : i2
   // CHECK-NEXT: wire [63:0] _[[AMT64:.*]] = 64'd3;
-  %amt64 = llhd.const 3 : i64
+  %amt64 = hw.constant 3 : i64
 
   // CHECK-NEXT: wire [68:0] _[[TMP0:.*]] = {_[[A]], _[[HIDDEN]]};
   // CHECK-NEXT: wire [68:0] _[[TMP1:.*]] = _[[TMP0]] << _[[AMT]];
@@ -56,6 +56,6 @@ llhd.entity @check_bitwise() -> () {
 
   // CHECK-NEXT: wire _[[COND:.*]] = 1'd1;
   // CHECK-NEXT: wire [63:0] _{{.*}} = _[[COND]] ? _[[A]] : _[[SEXT]];
-  %cond = llhd.const 1 : i1
+  %cond = hw.constant 1 : i1
   %16 = comb.mux %cond, %a, %14 : i64
 }

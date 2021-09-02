@@ -21,23 +21,23 @@
 // CHECK-NEXT: 9000ps 0d 0e  root/sig1  0x00000000
 // CHECK-NEXT: 9000ps 0d 0e  root/sig2  0x00000000
 llhd.entity @root () -> () {
-  %0 = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
-  %t1 = llhd.const #llhd.time<2ns, 0d, 0e> : !llhd.time
-  %1 = llhd.const 0 : i1
-  %c0 = llhd.const 0 : i32
-  %c1 = llhd.const 1 : i32
-  %c2 = llhd.const 2 : i32
-  %c3 = llhd.const 3 : i32
+  %0 = llhd.constant_time #llhd.time<1ns, 0d, 0e>
+  %t1 = llhd.constant_time #llhd.time<2ns, 0d, 0e>
+  %1 = hw.constant 0 : i1
+  %c0 = hw.constant 0 : i32
+  %c1 = hw.constant 1 : i32
+  %c2 = hw.constant 2 : i32
+  %c3 = hw.constant 3 : i32
   %s0 = llhd.sig "sig1" %c0 : i32
   %s1 = llhd.sig "sig2" %c0 : i32
   %c = llhd.sig "clock" %1 : i1
   %p = llhd.prb %c : !llhd.sig<i1>
-  %allset1 = llhd.const 1 : i1
+  %allset1 = hw.constant 1 : i1
   %nc = comb.xor %p, %allset1 : i1
   llhd.drv %c, %nc after %t1 : !llhd.sig<i1>
   llhd.reg %s0, (%c0, "fall" %p after %0 : i32), (%c1, "rise" %p after %0 : i32), (%c2, "low" %p after %0 : i32), (%c3, "high" %p after %0 : i32) : !llhd.sig<i32>
   %2 = llhd.prb %s1 : !llhd.sig<i32>
-  %allset32 = llhd.const -1 : i32
+  %allset32 = hw.constant -1 : i32
   %3 = comb.xor %2, %allset32 : i32
   llhd.reg %s1, (%3, "both" %p after %0 : i32) : !llhd.sig<i32>
 }
