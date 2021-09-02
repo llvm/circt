@@ -587,6 +587,7 @@ static Direction getCellDirectionFor(Value value) {
   Operation *parentOp = value.getDefiningOp();
   assert(isa<CellInterface>(parentOp) &&
          "Pre-condition: this is a Cell Interface.");
+
   size_t i = 0, numResults = parentOp->getNumResults();
   for (; i != numResults && value != parentOp->getResult(i); ++i)
     ;
