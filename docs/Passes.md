@@ -4,10 +4,6 @@ This document describes the available CIRCT passes and their contracts.
 
 [TOC]
 
-## Analysis Passes
-
-[include "CIRCTAnalysisPasses.md"]
-
 ## Conversion Passes
 
 [include "CIRCTConversionPasses.md"]
