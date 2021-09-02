@@ -19,14 +19,11 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace calyx;
-
-//===----------------------------------------------------------------------===//
-// Emitter
-//===----------------------------------------------------------------------===//
 
 namespace {
 
@@ -48,6 +45,47 @@ static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 
+/// A tracker to determine which libraries should be imported for a given
+/// program.
+struct ImportTracker {
+public:
+  /// Returns the list of library names used for in this program.
+  /// E.g. if `primitives/core.futil` is used, returns { "core" }.
+  llvm::SmallSet<StringRef, 4> getLibraryNames(ProgramOp program) {
+    program.walk([&](ComponentOp component) {
+      for (auto &op : *component.getBody()) {
+        if (!isa<CellInterface>(op) || isa<InstanceOp>(op))
+          // It is not a primitive.
+          continue;
+        usedLibraries.insert(getLibraryFor(&op));
+      }
+    });
+    return usedLibraries;
+  }
+
+private:
+  /// Returns the library name for a given Operation Type.
+  StringRef getLibraryFor(Operation *op) {
+    StringRef library;
+    TypeSwitch<Operation *>(op)
+        .Case<MemoryOp, RegisterOp>([&](auto op) { library = "core"; })
+        /*.Case<>([&](auto op) { library = "binary_operators"; })*/
+        /*.Case<>([&](auto op) { library = "math"; })*/
+        .Default([&](auto op) {
+          llvm_unreachable("Type matching failed for this operation.");
+        });
+    return library;
+  }
+
+  /// Maintains a unique list of libraries used throughout the lifetime of the
+  /// tracker.
+  llvm::SmallSet<StringRef, 4> usedLibraries;
+};
+
+//===----------------------------------------------------------------------===//
+// Emitter
+//===----------------------------------------------------------------------===//
+
 /// An emitter for Calyx dialect operations to .futil output.
 struct Emitter {
   Emitter(llvm::raw_ostream &os) : os(os) {}
@@ -65,14 +103,16 @@ struct Emitter {
   void emitProgram(ProgramOp op);
 
   /// Import emission.
-  /// TODO(Calyx): Only import a library if a primitive is used from it.
-  void emitAllImports() {
-    auto emitImport = [&](StringRef path) {
-      os << "import " << delimiter() << path << delimiter() << semicolonEndL();
+  void emitImports(ProgramOp op) {
+    auto emitImport = [&](StringRef library) {
+      // Libraries share a common relative path:
+      //   primitives/<library-name>.futil
+      os << "import " << delimiter() << "primitives/" << library << period()
+         << "futil" << delimiter() << semicolonEndL();
     };
-    emitImport("primitives/core.futil");
-    emitImport("primitives/binary_operators.futil");
-    emitImport("primitives/math.futil");
+
+    for (StringRef library : importTracker.getLibraryNames(op))
+      emitImport(library);
   }
 
   // Component emission
@@ -104,6 +144,9 @@ struct Emitter {
   void emitMemory(MemoryOp memory);
 
 private:
+  /// Used to track which imports are required for this program.
+  ImportTracker importTracker;
+
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
     encounteredError = true;
@@ -442,10 +485,11 @@ void Emitter::emitControl(ControlOp control) {
 mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
                                               llvm::raw_ostream &os) {
   Emitter emitter(os);
-  emitter.emitAllImports();
   for (auto &op : *module.getBody()) {
-    if (auto programOp = dyn_cast<ProgramOp>(op))
-      emitter.emitProgram(programOp);
+    op.walk([&](ProgramOp program) {
+      emitter.emitImports(program);
+      emitter.emitProgram(program);
+    });
   }
   return emitter.finalize();
 }

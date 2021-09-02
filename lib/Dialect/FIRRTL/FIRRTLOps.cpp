@@ -716,9 +716,8 @@ static void printModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   // allow these customizations.  Need to not print the terminator.
 
   // Print the operation and the function name.
-  auto funcName = op.moduleName();
-  p << op->getName() << ' ';
-  p.printSymbolName(funcName);
+  p << " ";
+  p.printSymbolName(op.moduleName());
 
   bool needPortNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
@@ -947,7 +946,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
                        StringRef name, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
-  result.addAttribute("moduleName", builder.getSymbolRefAttr(moduleName));
+  result.addAttribute("moduleName",
+                      SymbolRefAttr::get(builder.getContext(), moduleName));
   result.addAttribute("name", builder.getStringAttr(name));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
@@ -1573,7 +1573,7 @@ bool firrtl::isExpression(Operation *op) {
 }
 
 static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
-  p << "firrtl.constant ";
+  p << " ";
   p.printAttributeWithoutType(op.valueAttr());
   p << " : ";
   p.printType(op.getType());
@@ -1667,7 +1667,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 }
 
 static void printSpecialConstantOp(OpAsmPrinter &p, SpecialConstantOp &op) {
-  p << "firrtl.specialconstant ";
+  p << " ";
   // SpecialConstant uses a BoolAttr, and we want to print `true` as `1`.
   p << static_cast<unsigned>(op.value());
   p << " : ";

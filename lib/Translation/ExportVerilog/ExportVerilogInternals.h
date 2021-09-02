@@ -44,6 +44,7 @@ struct ModuleNameManager {
   StringRef getName(Operation *op) { return getName(ValueOrOp(op)); }
 
   bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
+  bool hasName(Operation *op) { return nameTable.count(ValueOrOp(op)); }
 
   void addOutputNames(StringRef name, Operation *module) {
     outputNames.push_back(addLegalName(nullptr, name, module));

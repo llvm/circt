@@ -18,14 +18,6 @@
 
 #include "mlir/IR/BuiltinAttributes.h"
 
-namespace circt {
-namespace msft {
-/// Represents a path through the instance hierarchy.
-using InstanceIDAttr = mlir::SymbolRefAttr;
-using SwitchInstanceCase = std::pair<InstanceIDAttr, Attribute>;
-} // namespace msft
-} // namespace circt
-
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/MSFT/MSFTAttributes.h.inc"
 

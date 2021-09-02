@@ -279,7 +279,7 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   auto componentName =
       op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
           .getValue();
-  p << "calyx.component ";
+  p << " ";
   p.printSymbolName(componentName);
 
   auto ports = getComponentPortInfo(op);
@@ -517,7 +517,7 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
     if (!isa<GroupOp>(op))
       continue;
     auto group = cast<GroupOp>(op);
-    StringRef groupName = group.sym_name();
+    auto groupName = group.sym_nameAttr();
     if (SymbolTable::symbolKnownUseEmpty(groupName, control))
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
@@ -547,7 +547,7 @@ GroupDoneOp GroupOp::getDoneOp() {
 /// <instance-name>.<port-name>
 static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
                                   ArrayRef<StringRef> portNames) {
-  assert(op->hasTrait<Cell>() && "must have the Cell trait");
+  assert(isa<CellInterface>(op) && "must implement the Cell interface");
 
   auto instanceName = op->getAttrOfType<StringAttr>("instanceName").getValue();
   std::string prefix = instanceName.str() + ".";
@@ -559,18 +559,49 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 // AssignOp
 //===----------------------------------------------------------------------===//
 
-/// Returns whether the given value is a port of a component, which are
-/// defined as Block Arguments.
-static bool isComponentPort(Value value) { return value.isa<BlockArgument>(); }
-
-/// Verifies the given value of the AssignOp if it is a component port. The
+/// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
-/// or a destination.
-static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
-                                                     bool isDestination) {
-  Value value = isDestination ? op.dest() : op.src();
+/// or a destination. The `isComponentPort` is used to distinguish whether the
+/// value is defined by a component port or a cell interface port.
+static LogicalResult verifyPortDirection(AssignOp op, Direction direction,
+                                         bool isDestination,
+                                         bool isComponentPort) {
+  bool isCellInterfacePort = !isComponentPort, isSource = !isDestination;
+  // Component output ports and cell interface input ports should be driven.
+  Direction validDirection =
+      (isDestination && isComponentPort) || (isSource && isCellInterfacePort)
+          ? Direction::Output
+          : Direction::Input;
 
+  return direction == validDirection
+             ? success()
+             : op.emitOpError()
+                   << "has a " << (isComponentPort ? "component" : "cell")
+                   << " port as the "
+                   << (isDestination ? "destination" : "source")
+                   << " with the incorrect direction.";
+}
+
+/// Gets the cell direction for a given value.
+static Direction getCellDirectionFor(Value value) {
+  Operation *parentOp = value.getDefiningOp();
+  assert(isa<CellInterface>(parentOp) &&
+         "Pre-condition: this is a Cell Interface.");
+
+  size_t i = 0, numResults = parentOp->getNumResults();
+  for (; i != numResults && value != parentOp->getResult(i); ++i)
+    ;
+  assert(i < numResults && "Value not found in Cell's ports.");
+
+  return cast<CellInterface>(parentOp).portDirections()[i];
+}
+
+/// Gets the port direction for a given Argument from the parent ComponentOp of
+/// `op`.
+static Direction getComponentDirectionFor(Value value, Operation *op) {
   auto component = op->getParentOfType<ComponentOp>();
+  assert(isa<ComponentOp>(component) && "Op not within ComponentOp.");
+
   Block *body = component.getBody();
   auto it = llvm::find_if(body->getArguments(),
                           [&](auto arg) { return arg == value; });
@@ -579,58 +610,36 @@ static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
   BlockArgument blockArg = *it;
 
   size_t blockArgNum = blockArg.getArgNumber();
-
   auto ports = getComponentPortInfo(component);
-  assert(blockArgNum < ports.size() &&
-         "Block argument index should be within range of component's ports.");
-  // Within a component, we want to drive component output ports, and be
-  // driven by its input ports.
-  Direction validComponentDirection = isDestination ? Output : Input;
-  return ports[blockArgNum].direction == validComponentDirection
-             ? success()
-             : op.emitOpError()
-                   << "has a component port as the "
-                   << (isDestination ? "destination" : "source")
-                   << " with the incorrect direction. It should be "
-                   << (isDestination ? "Output" : "Input") << ".";
+  return ports[blockArgNum].direction;
 }
 
-/// Verifies the destination of an assignment operation.
-static LogicalResult verifyAssignOpDestination(AssignOp assign) {
-  Value dest = assign.dest();
-  if (isComponentPort(dest))
-    return verifyAssignOpWithComponentPort(assign,
-                                           /*isDestination=*/true);
+/// Verifies the value of a given assignment operation. The boolean
+/// `isDestination` is used to distinguish whether the destination
+/// or source of the AssignOp is to be verified.
+static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
+  Value value = isDestination ? op.dest() : op.src();
 
-  Operation *definingOp = dest.getDefiningOp();
-  bool isValidDestination =
-      definingOp->hasTrait<Cell>() || isa<GroupGoOp, GroupDoneOp>(definingOp);
-  if (!isValidDestination)
-    assign->emitOpError(
-        "has an invalid destination port. The destination of an AssignOp "
-        "must be drive-able.");
-
-  return success();
-}
-
-/// Verifies the source of an assignment operation.
-static LogicalResult verifyAssignOpSource(AssignOp assign) {
-  Value src = assign.src();
-  if (isComponentPort(src))
-    return verifyAssignOpWithComponentPort(assign,
-                                           /*isDestination=*/false);
+  bool isComponentPort = value.isa<BlockArgument>();
+  Operation *definingOp = value.getDefiningOp();
+  // If the defining operation is a Component or Cell, verify its direction.
+  if (isComponentPort || isa<CellInterface>(definingOp)) {
+    Direction direction = isComponentPort ? getComponentDirectionFor(value, op)
+                                          : getCellDirectionFor(value);
+    return verifyPortDirection(op, direction, isDestination, isComponentPort);
+  } else if (isDestination && !isa<GroupGoOp, GroupDoneOp>(definingOp)) {
+    // The value's defining operation does not have any other valid matches.
+    return op->emitOpError(
+        "has an invalid destination port. It must be drive-able.");
+  }
 
   return success();
 }
 
 static LogicalResult verifyAssignOp(AssignOp assign) {
-  // TODO(Calyx): Verification for Cell trait (inverse of components ports):
-  // (1) The destination has Direction::Input, and
-  // (2) the source has Direction::Output.
-  // This is simpler with the completion of the Cell Interface.
-  // See: https://github.com/llvm/circt/issues/1597
-  return succeeded(verifyAssignOpDestination(assign)) &&
-                 succeeded(verifyAssignOpSource(assign))
+  bool isDestination = true, isSource = false;
+  return succeeded(verifyAssignOpValue(assign, isDestination)) &&
+                 succeeded(verifyAssignOpValue(assign, isSource))
              ? success()
              : failure();
 }
@@ -651,10 +660,21 @@ ComponentOp InstanceOp::getReferencedComponent() {
 
 /// Provide meaningful names to the result values of an InstanceOp.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  SmallVector<StringRef> ports;
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<StringRef> InstanceOp::portNames() {
+  SmallVector<StringRef> portNames;
   for (auto &&port : getReferencedComponent().portNames())
-    ports.push_back(port.cast<StringAttr>().getValue());
-  getCellAsmResultNames(setNameFn, *this, ports);
+    portNames.push_back(port.cast<StringAttr>().getValue());
+  return portNames;
+}
+
+SmallVector<Direction> InstanceOp::portDirections() {
+  SmallVector<Direction> portDirections;
+  for (auto &&port : getComponentPortInfo(getReferencedComponent()))
+    portDirections.push_back(port.direction);
+  return portDirections;
 }
 
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
@@ -718,23 +738,46 @@ void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   getCellAsmResultNames(setNameFn, *this, this->portNames());
 }
 
+SmallVector<StringRef> RegisterOp::portNames() {
+  return {"in", "write_en", "clk", "reset", "out", "done"};
+}
+
+SmallVector<Direction> RegisterOp::portDirections() {
+  return {Input, Input, Input, Input, Output, Output};
+}
+
 //===----------------------------------------------------------------------===//
 // MemoryOp
 //===----------------------------------------------------------------------===//
 
 /// Provide meaningful names to the result values of a MemoryOp.
 void MemoryOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<StringRef> MemoryOp::portNames() {
   SmallVector<StringRef> portNames;
-  SmallVector<SmallString<8>> addrNames;
   for (size_t i = 0, e = addrSizes().size(); i != e; ++i) {
-    addrNames.emplace_back("addr" + std::to_string(i));
-    portNames.push_back(addrNames[i]);
+    auto nameAttr =
+        StringAttr::get(this->getContext(), "addr" + std::to_string(i));
+    portNames.push_back(nameAttr.getValue());
   }
   portNames.push_back("write_data");
   portNames.push_back("write_en");
   portNames.push_back("read_data");
   portNames.push_back("done");
-  getCellAsmResultNames(setNameFn, *this, portNames);
+  return portNames;
+}
+
+SmallVector<Direction> MemoryOp::portDirections() {
+  SmallVector<Direction> portDirections;
+  for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
+    portDirections.push_back(Input);
+  portDirections.push_back(Input);
+  portDirections.push_back(Input);
+  portDirections.push_back(Output);
+  portDirections.push_back(Output);
+  return portDirections;
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
@@ -853,6 +896,8 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/Calyx/CalyxInterfaces.cpp.inc"
 
 // Provide the autogenerated implementation guts for the Op classes.
 #define GET_OP_CLASSES

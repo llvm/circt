@@ -36,78 +36,19 @@ struct TclOutputState {
     os.indent(2);
     return os;
   };
-
-  /// Track which modules have been examined so we can issue warnings for
-  /// instance-specific annotations if we write out the same one twice.
-  SmallPtrSet<Operation *, 32> modulesEmitted;
 };
 } // anonymous namespace
 
-namespace {
-/// Represents a Verilog 'entity' -- a unique identifier which locates a
-/// particular instance in the module-instance hierarchy.
-struct Entity {
-  Entity(TclOutputState &s)
-      : s(s), parent(nullptr), insideEmittedModule(false) {}
-  Entity(Entity *parent, InstanceOp inst, bool insideEmittedModule)
-      : s(parent->s), parent(parent), inst(inst),
-        insideEmittedModule(insideEmittedModule) {}
-
-  /// Return the entity inside this instance.
-  Optional<Entity> enter(InstanceOp inst);
-  /// Emit a physical location tcl command.
-  LogicalResult emit(Operation *, StringRef attrName, PhysLocationAttr);
-  /// Emit the entity hierarchy.
-  void emitPath();
-
-  TclOutputState &s;
-  Entity *parent;
-  InstanceOp inst;
-  bool insideEmittedModule;
-
-  StringSet<> emittedAttrKeys;
-
-  StringRef name() {
-    if (inst == nullptr)
-      return "$parent";
-    return inst.instanceName();
-  }
-
-  Optional<InstanceIDAttr> instID() {
-    SmallVector<FlatSymbolRefAttr> stack;
-    return _instID(stack);
-  }
-
-private:
-  Optional<InstanceIDAttr> _instID(SmallVectorImpl<FlatSymbolRefAttr> &stack) {
-    if (parent == nullptr)
-      return {};
-    if (parent->parent == nullptr) {
-      SmallVector<FlatSymbolRefAttr, 32> reverseStack(llvm::reverse(stack));
-      return SymbolRefAttr::get(inst.getContext(), inst.instanceName(),
-                                reverseStack);
-    }
-    stack.push_back(SymbolRefAttr::get(inst.getContext(), inst.instanceName()));
-    return parent->_instID(stack);
-  }
-};
-} // anonymous namespace
-
-Optional<Entity> Entity::enter(InstanceOp inst) {
-  auto mod = dyn_cast_or_null<hw::HWModuleOp>(inst.getReferencedModule());
-  if (!mod) // Could be an extern module, which we should ignore.
-    return {};
-  bool modEmitted = insideEmittedModule ||
-                    s.modulesEmitted.find(mod) != s.modulesEmitted.end();
-  s.modulesEmitted.insert(mod);
-
-  return Entity(this, inst, modEmitted);
+void emitPath(TclOutputState &s, RootedInstancePathAttr path) {
+  for (auto part : path.getPath())
+    s.os << part.getValue() << '|';
 }
 
 /// Emit tcl in the form of:
 /// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
-LogicalResult Entity::emit(Operation *op, StringRef attrKey,
-                           PhysLocationAttr pla) {
+static LogicalResult emit(TclOutputState &s, RootedInstancePathAttr path,
+                          Operation *op, StringRef attrKey,
+                          PhysLocationAttr pla) {
 
   if (!attrKey.startswith_insensitive("loc:"))
     return op->emitError("Error in '")
@@ -139,8 +80,8 @@ LogicalResult Entity::emit(Operation *op, StringRef attrKey,
        << pla.getNum();
 
   // To which entity does this apply?
-  s.os << " -to ";
-  emitPath();
+  s.os << " -to $parent|";
+  emitPath(s, path);
   // If instance name is specified, add it in between the parent entity path and
   // the child entity patch.
   if (auto inst = dyn_cast<hw::InstanceOp>(op))
@@ -149,21 +90,14 @@ LogicalResult Entity::emit(Operation *op, StringRef attrKey,
     s.os << name.getValue() << '|';
   s.os << childEntity << '\n';
 
-  emittedAttrKeys.insert(attrKey);
   return success();
 }
 
-void Entity::emitPath() {
-  if (parent)
-    parent->emitPath();
-  // Names are separated by '|'.
-  s.os << name() << "|";
-}
-
-static LogicalResult emitAttr(Entity &entity, Operation *op, StringRef key,
+static LogicalResult emitAttr(TclOutputState &s, RootedInstancePathAttr path,
+                              Operation *op, StringRef attrName,
                               Attribute attr) {
   if (auto loc = attr.dyn_cast<PhysLocationAttr>())
-    if (failed(entity.emit(op, key, loc)))
+    if (failed(emit(s, path, op, attrName, loc)))
       return failure();
   return success();
 }
@@ -172,70 +106,82 @@ static LogicalResult emitAttr(Entity &entity, Operation *op, StringRef key,
 /// recusively, assume that all descendants are in the same entity. When this is
 /// no longer a sound assuption, we'll have to refactor this code. For now, only
 /// HWModule instances create a new entity.
-static LogicalResult exportTcl(Entity &entity, Operation *op) {
-  // Instances require a new child entity and trigger a descent of the
-  // instantiated module in the new entity.
-  if (auto inst = dyn_cast<hw::InstanceOp>(op)) {
-    Optional<Entity> inModule = entity.enter(inst);
-    if (inModule && failed(exportTcl(*inModule, inst.getReferencedModule())))
-      return failure();
-  }
+static LogicalResult emitAttrs(TclOutputState &s, Operation *root,
+                               Operation *op) {
 
-  // Iterate through 'op's attributes, looking for attributes which we
-  // recognize.
-  for (NamedAttribute attr : op->getAttrs()) {
-    if (entity.emittedAttrKeys.find(attr.first) != entity.emittedAttrKeys.end())
-      op->emitWarning("Attribute has already been emitted: '")
-          << attr.first << "'";
-    if (failed(emitAttr(entity, op, attr.first, attr.second)))
-      return failure();
-  }
+  auto rootName = FlatSymbolRefAttr::get(
+      root->getContext(), SymbolTable::getSymbolName(root).getValue());
 
   // Iterate again through the attributes, looking for instance-specific
   // attributes.
   for (NamedAttribute attr : op->getAttrs()) {
-    if (auto instSwitch = attr.second.dyn_cast<SwitchInstanceAttr>()) {
-      auto instID = entity.instID();
-      if (!instID)
-        continue;
-      Attribute instAttr = instSwitch.lookup(*instID);
-      if (instAttr && failed(emitAttr(entity, op, attr.first, instAttr)))
-        return failure();
-    }
-  }
+    auto result =
+        llvm::TypeSwitch<Attribute, LogicalResult>(attr.second)
 
-  auto result = op->walk([&](Operation *innerOp) {
-    if (innerOp != op && failed(exportTcl(entity, innerOp)))
+            // Handle switch instance.
+            .Case([&](SwitchInstanceAttr instSwitch) {
+              for (auto switchCase : instSwitch.getCases()) {
+                // Filter for only paths rooted at the root module.
+                auto caseRoot = switchCase.getInst().getRootModule();
+                if (caseRoot != rootName)
+                  continue;
+
+                // Output the attribute.
+                if (failed(emitAttr(s, switchCase.getInst(), op, attr.first,
+                                    switchCase.getAttr())))
+                  return failure();
+              }
+              return success();
+            })
+
+            // Physloc outside of a switch instance is not valid.
+            .Case([op](PhysLocationAttr) {
+              return op->emitOpError("PhysLoc attribute must be inside an "
+                                     "instance switch attribute");
+            })
+
+            // Ignore attributes we don't understand.
+            .Default([](Attribute) { return success(); });
+
+    if (failed(result))
+      return failure();
+  }
+  return success();
+}
+
+/// Write out all the relevant tcl commands. Create one 'proc' per module which
+/// takes the parent entity name since we don't assume that the created module
+/// is the top level for the entire design.
+LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
+                                            llvm::raw_ostream &os) {
+  TclOutputState state(os);
+  mlir::ModuleOp mlirModule = hwMod->getParentOfType<mlir::ModuleOp>();
+
+  os << "proc " << hwMod.getName() << "_config { parent } {\n";
+
+  auto result = mlirModule->walk([&](Operation *innerOp) {
+    if (failed(emitAttrs(state, hwMod, innerOp)))
       return mlir::WalkResult::interrupt();
     return mlir::WalkResult::advance();
   });
+
+  os << "}\n\n";
   return failure(result.wasInterrupted());
 }
 
-/// Write out all the relevant tcl commands. Create one 'proc' per module (since
-/// we don't know which one will be the 'top' module). Said procedure takes the
-/// parent entity name since we don't assume that the created module is the top
-/// level for the entire design.
-LogicalResult circt::msft::exportQuartusTcl(ModuleOp module,
+static LogicalResult exportQuartusTclForAll(mlir::ModuleOp mod,
                                             llvm::raw_ostream &os) {
-  TclOutputState state(os);
-
-  for (auto &op : module.getBody()->getOperations()) {
-    auto hwMod = dyn_cast<HWModuleOp>(op);
-    if (!hwMod)
-      continue;
-    os << "proc " << hwMod.getName() << "_config { parent } {\n";
-    Entity entity(state);
-    if (failed(exportTcl(entity, hwMod)))
-      return failure();
-    os << "}\n\n";
+  for (Operation &op : mod.getBody()->getOperations()) {
+    if (auto hwmod = dyn_cast<hw::HWModuleOp>(op))
+      if (failed(exportQuartusTcl(hwmod, os)))
+        return failure();
   }
   return success();
 }
 
 void circt::msft::registerMSFTTclTranslation() {
   mlir::TranslateFromMLIRRegistration toQuartusTcl(
-      "export-quartus-tcl", exportQuartusTcl,
+      "export-quartus-tcl", exportQuartusTclForAll,
       [](mlir::DialectRegistry &registry) {
         registry.insert<MSFTDialect, HWDialect>();
       });

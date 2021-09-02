@@ -23,9 +23,14 @@ class ModuleOp;
 } // namespace mlir
 
 namespace circt {
+namespace hw {
+class HWModuleOp;
+}
+
 namespace msft {
-/// Export TCL for a module.
-mlir::LogicalResult exportQuartusTcl(mlir::ModuleOp module,
+
+/// Export TCL for a specific hw module.
+mlir::LogicalResult exportQuartusTcl(hw::HWModuleOp module,
                                      llvm::raw_ostream &os);
 
 /// Register the Tcl exports.

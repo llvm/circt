@@ -22,6 +22,32 @@ using namespace msft;
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/MSFT/MSFTAttributes.cpp.inc"
 
+static Attribute parseRootedInstancePath(MLIRContext *ctxt,
+                                         DialectAsmParser &p) {
+  FlatSymbolRefAttr root;
+  if (p.parseAttribute(root) || p.parseLSquare())
+    return Attribute();
+  SmallVector<StringAttr, 16> path;
+  if (p.parseOptionalRSquare()) {
+    do {
+      StringAttr instName;
+      if (p.parseAttribute(instName))
+        return Attribute();
+      path.push_back(instName);
+    } while (!p.parseOptionalComma());
+    if (p.parseRSquare())
+      return Attribute();
+  }
+  return RootedInstancePathAttr::get(ctxt, root, path);
+}
+
+static void printRootedInstancePath(RootedInstancePathAttr me,
+                                    DialectAsmPrinter &p) {
+  p << me.getRootModule() << '[';
+  llvm::interleave(me.getPath(), p, ",");
+  p << ']';
+}
+
 Attribute SwitchInstanceAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
                                     Type type) {
   if (p.parseLess())
@@ -29,13 +55,17 @@ Attribute SwitchInstanceAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
   if (!p.parseOptionalGreater())
     return SwitchInstanceAttr::get(ctxt, {});
 
-  SmallVector<SwitchInstanceCase> instPairs;
+  SmallVector<SwitchInstanceCaseAttr> instPairs;
   do {
-    SymbolRefAttr instId;
-    Attribute attr;
-    if (p.parseAttribute(instId) || p.parseEqual() || p.parseAttribute(attr))
+    auto path = parseRootedInstancePath(ctxt, p)
+                    .dyn_cast_or_null<RootedInstancePathAttr>();
+    if (!path)
       return Attribute();
-    instPairs.push_back(std::make_pair(instId, attr));
+
+    Attribute attr;
+    if (p.parseEqual() || p.parseAttribute(attr))
+      return Attribute();
+    instPairs.push_back(SwitchInstanceCaseAttr::get(ctxt, path, attr));
   } while (!p.parseOptionalComma());
   if (p.parseGreater())
     return Attribute();
@@ -45,18 +75,19 @@ Attribute SwitchInstanceAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
 
 void SwitchInstanceAttr::print(DialectAsmPrinter &p) const {
   p << "switch.inst<";
-  llvm::interleaveComma(getCases(), p, [&](auto instPair) {
-    p << instPair.first << '=';
-    p.printAttribute(instPair.second);
+  llvm::interleaveComma(getCases(), p, [&](auto instCase) {
+    printRootedInstancePath(instCase.getInst(), p);
+    p << '=';
+    p.printAttribute(instCase.getAttr());
   });
   p << '>';
 }
 
-Attribute SwitchInstanceAttr::lookup(InstanceIDAttr id) {
+Attribute SwitchInstanceAttr::lookup(RootedInstancePathAttr id) {
   // TODO: This is obviously very slow. Speed this up by using a sorted list.
-  for (auto pair : getCases())
-    if (pair.first == id)
-      return pair.second;
+  for (auto c : getCases())
+    if (c.getInst() == id)
+      return c.getAttr();
   return Attribute();
 }
 

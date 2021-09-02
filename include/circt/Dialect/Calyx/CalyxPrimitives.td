@@ -44,13 +44,6 @@ def RegisterOp : CalyxPrimitive<"register", [
     }]>
   ];
   let extraClassDeclaration = [{
-    SmallVector<StringRef> portNames() {
-      return {"in", "write_en", "clk", "reset", "out", "done"};
-    }
-    SmallVector<Direction> portDirections() {
-      return { Input, Input, Input, Input, Output, Output };
-    }
-
     Value inPort()      { return getResult(0); }
     Value writeEnPort() { return getResult(1); }
     Value clkPort()     { return getResult(2); }

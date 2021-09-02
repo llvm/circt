@@ -40,15 +40,26 @@ class Instance:
     return self.parent.path + [self]
 
   @property
-  def path_attr(self) -> ir.MlirAttribute:
-    symrefs = [f"@{i.name}" for i in self.path]
-    if len(symrefs) <= 1:
-      return None
-    return ir.Attribute.parse("::".join(symrefs[:-1]))
+  def root_module(self) -> hw.HWModuleOp:
+    if self.parent is None:
+      return self.module
+    return self.parent.root_module
+
+  @property
+  def path_attr(self) -> msft.RootedInstancePathAttr:
+    return msft.RootedInstancePathAttr.get(
+        ir.FlatSymbolRefAttr.get(
+            ir.StringAttr(
+                self.root_module.operation.attributes["sym_name"]).value),
+        [x.name_attr for x in self.path[:-1]])
 
   @property
   def name(self):
     return ir.StringAttr(self.instOp.instanceName).value
+
+  @property
+  def name_attr(self):
+    return ir.StringAttr(self.instOp.instanceName)
 
   @property
   def is_root(self):
@@ -79,12 +90,6 @@ class Instance:
       inst.walk_instances(callback)
 
   def attach_attribute(self, attr_key: str, attr: ir.Attribute):
-    # In the case where this instance sits in the 'top' or 'root' module, we
-    # don't need a switch attr.
-    if self.parent.is_root:
-      self.instOp.attributes[attr_key] = attr
-      return
-
     if attr_key not in self.instOp.attributes:
       cases = []
     else:

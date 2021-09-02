@@ -472,8 +472,7 @@ void GrandCentralTapsPass::runOnOperation() {
       // instantiated in a parent module that itself is instantiated in
       // different locations, this will pretty arbitrarily pick one of those
       // locations.
-      path.back()->setAttr("moduleName",
-                           builder.getSymbolRefAttr(name.getValue()));
+      path.back()->setAttr("moduleName", SymbolRefAttr::get(name));
     }
 
     // Drop the original black box module.

@@ -355,7 +355,7 @@ enum VerilogPrecedence {
   Unary,           // Unary operators like ~foo
   Multiply,        // * , / , %
   Addition,        // + , -
-  Shift,           // << , >>
+  Shift,           // << , >>, <<<, >>>
   Comparison,      // > , >= , < , <=
   Equality,        // == , !=
   And,             // &
@@ -815,8 +815,12 @@ private:
 
     /// This flag indicates that the RHS operand is an unsigned value that has
     /// "self determined" width.  This means that we can omit explicit zero
-    /// extensions from it.
+    /// extensions from it, and don't impose a sign on it.
     EB_RHS_UnsignedWithSelfDeterminedWidth = 0x4,
+
+    /// This flag indicates that the result should be wrapped in a $signed(x)
+    /// expression to force the result to signed.
+    EB_ForceResultSigned = 0x8,
   };
 
   /// Emit a binary expression.  The "emitBinaryFlags" are a bitset from
@@ -887,8 +891,8 @@ private:
   SubExprInfo visitComb(ShrSOp op) {
     // >>> is only an arithmetic shift right when both operands are signed.
     // Otherwise it does a logical shift.
-    return emitBinary(op, Shift, ">>>",
-                      EB_RequireSignedOperands |
+    return emitBinary(op, LowestPrecedence, ">>>",
+                      EB_RequireSignedOperands | EB_ForceResultSigned |
                           EB_RHS_UnsignedWithSelfDeterminedWidth);
   }
   SubExprInfo visitComb(AndOp op) {
@@ -942,6 +946,8 @@ private:
 SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
                                     const char *syntax,
                                     unsigned emitBinaryFlags) {
+  if (emitBinaryFlags & EB_ForceResultSigned)
+    os << "$signed(";
   auto operandSignReq =
       SubExprSignRequirement(emitBinaryFlags & EB_OperandSignRequirementMask);
   auto lhsInfo =
@@ -957,9 +963,14 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   if (!isa<AddOp, MulOp, AndOp, OrOp, XorOp>(op))
     rhsPrec = VerilogPrecedence(prec - 1);
 
-  // If the RHS operand has self-determined width, inform emitSubExpr of this.
-  bool rhsIsUnsignedValueWithSelfDeterminedWidth =
-      (emitBinaryFlags & EB_RHS_UnsignedWithSelfDeterminedWidth) != 0;
+  // If the RHS operand has self-determined width and always treated as
+  // unsigned, inform emitSubExpr of this.  This is true for the shift amount in
+  // a shift operation.
+  bool rhsIsUnsignedValueWithSelfDeterminedWidth = false;
+  if (emitBinaryFlags & EB_RHS_UnsignedWithSelfDeterminedWidth) {
+    rhsIsUnsignedValueWithSelfDeterminedWidth = true;
+    operandSignReq = NoRequirement;
+  }
 
   auto rhsInfo =
       emitSubExpr(op->getOperand(1), rhsPrec, OOLBinary, operandSignReq,
@@ -970,6 +981,11 @@ SubExprInfo ExprEmitter::emitBinary(Operation *op, VerilogPrecedence prec,
   SubExprSignResult signedness = IsUnsigned;
   if (lhsInfo.signedness == IsSigned && rhsInfo.signedness == IsSigned)
     signedness = IsSigned;
+
+  if (emitBinaryFlags & EB_ForceResultSigned) {
+    os << ')';
+    signedness = IsSigned;
+  }
 
   return {prec, signedness};
 }
@@ -1741,18 +1757,21 @@ private:
   LogicalResult visitSV(FatalOp op);
   LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(VerbatimOp op);
-  LogicalResult emitImmediateAssertion(Operation *op, Twine name,
-                                       StringRef label, Value expression);
+
+  void emitAssertionLabel(Operation *op, StringRef opName);
+  LogicalResult emitImmediateAssertion(Operation *op, StringRef opName,
+                                       Value expression);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
-  LogicalResult visitSV(BindOp op);
-  LogicalResult emitConcurrentAssertion(Operation *op, Twine name,
-                                        StringRef label, EventControl event,
-                                        Value clock, Value property);
+  LogicalResult emitConcurrentAssertion(Operation *op, StringRef opName,
+                                        EventControl event, Value clock,
+                                        Value property);
   LogicalResult visitSV(AssertConcurrentOp op);
   LogicalResult visitSV(AssumeConcurrentOp op);
   LogicalResult visitSV(CoverConcurrentOp op);
+
+  LogicalResult visitSV(BindOp op);
   LogicalResult visitSV(InterfaceOp op);
   LogicalResult visitSV(InterfaceSignalOp op);
   LogicalResult visitSV(InterfaceModportOp op);
@@ -2083,15 +2102,28 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op, Twine name,
-                                                  StringRef label,
+/// Emit the `<label>:` portion of an immediate or concurrent verification
+/// operation. If a label has been stored for the operation through
+/// `addLegalName` in the pre-pass, that label is used. Otherwise, if the
+/// `enforceVerifLabels` option is set, a temporary name for the operation is
+/// picked and uniquified through `addName`.
+void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
+  if (names.hasName(op)) {
+    os << names.getName(op) << ": ";
+  } else if (state.options.enforceVerifLabels) {
+    auto name = names.addName(op, opName);
+    os << name << ": ";
+  }
+}
+
+LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op,
+                                                  StringRef opName,
                                                   Value expression) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent();
-  if (!label.empty())
-    os << label << ": ";
-  os << name << "(";
+  emitAssertionLabel(op, opName);
+  os << opName << "(";
   emitExpression(expression, ops);
   os << ");";
   emitLocationInfoAndNewLine(ops);
@@ -2099,27 +2131,27 @@ LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op, Twine name,
 }
 
 LogicalResult StmtEmitter::visitSV(AssertOp op) {
-  return emitImmediateAssertion(op, "assert", op.label(), op.expression());
+  return emitImmediateAssertion(op, "assert", op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
-  return emitImmediateAssertion(op, "assume", op.label(), op.expression());
+  return emitImmediateAssertion(op, "assume", op.expression());
 }
 
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  return emitImmediateAssertion(op, "cover", op.label(), op.expression());
+  return emitImmediateAssertion(op, "cover", op.expression());
 }
 
-LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
-                                                   StringRef label,
+LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op,
+                                                   StringRef opName,
                                                    EventControl event,
                                                    Value clock,
                                                    Value property) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  if (!label.empty())
-    os << label << ": ";
-  os << name << " property (@(" << stringifyEventControl(event) << " ";
+  indent();
+  emitAssertionLabel(op, opName);
+  os << opName << " property (@(" << stringifyEventControl(event) << " ";
   emitExpression(clock, ops);
   os << ") ";
   emitExpression(property, ops);
@@ -2129,18 +2161,18 @@ LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op, Twine name,
 }
 
 LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assert", op.label(), op.event(),
-                                 op.clock(), op.property());
+  return emitConcurrentAssertion(op, "assert", op.event(), op.clock(),
+                                 op.property());
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assume", op.label(), op.event(),
-                                 op.clock(), op.property());
+  return emitConcurrentAssertion(op, "assume", op.event(), op.clock(),
+                                 op.property());
 }
 
 LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
-  return emitConcurrentAssertion(op, "cover", op.label(), op.event(),
-                                 op.clock(), op.property());
+  return emitConcurrentAssertion(op, "cover", op.event(), op.clock(),
+                                 op.property());
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
@@ -2892,7 +2924,8 @@ void ModuleEmitter::emitBind(BindOp op) {
   verifyModuleName(op, childVerilogName);
 
   indent() << "bind " << parentVerilogName.getValue() << " "
-           << childVerilogName.getValue() << ' ' << inst.getName() << " (";
+           << childVerilogName.getValue() << ' ' << inst.getName().getValue()
+           << " (";
 
   SmallVector<ModulePortInfo> parentPortInfo = parentMod.getPorts();
   SmallVector<ModulePortInfo> childPortInfo = getModulePortInfo(childMod);
