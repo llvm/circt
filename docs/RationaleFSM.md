@@ -30,7 +30,8 @@ to lower the FSM abstraction into HW+Comb+SV (Hardware) and Standard+SCF+MemRef
 
 ## Operations
 
-**Two ways of instantiation**
+### Two ways of instantiation
+
 A state machine is defined by an `fsm.machine` operation, which contains all
 the states and transitions of the state machine. `fsm.machine` has a list of
 inputs and outputs and explicit state type:
@@ -83,7 +84,7 @@ hw.module @qux() {
 }
 ```
 
-**Explicit state and transition representation**
+### Explicit state and transition representation
 
 Each state of an FSM is represented explicitly with an `fsm.state` operation.
 `fsm.state` must have an `output` CFG region representing the combinational
@@ -114,7 +115,7 @@ fsm.machine @foo(%arg0: i1) -> i1 attributes {stateType = i1} {
 }
 ```
 
-**Guard region of transitions**
+### Guard region of transitions
 
 `fsm.transition` has an optional `guard` CFG region, which must be terminated
 with an `fsm.return` operation returning a Boolean value to indicate whether
@@ -140,7 +141,7 @@ contain any operations with side effects, enabling the evaluation of guards to
 be parallelized.  Note that an empty guard region is evaluated as true, which
 means the corresponding transition is always taken.
 
-**Action region of transitions and internal variables**
+### Action region of transitions and internal variables
 
 To avoid *state explosion*, we introduce `fsm.variable` operation (similar to
 the [extended state](https://en.wikipedia.org/wiki/UML_state_machine) in UML
