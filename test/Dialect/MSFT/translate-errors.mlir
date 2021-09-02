@@ -12,6 +12,6 @@ hw.module @top() {
 hw.module.extern @Foo()
 
 hw.module @top() {
-  // expected-error @+1 {{Error in 'phys:' PhysLocation attribute. Expected loc:<entityName>}}
+  // expected-error @+1 {{'hw.instance' op PhysLoc attributes must have names starting with 'loc'}}
   hw.instance "foo1" @Foo() {"phys:" = #msft.switch.inst< @top[] = #msft.physloc<DSP, 0, 0, 0> > } : () -> ()
 }
