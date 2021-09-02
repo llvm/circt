@@ -596,10 +596,13 @@ static Direction getCellDirectionFor(Value value) {
   return cast<CellInterface>(parentOp).portDirections()[i];
 }
 
-/// Gets the port direction for a given argument value of a component.
-static Direction getComponentDirectionFor(Value value, ComponentOp op) {
+/// Gets the port direction for a given Argument from the parent ComponentOp of
+/// `op`.
+static Direction getComponentDirectionFor(Value value, Operation *op) {
+  auto component = op->getParentOfType<ComponentOp>();
+  assert(isa<ComponentOp>(component) && "Op not within ComponentOp.");
 
-  Block *body = op.getBody();
+  Block *body = component.getBody();
   auto it = llvm::find_if(body->getArguments(),
                           [&](auto arg) { return arg == value; });
   assert(it != body->getArguments().end() &&
@@ -607,33 +610,28 @@ static Direction getComponentDirectionFor(Value value, ComponentOp op) {
   BlockArgument blockArg = *it;
 
   size_t blockArgNum = blockArg.getArgNumber();
-  auto ports = getComponentPortInfo(op);
-  assert(blockArgNum < ports.size() &&
-         "Block argument index should be within range of component's ports.");
+  auto ports = getComponentPortInfo(component);
   return ports[blockArgNum].direction;
 }
 
 /// Verifies the value of a given assignment operation. The boolean
 /// `isDestination` is used to distinguish whether the destination
 /// or source of the AssignOp is to be verified.
-static LogicalResult verifyAssignOpValue(AssignOp assign, bool isDestination) {
-  Value value = isDestination ? assign.dest() : assign.src();
-  bool isComponentPort = value.isa<BlockArgument>();
-  if (isComponentPort) {
-    Direction componentDir =
-        getComponentDirectionFor(value, assign->getParentOfType<ComponentOp>());
-    return verifyPortDirection(assign, componentDir, isDestination,
-                               isComponentPort);
-  }
+static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
+  Value value = isDestination ? op.dest() : op.src();
 
+  bool isComponentPort = value.isa<BlockArgument>();
   Operation *definingOp = value.getDefiningOp();
-  if (isa<CellInterface>(definingOp)) {
-    return verifyPortDirection(assign, getCellDirectionFor(value),
-                               isDestination, isComponentPort);
-  } else if (isDestination && !isa<GroupGoOp, GroupDoneOp>(definingOp))
+  // If the defining operation is a Component or Cell, verify its direction.
+  if (isComponentPort || isa<CellInterface>(definingOp)) {
+    Direction direction = isComponentPort ? getComponentDirectionFor(value, op)
+                                          : getCellDirectionFor(value);
+    return verifyPortDirection(op, direction, isDestination, isComponentPort);
+  } else if (isDestination && !isa<GroupGoOp, GroupDoneOp>(definingOp)) {
     // The value's defining operation does not have any other valid matches.
-    return assign->emitOpError(
+    return op->emitOpError(
         "has an invalid destination port. It must be drive-able.");
+  }
 
   return success();
 }
