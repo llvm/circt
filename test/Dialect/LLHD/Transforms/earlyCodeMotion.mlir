@@ -3,8 +3,8 @@
 
 // CHECK-LABEL:   llhd.proc @check_dont_move_sideeffect() -> (
 // CHECK-SAME:                                                %[[VAL_0:.*]] : !llhd.sig<i32>) {
-// CHECK:           %[[VAL_1:.*]] = llhd.const 4 : i32
-// CHECK:           %[[VAL_2:.*]] = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+// CHECK:           %[[VAL_1:.*]] = hw.constant 4 : i32
+// CHECK:           %[[VAL_2:.*]] = llhd.constant_time #llhd.time<1ns, 0d, 0e>
 // CHECK:           br ^bb1
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_3:.*]] = llhd.var %[[VAL_1]] : i32
@@ -17,8 +17,8 @@
 // CHECK:         }
 llhd.proc @check_dont_move_sideeffect() -> (%sig : !llhd.sig<i32>) {
   // TR: -1
-  %c = llhd.const 4 : i32
-  %time = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+  %c = hw.constant 4 : i32
+  %time = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   br ^bb1
 ^bb1:
   // TR: -1
@@ -37,7 +37,7 @@ llhd.proc @check_dont_move_sideeffect() -> (%sig : !llhd.sig<i32>) {
 // are moved freely
 // CHECK-LABEL:   llhd.proc @check_move_prb1(
 // CHECK-SAME:                               %[[VAL_0:.*]] : !llhd.sig<i32>) -> () {
-// CHECK:           %[[VAL_1:.*]] = llhd.const 4 : i32
+// CHECK:           %[[VAL_1:.*]] = hw.constant 4 : i32
 // CHECK:           %[[VAL_2:.*]] = addi %[[VAL_1]], %[[VAL_1]] : i32
 // CHECK:           br ^bb1
 // CHECK:         ^bb1:
@@ -52,7 +52,7 @@ llhd.proc @check_move_prb1(%sig : !llhd.sig<i32>) -> () {
   br ^bb1
 ^bb1:
   // TR: 0
-  %c = llhd.const 4 : i32
+  %c = hw.constant 4 : i32
   %prb1 = llhd.prb %sig : !llhd.sig<i32>
   br ^bb2
 ^bb2:
@@ -66,7 +66,7 @@ llhd.proc @check_move_prb1(%sig : !llhd.sig<i32>) -> () {
 // the same TR, but side-effect-free operations are moved freely
 // CHECK-LABEL:   llhd.proc @check_move_prb2(
 // CHECK-SAME:                               %[[VAL_0:.*]] : !llhd.sig<i32>) -> () {
-// CHECK:           %[[VAL_1:.*]] = llhd.const 4 : i32
+// CHECK:           %[[VAL_1:.*]] = hw.constant 4 : i32
 // CHECK:           %[[VAL_2:.*]] = addi %[[VAL_1]], %[[VAL_1]] : i32
 // CHECK:           br ^bb1
 // CHECK:         ^bb1:
@@ -81,7 +81,7 @@ llhd.proc @check_move_prb2(%sig : !llhd.sig<i32>) -> () {
   br ^bb1
 ^bb1:
   // TR: 1
-  %c = llhd.const 4 : i32
+  %c = hw.constant 4 : i32
   %prb1 = llhd.prb %sig : !llhd.sig<i32>
   llhd.wait ^bb2
 ^bb2:
@@ -93,7 +93,7 @@ llhd.proc @check_move_prb2(%sig : !llhd.sig<i32>) -> () {
 
 // CHECK-LABEL:   llhd.proc @check_blockarg(
 // CHECK-SAME:                              %[[VAL_0:.*]] : !llhd.sig<i32>) -> () {
-// CHECK:           %[[VAL_1:.*]] = llhd.const 4 : i32
+// CHECK:           %[[VAL_1:.*]] = hw.constant 4 : i32
 // CHECK:           br ^bb1(%[[VAL_1]] : i32)
 // CHECK:         ^bb1(%[[VAL_2:.*]]: i32):
 // CHECK:           %[[VAL_3:.*]] = addi %[[VAL_2]], %[[VAL_2]] : i32
@@ -101,7 +101,7 @@ llhd.proc @check_move_prb2(%sig : !llhd.sig<i32>) -> () {
 // CHECK:         }
 llhd.proc @check_blockarg(%sig : !llhd.sig<i32>) -> () {
   // TR: -1
-  %c = llhd.const 4 : i32
+  %c = hw.constant 4 : i32
   br ^bb1(%c : i32)
 ^bb1(%a : i32):
   // TR: -1
@@ -111,10 +111,10 @@ llhd.proc @check_blockarg(%sig : !llhd.sig<i32>) -> () {
 
 // CHECK-LABEL:   llhd.proc @loop(
 // CHECK-SAME:                    %[[VAL_0:.*]] : !llhd.sig<i2>) -> () {
-// CHECK:           %[[VAL_1:.*]] = llhd.const 0 : i32
-// CHECK:           %[[VAL_2:.*]] = llhd.const 2 : i32
-// CHECK:           %[[VAL_3:.*]] = llhd.const 0 : i2
-// CHECK:           %[[VAL_4:.*]] = llhd.const 1 : i32
+// CHECK:           %[[VAL_1:.*]] = hw.constant 0 : i32
+// CHECK:           %[[VAL_2:.*]] = hw.constant 2 : i32
+// CHECK:           %[[VAL_3:.*]] = hw.constant 0 : i2
+// CHECK:           %[[VAL_4:.*]] = hw.constant 1 : i32
 // CHECK:           br ^bb1
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_5:.*]] = llhd.var %[[VAL_1]] : i32
@@ -137,13 +137,13 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
   br ^body
 ^body:
   // TR: 0
-  %0 = llhd.const 0 : i32
+  %0 = hw.constant 0 : i32
   %i = llhd.var %0 : i32
   br ^loop_body
 ^loop_body:
   // TR: 1
   %i_ld = llhd.load %i : !llhd.ptr<i32>
-  %1 = llhd.const 2 : i32
+  %1 = hw.constant 2 : i32
   %2 = cmpi ult, %i_ld, %1 : i32
   cond_br %2, ^loop_continue, ^check
 ^check:
@@ -151,8 +151,8 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
   llhd.wait (%in_i : !llhd.sig<i2>), ^body
 ^loop_continue:
   // TR: 1
-  %3 = llhd.const 0 : i2
-  %5 = llhd.const 1 : i32
+  %3 = hw.constant 0 : i2
+  %5 = hw.constant 1 : i32
   %prb = llhd.prb %in_i : !llhd.sig<i2>
   %i_ld4 = llhd.load %i : !llhd.ptr<i32>
   %14 = addi %i_ld4, %5 : i32
@@ -162,9 +162,9 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 
 // CHECK-LABEL:   llhd.proc @complicated(
 // CHECK-SAME: %[[VAL_0:.*]] : !llhd.sig<i1>, %[[VAL_1:.*]] : !llhd.sig<i1>, %[[VAL_2:.*]] : !llhd.sig<i1>) -> (%[[VAL_3:.*]] : !llhd.sig<i1>, %[[VAL_4:.*]] : !llhd.sig<i1>) {
-// CHECK:           %[[ALLSET:.*]] = llhd.const true : i1
-// CHECK:           %[[VAL_5:.*]] = llhd.const false : i1
-// CHECK:           %[[VAL_6:.*]] = llhd.const #llhd.time<0s, 1d, 0e> : !llhd.time
+// CHECK:           %[[ALLSET:.*]] = hw.constant true
+// CHECK:           %[[VAL_5:.*]] = hw.constant false
+// CHECK:           %[[VAL_6:.*]] = llhd.constant_time #llhd.time<0s, 1d, 0e>
 // CHECK:           br ^bb1
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_7:.*]] = llhd.prb %[[VAL_3]] : !llhd.sig<i1>
@@ -205,7 +205,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 // CHECK:           br ^bb1
 // CHECK:         }
 llhd.proc @complicated(%rst_ni: !llhd.sig<i1>, %clk_i: !llhd.sig<i1>, %async_ack_i: !llhd.sig<i1>) -> (%ack_src_q: !llhd.sig<i1> , %ack_q: !llhd.sig<i1> ) {
-  %allset = llhd.const 1 : i1
+  %allset = hw.constant 1 : i1
   // TR: -1
   br ^0
 ^0:
@@ -224,7 +224,7 @@ llhd.proc @complicated(%rst_ni: !llhd.sig<i1>, %clk_i: !llhd.sig<i1>, %async_ack
   llhd.store %ack_src_q_shadow, %2 : !llhd.ptr<i1>
   llhd.store %ack_src_q_shadow, %2 : !llhd.ptr<i1>
   %clk_i_prb1 = llhd.prb %clk_i : !llhd.sig<i1>
-  %3 = llhd.const 0 : i1
+  %3 = hw.constant 0 : i1
   %4 = llhd.eq %clk_i_prb, %3 : i1
   %5 = llhd.neq %clk_i_prb1, %3 : i1
   %posedge = comb.and %4, %5 : i1
@@ -239,7 +239,7 @@ llhd.proc @complicated(%rst_ni: !llhd.sig<i1>, %clk_i: !llhd.sig<i1>, %async_ack
   %8 = llhd.neq %rst_ni_prb1, %3 : i1
   %9 = comb.xor %8, %allset : i1
   %10 = llhd.neq %9, %3 : i1
-  %11 = llhd.const #llhd.time<0s, 1d, 0e> : !llhd.time
+  %11 = llhd.constant_time #llhd.time<0s, 1d, 0e>
   cond_br %10, ^if_true, ^if_false
 ^if_false:
   // TR: 0

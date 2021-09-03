@@ -3,7 +3,7 @@
 // CHECK-LABEL: _check_relations
 llhd.entity @check_relations() -> () {
   // CHECK-NEXT: wire [63:0] _[[A:.*]] = 64'd42;
-  %a = llhd.const 42 : i64
+  %a = hw.constant 42 : i64
   // CHECK-NEXT: wire  _{{.*}} = _[[A]] == _[[A]];
   %1 = comb.icmp eq %a, %a : i64
   // CHECK-NEXT: wire  _{{.*}} = _[[A]] != _[[A]];

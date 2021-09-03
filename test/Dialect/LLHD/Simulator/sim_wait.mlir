@@ -20,7 +20,7 @@
 // CHECK-NEXT: 0ps 0d 10e  root/proc/s2  0x00000005
 // CHECK-NEXT: 0ps 0d 10e  root/s2  0x00000005
 llhd.entity @root () -> () {
-  %0 = llhd.const 0 : i32
+  %0 = hw.constant 0 : i32
   %1 = llhd.sig "s1" %0 : i32
   %2 = llhd.sig "s2" %0 : i32
   llhd.inst "proc" @proc () -> (%1, %2) : () -> (!llhd.sig<i32>, !llhd.sig<i32>)
@@ -29,11 +29,11 @@ llhd.entity @root () -> () {
 llhd.proc @proc () -> (%a : !llhd.sig<i32>, %b : !llhd.sig<i32>) {
   br ^timed
 ^timed:
-  %t1 = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
-  %t2 = llhd.const #llhd.time<0ns, 0d, 2e>: !llhd.time
+  %t1 = llhd.constant_time #llhd.time<0ns, 0d, 1e>
+  %t2 = llhd.constant_time #llhd.time<0ns, 0d, 2e>
   llhd.wait for %t1, ^observe
 ^observe:
-  %c0 = llhd.const 1 : i32
+  %c0 = hw.constant 1 : i32
   %p0 = llhd.prb %b : !llhd.sig<i32>
   %a0 = addi %c0, %p0 : i32
   llhd.drv %a, %a0 after %t1 : !llhd.sig<i32>

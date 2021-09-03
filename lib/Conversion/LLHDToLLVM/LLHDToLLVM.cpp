@@ -2111,46 +2111,37 @@ struct NeqOpConversion : public ConvertToLLVMPattern {
 namespace {
 /// Lower an LLHD constant operation to an equivalent LLVM dialect constant
 /// operation.
-struct ConstOpConversion : public ConvertToLLVMPattern {
-  explicit ConstOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::ConstOp::getOperationName(), ctx,
+struct ConstantTimeOpConversion : public ConvertToLLVMPattern {
+  explicit ConstantTimeOpConversion(MLIRContext *ctx,
+                                    LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::ConstantTimeOp::getOperationName(), ctx,
                              typeConverter) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operand,
                   ConversionPatternRewriter &rewriter) const override {
     // Get the ConstOp.
-    auto constOp = cast<ConstOp>(op);
+    auto constOp = cast<ConstantTimeOp>(op);
     // Get the constant's attribute.
-    auto attr = constOp.value();
+    TimeAttr timeAttr = constOp.valueAttr();
     // Handle the time const special case: create a new array containing the
     // three time values.
-    if (auto timeAttr = attr.dyn_cast<TimeAttr>()) {
-      auto timeTy = typeConverter->convertType(constOp.getResult().getType());
+    auto timeTy = typeConverter->convertType(constOp.getResult().getType());
 
-      // Convert real-time element to ps.
-      llvm::StringMap<uint64_t> map = {
-          {"s", 12}, {"ms", 9}, {"us", 6}, {"ns", 3}, {"ps", 0}};
-      uint64_t adjusted =
-          std::pow(10, map[timeAttr.getTimeUnit()]) * timeAttr.getTime();
+    // Convert real-time element to ps.
+    llvm::StringMap<uint64_t> map = {
+        {"s", 12}, {"ms", 9}, {"us", 6}, {"ns", 3}, {"ps", 0}};
+    uint64_t adjusted =
+        std::pow(10, map[timeAttr.getTimeUnit()]) * timeAttr.getTime();
 
-      // Get sub-steps.
-      uint64_t delta = timeAttr.getDelta();
-      uint64_t eps = timeAttr.getEps();
+    // Get sub-steps.
+    uint64_t delta = timeAttr.getDelta();
+    uint64_t eps = timeAttr.getEps();
 
-      // Create time constant.
-      auto denseAttr = DenseElementsAttr::get(
-          VectorType::get(3, rewriter.getI64Type()), {adjusted, delta, eps});
-      rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
-      return success();
-    }
-
-    // Get the converted llvm type.
-    auto intType = typeConverter->convertType(attr.getType());
-    // Replace the operation with an llvm constant op.
-    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, intType,
-                                                  constOp.valueAttr());
-
+    // Create time constant.
+    auto denseAttr = DenseElementsAttr::get(
+        VectorType::get(3, rewriter.getI64Type()), {adjusted, delta, eps});
+    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
     return success();
   }
 };
@@ -2804,7 +2795,7 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
-  patterns.add<ConstOpConversion, HWConstantOpConversion,
+  patterns.add<ConstantTimeOpConversion, HWConstantOpConversion,
                HWArrayCreateOpConversion, HWStructCreateOpConversion>(
       ctx, converter);
 

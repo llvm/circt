@@ -95,7 +95,7 @@
 // NAMED: 5000ps
 // NAMED:   root/s  0xd9
 llhd.entity @root () -> () {
-  %0 = llhd.const 1 : i8
+  %0 = hw.constant 1 : i8
   %s = llhd.sig "s" %0 : i8
   %1 = llhd.sig "1" %0 : i8
   llhd.inst "foo" @foo () -> (%s) : () -> (!llhd.sig<i8>)
@@ -106,11 +106,11 @@ llhd.proc @foo () -> (%s : !llhd.sig<i8>) {
 ^entry:
   %1 = llhd.prb %s : !llhd.sig<i8>
   %2 = addi %1, %1 : i8
-  %t0 = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
+  %t0 = llhd.constant_time #llhd.time<0ns, 0d, 1e>
   llhd.drv %s, %2 after %t0 : !llhd.sig<i8>
   %3 = addi %2, %1 : i8
-  %t1 = llhd.const #llhd.time<0ns, 0d, 2e> : !llhd.time
+  %t1 = llhd.constant_time #llhd.time<0ns, 0d, 2e>
   llhd.drv %s, %3 after %t1 : !llhd.sig<i8>
-  %t2= llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+  %t2= llhd.constant_time #llhd.time<1ns, 0d, 0e>
   llhd.wait for %t2, ^entry
 }
