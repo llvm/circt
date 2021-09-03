@@ -115,3 +115,72 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     Value done()      { return getResult(getNumDimensions() + 3); }
   }];
 }
+
+class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
+  CalyxPrimitive<"std_" # mnemonic, traits> {
+
+  let summary = "Defines an operation which maps to a Calyx library primitive";
+  let description = [{
+    This operation represents an instance of a Calyx library primitive.
+    A library primitive maps to some hardware-implemented component within the
+    native Calyx compiler.
+  }];
+
+  let arguments = (ins StrAttr:$instanceName);
+  let builders = [
+    OpBuilder<(ins "StringAttr":$instanceName, "::mlir::TypeRange":$resultTypes), [{
+      $_state.addAttribute("instanceName", instanceName);
+      $_state.addTypes(resultTypes);
+    }]>
+  ];
+}
+
+class BoolBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+    SameTypeConstraint<"left", "right">
+  ]> {
+  let results = (outs AnyType:$left, AnyType:$right, I1:$out);
+}
+
+def LtLibOp  : BoolBinaryLibraryOp<"lt"> {}
+def GtLibOp  : BoolBinaryLibraryOp<"gt"> {}
+def EqLibOp  : BoolBinaryLibraryOp<"eq"> {}
+def NeqLibOp : BoolBinaryLibraryOp<"neq"> {}
+def GeLibOp  : BoolBinaryLibraryOp<"ge"> {}
+def LeLibOp  : BoolBinaryLibraryOp<"le"> {}
+
+class ArithBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+    SameTypeConstraint<"left", "right">,
+    SameTypeConstraint<"left", "out">
+  ]> {
+  let results = (outs AnyType:$left, AnyType:$right, AnyType:$out);
+}
+
+def AddLibOp  : ArithBinaryLibraryOp<"add"> {}
+def SubLibOp  : ArithBinaryLibraryOp<"sub"> {}
+def ShruLibOp : ArithBinaryLibraryOp<"shru"> {}
+def ShrLibOp  : ArithBinaryLibraryOp<"shr"> {}
+def ShlLibOp  : ArithBinaryLibraryOp<"shl"> {}
+def AndLibOp  : ArithBinaryLibraryOp<"and"> {}
+def NotLibOp  : ArithBinaryLibraryOp<"not"> {}
+def OrLibOp   : ArithBinaryLibraryOp<"or"> {}
+def XorLibOp  : ArithBinaryLibraryOp<"xor"> {}
+
+class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+  ]> {
+  let results = (outs AnyInteger:$in, AnyInteger:$out);
+}
+
+def PadLibOp : UnaryLibraryOp<"pad"> {
+  let verifier = [{
+    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+    return success(inBits < outBits);
+  }];
+}
+
+def SliceLibOp : UnaryLibraryOp<"slice"> {
+  let verifier = [{
+    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+    return success(inBits > outBits);  }];
+}

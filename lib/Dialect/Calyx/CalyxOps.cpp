@@ -894,6 +894,48 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 }
 
 //===----------------------------------------------------------------------===//
+// Calyx library ops
+//===----------------------------------------------------------------------===//
+
+#define ImplUnaryOpCellInterface(OpType)                                       \
+  SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
+  SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
+  void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
+    getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }
+
+#define ImplBinOpCellInterface(OpType)                                         \
+  SmallVector<StringRef> OpType::portNames() {                                 \
+    return {"left", "right", "out"};                                           \
+  }                                                                            \
+  SmallVector<Direction> OpType::portDirections() {                            \
+    return {Input, Input, Output};                                             \
+  }                                                                            \
+  void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
+    getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }
+
+ImplUnaryOpCellInterface(PadLibOp);
+ImplUnaryOpCellInterface(SliceLibOp);
+
+ImplBinOpCellInterface(LtLibOp);
+ImplBinOpCellInterface(GtLibOp);
+ImplBinOpCellInterface(EqLibOp);
+ImplBinOpCellInterface(NeqLibOp);
+ImplBinOpCellInterface(GeLibOp);
+ImplBinOpCellInterface(LeLibOp);
+
+ImplBinOpCellInterface(AddLibOp);
+ImplBinOpCellInterface(SubLibOp);
+ImplBinOpCellInterface(ShruLibOp);
+ImplBinOpCellInterface(ShrLibOp);
+ImplBinOpCellInterface(ShlLibOp);
+ImplBinOpCellInterface(AndLibOp);
+ImplBinOpCellInterface(NotLibOp);
+ImplBinOpCellInterface(OrLibOp);
+ImplBinOpCellInterface(XorLibOp);
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
