@@ -68,8 +68,12 @@ private:
   StringRef getLibraryFor(Operation *op) {
     StringRef library;
     TypeSwitch<Operation *>(op)
-        .Case<MemoryOp, RegisterOp>([&](auto op) { library = "core"; })
-        /*.Case<>([&](auto op) { library = "binary_operators"; })*/
+        .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
+              AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
+              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp>(
+            [&](auto op) { library = "core"; })
+        .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
+              SrshLibOp>([&](auto op) { library = "binary_operators"; })
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
           llvm_unreachable("Type matching failed for this operation.");
@@ -143,6 +147,14 @@ struct Emitter {
   // Memory emission
   void emitMemory(MemoryOp memory);
 
+  // Emits a library primitive with template parameters based on all in- and
+  // output ports.
+  void emitLibraryPrimTypedByAllPorts(Operation *op);
+
+  // Emits a library primitive with a single template parameter based on the
+  // first input port.
+  void emitLibraryPrimTypedByFirstInputPort(Operation *op);
+
 private:
   /// Used to track which imports are required for this program.
   ImportTracker importTracker;
@@ -204,14 +216,10 @@ private:
       return;
 
     TypeSwitch<Operation *>(definingOp)
-        .Case<InstanceOp>([&](auto op) {
+        .Case<CellInterface>([&](auto cell) {
           // A cell port should be defined as <instance-name>.<port-name>
-          auto opResult = value.cast<OpResult>();
-          unsigned portIndex = opResult.getResultNumber();
-          auto ports = getComponentPortInfo(op.getReferencedComponent());
-          StringAttr portName = ports[portIndex].name;
           (isIndented ? indent() : os)
-              << op.instanceName() << period() << portName.getValue();
+              << cell.instanceName() << period() << cell.portName(value);
         })
         .Case<hw::ConstantOp>([&](auto op) {
           // A constant is defined as <bit-width>'<base><value>, where the base
@@ -332,6 +340,13 @@ void Emitter::emitComponent(ComponentOp op) {
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
           .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
+          .Case<SliceLibOp, PadLibOp>(
+              [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
+          .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
+                SgtLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp, AddLibOp,
+                SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
+                NotLibOp, OrLibOp, XorLibOp>(
+              [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });
@@ -429,6 +444,29 @@ void Emitter::emitMemory(MemoryOp memory) {
   os << RParen() << semicolonEndL();
 }
 
+/// Calling getName() on a calyx operation will return "calyx.${opname}". This
+/// function returns whatever is left after the first '.' in the string,
+/// removing the 'calyx' prefix.
+static StringRef removeCalyxPrefix(StringRef s) { return s.split(".").second; }
+
+void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
+  auto cell = cast<CellInterface>(op);
+  indent() << cell.instanceName() << equals()
+           << removeCalyxPrefix(op->getName().getStringRef()) << LParen();
+  llvm::interleaveComma(op->getResults(), os, [&](auto res) {
+    os << std::to_string(res.getType().getIntOrFloatBitWidth());
+  });
+  os << RParen() << semicolonEndL();
+}
+
+void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
+  auto cell = cast<CellInterface>(op);
+  unsigned bitwidth = cell.inputPorts()[0].getType().getIntOrFloatBitWidth();
+  indent() << cell.instanceName() << equals()
+           << removeCalyxPrefix(op->getName().getStringRef()) << LParen()
+           << bitwidth << RParen() << semicolonEndL();
+}
+
 void Emitter::emitAssignment(AssignOp op) {
 
   emitValue(op.dest(), /*isIndented=*/true);
@@ -447,7 +485,12 @@ void Emitter::emitWires(WiresOp op) {
       TypeSwitch<Operation *>(&bodyOp)
           .Case<GroupOp>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
-          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+          .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp,
+                // Calyx stdlib ops
+                LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
+                SgtLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp, AddLibOp,
+                SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
+                NotLibOp, OrLibOp, XorLibOp, SliceLibOp, PadLibOp>(
               [&](auto op) { /* Do nothing. */ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside wires section");
