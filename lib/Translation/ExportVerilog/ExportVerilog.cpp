@@ -2334,9 +2334,9 @@ LogicalResult StmtEmitter::visitSV(AlwaysCombOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  StringRef opString = "always @(*)";
-  if (state.options.useAlwaysComb)
-    opString = "always_comb";
+  StringRef opString = "always_comb";
+  if (state.options.noAlwaysComb)
+    opString = "always @(*)";
 
   indent() << opString;
   emitBlockAsStatement(op.getBodyBlock(), ops, opString);
