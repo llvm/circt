@@ -85,24 +85,24 @@ void HWGeneratorCalloutPass::runOnOperation() {
     return;
   }
   for (auto &op : llvm::make_early_inc_range(root.getBody()->getOperations())) {
-    if (auto schema = dyn_cast<HWGeneratorSchemaOp>(op)) 
+    if (auto schema = dyn_cast<HWGeneratorSchemaOp>(op))
       genOps[schema.getName()] = schema;
     else if (auto generator = dyn_cast<HWModuleGeneratedOp>(op))
       genOps[generator.getName()] = generator;
     else if (auto hwMod = dyn_cast<HWModuleOp>(op))
-      for (auto InstanceOp : llvm::make_early_inc_range(hwMod.getOps<InstanceOp>())) {
+      for (auto InstanceOp :
+           llvm::make_early_inc_range(hwMod.getOps<InstanceOp>())) {
         auto memName = InstanceOp.moduleName();
         if (genOps.count(memName)) {
           auto generator = dyn_cast<HWModuleGeneratedOp>(genOps[memName]);
           SmallVector<std::string> hierNames;
           getHierarchichalNames(hwMod, hierNames, memName.str(), symbolUsers);
           for (auto hName : hierNames)
-            processGenerator(generator, *generatorExe, extraGeneratorArgs, InstanceOp,
-                             hName);
+            processGenerator(generator, *generatorExe, extraGeneratorArgs,
+                             InstanceOp, hName);
         }
       }
-    }
-  
+  }
 }
 
 void HWGeneratorCalloutPass::processGenerator(
