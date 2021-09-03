@@ -35,12 +35,38 @@ struct HWGeneratorCalloutPass
 
   void processGenerator(HWModuleGeneratedOp generatedModuleOp,
                         StringRef generatorExe,
-                        ArrayRef<StringRef> extraGeneratorArgs);
+                        ArrayRef<StringRef> extraGeneratorArgs,
+                        Operation *instOp, StringRef hierName);
+
+private:
+  llvm::StringMap<Operation *> genOps;
 };
 } // end anonymous namespace
 
+void static getHierarchichalNames(HWModuleOp op,
+                                  SmallVector<std::string> &names,
+                                  const std::string path,
+                                  mlir::SymbolUserMap symbolUsers) {
+
+  if (!op)
+    return;
+  bool parentFound = false;
+  auto opPath = op.getName().str() + "." + path;
+  for (auto u : symbolUsers.getUsers(op)) {
+    if (auto inst = dyn_cast<InstanceOp>(u)) {
+      getHierarchichalNames(inst->getParentOfType<HWModuleOp>(), names, opPath,
+                            symbolUsers);
+      parentFound = true;
+    }
+  }
+  if (!parentFound)
+    names.push_back(opPath);
+}
+
 void HWGeneratorCalloutPass::runOnOperation() {
   ModuleOp root = getOperation();
+  mlir::SymbolTableCollection symbolTable;
+  mlir::SymbolUserMap symbolUsers(symbolTable, root);
   SmallVector<StringRef> genOptions;
   StringRef extraGeneratorArgs(genExecArgs);
   extraGeneratorArgs.split(genOptions, ';');
@@ -59,19 +85,35 @@ void HWGeneratorCalloutPass::runOnOperation() {
     return;
   }
   for (auto &op : llvm::make_early_inc_range(root.getBody()->getOperations())) {
-    if (auto generator = dyn_cast<HWModuleGeneratedOp>(op))
-      processGenerator(generator, *generatorExe, extraGeneratorArgs);
-  }
+    if (auto schema = dyn_cast<HWGeneratorSchemaOp>(op)) 
+      genOps[schema.getName()] = schema;
+    else if (auto generator = dyn_cast<HWModuleGeneratedOp>(op))
+      genOps[generator.getName()] = generator;
+    else if (auto hwMod = dyn_cast<HWModuleOp>(op))
+      for (auto InstanceOp : llvm::make_early_inc_range(hwMod.getOps<InstanceOp>())) {
+        auto memName = InstanceOp.moduleName();
+        if (genOps.count(memName)) {
+          auto generator = dyn_cast<HWModuleGeneratedOp>(genOps[memName]);
+          SmallVector<std::string> hierNames;
+          getHierarchichalNames(hwMod, hierNames, memName.str(), symbolUsers);
+          for (auto hName : hierNames)
+            processGenerator(generator, *generatorExe, extraGeneratorArgs, InstanceOp,
+                             hName);
+        }
+      }
+    }
+  
 }
 
 void HWGeneratorCalloutPass::processGenerator(
     HWModuleGeneratedOp generatedModuleOp, StringRef generatorExe,
-    ArrayRef<StringRef> extraGeneratorArgs) {
+    ArrayRef<StringRef> extraGeneratorArgs, Operation *instOp,
+    StringRef hierName) {
   // Get the corresponding schema associated with this generated op.
-  auto genSchema =
-      dyn_cast<HWGeneratorSchemaOp>(generatedModuleOp.getGeneratorKindOp());
-  if (!genSchema)
+  auto schemaF = genOps.find(generatedModuleOp.generatorKind());
+  if (schemaF == genOps.end())
     return;
+  auto genSchema = dyn_cast<HWGeneratorSchemaOp>(schemaF->second);
 
   // Ignore the generator op if the schema does not match the user specified
   // schema name from command line "-schema-name"
@@ -90,6 +132,8 @@ void HWGeneratorCalloutPass::processGenerator(
   // explicitly.
   generatorArgs.push_back("--moduleName");
   generatorArgs.push_back(moduleName);
+  generatorArgs.push_back("--hierarchichalName");
+  generatorArgs.push_back(hierName.str());
   // Iterate over all the attributes in the schema.
   // Assumption: All the options required by the generator program must be
   // present in the schema.
@@ -113,23 +157,29 @@ void HWGeneratorCalloutPass::processGenerator(
       return;
     }
   }
-  if (auto verifData = generatedModuleOp->getAttr("verificationData").dyn_cast_or_null<DictionaryAttr>()) {
+  if (auto verifData = generatedModuleOp->getAttr("verificationData")
+                           .dyn_cast_or_null<DictionaryAttr>()) {
     std::string verifStr;
-    for (auto a : verifData){
-      verifStr += a.first.str() + " : " ;
-      generatorArgs.push_back("--"+a.first.str());
+    for (auto a : verifData) {
+      verifStr += a.first.str() + " : ";
+      generatorArgs.push_back("--" + a.first.str());
       auto v = a.second;
       if (auto intV = v.dyn_cast<IntegerAttr>())
         generatorArgs.push_back(std::to_string(intV.getValue().getZExtValue()));
       else if (auto strV = v.dyn_cast<StringAttr>())
         generatorArgs.push_back(strV.getValue().str());
       else if (auto arrV = v.dyn_cast<ArrayAttr>()) {
-        for (auto i : arrV){
+        std::string indices;
+        for (auto arrI : llvm::enumerate(arrV)) {
+          auto i = arrI.value();
+          if (arrI.index() != 0)
+            indices += ",";
           if (auto intV = i.dyn_cast<IntegerAttr>())
-            generatorArgs.push_back(std::to_string(intV.getValue().getZExtValue()));
+            indices += std::to_string(intV.getValue().getZExtValue());
           else if (auto strV = i.dyn_cast<StringAttr>())
-            generatorArgs.push_back(strV.getValue().str());
+            indices += strV.getValue().str();
         }
+        generatorArgs.push_back(indices);
       }
     }
   }
