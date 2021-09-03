@@ -96,8 +96,8 @@ print("=== Tcl")
 
 # CHECK-LABEL: proc pycde_Test_config { parent }
 # CHECK-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|dsp_inst
-# CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|pycde_UnParameterized_0|memory|bank
-# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
-# CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|memory|bank
 # CHECK-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|memory|bank
+# CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|memory|bank
+# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
+# CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|pycde_UnParameterized_0|memory|bank
 t.print_tcl("pycde_Test")
