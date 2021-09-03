@@ -51,8 +51,9 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         SmallVector<circt::calyx::ComponentPortInfo> info;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections(), $_op.portNames()))
-          info.push_back(ComponentPortInfo{StringAttr::get($_op->getContext(), std::get<2>(it)), std::get<0>(it).getType(), std::get<1>(it)});
+        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections(),$_op.portNames()))
+          info.push_back(ComponentPortInfo{StringAttr::get($_op->getContext(),
+            std::get<2>(it)), std::get<0>(it).getType(), std::get<1>(it)});
         return info;
     }]
     >,
