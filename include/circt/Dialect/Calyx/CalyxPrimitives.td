@@ -147,6 +147,12 @@ def EqLibOp  : BoolBinaryLibraryOp<"eq"> {}
 def NeqLibOp : BoolBinaryLibraryOp<"neq"> {}
 def GeLibOp  : BoolBinaryLibraryOp<"ge"> {}
 def LeLibOp  : BoolBinaryLibraryOp<"le"> {}
+def SltLibOp  : BoolBinaryLibraryOp<"slt"> {}
+def SgtLibOp  : BoolBinaryLibraryOp<"sgt"> {}
+def SeqLibOp  : BoolBinaryLibraryOp<"seq"> {}
+def SneqLibOp : BoolBinaryLibraryOp<"sneq"> {}
+def SgeLibOp  : BoolBinaryLibraryOp<"sge"> {}
+def SleLibOp  : BoolBinaryLibraryOp<"sle"> {}
 
 class ArithBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
     SameTypeConstraint<"left", "right">,
@@ -158,8 +164,9 @@ class ArithBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
 def AddLibOp  : ArithBinaryLibraryOp<"add"> {}
 def SubLibOp  : ArithBinaryLibraryOp<"sub"> {}
 def ShruLibOp : ArithBinaryLibraryOp<"shru"> {}
-def ShrLibOp  : ArithBinaryLibraryOp<"shr"> {}
-def ShlLibOp  : ArithBinaryLibraryOp<"shl"> {}
+def RshLibOp  : ArithBinaryLibraryOp<"rsh"> {}
+def SrshLibOp : ArithBinaryLibraryOp<"srsh"> {}
+def LshLibOp  : ArithBinaryLibraryOp<"lsh"> {}
 def AndLibOp  : ArithBinaryLibraryOp<"and"> {}
 def NotLibOp  : ArithBinaryLibraryOp<"not"> {}
 def OrLibOp   : ArithBinaryLibraryOp<"or"> {}
