@@ -108,6 +108,28 @@ def CellOpInterface : OpInterface<"CellInterface"> {
             ports.push_back(std::get<0>(it));
         return ports;
       }]
+    >,
+    InterfaceMethod<
+      "This returns the ports of a cell, filtering out any interface ports.",
+      "SmallVector<Value>",
+      "filterInterfacePorts",
+      (ins "calyx::Direction":$dir),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{
+        // TODO(Calyx): Rewrite this once we've added attributes to the interface ports
+        auto isInterfacePort = [](StringRef portName) {
+          return portName == "clk" || portName == "reset" || portName == "go"
+            || portName == "done";
+        };
+
+        SmallVector<Value> filteredPorts;
+        for (auto it : llvm::zip($_op->getResults(), $_op.portInfos())) {
+          auto portInfo = std::get<1>(it);
+          if (portInfo.direction == dir && !isInterfacePort(portInfo.name.getValue()))
+            filteredPorts.push_back(std::get<0>(it));
+        }
+        return filteredPorts;
+      }]
     >
   ];
 
