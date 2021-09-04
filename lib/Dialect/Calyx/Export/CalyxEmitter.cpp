@@ -200,6 +200,9 @@ private:
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
     auto definingOp = value.getDefiningOp();
+    if (definingOp == nullptr)
+      return;
+
     TypeSwitch<Operation *>(definingOp)
         .Case<InstanceOp>([&](auto op) {
           // A cell port should be defined as <instance-name>.<port-name>
@@ -328,6 +331,7 @@ void Emitter::emitComponent(ComponentOp op) {
           .Case<InstanceOp>([&](auto op) { emitInstance(op); })
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
+          .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });

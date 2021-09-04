@@ -2,7 +2,10 @@
 
 calyx.program {
   calyx.component @Z(%go : i1, %reset : i1, %clk : i1) -> (%flag :i1, %done: i1) {
-    calyx.wires {}
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
+    calyx.wires {
+      calyx.assign %done = %r.done : i1
+    }
     calyx.control {}
   }
 

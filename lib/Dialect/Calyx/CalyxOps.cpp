@@ -434,11 +434,25 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
       clk |= (portName == "clk");
       reset |= (portName == "reset");
     }
-    if (go && clk && reset && done)
-      return success();
   }
-  return op->emitOpError() << "does not have required 1-bit input ports `go`, "
-                              "`clk`, `reset`, and output port `done`";
+  SmallVector<bool, 4> hasRequiredPort{go, clk, reset, done};
+  if (!llvm::all_of(hasRequiredPort, [&](bool b) { return b; }))
+    return op->emitOpError("does not have required 1-bit input ports `go`, "
+                           "`clk`, `reset`, and output port `done`");
+
+  // Verify the component actually does something: has a non-empty Control
+  // region, or continuous assignments.
+  bool hasNoControlConstructs =
+      op.getControlOp().getBody()->getOperations().empty();
+  bool hasNoAssignments =
+      op.getWiresOp().getBody()->getOps<AssignOp>().empty();
+  if (hasNoControlConstructs && hasNoAssignments)
+    return op->emitOpError(
+        "The component currently does nothing. It needs to either have "
+        "continuous assignments in the Wires region or control constructs in "
+        "the Control region.");
+
+  return success();
 }
 
 /// Returns a new vector containing the concatenation of vectors @p a and @p b.

@@ -4,13 +4,15 @@
 calyx.program {
   // CHECK-LABEL: calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
   calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
-    calyx.wires {}
+    %c1_1 = constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
 
   // CHECK-LABEL: calyx.component @B(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
   calyx.component @B (%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
-    calyx.wires {}
+    %c1_1 = constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
 
