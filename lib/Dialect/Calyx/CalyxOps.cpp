@@ -444,8 +444,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
   // region, or continuous assignments.
   bool hasNoControlConstructs =
       op.getControlOp().getBody()->getOperations().empty();
-  bool hasNoAssignments =
-      op.getWiresOp().getBody()->getOps<AssignOp>().empty();
+  bool hasNoAssignments = op.getWiresOp().getBody()->getOps<AssignOp>().empty();
   if (hasNoControlConstructs && hasNoAssignments)
     return op->emitOpError(
         "The component currently does nothing. It needs to either have "
