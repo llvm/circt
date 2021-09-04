@@ -102,8 +102,10 @@ static LogicalResult verifyControlBody(Operation *op) {
   return success();
 }
 
+static LogicalResult portsDrivenByGroup(ValueRange ports, GroupOp groupOp);
+
 /// Checks whether @p port is driven from within @p groupOp.
-static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp) {
+static LogicalResult portDrivenByGroup(Value port, GroupOp groupOp) {
   // Check if the port is driven by an assignOp from within @p groupOp.
   for (auto &use : port.getUses()) {
     if (auto assignOp = dyn_cast<AssignOp>(use.getOwner())) {
@@ -114,30 +116,22 @@ static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp) {
     }
   }
 
-  // If @p port is an output of an InstanceOp, and if any input port of
-  // this InstanceOp is driven within @p groupOp, we'll assume that @p port
-  // is sensitive to the driven input port.
-  // @TODO: simplify this logic when the calyx.cell interface allows us to more
-  // easily access the input and output ports of a component
-  if (auto instanceOp = dyn_cast<InstanceOp>(port.getDefiningOp())) {
-    auto compOp = instanceOp.getReferencedComponent();
-    auto compOpPortInfo = llvm::enumerate(getComponentPortInfo(compOp));
-
-    bool isOutputPort = llvm::any_of(compOpPortInfo, [&](auto portInfo) {
-      return port == instanceOp->getResult(portInfo.index()) &&
-             portInfo.value().direction == Direction::Output;
-    });
-
-    if (isOutputPort) {
-      return success(llvm::any_of(compOpPortInfo, [&](auto portInfo) {
-        return portInfo.value().direction == Direction::Input &&
-               succeeded(isPortDrivenByGroup(
-                   instanceOp->getResult(portInfo.index()), groupOp));
-      }));
-    }
-  }
+  // If @p port is an output of a cell then we conservatively enforce that all
+  // (and at least one) non-interface inputs of the cell must be driven by the
+  // group.
+  if (auto cell = dyn_cast<CellInterface>(port.getDefiningOp());
+      cell && cell.direction(port) == calyx::Direction::Output)
+    return portsDrivenByGroup(
+        cell.filterInterfacePorts(calyx::Direction::Input), groupOp);
 
   return failure();
+}
+
+/// Checks whether all ports in @p ports are driven from within @p groupOp
+static LogicalResult portsDrivenByGroup(ValueRange ports, GroupOp groupOp) {
+  return success(llvm::all_of(ports, [&](auto port) {
+    return portDrivenByGroup(port, groupOp).succeeded();
+  }));
 }
 
 LogicalResult calyx::verifyCell(Operation *op) {
@@ -867,7 +861,7 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
       ifOp.elseRegion().front().empty())
     return ifOp.emitError() << "empty 'else' region.";
 
-  if (failed(isPortDrivenByGroup(ifOp.cond(), groupOp)))
+  if (failed(portDrivenByGroup(ifOp.cond(), groupOp)))
     return ifOp.emitError()
            << "conditional op: '" << valueName(component, ifOp.cond())
            << "' expected to be driven from group: '" << ifOp.groupName()
@@ -892,7 +886,7 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
   if (whileOp.body().front().empty())
     return whileOp.emitError() << "empty body region.";
 
-  if (failed(isPortDrivenByGroup(whileOp.cond(), groupOp)))
+  if (failed(portDrivenByGroup(whileOp.cond(), groupOp)))
     return whileOp.emitError()
            << "conditional op: '" << valueName(component, whileOp.cond())
            << "' expected to be driven from group: '" << whileOp.groupName()
