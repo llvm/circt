@@ -4,14 +4,14 @@
 calyx.program {
   // CHECK-LABEL: calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
   calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
 
   // CHECK-LABEL: calyx.component @B(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
   calyx.component @B (%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
@@ -35,7 +35,7 @@ calyx.program {
     %gt.left, %gt.right, %gt.out = calyx.std_gt "gt" : i8, i8, i1
     %pad.in, %pad.out = calyx.std_pad "pad" : i8, i9
     %slice.in, %slice.out = calyx.std_slice "slice" : i8, i7
-    %c1_i1 = constant 1 : i1
+    %c1_i1 = hw.constant 1 : i1
 
     calyx.wires {
       // CHECK: calyx.group @Group1 {
