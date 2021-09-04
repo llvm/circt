@@ -18,7 +18,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     // expected-error @+1 {{'calyx.instance' op is referencing component: A, which does not exist.}}
     calyx.instance "a0" @A
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
@@ -28,14 +28,14 @@ calyx.program {
 
 calyx.program {
   calyx.component @A(%in: i16, %go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     // expected-error @+1 {{'calyx.instance' op has a wrong number of results; expected: 5 but got 0}}
     calyx.instance "a0" @A
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
@@ -45,7 +45,7 @@ calyx.program {
 
 calyx.program {
   calyx.component @B(%in: i16, %go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
@@ -61,12 +61,12 @@ calyx.program {
 
 calyx.program {
   calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i16, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
   calyx.component @B(%in: i16, %go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
@@ -76,9 +76,7 @@ calyx.program {
     // expected-error @+1 {{'calyx.assign' op expects parent op to be one of 'calyx.group, calyx.wires'}}
     calyx.assign %b.in = %a.out : i16
 
-    calyx.wires {
-      calyx.assign %done = %b.done : i1
-    }
+    calyx.wires { calyx.assign %b.in = %a.out : i16 }
     calyx.control {}
   }
 }
@@ -101,12 +99,12 @@ calyx.program {
 
 calyx.program {
   calyx.component @B(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires {
       calyx.group @A { calyx.group_done %c1_1 : i1 }
     }
@@ -130,7 +128,7 @@ calyx.program {
       }
       calyx.assign %done = %c1_1 : i1
     }
-    calyx.control { }
+    calyx.control {}
   }
 }
 
@@ -138,13 +136,13 @@ calyx.program {
 
 calyx.program {
   calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
@@ -165,9 +163,9 @@ calyx.program {
     }
     calyx.control {}
   }
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
@@ -184,11 +182,11 @@ calyx.program {
 
 calyx.program {
   calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
     calyx.wires { }
     calyx.control {
@@ -204,13 +202,13 @@ calyx.program {
 
 calyx.program {
   calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
@@ -227,13 +225,13 @@ calyx.program {
 
 calyx.program {
   calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
@@ -248,11 +246,11 @@ calyx.program {
 
 calyx.program {
   calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
     calyx.wires { }
     calyx.control {
@@ -268,13 +266,13 @@ calyx.program {
 
 calyx.program {
   calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
@@ -323,8 +321,8 @@ calyx.program {
 // -----
 
 calyx.program {
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
-    %c1_1 = constant 1 : i1
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
+    %c1_1 = hw.constant 1 : i1
     calyx.wires {
       // expected-error @+1 {{'calyx.assign' op has an invalid destination port. It must be drive-able.}}
       calyx.assign %c1_1 = %go : i1
@@ -336,8 +334,8 @@ calyx.program {
 // -----
 
 calyx.program {
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i32, %done: i1) {
-    %c1_1 = constant 1 : i1
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
+    %c1_1 = hw.constant 1 : i1
     calyx.wires {
       // expected-error @+1 {{'calyx.assign' op has a component port as the destination with the incorrect direction.}}
       calyx.assign %go = %c1_1 : i1
@@ -349,7 +347,7 @@ calyx.program {
 // -----
 
 calyx.program {
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%flag: i1, %out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     calyx.wires {
       // expected-error @+1 {{'calyx.assign' op has a component port as the source with the incorrect direction.}}
@@ -362,7 +360,7 @@ calyx.program {
 // -----
 
 calyx.program {
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%flag: i1, %out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     calyx.wires {
       // expected-error @+1 {{'calyx.assign' op has a cell port as the source with the incorrect direction.}}
@@ -375,7 +373,7 @@ calyx.program {
 // -----
 
 calyx.program {
-  calyx.component @main(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%flag: i1, %out: i32, %done: i1) {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     calyx.wires {
       // expected-error @+1 {{'calyx.assign' op has a cell port as the destination with the incorrect direction.}}

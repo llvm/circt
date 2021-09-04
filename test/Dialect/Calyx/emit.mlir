@@ -12,9 +12,7 @@ calyx.program {
   // CHECK-LABEL: component B(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
   calyx.component @B(%in: i1, %go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
     %c1_1 = hw.constant 1 : i1
-    calyx.wires {
-      calyx.assign %done = %c1_1 : i1
-    }
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
 
