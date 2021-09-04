@@ -2,7 +2,7 @@
 
 calyx.program {
   calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
-    %c1_1 = constant 1 : i1
+    %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
