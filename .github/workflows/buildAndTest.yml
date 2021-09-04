@@ -15,7 +15,7 @@ jobs:
     name: Build LLVM
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20210903204844
+      image: ghcr.io/circt/images/circt-ci-build:20210811055218
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -88,7 +88,7 @@ jobs:
     needs: build-llvm
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20210903204844
+      image: ghcr.io/circt/images/circt-ci-build:20210811055218
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
