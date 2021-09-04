@@ -2139,8 +2139,9 @@ struct ConstantTimeOpConversion : public ConvertToLLVMPattern {
     uint64_t eps = timeAttr.getEps();
 
     // Create time constant.
-    auto denseAttr = DenseElementsAttr::get(
-        VectorType::get(3, rewriter.getI64Type()), {adjusted, delta, eps});
+    auto denseAttr =
+        DenseElementsAttr::get(RankedTensorType::get(3, rewriter.getI64Type()),
+                               {adjusted, delta, eps});
     rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
     return success();
   }

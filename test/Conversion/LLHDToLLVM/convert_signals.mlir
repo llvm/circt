@@ -74,7 +74,7 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:           %[[VAL_10:.*]] = llvm.insertvalue %[[VAL_8]], %[[VAL_9]][0 : i32] : !llvm.array<3 x i5>
 // CHECK:           %[[VAL_11:.*]] = llvm.insertvalue %[[VAL_8]], %[[VAL_10]][1 : i32] : !llvm.array<3 x i5>
 // CHECK:           %[[VAL_12:.*]] = llvm.insertvalue %[[VAL_8]], %[[VAL_11]][2 : i32] : !llvm.array<3 x i5>
-// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : vector<3xi64>) : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_14:.*]] = llvm.mlir.constant(1 : i64) : i64
 // CHECK:           %[[VAL_15:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_16:.*]] = llvm.alloca %[[VAL_15]] x i1 {alignment = 4 : i64} : (i32) -> !llvm.ptr<i1>
@@ -131,7 +131,7 @@ llhd.entity @convert_drv_enable (%sI1 : !llhd.sig<i1>) -> () {
 // CHECK-SAME:                           %[[VAL_0:.*]]: !llvm.ptr<i8>,
 // CHECK-SAME:                           %[[VAL_1:.*]]: !llvm.ptr<struct<(array<3 x i1>)>>,
 // CHECK-SAME:                           %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
-// CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : vector<3xi64>) : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_4:.*]] = llvm.mlir.constant(false) : i1
 // CHECK:           %[[VAL_5:.*]] = llvm.mlir.constant(0 : i32) : i32
 // CHECK:           %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_5]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
