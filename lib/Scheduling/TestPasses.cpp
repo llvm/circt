@@ -131,6 +131,10 @@ static void emitSchedule(Problem &prob, StringRef attrName,
 namespace {
 struct TestProblemPass : public PassWrapper<TestProblemPass, FunctionPass> {
   void runOnFunction() override;
+  StringRef getArgument() const override { return "test-scheduling-problem"; }
+  StringRef getDescription() const override {
+    return "Import a schedule encoded as attributes";
+  }
 };
 } // namespace
 
@@ -164,6 +168,10 @@ namespace {
 struct TestCyclicProblemPass
     : public PassWrapper<TestCyclicProblemPass, FunctionPass> {
   void runOnFunction() override;
+  StringRef getArgument() const override { return "test-cyclic-problem"; }
+  StringRef getDescription() const override {
+    return "Import a solution for the cyclic problem encoded as attributes";
+  }
 };
 } // namespace
 
@@ -201,6 +209,11 @@ namespace {
 struct TestSPOProblemPass
     : public PassWrapper<TestSPOProblemPass, FunctionPass> {
   void runOnFunction() override;
+  StringRef getArgument() const override { return "test-spo-problem"; }
+  StringRef getDescription() const override {
+    return "Import a solution for the shared, pipelined operators problem "
+           "encoded as attributes";
+  }
 };
 } // namespace
 
@@ -234,6 +247,10 @@ namespace {
 struct TestASAPSchedulerPass
     : public PassWrapper<TestASAPSchedulerPass, FunctionPass> {
   void runOnFunction() override;
+  StringRef getArgument() const override { return "test-asap-scheduler"; }
+  StringRef getDescription() const override {
+    return "Emit ASAP scheduler's solution as attributes";
+  }
 };
 } // anonymous namespace
 
@@ -269,6 +286,10 @@ struct TestSimplexSchedulerPass
   TestSimplexSchedulerPass(const TestSimplexSchedulerPass &) {}
   Option<std::string> problemToTest{*this, "with", llvm::cl::init("Problem")};
   void runOnFunction() override;
+  StringRef getArgument() const override { return "test-simplex-scheduler"; }
+  StringRef getDescription() const override {
+    return "Emit a simplex scheduler's solution as attributes";
+  }
 };
 } // anonymous namespace
 
@@ -347,19 +368,21 @@ void TestSimplexSchedulerPass::runOnFunction() {
 namespace circt {
 namespace test {
 void registerSchedulingTestPasses() {
-  PassRegistration<TestProblemPass> problemTester(
-      "test-scheduling-problem", "Import a schedule encoded as attributes");
-  PassRegistration<TestCyclicProblemPass> cyclicProblemTester(
-      "test-cyclic-problem",
-      "Import a solution for the cyclic problem encoded as attributes");
-  PassRegistration<TestSPOProblemPass> spoTester(
-      "test-spo-problem", "Import a solution for the shared, pipelined "
-                          "operators problem encoded as attributes");
-  PassRegistration<TestASAPSchedulerPass> asapTester(
-      "test-asap-scheduler", "Emit ASAP scheduler's solution as attributes");
-  PassRegistration<TestSimplexSchedulerPass> simplexTester(
-      "test-simplex-scheduler",
-      "Emit a simplex scheduler's solution as attributes");
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestProblemPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestCyclicProblemPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestSPOProblemPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestASAPSchedulerPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestSimplexSchedulerPass>();
+  });
 }
 } // namespace test
 } // namespace circt

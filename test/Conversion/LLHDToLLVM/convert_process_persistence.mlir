@@ -120,7 +120,7 @@ llhd.proc @convert_persistent_i32 () -> () {
 // CHECK:           %[[VAL_8:.*]] = llvm.icmp "eq" %[[VAL_6]], %[[VAL_7]] : i32
 // CHECK:           llvm.cond_br %[[VAL_8]], ^bb2, ^bb4
 // CHECK:         ^bb2:
-// CHECK:           %[[VAL_9:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : vector<3xi64>) : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_9:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_10:.*]] = llvm.mlir.constant(0 : i32) : i32
 // CHECK:           %[[VAL_11:.*]] = llvm.mlir.constant(3 : i32) : i32
 // CHECK:           %[[VAL_12:.*]] = llvm.mlir.constant(0 : i32) : i32

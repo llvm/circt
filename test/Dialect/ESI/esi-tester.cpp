@@ -38,14 +38,20 @@ struct TestESIModWrap
           signalPassFailure();
     }
   }
+
+  StringRef getArgument() const override { return "test-mod-wrap"; }
+  StringRef getDescription() const override {
+    return "Test the ESI find and wrap functionality";
+  }
 };
 
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
   registry.insert<comb::CombDialect, esi::ESIDialect, hw::HWDialect>();
 
-  mlir::PassRegistration<TestESIModWrap>(
-      "test-mod-wrap", "Test the ESI find and wrap functionality");
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestESIModWrap>();
+  });
 
   return mlir::failed(
       mlir::MlirOptMain(argc, argv, "CIRCT modular optimizer driver", registry,
