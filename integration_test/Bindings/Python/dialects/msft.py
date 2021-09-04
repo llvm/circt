@@ -1,5 +1,6 @@
 # REQUIRES: bindings_python
-# RUN: %PYTHON% %s | FileCheck %s
+# RUN: %PYTHON% %s 2> %t | FileCheck %s
+# RUN: cat %t | FileCheck --check-prefix=ERR %s
 
 import circt
 from circt import msft
@@ -32,18 +33,18 @@ with ir.Context() as ctx, ir.Location.unknown():
     ext_inst = extmod.create("ext1")
 
   with ir.InsertionPoint.at_block_terminator(top.body.blocks[0]):
-    inst = op.create("inst1")
+    path = op.create("inst1")
 
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
   physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)
   print(physAttr)
 
-  inst = msft.RootedInstancePathAttr.get(
+  path = msft.RootedInstancePathAttr.get(
       ir.Attribute.parse("@top"),
       [ir.StringAttr.get("inst1"),
        ir.StringAttr.get("ext1")])
   # CHECK-NEXT: #msft.switch.inst<@top["inst1","ext1"]=#msft.physloc<M20K, 2, 6, 1>>
-  instSwitch = msft.SwitchInstanceAttr.get([(inst, physAttr)])
+  instSwitch = msft.SwitchInstanceAttr.get([(path, physAttr)])
   print(instSwitch)
 
   resolved_inst = msft.get_instance(top.operation,
@@ -58,6 +59,21 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: hw.module @MyWidget()
   # CHECK:   hw.output
   m.operation.print()
+
+  db = msft.DeviceDB(top.operation)
+
+  assert db.get_instance_at(physAttr) is None
+  place_rc = db.add_placement(physAttr, path, "subpath", resolved_inst)
+  assert place_rc
+  located_inst = db.get_instance_at(physAttr)
+  assert located_inst is not None
+  assert located_inst[0] == path
+  assert located_inst[1] == "subpath"
+  assert located_inst[2] == resolved_inst
+
+  num_failed = db.add_design_placements()
+  assert num_failed == 1
+  # ERR: error: 'hw.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by hw.instance "ext1" @MyExternMod() {"loc:subpath" = #msft.switch.inst<@top["inst1","ext1"]=#msft.physloc<M20K, 2, 6, 1>>, parameters = {}}
 
   # CHECK-LABEL: === tcl ===
   print("=== tcl ===")

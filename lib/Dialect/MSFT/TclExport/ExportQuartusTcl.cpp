@@ -89,7 +89,7 @@ static void emit(TclOutputState &s, DeviceDB::PlacedInstance inst,
 LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
                                             llvm::raw_ostream &os) {
   TclOutputState state(os);
-  DeviceDB db(hwMod.getContext(), hwMod);
+  DeviceDB db(hwMod);
   size_t failures = db.addDesignPlacements();
   if (failures != 0)
     return hwMod->emitError("Could not place ") << failures << " instances";

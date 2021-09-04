@@ -33,7 +33,7 @@ namespace msft {
 class DeviceDB {
 public:
   /// Create a DB treating 'top' as the root module.
-  DeviceDB(MLIRContext *ctxt, Operation *top);
+  DeviceDB(Operation *top);
 
   // TODO: Add calls to model the device primitive locations.
 

@@ -30,6 +30,10 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        MlirStringCallback,
                                                        void *userData);
 
+//===----------------------------------------------------------------------===//
+// Generator registration.
+//===----------------------------------------------------------------------===//
+
 /// This callback constructs a replacement for the operation argument and
 /// returns it.
 typedef struct {
@@ -43,6 +47,34 @@ MLIR_CAPI_EXPORTED void mlirMSFTRegisterGenerator(MlirContext,
                                                   const char *generatorName,
                                                   mlirMSFTGeneratorCallback cb,
                                                   MlirAttribute parameters);
+
+//===----------------------------------------------------------------------===//
+// DeviceDB.
+//===----------------------------------------------------------------------===//
+
+typedef struct {
+  void *ptr;
+} CirctMSFTDeviceDB;
+
+typedef struct {
+  MlirAttribute path; // RootedInstancePathAttr.
+  const char *subpath;
+  size_t subpathLength;
+  MlirOperation op;
+} CirctMSFTPlacedInstance;
+
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirOperation top);
+void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
+size_t circtMSFTDeviceDBAddDesignPlacements(CirctMSFTDeviceDB);
+MlirLogicalResult circtMSFTDeviceDBAddPlacement(CirctMSFTDeviceDB,
+                                                MlirAttribute loc,
+                                                CirctMSFTPlacedInstance inst);
+bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB, MlirAttribute loc,
+                                       CirctMSFTPlacedInstance *out);
+
+//===----------------------------------------------------------------------===//
+// MSFT Attributes.
+//===----------------------------------------------------------------------===//
 
 /// Add a physical location attribute with the given entity name, device type, x
 /// and y coordinates, and number.
