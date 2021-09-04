@@ -92,8 +92,11 @@ splitTarget(StringRef target, MLIRContext *context) {
   return {targetBase, ArrayAttr::get(context, annotationVec)};
 }
 
-/// Split out non-local paths
-SmallVector<std::tuple<std::string, std::string, std::string>>
+/// Split out non-local paths.  This will return a set of target strings for
+/// each named entity along the path.
+/// c|c:ai/Am:bi/Bm>d.agg[3] ->
+/// c|c>ai, c|Am>bi, c|Bm>d.agg[2]
+static SmallVector<std::tuple<std::string, std::string, std::string>>
 expandNonLocal(StringRef target) {
   SmallVector<std::tuple<std::string, std::string, std::string>> retval;
   StringRef circuit;
@@ -121,8 +124,9 @@ expandNonLocal(StringRef target) {
   return retval;
 }
 
-/// Make an anchor
-void buildNLA(
+/// Make an anchor for a non-local annotation.  Use the expanded path to build
+/// the module and name list in the anchor.
+static void buildNLA(
     CircuitOp circuit, StringRef targetStrRef,
     SmallVectorImpl<std::tuple<std::string, std::string, std::string>> &nlas) {
   OpBuilder b(circuit.getBodyRegion());
