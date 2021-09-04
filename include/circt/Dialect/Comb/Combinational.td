@@ -14,6 +14,8 @@
 // Arithmetic and Logical Operations
 //===----------------------------------------------------------------------===//
 
+include "mlir/Interfaces/InferTypeOpInterface.td"
+
 // Base class for binary operators.
 class BinOp<string mnemonic, list<OpTrait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
@@ -128,11 +130,6 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
 
-  let builders = [
-    OpBuilder<(ins "ICmpPredicate":$pred, "Value":$lhs, "Value":$rhs), [{
-      return build($_builder, $_state, $_builder.getI1Type(), pred, lhs, rhs);
-    }]>
-  ];
   let extraClassDeclaration = [{
     /// Returns the flipped predicate, reversing the LHS and RHS operands.  The
     /// lhs and rhs operands should be flipped to match the new predicate.
@@ -254,14 +251,4 @@ def MuxOp : CombOp<"mux",
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
-
-  let builders = [
-    OpBuilder<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue),
-    [{
-      assert(trueValue.getType() == falseValue.getType() &&
-             "mux requires matching true/false value types");
-      return build($_builder, $_state, trueValue.getType(),
-                   cond, trueValue, falseValue);
-    }]>
-  ];
 }
