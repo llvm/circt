@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -32,6 +33,10 @@ MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
   return wrap(exportQuartusTcl(hwmod, stream));
 }
 
+//===----------------------------------------------------------------------===//
+// Generator registration.
+//===----------------------------------------------------------------------===//
+
 void mlirMSFTRegisterGenerator(MlirContext cCtxt, const char *opName,
                                const char *generatorName,
                                mlirMSFTGeneratorCallback cb,
@@ -45,6 +50,34 @@ void mlirMSFTRegisterGenerator(MlirContext cCtxt, const char *opName,
       },
       unwrap(parameters));
 }
+
+//===----------------------------------------------------------------------===//
+// DeviceDB.
+//===----------------------------------------------------------------------===//
+
+DEFINE_C_API_PTR_METHODS(CirctMSFTDeviceDB, circt::msft::DeviceDB)
+
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirOperation top) {
+  return wrap(new DeviceDB(unwrap(top)));
+}
+void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self) { delete unwrap(self); }
+size_t circtMSFTAddDesignPlacements(CirctMSFTDeviceDB self) {
+  return unwrap(self)->addDesignPlacements();
+}
+MlirLogicalResult circtMSFTAddPlacement(CirctMSFTDeviceDB self,
+                                        MlirAttribute cLoc,
+                                        CirctMSFTPlacedInstance cInst) {
+  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  RootedInstancePathAttr path =
+      unwrap(cInst.path).cast<RootedInstancePathAttr>();
+  auto inst = DeviceDB::PlacedInstance{path, cInst.subpath, unwrap(cInst.op)};
+
+  return wrap(unwrap(self)->addPlacement(loc, inst));
+}
+
+//===----------------------------------------------------------------------===//
+// MSFT Attributes.
+//===----------------------------------------------------------------------===//
 
 void mlirMSFTAddPhysLocationAttr(MlirOperation cOp, const char *entityName,
                                  DeviceType type, long x, long y, long num) {

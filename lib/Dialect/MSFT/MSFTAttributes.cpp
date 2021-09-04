@@ -132,7 +132,11 @@ Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
 void MSFTDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
   if (succeeded(generatedAttributePrinter(attr, p)))
     return;
-  llvm_unreachable("Unexpected attribute");
+  TypeSwitch<Attribute>(attr)
+      .Case([&p](RootedInstancePathAttr path) {
+        printRootedInstancePath(path, p);
+      })
+      .Default([](Attribute) { llvm_unreachable("Unexpected attribute"); });
 }
 
 void MSFTDialect::registerAttributes() {

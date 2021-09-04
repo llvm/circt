@@ -9,7 +9,6 @@
 #include "DialectModules.h"
 
 #include "circt-c/Dialect/MSFT.h"
-#include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/Bindings/Python/PybindAdaptors.h"
@@ -24,6 +23,7 @@ namespace py = pybind11;
 
 using namespace circt;
 using namespace circt::msft;
+using namespace mlir::python::adaptors;
 
 static MlirOperation callPyFunc(MlirOperation op, void *userData) {
   py::gil_scoped_acquire gil;
@@ -41,7 +41,19 @@ static void registerGenerator(MlirContext ctxt, std::string opName,
                             parameters);
 }
 
-using namespace mlir::python::adaptors;
+class DeviceDB {
+public:
+  DeviceDB(MlirOperation top) { db = circtMSFTCreateDeviceDB(top); }
+  size_t addDesignPlacements() { return circtMSFTAddDesignPlacements(db); }
+  bool addPlacement(MlirAttribute loc, MlirAttribute path, std::string subpath,
+                    MlirOperation op) {
+    return mlirLogicalResultIsSuccess(circtMSFTAddPlacement(
+        db, loc, CirctMSFTPlacedInstance{path, subpath.c_str(), op}));
+  }
+
+private:
+  CirctMSFTDeviceDB db;
+};
 
 /// Populate the msft python module.
 void circt::python::populateDialectMSFTSubmodule(py::module &m) {
@@ -139,4 +151,12 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly("num_cases", [](MlirAttribute self) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);
       });
+
+  py::class_<DeviceDB>(m, "DeviceDB")
+      .def(py::init<MlirOperation>(), py::arg("top"))
+      .def("add_design_placements", &DeviceDB::addDesignPlacements,
+           "Add the placements already present in the design.")
+      .def("add_placement", &DeviceDB::addPlacement,
+           "Inform the DB about a new placement.", py::arg("location"),
+           py::arg("path"), py::arg("subpath"), py::arg("op"));
 }

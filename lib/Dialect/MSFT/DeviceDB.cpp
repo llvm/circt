@@ -20,7 +20,7 @@ using namespace msft;
 // not an immediate goal.
 //===----------------------------------------------------------------------===//
 
-DeviceDB::DeviceDB(MLIRContext *ctxt, Operation *top) : ctxt(ctxt), top(top) {}
+DeviceDB::DeviceDB(Operation *top) : ctxt(top->getContext()), top(top) {}
 
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
