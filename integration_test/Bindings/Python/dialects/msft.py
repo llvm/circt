@@ -61,8 +61,16 @@ with ir.Context() as ctx, ir.Location.unknown():
   m.operation.print()
 
   db = msft.DeviceDB(top.operation)
+
+  assert db.get_instance_at(physAttr) is None
   place_rc = db.add_placement(physAttr, path, "subpath", resolved_inst)
   assert place_rc
+  located_inst = db.get_instance_at(physAttr)
+  assert located_inst is not None
+  assert located_inst[0] == path
+  assert located_inst[1] == "subpath"
+  assert located_inst[2] == resolved_inst
+
   num_failed = db.add_design_placements()
   assert num_failed == 1
   # ERR: error: 'hw.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by hw.instance "ext1" @MyExternMod() {"loc:subpath" = #msft.switch.inst<@top["inst1","ext1"]=#msft.physloc<M20K, 2, 6, 1>>, parameters = {}}

@@ -59,14 +59,18 @@ typedef struct {
 typedef struct {
   MlirAttribute path; // RootedInstancePathAttr.
   const char *subpath;
+  size_t subpathLength;
   MlirOperation op;
 } CirctMSFTPlacedInstance;
 
 CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirOperation top);
 void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
-size_t circtMSFTAddDesignPlacements(CirctMSFTDeviceDB);
-MlirLogicalResult circtMSFTAddPlacement(CirctMSFTDeviceDB, MlirAttribute loc,
-                                        CirctMSFTPlacedInstance inst);
+size_t circtMSFTDeviceDBAddDesignPlacements(CirctMSFTDeviceDB);
+MlirLogicalResult circtMSFTDeviceDBAddPlacement(CirctMSFTDeviceDB,
+                                                MlirAttribute loc,
+                                                CirctMSFTPlacedInstance inst);
+bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB, MlirAttribute loc,
+                                       CirctMSFTPlacedInstance *out);
 
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
