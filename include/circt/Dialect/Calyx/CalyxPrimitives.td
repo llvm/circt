@@ -70,11 +70,11 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     ```mlir
       // A 1-dimensional, 32-bit memory with size dimension 1. Equivalent representation in the native compiler:
       // `m1 = std_mem_d1(32, 1, 1)`
-      %m1.addr0, %m1.write_data, %m1.write_en, %m1.read_data, %m1.done = calyx.memory "m1"<[1] x 32> [1] : i1, i32, i1, i32, i1
+      %m1.addr0, %m1.write_data, %m1.write_en, %m1.clk, %m1.read_data, %m1.done = calyx.memory "m1"<[1] x 32> [1] : i1, i32, i1, i1, i32, i1
 
       // A 2-dimensional, 8-bit memory with size dimensions 64 x 64. Equivalent representation in the native compiler:
       // `m2 = std_mem_d2(8, 64, 64, 6, 6)`
-      %m2.addr0, %m2.addr1, %m2.write_data, %m2.write_en, %m2.read_data, %m2.done = calyx.memory "m2"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i8, i1
+      %m2.addr0, %m2.addr1, %m2.write_data, %m2.write_en, %m2.clk, %m2.read_data, %m2.done = calyx.memory "m2"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
     ```
   }];
 
@@ -111,8 +111,9 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     Value addrPort(size_t i) { assert(i<getNumDimensions() && "Out of bounds of address ports for this memory."); return getResults()[i]; }
     Value writeData() { return getResult(getNumDimensions()); }
     Value writeEn()   { return getResult(getNumDimensions() + 1); }
-    Value readData()  { return getResult(getNumDimensions() + 2); }
-    Value done()      { return getResult(getNumDimensions() + 3); }
+    Value clk()       { return getResult(getNumDimensions() + 2); }
+    Value readData()  { return getResult(getNumDimensions() + 3); }
+    Value done()      { return getResult(getNumDimensions() + 4); }
   }];
 }
 
