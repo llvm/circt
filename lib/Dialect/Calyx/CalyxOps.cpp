@@ -776,10 +776,7 @@ SmallVector<StringRef> MemoryOp::portNames() {
         StringAttr::get(this->getContext(), "addr" + std::to_string(i));
     portNames.push_back(nameAttr.getValue());
   }
-  portNames.push_back("write_data");
-  portNames.push_back("write_en");
-  portNames.push_back("read_data");
-  portNames.push_back("done");
+  portNames.append({"write_data", "write_en", "clk", "read_data", "done"});
   return portNames;
 }
 
@@ -787,10 +784,7 @@ SmallVector<Direction> MemoryOp::portDirections() {
   SmallVector<Direction> portDirections;
   for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
     portDirections.push_back(Input);
-  portDirections.push_back(Input);
-  portDirections.push_back(Input);
-  portDirections.push_back(Output);
-  portDirections.push_back(Output);
+  portDirections.append({Input, Input, Input, Output, Output});
   return portDirections;
 }
 
@@ -803,11 +797,12 @@ void MemoryOp::build(OpBuilder &builder, OperationState &state,
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
   SmallVector<Type> types;
   for (int64_t size : addrSizes)
-    types.push_back(builder.getIntegerType(size));
-  types.push_back(builder.getIntegerType(width));
-  types.push_back(builder.getI1Type());
-  types.push_back(builder.getIntegerType(width));
-  types.push_back(builder.getI1Type());
+    types.push_back(builder.getIntegerType(size)); // Addresses
+  types.push_back(builder.getIntegerType(width));  // Write data
+  types.push_back(builder.getI1Type());            // Write enable
+  types.push_back(builder.getI1Type());            // Clk
+  types.push_back(builder.getIntegerType(width));  // Read data
+  types.push_back(builder.getI1Type());            // Done
   state.addTypes(types);
 }
 
@@ -820,7 +815,7 @@ static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
     return memoryOp.emitOpError("mismatched number of dimensions (")
            << numDims << ") and address sizes (" << numAddrs << ")";
 
-  size_t numExtraPorts = 4; // write data/enable and read data/done.
+  size_t numExtraPorts = 5; // write data/enable, clk, and read data/done.
   if (memoryOp.getNumResults() != numAddrs + numExtraPorts)
     return memoryOp.emitOpError("incorrect number of address ports, expected ")
            << numAddrs;

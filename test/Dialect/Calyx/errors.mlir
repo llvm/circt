@@ -290,7 +290,7 @@ calyx.program {
 calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     // expected-error @+1 {{'calyx.memory' op mismatched number of dimensions (1) and address sizes (2)}}
-    %m.addr0, %m.write_data, %m.write_en, %m.read_data, %m.done = calyx.memory "m"<[64] x 8> [6, 6] : i6, i8, i1, i8, i1
+    %m.addr0, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64] x 8> [6, 6] : i6, i8, i1, i1, i8, i1
     calyx.wires { calyx.assign %done = %m.done : i1 }
     calyx.control {}
   }
@@ -301,7 +301,7 @@ calyx.program {
 calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     // expected-error @+1 {{'calyx.memory' op incorrect number of address ports, expected 2}}
-    %m.addr0, %m.write_data, %m.write_en, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i8, i1, i8, i1
+    %m.addr0, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i8, i1, i1, i8, i1
     calyx.wires { calyx.assign %done = %m.done : i1}
     calyx.control {}
   }
@@ -312,7 +312,7 @@ calyx.program {
 calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     // expected-error @+1 {{'calyx.memory' op address size (5) for dimension 0 can't address the entire range (64)}}
-    %m.addr0, %m.write_data, %m.write_en, %m.read_data, %m.done = calyx.memory "m"<[64] x 8> [5] : i5, i8, i1, i5, i1
+    %m.addr0, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64] x 8> [5] : i5, i8, i1, i1, i5, i1
     calyx.wires { calyx.assign %done = %m.done : i1 }
     calyx.control {}
   }
