@@ -3,9 +3,7 @@
 calyx.program {
   calyx.component @Z(%go : i1, %reset : i1, %clk : i1) -> (%flag :i1, %done: i1) {
     %c1_1 = hw.constant 1 : i1
-    calyx.wires {
-      calyx.assign %done = %c1_1 : i1
-    }
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
 
