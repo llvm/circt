@@ -75,7 +75,7 @@ LogicalResult verifyCell(Operation *op);
 SmallVector<ComponentPortInfo> getComponentPortInfo(Operation *op);
 
 /// Returns port information for the block argument provided.
-ComponentPortInfo getComponentPort(Value blockArg);
+ComponentPortInfo getComponentPortInfo(BlockArgument arg);
 
 } // namespace calyx
 } // namespace circt

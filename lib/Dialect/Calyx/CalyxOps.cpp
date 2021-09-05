@@ -76,19 +76,18 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Returns whether this value is either (1) a port on a ComponentOp or (2) a
+/// port on a cell interface.
+static bool isPort(Value value) {
+  Operation *definingOp = value.getDefiningOp();
+  return value.isa<BlockArgument>() ||
+         (definingOp && isa<CellInterface>(definingOp));
+}
+
 /// Gets the port for a given BlockArgument.
-ComponentPortInfo calyx::getComponentPort(Value blockArg) {
-  assert(blockArg.isa<BlockArgument>() &&
-         "This should be a component body argument.");
-
-  Block *body = blockArg.getParentBlock();
-  auto argIt = llvm::find_if(body->getArguments(),
-                             [&](auto arg) { return arg == blockArg; });
-  assert(argIt != body->getArguments().end() &&
-         "Argument not found in the component body arguments.");
-
-  Operation *op = body->getParentOp();
-  return getComponentPortInfo(op)[argIt->getArgNumber()];
+ComponentPortInfo calyx::getComponentPortInfo(BlockArgument arg) {
+  Operation *op = arg.getOwner()->getParentOp();
+  return getComponentPortInfo(op)[arg.getArgNumber()];
 }
 
 /// Verifies the body of a ControlLikeOp.
@@ -583,19 +582,26 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 
 /// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
-/// or a destination. The `isComponentPort` is used to distinguish whether the
-/// value is defined by a component port or a cell interface port.
-static LogicalResult verifyPortDirection(AssignOp op, Direction direction,
-                                         bool isDestination,
-                                         bool isComponentPort) {
-  bool isCellInterfacePort = !isComponentPort, isSource = !isDestination;
+/// or a destination.
+static LogicalResult verifyPortDirection(AssignOp op, Value value,
+                                         bool isDestination) {
+  Operation *definingOp = value.getDefiningOp();
+  bool isComponentPort = value.isa<BlockArgument>(),
+       isCellInterfacePort = definingOp && isa<CellInterface>(definingOp);
+  assert((isComponentPort || isCellInterfacePort) && "Not a port.");
+
+  ComponentPortInfo port =
+      isComponentPort ? getComponentPortInfo(value.cast<BlockArgument>())
+                      : cast<CellInterface>(definingOp).portInfo(value);
+
+  bool isSource = !isDestination;
   // Component output ports and cell interface input ports should be driven.
   Direction validDirection =
       (isDestination && isComponentPort) || (isSource && isCellInterfacePort)
           ? Direction::Output
           : Direction::Input;
 
-  return direction == validDirection
+  return port.direction == validDirection
              ? success()
              : op.emitOpError()
                    << "has a " << (isComponentPort ? "component" : "cell")
@@ -609,31 +615,25 @@ static LogicalResult verifyPortDirection(AssignOp op, Direction direction,
 /// or source of the AssignOp is to be verified.
 static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
   Value value = isDestination ? op.dest() : op.src();
+  if (isPort(value))
+    return verifyPortDirection(op, value, isDestination);
 
-  bool isComponentPort = value.isa<BlockArgument>();
-  Operation *definingOp = value.getDefiningOp();
-  // If the defining operation is a Component or Cell, verify its direction.
-  if (isComponentPort || isa<CellInterface>(definingOp)) {
-    Direction direction =
-        isComponentPort
-            ? getComponentPort(value).direction
-            : cast<CellInterface>(definingOp).portInfo(value).direction;
-    return verifyPortDirection(op, direction, isDestination, isComponentPort);
-  } else if (isDestination && !isa<GroupGoOp, GroupDoneOp>(definingOp)) {
-    // The value's defining operation does not have any other valid matches.
+  // A destination may also be the Go or Done hole of a GroupOp.
+  if (isDestination && !isa<GroupGoOp, GroupDoneOp>(value.getDefiningOp()))
     return op->emitOpError(
         "has an invalid destination port. It must be drive-able.");
-  }
 
   return success();
 }
 
 static LogicalResult verifyAssignOp(AssignOp assign) {
   bool isDestination = true, isSource = false;
-  return succeeded(verifyAssignOpValue(assign, isDestination)) &&
-                 succeeded(verifyAssignOpValue(assign, isSource))
-             ? success()
-             : failure();
+  if (failed(verifyAssignOpValue(assign, isDestination)))
+    return failure();
+  if (failed(verifyAssignOpValue(assign, isSource)))
+    return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

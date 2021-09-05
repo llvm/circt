@@ -219,9 +219,9 @@ private:
 
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
-    if (value.isa<BlockArgument>()) {
+    if (auto blockArg = value.dyn_cast<BlockArgument>()) {
       // Emit component block argument.
-      StringAttr portName = getComponentPort(value).name;
+      StringAttr portName = getComponentPortInfo(blockArg).name;
       (isIndented ? indent() : os) << '%' << portName.getValue();
       return;
     }
