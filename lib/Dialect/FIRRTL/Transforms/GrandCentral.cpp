@@ -12,6 +12,7 @@
 
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -36,90 +37,6 @@ using llvm::StringSwitch;
 //===----------------------------------------------------------------------===//
 
 namespace {
-
-/// Base class of all AugmentedTypes.  Roughly, this is a FIRRTL type that may
-/// have some more information about it.  It may also contain other
-/// AugmentedTypes.  Alternatively, this can be viewed as a mechanism to provide
-/// structure over a DictionaryAttr which is actually representing an
-/// AugmentedType.
-struct AugmentedType {
-
-  enum Kind {
-    Unknown = -1,
-    Ground,
-    Vector,
-    Bundle,
-    String,
-    Boolean,
-    Integer,
-    Double,
-    Literal,
-    Deleted
-  };
-
-private:
-  const Kind kind;
-
-protected:
-  /// The data of the AugmentedType.  This will just be the DictionaryAttr that
-  /// was used to create the type.
-  DictionaryAttr storage;
-
-public:
-  Kind getKind() const { return kind; }
-
-  AugmentedType(Kind k, DictionaryAttr dict) : kind(k), storage(dict) {}
-
-  StringAttr getName() { return storage.getAs<StringAttr>("name"); }
-};
-
-/// An AugmentedBundleType
-struct Bundle : public AugmentedType {
-  IntegerAttr getID() { return storage.getAs<IntegerAttr>("id"); }
-  StringAttr getName() { return storage.getAs<StringAttr>("defName"); }
-  ArrayAttr getElements() { return storage.getAs<ArrayAttr>("elements"); }
-  bool isRoot() { return getID() != nullptr; }
-
-  Bundle(DictionaryAttr dict) : AugmentedType(Kind::Bundle, dict) {}
-
-  static bool classof(const AugmentedType *at) {
-    return at->getKind() == Kind::Bundle;
-  }
-};
-
-/// An AugmentedVectorType
-struct Vector : public AugmentedType {
-  ArrayAttr getElements() { return storage.getAs<ArrayAttr>("elements"); }
-
-  Vector(DictionaryAttr dict) : AugmentedType(Kind::Vector, dict) {}
-
-  static bool classof(const AugmentedType *at) {
-    return at->getKind() == Kind::Vector;
-  }
-};
-
-/// An AugmentedGroundType
-struct Ground : public AugmentedType {
-  IntegerAttr getID() { return storage.getAs<IntegerAttr>("id"); }
-
-  Ground(DictionaryAttr dict) : AugmentedType(Kind::Ground, dict) {}
-
-  static bool classof(const AugmentedType *at) {
-    return at->getKind() == Kind::Ground;
-  }
-};
-
-/// Template used for representing any "unsupported" AugmentedType
-template <AugmentedType::Kind k>
-struct Unsupported : public AugmentedType {
-  StringAttr getClass() { return storage.getAs<StringAttr>("class"); }
-  DictionaryAttr getUnderlying() { return storage; }
-
-  Unsupported(DictionaryAttr dict) : AugmentedType(k, dict) {}
-
-  static bool classof(const AugmentedType *at) { return at->getKind() == k; }
-};
-
 /// A wrapper around a string that is used to encode a type which cannot be
 /// represented by an mlir::Type for some reason.  This is currently used to
 /// represent either an interface, a n-dimensional vector of interfaces, or a
@@ -224,7 +141,7 @@ private:
   /// Optionally build an AugmentedType from an attribute.  Return none if the
   /// attribute is not a dictionary or if it does not match any of the known
   /// templates for AugmentedTypes.
-  Optional<AugmentedType> fromAttr(Attribute attr);
+  Optional<Attribute> fromAttr(Attribute attr);
 
   /// Mapping of ID to leaf ground type associated with that ID.
   DenseMap<Attribute, Value> leafMap;
@@ -237,19 +154,18 @@ private:
 
   /// Recursively examine an AugmentedType to populate the "mappings" file
   /// (generate XMRs) for this interface.  This does not build new interfaces.
-  bool traverseField(AugmentedType *field, IntegerAttr id, Twine path);
+  bool traverseField(Attribute field, IntegerAttr id, Twine path);
 
   /// Recursively examine an AugmentedType to both build new interfaces and
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
   /// the type of the field exmained.
-  Optional<TypeSum> computeField(AugmentedType *field, IntegerAttr id,
-                                 Twine path);
+  Optional<TypeSum> computeField(Attribute field, IntegerAttr id, Twine path);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
   /// and populate a "mappings" file (generate XMRs).  Return none if the
   /// interface is invalid.
-  Optional<sv::InterfaceOp> traverseBundle(Bundle bundle, IntegerAttr id,
-                                           Twine path);
+  Optional<sv::InterfaceOp> traverseBundle(AugmentedBundleTypeAttr bundle,
+                                           IntegerAttr id, Twine path);
 
   /// Return the module associated with this value.
   FModuleLike getEnclosingModule(Value value);
@@ -308,7 +224,7 @@ private:
 
 } // namespace
 
-Optional<AugmentedType> GrandCentralPass::fromAttr(Attribute attr) {
+Optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
   auto dict = attr.dyn_cast<DictionaryAttr>();
   if (!dict) {
     emitCircuitError() << "attribute is not a dictionary: " << attr << "\n";
@@ -324,86 +240,62 @@ Optional<AugmentedType> GrandCentralPass::fromAttr(Attribute attr) {
   auto classBase = clazz.getValue();
   classBase.consume_front("sifive.enterprise.grandcentral.Augmented");
 
-  auto kind = StringSwitch<AugmentedType::Kind>(classBase)
-                  .Case("BundleType", AugmentedType::Bundle)
-                  .Case("VectorType", AugmentedType::Vector)
-                  .Case("GroundType", AugmentedType::Ground)
-                  .Case("StringType", AugmentedType::String)
-                  .Case("BooleanType", AugmentedType::Boolean)
-                  .Case("IntegerType", AugmentedType::Integer)
-                  .Case("DoubleType", AugmentedType::Double)
-                  .Case("LiteralType", AugmentedType::Literal)
-                  .Case("DeletedType", AugmentedType::Deleted)
-                  .Default(AugmentedType::Unknown);
-
-  switch (kind) {
-  case AugmentedType::Bundle:
+  if (classBase == "BundleType") {
     if (dict.getAs<StringAttr>("defName") && dict.getAs<ArrayAttr>("elements"))
-      return Bundle(dict);
+      return AugmentedBundleTypeAttr::get(&getContext(), dict);
     emitCircuitError() << "has an invalid AugmentedBundleType that does not "
                           "contain 'defName' and 'elements' fields: "
                        << dict;
-    break;
-  case AugmentedType::Vector:
+  } else if (classBase == "VectorType") {
     if (dict.getAs<StringAttr>("name") && dict.getAs<ArrayAttr>("elements"))
-      return Vector(dict);
+      return AugmentedVectorTypeAttr::get(&getContext(), dict);
     emitCircuitError() << "has an invalid AugmentedVectorType that does not "
                           "contain 'name' and 'elements' fields: "
                        << dict;
-    break;
-  case AugmentedType::Ground: {
+  } else if (classBase == "GroundType") {
     auto id = dict.getAs<IntegerAttr>("id");
     auto name = dict.getAs<StringAttr>("name");
     if (id && leafMap.count(id) && name)
-      return Ground(dict);
+      return AugmentedGroundTypeAttr::get(&getContext(), dict);
     if (!id || !name)
       emitCircuitError() << "has an invalid AugmentedGroundType that does not "
                             "contain 'id' and 'name' fields:  "
                          << dict;
     if (id && !leafMap.count(id))
-      emitCircuitError()
-          << "has an AugmentedGroundType with 'id == "
-          << id.getValue().getZExtValue()
-          << "' that does not have a scattered leaf to connect to in the "
-             "circuit (was the leaf deleted or constant prop'd away?)";
-    break;
-  }
-  case AugmentedType::String:
+      emitCircuitError() << "has an AugmentedGroundType with 'id == "
+                         << id.getValue().getZExtValue()
+                         << "' that does not have a scattered leaf to connect "
+                            "to in the circuit "
+                            "(was the leaf deleted or constant prop'd away?)";
+  } else if (classBase == "StringType") {
     if (auto name = dict.getAs<StringAttr>("name"))
-      return Unsupported<AugmentedType::String>(dict);
-    break;
-  case AugmentedType::Boolean:
+      return AugmentedStringTypeAttr::get(&getContext(), dict);
+  } else if (classBase == "BooleanType") {
     if (auto name = dict.getAs<StringAttr>("name"))
-      return Unsupported<AugmentedType::Boolean>(dict);
-    break;
-  case AugmentedType::Integer:
+      return AugmentedBooleanTypeAttr::get(&getContext(), dict);
+  } else if (classBase == "IntegerType") {
     if (auto name = dict.getAs<StringAttr>("name"))
-      return Unsupported<AugmentedType::Integer>(dict);
-    break;
-  case AugmentedType::Double:
+      return AugmentedIntegerTypeAttr::get(&getContext(), dict);
+  } else if (classBase == "DoubleType") {
     if (auto name = dict.getAs<StringAttr>("name"))
-      return Unsupported<AugmentedType::Double>(dict);
-    break;
-  case AugmentedType::Literal:
+      return AugmentedDoubleTypeAttr::get(&getContext(), dict);
+  } else if (classBase == "LiteralType") {
     if (auto name = dict.getAs<StringAttr>("name"))
-      return Unsupported<AugmentedType::Literal>(dict);
-    break;
-  case AugmentedType::Deleted:
+      return AugmentedLiteralTypeAttr::get(&getContext(), dict);
+  } else if (classBase == "DeletedType") {
     if (auto name = dict.getAs<StringAttr>("name"))
-      return Unsupported<AugmentedType::Deleted>(dict);
-    break;
-  case AugmentedType::Unknown:
+      return AugmentedDeletedTypeAttr::get(&getContext(), dict);
+  } else {
     emitCircuitError() << "has an invalid AugmentedType";
   }
-
   return None;
 }
 
-bool GrandCentralPass::traverseField(AugmentedType *field, IntegerAttr id,
+bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                                      Twine path) {
-  return TypeSwitch<AugmentedType *, bool>(field)
-      .Case<Ground>([&](Ground *ground) {
-        Value leafValue = leafMap.lookup(ground->getID());
+  return TypeSwitch<Attribute, bool>(field)
+      .Case<AugmentedGroundTypeAttr>([&](auto ground) {
+        Value leafValue = leafMap.lookup(ground.getID());
         assert(leafValue && "leafValue not found");
 
         auto builder = OpBuilder::atBlockEnd(
@@ -437,38 +329,43 @@ bool GrandCentralPass::traverseField(AugmentedType *field, IntegerAttr id,
                                                    ";");
         return true;
       })
-      .Case<Vector>([&](Vector *vector) {
+      .Case<AugmentedVectorTypeAttr>([&](auto vector) {
         bool notFailed = true;
-        auto elements = vector->getElements();
+        auto elements = vector.getElements();
         for (size_t i = 0, e = elements.size(); i != e; ++i) {
           auto field = fromAttr(elements[i]);
           if (!field)
             return false;
           notFailed &=
-              traverseField(&field.getValue(), id, path + "[" + Twine(i) + "]");
+              traverseField(field.getValue(), id, path + "[" + Twine(i) + "]");
         }
         return notFailed;
       })
-      .Case<Bundle>([&](Bundle *bundle) {
+      .Case<AugmentedBundleTypeAttr>([&](AugmentedBundleTypeAttr bundle) {
         bool anyFailed = true;
-        for (auto element : bundle->getElements()) {
+        for (auto element : bundle.getElements()) {
           auto field = fromAttr(element);
           if (!field)
             return false;
           auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
           if (!name)
             name = element.cast<DictionaryAttr>().getAs<StringAttr>("defName");
-          anyFailed &= traverseField(&field.getValue(), id,
-                                     path + "." + name.getValue());
+          anyFailed &=
+              traverseField(field.getValue(), id, path + "." + name.getValue());
         }
 
         return anyFailed;
       })
-      .Case<Unsupported<AugmentedType::Unknown>>([&](auto *a) { return false; })
+      .Case<AugmentedStringTypeAttr>([&](auto a) { return false; })
+      .Case<AugmentedBooleanTypeAttr>([&](auto a) { return false; })
+      .Case<AugmentedIntegerTypeAttr>([&](auto a) { return false; })
+      .Case<AugmentedDoubleTypeAttr>([&](auto a) { return false; })
+      .Case<AugmentedLiteralTypeAttr>([&](auto a) { return false; })
+      .Case<AugmentedDeletedTypeAttr>([&](auto a) { return false; })
       .Default([](auto a) { return true; });
 }
 
-Optional<TypeSum> GrandCentralPass::computeField(AugmentedType *field,
+Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
                                                  IntegerAttr id, Twine path) {
 
   auto unsupported = [&](StringRef name, StringRef kind) {
@@ -478,71 +375,76 @@ Optional<TypeSum> GrandCentralPass::computeField(AugmentedType *field,
          false});
   };
 
-  return TypeSwitch<AugmentedType *, Optional<TypeSum>>(field)
-      .Case<Ground>([&](Ground *ground) -> Optional<TypeSum> {
-        // Traverse to generate mappings.
-        traverseField(field, id, path);
-        auto value = leafMap.lookup(ground->getID());
-        auto tpe = value.getType().cast<FIRRTLType>();
-        if (!tpe.isGround()) {
-          value.getDefiningOp()->emitOpError()
-              << "cannot be added to interface with id '"
-              << id.getValue().getZExtValue()
-              << "' because it is not a ground type";
-          return None;
-        }
-        return TypeSum(IntegerType::get(getOperation().getContext(),
-                                        tpe.getBitWidthOrSentinel()));
-      })
-      .Case<Vector>([&](Vector *vector) -> Optional<TypeSum> {
-        bool notFailed = true;
-        auto elements = vector->getElements();
-        auto firstElement = fromAttr(elements[0]);
-        auto elementType = computeField(&firstElement.getValue(), id,
-                                        path + "[" + Twine(0) + "]");
-        if (!elementType)
-          return None;
+  return TypeSwitch<Attribute, Optional<TypeSum>>(field)
+      .Case<AugmentedGroundTypeAttr>(
+          [&](AugmentedGroundTypeAttr ground) -> Optional<TypeSum> {
+            // Traverse to generate mappings.
+            traverseField(field, id, path);
+            auto value = leafMap.lookup(ground.getID());
+            auto tpe = value.getType().cast<FIRRTLType>();
+            if (!tpe.isGround()) {
+              value.getDefiningOp()->emitOpError()
+                  << "cannot be added to interface with id '"
+                  << id.getValue().getZExtValue()
+                  << "' because it is not a ground type";
+              return None;
+            }
+            return TypeSum(IntegerType::get(getOperation().getContext(),
+                                            tpe.getBitWidthOrSentinel()));
+          })
+      .Case<AugmentedVectorTypeAttr>(
+          [&](AugmentedVectorTypeAttr vector) -> Optional<TypeSum> {
+            bool notFailed = true;
+            auto elements = vector.getElements();
+            auto firstElement = fromAttr(elements[0]);
+            auto elementType = computeField(firstElement.getValue(), id,
+                                            path + "[" + Twine(0) + "]");
+            if (!elementType)
+              return None;
 
-        for (size_t i = 1, e = elements.size(); i != e; ++i) {
-          auto subField = fromAttr(elements[i]);
-          if (!subField)
-            return None;
-          notFailed &= traverseField(&subField.getValue(), id,
-                                     path + "[" + Twine(i) + "]");
-        }
+            for (size_t i = 1, e = elements.size(); i != e; ++i) {
+              auto subField = fromAttr(elements[i]);
+              if (!subField)
+                return None;
+              notFailed &= traverseField(subField.getValue(), id,
+                                         path + "[" + Twine(i) + "]");
+            }
 
-        if (auto *tpe = std::get_if<Type>(&elementType.getValue()))
-          return TypeSum(
-              hw::UnpackedArrayType::get(*tpe, elements.getValue().size()));
-        auto str = std::get<VerbatimType>(elementType.getValue());
-        str.str.append(("[" + Twine(elements.getValue().size()) + "]").str());
-        return TypeSum(str);
+            if (auto *tpe = std::get_if<Type>(&elementType.getValue()))
+              return TypeSum(
+                  hw::UnpackedArrayType::get(*tpe, elements.getValue().size()));
+            auto str = std::get<VerbatimType>(elementType.getValue());
+            str.str.append(
+                ("[" + Twine(elements.getValue().size()) + "]").str());
+            return TypeSum(str);
+          })
+      .Case<AugmentedBundleTypeAttr>(
+          [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
+            auto iface = traverseBundle(bundle, id, path);
+            assert(iface && iface.getValue());
+            return VerbatimType(
+                {SmallString<0>((iface.getValue().getName() + " " +
+                                 bundle.getDefName().getValue())
+                                    .str()),
+                 true});
+          })
+      .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
+        return unsupported(field.getName().getValue(), "string");
       })
-      .Case<Bundle>([&](Bundle *bundle) -> TypeSum {
-        auto iface = traverseBundle(*bundle, id, path);
-        assert(iface && iface.getValue());
-        return VerbatimType({SmallString<0>((iface.getValue().getName() + " " +
-                                             bundle->getName().getValue())
-                                                .str()),
-                             true});
+      .Case<AugmentedBooleanTypeAttr>([&](auto field) -> TypeSum {
+        return unsupported(field.getName().getValue(), "boolean");
       })
-      .Case<Unsupported<AugmentedType::String>>([&](auto *field) -> TypeSum {
-        return unsupported(field->getName().getValue(), "string");
+      .Case<AugmentedIntegerTypeAttr>([&](auto field) -> TypeSum {
+        return unsupported(field.getName().getValue(), "integer");
       })
-      .Case<Unsupported<AugmentedType::Boolean>>([&](auto *field) -> TypeSum {
-        return unsupported(field->getName().getValue(), "boolean");
+      .Case<AugmentedDoubleTypeAttr>([&](auto field) -> TypeSum {
+        return unsupported(field.getName().getValue(), "double");
       })
-      .Case<Unsupported<AugmentedType::Integer>>([&](auto *field) -> TypeSum {
-        return unsupported(field->getName().getValue(), "integer");
+      .Case<AugmentedLiteralTypeAttr>([&](auto field) -> TypeSum {
+        return unsupported(field.getName().getValue(), "literal");
       })
-      .Case<Unsupported<AugmentedType::Double>>([&](auto *field) -> TypeSum {
-        return unsupported(field->getName().getValue(), "double");
-      })
-      .Case<Unsupported<AugmentedType::Literal>>([&](auto *field) -> TypeSum {
-        return unsupported(field->getName().getValue(), "literal");
-      })
-      .Case<Unsupported<AugmentedType::Deleted>>([&](auto *field) -> TypeSum {
-        return unsupported(field->getName().getValue(), "deleted");
+      .Case<AugmentedDeletedTypeAttr>([&](auto field) -> TypeSum {
+        return unsupported(field.getName().getValue(), "deleted");
       });
 }
 
@@ -553,12 +455,13 @@ Optional<TypeSum> GrandCentralPass::computeField(AugmentedType *field,
 /// and generate stringy-typed SystemVerilog hierarchical references to
 /// drive the interface. Returns false on any failure and true on success.
 Optional<sv::InterfaceOp>
-GrandCentralPass::traverseBundle(Bundle bundle, IntegerAttr id, Twine path) {
+GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
+                                 Twine path) {
   auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
   sv::InterfaceOp iface;
   builder.setInsertionPointToEnd(getOperation().getBody());
   auto loc = getOperation().getLoc();
-  auto iFaceName = getNamespace().newName(bundle.getName().getValue());
+  auto iFaceName = getNamespace().newName(bundle.getDefName().getValue());
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
   iface->setAttr(
       "output_file",
@@ -578,7 +481,7 @@ GrandCentralPass::traverseBundle(Bundle bundle, IntegerAttr id, Twine path) {
     if (!name)
       name = element.cast<DictionaryAttr>().getAs<StringAttr>("defName");
     auto elementType =
-        computeField(&field.getValue(), id, path + "." + name.getValue());
+        computeField(field.getValue(), id, path + "." + name.getValue());
     if (!elementType)
       return None;
 
@@ -1014,7 +917,7 @@ void GrandCentralPass::runOnOperation() {
   // then the top-level instantiate interface will be marked for extraction via
   // a SystemVerilog bind.
   for (auto anno : worklist) {
-    auto bundle = Bundle(anno.getDict());
+    auto bundle = AugmentedBundleTypeAttr::get(&getContext(), anno.getDict());
 
     // The top-level AugmentedBundleType must have a global ID field so that
     // this can be linked to the parent and companion.
@@ -1055,7 +958,7 @@ void GrandCentralPass::runOnOperation() {
         parentIDMap.lookup(bundle.getID()).second.getBodyBlock());
     auto symbolName = getNamespace().newName(
         ("__" + companionIDMap.lookup(bundle.getID()).name + "_" +
-         bundle.getName().getValue() + "__"));
+         bundle.getDefName().getValue() + "__"));
     auto instance = builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), iface.getValue().getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,

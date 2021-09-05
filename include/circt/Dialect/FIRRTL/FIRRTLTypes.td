@@ -231,3 +231,68 @@ def StringArrayAttr: ArrayAttrBase<
     ""> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
+
+class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
+
+  let parameters = (
+    ins "DictionaryAttr":$underlying
+  );
+
+  code defaultClassDeclaration = [{
+    StringAttr getClass() { return getUnderlying().getAs<StringAttr>("class"); }
+  }];
+
+  code hasName = [{
+    StringAttr getName() { return getUnderlying().getAs<StringAttr>("name"); }
+  }];
+
+  code hasDefName = [{
+    StringAttr getDefName() { return getUnderlying().getAs<StringAttr>("defName"); }
+  }];
+
+  code hasID = [{
+    IntegerAttr getID() { return getUnderlying().getAs<IntegerAttr>("id"); }
+  }];
+
+  code hasElements = [{
+    ArrayAttr getElements() { return getUnderlying().getAs<ArrayAttr>("elements"); }
+  }];
+
+}
+
+def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
+  let extraClassDeclaration =
+    defaultClassDeclaration #
+    hasID #
+    hasElements #
+    hasDefName # [{
+      bool isRoot() { return getID() != nullptr; }
+    }];
+}
+
+def AugmentedVectorType : AugmentedType<"AugmentedVectorType"> {
+  let extraClassDeclaration = defaultClassDeclaration # hasElements;
+}
+
+def AugmentedGroundType : AugmentedType<"AugmentedGroundType"> {
+  let extraClassDeclaration = hasID # hasName;
+}
+
+def AugmentedStringType : AugmentedType<"AugmentedStringType"> {
+  let extraClassDeclaration = hasName;
+}
+def AugmentedBooleanType : AugmentedType<"AugmentedBooleanType"> {
+  let extraClassDeclaration = hasName;
+}
+def AugmentedIntegerType : AugmentedType<"AugmentedIntegerType"> {
+  let extraClassDeclaration = hasName;
+}
+def AugmentedDoubleType : AugmentedType<"AugmentedDoubleType"> {
+  let extraClassDeclaration = hasName;
+}
+def AugmentedLiteralType : AugmentedType<"AugmentedLiteralType"> {
+  let extraClassDeclaration = hasName;
+}
+def AugmentedDeletedType : AugmentedType<"AugmentedDeletedType"> {
+  let extraClassDeclaration = hasName;
+}
