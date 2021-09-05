@@ -57,7 +57,6 @@ void CalyxOpAsmDialectInterface::getAsmBlockArgumentNames(
 }
 
 void CalyxDialect::initialize() {
-
   // Register operations.
   addOperations<
 #define GET_OP_LIST
@@ -69,6 +68,6 @@ void CalyxDialect::initialize() {
 }
 
 // Provide implementations for the enums and attributes we use.
-#include "circt/Dialect/Calyx/CalyxAttributes.cpp.inc"
+#include "circt/Dialect/Calyx/CalyxAttrs.cpp.inc"
 #include "circt/Dialect/Calyx/CalyxDialect.cpp.inc"
 #include "circt/Dialect/Calyx/CalyxEnums.cpp.inc"

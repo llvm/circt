@@ -110,7 +110,4 @@ SmallVector<ComponentPortInfo> getComponentPortInfo(Operation *op);
 #define GET_OP_CLASSES
 #include "circt/Dialect/Calyx/Calyx.h.inc"
 
-#define GET_ATTRDEF_CLASSES
-#include "circt/Dialect/Calyx/CalyxAttributes.h.inc"
-
 #endif // CIRCT_DIALECT_CALYX_OPS_H

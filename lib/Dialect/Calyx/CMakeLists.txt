@@ -22,7 +22,7 @@ set(Calyx_LinkLibs
 set(Calyx_Deps
   ${Calyx_LinkLibs}
   MLIRCalyxEnumsIncGen
-  MLIRCalyxAttributesIncGen
+  MLIRCalyxAttrsIncGen
   MLIRCalyxInterfacesIncGen
   )
 
