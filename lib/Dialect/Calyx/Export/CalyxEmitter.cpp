@@ -205,8 +205,8 @@ private:
 
   /// Helper function for emitting combinational operations.
   template <typename CombinationalOp>
-  void emitCombinationalValue(CombinationalOp value, StringRef logicalSymbol) {
-    auto inputs = value.inputs();
+  void emitCombinationalValue(CombinationalOp op, StringRef logicalSymbol) {
+    auto inputs = op.inputs();
     os << LParen();
     for (size_t i = 0, e = inputs.size(); i != e; ++i) {
       emitValue(inputs[i], /*isIndented=*/false);
