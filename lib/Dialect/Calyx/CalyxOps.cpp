@@ -400,7 +400,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
           std::distance(cIt.begin(), cIt.end()) !=
       2)
     return op.emitOpError(
-        "requires exactly one of each: 'calyx.wires', 'calyx.control'");
+        "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
 
   SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
 
