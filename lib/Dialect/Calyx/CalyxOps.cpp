@@ -200,8 +200,6 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
-namespace {
-
 /// This is a helper function that should only be used to get the WiresOp or
 /// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
 /// the end of a component's body. In the worst case, this will run in linear
@@ -227,8 +225,6 @@ static Value getBlockArgumentWithName(StringRef name, ComponentOp op) {
   }
   return Value{};
 }
-
-} // namespace
 
 WiresOp calyx::ComponentOp::getWiresOp() {
   return getControlOrWiresFrom<WiresOp>(*this);
