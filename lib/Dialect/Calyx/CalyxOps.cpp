@@ -76,6 +76,21 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Gets the port for a given BlockArgument.
+ComponentPortInfo calyx::getComponentPort(Value blockArg) {
+  assert(blockArg.isa<BlockArgument>() &&
+         "This should be a component body argument.");
+
+  Block *body = blockArg.getParentBlock();
+  auto argIt = llvm::find_if(body->getArguments(),
+                             [&](auto arg) { return arg == blockArg; });
+  assert(argIt != body->getArguments().end() &&
+         "Argument not found in the component body arguments.");
+
+  Operation *op = body->getParentOp();
+  return getComponentPortInfo(op)[argIt->getArgNumber()];
+}
+
 /// Verifies the body of a ControlLikeOp.
 static LogicalResult verifyControlBody(Operation *op) {
   if (isa<SeqOp, ParOp>(op))
@@ -589,38 +604,6 @@ static LogicalResult verifyPortDirection(AssignOp op, Direction direction,
                    << " with the incorrect direction.";
 }
 
-/// Gets the cell direction for a given value.
-static Direction getCellDirectionFor(Value value) {
-  Operation *parentOp = value.getDefiningOp();
-  assert(isa<CellInterface>(parentOp) &&
-         "Pre-condition: this is a Cell Interface.");
-
-  size_t i = 0, numResults = parentOp->getNumResults();
-  for (; i != numResults && value != parentOp->getResult(i); ++i)
-    ;
-  assert(i < numResults && "Value not found in Cell's ports.");
-
-  return cast<CellInterface>(parentOp).portDirections()[i];
-}
-
-/// Gets the port direction for a given Argument from the parent ComponentOp of
-/// `op`.
-static Direction getComponentDirectionFor(Value value, Operation *op) {
-  auto component = op->getParentOfType<ComponentOp>();
-  assert(isa<ComponentOp>(component) && "Op not within ComponentOp.");
-
-  Block *body = component.getBody();
-  auto it = llvm::find_if(body->getArguments(),
-                          [&](auto arg) { return arg == value; });
-  assert(it != body->getArguments().end() &&
-         "Value not found in the component ports.");
-  BlockArgument blockArg = *it;
-
-  size_t blockArgNum = blockArg.getArgNumber();
-  auto ports = getComponentPortInfo(component);
-  return ports[blockArgNum].direction;
-}
-
 /// Verifies the value of a given assignment operation. The boolean
 /// `isDestination` is used to distinguish whether the destination
 /// or source of the AssignOp is to be verified.
@@ -631,8 +614,10 @@ static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
   Operation *definingOp = value.getDefiningOp();
   // If the defining operation is a Component or Cell, verify its direction.
   if (isComponentPort || isa<CellInterface>(definingOp)) {
-    Direction direction = isComponentPort ? getComponentDirectionFor(value, op)
-                                          : getCellDirectionFor(value);
+    Direction direction =
+        isComponentPort
+            ? getComponentPort(value).direction
+            : cast<CellInterface>(definingOp).portInfo(value).direction;
     return verifyPortDirection(op, direction, isDestination, isComponentPort);
   } else if (isDestination && !isa<GroupGoOp, GroupDoneOp>(definingOp)) {
     // The value's defining operation does not have any other valid matches.

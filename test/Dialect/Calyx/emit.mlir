@@ -63,6 +63,8 @@ calyx.program {
       }
       // CHECK:   c0.go = c1.out;
       calyx.assign %c0.go = %c1.out : i1
+      // CHECK:   %done = 1'd1;
+      calyx.assign  %done = %c1 : i1
     }
     // CHECK-LABEL: control {
     // CHECK-NEXT:    par {

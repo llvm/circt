@@ -219,8 +219,16 @@ private:
 
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
+    if (value.isa<BlockArgument>()) {
+      // Emit component block argument.
+      StringAttr portName = getComponentPort(value).name;
+      (isIndented ? indent() : os) << '%' << portName.getValue();
+      return;
+    }
+
     auto definingOp = value.getDefiningOp();
     if (definingOp == nullptr)
+      // Short-circuit to avoid TypeSwitch on a nullptr.
       return;
 
     TypeSwitch<Operation *>(definingOp)
