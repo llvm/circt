@@ -152,7 +152,7 @@ struct Emitter {
   // e.g.:
   //   $f.in0, $f.in1, $f.in2, $f.out : calyx.std_foo "f" : i1, i2, i3, i4
   // emits:
-  //   foo = std_foo(1, 2, 3, 4);
+  //   f = std_foo(1, 2, 3, 4);
   void emitLibraryPrimTypedByAllPorts(Operation *op);
 
   // Emits a library primitive with a single template parameter based on the
@@ -160,7 +160,7 @@ struct Emitter {
   // e.g.:
   //   $f.in0, $f.in1, $f.out : calyx.std_foo "f" : i32, i32, i1
   // emits:
-  //   foo = std_foo(32);
+  //   f = std_foo(32);
   void emitLibraryPrimTypedByFirstInputPort(Operation *op);
 
 private:
