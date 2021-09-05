@@ -3150,7 +3150,7 @@ ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
     return failure();
   }
 
-  if (!scatterCustomAnnotations(thisAnnotationMap, getContext(), annotationID,
+  if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
                                 translateLocation(loc)))
     return failure();
 
