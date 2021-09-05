@@ -71,7 +71,4 @@ void CalyxDialect::initialize() {
 
   // Register interface implementations.
   addInterfaces<CalyxOpAsmDialectInterface>();
-
-  // Register attributes.
-  addAttributes<calyx::CalyxAttr>();
 }

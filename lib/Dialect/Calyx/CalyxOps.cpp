@@ -30,22 +30,6 @@ using namespace circt;
 using namespace circt::calyx;
 using namespace mlir;
 
-//CalyxAttr CalyxAttr::get(IntegerAttr value, MLIRContext *context) {
-//  return Base::get(context, value);
-//}
-//
-//Attribute CalyxDialect::parseAttribute(DialectAsmParser &parser,
-//                                       Type type) const {
-////  IntegerAttr attr;
-////  if (parser.parseKeyword(&attr))
-////    return {};
-////  return CalyxAttr::get(attr.getValue(), parser.getBuilder().getContext());
-//}
-//
-//void CalyxDialect::printAttribute(Attribute attr, DialectAsmPrinter &os) const {
-//  llvm_unreachable("Unknown attribute type");
-//}
-
 //===----------------------------------------------------------------------===//
 // Utilities related to Direction
 //===----------------------------------------------------------------------===//
