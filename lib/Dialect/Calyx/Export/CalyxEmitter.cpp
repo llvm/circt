@@ -227,9 +227,7 @@ private:
     }
 
     auto definingOp = value.getDefiningOp();
-    if (definingOp == nullptr)
-      // Short-circuit to avoid TypeSwitch on a nullptr.
-      return;
+    assert(definingOp && "Value does not have a defining operation.");
 
     TypeSwitch<Operation *>(definingOp)
         .Case<CellInterface>([&](auto cell) {
