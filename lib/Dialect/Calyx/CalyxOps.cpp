@@ -919,6 +919,7 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 
 ImplUnaryOpCellInterface(PadLibOp);
 ImplUnaryOpCellInterface(SliceLibOp);
+ImplUnaryOpCellInterface(NotLibOp);
 
 ImplBinOpCellInterface(LtLibOp);
 ImplBinOpCellInterface(GtLibOp);
@@ -940,7 +941,6 @@ ImplBinOpCellInterface(RshLibOp);
 ImplBinOpCellInterface(SrshLibOp);
 ImplBinOpCellInterface(LshLibOp);
 ImplBinOpCellInterface(AndLibOp);
-ImplBinOpCellInterface(NotLibOp);
 ImplBinOpCellInterface(OrLibOp);
 ImplBinOpCellInterface(XorLibOp);
 

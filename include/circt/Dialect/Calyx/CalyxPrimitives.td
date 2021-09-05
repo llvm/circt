@@ -169,7 +169,6 @@ def RshLibOp  : ArithBinaryLibraryOp<"rsh"> {}
 def SrshLibOp : ArithBinaryLibraryOp<"srsh"> {}
 def LshLibOp  : ArithBinaryLibraryOp<"lsh"> {}
 def AndLibOp  : ArithBinaryLibraryOp<"and"> {}
-def NotLibOp  : ArithBinaryLibraryOp<"not"> {}
 def OrLibOp   : ArithBinaryLibraryOp<"or"> {}
 def XorLibOp  : ArithBinaryLibraryOp<"xor"> {}
 
@@ -192,3 +191,4 @@ def SliceLibOp : UnaryLibraryOp<"slice"> {
     unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
     return success(inBits > outBits);  }];
 }
+def NotLibOp  : UnaryLibraryOp<"not"> {}
