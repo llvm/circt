@@ -66,6 +66,34 @@ struct ComponentPortInfo {
   StringAttr name;
   Type type;
   Direction direction;
+  DictionaryAttr attributes = {};
+
+  /// Returns whether the given port has attribute with Identifier `name`.
+  bool hasAttribute(StringRef identifier) {
+    return llvm::any_of(attributes, [&](auto idToAttribute) {
+      return identifier == std::get<0>(idToAttribute);
+    });
+  }
+
+  /// Returns the attribute associated with the given name if it exists,
+  /// otherwise std::nullopt.
+  std::optional<Attribute> getAttribute(StringRef identifier) {
+    auto it = llvm::find_if(attributes, [&](auto idToAttribute) {
+      return identifier == std::get<0>(idToAttribute);
+    });
+    if (it == attributes.end())
+      return std::nullopt;
+    return std::get<1>(*it);
+  }
+
+  /// Returns all identifiers for this dictionary attribute.
+  SmallVector<StringRef> getAllIdentifiers() {
+    SmallVector<StringRef> identifiers;
+    llvm::transform(
+        attributes, std::back_inserter(identifiers),
+        [](auto idToAttribute) { return std::get<0>(idToAttribute); });
+    return identifiers;
+  }
 };
 
 /// A helper function to verify each operation with the Cell trait.
@@ -81,5 +109,8 @@ SmallVector<ComponentPortInfo> getComponentPortInfo(Operation *op);
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Calyx/Calyx.h.inc"
+
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Calyx/CalyxAttributes.h.inc"
 
 #endif // CIRCT_DIALECT_CALYX_OPS_H
