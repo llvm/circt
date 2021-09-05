@@ -397,18 +397,14 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
 }
 
 static LogicalResult verifyComponentOp(ComponentOp op) {
-  // Verify there is exactly one of each section:
-  // calyx.wires, and calyx.control.
-  uint32_t numWires = 0, numControl = 0;
-  for (auto &bodyOp : *op.getBody()) {
-    if (isa<WiresOp>(bodyOp))
-      ++numWires;
-    else if (isa<ControlOp>(bodyOp))
-      ++numControl;
-  }
-  if (!(numWires == 1) || !(numControl == 1))
-    return op.emitOpError() << "requires exactly one of each: "
-                               "'calyx.wires', 'calyx.control'.";
+  // Verify there is exactly one of each the wires and control operations.
+  auto wIt = op.getBody()->getOps<WiresOp>();
+  auto cIt = op.getBody()->getOps<ControlOp>();
+  if (std::distance(wIt.begin(), wIt.end()) +
+          std::distance(cIt.begin(), cIt.end()) !=
+      2)
+    return op.emitOpError(
+        "requires exactly one of each: 'calyx.wires', 'calyx.control'");
 
   SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
 
