@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 
 #include "mlir/IR/BuiltinTypes.h"
@@ -20,32 +21,6 @@ namespace circt {
 namespace firrtl {
 
 class FIRRTLType;
-
-enum class Direction { Input = 0, Output };
-
-template <typename T>
-T &operator<<(T &os, const Direction &dir) {
-  return os << (dir == Direction::Input ? "input" : "output");
-}
-
-namespace direction {
-
-/// The key in a module's attribute dictionary used to find the direction.
-static const char *const attrKey = "portDirections";
-
-/// Return an output direction if \p isOutput is true, otherwise return an
-/// input direction.
-inline Direction get(bool isOutput) { return (Direction)isOutput; }
-
-/// Return a \p IntegerAttr containing the packed representation of an array
-/// of directions.
-IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
-
-/// Turn a packed representation of port attributes into a vector that can
-/// be worked with.
-SmallVector<Direction> unpackAttribute(Operation *module);
-
-} // namespace direction
 
 /// This holds the name and type that describes the module's ports.
 struct ModulePortInfo {

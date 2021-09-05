@@ -19,6 +19,48 @@ using namespace firrtl;
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.cpp.inc"
 
+//===----------------------------------------------------------------------===//
+// PortDirectionsAttr
+//===----------------------------------------------------------------------===//
+
+Direction PortDirectionsAttr::operator[](unsigned index) {
+  // This function exists to avoids copying the underlying array to query a bit.
+  return getImpl()->value[index];
+}
+
+Attribute PortDirectionsAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
+                                    Type type) {
+  if (p.parseLess())
+    return Attribute();
+  PortDirections directions;
+  while (true) {
+    if (!p.parseOptionalKeyword("in"))
+      directions.push_back(Direction::Input);
+    else if (!p.parseKeyword("out", "Expected 'in' or 'out'"))
+      directions.push_back(Direction::Output);
+    else
+      return Attribute();
+    // If there is no comma, break out of the loop.
+    if (p.parseOptionalComma())
+      break;
+  }
+  if (p.parseGreater())
+    return Attribute();
+  return PortDirectionsAttr::get(ctxt, directions);
+}
+
+void PortDirectionsAttr::print(DialectAsmPrinter &p) const {
+  p << "directions<";
+  llvm::interleaveComma(getValue(), p, [&](auto direction) {
+    p << (direction == Direction::Input ? "in" : "out");
+  });
+  p << '>';
+}
+
+//===----------------------------------------------------------------------===//
+// InvalidValueAttr
+//===----------------------------------------------------------------------===//
+
 Attribute InvalidValueAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
                                   Type typeX) {
   FIRRTLType type;
@@ -30,6 +72,10 @@ Attribute InvalidValueAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
 void InvalidValueAttr::print(DialectAsmPrinter &p) const {
   p << "invalidvalue<" << getType() << '>';
 }
+
+//===----------------------------------------------------------------------===//
+// Dialect Attributes
+//===----------------------------------------------------------------------===//
 
 Attribute FIRRTLDialect::parseAttribute(DialectAsmParser &p, Type type) const {
   StringRef attrName;

@@ -3195,7 +3195,8 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
     // output.thing <= input  ; identifier expression
     auto backtrackState = getLexer().getCursor();
 
-    bool isOutput = getToken().is(FIRToken::kw_output);
+    auto portDirection = getToken().is(FIRToken::kw_output) ? Direction::Output
+                                                            : Direction::Input;
     consumeToken();
 
     // If we have something that isn't a keyword then this must be an
@@ -3225,7 +3226,7 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
                        getConstants().targetSet, type));
 
     resultPorts.push_back(
-        {name, type, direction::get(isOutput), info.getLoc(), annotations});
+        {name, type, portDirection, info.getLoc(), annotations});
     resultPortLocs.push_back(info.getFIRLoc());
   }
 

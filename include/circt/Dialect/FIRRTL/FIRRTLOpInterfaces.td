@@ -44,17 +44,29 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     InterfaceMethod<"Get infromation about all ports",
     "SmallVector<ModulePortInfo>", "getPorts">,
 
-    InterfaceMethod<"Get the module port directions",
-    "IntegerAttr", "getPortDirections", (ins), [{}],
+    InterfaceMethod<"Get the module port directions attribute",
+    "PortDirectionsAttr", "getPortDirectionsAttr", (ins), [{}],
     /*methodBody=*/[{ 
-      return $_op->template getAttrOfType<IntegerAttr>(direction::attrKey); 
+      return $_op->template getAttrOfType<PortDirectionsAttr>(
+          FModuleLike::getPortDirectionsAttrName()); 
+    }]>,
+
+    InterfaceMethod<"Get the module port directions",
+    "PortDirections", "getPortDirections", (ins), [{}],
+    /*methodBody=*/[{ 
+      return getPortDirectionsAttr().getValue();
     }]>,
 
     InterfaceMethod<"Get a module port direction",
     "Direction", "getPortDirection", (ins "size_t":$portIndex), [{}],
     /*methodBody=*/[{
-      return direction::get($_op.getPortDirections().getValue()[portIndex]); 
+      // Using the attribute avoids copying the underlying bitvector.
+      return getPortDirectionsAttr()[portIndex];
     }]>
-
   ];
+
+  let extraClassDeclaration = [{
+    /// Get the name of the attribute used to store the port directions.
+    static StringRef getPortDirectionsAttrName();
+  }];
 }

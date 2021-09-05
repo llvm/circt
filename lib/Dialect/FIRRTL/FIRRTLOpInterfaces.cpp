@@ -19,3 +19,12 @@ using namespace llvm;
 using namespace circt::firrtl;
 
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.cpp.inc"
+
+//===----------------------------------------------------------------------===//
+// FModuleLikeInterface
+//===----------------------------------------------------------------------===//
+
+/// The key in a module's attribute dictionary used to find the direction.
+static const char *const attrKey = "portDirections";
+
+StringRef FModuleLike::getPortDirectionsAttrName() { return attrKey; }

@@ -71,6 +71,7 @@ using mlir::TypeSwitch;
 // Forward declarations of LLVM classes to be imported in to the circt
 // namespace.
 namespace llvm {
+class BitVector;
 template <typename KeyT, typename ValueT, unsigned InlineBuckets,
           typename KeyInfoT, typename BucketT>
 class SmallDenseMap;
@@ -78,6 +79,7 @@ class SmallDenseMap;
 
 // Import things we want into our namespace.
 namespace circt {
+using llvm::BitVector;
 using llvm::SmallDenseMap;
 } // namespace circt
 

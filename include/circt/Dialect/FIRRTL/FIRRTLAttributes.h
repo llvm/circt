@@ -14,6 +14,110 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Support/LLVM.h"
+#include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/iterator.h"
+
+namespace circt {
+namespace firrtl {
+
+//===----------------------------------------------------------------------===//
+// PortDirections
+//===----------------------------------------------------------------------===//
+
+/// This represents the direction of a single port.
+enum class Direction { Input = 0, Output };
+
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
+                                     const Direction &dir) {
+  return os << (dir == Direction::Input ? "in" : "out");
+}
+
+/// This represents the directions of ports in a module.  This is a simple type
+/// safe wrapper around a BitVector.
+class PortDirections {
+public:
+  /// Iterator for PortDirections returning Directions.
+  struct Iterator
+      : public llvm::iterator_facade_base<Iterator, std::forward_iterator_tag,
+                                          Direction> {
+    explicit Iterator(const PortDirections &directions, size_t index = 0)
+        : directions(&directions), index(index) {}
+    Iterator &operator=(const Iterator &) = default;
+    using llvm::iterator_facade_base<Iterator, std::forward_iterator_tag,
+                                     Direction>::operator++;
+    Iterator &operator++() { return ++index, *this; }
+    Direction operator*() const { return directions->at(index); }
+    bool operator==(const Iterator &rhs) const { return index == rhs.index; }
+    bool operator!=(const Iterator &rhs) const { return index != rhs.index; }
+
+  private:
+    const PortDirections *directions;
+    size_t index;
+  };
+
+  using value_type = Direction;
+  using iterator = Iterator;
+
+  /// Construct an empty PortDirections.
+  PortDirections() = default;
+
+  /// Construct a PortDirections from a array of Directions.
+  PortDirections(ArrayRef<Direction> directions) {
+    reserve(directions.size());
+    llvm::copy(directions, std::back_inserter(*this));
+  }
+
+  bool operator==(const PortDirections &rhs) const {
+    return directions == rhs.directions;
+  }
+
+  /// Get the direction of a specifc port.
+  Direction at(unsigned index) const {
+    unsigned val = directions[index];
+    return static_cast<Direction>(val);
+  }
+
+  /// Get the direction of a specifc port.
+  Direction operator[](unsigned index) const { return at(index); }
+
+  /// Get the number of ports.
+  size_t size() const { return directions.size(); }
+
+  /// Reserve storage without initializing the elements.
+  void reserve(unsigned amount) { directions.reserve(amount); }
+
+  /// Append a port direction.
+  void push_back(Direction direction) {
+    directions.push_back(static_cast<bool>(direction));
+  }
+
+  /// Unpack the the port directions into a vector of Directions.
+  SmallVector<Direction> unpack() {
+    return SmallVector<Direction>(begin(), end());
+  }
+
+  Iterator begin() const { return Iterator(*this); }
+  Iterator end() const { return Iterator(*this, size()); }
+
+  llvm::hash_code hash_value() const {
+    auto hash = llvm::hash_value(directions.size());
+    if (directions.size())
+      hash = hash_combine(hash, directions.getData());
+    return hash;
+  }
+
+private:
+  BitVector directions;
+};
+
+inline llvm::hash_code hash_value(const PortDirections &portDirections) {
+  return portDirections.hash_value();
+}
+
+} // namespace firrtl
+} // namespace circt
 
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h.inc"

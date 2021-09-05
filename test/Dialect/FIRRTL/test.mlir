@@ -129,6 +129,10 @@ firrtl.module @TestInvalidAttr() {
   }
 }
 
+// Test round-tripping the direction attribute.
+// CHECK: firrtl.directions<in, out, in>
+firrtl.module @PortDirectionsAttr() attributes {circt.test = #firrtl.directions<in, out, in>} { }
+
 // CHECK-LABEL: @VerbatimExpr
 firrtl.module @VerbatimExpr() {
   // CHECK: %[[TMP:.+]] = firrtl.verbatim.expr "FOO" : () -> !firrtl.uint<42>

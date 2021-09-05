@@ -706,13 +706,14 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   for (auto attr : extModule->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != "portNames" && attr.first != direction::attrKey &&
+    if (attr.first != "portNames" &&
+        attr.first != FModuleLike::getPortDirectionsAttrName() &&
         attr.first != "portAnnotations" &&
         attr.first != mlir::function_like_impl::getArgDictAttrName())
       newModuleAttrs.push_back(attr);
 
   SmallVector<Attribute> newArgNames;
-  SmallVector<Direction> newArgDirections;
+  PortDirections newArgDirections;
   SmallVector<Attribute, 8> newArgAttrs;
   SmallVector<Attribute, 8> newArgAnnotations;
   SmallVector<Type, 8> inputTypes;
@@ -726,9 +727,9 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   }
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder.getArrayAttr(newArgNames)));
-  newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get(direction::attrKey, context),
-                     direction::packAttribute(newArgDirections, context)));
+  newModuleAttrs.push_back(NamedAttribute(
+      Identifier::get(FModuleLike::getPortDirectionsAttrName(), context),
+      PortDirectionsAttr::get(context, newArgDirections)));
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get("portAnnotations", context),
                      builder.getArrayAttr(newArgAnnotations)));
@@ -785,13 +786,14 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto attr : module->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != "portNames" && attr.first != direction::attrKey &&
+    if (attr.first != "portNames" &&
+        attr.first != FModuleLike::getPortDirectionsAttrName() &&
         attr.first != "portAnnotations" &&
         attr.first != mlir::function_like_impl::getArgDictAttrName())
       newModuleAttrs.push_back(attr);
 
   SmallVector<Attribute> newArgNames;
-  SmallVector<Direction> newArgDirections;
+  PortDirections newArgDirections;
   SmallVector<Attribute, 8> newArgAttrs;
   SmallVector<Attribute, 8> newArgAnnotations;
   for (auto &port : newArgs) {
@@ -802,9 +804,9 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   }
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder->getArrayAttr(newArgNames)));
-  newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get(direction::attrKey, context),
-                     direction::packAttribute(newArgDirections, context)));
+  newModuleAttrs.push_back(NamedAttribute(
+      Identifier::get(FModuleLike::getPortDirectionsAttrName(), context),
+      PortDirectionsAttr::get(context, newArgDirections)));
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get("portAnnotations", context),
                      builder->getArrayAttr(newArgAnnotations)));

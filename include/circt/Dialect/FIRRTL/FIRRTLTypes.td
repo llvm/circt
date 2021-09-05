@@ -191,6 +191,36 @@ def PortAnnotationsAttr : ArrayAttrBase<
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
 
+def PortDirectionsAttr : AttrDef<FIRRTLDialect, "PortDirections"> {
+  let summary = "An array of port directions";
+  let description = [{
+    Syntax:
+
+    ```
+    direction  ::= 'in' | 'out'
+    directions ::= 'firrtl.directions' '<' (direction (',' direction)*)? '>'
+    ```
+
+    This represents the directions of a list of ports.  This uses a packed
+    bitvector under the hood to store the information.
+
+    Examples:
+
+    ```mlir
+    firrtl.directions<in, out, in>
+    ```
+  }];
+  let mnemonic = "directions";
+  let parameters = (ins "PortDirections":$value);
+  let storageType = "PortDirectionsAttr";
+  let returnType = "PortDirections";
+  let convertFromStorage = "$_self.getValue()";
+  let cppNamespace = "circt::firrtl";
+  let extraClassDeclaration = [{
+    /// Get the direction of a port by index.
+    Direction operator[](unsigned index);
+  }];
+}
 
 def InvalidValueAttr
   : AttrDef<FIRRTLDialect, "InvalidValue", [], "::mlir::Attribute"> {
