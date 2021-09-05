@@ -200,16 +200,6 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
-/// Returns a new vector containing the concatenation of vectors @p a and @p b.
-template <typename T>
-static SmallVector<T> concat(const SmallVectorImpl<T> &a,
-                             const SmallVectorImpl<T> &b) {
-  SmallVector<T> out;
-  out.append(a);
-  out.append(b);
-  return out;
-}
-
 /// This is a helper function that should only be used to get the WiresOp or
 /// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
 /// the end of a component's body. In the worst case, this will run in linear
@@ -422,9 +412,6 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   return success();
 }
 
-/// xxx TODO
-static bool isInterfacePort(ComponentPortInfo port) {}
-
 /// xxx
 static LogicalResult hasRequiredPorts(ComponentOp op) {
   auto ports = getComponentPortInfo(op);
@@ -456,14 +443,18 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
 }
 
 static LogicalResult verifyComponentOp(ComponentOp op) {
-  // Verify there is exactly one of each the wires and control operations.
-  auto wIt = op.getBody()->getOps<WiresOp>();
-  auto cIt = op.getBody()->getOps<ControlOp>();
-  if (std::distance(wIt.begin(), wIt.end()) +
-          std::distance(cIt.begin(), cIt.end()) !=
-      2)
-    return op.emitOpError(
-        "requires exactly one of each: 'calyx.wires', 'calyx.control'");
+  // Verify there is exactly one of each section:
+  // calyx.wires, and calyx.control.
+  uint32_t numWires = 0, numControl = 0;
+  for (auto &bodyOp : *op.getBody()) {
+    if (isa<WiresOp>(bodyOp))
+      ++numWires;
+    else if (isa<ControlOp>(bodyOp))
+      ++numControl;
+  }
+  if (!(numWires == 1) || !(numControl == 1))
+    return op.emitOpError() << "requires exactly one of each: "
+                               "'calyx.wires', 'calyx.control'.";
 
   if (failed(hasRequiredPorts(op)))
     return failure();
@@ -480,6 +471,16 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
         "the Control region.");
 
   return success();
+}
+
+/// Returns a new vector containing the concatenation of vectors @p a and @p b.
+template <typename T>
+static SmallVector<T> concat(const SmallVectorImpl<T> &a,
+                             const SmallVectorImpl<T> &b) {
+  SmallVector<T> out;
+  out.append(a);
+  out.append(b);
+  return out;
 }
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,

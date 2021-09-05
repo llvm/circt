@@ -56,19 +56,19 @@ void CalyxOpAsmDialectInterface::getAsmBlockArgumentNames(
     setNameFn(block->getArgument(i), ports[i].cast<StringAttr>().getValue());
 }
 
-// Provide implementations for the enums and attributes we use.
-#include "circt/Dialect/Calyx/CalyxAttributes.cpp.inc"
-#include "circt/Dialect/Calyx/CalyxDialect.cpp.inc"
-#include "circt/Dialect/Calyx/CalyxEnums.cpp.inc"
-
 void CalyxDialect::initialize() {
 
   // Register operations.
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Calyx/Calyx.cpp.inc"
-  >();
+      >();
 
   // Register interface implementations.
   addInterfaces<CalyxOpAsmDialectInterface>();
 }
+
+// Provide implementations for the enums and attributes we use.
+#include "circt/Dialect/Calyx/CalyxAttributes.cpp.inc"
+#include "circt/Dialect/Calyx/CalyxDialect.cpp.inc"
+#include "circt/Dialect/Calyx/CalyxEnums.cpp.inc"
