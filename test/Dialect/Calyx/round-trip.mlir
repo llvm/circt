@@ -47,13 +47,9 @@ calyx.program {
         calyx.assign %c1.in = %c0.out : i8
         calyx.group_done %c1.done : i1
       }
-      calyx.group @Group2 {
+      calyx.comb_group @Group2 {
         // CHECK: calyx.assign %c2.in = %c0.out, %done ? : i8
         calyx.assign %c2.in = %c0.out, %done ? : i8
-
-        // CHECK: calyx.group_done %c2.done, %0 ? : i1
-        %guard = comb.and %c1_i1, %c2.out : i1
-        calyx.group_done %c2.done, %guard ? : i1
       }
     }
     calyx.control {
@@ -67,11 +63,11 @@ calyx.program {
       // CHECK-NEXT: } else {
       // CHECK-NEXT: calyx.enable @Group2
       // CHECK-NEXT: }
-      // CHECK-NEXT: calyx.if %c2.out with @Group2 {
+      // CHECK-NEXT: calyx.if %c2.out {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK-NEXT: }
       // CHECK-NEXT: calyx.while %c2.out with @Group2 {
-      // CHECK-NEXT: calyx.while %c2.out with @Group2 {
+      // CHECK-NEXT: calyx.while %c2.out {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK:      calyx.par {
       // CHECK-NEXT: calyx.enable @Group1
@@ -86,11 +82,11 @@ calyx.program {
             } else {
               calyx.enable @Group2
             }
-            calyx.if %c2.out with @Group2 {
+            calyx.if %c2.out {
               calyx.enable @Group1
             }
             calyx.while %c2.out with @Group2 {
-              calyx.while %c2.out with @Group2 {
+              calyx.while %c2.out {
                 calyx.enable @Group1
               }
             }

@@ -130,7 +130,7 @@ struct Emitter {
   void emitWires(WiresOp op);
 
   // Group emission
-  void emitGroup(GroupOp group);
+  void emitGroup(GroupInterface group);
 
   // Control emission
   void emitControl(ControlOp control);
@@ -265,10 +265,10 @@ private:
 
   /// Emits a port for a Group.
   template <typename OpTy>
-  void emitGroupPort(GroupOp group, OpTy op, StringRef portHole) {
+  void emitGroupPort(GroupInterface group, OpTy op, StringRef portHole) {
     assert((isa<GroupGoOp>(op) || isa<GroupDoneOp>(op)) &&
            "Required to be a group port.");
-    indent() << group.sym_name() << LSquare() << portHole << RSquare()
+    indent() << group.symName().getValue() << LSquare() << portHole << RSquare()
              << equals();
     if (op.guard()) {
       emitValue(op.guard(), /*isIndented=*/false);
@@ -297,7 +297,8 @@ private:
           .template Case<IfOp, WhileOp>([&](auto op) {
             indent() << (isa<IfOp>(op) ? "if " : "while ");
             emitValue(op.cond(), /*isIndented=*/false);
-            os << " with " << op.groupName();
+            if (auto groupName = op.groupName(); groupName.hasValue())
+              os << " with " << groupName.getValue();
             emitCalyxBody([&]() { emitCalyxControl(op); });
           })
           .template Case<EnableOp>([&](auto op) { emitEnable(op); })
@@ -497,7 +498,7 @@ void Emitter::emitWires(WiresOp op) {
   emitCalyxSection("wires", [&]() {
     for (auto &&bodyOp : *op.getBody()) {
       TypeSwitch<Operation *>(&bodyOp)
-          .Case<GroupOp>([&](auto op) { emitGroup(op); })
+          .Case<GroupInterface>([&](auto op) { emitGroup(op); })
           .Case<AssignOp>([&](auto op) { emitAssignment(op); })
           .Case<hw::ConstantOp, comb::AndOp, comb::OrOp, comb::XorOp>(
               [&](auto op) { /* Do nothing. */ })
@@ -508,7 +509,7 @@ void Emitter::emitWires(WiresOp op) {
   });
 }
 
-void Emitter::emitGroup(GroupOp group) {
+void Emitter::emitGroup(GroupInterface group) {
   auto emitGroupBody = [&]() {
     for (auto &&bodyOp : *group.getBody()) {
       TypeSwitch<Operation *>(&bodyOp)
@@ -522,7 +523,16 @@ void Emitter::emitGroup(GroupOp group) {
           });
     }
   };
-  emitCalyxSection("group", emitGroupBody, group.sym_name());
+  auto prefix =
+      TypeSwitch<Operation *, StringRef>(group)
+          .Case<GroupOp>([](auto) { return "group"; })
+          .Case<CombGroupOp>([](auto) { return "comb_group"; })
+          .Default([&](auto) {
+            emitOpError(group, "Group type not supported for emission");
+            return "";
+          });
+
+  emitCalyxSection(prefix, emitGroupBody, group.symName().getValue());
 }
 
 void Emitter::emitEnable(EnableOp enable) {

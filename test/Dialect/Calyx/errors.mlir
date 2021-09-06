@@ -73,7 +73,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %a.go, %a.clk, %a.reset, %a.out, %a.done = calyx.instance "a" @A : i1, i1, i1, i16, i1
     %b.in, %b.go, %b.clk, %b.reset, %b.done = calyx.instance "b" @B : i16, i1, i1, i1, i1
-    // expected-error @+1 {{'calyx.assign' op expects parent op to be one of 'calyx.group, calyx.wires'}}
+    // expected-error @+1 {{'calyx.assign' op expects parent op to be one of 'calyx.group, calyx.comb_group, calyx.wires'}}
     calyx.assign %b.in = %a.out : i16
 
     calyx.wires { calyx.assign %b.in = %a.out : i16 }
@@ -138,7 +138,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
+    calyx.wires { calyx.comb_group @Group1 { calyx.assign %c0.go = %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{empty 'then' region.}}
@@ -161,7 +161,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
+    calyx.wires { calyx.comb_group @Group1 { calyx.assign %c0.go = %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{empty 'else' region.}}
@@ -182,12 +182,13 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
+    %c1_1 = hw.constant 1 : i1
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    calyx.wires { }
+    calyx.wires { calyx.comb_group @Group2 { calyx.assign %c0.go = %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{'calyx.if' op with group 'Group1', which does not exist.}}
-        calyx.if %c0.out with @Group1 {} else {}
+        calyx.if %c0.out with @Group1 { calyx.enable @Group2}
       }
     }
   }
@@ -204,7 +205,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
+    calyx.wires { calyx.comb_group @Group1 {  calyx.assign %c0.go = %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{conditional op: '%c0.out' expected to be driven from group: 'Group1' but no driver was found.}}
@@ -227,7 +228,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
+    calyx.wires { calyx.comb_group @Group1 { calyx.assign %c0.go = %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{empty body region.}}
@@ -246,12 +247,15 @@ calyx.program {
     calyx.control {}
   }
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
+    %c1_1 = hw.constant 1 : i1
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    calyx.wires { }
+    calyx.wires { calyx.comb_group @Group2 { calyx.assign %c0.go = %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{'calyx.while' op with group 'Group1', which does not exist.}}
-        calyx.while %c0.out with @Group1 {}
+        calyx.while %c0.out with @Group1 {
+          calyx.enable @Group2
+        }
       }
     }
   }
@@ -268,7 +272,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
+    calyx.wires { calyx.comb_group @Group1 { } }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{conditional op: '%c0.out' expected to be driven from group: 'Group1' but no driver was found.}}
@@ -390,6 +394,48 @@ calyx.program {
     calyx.control {
       calyx.seq { calyx.enable @A }
       calyx.seq { calyx.enable @A }
+    }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
+    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
+    calyx.control {
+      calyx.seq {
+        // expected-error @+1 {{'calyx.if' op with group 'Group1', which is not a combinational group.}}
+        calyx.if %c0.out with @Group1 { calyx.enable @Group1}
+      }
+    }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
+    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.group @Group1 { calyx.group_done %c1_1 : i1 } }
+    calyx.control {
+      calyx.seq {
+        // expected-error @+1 {{'calyx.while' op with group 'Group1', which is not a combinational group.}}
+        calyx.while %c0.out with @Group1 { calyx.enable @Group1}
+      }
     }
   }
 }
