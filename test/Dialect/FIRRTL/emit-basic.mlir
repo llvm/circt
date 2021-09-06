@@ -97,7 +97,7 @@ firrtl.circuit "Foo" {
     // CHECK: inst someInst of Simple
     // CHECK: someInst.someIn <= ui1
     // CHECK: someOut <= someInst.someOut
-    %someInst_someIn, %someInst_someOut = firrtl.instance @Simple {name = "someInst"} : !firrtl.uint<1>, !firrtl.uint<1>
+    %someInst_someIn, %someInst_someOut = firrtl.instance @Simple {name = "someInst"} : in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %someInst_someIn, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %someOut, %someInst_someOut : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: someOut is invalid

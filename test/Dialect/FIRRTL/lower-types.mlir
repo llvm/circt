@@ -42,8 +42,8 @@ firrtl.circuit "TopLevel" {
 
     // CHECK-NEXT: %inst_source_valid, %inst_source_ready, %inst_source_data, %inst_sink_valid, %inst_sink_ready, %inst_sink_data
     // CHECK-SAME: = firrtl.instance @Simple {name = ""} :
-    // CHECK-SAME: !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<64>
-    %sourceV, %sinkV = firrtl.instance @Simple {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+    // CHECK-SAME: in !firrtl.uint<1>, out !firrtl.uint<1>, in !firrtl.uint<64>, out !firrtl.uint<1>, in !firrtl.uint<1>, out !firrtl.uint<64>
+    %sourceV, %sinkV = firrtl.instance @Simple {name = ""} : in !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 
     // CHECK-NEXT: firrtl.connect %inst_source_valid, %source_valid
     // CHECK-NEXT: firrtl.connect %source_ready, %inst_source_ready
@@ -276,7 +276,7 @@ firrtl.circuit "TopLevel" {
     firrtl.module @mod_2(in %clock: !firrtl.clock, in %inp_a: !firrtl.bundle<inp_d: uint<14>>) {
     }
     firrtl.module @top_mod(in %clock: !firrtl.clock) {
-      %U0_clock, %U0_inp_a = firrtl.instance @mod_2 {name = "U0"} : !firrtl.clock, !firrtl.bundle<inp_d: uint<14>>
+      %U0_clock, %U0_inp_a = firrtl.instance @mod_2 {name = "U0"} : in !firrtl.clock, in !firrtl.bundle<inp_d: uint<14>>
       %0 = firrtl.invalidvalue : !firrtl.clock
       firrtl.connect %U0_clock, %0 : !firrtl.clock, !firrtl.clock
       %1 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
@@ -287,7 +287,7 @@ firrtl.circuit "TopLevel" {
 
 //CHECK-LABEL:     firrtl.module @mod_2(in %clock: !firrtl.clock, in %inp_a_inp_d: !firrtl.uint<14>)
 //CHECK:    firrtl.module @top_mod(in %clock: !firrtl.clock)
-//CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @mod_2 {name = "U0"} : !firrtl.clock, !firrtl.uint<14>
+//CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @mod_2 {name = "U0"} : in !firrtl.clock, in !firrtl.uint<14>
 //CHECK-NEXT:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
 //CHECK-NEXT:      firrtl.connect %U0_clock, %invalid_clock : !firrtl.clock, !firrtl.clock
 //CHECK-NEXT:      %invalid_ui14 = firrtl.invalidvalue : !firrtl.uint<14>
@@ -406,8 +406,8 @@ firrtl.circuit "TopLevel" {
   // CHECK-LABEL: firrtl.extmodule @ExternalModule(in %source_valid: !firrtl.uint<1>, out %source_ready: !firrtl.uint<1>, in %source_data: !firrtl.uint<64>)
   firrtl.extmodule @ExternalModule(in %source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>> )
   firrtl.module @Test() {
-    // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule  {name = ""} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<64>
-    %inst_source = firrtl.instance @ExternalModule {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+    // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule  {name = ""} : in !firrtl.uint<1>, out !firrtl.uint<1>, in !firrtl.uint<64>
+    %inst_source = firrtl.instance @ExternalModule {name = ""} : in !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
   }
 
 // Test RegResetOp lowering
@@ -482,7 +482,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %a, %0 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
   firrtl.module @AnnotationsInstanceOp() {
-    %bar_a = firrtl.instance @Bar  {annotations = [{a = "a"}], name = "bar"} : !firrtl.vector<uint<1>, 2>
+    %bar_a = firrtl.instance @Bar  {annotations = [{a = "a"}], name = "bar"} : out !firrtl.vector<uint<1>, 2>
   }
   // CHECK: firrtl.instance
   // CHECK-SAME: annotations = [{a = "a"}]
@@ -778,7 +778,7 @@ firrtl.circuit "TopLevel" {
   firrtl.module @PartialConnectLHSFlip(in %a: !firrtl.bundle<b: bundle<c flip: uint<2>>>) { }
    // CHECK-LABEL: firrtl.module @FooFlipType
   firrtl.module @FooFlipType(in %a: !firrtl.bundle<b: bundle<c flip: uint<2>>>) {
-    %mgmt_a = firrtl.instance @PartialConnectLHSFlip  {name = "mgmt"} : !firrtl.bundle<b: bundle<c flip: uint<2>>>
+    %mgmt_a = firrtl.instance @PartialConnectLHSFlip  {name = "mgmt"} : in !firrtl.bundle<b: bundle<c flip: uint<2>>>
     %0 = firrtl.subfield %mgmt_a(0) : (!firrtl.bundle<b: bundle<c flip: uint<2>>>) -> !firrtl.bundle<c flip: uint<2>>
     %1 = firrtl.subfield %0(0) : (!firrtl.bundle<c flip: uint<2>>) -> !firrtl.uint<2>
     // CHECK: firrtl.connect %a_b_c, %mgmt_a_b_c : !firrtl.uint<2>, !firrtl.uint<2>
@@ -825,7 +825,7 @@ firrtl.circuit "TopLevel" {
   // CHECK-COUNT-2: firrtl.annotations = [{b}]
   // CHECK-NOT: firrtl.annotations = [{a}]
   firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b}]}) {
-    %sub_a = firrtl.instance @Sub1  {name = "sub", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
+    %sub_a = firrtl.instance @Sub1  {name = "sub"} : in !firrtl.vector<uint<1>, 2>
     firrtl.connect %sub_a, %a : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
 
@@ -860,7 +860,7 @@ firrtl.circuit "TopLevel" {
     // CHECK: %[[a_b:.+]] = firrtl.wire
     %a = firrtl.wire  : !firrtl.bundle<b: uint<1>>
     // CHECK-NEXT: %bar_a = firrtl.instance @Bar
-    %bar_a = firrtl.instance @Bar2  {name = "bar"} : !firrtl.uint<2>
+    %bar_a = firrtl.instance @Bar2  {name = "bar"} : in !firrtl.uint<2>
     // CHECK-NEXT: %invalid_ui2 = firrtl.invalidvalue
     %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
     // CHECK-NEXT: firrtl.connect %bar_a, %invalid_ui2
@@ -1063,7 +1063,7 @@ firrtl.circuit "TopLevel" {
   // CHECK-LABEL firrtl.module @Foo3
   firrtl.module @Foo3() {
     // CHECK: [{one}], [{two}], []
-    %bar_a, %bar_b = firrtl.instance @Bar3  {name = "bar", portAnnotations = [[{one}], [#firrtl.subAnno<fieldID = 1, {two}>]]} : !firrtl.uint<1>, !firrtl.bundle<baz: uint<1>, qux: uint<1>>
+    %bar_a, %bar_b = firrtl.instance @Bar3  {name = "bar", portAnnotations = [[{one}], [#firrtl.subAnno<fieldID = 1, {two}>]]} : in !firrtl.uint<1>, out !firrtl.bundle<baz: uint<1>, qux: uint<1>>
   }
 
 
@@ -1129,7 +1129,7 @@ firrtl.module @bofa(out %auto: !firrtl.bundle<io_out: bundle<foo: bundle<bar: an
 firrtl.extmodule @is1436_BAR(out %io: !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>)
 // CHECK-LABEL: firrtl.module @is1436_FOO
 firrtl.module @is1436_FOO() {
-  %thing_io = firrtl.instance @is1436_BAR  {name = "thing"} : !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>
+  %thing_io = firrtl.instance @is1436_BAR  {name = "thing"} : out !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>
   %0 = firrtl.subfield %thing_io(0) : (!firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>) -> !firrtl.vector<uint<1>, 1>
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
   %1 = firrtl.subaccess %0[%c0_ui2] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<2>

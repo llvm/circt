@@ -26,7 +26,7 @@ firrtl.module @simple(in %in : !firrtl.uint<1>, out %out : !firrtl.uint<1>) {
 }
 firrtl.module @CheckInitialization() {
   // expected-error @+1 {{sink "test.in" not fully initialized}}
-  %simple_out, %simple_in = firrtl.instance @simple {name = "test", portNames=["in", "out"]}: !firrtl.uint<1>, !firrtl.uint<1>
+  %simple_out, %simple_in = firrtl.instance @simple {name = "test", portNames=["in", "out"]}: in !firrtl.uint<1>, out !firrtl.uint<1>
 }
 }
 

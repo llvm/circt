@@ -37,7 +37,7 @@
 // CHECK: firrtl.module @test_mux(in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg5: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_mux(%arg0: index, %arg1: index, %arg2: index, %arg3: none, ...) -> (index, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_arg3 = firrtl.instance @handshake_mux_3ins_1outs_ui64  {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_arg3 = firrtl.instance @handshake_mux_3ins_1outs_ui64 {name = ""} : in !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
   %0 = "handshake.mux"(%arg0, %arg1, %arg2): (index, index, index) -> index
   handshake.return %0, %arg3 : index, none
 }

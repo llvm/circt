@@ -168,9 +168,8 @@ public:
   void visitDecl(InstanceOp op) {
     // Track any instance inputs which need to be connected to for init
     // coverage.
-    auto ref = op.getReferencedModule();
     for (auto result : llvm::enumerate(op.results()))
-      if (ref.getPortDirection(result.index()) == Direction::Out)
+      if (op.getPortDirection(result.index()) == Direction::Out)
         declareSinks(result.value(), Flow::Source);
       else
         declareSinks(result.value(), Flow::Sink);

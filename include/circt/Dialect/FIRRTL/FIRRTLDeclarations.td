@@ -19,18 +19,22 @@ def InstanceOp : FIRRTLOp<"instance", [
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
+                       PortDirectionsAttr:$portDirections,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        BoolAttr:$lowerToBind);
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat =
-    "$moduleName custom<InstanceOp>(attr-dict) (`:` type($results)^ )?";
+  let assemblyFormat = [{
+    $moduleName custom<InstanceOp>(attr-dict)
+    custom<PortList>(type($results), $portDirections)
+  }];
 
   let verifier = "return ::verifyInstanceOp(*this);";
 
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
+                   "PortDirections":$portDirections,
                    "::mlir::StringRef":$moduleName,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
@@ -55,6 +59,11 @@ def InstanceOp : FIRRTLOp<"instance", [
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
+    }
+
+    /// Get the direction of the specified port.
+    Direction getPortDirection(size_t resultNo) {
+      return portDirectionsAttr()[resultNo];
     }
 
     /// Hooks for port annotations.

@@ -42,24 +42,24 @@ circuit test_mod : %[[{"a": "a"}]]
     c <= flipFlop.a_q
 
 ; MLIR-LABEL: firrtl.module @test_mod(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<2>, out %c: !firrtl.uint<1>) {
-; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance @Cat  {name = "cat"} : !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.uint<6>
+; MLIR-NEXT:    %cat_a, %cat_b, %cat_c, %cat_d = firrtl.instance @Cat {name = "cat"} : in !firrtl.uint<2>, in !firrtl.uint<2>, in !firrtl.uint<2>, out !firrtl.uint<6>
 ; MLIR-NEXT:    firrtl.connect %cat_a, %b : !firrtl.uint<2>, !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.connect %cat_b, %b : !firrtl.uint<2>, !firrtl.uint<2>
 ; MLIR-NEXT:    firrtl.connect %cat_c, %b : !firrtl.uint<2>, !firrtl.uint<2>
-; MLIR-NEXT:    %implicitTrunc_inp_1, %implicitTrunc_inp_2, %implicitTrunc_out1, %implicitTrunc_out2 = firrtl.instance @ImplicitTrunc  {name = "implicitTrunc"} : !firrtl.uint<1>, !firrtl.sint<5>, !firrtl.sint<3>, !firrtl.sint<3>
+; MLIR-NEXT:    %implicitTrunc_inp_1, %implicitTrunc_inp_2, %implicitTrunc_out1, %implicitTrunc_out2 = firrtl.instance @ImplicitTrunc {name = "implicitTrunc"} : in !firrtl.uint<1>, in !firrtl.sint<5>, out !firrtl.sint<3>, out !firrtl.sint<3>
 ; MLIR-NEXT:    firrtl.connect %implicitTrunc_inp_1, %a : !firrtl.uint<1>, !firrtl.uint<1>
 ; MLIR-NEXT:    %0 = firrtl.asSInt %cat_d : (!firrtl.uint<6>) -> !firrtl.sint<6>
 ; MLIR-NEXT:    %1 = firrtl.bits %0 4 to 0 : (!firrtl.sint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    %2 = firrtl.asSInt %1 : (!firrtl.uint<5>) -> !firrtl.sint<5>
 ; MLIR-NEXT:    firrtl.connect %implicitTrunc_inp_2, %2 : !firrtl.sint<5>, !firrtl.sint<5>
-; MLIR-NEXT:    %prettifyExample_inp_1, %prettifyExample_inp_2, %prettifyExample_inp_3, %prettifyExample_out1, %prettifyExample_out2 = firrtl.instance @PrettifyExample  {name = "prettifyExample"} : !firrtl.uint<5>, !firrtl.uint<5>, !firrtl.uint<5>, !firrtl.uint<10>, !firrtl.uint<10>
+; MLIR-NEXT:    %prettifyExample_inp_1, %prettifyExample_inp_2, %prettifyExample_inp_3, %prettifyExample_out1, %prettifyExample_out2 = firrtl.instance @PrettifyExample {name = "prettifyExample"} : in !firrtl.uint<5>, in !firrtl.uint<5>, in !firrtl.uint<5>, out !firrtl.uint<10>, out !firrtl.uint<10>
 ; MLIR-NEXT:    %3 = firrtl.bits %cat_d 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.connect %prettifyExample_inp_1, %3 : !firrtl.uint<5>, !firrtl.uint<5>
 ; MLIR-NEXT:    %4 = firrtl.bits %cat_d 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.connect %prettifyExample_inp_2, %4 : !firrtl.uint<5>, !firrtl.uint<5>
 ; MLIR-NEXT:    %5 = firrtl.bits %cat_d 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
 ; MLIR-NEXT:    firrtl.connect %prettifyExample_inp_3, %5 : !firrtl.uint<5>, !firrtl.uint<5>
-; MLIR-NEXT:    %flipFlop_clock, %flipFlop_a_d, %flipFlop_a_q = firrtl.instance @FlipFlop  {name = "flipFlop"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
+; MLIR-NEXT:    %flipFlop_clock, %flipFlop_a_d, %flipFlop_a_q = firrtl.instance @FlipFlop {name = "flipFlop"} : in !firrtl.clock, in !firrtl.uint<1>, out !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.connect %flipFlop_clock, %clock : !firrtl.clock, !firrtl.clock
 ; MLIR-NEXT:    firrtl.connect %flipFlop_a_d, %a : !firrtl.uint<1>, !firrtl.uint<1>
 ; MLIR-NEXT:    firrtl.connect %c, %flipFlop_a_q : !firrtl.uint<1>, !firrtl.uint<1>

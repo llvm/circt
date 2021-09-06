@@ -895,6 +895,7 @@ void TypeLoweringVisitor::visitExpr(AsPassivePrimOp op) {
 
 void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   SmallVector<Type, 8> resultTypes;
+  PortDirections portDirections;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
   SmallVector<StringAttr, 8> resultNames;
   bool skip = true;
@@ -904,17 +905,24 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   endFields.push_back(0);
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto srcType = op.getType(i).cast<FIRRTLType>();
+    auto srcDirection = op.portDirections()[i];
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     if (!peelType(srcType, fieldTypes)) {
       resultTypes.push_back(srcType);
+      portDirections.push_back(srcDirection);
       newPortAnno.push_back(oldPortAnno[i]);
     } else {
       skip = false;
       // Store the flat type for the new bundle type.
       for (auto field : fieldTypes) {
         resultTypes.push_back(field.type);
+
+        // Flip the direction if the field is an output.
+        auto direction = (Direction)((unsigned)srcDirection ^ field.isOutput);
+        portDirections.push_back(direction);
+
         newPortAnno.push_back(filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
             field));
@@ -928,8 +936,10 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
-      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr());
+      resultTypes, op.moduleNameAttr(), op.nameAttr(),
+      PortDirectionsAttr::get(builder->getContext(), portDirections),
+      op.annotations(), builder->getArrayAttr(newPortAnno),
+      op.lowerToBindAttr());
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;

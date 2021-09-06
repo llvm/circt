@@ -51,8 +51,7 @@ firrtl.circuit "Simple" {
                               in %reset: !firrtl.uint<1>) {
     // CHECK-NEXT: %c0_i2 = hw.constant
     // CHECK-NEXT: %xyz.out4 = hw.instance "xyz" @Simple([[ARG1:%.+]], %u2, %s8) : (i4, i2, i8) -> i4
-    %xyz:4 = firrtl.instance @Simple {name = "xyz", portNames=["in1", "in2", "in3", "out4"]}
-     : !firrtl.uint<4>, !firrtl.uint<2>, !firrtl.sint<8>, !firrtl.uint<4>
+    %xyz:4 = firrtl.instance @Simple {name = "xyz"} : in !firrtl.uint<4>, in !firrtl.uint<2>, in !firrtl.sint<8>, out !firrtl.uint<4>
 
     // CHECK: [[ARG1]] = comb.concat %c0_i2, %u2 : (i2, i2) -> i4
     firrtl.connect %xyz#0, %u2 : !firrtl.uint<4>, !firrtl.uint<2>
@@ -68,8 +67,7 @@ firrtl.circuit "Simple" {
     // hw.instance carries the parameters, unlike at the FIRRTL layer.
 
     // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule(%reset)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i1) -> i8
-    %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
-      : !firrtl.uint<1>, !firrtl.uint<8>
+    %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext"} : in !firrtl.uint<1>, out !firrtl.uint<8>
 
     // CHECK: sv.fwrite "%x"(%xyz.out4) : i4
     // CHECK: sv.fwrite "Something interesting! %x"(%myext.out) : i8
@@ -145,8 +143,7 @@ firrtl.circuit "Simple" {
     // CHECK: %false = hw.constant false
 
     // CHECK-NEXT: hw.instance "myext" @MyParameterizedExtModule([[ARG:%.+]]) {parameters
-    %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
-      : !firrtl.uint<1>, !firrtl.uint<8>
+    %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext"} : in !firrtl.uint<1>, out !firrtl.uint<8>
 
     // CHECK: [[ADD:%.+]] = comb.add %0, %1
 
@@ -167,8 +164,7 @@ firrtl.circuit "Simple" {
   // CHECK-LABEL: hw.module @instance_cyclic
   firrtl.module @instance_cyclic(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>) {
     // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule(%0)
-    %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
-      : !firrtl.uint<1>, !firrtl.uint<8>
+    %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext"} : in !firrtl.uint<1>, out !firrtl.uint<8>
 
     // Output of the instance is fed into the input!
     %11 = firrtl.bits %myext#1 2 to 2 : (!firrtl.uint<8>) -> !firrtl.uint<1>
@@ -207,11 +203,9 @@ firrtl.circuit "Simple" {
                                    out %oB: !firrtl.uint<0>) {
 
     // CHECK: %myinst.outa = hw.instance "myinst" @ZeroWidthPorts(%iA) : (i4) -> i4
-    %myinst:5 = firrtl.instance @ZeroWidthPorts {name = "myinst", portNames=["inA", "inB", "inC", "outa", "outb"]}
-      : !firrtl.uint<4>, !firrtl.uint<0>, !firrtl.analog<0>, !firrtl.uint<4>, !firrtl.uint<0>
+    %myinst:5 = firrtl.instance @ZeroWidthPorts {name = "myinst"} : in !firrtl.uint<4>, in !firrtl.uint<0>, in !firrtl.analog<0>, out !firrtl.uint<4>, out !firrtl.uint<0>
     // CHECK: = hw.instance "myinst" @SameNamePorts({{.+}}, {{.+}} {{.+}}) : (i4, i1, !hw.inout<i1>) -> (i4, i1)
-    %myinst_sameName:5 = firrtl.instance @SameNamePorts {name = "myinst"}
-      : !firrtl.uint<4>, !firrtl.uint<1>, !firrtl.analog<1>, !firrtl.uint<4>, !firrtl.uint<1>
+    %myinst_sameName:5 = firrtl.instance @SameNamePorts {name = "myinst"} : in !firrtl.uint<4>, in !firrtl.uint<1>, in!firrtl.analog<1>, out !firrtl.uint<4>, out !firrtl.uint<1>
 
     // Output of the instance is fed into the input!
     firrtl.connect %myinst#0, %iA : !firrtl.uint<4>, !firrtl.uint<4>
@@ -238,11 +232,11 @@ firrtl.circuit "Simple" {
   firrtl.module @foo690() {
     // CHECK: %.led_0.wire = sv.wire
     // CHECK: hw.instance "fpga" @bar690(%.led_0.wire) : (!hw.inout<i1>) -> ()
-    %result = firrtl.instance @bar690 {name = "fpga", portNames = ["led_0"]} : !firrtl.analog<1>
+    %result = firrtl.instance @bar690 {name = "fpga"} : in !firrtl.analog<1>
   }
   // CHECK-LABEL: hw.module @foo690a(%a: !hw.inout<i1>) {
   firrtl.module @foo690a(in %a: !firrtl.analog<1>) {
-    %result = firrtl.instance @bar690 {name = "fpga", portNames = ["led_0"]} : !firrtl.analog<1>
+    %result = firrtl.instance @bar690 {name = "fpga"} : in !firrtl.analog<1>
     firrtl.attach %result, %a: !firrtl.analog<1>, !firrtl.analog<1>
   }
 
@@ -253,7 +247,7 @@ firrtl.circuit "Simple" {
   // CHECK-NEXT:  hw.instance "fpga" @bar740(%.led_0.wire)
   firrtl.extmodule @bar740(in %led_0: !firrtl.analog<1>)
   firrtl.module @foo740(in %led_0: !firrtl.analog<1>) {
-    %result = firrtl.instance @bar740 {name = "fpga", portNames = ["led_0"]} : !firrtl.analog<1>
+    %result = firrtl.instance @bar740 {name = "fpga"} : in !firrtl.analog<1>
     firrtl.attach %result, %led_0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
 }

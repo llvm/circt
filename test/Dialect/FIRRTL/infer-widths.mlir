@@ -534,7 +534,7 @@ firrtl.circuit "Foo" {
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
   firrtl.module @InterModuleSimpleBar(in %in: !firrtl.uint<42>, out %out: !firrtl.uint) {
-    %inst_in, %inst_out = firrtl.instance @InterModuleSimpleFoo {name = "inst"} : !firrtl.uint, !firrtl.uint
+    %inst_in, %inst_out = firrtl.instance @InterModuleSimpleFoo {name = "inst"} : in !firrtl.uint, out !firrtl.uint
     %0 = firrtl.add %inst_out, %inst_out : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %inst_in, %in : !firrtl.uint, !firrtl.uint<42>
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
@@ -553,8 +553,8 @@ firrtl.circuit "Foo" {
     firrtl.connect %out, %0 : !firrtl.uint, !firrtl.uint
   }
   firrtl.module @InterModuleMultipleBar(in %in1: !firrtl.uint<17>, in %in2: !firrtl.uint<42>, out %out: !firrtl.uint) {
-    %inst1_in, %inst1_out = firrtl.instance @InterModuleMultipleFoo {name = "inst1"} : !firrtl.uint, !firrtl.uint
-    %inst2_in, %inst2_out = firrtl.instance @InterModuleMultipleFoo {name = "inst2"} : !firrtl.uint, !firrtl.uint
+    %inst1_in, %inst1_out = firrtl.instance @InterModuleMultipleFoo {name = "inst1"} : in !firrtl.uint, out !firrtl.uint
+    %inst2_in, %inst2_out = firrtl.instance @InterModuleMultipleFoo {name = "inst2"} : in !firrtl.uint, out !firrtl.uint
     %0 = firrtl.xor %inst1_out, %inst2_out : (!firrtl.uint, !firrtl.uint) -> !firrtl.uint
     firrtl.connect %inst1_in, %in1 : !firrtl.uint, !firrtl.uint<17>
     firrtl.connect %inst2_in, %in2 : !firrtl.uint, !firrtl.uint<42>
@@ -922,7 +922,7 @@ firrtl.circuit "Foo" {
   // CHECK-LABEL: @InterModuleGoodCycleBar
   // CHECK-SAME: out %out: !firrtl.uint<39>
   firrtl.module @InterModuleGoodCycleBar(in %in: !firrtl.uint<42>, out %out: !firrtl.uint) {
-    %inst_in, %inst_out = firrtl.instance @InterModuleGoodCycleFoo {name = "inst"} : !firrtl.uint, !firrtl.uint
+    %inst_in, %inst_out = firrtl.instance @InterModuleGoodCycleFoo {name = "inst"} : in !firrtl.uint, out !firrtl.uint
     firrtl.connect %inst_in, %in : !firrtl.uint, !firrtl.uint<42>
     firrtl.connect %inst_in, %inst_out : !firrtl.uint, !firrtl.uint
     firrtl.connect %out, %inst_out : !firrtl.uint, !firrtl.uint

@@ -29,7 +29,7 @@
 // CHECK-SAME: in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_lazy_fork(%arg0: index, %arg1: none, ...) -> (index, index, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2 = firrtl.instance @handshake_lazy_fork_1ins_2outs_ui64  {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2 = firrtl.instance @handshake_lazy_fork_1ins_2outs_ui64 {name = ""} : in !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
   %0:2 = "handshake.lazy_fork"(%arg0) {control = false} : (index) -> (index, index)
   handshake.return %0#0, %0#1, %arg1 : index, index, none
 }

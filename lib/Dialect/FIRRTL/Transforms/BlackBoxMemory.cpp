@@ -83,12 +83,15 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
                                  ArrayRef<ModulePortInfo> modulePorts) {
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
+  PortDirections portDirections;
   resultTypes.reserve(modulePorts.size());
-  for (auto port : modulePorts)
+  for (auto port : modulePorts) {
     resultTypes.push_back(port.type);
+    portDirections.push_back(port.direction);
+  }
 
-  return builder.create<InstanceOp>(loc, resultTypes, moduleName,
-                                    instanceName.getValue());
+  return builder.create<InstanceOp>(loc, resultTypes, portDirections,
+                                    moduleName, instanceName.getValue());
 }
 
 /// Get the pohwist for an external module representing a blackbox memory. This

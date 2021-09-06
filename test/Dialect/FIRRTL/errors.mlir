@@ -231,7 +231,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.uint<1>', but got '!firrtl.uint<2>'}}
-    %a = firrtl.instance @Callee {name = ""} : !firrtl.uint<2>
+    %a = firrtl.instance @Callee {name = ""} : in !firrtl.uint<2>
   }
 }
 
@@ -255,8 +255,18 @@ firrtl.circuit "Foo" {
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>, in %arg1: !firrtl.bundle<valid: uint<1>>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg1" must be '!firrtl.bundle<valid: uint<1>>', but got '!firrtl.bundle<valid: uint<2>>'}}
-    %a:2 = firrtl.instance @Callee {name = ""}
-    : !firrtl.uint<1>, !firrtl.bundle<valid: uint<2>>
+    %a:2 = firrtl.instance @Callee {name = ""} : in !firrtl.uint<1>, in !firrtl.bundle<valid: uint<2>>
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+
+  firrtl.module @Callee(in %arg0: !firrtl.uint<1> ) { }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op mistmatched port directions}}
+    firrtl.instance @Callee {name = ""} : out !firrtl.uint<1>
   }
 }
 

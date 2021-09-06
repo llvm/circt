@@ -5,7 +5,7 @@
 firrtl.circuit "ConstInput"   {
   firrtl.module @ConstInput(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %c_in0, %c_in1, %c_out = firrtl.instance @Child  {name = "c"} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %c_in0, %c_in1, %c_out = firrtl.instance @Child  {name = "c"} : in !firrtl.uint<1>, in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %c_in0, %x : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %c_in1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %z, %c_out : !firrtl.uint<1>, !firrtl.uint<1>
@@ -29,7 +29,7 @@ firrtl.circuit "InstanceInput"   {
   // CHECK-LABEL: firrtl.module @Child1
   firrtl.module @Child1(out %out: !firrtl.uint<1>) {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
-    %b0_in, %b0_out = firrtl.instance @Bottom1  {name = "b0"} : !firrtl.uint<1>, !firrtl.uint<1>
+    %b0_in, %b0_out = firrtl.instance @Bottom1  {name = "b0"} : in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %b0_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
     // CHECK: %[[C1:.+]] = firrtl.constant 1 :
     // CHECK: firrtl.connect %out, %[[C1]]
@@ -38,10 +38,10 @@ firrtl.circuit "InstanceInput"   {
   // CHECK-LABEL:  firrtl.module @InstanceInput
   firrtl.module @InstanceInput(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
-    %c_out = firrtl.instance @Child1  {name = "c"} : !firrtl.uint<1>
-    %b0_in, %b0_out = firrtl.instance @Bottom1  {name = "b0"} : !firrtl.uint<1>, !firrtl.uint<1>
+    %c_out = firrtl.instance @Child1  {name = "c"} : out !firrtl.uint<1>
+    %b0_in, %b0_out = firrtl.instance @Bottom1  {name = "b0"} : in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %b0_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
-    %b1_in, %b1_out = firrtl.instance @Bottom1  {name = "b1"} : !firrtl.uint<1>, !firrtl.uint<1>
+    %b1_in, %b1_out = firrtl.instance @Bottom1  {name = "b1"} : in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %b1_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
     %0 = firrtl.and %b0_out, %b1_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %1 = firrtl.and %0, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -61,7 +61,7 @@ firrtl.circuit "InstanceInput2"   {
  // CHECK-LABEL:  firrtl.module @Child2
   firrtl.module @Child2(out %out: !firrtl.uint<1>) {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
-    %b0_in, %b0_out = firrtl.instance @Bottom2  {name = "b0"} : !firrtl.uint<1>, !firrtl.uint<1>
+    %b0_in, %b0_out = firrtl.instance @Bottom2  {name = "b0"} : in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %b0_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
     // CHECK: firrtl.connect %out, %b0_out
     firrtl.connect %out, %b0_out : !firrtl.uint<1>, !firrtl.uint<1>
@@ -69,10 +69,10 @@ firrtl.circuit "InstanceInput2"   {
  // CHECK-LABEL:  firrtl.module @InstanceInput2
   firrtl.module @InstanceInput2(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
     %c1_ui = firrtl.constant 1 : !firrtl.uint
-    %c_out = firrtl.instance @Child2  {name = "c"} : !firrtl.uint<1>
-    %b0_in, %b0_out = firrtl.instance @Bottom2  {name = "b0"} : !firrtl.uint<1>, !firrtl.uint<1>
+    %c_out = firrtl.instance @Child2  {name = "c"} : out !firrtl.uint<1>
+    %b0_in, %b0_out = firrtl.instance @Bottom2  {name = "b0"} : in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %b0_in, %x : !firrtl.uint<1>, !firrtl.uint<1>
-    %b1_in, %b1_out = firrtl.instance @Bottom2  {name = "b1"} : !firrtl.uint<1>, !firrtl.uint<1>
+    %b1_in, %b1_out = firrtl.instance @Bottom2  {name = "b1"} : in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %b1_in, %c1_ui : !firrtl.uint<1>, !firrtl.uint
     %0 = firrtl.and %b0_out, %b1_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     %1 = firrtl.and %0, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -102,7 +102,7 @@ firrtl.circuit "constOutput"   {
     firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
   firrtl.module @constOutput(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
-    %c_out = firrtl.instance @constOutChild  {name = "c"} : !firrtl.uint<1>
+    %c_out = firrtl.instance @constOutChild  {name = "c"} : out !firrtl.uint<1>
     %0 = firrtl.and %x, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %z, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: %[[C3_0:.+]] = firrtl.constant 0 : !firrtl.uint<1>
@@ -196,7 +196,7 @@ firrtl.circuit "padConstOut"   {
   }
   // CHECK-LABEL: firrtl.module @padConstOut
   firrtl.module @padConstOut(out %z: !firrtl.uint<16>) {
-    %c_x = firrtl.instance @padConstOutChild  {name = "c"} : !firrtl.uint<8>
+    %c_x = firrtl.instance @padConstOutChild  {name = "c"} : out !firrtl.uint<8>
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     %0 = firrtl.cat %c3_ui2, %c_x : (!firrtl.uint<2>, !firrtl.uint<8>) -> !firrtl.uint<10>
     // CHECK: %[[C8:.+]] = firrtl.constant 771 : !firrtl.uint<10>
@@ -217,7 +217,7 @@ firrtl.circuit "padConstIn"   {
   }
   // CHECK-LABEL: firrtl.module @padConstIn
   firrtl.module @padConstIn(out %z: !firrtl.uint<16>) {
-    %c_x, %c_y = firrtl.instance @padConstInChild  {name = "c"} : !firrtl.uint<8>, !firrtl.uint<16>
+    %c_x, %c_y = firrtl.instance @padConstInChild  {name = "c"} : in !firrtl.uint<8>, out !firrtl.uint<16>
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     firrtl.connect %c_x, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
     firrtl.connect %z, %c_y : !firrtl.uint<16>, !firrtl.uint<16>

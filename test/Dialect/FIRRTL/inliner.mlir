@@ -130,7 +130,7 @@ firrtl.module @InlineMe1(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
                    out %out0: !firrtl.uint<4>,
                    out %out1: !firrtl.uint<4>)
         attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-  %a_in0, %a_in1, %a_out0, %a_out1 = firrtl.instance @InlineMe0 {name = "a"} : !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>
+  %a_in0, %a_in1, %a_out0, %a_out1 = firrtl.instance @InlineMe0 {name = "a"} : in !firrtl.uint<4>, in !firrtl.uint<4>, out !firrtl.uint<4>, out !firrtl.uint<4>
   firrtl.connect %a_in0, %in0 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %a_in1, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out0, %a_out0 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -139,7 +139,7 @@ firrtl.module @InlineMe1(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
 firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
                    out %out0: !firrtl.uint<4>,
                    out %out1: !firrtl.uint<4>) {
-  %b_in0, %b_in1, %b_out0, %b_out1 = firrtl.instance @InlineMe1 {name = "b"} : !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>
+  %b_in0, %b_in1, %b_out0, %b_out1 = firrtl.instance @InlineMe1 {name = "b"} : in !firrtl.uint<4>, in !firrtl.uint<4>, out !firrtl.uint<4>, out !firrtl.uint<4>
   firrtl.connect %b_in0, %in0 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %b_in1, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out0, %b_out0 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -179,7 +179,7 @@ firrtl.module @InlineMe0(in %in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>,
 }
 firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>,
                                    out %out0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>) {
-  %i_in0, %i_out0 = firrtl.instance @InlineMe0 {name = "i"} : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+  %i_in0, %i_out0 = firrtl.instance @InlineMe0 {name = "i"} : in !firrtl.bundle<a: uint<4>, b flip: uint<4>>, out !firrtl.bundle<a: uint<4>, b flip: uint<4>>
   firrtl.connect %i_in0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
   firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
 // CHECK: %i_in0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
@@ -193,7 +193,7 @@ firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b flip: u
 // Test that all operations with names are renamed.
 firrtl.circuit "renaming" {
 firrtl.module @renaming() {
-  %0, %1, %2 = firrtl.instance @declarations {name = "myinst"} : !firrtl.clock, !firrtl.uint<8>, !firrtl.asyncreset
+  %0, %1, %2 = firrtl.instance @declarations {name = "myinst"} : in !firrtl.clock, in !firrtl.uint<8>, in !firrtl.asyncreset
 }
 firrtl.module @declarations(in %clock : !firrtl.clock, in %u8 : !firrtl.uint<8>, in %reset : !firrtl.asyncreset) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   // CHECK: %myinst_cmem = firrtl.combmem : !firrtl.cmemory<uint<8>, 8>

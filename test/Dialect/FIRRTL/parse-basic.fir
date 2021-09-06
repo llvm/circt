@@ -308,7 +308,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
-    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : !firrtl.uint<80>
+    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : in !firrtl.uint<80>
     inst xyz of circuit
     ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.uint<80>, !firrtl.uint<8>
     xyz.in <= i8

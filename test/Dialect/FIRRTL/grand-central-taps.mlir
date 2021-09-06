@@ -109,7 +109,7 @@ firrtl.circuit "TestHarness" attributes {
     in %in: !firrtl.uint<1>,
     out %out: !firrtl.uint<1>
   ) {
-    %bar_clock, %bar_reset, %bar_in, %bar_out = firrtl.instance @Bar  {name = "bar"} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+    %bar_clock, %bar_reset, %bar_in, %bar_out = firrtl.instance @Bar  {name = "bar"} : in !firrtl.clock, in !firrtl.reset, in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %bar_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %bar_reset, %reset : !firrtl.reset, !firrtl.reset
     firrtl.connect %bar_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
@@ -210,16 +210,16 @@ firrtl.circuit "TestHarness" attributes {
 
   // CHECK: firrtl.module @TestHarness
   firrtl.module @TestHarness(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-    %foo_clock, %foo_reset, %foo_in, %foo_out = firrtl.instance @Foo {name = "foo"} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+    %foo_clock, %foo_reset, %foo_in, %foo_out = firrtl.instance @Foo {name = "foo"} : in !firrtl.clock, in !firrtl.reset, in !firrtl.uint<1>, out !firrtl.uint<1>
     firrtl.connect %foo_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %foo_reset, %reset : !firrtl.reset, !firrtl.uint<1>
     firrtl.connect %foo_in, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %foo_out : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.instance @BlackHole {name = "bigScary"}
-    %0 = firrtl.instance @ExtmoduleWithTappedPort {name = "extmoduleWithTappedPort"} : !firrtl.uint<1>
+    %0 = firrtl.instance @ExtmoduleWithTappedPort {name = "extmoduleWithTappedPort"} : out !firrtl.uint<1>
     // CHECK: firrtl.instance [[DT]] {name = "dataTap"}
-    %DataTap_7, %DataTap_6, %DataTap_5, %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance @DataTap {name = "dataTap"} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>
+    %DataTap_7, %DataTap_6, %DataTap_5, %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance @DataTap {name = "dataTap"} : out !firrtl.uint<1>, out !firrtl.uint<1>, out !firrtl.uint<1>, out !firrtl.uint<1>, out !firrtl.uint<1>, out !firrtl.uint<1>, out !firrtl.clock, out !firrtl.uint<1>
     // CHECK: firrtl.instance [[MT]] {name = "memTap"}
-    %MemTap_mem_0, %MemTap_mem_1 = firrtl.instance @MemTap {name = "memTap"} : !firrtl.uint<1>, !firrtl.uint<1>
+    %MemTap_mem_0, %MemTap_mem_1 = firrtl.instance @MemTap {name = "memTap"} : out !firrtl.uint<1>, out !firrtl.uint<1>
   }
 }

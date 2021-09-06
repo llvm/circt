@@ -1429,6 +1429,12 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
       resultTypes.append(instOp.getResultTypes().begin(),
                          instOp.getResultTypes().end());
 
+      // Determine the new port directions.
+      PortDirections directions;
+      directions.reserve(instOp.getNumResults() + 1);
+      directions.push_back(Direction::In);
+      llvm::copy(instOp.portDirections(), std::back_inserter(directions));
+
       // Create a new list of port annotations.
       SmallVector<Attribute> newPortAnnos;
       if (auto oldPortAnnos = instOp.portAnnotations()) {
@@ -1443,7 +1449,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
       // Create a new instance op with the reset inserted.
       auto newInstOp = builder.create<InstanceOp>(
-          resultTypes, instOp.moduleName(), instOp.name(),
+          resultTypes, directions, instOp.moduleName(), instOp.name(),
           instOp.annotations().getValue(), newPortAnnos);
       instReset = newInstOp.getResult(0);
 

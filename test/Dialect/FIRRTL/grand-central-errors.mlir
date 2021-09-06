@@ -54,7 +54,7 @@ firrtl.circuit "Foo" attributes {
          defName = "View",
          name = "sub_port",
          target = [".a"]}],
-      name = "bar"} : !firrtl.uint<1>
+      name = "bar"} : in !firrtl.uint<1>
     firrtl.connect %bar_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

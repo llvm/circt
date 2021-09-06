@@ -123,8 +123,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       .Case<InstanceOp>([&](auto inst) {
         for (auto arg : llvm::enumerate(inst.getResults()))
           if (arg.value() == val) {
-            if (inst.getReferencedModule().getPortDirection(arg.index()) ==
-                Direction::Out)
+            if (inst.getPortDirection(arg.index()) == Direction::Out)
               return accumulatedFlow;
             else
               return swap();
@@ -935,12 +934,16 @@ FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, ArrayRef<Attribute> annotations,
+                       TypeRange resultTypes, PortDirections portDirections,
+                       StringRef moduleName, StringRef name,
+                       ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
   result.addAttribute("name", builder.getStringAttr(name));
+  result.addAttribute(
+      "portDirections",
+      PortDirectionsAttr::get(builder.getContext(), portDirections));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
   result.addTypes(resultTypes);
@@ -1013,6 +1016,12 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
                 << modulePorts.size() << " but got " << numResults;
     diag.attachNote(referencedModule->getLoc())
         << "original module declared here";
+    return failure();
+  }
+
+  // Check that the port directions are the same.
+  if (portDirectionsAttr() != referencedModule.getPortDirectionsAttr()) {
+    emitOpError() << "mistmatched port directions";
     return failure();
   }
 
@@ -2531,13 +2540,66 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
 }
 
 //===----------------------------------------------------------------------===//
+// PortList Custom Directive
+//===----------------------------------------------------------------------===//
+
+/// This custom printer takes a list of port typoes and port directions and
+/// prints them in a single statement. This also has to handle the printing of
+/// an optional ":".
+static ParseResult parsePortList(OpAsmParser &parser,
+                                 SmallVectorImpl<Type> &resultTypes,
+                                 PortDirectionsAttr &portDirections) {
+  auto *context = parser.getBuilder().getContext();
+
+  // If there is no colon, there are no types to parse.
+  if (parser.parseOptionalColon()) {
+    portDirections = PortDirectionsAttr::get(context, {});
+    return success();
+  }
+
+  PortDirections directions;
+  while (true) {
+    // Parse the 'in' or 'out' keyword.
+    if (!parser.parseOptionalKeyword("in"))
+      directions.push_back(Direction::In);
+    else if (!parser.parseKeyword("out", " or 'in'"))
+      directions.push_back(Direction::Out);
+    else
+      return failure();
+
+    // Parse the type.
+    Type type;
+    llvm::SMLoc loc = parser.getCurrentLocation();
+    if (parser.parseType(type))
+      return parser.emitError(loc, "Expected type");
+    resultTypes.push_back(type);
+
+    // If there is no comma, break out of the loop.
+    if (parser.parseOptionalComma())
+      break;
+  }
+  portDirections = PortDirectionsAttr::get(context, directions);
+  return success();
+}
+
+static void printPortList(OpAsmPrinter &p, Operation *op, TypeRange resultTypes,
+                          PortDirectionsAttr portDirections) {
+  if (!resultTypes.size())
+    return;
+  p << ":";
+  llvm::interleaveComma(
+      llvm::zip(resultTypes, portDirections.getValue()), p, [&](auto pair) {
+        p << " " << std::get<1>(pair) << " " << std::get<0>(pair);
+      });
+}
+
+//===----------------------------------------------------------------------===//
 // InstanceOp Custom attr-dict Directive
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    NamedAttrList &resultAttrs) {
   auto result = parseElidePortAnnotations(parser, resultAttrs);
-
   if (!resultAttrs.get("lowerToBind")) {
     resultAttrs.append("lowerToBind", parser.getBuilder().getBoolAttr(false));
   }
@@ -2549,7 +2611,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
 /// "annotations" if it exists or if it is empty.
 static void printInstanceOp(OpAsmPrinter &p, Operation *op,
                             DictionaryAttr attr) {
-  SmallVector<StringRef, 2> elides = {"moduleName"};
+  SmallVector<StringRef, 2> elides = {"moduleName", "portDirections"};
   if (auto lowerToBind = op->getAttrOfType<BoolAttr>("lowerToBind"))
     if (!lowerToBind.getValue())
       elides.push_back("lowerToBind");

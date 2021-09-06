@@ -2003,7 +2003,8 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
 
   // Create a instance operation.
   auto instanceOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp->getLoc(), resultTypes, subModuleOp.getName());
+      oldOp->getLoc(), resultTypes, subModuleOp.getPortDirections(),
+      subModuleOp.getName());
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.

@@ -2626,15 +2626,15 @@ ParseResult FIRStmtParser::parseInstance() {
   // Look up the module that is being referenced.
   auto circuit =
       builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedModule = circuit.lookupSymbol(moduleName);
+  auto referencedModule =
+      dyn_cast_or_null<FModuleLike>(circuit.lookupSymbol(moduleName));
   if (!referencedModule) {
     emitError(startTok.getLoc(),
               "use of undefined module name '" + moduleName + "' in instance");
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts =
-      cast<FModuleLike>(referencedModule).getPorts();
+  SmallVector<ModulePortInfo> modulePorts = referencedModule.getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
@@ -2663,9 +2663,9 @@ ParseResult FIRStmtParser::parseInstance() {
                    });
   auto name = dontTouch ? id : filterUselessName(id);
 
-  auto result = builder.create<InstanceOp>(resultTypes, moduleName, name,
-                                           annotations.first.getValue(),
-                                           annotations.second.getValue());
+  auto result = builder.create<InstanceOp>(
+      resultTypes, referencedModule.getPortDirections(), moduleName, name,
+      annotations.first.getValue(), annotations.second.getValue());
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
