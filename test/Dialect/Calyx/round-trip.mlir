@@ -58,6 +58,7 @@ calyx.program {
     }
     calyx.control {
       // CHECK:      calyx.seq {
+      // CHECK-NEXT: calyx.seq {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK-NEXT: calyx.enable @Group2
       // CHECK-NEXT: calyx.seq {
@@ -76,27 +77,29 @@ calyx.program {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK-NEXT: calyx.enable @Group2
       calyx.seq {
-        calyx.enable @Group1
-        calyx.enable @Group2
         calyx.seq {
-          calyx.if %c2.out with @Group2 {
-            calyx.enable @Group1
-          } else {
-            calyx.enable @Group2
-          }
-          calyx.if %c2.out with @Group2 {
-            calyx.enable @Group1
-          }
-          calyx.while %c2.out with @Group2 {
-            calyx.while %c2.out with @Group2 {
+          calyx.enable @Group1
+          calyx.enable @Group2
+          calyx.seq {
+            calyx.if %c2.out with @Group2 {
               calyx.enable @Group1
+            } else {
+              calyx.enable @Group2
+            }
+            calyx.if %c2.out with @Group2 {
+              calyx.enable @Group1
+            }
+            calyx.while %c2.out with @Group2 {
+              calyx.while %c2.out with @Group2 {
+                calyx.enable @Group1
+              }
             }
           }
         }
-      }
-      calyx.par {
-        calyx.enable @Group1
-        calyx.enable @Group2
+        calyx.par {
+          calyx.enable @Group1
+          calyx.enable @Group2
+        }
       }
     }
   }

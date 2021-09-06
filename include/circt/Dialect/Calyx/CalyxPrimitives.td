@@ -108,7 +108,10 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     size_t getNumDimensions() { return addrSizes().size(); }
 
     ValueRange addrPorts() { return getResults().take_front(getNumDimensions()); }
-    Value addrPort(size_t i) { assert(i<getNumDimensions() && "Out of bounds of address ports for this memory."); return getResults()[i]; }
+    Value addrPort(size_t i) {
+      assert(i < getNumDimensions() && "index greater than number of memory address ports.");
+      return getResults()[i];
+    }
     Value writeData() { return getResult(getNumDimensions()); }
     Value writeEn()   { return getResult(getNumDimensions() + 1); }
     Value clk()       { return getResult(getNumDimensions() + 2); }
