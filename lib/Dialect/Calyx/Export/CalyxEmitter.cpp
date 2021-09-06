@@ -205,8 +205,8 @@ private:
 
   /// Helper function for emitting combinational operations.
   template <typename CombinationalOp>
-  void emitCombinationalValue(CombinationalOp value, StringRef logicalSymbol) {
-    auto inputs = value.inputs();
+  void emitCombinationalValue(CombinationalOp op, StringRef logicalSymbol) {
+    auto inputs = op.inputs();
     os << LParen();
     for (size_t i = 0, e = inputs.size(); i != e; ++i) {
       emitValue(inputs[i], /*isIndented=*/false);
@@ -219,9 +219,15 @@ private:
 
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
-    auto definingOp = value.getDefiningOp();
-    if (definingOp == nullptr)
+    if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+      // Emit component block argument.
+      StringAttr portName = getComponentPortInfo(blockArg).name;
+      (isIndented ? indent() : os) << portName.getValue();
       return;
+    }
+
+    auto definingOp = value.getDefiningOp();
+    assert(definingOp && "Value does not have a defining operation.");
 
     TypeSwitch<Operation *>(definingOp)
         .Case<CellInterface>([&](auto cell) {
