@@ -76,8 +76,8 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
-/// Returns whether the given operation is a control flow operator.
-static bool isControlFlowOperator(Operation *op) {
+/// Returns whether the given operation has a control region.
+static bool hasControlRegion(Operation *op) {
   return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp>(op);
 }
 
@@ -107,9 +107,9 @@ static LogicalResult verifyControlBody(Operation *op) {
     // Verify that multiple control flow operations are nested inside a single
     // control operator. See: https://github.com/llvm/circt/issues/1723
     // for more details.
-    size_t numControlFlowOperations = llvm::count_if(
-        opsIt, [](auto &&op) { return isControlFlowOperator(&op); });
-    if (numControlFlowOperations > 1)
+    size_t numControlFlowRegions =
+        llvm::count_if(opsIt, [](auto &&op) { return hasControlRegion(&op); });
+    if (numControlFlowRegions > 1)
       return op->emitOpError(
           "has an invalid control sequence. Multiple control flow operations "
           "must all be nested in a single calyx.seq or calyx.par");
@@ -162,7 +162,7 @@ LogicalResult calyx::verifyCell(Operation *op) {
 
 LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
-  if (!isControlFlowOperator(parent))
+  if (!hasControlRegion(parent))
     return op->emitOpError()
            << "has parent: " << parent
            << ", which is not allowed for a control-like operation.";
