@@ -76,6 +76,11 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Returns whether the given operation has a control region.
+static bool hasControlRegion(Operation *op) {
+  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp>(op);
+}
+
 /// Verifies the body of a ControlLikeOp.
 static LogicalResult verifyControlBody(Operation *op) {
   if (isa<SeqOp, ParOp>(op))
@@ -90,14 +95,23 @@ static LogicalResult verifyControlBody(Operation *op) {
     // However, that must be the only operation.
     //  E.g. Allowed:  calyx.control { calyx.enable @A }
     //   Not Allowed:  calyx.control { calyx.enable @A calyx.seq { ... } }
-    bool isInvalidBody =
+    bool usesEnableAsCompositionOperator =
         numOperations > 1 && llvm::any_of(region.front(), [](auto &&bodyOp) {
           return isa<EnableOp>(bodyOp);
         });
-    if (isInvalidBody)
+    if (usesEnableAsCompositionOperator)
       return op->emitOpError(
           "EnableOp is not a composition operator. It should be nested "
           "in a control flow operation, such as \"calyx.seq\"");
+
+    // Verify that multiple control flow operations are nested inside a single
+    // control operator. See: https://github.com/llvm/circt/issues/1723
+    size_t numControlFlowRegions =
+        llvm::count_if(opsIt, [](auto &&op) { return hasControlRegion(&op); });
+    if (numControlFlowRegions > 1)
+      return op->emitOpError(
+          "has an invalid control sequence. Multiple control flow operations "
+          "must all be nested in a single calyx.seq or calyx.par");
   }
   return success();
 }
@@ -147,11 +161,7 @@ LogicalResult calyx::verifyCell(Operation *op) {
 
 LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
-  // Operations that may parent other ControlLike operations.
-  auto isValidParent = [](Operation *operation) {
-    return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp>(operation);
-  };
-  if (!isValidParent(parent))
+  if (!hasControlRegion(parent))
     return op->emitOpError()
            << "has parent: " << parent
            << ", which is not allowed for a control-like operation.";
