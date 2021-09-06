@@ -850,9 +850,7 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
     return success();
   }
   auto groupName = optGroupName.getValue();
-
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
-
   if (!groupOp)
     return ifOp.emitOpError()
            << "with group '" << groupName << "', which does not exist.";
@@ -887,7 +885,6 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
   }
   auto groupName = optGroupName.getValue();
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
-
   if (!groupOp)
     return whileOp.emitOpError()
            << "with group '" << groupName << "', which does not exist.";
