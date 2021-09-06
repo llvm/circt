@@ -106,7 +106,6 @@ static LogicalResult verifyControlBody(Operation *op) {
 
     // Verify that multiple control flow operations are nested inside a single
     // control operator. See: https://github.com/llvm/circt/issues/1723
-    // for more details.
     size_t numControlFlowRegions =
         llvm::count_if(opsIt, [](auto &&op) { return hasControlRegion(&op); });
     if (numControlFlowRegions > 1)
