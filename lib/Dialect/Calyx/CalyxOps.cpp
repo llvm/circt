@@ -76,7 +76,6 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
-
 /// Returns whether this value is either (1) a port on a ComponentOp or (2) a
 /// port on a cell interface.
 static bool isPort(Value value) {
@@ -89,6 +88,7 @@ static bool isPort(Value value) {
 ComponentPortInfo calyx::getComponentPortInfo(BlockArgument arg) {
   Operation *op = arg.getOwner()->getParentOp();
   return getComponentPortInfo(op)[arg.getArgNumber()];
+}
 
 /// Returns whether the given operation has a control region.
 static bool hasControlRegion(Operation *op) {
