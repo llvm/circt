@@ -222,7 +222,7 @@ private:
     if (auto blockArg = value.dyn_cast<BlockArgument>()) {
       // Emit component block argument.
       StringAttr portName = getComponentPortInfo(blockArg).name;
-      (isIndented ? indent() : os) << '%' << portName.getValue();
+      (isIndented ? indent() : os) << portName.getValue();
       return;
     }
 
