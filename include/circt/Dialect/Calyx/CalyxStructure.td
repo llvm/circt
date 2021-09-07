@@ -107,6 +107,12 @@ def ComponentOp : CalyxOp<"component", [
       /// Returns the port information for this component.
       SmallVector<PortInfo> getPortInfo();
 
+      /// Returns the input port information for this component.
+      SmallVector<PortInfo> getInputPortInfo();
+
+      /// Returns the input port information for this component.
+      SmallVector<PortInfo> getOutputPortInfo();
+
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
 

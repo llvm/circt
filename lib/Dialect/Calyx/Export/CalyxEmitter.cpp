@@ -121,7 +121,7 @@ struct Emitter {
 
   // Component emission
   void emitComponent(ComponentOp op);
-  void emitComponentPorts(ArrayRef<PortInfo> ports);
+  void emitComponentPorts(ComponentOp op);
 
   // Instance emission
   void emitInstance(InstanceOp op);
@@ -337,7 +337,7 @@ void Emitter::emitComponent(ComponentOp op) {
   indent() << "component " << op.getName();
 
   // Emit the ports.
-  emitComponentPorts(op.getPortInfo());
+  emitComponentPorts(op);
   os << space() << LBraceEndL();
   addIndent();
   WiresOp wires;
@@ -373,15 +373,7 @@ void Emitter::emitComponent(ComponentOp op) {
 }
 
 /// Emit the ports of a component.
-void Emitter::emitComponentPorts(ArrayRef<PortInfo> ports) {
-  std::vector<PortInfo> inPorts, outPorts;
-  for (const PortInfo &port : ports) {
-    if (port.direction == Direction::Input)
-      inPorts.push_back(port);
-    else
-      outPorts.push_back(port);
-  }
-
+void Emitter::emitComponentPorts(ComponentOp op) {
   // To avoid the native compiler adding each of the required ports twice,
   // add the @<port-name> attribute here. This is a quick-fix solution.
   // Eventually we want to add attributes directly to component arguments.
@@ -414,9 +406,9 @@ void Emitter::emitComponentPorts(ArrayRef<PortInfo> ports) {
     }
     os << RParen();
   };
-  emitPorts(inPorts);
+  emitPorts(op.getInputPortInfo());
   os << arrow();
-  emitPorts(outPorts);
+  emitPorts(op.getOutputPortInfo());
 }
 
 void Emitter::emitInstance(InstanceOp op) {

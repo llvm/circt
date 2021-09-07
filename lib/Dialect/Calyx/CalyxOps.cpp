@@ -287,6 +287,24 @@ SmallVector<PortInfo> ComponentOp::getPortInfo() {
   return results;
 };
 
+/// A helper function to return a filtered subset of a component's ports.
+template <typename Pred>
+static SmallVector<PortInfo> getFilteredPorts(ComponentOp op, Pred p) {
+  SmallVector<PortInfo> ports = op.getPortInfo();
+  llvm::erase_if(ports, p);
+  return ports;
+};
+
+SmallVector<PortInfo> ComponentOp::getInputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Output; });
+};
+
+SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Input; });
+};
+
 static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   auto componentName =
       op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
@@ -294,14 +312,7 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   p << " ";
   p.printSymbolName(componentName);
 
-  // Partition input and output ports.
-  SmallVector<PortInfo> ports = op.getPortInfo();
-  auto partitionIt = std::stable_partition(
-      ports.begin(), ports.end(),
-      [](const PortInfo &port) { return port.direction == Input; });
-  SmallVector<PortInfo, 8> inPorts(ports.begin(), partitionIt);
-  SmallVector<PortInfo, 8> outPorts(partitionIt, ports.end());
-
+  // Print the port definition list for input and output ports.
   auto printPortDefList = [&](auto ports) {
     p << "(";
     llvm::interleaveComma(ports, p, [&](auto port) {
@@ -309,9 +320,9 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
     });
     p << ")";
   };
-  printPortDefList(inPorts);
+  printPortDefList(op.getInputPortInfo());
   p << " -> ";
-  printPortDefList(outPorts);
+  printPortDefList(op.getOutputPortInfo());
 
   p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
