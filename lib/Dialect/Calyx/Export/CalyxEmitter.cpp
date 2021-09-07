@@ -526,7 +526,7 @@ void Emitter::emitGroup(GroupInterface group) {
   auto prefix =
       TypeSwitch<Operation *, StringRef>(group)
           .Case<GroupOp>([](auto) { return "group"; })
-          .Case<CombGroupOp>([](auto) { return "comb_group"; })
+          .Case<CombGroupOp>([](auto) { return "comb group"; })
           .Default([&](auto) {
             emitOpError(group, "Group type not supported for emission");
             return "";

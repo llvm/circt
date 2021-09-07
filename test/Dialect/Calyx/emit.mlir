@@ -54,7 +54,7 @@ calyx.program {
         calyx.assign %c0.in = %c0.out : i8
         calyx.group_done %c0.done : i1
       }
-      // CHECK-LABEL: group Group2 {
+      // CHECK-LABEL: comb group Group2 {
       // CHECK-NEXT:     c1.in = (c1.out | (c1.out & 1'd1 & !c1.out)) ? c1.out;
       calyx.comb_group @Group2 {
         %not = comb.xor %c1.out, %c1 : i1
