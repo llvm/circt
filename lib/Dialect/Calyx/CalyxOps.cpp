@@ -844,7 +844,7 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
       ifOp.elseRegion().front().empty())
     return ifOp.emitError() << "empty 'else' region.";
 
-  auto optGroupName = ifOp.groupName();
+  Optional<StringRef> optGroupName = ifOp.groupName();
   if (!optGroupName.hasValue()) {
     /// No combinational group was provided
     return success();
@@ -878,7 +878,7 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
   if (whileOp.body().front().empty())
     return whileOp.emitError() << "empty body region.";
 
-  auto optGroupName = whileOp.groupName();
+  Optional<StringRef> optGroupName = whileOp.groupName();
   if (!optGroupName.hasValue()) {
     /// No combinational group was provided
     return success();
