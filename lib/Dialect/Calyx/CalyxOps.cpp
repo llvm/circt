@@ -820,7 +820,7 @@ static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
 static LogicalResult verifyEnableOp(EnableOp enableOp) {
   auto component = enableOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  auto groupName = enableOp.groupName();
+  StringRef groupName = enableOp.groupName();
 
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
@@ -854,7 +854,7 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
     /// No combinational group was provided
     return success();
   }
-  auto groupName = optGroupName.getValue();
+  StringRef groupName = optGroupName.getValue();
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
     return ifOp.emitOpError()
@@ -888,7 +888,7 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
     /// No combinational group was provided
     return success();
   }
-  auto groupName = optGroupName.getValue();
+  StringRef groupName = optGroupName.getValue();
   auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
   if (!groupOp)
     return whileOp.emitOpError()

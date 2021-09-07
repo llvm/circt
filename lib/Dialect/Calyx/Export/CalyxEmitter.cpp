@@ -523,16 +523,8 @@ void Emitter::emitGroup(GroupInterface group) {
           });
     }
   };
-  auto prefix =
-      TypeSwitch<Operation *, StringRef>(group)
-          .Case<GroupOp>([](auto) { return "group"; })
-          .Case<CombGroupOp>([](auto) { return "comb group"; })
-          .Default([&](auto) {
-            emitOpError(group, "Group type not supported for emission");
-            return "";
-          });
-
-  emitCalyxSection(prefix, emitGroupBody, group.symName().getValue());
+  auto prefix = Twine(isa<CombGroupOp>(group) ? "comb " : "") + "group";
+  emitCalyxSection(prefix.str(), emitGroupBody, group.symName().getValue());
 }
 
 void Emitter::emitEnable(EnableOp enable) {
