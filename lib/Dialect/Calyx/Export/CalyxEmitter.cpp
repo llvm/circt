@@ -193,10 +193,10 @@ private:
   void emitAttribute(Operation *op, StringRef identifier, Attribute attr,
                      bool isPort) {
     // Determines whether the attribute should follow format (2).
-    bool isDiamondFormat = isa<GroupOp, ComponentOp>(op) && !isPort;
+    bool isGroupOrComponentAttr = isa<GroupOp, ComponentOp>(op) && !isPort;
 
     if (attr.isa<UnitAttr>()) {
-      assert(!isDiamondFormat &&
+      assert(!isGroupOrComponentAttr &&
              "Attributes for GroupOp and ComponentOp must provide a value.");
       os << addressSymbol() << identifier;
       return;
@@ -205,7 +205,7 @@ private:
     if (auto intAttr = attr.dyn_cast<IntegerAttr>()) {
       auto attrValue = intAttr.getValue();
 
-      if (isDiamondFormat) {
+      if (isGroupOrComponentAttr) {
         os << LAngleBracket() << delimiter() << identifier << delimiter()
            << equals() << attrValue << RAngleBracket();
         return;
