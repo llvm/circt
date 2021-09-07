@@ -130,15 +130,16 @@ static LogicalResult verifyControlBody(Operation *op) {
   return success();
 }
 
-static LogicalResult portsDrivenByGroup(ValueRange ports, GroupOp groupOp);
+static LogicalResult portsDrivenByGroup(ValueRange ports,
+                                        GroupInterface groupOp);
 
 /// Checks whether @p port is driven from within @p groupOp.
-static LogicalResult portDrivenByGroup(Value port, GroupOp groupOp) {
+static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
   // Check if the port is driven by an assignOp from within @p groupOp.
   for (auto &use : port.getUses()) {
     if (auto assignOp = dyn_cast<AssignOp>(use.getOwner())) {
       if (assignOp.dest() != port ||
-          assignOp->getParentOfType<GroupOp>() != groupOp)
+          assignOp->getParentOfType<GroupInterface>() != groupOp)
         continue;
       return success();
     }
@@ -156,7 +157,8 @@ static LogicalResult portDrivenByGroup(Value port, GroupOp groupOp) {
 }
 
 /// Checks whether all ports in @p ports are driven from within @p groupOp
-static LogicalResult portsDrivenByGroup(ValueRange ports, GroupOp groupOp) {
+static LogicalResult portsDrivenByGroup(ValueRange ports,
+                                        GroupInterface groupOp) {
   return success(llvm::all_of(ports, [&](auto port) {
     return portDrivenByGroup(port, groupOp).succeeded();
   }));
@@ -537,10 +539,10 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
 
   // Verify each group is referenced in the control section.
   for (auto &&op : *wires.getBody()) {
-    if (!isa<GroupOp>(op))
+    if (!isa<GroupInterface>(op))
       continue;
-    auto group = cast<GroupOp>(op);
-    auto groupName = group.sym_nameAttr();
+    auto group = cast<GroupInterface>(op);
+    auto groupName = group.symName();
     if (SymbolTable::symbolKnownUseEmpty(groupName, control))
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
@@ -818,11 +820,16 @@ static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
 static LogicalResult verifyEnableOp(EnableOp enableOp) {
   auto component = enableOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  auto groupName = enableOp.groupName();
+  StringRef groupName = enableOp.groupName();
 
-  if (!wiresOp.lookupSymbol<GroupOp>(groupName))
+  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
+  if (!groupOp)
     return enableOp.emitOpError()
-           << "with group: " << groupName << ", which does not exist.";
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (isa<CombGroupOp>(groupOp))
+    return enableOp.emitOpError() << "with group '" << groupName
+                                  << "', which is a combinational group.";
 
   return success();
 }
@@ -834,12 +841,6 @@ static LogicalResult verifyEnableOp(EnableOp enableOp) {
 static LogicalResult verifyIfOp(IfOp ifOp) {
   auto component = ifOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  auto groupName = ifOp.groupName();
-  auto groupOp = wiresOp.lookupSymbol<GroupOp>(groupName);
-
-  if (!groupOp)
-    return ifOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
 
   if (ifOp.thenRegion().front().empty())
     return ifOp.emitError() << "empty 'then' region.";
@@ -848,10 +849,25 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
       ifOp.elseRegion().front().empty())
     return ifOp.emitError() << "empty 'else' region.";
 
+  Optional<StringRef> optGroupName = ifOp.groupName();
+  if (!optGroupName.hasValue()) {
+    /// No combinational group was provided
+    return success();
+  }
+  StringRef groupName = optGroupName.getValue();
+  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
+  if (!groupOp)
+    return ifOp.emitOpError()
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (isa<GroupOp>(groupOp))
+    return ifOp.emitOpError() << "with group '" << groupName
+                              << "', which is not a combinational group.";
+
   if (failed(portDrivenByGroup(ifOp.cond(), groupOp)))
     return ifOp.emitError()
            << "conditional op: '" << valueName(component, ifOp.cond())
-           << "' expected to be driven from group: '" << ifOp.groupName()
+           << "' expected to be driven from group: '" << groupName
            << "' but no driver was found.";
 
   return success();
@@ -863,20 +879,29 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
 static LogicalResult verifyWhileOp(WhileOp whileOp) {
   auto component = whileOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  auto groupName = whileOp.groupName();
-  auto groupOp = wiresOp.lookupSymbol<GroupOp>(groupName);
-
-  if (!groupOp)
-    return whileOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
 
   if (whileOp.body().front().empty())
     return whileOp.emitError() << "empty body region.";
 
+  Optional<StringRef> optGroupName = whileOp.groupName();
+  if (!optGroupName.hasValue()) {
+    /// No combinational group was provided
+    return success();
+  }
+  StringRef groupName = optGroupName.getValue();
+  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
+  if (!groupOp)
+    return whileOp.emitOpError()
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (isa<GroupOp>(groupOp))
+    return whileOp.emitOpError() << "with group '" << groupName
+                                 << "', which is not a combinational group.";
+
   if (failed(portDrivenByGroup(whileOp.cond(), groupOp)))
     return whileOp.emitError()
            << "conditional op: '" << valueName(component, whileOp.cond())
-           << "' expected to be driven from group: '" << whileOp.groupName()
+           << "' expected to be driven from group: '" << groupName
            << "' but no driver was found.";
 
   return success();
