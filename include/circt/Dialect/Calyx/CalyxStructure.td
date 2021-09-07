@@ -105,7 +105,7 @@ def ComponentOp : CalyxOp<"component", [
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
 
       /// Returns the port information for this component.
-      ArrayRef<PortInfo> getPortInfo();
+      SmallVector<PortInfo> getPortInfo();
 
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();

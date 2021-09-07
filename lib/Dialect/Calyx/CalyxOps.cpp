@@ -273,7 +273,7 @@ static FunctionType getComponentType(ComponentOp component) {
   return component.getTypeAttr().getValue().cast<FunctionType>();
 }
 
-ArrayRef<PortInfo> ComponentOp::getPortInfo() {
+SmallVector<PortInfo> ComponentOp::getPortInfo() {
   auto portTypes = getComponentType(*this).getInputs();
   auto portNamesAttr = portNames();
   auto portDirectionsAttr =
@@ -294,14 +294,13 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   p << " ";
   p.printSymbolName(componentName);
 
-  ArrayRef<PortInfo> ports = op.getPortInfo();
-  SmallVector<PortInfo, 8> inPorts, outPorts;
-  for (const PortInfo &port : ports) {
-    if (port.direction == Direction::Input)
-      inPorts.push_back(port);
-    else
-      outPorts.push_back(port);
-  }
+  // Partition input and output ports.
+  SmallVector<PortInfo> ports = op.getPortInfo();
+  auto partitionIt = std::stable_partition(
+      ports.begin(), ports.end(),
+      [](const PortInfo &port) { return port.direction == Input; });
+  SmallVector<PortInfo, 8> inPorts(ports.begin(), partitionIt);
+  SmallVector<PortInfo, 8> outPorts(partitionIt, ports.end());
 
   auto printPortDefList = [&](auto ports) {
     p << "(";
@@ -427,8 +426,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
   // Verify the component has the following ports.
   // TODO(Calyx): Eventually, we want to attach attributes to these arguments.
   bool go = false, clk = false, reset = false, done = false;
-  ArrayRef<PortInfo> ports = op.getPortInfo();
-  for (const PortInfo &port : ports) {
+  for (const PortInfo &port : op.getPortInfo()) {
     if (!port.type.isInteger(1))
       // Each of the ports has bit width 1.
       continue;
@@ -663,8 +661,7 @@ SmallVector<StringRef> InstanceOp::portNames() {
 
 SmallVector<Direction> InstanceOp::portDirections() {
   SmallVector<Direction> portDirections;
-  ArrayRef<PortInfo> ports = getReferencedComponent().getPortInfo();
-  for (const PortInfo &port : ports)
+  for (const PortInfo &port : getReferencedComponent().getPortInfo())
     portDirections.push_back(port.direction);
   return portDirections;
 }
@@ -688,7 +685,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
            << instance.componentName();
 
   // Verify the instance result ports with those of its referenced component.
-  ArrayRef<PortInfo> componentPorts = referencedComponent.getPortInfo();
+  SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
   size_t numPorts = componentPorts.size();
 
   size_t numResults = instance.getNumResults();
