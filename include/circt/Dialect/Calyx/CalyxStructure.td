@@ -86,7 +86,7 @@ def ComponentOp : CalyxOp<"component", [
   let regions = (region SizedRegion<1>: $body);
 
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ComponentPortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{

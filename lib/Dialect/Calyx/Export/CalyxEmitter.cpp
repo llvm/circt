@@ -121,7 +121,7 @@ struct Emitter {
 
   // Component emission
   void emitComponent(ComponentOp op);
-  void emitComponentPorts(ArrayRef<ComponentPortInfo> ports);
+  void emitComponentPorts(ArrayRef<PortInfo> ports);
 
   // Instance emission
   void emitInstance(InstanceOp op);
@@ -221,7 +221,7 @@ private:
   void emitValue(Value value, bool isIndented) {
     if (auto blockArg = value.dyn_cast<BlockArgument>()) {
       // Emit component block argument.
-      StringAttr portName = getComponentPortInfo(blockArg).name;
+      StringAttr portName = getPortInfo(blockArg).name;
       (isIndented ? indent() : os) << portName.getValue();
       return;
     }
@@ -337,7 +337,7 @@ void Emitter::emitComponent(ComponentOp op) {
   indent() << "component " << op.getName();
 
   // Emit the ports.
-  auto ports = getComponentPortInfo(op);
+  auto ports = getPortInfo(op);
   emitComponentPorts(ports);
   os << space() << LBraceEndL();
   addIndent();
@@ -374,8 +374,8 @@ void Emitter::emitComponent(ComponentOp op) {
 }
 
 /// Emit the ports of a component.
-void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
-  std::vector<ComponentPortInfo> inPorts, outPorts;
+void Emitter::emitComponentPorts(ArrayRef<PortInfo> ports) {
+  std::vector<PortInfo> inPorts, outPorts;
   for (auto &&port : ports) {
     if (port.direction == Direction::Input)
       inPorts.push_back(port);

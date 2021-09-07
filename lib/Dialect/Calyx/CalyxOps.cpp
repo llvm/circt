@@ -85,7 +85,7 @@ static bool isPort(Value value) {
 }
 
 /// Gets the port for a given BlockArgument.
-ComponentPortInfo calyx::getComponentPortInfo(BlockArgument arg) {
+PortInfo calyx::getComponentPortInfo(BlockArgument arg) {
   Operation *op = arg.getOwner()->getParentOp();
   return getComponentPortInfo(op)[arg.getArgNumber()];
 }
@@ -272,7 +272,7 @@ static FunctionType getComponentType(ComponentOp component) {
 }
 
 /// Returns the port information for the given component.
-SmallVector<ComponentPortInfo> calyx::getComponentPortInfo(Operation *op) {
+SmallVector<PortInfo> calyx::getComponentPortInfo(Operation *op) {
   assert(isa<ComponentOp>(op) &&
          "Can only get port information from a component.");
   auto component = dyn_cast<ComponentOp>(op);
@@ -281,7 +281,7 @@ SmallVector<ComponentPortInfo> calyx::getComponentPortInfo(Operation *op) {
   auto portDirectionsAttr =
       component->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
 
-  SmallVector<ComponentPortInfo> results;
+  SmallVector<PortInfo> results;
   for (uint64_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
     results.push_back({portNamesAttr[i].cast<StringAttr>(), portTypes[i],
                        direction::get(portDirectionsAttr.getValue()[i])});
@@ -297,7 +297,7 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
   p.printSymbolName(componentName);
 
   auto ports = getComponentPortInfo(op);
-  SmallVector<ComponentPortInfo, 8> inPorts, outPorts;
+  SmallVector<PortInfo, 8> inPorts, outPorts;
   for (auto &&port : ports) {
     if (port.direction == Direction::Input)
       inPorts.push_back(port);
@@ -426,7 +426,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     return op.emitOpError(
         "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
 
-  SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
+  SmallVector<PortInfo> componentPorts = getComponentPortInfo(op);
 
   // Verify the component has the following ports.
   // TODO(Calyx): Eventually, we want to attach attributes to these arguments.
@@ -475,7 +475,7 @@ static SmallVector<T> concat(const SmallVectorImpl<T> &a,
 }
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ComponentPortInfo> ports) {
+                        StringAttr name, ArrayRef<PortInfo> ports) {
   using namespace mlir::function_like_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
@@ -592,8 +592,8 @@ static LogicalResult verifyPortDirection(AssignOp op, Value value,
        isCellInterfacePort = definingOp && isa<CellInterface>(definingOp);
   assert((isComponentPort || isCellInterfacePort) && "Not a port.");
 
-  ComponentPortInfo port =
-      isComponentPort ? getComponentPortInfo(value.cast<BlockArgument>())
+  PortInfo port = isComponentPort
+                      ? getComponentPortInfo(value.cast<BlockArgument>())
                       : cast<CellInterface>(definingOp).portInfo(value);
 
   bool isSource = !isDestination;
@@ -690,7 +690,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
            << instance.componentName();
 
   // Verify the instance result ports with those of its referenced component.
-  SmallVector<ComponentPortInfo> componentPorts =
+  SmallVector<PortInfo> componentPorts =
       getComponentPortInfo(referencedComponent);
 
   size_t numResults = instance.getNumResults();

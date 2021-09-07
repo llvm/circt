@@ -62,7 +62,7 @@ SmallVector<Direction> genInOutDirections(size_t nIns, size_t nOuts);
 } // namespace direction
 
 /// This holds the name and type that describes the component's ports.
-struct ComponentPortInfo {
+struct PortInfo {
   StringAttr name;
   Type type;
   Direction direction;
@@ -72,10 +72,10 @@ struct ComponentPortInfo {
 LogicalResult verifyCell(Operation *op);
 
 /// Returns port information about a given component.
-SmallVector<ComponentPortInfo> getComponentPortInfo(Operation *op);
+SmallVector<PortInfo> getComponentPortInfo(Operation *op);
 
 /// Returns port information for the block argument provided.
-ComponentPortInfo getComponentPortInfo(BlockArgument arg);
+PortInfo getComponentPortInfo(BlockArgument arg);
 
 } // namespace calyx
 } // namespace circt
