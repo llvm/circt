@@ -358,8 +358,8 @@ void GrandCentralTapsPass::runOnOperation() {
     llvm::dbgs() << "Tapped ports:\n";
     for (auto it : tappedPorts)
       llvm::dbgs() << "- " << it.first << ": "
-                   << it.second.first->getAttr("sym_name") << " port #"
-                   << it.second.second << "\n";
+                   << it.second.first->getAttr(SymbolTable::getSymbolAttrName())
+                   << " port #" << it.second.second << "\n";
     llvm::dbgs() << "Tapped ops:\n";
     for (auto it : tappedOps)
       llvm::dbgs() << "- " << it.first << ": " << *it.second << "\n";
