@@ -1052,6 +1052,127 @@ bool circt::firrtl::scatterCustomAnnotations(
       continue;
     }
 
+    // Scatter signal driver annotations to the sources *and* the targets of the
+    // drives.
+    if (clazz == "sifive.enterprise.grandcentral.SignalDriverAnnotation") {
+      auto id = newID();
+
+      // Rework the circuit-level annotation to no longer include the
+      // information we are scattering away anyway.
+      NamedAttrList fields;
+      auto annotationsAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "annotations", loc, clazz);
+      auto circuitAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuit", loc, clazz);
+      auto circuitPackageAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuitPackage", loc, clazz);
+      if (!annotationsAttr || !circuitAttr || !circuitPackageAttr)
+        return false;
+      fields.append("class", classAttr);
+      fields.append("id", id);
+      fields.append("annotations", annotationsAttr);
+      fields.append("circuit", circuitAttr);
+      fields.append("circuitPackage", circuitPackageAttr);
+      newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
+
+      // A callback that will scatter every source and sink target pair to the
+      // corresponding two ends of the connection.
+      auto handleTarget = [&](Attribute attr, unsigned i, bool isSource) {
+        auto targetId = newID();
+        DictionaryAttr targetDict = attr.dyn_cast<DictionaryAttr>();
+        if (!targetDict) {
+          mlir::emitError(loc, "SignalDriverAnnotation source and sink target "
+                               "entries must be dictionaries")
+                  .attachNote()
+              << "annotation:" << dict << "\n";
+          return false;
+        }
+
+        // Dig up the two sides of the link.
+        auto path = Twine(clazz) + "." + (isSource ? "source" : "sink") +
+                    "Targets[" + Twine(i) + "]";
+        auto originAttr =
+            tryGetAs<StringAttr>(targetDict, dict, "_1", loc, path);
+        auto destinationAttr =
+            tryGetAs<StringAttr>(targetDict, dict, "_2", loc, path);
+        if (!originAttr || !destinationAttr)
+          return false;
+
+        // Build the two annotations.
+        for (auto pair : std::array{std::make_pair(originAttr, true),
+                                    std::make_pair(destinationAttr, false)}) {
+          auto canonTarget = canonicalizeTarget(pair.first.getValue());
+          if (!canonTarget)
+            return false;
+
+          // HACK: Ignore the side of the connection that targets the *other*
+          // circuit. We do this by checking whether the canonicalized target
+          // begins with `~CircuitName|`. If it doesn't, we skip.
+          // TODO: Once we properly support multiple circuits, this can go and
+          // the annotation can scatter properly.
+          StringRef prefix(*canonTarget);
+          if (!(prefix.consume_front("~") &&
+                prefix.consume_front(circuit.name()) &&
+                prefix.consume_front("|"))) {
+            continue;
+          }
+
+          // Assemble the annotation on this side of the connection.
+          NamedAttrList fields;
+          fields.append("class", classAttr);
+          fields.append("id", id);
+          fields.append("targetId", targetId);
+          if (pair.second)
+            fields.append("destination", destinationAttr);
+          else
+            fields.append("origin", originAttr);
+
+          // Handle subfield and non-local targets.
+          auto NLATargets = expandNonLocal(*canonTarget);
+          auto leafTarget = splitAndAppendTarget(
+                                fields, std::get<0>(NLATargets.back()), context)
+                                .first;
+          if (NLATargets.size() > 1) {
+            buildNLA(circuit, *canonTarget, NLATargets);
+            fields.append("circt.nonlocal",
+                          FlatSymbolRefAttr::get(context, *canonTarget));
+          }
+          newAnnotations[leafTarget].push_back(
+              DictionaryAttr::get(context, fields));
+
+          // Annotate instances along the NLA path.
+          for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+            NamedAttrList fields;
+            fields.append("circt.nonlocal",
+                          FlatSymbolRefAttr::get(context, *canonTarget));
+            fields.append("class", StringAttr::get(context, "circt.nonlocal"));
+            newAnnotations[std::get<0>(NLATargets[i])].push_back(
+                DictionaryAttr::get(context, fields));
+          }
+        }
+
+        return true;
+      };
+
+      // Handle the source and sink targets.
+      auto sourcesAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "sourceTargets", loc, clazz);
+      auto sinksAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "sinkTargets", loc, clazz);
+      if (!sourcesAttr || !sinksAttr)
+        return false;
+      unsigned i = 0;
+      for (auto attr : sourcesAttr)
+        if (!handleTarget(attr, i++, true))
+          return false;
+      i = 0;
+      for (auto attr : sinksAttr)
+        if (!handleTarget(attr, i++, false))
+          return false;
+
+      continue;
+    }
+
     // Just copy over any annotation we don't understand.
     newAnnotations["~"].push_back(a);
   }

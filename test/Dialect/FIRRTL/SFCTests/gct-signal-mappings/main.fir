@@ -4,12 +4,15 @@ circuit Top :
   module Foo :
     input clock : Clock
     input reset : Reset
-    input dataIn : {a: {b: {c: UInt<42>}}}
-    output dataOut : {x: {y: {z: UInt<42>}}}
+    input dataIn : {a: {b: {c: UInt<42>}}, d: UInt<9001>}
+    output dataOut : {x: {y: {z: UInt<42>}}, w: UInt<9001>}
 
     reg stuff : UInt<42>
+    reg stuff2 : UInt<9001>
     stuff <= dataIn.a.b.c
-    dataOut.x.y.z <= dataOut
+    stuff2 <= dataIn.d
+    dataOut.x.y.z <= stuff
+    dataOut.w <= stuff2
 
   module Top :
     input clock : Clock
