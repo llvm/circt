@@ -64,8 +64,8 @@ The current set of "tool capability" Lowering Options is:
 
  * `useAlwaysFF` (default=`false`).  If true, emits `sv.alwaysff` as
     Verilog `always_ff` statements.  Otherwise, print them as `always` statements.
- * `useAlwaysComb` (default=`false`).  If true, emits `sv.alwayscomb` as Verilog
-   `always_comb` statements.  Otherwise, print them as `always @(*)`.
+ * `noAlwaysComb` (default=`false`).  If true, emits `sv.alwayscomb` as Verilog
+   `always @(*)` statements.  Otherwise, print them as `always_comb`.
  * `allowExprInEventControl` (default=`false`).   If true, expressions are
    allowed in the sensitivity list of `always` statements, otherwise they are
    forced to be simple wires. Some EDA tools rely on these being simple wires.
