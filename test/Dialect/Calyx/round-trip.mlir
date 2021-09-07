@@ -51,17 +51,22 @@ calyx.program {
         // CHECK: calyx.assign %c2.in = %c0.out, %done ? : i8
         calyx.assign %c2.in = %c0.out, %done ? : i8
       }
+      calyx.group @Group3 {
+        calyx.assign %r.in = %c0.out : i8
+        calyx.assign %r.write_en = %c1_i1 : i1
+        calyx.group_done %r.done : i1
+      }
     }
     calyx.control {
       // CHECK:      calyx.seq {
       // CHECK-NEXT: calyx.seq {
       // CHECK-NEXT: calyx.enable @Group1
-      // CHECK-NEXT: calyx.enable @Group2
+      // CHECK-NEXT: calyx.enable @Group3
       // CHECK-NEXT: calyx.seq {
       // CHECK-NEXT: calyx.if %c2.out with @Group2 {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK-NEXT: } else {
-      // CHECK-NEXT: calyx.enable @Group2
+      // CHECK-NEXT: calyx.enable @Group3
       // CHECK-NEXT: }
       // CHECK-NEXT: calyx.if %c2.out {
       // CHECK-NEXT: calyx.enable @Group1
@@ -71,16 +76,16 @@ calyx.program {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK:      calyx.par {
       // CHECK-NEXT: calyx.enable @Group1
-      // CHECK-NEXT: calyx.enable @Group2
+      // CHECK-NEXT: calyx.enable @Group3
       calyx.seq {
         calyx.seq {
           calyx.enable @Group1
-          calyx.enable @Group2
+          calyx.enable @Group3
           calyx.seq {
             calyx.if %c2.out with @Group2 {
               calyx.enable @Group1
             } else {
-              calyx.enable @Group2
+              calyx.enable @Group3
             }
             calyx.if %c2.out {
               calyx.enable @Group1
@@ -94,7 +99,7 @@ calyx.program {
         }
         calyx.par {
           calyx.enable @Group1
-          calyx.enable @Group2
+          calyx.enable @Group3
         }
       }
     }

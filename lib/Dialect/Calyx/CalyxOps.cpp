@@ -822,9 +822,14 @@ static LogicalResult verifyEnableOp(EnableOp enableOp) {
   auto wiresOp = component.getWiresOp();
   auto groupName = enableOp.groupName();
 
-  if (!wiresOp.lookupSymbol<GroupInterface>(groupName))
+  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
+  if (!groupOp)
     return enableOp.emitOpError()
-           << "with group: " << groupName << ", which does not exist.";
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (isa<CombGroupOp>(groupOp))
+    return enableOp.emitOpError() << "with group '" << groupName
+                                  << "', which is a combinational group.";
 
   return success();
 }

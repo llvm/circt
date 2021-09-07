@@ -88,7 +88,7 @@ calyx.program {
     calyx.wires {}
     calyx.control {
       calyx.seq {
-        // expected-error @+1 {{'calyx.enable' op with group: WrongName, which does not exist.}}
+        // expected-error @+1 {{'calyx.enable' op with group 'WrongName', which does not exist.}}
         calyx.enable @WrongName
       }
     }
@@ -161,12 +161,15 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.comb_group @Group1 { calyx.assign %c0.go = %c1_1 : i1 } }
+    calyx.wires {
+      calyx.comb_group @Group1 { calyx.assign %c0.go = %c1_1 : i1 }
+      calyx.group @Group2 { calyx.group_done %c1_1 : i1 } 
+    }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{empty 'else' region.}}
         calyx.if %c0.out with @Group1 {
-          calyx.enable @Group1
+          calyx.enable @Group2
         } else {}
       }
     }
@@ -184,7 +187,7 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c1_1 = hw.constant 1 : i1
     %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    calyx.wires { calyx.comb_group @Group2 { calyx.assign %c0.go = %c1_1 : i1 } }
+    calyx.wires { calyx.group @Group2 { calyx.group_done %c1_1 : i1 } }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{'calyx.if' op with group 'Group1', which does not exist.}}
@@ -205,12 +208,15 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.comb_group @Group1 {  calyx.assign %c0.go = %c1_1 : i1 } }
+    calyx.wires {
+      calyx.comb_group @Group1 {  calyx.assign %c0.go = %c1_1 : i1 }
+      calyx.group @Group2 { calyx.group_done %c1_1 : i1 } 
+    }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{conditional op: '%c0.out' expected to be driven from group: 'Group1' but no driver was found.}}
         calyx.if %c0.out with @Group1 {
-          calyx.enable @Group1
+          calyx.enable @Group2
         }
       }
     }
@@ -272,12 +278,15 @@ calyx.program {
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.comb_group @Group1 { } }
+    calyx.wires {
+      calyx.comb_group @Group1 { }
+      calyx.group @Group2 { calyx.group_done %c1_1 : i1 } 
+    }
     calyx.control {
       calyx.seq {
         // expected-error @+1 {{conditional op: '%c0.out' expected to be driven from group: 'Group1' but no driver was found.}}
         calyx.while %c0.out with @Group1 {
-          calyx.enable @Group1
+          calyx.enable @Group2
         }
       }
     }
@@ -435,6 +444,29 @@ calyx.program {
       calyx.seq {
         // expected-error @+1 {{'calyx.while' op with group 'Group1', which is not a combinational group.}}
         calyx.while %c0.out with @Group1 { calyx.enable @Group1}
+      }
+    }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @A(%go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
+    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.comb_group @Group1 { calyx.assign %c0.go = %c1_1 : i1 } }
+    calyx.control {
+      calyx.seq {
+        calyx.if %c0.out {
+          // expected-error @+1 {{'calyx.enable' op with group 'Group1', which is a combinational group.}}
+          calyx.enable @Group1
+        }
       }
     }
   }
