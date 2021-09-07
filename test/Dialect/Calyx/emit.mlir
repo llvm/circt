@@ -3,7 +3,7 @@
 // CHECK: import "primitives/core.futil";
 calyx.program {
   // CHECK-LABEL: component A(in: 8, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 8, @done done: 1) {
-  calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
+  calyx.component @A(%in: i8, %go: i1 {go = 1}, %clk: i1 {clk = 1}, %reset: i1 {reset = 1}) -> (%out: i8, %done: i1 {done = 1}) {
     %c1_1 = hw.constant 1 : i1
 
     calyx.wires {
@@ -14,14 +14,14 @@ calyx.program {
   }
 
   // CHECK-LABEL: component B(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
-  calyx.component @B(%in: i1, %go: i1, %clk: i1, %reset: i1) -> (%out: i1, %done: i1) {
+  calyx.component @B(%in: i1, %go: i1 {go = 1}, %clk: i1 {clk = 1}, %reset: i1 {reset = 1}) -> (%out: i1, %done: i1 {done = 1}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
 
   // CHECK-LABEL: component main(@go go: 1, @clk clk: 1, @reset reset: 1) -> (@done done: 1) {
-  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
+  calyx.component @main(%go: i1 {go = 1}, %clk: i1 {clk = 1}, %reset: i1 {reset = 1}) -> (%done: i1 {done = 1}) {
     // CHECK-LABEL: cells {
     // CHECK-NEXT:    c0 = A();
     // CHECK-NEXT:    c1 = B();

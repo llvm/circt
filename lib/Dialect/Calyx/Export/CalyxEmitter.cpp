@@ -24,11 +24,14 @@
 
 using namespace circt;
 using namespace calyx;
+using namespace mlir;
 
 namespace {
 
 static constexpr std::string_view LSquare() { return "["; }
 static constexpr std::string_view RSquare() { return "]"; }
+static constexpr std::string_view LAngleBracket() { return "<"; }
+static constexpr std::string_view RAngleBracket() { return ">"; }
 static constexpr std::string_view LParen() { return "("; }
 static constexpr std::string_view RParen() { return ")"; }
 static constexpr std::string_view colon() { return ": "; }
@@ -44,6 +47,7 @@ static constexpr std::string_view apostrophe() { return "'"; }
 static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
+static constexpr std::string_view addressSymbol() { return "@"; }
 
 /// A tracker to determine which libraries should be imported for a given
 /// program.
@@ -121,7 +125,7 @@ struct Emitter {
 
   // Component emission
   void emitComponent(ComponentOp op);
-  void emitComponentPorts(ArrayRef<ComponentPortInfo> ports);
+  void emitComponentPorts(ComponentOp op);
 
   // Instance emission
   void emitInstance(InstanceOp op);
@@ -177,6 +181,46 @@ private:
   InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {
     encounteredError = true;
     return op->emitOpError(message);
+  }
+
+  /// Calyx attributes are emitted in one of the two following formats:
+  /// (1)  @<attribute-name>(<attribute-value>), e.g. `@go`, `@bound(5)`.
+  /// (2)  <"<attribute-name>"=<attribute-value>>, e.g. `<"static"=1>`.
+  ///
+  /// Since ports are structural in nature and not operations, an
+  /// extra boolean value is added to determine whether this is a port of the
+  /// given operation.
+  void emitAttribute(Operation *op, StringRef identifier, Attribute attr,
+                     bool isPort) {
+    // Determines whether the attribute should follow format (2).
+    bool isDiamondFormat = isa<GroupOp, ComponentOp>(op) && !isPort;
+
+    if (attr.isa<UnitAttr>()) {
+      assert(!isDiamondFormat &&
+             "Groups and Component attributes must provide a value.");
+      os << addressSymbol() << identifier;
+      return;
+    }
+
+    if (auto intAttr = attr.dyn_cast<IntegerAttr>()) {
+      auto attrValue = intAttr.getValue();
+
+      if (isDiamondFormat) {
+        os << LAngleBracket() << delimiter() << identifier << delimiter()
+           << equals() << attrValue << RAngleBracket();
+        return;
+      }
+
+      // Otherwise, follow format (1).
+      os << addressSymbol() << identifier;
+      // Integer attributes with value 1 may optionally emit the value. For
+      // example, { clk = 1 } would be emitted as `@clk` rather than `@clk(1)`.
+      if (attrValue != 1)
+        os << LParen() << intAttr.getValue() << RParen();
+      return;
+    }
+
+    emitOpError(op, "This attribute type is not supported for Calyx emission.");
   }
 
   /// Helper function for emitting a Calyx section. It emits the body in the
@@ -337,8 +381,7 @@ void Emitter::emitComponent(ComponentOp op) {
   indent() << "component " << op.getName();
 
   // Emit the ports.
-  auto ports = getComponentPortInfo(op);
-  emitComponentPorts(ports);
+  emitComponentPorts(op);
   os << space() << LBraceEndL();
   addIndent();
   WiresOp wires;
@@ -374,8 +417,10 @@ void Emitter::emitComponent(ComponentOp op) {
 }
 
 /// Emit the ports of a component.
-void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
-  std::vector<ComponentPortInfo> inPorts, outPorts;
+void Emitter::emitComponentPorts(ComponentOp op) {
+  SmallVector<ComponentPortInfo, 8> ports = getComponentPortInfo(op);
+
+  SmallVector<ComponentPortInfo, 4> inPorts, outPorts;
   for (auto &&port : ports) {
     if (port.direction == Direction::Input)
       inPorts.push_back(port);
@@ -383,32 +428,18 @@ void Emitter::emitComponentPorts(ArrayRef<ComponentPortInfo> ports) {
       outPorts.push_back(port);
   }
 
-  // To avoid the native compiler adding each of the required ports twice,
-  // add the @<port-name> attribute here. This is a quick-fix solution.
-  // Eventually we want to add attributes directly to component arguments.
-  // See: https://github.com/llvm/circt/issues/1666
-  llvm::SmallVector<StringRef> requiredPorts = {"go", "clk", "done", "reset",
-                                                "done"};
-  auto requiresNativeCompilerAttribute = [&](StringRef portName) {
-    return llvm::find_if(requiredPorts, [&](StringRef requiredPort) {
-             return requiredPort == portName;
-           }) != requiredPorts.end();
-  };
-
   auto emitPorts = [&](auto ports) {
     os << LParen();
     for (size_t i = 0, e = ports.size(); i < e; ++i) {
       const auto &port = ports[i];
-      std::string name = port.name.getValue().str();
-      if (requiresNativeCompilerAttribute(name)) {
-        // @<port-name> <port-name>
-        name.insert(0, "@");
-        name += " ";
-        name += port.name.getValue();
+      // Emit port attributes.
+      for (auto &&[id, attr] : port.attributes) {
+        emitAttribute(op, id, attr, /*isPort=*/true);
+        os << " ";
       }
       // We only care about the bit width in the emitted .futil file.
       auto bitWidth = port.type.getIntOrFloatBitWidth();
-      os << name << colon() << bitWidth;
+      os << port.name.getValue() << colon() << bitWidth;
 
       if (i + 1 < e)
         os << comma();
