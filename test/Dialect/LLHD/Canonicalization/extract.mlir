@@ -6,48 +6,34 @@
 // CHECK-SAME: %[[ARRAY:.*]]: !hw.array<10xi1>
 // CHECK-SAME: %[[ARRAYSIG:.*]]: !llhd.sig<!hw.array<10xi1>>
 func @dyn_extract_slice_to_static_extract(%int : i32, %sig : !llhd.sig<i32>, %array : !hw.array<10xi1>, %arraysig : !llhd.sig<!hw.array<10xi1>>)
-    -> (i16, i16, !llhd.sig<i16>, !llhd.sig<i16>, !hw.array<5xi1>, !hw.array<5xi1>, !llhd.sig<!hw.array<5xi1>>, !llhd.sig<!hw.array<5xi1>>) {
-  %ind1 = llhd.const 1 : i8
-  %ind2 = constant 2 : i8
+    -> (i16, !llhd.sig<i16>, !hw.array<5xi1>, !llhd.sig<!hw.array<5xi1>>) {
+  %ind1 = hw.constant 1 : i8
   // CHECK-NEXT: %[[EXTINT1:.*]] = llhd.extract_slice %[[INT]], 1 : i32 -> i16
   %0 = llhd.dyn_extract_slice %int, %ind1 : (i32, i8) -> i16
-  // CHECK-NEXT: %[[EXTINT2:.*]] = llhd.extract_slice %[[INT]], 2 : i32 -> i16
-  %1 = llhd.dyn_extract_slice %int, %ind2 : (i32, i8) -> i16
   // CHECK-NEXT: %[[EXTSIG1:.*]] = llhd.extract_slice %[[SIG]], 1 : !llhd.sig<i32> -> !llhd.sig<i16>
-  %2 = llhd.dyn_extract_slice %sig, %ind1 : (!llhd.sig<i32>, i8) -> !llhd.sig<i16>
-  // CHECK-NEXT: %[[EXTSIG2:.*]] = llhd.extract_slice %[[SIG]], 2 : !llhd.sig<i32> -> !llhd.sig<i16>
-  %3 = llhd.dyn_extract_slice %sig, %ind2 : (!llhd.sig<i32>, i8) -> !llhd.sig<i16>
+  %1 = llhd.dyn_extract_slice %sig, %ind1 : (!llhd.sig<i32>, i8) -> !llhd.sig<i16>
   // CHECK-NEXT: %[[EXTARRAY1:.*]] = llhd.extract_slice %[[ARRAY]], 1 : !hw.array<10xi1> -> !hw.array<5xi1>
-  %4 = llhd.dyn_extract_slice %array, %ind1 : (!hw.array<10xi1>, i8) -> !hw.array<5xi1>
-  // CHECK-NEXT: %[[EXTARRAY2:.*]] = llhd.extract_slice %[[ARRAY]], 2 : !hw.array<10xi1> -> !hw.array<5xi1>
-  %5 = llhd.dyn_extract_slice %array, %ind2 : (!hw.array<10xi1>, i8) -> !hw.array<5xi1>
+  %2 = llhd.dyn_extract_slice %array, %ind1 : (!hw.array<10xi1>, i8) -> !hw.array<5xi1>
   // CHECK-NEXT: %[[EXTARRAYSIG1:.*]] = llhd.extract_slice %[[ARRAYSIG]], 1 : !llhd.sig<!hw.array<10xi1>> -> !llhd.sig<!hw.array<5xi1>>
-  %6 = llhd.dyn_extract_slice %arraysig, %ind1 : (!llhd.sig<!hw.array<10xi1>>, i8) -> !llhd.sig<!hw.array<5xi1>>
-  // CHECK-NEXT: %[[EXTARRAYSIG2:.*]] = llhd.extract_slice %[[ARRAYSIG]], 2 : !llhd.sig<!hw.array<10xi1>> -> !llhd.sig<!hw.array<5xi1>>
-  %7 = llhd.dyn_extract_slice %arraysig, %ind2 : (!llhd.sig<!hw.array<10xi1>>, i8) -> !llhd.sig<!hw.array<5xi1>>
+  %3 = llhd.dyn_extract_slice %arraysig, %ind1 : (!llhd.sig<!hw.array<10xi1>>, i8) -> !llhd.sig<!hw.array<5xi1>>
 
-  // CHECK-NEXT: return %[[EXTINT1]], %[[EXTINT2]], %[[EXTSIG1]], %[[EXTSIG2]], %[[EXTARRAY1]], %[[EXTARRAY2]], %[[EXTARRAYSIG1]], %[[EXTARRAYSIG2]] : i16, i16, !llhd.sig<i16>, !llhd.sig<i16>, !hw.array<5xi1>, !hw.array<5xi1>, !llhd.sig<!hw.array<5xi1>>, !llhd.sig<!hw.array<5xi1>>
-  return %0, %1, %2, %3, %4, %5, %6, %7 : i16, i16, !llhd.sig<i16>, !llhd.sig<i16>, !hw.array<5xi1>, !hw.array<5xi1>, !llhd.sig<!hw.array<5xi1>>, !llhd.sig<!hw.array<5xi1>>
+  // CHECK-NEXT: return %[[EXTINT1]], %[[EXTSIG1]], %[[EXTARRAY1]], %[[EXTARRAYSIG1]] : i16, !llhd.sig<i16>, !hw.array<5xi1>, !llhd.sig<!hw.array<5xi1>>
+  return %0, %1, %2, %3 : i16, !llhd.sig<i16>, !hw.array<5xi1>, !llhd.sig<!hw.array<5xi1>>
 }
 
 // CHECK-LABEL: @dyn_extract_element_to_static_extract
 // CHECK-SAME: %[[ARRAY:.*]]: !hw.array<10xi1>
 // CHECK-SAME: %[[ARRAYSIG:.*]]: !llhd.sig<!hw.array<10xi1>>
 func @dyn_extract_element_to_static_extract(%array : !hw.array<10xi1>, %arraysig : !llhd.sig<!hw.array<10xi1>>)
-    -> (i1, i1, !llhd.sig<i1>, !llhd.sig<i1>) {
-  %ind1 = llhd.const 1 : i8
-  %ind2 = constant 2 : i8
+    -> (i1, !llhd.sig<i1>) {
+  %ind1 = hw.constant 1 : i8
   // CHECK-NEXT: %[[EXTSIG1:.*]] = llhd.extract_element %[[ARRAY]], 1 : !hw.array<10xi1> -> i1
   %0 = llhd.dyn_extract_element %array, %ind1 : (!hw.array<10xi1>, i8) -> i1
-  // CHECK-NEXT: %[[EXTSIG2:.*]] = llhd.extract_element %[[ARRAY]], 2 : !hw.array<10xi1> -> i1
-  %1 = llhd.dyn_extract_element %array, %ind2 : (!hw.array<10xi1>, i8) -> i1
   // CHECK-NEXT: %[[EXTARRAYSIG1:.*]] = llhd.extract_element %[[ARRAYSIG]], 1 : !llhd.sig<!hw.array<10xi1>> -> !llhd.sig<i1>
-  %2 = llhd.dyn_extract_element %arraysig, %ind1 : (!llhd.sig<!hw.array<10xi1>>, i8) -> !llhd.sig<i1>
-  // CHECK-NEXT: %[[EXTARRAYSIG2:.*]] = llhd.extract_element %[[ARRAYSIG]], 2 : !llhd.sig<!hw.array<10xi1>> -> !llhd.sig<i1>
-  %3 = llhd.dyn_extract_element %arraysig, %ind2 : (!llhd.sig<!hw.array<10xi1>>, i8) -> !llhd.sig<i1>
+  %1 = llhd.dyn_extract_element %arraysig, %ind1 : (!llhd.sig<!hw.array<10xi1>>, i8) -> !llhd.sig<i1>
 
-  // CHECK-NEXT: return %[[EXTSIG1]], %[[EXTSIG2]], %[[EXTARRAYSIG1]], %[[EXTARRAYSIG2]] : i1, i1, !llhd.sig<i1>, !llhd.sig<i1>
-  return %0, %1, %2, %3 : i1, i1, !llhd.sig<i1>, !llhd.sig<i1>
+  // CHECK-NEXT: return %[[EXTSIG1]], %[[EXTARRAYSIG1]] : i1, !llhd.sig<i1>
+  return %0, %1 : i1, !llhd.sig<i1>
 }
 
 // CHECK-LABEL: @extract_slice_folding
@@ -58,8 +44,8 @@ func @dyn_extract_element_to_static_extract(%array : !hw.array<10xi1>, %arraysig
 func @extract_slice_folding(%int : i32, %sig : !llhd.sig<i32>, %array : !hw.array<10xi1>, %arraysig : !llhd.sig<!hw.array<10xi1>>)
     -> (i32, !llhd.sig<i32>, !hw.array<10xi1>, !llhd.sig<!hw.array<10xi1>>, i8, !llhd.sig<i8>, !hw.array<2xi1>, !llhd.sig<!hw.array<2xi1>>,
       i4, !hw.array<2xi1>, i4, !hw.array<2xi1>, i4, !hw.array<2xi1>, i4, !hw.array<2xi1>, i24, i24, !hw.array<2xi1>, !hw.array<1xi1>) {
-  // CHECK-NEXT: %[[VAL_4:.*]] = llhd.const 3 : i32
-  %c = llhd.const 3 : i32
+  // CHECK-NEXT: %[[VAL_4:.*]] = hw.constant 3 : i32
+  %c = hw.constant 3 : i32
 
   %0 = llhd.extract_slice %int, 0 : i32 -> i32
   %1 = llhd.extract_slice %sig, 0 : !llhd.sig<i32> -> !llhd.sig<i32>
@@ -131,7 +117,7 @@ func @extract_slice_folding(%int : i32, %sig : !llhd.sig<i32>, %array : !hw.arra
 // CHECK-SAME: %[[SHORT:.*]]: i16
 // CHECK-SAME: %[[BYTE:.*]]: i8
 func @extract_element_folding(%int1 : i32, %int2 : i32, %int3 : i32, %int4 : i32, %int5 : i32, %int6 : i32, %short : i16, %byte : i8) -> (i8, i32, i32, i32) {
-  %amt = llhd.const 1 : i32
+  %amt = hw.constant 1 : i32
   %tup = hw.struct_create (%int1, %short, %byte) : !hw.struct<foo: i32, bar: i16, baz: i8>
   %arr = hw.array_create %int1, %int2, %int3 : i32
   %hidden = hw.array_create %int4, %int5, %int6 : i32

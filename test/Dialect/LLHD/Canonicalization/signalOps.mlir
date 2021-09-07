@@ -6,8 +6,8 @@
 // CHECK-SAME: %[[TIME:.*]]: !llhd.time
 // CHECK-SAME: %[[COND:.*]]: i1
 func @drv_folding(%sig: !llhd.sig<i32>, %val: i32, %time: !llhd.time, %cond: i1) {
-  %true = llhd.const 1 : i1
-  %false = llhd.const 0 : i1
+  %true = hw.constant 1 : i1
+  %false = hw.constant 0 : i1
 
   // CHECK-NEXT: llhd.drv %[[SIG]], %[[VAL]] after %[[TIME]] :
   llhd.drv %sig, %val after %time : !llhd.sig<i32>

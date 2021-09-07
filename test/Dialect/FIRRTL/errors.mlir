@@ -3,7 +3,7 @@
 firrtl.circuit "X" {
 
 firrtl.module @X(in %b : !firrtl.unknowntype) {
-  // expected-error @-1 {{unknown firrtl type}}
+  // expected-error @-1 {{unknown FIRRTL dialect type: "unknowntype"}}
 }
 
 }

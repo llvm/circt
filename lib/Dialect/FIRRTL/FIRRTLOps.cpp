@@ -716,9 +716,8 @@ static void printModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   // allow these customizations.  Need to not print the terminator.
 
   // Print the operation and the function name.
-  auto funcName = op.moduleName();
-  p << op->getName() << ' ';
-  p.printSymbolName(funcName);
+  p << " ";
+  p.printSymbolName(op.moduleName());
 
   bool needPortNamesAttr = false;
   printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
@@ -936,18 +935,19 @@ FModuleLike InstanceOp::getReferencedModule() {
   if (!circuit)
     return nullptr;
 
-  return circuit.lookupSymbol<FModuleLike>(moduleName());
+  return circuit.lookupSymbol<FModuleLike>(moduleNameAttr());
 }
 
-FModuleLike InstanceOp::getReferencedModule(SymbolTable &symtbl) {
-  return symtbl.lookup<FModuleLike>(moduleName());
+FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
+  return symbolTable.lookup<FModuleLike>(moduleNameAttr().getLeafReference());
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
                        StringRef name, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
-  result.addAttribute("moduleName", builder.getSymbolRefAttr(moduleName));
+  result.addAttribute("moduleName",
+                      SymbolRefAttr::get(builder.getContext(), moduleName));
   result.addAttribute("name", builder.getStringAttr(name));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
@@ -993,26 +993,19 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-/// Verify the correctness of an InstanceOp.
-static LogicalResult verifyInstanceOp(InstanceOp instance) {
-
-  // Check that this instance is inside a module.
-  auto module = instance->getParentOfType<FModuleOp>();
-  if (!module) {
-    instance.emitOpError("should be embedded in a 'firrtl.module'");
-    return failure();
-  }
-
-  auto referencedModule = instance.getReferencedModule();
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto module = (*this)->getParentOfType<FModuleOp>();
+  auto referencedModule =
+      symbolTable.lookupNearestSymbolFrom<FModuleLike>(*this, moduleNameAttr());
   if (!referencedModule) {
-    instance.emitOpError("invalid symbol reference");
+    emitOpError("invalid symbol reference");
     return failure();
   }
 
   // Check that this instance doesn't recursively instantiate its wrapping
   // module.
   if (referencedModule == module) {
-    auto diag = instance.emitOpError()
+    auto diag = emitOpError()
                 << "is a recursive instantiation of its containing module";
     diag.attachNote(module.getLoc()) << "containing module declared here";
     return failure();
@@ -1021,9 +1014,9 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   SmallVector<ModulePortInfo> modulePorts = referencedModule.getPorts();
 
   // Check that result types are consistent with the referenced module's ports.
-  size_t numResults = instance.getNumResults();
+  size_t numResults = getNumResults();
   if (numResults != modulePorts.size()) {
-    auto diag = instance.emitOpError()
+    auto diag = emitOpError()
                 << "has a wrong number of results; expected "
                 << modulePorts.size() << " but got " << numResults;
     diag.attachNote(referencedModule->getLoc())
@@ -1032,10 +1025,10 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   }
 
   for (size_t i = 0; i != numResults; i++) {
-    auto resultType = instance.getResult(i).getType();
+    auto resultType = getResult(i).getType();
     auto expectedType = modulePorts[i].type;
     if (resultType != expectedType) {
-      auto diag = instance.emitOpError()
+      auto diag = emitOpError()
                   << "result type for " << modulePorts[i].name << " must be "
                   << expectedType << ", but got " << resultType;
 
@@ -1043,6 +1036,19 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
           << "original module declared here";
       return failure();
     }
+  }
+
+  return success();
+}
+
+/// Verify the correctness of an InstanceOp.
+static LogicalResult verifyInstanceOp(InstanceOp instance) {
+
+  // Check that this instance is inside a module.
+  auto module = instance->getParentOfType<FModuleOp>();
+  if (!module) {
+    instance.emitOpError("should be embedded in a 'firrtl.module'");
+    return failure();
   }
 
   if (instance.portAnnotations().size() != instance.getNumResults())
@@ -1573,7 +1579,7 @@ bool firrtl::isExpression(Operation *op) {
 }
 
 static void printConstantOp(OpAsmPrinter &p, ConstantOp &op) {
-  p << "firrtl.constant ";
+  p << " ";
   p.printAttributeWithoutType(op.valueAttr());
   p << " : ";
   p.printType(op.getType());
@@ -1667,7 +1673,7 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result,
 }
 
 static void printSpecialConstantOp(OpAsmPrinter &p, SpecialConstantOp &op) {
-  p << "firrtl.specialconstant ";
+  p << " ";
   // SpecialConstant uses a BoolAttr, and we want to print `true` as `1`.
   p << static_cast<unsigned>(op.value());
   p << " : ";

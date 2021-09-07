@@ -9,7 +9,6 @@
 #include "DialectModules.h"
 
 #include "circt-c/Dialect/MSFT.h"
-#include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/Bindings/Python/PybindAdaptors.h"
@@ -24,6 +23,7 @@ namespace py = pybind11;
 
 using namespace circt;
 using namespace circt::msft;
+using namespace mlir::python::adaptors;
 
 static MlirOperation callPyFunc(MlirOperation op, void *userData) {
   py::gil_scoped_acquire gil;
@@ -41,18 +41,35 @@ static void registerGenerator(MlirContext ctxt, std::string opName,
                             parameters);
 }
 
-using namespace mlir::python::adaptors;
+class DeviceDB {
+public:
+  DeviceDB(MlirOperation top) { db = circtMSFTCreateDeviceDB(top); }
+  size_t addDesignPlacements() {
+    return circtMSFTDeviceDBAddDesignPlacements(db);
+  }
+  bool addPlacement(MlirAttribute loc, MlirAttribute path, std::string subpath,
+                    MlirOperation op) {
+    return mlirLogicalResultIsSuccess(circtMSFTDeviceDBAddPlacement(
+        db, loc,
+        CirctMSFTPlacedInstance{path, subpath.c_str(), subpath.size(), op}));
+  }
+  py::object getInstanceAt(MlirAttribute loc) {
+    CirctMSFTPlacedInstance inst;
+    if (!circtMSFTDeviceDBTryGetInstanceAt(db, loc, &inst))
+      return py::none();
+    std::string subpath(inst.subpath, inst.subpathLength);
+    return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
+  }
+
+private:
+  CirctMSFTDeviceDB db;
+};
 
 /// Populate the msft python module.
 void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   mlirMSFTRegisterPasses();
 
   m.doc() = "MSFT dialect Python native extension";
-
-  m.def("locate", &mlirMSFTAddPhysLocationAttr,
-        "Attach a physical location to an op's entity.",
-        py::arg("op_to_locate"), py::arg("entity_within"), py::arg("devtype"),
-        py::arg("x"), py::arg("y"), py::arg("num"));
 
   m.def("get_instance", circtMSFTGetInstance, py::arg("root"), py::arg("path"));
 
@@ -61,7 +78,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .value("DSP", DeviceType::DSP)
       .export_values();
 
-  m.def("export_tcl", [](MlirModule mod, py::object fileObject) {
+  m.def("export_tcl", [](MlirOperation mod, py::object fileObject) {
     circt::python::PyFileAccumulator accum(fileObject, false);
     py::gil_scoped_release();
     mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
@@ -101,6 +118,19 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
         return (DeviceType)circtMSFTPhysLocationAttrGetNum(self);
       });
 
+  mlir_attribute_subclass(m, "RootedInstancePathAttr",
+                          circtMSFTAttributeIsARootedInstancePathAttribute)
+      .def_classmethod(
+          "get",
+          [](py::object cls, MlirAttribute rootSymbol,
+             std::vector<MlirAttribute> instancePath, MlirContext ctxt) {
+            return cls(circtMSFTRootedInstancePathAttrGet(
+                ctxt, rootSymbol, instancePath.data(), instancePath.size()));
+          },
+          "Create an rooted instance path attribute", py::arg(),
+          py::arg("root_symbol"), py::arg("instance_path"),
+          py::arg("ctxt") = py::none());
+
   mlir_attribute_subclass(m, "SwitchInstanceAttr",
                           circtMSFTAttributeIsASwitchInstanceAttribute)
       .def_classmethod(
@@ -131,4 +161,16 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly("num_cases", [](MlirAttribute self) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);
       });
+
+  py::class_<DeviceDB>(m, "DeviceDB")
+      .def(py::init<MlirOperation>(), py::arg("top"))
+      .def("add_design_placements", &DeviceDB::addDesignPlacements,
+           "Add the placements already present in the design.")
+      .def("add_placement", &DeviceDB::addPlacement,
+           "Inform the DB about a new placement.", py::arg("location"),
+           py::arg("path"), py::arg("subpath"), py::arg("op"))
+      .def("get_instance_at", &DeviceDB::getInstanceAt,
+           "Get the instance at location. Returns None if nothing exists "
+           "there. Otherwise, returns (path, subpath, op) of the instance "
+           "there.");
 }

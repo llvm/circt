@@ -3,10 +3,10 @@
 // CHECK-LABEL: _check_sig
 llhd.entity @check_sig () -> () {
   // CHECK-NEXT: wire _[[A:.*]] = 1'd1;
-  %0 = llhd.const 1 : i1
+  %0 = hw.constant 1 : i1
   // CHECK-NEXT: wire [63:0] _[[B:.*]] = 64'd256;
-  %1 = llhd.const 256 : i64
-  %2 = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+  %1 = hw.constant 256 : i64
+  %2 = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   // CHECK-NEXT: var _[[C:.*]] = _[[A]];
   %3 = llhd.sig "sigI1" %0 : i1
   // CHECK-NEXT: var [63:0] _{{.*}} = _[[B]];
@@ -14,7 +14,7 @@ llhd.entity @check_sig () -> () {
   %5 = llhd.prb %3 : !llhd.sig<i1>
   // CHECK-NEXT: assign _[[C]] = #(1ns) _[[A]];
   llhd.drv %3, %0 after %2 : !llhd.sig<i1>
-  %6 = llhd.const #llhd.time<0ns, 1d, 0e> : !llhd.time
+  %6 = llhd.constant_time #llhd.time<0ns, 1d, 0e>
   // CHECK-NEXT: assign _[[C]] = #(0ns) _[[A]];
   llhd.drv %3, %0 after %6 : !llhd.sig<i1>
   // CHECK-NEXT: assign _[[C]] = #(0ns) _[[A]] ? _[[A]] : _[[C]];

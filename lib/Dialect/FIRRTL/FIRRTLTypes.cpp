@@ -20,10 +20,8 @@
 using namespace circt;
 using namespace firrtl;
 
+using mlir::OptionalParseResult;
 using mlir::TypeStorageAllocator;
-
-static ParseResult parseFIRRTLType(FIRRTLType &result,
-                                   DialectAsmParser &parser);
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
@@ -37,29 +35,35 @@ static ParseResult parseFIRRTLType(FIRRTLType &result,
 // Type Printing
 //===----------------------------------------------------------------------===//
 
-void FIRRTLType::print(raw_ostream &os) const {
+static void printType(Type type, DialectAsmPrinter &os);
+
+/// Print a type with a custom printer implementation.
+///
+/// This only prints a subset of all types in the dialect. Use `printType`
+/// instead, which will call this function in turn, as appropriate.
+static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &os) {
   auto printWidthQualifier = [&](Optional<int32_t> width) {
     if (width)
       os << '<' << width.getValue() << '>';
   };
-
-  TypeSwitch<FIRRTLType>(*this)
-      .Case<ClockType>([&](Type) { os << "clock"; })
-      .Case<ResetType>([&](Type) { os << "reset"; })
-      .Case<AsyncResetType>([&](Type) { os << "asyncreset"; })
-      .Case<SIntType>([&](SIntType sIntType) {
+  bool anyFailed = false;
+  TypeSwitch<Type>(type)
+      .Case<ClockType>([&](auto) { os << "clock"; })
+      .Case<ResetType>([&](auto) { os << "reset"; })
+      .Case<AsyncResetType>([&](auto) { os << "asyncreset"; })
+      .Case<SIntType>([&](auto sIntType) {
         os << "sint";
         printWidthQualifier(sIntType.getWidth());
       })
-      .Case<UIntType>([&](UIntType uIntType) {
+      .Case<UIntType>([&](auto uIntType) {
         os << "uint";
         printWidthQualifier(uIntType.getWidth());
       })
-      .Case<AnalogType>([&](AnalogType analogType) {
+      .Case<AnalogType>([&](auto analogType) {
         os << "analog";
         printWidthQualifier(analogType.getWidth());
       })
-      .Case<BundleType>([&](BundleType bundleType) {
+      .Case<BundleType>([&](auto bundleType) {
         os << "bundle<";
         llvm::interleaveComma(bundleType.getElements(), os,
                               [&](BundleType::BundleElement element) {
@@ -67,22 +71,50 @@ void FIRRTLType::print(raw_ostream &os) const {
                                 if (element.isFlip)
                                   os << " flip";
                                 os << ": ";
-                                element.type.print(os);
+                                printType(element.type, os);
                               });
         os << '>';
       })
-      .Case<FVectorType>([&](FVectorType vectorType) {
+      .Case<FVectorType>([&](auto vectorType) {
         os << "vector<";
-        vectorType.getElementType().print(os);
+        printType(vectorType.getElementType(), os);
         os << ", " << vectorType.getNumElements() << '>';
       })
-      .Default([](Type) { assert(0 && "unknown dialect type to print"); });
+      .Default([&](auto) { anyFailed = true; });
+  return failure(anyFailed);
+}
+
+/// Print a type defined by this dialect.
+static void printType(Type type, DialectAsmPrinter &os) {
+  // Try the generated type printer.
+  if (succeeded(generatedTypePrinter(type, os)))
+    return;
+
+  // Try the custom type printer.
+  if (succeeded(customTypePrinter(type, os)))
+    return;
+
+  // None of the above recognized the type, so we bail.
+  assert(false && "type to print unknown to FIRRTL dialect");
 }
 
 //===----------------------------------------------------------------------===//
 // Type Parsing
 //===----------------------------------------------------------------------===//
 
+static ParseResult parseFIRRTLType(FIRRTLType &result,
+                                   DialectAsmParser &parser);
+
+/// Parse a type with a custom parser implementation.
+///
+/// This only accepts a subset of all types in the dialect. Use `parseType`
+/// instead, which will call this function in turn, as appropriate.
+///
+/// Returns `llvm::None` if the type `name` is not covered by the custom
+/// parsers. Otherwise returns success or failure as appropriate. On success,
+/// `result` is set to the resulting type.
+///
+/// ```plain
 /// firrtl-type
 ///   ::= clock
 ///   ::= reset
@@ -94,20 +126,18 @@ void FIRRTLType::print(raw_ostream &os) const {
 ///   ::= vector '<' type ',' int '>'
 ///
 /// bundle-elt ::= identifier ':' type
-///
-static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
-                                   DialectAsmParser &parser) {
-
-  auto *context = parser.getBuilder().getContext();
-
-  if (name.equals("clock")) {
+/// ```
+static OptionalParseResult customTypeParser(MLIRContext *context,
+                                            DialectAsmParser &parser,
+                                            StringRef name, Type &result) {
+  if (name.equals("clock"))
     return result = ClockType::get(context), success();
-  } else if (name.equals("reset")) {
+  if (name.equals("reset"))
     return result = ResetType::get(context), success();
-  } else if (name.equals("asyncreset")) {
+  if (name.equals("asyncreset"))
     return result = AsyncResetType::get(context), success();
-  } else if (name.equals("sint") || name.equals("uint") ||
-             name.equals("analog")) {
+
+  if (name.equals("sint") || name.equals("uint") || name.equals("analog")) {
     // Parse the width specifier if it exists.
     int32_t width = -1;
     if (!parser.parseOptionalLess()) {
@@ -128,7 +158,9 @@ static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
       result = AnalogType::get(context, width);
     }
     return success();
-  } else if (name.equals("bundle")) {
+  }
+
+  if (name.equals("bundle")) {
     if (parser.parseLess())
       return failure();
 
@@ -169,7 +201,9 @@ static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
     }
 
     return result = BundleType::get(elements, context), success();
-  } else if (name.equals("vector")) {
+  }
+
+  if (name.equals("vector")) {
     FIRRTLType elementType;
     unsigned width = 0;
 
@@ -181,10 +215,56 @@ static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
     return result = FVectorType::get(elementType, width), success();
   }
 
-  return parser.emitError(parser.getNameLoc(), "unknown firrtl type"),
-         failure();
+  return {};
 }
 
+/// Parse a type defined by this dialect.
+///
+/// This will first try the generated type parsers and then resort to the custom
+/// parser implementation. Emits an error and returns failure if `name` does not
+/// refer to a type defined in this dialect.
+static ParseResult parseType(Type &result, StringRef name,
+                             DialectAsmParser &parser) {
+  auto *context = parser.getBuilder().getContext();
+  OptionalParseResult parseResult;
+
+  // Try the generated type parser.
+  parseResult = generatedTypeParser(context, parser, name, result);
+  if (parseResult.hasValue())
+    return parseResult.getValue();
+
+  // Try the custom type parser.
+  parseResult = customTypeParser(context, parser, name, result);
+  if (parseResult.hasValue())
+    return parseResult.getValue();
+
+  // None of the above recognized the type, so we bail.
+  parser.emitError(parser.getNameLoc(), "unknown FIRRTL dialect type: \"")
+      << name << "\"";
+  return failure();
+}
+
+/// Parse a `FIRRTLType` with a `name` that has already been parsed.
+///
+/// Note that only a subset of types defined in the FIRRTL dialect inherit from
+/// `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
+static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
+                                   DialectAsmParser &parser) {
+  Type type;
+  if (failed(parseType(type, name, parser)))
+    return failure();
+  result = type.dyn_cast<FIRRTLType>();
+  if (result)
+    return success();
+  parser.emitError(parser.getNameLoc(), "unknown FIRRTL type: \"")
+      << name << "\"";
+  return failure();
+}
+
+/// Parse a `FIRRTLType`.
+///
+/// Note that only a subset of types defined in the FIRRTL dialect inherit from
+/// `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
 static ParseResult parseFIRRTLType(FIRRTLType &result,
                                    DialectAsmParser &parser) {
   StringRef name;
@@ -193,29 +273,22 @@ static ParseResult parseFIRRTLType(FIRRTLType &result,
   return parseFIRRTLType(result, name, parser);
 }
 
-/// Parse a type registered to this dialect.
-Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
-  llvm::StringRef name;
-  if (parser.parseKeyword(&name))
-    return Type();
+//===----------------------------------------------------------------------===//
+// Dialect Type Parsing and Printing
+//===----------------------------------------------------------------------===//
 
-  // Parse a generated type.
-  Type genType;
-  auto parseResult = generatedTypeParser(getContext(), parser, name, genType);
-  if (parseResult.hasValue())
-    return genType;
-
-  // Parse a FIRRTLType.
-  FIRRTLType result;
-  if (parseFIRRTLType(result, name, parser))
-    return Type();
-  return result;
+/// Print a type registered to this dialect.
+void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
+  ::printType(type, os);
 }
 
-void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
-  if (succeeded(generatedTypePrinter(type, os)))
-    return;
-  type.cast<FIRRTLType>().print(os.getStream());
+/// Parse a type registered to this dialect.
+Type FIRRTLDialect::parseType(DialectAsmParser &parser) const {
+  StringRef name;
+  Type result;
+  if (parser.parseKeyword(&name) || ::parseType(result, name, parser))
+    return Type();
+  return result;
 }
 
 //===----------------------------------------------------------------------===//
@@ -902,7 +975,7 @@ std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
 void CMemoryType::print(mlir::DialectAsmPrinter &printer) const {
   printer << "cmemory<";
   // Don't print element types with "!firrtl.".
-  getElementType().print(printer.getStream());
+  printType(getElementType(), printer);
   printer << ", " << getNumElements() << ">";
 }
 

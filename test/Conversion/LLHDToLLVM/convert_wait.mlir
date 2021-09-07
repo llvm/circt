@@ -21,7 +21,7 @@
 // CHECK:           %[[VAL_10:.*]] = llvm.icmp "eq" %[[VAL_6]], %[[VAL_9]] : i32
 // CHECK:           llvm.cond_br %[[VAL_10]], ^bb3, ^bb5
 // CHECK:         ^bb3:
-// CHECK:           %[[VAL_11:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : vector<3xi64>) : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_11:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_12:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_13:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_3]], %[[VAL_4]]] : (!llvm.ptr<struct<(i32, i32, ptr<array<0 x i1>>, struct<()>)>>, i32, i32) -> !llvm.ptr<i32>
 // CHECK:           llvm.store %[[VAL_12]], %[[VAL_13]] : !llvm.ptr<i32>
@@ -45,7 +45,7 @@
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_resume_timed () -> () {
-  %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
+  %t = llhd.constant_time #llhd.time<0ns, 0d, 1e>
   llhd.wait for %t, ^end
 ^end:
   llhd.halt
@@ -151,7 +151,7 @@ llhd.proc @convert_resume_observe_partial (%in0 : !llhd.sig<i1>, %in1 : !llhd.si
 // CHECK:           %[[VAL_12:.*]] = llvm.icmp "eq" %[[VAL_8]], %[[VAL_11]] : i32
 // CHECK:           llvm.cond_br %[[VAL_12]], ^bb3, ^bb5
 // CHECK:         ^bb3:
-// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : vector<3xi64>) : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_14:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_15:.*]] = llvm.getelementptr %[[VAL_1]]{{\[}}%[[VAL_5]], %[[VAL_6]]] : (!llvm.ptr<struct<(i32, i32, ptr<array<1 x i1>>, struct<()>)>>, i32, i32) -> !llvm.ptr<i32>
 // CHECK:           llvm.store %[[VAL_14]], %[[VAL_15]] : !llvm.ptr<i32>
@@ -184,7 +184,7 @@ llhd.proc @convert_resume_observe_partial (%in0 : !llhd.sig<i1>, %in1 : !llhd.si
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_resume_timed_observe (%in0 : !llhd.sig<i32>) -> () {
-  %t = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
+  %t = llhd.constant_time #llhd.time<0ns, 0d, 1e>
   llhd.wait for %t, (%in0 : !llhd.sig<i32>), ^end
 ^end:
   llhd.halt

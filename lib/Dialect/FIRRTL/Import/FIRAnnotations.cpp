@@ -12,6 +12,7 @@
 
 #include "FIRAnnotations.h"
 
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -89,6 +90,57 @@ splitTarget(StringRef target, MLIRContext *context) {
     annotationVec.push_back(StringAttr::get(context, temp));
 
   return {targetBase, ArrayAttr::get(context, annotationVec)};
+}
+
+/// Split out non-local paths.  This will return a set of target strings for
+/// each named entity along the path.
+/// c|c:ai/Am:bi/Bm>d.agg[3] ->
+/// c|c>ai, c|Am>bi, c|Bm>d.agg[2]
+static SmallVector<std::tuple<std::string, std::string, std::string>>
+expandNonLocal(StringRef target) {
+  SmallVector<std::tuple<std::string, std::string, std::string>> retval;
+  StringRef circuit;
+  std::tie(circuit, target) = target.split('|');
+  while (target.count(':')) {
+    StringRef nla;
+    std::tie(nla, target) = target.split(':');
+    StringRef inst, mod;
+    std::tie(mod, inst) = nla.split('/');
+    retval.emplace_back((circuit + "|" + mod + ">" + inst).str(), mod.str(),
+                        inst.str());
+  }
+  if (target.empty()) {
+    retval.emplace_back(circuit.str(), "", "");
+  } else {
+
+    StringRef mod, name;
+    // remove aggregate
+    auto targetBase =
+        target.take_until([](char c) { return c == '.' || c == '['; });
+    std::tie(mod, name) = targetBase.split('>');
+    if (name.empty())
+      name = mod;
+    retval.emplace_back((circuit + "|" + target).str(), mod, name);
+  }
+  return retval;
+}
+
+/// Make an anchor for a non-local annotation.  Use the expanded path to build
+/// the module and name list in the anchor.
+static void buildNLA(
+    CircuitOp circuit, StringRef targetStrRef,
+    SmallVectorImpl<std::tuple<std::string, std::string, std::string>> &nlas) {
+  OpBuilder b(circuit.getBodyRegion());
+  SmallVector<Attribute> mods;
+  SmallVector<Attribute> insts;
+  for (auto &nla : nlas) {
+    mods.push_back(
+        FlatSymbolRefAttr::get(circuit.getContext(), std::get<1>(nla)));
+    insts.push_back(StringAttr::get(circuit.getContext(), std::get<2>(nla)));
+  }
+  auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
+  auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
+  b.create<NonLocalAnchor>(circuit.getLoc(), targetStrRef, modAttr, instAttr);
 }
 
 /// Append the argument `target` to the `annotation` using the key "target".
@@ -203,7 +255,8 @@ static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
 /// false if unsuccessful.
 bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
                              llvm::StringMap<ArrayAttr> &annotationMap,
-                             json::Path path, MLIRContext *context) {
+                             json::Path path, CircuitOp circuit) {
+  auto context = circuit.getContext();
 
   /// Examine an Annotation JSON object and return an optional string indicating
   /// the target associated with this annotation.  Erase the target from the
@@ -232,19 +285,6 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
     }
 
     auto target = canonTargetStr.getValue();
-
-    // Allow targets through that are instance targets.  Error on anything which
-    // is actually non-local.  E.g., this is allowing:
-    //     ~Foo|Foo/bar:Bar
-    // But, this is disallowing:
-    //     ~Foo|Foo/bar:Bar/baz:Baz
-    bool unsupported = std::count_if(target.begin(), target.end(), [](char a) {
-                         return a == '/' || a == ':';
-                       }) > 2;
-    if (unsupported) {
-      p.field("target").report("unsupported non-local target");
-      return {};
-    }
 
     // Remove the target field from the annotation and return the target.
     object->erase("target");
@@ -343,10 +383,18 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
 
     // Build up the Attribute to represent the Annotation and store it in the
     // global Target -> Attribute mapping.
+    auto NLATargets = expandNonLocal(targetStrRef);
+
     NamedAttrList metadata;
     // Annotations on the element instance.
-    targetStrRef = splitAndAppendTarget(metadata, targetStrRef, context).first;
-
+    auto leafTarget =
+        splitAndAppendTarget(metadata, std::get<0>(NLATargets.back()), context)
+            .first;
+    if (NLATargets.size() > 1) {
+      buildNLA(circuit, targetStrRef, NLATargets);
+      metadata.append("circt.nonlocal",
+                      FlatSymbolRefAttr::get(context, targetStrRef));
+    }
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(field.second, p)) {
         metadata.append(field.first, value);
@@ -354,8 +402,17 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
       }
       return false;
     }
-    mutableAnnotationMap[targetStrRef].push_back(
+    mutableAnnotationMap[leafTarget].push_back(
         DictionaryAttr::get(context, metadata));
+
+    for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+      NamedAttrList pathmetadata;
+      pathmetadata.append("circt.nonlocal",
+                          FlatSymbolRefAttr::get(context, targetStrRef));
+      pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
+      mutableAnnotationMap[std::get<0>(NLATargets[i])].push_back(
+          DictionaryAttr::get(context, pathmetadata));
+    }
   }
 
   // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
@@ -625,8 +682,9 @@ static bool parseAugmentedType(
 /// Annotations targeting "~" to those targeting something more specific if
 /// possible.
 bool circt::firrtl::scatterCustomAnnotations(
-    llvm::StringMap<ArrayAttr> &annotationMap, MLIRContext *context,
+    llvm::StringMap<ArrayAttr> &annotationMap, CircuitOp circuit,
     unsigned &annotationID, Location loc) {
+  MLIRContext *context = circuit.getContext();
 
   // Exit if no anotations exist that target "~". Also ensure a spurious entry
   // is not created in the map.
@@ -751,17 +809,34 @@ bool circt::firrtl::scatterCustomAnnotations(
           auto maybeSourceTarget = canonicalizeTarget(sourceAttr.getValue());
           if (!maybeSourceTarget)
             return false;
-          auto sourcePair = splitAndAppendTarget(
-              source, maybeSourceTarget.getValue(), context);
-          if (sourcePair.second.hasValue())
-            appendTarget(dontTouchAnn, sourcePair.second.getValue());
+          auto NLATargets = expandNonLocal(*maybeSourceTarget);
+          auto leafTarget = splitAndAppendTarget(
+              source, std::get<0>(NLATargets.back()), context);
+          if (NLATargets.size() > 1) {
+            buildNLA(circuit, *maybeSourceTarget, NLATargets);
+            source.append("circt.nonlocal",
+                          FlatSymbolRefAttr::get(context, *maybeSourceTarget));
+          }
+          if (leafTarget.second.hasValue())
+            appendTarget(dontTouchAnn, leafTarget.second.getValue());
           source.append("type", StringAttr::get(context, "source"));
-          newAnnotations[sourcePair.first].push_back(
-              DictionaryAttr::getWithSorted(context, source));
-          newAnnotations[sourcePair.first].push_back(
-              DictionaryAttr::getWithSorted(context, dontTouchAnn));
-          if (sourcePair.second.hasValue())
+          newAnnotations[leafTarget.first].push_back(
+              DictionaryAttr::get(context, source));
+          newAnnotations[leafTarget.first].push_back(
+              DictionaryAttr::get(context, dontTouchAnn));
+          if (leafTarget.second.hasValue())
             dontTouchAnn.pop_back();
+
+          for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+            NamedAttrList pathmetadata;
+            pathmetadata.append(
+                "circt.nonlocal",
+                FlatSymbolRefAttr::get(context, *maybeSourceTarget));
+            pathmetadata.append("class",
+                                StringAttr::get(context, "circt.nonlocal"));
+            newAnnotations[std::get<0>(NLATargets[i])].push_back(
+                DictionaryAttr::get(context, pathmetadata));
+          }
 
           // Port Annotations generation.
           port.append("portID", portID);
@@ -870,10 +945,26 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(tap.getValue());
         if (!canonTarget)
           return false;
-        auto targetStrRef =
-            splitAndAppendTarget(foo, canonTarget.getValue(), context).first;
-        newAnnotations[targetStrRef].push_back(
-            DictionaryAttr::get(context, foo));
+        auto NLATargets = expandNonLocal(*canonTarget);
+        auto leafTarget =
+            splitAndAppendTarget(foo, std::get<0>(NLATargets.back()), context)
+                .first;
+        if (NLATargets.size() > 1) {
+          buildNLA(circuit, *canonTarget, NLATargets);
+          foo.append("circt.nonlocal",
+                     FlatSymbolRefAttr::get(context, *canonTarget));
+        }
+        newAnnotations[leafTarget].push_back(DictionaryAttr::get(context, foo));
+
+        for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+          NamedAttrList pathmetadata;
+          pathmetadata.append("circt.nonlocal",
+                              FlatSymbolRefAttr::get(context, *canonTarget));
+          pathmetadata.append("class",
+                              StringAttr::get(context, "circt.nonlocal"));
+          newAnnotations[std::get<0>(NLATargets[i])].push_back(
+              DictionaryAttr::get(context, pathmetadata));
+        }
       }
       continue;
     }

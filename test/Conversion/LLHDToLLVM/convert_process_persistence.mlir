@@ -59,7 +59,7 @@ func @dummy_subsig(%0 : !llhd.sig<i10>) {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_persistent_i1 () -> () {
-  %0 = llhd.const 0 : i1
+  %0 = hw.constant 0 : i1
   br ^resume
 ^resume:
   call @dummy_i1(%0) : (i1) -> ()
@@ -99,7 +99,7 @@ llhd.proc @convert_persistent_i1 () -> () {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_persistent_i32 () -> () {
-  %0 = llhd.const 0 : i32
+  %0 = hw.constant 0 : i32
   br ^resume
 ^resume:
   call @dummy_i32(%0) : (i32) -> ()
@@ -120,7 +120,7 @@ llhd.proc @convert_persistent_i32 () -> () {
 // CHECK:           %[[VAL_8:.*]] = llvm.icmp "eq" %[[VAL_6]], %[[VAL_7]] : i32
 // CHECK:           llvm.cond_br %[[VAL_8]], ^bb2, ^bb4
 // CHECK:         ^bb2:
-// CHECK:           %[[VAL_9:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : vector<3xi64>) : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_9:.*]] = llvm.mlir.constant(dense<[0, 0, 1]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_10:.*]] = llvm.mlir.constant(0 : i32) : i32
 // CHECK:           %[[VAL_11:.*]] = llvm.mlir.constant(3 : i32) : i32
 // CHECK:           %[[VAL_12:.*]] = llvm.mlir.constant(0 : i32) : i32
@@ -139,7 +139,7 @@ llhd.proc @convert_persistent_i32 () -> () {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_persistent_time () -> () {
-  %0 = llhd.const #llhd.time<0ns, 0d, 1e> : !llhd.time
+  %0 = llhd.constant_time #llhd.time<0ns, 0d, 1e>
   br ^resume
 ^resume:
   call @dummy_time(%0) : (!llhd.time) -> ()
@@ -182,7 +182,7 @@ llhd.proc @convert_persistent_time () -> () {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_persistent_ptr () -> () {
-  %0 = llhd.const 0 : i32
+  %0 = hw.constant 0 : i32
   %1 = llhd.var %0 : i32
   br ^resume
 ^resume:
@@ -298,7 +298,7 @@ llhd.proc @convert_persistent_subsig () -> (%out : !llhd.sig<i32>) {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_persistent_block_argument () -> () {
-    %1 = llhd.const 0 : i32
+    %1 = hw.constant 0 : i32
     br ^argBB(%1 : i32)
 ^argBB(%i : i32):
     br ^end
@@ -358,7 +358,7 @@ llhd.proc @convert_persistent_block_argument () -> () {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_ptr_redirect () -> () {
-  %1 = llhd.const 0 : i32
+  %1 = hw.constant 0 : i32
   %var = llhd.var %1 : i32
   llhd.store %var, %1 : !llhd.ptr<i32>
   br ^bb0

@@ -26,9 +26,13 @@ MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses();
 
 /// Emits tcl for the specified module using the provided callback and user
 /// data
-MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirModule,
+MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        MlirStringCallback,
                                                        void *userData);
+
+//===----------------------------------------------------------------------===//
+// Generator registration.
+//===----------------------------------------------------------------------===//
 
 /// This callback constructs a replacement for the operation argument and
 /// returns it.
@@ -43,6 +47,34 @@ MLIR_CAPI_EXPORTED void mlirMSFTRegisterGenerator(MlirContext,
                                                   const char *generatorName,
                                                   mlirMSFTGeneratorCallback cb,
                                                   MlirAttribute parameters);
+
+//===----------------------------------------------------------------------===//
+// DeviceDB.
+//===----------------------------------------------------------------------===//
+
+typedef struct {
+  void *ptr;
+} CirctMSFTDeviceDB;
+
+typedef struct {
+  MlirAttribute path; // RootedInstancePathAttr.
+  const char *subpath;
+  size_t subpathLength;
+  MlirOperation op;
+} CirctMSFTPlacedInstance;
+
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirOperation top);
+void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
+size_t circtMSFTDeviceDBAddDesignPlacements(CirctMSFTDeviceDB);
+MlirLogicalResult circtMSFTDeviceDBAddPlacement(CirctMSFTDeviceDB,
+                                                MlirAttribute loc,
+                                                CirctMSFTPlacedInstance inst);
+bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB, MlirAttribute loc,
+                                       CirctMSFTPlacedInstance *out);
+
+//===----------------------------------------------------------------------===//
+// MSFT Attributes.
+//===----------------------------------------------------------------------===//
 
 /// Add a physical location attribute with the given entity name, device type, x
 /// and y coordinates, and number.
@@ -62,6 +94,12 @@ CirctMSFTDevType circtMSFTPhysLocationAttrGetDeviceType(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
+
+bool circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute);
+MlirAttribute circtMSFTRootedInstancePathAttrGet(MlirContext,
+                                                 MlirAttribute rootSym,
+                                                 MlirAttribute *pathStringAttrs,
+                                                 size_t num);
 
 typedef struct {
   MlirAttribute instance;

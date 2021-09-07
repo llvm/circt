@@ -20,7 +20,7 @@
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_sig () -> () {
-  %init = llhd.const 0 : i1
+  %init = hw.constant 0 : i1
   %initArr = hw.array_create %init, %init, %init, %init : i1
   %s0 = llhd.sig "sig0" %init : i1
   %s1 = llhd.sig "sig1" %initArr : !hw.array<4xi1>
@@ -74,7 +74,7 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:           %[[VAL_10:.*]] = llvm.insertvalue %[[VAL_8]], %[[VAL_9]][0 : i32] : !llvm.array<3 x i5>
 // CHECK:           %[[VAL_11:.*]] = llvm.insertvalue %[[VAL_8]], %[[VAL_10]][1 : i32] : !llvm.array<3 x i5>
 // CHECK:           %[[VAL_12:.*]] = llvm.insertvalue %[[VAL_8]], %[[VAL_11]][2 : i32] : !llvm.array<3 x i5>
-// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : vector<3xi64>) : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_14:.*]] = llvm.mlir.constant(1 : i64) : i64
 // CHECK:           %[[VAL_15:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_16:.*]] = llvm.alloca %[[VAL_15]] x i1 {alignment = 4 : i64} : (i32) -> !llvm.ptr<i1>
@@ -101,10 +101,10 @@ llhd.entity @convert_prb (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5>>) -> () {
-  %cI1 = llhd.const 0 : i1
-  %cI5 = llhd.const 0 : i5
+  %cI1 = hw.constant 0 : i1
+  %cI5 = hw.constant 0 : i5
   %cArr = hw.array_create %cI5, %cI5, %cI5 : i5
-  %t = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+  %t = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   llhd.drv %sI1, %cI1 after %t : !llhd.sig<i1>
   llhd.drv %sArr, %cArr after %t : !llhd.sig<!hw.array<3xi5>>
 }
@@ -123,7 +123,7 @@ llhd.entity @convert_drv (%sI1 : !llhd.sig<i1>, %sArr : !llhd.sig<!hw.array<3xi5
 // CHECK:         }
 llhd.entity @convert_drv_enable (%sI1 : !llhd.sig<i1>) -> () {
     %cI1 = llhd.prb %sI1 : !llhd.sig<i1>
-    %t = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+    %t = llhd.constant_time #llhd.time<1ns, 0d, 0e>
     llhd.drv %sI1, %cI1 after %t if %cI1 : !llhd.sig<i1>
 }
 
@@ -131,7 +131,7 @@ llhd.entity @convert_drv_enable (%sI1 : !llhd.sig<i1>) -> () {
 // CHECK-SAME:                           %[[VAL_0:.*]]: !llvm.ptr<i8>,
 // CHECK-SAME:                           %[[VAL_1:.*]]: !llvm.ptr<struct<(array<3 x i1>)>>,
 // CHECK-SAME:                           %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
-// CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : vector<3xi64>) : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_4:.*]] = llvm.mlir.constant(false) : i1
 // CHECK:           %[[VAL_5:.*]] = llvm.mlir.constant(0 : i32) : i32
 // CHECK:           %[[VAL_6:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_5]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
@@ -203,8 +203,8 @@ llhd.entity @convert_drv_enable (%sI1 : !llhd.sig<i1>) -> () {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_reg () -> () {
-  %0 = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
-  %1 = llhd.const 0 : i1
+  %0 = llhd.constant_time #llhd.time<1ns, 0d, 0e>
+  %1 = hw.constant 0 : i1
   %2 = llhd.sig "sig" %1: i1
   llhd.reg %2, (%1, "fall" %1 after %0 : i1), (%1, "rise" %1 after %0 : i1), (%1, "low" %1 after %0 : i1), (%1, "high" %1 after %0 : i1), (%1, "both" %1 after %0 : i1) : !llhd.sig<i1>
 }

@@ -9,6 +9,6 @@ func @illegaltype(%arg0: !llhd.illegaltype) {
 
 // expected-error @+2 {{Invalid LLHD attribute!}}
 func @illegalattr() {
-    %0 = llhd.const #llhd.illegalattr : i1
+    %0 = llhd.constant_time #llhd.illegalattr : i1
     return
 }

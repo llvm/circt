@@ -32,6 +32,10 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
                          See docs/PythonBindings.md.")
   endif()
 
+# Generate a CompilationDatabase (compile_commands.json file) for our build,
+# for use by clang_complete, YouCompleteMe, etc.
+  set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
 #-------------------------------------------------------------------------------
 # Project setup and globals
 #-------------------------------------------------------------------------------

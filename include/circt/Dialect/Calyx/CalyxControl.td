@@ -84,6 +84,26 @@ def SeqOp : CalyxContainer<"seq", [
   }];
 }
 
+def ParOp : CalyxContainer<"par", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Parallel";
+  let description = [{
+    The "calyx.par" operation executes the
+    control within its region in parallel.
+
+    ```mlir
+      calyx.par {
+        // G1 and G2 will execute in parallel.
+        // The region is complete when both
+        // G1 and G2 are done.
+        calyx.enable @G1
+        calyx.enable @G2
+      }
+    ```
+  }];
+}
+
 def EnableOp : CalyxOp<"enable", [
     ControlLike
   ]> {

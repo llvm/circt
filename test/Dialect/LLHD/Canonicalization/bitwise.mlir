@@ -4,10 +4,10 @@
 // CHECK-SAME: %[[BASE:.*]]: i4
 // CHECK-SAME: %[[HIDDEN:.*]]: i8
 func @check_shl_folding(%base : i4, %hidden : i8) -> (i4, i4) {
-  // CHECK-NEXT: %[[NEGSEVEN:.*]] = llhd.const -7 : i4
-  %0 = llhd.const 2 : i4
-  %1 = llhd.const 4 : i4
-  %2 = llhd.const 0 : i4
+  // CHECK-NEXT: %[[NEGSEVEN:.*]] = hw.constant -7 : i4
+  %0 = hw.constant 2 : i4
+  %1 = hw.constant 4 : i4
+  %2 = hw.constant 0 : i4
   %3 = llhd.shl %0, %1, %0 : (i4, i4, i4) -> i4
   // check correct pattern replacement if amount is constant zero
   %4 = llhd.shl %base, %hidden, %2 : (i4, i8, i4) -> i4
@@ -19,10 +19,10 @@ func @check_shl_folding(%base : i4, %hidden : i8) -> (i4, i4) {
 // CHECK-SAME: %[[BASE:.*]]: i4
 // CHECK-SAME: %[[HIDDEN:.*]]: i8
 func @check_shr_folding(%base : i4, %hidden : i8) -> (i4, i4) {
-  // CHECK-NEXT: %[[NEGSEVEN:.*]] = llhd.const -7 : i4
-  %0 = llhd.const 2 : i4
-  %1 = llhd.const 4 : i4
-  %2 = llhd.const 0 : i4
+  // CHECK-NEXT: %[[NEGSEVEN:.*]] = hw.constant -7 : i4
+  %0 = hw.constant 2 : i4
+  %1 = hw.constant 4 : i4
+  %2 = hw.constant 0 : i4
   %3 = llhd.shr %1, %0, %0 : (i4, i4, i4) -> i4
   // check correct pattern replacement if amount is constant zero
   %4 = llhd.shr %base, %hidden, %2 : (i4, i8, i4) -> i4

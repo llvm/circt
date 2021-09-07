@@ -35,7 +35,7 @@ llhd.proc @entryBlockMustHaveBrTerminator() -> () {
 llhd.proc @noOptionalTime() -> () {
   br ^bb1
 ^bb1:
-  %time = llhd.const #llhd.time<0ns, 0d, 0e> : !llhd.time
+  %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
   // expected-error @+1 {{Process-lowering: llhd.wait terminators with optional time argument cannot be lowered to structural LLHD.}}
   llhd.wait for %time, ^bb1
 }

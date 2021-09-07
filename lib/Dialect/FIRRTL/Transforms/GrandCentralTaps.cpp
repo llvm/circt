@@ -358,8 +358,8 @@ void GrandCentralTapsPass::runOnOperation() {
     llvm::dbgs() << "Tapped ports:\n";
     for (auto it : tappedPorts)
       llvm::dbgs() << "- " << it.first << ": "
-                   << it.second.first->getAttr("sym_name") << " port #"
-                   << it.second.second << "\n";
+                   << it.second.first->getAttr(SymbolTable::getSymbolAttrName())
+                   << " port #" << it.second.second << "\n";
     llvm::dbgs() << "Tapped ops:\n";
     for (auto it : tappedOps)
       llvm::dbgs() << "- " << it.first << ": " << *it.second << "\n";
@@ -472,8 +472,7 @@ void GrandCentralTapsPass::runOnOperation() {
       // instantiated in a parent module that itself is instantiated in
       // different locations, this will pretty arbitrarily pick one of those
       // locations.
-      path.back()->setAttr("moduleName",
-                           builder.getSymbolRefAttr(name.getValue()));
+      path.back()->setAttr("moduleName", SymbolRefAttr::get(name));
     }
 
     // Drop the original black box module.

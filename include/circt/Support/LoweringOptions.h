@@ -54,28 +54,38 @@ struct LoweringOptions {
   /// Write the verilog emitter options to a module's attributes.
   void setAsAttribute(mlir::ModuleOp module);
 
-  // Load any emitter options from the module. If there is an error validating
-  // the attribute, this will print an error using the ModuleOp.
+  /// Load any emitter options from the module. If there is an error validating
+  /// the attribute, this will print an error using the ModuleOp.
   void parseFromAttribute(mlir::ModuleOp module);
 
-  // If true, ExportVerilog emits AlwaysFFOp as Verilog always_ff statements.
-  // Otherwise, it will print them as always statements
+  /// If true, emit `sv.alwaysff` as Verilog `always_ff` statements.  Otherwise,
+  /// print them as `always` statements
   bool useAlwaysFF = false;
 
-  /// If true, ExportVerilog allows expressions in the sensitivity list of
-  /// `always` statements, instead of forcing them to be simple wires. Some EDA
+  /// If true, emits `sv.alwayscomb` as Verilog `always @(*)` statements.
+  /// Otherwise, print them as `always_comb`.
+  bool noAlwaysComb = false;
+
+  /// If true, expressions are allowed in the sensitivity list of `always`
+  /// statements, otherwise they are forced to be simple wires. Some EDA
   /// tools rely on these being simple wires.
   bool allowExprInEventControl = false;
 
-  /// If true, lowering will eliminate packed arrays for tools that don't
-  /// support them (e.g. Yosys).
+  /// If true, eliminate packed arrays for tools that don't support them (e.g.
+  /// Yosys).
   bool disallowPackedArrays = false;
 
-  /// If true, lowering will not emit locally scoped "automatic" or logic
-  /// declarations, emitting top level wire and reg's instead.
+  /// If true, do not emit SystemVerilog locally scoped "automatic" or logic
+  /// declarations - emit top level wire and reg's instead.
   bool disallowLocalVariables = false;
 
-  /// This is the target width of lines in an emitted verilog source file in
+  /// If true, verification statements like `assert`, `assume`, and `cover` will
+  /// always be emitted with a label. If the statement has no label in the IR, a
+  /// generic one will be created. Some EDA tools require verification
+  /// statements to be labeled.
+  bool enforceVerifLabels = false;
+
+  /// This is the target width of lines in an emitted Verilog source file in
   /// columns.
   enum { DEFAULT_LINE_LENGTH = 90 };
   unsigned emittedLineLength = DEFAULT_LINE_LENGTH;

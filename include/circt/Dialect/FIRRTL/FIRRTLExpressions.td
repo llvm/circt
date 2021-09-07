@@ -536,7 +536,8 @@ def TailPrimOp : PrimOp<"tail"> {
 // Verbatim
 //===----------------------------------------------------------------------===//
 
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface>;
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
+                         ["getAsmResultNames"]>;
 
 def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
                               [NoSideEffect, HasCustomSSAName]> {

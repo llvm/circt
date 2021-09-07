@@ -44,13 +44,6 @@ def RegisterOp : CalyxPrimitive<"register", [
     }]>
   ];
   let extraClassDeclaration = [{
-    SmallVector<StringRef> portNames() {
-      return {"in", "write_en", "clk", "reset", "out", "done"};
-    }
-    SmallVector<Direction> portDirections() {
-      return { Input, Input, Input, Input, Output, Output };
-    }
-
     Value inPort()      { return getResult(0); }
     Value writeEnPort() { return getResult(1); }
     Value clkPort()     { return getResult(2); }
@@ -77,11 +70,11 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     ```mlir
       // A 1-dimensional, 32-bit memory with size dimension 1. Equivalent representation in the native compiler:
       // `m1 = std_mem_d1(32, 1, 1)`
-      %m1.addr0, %m1.write_data, %m1.write_en, %m1.read_data, %m1.done = calyx.memory "m1"<[1] x 32> [1] : i1, i32, i1, i32, i1
+      %m1.addr0, %m1.write_data, %m1.write_en, %m1.clk, %m1.read_data, %m1.done = calyx.memory "m1"<[1] x 32> [1] : i1, i32, i1, i1, i32, i1
 
       // A 2-dimensional, 8-bit memory with size dimensions 64 x 64. Equivalent representation in the native compiler:
       // `m2 = std_mem_d2(8, 64, 64, 6, 6)`
-      %m2.addr0, %m2.addr1, %m2.write_data, %m2.write_en, %m2.read_data, %m2.done = calyx.memory "m2"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i8, i1
+      %m2.addr0, %m2.addr1, %m2.write_data, %m2.write_en, %m2.clk, %m2.read_data, %m2.done = calyx.memory "m2"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
     ```
   }];
 
@@ -115,10 +108,90 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     size_t getNumDimensions() { return addrSizes().size(); }
 
     ValueRange addrPorts() { return getResults().take_front(getNumDimensions()); }
-    Value addrPort(size_t i) { assert(i<getNumDimensions() && "Out of bounds of address ports for this memory."); return getResults()[i]; }
+    Value addrPort(size_t i) {
+      assert(i < getNumDimensions() && "index greater than number of memory address ports.");
+      return getResults()[i];
+    }
     Value writeData() { return getResult(getNumDimensions()); }
     Value writeEn()   { return getResult(getNumDimensions() + 1); }
-    Value readData()  { return getResult(getNumDimensions() + 2); }
-    Value done()      { return getResult(getNumDimensions() + 3); }
+    Value clk()       { return getResult(getNumDimensions() + 2); }
+    Value readData()  { return getResult(getNumDimensions() + 3); }
+    Value done()      { return getResult(getNumDimensions() + 4); }
   }];
 }
+
+class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
+  CalyxPrimitive<"std_" # mnemonic, traits> {
+
+  let summary = "Defines an operation which maps to a Calyx library primitive";
+  let description = [{
+    This operation represents an instance of a Calyx library primitive.
+    A library primitive maps to some hardware-implemented component within the
+    native Calyx compiler.
+  }];
+
+  let arguments = (ins StrAttr:$instanceName);
+  let builders = [
+    OpBuilder<(ins "StringAttr":$instanceName, "::mlir::TypeRange":$resultTypes), [{
+      $_state.addAttribute("instanceName", instanceName);
+      $_state.addTypes(resultTypes);
+    }]>
+  ];
+}
+
+class BoolBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+    SameTypeConstraint<"left", "right">
+  ]> {
+  let results = (outs AnyType:$left, AnyType:$right, I1:$out);
+}
+
+def LtLibOp  : BoolBinaryLibraryOp<"lt"> {}
+def GtLibOp  : BoolBinaryLibraryOp<"gt"> {}
+def EqLibOp  : BoolBinaryLibraryOp<"eq"> {}
+def NeqLibOp : BoolBinaryLibraryOp<"neq"> {}
+def GeLibOp  : BoolBinaryLibraryOp<"ge"> {}
+def LeLibOp  : BoolBinaryLibraryOp<"le"> {}
+def SltLibOp  : BoolBinaryLibraryOp<"slt"> {}
+def SgtLibOp  : BoolBinaryLibraryOp<"sgt"> {}
+def SeqLibOp  : BoolBinaryLibraryOp<"seq"> {}
+def SneqLibOp : BoolBinaryLibraryOp<"sneq"> {}
+def SgeLibOp  : BoolBinaryLibraryOp<"sge"> {}
+def SleLibOp  : BoolBinaryLibraryOp<"sle"> {}
+
+class ArithBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+    SameTypeConstraint<"left", "right">,
+    SameTypeConstraint<"left", "out">
+  ]> {
+  let results = (outs AnyType:$left, AnyType:$right, AnyType:$out);
+}
+
+def AddLibOp  : ArithBinaryLibraryOp<"add"> {}
+def SubLibOp  : ArithBinaryLibraryOp<"sub"> {}
+def ShruLibOp : ArithBinaryLibraryOp<"shru"> {}
+def RshLibOp  : ArithBinaryLibraryOp<"rsh"> {}
+def SrshLibOp : ArithBinaryLibraryOp<"srsh"> {}
+def LshLibOp  : ArithBinaryLibraryOp<"lsh"> {}
+def AndLibOp  : ArithBinaryLibraryOp<"and"> {}
+def OrLibOp   : ArithBinaryLibraryOp<"or"> {}
+def XorLibOp  : ArithBinaryLibraryOp<"xor"> {}
+
+class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
+  ]> {
+  let results = (outs AnyInteger:$in, AnyInteger:$out);
+}
+
+def PadLibOp : UnaryLibraryOp<"pad"> {
+  let verifier = [{
+    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+    return success(inBits < outBits);
+  }];
+}
+
+def SliceLibOp : UnaryLibraryOp<"slice"> {
+  let verifier = [{
+    unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
+    unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
+    return success(inBits > outBits);  }];
+}
+def NotLibOp  : UnaryLibraryOp<"not"> {}

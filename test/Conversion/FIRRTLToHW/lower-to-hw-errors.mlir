@@ -16,7 +16,7 @@ firrtl.circuit "InvalidBundle" {
   }
 
   // expected-error @+1 {{unexpected operation 'builtin.func' in a firrtl.circuit}}
-  func private @UnknownFunction() {
+  builtin.func private @UnknownFunction() {
     return
   }
 }

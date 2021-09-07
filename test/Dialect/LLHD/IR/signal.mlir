@@ -2,12 +2,12 @@
 
 // CHECK-LABEL: checkSigInst
 llhd.entity @checkSigInst () -> () {
-  // CHECK: %[[CI1:.*]] = llhd.const
-  %cI1 = llhd.const 0 : i1
+  // CHECK: %[[CI1:.*]] = hw.constant
+  %cI1 = hw.constant 0 : i1
   // CHECK-NEXT: %{{.*}} = llhd.sig "sigI1" %[[CI1]] : i1
   %sigI1 = llhd.sig "sigI1" %cI1 : i1
-  // CHECK-NEXT: %[[CI64:.*]] = llhd.const
-  %cI64 = llhd.const 0 : i64
+  // CHECK-NEXT: %[[CI64:.*]] = hw.constant
+  %cI64 = hw.constant 0 : i64
   // CHECK-NEXT: %{{.*}} = llhd.sig "sigI64" %[[CI64]] : i64
   %sigI64 = llhd.sig "sigI64" %cI64 : i64
 

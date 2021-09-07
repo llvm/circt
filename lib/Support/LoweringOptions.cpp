@@ -41,12 +41,16 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       // Empty options are fine.
     } else if (option == "alwaysFF") {
       useAlwaysFF = true;
+    } else if (option == "noAlwaysComb") {
+      noAlwaysComb = true;
     } else if (option == "exprInEventControl") {
       allowExprInEventControl = true;
     } else if (option == "disallowPackedArrays") {
       disallowPackedArrays = true;
     } else if (option == "disallowLocalVariables") {
       disallowLocalVariables = true;
+    } else if (option == "verifLabels") {
+      enforceVerifLabels = true;
     } else if (option.startswith("emittedLineLength=")) {
       option = option.drop_front(strlen("emittedLineLength="));
       if (option.getAsInteger(10, emittedLineLength)) {
@@ -65,12 +69,16 @@ std::string LoweringOptions::toString() const {
   // All options should add a trailing comma to simplify the code.
   if (useAlwaysFF)
     options += "alwaysFF,";
+  if (noAlwaysComb)
+    options += "noAlwaysComb,";
   if (allowExprInEventControl)
     options += "exprInEventControl,";
   if (disallowPackedArrays)
     options += "disallowPackedArrays,";
   if (disallowLocalVariables)
     options += "disallowLocalVariables,";
+  if (enforceVerifLabels)
+    options += "verifLabels,";
 
   if (emittedLineLength != DEFAULT_LINE_LENGTH)
     options += "emittedLineLength=" + std::to_string(emittedLineLength) + ',';

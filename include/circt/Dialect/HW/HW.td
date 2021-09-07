@@ -20,23 +20,9 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
 
-def HWDialect : Dialect {
-  let name = "hw";
+include "circt/Dialect/HW/HWDialect.td"
 
-  let summary = "Types and operations for the hardware dialect";
-  let description = [{
-    This dialect defines the `hw` dialect, which is intended to be a generic
-    representation of HW outside of a particular use-case.
-  }];
-
-  let hasConstantMaterializer = 1;
-  let cppNamespace = "::circt::hw";
-  let extraClassDeclaration = [{
-    /// Register all HW types.
-    void registerTypes();
-  }];
-}
-
+include "circt/Dialect/HW/HWTypesImpl.td"
 include "circt/Dialect/HW/HWTypes.td"
 
 // Base class for the operation in this dialect.

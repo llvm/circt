@@ -17,6 +17,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/Transforms/InliningUtils.h"
 
 using namespace circt;
 using namespace hw;
@@ -57,6 +58,27 @@ struct HWOpAsmDialectInterface : public OpAsmDialectInterface {
 };
 } // end anonymous namespace
 
+namespace {
+/// This class defines the interface for handling inlining with HW operations.
+struct HWInlinerInterface : public mlir::DialectInlinerInterface {
+  using mlir::DialectInlinerInterface::DialectInlinerInterface;
+
+  bool isLegalToInline(Operation *op, Region *, bool,
+                       BlockAndValueMapping &) const final {
+    return isa<ConstantOp>(op) || isa<BitcastOp>(op) ||
+           isa<ArrayCreateOp>(op) || isa<ArrayConcatOp>(op) ||
+           isa<ArraySliceOp>(op) || isa<ArrayGetOp>(op) ||
+           isa<StructCreateOp>(op) || isa<StructInjectOp>(op) ||
+           isa<UnionCreateOp>(op) || isa<UnionExtractOp>(op);
+  }
+
+  bool isLegalToInline(Region *, Region *, bool,
+                       BlockAndValueMapping &) const final {
+    return false;
+  }
+};
+} // end anonymous namespace
+
 void HWDialect::initialize() {
   // Register types.
   registerTypes();
@@ -68,7 +90,7 @@ void HWDialect::initialize() {
       >();
 
   // Register interface implementations.
-  addInterfaces<HWOpAsmDialectInterface>();
+  addInterfaces<HWOpAsmDialectInterface, HWInlinerInterface>();
 }
 
 // Registered hook to materialize a single constant operation from a given

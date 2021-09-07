@@ -19,14 +19,11 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Translation.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 using namespace calyx;
-
-//===----------------------------------------------------------------------===//
-// Emitter
-//===----------------------------------------------------------------------===//
 
 namespace {
 
@@ -48,6 +45,51 @@ static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 
+/// A tracker to determine which libraries should be imported for a given
+/// program.
+struct ImportTracker {
+public:
+  /// Returns the list of library names used for in this program.
+  /// E.g. if `primitives/core.futil` is used, returns { "core" }.
+  llvm::SmallSet<StringRef, 4> getLibraryNames(ProgramOp program) {
+    program.walk([&](ComponentOp component) {
+      for (auto &op : *component.getBody()) {
+        if (!isa<CellInterface>(op) || isa<InstanceOp>(op))
+          // It is not a primitive.
+          continue;
+        usedLibraries.insert(getLibraryFor(&op));
+      }
+    });
+    return usedLibraries;
+  }
+
+private:
+  /// Returns the library name for a given Operation Type.
+  StringRef getLibraryFor(Operation *op) {
+    StringRef library;
+    TypeSwitch<Operation *>(op)
+        .Case<MemoryOp, RegisterOp, NotLibOp, AndLibOp, OrLibOp, XorLibOp,
+              AddLibOp, SubLibOp, GtLibOp, LtLibOp, EqLibOp, NeqLibOp, GeLibOp,
+              LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp>(
+            [&](auto op) { library = "core"; })
+        .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
+              SrshLibOp>([&](auto op) { library = "binary_operators"; })
+        /*.Case<>([&](auto op) { library = "math"; })*/
+        .Default([&](auto op) {
+          llvm_unreachable("Type matching failed for this operation.");
+        });
+    return library;
+  }
+
+  /// Maintains a unique list of libraries used throughout the lifetime of the
+  /// tracker.
+  llvm::SmallSet<StringRef, 4> usedLibraries;
+};
+
+//===----------------------------------------------------------------------===//
+// Emitter
+//===----------------------------------------------------------------------===//
+
 /// An emitter for Calyx dialect operations to .futil output.
 struct Emitter {
   Emitter(llvm::raw_ostream &os) : os(os) {}
@@ -65,14 +107,16 @@ struct Emitter {
   void emitProgram(ProgramOp op);
 
   /// Import emission.
-  /// TODO(Calyx): Only import a library if a primitive is used from it.
-  void emitAllImports() {
-    auto emitImport = [&](StringRef path) {
-      os << "import " << delimiter() << path << delimiter() << semicolonEndL();
+  void emitImports(ProgramOp op) {
+    auto emitImport = [&](StringRef library) {
+      // Libraries share a common relative path:
+      //   primitives/<library-name>.futil
+      os << "import " << delimiter() << "primitives/" << library << period()
+         << "futil" << delimiter() << semicolonEndL();
     };
-    emitImport("primitives/core.futil");
-    emitImport("primitives/binary_operators.futil");
-    emitImport("primitives/math.futil");
+
+    for (StringRef library : importTracker.getLibraryNames(op))
+      emitImport(library);
   }
 
   // Component emission
@@ -103,7 +147,26 @@ struct Emitter {
   // Memory emission
   void emitMemory(MemoryOp memory);
 
+  // Emits a library primitive with template parameters based on all in- and
+  // output ports.
+  // e.g.:
+  //   $f.in0, $f.in1, $f.in2, $f.out : calyx.std_foo "f" : i1, i2, i3, i4
+  // emits:
+  //   f = std_foo(1, 2, 3, 4);
+  void emitLibraryPrimTypedByAllPorts(Operation *op);
+
+  // Emits a library primitive with a single template parameter based on the
+  // first input port.
+  // e.g.:
+  //   $f.in0, $f.in1, $f.out : calyx.std_foo "f" : i32, i32, i1
+  // emits:
+  //   f = std_foo(32);
+  void emitLibraryPrimTypedByFirstInputPort(Operation *op);
+
 private:
+  /// Used to track which imports are required for this program.
+  ImportTracker importTracker;
+
   /// Emit an error and remark that emission failed.
   InFlightDiagnostic emitError(Operation *op, const Twine &message) {
     encounteredError = true;
@@ -142,8 +205,8 @@ private:
 
   /// Helper function for emitting combinational operations.
   template <typename CombinationalOp>
-  void emitCombinationalValue(CombinationalOp value, StringRef logicalSymbol) {
-    auto inputs = value.inputs();
+  void emitCombinationalValue(CombinationalOp op, StringRef logicalSymbol) {
+    auto inputs = op.inputs();
     os << LParen();
     for (size_t i = 0, e = inputs.size(); i != e; ++i) {
       emitValue(inputs[i], /*isIndented=*/false);
@@ -156,16 +219,21 @@ private:
 
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
+    if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+      // Emit component block argument.
+      StringAttr portName = getComponentPortInfo(blockArg).name;
+      (isIndented ? indent() : os) << portName.getValue();
+      return;
+    }
+
     auto definingOp = value.getDefiningOp();
+    assert(definingOp && "Value does not have a defining operation.");
+
     TypeSwitch<Operation *>(definingOp)
-        .Case<InstanceOp>([&](auto op) {
+        .Case<CellInterface>([&](auto cell) {
           // A cell port should be defined as <instance-name>.<port-name>
-          auto opResult = value.cast<OpResult>();
-          unsigned portIndex = opResult.getResultNumber();
-          auto ports = getComponentPortInfo(op.getReferencedComponent());
-          StringAttr portName = ports[portIndex].name;
           (isIndented ? indent() : os)
-              << op.instanceName() << period() << portName.getValue();
+              << cell.instanceName() << period() << cell.portName(value);
         })
         .Case<hw::ConstantOp>([&](auto op) {
           // A constant is defined as <bit-width>'<base><value>, where the base
@@ -222,6 +290,9 @@ private:
       TypeSwitch<Operation *>(&bodyOp)
           .template Case<SeqOp>([&](auto op) {
             emitCalyxSection("seq", [&]() { emitCalyxControl(op); });
+          })
+          .template Case<ParOp>([&](auto op) {
+            emitCalyxSection("par", [&]() { emitCalyxControl(op); });
           })
           .template Case<IfOp, WhileOp>([&](auto op) {
             indent() << (isa<IfOp>(op) ? "if " : "while ");
@@ -282,6 +353,14 @@ void Emitter::emitComponent(ComponentOp op) {
           .Case<InstanceOp>([&](auto op) { emitInstance(op); })
           .Case<RegisterOp>([&](auto op) { emitRegister(op); })
           .Case<MemoryOp>([&](auto op) { emitMemory(op); })
+          .Case<hw::ConstantOp>([&](auto op) { /*Do nothing*/ })
+          .Case<SliceLibOp, PadLibOp>(
+              [&](auto op) { emitLibraryPrimTypedByAllPorts(op); })
+          .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
+                SgtLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp, AddLibOp,
+                SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
+                NotLibOp, OrLibOp, XorLibOp>(
+              [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");
           });
@@ -379,6 +458,29 @@ void Emitter::emitMemory(MemoryOp memory) {
   os << RParen() << semicolonEndL();
 }
 
+/// Calling getName() on a calyx operation will return "calyx.${opname}". This
+/// function returns whatever is left after the first '.' in the string,
+/// removing the 'calyx' prefix.
+static StringRef removeCalyxPrefix(StringRef s) { return s.split(".").second; }
+
+void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
+  auto cell = cast<CellInterface>(op);
+  indent() << cell.instanceName() << equals()
+           << removeCalyxPrefix(op->getName().getStringRef()) << LParen();
+  llvm::interleaveComma(op->getResults(), os, [&](auto res) {
+    os << std::to_string(res.getType().getIntOrFloatBitWidth());
+  });
+  os << RParen() << semicolonEndL();
+}
+
+void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
+  auto cell = cast<CellInterface>(op);
+  unsigned bitwidth = cell.inputPorts()[0].getType().getIntOrFloatBitWidth();
+  indent() << cell.instanceName() << equals()
+           << removeCalyxPrefix(op->getName().getStringRef()) << LParen()
+           << bitwidth << RParen() << semicolonEndL();
+}
+
 void Emitter::emitAssignment(AssignOp op) {
 
   emitValue(op.dest(), /*isIndented=*/true);
@@ -439,10 +541,11 @@ void Emitter::emitControl(ControlOp control) {
 mlir::LogicalResult circt::calyx::exportCalyx(mlir::ModuleOp module,
                                               llvm::raw_ostream &os) {
   Emitter emitter(os);
-  emitter.emitAllImports();
   for (auto &op : *module.getBody()) {
-    if (auto programOp = dyn_cast<ProgramOp>(op))
-      emitter.emitProgram(programOp);
+    op.walk([&](ProgramOp program) {
+      emitter.emitImports(program);
+      emitter.emitProgram(program);
+    });
   }
   return emitter.finalize();
 }
