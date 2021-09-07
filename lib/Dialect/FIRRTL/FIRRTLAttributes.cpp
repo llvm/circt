@@ -23,8 +23,13 @@ using namespace firrtl;
 // PortDirectionsAttr
 //===----------------------------------------------------------------------===//
 
+llvm::raw_ostream &circt::firrtl::operator<<(llvm::raw_ostream &os,
+                                             const Direction &dir) {
+  return os << (dir == Direction::In ? "in" : "out");
+}
+
 Direction PortDirectionsAttr::operator[](unsigned index) {
-  // This function exists to avoids copying the underlying array to query a bit.
+  // This function exists to avoid copying the underlying array to query a bit.
   return getImpl()->value[index];
 }
 
@@ -35,9 +40,9 @@ Attribute PortDirectionsAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
   PortDirections directions;
   while (true) {
     if (!p.parseOptionalKeyword("in"))
-      directions.push_back(Direction::Input);
+      directions.push_back(Direction::In);
     else if (!p.parseKeyword("out", "Expected 'in' or 'out'"))
-      directions.push_back(Direction::Output);
+      directions.push_back(Direction::Out);
     else
       return Attribute();
     // If there is no comma, break out of the loop.
@@ -52,7 +57,7 @@ Attribute PortDirectionsAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
 void PortDirectionsAttr::print(DialectAsmPrinter &p) const {
   p << "directions<";
   llvm::interleaveComma(getValue(), p, [&](auto direction) {
-    p << (direction == Direction::Input ? "in" : "out");
+    p << (direction == Direction::In ? "in" : "out");
   });
   p << '>';
 }

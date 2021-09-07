@@ -103,7 +103,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
   if (auto blockArg = val.dyn_cast<BlockArgument>()) {
     auto module = cast<FModuleLike>(val.getParentBlock()->getParentOp());
     auto direction = module.getPortDirection(blockArg.getArgNumber());
-    if (direction == Direction::Output)
+    if (direction == Direction::Out)
       return swap();
     return accumulatedFlow;
   }
@@ -124,7 +124,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         for (auto arg : llvm::enumerate(inst.getResults()))
           if (arg.value() == val) {
             if (inst.getReferencedModule().getPortDirection(arg.index()) ==
-                Direction::Output)
+                Direction::Out)
               return accumulatedFlow;
             else
               return swap();
@@ -598,8 +598,8 @@ static ParseResult parseFunctionArgumentList2(
       if (argNames.empty() && !argTypes.empty())
         return parser.emitError(loc, "expected type instead of SSA identifier");
       argNames.push_back(argument);
-      argDirections.push_back(direction == "out" ? Direction::Output
-                                                 : Direction::Input);
+      argDirections.push_back(direction == "out" ? Direction::Out
+                                                 : Direction::In);
       if (parser.parseColonType(argumentType))
         return failure();
     } else if (allowVariadic && succeeded(parser.parseOptionalEllipsis())) {

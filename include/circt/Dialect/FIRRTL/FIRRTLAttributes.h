@@ -13,11 +13,8 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_H
 
-#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Support/LLVM.h"
 #include "llvm/ADT/BitVector.h"
-#include "llvm/ADT/iterator.h"
 
 namespace circt {
 namespace firrtl {
@@ -27,12 +24,10 @@ namespace firrtl {
 //===----------------------------------------------------------------------===//
 
 /// This represents the direction of a single port.
-enum class Direction { Input = 0, Output };
+enum class Direction { In, Out };
 
-inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
-                                     const Direction &dir) {
-  return os << (dir == Direction::Input ? "in" : "out");
-}
+/// Prints the Direction to the stream as either "in" or "out".
+llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const Direction &dir);
 
 /// This represents the directions of ports in a module.  This is a simple type
 /// safe wrapper around a BitVector.
@@ -74,10 +69,7 @@ public:
   }
 
   /// Get the direction of a specifc port.
-  Direction at(unsigned index) const {
-    unsigned val = directions[index];
-    return static_cast<Direction>(val);
-  }
+  Direction at(unsigned index) const { return Direction(directions[index]); }
 
   /// Get the direction of a specifc port.
   Direction operator[](unsigned index) const { return at(index); }
@@ -109,7 +101,7 @@ public:
   }
 
 private:
-  BitVector directions;
+  llvm::BitVector directions;
 };
 
 inline llvm::hash_code hash_value(const PortDirections &portDirections) {

@@ -652,7 +652,7 @@ void InferResetsPass::traceResets(InstanceOp inst) {
     auto dir = directions[it.index()];
     Value dstPort = module.getArgument(it.index());
     Value srcPort = it.value();
-    if (dir == Direction::Output)
+    if (dir == Direction::Out)
       std::swap(dstPort, srcPort);
     traceResets(dstPort, srcPort, it.value().getLoc());
   }
@@ -1364,8 +1364,8 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
   Value actualReset = domain.existingValue;
   if (domain.newPortName) {
     ModulePortInfo portInfo{domain.newPortName,
-                            AsyncResetType::get(&getContext()),
-                            Direction::Input, domain.reset.getLoc()};
+                            AsyncResetType::get(&getContext()), Direction::In,
+                            domain.reset.getLoc()};
     module.insertPorts({{0, portInfo}});
     actualReset = module.getArgument(0);
     LLVM_DEBUG(llvm::dbgs()
