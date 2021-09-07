@@ -61,16 +61,17 @@ def HandshakeToFIRRTL : Pass<"lower-handshake-to-firrtl", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
-// LLHDToLLVM
+// ConvertToLLVM
 //===----------------------------------------------------------------------===//
 
-def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
-    let summary = "Convert LLHD to LLVM";
+def ConvertToLLVM : Pass<"convert-to-llvm", "mlir::ModuleOp"> {
+    let summary = "Convert LLHD, HW, and Comb to LLVM for simulation.";
     let description = [{
-        This pass translates LLHD to LLVM. 
+        This pass translates the LLHD, HW, and Comb dialects to LLVM for
+        simulation. 
     }];
 
-    let constructor = "circt::createConvertLLHDToLLVMPass()";
+    let constructor = "circt::createConvertToLLVMPass()";
     let dependentDialects = ["mlir::LLVM::LLVMDialect"];
 }
 

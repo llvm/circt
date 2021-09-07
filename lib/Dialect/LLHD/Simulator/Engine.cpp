@@ -13,7 +13,7 @@
 #include "State.h"
 #include "Trace.h"
 
-#include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
+#include "circt/Conversion/ConvertToLLVM/ConvertToLLVM.h"
 #include "circt/Dialect/LLHD/Simulator/Engine.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"

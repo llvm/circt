@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
+#include "circt/Conversion/ConvertToLLVM/ConvertToLLVM.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/LLHD/IR/LLHDDialect.h"
@@ -143,7 +143,7 @@ static int dumpLLVM(ModuleOp module, MLIRContext &context) {
 static LogicalResult applyMLIRPasses(ModuleOp module) {
   PassManager pm(module.getContext());
 
-  pm.addPass(createConvertLLHDToLLVMPass());
+  pm.addPass(createConvertToLLVMPass());
 
   return pm.run(module);
 }

@@ -30,7 +30,7 @@ add_circt_library(CIRCTLLHDSimEngine
 
     LINK_LIBS PUBLIC
     CIRCTLLHD
-    CIRCTLLHDToLLVM
+    CIRCTConvertToLLVM
     CIRCTLLHDSimState
     CIRCTLLHDSimTrace
     circt-llhd-signals-runtime-wrappers

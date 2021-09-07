@@ -7,7 +7,7 @@ set(LIBS
         CIRCTLLHD
         CIRCTComb
         CIRCTHW
-        CIRCTLLHDToLLVM
+        CIRCTConvertToLLVM
         CIRCTLLHDSimEngine
         )
 
