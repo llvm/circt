@@ -76,6 +76,12 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+namespace {
+
+constexpr std::array<StringRef, 4> InterfacePorts{"clk", "done", "go", "reset"};
+
+} // namespace
+
 /// Verifies the body of a ControlLikeOp.
 static LogicalResult verifyControlBody(Operation *op) {
   if (isa<SeqOp, ParOp>(op))
@@ -416,10 +422,11 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   return success();
 }
 
-/// xxx
+/// Determines whether the given ComponentOp has all the required ports.
 static LogicalResult hasRequiredPorts(ComponentOp op) {
   auto ports = getComponentPortInfo(op);
 
+  // Get all identifiers from the component ports.
   llvm::SmallVector<StringRef, 4> identifiers;
   for (ComponentPortInfo port : ports) {
     auto portIds = port.getAllIdentifiers();
@@ -428,19 +435,19 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
   // Sort the identifiers: a pre-condition for std::set_intersection.
   std::sort(identifiers.begin(), identifiers.end());
 
-  llvm::SmallVector<StringRef, 4> required{"clk", "done", "go", "reset"},
-      intersect;
+  llvm::SmallVector<StringRef, 4> intersection;
   // Find the intersection between all identifiers and required ports.
-  std::set_intersection(required.begin(), required.end(), identifiers.begin(),
-                        identifiers.end(), std::back_inserter(intersect));
+  std::set_intersection(InterfacePorts.begin(), InterfacePorts.end(),
+                        identifiers.begin(), identifiers.end(),
+                        std::back_inserter(intersection));
 
-  size_t actual = std::distance(intersect.begin(), intersect.end());
-  if (actual == required.size())
+  if (intersection.size() == InterfacePorts.size())
     return success();
 
   SmallVector<StringRef, 4> difference;
-  std::set_difference(required.begin(), required.end(), intersect.begin(),
-                      intersect.end(), std::back_inserter(difference));
+  std::set_difference(InterfacePorts.begin(), InterfacePorts.end(),
+                      intersection.begin(), intersection.end(),
+                      std::back_inserter(difference));
   return op->emitOpError()
          << "is missing the following required port attribute identifiers: "
          << difference;
@@ -495,6 +502,7 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 
   std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
   std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
+  SmallVector<Attribute> portAttributes;
   SmallVector<Direction, 8> portDirections;
   // Avoid using llvm::partition or llvm::sort to preserve relative ordering
   // between individual inputs and outputs.
@@ -502,6 +510,7 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
     bool isInput = port.direction == Direction::Input;
     (isInput ? portIOTypes.first : portIOTypes.second).push_back(port.type);
     (isInput ? portIONames.first : portIONames.second).push_back(port.name);
+    portAttributes.push_back(port.attributes);
   }
   auto portTypes = concat(portIOTypes.first, portIOTypes.second);
   auto portNames = concat(portIONames.first, portIONames.second);
@@ -517,6 +526,8 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
                                                    portIOTypes.first.size(),
                                                    portIOTypes.second.size()),
                                                builder.getContext()));
+  // Record the attributes of the ports.
+  result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
 
   // Create a single-blocked region.
   result.addRegion();
