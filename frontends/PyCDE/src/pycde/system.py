@@ -94,6 +94,11 @@ class System:
       if op_modname == mod_name:
         return op
 
+  def get_instance(self, mod_name: str) -> Instance:
+    assert self.passed
+    root_mod = self.get_module(mod_name)
+    return Instance(root_mod, None, None, self)
+
   def walk_instances(self, mod_name: str, callback) -> None:
     """Walk the instance hierachy, calling 'callback' on each instance."""
     assert self.passed
