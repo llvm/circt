@@ -61,7 +61,7 @@ SmallVector<Direction> unpackAttribute(Operation *component);
 SmallVector<Direction> genInOutDirections(size_t nIns, size_t nOuts);
 } // namespace direction
 
-/// This holds the name and type that describes the component's ports.
+/// This holds information about the port to either a component or cell.
 struct PortInfo {
   StringAttr name;
   Type type;
