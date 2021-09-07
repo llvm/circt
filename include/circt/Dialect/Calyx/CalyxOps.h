@@ -71,11 +71,8 @@ struct PortInfo {
 /// A helper function to verify each operation with the Cell trait.
 LogicalResult verifyCell(Operation *op);
 
-/// Returns port information about a given component.
-SmallVector<PortInfo> getComponentPortInfo(Operation *op);
-
 /// Returns port information for the block argument provided.
-PortInfo getComponentPortInfo(BlockArgument arg);
+PortInfo getPortInfo(BlockArgument arg);
 
 } // namespace calyx
 } // namespace circt

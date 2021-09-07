@@ -85,9 +85,11 @@ static bool isPort(Value value) {
 }
 
 /// Gets the port for a given BlockArgument.
-PortInfo calyx::getComponentPortInfo(BlockArgument arg) {
+PortInfo calyx::getPortInfo(BlockArgument arg) {
   Operation *op = arg.getOwner()->getParentOp();
-  return getComponentPortInfo(op)[arg.getArgNumber()];
+  assert(isa<ComponentOp>(op) &&
+         "Only ComponentOp should support lookup by BlockArgument.");
+  return cast<ComponentOp>(op).getPortInfo()[arg.getArgNumber()];
 }
 
 /// Returns whether the given operation has a control region.
@@ -271,15 +273,11 @@ static FunctionType getComponentType(ComponentOp component) {
   return component.getTypeAttr().getValue().cast<FunctionType>();
 }
 
-/// Returns the port information for the given component.
-SmallVector<PortInfo> calyx::getComponentPortInfo(Operation *op) {
-  assert(isa<ComponentOp>(op) &&
-         "Can only get port information from a component.");
-  auto component = dyn_cast<ComponentOp>(op);
-  auto portTypes = getComponentType(component).getInputs();
-  auto portNamesAttr = component.portNames();
+ArrayRef<PortInfo> ComponentOp::getPortInfo() {
+  auto portTypes = getComponentType(*this).getInputs();
+  auto portNamesAttr = portNames();
   auto portDirectionsAttr =
-      component->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
+      (*this)->getAttrOfType<IntegerAttr>(direction::attrKey);
 
   SmallVector<PortInfo> results;
   for (uint64_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
@@ -287,18 +285,18 @@ SmallVector<PortInfo> calyx::getComponentPortInfo(Operation *op) {
                        direction::get(portDirectionsAttr.getValue()[i])});
   }
   return results;
-}
+};
 
-static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
+static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   auto componentName =
       op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
           .getValue();
   p << " ";
   p.printSymbolName(componentName);
 
-  auto ports = getComponentPortInfo(op);
+  ArrayRef<PortInfo> ports = op.getPortInfo();
   SmallVector<PortInfo, 8> inPorts, outPorts;
-  for (auto &&port : ports) {
+  for (const PortInfo &port : ports) {
     if (port.direction == Direction::Input)
       inPorts.push_back(port);
     else
@@ -426,12 +424,11 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     return op.emitOpError(
         "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
 
-  SmallVector<PortInfo> componentPorts = getComponentPortInfo(op);
-
   // Verify the component has the following ports.
   // TODO(Calyx): Eventually, we want to attach attributes to these arguments.
   bool go = false, clk = false, reset = false, done = false;
-  for (auto &&port : componentPorts) {
+  ArrayRef<PortInfo> ports = op.getPortInfo();
+  for (const PortInfo &port : ports) {
     if (!port.type.isInteger(1))
       // Each of the ports has bit width 1.
       continue;
@@ -593,7 +590,7 @@ static LogicalResult verifyPortDirection(AssignOp op, Value value,
   assert((isComponentPort || isCellInterfacePort) && "Not a port.");
 
   PortInfo port = isComponentPort
-                      ? getComponentPortInfo(value.cast<BlockArgument>())
+                      ? getPortInfo(value.cast<BlockArgument>())
                       : cast<CellInterface>(definingOp).portInfo(value);
 
   bool isSource = !isDestination;
@@ -666,7 +663,8 @@ SmallVector<StringRef> InstanceOp::portNames() {
 
 SmallVector<Direction> InstanceOp::portDirections() {
   SmallVector<Direction> portDirections;
-  for (auto &&port : getComponentPortInfo(getReferencedComponent()))
+  ArrayRef<PortInfo> ports = getReferencedComponent().getPortInfo();
+  for (const PortInfo &port : ports)
     portDirections.push_back(port.direction);
   return portDirections;
 }
@@ -690,14 +688,14 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
            << instance.componentName();
 
   // Verify the instance result ports with those of its referenced component.
-  SmallVector<PortInfo> componentPorts =
-      getComponentPortInfo(referencedComponent);
+  ArrayRef<PortInfo> componentPorts = referencedComponent.getPortInfo();
+  size_t numPorts = componentPorts.size();
 
   size_t numResults = instance.getNumResults();
-  if (numResults != componentPorts.size())
+  if (numResults != numPorts)
     return instance.emitOpError()
-           << "has a wrong number of results; expected: "
-           << componentPorts.size() << " but got " << numResults;
+           << "has a wrong number of results; expected: " << numPorts
+           << " but got " << numResults;
 
   for (size_t i = 0; i != numResults; ++i) {
     auto resultType = instance.getResult(i).getType();
