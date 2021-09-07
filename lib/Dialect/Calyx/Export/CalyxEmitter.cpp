@@ -221,7 +221,7 @@ private:
   void emitValue(Value value, bool isIndented) {
     if (auto blockArg = value.dyn_cast<BlockArgument>()) {
       // Emit component block argument.
-      StringAttr portName = getPortInfo(blockArg).name;
+      StringAttr portName = getComponentPortInfo(blockArg).name;
       (isIndented ? indent() : os) << portName.getValue();
       return;
     }
@@ -337,7 +337,7 @@ void Emitter::emitComponent(ComponentOp op) {
   indent() << "component " << op.getName();
 
   // Emit the ports.
-  auto ports = getPortInfo(op);
+  auto ports = getComponentPortInfo(op);
   emitComponentPorts(ports);
   os << space() << LBraceEndL();
   addIndent();
