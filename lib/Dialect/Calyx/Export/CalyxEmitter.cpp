@@ -152,7 +152,7 @@ struct Emitter {
   // e.g.:
   //   $f.in0, $f.in1, $f.in2, $f.out : calyx.std_foo "f" : i1, i2, i3, i4
   // emits:
-  //   foo = std_foo(1, 2, 3, 4);
+  //   f = std_foo(1, 2, 3, 4);
   void emitLibraryPrimTypedByAllPorts(Operation *op);
 
   // Emits a library primitive with a single template parameter based on the
@@ -160,7 +160,7 @@ struct Emitter {
   // e.g.:
   //   $f.in0, $f.in1, $f.out : calyx.std_foo "f" : i32, i32, i1
   // emits:
-  //   foo = std_foo(32);
+  //   f = std_foo(32);
   void emitLibraryPrimTypedByFirstInputPort(Operation *op);
 
 private:
@@ -205,8 +205,8 @@ private:
 
   /// Helper function for emitting combinational operations.
   template <typename CombinationalOp>
-  void emitCombinationalValue(CombinationalOp value, StringRef logicalSymbol) {
-    auto inputs = value.inputs();
+  void emitCombinationalValue(CombinationalOp op, StringRef logicalSymbol) {
+    auto inputs = op.inputs();
     os << LParen();
     for (size_t i = 0, e = inputs.size(); i != e; ++i) {
       emitValue(inputs[i], /*isIndented=*/false);
@@ -219,9 +219,15 @@ private:
 
   /// Emits the value of a guard or assignment.
   void emitValue(Value value, bool isIndented) {
-    auto definingOp = value.getDefiningOp();
-    if (definingOp == nullptr)
+    if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+      // Emit component block argument.
+      StringAttr portName = getComponentPortInfo(blockArg).name;
+      (isIndented ? indent() : os) << portName.getValue();
       return;
+    }
+
+    auto definingOp = value.getDefiningOp();
+    assert(definingOp && "Value does not have a defining operation.");
 
     TypeSwitch<Operation *>(definingOp)
         .Case<CellInterface>([&](auto cell) {

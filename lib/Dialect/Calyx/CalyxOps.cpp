@@ -78,9 +78,29 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 
 namespace {
 
+// A list of required interface ports for ComponentOps.
 constexpr std::array<StringRef, 4> InterfacePorts{"clk", "done", "go", "reset"};
 
 } // namespace
+
+/// Returns whether this value is either (1) a port on a ComponentOp or (2) a
+/// port on a cell interface.
+static bool isPort(Value value) {
+  Operation *definingOp = value.getDefiningOp();
+  return value.isa<BlockArgument>() ||
+         (definingOp && isa<CellInterface>(definingOp));
+}
+
+/// Gets the port for a given BlockArgument.
+ComponentPortInfo calyx::getComponentPortInfo(BlockArgument arg) {
+  Operation *op = arg.getOwner()->getParentOp();
+  return getComponentPortInfo(op)[arg.getArgNumber()];
+}
+
+/// Returns whether the given operation has a control region.
+static bool hasControlRegion(Operation *op) {
+  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp>(op);
+}
 
 /// Verifies the body of a ControlLikeOp.
 static LogicalResult verifyControlBody(Operation *op) {
@@ -96,14 +116,23 @@ static LogicalResult verifyControlBody(Operation *op) {
     // However, that must be the only operation.
     //  E.g. Allowed:  calyx.control { calyx.enable @A }
     //   Not Allowed:  calyx.control { calyx.enable @A calyx.seq { ... } }
-    bool isInvalidBody =
+    bool usesEnableAsCompositionOperator =
         numOperations > 1 && llvm::any_of(region.front(), [](auto &&bodyOp) {
           return isa<EnableOp>(bodyOp);
         });
-    if (isInvalidBody)
+    if (usesEnableAsCompositionOperator)
       return op->emitOpError(
           "EnableOp is not a composition operator. It should be nested "
           "in a control flow operation, such as \"calyx.seq\"");
+
+    // Verify that multiple control flow operations are nested inside a single
+    // control operator. See: https://github.com/llvm/circt/issues/1723
+    size_t numControlFlowRegions =
+        llvm::count_if(opsIt, [](auto &&op) { return hasControlRegion(&op); });
+    if (numControlFlowRegions > 1)
+      return op->emitOpError(
+          "has an invalid control sequence. Multiple control flow operations "
+          "must all be nested in a single calyx.seq or calyx.par");
   }
   return success();
 }
@@ -153,11 +182,7 @@ LogicalResult calyx::verifyCell(Operation *op) {
 
 LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
-  // Operations that may parent other ControlLike operations.
-  auto isValidParent = [](Operation *operation) {
-    return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp>(operation);
-  };
-  if (!isValidParent(parent))
+  if (!hasControlRegion(parent))
     return op->emitOpError()
            << "has parent: " << parent
            << ", which is not allowed for a control-like operation.";
@@ -206,8 +231,6 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
-namespace {
-
 /// This is a helper function that should only be used to get the WiresOp or
 /// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
 /// the end of a component's body. In the worst case, this will run in linear
@@ -233,8 +256,6 @@ static Value getBlockArgumentWithName(StringRef name, ComponentOp op) {
   }
   return Value{};
 }
-
-} // namespace
 
 WiresOp calyx::ComponentOp::getWiresOp() {
   return getControlOrWiresFrom<WiresOp>(*this);
@@ -454,18 +475,14 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
 }
 
 static LogicalResult verifyComponentOp(ComponentOp op) {
-  // Verify there is exactly one of each section:
-  // calyx.wires, and calyx.control.
-  uint32_t numWires = 0, numControl = 0;
-  for (auto &bodyOp : *op.getBody()) {
-    if (isa<WiresOp>(bodyOp))
-      ++numWires;
-    else if (isa<ControlOp>(bodyOp))
-      ++numControl;
-  }
-  if (!(numWires == 1) || !(numControl == 1))
-    return op.emitOpError() << "requires exactly one of each: "
-                               "'calyx.wires', 'calyx.control'.";
+  // Verify there is exactly one of each the wires and control operations.
+  auto wIt = op.getBody()->getOps<WiresOp>();
+  auto cIt = op.getBody()->getOps<ControlOp>();
+  if (std::distance(wIt.begin(), wIt.end()) +
+          std::distance(cIt.begin(), cIt.end()) !=
+      2)
+    return op.emitOpError(
+        "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
 
   if (failed(hasRequiredPorts(op)))
     return failure();
@@ -608,19 +625,26 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 
 /// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
-/// or a destination. The `isComponentPort` is used to distinguish whether the
-/// value is defined by a component port or a cell interface port.
-static LogicalResult verifyPortDirection(AssignOp op, Direction direction,
-                                         bool isDestination,
-                                         bool isComponentPort) {
-  bool isCellInterfacePort = !isComponentPort, isSource = !isDestination;
+/// or a destination.
+static LogicalResult verifyPortDirection(AssignOp op, Value value,
+                                         bool isDestination) {
+  Operation *definingOp = value.getDefiningOp();
+  bool isComponentPort = value.isa<BlockArgument>(),
+       isCellInterfacePort = definingOp && isa<CellInterface>(definingOp);
+  assert((isComponentPort || isCellInterfacePort) && "Not a port.");
+
+  ComponentPortInfo port =
+      isComponentPort ? getComponentPortInfo(value.cast<BlockArgument>())
+                      : cast<CellInterface>(definingOp).portInfo(value);
+
+  bool isSource = !isDestination;
   // Component output ports and cell interface input ports should be driven.
   Direction validDirection =
       (isDestination && isComponentPort) || (isSource && isCellInterfacePort)
           ? Direction::Output
           : Direction::Input;
 
-  return direction == validDirection
+  return port.direction == validDirection
              ? success()
              : op.emitOpError()
                    << "has a " << (isComponentPort ? "component" : "cell")
@@ -629,66 +653,30 @@ static LogicalResult verifyPortDirection(AssignOp op, Direction direction,
                    << " with the incorrect direction.";
 }
 
-/// Gets the cell direction for a given value.
-static Direction getCellDirectionFor(Value value) {
-  Operation *parentOp = value.getDefiningOp();
-  assert(isa<CellInterface>(parentOp) &&
-         "Pre-condition: this is a Cell Interface.");
-
-  size_t i = 0, numResults = parentOp->getNumResults();
-  for (; i != numResults && value != parentOp->getResult(i); ++i)
-    ;
-  assert(i < numResults && "Value not found in Cell's ports.");
-
-  return cast<CellInterface>(parentOp).portDirections()[i];
-}
-
-/// Gets the port direction for a given Argument from the parent ComponentOp of
-/// `op`.
-static Direction getComponentDirectionFor(Value value, Operation *op) {
-  auto component = op->getParentOfType<ComponentOp>();
-  assert(isa<ComponentOp>(component) && "Op not within ComponentOp.");
-
-  Block *body = component.getBody();
-  auto it = llvm::find_if(body->getArguments(),
-                          [&](auto arg) { return arg == value; });
-  assert(it != body->getArguments().end() &&
-         "Value not found in the component ports.");
-  BlockArgument blockArg = *it;
-
-  size_t blockArgNum = blockArg.getArgNumber();
-  auto ports = getComponentPortInfo(component);
-  return ports[blockArgNum].direction;
-}
-
 /// Verifies the value of a given assignment operation. The boolean
 /// `isDestination` is used to distinguish whether the destination
 /// or source of the AssignOp is to be verified.
 static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
   Value value = isDestination ? op.dest() : op.src();
+  if (isPort(value))
+    return verifyPortDirection(op, value, isDestination);
 
-  bool isComponentPort = value.isa<BlockArgument>();
-  Operation *definingOp = value.getDefiningOp();
-  // If the defining operation is a Component or Cell, verify its direction.
-  if (isComponentPort || isa<CellInterface>(definingOp)) {
-    Direction direction = isComponentPort ? getComponentDirectionFor(value, op)
-                                          : getCellDirectionFor(value);
-    return verifyPortDirection(op, direction, isDestination, isComponentPort);
-  } else if (isDestination && !isa<GroupGoOp, GroupDoneOp>(definingOp)) {
-    // The value's defining operation does not have any other valid matches.
+  // A destination may also be the Go or Done hole of a GroupOp.
+  if (isDestination && !isa<GroupGoOp, GroupDoneOp>(value.getDefiningOp()))
     return op->emitOpError(
         "has an invalid destination port. It must be drive-able.");
-  }
 
   return success();
 }
 
 static LogicalResult verifyAssignOp(AssignOp assign) {
   bool isDestination = true, isSource = false;
-  return succeeded(verifyAssignOpValue(assign, isDestination)) &&
-                 succeeded(verifyAssignOpValue(assign, isSource))
-             ? success()
-             : failure();
+  if (failed(verifyAssignOpValue(assign, isDestination)))
+    return failure();
+  if (failed(verifyAssignOpValue(assign, isSource)))
+    return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -959,6 +947,7 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 
 ImplUnaryOpCellInterface(PadLibOp);
 ImplUnaryOpCellInterface(SliceLibOp);
+ImplUnaryOpCellInterface(NotLibOp);
 
 ImplBinOpCellInterface(LtLibOp);
 ImplBinOpCellInterface(GtLibOp);
@@ -980,7 +969,6 @@ ImplBinOpCellInterface(RshLibOp);
 ImplBinOpCellInterface(SrshLibOp);
 ImplBinOpCellInterface(LshLibOp);
 ImplBinOpCellInterface(AndLibOp);
-ImplBinOpCellInterface(NotLibOp);
 ImplBinOpCellInterface(OrLibOp);
 ImplBinOpCellInterface(XorLibOp);
 

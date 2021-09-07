@@ -5,7 +5,11 @@ calyx.program {
   // CHECK-LABEL: component A(in: 8, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 8, @done done: 1) {
   calyx.component @A(%in: i8, %go: i1, %clk: i1, %reset: i1) -> (%out: i8, %done: i1) {
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+
+    calyx.wires {
+      // CHECK: done = 1'd1;
+      calyx.assign %done = %c1_1 : i1
+    }
     calyx.control {}
   }
 
@@ -33,7 +37,8 @@ calyx.program {
     %m1.addr0, %m1.addr1, %m1.write_data, %m1.write_en, %m1.clk, %m1.read_data, %m1.done = calyx.memory "m1"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
     %a0.left, %a0.right, %a0.out = calyx.std_add "a0" : i32, i32, i32
     %s0.in, %s0.out = calyx.std_slice "s0" : i32, i8
-
+    %c0 = hw.constant 0 : i1
+    %c1 = hw.constant 1 : i1
     // CHECK-LABEL: wires {
     calyx.wires {
       // CHECK-NEXT: group Group1 {
@@ -42,8 +47,6 @@ calyx.program {
       // CHECK-NEXT:    Group1[go] = 1'd0;
       // CHECK-NEXT:    c0.in = c0.out;
       // CHECK-NEXT:    Group1[done] = c0.done;
-      %c0 = hw.constant 0 : i1
-      %c1 = hw.constant 1 : i1
       calyx.group @Group1 {
         calyx.assign %s0.in = %a0.out : i32
         calyx.assign %a0.left = %m0.read_data : i32
@@ -65,36 +68,40 @@ calyx.program {
       calyx.assign %c0.go = %c1.out : i1
     }
     // CHECK-LABEL: control {
-    // CHECK-NEXT:    par {
-    // CHECK-NEXT:      Group1;
-    // CHECK-NEXT:      Group2;
-    // CHECK-NEXT:    }
     // CHECK-NEXT:    seq {
-    // CHECK-NEXT:      Group1;
-    // CHECK-NEXT:      while c1.in with Group2 {
-    // CHECK-NEXT:        seq {
-    // CHECK-NEXT:          Group1;
-    // CHECK-NEXT:          Group1;
-    // CHECK-NEXT:          if c1.in with Group2 {
-    // CHECK-NEXT:            Group2;
+    // CHECK-NEXT:      par {
+    // CHECK-NEXT:        Group1;
+    // CHECK-NEXT:        Group2;
+    // CHECK-NEXT:      }
+    // CHECK-NEXT:      seq {
+    // CHECK-NEXT:        Group1;
+    // CHECK-NEXT:        while c1.in with Group2 {
+    // CHECK-NEXT:          seq {
+    // CHECK-NEXT:            Group1;
+    // CHECK-NEXT:            Group1;
+    // CHECK-NEXT:            if c1.in with Group2 {
+    // CHECK-NEXT:              Group2;
+    // CHECK-NEXT:            }
     // CHECK-NEXT:          }
     // CHECK-NEXT:        }
     // CHECK-NEXT:      }
     // CHECK-NEXT:    }
     // CHECK-NEXT:  }
     calyx.control {
-      calyx.par {
-        calyx.enable @Group1
-        calyx.enable @Group2
-      }
       calyx.seq {
-        calyx.enable @Group1
-        calyx.while %c1.in with @Group2 {
-          calyx.seq {
-            calyx.enable @Group1
-            calyx.enable @Group1
-            calyx.if %c1.in with @Group2 {
-              calyx.enable @Group2
+        calyx.par {
+          calyx.enable @Group1
+          calyx.enable @Group2
+        }
+        calyx.seq {
+          calyx.enable @Group1
+          calyx.while %c1.in with @Group2 {
+            calyx.seq {
+              calyx.enable @Group1
+              calyx.enable @Group1
+              calyx.if %c1.in with @Group2 {
+                calyx.enable @Group2
+              }
             }
           }
         }

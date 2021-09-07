@@ -506,6 +506,11 @@ circuit GCTDataTap : %[
         "class":"sifive.enterprise.grandcentral.LiteralDataTapKey",
         "literal":"UInt<16>(\"h2a\")",
         "portName":"~GCTDataTap|DataTap>_9[0]"
+      },
+      {
+        "class": "sifive.enterprise.grandcentral.ReferenceDataTapKey",
+        "source": "~GCTDataTap|GCTDataTap/im:InnerMod>w",
+        "portName": "~GCTDataTap|DataTap>_10"
       }
     ]
   },
@@ -524,11 +529,16 @@ circuit GCTDataTap : %[
     output _7 : UInt<1>[1]
     output _8 : UInt<1>
     output _9 : UInt<1>[1]
+    output _10 : UInt<1>
 
     defname = DataTap
 
   extmodule BlackBox:
     defname = BlackBox
+
+  module InnerMod :
+
+    wire w : UInt<1>
 
   module GCTDataTap :
     input clock : Clock
@@ -540,9 +550,11 @@ circuit GCTDataTap : %[
     wire w : {a: UInt<1>}
     inst DataTap of DataTap
     inst BlackBox of BlackBox
+    inst im of InnerMod
 
     ; CHECK-LABEL: firrtl.circuit "GCTDataTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
+    ; CHECK:      firrtl.nla @"~GCTDataTap|GCTDataTap/im:InnerMod>w" [@GCTDataTap, @InnerMod] ["im", "w"]
     ; CHECK: firrtl.extmodule @DataTap
     ; CHECK-SAME: %_0: !firrtl.uint<1> {firrtl.annotations =
     ; CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}
@@ -603,6 +615,9 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:     {class = "firrtl.transforms.DontTouchAnnotation"}>
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.LiteralDataTapKey",
     ; CHECK-SAME:      literal = "UInt<16>(\22h2a\22)"}
+    ; CHECK-SAME: %_10: !firrtl.uint<1> {firrtl.annotations =
+    ; CHECK-SAME      {class = "firrtl.transforms.DontTouchAnnotation"}
+    ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = [[ID]] : i64, portID = [[PORT_ID_6:[0-9]+]] : i64, type = "portName"}
     ; CHECK-SAME: annotations = [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.DataTapsAnnotation"},
     ; CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}]
@@ -618,6 +633,11 @@ circuit GCTDataTap : %[
     ; CHECK-SAME:    id = [[ID]] : i64,
     ; CHECK-SAME:    internalPath = "baz.quz",
     ; CHECK-SAME:    portID = [[PORT_ID_5]] : i64}
+
+    ; CHECK: firrtl.module @InnerMod
+    ; CHECK-NEXT: %w = firrtl.wire
+    ; CHECK-SAME: {circt.nonlocal = @"~GCTDataTap|GCTDataTap/im:InnerMod>w", class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 7 : i64, type = "source"}
+    ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
 
     ; CHECK: firrtl.module @GCTDataTap
     ; CHECK: firrtl.reg

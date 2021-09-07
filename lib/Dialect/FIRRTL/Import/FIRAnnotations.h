@@ -37,7 +37,7 @@ bool fromJSON(llvm::json::Value &value, StringRef circuitTarget,
               CircuitOp circuit);
 
 bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
-                              MLIRContext *context, unsigned &annotationID,
+                              CircuitOp circuit, unsigned &annotationID,
                               Location loc);
 
 } // namespace firrtl

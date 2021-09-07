@@ -98,11 +98,6 @@ calyx.program {
 // -----
 
 calyx.program {
-  calyx.component @B(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
-    %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.assign %done = %c1_1 : i1 }
-    calyx.control {}
-  }
   calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires {
@@ -380,5 +375,21 @@ calyx.program {
       calyx.assign %r.done = %go : i1
     }
     calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main(%go: i1, %clk: i1, %reset: i1) -> (%done: i1) {
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires {
+      calyx.group @A { calyx.group_done %c1_1 : i1 }
+    }
+    // expected-error @+1 {{'calyx.control' op has an invalid control sequence. Multiple control flow operations must all be nested in a single calyx.seq or calyx.par}}
+    calyx.control {
+      calyx.seq { calyx.enable @A }
+      calyx.seq { calyx.enable @A }
+    }
   }
 }
