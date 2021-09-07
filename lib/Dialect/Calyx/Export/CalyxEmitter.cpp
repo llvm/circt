@@ -197,7 +197,7 @@ private:
 
     if (attr.isa<UnitAttr>()) {
       assert(!isDiamondFormat &&
-             "Groups and Component attributes must provide a value.");
+             "Attributes for GroupOp and ComponentOp must provide a value.");
       os << addressSymbol() << identifier;
       return;
     }
