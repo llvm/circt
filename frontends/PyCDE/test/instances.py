@@ -82,7 +82,12 @@ instance_attrs.lookup(pycde.AppID("pycde_UnParameterized")).add_attribute(loc)
 loc = attrs.placement(["memory", "bank"], msft.DSP, 39, 25, 0)
 instance_attrs.lookup(pycde.AppID("pycde_UnParameterized",
                                   "pycde_Nothing")).add_attribute(loc)
-t.walk_instances("pycde_Test", instance_attrs.apply_attributes_visitor)
+test_inst = t.get_instance("pycde_Test")
+test_inst.walk_instances(instance_attrs.apply_attributes_visitor)
+
+assert test_inst.get_instance_at(loc) is not None
+assert test_inst.get_instance_at(msft.PhysLocationAttr.get(msft.M20K, 0, 0,
+                                                           0)) is None
 
 assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)

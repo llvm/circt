@@ -147,7 +147,7 @@ circuit Foo: %[[{"a":null,"target":"~Foo|Foo>x"}]]
 
 ; A target pointing at a non-existent instance should error.
 
-; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>baz' and payload '[{circt.nonlocal = @"~Foo|Foo/baz:Bar", class = "circt.nonlocal"}]'}}
+; expected-error @+1 {{unapplied annotations with target '~Foo|Foo>baz' and payload '[{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]'}}
 circuit Foo: %[[{"a":null,"target":"~Foo|Foo/baz:Bar"}]]
   module Bar:
     skip

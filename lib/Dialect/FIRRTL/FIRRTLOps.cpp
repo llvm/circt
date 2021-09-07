@@ -935,11 +935,11 @@ FModuleLike InstanceOp::getReferencedModule() {
   if (!circuit)
     return nullptr;
 
-  return circuit.lookupSymbol<FModuleLike>(moduleName());
+  return circuit.lookupSymbol<FModuleLike>(moduleNameAttr());
 }
 
-FModuleLike InstanceOp::getReferencedModule(SymbolTable &symtbl) {
-  return symtbl.lookup<FModuleLike>(moduleName());
+FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
+  return symbolTable.lookup<FModuleLike>(moduleNameAttr().getLeafReference());
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -993,26 +993,19 @@ void InstanceOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
-/// Verify the correctness of an InstanceOp.
-static LogicalResult verifyInstanceOp(InstanceOp instance) {
-
-  // Check that this instance is inside a module.
-  auto module = instance->getParentOfType<FModuleOp>();
-  if (!module) {
-    instance.emitOpError("should be embedded in a 'firrtl.module'");
-    return failure();
-  }
-
-  auto referencedModule = instance.getReferencedModule();
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto module = (*this)->getParentOfType<FModuleOp>();
+  auto referencedModule =
+      symbolTable.lookupNearestSymbolFrom<FModuleLike>(*this, moduleNameAttr());
   if (!referencedModule) {
-    instance.emitOpError("invalid symbol reference");
+    emitOpError("invalid symbol reference");
     return failure();
   }
 
   // Check that this instance doesn't recursively instantiate its wrapping
   // module.
   if (referencedModule == module) {
-    auto diag = instance.emitOpError()
+    auto diag = emitOpError()
                 << "is a recursive instantiation of its containing module";
     diag.attachNote(module.getLoc()) << "containing module declared here";
     return failure();
@@ -1021,9 +1014,9 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   SmallVector<ModulePortInfo> modulePorts = referencedModule.getPorts();
 
   // Check that result types are consistent with the referenced module's ports.
-  size_t numResults = instance.getNumResults();
+  size_t numResults = getNumResults();
   if (numResults != modulePorts.size()) {
-    auto diag = instance.emitOpError()
+    auto diag = emitOpError()
                 << "has a wrong number of results; expected "
                 << modulePorts.size() << " but got " << numResults;
     diag.attachNote(referencedModule->getLoc())
@@ -1032,10 +1025,10 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
   }
 
   for (size_t i = 0; i != numResults; i++) {
-    auto resultType = instance.getResult(i).getType();
+    auto resultType = getResult(i).getType();
     auto expectedType = modulePorts[i].type;
     if (resultType != expectedType) {
-      auto diag = instance.emitOpError()
+      auto diag = emitOpError()
                   << "result type for " << modulePorts[i].name << " must be "
                   << expectedType << ", but got " << resultType;
 
@@ -1043,6 +1036,19 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
           << "original module declared here";
       return failure();
     }
+  }
+
+  return success();
+}
+
+/// Verify the correctness of an InstanceOp.
+static LogicalResult verifyInstanceOp(InstanceOp instance) {
+
+  // Check that this instance is inside a module.
+  auto module = instance->getParentOfType<FModuleOp>();
+  if (!module) {
+    instance.emitOpError("should be embedded in a 'firrtl.module'");
+    return failure();
   }
 
   if (instance.portAnnotations().size() != instance.getNumResults())

@@ -119,9 +119,10 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   }
 
   if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs(), {"sym_name"});
+    p.printOptionalAttrDict(op->getAttrs(), {SymbolTable::getSymbolAttrName()});
   else
-    p.printOptionalAttrDict(op->getAttrs(), {"name", "sym_name"});
+    p.printOptionalAttrDict(op->getAttrs(),
+                            {"name", SymbolTable::getSymbolAttrName()});
 }
 
 //===----------------------------------------------------------------------===//
@@ -196,7 +197,7 @@ void RegOp::build(OpBuilder &builder, OperationState &odsState,
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (sym_name)
-    odsState.addAttribute("sym_name", sym_name);
+    odsState.addAttribute(SymbolTable::getSymbolAttrName(), sym_name);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -765,7 +766,8 @@ void InterfaceOp::build(OpBuilder &builder, OperationState &result,
                         StringRef sym_name, std::function<void()> body) {
   OpBuilder::InsertionGuard guard(builder);
 
-  result.addAttribute("sym_name", builder.getStringAttr(sym_name));
+  result.addAttribute(::SymbolTable::getSymbolAttrName(),
+                      builder.getStringAttr(sym_name));
   builder.createBlock(result.addRegion());
   if (body)
     body();
@@ -962,7 +964,7 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
   if (!name)
     name = builder.getStringAttr("");
   if (sym_name)
-    odsState.addAttribute("sym_name", sym_name);
+    odsState.addAttribute(SymbolTable::getSymbolAttrName(), sym_name);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));

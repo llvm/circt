@@ -12,6 +12,34 @@
 
 include "mlir/IR/OpBase.td"
 
+// Op interface for groups.
+def GroupOpInterface : OpInterface<"GroupInterface"> {
+  let cppNamespace = "::circt::calyx";
+
+  let description = [{
+    This is an op interface for Calyx Groups.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "This returns the symbol name of the group.",
+      "mlir::StringAttr",
+      "symName",
+      (ins), [{
+        Operation* op = $_op;
+        return op->getAttrOfType<mlir::StringAttr>("sym_name");
+      }]>,
+    InterfaceMethod<
+      "This returns the body of the group.",
+      "Block*",
+      "getBody",
+      (ins), [{
+        Operation* op = $_op;
+        return &op->getRegion(0).front();
+      }]>
+  ];
+}
+
 /// Op Interface for cells.
 def CellOpInterface : OpInterface<"CellInterface"> {
   let cppNamespace = "::circt::calyx";

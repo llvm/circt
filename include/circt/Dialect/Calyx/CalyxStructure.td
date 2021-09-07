@@ -174,6 +174,7 @@ def InstanceOp : CalyxCell<"instance", [
 
 def GroupOp : CalyxOp<"group", [
     HasParent<"WiresOp">,
+    DeclareOpInterfaceMethods<GroupOpInterface>,
     NoRegionArguments,
     RegionKindInterface,
     SingleBlock,
@@ -212,9 +213,43 @@ def GroupOp : CalyxOp<"group", [
   let assemblyFormat = "$sym_name $body attr-dict";
 }
 
+def CombGroupOp : CalyxOp<"comb_group", [
+    HasParent<"WiresOp">,
+    DeclareOpInterfaceMethods<GroupOpInterface>,
+    NoRegionArguments,
+    RegionKindInterface,
+    SingleBlock,
+    Symbol,
+    NoTerminator
+  ]> {
+  let summary = "Calyx Combinational Group";
+  let description = [{
+    Represents a Calyx combinational group, which is a collection
+    of combinational assignments that are only active when the group
+    is run from the control execution schedule.
+    A combinational group does not have group_go or group_done operators.
+
+    ```mlir
+      calyx.comb_group @MyCombGroup {
+        calyx.assign %1 = %2 : i32
+      }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr: $sym_name);
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name $body attr-dict";
+}
+
 def AssignOp : CalyxOp<"assign", [
     SameTypeConstraint<"dest", "src">,
-    ParentOneOf<["GroupOp", "WiresOp"]>
+    ParentOneOf<["GroupOp", "CombGroupOp", "WiresOp"]>
   ]> {
   let summary = "Calyx Assignment";
   let description = [{

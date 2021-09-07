@@ -3093,7 +3093,7 @@ private:
   /// message
   ParseResult importAnnotations(CircuitOp circuit, SMLoc loc,
                                 StringRef circuitTarget,
-                                StringRef annotationsStr);
+                                StringRef annotationsStr, size_t &nlaNumber);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
@@ -3126,7 +3126,8 @@ private:
 
 ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
                                                 StringRef circuitTarget,
-                                                StringRef annotationsStr) {
+                                                StringRef annotationsStr,
+                                                size_t &nlaNumber) {
 
   auto annotations = json::parse(annotationsStr);
   if (auto err = annotations.takeError()) {
@@ -3140,7 +3141,7 @@ ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
   if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
-                circuit)) {
+                circuit, nlaNumber)) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3151,7 +3152,7 @@ ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
   }
 
   if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
-                                translateLocation(loc)))
+                                translateLocation(loc), nlaNumber))
     return failure();
 
   // Merge the attributes we just parsed into the global set we're accumulating.
@@ -3461,6 +3462,7 @@ ParseResult FIRCircuitParser::parseCircuit(
   auto circuit = b.create<CircuitOp>(info.getLoc(), name);
 
   std::string circuitTarget = "~" + name.getValue().str();
+  size_t nlaNumber = 0;
 
   // Deal with any inline annotations, if they exist.  These are processed first
   // to place any annotations from an annotation file *after* the inline
@@ -3468,13 +3470,13 @@ ParseResult FIRCircuitParser::parseCircuit(
   // semantics.
   if (!inlineAnnotations.empty())
     if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
-                          inlineAnnotations))
+                          inlineAnnotations, nlaNumber))
       return failure();
 
   // Deal with the annotation file if one was specified
   for (auto annotationsBuf : annotationsBufs)
     if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
-                          annotationsBuf->getBuffer()))
+                          annotationsBuf->getBuffer(), nlaNumber))
       return failure();
 
   // Get annotations associated with this circuit. These are either:

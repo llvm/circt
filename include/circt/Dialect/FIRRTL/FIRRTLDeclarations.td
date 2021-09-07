@@ -10,7 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-def InstanceOp : FIRRTLOp<"instance"> {
+def InstanceOp : FIRRTLOp<"instance", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs

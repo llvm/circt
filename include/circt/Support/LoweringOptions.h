@@ -62,9 +62,9 @@ struct LoweringOptions {
   /// print them as `always` statements
   bool useAlwaysFF = false;
 
-  /// If true, emits `sv.alwayscomb` as Verilog `always_comb` statements.
-  /// Otherwise, print them as `always @(*)`.
-  bool useAlwaysComb = false;
+  /// If true, emits `sv.alwayscomb` as Verilog `always @(*)` statements.
+  /// Otherwise, print them as `always_comb`.
+  bool noAlwaysComb = false;
 
   /// If true, expressions are allowed in the sensitivity list of `always`
   /// statements, otherwise they are forced to be simple wires. Some EDA

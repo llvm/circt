@@ -127,8 +127,8 @@ expandNonLocal(StringRef target) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-static void buildNLA(
-    CircuitOp circuit, StringRef targetStrRef,
+static FlatSymbolRefAttr buildNLA(
+    CircuitOp circuit, size_t nlaSuffix,
     SmallVectorImpl<std::tuple<std::string, std::string, std::string>> &nlas) {
   OpBuilder b(circuit.getBodyRegion());
   SmallVector<Attribute> mods;
@@ -140,7 +140,9 @@ static void buildNLA(
   }
   auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
   auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
-  b.create<NonLocalAnchor>(circuit.getLoc(), targetStrRef, modAttr, instAttr);
+  auto nla = b.create<NonLocalAnchor>(
+      circuit.getLoc(), "nla_" + std::to_string(nlaSuffix), modAttr, instAttr);
+  return FlatSymbolRefAttr::get(nla);
 }
 
 /// Append the argument `target` to the `annotation` using the key "target".
@@ -255,7 +257,8 @@ static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
 /// false if unsuccessful.
 bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
                              llvm::StringMap<ArrayAttr> &annotationMap,
-                             json::Path path, CircuitOp circuit) {
+                             json::Path path, CircuitOp circuit,
+                             size_t &nlaNumber) {
   auto context = circuit.getContext();
 
   /// Examine an Annotation JSON object and return an optional string indicating
@@ -390,11 +393,6 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
     auto leafTarget =
         splitAndAppendTarget(metadata, std::get<0>(NLATargets.back()), context)
             .first;
-    if (NLATargets.size() > 1) {
-      buildNLA(circuit, targetStrRef, NLATargets);
-      metadata.append("circt.nonlocal",
-                      FlatSymbolRefAttr::get(context, targetStrRef));
-    }
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(field.second, p)) {
         metadata.append(field.first, value);
@@ -402,13 +400,17 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
       }
       return false;
     }
+    FlatSymbolRefAttr nlaSym;
+    if (NLATargets.size() > 1) {
+      nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
+      metadata.append("circt.nonlocal", nlaSym);
+    }
     mutableAnnotationMap[leafTarget].push_back(
         DictionaryAttr::get(context, metadata));
 
     for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
       NamedAttrList pathmetadata;
-      pathmetadata.append("circt.nonlocal",
-                          FlatSymbolRefAttr::get(context, targetStrRef));
+      pathmetadata.append("circt.nonlocal", nlaSym);
       pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
       mutableAnnotationMap[std::get<0>(NLATargets[i])].push_back(
           DictionaryAttr::get(context, pathmetadata));
@@ -683,7 +685,7 @@ static bool parseAugmentedType(
 /// possible.
 bool circt::firrtl::scatterCustomAnnotations(
     llvm::StringMap<ArrayAttr> &annotationMap, CircuitOp circuit,
-    unsigned &annotationID, Location loc) {
+    unsigned &annotationID, Location loc, size_t &nlaNumber) {
   MLIRContext *context = circuit.getContext();
 
   // Exit if no anotations exist that target "~". Also ensure a spurious entry
@@ -812,10 +814,10 @@ bool circt::firrtl::scatterCustomAnnotations(
           auto NLATargets = expandNonLocal(*maybeSourceTarget);
           auto leafTarget = splitAndAppendTarget(
               source, std::get<0>(NLATargets.back()), context);
+          FlatSymbolRefAttr nlaSym;
           if (NLATargets.size() > 1) {
-            buildNLA(circuit, *maybeSourceTarget, NLATargets);
-            source.append("circt.nonlocal",
-                          FlatSymbolRefAttr::get(context, *maybeSourceTarget));
+            nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
+            source.append("circt.nonlocal", nlaSym);
           }
           if (leafTarget.second.hasValue())
             appendTarget(dontTouchAnn, leafTarget.second.getValue());
@@ -829,9 +831,7 @@ bool circt::firrtl::scatterCustomAnnotations(
 
           for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
             NamedAttrList pathmetadata;
-            pathmetadata.append(
-                "circt.nonlocal",
-                FlatSymbolRefAttr::get(context, *maybeSourceTarget));
+            pathmetadata.append("circt.nonlocal", nlaSym);
             pathmetadata.append("class",
                                 StringAttr::get(context, "circt.nonlocal"));
             newAnnotations[std::get<0>(NLATargets[i])].push_back(
@@ -950,7 +950,7 @@ bool circt::firrtl::scatterCustomAnnotations(
             splitAndAppendTarget(foo, std::get<0>(NLATargets.back()), context)
                 .first;
         if (NLATargets.size() > 1) {
-          buildNLA(circuit, *canonTarget, NLATargets);
+          buildNLA(circuit, ++nlaNumber, NLATargets);
           foo.append("circt.nonlocal",
                      FlatSymbolRefAttr::get(context, *canonTarget));
         }

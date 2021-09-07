@@ -77,12 +77,12 @@ circuit Foo: %[[
   module Foo:
     inst bar of Bar
     ; CHECK-LABEL: firrtl.circuit "Foo"
-    ; CHECK: firrtl.nla  @"~Foo|Foo/bar:Bar" [@Foo, @Bar] ["bar", "Bar"]
+    ; CHECK: firrtl.nla  @nla_1 [@Foo, @Bar] ["bar", "Bar"]
     ; CHECK: firrtl.module @Bar
     ; CHECK-SAME annotations = [{c = "c"}]
     ; CHECK: firrtl.module @Foo
     ; CHECK: firrtl.instance @Bar
-    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {circt.nonlocal = @"~Foo|Foo/bar:Bar", class = "circt.nonlocal"}]
+    ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]
 
 ; // -----
 
@@ -99,9 +99,9 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     inst bar of Bar
 
     ; CHECK-LABEL: firrtl.circuit "Foo"
-    ; CHECK: firrtl.nla @"~Foo|Foo/bar:Bar>b.qux" [@Foo, @Bar] ["bar", "b"]
+    ; CHECK: firrtl.nla @nla_1 [@Foo, @Bar] ["bar", "b"]
     ; CHECK: firrtl.module @Bar
-    ; CHECK-SAME: [#firrtl<"subAnno<fieldID = 2, {circt.nonlocal = @\22~Foo|Foo/bar:Bar>b.qux\22, three}>">]
+    ; CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
     ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance @Bar
     ; CHECK-SAME: [{one}],
     ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>],
@@ -554,7 +554,7 @@ circuit GCTDataTap : %[
 
     ; CHECK-LABEL: firrtl.circuit "GCTDataTap"
     ; CHECK-SAME: annotations = [{unrelatedAnnotation}]
-    ; CHECK:      firrtl.nla @"~GCTDataTap|GCTDataTap/im:InnerMod>w" [@GCTDataTap, @InnerMod] ["im", "w"]
+    ; CHECK:      firrtl.nla @nla_1 [@GCTDataTap, @InnerMod] ["im", "w"]
     ; CHECK: firrtl.extmodule @DataTap
     ; CHECK-SAME: %_0: !firrtl.uint<1> {firrtl.annotations =
     ; CHECK-SAME:   {class = "firrtl.transforms.DontTouchAnnotation"}
@@ -636,7 +636,7 @@ circuit GCTDataTap : %[
 
     ; CHECK: firrtl.module @InnerMod
     ; CHECK-NEXT: %w = firrtl.wire
-    ; CHECK-SAME: {circt.nonlocal = @"~GCTDataTap|GCTDataTap/im:InnerMod>w", class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 7 : i64, type = "source"}
+    ; CHECK-SAME: {circt.nonlocal = @nla_1, class = "sifive.enterprise.grandcentral.ReferenceDataTapKey", id = 0 : i64, portID = 7 : i64, type = "source"}
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
 
     ; CHECK: firrtl.module @GCTDataTap
@@ -877,9 +877,9 @@ circuit Foo : %[[
 
 ; // -----
 
-; A non-local Annotation is supported.
+; Multiple non-local Annotations are supported.
 
-circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
+circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}, {"b":"b","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
   module Baz :
     skip
   module Bar :
@@ -887,12 +887,13 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}]]
   module Foo :
     inst bar of Bar
 ; CHECK-LABEL: firrtl.circuit "Foo"
-; CHECK: firrtl.nla @"~Foo|Foo/bar:Bar/baz:Baz" [@Foo, @Bar, @Baz] ["bar", "baz", "Baz"]
+; CHECK: firrtl.nla @nla_2 [@Foo, @Bar, @Baz] ["bar", "baz", "Baz"]
+; CHECK: firrtl.nla @nla_1 [@Foo, @Bar, @Baz] ["bar", "baz", "Baz"]
 ; CHECK: firrtl.module @Baz
-; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz"}]
+; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @nla_1}, {b = "b", circt.nonlocal = @nla_2}]
 ; CHECK: firrtl.module @Bar()
 ; CHECK: firrtl.instance @Baz
-; CHECK-SAME: [{circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz", class = "circt.nonlocal"}]
+; CHECK-SAME: [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]
 ; CHECK: firrtl.module @Foo()
 ; CHECK: firrtl.instance @Bar
-; CHECK-SAME: [{circt.nonlocal = @"~Foo|Foo/bar:Bar/baz:Baz", class = "circt.nonlocal"}]
+; CHECK-SAME: [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]

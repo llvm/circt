@@ -54,15 +54,22 @@ calyx.program {
         calyx.assign %c0.in = %c0.out : i8
         calyx.group_done %c0.done : i1
       }
-      // CHECK-LABEL: group Group2 {
-      // CHECK-NEXT:    c1.in = (c1.out | 1'd0) ? c1.out;
-      // CHECK-NEXT:    Group2[done] = (c1.out & 1'd1 & !c1.out) ? c1.done;
-      calyx.group @Group2 {
-        %or = comb.or %c1.out, %c0 : i1
-        calyx.assign %c1.in = %c1.out, %or ? : i1
+      // CHECK-LABEL: comb group Group2 {
+      // CHECK-NEXT:     c1.in = (c1.out | (c1.out & 1'd1 & !c1.out)) ? c1.out;
+      calyx.comb_group @Group2 {
         %not = comb.xor %c1.out, %c1 : i1
         %and = comb.and %c1.out, %c1, %not : i1
-        calyx.group_done %c1.done, %and ? : i1
+        %or = comb.or %c1.out, %and : i1
+        calyx.assign %c1.in = %c1.out, %or ? : i1
+      }
+      // CHECK-LABEL: group Group3 {
+      // CHECK-NEXT:     r.in = c0.out;
+      // CHECK-NEXT:     r.write_en = 1'd1;
+      // CHECK-NEXT:     Group3[done] = r.done;
+      calyx.group @Group3 {
+        calyx.assign %r.in = %c0.out : i8
+        calyx.assign %r.write_en = %c1 : i1
+        calyx.group_done %r.done : i1
       }
       // CHECK:   c0.go = c1.out;
       calyx.assign %c0.go = %c1.out : i1
@@ -71,7 +78,7 @@ calyx.program {
     // CHECK-NEXT:    seq {
     // CHECK-NEXT:      par {
     // CHECK-NEXT:        Group1;
-    // CHECK-NEXT:        Group2;
+    // CHECK-NEXT:        Group3;
     // CHECK-NEXT:      }
     // CHECK-NEXT:      seq {
     // CHECK-NEXT:        Group1;
@@ -80,7 +87,13 @@ calyx.program {
     // CHECK-NEXT:            Group1;
     // CHECK-NEXT:            Group1;
     // CHECK-NEXT:            if c1.in with Group2 {
-    // CHECK-NEXT:              Group2;
+    // CHECK-NEXT:              Group1;
+    // CHECK-NEXT:            }
+    // CHECK-NEXT:            if c1.in {
+    // CHECK-NEXT:              Group1;
+    // CHECK-NEXT:            }
+    // CHECK-NEXT:            while c1.in {
+    // CHECK-NEXT:              Group1;
     // CHECK-NEXT:            }
     // CHECK-NEXT:          }
     // CHECK-NEXT:        }
@@ -91,7 +104,7 @@ calyx.program {
       calyx.seq {
         calyx.par {
           calyx.enable @Group1
-          calyx.enable @Group2
+          calyx.enable @Group3
         }
         calyx.seq {
           calyx.enable @Group1
@@ -100,7 +113,13 @@ calyx.program {
               calyx.enable @Group1
               calyx.enable @Group1
               calyx.if %c1.in with @Group2 {
-                calyx.enable @Group2
+                calyx.enable @Group1
+              }
+              calyx.if %c1.in {
+                calyx.enable @Group1
+              }
+              calyx.while %c1.in {
+                calyx.enable @Group1
               }
             }
           }
