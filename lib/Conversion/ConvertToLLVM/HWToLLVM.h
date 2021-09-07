@@ -28,7 +28,7 @@ void populateHWToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
 
 /// Get the HW to LLVM conversion patterns.
 void populateHWToLLVMConversionPatterns(mlir::LLVMTypeConverter &converter,
-                                          RewritePatternSet &patterns);
+                                        RewritePatternSet &patterns);
 
 } // namespace circt
 
