@@ -903,3 +903,60 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}, {"b":"b","target"
 ; CHECK: firrtl.module @Foo()
 ; CHECK: firrtl.instance @Bar
 ; CHECK-SAME: [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]
+
+; // -----
+
+; Grand Central's SignalDriverAnnotation is properly scattered to the circuit
+; and the targeted operations.
+
+circuit Sub : %[[{
+  "class": "sifive.enterprise.grandcentral.SignalDriverAnnotation",
+  "sinkTargets": [
+    {"_1": "~Top|Foo>clock",        "_2": "~Sub|Sub>clockSink" },
+    {"_1": "~Top|Foo>dataIn.a.b.c", "_2": "~Sub|Sub>dataSink.u"},
+    {"_1": "~Top|Foo>dataIn.d",     "_2": "~Sub|Sub>dataSink.v"},
+    {"_1": "~Top|Foo>dataIn.e",     "_2": "~Sub|Sub>dataSink.w"}
+  ],
+  "sourceTargets": [
+    {"_1": "~Top|Top>clock",         "_2": "~Sub|Sub>clockSource" },
+    {"_1": "~Top|Foo>dataOut.x.y.z", "_2": "~Sub|Sub>dataSource.u"},
+    {"_1": "~Top|Foo>dataOut.w",     "_2": "~Sub|Sub>dataSource.v"},
+    {"_1": "~Top|Foo>dataOut.p",     "_2": "~Sub|Sub>dataSource.w"}
+  ],
+  "circuit": "",
+  "annotations": [],
+  "circuitPackage": "other"
+}]]
+  extmodule SubExtern :
+    input clockIn : Clock
+    output clockOut : Clock
+    input someInput : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2] }
+    output someOutput : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2] }
+
+  module Sub :
+    wire clockSource : Clock
+    wire clockSink : Clock
+    wire dataSource : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2] }
+    wire dataSink : { u: UInt<42>, v: UInt<9001>, w: UInt<1>[2] }
+
+    inst ext of SubExtern
+    ext.clockIn <= clockSource
+    ext.someInput <= dataSource
+    clockSink <= ext.clockOut
+    dataSink <= ext.someOutput
+
+; CHECK-LABEL: firrtl.circuit "Sub"
+; CHECK-SAME: {annotations = [], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = [[ID:.+]] : i64}
+; CHECK-LABEL: firrtl.module @Sub
+; CHECK: %clockSource = firrtl.wire
+; CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = [[ID]] : i64, origin = "~Top|Top>clock", targetId = 1 : i64}
+; CHECK: %clockSink = firrtl.wire
+; CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = [[ID]] : i64, origin = "~Top|Foo>clock", targetId = 5 : i64}
+; CHECK: %dataSource = firrtl.wire
+; CHECK-SAME: #firrtl<"subAnno<fieldID = 1, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, id = [[ID]] : i64, origin = \22~Top|Foo>dataOut.x.y.z\22, targetId = 2 : i64}>">
+; CHECK-SAME: #firrtl<"subAnno<fieldID = 2, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, id = [[ID]] : i64, origin = \22~Top|Foo>dataOut.w\22, targetId = 3 : i64}>">
+; CHECK-SAME: #firrtl<"subAnno<fieldID = 3, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, id = [[ID]] : i64, origin = \22~Top|Foo>dataOut.p\22, targetId = 4 : i64}>">
+; CHECK: %dataSink = firrtl.wire
+; CHECK-SAME: #firrtl<"subAnno<fieldID = 1, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, id = [[ID]] : i64, origin = \22~Top|Foo>dataIn.a.b.c\22, targetId = 6 : i64}>">
+; CHECK-SAME: #firrtl<"subAnno<fieldID = 2, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, id = [[ID]] : i64, origin = \22~Top|Foo>dataIn.d\22, targetId = 7 : i64}>">
+; CHECK-SAME: #firrtl<"subAnno<fieldID = 3, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, id = [[ID]] : i64, origin = \22~Top|Foo>dataIn.e\22, targetId = 8 : i64}>">
