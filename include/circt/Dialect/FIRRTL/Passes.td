@@ -288,7 +288,7 @@ def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
-def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings", "mlir::ModuleOp"> {
+def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings", "FModuleOp"> {
   let summary = "Generate signal mappings that force/probe signals in a circuit from another circuit";
   let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
   let dependentDialects = ["sv::SVDialect"];

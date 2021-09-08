@@ -52,7 +52,7 @@ enum class MappingDirection {
 struct SignalMapping {
   MappingDirection dir;
   StringAttr remoteTarget;
-  StringRef localName;
+  StringAttr localName;
   StringRef localFields;
 
   /// The type of the signal being mapped.
@@ -64,7 +64,7 @@ struct SignalMapping {
 struct ModuleSignalMappings {
   ModuleSignalMappings(FModuleOp module) : module(module) {}
   void run();
-  void addTargets(ArrayAttr targets, MappingDirection dir);
+  void addTarget(Value value, Annotation anno);
   void emitMappingsModule();
   void instantiateMappingsModule();
 
@@ -73,10 +73,6 @@ struct ModuleSignalMappings {
   bool allAnalysesPreserved = false;
   SmallVector<SignalMapping> mappings;
   SmallString<64> mappingsModuleName;
-
-  /// A lookup table of local operations that carry a name which can be
-  /// referenced in an annotation.
-  DenseMap<StringRef, Value> localNames;
 };
 } // namespace
 
@@ -85,80 +81,44 @@ static T &operator<<(T &os, const SignalMapping &mapping) {
   os << "SignalMapping { remote"
      << (mapping.dir == MappingDirection::DriveRemote ? "Sink" : "Source")
      << ": " << mapping.remoteTarget << ", "
-     << "localTarget: \"" << mapping.localName << "\" }";
+     << "localTarget: " << mapping.localName << " }";
   return os;
 }
 
 void ModuleSignalMappings::run() {
-  LLVM_DEBUG(llvm::dbgs() << "Running on module `" << module.getName()
-                          << "`\n");
-
-  // Gather the signal driver annotations on this module, and keep track of the
-  // target within the module.
-  LLVM_DEBUG(llvm::dbgs() << "- Gather annotations\n");
-  AnnotationSet::removeAnnotations(module, [&](Annotation anno) {
-    if (!anno.isClass(signalDriverAnnoClass))
-      return false;
-    if (auto sinks = anno.getMember<ArrayAttr>("sinkTargets")) {
-      addTargets(sinks, MappingDirection::DriveRemote);
-    } else {
-      module.emitError("SignalDriverAnnotation missing "
-                       "\"sinkTargets\" attribute");
-      anyFailed = true;
-    }
-    if (auto sources = anno.getMember<ArrayAttr>("sourceTargets")) {
-      addTargets(sources, MappingDirection::ProbeRemote);
-    } else {
-      module.emitError("SignalDriverAnnotation missing "
-                       "\"sourceTargets\" attribute");
-      anyFailed = true;
-    }
-    return true;
-  });
-  if (anyFailed)
-    return;
-
-  // Nothing to do if there are no signal mappings.
-  if (mappings.empty()) {
-    LLVM_DEBUG(llvm::dbgs() << "- No annotations, nothing left to do\n");
+  // Check whether this module has any `SignalDriverAnnotation`s. These indicate
+  // whether the module contains any operations with such annotations and
+  // requires processing.
+  if (!AnnotationSet::removeAnnotations(module, signalDriverAnnoClass)) {
+    LLVM_DEBUG(llvm::dbgs() << "Skipping `" << module.getName()
+                            << "` (has no annotations)\n");
     allAnalysesPreserved = true;
     return;
   }
+  LLVM_DEBUG(llvm::dbgs() << "Running on module `" << module.getName()
+                          << "`\n");
 
-  // Gather a name table to resolve local mappings.
+  // Gather the signal driver annotations on the ports of this module.
+  LLVM_DEBUG(llvm::dbgs() << "- Gather port annotations\n");
+  AnnotationSet::removePortAnnotations(
+      module, [&](unsigned i, Annotation anno) {
+        if (!anno.isClass(signalDriverAnnoClass))
+          return false;
+        addTarget(module.getArgument(i), anno);
+        return true;
+      });
+
+  // Gather the signal driver annotations of the operations within this module.
+  LLVM_DEBUG(llvm::dbgs() << "- Gather operation annotations\n");
   module.walk([&](Operation *op) {
-    TypeSwitch<Operation *>(op).Case<WireOp, NodeOp, RegOp, RegResetOp>(
-        [&](auto op) {
-          localNames.insert({op.name(), op});
-        });
+    AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
+      if (!anno.isClass(signalDriverAnnoClass))
+        return false;
+      for (auto result : op->getResults())
+        addTarget(result, anno);
+      return true;
+    });
   });
-
-  // Gather the types and values for the signal mappings. This may incur
-  // additional subfield/subfindex operations to be generated.
-  for (auto &mapping : mappings) {
-    // Resolve the name locally.
-    mapping.localValue = localNames.lookup(mapping.localName);
-    if (!mapping.localValue) {
-      module.emitError("unknown local target \"")
-          << mapping.localName << "\" in SignalDriverAnnotation";
-      anyFailed = true;
-      return;
-    }
-    LLVM_DEBUG(llvm::dbgs() << "- Resolved `" << mapping.localName << "` to "
-                            << mapping.localValue << "\n");
-
-    // Resolve any subfield/subindex accesses.
-    StringRef fields = mapping.localFields;
-    while (!fields.empty()) {
-      module.emitError(
-          "subfield accesses not yet supported in SignalDriverAnnotation");
-      anyFailed = true;
-      return;
-    }
-
-    mapping.type = mapping.localValue.getType().cast<FIRRTLType>();
-    // TODO: Resolve the remote value somehow.
-  }
 
   // Pick a name for the module that implements the signal mappings.
   mappingsModuleName = module.getName();
@@ -171,54 +131,47 @@ void ModuleSignalMappings::run() {
   instantiateMappingsModule();
 }
 
-/// Add the entries of the `sinkTargets` or `sourceTargets` array in a
-/// `SignalDriverAnnotation` to the list of mappings that need to be established
-/// for this module.
-void ModuleSignalMappings::addTargets(ArrayAttr targets, MappingDirection dir) {
-  const char *dirString =
-      dir == MappingDirection::DriveRemote ? "sink" : "source";
-  for (auto target : targets.getAsRange<DictionaryAttr>()) {
-    SignalMapping mapping;
-    mapping.dir = dir;
-    mapping.remoteTarget = target.getAs<StringAttr>("_1");
-    if (!mapping.remoteTarget) {
-      module.emitError("SignalDriverAnnotation ")
-          << dirString << " target " << target << " missing \"_1\" attribute";
-      anyFailed = true;
-      continue;
-    }
-    auto localTarget = target.getAs<StringAttr>("_2");
-    if (!localTarget) {
-      module.emitError("SignalDriverAnnotation ")
-          << dirString << " target " << target << " missing \"_2\" attribute";
-      anyFailed = true;
-      continue;
-    }
-    mapping.localName = localTarget.getValue();
-    LLVM_DEBUG(llvm::dbgs() << "  - " << mapping << "\n");
-    mappings.push_back(std::move(mapping));
+void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
+  // We're emitting code for the "local" side of these annotations, which
+  // sits in the sub-circuit and interacts with the main circuit on the
+  // "remote" side.
+  if (anno.getMember<StringAttr>("side").getValue() != "local")
+    return;
+
+  SignalMapping mapping;
+  mapping.dir = anno.getMember<StringAttr>("dir").getValue() == "source"
+                    ? MappingDirection::ProbeRemote
+                    : MappingDirection::DriveRemote;
+  mapping.remoteTarget = anno.getMember<StringAttr>("peer");
+  mapping.localValue = value;
+  mapping.type = value.getType().cast<FIRRTLType>();
+
+  // Guess a name for the local value. This is only for readability's sake,
+  // giving the pass a hint for picking the names of the generated module ports.
+  if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+    mapping.localName =
+        module.portNames()[blockArg.getArgNumber()].cast<StringAttr>();
+  } else if (auto op = value.getDefiningOp()) {
+    mapping.localName = op->getAttrOfType<StringAttr>("name");
   }
+
+  LLVM_DEBUG(llvm::dbgs() << "  - " << mapping << "\n");
+  mappings.push_back(std::move(mapping));
 }
 
 void ModuleSignalMappings::emitMappingsModule() {
   LLVM_DEBUG(llvm::dbgs() << "- Generating `" << mappingsModuleName << "`\n");
-  auto *context = module.getContext();
 
   // Determine what ports this module will have, given the signal mappings we
   // are supposed to emit.
   SmallVector<ModulePortInfo> ports;
   for (auto &mapping : mappings) {
-    // TODO: We really need the local operation this is targeting, to get at the
-    // type and all the other good stuff.
-    ports.push_back(ModulePortInfo{
-        StringAttr::get(context, mapping.localName),
-        // TODO: This needs to come from the local target:
-        mapping.type,
-        mapping.dir == MappingDirection::DriveRemote ? Direction::Input
-                                                     : Direction::Output,
-        module.getLoc()});
-    LLVM_DEBUG(llvm::dbgs()
-               << "  - Adding port `" << mapping.localName << "`\n");
+    ports.push_back(ModulePortInfo{mapping.localName, mapping.type,
+                                   mapping.dir == MappingDirection::DriveRemote
+                                       ? Direction::Input
+                                       : Direction::Output,
+                                   module.getLoc()});
+    LLVM_DEBUG(llvm::dbgs() << "  - Adding port " << mapping.localName << "\n");
   }
 
   // Create the actual module.
@@ -292,19 +245,12 @@ class GrandCentralSignalMappingsPass
 };
 
 void GrandCentralSignalMappingsPass::runOnOperation() {
-  LLVM_DEBUG(llvm::dbgs() << "Running the GCT Signal Mappings pass\n");
-  bool allAnalysesPreserved = true;
-  getOperation().walk([&](FModuleOp module) {
-    ModuleSignalMappings mapper(module);
-    mapper.run();
-    allAnalysesPreserved &= mapper.allAnalysesPreserved;
-    if (mapper.anyFailed) {
-      signalPassFailure();
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-  });
-  if (allAnalysesPreserved)
+  FModuleOp module = getOperation();
+  ModuleSignalMappings mapper(module);
+  mapper.run();
+  if (mapper.anyFailed)
+    return signalPassFailure();
+  if (mapper.allAnalysesPreserved)
     markAllAnalysesPreserved();
 }
 
