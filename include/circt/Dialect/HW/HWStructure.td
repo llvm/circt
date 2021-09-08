@@ -278,6 +278,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
 }
 
 def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Create an instance of a module";
   let description = [{
@@ -326,8 +327,6 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
     $instanceName (`sym` $sym_name^)? $moduleName `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
   }];
-
-  let verifier = "return ::verifyInstanceOp(*this);";
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
