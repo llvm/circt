@@ -289,13 +289,13 @@ def AllocaOp :HIR_Op<"alloca",[]> {
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def BusInstantiateOp :HIR_Op<"bus.instantiate",[]> {
+def BusOp :HIR_Op<"bus",[]> {
   let summary = "Instantiate new bus.";
 
   let description = [{ Instantiate a new !hir.bus or tensor<...x!hir.bus>
     Tensor of bus can not contain flipped members.
       Example: 
-      ```%w = hir.bus.instantiate : !hir.bus<...>```
+      ```%w = hir.bus : !hir.bus<...>```
   }];
 
   let arguments = (ins);

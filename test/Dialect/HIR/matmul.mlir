@@ -6,7 +6,7 @@
 
 hir.func @readA at %t(
 %Ai :!hir.memref<16x16xi32> ports [#rd],
-%A : !hir.memref<16x(bank 16)xi32> ports[#wr]) ->(!hir.time){
+%A : !hir.memref<16x(bank 16)xi32> ports[#wr]) ->(%t_done: !hir.time){
 
   hir.comment "readA"
   %0  = constant 0  :index
@@ -32,7 +32,7 @@ hir.func @readA at %t(
 
 hir.func @readB at %t(
 %Bi : !hir.memref<16x16xi32> ports [#rd], 
-%Bw : !hir.memref<(bank 16)x(bank 16)xi32> ports [#wr]) -> (!hir.time){
+%Bw : !hir.memref<(bank 16)x(bank 16)xi32> ports [#wr]) -> (%t_done: !hir.time){
   hir.comment "readB"
 
   %0  = constant 0:index
@@ -72,7 +72,7 @@ hir.func @readB at %t(
 hir.func @kernel at %t(
 %A : !hir.memref<16x(bank 16)xi32> ports [#rd],
 %B : !hir.memref<(bank 16)x(bank 16)xi32> ports [#reg_rd],
-%C: !hir.memref<16x(bank 16)xi32> ports [#wr])->(!hir.time){
+%C: !hir.memref<16x(bank 16)xi32> ports [#wr])->(%t_done:!hir.time){
 
   hir.comment "kernel"
   %0  = constant 0 :index 
@@ -87,7 +87,7 @@ hir.func @kernel at %t(
   %t_i_loop_done = hir.for %i : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%ti = %t + 1){
     hir.for %j : index = %0 to %ub step %1 iter_time(%tj = %ti){
       hir.comment "j loop"
-      %C_bus = hir.bus.instantiate : tensor<17x!hir.bus<i32>>
+      %C_bus = hir.bus : tensor<17x!hir.bus<i32>>
       %c_bus = hir.tensor.extract %C_bus[%0] : tensor<17x!hir.bus<i32>> -> !hir.bus<i32> ports ["send"]
       hir.send %c0_i32 to %c_bus[0] at %tj + 3 : i32 to !hir.bus<i32>
 
@@ -126,7 +126,7 @@ hir.func @kernel at %t(
 
 hir.func @writeC at %t(
 %Ci: !hir.memref<16x(bank 16)xi32> ports [#rd],
-%Co : !hir.memref<16x16xi32> ports [#wr]) -> (!hir.time){
+%Co : !hir.memref<16x16xi32> ports [#wr]) -> (%t_done: !hir.time){
 
   hir.comment "writeC"
   %0  = constant 0 :index 
@@ -152,7 +152,7 @@ hir.func @writeC at %t(
 hir.func @matmul at %t(
 %Ai :!hir.memref<16x16xi32> ports [#rd],
 %Bi : !hir.memref<16x16xi32> ports [#rd], 
-%Co : !hir.memref<16x16xi32> ports [#wr]) ->(!hir.time){
+%Co : !hir.memref<16x16xi32> ports [#wr]) -> (%t_done: !hir.time){
 
   %32 = constant 32 
 

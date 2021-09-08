@@ -31,14 +31,17 @@ using namespace llvm;
 // Helper functions.
 //------------------------------------------------------------------------------
 ParseResult
-parseOperandColonType(OpAsmParser &parser,
-                      SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
-                      SmallVectorImpl<Type> &argTypes) {
+parseNamedOperandColonType(OpAsmParser &parser,
+                           SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
+                           SmallVectorImpl<Type> &argTypes) {
 
   OpAsmParser::OperandType operand;
   Type operandTy;
+  auto operandLoc = parser.getCurrentLocation();
   if (parser.parseOperand(operand) || parser.parseColonType(operandTy))
     return failure();
+  if (operand.name.empty())
+    return parser.emitError(operandLoc) << "SSA value must have a valid name.";
   entryArgs.push_back(operand);
   argTypes.push_back(operandTy);
   return success();
@@ -309,7 +312,7 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printCallOp(OpAsmPrinter &printer, CallOp op) {
-  printer << "hir.call @" << op.callee();
+  printer << " @" << op.callee();
   printer << "(" << op.operands() << ") at ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
   printWithSSANames(printer, op, op->getAttrDictionary());
@@ -394,7 +397,7 @@ static void printCallInstanceOp(OpAsmPrinter &printer, CallInstanceOp op) {
 /// IfOp
 static void printIfOp(OpAsmPrinter &printer, IfOp op) {
 
-  printer << "hir.if " << op.condition();
+  printer << " " << op.condition();
 
   printer << " at time(" << op.if_region().getArgument(0) << " = ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
@@ -485,8 +488,7 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::OperandType conditionVar;
   llvm::Optional<OpAsmParser::OperandType> tstart;
   IntegerAttr offset;
-  if (parser.parseLParen() || parser.parseOperand(conditionVar) ||
-      parser.parseRParen())
+  if (parser.parseOperand(conditionVar))
     return failure();
 
   if (parser.parseKeyword("at") || parser.parseKeyword("iter_time") ||
@@ -524,7 +526,7 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printWhileOp(OpAsmPrinter &printer, WhileOp op) {
-  printer << "hir.while (" << op.condition() << ")";
+  printer << " " << op.condition();
   printer << " at iter_time(" << op.getIterTimeVar() << " = ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
   printer << ")";
@@ -600,7 +602,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printForOp(OpAsmPrinter &printer, ForOp op) {
-  printer << "hir.for " << op.getInductionVar() << " : "
+  printer << " " << op.getInductionVar() << " : "
           << op.getInductionVar().getType() << " = " << op.lb() << " to "
           << op.ub() << " step " << op.step();
 
@@ -633,8 +635,7 @@ LogicalResult ForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
 static ParseResult parseArgList(OpAsmParser &parser,
                                 SmallVectorImpl<OpAsmParser::OperandType> &args,
                                 SmallVectorImpl<Type> &argTypes,
-                                SmallVectorImpl<DictionaryAttr> &argAttrs,
-                                SmallVectorImpl<StringRef> &argNames) {
+                                SmallVectorImpl<DictionaryAttr> &argAttrs) {
 
   auto *context = parser.getBuilder().getContext();
   if (parser.parseLParen())
@@ -642,8 +643,8 @@ static ParseResult parseArgList(OpAsmParser &parser,
   if (failed(parser.parseOptionalRParen())) {
     while (1) {
       // Parse operand and type
-      auto typeLoc = parser.getCurrentLocation();
-      if (parseOperandColonType(parser, args, argTypes))
+      auto operandLoc = parser.getCurrentLocation();
+      if (parseNamedOperandColonType(parser, args, argTypes))
         return failure();
       auto argTy = argTypes.back();
       // Parse argAttr
@@ -660,7 +661,7 @@ static ParseResult parseArgList(OpAsmParser &parser,
         if (parseBusPortsAttr(parser, argAttrs))
           return failure();
       } else
-        return parser.emitError(typeLoc, "Unsupported type.");
+        return parser.emitError(operandLoc, "Unsupported type.");
 
       if (failed(parser.parseOptionalComma()))
         break;
@@ -673,21 +674,19 @@ static ParseResult parseArgList(OpAsmParser &parser,
 
 static ParseResult
 parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
-                   SmallVectorImpl<OpAsmParser::OperandType> &args) {
+                   SmallVectorImpl<OpAsmParser::OperandType> &args,
+                   SmallVectorImpl<OpAsmParser::OperandType> &results) {
   SmallVector<Type, 4> argTypes;
   SmallVector<DictionaryAttr> argAttrs;
-  SmallVector<StringRef, 4> argNames;
-  SmallVector<OpAsmParser::OperandType> results;
   SmallVector<Type, 4> resultTypes;
   SmallVector<DictionaryAttr> resultAttrs;
-  SmallVector<StringRef, 4> resultNames;
   // parse args
-  if (parseArgList(parser, args, argTypes, argAttrs, argNames))
+  if (parseArgList(parser, args, argTypes, argAttrs))
     return failure();
 
   // If result types present then parse them.
   if (succeeded(parser.parseOptionalArrow()))
-    if (parseArgList(parser, results, resultTypes, resultAttrs, resultNames))
+    if (parseArgList(parser, results, resultTypes, resultAttrs))
       return failure();
 
   funcTy = hir::FuncType::get(parser.getBuilder().getContext(), argTypes,
@@ -696,14 +695,34 @@ parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
 }
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
-  for (auto &argAttr : attrs)
+  for (const auto &argAttr : attrs)
     if (argAttr.first == name)
       return true;
   return false;
 }
+
+LogicalResult addNamesAttribute(MLIRContext *context, StringRef attrName,
+                                ArrayRef<OpAsmParser::OperandType> args,
+                                OperationState &result) {
+
+  if (args.empty())
+    return success();
+
+  // Use SSA names only if names are not previously defined.
+  if (!hasAttribute(attrName, result.attributes)) {
+    SmallVector<Attribute> argNames;
+    for (const auto &arg : args)
+      argNames.push_back(getNameAttr(context, arg.name));
+
+    result.addAttribute(attrName, ArrayAttr::get(context, argNames));
+  }
+  return success();
+}
+
 // Parse method.
 static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  SmallVector<OpAsmParser::OperandType, 4> resultArgs;
   OpAsmParser::OperandType tstart;
   auto &builder = parser.getBuilder();
   auto *context = builder.getContext();
@@ -715,11 +734,15 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   // Parse tstart.
   if (parser.parseKeyword("at") || parser.parseRegionArgument(tstart))
     return failure();
-
+  if (tstart.name.empty())
+    return parser.emitError(parser.getCurrentLocation())
+           << "Expected valid name for start time.";
+  auto loc = parser.getCurrentLocation();
   // Parse the function signature.
   hir::FuncType funcTy;
-  if (parseFuncSignature(parser, funcTy, entryArgs))
+  if (parseFuncSignature(parser, funcTy, entryArgs, resultArgs))
     return failure();
+  entryArgs.push_back(tstart);
 
   auto functionTy = funcTy.getFunctionType();
   result.addAttribute(mlir::function_like_impl::getTypeAttrName(),
@@ -727,22 +750,18 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   result.addAttribute("funcTy", TypeAttr::get(funcTy));
 
   // Use the argument and result names if not already specified.
-  if (!hasAttribute("argNames", result.attributes)) {
-    SmallVector<Attribute> argNames;
-    if (!entryArgs.empty()) {
-      for (auto &arg : entryArgs)
-        argNames.push_back(getNameAttr(context, arg.name));
-    }
-
-    result.addAttribute("argNames", ArrayAttr::get(context, argNames));
-  }
+  if (failed(addNamesAttribute(context, "argNames", entryArgs, result)))
+    return parser.emitError(loc)
+           << "FuncOp input arguments must have a valid name.";
+  if (failed(addNamesAttribute(context, "resultNames", resultArgs, result)))
+    return parser.emitError(loc)
+           << "FuncOp return arguments must have a valid name.";
 
   // Add the attributes to the function arguments.
   mlir::function_like_impl::addArgAndResultAttrs(
       builder, result, funcTy.getInputAttrs(), funcTy.getResultAttrs());
   // Parse the optional function body.
   auto *body = result.addRegion();
-  entryArgs.push_back(tstart);
   SmallVector<Type> entryArgTypes;
   for (auto ty : funcTy.getFunctionType().getInputs()) {
     entryArgTypes.push_back(ty);
@@ -756,54 +775,56 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
+static ParseResult printArgList(OpAsmPrinter &printer, ArrayAttr argNames,
+                                ArrayRef<Type> argTypes,
+                                ArrayRef<DictionaryAttr> argAttrs) {
+  printer << "(";
+  for (unsigned i = 0; i < argTypes.size(); i++) {
+    if (i > 0)
+      printer << ", ";
+    printer << "%" << argNames[i].dyn_cast<StringAttr>().getValue() << " : "
+            << argTypes[i];
+
+    if (helper::isBuiltinSizedType(argTypes[i])) {
+      auto delay = helper::extractDelayFromDict(argAttrs[i]);
+      if (delay)
+        printer << " delay " << delay;
+    } else if (argTypes[i].isa<hir::MemrefType>()) {
+      printer << " ports " << helper::extractMemrefPortsFromDict(argAttrs[i]);
+    } else if (helper::isBusType(argTypes[i])) {
+      printer << " ports [" << helper::extractBusPortFromDict(argAttrs[i])
+              << "]";
+    }
+  }
+  printer << ")";
+
+  return success();
+}
+
 static void printFuncSignature(OpAsmPrinter &printer, hir::FuncOp op) {
   auto fnType = op.getType();
-  Region &body = op.getOperation()->getRegion(0);
   auto inputTypes = fnType.getInputs();
   auto resultTypes = fnType.getResults();
   ArrayRef<DictionaryAttr> inputAttrs =
       op.funcTy().dyn_cast<FuncType>().getInputAttrs();
   ArrayRef<DictionaryAttr> resultAttrs =
       op.funcTy().dyn_cast<FuncType>().getResultAttrs();
+  auto inputNames = op->getAttr("argNames").dyn_cast_or_null<ArrayAttr>();
+  auto resultNames = op->getAttr("resultNames").dyn_cast_or_null<ArrayAttr>();
 
-  printer << "(";
-  for (unsigned i = 0; i < inputTypes.size(); i++) {
-    if (i > 0)
-      printer << ", ";
-    printer << body.front().getArgument(i) << " : " << inputTypes[i];
+  printArgList(printer, inputNames, inputTypes, inputAttrs);
 
-    if (helper::isBuiltinSizedType(inputTypes[i])) {
-      auto delay = helper::extractDelayFromDict(inputAttrs[i]);
-      if (delay != 0)
-        printer << " delay " << delay;
-    } else if (inputTypes[i].dyn_cast<hir::MemrefType>()) {
-      auto ports = helper::extractMemrefPortsFromDict(inputAttrs[i]);
-      printer << " ports " << ports;
-    } else if (inputTypes[i].dyn_cast<hir::BusType>() ||
-               inputTypes[i].dyn_cast<mlir::TensorType>()) {
-      auto busPortStr = helper::extractBusPortFromDict(inputAttrs[i]);
-      printer << " ports [" << busPortStr << "]";
-    }
-  }
-  printer << ")";
   if (resultTypes.size() == 0)
     return;
 
-  printer << " -> (";
-  for (unsigned i = 0; i < resultTypes.size(); i++) {
-    if (i > 0)
-      printer << ", ";
-    printer << resultTypes[i];
-    auto delay = helper::extractDelayFromDict(resultAttrs[i]);
-    if (delay != 0)
-      printer << " delay " << delay;
-  }
-  printer << ")";
+  printer << " -> ";
+
+  printArgList(printer, resultNames, resultTypes, resultAttrs);
 }
 
 static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
   // Print function name, signature, and control.
-  printer << op.getOperationName() << " ";
+  printer << " ";
   printer.printSymbolName(op.sym_name());
   Region &body = op.getOperation()->getRegion(0);
   printer << " at "
@@ -816,8 +837,9 @@ static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
   if (!body.empty())
     printer.printRegion(body, /*printEntryBlockArgs=*/false,
                         /*printBlockTerminators=*/true);
-  printer.printOptionalAttrDict(
-      op->getAttrs(), {"funcTy", "type", "arg_attrs", "res_attrs", "sym_name"});
+  printer.printOptionalAttrDict(op->getAttrs(),
+                                {"funcTy", "type", "arg_attrs", "res_attrs",
+                                 "sym_name", "argNames", "resultNames"});
 }
 
 LogicalResult hir::FuncOp::verifyType() {

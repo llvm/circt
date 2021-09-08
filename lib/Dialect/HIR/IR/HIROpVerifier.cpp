@@ -82,6 +82,19 @@ LogicalResult verifyFuncOp(hir::FuncOp op) {
       }
     }
   }
+  auto inputTypes = funcTy.getInputTypes();
+  auto resultTypes = funcTy.getResultTypes();
+  if (!inputTypes.empty()) {
+    auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+    // argNames also contains the start time.
+    if ((!argNames) || (argNames.size() - 1 != inputTypes.size()))
+      return op.emitError("Mismatch in number of argument names.");
+  }
+  if (!resultTypes.empty()) {
+    auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
+    if ((!resultNames) || (resultNames.size() != resultTypes.size()))
+      return op.emitError("Mismatch in number of result names.");
+  }
   return success();
 }
 

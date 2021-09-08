@@ -65,6 +65,7 @@ struct HIRInlinerInterface : public mlir::DialectInlinerInterface {
       valuesToRepl[it.index()].replaceAllUsesWith(it.value());
   }
 };
+
 struct HIROpAsmDialectInterface : public mlir::OpAsmDialectInterface {
   using mlir::OpAsmDialectInterface::OpAsmDialectInterface;
   void getAsmResultNames(Operation *operation,
@@ -78,6 +79,23 @@ struct HIROpAsmDialectInterface : public mlir::OpAsmDialectInterface {
       if (auto str = value[i].dyn_cast<StringAttr>())
         if (!str.getValue().empty())
           setNameFn(operation->getResult(i), str.getValue());
+  }
+
+  void getAsmBlockArgumentNames(Block *block,
+                                OpAsmSetValueNameFn setNameFn) const override {
+    // Assign port names to the bbargs if this is a module.
+    auto parentOp = dyn_cast<hir::FuncOp>(block->getParentOp());
+    if (parentOp) {
+      auto argNames =
+          parentOp->getAttr("argNames").dyn_cast_or_null<ArrayAttr>();
+      if (!argNames)
+        return;
+      for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+        auto name = argNames[i].dyn_cast<StringAttr>();
+        if (name)
+          setNameFn(block->getArgument(i), name.getValue());
+      }
+    }
   }
 };
 } // end anonymous namespace
