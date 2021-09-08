@@ -471,3 +471,14 @@ calyx.program {
     }
   }
 }
+
+// -----
+
+calyx.program {
+  // expected-error @+1 {{'calyx.component' op is missing the following required port attribute identifiers: done, go}}
+  calyx.component @main(%go: i1, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1) {
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+}
