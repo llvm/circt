@@ -55,7 +55,6 @@ print("=== Hierarchy")
 # CHECK-NEXT: <instance: [pycde_UnParameterized_0, pycde_Nothing]>
 t.walk_instances("pycde_Test", lambda inst: print(inst))
 
-
 locs = pycde.AppIDIndex()
 locs.lookup(pycde.AppID("pycde_UnParameterized_0"))["loc"] = \
   (["memory", "bank"], msft.M20K, 39, 25, 0)
@@ -77,27 +76,33 @@ x = 0
 y = 10
 t.walk_instances("pycde_Test", place_inst)
 
-
 instance_attrs = pycde.AppIDIndex()
 loc = attrs.placement(["memory", "bank"], msft.M20K, 15, 25, 0)
 instance_attrs.lookup(pycde.AppID("pycde_UnParameterized")).add_attribute(loc)
+loc = attrs.placement(["memory", "bank"], msft.DSP, 39, 25, 0)
 instance_attrs.lookup(pycde.AppID("pycde_UnParameterized",
                                   "pycde_Nothing")).add_attribute(loc)
-t.walk_instances("pycde_Test", instance_attrs.apply_attributes_visitor)
+test_inst = t.get_instance("pycde_Test")
+test_inst.walk_instances(instance_attrs.apply_attributes_visitor)
+
+assert test_inst.get_instance_at(loc) is not None
+assert test_inst.get_instance_at(msft.PhysLocationAttr.get(msft.M20K, 0, 0,
+                                                           0)) is None
 
 assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
 assert (len(instance_attrs.find_unused()) == 1)
 
+print("=== Final mlir dump")
 t.print()
 
 # CHECK-LABEL: === Tcl
 print("=== Tcl")
 
 # CHECK-LABEL: proc pycde_Test_config { parent }
-# CHECK-NEXT:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|dsp_inst
-# CHECK-NEXT:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|memory|bank
-# CHECK-NEXT:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|memory|bank
-# CHECK-NEXT:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
-# CHECK-NEXT:  set_location_assignment M20K_X39_Y25_N0 -to $parent|pycde_UnParameterized_0|memory|bank
-t.print_tcl()
+# CHECK-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|dsp_inst
+# CHECK-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|pycde_UnParameterized|pycde_Nothing|memory|bank
+# CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|pycde_UnParameterized|memory|bank
+# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|pycde_UnParameterized_0|pycde_Nothing|dsp_inst
+# CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|pycde_UnParameterized_0|memory|bank
+t.print_tcl("pycde_Test")

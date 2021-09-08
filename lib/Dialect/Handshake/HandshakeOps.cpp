@@ -834,7 +834,7 @@ bool handshake::JoinOp::tryExecute(
   return success();
 }
 void print(OpAsmPrinter &p, ForkOp op) {
-  p << "handshake.fork ";
+  p << " ";
   p.printOperands(op.getOperands());
  // p << " : " << op.getType();
 }
@@ -857,7 +857,6 @@ static ParseResult parseReturnOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printReturnOp(OpAsmPrinter &p, handshake::ReturnOp op) {
-  p << "handshake.return";
   if (op.getNumOperands() != 0) {
     p << ' ';
     p.printOperands(op.getOperands());

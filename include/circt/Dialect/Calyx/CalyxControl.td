@@ -40,13 +40,13 @@ def IfOp : CalyxContainer<"if", [
   let summary = "Calyx If";
   let arguments = (ins
     I1:$cond,
-    FlatSymbolRefAttr:$groupName
+    OptionalAttr<FlatSymbolRefAttr>:$groupName
     );
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let description = [{
     The "calyx.if" operation represents and if-then-else construct for
     conditionally executing two Calyx groups. The operands to an if operation is
-    a 1-bit port and the group under which this port is driven.
+    a 1-bit port and an optional combinational group under which this port is driven.
 
     Note: The native and CIRCT Calyx IRs may diverge wrt. 'with' execution, see:
     https://github.com/cucapra/calyx/discussions/588
@@ -59,10 +59,14 @@ def IfOp : CalyxContainer<"if", [
         calyx.enable @G3
         ...
       }
+      calyx.if %1 {
+        calyx.enable @G2
+        ...
+      }
     ```
   }];
 
-  let assemblyFormat = "$cond `with` $groupName $thenRegion (`else` $elseRegion^)? attr-dict";
+  let assemblyFormat = "$cond (`with` $groupName^)? $thenRegion (`else` $elseRegion^)? attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
 
@@ -77,6 +81,26 @@ def SeqOp : CalyxContainer<"seq", [
     ```mlir
       calyx.seq {
         // G2 will not begin execution until G1 is done.
+        calyx.enable @G1
+        calyx.enable @G2
+      }
+    ```
+  }];
+}
+
+def ParOp : CalyxContainer<"par", [
+    ControlLike
+  ]> {
+  let summary = "Calyx Parallel";
+  let description = [{
+    The "calyx.par" operation executes the
+    control within its region in parallel.
+
+    ```mlir
+      calyx.par {
+        // G1 and G2 will execute in parallel.
+        // The region is complete when both
+        // G1 and G2 are done.
         calyx.enable @G1
         calyx.enable @G2
       }
@@ -114,13 +138,13 @@ def WhileOp : CalyxContainer<"while", [
   let summary = "Calyx While";
   let arguments = (ins
     I1:$cond,
-    FlatSymbolRefAttr:$groupName
+    OptionalAttr<FlatSymbolRefAttr>:$groupName
   );
   let description = [{
     The "calyx.while" operation represents a construct for continuously
     executing the inner groups of the 'while' operation while the condition port
-    evaluates to true. The operands to a while operation is a 1-bit port and the
-    group under which this port is driven.
+    evaluates to true. The operands to a while operation is a 1-bit port and an
+    optional combinational group under which this port is driven.
 
     Note: The native and CIRCT Calyx IRs may diverge wrt. 'with' execution, see:
     https://github.com/cucapra/calyx/discussions/588
@@ -130,9 +154,13 @@ def WhileOp : CalyxContainer<"while", [
         calyx.enable @G2
         ...
       }
+      calyx.while %1 {
+        calyx.enable @G2
+        ...
+      }
     ```
   }];
 
-  let assemblyFormat = "$cond `with` $groupName $body attr-dict";
+  let assemblyFormat = "$cond (`with` $groupName^)? $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }

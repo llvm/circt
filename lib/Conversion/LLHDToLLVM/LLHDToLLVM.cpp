@@ -1077,8 +1077,7 @@ struct WaitOpConversion : public ConvertToLLVMPattern {
 
       std::array<Value, 5> args({statePtr, procStateBC, realTime, delta, eps});
       rewriter.create<LLVM::CallOp>(op->getLoc(), llvm::None,
-                                    rewriter.getSymbolRefAttr(llhdSuspendFunc),
-                                    args);
+                                    SymbolRefAttr::get(llhdSuspendFunc), args);
     }
 
     rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, ValueRange());
@@ -1198,12 +1197,11 @@ struct InstOpConversion : public ConvertToLLVMPattern {
           initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, regGep);
 
       // Malloc reg state.
-      auto regMall =
-          initBuilder
-              .create<LLVM::CallOp>(op->getLoc(), i8PtrTy,
-                                    rewriter.getSymbolRefAttr(mallFunc),
-                                    ArrayRef<Value>({regSize}))
-              .getResult(0);
+      auto regMall = initBuilder
+                         .create<LLVM::CallOp>(op->getLoc(), i8PtrTy,
+                                               SymbolRefAttr::get(mallFunc),
+                                               ArrayRef<Value>({regSize}))
+                         .getResult(0);
       auto regMallBC = initBuilder.create<LLVM::BitcastOp>(
           op->getLoc(), regStatePtrTy, regMall);
       auto zeroB = initBuilder.create<LLVM::ConstantOp>(
@@ -1231,7 +1229,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
       // Add reg state pointer to global state.
       initBuilder.create<LLVM::CallOp>(
-          op->getLoc(), llvm::None, rewriter.getSymbolRefAttr(allocEntityFunc),
+          op->getLoc(), llvm::None, SymbolRefAttr::get(allocEntityFunc),
           ArrayRef<Value>({initStatePtr, owner, regMall}));
 
       // Index of the signal in the entity's signal table.
@@ -1267,11 +1265,11 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         auto mallocSize =
             initBuilder.create<LLVM::MulOp>(op.getLoc(), i64Ty, size, twoC);
         std::array<Value, 1> margs({mallocSize});
-        auto mall = initBuilder
-                        .create<LLVM::CallOp>(
-                            op.getLoc(), i8PtrTy,
-                            rewriter.getSymbolRefAttr(mallFunc), margs)
-                        .getResult(0);
+        auto mall =
+            initBuilder
+                .create<LLVM::CallOp>(op.getLoc(), i8PtrTy,
+                                      SymbolRefAttr::get(mallFunc), margs)
+                .getResult(0);
 
         // Store the initial value.
         auto bitcast = initBuilder.create<LLVM::BitcastOp>(
@@ -1294,7 +1292,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         auto sigIndex =
             initBuilder
                 .create<LLVM::CallOp>(op.getLoc(), i32Ty,
-                                      rewriter.getSymbolRefAttr(sigFunc), args)
+                                      SymbolRefAttr::get(sigFunc), args)
                 .getResult(0);
 
         // Add structured underlying type information.
@@ -1317,8 +1315,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
           // Add information to the state.
           initBuilder.create<LLVM::CallOp>(
-              op.getLoc(), llvm::None,
-              rewriter.getSymbolRefAttr(addSigElemFunc),
+              op.getLoc(), llvm::None, SymbolRefAttr::get(addSigElemFunc),
               ArrayRef<Value>({initStatePtr, sigIndex, toInt, numElements}));
         } else if (auto structTy =
                        underlyingTy.dyn_cast<LLVM::LLVMStructType>()) {
@@ -1351,8 +1348,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
             // Add information to the state.
             initBuilder.create<LLVM::CallOp>(
-                op.getLoc(), llvm::None,
-                rewriter.getSymbolRefAttr(addSigStructFunc),
+                op.getLoc(), llvm::None, SymbolRefAttr::get(addSigStructFunc),
                 ArrayRef<Value>(
                     {initStatePtr, sigIndex, elemToInt, elemSizeToInt}));
           }
@@ -1384,12 +1380,11 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       auto procStateSize = initBuilder.create<LLVM::PtrToIntOp>(
           op->getLoc(), i64Ty, procStateGep);
       std::array<Value, 1> procStateMArgs({procStateSize});
-      auto procStateMall =
-          initBuilder
-              .create<LLVM::CallOp>(op->getLoc(), i8PtrTy,
-                                    rewriter.getSymbolRefAttr(mallFunc),
-                                    procStateMArgs)
-              .getResult(0);
+      auto procStateMall = initBuilder
+                               .create<LLVM::CallOp>(
+                                   op->getLoc(), i8PtrTy,
+                                   SymbolRefAttr::get(mallFunc), procStateMArgs)
+                               .getResult(0);
 
       auto procStateBC = initBuilder.create<LLVM::BitcastOp>(
           op->getLoc(), procStatePtrTy, procStateMall);
@@ -1408,11 +1403,11 @@ struct InstOpConversion : public ConvertToLLVMPattern {
       auto sensesSize =
           initBuilder.create<LLVM::PtrToIntOp>(op->getLoc(), i64Ty, sensesGep);
       std::array<Value, 1> senseMArgs({sensesSize});
-      auto sensesMall = initBuilder
-                            .create<LLVM::CallOp>(
-                                op->getLoc(), i8PtrTy,
-                                rewriter.getSymbolRefAttr(mallFunc), senseMArgs)
-                            .getResult(0);
+      auto sensesMall =
+          initBuilder
+              .create<LLVM::CallOp>(op->getLoc(), i8PtrTy,
+                                    SymbolRefAttr::get(mallFunc), senseMArgs)
+              .getResult(0);
 
       auto sensesBC = initBuilder.create<LLVM::BitcastOp>(
           op->getLoc(), sensesPtrTy, sensesMall);
@@ -1442,7 +1437,7 @@ struct InstOpConversion : public ConvertToLLVMPattern {
 
       std::array<Value, 3> allocProcArgs({initStatePtr, owner, procStateMall});
       initBuilder.create<LLVM::CallOp>(op->getLoc(), llvm::None,
-                                       rewriter.getSymbolRefAttr(allocProcFunc),
+                                       SymbolRefAttr::get(allocProcFunc),
                                        allocProcArgs);
     }
 
@@ -1660,7 +1655,7 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
         {statePtr, transformed.signal(), bc, sigWidth, realTime, delta, eps});
     // Create the library call.
     rewriter.create<LLVM::CallOp>(op->getLoc(), llvm::None,
-                                  rewriter.getSymbolRefAttr(drvFunc), args);
+                                  SymbolRefAttr::get(drvFunc), args);
 
     rewriter.eraseOp(op);
     return success();
@@ -2063,30 +2058,6 @@ struct CombParityOpConversion : public ConvertToLLVMPattern {
 } // namespace
 
 namespace {
-/// Convert a NegOp to LLVM dialect.
-struct NegOpConversion : public ConvertToLLVMPattern {
-  explicit NegOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::NegOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    NegOpAdaptor transformed(operands);
-
-    auto negOne = rewriter.create<LLVM::ConstantOp>(
-        op->getLoc(), transformed.value().getType(),
-        rewriter.getI32IntegerAttr(-1));
-    rewriter.replaceOpWithNewOp<LLVM::MulOp>(op, transformed.value().getType(),
-                                             negOne, transformed.value());
-
-    return success();
-  }
-};
-
-} // namespace
-
-namespace {
 /// Convert an EqOp to LLVM dialect.
 struct EqOpConversion : public ConvertToLLVMPattern {
   explicit EqOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
@@ -2140,46 +2111,38 @@ struct NeqOpConversion : public ConvertToLLVMPattern {
 namespace {
 /// Lower an LLHD constant operation to an equivalent LLVM dialect constant
 /// operation.
-struct ConstOpConversion : public ConvertToLLVMPattern {
-  explicit ConstOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::ConstOp::getOperationName(), ctx,
+struct ConstantTimeOpConversion : public ConvertToLLVMPattern {
+  explicit ConstantTimeOpConversion(MLIRContext *ctx,
+                                    LLVMTypeConverter &typeConverter)
+      : ConvertToLLVMPattern(llhd::ConstantTimeOp::getOperationName(), ctx,
                              typeConverter) {}
 
   LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operand,
                   ConversionPatternRewriter &rewriter) const override {
     // Get the ConstOp.
-    auto constOp = cast<ConstOp>(op);
+    auto constOp = cast<ConstantTimeOp>(op);
     // Get the constant's attribute.
-    auto attr = constOp.value();
+    TimeAttr timeAttr = constOp.valueAttr();
     // Handle the time const special case: create a new array containing the
     // three time values.
-    if (auto timeAttr = attr.dyn_cast<TimeAttr>()) {
-      auto timeTy = typeConverter->convertType(constOp.getResult().getType());
+    auto timeTy = typeConverter->convertType(constOp.getResult().getType());
 
-      // Convert real-time element to ps.
-      llvm::StringMap<uint64_t> map = {
-          {"s", 12}, {"ms", 9}, {"us", 6}, {"ns", 3}, {"ps", 0}};
-      uint64_t adjusted =
-          std::pow(10, map[timeAttr.getTimeUnit()]) * timeAttr.getTime();
+    // Convert real-time element to ps.
+    llvm::StringMap<uint64_t> map = {
+        {"s", 12}, {"ms", 9}, {"us", 6}, {"ns", 3}, {"ps", 0}};
+    uint64_t adjusted =
+        std::pow(10, map[timeAttr.getTimeUnit()]) * timeAttr.getTime();
 
-      // Get sub-steps.
-      uint64_t delta = timeAttr.getDelta();
-      uint64_t eps = timeAttr.getEps();
+    // Get sub-steps.
+    uint64_t delta = timeAttr.getDelta();
+    uint64_t eps = timeAttr.getEps();
 
-      // Create time constant.
-      auto denseAttr = DenseElementsAttr::get(
-          VectorType::get(3, rewriter.getI64Type()), {adjusted, delta, eps});
-      rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
-      return success();
-    }
-
-    // Get the converted llvm type.
-    auto intType = typeConverter->convertType(attr.getType());
-    // Replace the operation with an llvm constant op.
-    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, intType,
-                                                  constOp.valueAttr());
-
+    // Create time constant.
+    auto denseAttr =
+        DenseElementsAttr::get(RankedTensorType::get(3, rewriter.getI64Type()),
+                               {adjusted, delta, eps});
+    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, timeTy, denseAttr);
     return success();
   }
 };
@@ -2833,7 +2796,7 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
   MLIRContext *ctx = converter.getDialect()->getContext();
 
   // Value creation conversion patterns.
-  patterns.add<ConstOpConversion, HWConstantOpConversion,
+  patterns.add<ConstantTimeOpConversion, HWConstantOpConversion,
                HWArrayCreateOpConversion, HWStructCreateOpConversion>(
       ctx, converter);
 
@@ -2856,8 +2819,7 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
       converter);
 
   // Arithmetic conversion patterns.
-  patterns.add<NegOpConversion, EqOpConversion, NeqOpConversion>(ctx,
-                                                                 converter);
+  patterns.add<EqOpConversion, NeqOpConversion>(ctx, converter);
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
                CombModSOpConversion, CombICmpOpConversion, CombSExtOpConversion,

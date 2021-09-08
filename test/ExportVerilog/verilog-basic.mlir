@@ -121,7 +121,7 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   // CHECK: assign out1c = |in4;
   %2 = comb.icmp ne %in4, %c0_i4 : i4
 
-  // CHECK: assign out4s = $signed(in4) >>> $signed(in4);
+  // CHECK: assign out4s = $signed($signed(in4) >>> in4);
   // CHECK: assign sext17 = {w3[15], w3};
   %35 = comb.sext %w3_use : (i16) -> i17
   hw.output %0, %1, %2, %w1_use, %11, %w2_use, %w3_use, %35 : i1, i1, i1, i4, i4, i16, i16, i17

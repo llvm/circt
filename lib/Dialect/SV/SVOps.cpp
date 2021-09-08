@@ -119,9 +119,10 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   }
 
   if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs(), {"sym_name"});
+    p.printOptionalAttrDict(op->getAttrs(), {SymbolTable::getSymbolAttrName()});
   else
-    p.printOptionalAttrDict(op->getAttrs(), {"name", "sym_name"});
+    p.printOptionalAttrDict(op->getAttrs(),
+                            {"name", SymbolTable::getSymbolAttrName()});
 }
 
 //===----------------------------------------------------------------------===//
@@ -196,7 +197,7 @@ void RegOp::build(OpBuilder &builder, OperationState &odsState,
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (sym_name)
-    odsState.addAttribute("sym_name", sym_name);
+    odsState.addAttribute(SymbolTable::getSymbolAttrName(), sym_name);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -690,7 +691,7 @@ static ParseResult parseCaseZOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printCaseZOp(OpAsmPrinter &p, CaseZOp op) {
-  p << "sv.casez" << ' ' << op.cond() << " : " << op.cond().getType();
+  p << ' ' << op.cond() << " : " << op.cond().getType();
   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"casePatterns"});
 
   for (auto caseInfo : op.getCases()) {
@@ -765,7 +766,8 @@ void InterfaceOp::build(OpBuilder &builder, OperationState &result,
                         StringRef sym_name, std::function<void()> body) {
   OpBuilder::InsertionGuard guard(builder);
 
-  result.addAttribute("sym_name", builder.getStringAttr(sym_name));
+  result.addAttribute(::SymbolTable::getSymbolAttrName(),
+                      builder.getStringAttr(sym_name));
   builder.createBlock(result.addRegion());
   if (body)
     body();
@@ -818,7 +820,7 @@ static void printModportStructs(OpAsmPrinter &p, Operation *,
     auto port = attr.cast<ModportStructAttr>();
     p << port.direction();
     p << ' ';
-    p.printSymbolName(port.signal().getRootReference());
+    p.printSymbolName(port.signal().getRootReference().getValue());
   });
   p << ')';
 }
@@ -886,8 +888,7 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
   assert(ifaceTy && "GetModportOp expects an InterfaceType.");
   auto fieldAttr = SymbolRefAttr::get(builder.getContext(), field);
   auto modportSym =
-      SymbolRefAttr::get(builder.getContext(),
-                         ifaceTy.getInterface().getRootReference(), fieldAttr);
+      SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(), fieldAttr);
   build(builder, state, ModportType::get(builder.getContext(), modportSym),
         value, fieldAttr);
 }
@@ -912,8 +913,8 @@ ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
 
   auto *ctxt = p.getBuilder().getContext();
   ifaceTy = InterfaceType::get(
-      ctxt, FlatSymbolRefAttr::get(ctxt, fullSym.getRootReference()));
-  signalName = FlatSymbolRefAttr::get(ctxt, fullSym.getLeafReference());
+      ctxt, FlatSymbolRefAttr::get(fullSym.getRootReference()));
+  signalName = FlatSymbolRefAttr::get(fullSym.getLeafReference());
   return success();
 }
 
@@ -921,8 +922,7 @@ void printIfaceTypeAndSignal(OpAsmPrinter &p, Operation *op, Type type,
                              FlatSymbolRefAttr signalName) {
   InterfaceType ifaceTy = type.dyn_cast<InterfaceType>();
   assert(ifaceTy && "Expected an InterfaceType");
-  auto sym = SymbolRefAttr::get(op->getContext(),
-                                ifaceTy.getInterface().getRootReference(),
+  auto sym = SymbolRefAttr::get(ifaceTy.getInterface().getRootReference(),
                                 {signalName});
   p << sym;
 }
@@ -964,7 +964,7 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
   if (!name)
     name = builder.getStringAttr("");
   if (sym_name)
-    odsState.addAttribute("sym_name", sym_name);
+    odsState.addAttribute(SymbolTable::getSymbolAttrName(), sym_name);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));

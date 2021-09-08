@@ -10,7 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-def InstanceOp : FIRRTLOp<"instance"> {
+def InstanceOp : FIRRTLOp<"instance", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
@@ -86,7 +87,7 @@ def SeqMemOp : FIRRTLOp<"seqmem"> {
 }
 
 def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
-                               DeclareOpInterfaceMethods<OpAsmOpInterface>]> {
+         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Declares a memory port on a memory";
 
   let summary = "Defines a memory port on CHIRRTL memory";

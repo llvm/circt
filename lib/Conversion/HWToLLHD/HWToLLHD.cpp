@@ -62,6 +62,7 @@ void HWToLLHDPass::runOnOperation() {
   ConversionTarget target(context);
   target.addLegalDialect<LLHDDialect>();
   target.addLegalDialect<CombDialect>();
+  target.addLegalOp<ConstantOp>();
   target.addIllegalOp<HWModuleOp>();
   target.addIllegalOp<OutputOp>();
   target.addIllegalOp<InstanceOp>();
@@ -191,9 +192,8 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
 
       // Otherwise, drive the destination block argument value.
       if (!delta) {
-        auto timeType = TimeType::get(rewriter.getContext());
-        auto deltaAttr = TimeAttr::get(timeType, {0, 1, 0}, "ns");
-        delta = rewriter.create<ConstOp>(output.getLoc(), timeType, deltaAttr);
+        delta = rewriter.create<ConstantTimeOp>(
+            output.getLoc(), ArrayRef<unsigned int>({0, 1, 0}), "ns");
       }
       rewriter.create<DrvOp>(output.getLoc(), dest, src, delta, Value());
     }
@@ -247,17 +247,15 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
           diag << "argument type " << argType << " is not supported";
         });
 
-      auto init = rewriter.create<ConstOp>(arg.getLoc(), argType,
-                                           rewriter.getIntegerAttr(argType, 0));
+      auto init = rewriter.create<ConstantOp>(arg.getLoc(), argType, 0);
       SmallString<8> sigName(instance.instanceName());
       sigName += "_arg_";
       sigName += std::to_string(argIdx++);
       auto sig = rewriter.createOrFold<SigOp>(
           arg.getLoc(), SigType::get(argType), sigName, init);
       if (!delta) {
-        auto timeType = TimeType::get(rewriter.getContext());
-        auto deltaAttr = TimeAttr::get(timeType, {0, 1, 0}, "ns");
-        delta = rewriter.create<ConstOp>(arg.getLoc(), timeType, deltaAttr);
+        delta = rewriter.create<ConstantTimeOp>(
+            arg.getLoc(), ArrayRef<unsigned int>({0, 1, 0}), "ns");
       }
       rewriter.create<DrvOp>(arg.getLoc(), sig, arg, delta, Value());
       arguments.push_back(sig);
@@ -301,8 +299,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
       // collected in a canonicalization later where appropriate.
       // See github.com/llvm/circt/pull/988 for a discussion.
       if (!sig) {
-        auto init = rewriter.create<ConstOp>(
-            loc, resultType, rewriter.getIntegerAttr(resultType, 0));
+        auto init = rewriter.create<ConstantOp>(loc, resultType, 0);
         SmallString<8> sigName(instance.instanceName());
         sigName += "_result_";
         sigName += std::to_string(result.getResultNumber());

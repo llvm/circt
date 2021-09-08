@@ -4,8 +4,8 @@
 // CHECK: llhd.entity @foo (%[[ARG0:.*]] : !llhd.sig<i64>, %[[ARG1:.*]] : !llhd.sig<i64>) -> (%[[OUT0:.*]] : !llhd.sig<i64>) {
 "llhd.entity"() ({
 ^body(%arg0 : !llhd.sig<i64>, %arg1 : !llhd.sig<i64>, %out0 : !llhd.sig<i64>):
-  // CHECK-NEXT: %[[C0:.*]] = llhd.const 1
-  %0 = llhd.const 1 : i64
+  // CHECK-NEXT: %[[C0:.*]] = hw.constant 1
+  %0 = hw.constant 1 : i64
   // CHECK-NEXT: %[[P0:.*]] = llhd.prb %[[ARG0]]
   %1 = llhd.prb %arg0 : !llhd.sig<i64>
   "llhd.terminator"() {} : () -> ()

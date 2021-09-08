@@ -13,6 +13,12 @@ mlir_tablegen(CalyxAttrs.cpp.inc -gen-struct-attr-defs)
 add_public_tablegen_target(MLIRCalyxAttrsIncGen)
 add_dependencies(circt-headers MLIRCalyxAttrsIncGen)
 
+set(LLVM_TARGET_DEFINITIONS CalyxInterfaces.td)
+mlir_tablegen(CalyxInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(CalyxInterfaces.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(MLIRCalyxInterfacesIncGen)
+add_dependencies(circt-headers MLIRCalyxInterfacesIncGen)
+
 set(LLVM_TARGET_DEFINITIONS CalyxPasses.td)
 mlir_tablegen(CalyxPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTCalyxTransformsIncGen)

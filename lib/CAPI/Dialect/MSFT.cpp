@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -21,12 +22,20 @@ using namespace circt::msft;
 
 void mlirMSFTRegisterPasses() { circt::msft::registerMSFTPasses(); }
 
-MlirLogicalResult mlirMSFTExportTcl(MlirModule module,
+MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
                                     MlirStringCallback callback,
                                     void *userData) {
+  Operation *op = unwrap(module);
+  hw::HWModuleOp hwmod = dyn_cast<hw::HWModuleOp>(op);
+  if (!hwmod)
+    return wrap(op->emitOpError("Export TCL can only be run on HWModules"));
   mlir::detail::CallbackOstream stream(callback, userData);
-  return wrap(exportQuartusTcl(unwrap(module), stream));
+  return wrap(exportQuartusTcl(hwmod, stream));
 }
+
+//===----------------------------------------------------------------------===//
+// Generator registration.
+//===----------------------------------------------------------------------===//
 
 void mlirMSFTRegisterGenerator(MlirContext cCtxt, const char *opName,
                                const char *generatorName,
@@ -41,6 +50,52 @@ void mlirMSFTRegisterGenerator(MlirContext cCtxt, const char *opName,
       },
       unwrap(parameters));
 }
+
+//===----------------------------------------------------------------------===//
+// DeviceDB.
+//===----------------------------------------------------------------------===//
+
+DEFINE_C_API_PTR_METHODS(CirctMSFTDeviceDB, circt::msft::DeviceDB)
+
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirOperation top) {
+  return wrap(new DeviceDB(unwrap(top)));
+}
+void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self) { delete unwrap(self); }
+size_t circtMSFTDeviceDBAddDesignPlacements(CirctMSFTDeviceDB self) {
+  return unwrap(self)->addDesignPlacements();
+}
+MlirLogicalResult circtMSFTDeviceDBAddPlacement(CirctMSFTDeviceDB self,
+                                                MlirAttribute cLoc,
+                                                CirctMSFTPlacedInstance cInst) {
+  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  RootedInstancePathAttr path =
+      unwrap(cInst.path).cast<RootedInstancePathAttr>();
+  StringAttr subpath = StringAttr::get(
+      loc.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
+  auto inst =
+      DeviceDB::PlacedInstance{path, subpath.getValue(), unwrap(cInst.op)};
+
+  return wrap(unwrap(self)->addPlacement(loc, inst));
+}
+bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB self,
+                                       MlirAttribute cLoc,
+                                       CirctMSFTPlacedInstance *out) {
+  auto loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  Optional<DeviceDB::PlacedInstance> inst = unwrap(self)->getInstanceAt(loc);
+  if (!inst)
+    return false;
+  if (out != nullptr) {
+    out->path = wrap(inst->path);
+    out->subpath = inst->subpath.data();
+    out->subpathLength = inst->subpath.size();
+    out->op = wrap(inst->op);
+  }
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
+// MSFT Attributes.
+//===----------------------------------------------------------------------===//
 
 void mlirMSFTAddPhysLocationAttr(MlirOperation cOp, const char *entityName,
                                  DeviceType type, long x, long y, long num) {
@@ -80,6 +135,21 @@ uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute attr) {
   return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getNum();
 }
 
+bool circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute cAttr) {
+  return unwrap(cAttr).isa<RootedInstancePathAttr>();
+}
+MlirAttribute
+circtMSFTRootedInstancePathAttrGet(MlirContext cCtxt, MlirAttribute cRootSym,
+                                   MlirAttribute *cPathStringAttrs,
+                                   size_t num) {
+  auto ctxt = unwrap(cCtxt);
+  auto rootSym = unwrap(cRootSym).cast<FlatSymbolRefAttr>();
+  SmallVector<StringAttr, 16> path;
+  for (size_t i = 0; i < num; ++i)
+    path.push_back(unwrap(cPathStringAttrs[i]).cast<StringAttr>());
+  return wrap(RootedInstancePathAttr::get(ctxt, rootSym, path));
+}
+
 bool circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute attr) {
   return unwrap(attr).isa<SwitchInstanceAttr>();
 }
@@ -87,14 +157,18 @@ MlirAttribute
 circtMSFTSwitchInstanceAttrGet(MlirContext cCtxt,
                                CirctMSFTSwitchInstanceCase *listOfCases,
                                size_t numCases) {
-  SmallVector<SwitchInstanceCase, 64> cases;
+  MLIRContext *ctxt = unwrap(cCtxt);
+  SmallVector<SwitchInstanceCaseAttr, 64> cases;
   for (size_t i = 0; i < numCases; ++i) {
     CirctMSFTSwitchInstanceCase pair = listOfCases[i];
-    auto instance = unwrap(pair.instance).cast<SymbolRefAttr>();
+    Attribute instanceAttr = unwrap(pair.instance);
+    auto instance = instanceAttr.dyn_cast<RootedInstancePathAttr>();
+    assert(instance &&
+           "Expected `RootedInstancePathAttr` in switch instance case.");
     auto attr = unwrap(pair.attr);
-    cases.push_back(std::make_pair(instance, attr));
+    cases.push_back(SwitchInstanceCaseAttr::get(ctxt, instance, attr));
   }
-  return wrap(SwitchInstanceAttr::get(unwrap(cCtxt), cases));
+  return wrap(SwitchInstanceAttr::get(ctxt, cases));
 }
 size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute attr) {
   return unwrap(attr).cast<SwitchInstanceAttr>().getCases().size();
@@ -103,11 +177,11 @@ void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute attr,
                                          CirctMSFTSwitchInstanceCase *dstArray,
                                          size_t space) {
   auto sw = unwrap(attr).cast<SwitchInstanceAttr>();
-  ArrayRef<SwitchInstanceCase> cases = sw.getCases();
+  ArrayRef<SwitchInstanceCaseAttr> cases = sw.getCases();
   assert(space >= cases.size());
   for (size_t i = 0, e = cases.size(); i < e; ++i) {
     auto c = cases[i];
-    dstArray[i] = {wrap(c.first), wrap(c.second)};
+    dstArray[i] = {wrap(c.getInst()), wrap(c.getAttr())};
   }
 }
 

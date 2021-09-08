@@ -23,7 +23,7 @@
 // CHECK:           %[[VAL_16:.*]] = llvm.trunc %[[VAL_15]] : i16 to i1
 // CHECK:           %[[VAL_17:.*]] = llvm.mlir.constant(true) : i1
 // CHECK:           %[[VAL_18:.*]] = llvm.xor %[[VAL_16]], %[[VAL_17]] : i1
-// CHECK:           %[[VAL_19:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : vector<3xi64>) : !llvm.array<3 x i64>
+// CHECK:           %[[VAL_19:.*]] = llvm.mlir.constant(dense<[1000, 0, 0]> : tensor<3xi64>) : !llvm.array<3 x i64>
 // CHECK:           %[[VAL_20:.*]] = llvm.mlir.constant(1 : i64) : i64
 // CHECK:           %[[VAL_21:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_22:.*]] = llvm.alloca %[[VAL_21]] x i1 {alignment = 4 : i64} : (i32) -> !llvm.ptr<i1>
@@ -37,11 +37,11 @@
 // CHECK:         }
 
 llhd.entity @Foo () -> () {
-  %0 = llhd.const 0 : i1
+  %0 = hw.constant 0 : i1
   %toggle = llhd.sig "toggle" %0 : i1
   %1 = llhd.prb %toggle : !llhd.sig<i1>
-  %allset = llhd.const 1 : i1
+  %allset = hw.constant 1 : i1
   %2 = comb.xor %1, %allset : i1
-  %dt = llhd.const #llhd.time<1ns, 0d, 0e> : !llhd.time
+  %dt = llhd.constant_time #llhd.time<1ns, 0d, 0e>
   llhd.drv %toggle, %2 after %dt : !llhd.sig<i1>
 }

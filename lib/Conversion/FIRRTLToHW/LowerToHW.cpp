@@ -469,7 +469,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<hw::HWGeneratorSchemaOp>(
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
-  auto memorySchema = b.getSymbolRefAttr(schema);
+  auto memorySchema = SymbolRefAttr::get(schema);
 
   Type b1Type = IntegerType::get(&getContext(), 1);
 
@@ -2034,7 +2034,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
   }
 
-  auto memModuleAttr = builder.getSymbolRefAttr(getFirMemoryName(memSummary));
+  auto memModuleAttr =
+      SymbolRefAttr::get(op.getContext(), getFirMemoryName(memSummary));
 
   // FIRRTL ports are arbitrary in order, ours are not
   readOperands.append(writeOperands.begin(), writeOperands.end());
@@ -2120,19 +2121,17 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   }
 
   // Use the symbol from the module we are referencing.
-  FlatSymbolRefAttr symbolAttr = builder.getSymbolRefAttr(newModule);
+  FlatSymbolRefAttr symbolAttr = SymbolRefAttr::get(newModule);
 
   // If this instance is destined to be lowered to a bind, generate a symbol for
   // it and generate a bind op.  Enter the bind into global CircuitLoweringState
   // so that this can be moved outside of module once we're guaranteed to not be
   // a parallel context.
-  StringAttr symbol({});
+  StringAttr symbol;
   if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
     symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
-    auto instanceSymbol = builder.getSymbolRefAttr(symbol.getValue());
-
-    // FIXME: LLVM PR51665 shouldn't have to rebind symbol here.
-    auto moduleSymbol = builder.getSymbolRefAttr(theModule.getName());
+    auto instanceSymbol = SymbolRefAttr::get(symbol);
+    auto moduleSymbol = SymbolRefAttr::get(theModule.getNameAttr());
     auto bindOp = builder.create<sv::BindOp>(instanceSymbol, moduleSymbol);
     // If the lowered op already had output file information, then use that.
     // Otherwise, generate some default bind information.

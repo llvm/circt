@@ -10,8 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-// Base class for other typedefs. Provides dialact-specific defaults.
-class HWType<string name> : TypeDef<HWDialect, name> { }
+#ifndef CIRCT_DIALECT_HW_HWTYPES
+#define CIRCT_DIALECT_HW_HWTYPES
+
+include "circt/Dialect/HW/HWDialect.td"
 
 //===----------------------------------------------------------------------===//
 // Type predicates
@@ -19,184 +21,36 @@ class HWType<string name> : TypeDef<HWDialect, name> { }
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
-def HWIntegerType : DialectType<HWDialect, CPred<"hw::isHWIntegerType($_self)">,
-                                 "an integer bitvector of one or more bits",
-                                 "::mlir::IntegerType">;
+def HWIntegerType : DialectType<HWDialect,
+    CPred<"hw::isHWIntegerType($_self)">,
+    "an integer bitvector of one or more bits", "::mlir::IntegerType">;
 
 // Type constraint that indicates that an operand/result may only be a valid,
 // known, non-directional type.
-def HWValueType : DialectType<HWDialect, CPred<"hw::isHWValueType($_self)">,
-                               "a known primitive element">;
+def HWValueType : DialectType<HWDialect,
+    CPred<"hw::isHWValueType($_self)">, "a known primitive element">;
 
 // Type constraint that indicates that an operand/result may only be a valid
 // non-directional type.
-def HWNonInOutType : DialectType<HWDialect, CPred<"!hw::hasHWInOutType($_self)">,
-                                  "a type without inout">;
+def HWNonInOutType : DialectType<HWDialect,
+    CPred<"!hw::hasHWInOutType($_self)">, "a type without inout">;
 
-//===----------------------------------------------------------------------===//
-// Type declarations
-//===----------------------------------------------------------------------===//
-
-// A simple fixed size array. Declares the hw::ArrayType in C++.
-def ArrayTypeImpl : HWType<"Array"> {
-  let summary = "fixed-sized array";
-  let description = [{
-    Fixed sized HW arrays are roughly similar to C arrays. On the wire (vs.
-    in a memory), arrays are always packed. Memory layout is not defined as
-    it does not need to be since in silicon there is not implicit memory
-    sharing.
-  }];
-
-  let mnemonic = "array";
-  let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
-  let genVerifyDecl = 1;
-
-  let extraClassDeclaration = [{
-    static ArrayType get(Type elementType, size_t size) {
-      return get(elementType.getContext(), elementType, size);
-    }
-  }];
-}
+def InOutType : DialectType<HWDialect,
+    CPred<"hw::type_isa<hw::InOutType>($_self)">, "InOutType", "InOutType">;
 
 // A handle to refer to hw::ArrayType in ODS.
 def ArrayType : DialectType<HWDialect,
     CPred<"hw::type_isa<hw::ArrayType>($_self)">, "an ArrayType",
     "TypeAliasOr<ArrayType>">;
 
-// An 'unpacked' array of fixed size.
-def UnpackedArrayType : HWType<"UnpackedArray"> {
-  let summary = "SystemVerilog 'unpacked' fixed-sized array";
-  let description = [{
-    Unpacked arrays are a more flexible array representation than packed arrays,
-    and are typically used to model memories.  See SystemVerilog Spec 7.4.2.
-  }];
-
-  let mnemonic = "uarray";
-  let parameters = (ins "::mlir::Type":$elementType, "size_t":$size);
-  let genVerifyDecl = 1;
-
-  let extraClassDeclaration = [{
-    static UnpackedArrayType get(Type elementType, size_t size) {
-      return get(elementType.getContext(), elementType, size);
-    }
-  }];
-}
-
-def InOutType : HWType<"InOut"> {
-  let summary = "inout type";
-  let description = [{
-    InOut type is used for model operations and values that have "connection"
-    semantics, instead of typical dataflow behavior.  This is used for wires
-    and inout ports in Verilog.
-  }];
-
-  let mnemonic = "inout";
-  let parameters = (ins "::mlir::Type":$elementType);
-  let genVerifyDecl = 1;
-
-  let extraClassDeclaration = [{
-    static InOutType get(Type elementType) {
-      return get(elementType.getContext(), elementType);
-    }
-  }];
-}
-
-// A packed struct. Declares the hw::StructType in C++.
-def StructTypeImpl : HWType<"Struct"> {
-  let summary = "HW struct type";
-  let description = [{
-    Represents a structure of name, value pairs.
-    !hw.struct<fieldName1: Type1, fieldName2: Type2>
-  }];
-  let mnemonic = "struct";
-
-  let parameters = (
-    ins
-    // An ArrayRef of something which requires allocation in the storage
-    // constructor.
-    ArrayRefOfSelfAllocationParameter<
-      "::circt::hw::StructType::FieldInfo",
-      "struct fields">: $elements
-  );
-
-  let extraClassDeclaration = [{
-    using FieldInfo = ::circt::hw::detail::FieldInfo;
-    mlir::Type getFieldType(mlir::StringRef fieldName);
-    void getInnerTypes(mlir::SmallVectorImpl<mlir::Type>&);
-  }];
-}
-
 // A handle to refer to hw::StructType in ODS.
 def StructType : DialectType<HWDialect,
     CPred<"hw::type_isa<hw::StructType>($_self)">, "a StructType",
     "TypeAliasOr<StructType>">;
-
-// An untagged union. Declares the hw::UnionType in C++.
-def UnionTypeImpl : HWType<"Union"> {
-  let summary = "An untagged union of types";
-  let parameters = (
-    ins
-    // An ArrayRef of something which requires allocation in the storage
-    // constructor.
-    ArrayRefOfSelfAllocationParameter<
-      "::circt::hw::UnionType::FieldInfo",
-      "union fields">: $elements
-  );
-  let mnemonic = "union";
-
-  let extraClassDeclaration = [{
-    using FieldInfo = ::circt::hw::detail::FieldInfo;
-    mlir::Type getFieldType(mlir::StringRef fieldName);
-  }];
-}
 
 // A handle to refer to hw::UnionType in ODS.
 def UnionType : DialectType<HWDialect,
     CPred<"hw::type_isa<hw::UnionType>($_self)">, "a UnionType",
     "TypeAliasOr<UnionType>">;
 
-def TypeAliasType : HWType<"TypeAlias"> {
-  let summary = "An symbolic reference to a type declaration";
-  let description = [{
-    A TypeAlias is parameterized by a SymbolRefAttr, which points to a
-    TypedeclOp. The root reference should refer to a TypeScope within the same
-    outer ModuleOp, and the leaf reference should refer to a type within that
-    TypeScope. A TypeAlias is further parameterized by the inner type, which is
-    needed to be known at the time the type is parsed.
-
-    Upon construction, a TypeAlias stores the symbol reference and type, and
-    canonicalizes the type to resolve any nested type aliases. The canonical
-    type is also cached to avoid recomputing it when needed.
-  }];
-
-  let mnemonic = "typealias";
-
-  let parameters = (ins
-    "mlir::SymbolRefAttr":$ref,
-    "mlir::Type":$innerType,
-    "mlir::Type":$canonicalType
-  );
-
-  let builders = [
-    TypeBuilderWithInferredContext<(ins
-      "mlir::SymbolRefAttr":$ref, "mlir::Type":$innerType)>
-  ];
-
-  let extraClassDeclaration = [{
-    Optional<TypedeclOp> getDecl(Operation *op);
-  }];
-}
-
-//===----------------------------------------------------------------------===//
-// Attributes
-//===----------------------------------------------------------------------===//
-
-/// An attribute to indicate the output file an operation should be emitted to.
-def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
-  StructFieldAttr<"directory", OptionalAttr<StrAttr>>,
-  StructFieldAttr<"name", OptionalAttr<StrAttr>>,
-  StructFieldAttr<"exclude_from_filelist",
-    DefaultValuedAttr<BoolAttr, "false">>,
-  StructFieldAttr<"exclude_replicated_ops",
-    DefaultValuedAttr<BoolAttr, "true">>,
-]>;
+#endif // CIRCT_DIALECT_HW_HWTYPES

@@ -69,7 +69,7 @@ static hw::InstanceOp getInstance(hw::HWModuleOp root,
 hw::InstanceOp circt::msft::getInstance(hw::HWModuleOp root,
                                         SymbolRefAttr pathAttr) {
   SmallVector<StringRef, 16> path;
-  path.push_back(pathAttr.getRootReference());
+  path.push_back(pathAttr.getRootReference().getValue());
   for (auto sym : pathAttr.getNestedReferences())
     path.push_back(sym.getValue());
   return ::getInstance(root, path);

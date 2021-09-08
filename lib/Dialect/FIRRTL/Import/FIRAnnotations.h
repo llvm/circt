@@ -30,13 +30,15 @@ class ArrayAttr;
 namespace circt {
 namespace firrtl {
 
+class CircuitOp;
+
 bool fromJSON(llvm::json::Value &value, StringRef circuitTarget,
               llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
-              MLIRContext *context);
+              CircuitOp circuit, size_t &nlaNumber);
 
 bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
-                              MLIRContext *context, unsigned &annotationID,
-                              Location loc);
+                              CircuitOp circuit, unsigned &annotationID,
+                              Location loc, size_t &nlaNumber);
 
 } // namespace firrtl
 } // namespace circt

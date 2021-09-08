@@ -23,6 +23,9 @@ class Instance:
     self.module = module
     self.instOp = instOp
     self.parent = parent
+    if parent is None:
+      self.devicedb = msft.DeviceDB(module.operation)
+      self.devicedb.add_design_placements()
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
 
@@ -40,15 +43,32 @@ class Instance:
     return self.parent.path + [self]
 
   @property
-  def path_attr(self) -> ir.MlirAttribute:
-    symrefs = [f"@{i.name}" for i in self.path]
-    if len(symrefs) <= 1:
-      return None
-    return ir.Attribute.parse("::".join(symrefs[:-1]))
+  def root_module(self) -> hw.HWModuleOp:
+    if self.parent is None:
+      return self.module
+    return self.parent.root_module
+
+  @property
+  def root_instance(self) -> Instance:
+    if self.parent is None:
+      return self
+    return self.parent.root_instance
+
+  @property
+  def path_attr(self) -> msft.RootedInstancePathAttr:
+    return msft.RootedInstancePathAttr.get(
+        ir.FlatSymbolRefAttr.get(
+            ir.StringAttr(
+                self.root_module.operation.attributes["sym_name"]).value),
+        [x.name_attr for x in self.path[:-1]])
 
   @property
   def name(self):
     return ir.StringAttr(self.instOp.instanceName).value
+
+  @property
+  def name_attr(self):
+    return ir.StringAttr(self.instOp.instanceName)
 
   @property
   def is_root(self):
@@ -79,11 +99,13 @@ class Instance:
       inst.walk_instances(callback)
 
   def attach_attribute(self, attr_key: str, attr: ir.Attribute):
-    # In the case where this instance sits in the 'top' or 'root' module, we
-    # don't need a switch attr.
-    if self.parent.is_root:
-      self.instOp.attributes[attr_key] = attr
-      return
+    if isinstance(attr, msft.PhysLocationAttr):
+      assert attr_key.startswith("loc:")
+      db = self.root_instance.devicedb
+      rc = db.add_placement(attr, self.path_attr, attr_key[4:],
+                            self.instOp.operation)
+      if not rc:
+        raise ValueError("Failed to place")
 
     if attr_key not in self.instOp.attributes:
       cases = []
@@ -108,3 +130,9 @@ class Instance:
     if isinstance(subpath, list):
       subpath = "|".join(subpath)
     self.attach_attribute(f"loc:{subpath}", loc)
+
+  def get_instance_at(self, loc):
+    if isinstance(loc, tuple) and len(loc) == 2:
+      loc = loc[1]
+    assert isinstance(loc, msft.PhysLocationAttr)
+    return self.root_instance.devicedb.get_instance_at(loc)

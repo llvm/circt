@@ -6,9 +6,11 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-file(GLOB globbed *.cpp)
 add_circt_dialect_library(CIRCTMSFT
-  ${globbed}
+  MSFTAttributes.cpp
+  MSFTDialect.cpp
+  MSFTGenerator.cpp
+  DeviceDB.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/MSFT

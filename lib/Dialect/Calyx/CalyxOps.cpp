@@ -76,9 +76,30 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+/// Returns whether this value is either (1) a port on a ComponentOp or (2) a
+/// port on a cell interface.
+static bool isPort(Value value) {
+  Operation *definingOp = value.getDefiningOp();
+  return value.isa<BlockArgument>() ||
+         (definingOp && isa<CellInterface>(definingOp));
+}
+
+/// Gets the port for a given BlockArgument.
+PortInfo calyx::getPortInfo(BlockArgument arg) {
+  Operation *op = arg.getOwner()->getParentOp();
+  assert(isa<ComponentOp>(op) &&
+         "Only ComponentOp should support lookup by BlockArgument.");
+  return cast<ComponentOp>(op).getPortInfo()[arg.getArgNumber()];
+}
+
+/// Returns whether the given operation has a control region.
+static bool hasControlRegion(Operation *op) {
+  return isa<ControlOp, SeqOp, IfOp, WhileOp, ParOp>(op);
+}
+
 /// Verifies the body of a ControlLikeOp.
 static LogicalResult verifyControlBody(Operation *op) {
-  if (isa<SeqOp>(op))
+  if (isa<SeqOp, ParOp>(op))
     // This does not apply to sequential and parallel regions.
     return success();
 
@@ -90,54 +111,59 @@ static LogicalResult verifyControlBody(Operation *op) {
     // However, that must be the only operation.
     //  E.g. Allowed:  calyx.control { calyx.enable @A }
     //   Not Allowed:  calyx.control { calyx.enable @A calyx.seq { ... } }
-    bool isInvalidBody =
+    bool usesEnableAsCompositionOperator =
         numOperations > 1 && llvm::any_of(region.front(), [](auto &&bodyOp) {
           return isa<EnableOp>(bodyOp);
         });
-    if (isInvalidBody)
+    if (usesEnableAsCompositionOperator)
       return op->emitOpError(
           "EnableOp is not a composition operator. It should be nested "
           "in a control flow operation, such as \"calyx.seq\"");
+
+    // Verify that multiple control flow operations are nested inside a single
+    // control operator. See: https://github.com/llvm/circt/issues/1723
+    size_t numControlFlowRegions =
+        llvm::count_if(opsIt, [](auto &&op) { return hasControlRegion(&op); });
+    if (numControlFlowRegions > 1)
+      return op->emitOpError(
+          "has an invalid control sequence. Multiple control flow operations "
+          "must all be nested in a single calyx.seq or calyx.par");
   }
   return success();
 }
 
+static LogicalResult portsDrivenByGroup(ValueRange ports,
+                                        GroupInterface groupOp);
+
 /// Checks whether @p port is driven from within @p groupOp.
-static LogicalResult isPortDrivenByGroup(Value port, GroupOp groupOp) {
+static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
   // Check if the port is driven by an assignOp from within @p groupOp.
   for (auto &use : port.getUses()) {
     if (auto assignOp = dyn_cast<AssignOp>(use.getOwner())) {
       if (assignOp.dest() != port ||
-          assignOp->getParentOfType<GroupOp>() != groupOp)
+          assignOp->getParentOfType<GroupInterface>() != groupOp)
         continue;
       return success();
     }
   }
 
-  // If @p port is an output of an InstanceOp, and if any input port of
-  // this InstanceOp is driven within @p groupOp, we'll assume that @p port
-  // is sensitive to the driven input port.
-  // @TODO: simplify this logic when the calyx.cell interface allows us to more
-  // easily access the input and output ports of a component
-  if (auto instanceOp = dyn_cast<InstanceOp>(port.getDefiningOp())) {
-    auto compOp = instanceOp.getReferencedComponent();
-    auto compOpPortInfo = llvm::enumerate(getComponentPortInfo(compOp));
-
-    bool isOutputPort = llvm::any_of(compOpPortInfo, [&](auto portInfo) {
-      return port == instanceOp->getResult(portInfo.index()) &&
-             portInfo.value().direction == Direction::Output;
-    });
-
-    if (isOutputPort) {
-      return success(llvm::any_of(compOpPortInfo, [&](auto portInfo) {
-        return portInfo.value().direction == Direction::Input &&
-               succeeded(isPortDrivenByGroup(
-                   instanceOp->getResult(portInfo.index()), groupOp));
-      }));
-    }
-  }
+  // If @p port is an output of a cell then we conservatively enforce that all
+  // (and at least one) non-interface inputs of the cell must be driven by the
+  // group.
+  if (auto cell = dyn_cast<CellInterface>(port.getDefiningOp());
+      cell && cell.direction(port) == calyx::Direction::Output)
+    return portsDrivenByGroup(
+        cell.filterInterfacePorts(calyx::Direction::Input), groupOp);
 
   return failure();
+}
+
+/// Checks whether all ports in @p ports are driven from within @p groupOp
+static LogicalResult portsDrivenByGroup(ValueRange ports,
+                                        GroupInterface groupOp) {
+  return success(llvm::all_of(ports, [&](auto port) {
+    return portDrivenByGroup(port, groupOp).succeeded();
+  }));
 }
 
 LogicalResult calyx::verifyCell(Operation *op) {
@@ -153,11 +179,7 @@ LogicalResult calyx::verifyCell(Operation *op) {
 
 LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto parent = op->getParentOp();
-  // Operations that may parent other ControlLike operations.
-  auto isValidParent = [](Operation *operation) {
-    return isa<ControlOp, SeqOp, IfOp, WhileOp>(operation);
-  };
-  if (!isValidParent(parent))
+  if (!hasControlRegion(parent))
     return op->emitOpError()
            << "has parent: " << parent
            << ", which is not allowed for a control-like operation.";
@@ -168,7 +190,7 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   auto &region = op->getRegion(0);
   // Operations that are allowed in the body of a ControlLike op.
   auto isValidBodyOp = [](Operation *operation) {
-    return isa<EnableOp, SeqOp, IfOp, WhileOp>(operation);
+    return isa<EnableOp, SeqOp, IfOp, WhileOp, ParOp>(operation);
   };
   for (auto &&bodyOp : region.front()) {
     if (isValidBodyOp(&bodyOp))
@@ -206,8 +228,6 @@ static LogicalResult verifyProgramOp(ProgramOp program) {
 // ComponentOp
 //===----------------------------------------------------------------------===//
 
-namespace {
-
 /// This is a helper function that should only be used to get the WiresOp or
 /// ControlOp of a ComponentOp, which are guaranteed to exist and generally at
 /// the end of a component's body. In the worst case, this will run in linear
@@ -234,8 +254,6 @@ static Value getBlockArgumentWithName(StringRef name, ComponentOp op) {
   return Value{};
 }
 
-} // namespace
-
 WiresOp calyx::ComponentOp::getWiresOp() {
   return getControlOrWiresFrom<WiresOp>(*this);
 }
@@ -257,17 +275,13 @@ static FunctionType getComponentType(ComponentOp component) {
   return component.getTypeAttr().getValue().cast<FunctionType>();
 }
 
-/// Returns the port information for the given component.
-SmallVector<ComponentPortInfo> calyx::getComponentPortInfo(Operation *op) {
-  assert(isa<ComponentOp>(op) &&
-         "Can only get port information from a component.");
-  auto component = dyn_cast<ComponentOp>(op);
-  auto portTypes = getComponentType(component).getInputs();
-  auto portNamesAttr = component.portNames();
+SmallVector<PortInfo> ComponentOp::getPortInfo() {
+  auto portTypes = getComponentType(*this).getInputs();
+  auto portNamesAttr = portNames();
   auto portDirectionsAttr =
-      component->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
+      (*this)->getAttrOfType<IntegerAttr>(direction::attrKey);
 
-  SmallVector<ComponentPortInfo> results;
+  SmallVector<PortInfo> results;
   for (uint64_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
     results.push_back({portNamesAttr[i].cast<StringAttr>(), portTypes[i],
                        direction::get(portDirectionsAttr.getValue()[i])});
@@ -275,22 +289,32 @@ SmallVector<ComponentPortInfo> calyx::getComponentPortInfo(Operation *op) {
   return results;
 }
 
-static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
+/// A helper function to return a filtered subset of a component's ports.
+template <typename Pred>
+static SmallVector<PortInfo> getFilteredPorts(ComponentOp op, Pred p) {
+  SmallVector<PortInfo> ports = op.getPortInfo();
+  llvm::erase_if(ports, p);
+  return ports;
+}
+
+SmallVector<PortInfo> ComponentOp::getInputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Output; });
+}
+
+SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Input; });
+}
+
+static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   auto componentName =
       op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
           .getValue();
-  p << "calyx.component ";
+  p << " ";
   p.printSymbolName(componentName);
 
-  auto ports = getComponentPortInfo(op);
-  SmallVector<ComponentPortInfo, 8> inPorts, outPorts;
-  for (auto &&port : ports) {
-    if (port.direction == Direction::Input)
-      inPorts.push_back(port);
-    else
-      outPorts.push_back(port);
-  }
-
+  // Print the port definition list for input and output ports.
   auto printPortDefList = [&](auto ports) {
     p << "(";
     llvm::interleaveComma(ports, p, [&](auto port) {
@@ -298,9 +322,9 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
     });
     p << ")";
   };
-  printPortDefList(inPorts);
+  printPortDefList(op.getInputPortInfo());
   p << " -> ";
-  printPortDefList(outPorts);
+  printPortDefList(op.getOutputPortInfo());
 
   p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
@@ -403,25 +427,19 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
 }
 
 static LogicalResult verifyComponentOp(ComponentOp op) {
-  // Verify there is exactly one of each section:
-  // calyx.wires, and calyx.control.
-  uint32_t numWires = 0, numControl = 0;
-  for (auto &bodyOp : *op.getBody()) {
-    if (isa<WiresOp>(bodyOp))
-      ++numWires;
-    else if (isa<ControlOp>(bodyOp))
-      ++numControl;
-  }
-  if (!(numWires == 1) || !(numControl == 1))
-    return op.emitOpError() << "requires exactly one of each: "
-                               "'calyx.wires', 'calyx.control'.";
-
-  SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
+  // Verify there is exactly one of each the wires and control operations.
+  auto wIt = op.getBody()->getOps<WiresOp>();
+  auto cIt = op.getBody()->getOps<ControlOp>();
+  if (std::distance(wIt.begin(), wIt.end()) +
+          std::distance(cIt.begin(), cIt.end()) !=
+      2)
+    return op.emitOpError(
+        "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
 
   // Verify the component has the following ports.
   // TODO(Calyx): Eventually, we want to attach attributes to these arguments.
   bool go = false, clk = false, reset = false, done = false;
-  for (auto &&port : componentPorts) {
+  for (const PortInfo &port : op.getPortInfo()) {
     if (!port.type.isInteger(1))
       // Each of the ports has bit width 1.
       continue;
@@ -434,11 +452,24 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
       clk |= (portName == "clk");
       reset |= (portName == "reset");
     }
-    if (go && clk && reset && done)
-      return success();
   }
-  return op->emitOpError() << "does not have required 1-bit input ports `go`, "
-                              "`clk`, `reset`, and output port `done`";
+  SmallVector<bool, 4> hasRequiredPort{go, clk, reset, done};
+  if (!llvm::all_of(hasRequiredPort, [&](bool b) { return b; }))
+    return op->emitOpError("does not have required 1-bit input ports `go`, "
+                           "`clk`, `reset`, and output port `done`");
+
+  // Verify the component actually does something: has a non-empty Control
+  // region, or continuous assignments.
+  bool hasNoControlConstructs =
+      op.getControlOp().getBody()->getOperations().empty();
+  bool hasNoAssignments = op.getWiresOp().getBody()->getOps<AssignOp>().empty();
+  if (hasNoControlConstructs && hasNoAssignments)
+    return op->emitOpError(
+        "The component currently does nothing. It needs to either have "
+        "continuous assignments in the Wires region or control constructs in "
+        "the Control region.");
+
+  return success();
 }
 
 /// Returns a new vector containing the concatenation of vectors @p a and @p b.
@@ -452,7 +483,7 @@ static SmallVector<T> concat(const SmallVectorImpl<T> &a,
 }
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ComponentPortInfo> ports) {
+                        StringAttr name, ArrayRef<PortInfo> ports) {
   using namespace mlir::function_like_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
@@ -514,10 +545,10 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
 
   // Verify each group is referenced in the control section.
   for (auto &&op : *wires.getBody()) {
-    if (!isa<GroupOp>(op))
+    if (!isa<GroupInterface>(op))
       continue;
-    auto group = cast<GroupOp>(op);
-    StringRef groupName = group.sym_name();
+    auto group = cast<GroupInterface>(op);
+    auto groupName = group.symName();
     if (SymbolTable::symbolKnownUseEmpty(groupName, control))
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
@@ -547,7 +578,7 @@ GroupDoneOp GroupOp::getDoneOp() {
 /// <instance-name>.<port-name>
 static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
                                   ArrayRef<StringRef> portNames) {
-  assert(op->hasTrait<Cell>() && "must have the Cell trait");
+  assert(isa<CellInterface>(op) && "must implement the Cell interface");
 
   auto instanceName = op->getAttrOfType<StringAttr>("instanceName").getValue();
   std::string prefix = instanceName.str() + ".";
@@ -559,80 +590,60 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
 // AssignOp
 //===----------------------------------------------------------------------===//
 
-/// Returns whether the given value is a port of a component, which are
-/// defined as Block Arguments.
-static bool isComponentPort(Value value) { return value.isa<BlockArgument>(); }
-
-/// Verifies the given value of the AssignOp if it is a component port. The
+/// Determines whether the given direction is valid with the given inputs. The
 /// `isDestination` boolean is used to distinguish whether the value is a source
 /// or a destination.
-static LogicalResult verifyAssignOpWithComponentPort(AssignOp op,
-                                                     bool isDestination) {
-  Value value = isDestination ? op.dest() : op.src();
+static LogicalResult verifyPortDirection(AssignOp op, Value value,
+                                         bool isDestination) {
+  Operation *definingOp = value.getDefiningOp();
+  bool isComponentPort = value.isa<BlockArgument>(),
+       isCellInterfacePort = definingOp && isa<CellInterface>(definingOp);
+  assert((isComponentPort || isCellInterfacePort) && "Not a port.");
 
-  auto component = op->getParentOfType<ComponentOp>();
-  Block *body = component.getBody();
-  auto it = llvm::find_if(body->getArguments(),
-                          [&](auto arg) { return arg == value; });
-  assert(it != body->getArguments().end() &&
-         "Value not found in the component ports.");
-  BlockArgument blockArg = *it;
+  PortInfo port = isComponentPort
+                      ? getPortInfo(value.cast<BlockArgument>())
+                      : cast<CellInterface>(definingOp).portInfo(value);
 
-  size_t blockArgNum = blockArg.getArgNumber();
+  bool isSource = !isDestination;
+  // Component output ports and cell interface input ports should be driven.
+  Direction validDirection =
+      (isDestination && isComponentPort) || (isSource && isCellInterfacePort)
+          ? Direction::Output
+          : Direction::Input;
 
-  auto ports = getComponentPortInfo(component);
-  assert(blockArgNum < ports.size() &&
-         "Block argument index should be within range of component's ports.");
-  // Within a component, we want to drive component output ports, and be
-  // driven by its input ports.
-  Direction validComponentDirection = isDestination ? Output : Input;
-  return ports[blockArgNum].direction == validComponentDirection
+  return port.direction == validDirection
              ? success()
              : op.emitOpError()
-                   << "has a component port as the "
+                   << "has a " << (isComponentPort ? "component" : "cell")
+                   << " port as the "
                    << (isDestination ? "destination" : "source")
-                   << " with the incorrect direction. It should be "
-                   << (isDestination ? "Output" : "Input") << ".";
+                   << " with the incorrect direction.";
 }
 
-/// Verifies the destination of an assignment operation.
-static LogicalResult verifyAssignOpDestination(AssignOp assign) {
-  Value dest = assign.dest();
-  if (isComponentPort(dest))
-    return verifyAssignOpWithComponentPort(assign,
-                                           /*isDestination=*/true);
+/// Verifies the value of a given assignment operation. The boolean
+/// `isDestination` is used to distinguish whether the destination
+/// or source of the AssignOp is to be verified.
+static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
+  Value value = isDestination ? op.dest() : op.src();
+  if (isPort(value))
+    return verifyPortDirection(op, value, isDestination);
 
-  Operation *definingOp = dest.getDefiningOp();
-  bool isValidDestination =
-      definingOp->hasTrait<Cell>() || isa<GroupGoOp, GroupDoneOp>(definingOp);
-  if (!isValidDestination)
-    assign->emitOpError(
-        "has an invalid destination port. The destination of an AssignOp "
-        "must be drive-able.");
-
-  return success();
-}
-
-/// Verifies the source of an assignment operation.
-static LogicalResult verifyAssignOpSource(AssignOp assign) {
-  Value src = assign.src();
-  if (isComponentPort(src))
-    return verifyAssignOpWithComponentPort(assign,
-                                           /*isDestination=*/false);
+  // A destination may also be the Go or Done hole of a GroupOp.
+  if (isDestination && !isa<GroupGoOp, GroupDoneOp>(value.getDefiningOp()))
+    return op->emitOpError(
+        "has an invalid destination port. It must be drive-able.");
 
   return success();
 }
 
 static LogicalResult verifyAssignOp(AssignOp assign) {
-  // TODO(Calyx): Verification for Cell trait (inverse of components ports):
-  // (1) The destination has Direction::Input, and
-  // (2) the source has Direction::Output.
-  // This is simpler with the completion of the Cell Interface.
-  // See: https://github.com/llvm/circt/issues/1597
-  return succeeded(verifyAssignOpDestination(assign)) &&
-                 succeeded(verifyAssignOpSource(assign))
-             ? success()
-             : failure();
+  bool isDestination = true, isSource = false;
+  if (failed(verifyAssignOpValue(assign, isDestination)))
+    return failure();
+  if (failed(verifyAssignOpValue(assign, isSource)))
+    return failure();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -651,10 +662,21 @@ ComponentOp InstanceOp::getReferencedComponent() {
 
 /// Provide meaningful names to the result values of an InstanceOp.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  SmallVector<StringRef> ports;
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<StringRef> InstanceOp::portNames() {
+  SmallVector<StringRef> portNames;
   for (auto &&port : getReferencedComponent().portNames())
-    ports.push_back(port.cast<StringAttr>().getValue());
-  getCellAsmResultNames(setNameFn, *this, ports);
+    portNames.push_back(port.cast<StringAttr>().getValue());
+  return portNames;
+}
+
+SmallVector<Direction> InstanceOp::portDirections() {
+  SmallVector<Direction> portDirections;
+  for (const PortInfo &port : getReferencedComponent().getPortInfo())
+    portDirections.push_back(port.direction);
+  return portDirections;
 }
 
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
@@ -676,14 +698,14 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
            << instance.componentName();
 
   // Verify the instance result ports with those of its referenced component.
-  SmallVector<ComponentPortInfo> componentPorts =
-      getComponentPortInfo(referencedComponent);
+  SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
+  size_t numPorts = componentPorts.size();
 
   size_t numResults = instance.getNumResults();
-  if (numResults != componentPorts.size())
+  if (numResults != numPorts)
     return instance.emitOpError()
-           << "has a wrong number of results; expected: "
-           << componentPorts.size() << " but got " << numResults;
+           << "has a wrong number of results; expected: " << numPorts
+           << " but got " << numResults;
 
   for (size_t i = 0; i != numResults; ++i) {
     auto resultType = instance.getResult(i).getType();
@@ -718,23 +740,40 @@ void RegisterOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   getCellAsmResultNames(setNameFn, *this, this->portNames());
 }
 
+SmallVector<StringRef> RegisterOp::portNames() {
+  return {"in", "write_en", "clk", "reset", "out", "done"};
+}
+
+SmallVector<Direction> RegisterOp::portDirections() {
+  return {Input, Input, Input, Input, Output, Output};
+}
+
 //===----------------------------------------------------------------------===//
 // MemoryOp
 //===----------------------------------------------------------------------===//
 
 /// Provide meaningful names to the result values of a MemoryOp.
 void MemoryOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<StringRef> MemoryOp::portNames() {
   SmallVector<StringRef> portNames;
-  SmallVector<SmallString<8>> addrNames;
   for (size_t i = 0, e = addrSizes().size(); i != e; ++i) {
-    addrNames.emplace_back("addr" + std::to_string(i));
-    portNames.push_back(addrNames[i]);
+    auto nameAttr =
+        StringAttr::get(this->getContext(), "addr" + std::to_string(i));
+    portNames.push_back(nameAttr.getValue());
   }
-  portNames.push_back("write_data");
-  portNames.push_back("write_en");
-  portNames.push_back("read_data");
-  portNames.push_back("done");
-  getCellAsmResultNames(setNameFn, *this, portNames);
+  portNames.append({"write_data", "write_en", "clk", "read_data", "done"});
+  return portNames;
+}
+
+SmallVector<Direction> MemoryOp::portDirections() {
+  SmallVector<Direction> portDirections;
+  for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
+    portDirections.push_back(Input);
+  portDirections.append({Input, Input, Input, Output, Output});
+  return portDirections;
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
@@ -746,11 +785,12 @@ void MemoryOp::build(OpBuilder &builder, OperationState &state,
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));
   SmallVector<Type> types;
   for (int64_t size : addrSizes)
-    types.push_back(builder.getIntegerType(size));
-  types.push_back(builder.getIntegerType(width));
-  types.push_back(builder.getI1Type());
-  types.push_back(builder.getIntegerType(width));
-  types.push_back(builder.getI1Type());
+    types.push_back(builder.getIntegerType(size)); // Addresses
+  types.push_back(builder.getIntegerType(width));  // Write data
+  types.push_back(builder.getI1Type());            // Write enable
+  types.push_back(builder.getI1Type());            // Clk
+  types.push_back(builder.getIntegerType(width));  // Read data
+  types.push_back(builder.getI1Type());            // Done
   state.addTypes(types);
 }
 
@@ -763,7 +803,7 @@ static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
     return memoryOp.emitOpError("mismatched number of dimensions (")
            << numDims << ") and address sizes (" << numAddrs << ")";
 
-  size_t numExtraPorts = 4; // write data/enable and read data/done.
+  size_t numExtraPorts = 5; // write data/enable, clk, and read data/done.
   if (memoryOp.getNumResults() != numAddrs + numExtraPorts)
     return memoryOp.emitOpError("incorrect number of address ports, expected ")
            << numAddrs;
@@ -786,11 +826,16 @@ static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
 static LogicalResult verifyEnableOp(EnableOp enableOp) {
   auto component = enableOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  auto groupName = enableOp.groupName();
+  StringRef groupName = enableOp.groupName();
 
-  if (!wiresOp.lookupSymbol<GroupOp>(groupName))
+  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
+  if (!groupOp)
     return enableOp.emitOpError()
-           << "with group: " << groupName << ", which does not exist.";
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (isa<CombGroupOp>(groupOp))
+    return enableOp.emitOpError() << "with group '" << groupName
+                                  << "', which is a combinational group.";
 
   return success();
 }
@@ -802,12 +847,6 @@ static LogicalResult verifyEnableOp(EnableOp enableOp) {
 static LogicalResult verifyIfOp(IfOp ifOp) {
   auto component = ifOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  auto groupName = ifOp.groupName();
-  auto groupOp = wiresOp.lookupSymbol<GroupOp>(groupName);
-
-  if (!groupOp)
-    return ifOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
 
   if (ifOp.thenRegion().front().empty())
     return ifOp.emitError() << "empty 'then' region.";
@@ -816,10 +855,25 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
       ifOp.elseRegion().front().empty())
     return ifOp.emitError() << "empty 'else' region.";
 
-  if (failed(isPortDrivenByGroup(ifOp.cond(), groupOp)))
+  Optional<StringRef> optGroupName = ifOp.groupName();
+  if (!optGroupName.hasValue()) {
+    /// No combinational group was provided
+    return success();
+  }
+  StringRef groupName = optGroupName.getValue();
+  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
+  if (!groupOp)
+    return ifOp.emitOpError()
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (isa<GroupOp>(groupOp))
+    return ifOp.emitOpError() << "with group '" << groupName
+                              << "', which is not a combinational group.";
+
+  if (failed(portDrivenByGroup(ifOp.cond(), groupOp)))
     return ifOp.emitError()
            << "conditional op: '" << valueName(component, ifOp.cond())
-           << "' expected to be driven from group: '" << ifOp.groupName()
+           << "' expected to be driven from group: '" << groupName
            << "' but no driver was found.";
 
   return success();
@@ -831,28 +885,90 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
 static LogicalResult verifyWhileOp(WhileOp whileOp) {
   auto component = whileOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-  auto groupName = whileOp.groupName();
-  auto groupOp = wiresOp.lookupSymbol<GroupOp>(groupName);
-
-  if (!groupOp)
-    return whileOp.emitOpError()
-           << "with group '" << groupName << "', which does not exist.";
 
   if (whileOp.body().front().empty())
     return whileOp.emitError() << "empty body region.";
 
-  if (failed(isPortDrivenByGroup(whileOp.cond(), groupOp)))
+  Optional<StringRef> optGroupName = whileOp.groupName();
+  if (!optGroupName.hasValue()) {
+    /// No combinational group was provided
+    return success();
+  }
+  StringRef groupName = optGroupName.getValue();
+  auto groupOp = wiresOp.lookupSymbol<GroupInterface>(groupName);
+  if (!groupOp)
+    return whileOp.emitOpError()
+           << "with group '" << groupName << "', which does not exist.";
+
+  if (isa<GroupOp>(groupOp))
+    return whileOp.emitOpError() << "with group '" << groupName
+                                 << "', which is not a combinational group.";
+
+  if (failed(portDrivenByGroup(whileOp.cond(), groupOp)))
     return whileOp.emitError()
            << "conditional op: '" << valueName(component, whileOp.cond())
-           << "' expected to be driven from group: '" << whileOp.groupName()
+           << "' expected to be driven from group: '" << groupName
            << "' but no driver was found.";
 
   return success();
 }
 
 //===----------------------------------------------------------------------===//
+// Calyx library ops
+//===----------------------------------------------------------------------===//
+
+#define ImplUnaryOpCellInterface(OpType)                                       \
+  SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
+  SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
+  void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
+    getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }
+
+#define ImplBinOpCellInterface(OpType)                                         \
+  SmallVector<StringRef> OpType::portNames() {                                 \
+    return {"left", "right", "out"};                                           \
+  }                                                                            \
+  SmallVector<Direction> OpType::portDirections() {                            \
+    return {Input, Input, Output};                                             \
+  }                                                                            \
+  void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
+    getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }
+
+// clang-format off
+ImplUnaryOpCellInterface(PadLibOp)
+ImplUnaryOpCellInterface(SliceLibOp)
+ImplUnaryOpCellInterface(NotLibOp)
+
+ImplBinOpCellInterface(LtLibOp)
+ImplBinOpCellInterface(GtLibOp)
+ImplBinOpCellInterface(EqLibOp)
+ImplBinOpCellInterface(NeqLibOp)
+ImplBinOpCellInterface(GeLibOp)
+ImplBinOpCellInterface(LeLibOp)
+ImplBinOpCellInterface(SltLibOp)
+ImplBinOpCellInterface(SgtLibOp)
+ImplBinOpCellInterface(SeqLibOp)
+ImplBinOpCellInterface(SneqLibOp)
+ImplBinOpCellInterface(SgeLibOp)
+ImplBinOpCellInterface(SleLibOp)
+
+ImplBinOpCellInterface(AddLibOp)
+ImplBinOpCellInterface(SubLibOp)
+ImplBinOpCellInterface(ShruLibOp)
+ImplBinOpCellInterface(RshLibOp)
+ImplBinOpCellInterface(SrshLibOp)
+ImplBinOpCellInterface(LshLibOp)
+ImplBinOpCellInterface(AndLibOp)
+ImplBinOpCellInterface(OrLibOp)
+ImplBinOpCellInterface(XorLibOp)
+// clang-format on
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
+
+#include "circt/Dialect/Calyx/CalyxInterfaces.cpp.inc"
 
 // Provide the autogenerated implementation guts for the Op classes.
 #define GET_OP_CLASSES

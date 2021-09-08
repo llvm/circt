@@ -3084,14 +3084,16 @@ struct FIRCircuitParser : public FIRParser {
                             ModuleOp mlirModule)
       : FIRParser(state, lexer), mlirModule(mlirModule) {}
 
-  ParseResult parseCircuit(const llvm::MemoryBuffer *annotationsBuf);
+  ParseResult
+  parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf);
 
 private:
   /// Add annotations from a string to the internal annotation map.  Report
   /// errors using a provided source manager location and with a provided error
   /// message
-  ParseResult importAnnotations(SMLoc loc, StringRef circuitTarget,
-                                StringRef annotationsStr);
+  ParseResult importAnnotations(CircuitOp circuit, SMLoc loc,
+                                StringRef circuitTarget,
+                                StringRef annotationsStr, size_t &nlaNumber);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
@@ -3122,9 +3124,10 @@ private:
 
 } // end anonymous namespace
 
-ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
+ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
                                                 StringRef circuitTarget,
-                                                StringRef annotationsStr) {
+                                                StringRef annotationsStr,
+                                                size_t &nlaNumber) {
 
   auto annotations = json::parse(annotationsStr);
   if (auto err = annotations.takeError()) {
@@ -3138,7 +3141,7 @@ ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
   if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
-                getContext())) {
+                circuit, nlaNumber)) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3148,8 +3151,8 @@ ParseResult FIRCircuitParser::importAnnotations(SMLoc loc,
     return failure();
   }
 
-  if (!scatterCustomAnnotations(thisAnnotationMap, getContext(), annotationID,
-                                translateLocation(loc)))
+  if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
+                                translateLocation(loc), nlaNumber))
     return failure();
 
   // Merge the attributes we just parsed into the global set we're accumulating.
@@ -3433,8 +3436,8 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 ///
 /// If non-null, annotationsBuf is a memory buffer containing JSON annotations.
 ///
-ParseResult
-FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
+ParseResult FIRCircuitParser::parseCircuit(
+    SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs) {
   auto indent = getIndentation();
   if (!indent.hasValue())
     return emitError("'circuit' must be first token on its line"), failure();
@@ -3454,25 +3457,27 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
       info.parseOptionalInfo())
     return failure();
 
+  // Create the top-level circuit op in the MLIR module.
+  OpBuilder b(mlirModule.getBodyRegion());
+  auto circuit = b.create<CircuitOp>(info.getLoc(), name);
+
   std::string circuitTarget = "~" + name.getValue().str();
+  size_t nlaNumber = 0;
 
   // Deal with any inline annotations, if they exist.  These are processed first
   // to place any annotations from an annotation file *after* the inline
   // annotations.  While arbitrary, this makes the annotation file have "append"
   // semantics.
   if (!inlineAnnotations.empty())
-    if (importAnnotations(inlineAnnotationsLoc, circuitTarget,
-                          inlineAnnotations))
+    if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
+                          inlineAnnotations, nlaNumber))
       return failure();
 
   // Deal with the annotation file if one was specified
-  if (annotationsBuf) {
-    if (importAnnotations(info.getFIRLoc(), circuitTarget,
-                          annotationsBuf->getBuffer()))
+  for (auto annotationsBuf : annotationsBufs)
+    if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
+                          annotationsBuf->getBuffer(), nlaNumber))
       return failure();
-  }
-
-  OpBuilder b(mlirModule.getBodyRegion());
 
   // Get annotations associated with this circuit. These are either:
   //   1. Annotations with no target (which we use "~" to identify)
@@ -3480,8 +3485,7 @@ FIRCircuitParser::parseCircuit(const llvm::MemoryBuffer *annotationsBuf) {
   ArrayAttr annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
                                          getConstants().targetSet);
 
-  // Create the top-level circuit op in the MLIR module.
-  auto circuit = b.create<CircuitOp>(info.getLoc(), name, annotations);
+  circuit->setAttr("annotations", annotations);
   deferredModules.reserve(16);
 
   // Parse any contained modules.
@@ -3570,9 +3574,10 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                                              MLIRContext *context,
                                              FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
-  const llvm::MemoryBuffer *annotationsBuf = nullptr;
-  if (sourceMgr.getNumBuffers() > 1)
-    annotationsBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + 1);
+  SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
+  for (int i = 1, e = sourceMgr.getNumBuffers(); i < e; ++i)
+    annotationsBufs.push_back(
+        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + i));
 
   context->loadDialect<FIRRTLDialect>();
 
@@ -3582,7 +3587,7 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  if (FIRCircuitParser(state, lexer, *module).parseCircuit(annotationsBuf))
+  if (FIRCircuitParser(state, lexer, *module).parseCircuit(annotationsBufs))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by

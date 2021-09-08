@@ -121,7 +121,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r9 = $signed(a) % $signed(b);
 // CHECK-NEXT:   assign r10 = a << b;
 // CHECK-NEXT:   assign r11 = a >> b;
-// CHECK-NEXT:   assign r12 = $signed(a) >>> $signed(b);
+// CHECK-NEXT:   assign r12 = $signed($signed(a) >>> b);
 // CHECK-NEXT:   assign r13 = a | b;
 // CHECK-NEXT:   assign r14 = a & b;
 // CHECK-NEXT:   assign r15 = a ^ b;
@@ -768,7 +768,7 @@ hw.module @ShiftAmountZext(%a: i8, %b1: i4, %b2: i4, %b3: i4)
   // CHECK: assign o2 = a >> b2;
   %r2 = comb.shru %a, %B2 : i8
 
-  // CHECK: assign o3 = $signed(a) >>> $signed(b3);
+  // CHECK: assign o3 = $signed($signed(a) >>> b3);
   %r3 = comb.shrs %a, %B3 : i8
   hw.output %r1, %r2, %r3 : i8, i8, i8
 }
@@ -777,4 +777,18 @@ hw.module @ShiftAmountZext(%a: i8, %b1: i4, %b2: i4, %b3: i4)
 // CHECK: // Foo.bar:42:13
 hw.module @ModuleWithLocInfo()  {
 } loc("Foo.bar":42:13)
+
+
+// CHECK-LABEL: module SignedshiftResultSign
+// Issue #1681: https://github.com/llvm/circt/issues/1681
+hw.module @SignedshiftResultSign(%a: i18) -> (%b: i18) {
+  // CHECK: assign b = ($signed($signed(a) >>> a[6:0])) ^ 18'hB28;
+  %c2856_i18 = hw.constant 2856 : i18
+  %c0_i11 = hw.constant 0 : i11
+  %0 = comb.extract %a from 0 : (i18) -> i7
+  %1 = comb.concat %c0_i11, %0 : (i11, i7) -> i18
+  %2 = comb.shrs %a, %1 : i18
+  %3 = comb.xor %2, %c2856_i18 : i18
+  hw.output %3 : i18
+}
 

@@ -122,7 +122,7 @@ func @convert_shr_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.entity @convert_shr_sig (%sI32 : !llhd.sig<i32>) -> () {
-  %0 = llhd.const 8 : i32
+  %0 = hw.constant 8 : i32
   %1 = llhd.shr %sI32, %sI32, %0 : (!llhd.sig<i32>, !llhd.sig<i32>, i32) -> !llhd.sig<i32>
 }
 

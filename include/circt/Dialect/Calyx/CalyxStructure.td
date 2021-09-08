@@ -86,7 +86,7 @@ def ComponentOp : CalyxOp<"component", [
   let regions = (region SizedRegion<1>: $body);
 
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ComponentPortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -103,6 +103,15 @@ def ComponentOp : CalyxOp<"component", [
     public:
       /// Returns the body of a Calyx component.
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
+
+      /// Returns the port information for this component.
+      SmallVector<PortInfo> getPortInfo();
+
+      /// Returns the input port information for this component.
+      SmallVector<PortInfo> getInputPortInfo();
+
+      /// Returns the input port information for this component.
+      SmallVector<PortInfo> getOutputPortInfo();
 
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
@@ -174,6 +183,7 @@ def InstanceOp : CalyxCell<"instance", [
 
 def GroupOp : CalyxOp<"group", [
     HasParent<"WiresOp">,
+    DeclareOpInterfaceMethods<GroupOpInterface>,
     NoRegionArguments,
     RegionKindInterface,
     SingleBlock,
@@ -212,9 +222,43 @@ def GroupOp : CalyxOp<"group", [
   let assemblyFormat = "$sym_name $body attr-dict";
 }
 
+def CombGroupOp : CalyxOp<"comb_group", [
+    HasParent<"WiresOp">,
+    DeclareOpInterfaceMethods<GroupOpInterface>,
+    NoRegionArguments,
+    RegionKindInterface,
+    SingleBlock,
+    Symbol,
+    NoTerminator
+  ]> {
+  let summary = "Calyx Combinational Group";
+  let description = [{
+    Represents a Calyx combinational group, which is a collection
+    of combinational assignments that are only active when the group
+    is run from the control execution schedule.
+    A combinational group does not have group_go or group_done operators.
+
+    ```mlir
+      calyx.comb_group @MyCombGroup {
+        calyx.assign %1 = %2 : i32
+      }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr: $sym_name);
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name $body attr-dict";
+}
+
 def AssignOp : CalyxOp<"assign", [
     SameTypeConstraint<"dest", "src">,
-    ParentOneOf<["GroupOp", "WiresOp"]>
+    ParentOneOf<["GroupOp", "CombGroupOp", "WiresOp"]>
   ]> {
   let summary = "Calyx Assignment";
   let description = [{
@@ -262,7 +306,7 @@ def GroupDoneOp : CalyxGroupPort<"group_done", [
 }
 
 def GroupGoOp : CalyxGroupPort<"group_go", [
-  DeclareOpInterfaceMethods<OpAsmOpInterface>,
+  DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
 ]> {
   let summary = "Calyx Group Go Port";
   let description = [{

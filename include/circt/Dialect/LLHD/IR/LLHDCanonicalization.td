@@ -13,8 +13,8 @@
 #ifndef CIRCT_DIALECT_LLHD_IR_CANONICALIZATION_TD
 #define CIRCT_DIALECT_LLHD_IR_CANONICALIZATION_TD
 
+include "circt/Dialect/HW/HW.td"
 include "circt/Dialect/LLHD/IR/LLHD.td"
-include "mlir/Dialect/StandardOps/IR/Ops.td"
 
 def IndexAttrFromSignlessInteger : NativeCodeCall<
   "$_builder.getIndexAttr($0.cast<IntegerAttr>().getValue().getZExtValue())">;
@@ -23,10 +23,6 @@ def IndexAttrFromSignlessInteger : NativeCodeCall<
 // DynExtractSliceOp
 //===----------------------------------------------------------------------===//
 
-def DynExtractSliceWithLLHDConstOpStart : Pat<
-  (LLHD_DynExtractSliceOp $target, (LLHD_ConstOp $start)),
-  (LLHD_ExtractSliceOp $target, (IndexAttrFromSignlessInteger $start))>;
-
 def DynExtractSliceWithConstantOpStart : Pat<
   (LLHD_DynExtractSliceOp $target, (ConstantOp $start)),
   (LLHD_ExtractSliceOp $target, (IndexAttrFromSignlessInteger $start))>;
@@ -34,10 +30,6 @@ def DynExtractSliceWithConstantOpStart : Pat<
 //===----------------------------------------------------------------------===//
 // DynExtractElementOp
 //===----------------------------------------------------------------------===//
-
-def DynExtractElementWithLLHDConstOpIndex : Pat<
-  (LLHD_DynExtractElementOp $target, (LLHD_ConstOp $index)),
-  (LLHD_ExtractElementOp $target, (IndexAttrFromSignlessInteger $index))>;
 
 def DynExtractElementWithConstantOpIndex : Pat<
   (LLHD_DynExtractElementOp $target, (ConstantOp $index)),

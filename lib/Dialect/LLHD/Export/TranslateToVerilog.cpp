@@ -13,6 +13,7 @@
 #include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Visitors.h"
@@ -187,33 +188,27 @@ LogicalResult VerilogPrinter::printUnaryOp(Operation *inst, StringRef opSymbol,
 
 LogicalResult VerilogPrinter::printOperation(Operation *inst,
                                              unsigned indentAmount) {
-  if (auto op = dyn_cast<llhd::ConstOp>(inst)) {
-    if (IntegerAttr intAttr = op.value().dyn_cast<IntegerAttr>()) {
-      // Integer constant
-      out.PadToColumn(indentAmount);
-      out << "wire ";
-      if (failed(printType(inst->getResult(0).getType())))
-        return failure();
-      out << " ";
-      printVariableName(inst->getResult(0))
-          << " = " << op.getResult().getType().getIntOrFloatBitWidth() << "'d"
-          << intAttr.getValue().getZExtValue() << ";\n";
-      return success();
+  if (auto op = dyn_cast<hw::ConstantOp>(inst)) {
+    out.PadToColumn(indentAmount);
+    out << "wire ";
+    if (failed(printType(op.result().getType())))
+      return failure();
+    out << " ";
+    printVariableName(op.result())
+        << " = " << op.result().getType().getIntOrFloatBitWidth() << "'d"
+        << op.value().getZExtValue() << ";\n";
+    return success();
+  }
+  if (auto op = dyn_cast<llhd::ConstantTimeOp>(inst)) {
+    if (op.valueAttr().getTime() == 0 && op.valueAttr().getDelta() != 1) {
+      return emitError(op.getLoc(),
+                       "Not possible to translate a time attribute with 0 real "
+                       "time and non-1 delta.");
     }
-    if (llhd::TimeAttr timeAttr = op.value().dyn_cast<llhd::TimeAttr>()) {
-      // Time Constant
-      if (timeAttr.getTime() == 0 && timeAttr.getDelta() != 1) {
-        return emitError(
-            op.getLoc(),
-            "Not possible to translate a time attribute with 0 real "
-            "time and non-1 delta.");
-      }
-      // Track time value for future use
-      timeValueMap.insert(
-          std::make_pair(inst->getResult(0), timeAttr.getTime()));
-      return success();
-    }
-    return failure();
+    // Track time value for future use
+    timeValueMap.insert(
+        std::make_pair(inst->getResult(0), op.valueAttr().getTime()));
+    return success();
   }
   if (auto op = dyn_cast<llhd::SigOp>(inst)) {
     out.PadToColumn(indentAmount);
@@ -311,8 +306,6 @@ LogicalResult VerilogPrinter::printOperation(Operation *inst,
 
     return success();
   }
-  if (auto op = dyn_cast<llhd::NegOp>(inst))
-    return printUnaryOp(inst, "-", indentAmount);
   if (auto op = dyn_cast<comb::AddOp>(inst))
     return printVariadicOp(inst, "+", indentAmount);
   if (auto op = dyn_cast<comb::SubOp>(inst))
@@ -499,6 +492,6 @@ LogicalResult circt::llhd::exportVerilog(ModuleOp module, raw_ostream &os) {
 void circt::llhd::registerToVerilogTranslation() {
   TranslateFromMLIRRegistration registration(
       "export-llhd-verilog", exportVerilog, [](DialectRegistry &registry) {
-        registry.insert<llhd::LLHDDialect, comb::CombDialect>();
+        registry.insert<llhd::LLHDDialect, comb::CombDialect, hw::HWDialect>();
       });
 }

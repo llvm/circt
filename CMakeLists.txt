@@ -30,6 +30,10 @@ if( CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR )
                          See docs/PythonBindings.md.")
   endif()
 
+# Generate a CompilationDatabase (compile_commands.json file) for our build,
+# for use by clang_complete, YouCompleteMe, etc.
+  set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
 #-------------------------------------------------------------------------------
 # Project setup and globals
 #-------------------------------------------------------------------------------
@@ -280,7 +284,7 @@ else()
   else()
     set(ENV{PKG_CONFIG_PATH}
       "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
+    find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
   endif()
 
   if(CapnProto_FOUND)

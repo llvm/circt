@@ -4,16 +4,16 @@
 // CHECK-LABEL: @convert_const
 llvm.func @convert_const() {
   // CHECK-NEXT: %{{.*}} = llvm.mlir.constant(true) : i1
-  %0 = llhd.const 1 : i1
+  %0 = hw.constant 1 : i1
 
   // CHECK-NEXT %{{.*}} = llvm.mlir.constant(0 : i32) : i32
-  %1 = llhd.const 0 : i32
+  %1 = hw.constant 0 : i32
 
   // this gets erased
-  %2 = llhd.const #llhd.time<0ns, 0d, 0e> : !llhd.time
+  %2 = llhd.constant_time #llhd.time<0ns, 0d, 0e>
 
   // CHECK-NEXT %{{.*}} = llvm.mlir.constant(123 : i64) : i64
-  %3 = llhd.const 123 : i64
+  %3 = hw.constant 123 : i64
 
   llvm.return
 }

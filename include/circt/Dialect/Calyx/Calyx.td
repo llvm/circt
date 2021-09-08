@@ -18,6 +18,7 @@ include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "circt/Dialect/Calyx/CalyxInterfaces.td"
 
 def CalyxDialect : Dialect {
   let name = "calyx";
@@ -45,16 +46,11 @@ class SameTypeConstraint<string lhs, string rhs>
 class CalyxOp<string mnemonic, list<OpTrait> traits = []> :
   Op<CalyxDialect, mnemonic, traits>;
 
-/// Trait used to annotate instances of components and primitives.
-def Cell : NativeOpTrait<"Cell"> {
-  let cppNamespace = "::circt::calyx";
-}
-
 /// Base class for Calyx cells.
 class CalyxCell<string mnemonic, list<OpTrait> traits = []> :
   CalyxOp<mnemonic, !listconcat(traits, [
-    Cell,
-    DeclareOpInterfaceMethods<OpAsmOpInterface>
+    DeclareOpInterfaceMethods<CellOpInterface>,
+    DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>
   ])> {}
 
 /// Base class for Calyx containers.

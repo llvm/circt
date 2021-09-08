@@ -10,9 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/LLHD/IR/LLHDOps.h"
 #include "circt/Support/LLVM.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/PatternMatch.h"
 
 using namespace mlir;
@@ -25,12 +25,10 @@ namespace {
 
 void llhd::DynExtractSliceOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.insert<DynExtractSliceWithConstantOpStart,
-                 DynExtractSliceWithLLHDConstOpStart>(context);
+  results.insert<DynExtractSliceWithConstantOpStart>(context);
 }
 
 void llhd::DynExtractElementOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.insert<DynExtractElementWithConstantOpIndex,
-                 DynExtractElementWithLLHDConstOpIndex>(context);
+  results.insert<DynExtractElementWithConstantOpIndex>(context);
 }

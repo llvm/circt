@@ -17,8 +17,8 @@ llhd.proc @check_wait_0 () -> () {
 
 // CHECK-LABEL: @check_wait_1
 llhd.proc @check_wait_1 () -> () {
-  // CHECK-NEXT: %[[TIME:.*]] = llhd.const
-  %time = llhd.const #llhd.time<0ns, 0d, 0e> : !llhd.time
+  // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
+  %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
   // CHECK-NEXT: llhd.wait for %[[TIME]], ^[[BB:.*]](%[[TIME]] : !llhd.time)
   "llhd.wait"(%time, %time) [^bb1] {operand_segment_sizes=dense<[0,1,1]> : vector<3xi32>} : (!llhd.time, !llhd.time) -> ()
   // CHECK-NEXT: ^[[BB]](%[[T:.*]]: !llhd.time):
@@ -37,8 +37,8 @@ llhd.proc @check_wait_2 (%arg0 : !llhd.sig<i64>, %arg1 : !llhd.sig<i1>) -> () {
 
 // CHECK: llhd.proc @check_wait_3(%[[ARG0:.*]] : !llhd.sig<i64>, %[[ARG1:.*]] : !llhd.sig<i1>) -> () {
 llhd.proc @check_wait_3 (%arg0 : !llhd.sig<i64>, %arg1 : !llhd.sig<i1>) -> () {
-  // CHECK-NEXT: %[[TIME:.*]] = llhd.const
-  %time = llhd.const #llhd.time<0ns, 0d, 0e> : !llhd.time
+  // CHECK-NEXT: %[[TIME:.*]] = llhd.constant_time
+  %time = llhd.constant_time #llhd.time<0ns, 0d, 0e>
   // CHECK-NEXT: llhd.wait for %[[TIME]], (%[[ARG0]], %[[ARG1]] : !llhd.sig<i64>, !llhd.sig<i1>), ^[[BB:.*]](%[[ARG1]], %[[ARG0]] : !llhd.sig<i1>, !llhd.sig<i64>)
   "llhd.wait"(%arg0, %arg1, %time, %arg1, %arg0) [^bb1] {operand_segment_sizes=dense<[2,1,2]> : vector<3xi32>} : (!llhd.sig<i64>, !llhd.sig<i1>, !llhd.time, !llhd.sig<i1>, !llhd.sig<i64>) -> ()
   // CHECK: ^[[BB]](%[[A:.*]]: !llhd.sig<i1>, %[[B:.*]]: !llhd.sig<i64>):

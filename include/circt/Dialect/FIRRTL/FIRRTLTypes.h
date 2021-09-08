@@ -55,8 +55,6 @@ struct RecursiveTypeProperties {
 // This is a common base class for all FIRRTL types.
 class FIRRTLType : public Type {
 public:
-  void print(raw_ostream &os) const;
-
   /// Return true if this is a "passive" type - one that contains no "flip"
   /// types recursively within itself.
   bool isPassive() { return getRecursiveTypeProperties().isPassive; }

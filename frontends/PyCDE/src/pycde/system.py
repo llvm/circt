@@ -94,6 +94,11 @@ class System:
       if op_modname == mod_name:
         return op
 
+  def get_instance(self, mod_name: str) -> Instance:
+    assert self.passed
+    root_mod = self.get_module(mod_name)
+    return Instance(root_mod, None, None, self)
+
   def walk_instances(self, mod_name: str, callback) -> None:
     """Walk the instance hierachy, calling 'callback' on each instance."""
     assert self.passed
@@ -113,6 +118,6 @@ class System:
     self.run_passes()
     circt.export_verilog(self.mod, out_stream)
 
-  def print_tcl(self, out_stream: typing.TextIO = sys.stdout):
+  def print_tcl(self, top_module: str, out_stream: typing.TextIO = sys.stdout):
     self.run_passes()
-    msft.export_tcl(self.mod, out_stream)
+    msft.export_tcl(self.get_module(top_module).operation, out_stream)

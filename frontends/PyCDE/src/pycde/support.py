@@ -63,6 +63,7 @@ class OpOperandConnect(support.OpOperand):
 def obj_to_value(x, type, result_type=None):
   """Convert a python object to a CIRCT value, given the CIRCT type."""
   assert x is not None
+  from .value import Value
 
   type = support.type_to_pytype(type)
   if isinstance(type, hw.TypeAliasType):
@@ -72,19 +73,19 @@ def obj_to_value(x, type, result_type=None):
     result_type = type
   else:
     result_type = support.type_to_pytype(result_type)
-    assert isinstance(result_type, hw.TypeAliasType)
+    assert isinstance(result_type, hw.TypeAliasType) or result_type == type
 
   val = support.get_value(x)
   # If x is already a valid value, just return it.
   if val is not None:
     if val.type != result_type:
       raise ValueError(f"Expected {result_type}, got {val.type}")
-    return val
+    return Value.get(val)
 
   if isinstance(x, int):
     if not isinstance(type, ir.IntegerType):
       raise ValueError(f"Int can only be converted to hw int, not '{type}'")
-    return hw.ConstantOp.create(type, x).result
+    return Value.get(hw.ConstantOp.create(type, x).result)
 
   if isinstance(x, list):
     if not isinstance(type, hw.ArrayType):
@@ -95,7 +96,7 @@ def obj_to_value(x, type, result_type=None):
                        f"{len(x)} vs {type.size}")
     list_of_vals = list(map(lambda x: obj_to_value(x, elemty), x))
     # CIRCT's ArrayCreate op takes the array in reverse order.
-    return hw.ArrayCreateOp.create(reversed(list_of_vals)).result
+    return Value.get(hw.ArrayCreateOp.create(reversed(list_of_vals)).result)
 
   if isinstance(x, dict):
     if not isinstance(type, hw.StructType):
@@ -109,8 +110,9 @@ def obj_to_value(x, type, result_type=None):
       x.pop(fname)
     if len(x) > 0:
       raise ValueError(f"Extra fields specified: {x}")
-    return hw.StructCreateOp.create(elem_name_values,
-                                    result_type=result_type).result
+    return Value.get(
+        hw.StructCreateOp.create(elem_name_values,
+                                 result_type=result_type).result)
 
   raise ValueError(f"Unable to map object '{type(x)}' to MLIR Value")
 
