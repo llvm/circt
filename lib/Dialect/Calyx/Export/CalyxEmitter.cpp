@@ -303,7 +303,7 @@ private:
   void emitValue(Value value, bool isIndented) {
     if (auto blockArg = value.dyn_cast<BlockArgument>()) {
       // Emit component block argument.
-      StringAttr portName = getComponentPortInfo(blockArg).name;
+      StringAttr portName = getPortInfo(blockArg).name;
       (isIndented ? indent() : os) << portName.getValue();
       return;
     }
@@ -458,20 +458,10 @@ void Emitter::emitComponent(ComponentOp op) {
 
 /// Emit the ports of a component.
 void Emitter::emitComponentPorts(ComponentOp op) {
-  SmallVector<ComponentPortInfo, 8> ports = getComponentPortInfo(op);
-
-  SmallVector<ComponentPortInfo, 4> inPorts, outPorts;
-  for (auto &&port : ports) {
-    if (port.direction == Direction::Input)
-      inPorts.push_back(port);
-    else
-      outPorts.push_back(port);
-  }
-
   auto emitPorts = [&](auto ports) {
     os << LParen();
     for (size_t i = 0, e = ports.size(); i < e; ++i) {
-      const ComponentPortInfo &port = ports[i];
+      const PortInfo &port = ports[i];
 
       // We only care about the bit width in the emitted .futil file.
       auto bitWidth = port.type.getIntOrFloatBitWidth();
@@ -483,9 +473,9 @@ void Emitter::emitComponentPorts(ComponentOp op) {
     }
     os << RParen();
   };
-  emitPorts(inPorts);
+  emitPorts(op.getInputPortInfo());
   os << arrow();
-  emitPorts(outPorts);
+  emitPorts(op.getOutputPortInfo());
 }
 
 void Emitter::emitInstance(InstanceOp op) {

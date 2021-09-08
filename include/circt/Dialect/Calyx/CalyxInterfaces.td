@@ -84,30 +84,28 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       }]
     >,
     InterfaceMethod<
-      "This returns the ComponentPortInfo associated with all of the ports of a cell.",
-      "SmallVector<circt::calyx::ComponentPortInfo>",
+      "This returns the PortInfo associated with all of the ports of a cell.",
+      "SmallVector<circt::calyx::PortInfo>",
       "portInfos",
       (ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        SmallVector<circt::calyx::ComponentPortInfo> info;
+        SmallVector<circt::calyx::PortInfo> info;
 
         auto zip = llvm::zip($_op->getResults(), $_op.portDirections(), $_op.portNames());
         for (auto&& [result, direction, name] : zip)
-          info.push_back(
-            ComponentPortInfo{
+          info.push_back(PortInfo{
               .name=StringAttr::get($_op->getContext(), name),
               .type=result.getType(),
               .direction=direction,
               .attributes=DictionaryAttr()
-            }
-          );
+          });
         return info;
     }]
     >,
     InterfaceMethod<
-      "This returns the ComponentPortInfo associated with the port of a cell.",
-      "circt::calyx::ComponentPortInfo",
+      "This returns the PortInfo associated with the port of a cell.",
+      "circt::calyx::PortInfo",
       "portInfo",
       (ins "Value":$port),
       /*methodBody=*/"",
