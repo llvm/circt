@@ -18,7 +18,7 @@
 #include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Translation/ExportVerilog.h"
-#include "circt/Translation/HIRToVerilog.h"
+//#include "circt/Translation/HIRToVerilog.h"
 
 #ifndef CIRCT_INITALLTRANSLATIONS_H
 #define CIRCT_INITALLTRANSLATIONS_H
@@ -30,7 +30,7 @@ namespace circt {
 // automatically.
 inline void registerAllTranslations() {
   static bool initOnce = []() {
-    mlir::hir::registerHIRToVerilogTranslation();
+    // mlir::hir::registerHIRToVerilogTranslation();
     registerToVerilogTranslation();
     esi::registerESITranslations();
     calyx::registerToCalyxTranslation();

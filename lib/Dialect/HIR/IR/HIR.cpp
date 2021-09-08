@@ -44,6 +44,18 @@ parseOperandColonType(OpAsmParser &parser,
   return success();
 }
 
+static StringAttr getNameAttr(MLIRContext *context, StringRef name) {
+  if (!name.empty()) {
+    // Ignore numeric names like %42
+    assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
+    if (isdigit(name[1]))
+      name = StringRef();
+    else
+      name = name.drop_front();
+  }
+  return StringAttr::get(context, name);
+}
+
 ParseResult parseDelayAttr(OpAsmParser &parser,
                            SmallVectorImpl<DictionaryAttr> &attrsList) {
   NamedAttrList argAttrs;
@@ -617,52 +629,38 @@ LogicalResult ForOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
 
 /// FuncOp
 /// Example:
-/// hir.def @foo at %t (%x :i32 delay 1, %y: f32) ->(i1 delay 4){}
-static ParseResult
-parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
-                   SmallVectorImpl<OpAsmParser::OperandType> &entryArgs) {
-  SmallVector<DictionaryAttr> inputAttrs;
-  SmallVector<Type, 4> inputTypes;
-  SmallVector<DictionaryAttr> resultAttrs;
-  SmallVector<Type, 4> resultTypes;
+/// hir.def @foo at %t (%x :i32 delay 1, %y: f32) ->(%out: i1 delay 4){}
+static ParseResult parseArgList(OpAsmParser &parser,
+                                SmallVectorImpl<OpAsmParser::OperandType> &args,
+                                SmallVectorImpl<Type> &argTypes,
+                                SmallVectorImpl<DictionaryAttr> &argAttrs,
+                                SmallVectorImpl<StringRef> &argNames) {
+
   auto *context = parser.getBuilder().getContext();
-  // parse operand args
   if (parser.parseLParen())
     return failure();
   if (failed(parser.parseOptionalRParen())) {
     while (1) {
       // Parse operand and type
       auto typeLoc = parser.getCurrentLocation();
-      if (parseOperandColonType(parser, entryArgs, inputTypes))
+      if (parseOperandColonType(parser, args, argTypes))
         return failure();
-
+      auto argTy = argTypes.back();
       // Parse argAttr
-      if (helper::isBuiltinSizedType(inputTypes.back())) {
-        if (parseDelayAttr(parser, inputAttrs))
+      if (helper::isBuiltinSizedType(argTy)) {
+        if (parseDelayAttr(parser, argAttrs))
           return failure();
-      } else if (inputTypes.back().dyn_cast<hir::TimeType>()) {
-        inputAttrs.push_back(
+      } else if (argTy.isa<hir::TimeType>()) {
+        argAttrs.push_back(
             DictionaryAttr::get(context, SmallVector<NamedAttribute>({})));
-      } else if (inputTypes.back().dyn_cast<hir::MemrefType>()) {
-        if (parseMemrefPortsAttr(parser, inputAttrs))
+      } else if (argTy.isa<hir::MemrefType>()) {
+        if (parseMemrefPortsAttr(parser, argAttrs))
           return failure();
-      } else if (inputTypes.back().dyn_cast<hir::BusType>()) {
-        if (parseBusPortsAttr(parser, inputAttrs))
+      } else if (helper::isBusType(argTy)) {
+        if (parseBusPortsAttr(parser, argAttrs))
           return failure();
-      } else if (inputTypes.back().dyn_cast<mlir::TensorType>()) {
-        if (!inputTypes.back()
-                 .dyn_cast<mlir::TensorType>()
-                 .getElementType()
-                 .isa<hir::BusType>())
-          return parser.emitError(typeLoc,
-                                  "Unsupported function argument type ")
-                 << inputTypes.back();
-        if (parseBusPortsAttr(parser, inputAttrs))
-          return failure();
-      } else {
-        return parser.emitError(parser.getCurrentLocation(),
-                                "Expected builtin type or hir dialect type.");
-      }
+      } else
+        return parser.emitError(typeLoc, "Unsupported type.");
 
       if (failed(parser.parseOptionalComma()))
         break;
@@ -670,44 +668,45 @@ parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
     if (parser.parseRParen())
       return failure();
   }
-
-  // If result types present then parse them.
-  if (succeeded(parser.parseOptionalArrow())) {
-    // parse result args
-    if (parser.parseLParen())
-      return failure();
-
-    if (parser.parseOptionalRParen()) {
-      while (1) {
-        // Parse result type
-        Type resultTy;
-        if (parser.parseType(resultTy))
-          return failure();
-        resultTypes.push_back(resultTy);
-
-        // Parse delayAttr
-        if (parseDelayAttr(parser, resultAttrs))
-          if (parser.parseOptionalComma())
-            break;
-        if (failed(parser.parseOptionalComma()))
-          break;
-      }
-      if (parser.parseRParen())
-        return failure();
-    }
-  }
-
-  funcTy = hir::FuncType::get(parser.getBuilder().getContext(), inputTypes,
-                              inputAttrs, resultTypes, resultAttrs);
   return success();
 }
 
+static ParseResult
+parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
+                   SmallVectorImpl<OpAsmParser::OperandType> &args) {
+  SmallVector<Type, 4> argTypes;
+  SmallVector<DictionaryAttr> argAttrs;
+  SmallVector<StringRef, 4> argNames;
+  SmallVector<OpAsmParser::OperandType> results;
+  SmallVector<Type, 4> resultTypes;
+  SmallVector<DictionaryAttr> resultAttrs;
+  SmallVector<StringRef, 4> resultNames;
+  // parse args
+  if (parseArgList(parser, args, argTypes, argAttrs, argNames))
+    return failure();
+
+  // If result types present then parse them.
+  if (succeeded(parser.parseOptionalArrow()))
+    if (parseArgList(parser, results, resultTypes, resultAttrs, resultNames))
+      return failure();
+
+  funcTy = hir::FuncType::get(parser.getBuilder().getContext(), argTypes,
+                              argAttrs, resultTypes, resultAttrs);
+  return success();
+}
+
+static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
+  for (auto &argAttr : attrs)
+    if (argAttr.first == name)
+      return true;
+  return false;
+}
 // Parse method.
 static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   OpAsmParser::OperandType tstart;
   auto &builder = parser.getBuilder();
-
+  auto *context = builder.getContext();
   // Parse the name as a symbol.
   StringAttr functionName;
   if (parser.parseSymbolName(functionName, SymbolTable::getSymbolAttrName(),
@@ -727,6 +726,17 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
                       TypeAttr::get(functionTy));
   result.addAttribute("funcTy", TypeAttr::get(funcTy));
 
+  // Use the argument and result names if not already specified.
+  if (!hasAttribute("argNames", result.attributes)) {
+    SmallVector<Attribute> argNames;
+    if (!entryArgs.empty()) {
+      for (auto &arg : entryArgs)
+        argNames.push_back(getNameAttr(context, arg.name));
+    }
+
+    result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  }
+
   // Add the attributes to the function arguments.
   mlir::function_like_impl::addArgAndResultAttrs(
       builder, result, funcTy.getInputAttrs(), funcTy.getResultAttrs());
@@ -737,8 +747,7 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   for (auto ty : funcTy.getFunctionType().getInputs()) {
     entryArgTypes.push_back(ty);
   }
-  entryArgTypes.push_back(
-      helper::getTimeType(parser.getBuilder().getContext()));
+  entryArgTypes.push_back(helper::getTimeType(context));
   auto r = parser.parseOptionalRegion(*body, entryArgs, entryArgTypes);
   parser.parseOptionalAttrDict(result.attributes);
   // FuncOp::ensureTerminator(*body, builder, result.location);
