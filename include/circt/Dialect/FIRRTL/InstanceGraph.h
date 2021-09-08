@@ -59,16 +59,15 @@ class InstanceGraphNode {
   using EdgeVec = std::deque<InstanceRecord>;
   using UseVec = std::vector<InstanceRecord *>;
 
-  static InstanceRecord *unwrap(EdgeVec::value_type &value) {
-    return &value;
-  }
+  static InstanceRecord *unwrap(EdgeVec::value_type &value) { return &value; }
   class InstanceIterator final
       : public llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)> {
   public:
     /// Initializes the result type iterator to the specified result iterator.
     InstanceIterator(EdgeVec::iterator it)
-        : llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)>(
-              it, &unwrap) {}
+        : llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)>(it,
+                                                                      &unwrap) {
+    }
   };
 
 public:
@@ -133,12 +132,12 @@ class InstanceGraph {
     return &value;
   }
   struct NodeIterator final
-      : public llvm::mapped_iterator<NodeVec::iterator,
-                                     decltype(&unwrap)> {
+      : public llvm::mapped_iterator<NodeVec::iterator, decltype(&unwrap)> {
     /// Initializes the result type iterator to the specified result iterator.
     NodeIterator(NodeVec::iterator it)
-        : llvm::mapped_iterator<NodeVec::iterator, decltype(&unwrap)>(
-              it, &unwrap) {}
+        : llvm::mapped_iterator<NodeVec::iterator, decltype(&unwrap)>(it,
+                                                                      &unwrap) {
+    }
   };
 
 public:
