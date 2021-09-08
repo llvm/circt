@@ -85,9 +85,11 @@ static bool isPort(Value value) {
 }
 
 /// Gets the port for a given BlockArgument.
-ComponentPortInfo calyx::getComponentPortInfo(BlockArgument arg) {
+PortInfo calyx::getPortInfo(BlockArgument arg) {
   Operation *op = arg.getOwner()->getParentOp();
-  return getComponentPortInfo(op)[arg.getArgNumber()];
+  assert(isa<ComponentOp>(op) &&
+         "Only ComponentOp should support lookup by BlockArgument.");
+  return cast<ComponentOp>(op).getPortInfo()[arg.getArgNumber()];
 }
 
 /// Returns whether the given operation has a control region.
@@ -273,40 +275,46 @@ static FunctionType getComponentType(ComponentOp component) {
   return component.getTypeAttr().getValue().cast<FunctionType>();
 }
 
-/// Returns the port information for the given component.
-SmallVector<ComponentPortInfo> calyx::getComponentPortInfo(Operation *op) {
-  assert(isa<ComponentOp>(op) &&
-         "Can only get port information from a component.");
-  auto component = dyn_cast<ComponentOp>(op);
-  auto portTypes = getComponentType(component).getInputs();
-  auto portNamesAttr = component.portNames();
+SmallVector<PortInfo> ComponentOp::getPortInfo() {
+  auto portTypes = getComponentType(*this).getInputs();
+  auto portNamesAttr = portNames();
   auto portDirectionsAttr =
-      component->getAttrOfType<mlir::IntegerAttr>(direction::attrKey);
+      (*this)->getAttrOfType<IntegerAttr>(direction::attrKey);
 
-  SmallVector<ComponentPortInfo> results;
+  SmallVector<PortInfo> results;
   for (uint64_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
     results.push_back({portNamesAttr[i].cast<StringAttr>(), portTypes[i],
                        direction::get(portDirectionsAttr.getValue()[i])});
   }
   return results;
-}
+};
 
-static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
+/// A helper function to return a filtered subset of a component's ports.
+template <typename Pred>
+static SmallVector<PortInfo> getFilteredPorts(ComponentOp op, Pred p) {
+  SmallVector<PortInfo> ports = op.getPortInfo();
+  llvm::erase_if(ports, p);
+  return ports;
+};
+
+SmallVector<PortInfo> ComponentOp::getInputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Output; });
+};
+
+SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
+  return getFilteredPorts(
+      *this, [](const PortInfo &port) { return port.direction == Input; });
+};
+
+static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   auto componentName =
       op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
           .getValue();
   p << " ";
   p.printSymbolName(componentName);
 
-  auto ports = getComponentPortInfo(op);
-  SmallVector<ComponentPortInfo, 8> inPorts, outPorts;
-  for (auto &&port : ports) {
-    if (port.direction == Direction::Input)
-      inPorts.push_back(port);
-    else
-      outPorts.push_back(port);
-  }
-
+  // Print the port definition list for input and output ports.
   auto printPortDefList = [&](auto ports) {
     p << "(";
     llvm::interleaveComma(ports, p, [&](auto port) {
@@ -314,9 +322,9 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp &op) {
     });
     p << ")";
   };
-  printPortDefList(inPorts);
+  printPortDefList(op.getInputPortInfo());
   p << " -> ";
-  printPortDefList(outPorts);
+  printPortDefList(op.getOutputPortInfo());
 
   p.printRegion(op.body(), /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/false,
@@ -428,12 +436,10 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     return op.emitOpError(
         "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
 
-  SmallVector<ComponentPortInfo> componentPorts = getComponentPortInfo(op);
-
   // Verify the component has the following ports.
   // TODO(Calyx): Eventually, we want to attach attributes to these arguments.
   bool go = false, clk = false, reset = false, done = false;
-  for (auto &&port : componentPorts) {
+  for (const PortInfo &port : op.getPortInfo()) {
     if (!port.type.isInteger(1))
       // Each of the ports has bit width 1.
       continue;
@@ -477,7 +483,7 @@ static SmallVector<T> concat(const SmallVectorImpl<T> &a,
 }
 
 void ComponentOp::build(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ComponentPortInfo> ports) {
+                        StringAttr name, ArrayRef<PortInfo> ports) {
   using namespace mlir::function_like_impl;
 
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
@@ -594,8 +600,8 @@ static LogicalResult verifyPortDirection(AssignOp op, Value value,
        isCellInterfacePort = definingOp && isa<CellInterface>(definingOp);
   assert((isComponentPort || isCellInterfacePort) && "Not a port.");
 
-  ComponentPortInfo port =
-      isComponentPort ? getComponentPortInfo(value.cast<BlockArgument>())
+  PortInfo port = isComponentPort
+                      ? getPortInfo(value.cast<BlockArgument>())
                       : cast<CellInterface>(definingOp).portInfo(value);
 
   bool isSource = !isDestination;
@@ -668,7 +674,7 @@ SmallVector<StringRef> InstanceOp::portNames() {
 
 SmallVector<Direction> InstanceOp::portDirections() {
   SmallVector<Direction> portDirections;
-  for (auto &&port : getComponentPortInfo(getReferencedComponent()))
+  for (const PortInfo &port : getReferencedComponent().getPortInfo())
     portDirections.push_back(port.direction);
   return portDirections;
 }
@@ -692,14 +698,14 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
            << instance.componentName();
 
   // Verify the instance result ports with those of its referenced component.
-  SmallVector<ComponentPortInfo> componentPorts =
-      getComponentPortInfo(referencedComponent);
+  SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
+  size_t numPorts = componentPorts.size();
 
   size_t numResults = instance.getNumResults();
-  if (numResults != componentPorts.size())
+  if (numResults != numPorts)
     return instance.emitOpError()
-           << "has a wrong number of results; expected: "
-           << componentPorts.size() << " but got " << numResults;
+           << "has a wrong number of results; expected: " << numPorts
+           << " but got " << numResults;
 
   for (size_t i = 0; i != numResults; ++i) {
     auto resultType = instance.getResult(i).getType();

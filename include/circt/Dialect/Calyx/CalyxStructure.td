@@ -86,7 +86,7 @@ def ComponentOp : CalyxOp<"component", [
   let regions = (region SizedRegion<1>: $body);
 
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ComponentPortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -103,6 +103,15 @@ def ComponentOp : CalyxOp<"component", [
     public:
       /// Returns the body of a Calyx component.
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
+
+      /// Returns the port information for this component.
+      SmallVector<PortInfo> getPortInfo();
+
+      /// Returns the input port information for this component.
+      SmallVector<PortInfo> getInputPortInfo();
+
+      /// Returns the input port information for this component.
+      SmallVector<PortInfo> getOutputPortInfo();
 
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
