@@ -216,14 +216,14 @@ def _module_base(cls, extern: bool, params={}):
               raise ConnectionError(
                   "`no_connect` is only valid on extern module ports")
             else:
-              value = hw.ConstantOp.create(types.i1, 0).result
+              value = Value.get(hw.ConstantOp.create(types.i1, 0).result)
           else:
             value = obj_to_value(input, type)
         else:
           backedge = BackedgeBuilder.current().create(type, name, self, loc=loc)
           self.backedges[idx] = backedge
-          value = backedge.result
-        input_ports_values.append(value)
+          value = Value.get(backedge.result)
+        input_ports_values.append(value.value)
 
       # Set up the op attributes.
       attributes: dict[str:mlir.ir.Attribute] = {}
@@ -465,7 +465,7 @@ class _Generate:
         unconnected_ports.append(name)
         outputs.append(None)
       else:
-        val = obj_to_value(gen_ret[name], port_type)
+        val = obj_to_value(gen_ret[name], port_type).value
         outputs.append(val)
         gen_ret.pop(name)
     if len(unconnected_ports) > 0:

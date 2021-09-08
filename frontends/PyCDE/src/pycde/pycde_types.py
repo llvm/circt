@@ -18,7 +18,7 @@ class _Types:
     self.registered_aliases = OrderedDict()
 
   def __getattr__(self, name: str) -> mlir.ir.Type:
-    return mlir.ir.Type.parse(name)
+    return self.wrap(mlir.ir.Type.parse(name))
 
   def int(self, width: int, name: str = None):
     return self.wrap(mlir.ir.IntegerType.get_signless(width), name)
@@ -111,9 +111,12 @@ def PyCDEType(type):
       else:
         return self
 
-    def create(self, obj):
+    def create(self, obj, name: str = None):
       """Create a Value of this type from a python object."""
       from .support import obj_to_value
-      return obj_to_value(obj, self, self)
+      v = obj_to_value(obj, self, self)
+      if name is not None:
+        v.name = name
+      return v
 
   return _PyCDEType(type)
