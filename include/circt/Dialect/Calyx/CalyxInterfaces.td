@@ -95,10 +95,10 @@ def CellOpInterface : OpInterface<"CellInterface"> {
         auto zip = llvm::zip($_op->getResults(), $_op.portDirections(), $_op.portNames());
         for (auto&& [result, direction, name] : zip)
           info.push_back(PortInfo{
-              .name=StringAttr::get($_op->getContext(), name),
-              .type=result.getType(),
-              .direction=direction,
-              .attributes=DictionaryAttr()
+              StringAttr::get($_op->getContext(), name),
+              result.getType(),
+              direction,
+              DictionaryAttr()
           });
         return info;
     }]
