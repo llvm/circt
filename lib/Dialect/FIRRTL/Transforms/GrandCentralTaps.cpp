@@ -71,17 +71,6 @@ static constexpr const char *internalKeyClass =
 // Utilities
 //===----------------------------------------------------------------------===//
 
-/// An absolute instance path.
-using InstancePath = ArrayRef<InstanceOp>;
-
-template <typename T>
-static T &operator<<(T &os, const InstancePath &path) {
-  os << "$root";
-  for (auto inst : path)
-    os << "/" << inst.name() << ":" << inst.moduleName();
-  return os;
-}
-
 namespace {
 
 /// A port annotated with a data tap key or mem tap.
@@ -106,27 +95,6 @@ struct TappedValue {
   Annotation anno;
 };
 
-/// A data structure that caches and provides absolute paths to module instances
-/// in the IR.
-struct InstancePaths {
-  /// The instance graph of the IR.
-  InstanceGraph &instanceGraph;
-
-  explicit InstancePaths(InstanceGraph &instanceGraph)
-      : instanceGraph(instanceGraph) {}
-  ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
-
-private:
-  /// An allocator for individual instance paths and entire path lists.
-  llvm::BumpPtrAllocator allocator;
-
-  /// Cached absolute instance paths.
-  DenseMap<Operation *, ArrayRef<InstancePath>> absolutePathsCache;
-
-  /// Append an instance to a path.
-  InstancePath appendInstance(InstancePath path, InstanceOp inst);
-};
-
 /// Necessary information to wire up a port with tapped data or memory location.
 struct PortWiring {
   unsigned portNum;
@@ -135,51 +103,6 @@ struct PortWiring {
 };
 
 } // namespace
-
-ArrayRef<InstancePath> InstancePaths::getAbsolutePaths(Operation *op) {
-  assert((isa<FModuleOp, FExtModuleOp>(op))); // extra parens makes parser smile
-
-  // If we have reached the circuit root, we're done.
-  if (op == instanceGraph.getTopLevelNode()->getModule()) {
-    static InstancePath empty{};
-    return empty; // array with single empty path
-  }
-
-  // Fast path: hit the cache.
-  auto cached = absolutePathsCache.find(op);
-  if (cached != absolutePathsCache.end())
-    return cached->second;
-
-  // For each instance, collect the instance paths to its parent and append the
-  // instance itself to each.
-  SmallVector<InstancePath, 8> extendedPaths;
-  for (auto inst : instanceGraph[op]->uses()) {
-    auto instPaths = getAbsolutePaths(inst->getParent()->getModule());
-    extendedPaths.reserve(instPaths.size());
-    for (auto path : instPaths) {
-      extendedPaths.push_back(appendInstance(path, inst->getInstance()));
-    }
-  }
-
-  // Move the list of paths into the bump allocator for later quick retrieval.
-  ArrayRef<InstancePath> pathList;
-  if (!extendedPaths.empty()) {
-    auto paths = allocator.Allocate<InstancePath>(extendedPaths.size());
-    std::copy(extendedPaths.begin(), extendedPaths.end(), paths);
-    pathList = ArrayRef<InstancePath>(paths, extendedPaths.size());
-  }
-
-  absolutePathsCache.insert({op, pathList});
-  return pathList;
-}
-
-InstancePath InstancePaths::appendInstance(InstancePath path, InstanceOp inst) {
-  size_t n = path.size() + 1;
-  auto newPath = allocator.Allocate<InstanceOp>(n);
-  std::copy(path.begin(), path.end(), newPath);
-  newPath[path.size()] = inst;
-  return InstancePath(newPath, n);
-}
 
 /// Return a version of `path` that skips all front instances it has in common
 /// with `other`.
@@ -243,7 +166,7 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   void runOnOperation() override;
   void gatherAnnotations(Operation *op);
   void processAnnotation(AnnotatedPort &portAnno, AnnotatedExtModule &blackBox,
-                         InstancePaths &instancePaths);
+                         InstancePathCache &instancePaths);
 
   // Helpers to simplify collecting taps on the various things.
   void gatherTap(Annotation anno, Port port) {
@@ -346,7 +269,7 @@ void GrandCentralTapsPass::runOnOperation() {
   }
 
   // Build a generator for absolute module and instance paths in the design.
-  InstancePaths instancePaths(getAnalysis<InstanceGraph>());
+  InstancePathCache instancePaths(getAnalysis<InstanceGraph>());
 
   // Gather the annotated ports and operations throughout the design that we are
   // supposed to tap in one way or another.
@@ -524,7 +447,7 @@ void GrandCentralTapsPass::gatherAnnotations(Operation *op) {
 
 void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
                                              AnnotatedExtModule &blackBox,
-                                             InstancePaths &instancePaths) {
+                                             InstancePathCache &instancePaths) {
   LLVM_DEBUG(llvm::dbgs() << "- Processing port " << portAnno.portNum
                           << " anno " << portAnno.anno.getDict() << "\n");
   auto key = getKey(portAnno.anno);
