@@ -435,11 +435,18 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
 /// annotations:
 ///   1) Annotations necessary to build interfaces and store them at "~"
 ///   2) Scattered annotations for how components bind to interfaces
-static bool parseAugmentedType(
+static Optional<DictionaryAttr> parseAugmentedType(
     MLIRContext *context, DictionaryAttr augmentedType, DictionaryAttr root,
     llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
-    StringRef companion, StringAttr name, StringAttr defName, Location loc,
-    Twine clazz, Twine path = {}) {
+    StringRef companion, StringAttr name, StringAttr defName,
+    Optional<IntegerAttr> id, Optional<StringAttr>(description), Location loc,
+    unsigned &annotationID, Twine clazz, Twine path = {}) {
+
+  /// Return a new identifier that can be used to link scattered annotations
+  /// together.  This mutates the by-reference parameter annotationID.
+  auto newID = [&]() {
+    return IntegerAttr::get(IntegerType::get(context, 64), annotationID++);
+  };
 
   /// Optionally unpack a ReferenceTarget encoded as a DictionaryAttr.  Return
   /// either a pair containing the Target string (up to the reference) and an
@@ -536,7 +543,7 @@ static bool parseAugmentedType(
   auto classAttr =
       tryGetAs<StringAttr>(augmentedType, root, "class", loc, clazz, path);
   if (!classAttr)
-    return false;
+    return None;
   StringRef classBase = classAttr.getValue();
   if (!classBase.consume_front("sifive.enterprise.grandcentral.Augmented")) {
     mlir::emitError(loc,
@@ -545,7 +552,7 @@ static bool parseAugmentedType(
                         classAttr.getValue() + "' (Did you misspell it?)")
             .attachNote()
         << "see annotation: " << augmentedType;
-    return false;
+    return None;
   }
 
   // An AugmentedBundleType looks like:
@@ -555,7 +562,7 @@ static bool parseAugmentedType(
     defName =
         tryGetAs<StringAttr>(augmentedType, root, "defName", loc, clazz, path);
     if (!defName)
-      return false;
+      return None;
 
     // Each element is an AugmentedField with members:
     //   "name": String
@@ -565,7 +572,7 @@ static bool parseAugmentedType(
     auto elementsAttr =
         tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
     if (!elementsAttr)
-      return false;
+      return None;
     for (size_t i = 0, e = elementsAttr.size(); i != e; ++i) {
       auto field = elementsAttr[i].dyn_cast_or_null<DictionaryAttr>();
       if (!field) {
@@ -576,16 +583,20 @@ static bool parseAugmentedType(
                 "]' contained an unexpected type (expected a DictionaryAttr).")
                 .attachNote()
             << "The received element was: " << elementsAttr[i] << "\n";
-        return false;
+        return None;
       }
       auto ePath = (path + ".elements[" + Twine(i) + "]").str();
       auto name = tryGetAs<StringAttr>(field, root, "name", loc, clazz, ePath);
       auto tpe =
           tryGetAs<DictionaryAttr>(field, root, "tpe", loc, clazz, ePath);
-      if (!name || !tpe ||
-          !parseAugmentedType(context, tpe, root, newAnnotations, companion,
-                              name, defName, loc, clazz, path))
-        return false;
+      Optional<StringAttr> description = None;
+      if (auto maybeDescription = field.get("description"))
+        description = maybeDescription.cast<StringAttr>();
+      auto eltAttr = parseAugmentedType(
+          context, tpe, root, newAnnotations, companion, name, defName, None,
+          description, loc, annotationID, clazz, path);
+      if (!name || !tpe || !eltAttr)
+        return None;
 
       // Collect information necessary to build a module with this view later.
       // This includes the optional description and name.
@@ -594,7 +605,7 @@ static bool parseAugmentedType(
         attrs.append("description", maybeDescription.cast<StringAttr>());
       attrs.append("name", name);
       attrs.append("tpe", tpe.getAs<StringAttr>("class"));
-      elements.push_back(DictionaryAttr::getWithSorted(context, attrs));
+      elements.push_back(eltAttr.getValue());
     }
     // Add an annotation that stores information necessary to construct the
     // module for the view.  This needs the name of the module (defName) and the
@@ -602,10 +613,12 @@ static bool parseAugmentedType(
     NamedAttrList attrs;
     attrs.append("class", classAttr);
     attrs.append("defName", defName);
+    if (description)
+      attrs.append("description", description.getValue());
     attrs.append("elements", ArrayAttr::get(context, elements));
-    newAnnotations["~"].push_back(
-        DictionaryAttr::getWithSorted(context, attrs));
-    return true;
+    if (id)
+      attrs.append("id", id.getValue());
+    return DictionaryAttr::getWithSorted(context, attrs);
   }
 
   // An AugmentedGroundType looks like:
@@ -620,25 +633,39 @@ static bool parseAugmentedType(
     if (!maybeTarget) {
       mlir::emitError(loc, "Failed to parse ReferenceTarget").attachNote()
           << "See the full Annotation here: " << root;
-      return false;
+      return None;
     }
+
+    auto id = newID();
+
     auto target = maybeTarget.getValue();
-    NamedAttrList attr, dontTouchAnn;
-    attr.append("class", classAttr);
-    attr.append("defName", defName);
-    attr.append("name", name);
-    dontTouchAnn.append(
+    NamedAttrList elementIface, elementScattered, dontTouch;
+
+    // Populate the annotation for the interface element.
+    elementIface.append("class", classAttr);
+    if (description)
+      elementIface.append("description", description.getValue());
+    elementIface.append("id", id);
+    elementIface.append("name", name);
+    // Populate an annotation that will be scattered onto the element.
+    elementScattered.append("class", classAttr);
+    elementScattered.append("id", id);
+    // Populate a dont touch annotation for the scattered element.
+    dontTouch.append(
         "class",
         StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+    // If there are sub-targets, then add these.
     if (target.second) {
-      attr.append("target", target.second);
-      dontTouchAnn.append("target", target.second);
+      elementScattered.append("target", target.second);
+      dontTouch.append("target", target.second);
     }
+
     newAnnotations[target.first].push_back(
-        DictionaryAttr::getWithSorted(context, attr));
+        DictionaryAttr::getWithSorted(context, elementScattered));
     newAnnotations[target.first].push_back(
-        DictionaryAttr::getWithSorted(context, dontTouchAnn));
-    return true;
+        DictionaryAttr::getWithSorted(context, dontTouch));
+
+    return DictionaryAttr::getWithSorted(context, elementIface);
   }
 
   // An AugmentedVectorType looks like:
@@ -647,13 +674,24 @@ static bool parseAugmentedType(
     auto elementsAttr =
         tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
     if (!elementsAttr)
-      return false;
-    for (auto elt : elementsAttr)
-      if (!parseAugmentedType(context, elt.cast<DictionaryAttr>(), root,
-                              newAnnotations, companion, name, defName, loc,
-                              clazz, path))
-        return false;
-    return true;
+      return None;
+    SmallVector<Attribute> elements;
+    for (auto elt : elementsAttr) {
+      auto eltAttr = parseAugmentedType(context, elt.cast<DictionaryAttr>(),
+                                        root, newAnnotations, companion, name,
+                                        StringAttr::get(context, ""), id, None,
+                                        loc, annotationID, clazz, path);
+      if (!eltAttr)
+        return None;
+      elements.push_back(eltAttr.getValue());
+    }
+    NamedAttrList attrs;
+    attrs.append("class", classAttr);
+    if (description)
+      attrs.append("description", description.getValue());
+    attrs.append("elements", ArrayAttr::get(context, elements));
+    attrs.append("name", name);
+    return DictionaryAttr::getWithSorted(context, attrs);
   }
 
   // Any of the following are known and expected, but are legacy AugmentedTypes
@@ -667,7 +705,7 @@ static bool parseAugmentedType(
           .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
           .Default(false);
   if (isIgnorable)
-    return true;
+    return augmentedType;
 
   // Anything else is unexpected or a user error if they manually wrote
   // annotations.  Print an error and error out.
@@ -675,7 +713,7 @@ static bool parseAugmentedType(
                            "' (Did you misspell it?)")
           .attachNote()
       << "see annotation: " << augmentedType;
-  return false;
+  return None;
 }
 
 /// Convert known custom FIRRTL Annotations with compound targets to multiple
@@ -981,11 +1019,10 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
       if (!viewAttr)
         return false;
-      auto defName =
-          tryGetAs<StringAttr>(viewAttr, viewAttr, "defName", loc, clazz);
-      if (!defName)
+      auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
+      if (!name)
         return false;
-      companionAttrs.append("defName", defName);
+      companionAttrs.append("name", name);
       auto companionAttr =
           tryGetAs<StringAttr>(dict, dict, "companion", loc, clazz);
       if (!companionAttr)
@@ -998,17 +1035,18 @@ bool circt::firrtl::scatterCustomAnnotations(
         return false;
       parentAttrs.append("class", viewAnnotationClass);
       parentAttrs.append("id", id);
-      auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
-      if (!name)
-        return false;
       parentAttrs.append("name", name);
       parentAttrs.append("type", StringAttr::get(context, "parent"));
-      parentAttrs.append("defName", defName);
+
       newAnnotations[parentAttr.getValue()].push_back(
           DictionaryAttr::get(context, parentAttrs));
-      if (!parseAugmentedType(context, viewAttr, dict, newAnnotations,
-                              companion, {}, {}, loc, clazz, "view"))
+      auto prunedAttr =
+          parseAugmentedType(context, viewAttr, dict, newAnnotations, companion,
+                             {}, {}, id, {}, loc, annotationID, clazz, "view");
+      if (!prunedAttr)
         return false;
+
+      newAnnotations["~"].push_back(prunedAttr.getValue());
       continue;
     }
 
