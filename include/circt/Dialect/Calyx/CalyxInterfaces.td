@@ -91,12 +91,14 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         SmallVector<circt::calyx::ComponentPortInfo> info;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections(),$_op.portNames()))
+
+        auto zip = llvm::zip($_op->getResults(), $_op.portDirections(), $_op.portNames());
+        for (auto&& [result, direction, name] : zip)
           info.push_back(
             ComponentPortInfo{
-              .name=StringAttr::get($_op->getContext(), std::get<2>(it)),
-              .type=std::get<0>(it).getType(),
-              .direction=std::get<1>(it),
+              .name=StringAttr::get($_op->getContext(), name),
+              .type=result.getType(),
+              .direction=direction,
               .attributes=DictionaryAttr()
             }
           );
@@ -135,9 +137,9 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         SmallVector<Value> ports;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections()))
-          if (std::get<1>(it) == calyx::Direction::Input)
-            ports.push_back(std::get<0>(it));
+        for (auto&& [result, direction] : llvm::zip($_op->getResults(), $_op.portDirections()))
+          if (direction == calyx::Direction::Input)
+            ports.push_back(result);
         return ports;
       }]
     >,
@@ -149,9 +151,9 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         SmallVector<Value> ports;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections()))
-          if (std::get<1>(it) == calyx::Direction::Output)
-            ports.push_back(std::get<0>(it));
+        for (auto&& [result, direction] : llvm::zip($_op->getResults(), $_op.portDirections()))
+          if (direction == calyx::Direction::Output)
+            ports.push_back(result);
         return ports;
       }]
     >,
