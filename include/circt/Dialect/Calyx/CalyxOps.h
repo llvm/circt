@@ -79,15 +79,15 @@ struct PortInfo {
 
   /// Returns the attribute associated with the given name if it exists,
   /// otherwise std::nullopt.
-  std::optional<Attribute> getAttribute(StringRef identifier) {
+  llvm::Optional<Attribute> getAttribute(StringRef identifier) {
     if (attributes == nullptr)
-      return std::nullopt;
+      return None;
 
     auto it = llvm::find_if(attributes, [&](auto idToAttribute) {
       return identifier == std::get<0>(idToAttribute);
     });
     if (it == attributes.end())
-      return std::nullopt;
+      return None;
     return std::get<1>(*it);
   }
 
