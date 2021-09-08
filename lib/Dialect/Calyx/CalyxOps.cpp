@@ -287,7 +287,7 @@ SmallVector<PortInfo> ComponentOp::getPortInfo() {
                        direction::get(portDirectionsAttr.getValue()[i])});
   }
   return results;
-};
+}
 
 /// A helper function to return a filtered subset of a component's ports.
 template <typename Pred>
@@ -295,17 +295,17 @@ static SmallVector<PortInfo> getFilteredPorts(ComponentOp op, Pred p) {
   SmallVector<PortInfo> ports = op.getPortInfo();
   llvm::erase_if(ports, p);
   return ports;
-};
+}
 
 SmallVector<PortInfo> ComponentOp::getInputPortInfo() {
   return getFilteredPorts(
       *this, [](const PortInfo &port) { return port.direction == Output; });
-};
+}
 
 SmallVector<PortInfo> ComponentOp::getOutputPortInfo() {
   return getFilteredPorts(
       *this, [](const PortInfo &port) { return port.direction == Input; });
-};
+}
 
 static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   auto componentName =
