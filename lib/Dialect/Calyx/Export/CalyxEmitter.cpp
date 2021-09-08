@@ -39,7 +39,7 @@ static constexpr std::string_view space() { return " "; }
 static constexpr std::string_view period() { return "."; }
 static constexpr std::string_view questionMark() { return " ? "; }
 static constexpr std::string_view exclamationMark() { return "!"; }
-static constexpr std::string_view equals() { return " = "; }
+static constexpr std::string_view equals() { return "="; }
 static constexpr std::string_view comma() { return ", "; }
 static constexpr std::string_view arrow() { return " -> "; }
 static constexpr std::string_view delimiter() { return "\""; }
@@ -213,7 +213,7 @@ private:
   /// given operation.
   std::string getAttribute(Operation *op, StringRef identifier, Attribute attr,
                            bool isPort) {
-    // Verify this attribute is supported.
+    // Verify this attribute is supported for emission.
     if (!isValidCalyxAttribute(identifier))
       return "";
 
@@ -222,46 +222,46 @@ private:
 
     SmallVector<char> symbol;
 
+    bool isBooleanAttribute = llvm::find(CalyxBooleanAttributes, identifier) !=
+                              CalyxBooleanAttributes.end();
+
+    std::string output;
+    llvm::raw_string_ostream buffer(output);
+    buffer.reserveExtraSpace(16);
+
     if (attr.isa<UnitAttr>()) {
-      assert(!isGroupOrComponentAttr &&
-             "Attributes for GroupOp and ComponentOp must provide a value.");
-      return (addressSymbol() + identifier).str();
+      assert(isBooleanAttribute &&
+             "Non-boolean attributes must provide an integer value.");
+      buffer << addressSymbol() << identifier << space();
+    } else if (auto intAttr = attr.dyn_cast<IntegerAttr>()) {
+      APInt value = intAttr.getValue();
+      if (isGroupOrComponentAttr) {
+        buffer << LAngleBracket() << delimiter() << identifier << delimiter()
+               << equals() << value << RAngleBracket();
+      } else {
+        buffer << addressSymbol() << identifier;
+        // The only time we may omit the value is when it is a Boolean attribute
+        // with value 1.
+        if (!isBooleanAttribute || intAttr.getValue() != 1)
+          buffer << LParen() << value << RParen();
+        buffer << space();
+      }
     }
-
-    auto intAttr = attr.dyn_cast_or_null<IntegerAttr>();
-    if (intAttr == nullptr) {
-      emitOpError(op, "Attribute type not supported.");
-      return "";
-    }
-
-    SmallVector<char> value;
-    intAttr.getValue().toStringUnsigned(value);
-
-    // The only time we may omit the value is when it is a Boolean attribute
-    // with value 1.
-    bool omitValue = llvm::find(CalyxBooleanAttributes, identifier) !=
-                         CalyxBooleanAttributes.end() &&
-                     intAttr.getValue() == 1;
-
-    return isGroupOrComponentAttr
-               ? ("<\"" + identifier + "\"=" + value + ">").str()
-               : ("@" + identifier + (omitValue ? "" : "(" + value + ")") + " ")
-                     .str();
+    return buffer.str();
   }
 
-  /// Emits the attributes of a dictionary.
-  std::string getAttributes(Operation *op) {
-    std::string calyxAttributes;
-    for (auto &&[id, attr] : op->getAttrDictionary())
-      calyxAttributes += getAttribute(op, id, attr, /*isPort=*/false);
-    return calyxAttributes;
-  }
-  // Second version for port attributes.
-  std::string getPortAttributes(Operation *op, DictionaryAttr attributes) {
-    std::string calyxAttributes;
+  /// Emits the attributes of a dictionary. If the `attributes` are nullptr, we
+  /// assume this is for a port.
+  std::string getAttributes(Operation *op,
+                            DictionaryAttr attributes = nullptr) {
+    bool isPort = attributes != nullptr;
+    if (!isPort)
+      attributes = op->getAttrDictionary();
+
+    SmallString<16> calyxAttributes;
     for (auto &&[id, attr] : attributes)
-      calyxAttributes += getAttribute(op, id, attr, /*isPort=*/true);
-    return calyxAttributes;
+      calyxAttributes.append(getAttribute(op, id, attr, isPort));
+    return calyxAttributes.c_str();
   }
 
   /// Helper function for emitting a Calyx section. It emits the body in the
@@ -321,8 +321,9 @@ private:
               << cell.instanceName() << period() << cell.portName(value);
         })
         .Case<hw::ConstantOp>([&](auto op) {
-          // A constant is defined as <bit-width>'<base><value>, where the base
-          // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
+          // A constant is defined as <bit-width>'<base><value>, where the
+          // base is `b` (binary), `o` (octal), `h` hexadecimal, or `d`
+          // (decimal).
           APInt value = op.value();
 
           (isIndented ? indent() : os)
@@ -333,14 +334,14 @@ private:
         .Case<comb::AndOp>([&](auto op) { emitCombinationalValue(op, "&"); })
         .Case<comb::OrOp>([&](auto op) { emitCombinationalValue(op, "|"); })
         .Case<comb::XorOp>([&](auto op) {
-          // The XorOp is a bit different, since the Combinational dialect uses
-          // it to represent binary not.
+          // The XorOp is a bit different, since the Combinational dialect
+          // uses it to represent binary not.
           if (!op.isBinaryNot()) {
             emitOpError(op, "Only supporting Binary Not for XOR.");
             return;
           }
-          // The LHS is the value to be negated, and the RHS is a constant with
-          // all ones (guaranteed by isBinaryNot).
+          // The LHS is the value to be negated, and the RHS is a constant
+          // with all ones (guaranteed by isBinaryNot).
           os << exclamationMark();
           emitValue(op.inputs()[0], /*isIndented=*/false);
         })
@@ -354,7 +355,7 @@ private:
     assert((isa<GroupGoOp>(op) || isa<GroupDoneOp>(op)) &&
            "Required to be a group port.");
     indent() << group.symName().getValue() << LSquare() << portHole << RSquare()
-             << equals();
+             << space() << equals() << space();
     if (op.guard()) {
       emitValue(op.guard(), /*isIndented=*/false);
       os << questionMark();
@@ -372,16 +373,16 @@ private:
       return;
     }
     for (auto &&bodyOp : *controlOp.getBody()) {
-      std::string attrs = getAttributes(&bodyOp);
+      std::string attrDict = getAttributes(&bodyOp);
       TypeSwitch<Operation *>(&bodyOp)
           .template Case<SeqOp>([&](auto op) {
-            emitCalyxSection(attrs + "seq", [&]() { emitCalyxControl(op); });
+            emitCalyxSection(attrDict + "seq", [&]() { emitCalyxControl(op); });
           })
           .template Case<ParOp>([&](auto op) {
-            emitCalyxSection(attrs + "par", [&]() { emitCalyxControl(op); });
+            emitCalyxSection(attrDict + "par", [&]() { emitCalyxControl(op); });
           })
           .template Case<IfOp, WhileOp>([&](auto op) {
-            indent() << attrs << (isa<IfOp>(op) ? "if " : "while ");
+            indent() << attrDict << (isa<IfOp>(op) ? "if " : "while ");
             emitValue(op.cond(), /*isIndented=*/false);
             if (auto groupName = op.groupName(); groupName.hasValue())
               os << " with " << groupName.getValue();
@@ -477,7 +478,7 @@ void Emitter::emitComponentPorts(ComponentOp op) {
 
       // We only care about the bit width in the emitted .futil file.
       auto bitWidth = port.type.getIntOrFloatBitWidth();
-      os << getPortAttributes(op, port.attributes) << port.name.getValue()
+      os << getAttributes(op, port.attributes) << port.name.getValue()
          << colon() << bitWidth;
 
       if (i + 1 < e)
@@ -491,15 +492,16 @@ void Emitter::emitComponentPorts(ComponentOp op) {
 }
 
 void Emitter::emitInstance(InstanceOp op) {
-  indent() << getAttributes(op) << op.instanceName() << equals()
-           << op.componentName() << LParen() << RParen() << semicolonEndL();
+  indent() << getAttributes(op) << op.instanceName() << space() << equals()
+           << space() << op.componentName() << LParen() << RParen()
+           << semicolonEndL();
 }
 
 void Emitter::emitRegister(RegisterOp reg) {
   size_t bitWidth = reg.inPort().getType().getIntOrFloatBitWidth();
-  indent() << getAttributes(reg) << reg.instanceName() << equals() << "std_reg"
-           << LParen() << std::to_string(bitWidth) << RParen()
-           << semicolonEndL();
+  indent() << getAttributes(reg) << reg.instanceName() << space() << equals()
+           << space() << "std_reg" << LParen() << std::to_string(bitWidth)
+           << RParen() << semicolonEndL();
 }
 
 void Emitter::emitMemory(MemoryOp memory) {
@@ -509,9 +511,9 @@ void Emitter::emitMemory(MemoryOp memory) {
                         "supported by the native Calyx compiler.");
     return;
   }
-  indent() << getAttributes(memory) << memory.instanceName() << " = std_mem_d"
-           << std::to_string(dimension) << LParen() << memory.width()
-           << comma();
+  indent() << getAttributes(memory) << memory.instanceName() << space()
+           << equals() << space() << "std_mem_d" << std::to_string(dimension)
+           << LParen() << memory.width() << comma();
   for (Attribute size : memory.sizes()) {
     APInt memSize = size.cast<IntegerAttr>().getValue();
     memSize.print(os, /*isSigned=*/false);
@@ -536,8 +538,9 @@ static StringRef removeCalyxPrefix(StringRef s) { return s.split(".").second; }
 
 void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
   auto cell = cast<CellInterface>(op);
-  indent() << cell.instanceName() << equals()
-           << removeCalyxPrefix(op->getName().getStringRef()) << LParen();
+  indent() << getAttributes(op) << cell.instanceName() << space() << equals()
+           << space() << removeCalyxPrefix(op->getName().getStringRef())
+           << LParen();
   llvm::interleaveComma(op->getResults(), os, [&](auto res) {
     os << std::to_string(res.getType().getIntOrFloatBitWidth());
   });
@@ -547,15 +550,15 @@ void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
 void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
   auto cell = cast<CellInterface>(op);
   unsigned bitwidth = cell.inputPorts()[0].getType().getIntOrFloatBitWidth();
-  indent() << getAttributes(op) << cell.instanceName() << equals()
-           << removeCalyxPrefix(op->getName().getStringRef()) << LParen()
-           << bitwidth << RParen() << semicolonEndL();
+  indent() << getAttributes(op) << cell.instanceName() << space() << equals()
+           << space() << removeCalyxPrefix(op->getName().getStringRef())
+           << LParen() << bitwidth << RParen() << semicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {
 
   emitValue(op.dest(), /*isIndented=*/true);
-  os << equals();
+  os << space() << equals() << space();
   if (op.guard()) {
     emitValue(op.guard(), /*isIndented=*/false);
     os << questionMark();
