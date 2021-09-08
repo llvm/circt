@@ -1,14 +1,14 @@
 // RUN: circt-opt -pass-pipeline='calyx.program(calyx.component(calyx-remove-groups))' %s | FileCheck %s
 
 calyx.program {
-  calyx.component @Z(%go : i1, %reset : i1, %clk : i1) -> (%flag: i1, %out :i2, %done: i1) {
+  calyx.component @Z(%go: i1 {go}, %reset: i1 {reset}, %clk: i1 {clk}) -> (%flag: i1, %out :i2, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
   }
 
   // CHECK-LABEL: calyx.component @main
-  calyx.component @main(%go : i1, %reset : i1, %clk : i1) -> (%done: i1) {
+  calyx.component @main(%go: i1 {go}, %reset: i1 {reset}, %clk: i1 {clk}) -> (%done: i1 {done}) {
     %z.go, %z.reset, %z.clk, %z.flag, %z.out, %z.done = calyx.instance "z" @Z : i1, i1, i1, i1, i2, i1
     %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "fsm" : i2, i1, i1, i1, i2, i1
 

@@ -24,11 +24,14 @@
 
 using namespace circt;
 using namespace calyx;
+using namespace mlir;
 
 namespace {
 
 static constexpr std::string_view LSquare() { return "["; }
 static constexpr std::string_view RSquare() { return "]"; }
+static constexpr std::string_view LAngleBracket() { return "<"; }
+static constexpr std::string_view RAngleBracket() { return ">"; }
 static constexpr std::string_view LParen() { return "("; }
 static constexpr std::string_view RParen() { return ")"; }
 static constexpr std::string_view colon() { return ": "; }
@@ -36,7 +39,7 @@ static constexpr std::string_view space() { return " "; }
 static constexpr std::string_view period() { return "."; }
 static constexpr std::string_view questionMark() { return " ? "; }
 static constexpr std::string_view exclamationMark() { return "!"; }
-static constexpr std::string_view equals() { return " = "; }
+static constexpr std::string_view equals() { return "="; }
 static constexpr std::string_view comma() { return ", "; }
 static constexpr std::string_view arrow() { return " -> "; }
 static constexpr std::string_view delimiter() { return "\""; }
@@ -44,6 +47,28 @@ static constexpr std::string_view apostrophe() { return "'"; }
 static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
+static constexpr std::string_view addressSymbol() { return "@"; }
+
+// clang-format off
+/// A list of integer attributes supported by the native Calyx compiler.
+constexpr std::array<StringRef, 6> CalyxIntegerAttributes{
+  "external", "static", "share", "bound", "write_together", "read_together"
+};
+
+/// A list of boolean attributes supported by the native Calyx compiler.
+constexpr std::array<StringRef, 6> CalyxBooleanAttributes{
+  "clk", "done", "go", "reset", "generated", "precious"
+};
+// clang-format on
+
+/// Determines whether the given identifier is a valid Calyx attribute.
+static bool isValidCalyxAttribute(StringRef identifier) {
+
+  return llvm::find(CalyxIntegerAttributes, identifier) !=
+             CalyxIntegerAttributes.end() ||
+         llvm::find(CalyxBooleanAttributes, identifier) !=
+             CalyxBooleanAttributes.end();
+}
 
 /// A tracker to determine which libraries should be imported for a given
 /// program.
@@ -179,6 +204,63 @@ private:
     return op->emitOpError(message);
   }
 
+  /// Calyx attributes are emitted in one of the two following formats:
+  /// (1)  @<attribute-name>(<attribute-value>), e.g. `@go`, `@bound(5)`.
+  /// (2)  <"<attribute-name>"=<attribute-value>>, e.g. `<"static"=1>`.
+  ///
+  /// Since ports are structural in nature and not operations, an
+  /// extra boolean value is added to determine whether this is a port of the
+  /// given operation.
+  std::string getAttribute(Operation *op, StringRef identifier, Attribute attr,
+                           bool isPort) {
+    // Verify this attribute is supported for emission.
+    if (!isValidCalyxAttribute(identifier))
+      return "";
+
+    // Determines whether the attribute should follow format (2).
+    bool isGroupOrComponentAttr = isa<GroupOp, ComponentOp>(op) && !isPort;
+
+    std::string output;
+    llvm::raw_string_ostream buffer(output);
+    buffer.reserveExtraSpace(16);
+
+    bool isBooleanAttribute = llvm::find(CalyxBooleanAttributes, identifier) !=
+                              CalyxBooleanAttributes.end();
+    if (attr.isa<UnitAttr>()) {
+      assert(isBooleanAttribute &&
+             "Non-boolean attributes must provide an integer value.");
+      buffer << addressSymbol() << identifier << space();
+    } else if (auto intAttr = attr.dyn_cast<IntegerAttr>()) {
+      APInt value = intAttr.getValue();
+      if (isGroupOrComponentAttr) {
+        buffer << LAngleBracket() << delimiter() << identifier << delimiter()
+               << equals() << value << RAngleBracket();
+      } else {
+        buffer << addressSymbol() << identifier;
+        // The only time we may omit the value is when it is a Boolean attribute
+        // with value 1.
+        if (!isBooleanAttribute || intAttr.getValue() != 1)
+          buffer << LParen() << value << RParen();
+        buffer << space();
+      }
+    }
+    return buffer.str();
+  }
+
+  /// Emits the attributes of a dictionary. If the `attributes` dictionary is
+  /// not nullptr, we assume this is for a port.
+  std::string getAttributes(Operation *op,
+                            DictionaryAttr attributes = nullptr) {
+    bool isPort = attributes != nullptr;
+    if (!isPort)
+      attributes = op->getAttrDictionary();
+
+    SmallString<16> calyxAttributes;
+    for (auto &&[id, attr] : attributes)
+      calyxAttributes.append(getAttribute(op, id, attr, isPort));
+    return calyxAttributes.c_str();
+  }
+
   /// Helper function for emitting a Calyx section. It emits the body in the
   /// following format:
   /// {
@@ -248,8 +330,8 @@ private:
         .Case<comb::AndOp>([&](auto op) { emitCombinationalValue(op, "&"); })
         .Case<comb::OrOp>([&](auto op) { emitCombinationalValue(op, "|"); })
         .Case<comb::XorOp>([&](auto op) {
-          // The XorOp is a bit different, since the Combinational dialect uses
-          // it to represent binary not.
+          // The XorOp is a bit different, since the Combinational dialect
+          // uses it to represent binary not.
           if (!op.isBinaryNot()) {
             emitOpError(op, "Only supporting Binary Not for XOR.");
             return;
@@ -269,7 +351,7 @@ private:
     assert((isa<GroupGoOp>(op) || isa<GroupDoneOp>(op)) &&
            "Required to be a group port.");
     indent() << group.symName().getValue() << LSquare() << portHole << RSquare()
-             << equals();
+             << space() << equals() << space();
     if (op.guard()) {
       emitValue(op.guard(), /*isIndented=*/false);
       os << questionMark();
@@ -287,15 +369,23 @@ private:
       return;
     }
     for (auto &&bodyOp : *controlOp.getBody()) {
+      // Attribute dictionary is prepended for a control operation.
+      auto prependAttributes = [&](StringRef sym) {
+        return (getAttributes(&bodyOp) + sym).str();
+      };
+
       TypeSwitch<Operation *>(&bodyOp)
           .template Case<SeqOp>([&](auto op) {
-            emitCalyxSection("seq", [&]() { emitCalyxControl(op); });
+            emitCalyxSection(prependAttributes("seq"),
+                             [&]() { emitCalyxControl(op); });
           })
           .template Case<ParOp>([&](auto op) {
-            emitCalyxSection("par", [&]() { emitCalyxControl(op); });
+            emitCalyxSection(prependAttributes("par"),
+                             [&]() { emitCalyxControl(op); });
           })
           .template Case<IfOp, WhileOp>([&](auto op) {
-            indent() << (isa<IfOp>(op) ? "if " : "while ");
+            StringRef sym = (isa<IfOp>(op) ? "if " : "while ");
+            indent() << prependAttributes(sym);
             emitValue(op.cond(), /*isIndented=*/false);
             if (auto groupName = op.groupName(); groupName.hasValue())
               os << " with " << groupName.getValue();
@@ -335,8 +425,7 @@ void Emitter::emitProgram(ProgramOp op) {
 
 /// Emit a component.
 void Emitter::emitComponent(ComponentOp op) {
-  indent() << "component " << op.getName();
-
+  indent() << "component " << op.getName() << getAttributes(op);
   // Emit the ports.
   emitComponentPorts(op);
   os << space() << LBraceEndL();
@@ -375,32 +464,15 @@ void Emitter::emitComponent(ComponentOp op) {
 
 /// Emit the ports of a component.
 void Emitter::emitComponentPorts(ComponentOp op) {
-  // To avoid the native compiler adding each of the required ports twice,
-  // add the @<port-name> attribute here. This is a quick-fix solution.
-  // Eventually we want to add attributes directly to component arguments.
-  // See: https://github.com/llvm/circt/issues/1666
-  llvm::SmallVector<StringRef> requiredPorts = {"go", "clk", "done", "reset",
-                                                "done"};
-  auto requiresNativeCompilerAttribute = [&](StringRef portName) {
-    return llvm::find_if(requiredPorts, [&](StringRef requiredPort) {
-             return requiredPort == portName;
-           }) != requiredPorts.end();
-  };
-
   auto emitPorts = [&](auto ports) {
     os << LParen();
     for (size_t i = 0, e = ports.size(); i < e; ++i) {
-      const auto &port = ports[i];
-      std::string name = port.name.getValue().str();
-      if (requiresNativeCompilerAttribute(name)) {
-        // @<port-name> <port-name>
-        name.insert(0, "@");
-        name += " ";
-        name += port.name.getValue();
-      }
+      const PortInfo &port = ports[i];
+
       // We only care about the bit width in the emitted .futil file.
       auto bitWidth = port.type.getIntOrFloatBitWidth();
-      os << name << colon() << bitWidth;
+      os << getAttributes(op, port.attributes) << port.name.getValue()
+         << colon() << bitWidth;
 
       if (i + 1 < e)
         os << comma();
@@ -413,14 +485,16 @@ void Emitter::emitComponentPorts(ComponentOp op) {
 }
 
 void Emitter::emitInstance(InstanceOp op) {
-  indent() << op.instanceName() << equals() << op.componentName() << LParen()
-           << RParen() << semicolonEndL();
+  indent() << getAttributes(op) << op.instanceName() << space() << equals()
+           << space() << op.componentName() << LParen() << RParen()
+           << semicolonEndL();
 }
 
 void Emitter::emitRegister(RegisterOp reg) {
   size_t bitWidth = reg.inPort().getType().getIntOrFloatBitWidth();
-  indent() << reg.instanceName() << equals() << "std_reg" << LParen()
-           << std::to_string(bitWidth) << RParen() << semicolonEndL();
+  indent() << getAttributes(reg) << reg.instanceName() << space() << equals()
+           << space() << "std_reg" << LParen() << std::to_string(bitWidth)
+           << RParen() << semicolonEndL();
 }
 
 void Emitter::emitMemory(MemoryOp memory) {
@@ -430,9 +504,9 @@ void Emitter::emitMemory(MemoryOp memory) {
                         "supported by the native Calyx compiler.");
     return;
   }
-  indent() << memory.instanceName() << " = std_mem_d"
-           << std::to_string(dimension) << LParen() << memory.width()
-           << comma();
+  indent() << getAttributes(memory) << memory.instanceName() << space()
+           << equals() << space() << "std_mem_d" << std::to_string(dimension)
+           << LParen() << memory.width() << comma();
   for (Attribute size : memory.sizes()) {
     APInt memSize = size.cast<IntegerAttr>().getValue();
     memSize.print(os, /*isSigned=*/false);
@@ -457,8 +531,9 @@ static StringRef removeCalyxPrefix(StringRef s) { return s.split(".").second; }
 
 void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
   auto cell = cast<CellInterface>(op);
-  indent() << cell.instanceName() << equals()
-           << removeCalyxPrefix(op->getName().getStringRef()) << LParen();
+  indent() << getAttributes(op) << cell.instanceName() << space() << equals()
+           << space() << removeCalyxPrefix(op->getName().getStringRef())
+           << LParen();
   llvm::interleaveComma(op->getResults(), os, [&](auto res) {
     os << std::to_string(res.getType().getIntOrFloatBitWidth());
   });
@@ -468,15 +543,15 @@ void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
 void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
   auto cell = cast<CellInterface>(op);
   unsigned bitwidth = cell.inputPorts()[0].getType().getIntOrFloatBitWidth();
-  indent() << cell.instanceName() << equals()
-           << removeCalyxPrefix(op->getName().getStringRef()) << LParen()
-           << bitwidth << RParen() << semicolonEndL();
+  indent() << getAttributes(op) << cell.instanceName() << space() << equals()
+           << space() << removeCalyxPrefix(op->getName().getStringRef())
+           << LParen() << bitwidth << RParen() << semicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {
 
   emitValue(op.dest(), /*isIndented=*/true);
-  os << equals();
+  os << space() << equals() << space();
   if (op.guard()) {
     emitValue(op.guard(), /*isIndented=*/false);
     os << questionMark();
@@ -514,12 +589,14 @@ void Emitter::emitGroup(GroupInterface group) {
           });
     }
   };
-  auto prefix = Twine(isa<CombGroupOp>(group) ? "comb " : "") + "group";
-  emitCalyxSection(prefix.str(), emitGroupBody, group.symName().getValue());
+
+  Twine prefix = Twine(isa<CombGroupOp>(group) ? "comb " : "") + "group";
+  Twine groupHeader = Twine(group.symName().getValue()) + getAttributes(group);
+  emitCalyxSection(prefix.str(), emitGroupBody, groupHeader.str());
 }
 
 void Emitter::emitEnable(EnableOp enable) {
-  indent() << enable.groupName() << semicolonEndL();
+  indent() << getAttributes(enable) << enable.groupName() << semicolonEndL();
 }
 
 void Emitter::emitControl(ControlOp control) {

@@ -280,11 +280,15 @@ SmallVector<PortInfo> ComponentOp::getPortInfo() {
   auto portNamesAttr = portNames();
   auto portDirectionsAttr =
       (*this)->getAttrOfType<IntegerAttr>(direction::attrKey);
+  auto portAttrs = (*this)->getAttrOfType<ArrayAttr>("portAttributes");
 
   SmallVector<PortInfo> results;
   for (uint64_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
-    results.push_back({portNamesAttr[i].cast<StringAttr>(), portTypes[i],
-                       direction::get(portDirectionsAttr.getValue()[i])});
+    results.push_back(
+        PortInfo{.name = portNamesAttr[i].cast<StringAttr>(),
+                 .type = portTypes[i],
+                 .direction = direction::get(portDirectionsAttr.getValue()[i]),
+                 .attributes = portAttrs[i].cast<DictionaryAttr>()});
   }
   return results;
 }
@@ -317,8 +321,12 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
   // Print the port definition list for input and output ports.
   auto printPortDefList = [&](auto ports) {
     p << "(";
-    llvm::interleaveComma(ports, p, [&](auto port) {
+    llvm::interleaveComma(ports, p, [&](const PortInfo &port) {
       p << "%" << port.name.getValue() << ": " << port.type;
+      if (!port.attributes.empty()) {
+        p << " ";
+        p.printAttributeWithoutType(port.attributes);
+      }
     });
     p << ")";
   };
@@ -336,7 +344,8 @@ static void printComponentOp(OpAsmPrinter &p, ComponentOp op) {
 static ParseResult
 parsePortDefList(OpAsmParser &parser, OperationState &result,
                  SmallVectorImpl<OpAsmParser::OperandType> &ports,
-                 SmallVectorImpl<Type> &portTypes) {
+                 SmallVectorImpl<Type> &portTypes,
+                 SmallVectorImpl<NamedAttrList> &portAttrs) {
   if (parser.parseLParen())
     return failure();
 
@@ -349,6 +358,12 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
       continue;
     ports.push_back(port);
     portTypes.push_back(portType);
+
+    NamedAttrList portAttr;
+    portAttrs.push_back(succeeded(parser.parseOptionalAttrDict(portAttr))
+                            ? portAttr
+                            : NamedAttrList());
+
   } while (succeeded(parser.parseOptionalComma()));
 
   return parser.parseRParen();
@@ -361,12 +376,13 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
                         SmallVectorImpl<Type> &portTypes) {
   SmallVector<OpAsmParser::OperandType> inPorts, outPorts;
   SmallVector<Type> inPortTypes, outPortTypes;
+  SmallVector<NamedAttrList> portAttributes;
 
-  if (parsePortDefList(parser, result, inPorts, inPortTypes))
+  if (parsePortDefList(parser, result, inPorts, inPortTypes, portAttributes))
     return failure();
 
   if (parser.parseArrow() ||
-      parsePortDefList(parser, result, outPorts, outPortTypes))
+      parsePortDefList(parser, result, outPorts, outPortTypes, portAttributes))
     return failure();
 
   auto *context = parser.getBuilder().getContext();
@@ -393,6 +409,11 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   ports.append(outPorts);
   portTypes.append(inPortTypes);
   portTypes.append(outPortTypes);
+
+  SmallVector<Attribute> portAttrs;
+  llvm::transform(portAttributes, std::back_inserter(portAttrs),
+                  [&](auto attr) { return attr.getDictionary(context); });
+  result.addAttribute("portAttributes", ArrayAttr::get(context, portAttrs));
 
   return success();
 }
@@ -423,7 +444,41 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
 
   if (body->empty())
     body->push_back(new Block());
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
   return success();
+}
+
+/// Determines whether the given ComponentOp has all the required ports.
+static LogicalResult hasRequiredPorts(ComponentOp op) {
+  // Get all identifiers from the component ports.
+  llvm::SmallVector<StringRef, 4> identifiers;
+  for (PortInfo &port : op.getPortInfo()) {
+    auto portIds = port.getAllIdentifiers();
+    identifiers.append(portIds.begin(), portIds.end());
+  }
+  // Sort the identifiers: a pre-condition for std::set_intersection.
+  std::sort(identifiers.begin(), identifiers.end());
+
+  llvm::SmallVector<StringRef, 4> intersection,
+      interfacePorts{"clk", "done", "go", "reset"};
+  // Find the intersection between all identifiers and required ports.
+  std::set_intersection(interfacePorts.begin(), interfacePorts.end(),
+                        identifiers.begin(), identifiers.end(),
+                        std::back_inserter(intersection));
+
+  if (intersection.size() == interfacePorts.size())
+    return success();
+
+  SmallVector<StringRef, 4> difference;
+  std::set_difference(interfacePorts.begin(), interfacePorts.end(),
+                      intersection.begin(), intersection.end(),
+                      std::back_inserter(difference));
+  return op->emitOpError()
+         << "is missing the following required port attribute identifiers: "
+         << difference;
 }
 
 static LogicalResult verifyComponentOp(ComponentOp op) {
@@ -436,27 +491,8 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
     return op.emitOpError(
         "requires exactly one of each: 'calyx.wires', 'calyx.control'.");
 
-  // Verify the component has the following ports.
-  // TODO(Calyx): Eventually, we want to attach attributes to these arguments.
-  bool go = false, clk = false, reset = false, done = false;
-  for (const PortInfo &port : op.getPortInfo()) {
-    if (!port.type.isInteger(1))
-      // Each of the ports has bit width 1.
-      continue;
-
-    StringRef portName = port.name.getValue();
-    if (port.direction == Direction::Output) {
-      done |= (portName == "done");
-    } else {
-      go |= (portName == "go");
-      clk |= (portName == "clk");
-      reset |= (portName == "reset");
-    }
-  }
-  SmallVector<bool, 4> hasRequiredPort{go, clk, reset, done};
-  if (!llvm::all_of(hasRequiredPort, [&](bool b) { return b; }))
-    return op->emitOpError("does not have required 1-bit input ports `go`, "
-                           "`clk`, `reset`, and output port `done`");
+  if (failed(hasRequiredPorts(op)))
+    return failure();
 
   // Verify the component actually does something: has a non-empty Control
   // region, or continuous assignments.
@@ -490,6 +526,7 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 
   std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
   std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
+  SmallVector<Attribute> portAttributes;
   SmallVector<Direction, 8> portDirections;
   // Avoid using llvm::partition or llvm::sort to preserve relative ordering
   // between individual inputs and outputs.
@@ -497,6 +534,7 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
     bool isInput = port.direction == Direction::Input;
     (isInput ? portIOTypes.first : portIOTypes.second).push_back(port.type);
     (isInput ? portIONames.first : portIONames.second).push_back(port.name);
+    portAttributes.push_back(port.attributes);
   }
   auto portTypes = concat(portIOTypes.first, portIOTypes.second);
   auto portNames = concat(portIONames.first, portIONames.second);
@@ -512,6 +550,8 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
                                                    portIOTypes.first.size(),
                                                    portIOTypes.second.size()),
                                                builder.getContext()));
+  // Record the attributes of the ports.
+  result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
 
   // Create a single-blocked region.
   result.addRegion();
