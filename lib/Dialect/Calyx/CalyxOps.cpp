@@ -286,8 +286,8 @@ SmallVector<PortInfo> ComponentOp::getPortInfo() {
   for (uint64_t i = 0, e = portNamesAttr.size(); i != e; ++i) {
     results.push_back(
         PortInfo{.name = portNamesAttr[i].cast<StringAttr>(),
-                 .direction = direction::get(portDirectionsAttr.getValue()[i]),
                  .type = portTypes[i],
+                 .direction = direction::get(portDirectionsAttr.getValue()[i]),
                  .attributes = portAttrs[i].cast<DictionaryAttr>()});
   }
   return results;
