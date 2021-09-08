@@ -947,16 +947,20 @@ circuit Sub : %[[{
 
 ; CHECK-LABEL: firrtl.circuit "Sub"
 ; CHECK-SAME: {annotations = [], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = [[ID:.+]] : i64}
+
 ; CHECK-LABEL: firrtl.module @Sub
 ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = [[ID]] : i64}
+
 ; CHECK: %clockSource = firrtl.wire
 ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = [[ID]] : i64, peer = "~Top|Top>clock", side = "local", targetId = 1 : i64}
 ; CHECK: %clockSink = firrtl.wire
 ; CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "sink", id = [[ID]] : i64, peer = "~Top|Foo>clock", side = "local", targetId = 5 : i64}
+
 ; CHECK: %dataSource = firrtl.wire
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 1, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22source\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataOut.x.y.z\22, side = \22local\22, targetId = 2 : i64}>">
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 2, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22source\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataOut.w\22, side = \22local\22, targetId = 3 : i64}>">
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 3, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22source\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataOut.p\22, side = \22local\22, targetId = 4 : i64}>">
+
 ; CHECK: %dataSink = firrtl.wire
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 1, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22sink\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataIn.a.b.c\22, side = \22local\22, targetId = 6 : i64}>">
 ; CHECK-SAME: #firrtl<"subAnno<fieldID = 2, {class = \22sifive.enterprise.grandcentral.SignalDriverAnnotation\22, dir = \22sink\22, id = [[ID]] : i64, peer = \22~Top|Foo>dataIn.d\22, side = \22local\22, targetId = 7 : i64}>">

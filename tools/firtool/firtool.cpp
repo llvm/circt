@@ -348,6 +348,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     auto &circuitPM = pm.nest<firrtl::CircuitOp>();
     circuitPM.addPass(firrtl::createGrandCentralPass());
     circuitPM.addPass(firrtl::createGrandCentralTapsPass());
+    circuitPM.nest<firrtl::FModuleOp>().addPass(
+        firrtl::createGrandCentralSignalMappingsPass());
   }
 
   // The above passes, IMConstProp in particular, introduce additional

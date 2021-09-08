@@ -1133,15 +1133,24 @@ bool circt::firrtl::scatterCustomAnnotations(
           // Handle subfield and non-local targets.
           auto NLATargets = expandNonLocal(*canonTarget);
           auto leafTarget = splitAndAppendTarget(
-                                fields, std::get<0>(NLATargets.back()), context)
-                                .first;
+              fields, std::get<0>(NLATargets.back()), context);
           if (NLATargets.size() > 1) {
             buildNLA(circuit, *canonTarget, NLATargets);
             fields.append("circt.nonlocal",
                           FlatSymbolRefAttr::get(context, *canonTarget));
           }
-          newAnnotations[leafTarget].push_back(
+          newAnnotations[leafTarget.first].push_back(
               DictionaryAttr::get(context, fields));
+
+          // Add a don't touch annotation to whatever this annotation targets.
+          fields = NamedAttrList();
+          fields.append("class",
+                        StringAttr::get(
+                            context, "firrtl.transforms.DontTouchAnnotation"));
+          if (leafTarget.second)
+            fields.append("target", *leafTarget.second);
+          newAnnotations[leafTarget.first].push_back(
+              DictionaryAttr::getWithSorted(context, fields));
 
           // Keep track of the enclosing module.
           annotatedModules.insert(
