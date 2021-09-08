@@ -220,15 +220,12 @@ private:
     // Determines whether the attribute should follow format (2).
     bool isGroupOrComponentAttr = isa<GroupOp, ComponentOp>(op) && !isPort;
 
-    SmallVector<char> symbol;
-
-    bool isBooleanAttribute = llvm::find(CalyxBooleanAttributes, identifier) !=
-                              CalyxBooleanAttributes.end();
-
     std::string output;
     llvm::raw_string_ostream buffer(output);
     buffer.reserveExtraSpace(16);
 
+    bool isBooleanAttribute = llvm::find(CalyxBooleanAttributes, identifier) !=
+                              CalyxBooleanAttributes.end();
     if (attr.isa<UnitAttr>()) {
       assert(isBooleanAttribute &&
              "Non-boolean attributes must provide an integer value.");
@@ -250,8 +247,8 @@ private:
     return buffer.str();
   }
 
-  /// Emits the attributes of a dictionary. If the `attributes` are nullptr, we
-  /// assume this is for a port.
+  /// Emits the attributes of a dictionary. If the `attributes` dictionary is
+  /// not nullptr, we assume this is for a port.
   std::string getAttributes(Operation *op,
                             DictionaryAttr attributes = nullptr) {
     bool isPort = attributes != nullptr;
@@ -404,7 +401,7 @@ private:
   /// Current level of indentation. See `indent()` and
   /// `addIndent()`/`reduceIndent()`.
   unsigned currentIndent = 0;
-}; // namespace
+};
 
 } // end anonymous namespace
 

@@ -66,10 +66,12 @@ struct ComponentPortInfo {
   StringAttr name;
   Type type;
   Direction direction;
-  DictionaryAttr attributes = {};
+  DictionaryAttr attributes;
 
   /// Returns whether the given port has attribute with Identifier `name`.
   bool hasAttribute(StringRef identifier) {
+    if (attributes == nullptr)
+      return false;
     return llvm::any_of(attributes, [&](auto idToAttribute) {
       return identifier == std::get<0>(idToAttribute);
     });
@@ -78,6 +80,9 @@ struct ComponentPortInfo {
   /// Returns the attribute associated with the given name if it exists,
   /// otherwise std::nullopt.
   std::optional<Attribute> getAttribute(StringRef identifier) {
+    if (attributes == nullptr)
+      return std::nullopt;
+
     auto it = llvm::find_if(attributes, [&](auto idToAttribute) {
       return identifier == std::get<0>(idToAttribute);
     });
@@ -88,6 +93,9 @@ struct ComponentPortInfo {
 
   /// Returns all identifiers for this dictionary attribute.
   SmallVector<StringRef> getAllIdentifiers() {
+    if (attributes == nullptr)
+      return {};
+
     SmallVector<StringRef> identifiers;
     llvm::transform(
         attributes, std::back_inserter(identifiers),
