@@ -17,6 +17,7 @@
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OperationSupport.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/JSON.h"
 
@@ -1077,6 +1078,7 @@ bool circt::firrtl::scatterCustomAnnotations(
 
       // A callback that will scatter every source and sink target pair to the
       // corresponding two ends of the connection.
+      llvm::StringSet annotatedModules;
       auto handleTarget = [&](Attribute attr, unsigned i, bool isSource) {
         auto targetId = newID();
         DictionaryAttr targetDict = attr.dyn_cast<DictionaryAttr>();
@@ -1091,16 +1093,16 @@ bool circt::firrtl::scatterCustomAnnotations(
         // Dig up the two sides of the link.
         auto path = Twine(clazz) + "." + (isSource ? "source" : "sink") +
                     "Targets[" + Twine(i) + "]";
-        auto originAttr =
+        auto remoteAttr =
             tryGetAs<StringAttr>(targetDict, dict, "_1", loc, path);
-        auto destinationAttr =
+        auto localAttr =
             tryGetAs<StringAttr>(targetDict, dict, "_2", loc, path);
-        if (!originAttr || !destinationAttr)
+        if (!localAttr || !remoteAttr)
           return false;
 
         // Build the two annotations.
-        for (auto pair : std::array{std::make_pair(originAttr, true),
-                                    std::make_pair(destinationAttr, false)}) {
+        for (auto pair : std::array{std::make_pair(localAttr, true),
+                                    std::make_pair(remoteAttr, false)}) {
           auto canonTarget = canonicalizeTarget(pair.first.getValue());
           if (!canonTarget)
             return false;
@@ -1122,10 +1124,11 @@ bool circt::firrtl::scatterCustomAnnotations(
           fields.append("class", classAttr);
           fields.append("id", id);
           fields.append("targetId", targetId);
-          if (pair.second)
-            fields.append("destination", destinationAttr);
-          else
-            fields.append("origin", originAttr);
+          fields.append("peer", pair.second ? remoteAttr : localAttr);
+          fields.append("side", StringAttr::get(
+                                    context, pair.second ? "local" : "remote"));
+          fields.append("dir",
+                        StringAttr::get(context, isSource ? "source" : "sink"));
 
           // Handle subfield and non-local targets.
           auto NLATargets = expandNonLocal(*canonTarget);
@@ -1139,6 +1142,12 @@ bool circt::firrtl::scatterCustomAnnotations(
           }
           newAnnotations[leafTarget].push_back(
               DictionaryAttr::get(context, fields));
+
+          // Keep track of the enclosing module.
+          annotatedModules.insert(
+              (StringRef(std::get<0>(NLATargets.back())).split("|").first +
+               "|" + std::get<1>(NLATargets.back()))
+                  .str());
 
           // Annotate instances along the NLA path.
           for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
@@ -1169,6 +1178,16 @@ bool circt::firrtl::scatterCustomAnnotations(
       for (auto attr : sinksAttr)
         if (!handleTarget(attr, i++, false))
           return false;
+
+      // Indicate which modules have embedded `SignalDriverAnnotation`s.
+      for (auto &module : annotatedModules) {
+        llvm::errs() << "- Annotate module `" << module.getKey() << "`\n";
+        NamedAttrList fields;
+        fields.append("class", classAttr);
+        fields.append("id", id);
+        newAnnotations[module.getKey()].push_back(
+            DictionaryAttr::get(context, fields));
+      }
 
       continue;
     }
