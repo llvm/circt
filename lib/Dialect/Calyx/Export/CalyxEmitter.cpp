@@ -407,7 +407,7 @@ private:
   /// Current level of indentation. See `indent()` and
   /// `addIndent()`/`reduceIndent()`.
   unsigned currentIndent = 0;
-}; // namespace
+};
 
 } // end anonymous namespace
 
