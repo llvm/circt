@@ -105,7 +105,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
     auto direction = (Direction)cast<FModuleLike>(op)
                          .getPortDirections()
                          .getValue()[blockArg.getArgNumber()];
-    if (direction == Direction::Output)
+    if (direction == Direction::Out)
       return swap();
     return accumulatedFlow;
   }
@@ -126,7 +126,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         for (auto arg : llvm::enumerate(inst.getResults()))
           if (arg.value() == val) {
             if (inst.getReferencedModule().getPortDirection(arg.index()) ==
-                Direction::Output)
+                Direction::Out)
               return accumulatedFlow;
             else
               return swap();
@@ -2637,7 +2637,7 @@ IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
   // Pack the array of directions into an APInt.  Input is zero, output is one.
   APInt portDirections(size, 0);
   for (size_t i = 0, e = directions.size(); i != e; ++i)
-    if (directions[i] == Direction::Output)
+    if (directions[i] == Direction::Out)
       portDirections.setBit(i);
 
   return IntegerAttr::get(IntegerType::get(ctx, size), portDirections);
