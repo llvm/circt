@@ -935,32 +935,34 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }
 
-ImplUnaryOpCellInterface(PadLibOp);
-ImplUnaryOpCellInterface(SliceLibOp);
-ImplUnaryOpCellInterface(NotLibOp);
+// clang-format off
+ImplUnaryOpCellInterface(PadLibOp)
+ImplUnaryOpCellInterface(SliceLibOp)
+ImplUnaryOpCellInterface(NotLibOp)
 
-ImplBinOpCellInterface(LtLibOp);
-ImplBinOpCellInterface(GtLibOp);
-ImplBinOpCellInterface(EqLibOp);
-ImplBinOpCellInterface(NeqLibOp);
-ImplBinOpCellInterface(GeLibOp);
-ImplBinOpCellInterface(LeLibOp);
-ImplBinOpCellInterface(SltLibOp);
-ImplBinOpCellInterface(SgtLibOp);
-ImplBinOpCellInterface(SeqLibOp);
-ImplBinOpCellInterface(SneqLibOp);
-ImplBinOpCellInterface(SgeLibOp);
-ImplBinOpCellInterface(SleLibOp);
+ImplBinOpCellInterface(LtLibOp)
+ImplBinOpCellInterface(GtLibOp)
+ImplBinOpCellInterface(EqLibOp)
+ImplBinOpCellInterface(NeqLibOp)
+ImplBinOpCellInterface(GeLibOp)
+ImplBinOpCellInterface(LeLibOp)
+ImplBinOpCellInterface(SltLibOp)
+ImplBinOpCellInterface(SgtLibOp)
+ImplBinOpCellInterface(SeqLibOp)
+ImplBinOpCellInterface(SneqLibOp)
+ImplBinOpCellInterface(SgeLibOp)
+ImplBinOpCellInterface(SleLibOp)
 
-ImplBinOpCellInterface(AddLibOp);
-ImplBinOpCellInterface(SubLibOp);
-ImplBinOpCellInterface(ShruLibOp);
-ImplBinOpCellInterface(RshLibOp);
-ImplBinOpCellInterface(SrshLibOp);
-ImplBinOpCellInterface(LshLibOp);
-ImplBinOpCellInterface(AndLibOp);
-ImplBinOpCellInterface(OrLibOp);
-ImplBinOpCellInterface(XorLibOp);
+ImplBinOpCellInterface(AddLibOp)
+ImplBinOpCellInterface(SubLibOp)
+ImplBinOpCellInterface(ShruLibOp)
+ImplBinOpCellInterface(RshLibOp)
+ImplBinOpCellInterface(SrshLibOp)
+ImplBinOpCellInterface(LshLibOp)
+ImplBinOpCellInterface(AndLibOp)
+ImplBinOpCellInterface(OrLibOp)
+ImplBinOpCellInterface(XorLibOp)
+// clang-format on
 
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
