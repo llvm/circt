@@ -318,9 +318,8 @@ private:
               << cell.instanceName() << period() << cell.portName(value);
         })
         .Case<hw::ConstantOp>([&](auto op) {
-          // A constant is defined as <bit-width>'<base><value>, where the
-          // base is `b` (binary), `o` (octal), `h` hexadecimal, or `d`
-          // (decimal).
+          // A constant is defined as <bit-width>'<base><value>, where the base
+          // is `b` (binary), `o` (octal), `h` hexadecimal, or `d` (decimal).
           APInt value = op.value();
 
           (isIndented ? indent() : os)
@@ -337,8 +336,8 @@ private:
             emitOpError(op, "Only supporting Binary Not for XOR.");
             return;
           }
-          // The LHS is the value to be negated, and the RHS is a constant
-          // with all ones (guaranteed by isBinaryNot).
+          // The LHS is the value to be negated, and the RHS is a constant with
+          // all ones (guaranteed by isBinaryNot).
           os << exclamationMark();
           emitValue(op.inputs()[0], /*isIndented=*/false);
         })
@@ -370,16 +369,23 @@ private:
       return;
     }
     for (auto &&bodyOp : *controlOp.getBody()) {
-      std::string attrDict = getAttributes(&bodyOp);
+      // Attribute dictionary is prepended for a control operation.
+      auto prependAttributes = [&](StringRef sym) {
+        return (getAttributes(&bodyOp) + sym).str();
+      };
+
       TypeSwitch<Operation *>(&bodyOp)
           .template Case<SeqOp>([&](auto op) {
-            emitCalyxSection(attrDict + "seq", [&]() { emitCalyxControl(op); });
+            emitCalyxSection(prependAttributes("seq"),
+                             [&]() { emitCalyxControl(op); });
           })
           .template Case<ParOp>([&](auto op) {
-            emitCalyxSection(attrDict + "par", [&]() { emitCalyxControl(op); });
+            emitCalyxSection(prependAttributes("par"),
+                             [&]() { emitCalyxControl(op); });
           })
           .template Case<IfOp, WhileOp>([&](auto op) {
-            indent() << attrDict << (isa<IfOp>(op) ? "if " : "while ");
+            StringRef sym = (isa<IfOp>(op) ? "if " : "while ");
+            indent() << prependAttributes(sym);
             emitValue(op.cond(), /*isIndented=*/false);
             if (auto groupName = op.groupName(); groupName.hasValue())
               os << " with " << groupName.getValue();
@@ -401,7 +407,7 @@ private:
   /// Current level of indentation. See `indent()` and
   /// `addIndent()`/`reduceIndent()`.
   unsigned currentIndent = 0;
-};
+}; // namespace
 
 } // end anonymous namespace
 

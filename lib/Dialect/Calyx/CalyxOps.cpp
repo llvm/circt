@@ -76,13 +76,6 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
-namespace {
-
-// A list of required interface ports for ComponentOps.
-constexpr std::array<StringRef, 4> InterfacePorts{"clk", "done", "go", "reset"};
-
-} // namespace
-
 /// Returns whether this value is either (1) a port on a ComponentOp or (2) a
 /// port on a cell interface.
 static bool isPort(Value value) {
@@ -468,17 +461,18 @@ static LogicalResult hasRequiredPorts(ComponentOp op) {
   // Sort the identifiers: a pre-condition for std::set_intersection.
   std::sort(identifiers.begin(), identifiers.end());
 
-  llvm::SmallVector<StringRef, 4> intersection;
+  llvm::SmallVector<StringRef, 4> intersection,
+      interfacePorts{"clk", "done", "go", "reset"};
   // Find the intersection between all identifiers and required ports.
-  std::set_intersection(InterfacePorts.begin(), InterfacePorts.end(),
+  std::set_intersection(interfacePorts.begin(), interfacePorts.end(),
                         identifiers.begin(), identifiers.end(),
                         std::back_inserter(intersection));
 
-  if (intersection.size() == InterfacePorts.size())
+  if (intersection.size() == interfacePorts.size())
     return success();
 
   SmallVector<StringRef, 4> difference;
-  std::set_difference(InterfacePorts.begin(), InterfacePorts.end(),
+  std::set_difference(interfacePorts.begin(), interfacePorts.end(),
                       intersection.begin(), intersection.end(),
                       std::back_inserter(difference));
   return op->emitOpError()
