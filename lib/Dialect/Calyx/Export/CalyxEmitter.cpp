@@ -28,22 +28,6 @@ using namespace mlir;
 
 namespace {
 
-// clang-format off
-
-/// A list of attributes supported by the native Calyx compiler.
-constexpr std::array<StringRef, 12> CalyxAttributes{
-    "clk", "done", "go", "reset", "external", "static", "share",
-    "bound", "generated", "write_together", "read_together",
-    "precious"
-};
-
-/// A subset of Calyx attributes that are Boolean values.
-constexpr std::array<StringRef, 6> CalyxBooleanAttributes{
-    "clk", "done", "go", "reset", "generated", "precious"
-};
-
-// clang-format on
-
 static constexpr std::string_view LSquare() { return "["; }
 static constexpr std::string_view RSquare() { return "]"; }
 static constexpr std::string_view LAngleBracket() { return "<"; }
@@ -64,6 +48,27 @@ static constexpr std::string_view LBraceEndL() { return "{\n"; }
 static constexpr std::string_view RBraceEndL() { return "}\n"; }
 static constexpr std::string_view semicolonEndL() { return ";\n"; }
 static constexpr std::string_view addressSymbol() { return "@"; }
+
+// clang-format off
+/// A list of integer attributes supported by the native Calyx compiler.
+constexpr std::array<StringRef, 6> CalyxIntegerAttributes{
+  "external", "static", "share", "bound", "write_together", "read_together"
+};
+
+/// A list of boolean attributes supported by the native Calyx compiler.
+constexpr std::array<StringRef, 6> CalyxBooleanAttributes{
+  "clk", "done", "go", "reset", "generated", "precious"
+};
+// clang-format on
+
+/// Determines whether the given identifier is a valid Calyx attribute.
+static bool isValidCalyxAttribute(StringRef identifier) {
+
+  return llvm::find(CalyxIntegerAttributes, identifier) !=
+             CalyxIntegerAttributes.end() ||
+         llvm::find(CalyxBooleanAttributes, identifier) !=
+             CalyxBooleanAttributes.end();
+}
 
 /// A tracker to determine which libraries should be imported for a given
 /// program.
@@ -209,7 +214,7 @@ private:
   std::string getAttribute(Operation *op, StringRef identifier, Attribute attr,
                            bool isPort) {
     // Verify this attribute is supported.
-    if (llvm::find(CalyxAttributes, identifier) == CalyxAttributes.end())
+    if (!isValidCalyxAttribute(identifier))
       return "";
 
     // Determines whether the attribute should follow format (2).
@@ -230,17 +235,17 @@ private:
     }
 
     SmallVector<char> value;
-    // Format (1) may leave off the value if it is equal to 1,
-    // e.g. @clk instead of @clk(1).
-    bool emitValue = llvm::find(CalyxBooleanAttributes, identifier) ==
-                         CalyxBooleanAttributes.end() ||
-                     intAttr.getValue() != 1;
-    if (emitValue)
-      intAttr.getValue().toStringUnsigned(value);
+    intAttr.getValue().toStringUnsigned(value);
+
+    // The only time we may omit the value is when it is a Boolean attribute
+    // with value 1.
+    bool omitValue = llvm::find(CalyxBooleanAttributes, identifier) !=
+                         CalyxBooleanAttributes.end() &&
+                     intAttr.getValue() == 1;
 
     return isGroupOrComponentAttr
                ? ("<\"" + identifier + "\"=" + value + ">").str()
-               : ("@" + identifier + (emitValue ? "(" + value + ")" : "") + " ")
+               : ("@" + identifier + (omitValue ? "" : "(" + value + ")") + " ")
                      .str();
   }
 
