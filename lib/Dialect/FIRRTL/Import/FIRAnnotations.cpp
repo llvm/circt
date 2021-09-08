@@ -1135,7 +1135,7 @@ bool circt::firrtl::scatterCustomAnnotations(
           auto leafTarget = splitAndAppendTarget(
               fields, std::get<0>(NLATargets.back()), context);
           if (NLATargets.size() > 1) {
-            buildNLA(circuit, *canonTarget, NLATargets);
+            buildNLA(circuit, ++nlaNumber, NLATargets);
             fields.append("circt.nonlocal",
                           FlatSymbolRefAttr::get(context, *canonTarget));
           }
