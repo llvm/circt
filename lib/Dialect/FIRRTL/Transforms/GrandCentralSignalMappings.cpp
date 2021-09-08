@@ -13,28 +13,16 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
-#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
-#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
-#include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/SV/SVOps.h"
-#include "mlir/IR/Attributes.h"
+#include "circt/Dialect/SV/SVDialect.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/ADT/TinyPtrVector.h"
-#include "llvm/Support/Allocator.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/FormatVariadic.h"
 
 #define DEBUG_TYPE "gct"
 
 using namespace circt;
 using namespace firrtl;
-
-//===----------------------------------------------------------------------===//
-// Static class names
-//===----------------------------------------------------------------------===//
 
 static constexpr const char *signalDriverAnnoClass =
     "sifive.enterprise.grandcentral.SignalDriverAnnotation";
@@ -45,22 +33,32 @@ static constexpr const char *signalDriverAnnoClass =
 
 namespace {
 enum class MappingDirection {
+  /// The local signal forces the remote signal.
   DriveRemote,
+  /// The local signal is driven to the value of the remote signal through a
+  /// connect.
   ProbeRemote,
 };
 
+/// The information necessary to connect a local signal in a module to a remote
+/// value (in a different module and/or circuit).
 struct SignalMapping {
+  /// Whether we force or read from the target.
   MappingDirection dir;
+  /// The reference target of the thing we are forcing or probing.
   StringAttr remoteTarget;
-  StringAttr localName;
-  StringRef localFields;
-
   /// The type of the signal being mapped.
   FIRRTLType type;
-  /// The `localName` and `localFields` resolved to an actual value.
+  /// The block argument or result that interacts with the remote target, either
+  /// by forcing it or by reading from it through a connect.
   Value localValue;
+  /// The name of the local value, for reuse in the generated signal mappings
+  /// module.
+  StringAttr localName;
 };
 
+/// A helper structure that collects the data necessary to generate the signal
+/// mappings module for an existing `FModuleOp` in the IR.
 struct ModuleSignalMappings {
   ModuleSignalMappings(FModuleOp module) : module(module) {}
   void run();
@@ -69,7 +67,6 @@ struct ModuleSignalMappings {
   void instantiateMappingsModule();
 
   FModuleOp module;
-  bool anyFailed = false;
   bool allAnalysesPreserved = false;
   SmallVector<SignalMapping> mappings;
   SmallString<64> mappingsModuleName;
@@ -248,8 +245,6 @@ void GrandCentralSignalMappingsPass::runOnOperation() {
   FModuleOp module = getOperation();
   ModuleSignalMappings mapper(module);
   mapper.run();
-  if (mapper.anyFailed)
-    return signalPassFailure();
   if (mapper.allAnalysesPreserved)
     markAllAnalysesPreserved();
 }
