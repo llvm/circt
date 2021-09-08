@@ -124,6 +124,37 @@ static SmallVector<Operation *> getSAWritePath(Operation *op) {
   return retval;
 }
 
+/// Returns whether the given annotation requires precise tracking of the field
+/// ID as it gets replicated across lowered operations.
+static bool isAnnotationSensitiveToFieldID(Annotation anno) {
+  return anno.isClass("sifive.enterprise.grandcentral.SignalDriverAnnotation");
+}
+
+/// If an annotation on one operation is replicated across multiple IR
+/// operations as a result of type lowering, the replicated annotations may want
+/// to track which field ID they were applied to. This function adds a fieldID
+/// to such a replicated operation, if the annotation in question requires it.
+static Attribute updateAnnotationFieldID(MLIRContext *ctxt, Attribute attr,
+                                         unsigned fieldID) {
+  DictionaryAttr dict = attr.cast<DictionaryAttr>();
+
+  // No need to do anything if the annotation applies to the entire field.
+  if (fieldID == 0)
+    return attr;
+
+  // Only certain annotations require precise tracking of field IDs.
+  Annotation anno(dict);
+  if (!isAnnotationSensitiveToFieldID(anno))
+    return attr;
+
+  // Add the new ID to the existing field ID in the annotation.
+  if (auto existingFieldID = anno.getMember<IntegerAttr>("fieldID"))
+    fieldID += existingFieldID.getValue().getZExtValue();
+  NamedAttrList fields(dict);
+  fields.set("fieldID", IntegerAttr::get(IntegerType::get(ctxt, 64), fieldID));
+  return DictionaryAttr::get(ctxt, fields);
+}
+
 /// Copy annotations from \p annotations to \p loweredAttrs, except annotations
 /// with "target" key, that do not match the field suffix.
 static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
@@ -154,8 +185,9 @@ static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
           retval.push_back(subAnno.getAnnotations());
         }
       }
-    } else
-      retval.push_back(opAttr);
+    } else {
+      retval.push_back(updateAnnotationFieldID(ctxt, opAttr, field.fieldID));
+    }
   }
   return ArrayAttr::get(ctxt, retval);
 }
