@@ -81,21 +81,24 @@ struct HIROpAsmDialectInterface : public mlir::OpAsmDialectInterface {
           setNameFn(operation->getResult(i), str.getValue());
   }
 
+  ArrayAttr getBlockArgNames(Block *block) const {
+    auto *parentOperation = block->getParentOp();
+    auto argNames =
+        parentOperation->getAttr("argNames").dyn_cast_or_null<ArrayAttr>();
+    if (!argNames)
+      return ArrayAttr();
+    return argNames;
+  }
+
   void getAsmBlockArgumentNames(Block *block,
                                 OpAsmSetValueNameFn setNameFn) const override {
-    // Assign port names to the bbargs if this is a module.
-    auto parentOp = dyn_cast<hir::FuncOp>(block->getParentOp());
-    if (parentOp) {
-      auto argNames =
-          parentOp->getAttr("argNames").dyn_cast_or_null<ArrayAttr>();
-      if (!argNames)
-        return;
+    auto argNames = getBlockArgNames(block);
+    if (argNames)
       for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
         auto name = argNames[i].dyn_cast<StringAttr>();
         if (name)
           setNameFn(block->getArgument(i), name.getValue());
       }
-    }
   }
 };
 } // end anonymous namespace

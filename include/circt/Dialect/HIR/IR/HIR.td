@@ -249,6 +249,8 @@ def ForOp : HIR_Op<"for", [SingleBlock, RecursiveSideEffects, DeclareOpInterface
     void beginRegion(mlir::OpBuilder &builder);        
     void endRegion(mlir::OpBuilder &builder);
     SmallVector<Value> getCapturedValues();
+    StringRef getInductionVarName(){return (*this)->getAttr("argNames").dyn_cast<ArrayAttr>()[0].dyn_cast<StringAttr>().getValue();}
+    StringRef getIterTimeVarName(){return (*this)->getAttr("argNames").dyn_cast<ArrayAttr>()[1].dyn_cast<StringAttr>().getValue();}
   }];
   let hasCanonicalizeMethod = true; 
   let verifier =[{return verify$cppClass(*this);}];

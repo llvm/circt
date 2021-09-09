@@ -30,6 +30,43 @@ using namespace llvm;
 //------------------------------------------------------------------------------
 // Helper functions.
 //------------------------------------------------------------------------------
+static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
+  for (const auto &argAttr : attrs)
+    if (argAttr.first == name)
+      return true;
+  return false;
+}
+
+static StringAttr getNameAttr(MLIRContext *context, StringRef name) {
+  if (!name.empty()) {
+    // Ignore numeric names like %42
+    assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
+    if (isdigit(name[1]))
+      name = StringRef();
+    else
+      name = name.drop_front();
+  }
+  return StringAttr::get(context, name);
+}
+
+LogicalResult addNamesAttribute(MLIRContext *context, StringRef attrName,
+                                ArrayRef<OpAsmParser::OperandType> args,
+                                OperationState &result) {
+
+  if (args.empty())
+    return success();
+
+  // Use SSA names only if names are not previously defined.
+  if (!hasAttribute(attrName, result.attributes)) {
+    SmallVector<Attribute> argNames;
+    for (const auto &arg : args)
+      argNames.push_back(getNameAttr(context, arg.name));
+
+    result.addAttribute(attrName, ArrayAttr::get(context, argNames));
+  }
+  return success();
+}
+
 ParseResult
 parseNamedOperandColonType(OpAsmParser &parser,
                            SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
@@ -45,18 +82,6 @@ parseNamedOperandColonType(OpAsmParser &parser,
   entryArgs.push_back(operand);
   argTypes.push_back(operandTy);
   return success();
-}
-
-static StringAttr getNameAttr(MLIRContext *context, StringRef name) {
-  if (!name.empty()) {
-    // Ignore numeric names like %42
-    assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
-    if (isdigit(name[1]))
-      name = StringRef();
-    else
-      name = name.drop_front();
-  }
-  return StringAttr::get(context, name);
 }
 
 ParseResult parseDelayAttr(OpAsmParser &parser,
@@ -553,9 +578,13 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
   IntegerAttr offset;
 
   // Parse the induction variable followed by '='.
+  auto inductionVarLoc = parser.getCurrentLocation();
   if (parser.parseRegionArgument(inductionVar) ||
       parser.parseColonType(inductionVarTy) || parser.parseEqual())
     return failure();
+  if (inductionVar.name.empty())
+    return parser.emitError(inductionVarLoc) << "Expected valid name.";
+
   // Parse loop bounds.
   if (parser.parseOperand(lb) || parser.parseKeyword("to") ||
       parser.parseOperand(ub) || parser.parseKeyword("step") ||
@@ -563,9 +592,14 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // Parse iter-time.
-  if (parser.parseKeyword("iter_time") || parser.parseLParen() ||
-      parser.parseRegionArgument(iterTimeVar) || parser.parseEqual())
+  if (parser.parseKeyword("iter_time") || parser.parseLParen())
     return failure();
+  auto iterTimeVarLoc = parser.getCurrentLocation();
+  if (parser.parseRegionArgument(iterTimeVar) || parser.parseEqual())
+    return failure();
+
+  if (iterTimeVar.name.empty())
+    return parser.emitError(iterTimeVarLoc) << "Expected valid name.";
 
   if (parseTimeAndOffset(parser, tstart, offset) || parser.parseRParen())
     return failure();
@@ -583,6 +617,11 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
       return failure();
   if (offset)
     result.addAttribute("offset", offset);
+
+  if (failed(addNamesAttribute(context, "argNames", {inductionVar, iterTimeVar},
+                               result)))
+    return parser.emitError(inductionVarLoc)
+           << "Failed to add names for induction var and time var";
 
   // Parse the body region.
   Region *body = result.addRegion();
@@ -691,31 +730,6 @@ parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
 
   funcTy = hir::FuncType::get(parser.getBuilder().getContext(), argTypes,
                               argAttrs, resultTypes, resultAttrs);
-  return success();
-}
-
-static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
-  for (const auto &argAttr : attrs)
-    if (argAttr.first == name)
-      return true;
-  return false;
-}
-
-LogicalResult addNamesAttribute(MLIRContext *context, StringRef attrName,
-                                ArrayRef<OpAsmParser::OperandType> args,
-                                OperationState &result) {
-
-  if (args.empty())
-    return success();
-
-  // Use SSA names only if names are not previously defined.
-  if (!hasAttribute(attrName, result.attributes)) {
-    SmallVector<Attribute> argNames;
-    for (const auto &arg : args)
-      argNames.push_back(getNameAttr(context, arg.name));
-
-    result.addAttribute(attrName, ArrayAttr::get(context, argNames));
-  }
   return success();
 }
 

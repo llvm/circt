@@ -92,7 +92,9 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
     forOpEntry->setAttr(
         "WIDTH", builder.getI64IntegerAttr(ivTy.getIntOrFloatBitWidth()));
     forOpEntry->setAttr(
-        "names", builder.getStrArrayAttr({"b_loop_condition", "loop_iv"}));
+        "names", builder.getStrArrayAttr(
+                     {forOp.getInductionVarName().str() + "_loop_condition",
+                      forOp.getInductionVarName()}));
     auto condition = forOpEntry.getResult(0);
     auto iv = forOpEntry.getResult(1);
     BlockAndValueMapping operandMap;
@@ -108,6 +110,7 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
       builder.clone(operation, operandMap);
     }
   }
+
   if (auto attr = forOp->getAttrOfType<ArrayAttr>("names"))
     whileOp->setAttr("names", attr);
   forOp.replaceAllUsesWith((Operation *)whileOp);
