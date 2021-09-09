@@ -16,6 +16,7 @@
 #define SEQ_TD
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Pass/PassBase.td"
 
@@ -37,14 +38,15 @@ class SeqOp<string mnemonic, list<OpTrait> traits = []> :
 
 def CompRegOp : SeqOp<"compreg",
     [NoSideEffect, AllTypesMatch<["input", "data"/*, "resetValue"*/]>,
-     SameVariadicOperandSize]> {
+     SameVariadicOperandSize,
+     DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
        // AllTypesMatch doesn't work with Optional types yet.
 
   let summary = "Register a value, storing it for one cycle";
   let description = "See the Seq dialect rationale for a longer description";
 
   let arguments = (ins AnyType:$input, I1:$clk,
-    Optional<I1>:$reset, Optional<AnyType>:$resetValue);
+    Optional<I1>:$reset, Optional<AnyType>:$resetValue, StrAttr:$name);
   let results = (outs AnyType:$data);
 
   let printer = "return ::print$cppClass(p, *this);";
