@@ -373,33 +373,28 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
-    if (auto module = dyn_cast<FModuleOp>(op)) {
-      state.oldToNewModuleMap[&op] = lowerModule(module, topLevelModule, state);
-      modulesToProcess.push_back(module);
-      continue;
-    }
-
-    if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
-      state.oldToNewModuleMap[&op] =
-          lowerExtModule(extModule, topLevelModule, state);
-      continue;
-    }
-
-    // Anything which is _not_ a module or an extmodule is treated carefully.
-    // By default, this produces an error.
     TypeSwitch<Operation *>(&op)
+        .Case<FModuleOp>([&](auto module) {
+          state.oldToNewModuleMap[&op] =
+              lowerModule(module, topLevelModule, state);
+          modulesToProcess.push_back(module);
+        })
+        .Case<FExtModuleOp>([&](auto extModule) {
+          state.oldToNewModuleMap[&op] =
+              lowerExtModule(extModule, topLevelModule, state);
+        })
         // GrandCentral can generate interfaces.  These need to be let through.
         // Moving them to the end of the module has the effect of keeping them
         // in the same spot in the IR.
-        .Case<sv::InterfaceOp>([&](auto op) {
-          op->moveBefore(topLevelModule, topLevelModule->end());
+        .Case<sv::InterfaceOp>([&](auto passThrough) {
+          passThrough->moveBefore(topLevelModule, topLevelModule->end());
         })
-        .Default([](auto op) {
-          // Otherwise we don't know what this is.  We are just going to drop
-          // it, but emit an error so the client has some chance to know that
-          // this is going to happen.
-          op->emitError("unexpected operation '")
-              << op->getName() << "' in a firrtl.circuit";
+        // Otherwise we don't know what this is.  We are just going to drop
+        // it, but emit an error so the client has some chance to know that
+        // this is going to happen.
+        .Default([](auto other) {
+          other->emitError("unexpected operation '")
+              << other->getName() << "' in a firrtl.circuit";
         });
   }
 
@@ -703,8 +698,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   // Build the new hw.module op.
-  OpBuilder builder(topLevelModule->getParent()->getContext());
-  builder.setInsertionPointToEnd(topLevelModule);
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   return builder.create<hw::HWModuleExternOp>(oldModule.getLoc(), nameAttr,
                                               ports, verilogName);
@@ -724,8 +718,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   // Build the new hw.module op.
-  OpBuilder builder(topLevelModule->getParent()->getContext());
-  builder.setInsertionPointToEnd(topLevelModule);
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   auto newModule =
       builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
