@@ -46,9 +46,6 @@ public:
     DictionaryAttr regAttrs = reg->getAttrDictionary();
     if (!regAttrs.empty())
       svReg->setAttrs(regAttrs);
-    if (!svReg->hasAttrOfType<StringAttr>("name"))
-      // sv.reg requires a name attribute.
-      svReg->setAttr("name", rewriter.getStringAttr(""));
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
 
     if (reg.reset() && reg.resetValue()) {
