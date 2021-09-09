@@ -254,10 +254,6 @@ private:
 
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
 
-  /// These are ops that are just copied as they go through.  This is intended
-  /// to be used for ops that are from other dialects and are expected.
-  SmallVector<Operation *> passThroughOps;
-
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
   StringSet<> pendingAnnotations;
@@ -376,7 +372,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   state.processRemainingAnnotations(circuit, AnnotationSet(circuit));
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
-  for (auto &op : circuitBody->getOperations()) {
+  for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
     if (auto module = dyn_cast<FModuleOp>(op)) {
       state.oldToNewModuleMap[&op] = lowerModule(module, topLevelModule, state);
       modulesToProcess.push_back(module);
@@ -393,8 +389,11 @@ void FIRRTLModuleLowering::runOnOperation() {
     // By default, this produces an error.
     TypeSwitch<Operation *>(&op)
         // GrandCentral can generate interfaces.  These need to be let through.
-        .Case<sv::InterfaceOp>(
-            [&](auto op) { state.passThroughOps.push_back(op); })
+        // Moving them to the end of the module has the effect of keeping them
+        // in the same spot in the IR.
+        .Case<sv::InterfaceOp>([&](auto op) {
+          op->moveBefore(topLevelModule, topLevelModule->end());
+        })
         .Default([](auto op) {
           // Otherwise we don't know what this is.  We are just going to drop
           // it, but emit an error so the client has some chance to know that
@@ -427,10 +426,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   for (auto bind : state.binds) {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
-
-  // Move any pass through ops into the top of the new module.
-  for (auto *passThrough : state.passThroughOps)
-    passThrough->moveAfter(topLevelModule, topLevelModule->begin());
 
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
