@@ -223,12 +223,11 @@ void ModuleSignalMappings::instantiateMappingsModule() {
   // Generate the connections to and from the instance.
   unsigned portIdx = 0;
   for (auto &mapping : mappings) {
-    Value dst = inst.getResult(portIdx);
+    Value dst = inst.getResult(portIdx++);
     Value src = mapping.localValue;
     if (mapping.dir == MappingDirection::ProbeRemote)
       std::swap(src, dst);
     builder.create<ConnectOp>(dst, src);
-    ++portIdx;
   }
 }
 
