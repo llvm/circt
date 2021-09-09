@@ -9,6 +9,7 @@
 add_circt_dialect_library(CIRCTMSFT
   MSFTAttributes.cpp
   MSFTDialect.cpp
+  MSFTOps.cpp
   MSFTGenerator.cpp
   DeviceDB.cpp
 
