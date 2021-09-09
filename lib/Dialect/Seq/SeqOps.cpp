@@ -54,9 +54,9 @@ ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
     // If there is no explicit name attribute, get it from the SSA result name.
     // If numeric, just use an empty name.
     auto resultName = parser.getResultName(0).first;
-    if (!resultName.empty() && isdigit(resultName[0]))
-      resultName = "";
-    result.addAttribute("name", parser.getBuilder().getStringAttr(resultName));
+    if (!resultName.empty() && !isdigit(resultName[0]))
+      result.addAttribute("name",
+                          parser.getBuilder().getStringAttr(resultName));
   }
 
   result.addTypes({ty});
@@ -74,9 +74,7 @@ static void printCompRegOp(::mlir::OpAsmPrinter &p, CompRegOp reg) {
 
   SmallVector<StringRef> elidedAttrs;
   // Determine if 'name' can be elided.
-  if (reg.name().empty()) {
-    elidedAttrs.push_back("name");
-  } else {
+  if (reg.name()) {
     SmallString<32> resultNameStr;
     llvm::raw_svector_ostream tmpStream(resultNameStr);
     p.printOperand(reg.data(), tmpStream);
@@ -93,8 +91,8 @@ static void printCompRegOp(::mlir::OpAsmPrinter &p, CompRegOp reg) {
 /// attribute.
 void CompRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
-  if (!name().empty())
-    setNameFn(getResult(), name());
+  if (auto n = name())
+    setNameFn(getResult(), *n);
 }
 
 //===----------------------------------------------------------------------===//

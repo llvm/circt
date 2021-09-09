@@ -46,7 +46,8 @@ def CompRegOp : SeqOp<"compreg",
   let description = "See the Seq dialect rationale for a longer description";
 
   let arguments = (ins AnyType:$input, I1:$clk,
-    Optional<I1>:$reset, Optional<AnyType>:$resetValue, StrAttr:$name);
+    Optional<I1>:$reset, Optional<AnyType>:$resetValue,
+    OptionalAttr<StrAttr>:$name);
   let results = (outs AnyType:$data);
 
   let printer = "return ::print$cppClass(p, *this);";
