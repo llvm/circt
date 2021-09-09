@@ -282,12 +282,10 @@ firrtl.circuit "InterfaceVecOfBundleType" attributes {
 
 // CHECK-LABEL: firrtl.circuit "InterfaceVecOfBundleType"
 
-// CHECK: sv.interface {
-// CHECK-SAME: @Foo
+// CHECK: sv.interface @Foo
 // CHECK-NEXT: sv.verbatim "bar Bar[1]();"
 
-// CHECK: sv.interface
-// CHECK-SAME: @Bar
+// CHECK: sv.interface @Bar
 
 // -----
 

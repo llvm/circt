@@ -482,12 +482,13 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
   auto loc = getOperation().getLoc();
   auto iFaceName = getNamespace().newName(bundle.getDefName().getValue());
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
-  iface->setAttr(
-      "output_file",
-      hw::OutputFileAttr::get(getOutputDirectory(),
-                              builder.getStringAttr(iFaceName + ".sv"),
-                              builder.getBoolAttr(true),
-                              builder.getBoolAttr(true), builder.getContext()));
+  if (maybeExtractInfo)
+    iface->setAttr("output_file",
+                   hw::OutputFileAttr::get(
+                       getOutputDirectory(),
+                       builder.getStringAttr(iFaceName + ".sv"),
+                       builder.getBoolAttr(true), builder.getBoolAttr(true),
+                       builder.getContext()));
 
   builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBodyBlock());
 
@@ -769,12 +770,13 @@ void GrandCentralPass::runOnOperation() {
                   circuitOp.getLoc(), builder.getStringAttr(mappingName),
                   ArrayRef<ModulePortInfo>());
               auto *ctx = builder.getContext();
-              mapping->setAttr(
-                  "output_file",
-                  hw::OutputFileAttr::get(
-                      getOutputDirectory(),
-                      builder.getStringAttr(mapping.getName() + ".sv"),
-                      trueAttr, trueAttr, ctx));
+              if (maybeExtractInfo)
+                mapping->setAttr(
+                    "output_file",
+                    hw::OutputFileAttr::get(
+                        getOutputDirectory(),
+                        builder.getStringAttr(mapping.getName() + ".sv"),
+                        trueAttr, trueAttr, ctx));
               companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.
