@@ -1141,6 +1141,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(SkipOp op);
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(PartialConnectOp op);
+  LogicalResult visitStmt(ForceOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
@@ -2669,6 +2670,22 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   }
 
   builder.create<sv::AssignOp>(destVal, srcVal);
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
+  auto srcVal = getLoweredValue(op.src());
+  if (!srcVal)
+    return failure();
+
+  auto destVal = getPossiblyInoutLoweredValue(op.dest());
+  if (!destVal)
+    return failure();
+
+  if (!destVal.getType().isa<hw::InOutType>())
+    return op.emitError("destination isn't an inout type");
+
+  addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
   return success();
 }
 
