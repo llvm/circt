@@ -42,8 +42,11 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 
-    auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
-                                            reg.nameAttr());
+    StringAttr name = reg.nameAttr();
+    if (!name)
+      name = rewriter.getStringAttr("_compreg");
+    auto svReg =
+        rewriter.create<sv::RegOp>(loc, reg.getResult().getType(), name);
     DictionaryAttr regAttrs = reg->getAttrDictionary();
     if (!regAttrs.empty())
       svReg->setAttrs(regAttrs);
