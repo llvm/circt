@@ -822,7 +822,7 @@ circuit GCTInterface : %[
 
 circuit Foo : %[[
 {
-  "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+  "class": "sifive.enterprise.grandcentral.ViewAnnotation",
   "name": "Bar",
   "companion": "~Foo|Bar_companion",
   "parent": "~Foo|Foo",

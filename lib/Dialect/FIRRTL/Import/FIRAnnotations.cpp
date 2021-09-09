@@ -1008,7 +1008,8 @@ bool circt::firrtl::scatterCustomAnnotations(
     }
 
     if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
-                 "SerializedViewAnnotation") {
+                 "SerializedViewAnnotation" ||
+        clazz == "sifive.enterprise.grandcentral.ViewAnnotation") {
       auto viewAnnotationClass = StringAttr::get(
           context, "sifive.enterprise.grandcentral.ViewAnnotation");
       auto id = newID();
