@@ -18,6 +18,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
+#include <unordered_set>
 
 using namespace circt;
 using namespace sv;
@@ -40,6 +41,7 @@ struct HWGeneratorCalloutPass
 
 private:
   llvm::StringMap<Operation *> genOps;
+  std::unordered_set<Operation*> opsToRemove;
 };
 } // end anonymous namespace
 
@@ -103,6 +105,8 @@ void HWGeneratorCalloutPass::runOnOperation() {
         }
       }
   }
+  for (auto op : opsToRemove)
+    op->erase();
 }
 
 void HWGeneratorCalloutPass::processGenerator(
@@ -112,6 +116,9 @@ void HWGeneratorCalloutPass::processGenerator(
   // Get the corresponding schema associated with this generated op.
   auto schemaF = genOps.find(generatedModuleOp.generatorKind());
   if (schemaF == genOps.end())
+    return;
+
+  if (opsToRemove.count(generatedModuleOp))
     return;
   auto genSchema = dyn_cast<HWGeneratorSchemaOp>(schemaF->second);
 
@@ -126,6 +133,12 @@ void HWGeneratorCalloutPass::processGenerator(
   for (auto o : extraGeneratorArgs)
     generatorArgs.push_back(o.str());
 
+  if (!(generatedModuleOp->getAttrOfType<IntegerAttr>("readLatency").getUInt() == 1 && generatedModuleOp->getAttrOfType<IntegerAttr>("writeLatency").getUInt() == 1 && (
+        generatedModuleOp->getAttrOfType<IntegerAttr>("numWritePorts").getUInt() == 1 || generatedModuleOp->getAttrOfType<IntegerAttr>("numReadWritePorts").getUInt() == 1) &&
+generatedModuleOp->getAttrOfType<IntegerAttr>("numReadPorts").getUInt() <= 1 && 
+generatedModuleOp->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt() == 0
+        ))
+    return;
   auto moduleName =
       generatedModuleOp.getVerilogModuleNameAttr().getValue().str();
   // The moduleName option is not present in the schema, so add it
@@ -157,32 +170,32 @@ void HWGeneratorCalloutPass::processGenerator(
       return;
     }
   }
-  if (auto verifData = generatedModuleOp->getAttr("verificationData")
-                           .dyn_cast_or_null<DictionaryAttr>()) {
-    std::string verifStr;
-    for (auto a : verifData) {
-      verifStr += a.first.str() + " : ";
-      generatorArgs.push_back("--" + a.first.str());
-      auto v = a.second;
-      if (auto intV = v.dyn_cast<IntegerAttr>())
-        generatorArgs.push_back(std::to_string(intV.getValue().getZExtValue()));
-      else if (auto strV = v.dyn_cast<StringAttr>())
-        generatorArgs.push_back(strV.getValue().str());
-      else if (auto arrV = v.dyn_cast<ArrayAttr>()) {
-        std::string indices;
-        for (auto arrI : llvm::enumerate(arrV)) {
-          auto i = arrI.value();
-          if (arrI.index() != 0)
-            indices += ",";
-          if (auto intV = i.dyn_cast<IntegerAttr>())
-            indices += std::to_string(intV.getValue().getZExtValue());
-          else if (auto strV = i.dyn_cast<StringAttr>())
-            indices += strV.getValue().str();
-        }
-        generatorArgs.push_back(indices);
-      }
-    }
-  }
+  //if (auto verifData = generatedModuleOp->getAttr("verificationData")
+  //                         .dyn_cast_or_null<DictionaryAttr>()) {
+  //  std::string verifStr;
+  //  for (auto a : verifData) {
+  //    verifStr += a.first.str() + " : ";
+  //    generatorArgs.push_back("--" + a.first.str());
+  //    auto v = a.second;
+  //    if (auto intV = v.dyn_cast<IntegerAttr>())
+  //      generatorArgs.push_back(std::to_string(intV.getValue().getZExtValue()));
+  //    else if (auto strV = v.dyn_cast<StringAttr>())
+  //      generatorArgs.push_back(strV.getValue().str());
+  //    else if (auto arrV = v.dyn_cast<ArrayAttr>()) {
+  //      std::string indices;
+  //      for (auto arrI : llvm::enumerate(arrV)) {
+  //        auto i = arrI.value();
+  //        if (arrI.index() != 0)
+  //          indices += ",";
+  //        if (auto intV = i.dyn_cast<IntegerAttr>())
+  //          indices += std::to_string(intV.getValue().getZExtValue());
+  //        else if (auto strV = i.dyn_cast<StringAttr>())
+  //          indices += strV.getValue().str();
+  //      }
+  //      generatorArgs.push_back(indices);
+  //    }
+  //  }
+  //}
   SmallVector<StringRef> generatorArgStrRef;
   for (const std::string &a : generatorArgs)
     generatorArgStrRef.push_back(a);
@@ -218,14 +231,16 @@ void HWGeneratorCalloutPass::processGenerator(
 
   // Only extract the first line from the output.
   auto fileContent = (*bufferRead)->getBuffer().split('\n').first.str();
-  OpBuilder builder(generatedModuleOp);
-  auto extMod = builder.create<hw::HWModuleExternOp>(
-      generatedModuleOp.getLoc(), generatedModuleOp.getVerilogModuleNameAttr(),
-      generatedModuleOp.getPorts());
-  // Attach an attribute to which file the definition of the external
-  // module exists in.
-  extMod->setAttr("filenames", builder.getStringAttr(fileContent));
-  generatedModuleOp.erase();
+  if (!opsToRemove.count(generatedModuleOp)) {
+    OpBuilder builder(generatedModuleOp);
+    auto extMod = builder.create<hw::HWModuleExternOp>(
+        generatedModuleOp.getLoc(), generatedModuleOp.getVerilogModuleNameAttr(),
+        generatedModuleOp.getPorts());
+    // Attach an attribute to which file the definition of the external
+    // module exists in.
+    extMod->setAttr("filenames", builder.getStringAttr(fileContent));
+    opsToRemove.insert(generatedModuleOp);
+  }
 }
 
 std::unique_ptr<Pass> circt::sv::createHWGeneratorCalloutPass() {
