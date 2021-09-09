@@ -165,8 +165,8 @@ void ModuleSignalMappings::emitMappingsModule() {
   for (auto &mapping : mappings) {
     ports.push_back(ModulePortInfo{mapping.localName, mapping.type,
                                    mapping.dir == MappingDirection::DriveRemote
-                                       ? Direction::Input
-                                       : Direction::Output,
+                                       ? Direction::In
+                                       : Direction::Out,
                                    module.getLoc()});
     LLVM_DEBUG(llvm::dbgs() << "  - Adding port " << mapping.localName << "\n");
   }
@@ -197,12 +197,11 @@ void ModuleSignalMappings::emitMappingsModule() {
     }
     if (mapping.dir == MappingDirection::DriveRemote) {
       auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
-      builder.create<ForceOp>(xmr, mappingsModule.getArgument(portIdx));
+      builder.create<ForceOp>(xmr, mappingsModule.getArgument(portIdx++));
     } else {
       auto xmr = builder.create<VerbatimWireOp>(mapping.type, remoteXmrName);
-      builder.create<ConnectOp>(mappingsModule.getArgument(portIdx), xmr);
+      builder.create<ConnectOp>(mappingsModule.getArgument(portIdx++), xmr);
     }
-    ++portIdx;
   }
 }
 

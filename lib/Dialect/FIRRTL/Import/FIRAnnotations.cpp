@@ -744,6 +744,19 @@ bool circt::firrtl::scatterCustomAnnotations(
     return IntegerAttr::get(IntegerType::get(context, 64), annotationID++);
   };
 
+  /// Add a don't touch annotation for a target.
+  auto addDontTouch = [&](StringRef target,
+                          Optional<ArrayAttr> subfields = {}) {
+    NamedAttrList fields;
+    fields.append(
+        "class",
+        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+    if (subfields)
+      fields.append("target", *subfields);
+    newAnnotations[target].push_back(
+        DictionaryAttr::getWithSorted(context, fields));
+  };
+
   // Loop over all non-specific annotations that target "~".
   //
   //
@@ -794,14 +807,9 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto target = canonicalizeTarget(blackBoxAttr.getValue());
       if (!target)
         return false;
-      NamedAttrList dontTouchAnn;
-      dontTouchAnn.append(
-          "class",
-          StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
       newAnnotations[target.getValue()].push_back(
           DictionaryAttr::getWithSorted(context, attrs));
-      newAnnotations[target.getValue()].push_back(
-          DictionaryAttr::getWithSorted(context, dontTouchAnn));
+      addDontTouch(target.getValue());
 
       // Process all the taps.
       auto keyAttr = tryGetAs<ArrayAttr>(dict, dict, "keys", loc, clazz);
@@ -829,13 +837,7 @@ bool circt::firrtl::scatterCustomAnnotations(
             splitAndAppendTarget(port, maybePortTarget.getValue(), context);
         port.append("class", classAttr);
         port.append("id", id);
-
-        if (portPair.second.hasValue())
-          appendTarget(dontTouchAnn, portPair.second.getValue());
-        newAnnotations[portPair.first].push_back(
-            DictionaryAttr::getWithSorted(context, dontTouchAnn));
-        if (portPair.second.hasValue())
-          dontTouchAnn.pop_back();
+        addDontTouch(portPair.first, portPair.second);
 
         if (classAttr.getValue() ==
             "sifive.enterprise.grandcentral.ReferenceDataTapKey") {
@@ -859,15 +861,10 @@ bool circt::firrtl::scatterCustomAnnotations(
             nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
             source.append("circt.nonlocal", nlaSym);
           }
-          if (leafTarget.second.hasValue())
-            appendTarget(dontTouchAnn, leafTarget.second.getValue());
           source.append("type", StringAttr::get(context, "source"));
           newAnnotations[leafTarget.first].push_back(
               DictionaryAttr::get(context, source));
-          newAnnotations[leafTarget.first].push_back(
-              DictionaryAttr::get(context, dontTouchAnn));
-          if (leafTarget.second.hasValue())
-            dontTouchAnn.pop_back();
+          addDontTouch(leafTarget.first, leafTarget.second);
 
           for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
             NamedAttrList pathmetadata;
@@ -905,8 +902,7 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           newAnnotations[moduleTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, module));
-          newAnnotations[moduleTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, dontTouchAnn));
+          addDontTouch(moduleTarget.getValue());
 
           // Port Annotations generation.
           port.append("portID", portID);
@@ -1091,8 +1087,9 @@ bool circt::firrtl::scatterCustomAnnotations(
         }
 
         // Dig up the two sides of the link.
-        auto path = Twine(clazz) + "." + (isSource ? "source" : "sink") +
-                    "Targets[" + Twine(i) + "]";
+        auto path = (Twine(clazz) + "." + (isSource ? "source" : "sink") +
+                     "Targets[" + Twine(i) + "]")
+                        .str();
         auto remoteAttr =
             tryGetAs<StringAttr>(targetDict, dict, "_1", loc, path);
         auto localAttr =
@@ -1143,14 +1140,7 @@ bool circt::firrtl::scatterCustomAnnotations(
               DictionaryAttr::get(context, fields));
 
           // Add a don't touch annotation to whatever this annotation targets.
-          fields = NamedAttrList();
-          fields.append("class",
-                        StringAttr::get(
-                            context, "firrtl.transforms.DontTouchAnnotation"));
-          if (leafTarget.second)
-            fields.append("target", *leafTarget.second);
-          newAnnotations[leafTarget.first].push_back(
-              DictionaryAttr::getWithSorted(context, fields));
+          addDontTouch(leafTarget.first, leafTarget.second);
 
           // Keep track of the enclosing module.
           annotatedModules.insert(
