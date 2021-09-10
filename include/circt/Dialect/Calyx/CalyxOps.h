@@ -70,6 +70,7 @@ struct PortInfo {
 
   /// Returns whether the given port has attribute with Identifier `name`.
   bool hasAttribute(StringRef identifier) const {
+    assert(attributes && "PortInfo::attributes should be instantiated.");
     return llvm::any_of(attributes, [&](auto idToAttribute) {
       return identifier == std::get<0>(idToAttribute);
     });
@@ -78,6 +79,7 @@ struct PortInfo {
   /// Returns the attribute associated with the given name if it exists,
   /// otherwise std::nullopt.
   llvm::Optional<Attribute> getAttribute(StringRef identifier) const {
+    assert(attributes && "PortInfo::attributes should be instantiated.");
     auto it = llvm::find_if(attributes, [&](auto idToAttribute) {
       return identifier == std::get<0>(idToAttribute);
     });
@@ -88,6 +90,7 @@ struct PortInfo {
 
   /// Returns all identifiers for this dictionary attribute.
   SmallVector<StringRef> getAllIdentifiers() const {
+    assert(attributes && "PortInfo::attributes should be instantiated.");
     SmallVector<StringRef> identifiers;
     llvm::transform(
         attributes, std::back_inserter(identifiers),
