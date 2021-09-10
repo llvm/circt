@@ -618,10 +618,8 @@ static LogicalResult allPortsDrivenByGroup(ValueRange ports,
 
       // A port is driven if any of the following uses meet the criteria
       // (1) it is a destination of an assignment.
-      bool isAssignmentDest = assignOp.dest() == port;
-
       // (2) that assignment is found in the provided group.
-      return isAssignmentDest && group == parent;
+      return assignOp.dest() == port && group == parent;
     });
   };
 
