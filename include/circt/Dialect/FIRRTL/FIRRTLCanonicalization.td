@@ -27,7 +27,12 @@ def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 def NoDontTouch : Constraint<CPred<"!AnnotationSet($0).hasDontTouch()">>;
 
 // Constraint that matches annotation sets without dontTouch.
-def NoPortsDontTouch : Constraint<CPred<"llvm::all_of($0, [](Attribute a) { if (auto b = a.dyn_cast<ArrayAttr>()) return !AnnotationSet(b).hasDontTouch(); return true; })">>;
+def NoPortsDontTouch : Constraint<CPred<[{
+  llvm::all_of($0, [](Attribute a) { 
+    if (auto b = a.dyn_cast<ArrayAttr>()) 
+      return !AnnotationSet(b).hasDontTouch();
+     return true;
+  })}]>>;
 
 def NonEmptyStringAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
