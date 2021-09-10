@@ -41,7 +41,7 @@ struct HWGeneratorCalloutPass
 
 private:
   llvm::StringMap<Operation *> genOps;
-  std::unordered_set<Operation*> opsToRemove;
+  std::unordered_set<Operation *> opsToRemove;
 };
 } // end anonymous namespace
 
@@ -53,16 +53,16 @@ void static getHierarchichalNames(HWModuleOp op,
   if (!op)
     return;
   bool parentFound = false;
-  auto opPath = op.getName().str() + "." + path;
   for (auto u : symbolUsers.getUsers(op)) {
     if (auto inst = dyn_cast<InstanceOp>(u)) {
+      auto opPath = inst.instanceName().str() + "." + path;
       getHierarchichalNames(inst->getParentOfType<HWModuleOp>(), names, opPath,
                             symbolUsers);
       parentFound = true;
     }
   }
   if (!parentFound)
-    names.push_back(opPath);
+    names.push_back(op.getName().str() + "." + path);
 }
 
 void HWGeneratorCalloutPass::runOnOperation() {
@@ -98,7 +98,9 @@ void HWGeneratorCalloutPass::runOnOperation() {
         if (genOps.count(memName)) {
           auto generator = dyn_cast<HWModuleGeneratedOp>(genOps[memName]);
           SmallVector<std::string> hierNames;
-          getHierarchichalNames(hwMod, hierNames, memName.str(), symbolUsers);
+
+          getHierarchichalNames(hwMod, hierNames,
+                                InstanceOp.instanceName().str(), symbolUsers);
           for (auto hName : hierNames)
             processGenerator(generator, *generatorExe, extraGeneratorArgs,
                              InstanceOp, hName);
@@ -133,11 +135,18 @@ void HWGeneratorCalloutPass::processGenerator(
   for (auto o : extraGeneratorArgs)
     generatorArgs.push_back(o.str());
 
-  if (!(generatedModuleOp->getAttrOfType<IntegerAttr>("readLatency").getUInt() == 1 && generatedModuleOp->getAttrOfType<IntegerAttr>("writeLatency").getUInt() == 1 && (
-        generatedModuleOp->getAttrOfType<IntegerAttr>("numWritePorts").getUInt() == 1 || generatedModuleOp->getAttrOfType<IntegerAttr>("numReadWritePorts").getUInt() == 1) &&
-generatedModuleOp->getAttrOfType<IntegerAttr>("numReadPorts").getUInt() <= 1 && 
-generatedModuleOp->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt() == 0
-        ))
+  if (!(generatedModuleOp->getAttrOfType<IntegerAttr>("readLatency")
+                .getUInt() == 1 &&
+        generatedModuleOp->getAttrOfType<IntegerAttr>("writeLatency")
+                .getUInt() == 1 &&
+        (generatedModuleOp->getAttrOfType<IntegerAttr>("numWritePorts")
+                 .getUInt() == 1 ||
+         generatedModuleOp->getAttrOfType<IntegerAttr>("numReadWritePorts")
+                 .getUInt() == 1) &&
+        generatedModuleOp->getAttrOfType<IntegerAttr>("numReadPorts")
+                .getUInt() <= 1 &&
+        generatedModuleOp->getAttrOfType<IntegerAttr>("readUnderWrite")
+                .getUInt() == 0))
     return;
   auto moduleName =
       generatedModuleOp.getVerilogModuleNameAttr().getValue().str();
@@ -170,7 +179,7 @@ generatedModuleOp->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt() == 0
       return;
     }
   }
-  //if (auto verifData = generatedModuleOp->getAttr("verificationData")
+  // if (auto verifData = generatedModuleOp->getAttr("verificationData")
   //                         .dyn_cast_or_null<DictionaryAttr>()) {
   //  std::string verifStr;
   //  for (auto a : verifData) {
@@ -234,7 +243,8 @@ generatedModuleOp->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt() == 0
   if (!opsToRemove.count(generatedModuleOp)) {
     OpBuilder builder(generatedModuleOp);
     auto extMod = builder.create<hw::HWModuleExternOp>(
-        generatedModuleOp.getLoc(), generatedModuleOp.getVerilogModuleNameAttr(),
+        generatedModuleOp.getLoc(),
+        generatedModuleOp.getVerilogModuleNameAttr(),
         generatedModuleOp.getPorts());
     // Attach an attribute to which file the definition of the external
     // module exists in.
