@@ -644,7 +644,7 @@ LogicalResult verifyGroupOp(GroupOp group) {
             .Default([&](auto op) { return success(); });
 
     if (failed(verifyWrites))
-      return failure();
+      return group->emitOpError("...but did it?");
   }
 
   return success();
