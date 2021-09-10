@@ -168,34 +168,6 @@ static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
   return failure();
 }
 
-/// Checks whether all ports in @p ports are driven from within @p groupOp
-static LogicalResult allPortsDrivenByGroup(ValueRange ports,
-                                           GroupInterface group) {
-
-  auto portIsDriven = [&](Value p) {
-    // A port is driven if any of the following uses meet the criteria
-    // (1) it is a destination of an assignment.
-    // (2) that assignment is found in the provided group.
-    return llvm::any_of(p.getUses(), [&](auto &&use) {
-      auto assignOp = dyn_cast<AssignOp>(use.getOwner());
-      if (assignOp == nullptr)
-        return false;
-
-      auto g1 = assignOp->template getParentOfType<GroupOp>();
-      auto g2 = assignOp->template getParentOfType<CombGroupOp>();
-      if (g1 == nullptr && g2 == nullptr)
-        // This is a continuous assignment in WiresOp.
-        return false;
-
-      assert(group != nullptr);
-      return assignOp.dest() == p && (group == g1 || group == g2);
-    });
-  };
-
-  return success(
-      llvm::all_of(ports, [&](auto port) { return portIsDriven(port); }));
-}
-
 LogicalResult calyx::verifyCell(Operation *op) {
   auto opParent = op->getParentOp();
   if (!isa<ComponentOp>(opParent))
@@ -629,21 +601,53 @@ GroupDoneOp GroupOp::getDoneOp() {
   return cast<GroupDoneOp>(body->getTerminator());
 }
 
-LogicalResult verifyGroupOp(GroupOp group) {
-  LogicalResult verifyWrites = success();
-  group.walk([&](AssignOp assign) {
-    Operation *destOp = assign.dest().getDefiningOp();
-    verifyWrites = TypeSwitch<Operation *, LogicalResult>(destOp)
-                       .Case<RegisterOp>([&](auto op) {
-                         return allPortsDrivenByGroup(
-                             {op.writeEnPort(), op.inPort()}, group);
-                       })
-                       .Default([&](auto op) { return success(); });
-    if (failed(verifyWrites))
-      return;
-  });
+/// Function that is being used for verifyGroupOp !
+static LogicalResult allPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface group) {
+  assert(group != nullptr);
+  auto portIsDriven = [&](Value port) {
+    return llvm::any_of(port.getUses(), [&](auto &&use) {
+      auto assignOp = dyn_cast<AssignOp>(use.getOwner());
+      if (assignOp == nullptr)
+        return false;
 
-  return verifyWrites;
+      Operation *parent = assignOp->getParentOp();
+      if (isa<WiresOp>(parent))
+        // This is a continuous assignment.
+        return false;
+
+      // A port is driven if any of the following uses meet the criteria
+      // (1) it is a destination of an assignment.
+      bool isAssignmentDest = assignOp.dest() == port;
+
+      // (2) that assignment is found in the provided group.
+      return isAssignmentDest && group == parent;
+    });
+  };
+
+  return success(
+      llvm::all_of(ports, [&](auto port) { return portIsDriven(port); }));
+}
+
+LogicalResult verifyGroupOp(GroupOp group) {
+  for (auto &&groupOp : *group.getBody()) {
+    auto assign = dyn_cast<AssignOp>(groupOp);
+    if (assign == nullptr)
+      continue;
+    Operation *destOp = assign.dest().getDefiningOp();
+    LogicalResult verifyWrites =
+        TypeSwitch<Operation *, LogicalResult>(destOp)
+            .Case<RegisterOp>([&](auto op) {
+              auto writeTogether = {op.writeEnPort(), op.inPort()};
+              return allPortsDrivenByGroup(writeTogether, group);
+            })
+            .Default([&](auto op) { return success(); });
+
+    if (failed(verifyWrites))
+      return failure();
+  }
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
