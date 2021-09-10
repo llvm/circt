@@ -132,8 +132,9 @@ static LogicalResult verifyControlBody(Operation *op) {
   return success();
 }
 
-static LogicalResult portsDrivenByGroup(ValueRange ports,
-                                        GroupInterface groupOp);
+// Declaration here so that portDrivenByGroup can use it.
+static LogicalResult anyPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface groupOp);
 
 /// Checks whether @p port is driven from within @p groupOp.
 static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
@@ -147,21 +148,19 @@ static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
     }
   }
 
-  // If @p port is an output of a cell then we conservatively enforce that all
-  // (and at least one) non-interface inputs of the cell must be driven by the
-  // group.
+  // If @p port is an output of a cell then we conservatively enforce that at
+  // least one input port of the cell must be driven by the group.
   if (auto cell = dyn_cast<CellInterface>(port.getDefiningOp());
       cell && cell.direction(port) == calyx::Direction::Output)
-    return portsDrivenByGroup(
-        cell.filterInterfacePorts(calyx::Direction::Input), groupOp);
+    return anyPortsDrivenByGroup(cell.getInputPorts(), groupOp);
 
   return failure();
 }
 
-/// Checks whether all ports in @p ports are driven from within @p groupOp
-static LogicalResult portsDrivenByGroup(ValueRange ports,
-                                        GroupInterface groupOp) {
-  return success(llvm::all_of(ports, [&](auto port) {
+/// Checks whether any port in @p ports are driven within @p groupOp.
+static LogicalResult anyPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface groupOp) {
+  return success(llvm::any_of(ports, [&](auto port) {
     return portDrivenByGroup(port, groupOp).succeeded();
   }));
 }

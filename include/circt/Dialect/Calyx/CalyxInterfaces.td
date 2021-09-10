@@ -94,21 +94,22 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       (ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        SmallVector<circt::calyx::PortInfo> info;
+        SmallVector<circt::calyx::PortInfo> ports;
+        MLIRContext* context = $_op->getContext();
         auto zippedPortInfo = llvm::zip(
           $_op->getResults(),
           $_op.portDirections(),
           $_op.portNames(),
           $_op.portAttributes()
         );
-        for (auto&& [result, direction, name, attr] : zippedPortInfo)
-          info.push_back(PortInfo{
-              StringAttr::get($_op->getContext(), name),
+        for (auto&& [result, direction, name, attributes] : zippedPortInfo)
+          ports.push_back(PortInfo{
+              StringAttr::get(context, name),
               result.getType(),
               direction,
-              attr
+              attributes
           });
-        return info;
+        return ports;
     }]
     >,
     InterfaceMethod<
@@ -146,7 +147,7 @@ def CellOpInterface : OpInterface<"CellInterface"> {
     InterfaceMethod<
       "This returns the input ports of a cell.",
       "SmallVector<Value>",
-      "inputPorts",
+      "getInputPorts",
       (ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
@@ -160,7 +161,7 @@ def CellOpInterface : OpInterface<"CellInterface"> {
     InterfaceMethod<
       "This returns the output ports of a cell.",
       "SmallVector<Value>",
-      "outputPorts",
+      "getOutputPorts",
       (ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
