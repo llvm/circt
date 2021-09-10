@@ -19,6 +19,7 @@
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/LLHD/Transforms/Passes.h"
+#include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 
@@ -33,6 +34,7 @@ inline void registerAllPasses() {
   esi::registerESIPasses();
   firrtl::registerPasses();
   llhd::initLLHDTransformationPasses();
+  msft::registerMSFTPasses();
   seq::registerSeqPasses();
   sv::registerPasses();
 }
