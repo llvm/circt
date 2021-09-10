@@ -1987,4 +1987,19 @@ firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, o
   firrtl.connect %out, %r : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
+// CHECK-LABEL: firrtl.module @namedrop
+firrtl.module @namedrop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
+  // CHECK-NOT: _T_ 
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %_T_0 = firrtl.node %in : !firrtl.uint<1>
+  %_T_1 = firrtl.wire : !firrtl.uint<1>
+  %_T_2 = firrtl.reg %clock : !firrtl.uint<1>
+  %_T_3 = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  %a = firrtl.mem Undefined {depth = 8 : i64, name = "_T_5", portNames = ["a"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<1>>
+  %_T_6 = firrtl.combmem : !firrtl.cmemory<uint<1>, 8>
+  %_T_7 = firrtl.seqmem Undefined: !firrtl.cmemory<uint<1>, 8>
+  firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.connect %out, %in
+}
+
 }
