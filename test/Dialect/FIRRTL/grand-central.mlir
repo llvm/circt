@@ -238,6 +238,59 @@ firrtl.circuit "InterfaceBundleType" attributes {
 
 // -----
 
+firrtl.circuit "InterfaceVecOfBundleType" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+        elements = [
+          {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+           defName = "Bar",
+           elements = [
+             {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+              id = 1 : i64,
+              name = "b"}]}
+        ],
+        name = "bar"}],
+     id = 0 : i64}]}  {
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    %x = firrtl.wire {
+      annotations = [
+        {a},
+        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+         id = 1 : i64}]} : !firrtl.uint<2>
+    firrtl.instance @View_companion {name = "View_companion"}
+  }
+  firrtl.module @InterfaceVecOfBundleType() {
+    firrtl.instance @DUT {name = "dut"}
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "InterfaceVecOfBundleType"
+
+// CHECK: sv.interface {
+// CHECK-SAME: @Foo
+// CHECK-NEXT: sv.verbatim "bar Bar[1]();"
+
+// CHECK: sv.interface
+// CHECK-SAME: @Bar
+
+// -----
+
 firrtl.circuit "InterfaceNode" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",

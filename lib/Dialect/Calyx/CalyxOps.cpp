@@ -76,6 +76,16 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+// Convenience function for getting the SSA name of @p v under the scope of
+// operation @p scopeOp
+static std::string valueName(Operation *scopeOp, Value v) {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  AsmState asmState(scopeOp);
+  v.printAsOperand(os, asmState);
+  return s;
+}
+
 /// Returns whether this value is either (1) a port on a ComponentOp or (2) a
 /// port on a cell interface.
 static bool isPort(Value value) {
@@ -200,16 +210,6 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
            << ", which is not allowed in this control-like operation";
   }
   return verifyControlBody(op);
-}
-
-// Convenience function for getting the SSA name of @p v under the scope of
-// operation @p scopeOp
-static std::string valueName(Operation *scopeOp, Value v) {
-  std::string s;
-  llvm::raw_string_ostream os(s);
-  AsmState asmState(scopeOp);
-  v.printAsOperand(os, asmState);
-  return s;
 }
 
 //===----------------------------------------------------------------------===//

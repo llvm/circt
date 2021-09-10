@@ -44,9 +44,14 @@ struct VerbatimType {
   /// "()".
   bool instantiation;
 
+  /// True if this is a type which is unsupported and should be commented out.
+  bool unsupported;
+
   /// Serialize this type to a string.
-  std::string toStr() {
-    return (Twine(str) + (instantiation ? "()" : "") + ";").str();
+  std::string toStr(StringRef name) {
+    return ((unsupported ? "// " : "") + Twine(name) + " " + str +
+            (instantiation ? "()" : "") + ";")
+        .str();
   }
 };
 
@@ -389,7 +394,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
 
   auto unsupported = [&](StringRef name, StringRef kind) {
     return VerbatimType(
-        {("// " + name + " = <unsupported " + kind + " type>").str(), false});
+        {(" = <unsupported " + kind + " type>").str(), false, true});
   };
 
   return TypeSwitch<Attribute, Optional<TypeSum>>(field)
@@ -439,10 +444,8 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
             auto iface = traverseBundle(bundle, id, path);
             assert(iface && iface.getValue());
-            return VerbatimType({(iface.getValue().getName() + " " +
-                                  bundle.getDefName().getValue())
-                                     .str(),
-                                 true});
+            return VerbatimType(
+                {(bundle.getDefName().getValue()).str(), true, false});
           })
       .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
         return unsupported(field.getName().getValue(), "string");
@@ -508,7 +511,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
       builder.create<sv::VerbatimOp>(
           uloc, ("// " + cleanupDescription(description.getValue())));
     if (auto *str = std::get_if<VerbatimType>(&elementType.getValue())) {
-      builder.create<sv::VerbatimOp>(uloc, str->toStr());
+      builder.create<sv::VerbatimOp>(uloc, str->toStr(name.getValue()));
       continue;
     }
 
