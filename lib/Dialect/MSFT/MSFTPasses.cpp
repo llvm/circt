@@ -172,7 +172,11 @@ LogicalResult
 InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
                                     ArrayRef<Value> operands,
                                     ConversionPatternRewriter &rewriter) const {
-  return failure();
+  auto hwInst = rewriter.create<hw::InstanceOp>(
+      msftInst.getLoc(), msftInst.getResultTypes(), msftInst.instanceNameAttr(),
+      msftInst.moduleNameAttr(), operands, DictionaryAttr{}, StringAttr{});
+  rewriter.replaceOp(msftInst, hwInst.getResults());
+  return success();
 }
 
 namespace {
@@ -188,6 +192,7 @@ void LowerToHWPass::runOnOperation() {
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(*ctxt);
   target.addIllegalDialect<MSFTDialect>();
+  target.addLegalDialect<hw::HWDialect>();
 
   // Add all the conversion patterns.
   RewritePatternSet patterns(ctxt);
