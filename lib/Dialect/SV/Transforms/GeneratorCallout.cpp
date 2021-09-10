@@ -92,18 +92,18 @@ void HWGeneratorCalloutPass::runOnOperation() {
     else if (auto generator = dyn_cast<HWModuleGeneratedOp>(op))
       genOps[generator.getName()] = generator;
     else if (auto hwMod = dyn_cast<HWModuleOp>(op))
-      for (auto InstanceOp :
+      for (auto instOp :
            llvm::make_early_inc_range(hwMod.getOps<InstanceOp>())) {
-        auto memName = InstanceOp.moduleName();
+        auto memName = instOp.moduleName();
         if (genOps.count(memName)) {
           auto generator = dyn_cast<HWModuleGeneratedOp>(genOps[memName]);
           SmallVector<std::string> hierNames;
 
           getHierarchichalNames(hwMod, hierNames,
-                                InstanceOp.instanceName().str(), symbolUsers);
+                                instOp.instanceName().str(), symbolUsers);
           for (auto hName : hierNames)
             processGenerator(generator, *generatorExe, extraGeneratorArgs,
-                             InstanceOp, hName);
+                             instOp, hName);
         }
       }
   }
@@ -120,8 +120,6 @@ void HWGeneratorCalloutPass::processGenerator(
   if (schemaF == genOps.end())
     return;
 
-  if (opsToRemove.count(generatedModuleOp))
-    return;
   auto genSchema = dyn_cast<HWGeneratorSchemaOp>(schemaF->second);
 
   // Ignore the generator op if the schema does not match the user specified
@@ -206,8 +204,9 @@ void HWGeneratorCalloutPass::processGenerator(
   //  }
   //}
   SmallVector<StringRef> generatorArgStrRef;
-  for (const std::string &a : generatorArgs)
+  for (const std::string &a : generatorArgs) {
     generatorArgStrRef.push_back(a);
+  }
 
   std::string errMsg;
   SmallString<32> genExecOutFileName;
@@ -240,6 +239,7 @@ void HWGeneratorCalloutPass::processGenerator(
 
   // Only extract the first line from the output.
   auto fileContent = (*bufferRead)->getBuffer().split('\n').first.str();
+
   if (!opsToRemove.count(generatedModuleOp)) {
     OpBuilder builder(generatedModuleOp);
     auto extMod = builder.create<hw::HWModuleExternOp>(
