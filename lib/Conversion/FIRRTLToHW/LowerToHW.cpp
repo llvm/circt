@@ -1071,10 +1071,16 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                            ICmpPredicate unsignedOp);
   template <typename SignedOp, typename UnsignedOp>
   LogicalResult lowerDivLikeOp(Operation *op);
+
+  template <typename AOpTy>
+  bool lowerVerifOps(AOpTy op, Value &clock, Value &enable, Value &predicate,
+                     StringAttr &label, StringRef &fileName, StringRef &dir,
+                     StringRef annoClass);
   template <typename AOpTy, typename BOpTy>
   LogicalResult lowerVerificationStatement(AOpTy op, StringRef annoClass);
   template <typename AOpTy, typename BOpTy>
-  LogicalResult lowerVerificationConcurrentStatement(AOpTy op, StringRef annoClass);
+  LogicalResult lowerVerificationConcurrentStatement(AOpTy op,
+                                                     StringRef annoClass);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -2745,6 +2751,29 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
   return success();
 }
 
+/// Template for lowering all the operands of verification statements. This is
+/// common to concurrent or immediate verification statements.
+template <typename AOpTy>
+bool FIRRTLLowering::lowerVerifOps(AOpTy op, Value &clock, Value &enable,
+                                   Value &predicate, StringAttr &label,
+                                   StringRef &fileName, StringRef &dir,
+                                   StringRef annoClass) {
+  clock = getLoweredValue(op.clock());
+  enable = getLoweredValue(op.enable());
+  predicate = getLoweredValue(op.predicate());
+  if (!clock || !enable || !predicate)
+    return false;
+  if (op.nameAttr())
+    label = op.nameAttr();
+  else
+    label = builder.getStringAttr("");
+  AnnotationSet annoSet = AnnotationSet(circuitState.circuitOp);
+  if (auto a = annoSet.getAnnotation(annoClass)) {
+    fileName = a.getAs<StringAttr>("filename").getValue();
+    dir = a.getAs<StringAttr>("directory").getValue();
+  }
+  return true;
+}
 
 /// Template for lowering verification statements from type A to
 /// type B.
@@ -2767,31 +2796,21 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 template <typename AOpTy, typename BOpTy>
 LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
                                                          StringRef annoClass) {
-  auto clock = getLoweredValue(op.clock());
-  auto enable = getLoweredValue(op.enable());
-  auto predicate = getLoweredValue(op.predicate());
-  if (!clock || !enable || !predicate)
-    return failure();
+  Value clock, enable, predicate;
   StringAttr label;
-  if (op.nameAttr())
-    label = op.nameAttr();
-  else
-    label = builder.getStringAttr("");
-  auto annoSet = AnnotationSet(circuitState.circuitOp);
+  StringRef fileName, dir;
   BOpTy svOp;
-  
+  if (!lowerVerifOps<AOpTy>(op, clock, enable, predicate, label, fileName, dir,
+                            annoClass))
+    return failure();
+
   addToAlwaysBlock(clock, [&]() {
     addIfProceduralBlock(enable, [&]() {
       // Create BOpTy inside the always/if.
       svOp = builder.create<BOpTy>(predicate, label);
     });
   });
-  
-  StringRef fileName, dir;
-  if (auto a = annoSet.getAnnotation(annoClass)) {
-    fileName = a.getAs<StringAttr>("filename").getValue();
-    dir = a.getAs<StringAttr>("directory").getValue();
-  }
+
   if (!fileName.empty() || !dir.empty())
     svOp->setAttr("output_file",
                   hw::OutputFileAttr::get(builder.getStringAttr(dir),
@@ -2803,31 +2822,22 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
 }
 
 template <typename AOpTy, typename BOpTy>
-LogicalResult FIRRTLLowering::lowerVerificationConcurrentStatement(AOpTy op,
-                                                         StringRef annoClass) {
-  auto clock = getLoweredValue(op.clock());
-  auto enable = getLoweredValue(op.enable());
-  auto predicate = getLoweredValue(op.predicate());
-  if (!clock || !enable || !predicate)
-    return failure();
+LogicalResult
+FIRRTLLowering::lowerVerificationConcurrentStatement(AOpTy op,
+                                                     StringRef annoClass) {
+  Value clock, enable, predicate;
   StringAttr label;
-  if (op.nameAttr())
-    label = op.nameAttr();
-  else
-    label = builder.getStringAttr("");
-  auto annoSet = AnnotationSet(circuitState.circuitOp);
+  StringRef fileName, dir;
   BOpTy svOp;
+  if (!lowerVerifOps<AOpTy>(op, clock, enable, predicate, label, fileName, dir,
+                            annoClass))
+    return failure();
   predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
   svOp = builder.create<BOpTy>(
       circt::sv::EventControlAttr::get(builder.getContext(),
-        circt::sv::EventControl::AtPosEdge),
+                                       circt::sv::EventControl::AtPosEdge),
       clock, predicate, label);
 
-  StringRef fileName, dir;
-  if (auto a = annoSet.getAnnotation(annoClass)) {
-    fileName = a.getAs<StringAttr>("filename").getValue();
-    dir = a.getAs<StringAttr>("directory").getValue();
-  }
   if (!fileName.empty() || !dir.empty())
     svOp->setAttr("output_file",
                   hw::OutputFileAttr::get(builder.getStringAttr(dir),
@@ -2837,25 +2847,35 @@ LogicalResult FIRRTLLowering::lowerVerificationConcurrentStatement(AOpTy op,
                                           svOp.getContext()));
   return success();
 }
+
 // Lower an assert to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
-  return op.isConcurrent() ? lowerVerificationConcurrentStatement<AssertOp, sv::AssertConcurrentOp>(
-      op, assertAnnoClass): lowerVerificationStatement<AssertOp, sv::AssertOp>(
-      op, assertAnnoClass);
+  return op.isConcurrent()
+             ? lowerVerificationConcurrentStatement<AssertOp,
+                                                    sv::AssertConcurrentOp>(
+                   op, assertAnnoClass)
+             : lowerVerificationStatement<AssertOp, sv::AssertOp>(
+                   op, assertAnnoClass);
 }
 
 // Lower an assume to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
-  return op.isConcurrent() ? lowerVerificationConcurrentStatement<AssumeOp, sv::AssumeConcurrentOp>(
-      op, assumeAnnoClass): lowerVerificationStatement<AssumeOp, sv::AssumeOp>(
-      op, assumeAnnoClass);
+  return op.isConcurrent()
+             ? lowerVerificationConcurrentStatement<AssumeOp,
+                                                    sv::AssumeConcurrentOp>(
+                   op, assumeAnnoClass)
+             : lowerVerificationStatement<AssumeOp, sv::AssumeOp>(
+                   op, assumeAnnoClass);
 }
 
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
-  return op.isConcurrent() ? lowerVerificationConcurrentStatement<CoverOp, sv::CoverConcurrentOp>(
-      op, coverAnnoClass): lowerVerificationStatement<CoverOp, sv::CoverOp>(
-      op, coverAnnoClass);
+  return op.isConcurrent()
+             ? lowerVerificationConcurrentStatement<CoverOp,
+                                                    sv::CoverConcurrentOp>(
+                   op, coverAnnoClass)
+             : lowerVerificationStatement<CoverOp, sv::CoverOp>(op,
+                                                                coverAnnoClass);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {

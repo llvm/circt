@@ -2325,8 +2325,8 @@ ParseResult FIRStmtParser::parsePrintf() {
     APInt constOne(1, 1, false);
     Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped,
-                          "", true);
+    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped, "",
+                            true);
     return success();
   }
   if (formatStringRef.startswith("assert:")) {
@@ -2334,7 +2334,7 @@ ParseResult FIRStmtParser::parsePrintf() {
     Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
-                          "", true);
+                             "", true);
     return success();
   }
   if (formatStringRef.startswith("assume:")) {
@@ -2342,7 +2342,7 @@ ParseResult FIRStmtParser::parsePrintf() {
     Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
-                          "", true);
+                             "", true);
     return success();
   }
 
@@ -2430,8 +2430,8 @@ ParseResult FIRStmtParser::parseAssume() {
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssumeOp>(clock, predicate, enable,
-                           messageUnescaped, name.getValue());
+  builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
+                           name.getValue());
   return success();
 }
 
@@ -2453,8 +2453,8 @@ ParseResult FIRStmtParser::parseCover() {
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<CoverOp>(clock, predicate, enable,
-                          messageUnescaped, name.getValue());
+  builder.create<CoverOp>(clock, predicate, enable, messageUnescaped,
+                          name.getValue());
   return success();
 }
 
