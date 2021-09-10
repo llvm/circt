@@ -33,13 +33,13 @@ def RegisterOp : CalyxPrimitive<"register", [
   let builders = [
     OpBuilder<(ins "StringAttr":$instanceName, "size_t":$width), [{
       $_state.addAttribute("instanceName", instanceName);
-      auto i1Type = $_builder.getI1Type();
-      auto widthType = $_builder.getIntegerType(width);
+      Type i1Type = $_builder.getI1Type();
+      Type widthType = $_builder.getIntegerType(width);
       $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});
     }]>,
-    OpBuilder<(ins "StringAttr":$name, "Type":$type), [{
-      $_state.addAttribute("name", name);
-      auto i1Type = $_builder.getI1Type();
+    OpBuilder<(ins "StringAttr":$instanceName, "Type":$type), [{
+      $_state.addAttribute("instanceName", instanceName);
+      Type i1Type = $_builder.getI1Type();
       $_state.addTypes({type, i1Type, i1Type, i1Type, type, i1Type});
     }]>
   ];

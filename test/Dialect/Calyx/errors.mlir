@@ -209,7 +209,7 @@ calyx.program {
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
     calyx.wires {
-      calyx.comb_group @Group1 {  calyx.assign %c0.go = %c1_1 : i1 }
+      calyx.comb_group @Group1 {}
       calyx.group @Group2 { calyx.group_done %c1_1 : i1 } 
     }
     calyx.control {
