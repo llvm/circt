@@ -718,6 +718,13 @@ SmallVector<Direction> InstanceOp::portDirections() {
   return portDirections;
 }
 
+SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  for (const PortInfo &port : getReferencedComponent().getPortInfo())
+    portAttributes.push_back(port.attributes);
+  return portAttributes;
+}
+
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
   if (instance.componentName() == "main")
     return instance.emitOpError("cannot reference the entry point.");
@@ -787,6 +794,24 @@ SmallVector<Direction> RegisterOp::portDirections() {
   return {Input, Input, Input, Input, Output, Output};
 }
 
+SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
+  MLIRContext *context = getContext();
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList writeEn, clk, reset, done;
+  writeEn.append("go", isSet);
+  clk.append("clk", isSet);
+  reset.append("reset", isSet);
+  done.append("done", isSet);
+  return {
+      DictionaryAttr(),               // In
+      writeEn.getDictionary(context), // Write enable
+      clk.getDictionary(context),     // Clk
+      reset.getDictionary(context),   // Reset
+      DictionaryAttr(),               // Out
+      done.getDictionary(context)     // Done
+  };
+}
+
 //===----------------------------------------------------------------------===//
 // MemoryOp
 //===----------------------------------------------------------------------===//
@@ -813,6 +838,27 @@ SmallVector<Direction> MemoryOp::portDirections() {
     portDirections.push_back(Input);
   portDirections.append({Input, Input, Input, Output, Output});
   return portDirections;
+}
+
+SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  MLIRContext *context = getContext();
+  for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
+    portAttributes.push_back(DictionaryAttr()); // Addresses
+
+  // Use a boolean to indicate this attribute is used.
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList writeEn, clk, reset, done;
+  writeEn.append("go", isSet);
+  clk.append("clk", isSet);
+  done.append("done", isSet);
+  portAttributes.append({DictionaryAttr(),               // In
+                         writeEn.getDictionary(context), // Write enable
+                         clk.getDictionary(context),     // Clk
+                         DictionaryAttr(),               // Out
+                         done.getDictionary(context)}    // Done
+  );
+  return portAttributes;
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
@@ -959,6 +1005,9 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 #define ImplUnaryOpCellInterface(OpType)                                       \
   SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
   SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
+  SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
+    return {DictionaryAttr(), DictionaryAttr()};                               \
+  }                                                                            \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }
@@ -972,6 +1021,9 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
   }                                                                            \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }                                                                            \
+  SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
+    return {DictionaryAttr(), DictionaryAttr(), DictionaryAttr()};             \
   }
 
 // clang-format off
