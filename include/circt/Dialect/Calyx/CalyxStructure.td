@@ -220,6 +220,7 @@ def GroupOp : CalyxOp<"group", [
 
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$sym_name $body attr-dict";
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def CombGroupOp : CalyxOp<"comb_group", [

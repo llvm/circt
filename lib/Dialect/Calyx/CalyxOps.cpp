@@ -76,6 +76,16 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+// Convenience function for getting the SSA name of @p v under the scope of
+// operation @p scopeOp
+static std::string valueName(Operation *scopeOp, Value v) {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  AsmState asmState(scopeOp);
+  v.printAsOperand(os, asmState);
+  return s;
+}
+
 /// Returns whether this value is either (1) a port on a ComponentOp or (2) a
 /// port on a cell interface.
 static bool isPort(Value value) {
@@ -132,8 +142,8 @@ static LogicalResult verifyControlBody(Operation *op) {
   return success();
 }
 
-static LogicalResult portsDrivenByGroup(ValueRange ports,
-                                        GroupInterface groupOp);
+static LogicalResult allPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface groupOp);
 
 /// Checks whether @p port is driven from within @p groupOp.
 static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
@@ -152,18 +162,38 @@ static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
   // group.
   if (auto cell = dyn_cast<CellInterface>(port.getDefiningOp());
       cell && cell.direction(port) == calyx::Direction::Output)
-    return portsDrivenByGroup(
+    return allPortsDrivenByGroup(
         cell.filterInterfacePorts(calyx::Direction::Input), groupOp);
 
   return failure();
 }
 
 /// Checks whether all ports in @p ports are driven from within @p groupOp
-static LogicalResult portsDrivenByGroup(ValueRange ports,
-                                        GroupInterface groupOp) {
-  return success(llvm::all_of(ports, [&](auto port) {
-    return portDrivenByGroup(port, groupOp).succeeded();
-  }));
+static LogicalResult allPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface group) {
+
+  auto portIsDriven = [&](Value p) {
+    // A port is driven if any of the following uses meet the criteria
+    // (1) it is a destination of an assignment.
+    // (2) that assignment is found in the provided group.
+    return llvm::any_of(p.getUses(), [&](auto &&use) {
+      auto assignOp = dyn_cast<AssignOp>(use.getOwner());
+      if (assignOp == nullptr)
+        return false;
+
+      auto g1 = assignOp->template getParentOfType<GroupOp>();
+      auto g2 = assignOp->template getParentOfType<CombGroupOp>();
+      if (g1 == nullptr && g2 == nullptr)
+        // This is a continuous assignment in WiresOp.
+        return false;
+
+      assert(group != nullptr);
+      return assignOp.dest() == p && (group == g1 || group == g2);
+    });
+  };
+
+  return success(
+      llvm::all_of(ports, [&](auto port) { return portIsDriven(port); }));
 }
 
 LogicalResult calyx::verifyCell(Operation *op) {
@@ -201,16 +231,6 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
            << ", which is not allowed in this control-like operation";
   }
   return verifyControlBody(op);
-}
-
-// Convenience function for getting the SSA name of @p v under the scope of
-// operation @p scopeOp
-static std::string valueName(Operation *scopeOp, Value v) {
-  std::string s;
-  llvm::raw_string_ostream os(s);
-  AsmState asmState(scopeOp);
-  v.printAsOperand(os, asmState);
-  return s;
 }
 
 //===----------------------------------------------------------------------===//
@@ -607,6 +627,23 @@ GroupGoOp GroupOp::getGoOp() {
 GroupDoneOp GroupOp::getDoneOp() {
   auto body = this->getBody();
   return cast<GroupDoneOp>(body->getTerminator());
+}
+
+LogicalResult verifyGroupOp(GroupOp group) {
+  LogicalResult verifyWrites = success();
+  group.walk([&](AssignOp assign) {
+    Operation *destOp = assign.dest().getDefiningOp();
+    verifyWrites = TypeSwitch<Operation *, LogicalResult>(destOp)
+                       .Case<RegisterOp>([&](auto op) {
+                         return allPortsDrivenByGroup(
+                             {op.writeEnPort(), op.inPort()}, group);
+                       })
+                       .Default([&](auto op) { return success(); });
+    if (failed(verifyWrites))
+      return;
+  });
+
+  return verifyWrites;
 }
 
 //===----------------------------------------------------------------------===//
