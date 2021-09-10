@@ -67,6 +67,71 @@ hw.module @andDedupLong(%arg0: i7, %arg1: i7, %arg2: i7) -> (i7) {
   hw.output %0 : i7
 }
 
+// CHECK-LABEL: hw.module @orExclusiveConcats
+hw.module @orExclusiveConcats(%arg0: i6, %arg1: i2) -> (%o: i9) {
+  // CHECK-NEXT:    %false = hw.constant false
+  // CHECK-NEXT:    %0 = comb.concat %arg1, %false, %arg0 : (i2, i1, i6) -> i9
+  // CHECK-NEXT:    hw.output %0 : i9
+  %c0 = hw.constant 0 : i3
+  %0 = comb.concat %c0, %arg0 : (i3, i6) -> i9
+  %c1 = hw.constant 0 : i7
+  %1 = comb.concat %arg1, %c1 : (i2, i7) -> i9
+  %2 = comb.or %0, %1 : i9
+  hw.output %2 : i9
+}
+
+// When two concats are or'd together and have mutually-exclusive fields, they
+// can be merged together into a single concat.
+// concat0: 0aaa aaa0 0000 0bb0
+// concat1: 0000 0000 ccdd d000
+// merged:  0aaa aaa0 ccdd dbb0
+// CHECK-LABEL: hw.module @orExclusiveConcats2
+hw.module @orExclusiveConcats2(%arg0: i6, %arg1: i2, %arg2: i2, %arg3: i3) -> (%o: i16) {
+  // CHECK-NEXT:    %false = hw.constant false
+  // CHECK-NEXT:    %0 = comb.concat %false, %arg0, %false, %arg2, %arg3, %arg1, %false : (i1, i6, i1, i2, i3, i2, i1) -> i16
+  // CHECK-NEXT:    hw.output %0 : i16
+  %c0 = hw.constant 0 : i1
+  %c1 = hw.constant 0 : i6
+  %c2 = hw.constant 0 : i1
+  %0 = comb.concat %c0, %arg0, %c1, %arg1, %c2: (i1, i6, i6, i2, i1) -> i16
+  %c3 = hw.constant 0 : i8
+  %c4 = hw.constant 0 : i3
+  %1 = comb.concat %c3, %arg2, %arg3, %c4 : (i8, i2, i3, i3) -> i16
+  %2 = comb.or %0, %1 : i16
+  hw.output %2 : i16
+}
+
+// When two concats are or'd together and have mutually-exclusive fields, they
+// can be merged together into a single concat.
+// concat0: aaaa 1111
+// concat1: 1111 10bb
+// merged:  1111 1111
+// CHECK-LABEL: hw.module @orExclusiveConcats3
+hw.module @orExclusiveConcats3(%arg0: i4, %arg1: i2) -> (%o: i8) {
+  // CHECK-NEXT:    [[RES:%[a-z0-9_-]+]] = hw.constant -1 : i8
+  // CHECK-NEXT:    hw.output [[RES]] : i8
+  %c0 = hw.constant -1 : i4
+  %0 = comb.concat %arg0, %c0: (i4, i4) -> i8
+  %c1 = hw.constant -1 : i5
+  %c2 = hw.constant 0 : i1
+  %1 = comb.concat %c1, %c2, %arg1 : (i5, i1, i2) -> i8
+  %2 = comb.or %0, %1 : i8
+  hw.output %2 : i8
+}
+
+// CHECK-LABEL: hw.module @orMultipleExclusiveConcats
+hw.module @orMultipleExclusiveConcats(%arg0: i2, %arg1: i2, %arg2: i2) -> (%o: i6) {
+  // CHECK-NEXT:    %0 = comb.concat %arg0, %arg1, %arg2 : (i2, i2, i2) -> i6
+  // CHECK-NEXT:    hw.output %0 : i6
+  %c2 = hw.constant 0 : i2
+  %c4 = hw.constant 0 : i4
+  %0 = comb.concat %arg0, %c4: (i2, i4) -> i6
+  %1 = comb.concat %c2, %arg1, %c2: (i2, i2, i2) -> i6
+  %2 = comb.concat %c4, %arg2: (i4, i2) -> i6
+  %out = comb.or %0, %1, %2 : i6
+  hw.output %out : i6
+}
+
 // CHECK-LABEL: @extractNested
 hw.module @extractNested(%0: i5) -> (%o1 : i1) {
 // Multiple layers of nested extract is a weak evidence that the cannonicalization
