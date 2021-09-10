@@ -155,9 +155,8 @@ std::unique_ptr<Pass> createRunGeneratorsPass() {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Lower `ChannelBuffer`s, breaking out the various options. For now, just
-/// replace with the specified number of pipeline stages (since that's the only
-/// option).
+/// Lower MSFT's InstanceOp to HW's. Currently trivial since `msft.instance` is
+/// currently a subset of `hw.instance`.
 struct InstanceOpLowering : public OpConversionPattern<InstanceOp> {
 public:
   using OpConversionPattern::OpConversionPattern;
