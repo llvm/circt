@@ -590,9 +590,11 @@ void Emitter::emitGroup(GroupInterface group) {
     }
   };
 
-  Twine prefix = Twine(isa<CombGroupOp>(group) ? "comb " : "") + "group";
-  Twine groupHeader = Twine(group.symName().getValue()) + getAttributes(group);
-  emitCalyxSection(prefix.str(), emitGroupBody, groupHeader.str());
+  auto prefix = "group";
+  if (isa<CombGroupOp>(group))
+    prefix = "comb group";
+  auto groupHeader = (group.symName().getValue() + getAttributes(group)).str();
+  emitCalyxSection(prefix, emitGroupBody, groupHeader);
 }
 
 void Emitter::emitEnable(EnableOp enable) {
