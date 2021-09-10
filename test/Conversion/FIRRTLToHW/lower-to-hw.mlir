@@ -369,12 +369,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.cover.concurrent  posedge %clock %4 {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} : i1
     // CHECK-NEXT: %5 = comb.and %cEn, %cCond : i1
     // CHECK-NEXT: sv.cover.concurrent "cover_0" posedge %clock %5 {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} : i1
+    // CHECK: sv.cover.concurrent "cover_1" negedge %clock
+    // CHECK: sv.cover.concurrent "cover_2" edge %clock 
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true}
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true, name = "assert_0"}
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true}
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true, name = "assume_0"}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = "AtNegEdge", isConcurrent = true, name = "cover_1"}
+    firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = "AtEdge", isConcurrent = true, name = "cover_2"}
 
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
