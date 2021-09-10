@@ -220,6 +220,23 @@ private:
   InFlightDiagnostic emitCircuitError(StringRef message = {}) {
     return emitError(getOperation().getLoc(), "'firrtl.circuit' op " + message);
   }
+
+  // Insert comment delimiters ("// ") after newlines in the description string.
+  // This is necessary to prevent introducing invalid verbatim Verilog.
+  //
+  // TODO: Add a comment op and lower the description to that.
+  // TODO: Tracking issue: https://github.com/llvm/circt/issues/1677
+  std::string cleanupDescription(StringRef description) {
+    StringRef head;
+    SmallString<64> out;
+    do {
+      std::tie(head, description) = description.split("\n");
+      out.append(head);
+      if (!description.empty())
+        out.append("\n// ");
+    } while (!description.empty());
+    return std::string(out);
+  }
 };
 
 } // namespace
@@ -488,8 +505,8 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
     auto description =
         element.cast<DictionaryAttr>().getAs<StringAttr>("description");
     if (description)
-      builder.create<sv::VerbatimOp>(uloc,
-                                     ("// " + description.getValue()).str());
+      builder.create<sv::VerbatimOp>(
+          uloc, ("// " + cleanupDescription(description.getValue())));
     if (auto *str = std::get_if<VerbatimType>(&elementType.getValue())) {
       builder.create<sv::VerbatimOp>(uloc, str->toStr());
       continue;

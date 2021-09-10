@@ -10,6 +10,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
         name = "foo",
         id = 1 : i64},
        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        description = "multi\nline\ndescription\nof\nbar",
         name = "bar",
         id = 2 : i64}],
      id = 0 : i64},
@@ -75,6 +76,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i2
+// CHECK-NEXT: sv.verbatim "// multi\0A// line\0A// description\0A// of\0A// bar"
 // CHECK-NEXT: sv.interface.signal @bar : i4
 
 // -----
