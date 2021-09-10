@@ -184,3 +184,12 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
     }
   }];
 }
+
+def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
+  let summary = "Force procedural statement";
+  let description = "Maps to the corresponding `sv.force` operation.";
+  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
+  let results = (outs);
+  let assemblyFormat =
+    "$dest `,` $src attr-dict `:` type($dest) `,` type($src)";
+}

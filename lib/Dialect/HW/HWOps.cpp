@@ -725,18 +725,18 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op,
   return success();
 }
 
-static LogicalResult verifyInstanceOp(InstanceOp op) {
-  auto referencedModule = op.getReferencedModule();
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *referencedModule =
+      symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
   if (referencedModule == nullptr)
-    return op.emitError("Cannot find module definition '")
-           << op.moduleName() << "'";
+    return emitError("Cannot find module definition '") << moduleName() << "'";
 
-  // If the referenced module is internal, check that input and result types are
-  // consistent with the referenced module.
   if (!isa<HWModuleOp>(referencedModule))
     return success();
 
-  return verifyInstanceOpTypes(op, referencedModule);
+  // If the referenced module is internal, check that input and result types are
+  // consistent with the referenced module.
+  return verifyInstanceOpTypes(*this, referencedModule);
 }
 
 StringAttr InstanceOp::getResultName(size_t idx,

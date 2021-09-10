@@ -21,19 +21,19 @@ hw.module @top(%clk: i1, %rst: i1, %i: i32, %s: !hw.struct<foo: i32>) {
 
   %sv = hw.struct_create (%r0) : !hw.struct<foo: i32>
 
-  seq.compreg %s, %clk, %rst, %sv : !hw.struct<foo: i32>
+  %foo = seq.compreg %s, %clk, %rst, %sv : !hw.struct<foo: i32>
   seq.compreg %s, %clk : !hw.struct<foo: i32>
-  // CHECK: %{{.+}} = seq.compreg %s, %clk, %rst, %{{.+}} : !hw.struct<foo: i32>
+  // CHECK: %foo = seq.compreg %s, %clk, %rst, %{{.+}} : !hw.struct<foo: i32>
   // CHECK: %{{.+}} = seq.compreg %s, %clk : !hw.struct<foo: i32>
 
   // SV: [[REGST:%.+]] = hw.struct_create ([[REG5]]) : !hw.struct<foo: i32>
-  // SV: [[REG3:%.+]] = sv.reg  : !hw.inout<struct<foo: i32>>
+  // SV: %foo = sv.reg  : !hw.inout<struct<foo: i32>>
   // SV: sv.alwaysff(posedge %clk)  {
-  // SV:   sv.passign [[REG3]], %s : !hw.struct<foo: i32>
+  // SV:   sv.passign %foo, %s : !hw.struct<foo: i32>
   // SV: }(syncreset : posedge %rst)  {
-  // SV:   sv.passign [[REG3]], [[REGST]] : !hw.struct<foo: i32>
+  // SV:   sv.passign %foo, [[REGST]] : !hw.struct<foo: i32>
   // SV: }
-  // SV: [[REG4:%.+]] = sv.reg  : !hw.inout<struct<foo: i32>>
+  // SV: [[REG4:%.+]] = sv.reg {name = "_compreg"} : !hw.inout<struct<foo: i32>>
   // SV: sv.alwaysff(posedge %clk)  {
   // SV:   sv.passign [[REG4]], %s : !hw.struct<foo: i32>
   // SV: }

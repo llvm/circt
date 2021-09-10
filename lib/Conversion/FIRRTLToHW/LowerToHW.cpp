@@ -263,10 +263,6 @@ private:
 
   DenseMap<Operation *, Operation *> oldToNewModuleMap;
 
-  /// These are ops that are just copied as they go through.  This is intended
-  /// to be used for ops that are from other dialects and are expected.
-  SmallVector<Operation *> passThroughOps;
-
   // Record the set of remaining annotation classes. This is used to warn only
   // once about any annotation class.
   StringSet<> pendingAnnotations;
@@ -385,31 +381,29 @@ void FIRRTLModuleLowering::runOnOperation() {
   state.processRemainingAnnotations(circuit, AnnotationSet(circuit));
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
-  for (auto &op : circuitBody->getOperations()) {
-    if (auto module = dyn_cast<FModuleOp>(op)) {
-      state.oldToNewModuleMap[&op] = lowerModule(module, topLevelModule, state);
-      modulesToProcess.push_back(module);
-      continue;
-    }
-
-    if (auto extModule = dyn_cast<FExtModuleOp>(op)) {
-      state.oldToNewModuleMap[&op] =
-          lowerExtModule(extModule, topLevelModule, state);
-      continue;
-    }
-
-    // Anything which is _not_ a module or an extmodule is treated carefully.
-    // By default, this produces an error.
+  for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
     TypeSwitch<Operation *>(&op)
+        .Case<FModuleOp>([&](auto module) {
+          state.oldToNewModuleMap[&op] =
+              lowerModule(module, topLevelModule, state);
+          modulesToProcess.push_back(module);
+        })
+        .Case<FExtModuleOp>([&](auto extModule) {
+          state.oldToNewModuleMap[&op] =
+              lowerExtModule(extModule, topLevelModule, state);
+        })
         // GrandCentral can generate interfaces.  These need to be let through.
-        .Case<sv::InterfaceOp>(
-            [&](auto op) { state.passThroughOps.push_back(op); })
-        .Default([](auto op) {
-          // Otherwise we don't know what this is.  We are just going to drop
-          // it, but emit an error so the client has some chance to know that
-          // this is going to happen.
-          op->emitError("unexpected operation '")
-              << op->getName() << "' in a firrtl.circuit";
+        // Moving them to the end of the module has the effect of keeping them
+        // in the same spot in the IR.
+        .Case<sv::InterfaceOp>([&](auto passThrough) {
+          passThrough->moveBefore(topLevelModule, topLevelModule->end());
+        })
+        // Otherwise we don't know what this is.  We are just going to drop
+        // it, but emit an error so the client has some chance to know that
+        // this is going to happen.
+        .Default([](auto other) {
+          other->emitError("unexpected operation '")
+              << other->getName() << "' in a firrtl.circuit";
         });
   }
 
@@ -436,10 +430,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   for (auto bind : state.binds) {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
-
-  // Move any pass through ops into the top of the new module.
-  for (auto *passThrough : state.passThroughOps)
-    passThrough->moveAfter(topLevelModule, topLevelModule->begin());
 
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
@@ -723,8 +713,7 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   // Build the new hw.module op.
-  OpBuilder builder(topLevelModule->getParent()->getContext());
-  builder.setInsertionPointToEnd(topLevelModule);
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   return builder.create<hw::HWModuleExternOp>(oldModule.getLoc(), nameAttr,
                                               ports, verilogName);
@@ -744,8 +733,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   // Build the new hw.module op.
-  OpBuilder builder(topLevelModule->getParent()->getContext());
-  builder.setInsertionPointToEnd(topLevelModule);
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
   auto newModule =
       builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
@@ -1055,6 +1043,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(RegResetOp op);
   LogicalResult visitDecl(MemOp op);
   LogicalResult visitDecl(InstanceOp op);
+  LogicalResult visitDecl(VerbatimWireOp op);
 
   // Unary Ops.
   LogicalResult lowerNoopCast(Operation *op);
@@ -1156,6 +1145,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(SkipOp op);
   LogicalResult visitStmt(ConnectOp op);
   LogicalResult visitStmt(PartialConnectOp op);
+  LogicalResult visitStmt(ForceOp op);
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(StopOp op);
   LogicalResult visitStmt(AssertOp op);
@@ -1786,6 +1776,25 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
+}
+
+LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
+  auto resultTy = lowerType(op.getType());
+  if (!resultTy)
+    return failure();
+  resultTy = sv::InOutType::get(op.getContext(), resultTy);
+
+  SmallVector<Value, 4> operands;
+  operands.reserve(op.operands().size());
+  for (auto operand : op.operands()) {
+    auto lowered = getLoweredValue(operand);
+    if (!lowered)
+      return failure();
+    operands.push_back(lowered);
+  }
+
+  return setLoweringTo<sv::VerbatimExprOp>(op, resultTy, op.textAttr(),
+                                           operands);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
@@ -2684,6 +2693,22 @@ LogicalResult FIRRTLLowering::visitStmt(PartialConnectOp op) {
   }
 
   builder.create<sv::AssignOp>(destVal, srcVal);
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
+  auto srcVal = getLoweredValue(op.src());
+  if (!srcVal)
+    return failure();
+
+  auto destVal = getPossiblyInoutLoweredValue(op.dest());
+  if (!destVal)
+    return failure();
+
+  if (!destVal.getType().isa<hw::InOutType>())
+    return op.emitError("destination isn't an inout type");
+
+  addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
   return success();
 }
 

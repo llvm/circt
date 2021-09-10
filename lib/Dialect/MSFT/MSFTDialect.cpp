@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -23,7 +24,13 @@ using namespace msft;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-void MSFTDialect::initialize() { registerAttributes(); }
+void MSFTDialect::initialize() {
+  addOperations<
+#define GET_OP_LIST
+#include "circt/Dialect/MSFT/MSFT.cpp.inc"
+      >();
+  registerAttributes();
+}
 
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use

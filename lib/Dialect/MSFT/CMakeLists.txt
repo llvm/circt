@@ -9,7 +9,8 @@
 add_circt_dialect_library(CIRCTMSFT
   MSFTAttributes.cpp
   MSFTDialect.cpp
-  MSFTGenerator.cpp
+  MSFTOps.cpp
+  MSFTPasses.cpp
   DeviceDB.cpp
 
   ADDITIONAL_HEADER_DIRS

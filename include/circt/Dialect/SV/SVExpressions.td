@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+def AnySignlessIntegerOrInOutType : AnyTypeOf<[AnySignlessInteger, InOutType]>;
 def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
                          ["getAsmResultNames"]>;
 
@@ -28,7 +29,7 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
     }];
 
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
-  let results = (outs AnySignlessInteger:$result);
+  let results = (outs AnySignlessIntegerOrInOutType:$result);
   let assemblyFormat = [{
     $string attr-dict (`(` $operands^ `)`)?
       `:` functional-type($operands, $result)
@@ -56,7 +57,7 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
     }];
 
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
-  let results = (outs AnySignlessInteger:$result);
+  let results = (outs AnySignlessIntegerOrInOutType:$result);
   let assemblyFormat = [{
     $string attr-dict (`(` $operands^ `)`)?
       `:` functional-type($operands, $result)

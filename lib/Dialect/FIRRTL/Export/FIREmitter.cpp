@@ -277,7 +277,7 @@ void Emitter::emitModulePorts(ArrayRef<ModulePortInfo> ports,
                               Block::BlockArgListType arguments) {
   for (unsigned i = 0, e = ports.size(); i < e; ++i) {
     const auto &port = ports[i];
-    indent() << (port.direction == Direction::Input ? "input " : "output ");
+    indent() << (port.direction == Direction::In ? "input " : "output ");
     if (!arguments.empty())
       addValueName(arguments[i], port.name);
     os << port.name.getValue() << " : ";

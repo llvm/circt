@@ -400,7 +400,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Input, arg.getLoc()});
+    ports.push_back({portName, bundlePortType, Direction::In, arg.getLoc()});
     ++argIndex;
   }
 
@@ -415,26 +415,24 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Output, funcLoc});
+    ports.push_back({portName, bundlePortType, Direction::Out, funcLoc});
     ++argIndex;
   }
 
   // Add clock and reset signals.
   if (numClocks == 1) {
     ports.push_back({rewriter.getStringAttr("clock"),
-                     rewriter.getType<ClockType>(), Direction::Input, funcLoc});
+                     rewriter.getType<ClockType>(), Direction::In, funcLoc});
     ports.push_back({rewriter.getStringAttr("reset"),
-                     rewriter.getType<UIntType>(1), Direction::Input, funcLoc});
+                     rewriter.getType<UIntType>(1), Direction::In, funcLoc});
   } else if (numClocks > 1) {
     for (unsigned i = 0; i < numClocks; ++i) {
       auto clockName = "clock" + std::to_string(i);
       auto resetName = "reset" + std::to_string(i);
       ports.push_back({rewriter.getStringAttr(clockName),
-                       rewriter.getType<ClockType>(), Direction::Input,
-                       funcLoc});
+                       rewriter.getType<ClockType>(), Direction::In, funcLoc});
       ports.push_back({rewriter.getStringAttr(resetName),
-                       rewriter.getType<UIntType>(1), Direction::Input,
-                       funcLoc});
+                       rewriter.getType<UIntType>(1), Direction::In, funcLoc});
     }
   }
 
@@ -503,7 +501,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Input, loc});
+    ports.push_back({portName, bundlePortType, Direction::In, loc});
     ++argIndex;
   }
 
@@ -516,16 +514,16 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Output, loc});
+    ports.push_back({portName, bundlePortType, Direction::Out, loc});
     ++argIndex;
   }
 
   // Add clock and reset signals.
   if (hasClock) {
     ports.push_back({rewriter.getStringAttr("clock"),
-                     rewriter.getType<ClockType>(), Direction::Input, loc});
+                     rewriter.getType<ClockType>(), Direction::In, loc});
     ports.push_back({rewriter.getStringAttr("reset"),
-                     rewriter.getType<UIntType>(1), Direction::Input, loc});
+                     rewriter.getType<UIntType>(1), Direction::In, loc});
   }
 
   return rewriter.create<FModuleOp>(

@@ -91,9 +91,15 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         SmallVector<circt::calyx::PortInfo> info;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections(),$_op.portNames()))
-          info.push_back(PortInfo{StringAttr::get($_op->getContext(),
-            std::get<2>(it)), std::get<0>(it).getType(), std::get<1>(it)});
+
+        auto zip = llvm::zip($_op->getResults(), $_op.portDirections(), $_op.portNames());
+        for (auto&& [result, direction, name] : zip)
+          info.push_back(PortInfo{
+              StringAttr::get($_op->getContext(), name),
+              result.getType(),
+              direction,
+              DictionaryAttr()
+          });
         return info;
     }]
     >,
@@ -129,9 +135,9 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         SmallVector<Value> ports;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections()))
-          if (std::get<1>(it) == calyx::Direction::Input)
-            ports.push_back(std::get<0>(it));
+        for (auto&& [result, direction] : llvm::zip($_op->getResults(), $_op.portDirections()))
+          if (direction == calyx::Direction::Input)
+            ports.push_back(result);
         return ports;
       }]
     >,
@@ -143,9 +149,9 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         SmallVector<Value> ports;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections()))
-          if (std::get<1>(it) == calyx::Direction::Output)
-            ports.push_back(std::get<0>(it));
+        for (auto&& [result, direction] : llvm::zip($_op->getResults(), $_op.portDirections()))
+          if (direction == calyx::Direction::Output)
+            ports.push_back(result);
         return ports;
       }]
     >,
@@ -156,17 +162,16 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       (ins "calyx::Direction":$dir),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        // TODO(Calyx): Rewrite this once we've added attributes to the interface ports
         auto isInterfacePort = [](StringRef portName) {
-          return portName == "clk" || portName == "reset" || portName == "go"
-            || portName == "done";
+          return portName == "clk" || portName == "reset" ||
+                 portName == "go"  || portName == "done";
         };
 
         SmallVector<Value> filteredPorts;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portInfos())) {
-          auto portInfo = std::get<1>(it);
-          if (portInfo.direction == dir && !isInterfacePort(portInfo.name.getValue()))
-            filteredPorts.push_back(std::get<0>(it));
+        for (auto&& [result, port] : llvm::zip($_op->getResults(), $_op.portInfos())) {
+          StringRef name = port.name.getValue();
+          if (port.direction == dir && !isInterfacePort(name))
+            filteredPorts.push_back(result);
         }
         return filteredPorts;
       }]

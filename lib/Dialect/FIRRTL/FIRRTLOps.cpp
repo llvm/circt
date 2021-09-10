@@ -105,7 +105,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
     auto direction = (Direction)cast<FModuleLike>(op)
                          .getPortDirections()
                          .getValue()[blockArg.getArgNumber()];
-    if (direction == Direction::Output)
+    if (direction == Direction::Out)
       return swap();
     return accumulatedFlow;
   }
@@ -126,7 +126,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         for (auto arg : llvm::enumerate(inst.getResults()))
           if (arg.value() == val) {
             if (inst.getReferencedModule().getPortDirection(arg.index()) ==
-                Direction::Output)
+                Direction::Out)
               return accumulatedFlow;
             else
               return swap();
@@ -2323,6 +2323,25 @@ void VerbatimExprOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
+// VerbatimWireOp
+//===----------------------------------------------------------------------===//
+
+void VerbatimWireOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  // If the text is macro like, then use a pretty name.  We only take the
+  // text up to a weird character (like a paren) and currently ignore
+  // parenthesized expressions.
+  auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
+  auto name = text();
+  // Ignore a leading ` in macro name.
+  if (name.startswith("`"))
+    name = name.drop_front();
+  name = name.take_while(isOkCharacter);
+  if (!name.empty())
+    setNameFn(getResult(), name);
+}
+
+//===----------------------------------------------------------------------===//
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//
 
@@ -2637,7 +2656,7 @@ IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
   // Pack the array of directions into an APInt.  Input is zero, output is one.
   APInt portDirections(size, 0);
   for (size_t i = 0, e = directions.size(); i != e; ++i)
-    if (directions[i] == Direction::Output)
+    if (directions[i] == Direction::Out)
       portDirections.setBit(i);
 
   return IntegerAttr::get(IntegerType::get(ctx, size), portDirections);

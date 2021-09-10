@@ -30,6 +30,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using mlir::FailureOr;
 using mlir::function_like_impl::getArgAttrDict;
 using mlir::function_like_impl::setAllArgAttrDicts;
 
@@ -95,11 +96,20 @@ struct TappedValue {
   Annotation anno;
 };
 
+/// A parsed integer literal.
+struct Literal {
+  IntegerAttr value;
+  FIRRTLType type;
+  operator bool() const { return value && type; }
+};
+
 /// Necessary information to wire up a port with tapped data or memory location.
 struct PortWiring {
   unsigned portNum;
   ArrayRef<InstancePath> prefices;
   SmallString<16> suffix;
+  /// If set, the port should output a constant literal.
+  Literal literal;
 };
 
 } // namespace
@@ -156,6 +166,127 @@ static Key getKey(Annotation anno) {
   auto id = anno.getMember("id");
   auto portID = anno.getMember("portID");
   return {id, portID};
+}
+
+/// Parse a FIRRTL `UInt`/`SInt` literal.
+static FailureOr<Literal> parseIntegerLiteral(MLIRContext *context,
+                                              StringRef literal, Location loc) {
+  auto initial = literal; // used for error reporting
+  auto consumed = [&]() {
+    return initial.take_front(initial.size() - literal.size());
+  };
+  auto bail = [&](const Twine &message) {
+    mlir::emitError(loc, "expected ")
+        << message << " in literal after `" << consumed() << "`";
+    return failure();
+  };
+  auto consume = [&](StringRef text) {
+    if (!literal.consume_front(text)) {
+      (void)bail(Twine("`") + text + "`");
+      return false;
+    }
+    return true;
+  };
+
+  // Parse the leading keyword.
+  bool isSigned;
+  if (literal.consume_front("UInt")) {
+    isSigned = false;
+  } else if (literal.consume_front("SInt")) {
+    isSigned = true;
+  } else {
+    mlir::emitError(loc, "expected leading `UInt` or `SInt` in literal");
+    return failure();
+  }
+
+  // Parse the optional width.
+  Optional<APInt> width = {};
+  if (literal.consume_front("<")) {
+    auto widthLiteral = literal.take_while(llvm::isDigit);
+    APInt parsedWidth;
+    if (widthLiteral.getAsInteger(10, parsedWidth))
+      return bail("integer width");
+    literal = literal.drop_front(widthLiteral.size());
+    if (!literal.consume_front(">"))
+      return bail("closing `>`");
+    width = parsedWidth;
+  }
+
+  // Parse the opening parenthesis.
+  if (!consume("("))
+    return failure();
+
+  // Parse the opening quotes and base specifier.
+  unsigned base = 10;
+  bool hasQuotes = false;
+  if (literal.consume_front("\"")) {
+    hasQuotes = true;
+    if (literal.consume_front("h"))
+      base = 16;
+    else if (literal.consume_front("o"))
+      base = 8;
+    else if (literal.consume_front("b"))
+      base = 2;
+    else
+      return bail("base specifier (`h`, `o`, or `b`)");
+  }
+
+  // Parse the optional sign.
+  bool isNegative = false;
+  if (literal.consume_front("-"))
+    isNegative = true;
+  else if (literal.consume_front("+"))
+    isNegative = false;
+
+  // Parse the actual value.
+  APInt parsedValue;
+  auto valueLiteral = literal.take_while(llvm::isHexDigit);
+  if (valueLiteral.getAsInteger(base, parsedValue))
+    return bail("integer value");
+  literal = literal.drop_front(valueLiteral.size());
+
+  // Parse the closing quotes.
+  if (hasQuotes && !literal.consume_front("\""))
+    return bail("closing quotes");
+
+  // Parse the closing parenthesis.
+  if (!consume(")"))
+    return failure();
+
+  // Ensure that there's no junk afterwards.
+  if (!literal.empty()) {
+    mlir::emitError(loc, "extraneous `")
+        << literal << "` in literal after `" << consumed() << "`";
+    return failure();
+  }
+
+  // Ensure we have a 0 bit at the top to properly hold a negative value.
+  if (parsedValue.isNegative())
+    parsedValue = parsedValue.zext(parsedValue.getBitWidth() + 1);
+  if (isNegative)
+    parsedValue = -parsedValue;
+
+  // Ensure the width is sound.
+  int32_t saneWidth = -1;
+  if (width) {
+    saneWidth = (int32_t)width->getLimitedValue(INT32_MAX);
+    if (saneWidth != *width) {
+      mlir::emitError(loc, "width of literal `")
+          << initial << "` is too big to handle";
+      return failure();
+    }
+    parsedValue = isSigned ? parsedValue.sextOrTrunc(saneWidth)
+                           : parsedValue.zextOrTrunc(saneWidth);
+  }
+
+  // Assemble the literal.
+  Literal lit;
+  lit.type = IntType::get(context, isSigned, saneWidth);
+  lit.value = IntegerAttr::get(
+      IntegerType::get(context, parsedValue.getBitWidth(),
+                       isSigned ? IntegerType::Signed : IntegerType::Unsigned),
+      parsedValue);
+  return lit;
 }
 
 //===----------------------------------------------------------------------===//
@@ -355,6 +486,20 @@ void GrandCentralTapsPass::runOnOperation() {
       // Connect the output ports to the appropriate tapped object.
       for (auto port : portWiring) {
         LLVM_DEBUG(llvm::dbgs() << "- Wiring up port " << port.portNum << "\n");
+
+        // Handle literals. We send the literal string off to the FIRParser to
+        // translate into whatever ops are necessary. This yields a handle on
+        // value we're supposed to drive.
+        if (port.literal) {
+          LLVM_DEBUG(llvm::dbgs() << "  - Connecting literal "
+                                  << port.literal.value << "\n");
+          auto literal =
+              builder.create<ConstantOp>(port.literal.type, port.literal.value);
+          auto arg = impl.getArgument(port.portNum);
+          builder.create<ConnectOp>(arg, literal);
+          continue;
+        }
+
         // Determine the shortest hierarchical prefix from this black box
         // instance to the tapped object.
         Optional<InstancePath> shortestPrefix;
@@ -451,12 +596,18 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   LLVM_DEBUG(llvm::dbgs() << "- Processing port " << portAnno.portNum
                           << " anno " << portAnno.anno.getDict() << "\n");
   auto key = getKey(portAnno.anno);
-  auto anno = annos.find(key)->second;
   auto portName = blackBox.extModule.portNames()[portAnno.portNum];
-  PortWiring wiring = {portAnno.portNum, {}, {}};
+  PortWiring wiring = {portAnno.portNum, {}, {}, {}};
+
+  // Lookup the sibling annotation no the target. This may not exist, e.g. in
+  // the case of a `LiteralDataTapKey`, in which use the annotation on the
+  // data tap module port again.
+  auto targetAnnoIt = annos.find(key);
+  auto targetAnno =
+      targetAnnoIt != annos.end() ? targetAnnoIt->second : portAnno.anno;
 
   // Handle data taps on signals and ports.
-  if (anno.isClass(referenceKeyClass)) {
+  if (targetAnno.isClass(referenceKeyClass)) {
     // Handle ports.
     if (auto port = tappedPorts.lookup(key)) {
       wiring.prefices = instancePaths.getAbsolutePaths(port.first);
@@ -505,25 +656,25 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     blackBox.extModule.emitOpError(
         "ReferenceDataTapKey annotation was not scattered to "
         "an operation: ")
-        << anno.getDict();
+        << targetAnno.getDict();
     signalPassFailure();
     return;
   }
 
   // Handle data taps on black boxes.
-  if (anno.isClass(internalKeyClass)) {
+  if (targetAnno.isClass(internalKeyClass)) {
     auto op = tappedOps.lookup(key);
     if (!op) {
       blackBox.extModule.emitOpError(
           "DataTapModuleSignalKey annotation was not scattered to "
           "an operation: ")
-          << anno.getDict();
+          << targetAnno.getDict();
       signalPassFailure();
       return;
     }
 
     // Extract the internal path we're supposed to append.
-    auto internalPath = anno.getMember<StringAttr>("internalPath");
+    auto internalPath = targetAnno.getMember<StringAttr>("internalPath");
     if (!internalPath) {
       blackBox.extModule.emitError("DataTapModuleSignalKey annotation on port ")
           << portName << " missing \"internalPath\" attribute";
@@ -538,22 +689,40 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   }
 
   // Handle data taps with literals.
-  if (anno.isClass(literalKeyClass)) {
-    blackBox.extModule.emitError(
-        "LiteralDataTapKey annotations not yet supported (on port ")
-        << portName << ")";
-    signalPassFailure();
+  if (targetAnno.isClass(literalKeyClass)) {
+    auto literal = portAnno.anno.getMember<StringAttr>("literal");
+    if (!literal) {
+      blackBox.extModule.emitError("LiteralDataTapKey annotation on port ")
+          << portName << " missing \"literal\" attribute";
+      signalPassFailure();
+      return;
+    }
+
+    // Parse the literal.
+    auto parsed =
+        parseIntegerLiteral(blackBox.extModule.getContext(), literal.getValue(),
+                            blackBox.extModule.getLoc());
+    if (failed(parsed)) {
+      blackBox.extModule.emitError("LiteralDataTapKey annotation on port ")
+          << portName << " has invalid literal \"" << literal.getValue()
+          << "\"";
+      signalPassFailure();
+      return;
+    }
+
+    wiring.literal = *parsed;
+    portWiring.push_back(std::move(wiring));
     return;
   }
 
   // Handle memory taps.
-  if (anno.isClass(memTapClass)) {
+  if (targetAnno.isClass(memTapClass)) {
     auto op = tappedOps.lookup(key);
     if (!op) {
       blackBox.extModule.emitOpError(
           "MemTapAnnotation annotation was not scattered to "
           "an operation: ")
-          << anno.getDict();
+          << targetAnno.getDict();
       signalPassFailure();
       return;
     }

@@ -34,10 +34,10 @@ sys.print()
 # CHECK:    %c3_i32 = hw.constant 3 : i32
 # CHECK:    %c4_i32 = hw.constant 4 : i32
 # CHECK:    %1 = hw.array_create %c4_i32, %c3_i32, %c2_i32, %c1_i32 : i32
-# CHECK:    %2 = seq.compreg %0, %clk {name = "foo__reg1"} : i32
-# CHECK:    %3 = seq.compreg %2, %clk {name = "foo__reg2"} : i32
-# CHECK:    %4 = hw.array_get %1[%sel] : !hw.array<4xi32>
-# CHECK:    hw.output %3, %4 : i32, i32
+# CHECK:    %foo__reg1 = seq.compreg %0, %clk : i32
+# CHECK:    %foo__reg2 = seq.compreg %foo__reg1, %clk : i32
+# CHECK:    [[REG4:%.+]] = hw.array_get %1[%sel] : !hw.array<4xi32>
+# CHECK:    hw.output %foo__reg2, [[REG4]] : i32, i32
 # CHECK:  }
 
 sys.print_verilog()

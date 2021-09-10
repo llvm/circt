@@ -11,16 +11,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
-#include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
-#include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 #include <variant>
 
@@ -29,8 +26,6 @@
 using namespace circt;
 using namespace firrtl;
 using llvm::Optional;
-using llvm::SmallString;
-using llvm::StringSwitch;
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
@@ -43,17 +38,20 @@ namespace {
 /// tombstone for an actually unsupported type (e.g., an AugmentedBooleanType).
 struct VerbatimType {
   /// The textual representation of the type.
-  SmallString<0> str;
+  std::string str;
 
   /// True if this is a type which must be "instatiated" and requires a trailing
   /// "()".
   bool instantiation;
 
+  /// True if this is a type which is unsupported and should be commented out.
+  bool unsupported;
+
   /// Serialize this type to a string.
-  std::string toStr() {
-    if (instantiation)
-      return (str + "();").str();
-    return (str + ";").str();
+  std::string toStr(StringRef name) {
+    return ((unsupported ? "// " : "") + Twine(name) + " " + str +
+            (instantiation ? "()" : "") + ";")
+        .str();
   }
 };
 
@@ -67,50 +65,58 @@ class CircuitNamespace {
   StringSet<> internal;
 
 public:
-  /// Construct a new namesapce from a circuit op.  This namespace will be
+  /// Construct a new namespace from a circuit op.  This namespace will be
   /// composed of any operation in the first level of the circuit that contains
   /// a symbol.
-  CircuitNamespace(Operation *op) {
-    op->walk([&](Operation *op) {
+  CircuitNamespace(CircuitOp circuit) {
+    for (Operation &op : *circuit.getBody())
       if (auto symbol =
-              op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
+              op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
         internal.insert(symbol.getValue());
-      return WalkResult::skip();
-    });
   }
 
-private:
-  SmallString<0> newNameImpl(StringRef name) {
+  /// Return a unique name, derived from the input `name`, and add the new name
+  /// to the internal namespace.  There are two possible outcomes for the
+  /// returned name:
+  ///
+  /// 1. The original name is returned.
+  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
+  ///    `_0` and incrementing by one each time.
+  std::string newName(StringRef name) {
     // Special case the situation where there is no name collision to avoid
     // messing with the SmallString allocation below.
     if (internal.insert(name).second)
-      return name;
+      return name.str();
     size_t i = 0;
-    SmallString<0> tryName;
+    llvm::SmallString<64> tryName;
     do {
       tryName = (name + "_" + Twine(i++)).str();
     } while (!internal.insert(tryName).second);
-    return tryName;
+    return std::string(tryName);
   }
 
-public:
-  /// Generate a new name and add it to the namespace.
-  SmallString<0> newName(StringRef name) { return newNameImpl(name); }
-
-  /// Generate a new name and add it to the namespace.
-  SmallString<0> newName(Twine name) { return newNameImpl(name.str()); }
+  /// Return a unique name, derived from the input `name`, and add the new name
+  /// to the internal namespace.  There are two possible outcomes for the
+  /// returned name:
+  ///
+  /// 1. The original name is returned.
+  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
+  ///    `_0` and incrementing by one each time.
+  std::string newName(const Twine &name) {
+    return newName((StringRef)name.str());
+  }
 };
 
 /// Stores the information content of an ExtractGrandCentralAnnotation.
 struct ExtractionInfo {
-  /// The directority where Grand Central generated collateral (modules,
+  /// The directory where Grand Central generated collateral (modules,
   /// interfaces, etc.) will be written.
-  StringRef directory;
+  StringAttr directory = {};
 
   /// The name of the file where any binds will be written.  This will be placed
   /// in the same output area as normal compilation output, e.g., output
   /// Verilog.  This has no relation to the `directory` member.
-  StringRef bindFilename;
+  StringAttr bindFilename = {};
 };
 
 /// Stores information about the companion module of a GrandCentral view.
@@ -176,8 +182,7 @@ private:
 
   StringAttr getOutputDirectory() {
     if (maybeExtractInfo.hasValue())
-      return StringAttr::get(&getContext(),
-                             maybeExtractInfo.getValue().directory);
+      return maybeExtractInfo.getValue().directory;
     return {};
   }
 
@@ -219,6 +224,23 @@ private:
   // other than flooding their terminal.
   InFlightDiagnostic emitCircuitError(StringRef message = {}) {
     return emitError(getOperation().getLoc(), "'firrtl.circuit' op " + message);
+  }
+
+  // Insert comment delimiters ("// ") after newlines in the description string.
+  // This is necessary to prevent introducing invalid verbatim Verilog.
+  //
+  // TODO: Add a comment op and lower the description to that.
+  // TODO: Tracking issue: https://github.com/llvm/circt/issues/1677
+  std::string cleanupDescription(StringRef description) {
+    StringRef head;
+    SmallString<64> out;
+    do {
+      std::tie(head, description) = description.split("\n");
+      out.append(head);
+      if (!description.empty())
+        out.append("\n// ");
+    } while (!description.empty());
+    return std::string(out);
   }
 };
 
@@ -305,9 +327,11 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
             instancePaths->getAbsolutePaths(getEnclosingModule(leafValue));
         assert(srcPaths.size() == 1 &&
                "Unable to handle multiply instantiated companions");
-        SmallString<0> srcRef;
-        for (auto path : srcPaths[0])
-          srcRef.append((path.name() + ".").str());
+        llvm::SmallString<128> srcRef;
+        for (auto path : srcPaths[0]) {
+          srcRef.append(path.name());
+          srcRef.append(".");
+        }
 
         auto uloc = builder.getUnknownLoc();
         if (auto blockArg = leafValue.dyn_cast<BlockArgument>()) {
@@ -319,14 +343,14 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
                             .cast<StringAttr>()
                             .getValue() +
                         ";");
-        } else
-          builder.create<sv::VerbatimOp>(uloc, "assign " + path + " = " +
-                                                   srcRef +
-                                                   leafValue.getDefiningOp()
-                                                       ->getAttr("name")
-                                                       .cast<StringAttr>()
-                                                       .getValue() +
-                                                   ";");
+        } else {
+          auto leafModuleName = leafValue.getDefiningOp()
+                                    ->getAttr("name")
+                                    .cast<StringAttr>()
+                                    .getValue();
+          builder.create<sv::VerbatimOp>(
+              uloc, "assign " + path + " = " + srcRef + leafModuleName + ";");
+        }
         return true;
       })
       .Case<AugmentedVectorTypeAttr>([&](auto vector) {
@@ -370,9 +394,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
 
   auto unsupported = [&](StringRef name, StringRef kind) {
     return VerbatimType(
-        {SmallString<0>(
-             ("// " + name + " = <unsupported " + kind + " type>").str()),
-         false});
+        {(" = <unsupported " + kind + " type>").str(), false, true});
   };
 
   return TypeSwitch<Attribute, Optional<TypeSum>>(field)
@@ -423,10 +445,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             auto iface = traverseBundle(bundle, id, path);
             assert(iface && iface.getValue());
             return VerbatimType(
-                {SmallString<0>((iface.getValue().getName() + " " +
-                                 bundle.getDefName().getValue())
-                                    .str()),
-                 true});
+                {(bundle.getDefName().getValue()).str(), true, false});
           })
       .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
         return unsupported(field.getName().getValue(), "string");
@@ -488,13 +507,11 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
     auto uloc = builder.getUnknownLoc();
     auto description =
         element.cast<DictionaryAttr>().getAs<StringAttr>("description");
-    if (description) {
-      SmallString<0> formattedDescription;
-      builder.create<sv::VerbatimOp>(uloc,
-                                     ("// " + description.getValue()).str());
-    }
+    if (description)
+      builder.create<sv::VerbatimOp>(
+          uloc, ("// " + cleanupDescription(description.getValue())));
     if (auto *str = std::get_if<VerbatimType>(&elementType.getValue())) {
-      builder.create<sv::VerbatimOp>(uloc, str->toStr());
+      builder.create<sv::VerbatimOp>(uloc, str->toStr(name.getValue()));
       continue;
     }
 
@@ -549,8 +566,8 @@ void GrandCentralPass::runOnOperation() {
         return false;
       }
 
-      auto directory = anno.getMember<StringAttr>("directory"),
-           filename = anno.getMember<StringAttr>("filename");
+      auto directory = anno.getMember<StringAttr>("directory");
+      auto filename = anno.getMember<StringAttr>("filename");
       if (!directory || !filename) {
         emitCircuitError()
             << "contained an invalid 'ExtractGrandCentralAnnotation' that does "
@@ -560,7 +577,7 @@ void GrandCentralPass::runOnOperation() {
         return false;
       }
 
-      maybeExtractInfo = {directory.getValue(), filename.getValue()};
+      maybeExtractInfo = {directory, filename};
       // Intentional fallthrough.  Extraction info may be needed later.
     }
     return false;
@@ -612,27 +629,21 @@ void GrandCentralPass::runOnOperation() {
   auto exactlyOneInstance = [&](FModuleOp op,
                                 StringRef msg) -> Optional<InstanceOp> {
     auto instances = getSymbolTable().getSymbolUses(op, circuitOp);
-    size_t numInstances;
-    if (!instances.hasValue())
-      numInstances = 0;
-    else
-      numInstances = std::distance(instances.getValue().begin(),
-                                   instances.getValue().end());
-    if (numInstances == 0) {
+    if (!instances.hasValue()) {
       op->emitOpError() << "is marked as a GrandCentral '" << msg
                         << "', but is never instantiated";
       return None;
     }
-    if (numInstances > 1) {
-      auto diag = op->emitOpError()
-                  << "is marked as a GrandCentral '" << msg
-                  << "', but it is instantiated more than once";
-      for (auto instance : instances.getValue())
-        diag.attachNote(instance.getUser()->getLoc())
-            << "parent is instantiated here";
-      return None;
-    }
-    return cast<InstanceOp>((*(instances.getValue().begin())).getUser());
+
+    if (llvm::hasSingleElement(instances.getValue()))
+      return cast<InstanceOp>((*(instances.getValue().begin())).getUser());
+
+    auto diag = op->emitOpError() << "is marked as a GrandCentral '" << msg
+                                  << "', but it is instantiated more than once";
+    for (auto instance : instances.getValue())
+      diag.attachNote(instance.getUser()->getLoc())
+          << "parent is instantiated here";
+    return None;
   };
 
   /// Walk the circuit and extract all information related to scattered
@@ -641,6 +652,7 @@ void GrandCentralPass::runOnOperation() {
   /// Annotations are removed as they are discovered and if they are not
   /// malformed.
   removalError = false;
+  auto trueAttr = builder.getBoolAttr(true);
   circuitOp.walk([&](Operation *op) {
     TypeSwitch<Operation *>(op)
         .Case<RegOp, RegResetOp, WireOp, NodeOp>([&](auto op) {
@@ -651,7 +663,7 @@ void GrandCentralPass::runOnOperation() {
             auto maybeID = getID(op, annotation);
             if (!maybeID)
               return false;
-            leafMap.insert({maybeID.getValue(), op.getResult()});
+            leafMap[maybeID.getValue()] = op.getResult();
             return true;
           });
         })
@@ -705,7 +717,7 @@ void GrandCentralPass::runOnOperation() {
                 auto maybeID = getID(op, annotation);
                 if (!maybeID)
                   return false;
-                leafMap.insert({maybeID.getValue(), op.getArgument(i)});
+                leafMap[maybeID.getValue()] = op.getArgument(i);
 
                 return true;
               });
@@ -715,8 +727,8 @@ void GrandCentralPass::runOnOperation() {
             if (!annotation.isClass(
                     "sifive.enterprise.grandcentral.ViewAnnotation"))
               return false;
-            auto tpe = annotation.getMember<StringAttr>("type"),
-                 name = annotation.getMember<StringAttr>("name");
+            auto tpe = annotation.getMember<StringAttr>("type");
+            auto name = annotation.getMember<StringAttr>("name");
             auto id = annotation.getMember<IntegerAttr>("id");
             if (!tpe) {
               op.emitOpError()
@@ -755,15 +767,15 @@ void GrandCentralPass::runOnOperation() {
                   getNamespace().newName(name.getValue() + "_mapping");
               auto mapping = builder.create<FModuleOp>(
                   circuitOp.getLoc(), builder.getStringAttr(mappingName),
-                  SmallVector<ModulePortInfo>({}));
+                  ArrayRef<ModulePortInfo>());
               auto *ctx = builder.getContext();
               mapping->setAttr(
                   "output_file",
                   hw::OutputFileAttr::get(
                       getOutputDirectory(),
-                      StringAttr::get(ctx, mapping.getName() + ".sv"),
-                      BoolAttr::get(ctx, true), BoolAttr::get(ctx, true), ctx));
-              companionIDMap.insert({id, {name.getValue(), op, mapping}});
+                      builder.getStringAttr(mapping.getName() + ".sv"),
+                      trueAttr, trueAttr, ctx));
+              companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.
               builder.setInsertionPointToEnd(op.getBodyBlock());
@@ -781,27 +793,17 @@ void GrandCentralPass::runOnOperation() {
               if (!maybeExtractInfo)
                 return true;
 
-              instance.getValue()->setAttr("lowerToBind",
-                                           BoolAttr::get(ctx, true));
+              instance.getValue()->setAttr("lowerToBind", trueAttr);
               instance.getValue()->setAttr(
-                  "output_file",
-                  hw::OutputFileAttr::get(
-                      StringAttr::get(ctx, ""),
-                      StringAttr::get(ctx,
-                                      maybeExtractInfo.getValue().bindFilename),
-                      /*exclude_from_filelist=*/
-                      BoolAttr::get(ctx, true),
-                      /*exclude_replicated_ops=*/
-                      BoolAttr::get(ctx, true), ctx));
+                  "output_file", hw::OutputFileAttr::get(
+                                     builder.getStringAttr(""),
+                                     maybeExtractInfo.getValue().bindFilename,
+                                     trueAttr, trueAttr, ctx));
               op->setAttr("output_file",
                           hw::OutputFileAttr::get(
-                              StringAttr::get(
-                                  ctx, maybeExtractInfo.getValue().directory),
-                              StringAttr::get(ctx, op.getName() + ".sv"),
-                              /*exclude_from_filelist=*/
-                              BoolAttr::get(ctx, true),
-                              /*exclude_replicated_ops=*/
-                              BoolAttr::get(ctx, true), ctx));
+                              maybeExtractInfo.getValue().directory,
+                              builder.getStringAttr(op.getName() + ".sv"),
+                              trueAttr, trueAttr, ctx));
               return true;
             }
 
@@ -813,8 +815,7 @@ void GrandCentralPass::runOnOperation() {
               if (!instance)
                 return false;
 
-              parentIDMap.insert(
-                  {id, {instance.getValue(), cast<FModuleOp>(op)}});
+              parentIDMap[id] = {instance.getValue(), cast<FModuleOp>(op)};
               return true;
             }
 
@@ -957,8 +958,8 @@ void GrandCentralPass::runOnOperation() {
     builder.setInsertionPointToEnd(
         parentIDMap.lookup(bundle.getID()).second.getBodyBlock());
     auto symbolName = getNamespace().newName(
-        ("__" + companionIDMap.lookup(bundle.getID()).name + "_" +
-         bundle.getDefName().getValue() + "__"));
+        "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
+        bundle.getDefName().getValue() + "__");
     auto instance = builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), iface.getValue().getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
@@ -969,20 +970,17 @@ void GrandCentralPass::runOnOperation() {
     if (!maybeExtractInfo)
       continue;
 
-    instance->setAttr("doNotPrint", builder.getBoolAttr(true));
+    instance->setAttr("doNotPrint", trueAttr);
     builder.setInsertionPointToStart(
         instance->getParentOfType<ModuleOp>().getBody());
     auto bind = builder.create<sv::BindInterfaceOp>(
         getOperation().getLoc(),
         SymbolRefAttr::get(builder.getContext(),
                            instance.sym_name().getValue()));
-    bind->setAttr(
-        "output_file",
-        hw::OutputFileAttr::get(
-            builder.getStringAttr(""),
-            builder.getStringAttr(maybeExtractInfo.getValue().bindFilename),
-            builder.getBoolAttr(true), builder.getBoolAttr(true),
-            bind.getContext()));
+    bind->setAttr("output_file", hw::OutputFileAttr::get(
+                                     builder.getStringAttr(""),
+                                     maybeExtractInfo.getValue().bindFilename,
+                                     trueAttr, trueAttr, bind.getContext()));
   }
 
   // Signal pass failure if any errors were found while examining circuit

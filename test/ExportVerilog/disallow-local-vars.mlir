@@ -93,3 +93,26 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
 
   hw.output
 }
+
+// CHECK-LABEL: module always_inline_expr
+// DISALLOW-LABEL: module always_inline_expr
+// https://github.com/llvm/circt/issues/1705
+hw.module @always_inline_expr(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1, %wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i1, %wo_mask_0: i1, %wo_data_0: i5) -> (%ro_data_0: i5) {
+  %Memory = sv.reg  : !hw.inout<uarray<2xi5>>
+  %0 = sv.array_index_inout %Memory[%ro_addr_0] : !hw.inout<uarray<2xi5>>, i1
+  %1 = sv.read_inout %0 : !hw.inout<i5>
+  %x_i5 = sv.constantX : i5
+  %2 = comb.mux %ro_en_0, %1, %x_i5 : i5
+  sv.alwaysff(posedge %wo_clock_0)  {
+    %3 = comb.and %wo_en_0, %wo_mask_0 : i1
+    // CHECK: if (wo_en_0 & wo_mask_0)
+    // DISALLOW: if (_T)
+    sv.if %3  {
+      // CHECK: Memory[wo_addr_0] <= wo_data_0;
+      // DISALLOW: Memory[wo_addr_0] <= wo_data_0;
+      %4 = sv.array_index_inout %Memory[%wo_addr_0] : !hw.inout<uarray<2xi5>>, i1
+      sv.passign %4, %wo_data_0 : i5
+    }
+  }
+  hw.output %2 : i5
+}

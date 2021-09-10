@@ -170,7 +170,7 @@ public:
     // coverage.
     auto ref = op.getReferencedModule();
     for (auto result : llvm::enumerate(op.results()))
-      if (ref.getPortDirection(result.index()) == Direction::Output)
+      if (ref.getPortDirection(result.index()) == Direction::Out)
         declareSinks(result.value(), Flow::Source);
       else
         declareSinks(result.value(), Flow::Sink);
@@ -422,7 +422,7 @@ private:
 mlir::FailureOr<bool> ModuleVisitor::run(FModuleOp module) {
   // Track any results (flipped arguments) of the module for init coverage.
   for (auto it : llvm::enumerate(module.getArguments())) {
-    auto flow = module.getPortDirection(it.index()) == Direction::Input
+    auto flow = module.getPortDirection(it.index()) == Direction::In
                     ? Flow::Source
                     : Flow::Sink;
     declareSinks(it.value(), flow);
