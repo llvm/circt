@@ -369,6 +369,27 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.cover.concurrent  posedge %clock %4 {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} : i1
     // CHECK-NEXT: %5 = comb.and %cEn, %cCond : i1
     // CHECK-NEXT: sv.cover.concurrent "cover_0" posedge %clock %5 {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} : i1
+    firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true}
+    firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true, name = "assert_0"}
+    firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true}
+    firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true, name = "assume_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
+    firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
+
+    // CHECK-NEXT: sv.always posedge %clock {
+    // CHECK-NEXT:   sv.if %aEn {
+    // CHECK-NEXT:     sv.assert {output_file = {directory = "dir3", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir3/filename3"}} %aCond : i1
+    // CHECK-NEXT:     sv.assert "assert_0" {output_file = {directory = "dir3", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir3/filename3"}} %aCond : i1
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.if %bEn {
+    // CHECK-NEXT:     sv.assume {output_file = {directory = "dir1", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir1/filename1"}} %bCond : i1
+    // CHECK-NEXT:     sv.assume "assume_0" {output_file = {directory = "dir1", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir1/filename1"}} %bCond : i1
+    // CHECK-NEXT:   }
+    // CHECK-NEXT:   sv.if %cEn {
+    // CHECK-NEXT:     sv.cover {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} %cCond : i1
+    // CHECK-NEXT:     sv.cover "cover_0" {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} %cCond : i1
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
     firrtl.assert %clock, %aCond, %aEn, "assert0" {name = "assert_0"}
     firrtl.assume %clock, %bCond, %bEn, "assume0"

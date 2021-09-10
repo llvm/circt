@@ -103,7 +103,8 @@ def AssertOp : FIRRTLOp<"assert"> {
   let summary = "Assert Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message, StrAttr:$name);
+    StrAttr:$message, StrAttr:$name, DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
+    DefaultValuedAttr<StrAttr,"AtPosEdge">:$eventControl);
   let results = (outs);
 
   let assemblyFormat =
@@ -114,7 +115,8 @@ def AssumeOp : FIRRTLOp<"assume"> {
   let summary = "Assume Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message, StrAttr:$name);
+    StrAttr:$message, StrAttr:$name, DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
+    DefaultValuedAttr<StrAttr,"AtPosEdge">:$eventControl);
   let results = (outs);
 
   let assemblyFormat =
@@ -125,7 +127,8 @@ def CoverOp : FIRRTLOp<"cover"> {
   let summary = "Cover Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message, StrAttr:$name);
+    StrAttr:$message, StrAttr:$name, DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
+    DefaultValuedAttr<StrAttr,"AtPosEdge">:$eventControl);
   let results = (outs);
 
   let assemblyFormat =

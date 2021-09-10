@@ -325,7 +325,7 @@ void SVExtractTestCodeImplPass::runOnOperation() {
         return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
       };
       auto isCover = [](Operation *op) -> bool {
-        return isa<CoverOp>(op) || isa<AssertConcurrentOp>(op);
+        return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
       };
 
       doModule(rtlmod, isAssert, "_assert");
