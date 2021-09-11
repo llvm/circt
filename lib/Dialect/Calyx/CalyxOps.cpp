@@ -233,7 +233,8 @@ static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
   LogicalResult verifyWrites =
       TypeSwitch<Operation *, LogicalResult>(destCell)
           .Case<RegisterOp>([&](auto op) {
-            // We only want to verify this is written to if
+            // We only want to verify this is written to if the {write enable,
+            // in} port is driven.
             return succeeded(anyPortsDrivenByGroup(
                        {op.writeEnPort(), op.inPort()}, group))
                        ? allPortsDrivenByGroup({op.writeEnPort(), op.inPort()},
