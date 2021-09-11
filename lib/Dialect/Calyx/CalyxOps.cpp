@@ -83,14 +83,11 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 /// %and = comb.and %a, %b : i1
 /// calyx.assign %port = %and, %c1_i1 ? : i1   // Incorrect
 /// calyx.assign %port = %c1_i1, %and ? : i1   // Correct
-///
-static LogicalResult verifyNotComplexSource(Operation *op, Value source) {
-  assert((isa<AssignOp, GroupGoOp, GroupDoneOp>(op)) &&
-         "This verification only applies to a subset of Calyx operations");
-
-  Operation *definingOp = source.getDefiningOp();
+template <typename Op>
+static LogicalResult verifyNotComplexSource(Op op) {
+  Operation *definingOp = op.src().getDefiningOp();
   if (definingOp == nullptr)
-    // This is a port of the component.
+    // This is a port of the parent component.
     return success();
 
   if (isa<comb::XorOp, comb::AndOp, comb::OrOp>(definingOp))
@@ -696,7 +693,7 @@ static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
     return op->emitOpError(
         "has an invalid destination port. It must be drive-able.");
   else if (isSource)
-    return verifyNotComplexSource(op, value);
+    return verifyNotComplexSource(op);
 
   return success();
 }
@@ -796,7 +793,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verifyGroupGoOp(GroupGoOp goOp) {
-  return verifyNotComplexSource(goOp, goOp.src());
+  return verifyNotComplexSource(goOp);
 }
 
 /// Provide meaningful names to the result value of a GroupGoOp.
@@ -818,7 +815,7 @@ static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
   bool noGuard = (guardOp == nullptr);
 
   if (srcOp == nullptr)
-    // This is a block argument.
+    // This is a port of the parent component.
     return success();
 
   if (isa<hw::ConstantOp>(srcOp) && (noGuard || isa<hw::ConstantOp>(guardOp)))
@@ -826,7 +823,7 @@ static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
            << "with constant source" << (noGuard ? "" : " and constant guard")
            << ". This should be a combinational group.";
 
-  return verifyNotComplexSource(doneOp, doneOp.src());
+  return verifyNotComplexSource(doneOp);
 }
 
 //===----------------------------------------------------------------------===//
