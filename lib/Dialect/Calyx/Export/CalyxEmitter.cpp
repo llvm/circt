@@ -105,7 +105,6 @@ private:
         });
     return library;
   }
-
   /// Maintains a unique list of libraries used throughout the lifetime of the
   /// tracker.
   llvm::SmallSet<StringRef, 4> usedLibraries;
@@ -542,10 +541,11 @@ void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
 
 void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
   auto cell = cast<CellInterface>(op);
-  unsigned bitwidth = cell.inputPorts()[0].getType().getIntOrFloatBitWidth();
+  unsigned bitWidth = cell.getInputPorts()[0].getType().getIntOrFloatBitWidth();
+  StringRef opName = op->getName().getStringRef();
   indent() << getAttributes(op) << cell.instanceName() << space() << equals()
-           << space() << removeCalyxPrefix(op->getName().getStringRef())
-           << LParen() << bitwidth << RParen() << semicolonEndL();
+           << space() << removeCalyxPrefix(opName) << LParen() << bitWidth
+           << RParen() << semicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {
@@ -590,9 +590,9 @@ void Emitter::emitGroup(GroupInterface group) {
     }
   };
 
-  Twine prefix = Twine(isa<CombGroupOp>(group) ? "comb " : "") + "group";
-  Twine groupHeader = Twine(group.symName().getValue()) + getAttributes(group);
-  emitCalyxSection(prefix.str(), emitGroupBody, groupHeader.str());
+  StringRef prefix = isa<CombGroupOp>(group) ? "comb group" : "group";
+  auto groupHeader = (group.symName().getValue() + getAttributes(group)).str();
+  emitCalyxSection(prefix, emitGroupBody, groupHeader);
 }
 
 void Emitter::emitEnable(EnableOp enable) {

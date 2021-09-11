@@ -142,7 +142,7 @@ static LogicalResult verifyControlBody(Operation *op) {
   return success();
 }
 
-static LogicalResult allPortsDrivenByGroup(ValueRange ports,
+static LogicalResult anyPortsDrivenByGroup(ValueRange ports,
                                            GroupInterface groupOp);
 
 /// Checks whether @p port is driven from within @p groupOp.
@@ -157,15 +157,56 @@ static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
     }
   }
 
-  // If @p port is an output of a cell then we conservatively enforce that all
-  // (and at least one) non-interface inputs of the cell must be driven by the
-  // group.
+  // If @p port is an output of a cell then we conservatively enforce that at
+  // least one input port of the cell must be driven by the group.
   if (auto cell = dyn_cast<CellInterface>(port.getDefiningOp());
       cell && cell.direction(port) == calyx::Direction::Output)
-    return allPortsDrivenByGroup(
-        cell.filterInterfacePorts(calyx::Direction::Input), groupOp);
+    return anyPortsDrivenByGroup(cell.getInputPorts(), groupOp);
 
   return failure();
+}
+
+/// xxx
+static bool portIsUsedInGroup(Value port, GroupInterface group, bool isDriven) {
+  return llvm::any_of(port.getUses(), [&](auto &&use) {
+    auto assignOp = dyn_cast<AssignOp>(use.getOwner());
+    if (assignOp == nullptr)
+      return false;
+
+    Operation *parent = assignOp->getParentOp();
+    if (isa<WiresOp>(parent))
+      // This is a continuous assignment.
+      return false;
+
+    // A port is used if it meet the criteria:
+    // (1) it is a {source, destination} of an assignment.
+    // (2) that assignment is found in the provided group.
+
+    // If not driven, then read.
+    Value expected = isDriven ? assignOp.dest() : assignOp.src();
+    return expected == port && group == parent;
+  });
+}
+
+static LogicalResult allPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface group) {
+  return success(llvm::all_of(ports, [&](auto port) {
+    return portIsUsedInGroup(port, group, /*isDriven=*/true);
+  }));
+}
+
+static LogicalResult anyPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface group) {
+  return success(llvm::any_of(ports, [&](auto port) {
+    return portIsUsedInGroup(port, group, /*isDriven=*/true);
+  }));
+}
+
+static LogicalResult anyPortsReadByGroup(ValueRange ports,
+                                         GroupInterface group) {
+  return success(llvm::any_of(ports, [&](auto port) {
+    return portIsUsedInGroup(port, group, /*isDriven=*/false);
+  }));
 }
 
 LogicalResult calyx::verifyCell(Operation *op) {
@@ -423,8 +464,8 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   if (parseComponentSignature(parser, result, ports, portTypes))
     return failure();
 
-  // Build the component's type for FunctionLike trait. All ports are listed as
-  // arguments so they may be accessed within the component.
+  // Build the component's type for FunctionLike trait. All ports are listed
+  // as arguments so they may be accessed within the component.
   auto type =
       parser.getBuilder().getFunctionType(portTypes, /*resultTypes=*/{});
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
@@ -601,48 +642,130 @@ GroupDoneOp GroupOp::getDoneOp() {
   return cast<GroupDoneOp>(body->getTerminator());
 }
 
-/// Function that is being used for verifyGroupOp !
-static LogicalResult allPortsDrivenByGroup(ValueRange ports,
-                                           GroupInterface group) {
-  assert(group != nullptr);
-  auto portIsDriven = [&](Value port) {
-    return llvm::any_of(port.getUses(), [&](auto &&use) {
-      auto assignOp = dyn_cast<AssignOp>(use.getOwner());
-      if (assignOp == nullptr)
-        return false;
+/// Verifies that certain ports of primitives are either driven or read
+/// together.
+static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
+                                                GroupInterface group) {
+  Operation *destDefiningOp = assign.dest().getDefiningOp();
+  if (destDefiningOp == nullptr)
+    return success();
+  auto destCell = dyn_cast<CellInterface>(destDefiningOp);
+  if (destCell == nullptr)
+    return success();
 
-      Operation *parent = assignOp->getParentOp();
-      if (isa<WiresOp>(parent))
-        // This is a continuous assignment.
-        return false;
+  LogicalResult verifyWrites =
+      TypeSwitch<Operation *, LogicalResult>(destCell)
+          .Case<RegisterOp>([&](auto op) {
+            // We only want to verify this is written to if
+            return succeeded(anyPortsDrivenByGroup(
+                       {op.writeEnPort(), op.inPort()}, group))
+                       ? allPortsDrivenByGroup({op.writeEnPort(), op.inPort()},
+                                               group)
+                       : success();
+          })
+          .Case<MemoryOp>([&](auto op) {
+            SmallVector<Value> requiredWritePorts;
+            // If writing to memory, write_en, write_data, and all address ports
+            // should be driven.
+            requiredWritePorts.push_back(op.writeEn());
+            requiredWritePorts.push_back(op.writeData());
+            for (Value address : op.addrPorts())
+              requiredWritePorts.push_back(address);
 
-      // A port is driven if any of the following uses meet the criteria
-      // (1) it is a destination of an assignment.
-      // (2) that assignment is found in the provided group.
-      return assignOp.dest() == port && group == parent;
-    });
-  };
+            // We only want to verify the write ports if either write_data or
+            // write_en is driven.
+            return succeeded(anyPortsDrivenByGroup(
+                       {op.writeData(), op.writeEn()}, group))
+                       ? allPortsDrivenByGroup(requiredWritePorts, group)
+                       : success();
+          })
+          .Case<AndLibOp, OrLibOp, XorLibOp, AddLibOp, SubLibOp, GtLibOp,
+                LtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, LshLibOp,
+                RshLibOp, SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp,
+                SleLibOp, SrshLibOp>([&](auto op) {
+            Value lhs = op.lhsPort(), rhs = op.rhsPort();
+            return succeeded(anyPortsDrivenByGroup({lhs, rhs}, group))
+                       ? allPortsDrivenByGroup({lhs, rhs}, group)
+                       : success();
+          })
+          .Default([&](auto op) { return success(); });
 
-  return success(
-      llvm::all_of(ports, [&](auto port) { return portIsDriven(port); }));
+  if (failed(verifyWrites))
+    return group->emitOpError()
+           << "with cell: " << destCell->getName() << " \""
+           << destCell.instanceName()
+           << "\" is performing a write and failed to drive all necessary "
+              "ports.";
+
+  Operation *srcDefiningOp = assign.src().getDefiningOp();
+  if (srcDefiningOp == nullptr)
+    return success();
+  auto srcCell = dyn_cast<CellInterface>(srcDefiningOp);
+  if (srcCell == nullptr)
+    return success();
+
+  LogicalResult verifyReads =
+      TypeSwitch<Operation *, LogicalResult>(srcCell)
+          .Case<MemoryOp>([&](auto op) {
+            // If reading memory, all address ports should be driven. Note that
+            // we only want to verify the read ports if read_data is used in the
+            // group.
+            return succeeded(anyPortsReadByGroup({op.readData()}, group))
+                       ? allPortsDrivenByGroup(op.addrPorts(), group)
+                       : success();
+          })
+          .Default([&](auto op) { return success(); });
+
+  if (failed(verifyReads))
+    return group->emitOpError() << "with cell: " << srcCell->getName() << " \""
+                                << srcCell.instanceName()
+                                << "\" is having a read performed upon it, and "
+                                   "failed to drive all necessary ports.";
+
+  return success();
 }
 
-LogicalResult verifyGroupOp(GroupOp group) {
+/// Verifies a combinational group may contain only combinational primitives.
+// TODO(www.github.com/llvm/circt/issues/1739): Add Combinational trait.
+static LogicalResult verifyCombGroupOp(CombGroupOp group) {
+  auto isCombinational = [&](Value value) -> LogicalResult {
+    Operation *definingOp = value.getDefiningOp();
+    if (definingOp == nullptr)
+      return success();
+
+    if (auto cell = dyn_cast<CellInterface>(definingOp);
+        cell && isa<MemoryOp, RegisterOp>(cell))
+      // For now, assumes all component instances may be combinational. Once
+      // combinational components are supported, this can be changed.
+      return group->emitOpError()
+             << "with cell: " << cell->getName() << " \"" << cell.instanceName()
+             << "\", which is not combinational.";
+
+    return success();
+  };
+
+  for (auto &&op : *group.getBody()) {
+    auto assign = dyn_cast<AssignOp>(op);
+    if (assign == nullptr)
+      continue;
+    Value dst = assign.dest(), src = assign.src();
+    if (failed(isCombinational(dst)) || failed(isCombinational(src)))
+      return failure();
+  }
+  return success();
+}
+
+LogicalResult calyx::verifyGroupInterface(Operation *op) {
+  auto group = dyn_cast<GroupInterface>(op);
+  if (group == nullptr)
+    return success();
+
   for (auto &&groupOp : *group.getBody()) {
     auto assign = dyn_cast<AssignOp>(groupOp);
     if (assign == nullptr)
       continue;
-    Operation *destOp = assign.dest().getDefiningOp();
-    LogicalResult verifyWrites =
-        TypeSwitch<Operation *, LogicalResult>(destOp)
-            .Case<RegisterOp>([&](auto op) {
-              auto writeTogether = {op.writeEnPort(), op.inPort()};
-              return allPortsDrivenByGroup(writeTogether, group);
-            })
-            .Default([&](auto op) { return success(); });
-
-    if (failed(verifyWrites))
-      return group->emitOpError("...but did it?");
+    if (failed(verifyPrimitivePortDriving(assign, group)))
+      return failure();
   }
 
   return success();
@@ -757,6 +880,13 @@ SmallVector<Direction> InstanceOp::portDirections() {
   return portDirections;
 }
 
+SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  for (const PortInfo &port : getReferencedComponent().getPortInfo())
+    portAttributes.push_back(port.attributes);
+  return portAttributes;
+}
+
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
   if (instance.componentName() == "main")
     return instance.emitOpError("cannot reference the entry point.");
@@ -826,6 +956,24 @@ SmallVector<Direction> RegisterOp::portDirections() {
   return {Input, Input, Input, Input, Output, Output};
 }
 
+SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
+  MLIRContext *context = getContext();
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList writeEn, clk, reset, done;
+  writeEn.append("go", isSet);
+  clk.append("clk", isSet);
+  reset.append("reset", isSet);
+  done.append("done", isSet);
+  return {
+      DictionaryAttr(),               // In
+      writeEn.getDictionary(context), // Write enable
+      clk.getDictionary(context),     // Clk
+      reset.getDictionary(context),   // Reset
+      DictionaryAttr(),               // Out
+      done.getDictionary(context)     // Done
+  };
+}
+
 //===----------------------------------------------------------------------===//
 // MemoryOp
 //===----------------------------------------------------------------------===//
@@ -852,6 +1000,27 @@ SmallVector<Direction> MemoryOp::portDirections() {
     portDirections.push_back(Input);
   portDirections.append({Input, Input, Input, Output, Output});
   return portDirections;
+}
+
+SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  MLIRContext *context = getContext();
+  for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
+    portAttributes.push_back(DictionaryAttr()); // Addresses
+
+  // Use a boolean to indicate this attribute is used.
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList writeEn, clk, reset, done;
+  writeEn.append("go", isSet);
+  clk.append("clk", isSet);
+  done.append("done", isSet);
+  portAttributes.append({DictionaryAttr(),               // In
+                         writeEn.getDictionary(context), // Write enable
+                         clk.getDictionary(context),     // Clk
+                         DictionaryAttr(),               // Out
+                         done.getDictionary(context)}    // Done
+  );
+  return portAttributes;
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
@@ -950,7 +1119,7 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
 
   if (failed(portDrivenByGroup(ifOp.cond(), groupOp)))
     return ifOp.emitError()
-           << "conditional op: '" << valueName(component, ifOp.cond())
+           << "with conditional op: '" << valueName(component, ifOp.cond())
            << "' expected to be driven from group: '" << groupName
            << "' but no driver was found.";
 
@@ -998,6 +1167,9 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 #define ImplUnaryOpCellInterface(OpType)                                       \
   SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
   SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
+  SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
+    return {DictionaryAttr(), DictionaryAttr()};                               \
+  }                                                                            \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }
@@ -1011,6 +1183,9 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
   }                                                                            \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }                                                                            \
+  SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
+    return {DictionaryAttr(), DictionaryAttr(), DictionaryAttr()};             \
   }
 
 // clang-format off
