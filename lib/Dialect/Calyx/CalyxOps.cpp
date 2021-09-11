@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -76,8 +78,30 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
-// Convenience function for getting the SSA name of @p v under the scope of
-// operation @p scopeOp
+/// Verify that the value is not a "complex" value. For example, the source
+/// of an AssignOp should be a constant or port, e.g.
+/// %and = comb.and %a, %b : i1
+/// calyx.assign %port = %and, %c1_i1 ? : i1   // Incorrect
+/// calyx.assign %port = %c1_i1, %and ? : i1   // Correct
+///
+static LogicalResult verifyNotComplexSource(Operation *op, Value source) {
+  assert((isa<AssignOp, GroupGoOp, GroupDoneOp>(op)) &&
+         "This verification only applies to a subset of Calyx operations");
+
+  Operation *definingOp = source.getDefiningOp();
+  if (definingOp == nullptr)
+    // This is a port of the component.
+    return success();
+
+  if (isa<comb::XorOp, comb::AndOp, comb::OrOp>(definingOp))
+    return op->emitOpError("has source that is not a port or constant. "
+                           "Complex logic should be conducted in the guard.");
+
+  return success();
+}
+
+/// Convenience function for getting the SSA name of @p v under the scope of
+/// operation @p scopeOp
 static std::string valueName(Operation *scopeOp, Value v) {
   std::string s;
   llvm::raw_string_ostream os(s);
@@ -662,6 +686,7 @@ static LogicalResult verifyPortDirection(AssignOp op, Value value,
 /// `isDestination` is used to distinguish whether the destination
 /// or source of the AssignOp is to be verified.
 static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
+  bool isSource = !isDestination;
   Value value = isDestination ? op.dest() : op.src();
   if (isPort(value))
     return verifyPortDirection(op, value, isDestination);
@@ -670,6 +695,8 @@ static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
   if (isDestination && !isa<GroupGoOp, GroupDoneOp>(value.getDefiningOp()))
     return op->emitOpError(
         "has an invalid destination port. It must be drive-able.");
+  else if (isSource)
+    return verifyNotComplexSource(op, value);
 
   return success();
 }
@@ -768,12 +795,38 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
 // GroupGoOp
 //===----------------------------------------------------------------------===//
 
+static LogicalResult verifyGroupGoOp(GroupGoOp goOp) {
+  return verifyNotComplexSource(goOp, goOp.src());
+}
+
 /// Provide meaningful names to the result value of a GroupGoOp.
 void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto parent = (*this)->getParentOfType<GroupOp>();
   auto name = parent.sym_name();
   std::string resultName = name.str() + ".go";
   setNameFn(getResult(), resultName);
+}
+
+//===----------------------------------------------------------------------===//
+// GroupDoneOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
+  Operation *srcOp = doneOp.src().getDefiningOp();
+  Value optionalGuard = doneOp.guard();
+  Operation *guardOp = optionalGuard ? optionalGuard.getDefiningOp() : nullptr;
+  bool noGuard = (guardOp == nullptr);
+
+  if (srcOp == nullptr)
+    // This is a block argument.
+    return success();
+
+  if (isa<hw::ConstantOp>(srcOp) && (noGuard || isa<hw::ConstantOp>(guardOp)))
+    return doneOp->emitOpError()
+           << "with constant source" << (noGuard ? "" : " and constant guard")
+           << ". This should be a combinational group.";
+
+  return verifyNotComplexSource(doneOp, doneOp.src());
 }
 
 //===----------------------------------------------------------------------===//
