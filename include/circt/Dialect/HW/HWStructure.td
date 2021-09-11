@@ -368,7 +368,7 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
   let printer = "return ::print$cppClass(p, *this);";
 }
 
-def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
+def OutputOp : HWOp<"output", [Terminator, //HasParent<"HWModuleOp">,
                                 NoSideEffect, ReturnLike]> {
   let summary = "HW termination operation";
   let description = [{
