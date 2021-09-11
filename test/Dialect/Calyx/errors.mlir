@@ -526,7 +526,7 @@ calyx.program {
     %c1_i8 = hw.constant 1 : i8
     %c1_i1 = hw.constant 1 : i1
     calyx.wires {
-      // expected-error @+1 {{calyx.group' op with cell: calyx.std_gt "gt" is performing a write and failed to drive all necessary ports}}
+      // expected-error @+1 {{calyx.group' op with cell: calyx.std_gt "gt" is performing a write and failed to drive all necessary ports.}}
       calyx.group @A {
         calyx.assign %r.in = %gt.out : i1
         calyx.assign %r.write_en = %c1_i1 : i1
