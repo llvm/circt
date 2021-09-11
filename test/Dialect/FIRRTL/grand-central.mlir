@@ -13,7 +13,8 @@ firrtl.circuit "InterfaceGroundType" attributes {
         description = "multi\nline\ndescription\nof\nbar",
         name = "bar",
         id = 2 : i64}],
-     id = 0 : i64},
+     id = 0 : i64,
+     name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
@@ -96,7 +97,8 @@ firrtl.circuit "InterfaceVectorType" attributes {
            id = 2 : i64,
            name = "foo"}],
         name = "foo"}],
-      id = 0 : i64},
+      id = 0 : i64,
+      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
@@ -173,8 +175,10 @@ firrtl.circuit "InterfaceBundleType" attributes {
            name = "b"},
           {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
            id = 2 : i64,
-           name = "a"}]}],
-     id = 0 : i64},
+           name = "a"}],
+        name = "bar"}],
+     id = 0 : i64,
+     name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]}  {
@@ -227,7 +231,7 @@ firrtl.circuit "InterfaceBundleType" attributes {
 // CHECK-SAME: name = "Foo.sv"
 // CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of Bar"
-// CHECK-NEXT: Bar Bar();
+// CHECK-NEXT: Bar bar();
 
 // CHECK: sv.interface {
 // CHECK-SAME: output_file = {directory = "gct-dir"
@@ -250,10 +254,11 @@ firrtl.circuit "InterfaceVecOfBundleType" attributes {
            elements = [
              {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
               id = 1 : i64,
-              name = "b"}]}
-        ],
+              name = "b"}],
+           name = "bar"}],
         name = "bar"}],
-     id = 0 : i64}]}  {
+     id = 0 : i64,
+     name = "View"}]}  {
   firrtl.module @View_companion() attributes {
     annotations = [
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
@@ -283,7 +288,7 @@ firrtl.circuit "InterfaceVecOfBundleType" attributes {
 // CHECK-LABEL: firrtl.circuit "InterfaceVecOfBundleType"
 
 // CHECK: sv.interface @Foo
-// CHECK-NEXT: sv.verbatim "bar Bar[1]();"
+// CHECK-NEXT: sv.verbatim "Bar bar[1]();"
 
 // CHECK: sv.interface @Bar
 
@@ -298,7 +303,8 @@ firrtl.circuit "InterfaceNode" attributes {
         description = "some expression",
         id = 1 : i64,
         name = "foo"}],
-     id = 0 : i64},
+     id = 0 : i64,
+     name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
@@ -360,7 +366,8 @@ firrtl.circuit "InterfacePort" attributes {
         description = "description of foo",
         id = 1 : i64,
         name = "foo"}],
-     id = 0 : i64},
+     id = 0 : i64,
+     name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
@@ -422,7 +429,8 @@ firrtl.circuit "UnsupportedTypes" attributes {
         name = "integer"},
        {class = "sifive.enterprise.grandcentral.AugmentedDoubleType",
         name = "double"}],
-     id = 0 : i64},
+     id = 0 : i64,
+     name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
@@ -458,10 +466,10 @@ firrtl.circuit "UnsupportedTypes" attributes {
 // CHECK-SAME: output_file = {directory = "gct-dir"
 // CHECK-SAME: name = "Foo.sv"
 // CHECK-SAME: @Foo
-// CHECK-NEXT: sv.verbatim "// string = <unsupported string type>;"
-// CHECK-NEXT: sv.verbatim "// boolean = <unsupported boolean type>;"
-// CHECK-NEXT: sv.verbatim "// integer = <unsupported integer type>;"
-// CHECK-NEXT: sv.verbatim "// double = <unsupported double type>;"
+// CHECK-NEXT: sv.verbatim "// <unsupported string type> string;"
+// CHECK-NEXT: sv.verbatim "// <unsupported boolean type> boolean;"
+// CHECK-NEXT: sv.verbatim "// <unsupported integer type> integer;"
+// CHECK-NEXT: sv.verbatim "// <unsupported double type> double;"
 
 // -----
 
@@ -474,7 +482,8 @@ firrtl.circuit "BindInterfaceTest"  attributes {
       id = 1 : i64,
       name = "_a"
     }],
-    id = 0 : i64
+    id = 0 : i64,
+    name = "View"
   },
   {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
@@ -547,14 +556,16 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
         name = "foo",
         id = 1 : i64}],
-     id = 0 : i64},
+     id = 0 : i64,
+     name = "View1"},
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "Bar",
      elements = [
        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
         name = "foo",
         id = 3 : i64}],
-     id = 2 : i64},
+     id = 2 : i64,
+     name = "View2"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
      directory = "gct-dir",
      filename = "gct-dir/bindings.sv"}]} {
@@ -563,12 +574,12 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Foo",
        id = 0 : i64,
-       name = "View",
+       name = "View1",
        type = "companion"},
       {class = "sifive.enterprise.grandcentral.ViewAnnotation",
        defName = "Bar",
        id = 2 : i64,
-       name = "View",
+       name = "View2",
        type = "companion"}]} {}
   firrtl.module @DUT() attributes {
     annotations = [

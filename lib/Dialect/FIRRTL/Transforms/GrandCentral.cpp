@@ -44,14 +44,23 @@ struct VerbatimType {
   /// "()".
   bool instantiation;
 
-  /// True if this is a type which is unsupported and should be commented out.
-  bool unsupported;
+  /// A vector storing the width of each dimension of the type.
+  SmallVector<unsigned, 4> dimensions = {};
 
   /// Serialize this type to a string.
   std::string toStr(StringRef name) {
-    return ((unsupported ? "// " : "") + Twine(name) + " " + str +
-            (instantiation ? "()" : "") + ";")
-        .str();
+    SmallString<64> stringType(str);
+    stringType.append(" ");
+    stringType.append(name);
+    for (auto d : dimensions) {
+      stringType.append("[");
+      stringType.append(Twine(d).str());
+      stringType.append("]");
+    }
+    if (instantiation)
+      stringType.append("()");
+    stringType.append(";");
+    return std::string(stringType);
   }
 };
 
@@ -393,8 +402,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
                                                  IntegerAttr id, Twine path) {
 
   auto unsupported = [&](StringRef name, StringRef kind) {
-    return VerbatimType(
-        {(" = <unsupported " + kind + " type>").str(), false, true});
+    return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
   };
 
   return TypeSwitch<Attribute, Optional<TypeSum>>(field)
@@ -436,16 +444,14 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
               return TypeSum(
                   hw::UnpackedArrayType::get(*tpe, elements.getValue().size()));
             auto str = std::get<VerbatimType>(elementType.getValue());
-            str.str.append(
-                ("[" + Twine(elements.getValue().size()) + "]").str());
+            str.dimensions.push_back(elements.getValue().size());
             return TypeSum(str);
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
             auto iface = traverseBundle(bundle, id, path);
             assert(iface && iface.getValue());
-            return VerbatimType(
-                {(bundle.getDefName().getValue()).str(), true, false});
+            return VerbatimType({(bundle.getDefName().getValue()).str(), true});
           })
       .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
         return unsupported(field.getName().getValue(), "string");
@@ -498,8 +504,6 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
       return None;
 
     auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
-    if (!name)
-      name = element.cast<DictionaryAttr>().getAs<StringAttr>("defName");
     auto elementType =
         computeField(field.getValue(), id, path + "." + name.getValue());
     if (!elementType)
