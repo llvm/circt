@@ -2275,12 +2275,13 @@ ParseResult FIRStmtParser::parsePrintf() {
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
   StringRef formatStringRef(formatStrUnescaped);
+  // Generate concurrent verification statements
   if (formatStringRef.startswith("cover:")) {
     APInt constOne(1, 1, false);
     Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped, "",
-                            true);
+                            /*isConcurrent=*/true);
     return success();
   }
   if (formatStringRef.startswith("assert:")) {
@@ -2288,7 +2289,7 @@ ParseResult FIRStmtParser::parsePrintf() {
     Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "", true);
+                             "", /*isConcurrent=*/true);
     return success();
   }
   if (formatStringRef.startswith("assume:")) {
@@ -2296,7 +2297,7 @@ ParseResult FIRStmtParser::parsePrintf() {
     Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "", true);
+                             "", /*isConcurrent=*/true);
     return success();
   }
 
