@@ -174,8 +174,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   // Add an instance in the old module for the extracted module
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
   auto inst = b.create<hw::InstanceOp>(
-      op.getLoc(), ArrayRef<Type>(), ("InvisibleBind" + suffix).str(),
-      newMod.getName(), inputs.getArrayRef(), DictionaryAttr(),
+      op.getLoc(), newMod, ("InvisibleBind" + suffix).str(),
+      inputs.getArrayRef(), DictionaryAttr(),
       b.getStringAttr(
           ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()));
   inst->setAttr("doNotPrint", b.getBoolAttr(true));

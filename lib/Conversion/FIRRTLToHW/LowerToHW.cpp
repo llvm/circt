@@ -2072,8 +2072,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     portIndicesByName[portInfo[portIdx].name] = portIdx;
 
   // Ok, get ready to create the new instance operation.  We need to prepare
-  // input operands and results.
-  SmallVector<Type, 8> resultTypes;
+  // input operands.
   SmallVector<Value, 8> operands;
   for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
     auto &port = portInfo[portIndex];
@@ -2087,11 +2086,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     if (portType.isInteger(0))
       continue;
 
-    // Just remember outputs, we'll wire them up after creating the instance.
-    if (port.isOutput()) {
-      resultTypes.push_back(portType);
+    // We wire outputs up after creating the instance.
+    if (port.isOutput())
       continue;
-    }
 
     // If we can find the connects to this port, then we can directly
     // materialize it.
@@ -2114,9 +2111,6 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     operands.push_back(wire);
   }
 
-  // Use the symbol from the module we are referencing.
-  FlatSymbolRefAttr symbolAttr = SymbolRefAttr::get(newModule);
-
   // If this instance is destined to be lowered to a bind, generate a symbol for
   // it and generate a bind op.  Enter the bind into global CircuitLoweringState
   // so that this can be moved outside of module once we're guaranteed to not be
@@ -2137,9 +2131,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   }
 
   // Create the new hw.instance operation.
-  auto newInstance =
-      builder.create<hw::InstanceOp>(resultTypes, oldInstance.nameAttr(),
-                                     symbolAttr, operands, parameters, symbol);
+  auto newInstance = builder.create<hw::InstanceOp>(
+      newModule, oldInstance.nameAttr(), operands, parameters, symbol);
 
   if (symbol)
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));

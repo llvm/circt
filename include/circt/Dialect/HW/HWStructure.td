@@ -294,6 +294,22 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
                        OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs Variadic<AnyType>);
 
+  let builders = [
+    /// Create a instance that refers to a known module.
+    OpBuilder<(ins "Operation*":$module, "StringAttr":$name,
+                   "ArrayRef<Value>":$inputs,
+                   CArg<"DictionaryAttr", "{}">:$parameters,
+                   CArg<"StringAttr", "{}">:$sym_name)>,
+    /// Create a instance that refers to a known module.
+    OpBuilder<(ins "Operation*":$module, "StringRef":$name,
+                   "ArrayRef<Value>":$inputs,
+                   CArg<"DictionaryAttr", "{}">:$parameters,
+                   CArg<"StringAttr", "{}">:$sym_name), [{
+      build($_builder, $_state, module, $_builder.getStringAttr(name), inputs,
+            parameters, sym_name);
+    }]>
+  ];
+
   let extraClassDeclaration = [{
     // Return the name of the specified result or empty string if it cannot be
     // determined.

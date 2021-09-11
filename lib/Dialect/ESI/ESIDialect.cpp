@@ -306,10 +306,8 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // -----
   // Fifth, instantiate the pearl module.
 
-  auto pearlInst = modBuilder.create<hw::InstanceOp>(
-      modType.getResults(), "pearl",
-      SymbolTable::getSymbolName(pearl).getValue(), pearlOperands,
-      DictionaryAttr(), StringAttr());
+  auto pearlInst =
+      modBuilder.create<hw::InstanceOp>(pearl, "pearl", pearlOperands);
 
   // Hookup all the backedges.
   for (size_t i = 0, e = pearlInst.getNumResults(); i < e; ++i) {
