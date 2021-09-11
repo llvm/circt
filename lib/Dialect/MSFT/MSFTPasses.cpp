@@ -1,4 +1,4 @@
-//===- MSFTGenerator.cpp - Implement MSFT generators ----------------------===//
+//===- MSFTPasses.cpp - Implement MSFT passes -----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,10 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
+#include "mlir/Transforms/DialectConversion.h"
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
@@ -20,6 +22,10 @@
 using namespace circt;
 using namespace msft;
 using GeneratorSet = llvm::SmallSet<StringRef, 8>;
+
+//===----------------------------------------------------------------------===//
+// Generators.
+//===----------------------------------------------------------------------===//
 
 namespace {
 /// Holds the set of registered generators for each operation.
@@ -114,7 +120,6 @@ namespace msft {
 } // namespace circt
 
 namespace {
-/// Run all the physical lowerings.
 struct RunGeneratorsPass : public RunGeneratorsBase<RunGeneratorsPass> {
   void runOnOperation() override;
 };
@@ -142,7 +147,66 @@ namespace msft {
 std::unique_ptr<Pass> createRunGeneratorsPass() {
   return std::make_unique<RunGeneratorsPass>();
 }
+} // namespace msft
+} // namespace circt
 
+//===----------------------------------------------------------------------===//
+// Lower MSFT to HW.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Lower MSFT's InstanceOp to HW's. Currently trivial since `msft.instance` is
+/// currently a subset of `hw.instance`.
+struct InstanceOpLowering : public OpConversionPattern<InstanceOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(InstanceOp, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult
+InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
+                                    ArrayRef<Value> operands,
+                                    ConversionPatternRewriter &rewriter) const {
+  auto hwInst = rewriter.create<hw::InstanceOp>(
+      msftInst.getLoc(), msftInst.getResultTypes(), msftInst.instanceNameAttr(),
+      msftInst.moduleNameAttr(), operands, DictionaryAttr{}, StringAttr{});
+  rewriter.replaceOp(msftInst, hwInst.getResults());
+  return success();
+}
+
+namespace {
+struct LowerToHWPass : public LowerToHWBase<LowerToHWPass> {
+  void runOnOperation() override;
+};
+} // anonymous namespace
+
+void LowerToHWPass::runOnOperation() {
+  auto top = getOperation();
+  auto ctxt = &getContext();
+
+  // Set up a conversion and give it a set of laws.
+  ConversionTarget target(*ctxt);
+  target.addIllegalDialect<MSFTDialect>();
+  target.addLegalDialect<hw::HWDialect>();
+
+  // Add all the conversion patterns.
+  RewritePatternSet patterns(ctxt);
+  patterns.insert<InstanceOpLowering>(ctxt);
+
+  // Run the conversion.
+  if (failed(applyPartialConversion(top, target, std::move(patterns))))
+    signalPassFailure();
+}
+
+namespace circt {
+namespace msft {
+std::unique_ptr<Pass> createLowerToHWPass() {
+  return std::make_unique<LowerToHWPass>();
+}
 } // namespace msft
 } // namespace circt
 

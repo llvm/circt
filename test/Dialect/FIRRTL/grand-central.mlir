@@ -10,6 +10,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
         name = "foo",
         id = 1 : i64},
        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+        description = "multi\nline\ndescription\nof\nbar",
         name = "bar",
         id = 2 : i64}],
      id = 0 : i64},
@@ -75,6 +76,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i2
+// CHECK-NEXT: sv.verbatim "// multi\0A// line\0A// description\0A// of\0A// bar"
 // CHECK-NEXT: sv.interface.signal @bar : i4
 
 // -----
@@ -233,6 +235,59 @@ firrtl.circuit "InterfaceBundleType" attributes {
 // CHECK-SAME: @Bar
 // CHECK-NEXT: sv.interface.signal @b : i2
 // CHECK-NEXT: sv.interface.signal @a : i1
+
+// -----
+
+firrtl.circuit "InterfaceVecOfBundleType" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+        elements = [
+          {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+           defName = "Bar",
+           elements = [
+             {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+              id = 1 : i64,
+              name = "b"}]}
+        ],
+        name = "bar"}],
+     id = 0 : i64}]}  {
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    %x = firrtl.wire {
+      annotations = [
+        {a},
+        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+         id = 1 : i64}]} : !firrtl.uint<2>
+    firrtl.instance @View_companion {name = "View_companion"}
+  }
+  firrtl.module @InterfaceVecOfBundleType() {
+    firrtl.instance @DUT {name = "dut"}
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "InterfaceVecOfBundleType"
+
+// CHECK: sv.interface {
+// CHECK-SAME: @Foo
+// CHECK-NEXT: sv.verbatim "bar Bar[1]();"
+
+// CHECK: sv.interface
+// CHECK-SAME: @Bar
 
 // -----
 

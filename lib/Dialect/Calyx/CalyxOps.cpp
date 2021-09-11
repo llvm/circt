@@ -76,6 +76,16 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
+// Convenience function for getting the SSA name of @p v under the scope of
+// operation @p scopeOp
+static std::string valueName(Operation *scopeOp, Value v) {
+  std::string s;
+  llvm::raw_string_ostream os(s);
+  AsmState asmState(scopeOp);
+  v.printAsOperand(os, asmState);
+  return s;
+}
+
 /// Returns whether this value is either (1) a port on a ComponentOp or (2) a
 /// port on a cell interface.
 static bool isPort(Value value) {
@@ -132,8 +142,9 @@ static LogicalResult verifyControlBody(Operation *op) {
   return success();
 }
 
-static LogicalResult portsDrivenByGroup(ValueRange ports,
-                                        GroupInterface groupOp);
+// Declaration here so that portDrivenByGroup can use it.
+static LogicalResult anyPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface groupOp);
 
 /// Checks whether @p port is driven from within @p groupOp.
 static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
@@ -147,21 +158,19 @@ static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
     }
   }
 
-  // If @p port is an output of a cell then we conservatively enforce that all
-  // (and at least one) non-interface inputs of the cell must be driven by the
-  // group.
+  // If @p port is an output of a cell then we conservatively enforce that at
+  // least one input port of the cell must be driven by the group.
   if (auto cell = dyn_cast<CellInterface>(port.getDefiningOp());
       cell && cell.direction(port) == calyx::Direction::Output)
-    return portsDrivenByGroup(
-        cell.filterInterfacePorts(calyx::Direction::Input), groupOp);
+    return anyPortsDrivenByGroup(cell.getInputPorts(), groupOp);
 
   return failure();
 }
 
-/// Checks whether all ports in @p ports are driven from within @p groupOp
-static LogicalResult portsDrivenByGroup(ValueRange ports,
-                                        GroupInterface groupOp) {
-  return success(llvm::all_of(ports, [&](auto port) {
+/// Checks whether any port in @p ports are driven within @p groupOp.
+static LogicalResult anyPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface groupOp) {
+  return success(llvm::any_of(ports, [&](auto port) {
     return portDrivenByGroup(port, groupOp).succeeded();
   }));
 }
@@ -201,16 +210,6 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
            << ", which is not allowed in this control-like operation";
   }
   return verifyControlBody(op);
-}
-
-// Convenience function for getting the SSA name of @p v under the scope of
-// operation @p scopeOp
-static std::string valueName(Operation *scopeOp, Value v) {
-  std::string s;
-  llvm::raw_string_ostream os(s);
-  AsmState asmState(scopeOp);
-  v.printAsOperand(os, asmState);
-  return s;
 }
 
 //===----------------------------------------------------------------------===//
@@ -718,6 +717,13 @@ SmallVector<Direction> InstanceOp::portDirections() {
   return portDirections;
 }
 
+SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  for (const PortInfo &port : getReferencedComponent().getPortInfo())
+    portAttributes.push_back(port.attributes);
+  return portAttributes;
+}
+
 static LogicalResult verifyInstanceOp(InstanceOp instance) {
   if (instance.componentName() == "main")
     return instance.emitOpError("cannot reference the entry point.");
@@ -787,6 +793,24 @@ SmallVector<Direction> RegisterOp::portDirections() {
   return {Input, Input, Input, Input, Output, Output};
 }
 
+SmallVector<DictionaryAttr> RegisterOp::portAttributes() {
+  MLIRContext *context = getContext();
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList writeEn, clk, reset, done;
+  writeEn.append("go", isSet);
+  clk.append("clk", isSet);
+  reset.append("reset", isSet);
+  done.append("done", isSet);
+  return {
+      DictionaryAttr(),               // In
+      writeEn.getDictionary(context), // Write enable
+      clk.getDictionary(context),     // Clk
+      reset.getDictionary(context),   // Reset
+      DictionaryAttr(),               // Out
+      done.getDictionary(context)     // Done
+  };
+}
+
 //===----------------------------------------------------------------------===//
 // MemoryOp
 //===----------------------------------------------------------------------===//
@@ -813,6 +837,27 @@ SmallVector<Direction> MemoryOp::portDirections() {
     portDirections.push_back(Input);
   portDirections.append({Input, Input, Input, Output, Output});
   return portDirections;
+}
+
+SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
+  SmallVector<DictionaryAttr> portAttributes;
+  MLIRContext *context = getContext();
+  for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
+    portAttributes.push_back(DictionaryAttr()); // Addresses
+
+  // Use a boolean to indicate this attribute is used.
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList writeEn, clk, reset, done;
+  writeEn.append("go", isSet);
+  clk.append("clk", isSet);
+  done.append("done", isSet);
+  portAttributes.append({DictionaryAttr(),               // In
+                         writeEn.getDictionary(context), // Write enable
+                         clk.getDictionary(context),     // Clk
+                         DictionaryAttr(),               // Out
+                         done.getDictionary(context)}    // Done
+  );
+  return portAttributes;
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
@@ -959,6 +1004,9 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
 #define ImplUnaryOpCellInterface(OpType)                                       \
   SmallVector<StringRef> OpType::portNames() { return {"in", "out"}; }         \
   SmallVector<Direction> OpType::portDirections() { return {Input, Output}; }  \
+  SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
+    return {DictionaryAttr(), DictionaryAttr()};                               \
+  }                                                                            \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
   }
@@ -972,6 +1020,9 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
   }                                                                            \
   void OpType::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {              \
     getCellAsmResultNames(setNameFn, *this, this->portNames());                \
+  }                                                                            \
+  SmallVector<DictionaryAttr> OpType::portAttributes() {                       \
+    return {DictionaryAttr(), DictionaryAttr(), DictionaryAttr()};             \
   }
 
 // clang-format off

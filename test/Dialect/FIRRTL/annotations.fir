@@ -341,22 +341,22 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     input reset : UInt<1>
     input clock : Clock
 
-    ; CHECK: %0 = firrtl.wire  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_0 = firrtl.wire  {annotations = [{a = "a"}]}
     wire _T_0 : UInt<1>
-    ; CHECK: %1 = firrtl.node
+    ; CHECK: %_T_1 = firrtl.node
     node _T_1 = _T_0
-    ; CHECK: %2 = firrtl.reg %clock  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_2 = firrtl.reg %clock  {annotations = [{a = "a"}]}
     reg _T_2 : UInt<1>, clock
-    ; CHECK: %3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %4 = firrtl.seqmem Undefined {annotations = [{a = "a"}]}
+    ; CHECK: %_T_4 = firrtl.seqmem Undefined {annotations = [{a = "a"}]}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %5 = firrtl.combmem  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_5 = firrtl.combmem  {annotations = [{a = "a"}]}
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: firrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = ""}
+    ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = "_T_7"}
     inst _T_7 of Bar
     ; CHECK: firrtl.mem Undefined  {annotations = [{a = "a"}]
     mem _T_8 :

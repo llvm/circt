@@ -868,4 +868,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: hw.output
   }
 
+  // CHECK-LABEL: hw.module @Force
+  firrtl.module @Force(in %in: !firrtl.uint<42>) {
+    // CHECK: %out = sv.wire : !hw.inout<i42>
+    // CHECK: sv.initial {
+    // CHECK:   sv.force %out, %in : i42
+    // CHECK: }
+    %out = firrtl.wire : !firrtl.uint<42>
+    firrtl.force %out, %in : !firrtl.uint<42>, !firrtl.uint<42>
+  }
+
 }
