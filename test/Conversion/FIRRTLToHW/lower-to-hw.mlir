@@ -377,8 +377,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true, name = "assume_0"}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
-    firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = "AtNegEdge", isConcurrent = true, name = "cover_1"}
-    firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = "AtEdge", isConcurrent = true, name = "cover_2"}
+    firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
+    firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
 
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {

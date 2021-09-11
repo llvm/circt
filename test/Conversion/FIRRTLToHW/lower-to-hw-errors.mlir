@@ -78,17 +78,3 @@ firrtl.circuit "Foo" {
         {class = "sifive.enterprise.firrtl.ScalaClassAnnotation"}
     ]} {}
 }
-
-// -----
-
-
-firrtl.circuit "Verification" {
-firrtl.module @Verification(in %clock: !firrtl.clock, in %aCond: !firrtl.uint<1>,
- in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
- in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>) {
-
-  // expected-error @+2 {{'firrtl.cover' op LowerToHW couldn't handle this operation}}
-  // expected-error @+1 {{Event Control can only be one of :'AtPosEdge/AtEdge/AtNegEdge'}}
-  firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = "", isConcurrent = true, name = "cover_1"}
-}
-}

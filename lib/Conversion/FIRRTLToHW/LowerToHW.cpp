@@ -2834,17 +2834,12 @@ FIRRTLLowering::lowerVerificationConcurrentStatement(AOpTy op,
     return failure();
   predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
   sv::EventControl event;
-  if (op.eventControl() == "AtPosEdge")
+  if (op.eventControl() == EventControl::AtPosEdge)
     event = circt::sv::EventControl::AtPosEdge;
-  else if (op.eventControl() == "AtEdge")
+  else if (op.eventControl() == EventControl::AtEdge)
     event = circt::sv::EventControl::AtEdge;
-  else if (op.eventControl() == "AtNegEdge")
+  else if (op.eventControl() == EventControl::AtNegEdge)
     event = circt::sv::EventControl::AtNegEdge;
-  else {
-    op.emitError(
-        "Event Control can only be one of :'AtPosEdge/AtEdge/AtNegEdge'");
-    return failure();
-  }
   svOp = builder.create<BOpTy>(
       circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
       predicate, label);
