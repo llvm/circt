@@ -13,6 +13,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 
@@ -402,62 +403,6 @@ static StringAttr getPortNameAttr(MLIRContext *context, StringRef name) {
   return StringAttr::get(context, name);
 }
 
-/// Parse a function result list.
-///
-///   function-result-list ::= function-result-list-parens
-///   function-result-list-parens ::= `(` `)`
-///                                 | `(` function-result-list-no-parens `)`
-///   function-result-list-no-parens ::= function-result (`,` function-result)*
-///   function-result ::= (percent-identifier `:`) type attribute-dict?
-///
-static ParseResult
-parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
-                        SmallVectorImpl<NamedAttrList> &resultAttrs,
-                        SmallVectorImpl<Attribute> &resultNames) {
-  if (parser.parseLParen())
-    return failure();
-
-  // Special case for an empty set of parens.
-  if (succeeded(parser.parseOptionalRParen()))
-    return success();
-
-  // Parse individual function results.
-  do {
-    resultNames.push_back(parsePortName(parser));
-    if (!resultNames.back())
-      return failure();
-
-    resultTypes.emplace_back();
-    resultAttrs.emplace_back();
-    if (parser.parseType(resultTypes.back()) ||
-        parser.parseOptionalAttrDict(resultAttrs.back()))
-      return failure();
-  } while (succeeded(parser.parseOptionalComma()));
-  return parser.parseRParen();
-}
-
-/// This is a variant of mlor::parseFunctionSignature that allows names on
-/// result arguments.
-static ParseResult parseModuleFunctionSignature(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &argNames,
-    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
-    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
-    SmallVectorImpl<NamedAttrList> &resultAttrs,
-    SmallVectorImpl<Attribute> &resultNames) {
-
-  using namespace mlir::function_like_impl;
-  bool allowArgAttrs = true;
-  bool allowVariadic = false;
-  if (parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic, argNames,
-                                argTypes, argAttrs, isVariadic))
-    return failure();
-
-  if (succeeded(parser.parseOptionalArrow()))
-    return parseFunctionResultList(parser, resultTypes, resultAttrs,
-                                   resultNames);
-  return success();
-}
-
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
     if (argAttr.first == name)
@@ -495,9 +440,9 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   // Parse the function signature.
   bool isVariadic = false;
   SmallVector<Attribute> resultNames;
-  if (parseModuleFunctionSignature(parser, entryArgs, argTypes, argAttrs,
-                                   isVariadic, resultTypes, resultAttrs,
-                                   resultNames))
+  if (module_like_impl::parseModuleFunctionSignature(
+          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
+          resultAttrs, resultNames))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -564,71 +509,6 @@ FunctionType getHWModuleOpType(Operation *op) {
   return typeAttr.getValue().cast<FunctionType>();
 }
 
-static void printModuleSignature(OpAsmPrinter &p, Operation *op,
-                                 ArrayRef<Type> argTypes, bool isVariadic,
-                                 ArrayRef<Type> resultTypes,
-                                 bool &needArgNamesAttr) {
-  using namespace mlir::function_like_impl;
-
-  Region &body = op->getRegion(0);
-  bool isExternal = body.empty();
-  SmallString<32> resultNameStr;
-
-  p << '(';
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    if (i > 0)
-      p << ", ";
-
-    auto argName = getModuleArgumentName(op, i);
-
-    if (!isExternal) {
-      // Get the printed format for the argument name.
-      resultNameStr.clear();
-      llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(body.front().getArgument(i), tmpStream);
-
-      // If the name wasn't printable in a way that agreed with argName, make
-      // sure to print out an explicit argNames attribute.
-      if (tmpStream.str().drop_front() != argName)
-        needArgNamesAttr = true;
-
-      p << tmpStream.str() << ": ";
-    } else if (!argName.empty()) {
-      p << '%' << argName << ": ";
-    }
-
-    p.printType(argTypes[i]);
-    p.printOptionalAttrDict(getArgAttrs(op, i));
-  }
-
-  if (isVariadic) {
-    if (!argTypes.empty())
-      p << ", ";
-    p << "...";
-  }
-
-  p << ')';
-
-  // We print result types specially since we support named arguments.
-  if (!resultTypes.empty()) {
-    p << " -> (";
-    for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
-      if (i != 0)
-        p << ", ";
-      StringAttr name = getModuleResultNameAttr(op, i);
-      if (isValidKeyword(name.getValue()))
-        p << name.getValue();
-      else
-        p << name;
-      p << ": ";
-
-      p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(getResultAttrs(op, i));
-    }
-    p << ')';
-  }
-}
-
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_like_impl;
@@ -646,8 +526,8 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   }
 
   bool needArgNamesAttr = false;
-  printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes,
-                       needArgNamesAttr);
+  module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
+                                         resultTypes, needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (modKind == GenMod)
