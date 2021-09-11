@@ -10,10 +10,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Comb/CombDialect.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Scheduling/Algorithms.h"
+#include "circt/Scheduling/ComponentLibrary.h"
 
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
+
+#include "llvm/ADT/APSInt.h"
 
 using namespace mlir;
 using namespace circt;
@@ -362,6 +368,49 @@ void TestSimplexSchedulerPass::runOnFunction() {
 }
 
 //===----------------------------------------------------------------------===//
+// ComponentLibrary
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestComponentLibraryPass
+    : public PassWrapper<TestComponentLibraryPass, FunctionPass> {
+  TestComponentLibraryPass() = default;
+  TestComponentLibraryPass(const TestComponentLibraryPass &) {}
+  void runOnFunction() override;
+  StringRef getArgument() const override { return "test-component-library"; }
+  StringRef getDescription() const override {
+    return "Test the scheduling and lowering of ComponentLibrary";
+  }
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<comb::CombDialect>();
+  }
+};
+
+// Example component library that supports combinational adders and 3-cycle
+// multipliers. Dialects that want to support scheduling their primitives will
+// define something similar.
+struct TestComponentLibrary : ComponentLibrary {
+  TestComponentLibrary() {
+    addComponent<AddIOp>(/*latency=*/0);
+    addComponent<MulIOp>(/*latency=*/3);
+  }
+};
+} // anonymous namespace
+
+void TestComponentLibraryPass::runOnFunction() {
+  MLIRContext *context = &getContext();
+
+  TestComponentLibrary library;
+
+  getOperation().walk([&](Operation *op) {
+    Optional<unsigned> latency = library.getLatency(op);
+    if (latency.hasValue())
+      op->setAttr("latency", IntegerAttr::get(IntegerType::get(context, 64),
+                                              latency.getValue()));
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -382,6 +431,9 @@ void registerSchedulingTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestSimplexSchedulerPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestComponentLibraryPass>();
   });
 }
 } // namespace test
