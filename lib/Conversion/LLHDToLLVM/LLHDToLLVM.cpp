@@ -19,6 +19,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
+#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -290,20 +291,23 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
     rewriter.setInsertionPointAfter(persist.getDefiningOp());
   }
 
+  Value convPersist = converter->materializeTargetConversion(
+      rewriter, loc, converter->convertType(persist.getType()), {persist});
+
   auto gep0 = gepPersistenceState(dialect, loc, rewriter, elemTy, i, state);
 
   Value toStore;
   if (auto ptr = persist.getType().dyn_cast<PtrType>()) {
     // Unwrap the pointer and store it's value.
     auto elemTy = converter->convertType(ptr.getUnderlyingType());
-    toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, persist);
+    toStore = rewriter.create<LLVM::LoadOp>(loc, elemTy, convPersist);
   } else if (persist.getType().isa<SigType>()) {
     // Unwrap and store the signal struct.
-    toStore =
-        rewriter.create<LLVM::LoadOp>(loc, getLLVMSigType(dialect), persist);
+    toStore = rewriter.create<LLVM::LoadOp>(loc, getLLVMSigType(dialect),
+                                            convPersist);
   } else {
     // Store the value directly.
-    toStore = persist;
+    toStore = convPersist;
   }
 
   rewriter.create<LLVM::StoreOp>(loc, toStore, gep0);
@@ -313,6 +317,7 @@ static void persistValue(LLVM::LLVMDialect *dialect, Location loc,
   for (auto &use : llvm::make_early_inc_range(persist.getUses())) {
     auto user = use.getOwner();
     if (persist.getType().isa<PtrType>() && user != toStore.getDefiningOp() &&
+        user != convPersist.getDefiningOp() &&
         persist.getParentBlock() == user->getBlock()) {
       // Redirect uses of the pointer in the same block to the pointer in the
       // persistence state. This ensures that stores and loads all operate on
@@ -1247,6 +1252,9 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         // operand (assmued to be a constant/array op)
         auto defOp = op.init().getDefiningOp();
         auto initDef = recursiveCloneInit(initBuilder, defOp)->getResult(0);
+        Value initDefCast = typeConverter->materializeTargetConversion(
+            initBuilder, initDef.getLoc(),
+            typeConverter->convertType(initDef.getType()), initDef);
 
         // Compute the required space to malloc.
         auto oneC = initBuilder.create<LLVM::ConstantOp>(
@@ -1274,7 +1282,8 @@ struct InstOpConversion : public ConvertToLLVMPattern {
         // Store the initial value.
         auto bitcast = initBuilder.create<LLVM::BitcastOp>(
             op.getLoc(), LLVM::LLVMPointerType::get(underlyingTy), mall);
-        initBuilder.create<LLVM::StoreOp>(op.getLoc(), initDef, bitcast);
+
+        initBuilder.create<LLVM::StoreOp>(op.getLoc(), initDefCast, bitcast);
 
         // Get the amount of bytes required to represent an integer underlying
         // type. Use the whole size of the type if not an integer.
@@ -1634,11 +1643,11 @@ struct DrvOpConversion : public ConvertToLLVMPattern {
       rewriter.setInsertionPointToStart(drvBlock);
     }
 
+    Type valTy = typeConverter->convertType(transformed.value().getType());
     auto oneConst = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
     auto alloca = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(transformed.value().getType()),
-        oneConst, 4);
+        op->getLoc(), LLVM::LLVMPointerType::get(valTy), oneConst, 4);
     rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.value(), alloca);
     auto bc = rewriter.create<LLVM::BitcastOp>(op->getLoc(), i8PtrTy, alloca);
 
@@ -2381,7 +2390,8 @@ struct DynExtractSliceOpConversion : public ConvertToLLVMPattern {
     if (auto arrTy = extsOp.result().getType().dyn_cast<hw::ArrayType>()) {
       auto elemTy = typeConverter->convertType(arrTy.getElementType());
       auto llvmArrTy = typeConverter->convertType(arrTy);
-      auto targetTy = transformed.target().getType();
+      auto targetTy =
+          typeConverter->convertType(transformed.target().getType());
 
       auto zeroC = rewriter.create<LLVM::ConstantOp>(
           op->getLoc(), i64Ty, rewriter.getI64IntegerAttr(0));
@@ -2741,12 +2751,12 @@ struct VarOpConversion : ConvertToLLVMPattern {
     VarOpAdaptor transformed(operands);
 
     auto i32Ty = IntegerType::get(rewriter.getContext(), 32);
+    Type initTy = typeConverter->convertType(transformed.init().getType());
 
     auto oneC = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), i32Ty, rewriter.getI32IntegerAttr(1));
     auto alloca = rewriter.create<LLVM::AllocaOp>(
-        op->getLoc(), LLVM::LLVMPointerType::get(transformed.init().getType()),
-        oneC, 4);
+        op->getLoc(), LLVM::LLVMPointerType::get(initTy), oneC, 4);
     rewriter.create<LLVM::StoreOp>(op->getLoc(), transformed.init(), alloca);
     rewriter.replaceOp(op, alloca.getResult());
     return success();
@@ -2881,6 +2891,14 @@ void LLHDToLLVMLoweringPass::runOnOperation() {
 
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalOp<ModuleOp>();
+
+  // Apply a full conversion to remove unrealized conversion casts.
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
+    signalPassFailure();
+
+  patterns.clear();
+
+  mlir::populateReconcileUnrealizedCastsPatterns(patterns);
   target.addIllegalOp<UnrealizedConversionCastOp>();
 
   // Apply the full conversion.
