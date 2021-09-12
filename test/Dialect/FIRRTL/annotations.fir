@@ -341,22 +341,22 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     input reset : UInt<1>
     input clock : Clock
 
-    ; CHECK: %0 = firrtl.wire  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_0 = firrtl.wire  {annotations = [{a = "a"}]}
     wire _T_0 : UInt<1>
-    ; CHECK: %1 = firrtl.node
+    ; CHECK: %_T_1 = firrtl.node
     node _T_1 = _T_0
-    ; CHECK: %2 = firrtl.reg %clock  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_2 = firrtl.reg %clock  {annotations = [{a = "a"}]}
     reg _T_2 : UInt<1>, clock
-    ; CHECK: %3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %4 = firrtl.seqmem Undefined {annotations = [{a = "a"}]}
+    ; CHECK: %_T_4 = firrtl.seqmem Undefined {annotations = [{a = "a"}]}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %5 = firrtl.combmem  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_5 = firrtl.combmem  {annotations = [{a = "a"}]}
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: firrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = ""}
+    ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = "_T_7"}
     inst _T_7 of Bar
     ; CHECK: firrtl.mem Undefined  {annotations = [{a = "a"}]
     mem _T_8 :
@@ -722,7 +722,7 @@ circuit GCTInterface : %[
     "name": "view",
     "companion": "~GCTInterface|view_companion",
     "parent": "~GCTInterface|GCTInterface",
-    "view": "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"name\":\"register\",\"description\":\"the register in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"register\",\"elements\":[{\"name\":\"_2\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":0}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":1}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}]}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"_0\",\"elements\":[{\"name\":\"_1\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_1\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}}]}},{\"name\":\"port\",\"description\":\"the port 'a' in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"a\",\"component\":[]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}"
+    "view": "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"name\":\"register\",\"description\":\"the register in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"Register\",\"elements\":[{\"name\":\"_2\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":0}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":1}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}]}},{\"name\":\"_0_inst\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"_0_def\",\"elements\":[{\"name\":\"_1\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_1\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}}]}},{\"name\":\"port\",\"description\":\"the port 'a' in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"a\",\"component\":[]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}"
   },
   {
     "unrelatedAnnotation": null
@@ -749,7 +749,7 @@ circuit GCTInterface : %[
     ; CHECK-SAME:  defName = "ViewName",
     ; CHECK-SAME:  elements = [
     ; CHECK-SAME:    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-    ; CHECK-SAME:     defName = "register",
+    ; CHECK-SAME:     defName = "Register",
     ; CHECK-SAME:     description = "the register in GCTInterface",
     ; CHECK-SAME:     elements = [
     ; CHECK-SAME:       {class = "sifive.enterprise.grandcentral.AugmentedVectorType",
@@ -762,19 +762,22 @@ circuit GCTInterface : %[
     ; CHECK-SAME:           name = "_2"}],
     ; CHECK-SAME:        name = "_2"},
     ; CHECK-SAME:       {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
-    ; CHECK-SAME:        defName = "_0",
+    ; CHECK-SAME:        defName = "_0_def",
     ; CHECK-SAME:        elements = [
     ; CHECK-SAME:          {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:           id = [[ID_1:[0-9]+]] : i64,
     ; CHECK-SAME:           name = "_1"},
     ; CHECK-SAME:          {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:           id = [[ID_0:[0-9]+]] : i64,
-    ; CHECK-SAME:           name = "_0"}]}]},
+    ; CHECK-SAME:           name = "_0"}],
+    ; CHECK-SAME:        name = "_0_inst"}],
+    ; CHECK-SAME:     name = "register"},
     ; CHECK-SAME:    {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
     ; CHECK-SAME:     description = "the port 'a' in GCTInterface",
     ; CHECK-SAME:     id = [[ID_port:[0-9]+]] : i64,
     ; CHECK-SAME:     name = "port"}],
-    ; CHECK-SAME:  id = [[ID_ViewName:[0-9]+]] : i64}
+    ; CHECK-SAME:  id = [[ID_ViewName:[0-9]+]] : i64,
+    ; CHECK-SAME:  name = "view"}
     ; CHECK-SAME: {unrelatedAnnotation}
 
     ; The companion should be marked.
@@ -822,7 +825,7 @@ circuit GCTInterface : %[
 
 circuit Foo : %[[
 {
-  "class": "sifive.enterprise.grandcentral.GrandCentralView$SerializedViewAnnotation",
+  "class": "sifive.enterprise.grandcentral.ViewAnnotation",
   "name": "Bar",
   "companion": "~Foo|Bar_companion",
   "parent": "~Foo|Foo",

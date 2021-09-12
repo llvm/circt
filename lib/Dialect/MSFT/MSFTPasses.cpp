@@ -172,8 +172,8 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
                                     ArrayRef<Value> operands,
                                     ConversionPatternRewriter &rewriter) const {
   auto hwInst = rewriter.create<hw::InstanceOp>(
-      msftInst.getLoc(), msftInst.getResultTypes(), msftInst.instanceNameAttr(),
-      msftInst.moduleNameAttr(), operands, DictionaryAttr{}, StringAttr{});
+      msftInst.getLoc(), msftInst.getReferencedModule(),
+      msftInst.instanceNameAttr(), operands);
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
 }

@@ -1267,10 +1267,8 @@ Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
   instName.append("encode");
   instName.append(name());
   instName.append("Inst");
-  auto resTypes = hw::getModuleType(encImplMod).getResults();
   auto encodeInst = builder.create<hw::InstanceOp>(
-      operand.getLoc(), resTypes, instName, encImplMod.getName(),
-      ValueRange{clk, valid, operand}, DictionaryAttr(), StringAttr());
+      operand.getLoc(), encImplMod, instName, ValueRange{clk, valid, operand});
   return encodeInst.getResult(0);
 }
 
@@ -1290,9 +1288,7 @@ Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
   instName.append("decode");
   instName.append(name());
   instName.append("Inst");
-  auto resTypes = hw::getModuleType(decImplMod).getResults();
   auto decodeInst = builder.create<hw::InstanceOp>(
-      operand.getLoc(), resTypes, instName, decImplMod.getName(),
-      ValueRange{clk, valid, operand}, DictionaryAttr(), StringAttr());
+      operand.getLoc(), decImplMod, instName, ValueRange{clk, valid, operand});
   return decodeInst.getResult(0);
 }

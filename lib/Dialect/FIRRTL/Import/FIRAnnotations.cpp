@@ -618,6 +618,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
     attrs.append("elements", ArrayAttr::get(context, elements));
     if (id)
       attrs.append("id", id.getValue());
+    attrs.append("name", name);
     return DictionaryAttr::getWithSorted(context, attrs);
   }
 
@@ -1008,7 +1009,8 @@ bool circt::firrtl::scatterCustomAnnotations(
     }
 
     if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
-                 "SerializedViewAnnotation") {
+                 "SerializedViewAnnotation" ||
+        clazz == "sifive.enterprise.grandcentral.ViewAnnotation") {
       auto viewAnnotationClass = StringAttr::get(
           context, "sifive.enterprise.grandcentral.ViewAnnotation");
       auto id = newID();
@@ -1040,9 +1042,9 @@ bool circt::firrtl::scatterCustomAnnotations(
 
       newAnnotations[parentAttr.getValue()].push_back(
           DictionaryAttr::get(context, parentAttrs));
-      auto prunedAttr =
-          parseAugmentedType(context, viewAttr, dict, newAnnotations, companion,
-                             {}, {}, id, {}, loc, annotationID, clazz, "view");
+      auto prunedAttr = parseAugmentedType(
+          context, viewAttr, dict, newAnnotations, companion, name, {}, id, {},
+          loc, annotationID, clazz, "view");
       if (!prunedAttr)
         return false;
 

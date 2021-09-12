@@ -174,8 +174,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   // Add an instance in the old module for the extracted module
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
   auto inst = b.create<hw::InstanceOp>(
-      op.getLoc(), ArrayRef<Type>(), ("InvisibleBind" + suffix).str(),
-      newMod.getName(), inputs.getArrayRef(), DictionaryAttr(),
+      op.getLoc(), newMod, ("InvisibleBind" + suffix).str(),
+      inputs.getArrayRef(), DictionaryAttr(),
       b.getStringAttr(
           ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()));
   inst->setAttr("doNotPrint", b.getBoolAttr(true));
@@ -318,10 +318,15 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
       // Extract two sets of ops to different modules
       auto isAssert = [](Operation *op) -> bool {
-        return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op);
+        return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
+               isa<AssertConcurrentOp>(op);
       };
-      auto isAssume = [](Operation *op) -> bool { return isa<AssumeOp>(op); };
-      auto isCover = [](Operation *op) -> bool { return isa<CoverOp>(op); };
+      auto isAssume = [](Operation *op) -> bool {
+        return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
+      };
+      auto isCover = [](Operation *op) -> bool {
+        return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
+      };
 
       doModule(rtlmod, isAssert, "_assert");
       doModule(rtlmod, isAssume, "_assume");

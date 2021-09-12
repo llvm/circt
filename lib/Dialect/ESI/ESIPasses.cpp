@@ -851,11 +851,9 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
   Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
                       unwrap.valid(), stageReady};
-  Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
-                        rewriter.getI1Type()};
   auto stageInst = rewriter.create<InstanceOp>(
-      loc, resultTypes, pipeStageName, stageModule.getName(), operands,
-      stageParams.getDictionary(rewriter.getContext()), StringAttr());
+      loc, stageModule, pipeStageName, operands,
+      stageParams.getDictionary(rewriter.getContext()));
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from stage.
@@ -1080,7 +1078,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   Value send = operands[2];
 
   circt::BackedgeBuilder bb(rewriter, loc);
-  builder.declareCosimEndpoint();
+  auto endpointModule = builder.declareCosimEndpoint();
   Type ui64Type =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
   capnp::TypeSchema sendTypeSchema(send.getType());
@@ -1122,11 +1120,8 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   Value epInstInputs[] = {
       clk, rstn, recvReady, unwrapSend.valid(), encodeData.capnpBits(),
   };
-  Type epInstOutputs[] = {rewriter.getI1Type(), ingestBitArrayType,
-                          rewriter.getI1Type()};
   auto cosimEpModule = rewriter.create<InstanceOp>(
-      loc, epInstOutputs, name, "Cosim_Endpoint", epInstInputs,
-      params.getDictionary(ctxt), StringAttr());
+      loc, endpointModule, name, epInstInputs, params.getDictionary(ctxt));
   sendReady.setValue(cosimEpModule.getResult(2));
 
   // Set up the injest path.

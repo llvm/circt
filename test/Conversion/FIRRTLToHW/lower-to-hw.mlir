@@ -357,6 +357,29 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
    in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
    in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>) {
 
+    // CHECK-NEXT: %0 = comb.and %aEn, %aCond : i1
+    // CHECK-NEXT: sv.assert.concurrent  posedge %clock %0 {output_file = {directory = "dir3", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir3/filename3"}} : i1
+    // CHECK-NEXT: %1 = comb.and %aEn, %aCond : i1
+    // CHECK-NEXT: sv.assert.concurrent "assert_0" posedge %clock %1 {output_file = {directory = "dir3", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir3/filename3"}} : i1
+    // CHECK-NEXT: %2 = comb.and %bEn, %bCond : i1
+    // CHECK-NEXT: sv.assume.concurrent  posedge %clock %2 {output_file = {directory = "dir1", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir1/filename1"}} : i1
+    // CHECK-NEXT: %3 = comb.and %bEn, %bCond : i1
+    // CHECK-NEXT: sv.assume.concurrent "assume_0" posedge %clock %3 {output_file = {directory = "dir1", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir1/filename1"}} : i1
+    // CHECK-NEXT: %4 = comb.and %cEn, %cCond : i1
+    // CHECK-NEXT: sv.cover.concurrent  posedge %clock %4 {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} : i1
+    // CHECK-NEXT: %5 = comb.and %cEn, %cCond : i1
+    // CHECK-NEXT: sv.cover.concurrent "cover_0" posedge %clock %5 {output_file = {directory = "dir2", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir2/filename2"}} : i1
+    // CHECK: sv.cover.concurrent "cover_1" negedge %clock
+    // CHECK: sv.cover.concurrent "cover_2" edge %clock 
+    firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true}
+    firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true, name = "assert_0"}
+    firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true}
+    firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true, name = "assume_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
+    firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
+    firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
+
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
     // CHECK-NEXT:     sv.assert {output_file = {directory = "dir3", exclude_from_filelist = true, exclude_replicated_ops = true, name = "./dir3/filename3"}} %aCond : i1

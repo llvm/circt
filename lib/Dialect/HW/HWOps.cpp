@@ -647,6 +647,18 @@ static LogicalResult verifyHWModuleGeneratedOp(HWModuleGeneratedOp op) {
 // InstanceOp
 //===----------------------------------------------------------------------===//
 
+/// Create a instance that refers to a known module.
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       Operation *module, StringAttr name,
+                       ArrayRef<Value> inputs, DictionaryAttr parameters,
+                       StringAttr sym_name) {
+  assert(isAnyModule(module) && "Can only reference a module");
+  FunctionType modType = getModuleType(module);
+  build(builder, result, modType.getResults(), name,
+        FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
+        parameters, sym_name);
+}
+
 /// Lookup the module or extmodule for the symbol.  This returns null on
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {

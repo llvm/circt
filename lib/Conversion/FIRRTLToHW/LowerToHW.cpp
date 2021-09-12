@@ -1075,7 +1075,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                            ICmpPredicate unsignedOp);
   template <typename SignedOp, typename UnsignedOp>
   LogicalResult lowerDivLikeOp(Operation *op);
-  template <typename AOpTy, typename BOpTy>
+  template <typename AOpTy, typename BOpTy, typename COpTy>
   LogicalResult lowerVerificationStatement(AOpTy op, StringRef annoClass);
 
   LogicalResult visitExpr(CatPrimOp op);
@@ -2087,8 +2087,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     portIndicesByName[portInfo[portIdx].name] = portIdx;
 
   // Ok, get ready to create the new instance operation.  We need to prepare
-  // input operands and results.
-  SmallVector<Type, 8> resultTypes;
+  // input operands.
   SmallVector<Value, 8> operands;
   for (size_t portIndex = 0, e = portInfo.size(); portIndex != e; ++portIndex) {
     auto &port = portInfo[portIndex];
@@ -2102,11 +2101,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     if (portType.isInteger(0))
       continue;
 
-    // Just remember outputs, we'll wire them up after creating the instance.
-    if (port.isOutput()) {
-      resultTypes.push_back(portType);
+    // We wire outputs up after creating the instance.
+    if (port.isOutput())
       continue;
-    }
 
     // If we can find the connects to this port, then we can directly
     // materialize it.
@@ -2129,9 +2126,6 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     operands.push_back(wire);
   }
 
-  // Use the symbol from the module we are referencing.
-  FlatSymbolRefAttr symbolAttr = SymbolRefAttr::get(newModule);
-
   // If this instance is destined to be lowered to a bind, generate a symbol for
   // it and generate a bind op.  Enter the bind into global CircuitLoweringState
   // so that this can be moved outside of module once we're guaranteed to not be
@@ -2152,9 +2146,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   }
 
   // Create the new hw.instance operation.
-  auto newInstance =
-      builder.create<hw::InstanceOp>(resultTypes, oldInstance.nameAttr(),
-                                     symbolAttr, operands, parameters, symbol);
+  auto newInstance = builder.create<hw::InstanceOp>(
+      newModule, oldInstance.nameAttr(), operands, parameters, symbol);
 
   if (symbol)
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
@@ -2799,7 +2792,9 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 ///         bar(condition);
 ///       end
 ///     end
-template <typename AOpTy, typename BOpTy>
+/// The above can also be reduced into a concurrent verification statement
+/// sv.assert.concurrent posedge %clock (condition && enable)
+template <typename AOpTy, typename BOpTy, typename COpTy>
 LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
                                                          StringRef annoClass) {
   auto clock = getLoweredValue(op.clock());
@@ -2807,50 +2802,67 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
   auto predicate = getLoweredValue(op.predicate());
   if (!clock || !enable || !predicate)
     return failure();
+  StringAttr label;
+  if (op.nameAttr())
+    label = op.nameAttr();
+  else
+    label = builder.getStringAttr("");
+  auto annoSet = AnnotationSet(circuitState.circuitOp);
+  StringRef fileName, dir;
+  if (auto a = annoSet.getAnnotation(annoClass)) {
+    fileName = a.getAs<StringAttr>("filename").getValue();
+    dir = a.getAs<StringAttr>("directory").getValue();
+  }
+  Operation *svOp;
 
-  addToAlwaysBlock(clock, [&]() {
-    addIfProceduralBlock(enable, [&]() {
-      // Create BOpTy inside the always/if.
-      StringAttr label;
-      if (op.nameAttr())
-        label = op.nameAttr();
-      else
-        label = builder.getStringAttr("");
-      auto svOp = builder.create<BOpTy>(predicate, label);
-      auto annoSet = AnnotationSet(circuitState.circuitOp);
-      StringRef fileName, dir;
-      if (auto a = annoSet.getAnnotation(annoClass)) {
-        fileName = a.getAs<StringAttr>("filename").getValue();
-        dir = a.getAs<StringAttr>("directory").getValue();
-      }
-      if (!fileName.empty() || !dir.empty())
-        svOp->setAttr("output_file",
-                      hw::OutputFileAttr::get(builder.getStringAttr(dir),
-                                              builder.getStringAttr(fileName),
-                                              builder.getBoolAttr(true),
-                                              builder.getBoolAttr(true),
-                                              svOp.getContext()));
+  if (!op.isConcurrent())
+    addToAlwaysBlock(clock, [&]() {
+      addIfProceduralBlock(enable, [&]() {
+        // Create BOpTy inside the always/if.
+        svOp = builder.create<BOpTy>(predicate, label);
+      });
     });
-  });
-
+  else {
+    predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
+    sv::EventControl event;
+    if (op.eventControl() == EventControl::AtPosEdge)
+      event = circt::sv::EventControl::AtPosEdge;
+    else if (op.eventControl() == EventControl::AtEdge)
+      event = circt::sv::EventControl::AtEdge;
+    else if (op.eventControl() == EventControl::AtNegEdge)
+      event = circt::sv::EventControl::AtNegEdge;
+    svOp = builder.create<COpTy>(
+        circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
+        predicate, label);
+  }
+  if (!fileName.empty() || !dir.empty())
+    svOp->setAttr("output_file",
+                  hw::OutputFileAttr::get(builder.getStringAttr(dir),
+                                          builder.getStringAttr(fileName),
+                                          builder.getBoolAttr(true),
+                                          builder.getBoolAttr(true),
+                                          svOp->getContext()));
   return success();
 }
 
 // Lower an assert to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
-  return lowerVerificationStatement<AssertOp, sv::AssertOp>(op,
+  return lowerVerificationStatement<AssertOp, sv::AssertOp,
+                                    sv::AssertConcurrentOp>(op,
                                                             assertAnnoClass);
 }
 
 // Lower an assume to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
-  return lowerVerificationStatement<AssumeOp, sv::AssumeOp>(op,
+  return lowerVerificationStatement<AssumeOp, sv::AssumeOp,
+                                    sv::AssumeConcurrentOp>(op,
                                                             assumeAnnoClass);
 }
 
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
-  return lowerVerificationStatement<CoverOp, sv::CoverOp>(op, coverAnnoClass);
+  return lowerVerificationStatement<CoverOp, sv::CoverOp,
+                                    sv::CoverConcurrentOp>(op, coverAnnoClass);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {

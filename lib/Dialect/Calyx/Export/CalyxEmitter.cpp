@@ -542,10 +542,11 @@ void Emitter::emitLibraryPrimTypedByAllPorts(Operation *op) {
 
 void Emitter::emitLibraryPrimTypedByFirstInputPort(Operation *op) {
   auto cell = cast<CellInterface>(op);
-  unsigned bitwidth = cell.inputPorts()[0].getType().getIntOrFloatBitWidth();
+  unsigned bitWidth = cell.getInputPorts()[0].getType().getIntOrFloatBitWidth();
+  StringRef opName = op->getName().getStringRef();
   indent() << getAttributes(op) << cell.instanceName() << space() << equals()
-           << space() << removeCalyxPrefix(op->getName().getStringRef())
-           << LParen() << bitwidth << RParen() << semicolonEndL();
+           << space() << removeCalyxPrefix(opName) << LParen() << bitWidth
+           << RParen() << semicolonEndL();
 }
 
 void Emitter::emitAssignment(AssignOp op) {
