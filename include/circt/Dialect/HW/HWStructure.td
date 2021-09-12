@@ -311,8 +311,12 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
   ];
 
   let extraClassDeclaration = [{
-    // Return the name of the specified result or empty string if it cannot be
-    // determined.
+    /// Return the name of the specified input port or null if it cannot be
+    /// determined.
+    StringAttr getArgumentName(size_t i, const SymbolCache *cache = nullptr);
+
+    /// Return the name of the specified result or null if it cannot be
+    /// determined.
     StringAttr getResultName(size_t i, const SymbolCache *cache = nullptr);
 
     /// Lookup the module or extmodule for the symbol.  This returns null on

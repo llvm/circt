@@ -119,10 +119,19 @@ bool hw::isAnyModule(Operation *module) {
          isa<HWModuleGeneratedOp>(module);
 }
 
-/// Return the signature for the specified module as a function type.
-FunctionType hw::getModuleType(Operation *module) {
+/// Return the signature for a module as a function type from the module itself
+/// or from an hw::InstanceOp.
+FunctionType hw::getModuleType(Operation *moduleOrInstance) {
+  if (auto instance = dyn_cast<InstanceOp>(moduleOrInstance)) {
+    SmallVector<Type> inputs(instance->getOperandTypes());
+    SmallVector<Type> results(instance->getResultTypes());
+    return FunctionType::get(instance->getContext(), inputs, results);
+  }
+
+  assert(isAnyModule(moduleOrInstance) &&
+         "must be called on instance or module");
   auto typeAttr =
-      module->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
+      moduleOrInstance->getAttrOfType<TypeAttr>(HWModuleOp::getTypeAttrName());
   return typeAttr.getValue().cast<FunctionType>();
 }
 
@@ -155,12 +164,14 @@ StringAttr hw::getModuleResultNameAttr(Operation *module, size_t resultNo) {
 }
 
 void hw::setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names) {
+  assert(isAnyModule(module) && "Must be called on a module");
   assert(getModuleType(module).getNumInputs() == names.size() &&
          "incorrect number of arguments names specified");
   module->setAttr("argNames", ArrayAttr::get(module->getContext(), names));
 }
 
 void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
+  assert(isAnyModule(module) && "Must be called on a module");
   assert(getModuleType(module).getNumResults() == names.size() &&
          "incorrect number of arguments names specified");
   module->setAttr("resultNames", ArrayAttr::get(module->getContext(), names));
@@ -268,8 +279,16 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
 
+/// Return an encapsulated set of information about input and output ports of
+/// the specified module or instance.
 SmallVector<ModulePortInfo> hw::getModulePortInfo(Operation *op) {
-  assert(isAnyModule(op) && "Can only get module ports from a module");
+  assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
+         "Can only get module ports from an instance or module");
+
+  // TODO: Remove when argNames/resultNames are stored on instances.
+  if (auto instance = dyn_cast<InstanceOp>(op))
+    op = instance.getReferencedModule();
+
   SmallVector<ModulePortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
@@ -737,17 +756,21 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op,
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *referencedModule =
-      symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
-  if (referencedModule == nullptr)
+  auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
+  if (module == nullptr)
     return emitError("Cannot find module definition '") << moduleName() << "'";
 
-  if (!isa<HWModuleOp>(referencedModule))
-    return success();
+  // It must be some sort of module.
+  if (!isAnyModule(module))
+    return emitError("symbol reference '")
+           << moduleName() << "' isn't a module";
 
   // If the referenced module is internal, check that input and result types are
   // consistent with the referenced module.
-  return verifyInstanceOpTypes(*this, referencedModule);
+  if (isa<HWModuleOp>(module))
+    return verifyInstanceOpTypes(*this, module);
+
+  return success();
 }
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
@@ -810,9 +833,9 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
 static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
   p << ' ';
   p.printAttributeWithoutType(op.instanceNameAttr());
-  if (op->getAttr("sym_name")) {
-    p << ' ' << "sym" << ' ';
-    p.printSymbolName(op.sym_nameAttr().getValue());
+  if (auto attr = op.sym_nameAttr()) {
+    p << " sym ";
+    p.printSymbolName(attr.getValue());
   }
   p << ' ';
   p.printAttributeWithoutType(op.moduleNameAttr());
@@ -831,31 +854,47 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
     p << ')';
 }
 
-StringAttr InstanceOp::getResultName(size_t idx,
-                                     const SymbolCache *symbolCache) {
-  auto *module = getReferencedModule(symbolCache);
+/// Return the name of the specified input port or null if it cannot be
+/// determined.
+StringAttr InstanceOp::getArgumentName(size_t idx, const SymbolCache *cache) {
+  // TODO: Remove when argNames/resultNames are stored on instances.
+  auto *module = getReferencedModule(cache);
+  if (!module)
+    return {};
+  auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
+  // Tolerate malformed IR here to enable debug printing etc.
+  if (argNames && idx < argNames.size())
+    return argNames[idx].cast<StringAttr>();
+  return StringAttr();
+}
+
+/// Return the name of the specified result or null if it cannot be
+/// determined.
+StringAttr InstanceOp::getResultName(size_t idx, const SymbolCache *cache) {
+  // TODO: Remove when argNames/resultNames are stored on instances.
+  auto *module = getReferencedModule(cache);
   if (!module)
     return {};
 
-  return getModuleResultNameAttr(module, idx);
+  auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
+  // Tolerate malformed IR here to enable debug printing etc.
+  if (resultNames && idx < resultNames.size())
+    return resultNames[idx].cast<StringAttr>();
+  return StringAttr();
 }
 
 /// Suggest a name for each result value based on the saved result names
 /// attribute.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  auto *module = getReferencedModule();
-  if (!module)
-    return;
-
   // Provide default names for instance results.
   std::string name = instanceName().str() + ".";
   size_t baseNameLen = name.size();
 
   for (size_t i = 0, e = getNumResults(); i != e; ++i) {
-    auto resName = getModuleResultName(module, i);
+    auto resName = getResultName(i);
     name.resize(baseNameLen);
-    if (!resName.empty())
-      name += resName.str();
+    if (resName && !resName.getValue().empty())
+      name += resName.getValue().str();
     else
       name += std::to_string(i);
     setNameFn(getResult(i), name);
