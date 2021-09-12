@@ -335,14 +335,10 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
 
     /// An InstanceOp may optionally define a symbol.
     bool isOptionalSymbol() { return true; }
-
   }];
 
-  /// sym keyword for optional symbol simplifies parsing
-  let assemblyFormat = [{
-    $instanceName (`sym` $sym_name^)? $moduleName `(` $inputs `)` attr-dict
-      `:` functional-type($inputs, results)
-  }];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print$cppClass(p, *this);";
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,

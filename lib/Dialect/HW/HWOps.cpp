@@ -134,8 +134,7 @@ StringAttr hw::getVerilogModuleNameAttr(Operation *module) {
   if (nameAttr)
     return nameAttr;
 
-  return module->getAttrOfType<StringAttr>(
-      ::mlir::SymbolTable::getSymbolAttrName());
+  return module->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
 }
 
 /// Return the port name for the specified argument or result.
@@ -176,7 +175,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
-  result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
+  result.addAttribute(SymbolTable::getSymbolAttrName(), name);
 
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
@@ -245,8 +244,7 @@ StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
   if (auto vName = verilogNameAttr())
     return vName;
 
-  return (*this)->getAttrOfType<StringAttr>(
-      ::mlir::SymbolTable::getSymbolAttrName());
+  return (*this)->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
 }
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
@@ -396,7 +394,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the name as a symbol.
   StringAttr nameAttr;
-  if (parser.parseSymbolName(nameAttr, ::mlir::SymbolTable::getSymbolAttrName(),
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
                              result.attributes))
     return failure();
 
@@ -480,6 +478,8 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
                                  ArrayRef<Type> argTypes, bool isVariadic,
                                  ArrayRef<Type> resultTypes,
                                  bool &needArgNamesAttr) {
+  using namespace mlir::function_like_impl;
+
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
@@ -508,7 +508,7 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
     }
 
     p.printType(argTypes[i]);
-    p.printOptionalAttrDict(::mlir::function_like_impl::getArgAttrs(op, i));
+    p.printOptionalAttrDict(getArgAttrs(op, i));
   }
 
   if (isVariadic) {
@@ -531,8 +531,7 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
         os << '%' << name << ": ";
 
       p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(
-          ::mlir::function_like_impl::getResultAttrs(op, i));
+      p.printOptionalAttrDict(getResultAttrs(op, i));
     }
     os << ')';
   }
@@ -749,6 +748,87 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // If the referenced module is internal, check that input and result types are
   // consistent with the referenced module.
   return verifyInstanceOpTypes(*this, referencedModule);
+}
+
+static ParseResult parseInstanceOp(OpAsmParser &parser,
+                                   OperationState &result) {
+  StringAttr instanceNameAttr;
+  StringAttr sym_nameAttr;
+  FlatSymbolRefAttr moduleNameAttr;
+  SmallVector<OpAsmParser::OperandType, 4> inputsOperands;
+  SmallVector<Type> inputsTypes;
+  SmallVector<Type> allResultTypes;
+
+  if (parser.parseAttribute(instanceNameAttr,
+                            parser.getBuilder().getType<NoneType>(),
+                            "instanceName", result.attributes))
+    return failure();
+
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    // Parsing an optional symbol name doesn't fail, so no need to check the
+    // result.
+    (void)parser.parseOptionalSymbolName(sym_nameAttr, "sym_name",
+                                         result.attributes);
+  }
+
+  llvm::SMLoc inputsOperandsLoc;
+  if (parser.parseAttribute(moduleNameAttr,
+                            parser.getBuilder().getType<NoneType>(),
+                            "moduleName", result.attributes) ||
+      parser.parseLParen() || parser.getCurrentLocation(&inputsOperandsLoc) ||
+      parser.parseOperandList(inputsOperands) || parser.parseRParen() ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseLParen())
+    return failure();
+
+  if (failed(parser.parseOptionalRParen())) {
+    if (parser.parseTypeList(inputsTypes) || parser.parseRParen())
+      return failure();
+  }
+
+  if (parser.parseArrow())
+    return failure();
+
+  if (succeeded(parser.parseOptionalLParen())) {
+    if (failed(parser.parseOptionalRParen())) {
+      if (parser.parseTypeList(allResultTypes) || parser.parseRParen())
+        return failure();
+    }
+    result.addTypes(allResultTypes);
+  } else {
+    Type resultType;
+    if (parser.parseType(resultType))
+      return failure();
+    result.addTypes(resultType);
+  }
+  if (parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
+                             result.operands))
+    return failure();
+  return success();
+}
+
+static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
+  p << ' ';
+  p.printAttributeWithoutType(op.instanceNameAttr());
+  if (op->getAttr("sym_name")) {
+    p << ' ' << "sym" << ' ';
+    p.printSymbolName(op.sym_nameAttr().getValue());
+  }
+  p << ' ';
+  p.printAttributeWithoutType(op.moduleNameAttr());
+  p << '(';
+  p << op.inputs();
+  p << ')';
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{
+                              "instanceName", "sym_name", "moduleName"});
+  p << " : (";
+  p << op.inputs().getTypes();
+  p << ") -> ";
+  if (op->getNumResults() != 1)
+    p << '(';
+  p << op->getResultTypes();
+  if (op->getNumResults() != 1)
+    p << ')';
 }
 
 StringAttr InstanceOp::getResultName(size_t idx,
@@ -1053,9 +1133,8 @@ static void printStructExtractOp(OpAsmPrinter &printer,
   printExtractOp(printer, op);
 }
 
-void StructExtractOp::build(::mlir::OpBuilder &builder,
-                            ::mlir::OperationState &odsState, Value input,
-                            StructType::FieldInfo field) {
+void StructExtractOp::build(OpBuilder &builder, OperationState &odsState,
+                            Value input, StructType::FieldInfo field) {
   build(builder, odsState, field.type, input, field.name);
 }
 
