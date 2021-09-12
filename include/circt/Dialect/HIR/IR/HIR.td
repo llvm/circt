@@ -125,7 +125,9 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` `(` type($operands) `)`)? }];
 }
 
-def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbove, CallableOpInterface]> {
+def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike,
+  IsolatedFromAbove, CallableOpInterface, HasParent<"mlir::ModuleOp">]> {
+
   let summary = "Function definition";
   let description = [{
     This Op creates a new function 
@@ -170,6 +172,10 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike, IsolatedFromAbov
       }
       void updateArguments(ArrayRef<DictionaryAttr>);
       hir::FuncType getFuncType(){return funcTy().dyn_cast<hir::FuncType>();}
+      ArrayAttr getInputNames(){return
+      (*this)->getAttr("argNames").dyn_cast_or_null<ArrayAttr>();}
+      ArrayAttr getResultNames(){return
+      (*this)->getAttr("resultNames").dyn_cast_or_null<ArrayAttr>();}
   }];
   let verifier =[{return verify$cppClass(*this);}];
 }

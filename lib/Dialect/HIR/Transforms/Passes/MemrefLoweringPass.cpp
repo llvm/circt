@@ -67,6 +67,7 @@ public:
 
 private:
   void insertBusArguments();
+  void removeMemrefArguments();
   LogicalResult visitOp(hir::FuncOp);
   LogicalResult visitOp(hir::AllocaOp);
   LogicalResult visitOp(hir::LoadOp);
@@ -379,7 +380,6 @@ void addBusAttrsPerPort(size_t i, SmallVectorImpl<DictionaryAttr> &attrs,
 }
 
 void MemrefLoweringPass::insertBusArguments() {
-
   hir::FuncOp op = getOperation();
   OpBuilder builder(op);
   auto funcTy = op.funcTy().dyn_cast<hir::FuncType>();
@@ -425,24 +425,32 @@ void MemrefLoweringPass::insertBusArguments() {
   op->setAttr("argNames", builder.getArrayAttr(inputNamesRef));
 }
 
-void removeMemrefArguments(hir::FuncOp op) {
+void MemrefLoweringPass::removeMemrefArguments() {
+  auto op = getOperation();
+  OpBuilder builder(op);
   auto funcTy = op.funcTy().dyn_cast<hir::FuncType>();
   SmallVector<Type> inputTypes;
   SmallVector<DictionaryAttr> inputAttrs;
   auto &bb = op.getFuncBody().front();
-
+  SmallVector<Attribute> inputNames;
   // initialize with old attrs.
-  for (auto attr : funcTy.getInputAttrs())
+  uint64_t i;
+  for (i = 0; i < funcTy.getInputAttrs().size(); i++) {
+    auto attr = funcTy.getInputAttrs()[i];
     inputAttrs.push_back(attr);
+    inputNames.push_back(op.getInputNames()[i]);
+  }
+  inputNames.push_back(op.getInputNames()[i]);
 
   for (int i = bb.getNumArguments() - 2 /*last arg is timetype*/; i >= 0; i--) {
     if (bb.getArgument(i).getType().isa<hir::MemrefType>()) {
       bb.eraseArgument(i);
       inputAttrs.erase(inputAttrs.begin() + i);
-    } else {
+      inputNames.erase(inputNames.begin() + i);
     }
   }
   op.updateArguments(inputAttrs);
+  op->setAttr("argNames", ArrayAttr::get(builder.getContext(), inputNames));
 }
 
 Value extractBusFromTensor(OpBuilder &builder, Value busTensor,
@@ -1050,7 +1058,7 @@ void MemrefLoweringPass::runOnOperation() {
   OpBuilder builder(funcOp);
   initUnConnectedPorts();
   helper::eraseOps(opsToErase);
-  // removeMemrefArguments(funcOp);
+  removeMemrefArguments();
 }
 
 namespace circt {

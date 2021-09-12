@@ -92,8 +92,7 @@ unsigned int getLatencyFromMemrefAttrDict(StringRef latencyOf,
 //------------------------------------------------------------------------------
 
 namespace {
-class ConvertStandardToHIRPass
-    : public ConvertStandardToHIRBase<ConvertStandardToHIRPass> {
+class StandardToHIRPass : public StandardToHIRBase<StandardToHIRPass> {
 public:
   void runOnOperation() override {
     ModuleOp moduleOp = getOperation();
@@ -228,7 +227,7 @@ private: // State.
 //------------------------------------------------------------------------------
 // Op conversions.
 //------------------------------------------------------------------------------
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::FuncOp op) {
+LogicalResult StandardToHIRPass::convertOp(mlir::FuncOp op) {
   FunctionType originalFunctionTy = op.type().dyn_cast<FunctionType>();
   auto originalInputTypes = originalFunctionTy.getInputs();
   OpBuilder builder(op);
@@ -304,7 +303,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::FuncOp op) {
                        /*tstartRequired*/ true);
 }
 
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
+LogicalResult StandardToHIRPass::convertOp(mlir::scf::ForOp op) {
   OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
   Value lb = op.lowerBound();
@@ -335,7 +334,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::ForOp op) {
                        /*tstartRequired*/ true);
 }
 
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::YieldOp op) {
+LogicalResult StandardToHIRPass::convertOp(mlir::scf::YieldOp op) {
   OpBuilder builder(op);
   if (op.getNumOperands() > 0)
     return op->getParentOp()->emitError(
@@ -346,7 +345,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::scf::YieldOp op) {
   return success();
 }
 
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::LoadOp op) {
+LogicalResult StandardToHIRPass::convertOp(mlir::memref::LoadOp op) {
   OpBuilder builder(op);
   auto memref = op.memref();
   if (op->getNumResults() > 1)
@@ -391,7 +390,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::LoadOp op) {
   return success();
 }
 
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
+LogicalResult StandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
   OpBuilder builder(op);
   auto memref = op.memref();
   if (op->getNumResults() > 1)
@@ -433,7 +432,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
   return success();
 }
 
-// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::AddIOp op) {
+// LogicalResult StandardToHIRPass::convertOp(mlir::AddIOp op) {
 //  OpBuilder builder(op);
 //  Value res =
 //      builder
@@ -446,7 +445,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
 //  return success();
 //}
 //
-// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::SubIOp op) {
+// LogicalResult StandardToHIRPass::convertOp(mlir::SubIOp op) {
 //  OpBuilder builder(op);
 //  builder.create<hir::SubIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
 //                              op.rhs(), IntegerAttr(), Value(), Value());
@@ -454,7 +453,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
 //  return success();
 //}
 //
-// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::MulIOp op) {
+// LogicalResult StandardToHIRPass::convertOp(mlir::MulIOp op) {
 //  OpBuilder builder(op);
 //  builder.create<hir::MulIOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
 //                              op.rhs(), IntegerAttr(), Value(), Value());
@@ -462,7 +461,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
 //  return success();
 //}
 //
-// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::AddFOp op) {
+// LogicalResult StandardToHIRPass::convertOp(mlir::AddFOp op) {
 //  OpBuilder builder(op);
 //  builder.create<hir::AddFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
 //                              op.rhs(), IntegerAttr(), Value(), Value());
@@ -470,7 +469,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
 //  return success();
 //}
 //
-// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::SubFOp op) {
+// LogicalResult StandardToHIRPass::convertOp(mlir::SubFOp op) {
 //  OpBuilder builder(op);
 //  builder.create<hir::SubFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
 //                              op.rhs(), IntegerAttr(), Value(), Value());
@@ -478,7 +477,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
 //  return success();
 //}
 //
-// LogicalResult ConvertStandardToHIRPass::convertOp(mlir::MulFOp op) {
+// LogicalResult StandardToHIRPass::convertOp(mlir::MulFOp op) {
 //  OpBuilder builder(op);
 //  builder.create<hir::MulFOp>(op.getLoc(), op.getResult().getType(), op.lhs(),
 //                              op.rhs(), IntegerAttr(), Value(), Value());
@@ -486,7 +485,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
 //  return success();
 //}
 
-LogicalResult ConvertStandardToHIRPass::convertOp(mlir::ReturnOp op) {
+LogicalResult StandardToHIRPass::convertOp(mlir::ReturnOp op) {
   OpBuilder builder(op);
   Value c0 = builder
                  .create<mlir::ConstantOp>(op.getLoc(),
@@ -509,7 +508,7 @@ LogicalResult ConvertStandardToHIRPass::convertOp(mlir::ReturnOp op) {
   return success();
 }
 
-/// convert-to-hir pass Constructor
-std::unique_ptr<mlir::Pass> circt::createConvertStandardToHIRPass() {
-  return std::make_unique<ConvertStandardToHIRPass>();
+/// std-to-hir pass Constructor
+std::unique_ptr<mlir::Pass> circt::createStandardToHIRPass() {
+  return std::make_unique<StandardToHIRPass>();
 }
