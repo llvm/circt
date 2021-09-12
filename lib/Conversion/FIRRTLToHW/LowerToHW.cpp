@@ -2810,12 +2810,17 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
   else {
     predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
     sv::EventControl event;
-    if (op.eventControl() == EventControl::AtPosEdge)
+    switch (op.eventControl()) {
+    case EventControl::AtPosEdge:
       event = circt::sv::EventControl::AtPosEdge;
-    else if (op.eventControl() == EventControl::AtEdge)
+      break;
+    case EventControl::AtEdge:
       event = circt::sv::EventControl::AtEdge;
-    else if (op.eventControl() == EventControl::AtNegEdge)
+      break;
+    case EventControl::AtNegEdge:
       event = circt::sv::EventControl::AtNegEdge;
+      break;
+    }
     svOp = builder.create<COpTy>(
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
         predicate, label);
