@@ -2275,28 +2275,29 @@ ParseResult FIRStmtParser::parsePrintf() {
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
   StringRef formatStringRef(formatStrUnescaped);
+  // Generate concurrent verification statements
   if (formatStringRef.startswith("cover:")) {
     APInt constOne(1, 1, false);
-    auto constTrue =
+    Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped,
-                            "");
+    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped, "",
+                            /*isConcurrent=*/true);
     return success();
   }
   if (formatStringRef.startswith("assert:")) {
     APInt constOne(1, 1, false);
-    auto constTrue =
+    Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "");
+                             "", /*isConcurrent=*/true);
     return success();
   }
   if (formatStringRef.startswith("assume:")) {
     APInt constOne(1, 1, false);
-    auto constTrue =
+    Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "");
+                             "", /*isConcurrent=*/true);
     return success();
   }
 
@@ -2362,7 +2363,7 @@ ParseResult FIRStmtParser::parseAssert() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssertOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped), name);
+                           StringRef(messageUnescaped), name.getValue());
   return success();
 }
 
@@ -2384,8 +2385,8 @@ ParseResult FIRStmtParser::parseAssume() {
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssumeOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped), name);
+  builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
+                           name.getValue());
   return success();
 }
 
@@ -2407,8 +2408,8 @@ ParseResult FIRStmtParser::parseCover() {
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<CoverOp>(clock, predicate, enable,
-                          builder.getStringAttr(messageUnescaped), name);
+  builder.create<CoverOp>(clock, predicate, enable, messageUnescaped,
+                          name.getValue());
   return success();
 }
 
