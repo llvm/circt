@@ -32,13 +32,13 @@ using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
 
-static const StringRef assertAnnoClass =
+static const char assertAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractAssertionsAnnotation";
-static const StringRef assumeAnnoClass =
+static const char assumeAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
-static const StringRef coverAnnoClass =
+static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
-static const StringRef SeqMemAnnoClass =
+static const char SeqMemAnnoClass[] =
     "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation";
 
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
