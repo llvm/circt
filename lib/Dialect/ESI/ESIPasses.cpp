@@ -379,15 +379,13 @@ static StringAttr appendToRtlName(StringAttr base, StringRef suffix) {
 /// Convert all input and output ChannelPorts into valid/ready wires. Try not to
 /// change the order and materialize ops in reasonably intuitive locations.
 bool ESIPortsPass::updateFunc(HWModuleOp mod) {
-  auto *ctxt = &getContext();
   auto funcType = mod.getType();
   // Build ops in the module.
   ImplicitLocOpBuilder modBuilder(mod.getLoc(), mod.getBody());
   Type i1 = modBuilder.getI1Type();
 
   // Get information to be used later on.
-  hw::OutputOp outOp =
-      dyn_cast<hw::OutputOp>(mod.getBodyBlock()->getTerminator());
+  hw::OutputOp outOp = cast<hw::OutputOp>(mod.getBodyBlock()->getTerminator());
 
   bool updated = false;
 
@@ -436,7 +434,6 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
 
     // Since we added 2 block args but erased one, there's a net increase of 1.
     blockArgNum += 1;
-
     updated = true;
   }
 
@@ -492,7 +489,7 @@ bool ESIPortsPass::updateFunc(HWModuleOp mod) {
   modBuilder.create<hw::OutputOp>(newOutputOperands);
 
   // Set the new types.
-  auto newFuncType = FunctionType::get(ctxt, newArgTypes, newResultTypes);
+  auto newFuncType = modBuilder.getFunctionType(newArgTypes, newResultTypes);
   mod.setType(newFuncType);
   setModuleArgumentNames(mod, newArgNames);
   setModuleResultNames(mod, newResultNames);
@@ -550,9 +547,12 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
 
   // -----
   // Clone the instance.
-
   b.setInsertionPointAfter(inst);
-  auto newInst = b.create<InstanceOp>(resTypes, newOperands, inst->getAttrs());
+  DictionaryAttr parameters;
+  if (inst.parameters().hasValue())
+    parameters = inst.parameters().getValue();
+  auto newInst = b.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
+                                      parameters, inst.sym_nameAttr());
 
   // -----
   // Wrap the results back into ESI channels and connect up all the ready
