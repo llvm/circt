@@ -314,8 +314,8 @@ struct FIRRTLModuleLowering : public LowerFIRRTLToHWBase<FIRRTLModuleLowering> {
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
-  LogicalResult lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
-                           SmallVectorImpl<hw::ModulePortInfo> &ports,
+  LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
+                           SmallVectorImpl<hw::PortInfo> &ports,
                            Operation *moduleOp,
                            CircuitLoweringState &loweringState);
   hw::HWModuleOp lowerModule(FModuleOp oldModule, Block *topLevelModule,
@@ -455,7 +455,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   Type b1Type = IntegerType::get(&getContext(), 1);
 
   for (auto &mem : mems) {
-    SmallVector<hw::ModulePortInfo> ports;
+    SmallVector<hw::PortInfo> ports;
     size_t inputPin = 0;
     size_t outputPin = 0;
 
@@ -637,16 +637,14 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   emitString("");
 }
 
-LogicalResult
-FIRRTLModuleLowering::lowerPorts(ArrayRef<ModulePortInfo> firrtlPorts,
-                                 SmallVectorImpl<hw::ModulePortInfo> &ports,
-                                 Operation *moduleOp,
-                                 CircuitLoweringState &loweringState) {
+LogicalResult FIRRTLModuleLowering::lowerPorts(
+    ArrayRef<PortInfo> firrtlPorts, SmallVectorImpl<hw::PortInfo> &ports,
+    Operation *moduleOp, CircuitLoweringState &loweringState) {
   ports.reserve(firrtlPorts.size());
   size_t numArgs = 0;
   size_t numResults = 0;
   for (auto firrtlPort : firrtlPorts) {
-    hw::ModulePortInfo hwPort;
+    hw::PortInfo hwPort;
     hwPort.name = firrtlPort.name;
     hwPort.type = lowerType(firrtlPort.type);
 
@@ -686,8 +684,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule,
                                      CircuitLoweringState &loweringState) {
   // Map the ports over, lowering their types as we go.
-  SmallVector<ModulePortInfo> firrtlPorts = oldModule.getPorts();
-  SmallVector<hw::ModulePortInfo, 8> ports;
+  SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
+  SmallVector<hw::PortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
     return {};
 
@@ -710,8 +708,8 @@ hw::HWModuleOp
 FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
                                   CircuitLoweringState &loweringState) {
   // Map the ports over, lowering their types as we go.
-  SmallVector<ModulePortInfo> firrtlPorts = oldModule.getPorts();
-  SmallVector<hw::ModulePortInfo, 8> ports;
+  SmallVector<PortInfo> firrtlPorts = oldModule.getPorts();
+  SmallVector<hw::PortInfo, 8> ports;
   if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
     return {};
 
@@ -861,7 +859,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
   bodyBuilder.setInsertionPoint(cursor);
 
   // Insert argument casts, and re-vector users in the old body to use them.
-  SmallVector<ModulePortInfo> ports = oldModule.getPorts();
+  SmallVector<PortInfo> ports = oldModule.getPorts();
   assert(oldModule.body().getNumArguments() == ports.size() &&
          "port count mismatch");
 
@@ -2062,7 +2060,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // Decode information about the input and output ports on the referenced
   // module.
-  SmallVector<ModulePortInfo, 8> portInfo =
+  SmallVector<PortInfo, 8> portInfo =
       cast<FModuleLike>(oldModule).getPorts();
 
   // Build an index from the name attribute to an index into portInfo, so we

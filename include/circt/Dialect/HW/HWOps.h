@@ -34,7 +34,7 @@ enum PortDirection {
 };
 
 /// This holds the name, type, direction of a module's ports
-struct ModulePortInfo {
+struct PortInfo {
   StringAttr name;
   PortDirection direction;
   Type type;
@@ -48,7 +48,7 @@ struct ModulePortInfo {
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
-SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
+SmallVector<PortInfo> getModulePortInfo(Operation *op);
 
 // Helpers for working with modules.
 

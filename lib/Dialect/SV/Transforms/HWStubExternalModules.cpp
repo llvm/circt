@@ -35,7 +35,7 @@ void HWStubExternalModulesPass::runOnOperation() {
 
   for (auto &op : llvm::make_early_inc_range(*topModule))
     if (auto module = dyn_cast<hw::HWModuleExternOp>(op)) {
-      SmallVector<hw::ModulePortInfo> ports = module.getPorts();
+      SmallVector<hw::PortInfo> ports = module.getPorts();
       auto nameAttr = module.getNameAttr();
       auto newModule =
           builder.create<hw::HWModuleOp>(module.getLoc(), nameAttr, ports);

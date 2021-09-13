@@ -325,8 +325,7 @@ static StringRef getVerilogDeclWord(Operation *op,
 /// looking into an instance from a different module as happens with bind.  It
 /// may return "" when unable to determine a name.  This works in situations
 /// where names are pre-legalized during prepare.
-static StringRef getNameRemotely(Value value,
-                                 ArrayRef<ModulePortInfo> modulePorts) {
+static StringRef getNameRemotely(Value value, ArrayRef<PortInfo> modulePorts) {
   if (auto barg = value.dyn_cast<BlockArgument>())
     return modulePorts[barg.getArgNumber()].getName();
 
@@ -2003,7 +2002,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
   size_t operandIndex = 0;
-  for (ModulePortInfo port : parent.getPorts()) {
+  for (PortInfo port : parent.getPorts()) {
     if (!port.isOutput())
       continue;
 
@@ -2513,7 +2512,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   os << ' ' << names.getName(op) << " (";
 
-  SmallVector<ModulePortInfo> portInfo = getModulePortInfo(moduleOp);
+  SmallVector<PortInfo> portInfo = getModulePortInfo(moduleOp);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -2927,8 +2926,8 @@ void ModuleEmitter::emitBind(BindOp op) {
            << childVerilogName.getValue() << ' ' << inst.getName().getValue()
            << " (";
 
-  SmallVector<ModulePortInfo> parentPortInfo = parentMod.getPorts();
-  SmallVector<ModulePortInfo> childPortInfo = getModulePortInfo(childMod);
+  SmallVector<PortInfo> parentPortInfo = parentMod.getPorts();
+  SmallVector<PortInfo> childPortInfo = getModulePortInfo(childMod);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -3020,7 +3019,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     state.encounteredError = true;
 
   // Add all the ports to the name table.
-  SmallVector<ModulePortInfo> portInfo = module.getPorts();
+  SmallVector<PortInfo> portInfo = module.getPorts();
   for (auto &port : portInfo) {
     StringRef name = port.getName();
     if (name.empty()) {

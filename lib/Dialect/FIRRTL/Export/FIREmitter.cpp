@@ -47,7 +47,7 @@ struct Emitter {
   void emitCircuit(CircuitOp op);
   void emitModule(FModuleOp op);
   void emitModule(FExtModuleOp op);
-  void emitModulePorts(ArrayRef<ModulePortInfo> ports,
+  void emitModulePorts(ArrayRef<PortInfo> ports,
                        Block::BlockArgListType arguments = {});
 
   // Statement emission
@@ -273,7 +273,7 @@ void Emitter::emitModule(FExtModuleOp op) {
 /// Emit the ports of a module or extmodule. If the `arguments` array is
 /// non-empty, it is used to populate `emittedNames` with the port names for use
 /// during expression emission.
-void Emitter::emitModulePorts(ArrayRef<ModulePortInfo> ports,
+void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
                               Block::BlockArgListType arguments) {
   for (unsigned i = 0, e = ports.size(); i < e; ++i) {
     const auto &port = ports[i];

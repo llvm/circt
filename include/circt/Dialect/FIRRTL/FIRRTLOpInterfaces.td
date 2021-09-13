@@ -42,7 +42,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     InterfaceMethod<"Get infromation about all ports",
-    "SmallVector<ModulePortInfo>", "getPorts">,
+    "SmallVector<PortInfo>", "getPorts">,
 
     InterfaceMethod<"Get the module port directions",
     "IntegerAttr", "getPortDirections", (ins), [{}],

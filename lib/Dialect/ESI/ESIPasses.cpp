@@ -176,14 +176,14 @@ HWModuleExternOp ESIHWBuilder::declareStage() {
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
   // types and ops.
-  ModulePortInfo ports[] = {{clk, PortDirection::INPUT, getI1Type(), 0},
-                            {rstn, PortDirection::INPUT, getI1Type(), 1},
-                            {a, PortDirection::INPUT, getNoneType(), 2},
-                            {aValid, PortDirection::INPUT, getI1Type(), 3},
-                            {aReady, PortDirection::OUTPUT, getI1Type(), 0},
-                            {x, PortDirection::OUTPUT, getNoneType(), 1},
-                            {xValid, PortDirection::OUTPUT, getI1Type(), 2},
-                            {xReady, PortDirection::INPUT, getI1Type(), 4}};
+  PortInfo ports[] = {{clk, PortDirection::INPUT, getI1Type(), 0},
+                      {rstn, PortDirection::INPUT, getI1Type(), 1},
+                      {a, PortDirection::INPUT, getNoneType(), 2},
+                      {aValid, PortDirection::INPUT, getI1Type(), 3},
+                      {aReady, PortDirection::OUTPUT, getI1Type(), 0},
+                      {x, PortDirection::OUTPUT, getNoneType(), 1},
+                      {xValid, PortDirection::OUTPUT, getI1Type(), 2},
+                      {xReady, PortDirection::INPUT, getI1Type(), 4}};
   declaredStage = create<HWModuleExternOp>(name, ports);
   return declaredStage;
 }
@@ -199,15 +199,14 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpoint() {
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
   // types and ops.
-  ModulePortInfo ports[] = {
-      {clk, PortDirection::INPUT, getI1Type(), 0},
-      {rstn, PortDirection::INPUT, getI1Type(), 1},
-      {dataOutValid, PortDirection::OUTPUT, getI1Type(), 0},
-      {dataOutReady, PortDirection::INPUT, getI1Type(), 2},
-      {dataOut, PortDirection::OUTPUT, getNoneType(), 1},
-      {dataInValid, PortDirection::INPUT, getI1Type(), 3},
-      {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
-      {dataIn, PortDirection::INPUT, getNoneType(), 4}};
+  PortInfo ports[] = {{clk, PortDirection::INPUT, getI1Type(), 0},
+                      {rstn, PortDirection::INPUT, getI1Type(), 1},
+                      {dataOutValid, PortDirection::OUTPUT, getI1Type(), 0},
+                      {dataOutReady, PortDirection::INPUT, getI1Type(), 2},
+                      {dataOut, PortDirection::OUTPUT, getNoneType(), 1},
+                      {dataInValid, PortDirection::INPUT, getI1Type(), 3},
+                      {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
+                      {dataIn, PortDirection::INPUT, getNoneType(), 4}};
   declaredCosimEndpoint = create<HWModuleExternOp>(name, ports);
   return declaredCosimEndpoint;
 }

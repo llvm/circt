@@ -206,7 +206,7 @@ void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        StringAttr name, ArrayRef<PortInfo> ports,
                         ArrayRef<NamedAttribute> attributes) {
   using namespace mlir::function_like_impl;
 
@@ -232,7 +232,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   // Record the names of the arguments if present.
   SmallVector<Attribute> argNames, resultNames;
-  for (const ModulePortInfo &port : ports) {
+  for (const PortInfo &port : ports) {
     SmallVector<NamedAttribute, 2> argAttrs;
     if (port.isOutput())
       resultNames.push_back(port.name);
@@ -247,7 +247,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
-                       StringAttr name, ArrayRef<ModulePortInfo> ports,
+                       StringAttr name, ArrayRef<PortInfo> ports,
                        ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, attributes);
 
@@ -284,7 +284,7 @@ StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
 }
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
-                             StringAttr name, ArrayRef<ModulePortInfo> ports,
+                             StringAttr name, ArrayRef<PortInfo> ports,
                              StringRef verilogName,
                              ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, attributes);
@@ -295,8 +295,7 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
 
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
-                                ArrayRef<ModulePortInfo> ports,
-                                StringRef verilogName,
+                                ArrayRef<PortInfo> ports, StringRef verilogName,
                                 ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, attributes);
   result.addAttribute("generatorKind", genKind);
@@ -307,7 +306,7 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
-SmallVector<ModulePortInfo> hw::getModulePortInfo(Operation *op) {
+SmallVector<PortInfo> hw::getModulePortInfo(Operation *op) {
   assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
          "Can only get module ports from an instance or module");
 
@@ -315,7 +314,7 @@ SmallVector<ModulePortInfo> hw::getModulePortInfo(Operation *op) {
   if (auto instance = dyn_cast<InstanceOp>(op))
     op = instance.getReferencedModule();
 
-  SmallVector<ModulePortInfo> results;
+  SmallVector<PortInfo> results;
   auto argTypes = getModuleType(op).getInputs();
 
   auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
@@ -864,7 +863,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
 }
 
 static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
-  SmallVector<ModulePortInfo> portInfo = getModulePortInfo(op);
+  SmallVector<PortInfo> portInfo = getModulePortInfo(op);
   size_t nextPort = 0;
 
   auto printPortName = [&](bool isOutput) {

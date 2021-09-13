@@ -156,7 +156,7 @@ struct ExtmoduleInstanceRemover : public Reduction {
     auto portInfo = instOp.getReferencedModule().getPorts();
     ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
     SmallVector<Value> replacementWires;
-    for (firrtl::ModulePortInfo info : portInfo) {
+    for (firrtl::PortInfo info : portInfo) {
       auto wire = builder.create<firrtl::WireOp>(
           info.type, (Twine(instOp.name()) + "_" + info.getName()).str());
       if (info.isOutput()) {

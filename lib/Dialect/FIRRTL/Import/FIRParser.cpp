@@ -2588,7 +2588,7 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts =
+  SmallVector<PortInfo> modulePorts =
       cast<FModuleLike>(referencedModule).getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
@@ -3033,7 +3033,7 @@ private:
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
 
-  ParseResult parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
+  ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
                             Location defaultLoc, StringRef moduleTarget,
                             unsigned indent);
@@ -3116,7 +3116,7 @@ ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
 /// port.
 ///
 ParseResult
-FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
+FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
                                 Location defaultLoc, StringRef moduleTarget,
                                 unsigned indent) {
@@ -3185,7 +3185,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   bool isExtModule = getToken().is(FIRToken::kw_extmodule);
   consumeToken();
   StringAttr name;
-  SmallVector<ModulePortInfo, 8> portList;
+  SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
 
   LocWithInfo info(getToken().getLoc(), this);
@@ -3206,7 +3206,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   // Check for port name collisions.
   SmallDenseMap<Attribute, SMLoc> portIds;
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    ModulePortInfo &port = std::get<0>(portAndLoc);
+    PortInfo &port = std::get<0>(portAndLoc);
     auto &entry = portIds[port.name];
     if (!entry.isValid()) {
       entry = std::get<1>(portAndLoc);
@@ -3351,7 +3351,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   auto argIt = moduleOp.args_begin();
   auto portList = moduleOp.getPorts();
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    ModulePortInfo &port = std::get<0>(portAndLoc);
+    PortInfo &port = std::get<0>(portAndLoc);
     if (moduleContext.addSymbolEntry(port.getName(), *argIt,
                                      std::get<1>(portAndLoc)))
       return failure();

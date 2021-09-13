@@ -34,7 +34,7 @@ def HWModuleOp : HWOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -46,7 +46,7 @@ def HWModuleOp : HWOp<"module",
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
     // Decode information about the input and output ports on this module.
-    SmallVector<ModulePortInfo> getPorts() {
+    SmallVector<PortInfo> getPorts() {
       return getModulePortInfo(*this);
     }
 
@@ -112,14 +112,14 @@ def HWModuleExternOp : HWOp<"module.extern",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{
     // Decode information about the input and output ports on this module.
-    SmallVector<ModulePortInfo> getPorts() {
+    SmallVector<PortInfo> getPorts() {
       return getModulePortInfo(*this);
     }
 
@@ -216,16 +216,15 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "FlatSymbolRefAttr":$genKind,
-                   "StringAttr":$name,
-                   "ArrayRef<ModulePortInfo>":$ports,
+    OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
+                   "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{
     // Decode information about the input and output ports on this module.
-    SmallVector<ModulePortInfo> getPorts() {
+    SmallVector<PortInfo> getPorts() {
       return getModulePortInfo(*this);
     }
 

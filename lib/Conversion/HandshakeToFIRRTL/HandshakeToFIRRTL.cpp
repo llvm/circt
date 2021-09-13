@@ -388,7 +388,7 @@ static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
 /// supported in the next patch.
 static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
-  llvm::SmallVector<ModulePortInfo, 8> ports;
+  llvm::SmallVector<PortInfo, 8> ports;
 
   // Add all inputs of funcOp.
   unsigned argIndex = 0;
@@ -487,7 +487,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
                                    bool hasClock,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
-  llvm::SmallVector<ModulePortInfo, 8> ports;
+  llvm::SmallVector<PortInfo, 8> ports;
 
   auto loc = oldOp->getLoc();
 
@@ -1997,7 +1997,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   llvm::SmallVector<Type> resultTypes;
 
   // Bundle all ports of the instance into a new flattened bundle type.
-  SmallVector<ModulePortInfo, 8> portInfo = subModuleOp.getPorts();
+  SmallVector<PortInfo, 8> portInfo = subModuleOp.getPorts();
   for (auto &port : portInfo)
     resultTypes.push_back(port.type);
 

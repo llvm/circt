@@ -48,7 +48,7 @@ SmallVector<Direction> unpackAttribute(Operation *module);
 } // namespace direction
 
 /// This holds the name and type that describes the module's ports.
-struct ModulePortInfo {
+struct PortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
