@@ -104,7 +104,7 @@ static void findValidReady(Operation *modOp,
 void circt::esi::findValidReadySignals(
     Operation *modOp, SmallVectorImpl<ESIPortValidReadyMapping> &names) {
 
-  SmallVector<hw::PortInfo> ports = hw::getModulePortInfo(modOp);
+  SmallVector<hw::PortInfo> ports = hw::getAllModulePortInfos(modOp);
   llvm::StringMap<hw::PortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
@@ -118,7 +118,7 @@ void circt::esi::resolvePortNames(
     Operation *modOp, ArrayRef<StringRef> portNames,
     SmallVectorImpl<ESIPortValidReadyMapping> &names) {
 
-  SmallVector<hw::PortInfo> ports = hw::getModulePortInfo(modOp);
+  SmallVector<hw::PortInfo> ports = hw::getAllModulePortInfos(modOp);
   llvm::StringMap<hw::PortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
@@ -213,7 +213,7 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // Map the shell result to the pearl port.
   SmallVector<hw::PortInfo, 64> outputPortMap;
 
-  SmallVector<hw::PortInfo> pearlPorts = hw::getModulePortInfo(pearl);
+  SmallVector<hw::PortInfo> pearlPorts = hw::getAllModulePortInfos(pearl);
   for (const auto &port : pearlPorts) {
     if (controlPorts.contains(port.name.getValue()))
       continue;

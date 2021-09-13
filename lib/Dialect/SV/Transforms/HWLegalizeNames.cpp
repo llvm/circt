@@ -133,7 +133,7 @@ void HWLegalizeNamesPass::runOnModule(hw::HWModuleOp module) {
   SmallVector<Attribute> argNames, outputNames;
 
   // Legalize the ports.
-  for (const PortInfo &port : getModulePortInfo(module)) {
+  for (const PortInfo &port : getAllModulePortInfos(module)) {
     auto newName = nameResolver.getLegalName(port.name);
 
     auto &namesVector = port.isOutput() ? outputNames : argNames;

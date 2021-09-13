@@ -2060,8 +2060,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // Decode information about the input and output ports on the referenced
   // module.
-  SmallVector<PortInfo, 8> portInfo =
-      cast<FModuleLike>(oldModule).getPorts();
+  SmallVector<PortInfo, 8> portInfo = cast<FModuleLike>(oldModule).getPorts();
 
   // Build an index from the name attribute to an index into portInfo, so we
   // can do efficient lookups.

@@ -206,40 +206,32 @@ void hw::setModuleResultNames(Operation *module, ArrayRef<Attribute> names) {
 enum ExternModKind { PlainMod, ExternMod, GenMod };
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<PortInfo> ports,
+                        StringAttr name, const ModulePortInfo &ports,
                         ArrayRef<NamedAttribute> attributes) {
   using namespace mlir::function_like_impl;
 
   // Add an attribute for the name.
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
 
+  SmallVector<Attribute> argNames, resultNames;
+
   SmallVector<Type, 4> argTypes;
+  for (auto elt : ports.inputs) {
+    if (elt.direction == PortDirection::INOUT && !elt.type.isa<hw::InOutType>())
+      elt.type = hw::InOutType::get(elt.type);
+    argTypes.push_back(elt.type);
+    argNames.push_back(elt.name);
+  }
+
   SmallVector<Type, 4> resultTypes;
-  for (auto elt : ports) {
-    if (elt.isOutput())
-      resultTypes.push_back(elt.type);
-    else {
-      if (elt.direction == PortDirection::INOUT &&
-          !elt.type.isa<hw::InOutType>())
-        elt.type = hw::InOutType::get(elt.type);
-      argTypes.push_back(elt.type);
-    }
+  for (auto elt : ports.outputs) {
+    resultTypes.push_back(elt.type);
+    resultNames.push_back(elt.name);
   }
 
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-
-  // Record the names of the arguments if present.
-  SmallVector<Attribute> argNames, resultNames;
-  for (const PortInfo &port : ports) {
-    SmallVector<NamedAttribute, 2> argAttrs;
-    if (port.isOutput())
-      resultNames.push_back(port.name);
-    else
-      argNames.push_back(port.name);
-  }
-
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
   result.addAttributes(attributes);
@@ -247,7 +239,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
-                       StringAttr name, ArrayRef<PortInfo> ports,
+                       StringAttr name, const ModulePortInfo &ports,
                        ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, attributes);
 
@@ -257,11 +249,16 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
   bodyRegion->push_back(body);
 
   // Add arguments to the body block.
-  for (auto elt : ports)
-    if (!elt.isOutput())
-      body->addArgument(elt.type);
+  for (auto elt : ports.inputs)
+    body->addArgument(elt.type);
 
   HWModuleOp::ensureTerminator(*bodyRegion, builder, result.location);
+}
+
+void HWModuleOp::build(OpBuilder &builder, OperationState &result,
+                       StringAttr name, ArrayRef<PortInfo> ports,
+                       ArrayRef<NamedAttribute> attributes) {
+  build(builder, result, name, ModulePortInfo(ports), attributes);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -284,7 +281,7 @@ StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
 }
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
-                             StringAttr name, ArrayRef<PortInfo> ports,
+                             StringAttr name, const ModulePortInfo &ports,
                              StringRef verilogName,
                              ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, attributes);
@@ -293,9 +290,17 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
 
+void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
+                             StringAttr name, ArrayRef<PortInfo> ports,
+                             StringRef verilogName,
+                             ArrayRef<NamedAttribute> attributes) {
+  build(builder, result, name, ModulePortInfo(ports), verilogName, attributes);
+}
+
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
-                                ArrayRef<PortInfo> ports, StringRef verilogName,
+                                const ModulePortInfo &ports,
+                                StringRef verilogName,
                                 ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, attributes);
   result.addAttribute("generatorKind", genKind);
@@ -303,10 +308,55 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
 }
 
+void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
+                                FlatSymbolRefAttr genKind, StringAttr name,
+                                ArrayRef<PortInfo> ports, StringRef verilogName,
+                                ArrayRef<NamedAttribute> attributes) {
+  build(builder, result, genKind, name, ModulePortInfo(ports), verilogName,
+        attributes);
+}
+
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
-SmallVector<PortInfo> hw::getModulePortInfo(Operation *op) {
+ModulePortInfo hw::getModulePortInfo(Operation *op) {
+  assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
+         "Can only get module ports from an instance or module");
+
+  // TODO: Remove when argNames/resultNames are stored on instances.
+  if (auto instance = dyn_cast<InstanceOp>(op))
+    op = instance.getReferencedModule();
+
+  SmallVector<PortInfo> inputs, outputs;
+  auto argTypes = getModuleType(op).getInputs();
+
+  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    bool isInOut = false;
+    auto type = argTypes[i];
+
+    if (auto inout = type.dyn_cast<InOutType>()) {
+      isInOut = true;
+      type = inout.getElementType();
+    }
+
+    auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
+    inputs.push_back({argNames[i].cast<StringAttr>(), direction, type, i});
+  }
+
+  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
+  auto resultTypes = getModuleType(op).getResults();
+  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
+    outputs.push_back({resultNames[i].cast<StringAttr>(), PortDirection::OUTPUT,
+                       resultTypes[i], i});
+  }
+  return ModulePortInfo(inputs, outputs);
+}
+
+/// Return an encapsulated set of information about input and output ports of
+/// the specified module or instance.  The input ports always come before the
+/// output ports in the list.
+SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
   assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
          "Can only get module ports from an instance or module");
 
@@ -863,20 +913,19 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
 }
 
 static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
-  SmallVector<PortInfo> portInfo = getModulePortInfo(op);
-  size_t nextPort = 0;
+  ModulePortInfo portInfo = getModulePortInfo(op);
+  size_t nextInputPort = 0, nextOutputPort = 0;
 
-  auto printPortName = [&](bool isOutput) {
+  auto printPortName = [&](size_t &nextPort, SmallVector<PortInfo> &portList) {
     // Allow printing mangled instances.
-    if (nextPort >= portInfo.size() ||
-        portInfo[nextPort].isOutput() != isOutput) {
+    if (nextPort >= portList.size()) {
       p << "<corrupt port>: ";
       return;
     }
 
     // Print this as a bareword if it can be parsed as an MLIR keyword,
     // otherwise print it as a quoted string.
-    StringAttr name = portInfo[nextPort++].name;
+    StringAttr name = portList[nextPort++].name;
     if (isValidKeyword(name.getValue()))
       p << name.getValue();
     else
@@ -894,12 +943,12 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
   p.printAttributeWithoutType(op.moduleNameAttr());
   p << '(';
   llvm::interleaveComma(op.inputs(), p, [&](Value op) {
-    printPortName(false);
+    printPortName(nextInputPort, portInfo.inputs);
     p << op << ": " << op.getType();
   });
   p << ") -> (";
   llvm::interleaveComma(op.getResults(), p, [&](Value res) {
-    printPortName(true);
+    printPortName(nextOutputPort, portInfo.outputs);
     p << res.getType();
   });
   p << ')';

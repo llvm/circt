@@ -52,10 +52,7 @@ static void lowerBoundInstance(InstanceOp op, const SymbolCache &cache) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule(&cache))) {
-    if (port.isOutput())
-      continue;
-
+  for (auto &port : getModulePortInfo(op.getReferencedModule(&cache)).inputs) {
     auto src = op.getOperand(nextOpNo);
     ++nextOpNo;
 
@@ -95,10 +92,7 @@ static void lowerInstanceResults(InstanceOp op, const SymbolCache &cache) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule(&cache))) {
-    if (!port.isOutput())
-      continue;
-
+  for (auto &port : getModulePortInfo(op.getReferencedModule(&cache)).outputs) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 

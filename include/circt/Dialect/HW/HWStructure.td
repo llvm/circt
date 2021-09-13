@@ -35,6 +35,8 @@ def HWModuleOp : HWOp<"module",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -45,9 +47,14 @@ def HWModuleOp : HWOp<"module",
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
-    // Decode information about the input and output ports on this module.
-    SmallVector<PortInfo> getPorts() {
+    /// Decode information about the input and output ports on this module.
+    ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
+    }
+
+    /// Return all the module ports merged into one list.
+    SmallVector<PortInfo> getAllPorts() {
+      return getAllModulePortInfos(*this);
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
@@ -114,13 +121,21 @@ def HWModuleExternOp : HWOp<"module.extern",
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
+                   CArg<"StringRef", "StringRef()">:$verilogName,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{
-    // Decode information about the input and output ports on this module.
-    SmallVector<PortInfo> getPorts() {
+    /// Decode information about the input and output ports on this module.
+    ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
+    }
+
+    /// Return all the module ports merged into one list.
+    SmallVector<PortInfo> getAllPorts() {
+      return getAllModulePortInfos(*this);
     }
 
     /// Return the name to use for the Verilog module that we're referencing
@@ -219,13 +234,22 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
     OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
                    "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
+                   "const ModulePortInfo &":$ports,
+                   CArg<"StringRef", "StringRef()">:$verilogName,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{
-    // Decode information about the input and output ports on this module.
-    SmallVector<PortInfo> getPorts() {
+    /// Decode information about the input and output ports on this module.
+    ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
+    }
+
+    /// Return all the module ports merged into one list.
+    SmallVector<PortInfo> getAllPorts() {
+      return getAllModulePortInfos(*this);
     }
 
     /// Return the name to use for the Verilog module that we're referencing
