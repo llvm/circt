@@ -420,6 +420,8 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
   using namespace mlir::function_like_impl;
 
+  auto loc = parser.getCurrentLocation();
+
   SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   SmallVector<NamedAttrList, 4> argAttrs;
   SmallVector<NamedAttrList, 4> resultAttrs;
@@ -460,21 +462,25 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   auto *context = result.getContext();
 
-  // Use the argument and result names if not already specified.
-  if (!hasAttribute("argNames", result.attributes)) {
-    SmallVector<Attribute> argNames;
-    if (!entryArgs.empty()) {
-      for (auto &arg : entryArgs)
-        argNames.push_back(getPortNameAttr(context, arg.name));
-    } else if (!argTypes.empty()) {
-      // The parser returns empty names in a special way.
-      argNames.assign(argTypes.size(), StringAttr::get(context, ""));
-    }
-
-    result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  if (hasAttribute("argNames", result.attributes) ||
+      hasAttribute("resultNames", result.attributes)) {
+    parser.emitError(
+        loc, "explicit argNames and resultNames attributes not allowed");
+    return failure();
   }
-  if (!hasAttribute("resultNames", result.attributes))
-    result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
+
+  // Use the argument and result names if not already specified.
+  SmallVector<Attribute> argNames;
+  if (!entryArgs.empty()) {
+    for (auto &arg : entryArgs)
+      argNames.push_back(getPortNameAttr(context, arg.name));
+  } else if (!argTypes.empty()) {
+    // The parser returns empty names in a special way.
+    argNames.assign(argTypes.size(), StringAttr::get(context, ""));
+  }
+
+  result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
 
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());

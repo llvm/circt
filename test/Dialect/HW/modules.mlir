@@ -12,11 +12,11 @@ module {
   // CHECK-NEXT:    %1 = comb.and %a, %a : i1
   // CHECK-NEXT:    hw.output %0, %1 : i1, i1
 
-  hw.module.extern @C(%a: i1) -> ("": i1, "": i1) attributes {argNames=["nameOfPortInSV"]}
+  hw.module.extern @C(%nameOfPortInSV: i1) -> ("": i1, "": i1)
   // CHECK-LABEL: hw.module.extern @C(%nameOfPortInSV: i1) -> ("": i1, "": i1)
   // CHECK-NOT: {
 
-  hw.module.extern @explicitResultName() -> (x: i1) attributes {resultNames=["FOO"]}
+  hw.module.extern @explicitResultName() -> (FOO: i1)
   // CHECK-LABEL: hw.module.extern @explicitResultName() -> (FOO: i1)
 
   hw.module.extern @D_ATTR(%a: i1) -> ("": i1, "": i1) attributes {filename = "test.v", parameters = {DEFAULT = 0 : i64}}

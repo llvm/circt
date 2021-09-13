@@ -547,8 +547,7 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 // https://github.com/llvm/circt/issues/728
 
 // CHECK-LABEL: module issue728(
-hw.module @issue728(%clock: i1, %a: i1, %b: i1)
-attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"] } {
+hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   // CHECK:  always @(posedge clock) begin
   // CHECK:    automatic logic _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
   // CHECK:    automatic logic _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
@@ -558,7 +557,7 @@ attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"]
   // CHECK:  end // always @(posedge)
   sv.always posedge %clock  {
      sv.fwrite "force output"
-     %cond = comb.and %a, %b, %a, %b, %a, %b : i1
+     %cond = comb.and %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija : i1
      sv.if %cond  {
        sv.fwrite "this cond is split"
      }
@@ -567,8 +566,7 @@ attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"]
 }
 
 // CHECK-LABEL: module issue728ifdef(
-hw.module @issue728ifdef(%clock: i1, %a: i1, %b: i1)
-  attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"] } {
+hw.module @issue728ifdef(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   // CHECK: always @(posedge clock) begin
   // CHECK:      automatic logic _tmp;
   // CHECK:      automatic logic _tmp_0;
@@ -583,7 +581,7 @@ hw.module @issue728ifdef(%clock: i1, %a: i1, %b: i1)
   sv.always posedge %clock  {
      sv.fwrite "force output"
      sv.ifdef.procedural "FUN_AND_GAMES" {
-       %cond = comb.and %a, %b, %a, %b, %a, %b : i1
+       %cond = comb.and %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija : i1
        sv.if %cond  {
          sv.fwrite "this cond is split"
        }

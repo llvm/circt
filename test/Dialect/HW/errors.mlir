@@ -182,10 +182,3 @@ hw.module @test(%a: i2) -> () {
   hw.instance "test" @f(a: %a: i2) -> ()
   hw.output
 }
-
-// -----
-
-// expected-error @+1 {{'hw.module' op incorrect number of argument names}}
-hw.module @invalidNames(%clock: i1, %a: i1)
-  attributes { argNames = ["x", "y", "z"] } {
-}
