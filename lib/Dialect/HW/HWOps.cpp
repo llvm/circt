@@ -19,6 +19,31 @@
 using namespace circt;
 using namespace hw;
 
+/// Return true if this string parses as a valid MLIR keyword, false otherwise.
+static bool isValidKeyword(StringRef name) {
+  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
+    return false;
+  for (auto c : name.drop_front()) {
+    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
+      return false;
+  }
+
+  return true;
+}
+
+// Parse a portname as a keyword or a quote surrounded string, followed by a
+// colon.
+static StringAttr parsePortName(OpAsmParser &parser) {
+  StringAttr result;
+  StringRef keyword;
+  if (succeeded(parser.parseOptionalKeyword(&keyword))) {
+    result = parser.getBuilder().getStringAttr(keyword);
+  } else if (parser.parseAttribute(result,
+                                   parser.getBuilder().getType<NoneType>()))
+    return {};
+  return succeeded(parser.parseColon()) ? result : StringAttr();
+};
+
 /// Return true if the specified operation is a combinatorial logic op.
 bool hw::isCombinatorial(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
@@ -347,24 +372,14 @@ parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
   if (succeeded(parser.parseOptionalRParen()))
     return success();
 
-  auto *context = parser.getBuilder().getContext();
   // Parse individual function results.
   do {
+    resultNames.push_back(parsePortName(parser));
+    if (!resultNames.back())
+      return failure();
+
     resultTypes.emplace_back();
     resultAttrs.emplace_back();
-
-    OpAsmParser::OperandType operandName;
-    auto namePresent = parser.parseOptionalOperand(operandName);
-    StringRef implicitName;
-    if (namePresent.hasValue()) {
-      if (namePresent.getValue() || parser.parseColon())
-        return failure();
-
-      // If the name was specified, then we will use it.
-      implicitName = operandName.name;
-    }
-    resultNames.push_back(getPortNameAttr(context, implicitName));
-
     if (parser.parseType(resultTypes.back()) ||
         parser.parseOptionalAttrDict(resultAttrs.back()))
       return failure();
@@ -541,19 +556,21 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
 
   // We print result types specially since we support named arguments.
   if (!resultTypes.empty()) {
-    auto &os = p.getStream();
-    os << " -> (";
+    p << " -> (";
     for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
       if (i != 0)
-        os << ", ";
-      StringRef name = getModuleResultName(op, i);
-      if (!name.empty())
-        os << '%' << name << ": ";
+        p << ", ";
+      StringAttr name = getModuleResultNameAttr(op, i);
+      if (isValidKeyword(name.getValue()))
+        p << name.getValue();
+      else
+        p << name;
+      p << ": ";
 
       p.printType(resultTypes[i]);
       p.printOptionalAttrDict(getResultAttrs(op, i));
     }
-    os << ')';
+    p << ')';
   }
 }
 
@@ -811,23 +828,12 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
     return parser.parseRParen();
   };
 
-  // Parse a portname as a keyword or a quote surrounded string.
-  auto parsePortName = [&]() -> StringAttr {
-    StringAttr result;
-    StringRef keyword;
-    if (succeeded(parser.parseOptionalKeyword(&keyword))) {
-      result = parser.getBuilder().getStringAttr(keyword);
-    } else if (parser.parseAttribute(result, noneType))
-      return {};
-    return succeeded(parser.parseColon()) ? result : StringAttr();
-  };
-
   llvm::SMLoc inputsOperandsLoc;
   if (parser.parseAttribute(moduleNameAttr, noneType, "moduleName",
                             result.attributes) ||
       parser.getCurrentLocation(&inputsOperandsLoc) ||
       parseCommaSeparatedList([&]() -> ParseResult {
-        if (!parsePortName())
+        if (!parsePortName(parser))
           return failure();
         inputsOperands.push_back({});
         inputsTypes.push_back({});
@@ -838,7 +844,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
       parser.parseArrow() || parseCommaSeparatedList([&]() -> ParseResult {
-        if (!parsePortName())
+        if (!parsePortName(parser))
           return failure();
         allResultTypes.push_back({});
         return parser.parseType(allResultTypes.back());
@@ -849,18 +855,6 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
 
   result.addTypes(allResultTypes);
   return success();
-}
-
-/// Return true if this string parses as a valid MLIR keyword, false otherwise.
-static bool isValidKeyword(StringRef name) {
-  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
-    return false;
-  for (auto c : name.drop_front()) {
-    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
-      return false;
-  }
-
-  return true;
 }
 
 static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {

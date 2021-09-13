@@ -3,7 +3,7 @@
 
 // CHECK-LABEL: hw.module @unary_ops
 hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
-   -> (%a: i8, %b: i8, %c: i1) {
+   -> (a: i8, b: i8, c: i1) {
   %c-1_i8 = hw.constant -1 : i8
 
   // CHECK: [[XOR1:%.+]] = comb.xor %arg0
@@ -43,7 +43,7 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
 /// The pass should sink constants in to the block where they are used.
 // CHECK-LABEL: @sink_constants
 // VERILOG-LABEL: sink_constants
-hw.module @sink_constants(%clock :i1) -> (%out : i1){
+hw.module @sink_constants(%clock :i1) -> (out : i1){
   // CHECK: %false = hw.constant false
   %false = hw.constant false
 

@@ -48,7 +48,7 @@ hw.module @A(%arg0: i1) {
 // -----
 
 // expected-error @+1 {{'hw.output' op must have same number of operands as region results}}
-hw.module @A() -> (i1) { }
+hw.module @A() -> ("": i1) { }
 
 // -----
 
@@ -146,7 +146,7 @@ hw.module @test() -> () {
 // -----
 
 // expected-note @+1 {{original module declared here}}
-hw.module @f() -> (%a: i2) {
+hw.module @f() -> (a: i2) {
   %a = hw.constant 1 : i2
   hw.output %a : i2
 }

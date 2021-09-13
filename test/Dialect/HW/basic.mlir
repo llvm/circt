@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-// CHECK-LABEL: hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
-hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
+// CHECK-LABEL: hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i50) {
+hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i50) {
   // CHECK-NEXT:    %c42_i12 = hw.constant 42 : i12
   // CHECK-NEXT:    [[RES0:%[0-9]+]] = comb.add %c42_i12, %c42_i12 : i12
   // CHECK-NEXT:    [[RES1:%[0-9]+]] = comb.mul %c42_i12, [[RES0]] : i12
@@ -111,19 +111,19 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (i50) {
 }
 // CHECK-NEXT:  }
 
-hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (%x: i3, %z: !hw.union<bar: i3, baz: i8>) {
+hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (x: i3, z: !hw.union<bar: i3, baz: i8>) {
   %x = hw.union_extract %a["bar"] : !hw.union<foo: i1, bar: i3>
   %z = hw.union_create "bar", %x : !hw.union<bar: i3, baz: i8>
   hw.output %x, %z : i3, !hw.union<bar: i3, baz: i8>
 }
-// CHECK-LABEL: hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (%x: i3, %z: !hw.union<bar: i3, baz: i8>) {
+// CHECK-LABEL: hw.module @UnionOps(%a: !hw.union<foo: i1, bar: i3>) -> (x: i3, z: !hw.union<bar: i3, baz: i8>) {
 // CHECK-NEXT:    [[I3REG:%.+]] = hw.union_extract %a["bar"] : !hw.union<foo: i1, bar: i3>
 // CHECK-NEXT:    [[UREG:%.+]] = hw.union_create "bar", [[I3REG]] : !hw.union<bar: i3, baz: i8>
 // CHECK-NEXT:    hw.output [[I3REG]], [[UREG]] : i3, !hw.union<bar: i3, baz: i8>
 
 // https://github.com/llvm/circt/issues/863
 // CHECK-LABEL: hw.module @signed_arrays
-hw.module @signed_arrays(%arg0: si8) -> (%out: !hw.array<2xsi8>) {
+hw.module @signed_arrays(%arg0: si8) -> (out: !hw.array<2xsi8>) {
   // CHECK-NEXT:  %wireArray = sv.wire  : !hw.inout<array<2xsi8>>
   %wireArray = sv.wire : !hw.inout<!hw.array<2xsi8>>
 

@@ -302,7 +302,7 @@ hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
   sv.alias %a, %b, %c : !hw.inout<i42>, !hw.inout<i42>, !hw.inout<i42>
 }
 
-hw.module @reg_0(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
+hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
@@ -592,7 +592,7 @@ hw.module @issue728ifdef(%clock: i1, %a: i1, %b: i1)
 }
 
 // CHECK-LABEL: module alwayscombTest(
-hw.module @alwayscombTest(%a: i1) -> (%x: i1) {
+hw.module @alwayscombTest(%a: i1) -> (x: i1) {
   // CHECK: reg combWire;
   %combWire = sv.reg : !hw.inout<i1>
   // CHECK: always_comb
@@ -629,7 +629,7 @@ hw.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
 
 // https://github.com/llvm/circt/issues/859
 // CHECK-LABEL: module oooReg(
-hw.module @oooReg(%in: i1) -> (%result: i1) {
+hw.module @oooReg(%in: i1) -> (result: i1) {
   // CHECK: wire abc;
   %0 = sv.read_inout %abc : !hw.inout<i1>
 
@@ -654,7 +654,7 @@ hw.module @ifdef_beginend(%clock: i1, %cond: i1, %val: i8) {
 
 // https://github.com/llvm/circt/issues/884
 // CHECK-LABEL: module ConstResetValueMustBeInlined(
-hw.module @ConstResetValueMustBeInlined(%clock: i1, %reset: i1, %d: i42) -> (%q: i42) {
+hw.module @ConstResetValueMustBeInlined(%clock: i1, %reset: i1, %d: i42) -> (q: i42) {
   %c0_i42 = hw.constant 0 : i42
   %tmp = sv.reg : !hw.inout<i42>
   // CHECK:      localparam [41:0] _T = 42'h0;
@@ -755,7 +755,7 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
 
 // CHECK-LABEL: module MultiUseReadInOut(
 // Issue #1564
-hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (%aa: i3, %bb: i3){
+hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (aa: i3, bb: i3){
   %a = sv.reg  : !hw.inout<i3>
   %b = sv.reg  : !hw.inout<i3>
   %c = sv.reg  : !hw.inout<i3>
@@ -923,7 +923,7 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
 // CHECK-NEXT: // extInst a2
 }
 
-hw.module @bindInMod() -> () {
+hw.module @bindInMod() {
   sv.bind @bindInst in @remoteInstDut
 }
 

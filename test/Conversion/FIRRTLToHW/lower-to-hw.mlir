@@ -477,7 +477,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @Analog(%a1: !hw.inout<i1>, %b1: !hw.inout<i1>,
-  // CHECK:                          %c1: !hw.inout<i1>) -> (%outClock: i1) {
+  // CHECK:                          %c1: !hw.inout<i1>) -> (outClock: i1) {
   // CHECK-NEXT:   %0 = sv.read_inout %c1 : !hw.inout<i1>
   // CHECK-NEXT:   %1 = sv.read_inout %b1 : !hw.inout<i1>
   // CHECK-NEXT:   %2 = sv.read_inout %a1 : !hw.inout<i1>
@@ -717,7 +717,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %8, %clock1 : !firrtl.clock, !firrtl.clock
   }
 
-  // CHECK-LABEL: hw.module @top_modx() -> (%tmp27: i23) {
+  // CHECK-LABEL: hw.module @top_modx() -> (tmp27: i23) {
   // CHECK-NEXT:    %c0_i23 = hw.constant 0 : i23
   // CHECK-NEXT:    %c42_i23 = hw.constant 42 : i23
   // CHECK-NEXT:    hw.output %c0_i23 : i23
@@ -740,7 +740,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.partialconnect %b, %a : !firrtl.uint<1>, !firrtl.uint<2>
   }
 
-  // CHECK-LABEL: hw.module @SimpleStruct(%source: !hw.struct<valid: i1, ready: i1, data: i64>) -> (%fldout: i64) {
+  // CHECK-LABEL: hw.module @SimpleStruct(%source: !hw.struct<valid: i1, ready: i1, data: i64>) -> (fldout: i64) {
   // CHECK-NEXT:    %0 = hw.struct_extract %source["data"] : !hw.struct<valid: i1, ready: i1, data: i64>
   // CHECK-NEXT:    hw.output %0 : i64
   // CHECK-NEXT:  }

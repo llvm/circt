@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-hw.module @Sender() -> (%x: !esi.channel<i1>) {
+hw.module @Sender() -> (x: !esi.channel<i1>) {
   %0 = constant 0 : i1
   // Don't transmit any data.
   %ch, %rcvrRdy = esi.wrap.vr %0, %0 : i1
@@ -18,7 +18,7 @@ hw.module @StructRcvr(%a: !esi.channel<!FooStruct>) {
   %data, %valid = esi.unwrap.vr %a, %rdy : !FooStruct
 }
 
-// CHECK-LABEL: hw.module @Sender() -> (%x: !esi.channel<i1>) {
+// CHECK-LABEL: hw.module @Sender() -> (x: !esi.channel<i1>) {
 // CHECK:        %chanOutput, %ready = esi.wrap.vr %false, %false : i1
 // CHECK-LABEL: hw.module @Reciever(%a: !esi.channel<i1>) {
 // CHECK:        %rawOutput, %valid = esi.unwrap.vr %a, %true : i1

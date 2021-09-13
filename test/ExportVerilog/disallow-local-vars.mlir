@@ -6,7 +6,7 @@
 
 // CHECK-LABEL: module side_effect_expr
 // DISALLOW-LABEL: module side_effect_expr
-hw.module @side_effect_expr(%clock: i1) -> (%a: i1, %a2: i1) {
+hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
 
   // DISALLOW: reg [[SE_REG:[_A-Za-z0-9]+]];
 
@@ -97,7 +97,7 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
 // CHECK-LABEL: module always_inline_expr
 // DISALLOW-LABEL: module always_inline_expr
 // https://github.com/llvm/circt/issues/1705
-hw.module @always_inline_expr(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1, %wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i1, %wo_mask_0: i1, %wo_data_0: i5) -> (%ro_data_0: i5) {
+hw.module @always_inline_expr(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1, %wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i1, %wo_mask_0: i1, %wo_data_0: i5) -> (ro_data_0: i5) {
   %Memory = sv.reg  : !hw.inout<uarray<2xi5>>
   %0 = sv.array_index_inout %Memory[%ro_addr_0] : !hw.inout<uarray<2xi5>>, i1
   %1 = sv.read_inout %0 : !hw.inout<i5>

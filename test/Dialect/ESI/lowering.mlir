@@ -2,11 +2,11 @@
 // RUN: circt-opt %s --lower-esi-ports -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=IFACE %s
 // RUN: circt-opt %s --lower-esi-to-physical --lower-esi-ports --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=HW %s
 
-hw.module.extern @Sender(%clk: i1) -> ( %x: !esi.channel<i4>, %y: i8 )
-hw.module.extern @ArrSender() -> (%x: !esi.channel<!hw.array<4xi64>>)
+hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8)
+hw.module.extern @ArrSender() -> (x: !esi.channel<!hw.array<4xi64>>)
 hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1)
 
-// CHECK-LABEL: hw.module.extern @Sender(%clk: i1) -> (%x: !esi.channel<i4>, %y: i8)
+// CHECK-LABEL: hw.module.extern @Sender(%clk: i1) -> (x: !esi.channel<i4>, y: i8)
 // CHECK-LABEL: hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1)
 
 // IFACE-LABEL: sv.interface @IValidReady_i4 {
@@ -21,7 +21,7 @@ hw.module.extern @Reciever(%a: !esi.channel<i4>, %clk: i1)
 // IFACE-NEXT:    sv.interface.signal @data : !hw.array<4xi64>
 // IFACE-NEXT:    sv.interface.modport @sink  ("input" @ready, "output" @valid, "output" @data)
 // IFACE-NEXT:    sv.interface.modport @source  ("input" @valid, "input" @data, "output" @ready)
-// IFACE-LABEL: hw.module.extern @Sender(%clk: i1, %x: !sv.modport<@IValidReady_i4::@sink>) -> (%y: i8)
+// IFACE-LABEL: hw.module.extern @Sender(%clk: i1, %x: !sv.modport<@IValidReady_i4::@sink>) -> (y: i8)
 // IFACE-LABEL: hw.module.extern @ArrSender(%x: !sv.modport<@IValidReady_ArrayOf4xi64::@sink>)
 // IFACE-LABEL: hw.module.extern @Reciever(%a: !sv.modport<@IValidReady_i4::@source>, %clk: i1)
 
@@ -56,7 +56,7 @@ hw.module @test(%clk:i1, %rstn:i1) {
   // HW-NOT: esi
 }
 
-hw.module @add11(%clk: i1, %ints: !esi.channel<i32>) -> (%mutatedInts: !esi.channel<i32>, %c4: i4) {
+hw.module @add11(%clk: i1, %ints: !esi.channel<i32>) -> (mutatedInts: !esi.channel<i32>, c4: i4) {
   %i, %i_valid = esi.unwrap.vr %ints, %rdy : i32
   %c11 = hw.constant 11 : i32
   %m = comb.add %c11, %i : i32
@@ -64,13 +64,13 @@ hw.module @add11(%clk: i1, %ints: !esi.channel<i32>) -> (%mutatedInts: !esi.chan
   %c4 = hw.constant 0 : i4
   hw.output %mutInts, %c4 : !esi.channel<i32>, i4
 }
-// HW-LABEL: hw.module @add11(%clk: i1, %ints: i32, %ints_valid: i1, %mutatedInts_ready: i1) -> (%mutatedInts: i32, %mutatedInts_valid: i1, %c4: i4, %ints_ready: i1) {
+// HW-LABEL: hw.module @add11(%clk: i1, %ints: i32, %ints_valid: i1, %mutatedInts_ready: i1) -> (mutatedInts: i32, mutatedInts_valid: i1, c4: i4, ints_ready: i1) {
 // HW:   %{{.+}} = hw.constant 11 : i32
 // HW:   [[RES0:%.+]] = comb.add %{{.+}}, %ints : i32
 // HW:   %{{.+}} = hw.constant 0 : i4
 // HW:   hw.output [[RES0]], %ints_valid, %{{.+}}, %mutatedInts_ready : i32, i1, i4, i1
 
-hw.module @InternRcvr(%in: !esi.channel<!hw.array<4xi8>>) -> () {}
+hw.module @InternRcvr(%in: !esi.channel<!hw.array<4xi8>>) {}
 
 hw.module @test2(%clk:i1, %rstn:i1) {
   %ints, %c4 = hw.instance "adder" @add11(clk: %clk: i1, ints: %ints: !esi.channel<i32>) -> (mutatedInts: !esi.channel<i32>, c4: i4)
@@ -96,6 +96,6 @@ hw.module @twoChannelArgs(%clk: i1, %ints: !esi.channel<i32>, %foo: !esi.channel
   %i, %i_valid = esi.unwrap.vr %ints, %rdy : i32
   %i2, %i2_valid = esi.unwrap.vr %foo, %rdy : i7
 }
-// HW-LABEL: hw.module @twoChannelArgs(%clk: i1, %ints: i32, %ints_valid: i1, %foo: i7, %foo_valid: i1) -> (%ints_ready: i1, %foo_ready: i1)
+// HW-LABEL: hw.module @twoChannelArgs(%clk: i1, %ints: i32, %ints_valid: i1, %foo: i7, %foo_valid: i1) -> (ints_ready: i1, foo_ready: i1)
 // HW:   %true = hw.constant true
 // HW:   hw.output %true, %true : i1, i1
