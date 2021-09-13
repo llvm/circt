@@ -83,6 +83,9 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 /// %and = comb.and %a, %b : i1
 /// calyx.assign %port = %and, %c1_i1 ? : i1   // Incorrect
 /// calyx.assign %port = %c1_i1, %and ? : i1   // Correct
+/// TODO(Calyx): This is useful to verify current MLIR can be lowered to the
+/// native compiler. Remove this when Calyx supports wire declarations.
+/// See: https://github.com/llvm/circt/pull/1774 for context.
 template <typename Op>
 static LogicalResult verifyNotComplexSource(Op op) {
   Operation *definingOp = op.src().getDefiningOp();
