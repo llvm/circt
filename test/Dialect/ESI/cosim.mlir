@@ -4,7 +4,7 @@
 // Disable the SV test : circt-opt %s --lower-esi-ports --lower-esi-to-hw | circt-translate --export-verilog | FileCheck --check-prefix=SV %s
 // RUN: circt-translate %s -export-esi-capnp -verify-diagnostics | FileCheck --check-prefix=CAPNP %s
 
-hw.module.extern @Sender() -> (%x: !esi.channel<si14>)
+hw.module.extern @Sender() -> (x: !esi.channel<si14>)
 hw.module.extern @Reciever(%a: !esi.channel<i32>)
 hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 
@@ -13,22 +13,22 @@ hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 // CHECK-LABEL: hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 
 hw.module @top(%clk:i1, %rstn:i1) -> () {
-  hw.instance "recv" @Reciever (%cosimRecv) : (!esi.channel<i32>) -> ()
+  hw.instance "recv" @Reciever (a: %cosimRecv: !esi.channel<i32>) -> ()
   // CHECK:  hw.instance "recv" @Reciever(%0)  : (!esi.channel<i32>) -> ()
 
-  %send.x = hw.instance "send" @Sender () : () -> (!esi.channel<si14>)
+  %send.x = hw.instance "send" @Sender () -> (x: !esi.channel<si14>)
   // CHECK:  %send.x = hw.instance "send" @Sender() : () -> !esi.channel<si14>
 
   %cosimRecv = esi.cosim %clk, %rstn, %send.x, 1 {name="TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
   // CHECK:  esi.cosim %clk, %rstn, %send.x, 1 {name = "TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
 
-  %send2.x = hw.instance "send2" @Sender () : () -> (!esi.channel<si14>)
+  %send2.x = hw.instance "send2" @Sender () -> (x: !esi.channel<si14>)
   // CHECK:  %send2.x = hw.instance "send2" @Sender() : () -> !esi.channel<si14>
 
   %cosimArrRecv = esi.cosim %clk, %rstn, %send2.x, 2 {name="ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
   // CHECK:  esi.cosim %clk, %rstn, %send2.x, 2 {name = "ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
 
-  hw.instance "arrRecv" @ArrReciever (%cosimArrRecv) : (!esi.channel<!hw.array<4 x si64>>) -> ()
+  hw.instance "arrRecv" @ArrReciever (x: %cosimArrRecv: !esi.channel<!hw.array<4 x si64>>) -> ()
 
   // Ensure that the file hash is deterministic.
   // CAPNP: @0xccf233b58d85e822;

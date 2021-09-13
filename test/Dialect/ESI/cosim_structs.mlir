@@ -5,10 +5,10 @@
 !DataPkt = type !hw.struct<encrypted: i1, compressionLevel: ui4, blob: !hw.array<32 x i8>>
 !pktChan = type !esi.channel<!DataPkt>
 
-hw.module.extern @Compressor(%in: !esi.channel<i1>) -> (%x: !pktChan)
+hw.module.extern @Compressor(%in: !esi.channel<i1>) -> (x: !pktChan)
 
 hw.module @top(%clk:i1, %rstn:i1) -> () {
-  %compressedData = hw.instance "compressor" @Compressor(%inputData) : (!esi.channel<i1>) -> !pktChan
+  %compressedData = hw.instance "compressor" @Compressor(in: %inputData: !esi.channel<i1>) -> (x: !pktChan)
   %inputData = esi.cosim %clk, %rstn, %compressedData, 1 {name="Compressor"} : !pktChan -> !esi.channel<i1>
 }
 
