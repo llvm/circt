@@ -67,7 +67,7 @@ firrtl.circuit "Simple" {
     // Parameterized module reference.
     // hw.instance carries the parameters, unlike at the FIRRTL layer.
 
-    // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %reset: i1) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} -> (out: i8)
+    // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %reset: i1) -> (out: i8) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.uint<1>, !firrtl.uint<8>
 
@@ -144,7 +144,7 @@ firrtl.circuit "Simple" {
                               out %out0: !firrtl.uint<8>) {
     // CHECK: %false = hw.constant false
 
-    // CHECK-NEXT: hw.instance "myext" @MyParameterizedExtModule(in: [[ARG:%.+]]: i1) {parameters
+    // CHECK-NEXT: hw.instance "myext" @MyParameterizedExtModule(in: [[ARG:%.+]]: i1) -> (out: i8) {parameters
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.uint<1>, !firrtl.uint<8>
 

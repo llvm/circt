@@ -188,14 +188,14 @@ sv.bind @b1 in @AB
 hw.module.extern @ExternDestMod(%a: i1, %b: i2)
 hw.module @InternalDestMod(%a: i1, %b: i2) {}
 //CHECK-NEXT: hw.module @AB(%a: i1, %b: i2) {
-//CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) {doNotPrint = 1 : i64} -> ()
-//CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) {doNotPrint = 1 : i64} -> ()
-//CHECK-NEXT:   hw.instance "whazzzup" @ExternDestMod(a: %a: i1, b: %b: i2) {parameters = {CFG = #sv.verbatim.parameter<"\22FOO\22">}} -> ()
+//CHECK-NEXT:   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
+//CHECK-NEXT:   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint = 1 : i64}
+//CHECK-NEXT:   hw.instance "whazzzup" @ExternDestMod(a: %a: i1, b: %b: i2) -> () {parameters = {CFG = #sv.verbatim.parameter<"\22FOO\22">}}
 //CHECK-NEXT:   hw.output
 //CHECK-NEXT: }
 hw.module @AB(%a: i1, %b: i2) -> () {
-  hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) {doNotPrint=1} -> ()
-  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) {doNotPrint=1} -> ()
-  hw.instance "whazzzup" @ExternDestMod(a: %a: i1, b: %b: i2) {parameters = {CFG = #sv.verbatim.parameter<"\"FOO\"">}} -> ()
+  hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
+  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
+  hw.instance "whazzzup" @ExternDestMod(a: %a: i1, b: %b: i2) -> () {parameters = {CFG = #sv.verbatim.parameter<"\"FOO\"">}}
   hw.output
 }

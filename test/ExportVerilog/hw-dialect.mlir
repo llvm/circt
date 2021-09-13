@@ -199,9 +199,9 @@ hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (%y: i1, %z: i1, %p: i1, %p2:
   %w2 = hw.instance "a1" @AAA(d: %w: i1, e: %w1: i1) -> (f: i1)
   %w1, %y = hw.instance "b1" @B(a: %w2: i1) -> (b: i1, c: i1)
 
-  %p = hw.instance "paramd" @EXT_W_PARAMS(a: %w: i1, b: %i3: i0) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} -> (out: i1)
+  %p = hw.instance "paramd" @EXT_W_PARAMS(a: %w: i1, b: %i3: i0) -> (out: i1) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
 
-  %p2 = hw.instance "paramd2" @EXT_W_PARAMS2(a: %i2: i2) {parameters = {DEFAULT = 1 : i32}} -> (out: i1)
+  %p2 = hw.instance "paramd2" @EXT_W_PARAMS2(a: %i2: i2) -> (out: i1) {parameters = {DEFAULT = 1 : i32}}
 
   hw.output %y, %x, %p, %p2 : i1, i1, i1, i1
 }
@@ -614,8 +614,8 @@ hw.module.extern @ExternDestMod(%a: i1, %b: i2) -> (%c: i3, %d: i4)
 hw.module @InternalDestMod(%a: i1, %b: i3) {}
 // CHECK-LABEL module ABC
 hw.module @ABC(%a: i1, %b: i2) -> (%c: i4) {
-  %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) {doNotPrint=1} -> (c: i3, d: i4)
-  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3) {doNotPrint=1} -> ()
+  %0,%1 = hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> (c: i3, d: i4) {doNotPrint=1}
+  hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %0: i3) -> () {doNotPrint=1}
   hw.output %1 : i4
 }
 
@@ -713,7 +713,7 @@ hw.module @Chi() -> (%Chi_output : i0) {
    // CHECK-NEXT:   .Wtricky(40'd4294967295)
    // CHECK-NEXT: ) bar ();
    
-   hw.instance "bar" @Bar1360() {parameters = {WIDTH0 = 0 : i64, WIDTH1 = 4 : i4, WIDTH2 = 6812312123 : i40, WIDTH3 = -1 : si4, WIDTH4 = -88888888888888888 : si68, Wtricky = 4294967295 : i40}} -> ()
+   hw.instance "bar" @Bar1360() -> ()  {parameters = {WIDTH0 = 0 : i64, WIDTH1 = 4 : i4, WIDTH2 = 6812312123 : i40, WIDTH3 = -1 : si4, WIDTH4 = -88888888888888888 : si68, Wtricky = 4294967295 : i40}} 
    hw.output
  }
  hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}

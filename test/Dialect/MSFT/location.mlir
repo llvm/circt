@@ -5,10 +5,10 @@ hw.module.extern @Foo()
 
 // CHECK-LABEL: hw.module @leaf
 hw.module @leaf() {
-  // CHECK: hw.instance "foo" @Foo() {"loc:memBank2" = #msft.switch.inst<@shallow["leaf"]=#msft.physloc<M20K, 8, 19, 1>, @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3>>} -> ()
-  hw.instance "foo" @Foo() {
+  // CHECK: hw.instance "foo" @Foo() -> () {"loc:memBank2" = #msft.switch.inst<@shallow["leaf"]=#msft.physloc<M20K, 8, 19, 1>, @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3>>} 
+  hw.instance "foo" @Foo() -> () {
     "loc:memBank2" = #msft.switch.inst< @shallow["leaf"]=#msft.physloc<M20K, 8, 19, 1>,
-                                        @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3> > } -> ()
+                                        @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3> > }
 }
 
 // TCL-LABEL: proc shallow_config

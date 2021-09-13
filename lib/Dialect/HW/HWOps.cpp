@@ -837,13 +837,13 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
       }) ||
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseArrow() ||
-      parseCommaSeparatedList([&]() -> ParseResult {
+      parser.parseArrow() || parseCommaSeparatedList([&]() -> ParseResult {
         if (!parsePortName())
           return failure();
         allResultTypes.push_back({});
         return parser.parseType(allResultTypes.back());
-      })) {
+      }) ||
+      parser.parseOptionalAttrDict(result.attributes)) {
     return failure();
   }
 
@@ -898,15 +898,14 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
     printPortName(false);
     p << op << ": " << op.getType();
   });
-  p << ')';
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{
-                              "instanceName", "sym_name", "moduleName"});
-  p << " -> (";
+  p << ") -> (";
   llvm::interleaveComma(op.getResults(), p, [&](Value res) {
     printPortName(true);
     p << res.getType();
   });
   p << ')';
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{
+                              "instanceName", "sym_name", "moduleName"});
 }
 
 /// Return the name of the specified input port or null if it cannot be
