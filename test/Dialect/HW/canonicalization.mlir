@@ -482,7 +482,7 @@ hw.module @multiply_reduction(%arg0: i11, %arg1: i11) -> (result: i11) {
 
 hw.module @sext_constant_folding() -> (result: i5) {
   %c8_i4 = hw.constant 8 : i4
-  %0 = comb.sext %c8_i4 : (i4) -> (i5)
+  %0 = comb.sext %c8_i4 : (i4) -> i5
   hw.output %0 : i5
 }
 
@@ -526,7 +526,7 @@ hw.module @concat_fold_1(%arg0: i4, %arg1: i3, %arg2: i1) -> (result: i8) {
 // CHECK-LABEL: hw.module @concat_fold_2
 hw.module @concat_fold_2(%arg0: i3, %arg1: i1) -> (result: i9) {
   // CHECK-NEXT:  %0 = comb.extract %arg0 from 2 : (i3) -> i1
-  %b = comb.sext %arg0 : (i3) -> (i8)
+  %b = comb.sext %arg0 : (i3) -> i8
   // CHECK-NEXT:  = comb.concat %0, %0, %0, %0, %0, %arg0, %arg1 : (i1, i1, i1, i1, i1, i3, i1) -> i9
   %c = comb.concat %b, %arg1 : (i8, i1) -> (i9)
   hw.output %c : i9
@@ -882,7 +882,7 @@ hw.module @icmp_fold_1bit_eq1(%arg: i1) -> (result: i1, a: i1, b: i1, c: i1) {
 // CHECK-LABEL: hw.module @sext_identical(%a: i1) -> (result: i1) {
 // CHECK-NEXT:   hw.output %a : i1
 hw.module @sext_identical(%a: i1) -> (result: i1) {
-  %0 = comb.sext %a : (i1) -> (i1)
+  %0 = comb.sext %a : (i1) -> i1
   hw.output %0 : i1
 }
 
@@ -1019,7 +1019,7 @@ hw.module @wire5() -> () {
 // CHECK-LABEL: hw.module @sext_extract1
 hw.module @sext_extract1(%arg0: i4) -> (a: i4) {
   // CHECK-NEXT:  %0 = comb.sext %arg0 : (i4) -> i5
-  %0 = comb.sext %arg0 : (i4) -> (i8)
+  %0 = comb.sext %arg0 : (i4) -> i8
   // CHECK-NEXT:  = comb.extract %0 from 1 : (i5) -> i4
   %1 = comb.extract %0 from 1 : (i8) -> i4
   // CHECK: hw.output %1
@@ -1029,7 +1029,7 @@ hw.module @sext_extract1(%arg0: i4) -> (a: i4) {
 // CHECK-LABEL: hw.module @sext_extract2
 hw.module @sext_extract2(%arg0: i4) -> (a: i3) {
   // CHECK-NEXT:  %0 = comb.extract %arg0 from 1 : (i4) -> i3
-  %0 = comb.sext %arg0 : (i4) -> (i8)
+  %0 = comb.sext %arg0 : (i4) -> i8
   %1 = comb.extract %0 from 1 : (i8) -> i3
   // CHECK: hw.output %0
   hw.output %1 : i3
@@ -1038,7 +1038,7 @@ hw.module @sext_extract2(%arg0: i4) -> (a: i3) {
 // CHECK-LABEL: hw.module @sext_extract3
 hw.module @sext_extract3(%arg0: i4) -> (a: i3) {
   // CHECK-NEXT: %0 = comb.extract %arg0 from 3 : (i4) -> i1
-  %0 = comb.sext %arg0 : (i4) -> (i8)
+  %0 = comb.sext %arg0 : (i4) -> i8
   // CHECK-NEXT: %1 = comb.sext %0 : (i1) -> i3
   %1 = comb.extract %0 from 3 : (i8) -> i3
   // CHECK: hw.output %1
