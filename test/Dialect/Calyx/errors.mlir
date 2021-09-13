@@ -564,7 +564,7 @@ calyx.program {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
     calyx.wires {
-      // expected-error @+1 {{'calyx.comb_group' op with cell: calyx.register "r", which is not combinational.}}
+      // expected-error @+1 {{'calyx.comb_group' op with register: "r" is conducting a memory store. This is not combinational.}}
       calyx.comb_group @IncorrectCombGroup {
         calyx.assign %r.in = %c1_1 : i1
         calyx.assign %r.write_en = %c1_1 : i1

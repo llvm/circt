@@ -117,6 +117,15 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     Value clk()       { return getResult(getNumDimensions() + 2); }
     Value readData()  { return getResult(getNumDimensions() + 3); }
     Value done()      { return getResult(getNumDimensions() + 4); }
+
+    /// Returns the ports used in a memory read.
+    SmallVector<Value> getReadPorts() {
+      SmallVector<Value> ports;
+      for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
+        ports.push_back(getResult(i));
+      ports.push_back(readData());
+      return ports;
+    }
   }];
 }
 

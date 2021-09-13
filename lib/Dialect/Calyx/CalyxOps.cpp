@@ -731,31 +731,47 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
 // CombGroupOp
 //===----------------------------------------------------------------------===//
 
-/// Verifies a combinational group may contain only combinational primitives.
+/// Verifies the defining operation of a value is combinational.
+static LogicalResult isCombinational(Value value, GroupInterface group) {
+  Operation *definingOp = value.getDefiningOp();
+  if (definingOp == nullptr)
+    return success();
+
+  // For now, assumes all component instances may be combinational. Once
+  // combinational components are supported, this can be changed.
+  if (isa<InstanceOp>(definingOp))
+    return success();
+
+  // Reads to MemoryOp and RegisterOp are combinational. Writes are not.
+  if (auto r = dyn_cast<RegisterOp>(definingOp)) {
+    if (value != r.outPort())
+      return group->emitOpError()
+             << "with register: \""
+             << cast<CellInterface>(definingOp).instanceName()
+             << "\" is conducting a memory store. This is not combinational.";
+  } else if (auto m = dyn_cast<MemoryOp>(definingOp)) {
+    if (llvm::none_of(m.getReadPorts(), [&](Value p) { return p == value; }))
+      return group->emitOpError()
+             << "with memory: \""
+             << cast<CellInterface>(definingOp).instanceName()
+             << "\" is conducting a memory store. This is not combinational.";
+  }
+
+  return success();
+}
+
+/// Verifies a combinational group may contain only combinational primitives or
+/// perform combinational logic.
 // TODO(www.github.com/llvm/circt/issues/1739): Add Combinational trait.
 static LogicalResult verifyCombGroupOp(CombGroupOp group) {
-  auto isCombinational = [&](Value value) -> LogicalResult {
-    Operation *definingOp = value.getDefiningOp();
-    if (definingOp == nullptr)
-      return success();
-
-    if (auto cell = dyn_cast<CellInterface>(definingOp);
-        cell && isa<MemoryOp, RegisterOp>(cell))
-      // For now, assumes all component instances may be combinational. Once
-      // combinational components are supported, this can be changed.
-      return group->emitOpError()
-             << "with cell: " << cell->getName() << " \"" << cell.instanceName()
-             << "\", which is not combinational.";
-
-    return success();
-  };
 
   for (auto &&op : *group.getBody()) {
     auto assign = dyn_cast<AssignOp>(op);
     if (assign == nullptr)
       continue;
     Value dst = assign.dest(), src = assign.src();
-    if (failed(isCombinational(dst)) || failed(isCombinational(src)))
+    if (failed(isCombinational(dst, group)) ||
+        failed(isCombinational(src, group)))
       return failure();
   }
   return success();
