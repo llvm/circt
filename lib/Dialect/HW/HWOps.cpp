@@ -791,7 +791,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   // If the referenced module is internal, check that input and result types are
   // consistent with the referenced module.
-  if (isa<HWModuleOp>(module))
+  if (isa<HWModuleOp>(module) || isa<HWModuleGeneratedOp>(module))
     return verifyInstanceOpTypes(*this, module);
 
   return success();

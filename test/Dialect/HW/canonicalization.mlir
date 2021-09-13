@@ -1204,7 +1204,7 @@ hw.module @unintializedWire(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42)
 // CHECK-NEXT:    %_M.ro_data_0 = hw.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0(ro_clock_0: %clock1: i1, ro_en_0: %true: i1, ro_addr_0: %c0_i4: i4) -> (ro_data_0: i42)
 // CHECK-NEXT:    hw.output
 // CHECK-NEXT:  }
-hw.module.extern @FIRRTLMem_1_0_0_42_12_0_1_0(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1) -> (ro_data_0: i32)
+hw.module.extern @FIRRTLMem_1_0_0_42_12_0_1_0(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i4) -> (ro_data_0: i42)
 hw.module @IncompleteRead(%clock1: i1) {
   %c0_i3 = hw.constant 0 : i3
   %true = hw.constant true
