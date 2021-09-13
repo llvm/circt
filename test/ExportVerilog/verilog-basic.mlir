@@ -302,11 +302,11 @@ hw.module @ExternMods(%a_in: i8) {
   // CHECK: MyParameterizedExtModule #(
   // CHECK:   .CFG(FOO)
   // CHECK: ) xyz2
-  hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim.parameter<"FOO">}} : (i8) -> i1
+  hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) {parameters = {CFG = #sv.verbatim.parameter<"FOO">}} -> (out: i1)
   // CHECK: MyParameterizedExtModule #(
   // CHECK:   .CFG("STRING")
   // CHECK: ) xyz3
-  hw.instance "xyz3" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim.parameter<"\"STRING\"">}} : (i8) -> i1
+  hw.instance "xyz3" @MyParameterizedExtModule(in: %a_in: i8) {parameters = {CFG = #sv.verbatim.parameter<"\"STRING\"">}} -> (out: i1)
 }
 
 // CHECK-LABEL: module UseInstances
@@ -324,8 +324,8 @@ hw.module @UseInstances(%a_in: i8) -> (%a_out1: i1, %a_out2: i1) {
   // CHECK:   .in  (a_in),
   // CHECK:   .out (a_out2)
   // CHECK: );
-  %xyz.out = hw.instance "xyz" @MyExtModule(%a_in) : (i8) -> i1
-  %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i8) -> i1
+  %xyz.out = hw.instance "xyz" @MyExtModule(in: %a_in: i8) -> (out: i1)
+  %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} -> (out: i1)
   hw.output %xyz.out, %xyz2.out : i1, i1
 }
 
@@ -412,7 +412,7 @@ hw.module @BindEmissionInstance() {
 hw.module @BindEmission() -> () {
   // CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
   // CHECK-NEXT: // BindEmissionInstance BindEmissionInstance ();
-  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() {doNotPrint = true} : () -> ()
+  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() {doNotPrint = true} -> ()
   hw.output
 }
 

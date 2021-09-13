@@ -168,7 +168,7 @@ sv.bind @A in @NotAModule
 // -----
 hw.module.extern @ExternDestMod()
 hw.module @InternSrcMod() {
-  hw.instance "whatever" sym @A @ExternDestMod() : () -> ()
+  hw.instance "whatever" sym @A @ExternDestMod() -> ()
   hw.output
 }
 // expected-error @+1 {{Referenced instance isn't marked as doNotPrint}}

@@ -27,12 +27,12 @@ module {
     hw.output %in : i1
   }
 
-  // CHECK-LABEL: llhd.entity @SimpleInstance
+// CHECK-LABEL: llhd.entity @SimpleInstance
   // CHECK-SAME: (%[[IN:.+]] : !llhd.sig<i1>) ->
   // CHECK-SAME: (%[[OUT:.+]] : !llhd.sig<i1>)
   hw.module @SimpleInstance(%in: i1) -> (%out: i1) {
     // CHECK: llhd.inst "sub1" @sub(%[[IN]]) -> (%[[OUT]]) : (!llhd.sig<i1>) -> !llhd.sig<i1>
-    %0 = hw.instance "sub1" @sub (%in) : (i1) -> i1
+    %0 = hw.instance "sub1" @sub (in: %in: i1) -> (out: i1)
     hw.output %0 : i1
   }
 
@@ -49,7 +49,7 @@ module {
     // CHECK: %[[ADD2:.+]] = comb.add %[[RES]], %[[RES]]
     // CHECK: llhd.drv %[[OUT:.+]], %[[ADD2]]
     %0 = comb.add %in, %in : i1
-    %1 = hw.instance "sub1" @sub (%0) : (i1) -> i1
+    %1 = hw.instance "sub1" @sub (in: %0: i1) -> (out: i1)
     %2 = comb.add %1, %1 : i1
     hw.output %2 : i1
   }
@@ -61,7 +61,7 @@ module {
   hw.module @InstanceDirectlyDrivingMultipleOutputs(%in: i1) -> (%out1: i1, %out2: i1) {
     // CHECK: llhd.inst "sub1" @sub(%[[IN]]) -> (%[[OUT2]]) : (!llhd.sig<i1>) -> !llhd.sig<i1>
     // CHECK: llhd.con %[[OUT1]], %[[OUT2]]
-    %0 = hw.instance "sub1" @sub (%in) : (i1) -> i1
+    %0 = hw.instance "sub1" @sub (in: %in: i1) -> (out: i1)
     hw.output %0, %0 : i1, i1
   }
 
@@ -76,7 +76,7 @@ module {
     // CHECK: %[[ADD:.+]] = comb.add %[[RES]], %[[RES]]
     // CHECK: llhd.drv %[[OUT1:.+]], %[[ADD]]
     // CHECK: llhd.drv %[[OUT2:.+]], %[[ADD]]
-    %0 = hw.instance "sub1" @sub (%in) : (i1) -> i1
+    %0 = hw.instance "sub1" @sub(in: %in: i1) -> (out: i1)
     %1 = comb.add %0, %0 : i1
     hw.output %1, %1 : i1, i1
   }

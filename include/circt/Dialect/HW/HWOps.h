@@ -45,6 +45,11 @@ struct ModulePortInfo {
   bool isOutput() const { return direction == OUTPUT; }
 };
 
+/// Return an encapsulated set of information about input and output ports of
+/// the specified module or instance.  The input ports always come before the
+/// output ports in the list.
+SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
+
 // Helpers for working with modules.
 
 /// Return true if this is an hw.module, external module, generated module etc.
@@ -74,10 +79,6 @@ static inline StringRef getModuleResultName(Operation *module,
 
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
 void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
-
-/// Return an encapsulated set of information about input and output ports of
-/// the specified module or instance.
-SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);

@@ -26,17 +26,17 @@ module {
 
   hw.module @A(%d: i1, %e: !hw.inout<i1>) -> (i1, i1) {
     // Instantiate @B as a HW module with result-as-output sementics
-    %r1, %r2 = hw.instance "b1" @B(%d) : (i1) -> (i1, i1)
+    %r1, %r2 = hw.instance "b1" @B(a: %d: i1) -> (nameOfPortInSV: i1, "": i1)
     // Instantiate @C with a public symbol on the instance
-    %f, %g = hw.instance "c1" sym @E @C(%d) : (i1) -> (i1, i1)
+    %f, %g = hw.instance "c1" sym @E @C(a: %d: i1) -> ("": i1, "": i1)
     // Connect the inout port with %f
     sv.assign %e, %f : i1
     // Output values
     hw.output %g, %r1 : i1, i1
   }
   // CHECK-LABEL: hw.module @A(%d: i1, %e: !hw.inout<i1>) -> (i1, i1)
-  // CHECK-NEXT:  %b1.nameOfPortInSV, %b1.1 = hw.instance "b1" @B(%d) : (i1) -> (i1, i1)
-  // CHECK-NEXT:  %c1.0, %c1.1 = hw.instance "c1" sym @E @C(%d) : (i1) -> (i1, i1)
+  // CHECK-NEXT:  %b1.nameOfPortInSV, %b1.1 = hw.instance "b1" @B(a: %d: i1) -> (nameOfPortInSV: i1, "": i1)
+  // CHECK-NEXT:  %c1.0, %c1.1 = hw.instance "c1" sym @E @C(nameOfPortInSV: %d: i1) -> ("": i1, "": i1)
 
   hw.module @AnyType1(%a: vector< 3 x i8 >) { }
   // CHECK-LABEL: hw.module @AnyType1(%a: vector<3xi8>)
@@ -44,11 +44,11 @@ module {
   // CHECK-LABEL: hw.module @AnyTypeInstance()
   hw.module @AnyTypeInstance() {
     %vec = constant dense <0> : vector<3xi8>
-    hw.instance "anyType1" @AnyType1(%vec) : (vector<3xi8>) -> ()
+    hw.instance "anyType1" @AnyType1(a: %vec: vector<3xi8>) -> ()
   }
 
   // CHECK:       %cst = constant dense<0> : vector<3xi8>
-  // CHECK-NEXT:  hw.instance "anyType1" @AnyType1(%cst) : (vector<3xi8>) -> ()
+  // CHECK-NEXT:  hw.instance "anyType1" @AnyType1(a: %cst: vector<3xi8>) -> ()
 
   hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
   hw.module.generated @genmod1, @MEMORY() -> (%FOOBAR: i1) attributes {write_latency=1, read_latency=1, ports=["read","write"]}

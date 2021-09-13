@@ -280,7 +280,8 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
 }
 
 /// Return an encapsulated set of information about input and output ports of
-/// the specified module or instance.
+/// the specified module or instance.  The input ports always come before the
+/// output ports in the list.
 SmallVector<ModulePortInfo> hw::getModulePortInfo(Operation *op) {
   assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
          "Can only get module ports from an instance or module");
@@ -781,10 +782,10 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   SmallVector<OpAsmParser::OperandType, 4> inputsOperands;
   SmallVector<Type> inputsTypes;
   SmallVector<Type> allResultTypes;
+  auto noneType = parser.getBuilder().getType<NoneType>();
 
-  if (parser.parseAttribute(instanceNameAttr,
-                            parser.getBuilder().getType<NoneType>(),
-                            "instanceName", result.attributes))
+  if (parser.parseAttribute(instanceNameAttr, noneType, "instanceName",
+                            result.attributes))
     return failure();
 
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
@@ -794,43 +795,96 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
                                          result.attributes);
   }
 
-  llvm::SMLoc inputsOperandsLoc;
-  if (parser.parseAttribute(moduleNameAttr,
-                            parser.getBuilder().getType<NoneType>(),
-                            "moduleName", result.attributes) ||
-      parser.parseLParen() || parser.getCurrentLocation(&inputsOperandsLoc) ||
-      parser.parseOperandList(inputsOperands) || parser.parseRParen() ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseLParen())
-    return failure();
-
-  if (failed(parser.parseOptionalRParen())) {
-    if (parser.parseTypeList(inputsTypes) || parser.parseRParen())
+  // Parse a paren-enclosed list of comma-separated items.
+  auto parseCommaSeparatedList = [&](auto fn) -> ParseResult {
+    if (parser.parseLParen())
       return failure();
-  }
 
-  if (parser.parseArrow())
-    return failure();
+    // Empty list.
+    if (succeeded(parser.parseOptionalRParen()))
+      return success();
 
-  if (succeeded(parser.parseOptionalLParen())) {
-    if (failed(parser.parseOptionalRParen())) {
-      if (parser.parseTypeList(allResultTypes) || parser.parseRParen())
+    do {
+      if (failed(fn()))
         return failure();
-    }
-    result.addTypes(allResultTypes);
-  } else {
-    Type resultType;
-    if (parser.parseType(resultType))
-      return failure();
-    result.addTypes(resultType);
-  }
-  if (parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
-                             result.operands))
+    } while (succeeded(parser.parseOptionalComma()));
+    return parser.parseRParen();
+  };
+
+  // Parse a portname as a keyword or a quote surrounded string.
+  auto parsePortName = [&]() -> StringAttr {
+    StringAttr result;
+    StringRef keyword;
+    if (succeeded(parser.parseOptionalKeyword(&keyword))) {
+      result = parser.getBuilder().getStringAttr(keyword);
+    } else if (parser.parseAttribute(result, noneType))
+      return {};
+    return succeeded(parser.parseColon()) ? result : StringAttr();
+  };
+
+  llvm::SMLoc inputsOperandsLoc;
+  if (parser.parseAttribute(moduleNameAttr, noneType, "moduleName",
+                            result.attributes) ||
+      parser.getCurrentLocation(&inputsOperandsLoc) ||
+      parseCommaSeparatedList([&]() -> ParseResult {
+        if (!parsePortName())
+          return failure();
+        inputsOperands.push_back({});
+        inputsTypes.push_back({});
+        return failure(parser.parseOperand(inputsOperands.back()) ||
+                       parser.parseColon() ||
+                       parser.parseType(inputsTypes.back()));
+      }) ||
+      parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
+                             result.operands) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseArrow() ||
+      parseCommaSeparatedList([&]() -> ParseResult {
+        if (!parsePortName())
+          return failure();
+        allResultTypes.push_back({});
+        return parser.parseType(allResultTypes.back());
+      })) {
     return failure();
+  }
+
+  result.addTypes(allResultTypes);
   return success();
 }
 
+/// Return true if this string parses as a valid MLIR keyword, false otherwise.
+static bool isValidKeyword(StringRef name) {
+  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
+    return false;
+  for (auto c : name.drop_front()) {
+    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
+      return false;
+  }
+
+  return true;
+}
+
 static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
+  SmallVector<ModulePortInfo> portInfo = getModulePortInfo(op);
+  size_t nextPort = 0;
+
+  auto printPortName = [&](bool isOutput) {
+    // Allow printing mangled instances.
+    if (nextPort >= portInfo.size() ||
+        portInfo[nextPort].isOutput() != isOutput) {
+      p << "<corrupt port>: ";
+      return;
+    }
+
+    // Print this as a bareword if it can be parsed as an MLIR keyword,
+    // otherwise print it as a quoted string.
+    StringAttr name = portInfo[nextPort++].name;
+    if (isValidKeyword(name.getValue()))
+      p << name.getValue();
+    else
+      p << name;
+    p << ": ";
+  };
+
   p << ' ';
   p.printAttributeWithoutType(op.instanceNameAttr());
   if (auto attr = op.sym_nameAttr()) {
@@ -840,18 +894,19 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
   p << ' ';
   p.printAttributeWithoutType(op.moduleNameAttr());
   p << '(';
-  p << op.inputs();
+  llvm::interleaveComma(op.inputs(), p, [&](Value op) {
+    printPortName(false);
+    p << op << ": " << op.getType();
+  });
   p << ')';
   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{
                               "instanceName", "sym_name", "moduleName"});
-  p << " : (";
-  p << op.inputs().getTypes();
-  p << ") -> ";
-  if (op->getNumResults() != 1)
-    p << '(';
-  p << op->getResultTypes();
-  if (op->getNumResults() != 1)
-    p << ')';
+  p << " -> (";
+  llvm::interleaveComma(op.getResults(), p, [&](Value res) {
+    printPortName(true);
+    p << res.getType();
+  });
+  p << ')';
 }
 
 /// Return the name of the specified input port or null if it cannot be

@@ -8,7 +8,7 @@ module {
   }
   hw.module @test(%in: f16) -> (%out: f16) {
     // expected-error @+1 {{failed to legalize operation 'hw.instance'}}
-    %0 = hw.instance "sub1" @sub (%in) : (f16) -> (f16)
+    %0 = hw.instance "sub1" @sub (in: %in: f16) -> (out: f16)
     hw.output %0: f16
   }
 }

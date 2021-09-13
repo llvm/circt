@@ -6,19 +6,19 @@ hw.module @B(%a: i1) -> () {
 // CHECK-LABEL: hw.module @TestDupInstanceName
 hw.module @TestDupInstanceName(%a: i1) {
   // CHECK: hw.instance "name"
-  hw.instance "name" @B(%a) : (i1) -> ()
+  hw.instance "name" @B(a: %a: i1) -> ()
 
   // CHECK: hw.instance "name_0"
-  hw.instance "name" @B(%a) : (i1) -> ()
+  hw.instance "name" @B(a: %a: i1) -> ()
 }
 
 // CHECK-LABEL: TestEmptyInstanceName
 hw.module @TestEmptyInstanceName(%a: i1) {
   // CHECK: hw.instance "_T"
-  hw.instance "" @B(%a) : (i1) -> ()
+  hw.instance "" @B(a: %a: i1) -> ()
 
   // CHECK: hw.instance "_T_0"
-  hw.instance "" @B(%a) : (i1) -> ()
+  hw.instance "" @B(a: %a: i1) -> ()
 }
 
 // CHECK-LABEL: hw.module @TestInstanceNameValueConflict
@@ -30,7 +30,7 @@ hw.module @TestInstanceNameValueConflict(%a: i1) {
   // CHECK:  %input_1 = sv.reg
   %input = sv.reg : !hw.inout<i1>
   // CHECK: hw.instance "name_2"
-  hw.instance "name" @B(%a) : (i1) -> ()
+  hw.instance "name" @B(a: %a: i1) -> ()
 }
 
 // https://github.com/llvm/circt/issues/681
@@ -54,7 +54,7 @@ hw.module @reg(%inout: i1) -> (%output: i1) {
 // CHECK-LABEL: hw.module @inout_inst
 // CHECK-NEXT: hw.instance "foo" @inout_3
 hw.module @inout_inst(%a: i1) -> () {
-  %0 = hw.instance "foo" @inout (%a) : (i1) -> (i1)
+  %0 = hw.instance "foo" @inout (inout: %a: i1) -> (output: i1)
 }
 
 // https://github.com/llvm/circt/issues/525
@@ -90,7 +90,7 @@ hw.module @ModuleWithCollision(%reg: i1) -> (%wire: i1) {
   hw.output %reg : i1
 }
 hw.module @InstanceWithCollisions(%a: i1) {
-  hw.instance "parameter" @ModuleWithCollision(%a) : (i1) -> (i1)
+  hw.instance "parameter" @ModuleWithCollision(r: %a: i1) -> (wire: i1)
 }
 
 // TODO: Renaming the above interface declarations currently does not rename

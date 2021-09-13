@@ -28,5 +28,5 @@ hw.module @A () {}
 
 hw.module @B() {
   // expected-error @+1 {{unknown extmodule parameter value 'width' = @Foo}}
-  hw.instance "foo" @A() { parameters = { width = @Foo } }: () -> ()
+  hw.instance "foo" @A() { parameters = { width = @Foo } } -> ()
 }

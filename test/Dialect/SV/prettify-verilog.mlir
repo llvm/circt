@@ -169,11 +169,11 @@ hw.module.extern @MyExtModule(%in: i8)
 // VERILOG-LABEL: module MoveInstances
 hw.module @MoveInstances(%a_in: i8) {
   // CHECK: %0 = comb.add %a_in, %a_in : i8
-  // CHECK: hw.instance "xyz3" @MyExtModule(%0)
+  // CHECK: hw.instance "xyz3" @MyExtModule(in: %0: i8)
   // VERILOG: MyExtModule xyz3 (
   // VERILOG:   .in (a_in + a_in)
   // VERILOG: );
-  hw.instance "xyz3" @MyExtModule(%b) : (i8) -> ()
+  hw.instance "xyz3" @MyExtModule(in: %b: i8) -> ()
 
   %b = comb.add %a_in, %a_in : i8
 }

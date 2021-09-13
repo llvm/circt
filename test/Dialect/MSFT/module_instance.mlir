@@ -8,5 +8,5 @@ hw.module.extern @fooMod () -> (%x: i32)
 hw.module @top () {
   msft.instance "foo" @fooMod () : () -> (i32)
   // CHECK: %foo.x = msft.instance "foo" @fooMod() : () -> i32
-  // HWLOW: %foo.x = hw.instance "foo" @fooMod() : () -> i32
+  // HWLOW: %foo.x = hw.instance "foo" @fooMod() -> (x: i32)
 }
