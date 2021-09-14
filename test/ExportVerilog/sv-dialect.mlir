@@ -302,7 +302,7 @@ hw.module @Aliasing(%a : !hw.inout<i42>, %b : !hw.inout<i42>,
   sv.alias %a, %b, %c : !hw.inout<i42>, !hw.inout<i42>, !hw.inout<i42>
 }
 
-hw.module @reg_0(%in4: i4, %in8: i8) -> (%a: i8, %b: i8) {
+hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-LABEL: module reg_0(
   // CHECK-NEXT:   input  [3:0] in4,
   // CHECK-NEXT:   input  [7:0] in8,
@@ -547,8 +547,7 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 // https://github.com/llvm/circt/issues/728
 
 // CHECK-LABEL: module issue728(
-hw.module @issue728(%clock: i1, %a: i1, %b: i1)
-attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"] } {
+hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   // CHECK:  always @(posedge clock) begin
   // CHECK:    automatic logic _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
   // CHECK:    automatic logic _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
@@ -558,7 +557,7 @@ attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"]
   // CHECK:  end // always @(posedge)
   sv.always posedge %clock  {
      sv.fwrite "force output"
-     %cond = comb.and %a, %b, %a, %b, %a, %b : i1
+     %cond = comb.and %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija : i1
      sv.if %cond  {
        sv.fwrite "this cond is split"
      }
@@ -567,8 +566,7 @@ attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"]
 }
 
 // CHECK-LABEL: module issue728ifdef(
-hw.module @issue728ifdef(%clock: i1, %a: i1, %b: i1)
-  attributes { argNames = ["clock", "asdfasdfasdfasdfafa", "gasfdasafwjhijjafija"] } {
+hw.module @issue728ifdef(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   // CHECK: always @(posedge clock) begin
   // CHECK:      automatic logic _tmp;
   // CHECK:      automatic logic _tmp_0;
@@ -583,7 +581,7 @@ hw.module @issue728ifdef(%clock: i1, %a: i1, %b: i1)
   sv.always posedge %clock  {
      sv.fwrite "force output"
      sv.ifdef.procedural "FUN_AND_GAMES" {
-       %cond = comb.and %a, %b, %a, %b, %a, %b : i1
+       %cond = comb.and %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija, %asdfasdfasdfasdfafa, %gasfdasafwjhijjafija : i1
        sv.if %cond  {
          sv.fwrite "this cond is split"
        }
@@ -592,7 +590,7 @@ hw.module @issue728ifdef(%clock: i1, %a: i1, %b: i1)
 }
 
 // CHECK-LABEL: module alwayscombTest(
-hw.module @alwayscombTest(%a: i1) -> (%x: i1) {
+hw.module @alwayscombTest(%a: i1) -> (x: i1) {
   // CHECK: reg combWire;
   %combWire = sv.reg : !hw.inout<i1>
   // CHECK: always_comb
@@ -629,7 +627,7 @@ hw.module @inlineProceduralWiresWithLongNames(%clock: i1, %in: i1) {
 
 // https://github.com/llvm/circt/issues/859
 // CHECK-LABEL: module oooReg(
-hw.module @oooReg(%in: i1) -> (%result: i1) {
+hw.module @oooReg(%in: i1) -> (result: i1) {
   // CHECK: wire abc;
   %0 = sv.read_inout %abc : !hw.inout<i1>
 
@@ -654,7 +652,7 @@ hw.module @ifdef_beginend(%clock: i1, %cond: i1, %val: i8) {
 
 // https://github.com/llvm/circt/issues/884
 // CHECK-LABEL: module ConstResetValueMustBeInlined(
-hw.module @ConstResetValueMustBeInlined(%clock: i1, %reset: i1, %d: i42) -> (%q: i42) {
+hw.module @ConstResetValueMustBeInlined(%clock: i1, %reset: i1, %d: i42) -> (q: i42) {
   %c0_i42 = hw.constant 0 : i42
   %tmp = sv.reg : !hw.inout<i42>
   // CHECK:      localparam [41:0] _T = 42'h0;
@@ -755,7 +753,7 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
 
 // CHECK-LABEL: module MultiUseReadInOut(
 // Issue #1564
-hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (%aa: i3, %bb: i3){
+hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (aa: i3, bb: i3){
   %a = sv.reg  : !hw.inout<i3>
   %b = sv.reg  : !hw.inout<i3>
   %c = sv.reg  : !hw.inout<i3>
@@ -909,8 +907,8 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
   %myreg = sv.reg : !hw.inout<i1>
   %myreg_rd = sv.read_inout %myreg : !hw.inout<i1>
   %0 = hw.constant 1 : i1
-  hw.instance "a1" sym @bindInst @extInst(%mywire_rd, %myreg_rd, %j, %0, %z) {doNotPrint=1}: (i1, i1, i1, i1, i0) -> ()
-  hw.instance "a2" sym @bindInst2 @extInst(%mywire_rd, %myreg_rd, %j, %0, %z) {doNotPrint=1}: (i1, i1, i1, i1, i0) -> ()
+  hw.instance "a1" sym @bindInst @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
+  hw.instance "a2" sym @bindInst2 @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
 // CHECK: wire a2__k
 // CHECK-NEXT: wire a1__k
 // CHECK-NEXT: wire mywire
@@ -923,7 +921,7 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
 // CHECK-NEXT: // extInst a2
 }
 
-hw.module @bindInMod() -> () {
+hw.module @bindInMod() {
   sv.bind @bindInst in @remoteInstDut
 }
 

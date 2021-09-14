@@ -148,7 +148,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   OpBuilder b(op);
 
   // Construct the ports, this is just the input Values
-  SmallVector<hw::ModulePortInfo> ports;
+  SmallVector<hw::PortInfo> ports;
   {
     auto srcPorts = op.argNames();
     for (auto port : llvm::enumerate(inputs))
@@ -318,10 +318,15 @@ void SVExtractTestCodeImplPass::runOnOperation() {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
       // Extract two sets of ops to different modules
       auto isAssert = [](Operation *op) -> bool {
-        return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op);
+        return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
+               isa<AssertConcurrentOp>(op);
       };
-      auto isAssume = [](Operation *op) -> bool { return isa<AssumeOp>(op); };
-      auto isCover = [](Operation *op) -> bool { return isa<CoverOp>(op); };
+      auto isAssume = [](Operation *op) -> bool {
+        return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
+      };
+      auto isCover = [](Operation *op) -> bool {
+        return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
+      };
 
       doModule(rtlmod, isAssert, "_assert");
       doModule(rtlmod, isAssume, "_assume");

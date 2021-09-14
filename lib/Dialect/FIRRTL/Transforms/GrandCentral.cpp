@@ -772,7 +772,7 @@ void GrandCentralPass::runOnOperation() {
                   getNamespace().newName(name.getValue() + "_mapping");
               auto mapping = builder.create<FModuleOp>(
                   circuitOp.getLoc(), builder.getStringAttr(mappingName),
-                  ArrayRef<ModulePortInfo>());
+                  ArrayRef<PortInfo>());
               auto *ctx = builder.getContext();
               if (maybeExtractInfo)
                 mapping->setAttr(

@@ -258,8 +258,8 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     }
 
     // Check that the number of ports is exactly the same.
-    SmallVector<ModulePortInfo> ports = extModule.getPorts();
-    SmallVector<ModulePortInfo> collidingPorts = collidingExtModule.getPorts();
+    SmallVector<PortInfo> ports = extModule.getPorts();
+    SmallVector<PortInfo> collidingPorts = collidingExtModule.getPorts();
 
     if (ports.size() != collidingPorts.size()) {
       auto diag = op.emitOpError()
@@ -327,8 +327,8 @@ Block *CircuitOp::getBody() { return &getBodyRegion().front(); }
 
 /// This function can extract information about ports from a module and an
 /// extmodule.
-SmallVector<ModulePortInfo> FModuleOp::getPorts() {
-  SmallVector<ModulePortInfo> results;
+SmallVector<PortInfo> FModuleOp::getPorts() {
+  SmallVector<PortInfo> results;
 
   auto portNamesAttr = portNames();
   auto portDirections = getPortDirections().getValue();
@@ -348,8 +348,8 @@ SmallVector<ModulePortInfo> FModuleOp::getPorts() {
 
 /// This function can extract information about ports from a module and an
 /// extmodule.
-SmallVector<ModulePortInfo> FExtModuleOp::getPorts() {
-  SmallVector<ModulePortInfo> results;
+SmallVector<PortInfo> FExtModuleOp::getPorts() {
+  SmallVector<PortInfo> results;
 
   auto portNamesAttr = portNames();
   auto portDirections = getPortDirections().getValue();
@@ -374,8 +374,7 @@ BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
-void FModuleOp::insertPorts(
-    ArrayRef<std::pair<unsigned, ModulePortInfo>> ports) {
+void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   if (ports.empty())
     return;
   unsigned oldNumArgs = getNumArguments();
@@ -461,7 +460,7 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        StringAttr name, ArrayRef<PortInfo> ports,
                         ArrayAttr annotations) {
   using namespace mlir::function_like_impl;
 
@@ -501,7 +500,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name, ArrayRef<ModulePortInfo> ports,
+                      StringAttr name, ArrayRef<PortInfo> ports,
                       ArrayAttr annotations) {
   buildModule(builder, result, name, ports, annotations);
 
@@ -516,7 +515,7 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
-                         StringAttr name, ArrayRef<ModulePortInfo> ports,
+                         StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef defnameAttr, ArrayAttr annotations) {
   buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
@@ -1011,7 +1010,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts = referencedModule.getPorts();
+  SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
 
   // Check that result types are consistent with the referenced module's ports.
   size_t numResults = getNumResults();

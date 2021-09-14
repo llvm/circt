@@ -21,10 +21,10 @@ hw.type_scope @__hw_typedecls {
   hw.typedecl @foo : i1
 }
 
-hw.module @foo(%a: i1) -> (%b: i1) {
+hw.module @foo(%a: i1) -> (b: i1) {
   hw.output %a : i1
 }
-hw.module @bar(%x: i1) -> (%y: i1) {
+hw.module @bar(%x: i1) -> (y: i1) {
   hw.output %x : i1
 }
 sv.interface @usb {
@@ -33,7 +33,7 @@ sv.interface @usb {
 }
 hw.module.extern @pll ()
 
-hw.module @inout(%inout: i1) -> (%output: i1) {
+hw.module @inout(%inout: i1) -> (output: i1) {
   hw.output %inout : i1
 }
 

@@ -24,13 +24,13 @@
 #file3 = {directory = "dir2", exclude_replicated_ops = false}
 #file4 = {name = "file4.sv", exclude_replicated_ops = false}
 
-hw.module @foo1(%a: i1) -> (%b: i1) attributes {output_file = #file1} {
+hw.module @foo1(%a: i1) -> (b: i1) attributes {output_file = #file1} {
   hw.output %a : i1
 }
-hw.module @foo2(%a: i1) -> (%b: i1) attributes {output_file = #file2} {
+hw.module @foo2(%a: i1) -> (b: i1) attributes {output_file = #file2} {
   hw.output %a : i1
 }
-hw.module @foo3(%a: i1) -> (%b: i1) attributes {output_file = #file3} {
+hw.module @foo3(%a: i1) -> (b: i1) attributes {output_file = #file3} {
   hw.output %a : i1
 }
 

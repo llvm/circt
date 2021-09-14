@@ -32,7 +32,7 @@ hw.module @testTypeAlias(
   // CHECK: input  bar      structArg,
   %structArg: !hw.typealias<@__hw_typedecls::@bar,!hw.struct<a: i1, b: i1>>) ->
   // CHECK: output foo      out
-  (%out: !hw.typealias<@__hw_typedecls::@foo, i1>) {
+  (out: !hw.typealias<@__hw_typedecls::@foo, i1>) {
   // CHECK: out = arg0 + arg1
   %0 = comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@foo, i1>
@@ -47,7 +47,7 @@ hw.module @testRegOp() -> () {
 }
 
 // CHECK-LABEL: module testAggregateCreate
-hw.module @testAggregateCreate(%i: i1) -> (%out1: i1, %out2: i1) {
+hw.module @testAggregateCreate(%i: i1) -> (out1: i1, out2: i1) {
   // CHECK: wire bar [[NAME:.+]] = {{.+}};
   %0 = hw.struct_create(%i, %i) : !hw.typealias<@__hw_typedecls::@bar,!hw.struct<a: i1, b: i1>>
   // CHECK: [[NAME]].a

@@ -19,6 +19,6 @@ hw.module @twoListLoopback(%clk:i1, %rstn:i1) -> () {
 }
 
 hw.module @top(%clk:i1, %rstn:i1) -> () {
-  hw.instance "intLoopbackInst" @intLoopback(%clk, %rstn) : (i1, i1) -> ()
-  hw.instance "twoListLoopbackInst" @twoListLoopback(%clk, %rstn) : (i1, i1) -> ()
+  hw.instance "intLoopbackInst" @intLoopback(clk: %clk: i1, rstn: %rstn: i1) -> ()
+  hw.instance "twoListLoopbackInst" @twoListLoopback(clk: %clk: i1, rstn: %rstn: i1) -> ()
 }

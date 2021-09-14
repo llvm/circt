@@ -395,26 +395,26 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire en: UInt <1>
     pred <= eq(i8, i8)
     en <= not(reset)
-    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false}
     assert(clock, pred, en, "X equals Y when Z is valid")
-    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" {name = "assert_0"}
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false, name = "assert_0"}
     assert(clock, pred, en, "X equals Y when Z is valid") : assert_0
     ; CHECK: [[C:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.assert %clock, %pred, [[C]], "assert:X equals Y when Z is valid"
+    ; CHECK-NEXT: firrtl.assert %clock, %pred, %c1_ui1, "assert:X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = true}
     printf(clock, pred, "assert:X equals Y when Z is valid")
-    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false}
     assume(clock, pred, en, "X equals Y when Z is valid")
-    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" {name = "assume_0"}
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" {eventControl = 0 : i32, isConcurrent = false, name = "assume_0"}
     assume(clock, pred, en, "X equals Y when Z is valid") : assume_0
     ; CHECK: [[C2:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.assume %clock, %pred, [[C2]], "assume:X equals Y when Z is valid"
+    ; CHECK-NEXT: firrtl.assume %clock, %pred, [[C2]], "assume:X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = true}
     printf(clock, pred, "assume:X equals Y when Z is valid")
-    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false}
     cover(clock, pred, en, "X equals Y when Z is valid")
-    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" {name = "cover_0"}
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" {eventControl = 0 : i32, isConcurrent = false, name = "cover_0"}
     cover(clock, pred, en, "X equals Y when Z is valid") : cover_0
     ; CHECK: [[C3:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.cover %clock, %pred, [[C3]], "cover:X equals Y when Z is valid"
+    ; CHECK-NEXT: firrtl.cover %clock, %pred, [[C3]], "cover:X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = true}
     printf(clock, pred, "cover:X equals Y when Z is valid")
 
   ; CHECK-LABEL: firrtl.module @type_handling(

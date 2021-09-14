@@ -5,7 +5,7 @@ module attributes {circt.loweringOptions = "disallowPackedArrays"} {
 // CHECK-LABEL: hw.module @reject_arrays
 hw.module @reject_arrays(%arg0: i8, %arg1: i8, %arg2: i8,
                          %arg3: i8, %sel: i2, %clock: i1)
-   -> (%a: !hw.array<4xi8>) {
+   -> (a: !hw.array<4xi8>) {
   // This needs full-on "legalize types" for the HW dialect.
   
   %reg = sv.reg  : !hw.inout<array<4xi8>>
@@ -23,7 +23,7 @@ hw.module @reject_arrays(%arg0: i8, %arg1: i8, %arg2: i8,
 // CHECK-LABEL: hw.module @array_create_get_comb
 hw.module @array_create_get_comb(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
                                  %sel: i2)
-   -> (%a: i8) {
+   -> (a: i8) {
   // CHECK: %casez_tmp = sv.reg  : !hw.inout<i8>
   // CHECK: sv.alwayscomb  {
   // CHECK:   sv.casez %sel : i2

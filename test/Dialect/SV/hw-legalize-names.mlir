@@ -6,19 +6,19 @@ hw.module @B(%a: i1) -> () {
 // CHECK-LABEL: hw.module @TestDupInstanceName
 hw.module @TestDupInstanceName(%a: i1) {
   // CHECK: hw.instance "name"
-  hw.instance "name" @B(%a) : (i1) -> ()
+  hw.instance "name" @B(a: %a: i1) -> ()
 
   // CHECK: hw.instance "name_0"
-  hw.instance "name" @B(%a) : (i1) -> ()
+  hw.instance "name" @B(a: %a: i1) -> ()
 }
 
 // CHECK-LABEL: TestEmptyInstanceName
 hw.module @TestEmptyInstanceName(%a: i1) {
   // CHECK: hw.instance "_T"
-  hw.instance "" @B(%a) : (i1) -> ()
+  hw.instance "" @B(a: %a: i1) -> ()
 
   // CHECK: hw.instance "_T_0"
-  hw.instance "" @B(%a) : (i1) -> ()
+  hw.instance "" @B(a: %a: i1) -> ()
 }
 
 // CHECK-LABEL: hw.module @TestInstanceNameValueConflict
@@ -30,37 +30,35 @@ hw.module @TestInstanceNameValueConflict(%a: i1) {
   // CHECK:  %input_1 = sv.reg
   %input = sv.reg : !hw.inout<i1>
   // CHECK: hw.instance "name_2"
-  hw.instance "name" @B(%a) : (i1) -> ()
+  hw.instance "name" @B(a: %a: i1) -> ()
 }
 
 // https://github.com/llvm/circt/issues/681
 // Rename keywords used in variable/module names
-// CHECK-LABEL: hw.module @inout_3
-// CHECK-SAME: (%inout_0: i1) -> (%output_1: i1)
+// CHECK-LABEL: hw.module @inout_3(%inout_0: i1) -> (output_1: i1)
 // CHECK-NEXT: hw.output %inout_0 : i1
-hw.module @inout(%inout: i1) -> (%output: i1) {
+hw.module @inout(%inout: i1) -> (output: i1) {
   hw.output %inout : i1
 }
 
 // https://github.com/llvm/circt/issues/681
 // Rename keywords used in variable/module names
-// CHECK-LABEL: hw.module @reg_4
-// CHECK-SAME: (%inout_0: i1) -> (%output_1: i1)
+// CHECK-LABEL: hw.module @reg_4(%inout_0: i1) -> (output_1: i1)
 // CHECK-NEXT: hw.output %inout_0 : i1
-hw.module @reg(%inout: i1) -> (%output: i1) {
+hw.module @reg(%inout: i1) -> (output: i1) {
   hw.output %inout : i1
 }
 
 // CHECK-LABEL: hw.module @inout_inst
 // CHECK-NEXT: hw.instance "foo" @inout_3
-hw.module @inout_inst(%a: i1) -> () {
-  %0 = hw.instance "foo" @inout (%a) : (i1) -> (i1)
+hw.module @inout_inst(%a: i1) {
+  %0 = hw.instance "foo" @inout (inout: %a: i1) -> (output: i1)
 }
 
 // https://github.com/llvm/circt/issues/525
-// CHECK-LABEL: hw.module @issue525(%struct_0: i2, %else_1: i2) -> (%casex_2: i2)
+// CHECK-LABEL: hw.module @issue525(%struct_0: i2, %else_1: i2) -> (casex_2: i2)
 // CHECK-NEXT: %0 = comb.add %struct_0, %else_1 : i2
-hw.module @issue525(%struct: i2, %else: i2) -> (%casex: i2) {
+hw.module @issue525(%struct: i2, %else: i2) -> (casex: i2) {
   %2 = comb.add %struct, %else : i2
   hw.output %2 : i2
 }
@@ -85,12 +83,12 @@ sv.interface @output {
 
 // Instantiate a module which has had its ports renamed.
 // CHECK-LABEL: hw.module @ModuleWithCollision(
-// CHECK-SAME:    %reg_0: i1) -> (%wire_1: i1)
-hw.module @ModuleWithCollision(%reg: i1) -> (%wire: i1) {
+// CHECK-SAME:    %reg_0: i1) -> (wire_1: i1)
+hw.module @ModuleWithCollision(%reg: i1) -> (wire: i1) {
   hw.output %reg : i1
 }
 hw.module @InstanceWithCollisions(%a: i1) {
-  hw.instance "parameter" @ModuleWithCollision(%a) : (i1) -> (i1)
+  hw.instance "parameter" @ModuleWithCollision(r: %a: i1) -> (wire: i1)
 }
 
 // TODO: Renaming the above interface declarations currently does not rename

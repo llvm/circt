@@ -23,7 +23,7 @@ hw.module.extern @testTypeAlias(
 // CHECK-LABEL: hw.module @testTypeAliasComb
 hw.module @testTypeAliasComb(
   %arg0: !hw.typealias<@__hw_typedecls::@foo, i1>,
-  %arg1: !hw.typealias<@__hw_typedecls::@foo, i1>) -> (!hw.typealias<@__hw_typedecls::@foo, i1>) {
+  %arg1: !hw.typealias<@__hw_typedecls::@foo, i1>) -> (result: !hw.typealias<@__hw_typedecls::@foo, i1>) {
   // CHECK: comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
   %0 = comb.add %arg0, %arg1 : !hw.typealias<@__hw_typedecls::@foo, i1>
   hw.output %0 : !hw.typealias<@__hw_typedecls::@foo, i1>

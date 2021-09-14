@@ -102,6 +102,9 @@ struct PortInfo {
 /// A helper function to verify each operation with the Cell trait.
 LogicalResult verifyCell(Operation *op);
 
+/// A helper function to verify each operation with the Group Interface trait.
+LogicalResult verifyGroupInterface(Operation *op);
+
 /// Returns port information for the block argument provided.
 PortInfo getPortInfo(BlockArgument arg);
 

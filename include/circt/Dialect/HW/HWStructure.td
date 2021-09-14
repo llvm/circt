@@ -34,7 +34,9 @@ def HWModuleOp : HWOp<"module",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -45,9 +47,14 @@ def HWModuleOp : HWOp<"module",
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph;}
 
-    // Decode information about the input and output ports on this module.
-    SmallVector<ModulePortInfo> getPorts() {
+    /// Decode information about the input and output ports on this module.
+    ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
+    }
+
+    /// Return all the module ports merged into one list.
+    SmallVector<PortInfo> getAllPorts() {
+      return getAllModulePortInfos(*this);
     }
 
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
@@ -112,15 +119,23 @@ def HWModuleExternOp : HWOp<"module.extern",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
+                   CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{
-    // Decode information about the input and output ports on this module.
-    SmallVector<ModulePortInfo> getPorts() {
+    /// Decode information about the input and output ports on this module.
+    ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
+    }
+
+    /// Return all the module ports merged into one list.
+    SmallVector<PortInfo> getAllPorts() {
+      return getAllModulePortInfos(*this);
     }
 
     /// Return the name to use for the Verilog module that we're referencing
@@ -216,17 +231,25 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "FlatSymbolRefAttr":$genKind,
-                   "StringAttr":$name,
-                   "ArrayRef<ModulePortInfo>":$ports,
+    OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
+                   "ArrayRef<PortInfo>":$ports,
+                   CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
+                   "const ModulePortInfo &":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
   let extraClassDeclaration = [{
-    // Decode information about the input and output ports on this module.
-    SmallVector<ModulePortInfo> getPorts() {
+    /// Decode information about the input and output ports on this module.
+    ModulePortInfo getPorts() {
       return getModulePortInfo(*this);
+    }
+
+    /// Return all the module ports merged into one list.
+    SmallVector<PortInfo> getAllPorts() {
+      return getAllModulePortInfos(*this);
     }
 
     /// Return the name to use for the Verilog module that we're referencing
@@ -311,8 +334,12 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
   ];
 
   let extraClassDeclaration = [{
-    // Return the name of the specified result or empty string if it cannot be
-    // determined.
+    /// Return the name of the specified input port or null if it cannot be
+    /// determined.
+    StringAttr getArgumentName(size_t i, const SymbolCache *cache = nullptr);
+
+    /// Return the name of the specified result or null if it cannot be
+    /// determined.
     StringAttr getResultName(size_t i, const SymbolCache *cache = nullptr);
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
@@ -335,14 +362,10 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
 
     /// An InstanceOp may optionally define a symbol.
     bool isOptionalSymbol() { return true; }
-
   }];
 
-  /// sym keyword for optional symbol simplifies parsing
-  let assemblyFormat = [{
-    $instanceName (`sym` $sym_name^)? $moduleName `(` $inputs `)` attr-dict
-      `:` functional-type($inputs, results)
-  }];
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "return ::print$cppClass(p, *this);";
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,

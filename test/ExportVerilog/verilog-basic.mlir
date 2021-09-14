@@ -20,8 +20,8 @@ hw.module @no_ports() {
 // CHECK-NEXT:    output [16:0] sext17);
 
 hw.module @Expressions(%in4: i4, %clock: i1) ->
-  (%out1a: i1, %out1b: i1, %out1c: i1,
-   %out4: i4, %out4s: i4, %out16: i16, %out16s: i16, %sext17: i17) {
+  (out1a: i1, out1b: i1, out1c: i1,
+   out4: i4, out4s: i4, out16: i16, out16s: i16, sext17: i17) {
   %c1_i4 = hw.constant 1 : i4
   %c2_i4 = hw.constant 2 : i4
   %c3_i4 = hw.constant 3 : i4
@@ -128,7 +128,7 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 }
 
 // CHECK-LABEL: module Precedence(
-hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
+hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (out1: i1, out: i10) {
   %false = hw.constant false
   %c0_i2 = hw.constant 0 : i2
   %c0_i4 = hw.constant 0 : i4
@@ -228,8 +228,8 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (%out1: i1, %out: i10) {
 
 // CHECK-LABEL: module CmpSign(
 hw.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) ->
- (%o0: i1, %o1: i1, %o2: i1, %o3: i1, %o4: i1, %o5: i1, %o6: i1, %o7: i1,
-  %o8: i1, %o9: i1, %o10: i1, %o11: i1, %o12: i1, %o13: i1, %o14: i1, %o15: i1) {
+ (o0: i1, o1: i1, o2: i1, o3: i1, o4: i1, o5: i1, o6: i1, o7: i1,
+  o8: i1, o9: i1, o10: i1, o11: i1, o12: i1, o13: i1, o14: i1, o15: i1) {
   // CHECK: assign o0 = a < b;
   %0 = comb.icmp ult %a, %b : i4
   // CHECK-NEXT: assign o1 = $signed(c) < $signed(d);
@@ -267,8 +267,7 @@ hw.module @CmpSign(%a: i4, %b: i4, %c: i4, %d: i4) ->
 }
 
 // CHECK-LABEL: module MultiUseExpr
-hw.module @MultiUseExpr(%a: i4) ->
- (%b0: i1, %b1: i1, %b2: i1, %b3: i1, %b4: i2) {
+hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
   %false = hw.constant false
   %c1_i5 = hw.constant 1 : i5
   %c-1_i5 = hw.constant -1 : i5
@@ -294,23 +293,23 @@ hw.module @MultiUseExpr(%a: i4) ->
   hw.output %0, %3, %4, %5, %7 : i1, i1, i1, i1, i2
 }
 
-hw.module.extern @MyExtModule(%in: i8) -> (%out: i1) attributes {verilogName = "FooExtModule"}
-hw.module.extern @MyParameterizedExtModule(%in: i8) -> (%out: i1)
+hw.module.extern @MyExtModule(%in: i8) -> (out: i1) attributes {verilogName = "FooExtModule"}
+hw.module.extern @MyParameterizedExtModule(%in: i8) -> (out: i1)
 
 // CHECK-LABEL: module ExternMods
 hw.module @ExternMods(%a_in: i8) {
   // CHECK: MyParameterizedExtModule #(
   // CHECK:   .CFG(FOO)
   // CHECK: ) xyz2
-  hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim.parameter<"FOO">}} : (i8) -> i1
+  hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {parameters = {CFG = #sv.verbatim.parameter<"FOO">}} 
   // CHECK: MyParameterizedExtModule #(
   // CHECK:   .CFG("STRING")
   // CHECK: ) xyz3
-  hw.instance "xyz3" @MyParameterizedExtModule(%a_in) {parameters = {CFG = #sv.verbatim.parameter<"\"STRING\"">}} : (i8) -> i1
+  hw.instance "xyz3" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {parameters = {CFG = #sv.verbatim.parameter<"\"STRING\"">}} 
 }
 
 // CHECK-LABEL: module UseInstances
-hw.module @UseInstances(%a_in: i8) -> (%a_out1: i1, %a_out2: i1) {
+hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
   // CHECK: FooExtModule xyz (
   // CHECK:   .in  (a_in),
   // CHECK:   .out (a_out1)
@@ -324,8 +323,8 @@ hw.module @UseInstances(%a_in: i8) -> (%a_out1: i1, %a_out2: i1) {
   // CHECK:   .in  (a_in),
   // CHECK:   .out (a_out2)
   // CHECK: );
-  %xyz.out = hw.instance "xyz" @MyExtModule(%a_in) : (i8) -> i1
-  %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(%a_in) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}} : (i8) -> i1
+  %xyz.out = hw.instance "xyz" @MyExtModule(in: %a_in: i8) -> (out: i1)
+  %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
   hw.output %xyz.out, %xyz2.out : i1, i1
 }
 
@@ -395,7 +394,7 @@ hw.module @UninitReg1(%clock: i1, %reset: i1, %cond: i1, %value: i2) {
 // https://github.com/llvm/circt/issues/755
 // CHECK-LABEL: module UnaryParensIssue755(
 // CHECK: assign b = |(~a);
-hw.module @UnaryParensIssue755(%a: i8) -> (%b: i1) {
+hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
   %c-1_i8 = hw.constant -1 : i8
   %c0_i8 = hw.constant 0 : i8
   %0 = comb.xor %a, %c-1_i8 : i8
@@ -412,7 +411,7 @@ hw.module @BindEmissionInstance() {
 hw.module @BindEmission() -> () {
   // CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
   // CHECK-NEXT: // BindEmissionInstance BindEmissionInstance ();
-  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() {doNotPrint = true} : () -> ()
+  hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() -> ()  {doNotPrint = true}
   hw.output
 }
 

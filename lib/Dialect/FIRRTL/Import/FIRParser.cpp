@@ -1783,8 +1783,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   consumeToken();
 
   // Parse the operands and constant integer arguments.
-  SmallVector<Value, 4> operands;
-  SmallVector<int64_t, 4> integers;
+  SmallVector<Value, 3> operands;
+  SmallVector<int64_t, 3> integers;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         // Handle the integer constant case if present.
         if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
@@ -1811,7 +1811,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
 
   locationProcessor.setLoc(loc);
 
-  SmallVector<FIRRTLType, 4> opTypes;
+  SmallVector<FIRRTLType, 3> opTypes;
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
@@ -1852,7 +1852,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
 
   if (operands.size() != numOperandsExpected) {
     assert(numOperandsExpected <= 3);
-    const char *numberName[] = {"zero", "one", "two", "three"};
+    static const char *numberName[] = {"zero", "one", "two", "three"};
     const char *optionalS = &"s"[numOperandsExpected == 1];
     return emitError(loc, "operation requires ")
            << numberName[numOperandsExpected] << " operand" << optionalS;
@@ -2275,28 +2275,29 @@ ParseResult FIRStmtParser::parsePrintf() {
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
   StringRef formatStringRef(formatStrUnescaped);
+  // Generate concurrent verification statements
   if (formatStringRef.startswith("cover:")) {
     APInt constOne(1, 1, false);
-    auto constTrue =
+    Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped,
-                            "");
+    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped, "",
+                            /*isConcurrent=*/true);
     return success();
   }
   if (formatStringRef.startswith("assert:")) {
     APInt constOne(1, 1, false);
-    auto constTrue =
+    Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "");
+                             "", /*isConcurrent=*/true);
     return success();
   }
   if (formatStringRef.startswith("assume:")) {
     APInt constOne(1, 1, false);
-    auto constTrue =
+    Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "");
+                             "", /*isConcurrent=*/true);
     return success();
   }
 
@@ -2362,7 +2363,7 @@ ParseResult FIRStmtParser::parseAssert() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssertOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped), name);
+                           StringRef(messageUnescaped), name.getValue());
   return success();
 }
 
@@ -2384,8 +2385,8 @@ ParseResult FIRStmtParser::parseAssume() {
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssumeOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped), name);
+  builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
+                           name.getValue());
   return success();
 }
 
@@ -2407,8 +2408,8 @@ ParseResult FIRStmtParser::parseCover() {
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<CoverOp>(clock, predicate, enable,
-                          builder.getStringAttr(messageUnescaped), name);
+  builder.create<CoverOp>(clock, predicate, enable, messageUnescaped,
+                          name.getValue());
   return success();
 }
 
@@ -2587,7 +2588,7 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts =
+  SmallVector<PortInfo> modulePorts =
       cast<FModuleLike>(referencedModule).getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
@@ -3032,7 +3033,7 @@ private:
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
 
-  ParseResult parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
+  ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
                             Location defaultLoc, StringRef moduleTarget,
                             unsigned indent);
@@ -3115,7 +3116,7 @@ ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
 /// port.
 ///
 ParseResult
-FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
+FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
                                 Location defaultLoc, StringRef moduleTarget,
                                 unsigned indent) {
@@ -3184,7 +3185,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   bool isExtModule = getToken().is(FIRToken::kw_extmodule);
   consumeToken();
   StringAttr name;
-  SmallVector<ModulePortInfo, 8> portList;
+  SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
 
   LocWithInfo info(getToken().getLoc(), this);
@@ -3205,7 +3206,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   // Check for port name collisions.
   SmallDenseMap<Attribute, SMLoc> portIds;
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    ModulePortInfo &port = std::get<0>(portAndLoc);
+    PortInfo &port = std::get<0>(portAndLoc);
     auto &entry = portIds[port.name];
     if (!entry.isValid()) {
       entry = std::get<1>(portAndLoc);
@@ -3350,7 +3351,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   auto argIt = moduleOp.args_begin();
   auto portList = moduleOp.getPorts();
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    ModulePortInfo &port = std::get<0>(portAndLoc);
+    PortInfo &port = std::get<0>(portAndLoc);
     if (moduleContext.addSymbolEntry(port.getName(), *argIt,
                                      std::get<1>(portAndLoc)))
       return failure();

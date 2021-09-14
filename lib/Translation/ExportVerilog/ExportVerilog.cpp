@@ -326,9 +326,9 @@ static StringRef getVerilogDeclWord(Operation *op,
 /// may return "" when unable to determine a name.  This works in situations
 /// where names are pre-legalized during prepare.
 static StringRef getNameRemotely(Value value,
-                                 ArrayRef<ModulePortInfo> modulePorts) {
+                                 const ModulePortInfo &modulePorts) {
   if (auto barg = value.dyn_cast<BlockArgument>())
-    return modulePorts[barg.getArgNumber()].getName();
+    return modulePorts.inputs[barg.getArgNumber()].getName();
 
   if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
     auto *wireInput = readinout.input().getDefiningOp();
@@ -2003,10 +2003,7 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   HWModuleOp parent = op->getParentOfType<HWModuleOp>();
 
   size_t operandIndex = 0;
-  for (ModulePortInfo port : parent.getPorts()) {
-    if (!port.isOutput())
-      continue;
-
+  for (PortInfo port : parent.getPorts().outputs) {
     auto operand = op.getOperand(operandIndex);
     if (operand.hasOneUse() &&
         dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
@@ -2513,7 +2510,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   os << ' ' << names.getName(op) << " (";
 
-  SmallVector<ModulePortInfo> portInfo = getModulePortInfo(moduleOp);
+  SmallVector<PortInfo> portInfo = getAllModulePortInfos(moduleOp);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -2927,8 +2924,8 @@ void ModuleEmitter::emitBind(BindOp op) {
            << childVerilogName.getValue() << ' ' << inst.getName().getValue()
            << " (";
 
-  SmallVector<ModulePortInfo> parentPortInfo = parentMod.getPorts();
-  SmallVector<ModulePortInfo> childPortInfo = getModulePortInfo(childMod);
+  ModulePortInfo parentPortInfo = parentMod.getPorts();
+  SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(childMod);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -3020,7 +3017,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     state.encounteredError = true;
 
   // Add all the ports to the name table.
-  SmallVector<ModulePortInfo> portInfo = module.getPorts();
+  SmallVector<PortInfo> portInfo = module.getAllPorts();
   for (auto &port : portInfo) {
     StringRef name = port.getName();
     if (name.empty()) {

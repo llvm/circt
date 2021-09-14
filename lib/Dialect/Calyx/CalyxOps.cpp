@@ -166,21 +166,38 @@ static LogicalResult verifyControlBody(Operation *op) {
   return success();
 }
 
-// Declaration here so that portDrivenByGroup can use it.
 static LogicalResult anyPortsDrivenByGroup(ValueRange ports,
                                            GroupInterface groupOp);
+
+/// Determines whether the given port is used in the group. Its use depends on
+/// the `isDriven` value; if true, then the port should be a destination in an
+/// AssignOp. Otherwise, it should be the source, i.e. a read.
+static bool portIsUsedInGroup(Value port, GroupInterface group, bool isDriven) {
+  return llvm::any_of(port.getUses(), [&](auto &&use) {
+    auto assignOp = dyn_cast<AssignOp>(use.getOwner());
+    if (assignOp == nullptr)
+      return false;
+
+    Operation *parent = assignOp->getParentOp();
+    if (isa<WiresOp>(parent))
+      // This is a continuous assignment.
+      return false;
+
+    // A port is used if it meet the criteria:
+    // (1) it is a {source, destination} of an assignment.
+    // (2) that assignment is found in the provided group.
+
+    // If not driven, then read.
+    Value expected = isDriven ? assignOp.dest() : assignOp.src();
+    return expected == port && group == parent;
+  });
+}
 
 /// Checks whether @p port is driven from within @p groupOp.
 static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
   // Check if the port is driven by an assignOp from within @p groupOp.
-  for (auto &use : port.getUses()) {
-    if (auto assignOp = dyn_cast<AssignOp>(use.getOwner())) {
-      if (assignOp.dest() != port ||
-          assignOp->getParentOfType<GroupInterface>() != groupOp)
-        continue;
-      return success();
-    }
-  }
+  if (portIsUsedInGroup(port, groupOp, /*isDriven=*/true))
+    return success();
 
   // If @p port is an output of a cell then we conservatively enforce that at
   // least one input port of the cell must be driven by the group.
@@ -191,11 +208,27 @@ static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
   return failure();
 }
 
-/// Checks whether any port in @p ports are driven within @p groupOp.
+/// Checks whether all ports are driven within the group.
+static LogicalResult allPortsDrivenByGroup(ValueRange ports,
+                                           GroupInterface group) {
+  return success(llvm::all_of(ports, [&](auto port) {
+    return portIsUsedInGroup(port, group, /*isDriven=*/true);
+  }));
+}
+
+/// Checks whether any ports are driven within the group.
 static LogicalResult anyPortsDrivenByGroup(ValueRange ports,
-                                           GroupInterface groupOp) {
+                                           GroupInterface group) {
   return success(llvm::any_of(ports, [&](auto port) {
-    return portDrivenByGroup(port, groupOp).succeeded();
+    return portIsUsedInGroup(port, group, /*isDriven=*/true);
+  }));
+}
+
+/// Checks whether any ports are read within the group.
+static LogicalResult anyPortsReadByGroup(ValueRange ports,
+                                         GroupInterface group) {
+  return success(llvm::any_of(ports, [&](auto port) {
+    return portIsUsedInGroup(port, group, /*isDriven=*/false);
   }));
 }
 
@@ -206,6 +239,106 @@ LogicalResult calyx::verifyCell(Operation *op) {
            << "has parent: " << opParent << ", expected ComponentOp.";
   if (!op->hasAttr("instanceName"))
     return op->emitOpError() << "does not have an instanceName attribute.";
+
+  return success();
+}
+
+/// Verifies that certain ports of primitives are either driven or read
+/// together.
+static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
+                                                GroupInterface group) {
+  Operation *destDefiningOp = assign.dest().getDefiningOp();
+  if (destDefiningOp == nullptr)
+    return success();
+  auto destCell = dyn_cast<CellInterface>(destDefiningOp);
+  if (destCell == nullptr)
+    return success();
+
+  LogicalResult verifyWrites =
+      TypeSwitch<Operation *, LogicalResult>(destCell)
+          .Case<RegisterOp>([&](auto op) {
+            // We only want to verify this is written to if the {write enable,
+            // in} port is driven.
+            return succeeded(anyPortsDrivenByGroup(
+                       {op.writeEnPort(), op.inPort()}, group))
+                       ? allPortsDrivenByGroup({op.writeEnPort(), op.inPort()},
+                                               group)
+                       : success();
+          })
+          .Case<MemoryOp>([&](auto op) {
+            SmallVector<Value> requiredWritePorts;
+            // If writing to memory, write_en, write_data, and all address ports
+            // should be driven.
+            requiredWritePorts.push_back(op.writeEn());
+            requiredWritePorts.push_back(op.writeData());
+            for (Value address : op.addrPorts())
+              requiredWritePorts.push_back(address);
+
+            // We only want to verify the write ports if either write_data or
+            // write_en is driven.
+            return succeeded(anyPortsDrivenByGroup(
+                       {op.writeData(), op.writeEn()}, group))
+                       ? allPortsDrivenByGroup(requiredWritePorts, group)
+                       : success();
+          })
+          .Case<AndLibOp, OrLibOp, XorLibOp, AddLibOp, SubLibOp, GtLibOp,
+                LtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, LshLibOp,
+                RshLibOp, SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp,
+                SleLibOp, SrshLibOp>([&](auto op) {
+            Value lhs = op.lhsPort(), rhs = op.rhsPort();
+            return succeeded(anyPortsDrivenByGroup({lhs, rhs}, group))
+                       ? allPortsDrivenByGroup({lhs, rhs}, group)
+                       : success();
+          })
+          .Default([&](auto op) { return success(); });
+
+  if (failed(verifyWrites))
+    return group->emitOpError()
+           << "with cell: " << destCell->getName() << " \""
+           << destCell.instanceName()
+           << "\" is performing a write and failed to drive all necessary "
+              "ports.";
+
+  Operation *srcDefiningOp = assign.src().getDefiningOp();
+  if (srcDefiningOp == nullptr)
+    return success();
+  auto srcCell = dyn_cast<CellInterface>(srcDefiningOp);
+  if (srcCell == nullptr)
+    return success();
+
+  LogicalResult verifyReads =
+      TypeSwitch<Operation *, LogicalResult>(srcCell)
+          .Case<MemoryOp>([&](auto op) {
+            // If reading memory, all address ports should be driven. Note that
+            // we only want to verify the read ports if read_data is used in the
+            // group.
+            return succeeded(anyPortsReadByGroup({op.readData()}, group))
+                       ? allPortsDrivenByGroup(op.addrPorts(), group)
+                       : success();
+          })
+          .Default([&](auto op) { return success(); });
+
+  if (failed(verifyReads))
+    return group->emitOpError() << "with cell: " << srcCell->getName() << " \""
+                                << srcCell.instanceName()
+                                << "\" is having a read performed upon it, and "
+                                   "failed to drive all necessary ports.";
+
+  return success();
+}
+
+LogicalResult calyx::verifyGroupInterface(Operation *op) {
+  auto group = dyn_cast<GroupInterface>(op);
+  if (group == nullptr)
+    return success();
+
+  for (auto &&groupOp : *group.getBody()) {
+    auto assign = dyn_cast<AssignOp>(groupOp);
+    if (assign == nullptr)
+      continue;
+    if (failed(verifyPrimitivePortDriving(assign, group)))
+      return failure();
+  }
 
   return success();
 }
@@ -454,8 +587,8 @@ static ParseResult parseComponentOp(OpAsmParser &parser,
   if (parseComponentSignature(parser, result, ports, portTypes))
     return failure();
 
-  // Build the component's type for FunctionLike trait. All ports are listed as
-  // arguments so they may be accessed within the component.
+  // Build the component's type for FunctionLike trait. All ports are listed
+  // as arguments so they may be accessed within the component.
   auto type =
       parser.getBuilder().getFunctionType(portTypes, /*resultTypes=*/{});
   result.addAttribute(ComponentOp::getTypeAttrName(), TypeAttr::get(type));
@@ -614,6 +747,56 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
     if (SymbolTable::symbolKnownUseEmpty(groupName, control))
       return op.emitOpError() << "with name: " << groupName
                               << " is unused in the control execution schedule";
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// CombGroupOp
+//===----------------------------------------------------------------------===//
+
+/// Verifies the defining operation of a value is combinational.
+static LogicalResult isCombinational(Value value, GroupInterface group) {
+  Operation *definingOp = value.getDefiningOp();
+  if (definingOp == nullptr)
+    return success();
+
+  // For now, assumes all component instances may be combinational. Once
+  // combinational components are supported, this can be changed.
+  if (isa<InstanceOp>(definingOp))
+    return success();
+
+  // Reads to MemoryOp and RegisterOp are combinational. Writes are not.
+  if (auto r = dyn_cast<RegisterOp>(definingOp)) {
+    if (value != r.outPort())
+      return group->emitOpError()
+             << "with register: \""
+             << cast<CellInterface>(definingOp).instanceName()
+             << "\" is conducting a memory store. This is not combinational.";
+  } else if (auto m = dyn_cast<MemoryOp>(definingOp)) {
+    if (llvm::none_of(m.getReadPorts(), [&](Value p) { return p == value; }))
+      return group->emitOpError()
+             << "with memory: \""
+             << cast<CellInterface>(definingOp).instanceName()
+             << "\" is conducting a memory store. This is not combinational.";
+  }
+
+  return success();
+}
+
+/// Verifies a combinational group may contain only combinational primitives or
+/// perform combinational logic.
+// TODO(www.github.com/llvm/circt/issues/1739): Add Combinational trait.
+static LogicalResult verifyCombGroupOp(CombGroupOp group) {
+
+  for (auto &&op : *group.getBody()) {
+    auto assign = dyn_cast<AssignOp>(op);
+    if (assign == nullptr)
+      continue;
+    Value dst = assign.dest(), src = assign.src();
+    if (failed(isCombinational(dst, group)) ||
+        failed(isCombinational(src, group)))
+      return failure();
   }
   return success();
 }
@@ -1009,7 +1192,7 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
 
   if (failed(portDrivenByGroup(ifOp.cond(), groupOp)))
     return ifOp.emitError()
-           << "conditional op: '" << valueName(component, ifOp.cond())
+           << "with conditional op: '" << valueName(component, ifOp.cond())
            << "' expected to be driven from group: '" << groupName
            << "' but no driver was found.";
 

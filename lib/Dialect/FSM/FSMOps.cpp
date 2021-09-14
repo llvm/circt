@@ -43,14 +43,13 @@ void MachineOp::build(OpBuilder &builder, OperationState &state, StringRef name,
 StateOp MachineOp::getDefaultState() { return *getOps<StateOp>().begin(); }
 
 /// Get the port information of the machine.
-void MachineOp::getHWPortInfo(
-    SmallVectorImpl<circt::hw::ModulePortInfo> &ports) {
+void MachineOp::getHWPortInfo(SmallVectorImpl<hw::PortInfo> &ports) {
   ports.clear();
   auto machineType = getType();
   auto builder = Builder(*this);
 
   for (unsigned i = 0, e = machineType.getNumInputs(); i < e; ++i) {
-    circt::hw::ModulePortInfo port;
+    hw::PortInfo port;
     port.name = builder.getStringAttr("in" + std::to_string(i));
     port.direction = circt::hw::PortDirection::INPUT;
     port.type = machineType.getInput(i);
@@ -59,7 +58,7 @@ void MachineOp::getHWPortInfo(
   }
 
   for (unsigned i = 0, e = machineType.getNumResults(); i < e; ++i) {
-    circt::hw::ModulePortInfo port;
+    hw::PortInfo port;
     port.name = builder.getStringAttr("out" + std::to_string(i));
     port.direction = circt::hw::PortDirection::OUTPUT;
     port.type = machineType.getResult(i);
