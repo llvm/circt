@@ -49,16 +49,15 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   }
 }
 
-static LogicalResult verifyInstanceOp(InstanceOp op) {
-  auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
-  StringRef moduleName = op.moduleName();
-  // TODO(CIRCT #1790): Use `SymbolUserOpInterface`.
-  Operation *referencedModule = topLevelModuleOp.lookupSymbol(moduleName);
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
+  if (module == nullptr)
+    return emitError("Cannot find module definition '") << moduleName() << "'";
 
-  if (referencedModule == nullptr)
-    return op->emitOpError()
-           << "Cannot find module definition: '" << moduleName << "'";
-
+  // It must be some sort of module.
+  if (!hw::isAnyModule(module))
+    return emitError("symbol reference '")
+           << moduleName() << "' isn't a module";
   return success();
 }
 

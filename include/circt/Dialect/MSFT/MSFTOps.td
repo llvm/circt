@@ -12,6 +12,7 @@ class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
 
 def InstanceOp : MSFTOp<"instance", [
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         HasParent<"hw::HWModuleOp">
     ]> {
   let summary = "Create an instance of a module";
@@ -21,8 +22,6 @@ def InstanceOp : MSFTOp<"instance", [
                        Variadic<AnyType>:$inputs,
                        OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs Variadic<AnyType>);
-
-  let verifier = "return ::verify$cppClass(*this);";
 
   let extraClassDeclaration = [{
     // Return the name of the specified result or empty string if it cannot be
