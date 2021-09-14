@@ -731,23 +731,6 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
 // CombGroupOp
 //===----------------------------------------------------------------------===//
 
-/// Determines whether the given value indicates this is a memory store.
-static bool isMemoryStorePort(Value port) {
-  Operation *op = port.getDefiningOp();
-  if (op == nullptr)
-    return false;
-
-  if (auto r = dyn_cast<RegisterOp>(op))
-    return port != r.outPort();
-
-  if (auto m = dyn_cast<MemoryOp>(op)) {
-    auto writePorts = {m.writeData(), m.writeEn()};
-    return llvm::any_of(writePorts, [&](Value p) { return p == port; });
-  }
-
-  return false;
-}
-
 /// Verifies the defining operation of a value is combinational.
 static LogicalResult isCombinational(Value value, GroupInterface group) {
   Operation *definingOp = value.getDefiningOp();
@@ -764,17 +747,27 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
   if (isa<comb::CombDialect, hw::HWDialect>(definingOp->getDialect()))
     return success();
 
-  // Either this is a non-combinational cell or an improper use of memory.
-  auto cell = cast<CellInterface>(definingOp);
-  bool isMemoryStore = isMemoryStorePort(value);
-  if (!isMemoryStore)
-    return success();
+  // Reads to MemoryOp and RegisterOp are combinational. Writes are not.
+  if (auto r = dyn_cast<RegisterOp>(definingOp)) {
+    return value == r.outPort()
+               ? success()
+               : group->emitOpError()
+                     << "with register: \"" << r.instanceName()
+                     << "\" is conducting a memory store. This is not "
+                        "combinational.";
+  } else if (auto m = dyn_cast<MemoryOp>(definingOp)) {
+    auto writePorts = {m.writeData(), m.writeEn()};
+    return (llvm::none_of(writePorts, [&](Value p) { return p == value; }))
+               ? success()
+               : group->emitOpError()
+                     << "with memory: \"" << m.instanceName()
+                     << "\" is conducting a memory store. This "
+                        "is not combinational.";
+  }
 
-  assert(cell && "this should be a CellInterface.");
-  return group->emitOpError()
-         << "with " << cell->getName() << ": \"" << cell.instanceName() << "\" "
-         << (isMemoryStore ? "is conducting a memory store. " : "")
-         << "This is not combinational.";
+  StringRef portName = valueName(group->getParentOfType<ComponentOp>(), value);
+  return group->emitOpError() << "with port: " << portName
+                              << ". This operation is not combinational.";
 }
 
 /// Verifies a combinational group may contain only combinational primitives or
