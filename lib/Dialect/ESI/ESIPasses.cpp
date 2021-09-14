@@ -56,9 +56,10 @@ class ESIHWBuilder : public circt::ImplicitLocOpBuilder {
 public:
   ESIHWBuilder(Operation *top);
 
-  HWModuleExternOp declareStage();
+  HWModuleExternOp declareStage(Operation *symTable, Type);
   // Will be unused when CAPNP is undefined
-  HWModuleExternOp declareCosimEndpoint() LLVM_ATTRIBUTE_UNUSED;
+  HWModuleExternOp declareCosimEndpoint(Operation *symTable, Type sendType,
+                                        Type recvType) LLVM_ATTRIBUTE_UNUSED;
 
   InterfaceOp getOrConstructInterface(ChannelPort);
   InterfaceOp constructInterface(ChannelPort);
@@ -80,8 +81,8 @@ private:
   /// taken in the symbol table.
   StringAttr constructInterfaceName(ChannelPort);
 
-  HWModuleExternOp declaredStage;
-  HWModuleExternOp declaredCosimEndpoint;
+  llvm::DenseMap<Type, HWModuleExternOp> declaredStage;
+  llvm::DenseMap<std::pair<Type, Type>, HWModuleExternOp> declaredCosimEndpoint;
   llvm::DenseMap<Type, InterfaceOp> portTypeLookup;
 };
 } // anonymous namespace
@@ -108,7 +109,7 @@ ESIHWBuilder::ESIHWBuilder(Operation *top)
       dataIn(StringAttr::get(getContext(), "DataIn")),
       clk(StringAttr::get(getContext(), "clk")),
       rstn(StringAttr::get(getContext(), "rstn")),
-      width(Identifier::get("WIDTH", getContext())), declaredStage(nullptr) {
+      width(Identifier::get("WIDTH", getContext())) {
 
   auto regions = top->getRegions();
   if (regions.size() == 0) {
@@ -117,6 +118,29 @@ ESIHWBuilder::ESIHWBuilder(Operation *top)
   auto &region = regions.front();
   if (!region.empty())
     setInsertionPoint(&region.front(), region.front().begin());
+}
+
+static StringAttr constructUniqueSymbol(Operation *tableOp,
+                                        StringRef proposedNameRef) {
+  SmallString<64> proposedName = proposedNameRef;
+
+  // Normalize the type name.
+  for (char &ch : proposedName) {
+    if (isalpha(ch) || isdigit(ch) || ch == '_')
+      continue;
+    ch = '_';
+  }
+
+  // Make sure that this symbol isn't taken. If it is, append a number and try
+  // again.
+  size_t baseLength = proposedName.size();
+  size_t tries = 0;
+  while (SymbolTable::lookupSymbolIn(tableOp, proposedName)) {
+    proposedName.resize(baseLength);
+    proposedName.append(llvm::utostr(++tries));
+  }
+
+  return StringAttr::get(tableOp->getContext(), proposedName);
 }
 
 StringAttr ESIHWBuilder::constructInterfaceName(ChannelPort port) {
@@ -133,13 +157,6 @@ StringAttr ESIHWBuilder::constructInterfaceName(ChannelPort port) {
       .Case([&](hw::StructType t) { nameOS << "Struct"; })
       .Default([&](Type t) { nameOS << port.getInner(); });
 
-  // Normalize the type name.
-  for (char &ch : portTypeName) {
-    if (isalpha(ch) || isdigit(ch) || ch == '_')
-      continue;
-    ch = '_';
-  }
-
   // Don't allow the name to end with '_'.
   ssize_t i = portTypeName.size() - 1;
   while (i >= 0 && portTypeName[i] == '_') {
@@ -150,51 +167,47 @@ StringAttr ESIHWBuilder::constructInterfaceName(ChannelPort port) {
   // All stage names start with this.
   SmallString<64> proposedName("IValidReady_");
   proposedName.append(portTypeName);
-
-  // Make sure that this symbol isn't taken. If it is, append a number and try
-  // again.
-  size_t baseLength = proposedName.size();
-  size_t tries = 0;
-  while (SymbolTable::lookupSymbolIn(tableOp, proposedName)) {
-    proposedName.resize(baseLength);
-    proposedName.append(llvm::utostr(++tries));
-  }
-
-  return StringAttr::get(getContext(), proposedName);
+  return constructUniqueSymbol(tableOp, proposedName);
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module implements pipeline stage, adding 1 cycle latency. This particular
 /// implementation is double-buffered and fully pipelines the reverse-flow ready
 /// signal.
-HWModuleExternOp ESIHWBuilder::declareStage() {
-  if (declaredStage)
-    return declaredStage;
+HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
+                                            Type dataType) {
+  HWModuleExternOp &stage = declaredStage[dataType];
+  if (stage)
+    return stage;
 
-  auto name = StringAttr::get(getContext(), "ESI_PipelineStage");
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
   // types and ops.
   PortInfo ports[] = {{clk, PortDirection::INPUT, getI1Type(), 0},
                       {rstn, PortDirection::INPUT, getI1Type(), 1},
-                      {a, PortDirection::INPUT, getNoneType(), 2},
+                      {a, PortDirection::INPUT, dataType, 2},
                       {aValid, PortDirection::INPUT, getI1Type(), 3},
                       {aReady, PortDirection::OUTPUT, getI1Type(), 0},
-                      {x, PortDirection::OUTPUT, getNoneType(), 1},
+                      {x, PortDirection::OUTPUT, dataType, 1},
                       {xValid, PortDirection::OUTPUT, getI1Type(), 2},
                       {xReady, PortDirection::INPUT, getI1Type(), 4}};
-  declaredStage = create<HWModuleExternOp>(name, ports);
-  return declaredStage;
+  stage = create<HWModuleExternOp>(
+      constructUniqueSymbol(symTable, "ESI_PipelineStage"), ports,
+      "ESI_PipelineStage");
+  return stage;
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module contains a bi-directional Cosimulation DPI interface with valid/ready
 /// semantics.
-HWModuleExternOp ESIHWBuilder::declareCosimEndpoint() {
-  if (declaredCosimEndpoint)
-    return declaredCosimEndpoint;
-  auto name = StringAttr::get(getContext(), "Cosim_Endpoint");
+HWModuleExternOp ESIHWBuilder::declareCosimEndpoint(Operation *symTable,
+                                                    Type sendType,
+                                                    Type recvType) {
+  HWModuleExternOp &endpoint =
+      declaredCosimEndpoint[std::make_pair(sendType, recvType)];
+  if (endpoint)
+    return endpoint;
   // Since this module has parameterized widths on the a input and x output,
   // give the extern declation a None type since nothing else makes sense.
   // Will be refining this when we decide how to better handle parameterized
@@ -203,12 +216,14 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpoint() {
                       {rstn, PortDirection::INPUT, getI1Type(), 1},
                       {dataOutValid, PortDirection::OUTPUT, getI1Type(), 0},
                       {dataOutReady, PortDirection::INPUT, getI1Type(), 2},
-                      {dataOut, PortDirection::OUTPUT, getNoneType(), 1},
+                      {dataOut, PortDirection::OUTPUT, recvType, 1},
                       {dataInValid, PortDirection::INPUT, getI1Type(), 3},
                       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
-                      {dataIn, PortDirection::INPUT, getNoneType(), 4}};
-  declaredCosimEndpoint = create<HWModuleExternOp>(name, ports);
-  return declaredCosimEndpoint;
+                      {dataIn, PortDirection::INPUT, sendType, 4}};
+  endpoint = create<HWModuleExternOp>(
+      constructUniqueSymbol(symTable, "Cosim_Endpoint"), ports,
+      "Cosim_Endpoint");
+  return endpoint;
 }
 
 /// Return the InterfaceType which corresponds to an ESI port type. If it
@@ -828,7 +843,8 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   auto chPort = stage.input().getType().dyn_cast<ChannelPort>();
   if (!chPort)
     return failure();
-  auto stageModule = builder.declareStage();
+  Operation *symTable = stage->getParentWithTrait<OpTrait::SymbolTable>();
+  auto stageModule = builder.declareStage(symTable, chPort.getInner());
 
   NamedAttrList stageParams;
   size_t width = circt::hw::getBitWidth(chPort.getInner());
@@ -1079,7 +1095,6 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   Value send = operands[2];
 
   circt::BackedgeBuilder bb(rewriter, loc);
-  builder.declareCosimEndpoint();
   Type ui64Type =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
   capnp::TypeSchema sendTypeSchema(send.getType());
@@ -1088,6 +1103,9 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   capnp::TypeSchema recvTypeSchema(ep.recv().getType());
   if (!recvTypeSchema.isSupported())
     return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
+  Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
+  HWModuleExternOp endpoint = builder.declareCosimEndpoint(
+      symTable, sendTypeSchema.getType(), recvTypeSchema.getType());
 
   // Set all the parameters.
   NamedAttrList params;
