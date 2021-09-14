@@ -463,17 +463,20 @@ def VerbatimOp : SVOp<"verbatim"> {
 
     sv.verbatim allows operand substitutions with {{0}} syntax.
   }];
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
+  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
+                  DefaultValuedAttr<SymRefArrayAttr,"{}">:$symRefs);
 
   let assemblyFormat =
-    "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
+    "$string (`(` $operands^ `)` `:` type($operands))? attr-dict";
 
   let builders = [
     OpBuilder<(ins "Twine":$string),
                  "build(odsBuilder, odsState, "
-                 "odsBuilder.getStringAttr(string), ValueRange{});">,
+                 "odsBuilder.getStringAttr(string), ValueRange{},"
+                 "odsBuilder.getArrayAttr({}));">,
     OpBuilder<(ins "StringAttr":$string),
-                 "build(odsBuilder, odsState, string, ValueRange{});">
+                 "build(odsBuilder, odsState, string, ValueRange{},"
+                 "odsBuilder.getArrayAttr({}));">
   ];
 }
 

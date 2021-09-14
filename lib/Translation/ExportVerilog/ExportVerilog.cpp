@@ -588,7 +588,7 @@ public:
   }
 
   void emitTextWithSubstitutions(StringRef string, Operation *op,
-                                 std::function<void(Value)> operandEmitter);
+                                 std::function<void(Value)> operandEmitter, llvm::Optional<const SmallVector<Operation*,8>> symOps = None);
 
 private:
   void operator=(const EmitterBase &) = delete;
@@ -598,13 +598,14 @@ private:
 
 void EmitterBase::emitTextWithSubstitutions(
     StringRef string, Operation *op,
-    std::function<void(Value)> operandEmitter) {
+    std::function<void(Value)> operandEmitter, llvm::Optional<const SmallVector<Operation*,8>> symOps) {
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
 
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
   // returning true.  This returns false if no substitution is found.
+  unsigned numSymOps = symOps == None ? 0 : symOps.getValue().size();
   auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
     size_t start = 0;
     while (1) {
@@ -636,7 +637,13 @@ void EmitterBase::emitTextWithSubstitutions(
       }
       next += 2;
 
-      if (operandNo >= op->getNumOperands()) {
+      unsigned symOpNum = op->getNumOperands() - operandNo;
+      Value emitOp ;
+      if (operandNo < op->getNumOperands())
+        emitOp = op->getOperand(operandNo);
+      else if (symOpNum < numSymOps)
+        emitOp = *(symOps.getValue()[symOpNum]);
+      if (operandNo >= op->getNumOperands() && symOpNum >= numSymOps) {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
       }
@@ -645,6 +652,7 @@ void EmitterBase::emitTextWithSubstitutions(
       os << string.take_front(start - 2);
 
       // Emit the operand.
+      
       operandEmitter(op->getOperand(operandNo));
 
       // Forget about the part we emitted.
@@ -2054,6 +2062,10 @@ LogicalResult StmtEmitter::visitSV(FatalOp op) {
 LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
+  SmallVector<Operation *,8> symOps;
+  for (auto sym : op.symRefs()){
+    symOps.push_back(state.symbolCache.getDefinition(sym.cast<FlatSymbolRefAttr>()));
+  }
 
   // Drop an extraneous \n off the end of the string if present.
   StringRef string = op.string();
