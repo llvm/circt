@@ -105,7 +105,6 @@ private:
         });
     return library;
   }
-
   /// Maintains a unique list of libraries used throughout the lifetime of the
   /// tracker.
   llvm::SmallSet<StringRef, 4> usedLibraries;
@@ -591,9 +590,7 @@ void Emitter::emitGroup(GroupInterface group) {
     }
   };
 
-  auto prefix = "group";
-  if (isa<CombGroupOp>(group))
-    prefix = "comb group";
+  StringRef prefix = isa<CombGroupOp>(group) ? "comb group" : "group";
   auto groupHeader = (group.symName().getValue() + getAttributes(group)).str();
   emitCalyxSection(prefix, emitGroupBody, groupHeader);
 }

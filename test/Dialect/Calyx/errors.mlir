@@ -482,3 +482,105 @@ calyx.program {
     calyx.control {}
   }
 }
+
+// -----
+
+calyx.program {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires {
+      // expected-error @+1 {{'calyx.group' op with cell: calyx.register "r" is performing a write and failed to drive all necessary ports.}}
+      calyx.group @A {
+        calyx.assign %r.in = %c1_1 : i1
+        calyx.group_done %r.done : i1
+      }
+    }
+    calyx.control { calyx.enable @A }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
+    %c1_i8 = hw.constant 1 : i8
+    calyx.wires {
+      // expected-error @+1 {{'calyx.group' op with cell: calyx.memory "m" is performing a write and failed to drive all necessary ports.}}
+      calyx.group @A {
+        calyx.assign %m.write_data = %c1_i8 : i8
+        calyx.group_done %m.done : i1
+      }
+    }
+    calyx.control { calyx.enable @A }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %gt.left, %gt.right, %gt.out = calyx.std_gt "gt" : i8, i8, i1
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
+    %c1_i8 = hw.constant 1 : i8
+    %c1_i1 = hw.constant 1 : i1
+    calyx.wires {
+      // expected-error @+1 {{calyx.group' op with cell: calyx.std_gt "gt" is performing a write and failed to drive all necessary ports.}}
+      calyx.group @A {
+        calyx.assign %r.in = %gt.out : i1
+        calyx.assign %r.write_en = %c1_i1 : i1
+        calyx.assign %gt.left = %c1_i8 : i8
+        calyx.group_done %r.done : i1
+      }
+    }
+    calyx.control { calyx.enable @A }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
+    %c1_i1 = hw.constant 1 : i1
+    calyx.wires {
+      // expected-error @+1 {{'calyx.group' op with cell: calyx.memory "m" is having a read performed upon it, and failed to drive all necessary ports.}}
+      calyx.group @A {
+        calyx.assign %r.in = %m.read_data : i8
+        calyx.assign %r.write_en = %c1_i1 : i1
+        calyx.group_done %r.done : i1
+      }
+    }
+    calyx.control { calyx.enable @A }
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires {
+      // expected-error @+1 {{'calyx.comb_group' op with register: "r" is conducting a memory store. This is not combinational.}}
+      calyx.comb_group @IncorrectCombGroup {
+        calyx.assign %r.in = %c1_1 : i1
+        calyx.assign %r.write_en = %c1_1 : i1
+      }
+      calyx.group @A {
+        calyx.assign %r.in = %c1_1 : i1
+        calyx.assign %r.write_en = %c1_1 : i1
+        calyx.group_done %r.done : i1
+      }
+    }
+    calyx.control {
+      calyx.seq {
+        calyx.if %r.out with @IncorrectCombGroup {
+          calyx.enable @A
+        }
+      }
+    }
+  }
+}

@@ -117,6 +117,15 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     Value clk()       { return getResult(getNumDimensions() + 2); }
     Value readData()  { return getResult(getNumDimensions() + 3); }
     Value done()      { return getResult(getNumDimensions() + 4); }
+
+    /// Returns the ports used in a memory read.
+    SmallVector<Value> getReadPorts() {
+      SmallVector<Value> ports;
+      for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
+        ports.push_back(getResult(i));
+      ports.push_back(readData());
+      return ports;
+    }
   }];
 }
 
@@ -143,6 +152,11 @@ class BoolBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
     SameTypeConstraint<"left", "right">
   ]> {
   let results = (outs AnyType:$left, AnyType:$right, I1:$out);
+  let extraClassDeclaration = [{
+    Value lhsPort() { return getResult(0); }
+    Value rhsPort() { return getResult(1); }
+    Value outPort() { return getResult(2); }
+  }];
 }
 
 def LtLibOp  : BoolBinaryLibraryOp<"lt"> {}
@@ -163,6 +177,11 @@ class ArithBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
     SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs AnyType:$left, AnyType:$right, AnyType:$out);
+  let extraClassDeclaration = [{
+    Value lhsPort() { return getResult(0); }
+    Value rhsPort() { return getResult(1); }
+    Value outPort() { return getResult(2); }
+  }];
 }
 
 def AddLibOp  : ArithBinaryLibraryOp<"add"> {}
@@ -178,6 +197,10 @@ def XorLibOp  : ArithBinaryLibraryOp<"xor"> {}
 class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
   ]> {
   let results = (outs AnyInteger:$in, AnyInteger:$out);
+  let extraClassDeclaration = [{
+    Value inPort()  { return getResult(0); }
+    Value outPort() { return getResult(1); }
+  }];
 }
 
 def PadLibOp : UnaryLibraryOp<"pad"> {
@@ -192,6 +215,7 @@ def SliceLibOp : UnaryLibraryOp<"slice"> {
   let verifier = [{
     unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
     unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    return success(inBits > outBits);  }];
+    return success(inBits > outBits);
+  }];
 }
 def NotLibOp  : UnaryLibraryOp<"not"> {}
