@@ -81,13 +81,13 @@ static Value castToFIRRTLType(Value val, Type type,
                               ImplicitLocOpBuilder &builder) {
   auto firType = type.cast<FIRRTLType>();
 
-  // Use UnrealizedConversionCastOp except for a bundle type.
+  // Use HWStructCastOp for a bundle type.
   if (BundleType bundle = type.dyn_cast<BundleType>()) {
     val = builder.createOrFold<HWStructCastOp>(firType.getPassiveType(), val);
-  } else {
-    val = builder.create<mlir::UnrealizedConversionCastOp>(firType, val)
-              .getResult(0);
   }
+
+  val = builder.create<mlir::UnrealizedConversionCastOp>(firType, val)
+            .getResult(0);
 
   return val;
 }

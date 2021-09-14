@@ -127,8 +127,8 @@ public:
   Value convertToPassive(OpBuilder &builder, Location loc, Value input) {
     auto inType = input.getType().cast<FIRRTLType>();
     return builder
-        .create<mlir::UnrealizedConversionCastOp>(
-            loc, inType.getPassiveType(), input)
+        .create<mlir::UnrealizedConversionCastOp>(loc, inType.getPassiveType(),
+                                                  input)
         .getResult(0);
   }
 
