@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -76,8 +78,32 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
-// Convenience function for getting the SSA name of @p v under the scope of
-// operation @p scopeOp
+/// Verify that the value is not a "complex" value. For example, the source
+/// of an AssignOp should be a constant or port, e.g.
+/// %and = comb.and %a, %b : i1
+/// calyx.assign %port = %and, %c1_i1 ? : i1   // Incorrect
+/// calyx.assign %port = %c1_i1, %and ? : i1   // Correct
+/// TODO(Calyx): This is useful to verify current MLIR can be lowered to the
+/// native compiler. Remove this when Calyx supports wire declarations.
+/// See: https://github.com/llvm/circt/pull/1774 for context.
+template <typename Op>
+static LogicalResult verifyNotComplexSource(Op op) {
+  Operation *definingOp = op.src().getDefiningOp();
+  if (definingOp == nullptr)
+    // This is a port of the parent component.
+    return success();
+
+  // Currently, we use the Combinational dialect to perform logical operations
+  // on wires, i.e. comb::AndOp, comb::OrOp, comb::XorOp.
+  if (auto dialect = definingOp->getDialect(); isa<comb::CombDialect>(dialect))
+    return op->emitOpError("has source that is not a port or constant. "
+                           "Complex logic should be conducted in the guard.");
+
+  return success();
+}
+
+/// Convenience function for getting the SSA name of @p v under the scope of
+/// operation @p scopeOp
 static std::string valueName(Operation *scopeOp, Value v) {
   std::string s;
   llvm::raw_string_ostream os(s);
@@ -854,6 +880,7 @@ static LogicalResult verifyPortDirection(AssignOp op, Value value,
 /// `isDestination` is used to distinguish whether the destination
 /// or source of the AssignOp is to be verified.
 static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
+  bool isSource = !isDestination;
   Value value = isDestination ? op.dest() : op.src();
   if (isPort(value))
     return verifyPortDirection(op, value, isDestination);
@@ -862,6 +889,8 @@ static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
   if (isDestination && !isa<GroupGoOp, GroupDoneOp>(value.getDefiningOp()))
     return op->emitOpError(
         "has an invalid destination port. It must be drive-able.");
+  else if (isSource)
+    return verifyNotComplexSource(op);
 
   return success();
 }
@@ -960,12 +989,38 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
 // GroupGoOp
 //===----------------------------------------------------------------------===//
 
+static LogicalResult verifyGroupGoOp(GroupGoOp goOp) {
+  return verifyNotComplexSource(goOp);
+}
+
 /// Provide meaningful names to the result value of a GroupGoOp.
 void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto parent = (*this)->getParentOfType<GroupOp>();
   auto name = parent.sym_name();
   std::string resultName = name.str() + ".go";
   setNameFn(getResult(), resultName);
+}
+
+//===----------------------------------------------------------------------===//
+// GroupDoneOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
+  Operation *srcOp = doneOp.src().getDefiningOp();
+  Value optionalGuard = doneOp.guard();
+  Operation *guardOp = optionalGuard ? optionalGuard.getDefiningOp() : nullptr;
+  bool noGuard = (guardOp == nullptr);
+
+  if (srcOp == nullptr)
+    // This is a port of the parent component.
+    return success();
+
+  if (isa<hw::ConstantOp>(srcOp) && (noGuard || isa<hw::ConstantOp>(guardOp)))
+    return doneOp->emitOpError()
+           << "with constant source" << (noGuard ? "" : " and constant guard")
+           << ". This should be a combinational group.";
+
+  return verifyNotComplexSource(doneOp);
 }
 
 //===----------------------------------------------------------------------===//
