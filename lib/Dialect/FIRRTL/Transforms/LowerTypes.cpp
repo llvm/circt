@@ -260,6 +260,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   void visitExpr(InvalidValueOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(MuxPrimOp op);
+  void visitExpr(mlir::UnrealizedConversionCastOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(PartialConnectOp op);
   void visitStmt(WhenOp op);
@@ -876,6 +877,16 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
     auto high = getSubWhatever(op.high(), field.index);
     auto low = getSubWhatever(op.low(), field.index);
     return builder->create<MuxPrimOp>(op.sel(), high, low);
+  };
+  lowerProducer(op, clone);
+}
+
+// Expand UnrealizedConversionCastOp of aggregates
+void TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
+  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
+                   ArrayAttr attrs) -> Operation * {
+    auto input = getSubWhatever(op.getOperand(0), field.index);
+    return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input);
   };
   lowerProducer(op, clone);
 }
