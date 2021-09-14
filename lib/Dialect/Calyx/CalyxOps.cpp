@@ -791,7 +791,8 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
                         "is not combinational.";
   }
 
-  StringRef portName = valueName(group->getParentOfType<ComponentOp>(), value);
+  std::string portName =
+      valueName(group->getParentOfType<ComponentOp>(), value);
   return group->emitOpError() << "with port: " << portName
                               << ". This operation is not combinational.";
 }

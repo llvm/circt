@@ -159,7 +159,7 @@ hw.module @f() -> (a: i2) {
 }
 
 hw.module @test() -> () {
-  // expected-error @+1 {{'hw.instance' op #0 result type must be 'i2', but got 'i1'}}
+  // expected-error @+1 {{'hw.instance' op result type #0 must be 'i2', but got 'i1'}}
   %0 = hw.instance "test" @f() -> (a: i1)
   hw.output
 }
@@ -185,7 +185,21 @@ hw.module @f(%a: i1) -> () {
 }
 
 hw.module @test(%a: i2) -> () {
-  // expected-error @+1 {{'hw.instance' op #0 operand type must be 'i1', but got 'i2'}}
+  // expected-error @+1 {{'hw.instance' op operand type #0 must be 'i1', but got 'i2'}}
   hw.instance "test" @f(a: %a: i2) -> ()
+  hw.output
+}
+
+
+// -----
+
+// expected-note @+1 {{original module declared here}}
+hw.module @f(%a: i1) -> () {
+  hw.output
+}
+
+hw.module @test(%a: i1) -> () {
+  // expected-error @+1 {{'hw.instance' op input label #0 must be "a", but got "b"}}
+  hw.instance "test" @f(b: %a: i1) -> ()
   hw.output
 }

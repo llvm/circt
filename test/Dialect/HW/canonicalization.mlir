@@ -1164,7 +1164,7 @@ hw.module @unintializedWire(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42)
   %.write.data.wire = sv.wire  : !hw.inout<i42>
   %13 = sv.read_inout %.write.data.wire : !hw.inout<i42>
   %_M.ro_data_0, %_M.rw_rdata_0 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0
-     (ro_clock_0: %0: i1, ro_en_0: %1: i1, ro_addr_0: %2: i4) -> (ro_data_0: i42, rw_rdata_0: i42)
+     (ro_clock_0: %0: i1, ro_en_0: %1: i1, ro_addr_0: %2: i4) -> (ro_data_0: i42, rw_data_0: i42)
  
   %14 = sv.read_inout %.read.addr.wire : !hw.inout<i4>
   %c0_i4 = hw.constant 0 : i4
