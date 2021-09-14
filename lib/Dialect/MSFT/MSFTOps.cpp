@@ -52,6 +52,7 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 static LogicalResult verifyInstanceOp(InstanceOp op) {
   auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
   StringRef moduleName = op.moduleName();
+  // TODO(CIRCT #1790): Use `SymbolUserOpInterface`.
   Operation *referencedModule = topLevelModuleOp.lookupSymbol(moduleName);
 
   if (referencedModule == nullptr)
