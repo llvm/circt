@@ -418,6 +418,17 @@ Example:
   "inclusive": true
 }
 ```
+## FIRRTL specific attributes applied to HW Modules
+
+### Design Under Test
+
+| Property   | Type   | Description                                   |
+| ---------- | ------ | -------------                                 |
+| class      | string | `sifive.enterprise.firrtl.MarkDUTAnnotation`  |
+| target     | string | Reference target                              |
+
+Marks what is the DUT (and not the testbench). This annotation is lowered to the
+attribute `firrtl.DesignUnderTest` to indicate the module which is the DUT.
 
 ##  Grand Central
 
@@ -735,12 +746,3 @@ Example:
   "source":"~GCTMemTap|GCTMemTap>mem"
 }
 ```
-#### Design Under Test
-
-| Property   | Type   | Description                                   |
-| ---------- | ------ | -------------                                 |
-| class      | string | `sifive.enterprise.firrtl.MarkDUTAnnotation`  |
-| target     | string | Reference target                              |
-
-Marks what is the DUT (and not the testbench). This annotation is lowered to the
-attribute `DesignUnderTest` to indicate the module which is the DUT.

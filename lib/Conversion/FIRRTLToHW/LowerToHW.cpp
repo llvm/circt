@@ -721,7 +721,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (auto outputFile = oldModule->getAttr("output_file"))
     newModule->setAttr("output_file", outputFile);
   if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
-    newModule->setAttr("DesignUnderTest", builder.getUnitAttr());
+    newModule->setAttr("firrtl.DesignUnderTest", builder.getUnitAttr());
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;
