@@ -51,6 +51,10 @@ calyx.program {
         calyx.group_done %c1.done : i1
       }
       calyx.comb_group @ReadMemory {
+        // CHECK: calyx.assign %m.addr0 = %c0_i6 : i6
+        // CHECK-NEXT: calyx.assign %m.addr1 = %c0_i6 : i6
+        // CHECK-NEXT: calyx.assign %gt.left = %m.read_data : i8
+        // CHECK-NEXT: calyx.assign %gt.right = %c0_i8 : i8
         calyx.assign %m.addr0 = %c0_i6 : i6
         calyx.assign %m.addr1 = %c0_i6 : i6
         calyx.assign %gt.left = %m.read_data : i8

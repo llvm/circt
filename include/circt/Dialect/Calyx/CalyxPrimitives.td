@@ -125,9 +125,8 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   }];
 }
 
-class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = [
-    Combinational
-  ]> : CalyxPrimitive<"std_" # mnemonic, traits> {
+class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
+  CalyxPrimitive<"std_" # mnemonic, !listconcat(traits, [Combinational])> {
 
   let summary = "Defines an operation which maps to a Calyx library primitive";
   let description = [{
