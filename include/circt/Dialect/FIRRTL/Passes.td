@@ -221,11 +221,13 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
 def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
   let summary = "Prefixes names of modules and mems in a hiearchy";
   let description = [{
+
     This pass looks for modules annotated with the
     `NestedPrefixModulesAnnotation` and prefixes the names of all modules
-    instantiated underneath it. This pass will duplicate modules as necessary
-    to give submodules unique names. The annotation can be attached to module
-    definitions, as well as specific instances.
+    instantiated underneath it.  If `inclusive` is true, it includes the target
+    module in the renaming.  If `inclusive` is false, it will only rename
+    modules instantiated underneath the target module.  If a module is required
+    to have two different prefixes, it will be cloned.
 
     The supported annotation is:
     ```
@@ -236,8 +238,6 @@ def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
       }
     ```
 
-    If `inclusive` is false, it will not attach the prefix to target module,
-    only to modules instantiated underneath it.
   }];
   let constructor = "circt::firrtl::createPrefixModulesPass()";
 }

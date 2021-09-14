@@ -276,7 +276,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
 
   if (prefixModules)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
   if (blackBoxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());

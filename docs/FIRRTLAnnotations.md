@@ -404,11 +404,11 @@ Example:
 | prefix     | string | Prefix to use                                            |
 | inclusive  | bool   | Whether this prefix is inclusive of the target           |
 
-Prefixes all module names under the target with the required prefix.  If
-`inclusive` is true, it includes the target module in the renaming.  If
-`inclusive` is false, it will only rename modules instantiated underneath the
-target module.  If a module is required to have two different prefixes, it will
-be cloned.
+This annotations prefixes all module names under the target with the required
+prefix.  If `inclusive` is true, it includes the target module in the renaming.
+If `inclusive` is false, it will only rename modules instantiated underneath
+the target module.  If a module is required to have two different prefixes, it
+will be cloned.
 
 Example:
 ```json
