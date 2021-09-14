@@ -305,7 +305,7 @@ Example:
 
 | Property   | Type   | Description                             |
 | ---------- | ------ | -------------                           |
-| class      | string | `firrte.transforms.DontTouchAnnotation` |
+| class      | string | `firrtl.transforms.DontTouchAnnotation` |
 | target     | string | Reference target                        |
 
 The `DontTouchAnnotation` prevents the removal of elements through
