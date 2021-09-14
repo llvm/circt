@@ -866,10 +866,8 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
   Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
                       unwrap.valid(), stageReady};
-  Type resultTypes[] = {rewriter.getI1Type(), unwrap.rawOutput().getType(),
-                        rewriter.getI1Type()};
   auto stageInst = rewriter.create<InstanceOp>(
-      loc, resultTypes, pipeStageName, stageModule.getName(), operands,
+      loc, stageModule, pipeStageName, operands,
       stageParams.getDictionary(rewriter.getContext()), StringAttr());
   auto stageInstResults = stageInst.getResults();
 
@@ -1103,9 +1101,6 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   capnp::TypeSchema recvTypeSchema(ep.recv().getType());
   if (!recvTypeSchema.isSupported())
     return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
-  Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
-  HWModuleExternOp endpoint = builder.declareCosimEndpoint(
-      symTable, sendTypeSchema.getType(), recvTypeSchema.getType());
 
   // Set all the parameters.
   NamedAttrList params;
@@ -1133,17 +1128,21 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
   ArrayType ingestBitArrayType =
       ArrayType::get(rewriter.getI1Type(), recvTypeSchema.size());
 
+  // Build or get the cached Cosim Endpoint module parameterization.
+  Operation *symTable = ep->getParentWithTrait<OpTrait::SymbolTable>();
+  HWModuleExternOp endpoint = builder.declareCosimEndpoint(
+      symTable, egestBitArrayType, ingestBitArrayType);
+
   // Create replacement Cosim_Endpoint instance.
   StringAttr nameAttr = ep->getAttr("name").dyn_cast_or_null<StringAttr>();
   StringRef name = nameAttr ? nameAttr.getValue() : "cosimEndpoint";
   Value epInstInputs[] = {
       clk, rstn, recvReady, unwrapSend.valid(), encodeData.capnpBits(),
   };
-  Type epInstOutputs[] = {rewriter.getI1Type(), ingestBitArrayType,
-                          rewriter.getI1Type()};
-  auto cosimEpModule = rewriter.create<InstanceOp>(
-      loc, epInstOutputs, name, "Cosim_Endpoint", epInstInputs,
-      params.getDictionary(ctxt), StringAttr());
+
+  auto cosimEpModule =
+      rewriter.create<InstanceOp>(loc, endpoint, name, epInstInputs,
+                                  params.getDictionary(ctxt), StringAttr());
   sendReady.setValue(cosimEpModule.getResult(2));
 
   // Set up the injest path.
