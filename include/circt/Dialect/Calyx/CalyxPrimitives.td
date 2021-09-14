@@ -18,6 +18,11 @@ class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
     let skipDefaultBuilders = 1;
 }
 
+/// Trait used to mark certain operations in the Calyx dialect as combinational.
+def Combinational : NativeOpTrait<"Combinational"> {
+  let cppNamespace = "::circt::calyx";
+}
+
 def RegisterOp : CalyxPrimitive<"register", [
     SameTypeConstraint<"in", "out">
   ]> {
@@ -117,20 +122,12 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     Value clk()       { return getResult(getNumDimensions() + 2); }
     Value readData()  { return getResult(getNumDimensions() + 3); }
     Value done()      { return getResult(getNumDimensions() + 4); }
-
-    /// Returns the ports used in a memory read.
-    SmallVector<Value> getReadPorts() {
-      SmallVector<Value> ports;
-      for (size_t i = 0, e = addrSizes().size(); i != e; ++i)
-        ports.push_back(getResult(i));
-      ports.push_back(readData());
-      return ports;
-    }
   }];
 }
 
-class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
-  CalyxPrimitive<"std_" # mnemonic, traits> {
+class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = [
+    Combinational
+  ]> : CalyxPrimitive<"std_" # mnemonic, traits> {
 
   let summary = "Defines an operation which maps to a Calyx library primitive";
   let description = [{

@@ -37,6 +37,19 @@ public:
   }
 };
 
+/// A helper function to verify a combinational operation.
+LogicalResult verifyCombinationalOp(Operation *op);
+
+/// Signals that the following operation is combinational.
+template <typename ConcreteType>
+class Combinational
+    : public mlir::OpTrait::TraitBase<ConcreteType, Combinational> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    return verifyCombinationalOp(op);
+  }
+};
+
 /// The port direction attribute follows the implementation style of FIRRTL
 /// module port direction attributes.
 enum Direction { Input = 0, Output };
