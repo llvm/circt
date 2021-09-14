@@ -737,9 +737,12 @@ Example:
 ```
 #### Design Under Test
 
-| Property   | Type   | Description                             |
-| ---------- | ------ | -------------                           |
-| class      | string | `sifive.enterprise.firrtl.MarkDUTAnnotation` |
-| target     | string | Reference target                        |
+| Property   | Type   | Description                                   |
+| ---------- | ------ | -------------                                 |
+| class      | string | `sifive.enterprise.firrtl.MarkDUTAnnotation`  |
+| target     | string | Reference target                              |
 
-Marks what is the DUT (and not the testbench). This annotation can be lowered to the attribute `DesignUnderTest = [true]` to indicate the module which is the DUT.
+Marks what is the DUT (and not the testbench). 
+This annotation can be lowered to the attribute 
+`DesignUnderTest = [true]` 
+to indicate the module which is the DUT.
