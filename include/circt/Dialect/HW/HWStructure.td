@@ -306,13 +306,15 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
   let summary = "Create an instance of a module";
   let description = [{
     This represents an instance of a module. The inputs and results are
-    the referenced module's inputs and outputs.  Any parameters are stored in
-    the "parameters" dictionary.
+    the referenced module's inputs and outputs.  The `argNames` and
+    `resultNames` attributes must match the referenced module.  Any parameters
+    are stored in the `parameters` dictionary.
   }];
 
   let arguments = (ins StrAttr:$instanceName,
                        Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
                        Variadic<AnyType>:$inputs,
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        OptionalAttr<DictionaryAttr>:$parameters,
                        OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs Variadic<AnyType>);
@@ -336,11 +338,27 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
   let extraClassDeclaration = [{
     /// Return the name of the specified input port or null if it cannot be
     /// determined.
-    StringAttr getArgumentName(size_t i, const SymbolCache *cache = nullptr);
+    StringAttr getArgumentName(size_t i);
 
     /// Return the name of the specified result or null if it cannot be
     /// determined.
-    StringAttr getResultName(size_t i, const SymbolCache *cache = nullptr);
+    StringAttr getResultName(size_t i);
+
+    /// Change the name of the specified input port.
+    void setArgumentName(size_t i, StringAttr name);
+
+    /// Change the name of the specified output port.
+    void setResultName(size_t i, StringAttr name);
+
+    /// Change the names of all the input ports.
+    void setArgumentNames(ArrayAttr names) {
+      getOperation()->setAttr("argNames", names);
+    }
+
+    /// Change the names of all the result ports.
+    void setResultNames(ArrayAttr names) {
+      getOperation()->setAttr("resultNames", names);
+    }
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.

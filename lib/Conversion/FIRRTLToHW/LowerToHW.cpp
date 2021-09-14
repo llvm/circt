@@ -1957,87 +1957,117 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
   // Process each port in turn.
   SmallVector<Type, 8> resultTypes;
-  SmallVector<Value, 8> readOperands;
-  SmallVector<Value, 8> rwOperands;
-  SmallVector<Value, 8> writeOperands;
+  SmallVector<Value, 8> operands;
   DenseMap<Operation *, size_t> returnHolder;
+  SmallVector<Attribute> argNames, resultNames;
 
-  // Memories return multiple structs, one for each port, which means we have
-  // two layers of type to split appart.
-  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto portName = op.getPortName(i).getValue();
-    auto portKind = op.getPortKind(i);
+  // The result values of the memory are not necessarily in the same order as
+  // the memory module that we're lowering to.  We need to lower the read ports
+  // before the read/write ports, before the write ports.
+  for (unsigned memportKindIdx = 0; memportKindIdx != 3; ++memportKindIdx) {
+    MemOp::PortKind memportKind;
+    switch (memportKindIdx) {
+    default:
+      assert(0 && "invalid idx");
+    case 0:
+      memportKind = MemOp::PortKind::Read;
+      break;
+    case 1:
+      memportKind = MemOp::PortKind::ReadWrite;
+      break;
+    case 2:
+      memportKind = MemOp::PortKind::Write;
+      break;
+    }
 
-    auto addInput = [&](SmallVectorImpl<Value> &operands, StringRef field,
-                        size_t width) {
-      auto portType =
-          IntegerType::get(op.getContext(), std::max((size_t)1, width));
-      auto accesses = getAllFieldAccesses(op.getResult(i), field);
+    // This is set to the count of the kind of memport we're emitting, for
+    // label names.
+    unsigned portNumber = 0;
 
-      Value wire = createTmpWireOp(
-          portType, ("." + portName + "." + field + ".wire").str());
+    // Memories return multiple structs, one for each port, which means we
+    // have two layers of type to split apart.
+    for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+      // Process all of one kind before the next.
+      if (memportKind != op.getPortKind(i))
+        continue;
 
-      for (auto a : accesses) {
-        if (a.getType()
-                .cast<FIRRTLType>()
-                .getPassiveType()
-                .getBitWidthOrSentinel() > 0)
-          (void)setLowering(a, wire);
-        else
-          a->eraseOperand(0);
+      auto portName = op.getPortName(i).getValue();
+
+      auto addInput = [&](StringRef portLabel, StringRef field, size_t width) {
+        auto portType =
+            IntegerType::get(op.getContext(), std::max((size_t)1, width));
+        auto accesses = getAllFieldAccesses(op.getResult(i), field);
+
+        Value wire = createTmpWireOp(
+            portType, ("." + portName + "." + field + ".wire").str());
+
+        for (auto a : accesses) {
+          if (a.getType()
+                  .cast<FIRRTLType>()
+                  .getPassiveType()
+                  .getBitWidthOrSentinel() > 0)
+            (void)setLowering(a, wire);
+          else
+            a->eraseOperand(0);
+        }
+
+        operands.push_back(getReadInOutOp(wire));
+        argNames.push_back(
+            builder.getStringAttr(portLabel + Twine(portNumber)));
+      };
+      auto addOutput = [&](StringRef portLabel, StringRef field, size_t width) {
+        auto portType =
+            IntegerType::get(op.getContext(), std::max((size_t)1, width));
+        resultTypes.push_back(portType);
+
+        // Now collect the data for the instance.  A op produces multiple
+        // structures, so we need to look through SubfieldOps to see the
+        // true inputs and outputs.
+        auto accesses = getAllFieldAccesses(op.getResult(i), field);
+        // Read data ports are tracked to be updated later
+        for (auto &a : accesses) {
+          if (width)
+            returnHolder[a] = resultTypes.size() - 1;
+          else
+            a->eraseOperand(0);
+        }
+        resultNames.push_back(
+            builder.getStringAttr(portLabel + Twine(portNumber)));
+      };
+
+      if (memportKind == MemOp::PortKind::Read) {
+        addInput("ro_clock_", "clk", 1);
+        addInput("ro_en_", "en", 1);
+        addInput("ro_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
+        addOutput("ro_data_", "data", memSummary.dataWidth);
+      } else if (memportKind == MemOp::PortKind::ReadWrite) {
+        addInput("rw_clock_", "clk", 1);
+        addInput("rw_en_", "en", 1);
+        addInput("rw_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
+        addInput("rw_wmode_", "wmode", 1);
+        addInput("rw_wmask_", "wmask", 1);
+        addInput("rw_wdata_", "wdata", memSummary.dataWidth);
+        addOutput("rw_rdata_", "rdata", memSummary.dataWidth);
+      } else {
+        addInput("wo_clock_", "clk", 1);
+        addInput("wo_en_", "en", 1);
+        addInput("wo_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
+        addInput("wo_mask_", "mask", 1);
+        addInput("wo_data_", "data", memSummary.dataWidth);
       }
 
-      operands.push_back(getReadInOutOp(wire));
-    };
-    auto addOutput = [&](StringRef field, size_t width) {
-      auto portType =
-          IntegerType::get(op.getContext(), std::max((size_t)1, width));
-      resultTypes.push_back(portType);
-
-      // Now collect the data for the instance.  A op produces multiple
-      // structures, so we need to look through SubfieldOps to see the true
-      // inputs and outputs.
-      auto accesses = getAllFieldAccesses(op.getResult(i), field);
-      // Read data ports are tracked to be updated later
-      for (auto &a : accesses)
-        if (width)
-          returnHolder[a] = resultTypes.size() - 1;
-        else
-          a->eraseOperand(0);
-    };
-
-    if (portKind == MemOp::PortKind::Read) {
-      addInput(readOperands, "clk", 1);
-      addInput(readOperands, "en", 1);
-      addInput(readOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
-      addOutput("data", memSummary.dataWidth);
-    } else if (portKind == MemOp::PortKind::ReadWrite) {
-      addInput(readOperands, "clk", 1);
-      addInput(readOperands, "en", 1);
-      addInput(readOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
-      addInput(readOperands, "wmode", 1);
-      addInput(writeOperands, "wmask", 1);
-      addInput(writeOperands, "wdata", memSummary.dataWidth);
-      addOutput("rdata", memSummary.dataWidth);
-    } else {
-      addInput(writeOperands, "clk", 1);
-      addInput(writeOperands, "en", 1);
-      addInput(writeOperands, "addr", llvm::Log2_64_Ceil(memSummary.depth));
-      addInput(writeOperands, "mask", 1);
-      addInput(writeOperands, "data", memSummary.dataWidth);
+      ++portNumber;
     }
   }
 
   auto memModuleAttr =
       SymbolRefAttr::get(op.getContext(), getFirMemoryName(memSummary));
 
-  // FIRRTL ports are arbitrary in order, ours are not
-  readOperands.append(writeOperands.begin(), writeOperands.end());
-  // Create the instance to replace the memop
+  // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(
-      resultTypes, builder.getStringAttr(memName), memModuleAttr, readOperands,
+      resultTypes, builder.getStringAttr(memName), memModuleAttr, operands,
+      builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
       DictionaryAttr(), StringAttr());
-
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
