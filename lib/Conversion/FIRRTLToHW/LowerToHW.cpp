@@ -82,12 +82,12 @@ static Value castToFIRRTLType(Value val, Type type,
   auto firType = type.cast<FIRRTLType>();
 
   // Use HWStructCastOp for a bundle type.
-  if (BundleType bundle = type.dyn_cast<BundleType>()) {
+  if (BundleType bundle = type.dyn_cast<BundleType>())
     val = builder.createOrFold<HWStructCastOp>(firType.getPassiveType(), val);
-  }
 
-  val = builder.create<mlir::UnrealizedConversionCastOp>(firType, val)
-            .getResult(0);
+  if (type != val.getType())
+    val = builder.create<mlir::UnrealizedConversionCastOp>(firType, val)
+              .getResult(0);
 
   return val;
 }
@@ -95,8 +95,21 @@ static Value castToFIRRTLType(Value val, Type type,
 /// Cast from a FIRRTL type (potentially with a flip) to a standard type.
 static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
-  return builder.create<mlir::UnrealizedConversionCastOp>(type, val).getResult(
-      0);
+
+  if (hw::StructType structTy = type.dyn_cast<hw::StructType>()) {
+    // Strip off Flip type if needed.
+    val = builder
+              .create<mlir::UnrealizedConversionCastOp>(
+                  val.getType().cast<FIRRTLType>().getPassiveType(), val)
+              .getResult(0);
+    val = builder.createOrFold<HWStructCastOp>(type, val);
+    return val;
+  }
+
+  val =
+      builder.create<mlir::UnrealizedConversionCastOp>(type, val).getResult(0);
+
+  return val;
 }
 
 /// Return true if the specified FIRRTL type is a sized type (Int or Analog)
@@ -2157,10 +2170,15 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
-  // Conversions from standard integer types to FIRRTL types are lowered as
-  // the input operand.
   auto operand = op.getOperand(0);
   auto result = op.getResult(0);
+
+  // FIRRTL -> FIRRTL
+  if (operand.getType().isa<FIRRTLType>() && result.getType().isa<FIRRTLType>())
+    return lowerNoopCast(op);
+
+  // Conversions from standard integer types to FIRRTL types are lowered as
+  // the input operand.
   if (auto opIntType = operand.getType().dyn_cast<IntegerType>()) {
     if (opIntType.getWidth() != 0)
       return setLowering(result, operand);
@@ -2168,11 +2186,10 @@ LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
       return setLowering(result, Value());
   }
 
-  // Standard -> FIRRTL.
   if (!operand.getType().isa<FIRRTLType>())
     return setLowering(result, operand);
 
-  // Otherwise must be a conversion from FIRRTL type to standard int type.
+  // Otherwise must be a conversion from FIRRTL type to standard type.
   auto lowered_result = getLoweredValue(operand);
   if (!lowered_result) {
     // If this is a conversion from a zero bit HW type to firrtl value, then
