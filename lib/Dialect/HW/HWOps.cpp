@@ -759,8 +759,7 @@ Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {
 }
 
 // Helper function to verify instance op types
-static LogicalResult verifyInstanceOpTypes(InstanceOp op,
-                                           Operation *module) {  
+static LogicalResult verifyInstanceOpTypes(InstanceOp op, Operation *module) {
   // Make sure our port and result names match.
   ArrayAttr argNames = op.argNamesAttr();
   ArrayAttr modArgNames = module->getAttrOfType<ArrayAttr>("argNames");
