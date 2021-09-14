@@ -239,4 +239,10 @@ void setNames(Operation *operation, ArrayRef<StringRef> names) {
   OpBuilder builder(operation);
   operation->setAttr("names", builder.getStrArrayAttr(names));
 }
+SmallVector<Type> getTypes(ArrayRef<Value> values) {
+  SmallVector<Type> types;
+  for (auto value : values)
+    types.push_back(value.getType());
+  return types;
+}
 } // namespace helper

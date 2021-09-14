@@ -46,42 +46,22 @@ Type convertType(Type type) {
   return type;
 }
 
-SmallVector<Value> getHWModuleInputs(hir::FuncType funcTy,
-                                     SmallVectorImpl<Value> &args) {
-  SmallVector<Value> inputArgs;
+std::pair<SmallVector<Value>, SmallVector<Value>>
+filterCallOpArgs(hir::FuncType funcTy, OperandRange args) {
+  SmallVector<Value> inputs;
+  SmallVector<Value> results;
   for (uint64_t i = 0; i < funcTy.getInputTypes().size(); i++) {
-    auto ty = convertType(funcTy.getInputTypes()[i]);
-    auto attr = funcTy.getInputAttrs()[i];
-    if (ty.isa<hir::BusType>()) {
-      if (isRecvBus(attr)) {
-        inputArgs.push_back(args[i]);
-      }
-    } else {
-      inputArgs.push_back(args[i]);
+    auto ty = funcTy.getInputTypes()[i];
+    if (helper::isBusType(ty) && !isRecvBus(funcTy.getInputAttrs()[i])) {
+      results.push_back(args[i]);
+      continue;
     }
+    inputs.push_back(args[i]);
   }
-  return inputArgs;
+
+  return std::make_pair(inputs, results);
 }
 
-std::pair<SmallVector<Type>, SmallVector<Type>>
-getHWModuleTypes(hir::FuncType funcTy) {
-  SmallVector<Type> inputTypes;
-  SmallVector<Type> resultTypes;
-  for (uint64_t i = 0; i < funcTy.getInputTypes().size(); i++) {
-    auto ty = convertType(funcTy.getInputTypes()[i]);
-    auto attr = funcTy.getInputAttrs()[i];
-    if (ty.isa<hir::BusType>()) {
-      if (isRecvBus(attr)) {
-        inputTypes.push_back(ty);
-      } else {
-        resultTypes.push_back(ty);
-      }
-    } else {
-      inputTypes.push_back(ty);
-    }
-  }
-  return std::make_pair(inputTypes, resultTypes);
-}
 SmallVector<hw::ModulePortInfo> getHWModulePortInfoList(OpBuilder &builder,
                                                         hir::FuncType funcTy,
                                                         ArrayAttr inputNames,

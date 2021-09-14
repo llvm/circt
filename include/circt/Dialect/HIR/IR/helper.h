@@ -48,4 +48,6 @@ void eraseOps(mlir::ArrayRef<mlir::Operation *> opsToErase);
 mlir::Value lookupOrOriginal(mlir::BlockAndValueMapping &mapper,
                              mlir::Value originalValue);
 void setNames(mlir::Operation *, mlir::ArrayRef<mlir::StringRef>);
+
+mlir::SmallVector<mlir::Type> getTypes(mlir::ArrayRef<mlir::Value>);
 } // namespace helper
