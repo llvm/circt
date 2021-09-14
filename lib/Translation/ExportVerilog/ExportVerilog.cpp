@@ -2937,7 +2937,7 @@ void ModuleEmitter::emitBind(BindOp op) {
            << " (";
 
   ModulePortInfo parentPortInfo = parentMod.getPorts();
-  SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(childMod);
+  SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
@@ -3023,8 +3023,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Rewrite the module body into compliance with our emission expectations, and
   // collect/rename symbols within the body that conflict.
   ModuleNameManager names;
-  prepareHWModule(*module.getBodyBlock(), names, state.options,
-                  state.symbolCache);
+  prepareHWModule(*module.getBodyBlock(), names, state.options);
   if (names.hadError())
     state.encounteredError = true;
 

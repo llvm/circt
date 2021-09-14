@@ -140,8 +140,7 @@ bool isVerilogExpression(Operation *op);
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void prepareHWModule(Block &block, ModuleNameManager &names,
-                     const LoweringOptions &options,
-                     const hw::SymbolCache &cache);
+                     const LoweringOptions &options);
 } // namespace ExportVerilog
 
 } // namespace circt
