@@ -42,7 +42,7 @@ static StringAttr parsePortName(OpAsmParser &parser) {
                                    parser.getBuilder().getType<NoneType>()))
     return {};
   return succeeded(parser.parseColon()) ? result : StringAttr();
-};
+}
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool hw::isCombinatorial(Operation *op) {
@@ -838,12 +838,9 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitError("symbol reference '")
            << moduleName() << "' isn't a module";
 
-  // If the referenced module is internal, check that input and result types are
-  // consistent with the referenced module.
-  if (isa<HWModuleOp>(module) || isa<HWModuleGeneratedOp>(module))
-    return verifyInstanceOpTypes(*this, module);
-
-  return success();
+  // Check that input and result types are consistent with the referenced
+  // module.
+  return verifyInstanceOpTypes(*this, module);
 }
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
