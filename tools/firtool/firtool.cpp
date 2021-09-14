@@ -150,6 +150,9 @@ static cl::opt<bool>
                  cl::desc("create interfaces and data/memory taps from SiFive "
                           "Grand Central annotations"),
                  cl::init(false));
+static cl::opt<bool> exportModuleHierarchy(
+    "export-module-hierarchy",
+    cl::desc("export module and instance hierarchy as JSON"), cl::init(false));
 
 static cl::opt<bool>
     checkCombCycles("firrtl-check-comb-cycles",
@@ -359,6 +362,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
+
+    if (exportModuleHierarchy)
+      pm.addPass(sv::createHWExportModuleHierarchyPass());
   }
 
   // Load the emitter options from the command line. Command line options if
