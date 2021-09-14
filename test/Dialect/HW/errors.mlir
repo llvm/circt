@@ -29,13 +29,6 @@ func private @test_and() {
 
 // -----
 
-hw.module @M() {
-  // expected-error @+1 {{Cannot find module definition 'Bar'}}
-  hw.instance "instance" @Bar() -> ()
-}
-
-// -----
-
 func private @notModule () {
   return
 }
