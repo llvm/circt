@@ -24,18 +24,14 @@ using namespace msft;
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  assert(topLevelModuleOp &&
-         "This instance references a non-existent ModuleOp");
 
-  return topLevelModuleOp.lookupSymbol(moduleName());
+  Operation *referencedModule = topLevelModuleOp.lookupSymbol(moduleName());
+  assert(referencedModule && "This references a non-existent module.");
+  return referencedModule;
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
-  auto *module = getReferencedModule();
-  if (!module)
-    return {};
-
-  return hw::getModuleResultNameAttr(module, idx);
+  return hw::getModuleResultNameAttr(getReferencedModule(), idx);
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -54,6 +50,18 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       name += std::to_string(i);
     setNameFn(getResult(i), name);
   }
+}
+
+static LogicalResult verifyInstanceOp(InstanceOp op) {
+  auto topLevelModuleOp = op->getParentOfType<ModuleOp>();
+  StringRef moduleName = op.moduleName();
+  Operation *referencedModule = topLevelModuleOp.lookupSymbol(moduleName);
+
+  if (referencedModule == nullptr)
+    return op->emitOpError()
+           << "Cannot find module definition: '" << moduleName << "'";
+
+  return success();
 }
 
 #define GET_OP_CLASSES

@@ -758,10 +758,10 @@ Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {
       return result;
 
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  assert(topLevelModuleOp &&
-         "This instance references a non-existent ModuleOp");
 
-  return topLevelModuleOp.lookupSymbol(moduleName());
+  Operation *referencedModule = topLevelModuleOp.lookupSymbol(moduleName());
+  assert(referencedModule && "This references a non-existent module.");
+  return referencedModule;
 }
 
 // Helper function to verify instance op types

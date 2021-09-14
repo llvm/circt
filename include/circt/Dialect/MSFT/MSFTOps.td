@@ -22,6 +22,8 @@ def InstanceOp : MSFTOp<"instance", [
                        OptionalAttr<DictionaryAttr>:$parameters);
   let results = (outs Variadic<AnyType>);
 
+  let verifier = "return ::verify$cppClass(*this);";
+
   let extraClassDeclaration = [{
     // Return the name of the specified result or empty string if it cannot be
     // determined.
