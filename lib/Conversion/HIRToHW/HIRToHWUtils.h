@@ -6,8 +6,8 @@ using namespace circt;
 
 Type convertType(Type type);
 Type convertBusType(hir::BusType busTy);
-hw::ArrayType convertTensorType(mlir::TensorType tensorTy);
-bool isInputBus(DictionaryAttr busAttr);
+Type convertTensorType(mlir::TensorType tensorTy);
+bool isRecvBus(DictionaryAttr busAttr);
 SmallVector<Value> getHWModuleInputs(hir::FuncType funcTy,
                                      SmallVectorImpl<Value> &args,
                                      SmallVectorImpl<Value> &inputArgs);
@@ -19,3 +19,4 @@ SmallVector<hw::ModulePortInfo> getHWModulePortInfoList(OpBuilder &builder,
                                                         hir::FuncType funcTy,
                                                         ArrayAttr inputNames,
                                                         ArrayAttr resultNames);
+Operation *getConstantX(OpBuilder *builder, Type originalTy);

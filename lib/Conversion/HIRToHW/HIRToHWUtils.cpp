@@ -1,18 +1,41 @@
 #include "HIRToHWUtils.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 
-bool isInputBus(DictionaryAttr busAttr) {
+bool isRecvBus(DictionaryAttr busAttr) {
   return helper::extractBusPortFromDict(busAttr) == "recv";
+}
+
+IntegerType convertToIntegerType(Type ty) {
+  if (auto tupleTy = ty.dyn_cast<TupleType>()) {
+    auto width = 0;
+    for (auto elementTy : tupleTy.getTypes()) {
+      width += convertToIntegerType(elementTy).getWidth();
+    }
+    return IntegerType::get(ty.getContext(), width);
+  }
+  auto integerTy = ty.dyn_cast<IntegerType>();
+  assert(integerTy);
+  return integerTy;
 }
 
 Type convertBusType(hir::BusType busTy) {
   assert(busTy.getElementTypes().size() == 1);
-  return busTy.getElementTypes()[0];
+  return convertToIntegerType(busTy.getElementTypes()[0]);
 }
 
-hw::ArrayType convertTensorType(mlir::TensorType tensorTy) {
-  return hw::ArrayType::get(convertType(tensorTy.getElementType()),
-                            tensorTy.getNumElements());
+Type convertToArrayType(mlir::Type elementTy, ArrayRef<int64_t> shape) {
+  assert(shape.size() > 0);
+  if (shape.size() > 1)
+    return hw::ArrayType::get(convertToArrayType(elementTy, shape.slice(1)),
+                              shape[0]);
+  assert(shape[0] > 0);
+  return hw::ArrayType::get(convertType(elementTy), shape[0]);
+}
+
+Type convertTensorType(mlir::TensorType tensorTy) {
+  if (tensorTy.getShape().size() > 0)
+    return convertToArrayType(tensorTy.getElementType(), tensorTy.getShape());
+  return convertType(tensorTy.getElementType());
 }
 
 Type convertType(Type type) {
@@ -30,7 +53,7 @@ SmallVector<Value> getHWModuleInputs(hir::FuncType funcTy,
     auto ty = convertType(funcTy.getInputTypes()[i]);
     auto attr = funcTy.getInputAttrs()[i];
     if (ty.isa<hir::BusType>()) {
-      if (isInputBus(attr)) {
+      if (isRecvBus(attr)) {
         inputArgs.push_back(args[i]);
       }
     } else {
@@ -48,7 +71,7 @@ getHWModuleTypes(hir::FuncType funcTy) {
     auto ty = convertType(funcTy.getInputTypes()[i]);
     auto attr = funcTy.getInputAttrs()[i];
     if (ty.isa<hir::BusType>()) {
-      if (isInputBus(attr)) {
+      if (isRecvBus(attr)) {
         inputTypes.push_back(ty);
       } else {
         resultTypes.push_back(ty);
@@ -77,7 +100,7 @@ SmallVector<hw::ModulePortInfo> getHWModulePortInfoList(OpBuilder &builder,
     auto hwTy = convertType(originalTy);
     assert(hwTy);
     auto attr = funcTy.getInputAttrs()[i];
-    if (helper::isBusType(originalTy) && !isInputBus(attr)) {
+    if (helper::isBusType(originalTy) && !isRecvBus(attr)) {
       hwResultTypes.push_back(hwTy);
       auto name = inputNames[i].dyn_cast<StringAttr>();
       assert(name);
@@ -123,4 +146,22 @@ SmallVector<hw::ModulePortInfo> getHWModulePortInfoList(OpBuilder &builder,
     portInfoList.push_back(portInfo);
   }
   return portInfoList;
+}
+
+Operation *getConstantX(OpBuilder *builder, Type originalTy) {
+  auto hwTy = convertType(originalTy);
+  if (auto ty = hwTy.dyn_cast<hw::ArrayType>()) {
+    auto *element = getConstantX(builder, ty.getElementType());
+    uint64_t size = ty.getSize();
+    if (size == 1)
+      return element;
+    SmallVector<Value> elementCopies;
+    for (uint64_t i = 0; i < size; i++) {
+      elementCopies.push_back(element->getResult(0));
+    }
+    return builder->create<hw::ArrayCreateOp>(builder->getUnknownLoc(),
+                                              elementCopies);
+  }
+  assert(hwTy.isa<IntegerType>());
+  return builder->create<sv::ConstantXOp>(builder->getUnknownLoc(), hwTy);
 }

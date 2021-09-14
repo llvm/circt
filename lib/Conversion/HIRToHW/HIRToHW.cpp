@@ -19,14 +19,15 @@ private:
   LogicalResult visitRegion(mlir::Region &);
   LogicalResult visitOperation(Operation *);
   LogicalResult visitOp(hir::FuncOp);
-  LogicalResult visitOp(mlir::ConstantOp op);
+  LogicalResult visitOp(mlir::ConstantOp);
+  LogicalResult visitOp(hir::BusOp);
 
 private:
   OpBuilder *builder;
+  llvm::DenseMap<Value, Value> mapHIRToHWValue;
 };
 
 LogicalResult HIRToHWPass::visitOp(mlir::ConstantOp op) {
-
   if (op.getType().isa<mlir::IndexType>())
     return success();
   if (!op.getType().isa<mlir::IntegerType>())
@@ -38,6 +39,11 @@ LogicalResult HIRToHWPass::visitOp(mlir::ConstantOp op) {
   return success();
 }
 
+LogicalResult HIRToHWPass::visitOp(hir::BusOp op) {
+  mapHIRToHWValue[op.res()] = getConstantX(builder, op.getType())->getResult(0);
+  return success();
+}
+
 LogicalResult HIRToHWPass::visitOp(hir::FuncOp op) {
   builder = new OpBuilder(op);
   builder->setInsertionPoint(op);
@@ -46,9 +52,10 @@ LogicalResult HIRToHWPass::visitOp(hir::FuncOp op) {
   auto name = builder->getStringAttr("hw_" + op.getNameAttr().getValue().str());
   auto hwModuleOp =
       builder->create<hw::HWModuleOp>(op.getLoc(), name, portInfoList);
-  delete (builder);
   builder->setInsertionPointToStart(hwModuleOp.getBodyBlock());
-  return visitRegion(op.getFuncBody());
+  auto visitResult = visitRegion(op.getFuncBody());
+  delete (builder);
+  return visitResult;
 }
 
 LogicalResult HIRToHWPass::visitRegion(mlir::Region &region) {
@@ -64,10 +71,13 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
     return visitOp(op);
   if (auto op = dyn_cast<mlir::ConstantOp>(operation))
     return visitOp(op);
+  if (auto op = dyn_cast<hir::BusOp>(operation))
+    return visitOp(op);
 
   // operation->emitRemark() << "Unsupported operation for hir-to-hw pass.";
   return success();
 }
+
 void HIRToHWPass::runOnOperation() {
   ModuleOp moduleOp = getOperation();
   WalkResult result = moduleOp.walk([this](Operation *operation) -> WalkResult {
@@ -83,6 +93,7 @@ void HIRToHWPass::runOnOperation() {
     return;
   }
 }
+
 /// hir-to-hw pass Constructor
 std::unique_ptr<mlir::Pass> circt::createHIRToHWPass() {
   return std::make_unique<HIRToHWPass>();
