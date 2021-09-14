@@ -758,8 +758,8 @@ Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {
       return result;
 
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
+  assert(topLevelModuleOp &&
+         "This instance references a non-existent ModuleOp");
 
   return topLevelModuleOp.lookupSymbol(moduleName());
 }
@@ -958,8 +958,6 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
 StringAttr InstanceOp::getArgumentName(size_t idx, const SymbolCache *cache) {
   // TODO: Remove when argNames/resultNames are stored on instances.
   auto *module = getReferencedModule(cache);
-  if (!module)
-    return {};
   auto argNames = module->getAttrOfType<ArrayAttr>("argNames");
   // Tolerate malformed IR here to enable debug printing etc.
   if (argNames && idx < argNames.size())
@@ -972,8 +970,6 @@ StringAttr InstanceOp::getArgumentName(size_t idx, const SymbolCache *cache) {
 StringAttr InstanceOp::getResultName(size_t idx, const SymbolCache *cache) {
   // TODO: Remove when argNames/resultNames are stored on instances.
   auto *module = getReferencedModule(cache);
-  if (!module)
-    return {};
 
   auto resultNames = module->getAttrOfType<ArrayAttr>("resultNames");
   // Tolerate malformed IR here to enable debug printing etc.
