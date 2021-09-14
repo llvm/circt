@@ -93,6 +93,8 @@ static LogicalResult verifyNotComplexSource(Op op) {
     // This is a port of the parent component.
     return success();
 
+  // Currently, we use the Combinational dialect to perform logical operations
+  // on wires, i.e. comb::AndOp, comb::OrOp, comb::XorOp.
   if (auto dialect = definingOp->getDialect(); isa<comb::CombDialect>(dialect))
     return op->emitOpError("has source that is not a port or constant. "
                            "Complex logic should be conducted in the guard.");
