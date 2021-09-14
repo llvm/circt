@@ -54,7 +54,7 @@ ParseResult parseCompRegOp(OpAsmParser &parser, OperationState &result) {
     // If there is no explicit name attribute, get it from the SSA result name.
     // If numeric, just use an empty name.
     StringRef resultName = parser.getResultName(0).first;
-    if (resultName.empty() || isdigit(resultName[0]))
+    if (!resultName.empty() && isdigit(resultName[0]))
       resultName = "";
     result.addAttribute("name", parser.getBuilder().getStringAttr(resultName));
   }
