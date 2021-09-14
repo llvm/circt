@@ -741,16 +741,3 @@ calyx.program {
     calyx.control { calyx.enable @A }
   }
 }
-
-// -----
-
-calyx.program {
-
-  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
-    // expected-error @+1 {{'calyx.std_gt' op with static value: 1. Cannot have non-zero static value and Combinational trait.}}
-    %gt.left, %gt.right, %gt.out = calyx.std_gt "gt" {static=1} : i8, i8, i1
-    %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.assign %done = %c1_1 : i1 }
-    calyx.control {}
-  }
-}

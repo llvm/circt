@@ -52,14 +52,9 @@ public:
 
     // If the operation has the static attribute, verify it is zero.
     APInt staticValue = staticAttribute.cast<IntegerAttr>().getValue();
-    if (staticValue == 0)
-      return success();
+    assert(staticValue == 0 && "If combinational, it should take 0 cycles.");
 
-    SmallVector<char> staticStr;
-    staticValue.toStringUnsigned(staticStr);
-    return op->emitOpError()
-           << "with static value: " << staticStr
-           << ". Cannot have non-zero static value and Combinational trait.";
+    return success();
   }
 };
 
