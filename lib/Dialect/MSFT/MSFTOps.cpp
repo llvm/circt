@@ -24,10 +24,7 @@ using namespace msft;
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-
-  Operation *referencedModule = topLevelModuleOp.lookupSymbol(moduleName());
-  assert(referencedModule && "This references a non-existent module.");
-  return referencedModule;
+  return topLevelModuleOp.lookupSymbol(moduleName());
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
