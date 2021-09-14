@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -79,34 +80,16 @@ static IntType getWidestIntType(Type t1, Type t2) {
 static Value castToFIRRTLType(Value val, Type type,
                               ImplicitLocOpBuilder &builder) {
   auto firType = type.cast<FIRRTLType>();
-
-  // If this was an Analog type, it will be converted to an InOut type.
-  if (type.isa<AnalogType>())
-    return builder.createOrFold<AnalogInOutCastOp>(firType, val);
-
-  if (BundleType bundle = type.dyn_cast<BundleType>()) {
-    val = builder.createOrFold<HWStructCastOp>(firType.getPassiveType(), val);
-  } else {
-    val = builder.createOrFold<StdIntCastOp>(firType.getPassiveType(), val);
-  }
-
-  // Handle the flip type if needed.
-  if (type != val.getType())
-    val = builder.createOrFold<AsNonPassivePrimOp>(firType, val);
+  val = builder.create<mlir::UnrealizedConversionCastOp>(firType, val)
+            .getResult(0);
   return val;
 }
 
 /// Cast from a FIRRTL type (potentially with a flip) to a standard type.
 static Value castFromFIRRTLType(Value val, Type type,
                                 ImplicitLocOpBuilder &builder) {
-  if (type.isa<hw::InOutType>() && val.getType().isa<AnalogType>())
-    return builder.createOrFold<AnalogInOutCastOp>(type, val);
-
-  // Strip off Flip type if needed.
-  val = builder.createOrFold<AsPassivePrimOp>(val);
-  if (hw::StructType structTy = type.dyn_cast<hw::StructType>())
-    return builder.createOrFold<HWStructCastOp>(type, val);
-  return builder.createOrFold<StdIntCastOp>(type, val);
+  return builder.create<mlir::UnrealizedConversionCastOp>(type, val).getResult(
+      0);
 }
 
 /// Return true if the specified FIRRTL type is a sized type (Int or Analog)
@@ -801,7 +784,12 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
 
   // Convert fliped sources to passive sources.
   if (!connectSrc.getType().cast<FIRRTLType>().isPassive())
-    connectSrc = builder.createOrFold<AsPassivePrimOp>(connectSrc);
+    connectSrc =
+        builder
+            .create<mlir::UnrealizedConversionCastOp>(
+                connectSrc.getType().cast<FIRRTLType>().getPassiveType(),
+                connectSrc)
+            .getResult(0);
 
   // We know it must be the destination operand due to the types, but the
   // source may not match the destination width.
@@ -1032,14 +1020,11 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult lowerNoopCast(Operation *op);
   LogicalResult visitExpr(AsSIntPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsUIntPrimOp op) { return lowerNoopCast(op); }
-  LogicalResult visitExpr(AsPassivePrimOp op) { return lowerNoopCast(op); }
-  LogicalResult visitExpr(AsNonPassivePrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsClockPrimOp op) { return lowerNoopCast(op); }
   LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
 
-  LogicalResult visitExpr(StdIntCastOp op);
   LogicalResult visitExpr(HWStructCastOp op);
-  LogicalResult visitExpr(AnalogInOutCastOp op);
+  LogicalResult visitExpr(mlir::UnrealizedConversionCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
   LogicalResult visitExpr(NegPrimOp op);
@@ -1685,8 +1670,7 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
   if (op->getNumResults() == 1) {
     auto resultType = op->getResult(0).getType();
     if (resultType.isa<FIRRTLType>() && isZeroBitFIRRTLType(resultType) &&
-        (isExpression(op) || isa<AsPassivePrimOp>(op) ||
-         isa<AsNonPassivePrimOp>(op))) {
+        (isExpression(op) || isa<mlir::UnrealizedConversionCastOp>(op))) {
       // Zero bit values lower to the null Value.
       (void)setLowering(op->getResult(0), Value());
       return NowLowered;
@@ -2165,30 +2149,34 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
   return setLowering(op->getResult(0), operand);
 }
 
-LogicalResult FIRRTLLowering::visitExpr(StdIntCastOp op) {
+LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
   // Conversions from standard integer types to FIRRTL types are lowered as
   // the input operand.
-  if (auto opIntType = op.getOperand().getType().dyn_cast<IntegerType>()) {
+  if (auto opIntType = op.getOperand(0).getType().dyn_cast<IntegerType>()) {
     if (opIntType.getWidth() != 0)
-      return setLowering(op, op.getOperand());
+      return setLowering(op.getResult(0), op.getOperand(0));
     else
-      return setLowering(op, Value());
+      return setLowering(op.getResult(0), Value());
   }
 
+  // Standard -> FIRRTL.
+  if (!op.getOperand(0).getType().isa<FIRRTLType>())
+    return setLowering(op.getResult(0), op.getOperand(0));
+
   // Otherwise must be a conversion from FIRRTL type to standard int type.
-  auto result = getLoweredValue(op.getOperand());
+  auto result = getLoweredValue(op.getOperand(0));
   if (!result) {
     // If this is a conversion from a zero bit HW type to firrtl value, then
     // we want to successfully lower this to a null Value.
-    if (op.getOperand().getType().isSignlessInteger(0)) {
-      return setLowering(op, Value());
+    if (op.getOperand(0).getType().isSignlessInteger(0)) {
+      return setLowering(op.getResult(0), Value());
     }
     return failure();
   }
 
-  // We lower firrtl.stdIntCast converting from a firrtl type to a standard
-  // type into the lowered operand.
-  op.replaceAllUsesWith(result);
+  // We lower builtin.unrealized_conversion_cast converting from a firrtl type
+  // to a standard type into the lowered operand.
+  op.getResult(0).replaceAllUsesWith(result);
   return success();
 }
 
@@ -2206,23 +2194,6 @@ LogicalResult FIRRTLLowering::visitExpr(HWStructCastOp op) {
 
   // We lower firrtl.stdStructCast converting from a firrtl bundle to an hw
   // struct type into the lowered operand.
-  op.replaceAllUsesWith(result);
-  return success();
-}
-
-LogicalResult FIRRTLLowering::visitExpr(AnalogInOutCastOp op) {
-  // Standard -> FIRRTL.
-  if (!op.getOperand().getType().isa<FIRRTLType>())
-    return setLowering(op, op.getOperand());
-
-  // FIRRTL -> Standard.
-  auto result = getPossiblyInoutLoweredValue(op.getOperand());
-  if (!result)
-    return failure();
-
-  if (!result.getType().isa<hw::InOutType>())
-    return op.emitOpError("operand didn't lower to inout type correctly");
-
   op.replaceAllUsesWith(result);
   return success();
 }

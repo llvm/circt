@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLVISITORS_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -43,13 +44,10 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp, VerbatimExprOp, AsPassivePrimOp, AsNonPassivePrimOp,
-
-            // Conversion from FIRRTL to HW dialect types.
-            StdIntCastOp, HWStructCastOp, AnalogInOutCastOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitExpr(expr, args...);
-            })
+            TailPrimOp, VerbatimExprOp, HWStructCastOp,
+            mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
+          return thisCast->visitExpr(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -138,13 +136,10 @@ public:
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
   HANDLE(VerbatimExprOp, Unhandled);
-  HANDLE(AsPassivePrimOp, Unhandled);
-  HANDLE(AsNonPassivePrimOp, Unhandled);
 
-  // Conversion from FIRRTL to HW dialect types.
-  HANDLE(StdIntCastOp, Unhandled);
+  // Conversions.
   HANDLE(HWStructCastOp, Unhandled);
-  HANDLE(AnalogInOutCastOp, Unhandled);
+  HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
 #undef HANDLE
 };
 

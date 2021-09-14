@@ -260,7 +260,6 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   void visitExpr(InvalidValueOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(MuxPrimOp op);
-  void visitExpr(AsPassivePrimOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(PartialConnectOp op);
   void visitStmt(WhenOp op);
@@ -877,16 +876,6 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
     auto high = getSubWhatever(op.high(), field.index);
     auto low = getSubWhatever(op.low(), field.index);
     return builder->create<MuxPrimOp>(op.sel(), high, low);
-  };
-  lowerProducer(op, clone);
-}
-
-// Expand AsPassivePrimOp of aggregates
-void TypeLoweringVisitor::visitExpr(AsPassivePrimOp op) {
-  auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                   ArrayAttr attrs) -> Operation * {
-    auto input = getSubWhatever(op.input(), field.index);
-    return builder->create<AsPassivePrimOp>(field.type, input);
   };
   lowerProducer(op, clone);
 }
