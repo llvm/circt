@@ -47,15 +47,7 @@ public:
       name = rewriter.getStringAttr("_compreg");
     auto svReg =
         rewriter.create<sv::RegOp>(loc, reg.getResult().getType(), name);
-
-    // Carry forward all the attributes from CompRegOp which don't conflict.
-    auto svRegNamedAttrs = svReg->getAttrs();
-    SmallVector<NamedAttribute, 16> newRegAttrs(svRegNamedAttrs.begin(),
-                                                svRegNamedAttrs.end());
-    for (NamedAttribute regAttr : reg->getAttrDictionary())
-      if (!svReg->hasAttr(regAttr.first))
-        newRegAttrs.push_back(regAttr);
-    svReg->setAttrs(newRegAttrs);
+    svReg->setDialectAttrs(reg->getDialectAttrs());
 
     auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.reset() && reg.resetValue()) {
