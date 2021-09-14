@@ -149,6 +149,7 @@ def WiresOp : CalyxContainer<"wires", [
 }
 
 def InstanceOp : CalyxCell<"instance", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
   ]> {
   let summary = "Calyx Component Instance";
   let description = [{
@@ -174,7 +175,6 @@ def InstanceOp : CalyxCell<"instance", [
   let assemblyFormat = [{
     $instanceName $componentName attr-dict (`:` type($results)^)?
   }];
-  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def GroupOp : CalyxOp<"group", [

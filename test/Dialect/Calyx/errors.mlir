@@ -16,8 +16,20 @@ calyx.program {
 
 calyx.program {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
-    // expected-error @+1 {{'calyx.instance' op is referencing component: A, which does not exist.}}
-    calyx.instance "a0" @A
+    // expected-error @+1 {{referencing component: A, which does not exist.}}
+    calyx.instance "c" @A
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    // expected-error @+1 {{recursive instantiation of its parent component: main}}
+    calyx.instance "c" @main : i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
     calyx.control {}
