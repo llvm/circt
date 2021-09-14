@@ -38,6 +38,7 @@ def GroupOpInterface : OpInterface<"GroupInterface"> {
         return &op->getRegion(0).front();
       }]>
   ];
+  let verify = [{ return verifyGroupInterface(op); }];
 }
 
 /// Op Interface for cells.
@@ -195,7 +196,5 @@ def CellOpInterface : OpInterface<"CellInterface"> {
     >
   ];
 
-  let verify = [{
-    return verifyCell(op);
-  }];
+  let verify = [{ return verifyCell(op); }];
 }

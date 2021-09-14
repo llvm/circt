@@ -39,6 +39,8 @@ calyx.program {
     %slice.in, %slice.out = calyx.std_slice "slice" : i8, i7
     %not.in, %not.out = calyx.std_not "not" : i8, i8
     %c1_i1 = hw.constant 1 : i1
+    %c0_i6 = hw.constant 0 : i6
+    %c0_i8 = hw.constant 0 : i8
 
     calyx.wires {
       // CHECK: calyx.group @Group1 {
@@ -48,9 +50,15 @@ calyx.program {
         calyx.assign %c1.in = %c0.out : i8
         calyx.group_done %c1.done : i1
       }
-      calyx.comb_group @Group2 {
-        // CHECK: calyx.assign %c2.in = %c0.out, %done ? : i8
-        calyx.assign %c2.in = %c0.out, %done ? : i8
+      calyx.comb_group @ReadMemory {
+        // CHECK: calyx.assign %m.addr0 = %c0_i6 : i6
+        // CHECK-NEXT: calyx.assign %m.addr1 = %c0_i6 : i6
+        // CHECK-NEXT: calyx.assign %gt.left = %m.read_data : i8
+        // CHECK-NEXT: calyx.assign %gt.right = %c0_i8 : i8
+        calyx.assign %m.addr0 = %c0_i6 : i6
+        calyx.assign %m.addr1 = %c0_i6 : i6
+        calyx.assign %gt.left = %m.read_data : i8
+        calyx.assign %gt.right = %c0_i8 : i8
       }
       calyx.group @Group3 {
         calyx.assign %r.in = %c0.out : i8
@@ -64,7 +72,7 @@ calyx.program {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK-NEXT: calyx.enable @Group3
       // CHECK-NEXT: calyx.seq {
-      // CHECK-NEXT: calyx.if %c2.out with @Group2 {
+      // CHECK-NEXT: calyx.if %gt.out with @ReadMemory {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK-NEXT: } else {
       // CHECK-NEXT: calyx.enable @Group3
@@ -72,7 +80,7 @@ calyx.program {
       // CHECK-NEXT: calyx.if %c2.out {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK-NEXT: }
-      // CHECK-NEXT: calyx.while %c2.out with @Group2 {
+      // CHECK-NEXT: calyx.while %gt.out with @ReadMemory {
       // CHECK-NEXT: calyx.while %c2.out {
       // CHECK-NEXT: calyx.enable @Group1
       // CHECK:      calyx.par {
@@ -83,7 +91,7 @@ calyx.program {
           calyx.enable @Group1
           calyx.enable @Group3
           calyx.seq {
-            calyx.if %c2.out with @Group2 {
+            calyx.if %gt.out with @ReadMemory {
               calyx.enable @Group1
             } else {
               calyx.enable @Group3
@@ -91,7 +99,7 @@ calyx.program {
             calyx.if %c2.out {
               calyx.enable @Group1
             }
-            calyx.while %c2.out with @Group2 {
+            calyx.while %gt.out with @ReadMemory {
               calyx.while %c2.out {
                 calyx.enable @Group1
               }

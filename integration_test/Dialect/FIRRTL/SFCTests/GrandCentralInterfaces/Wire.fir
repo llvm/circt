@@ -1,5 +1,6 @@
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
-; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
+; RUN: rm -rf %t && mkdir %t && firtool --firrtl-grand-central --split-verilog --annotation-file %s.anno.json --annotation-file %s.extract.anno.json -o %t %s && cd %t && verilator --sv --lint-only Top.sv bindings.sv
+; RUN: firtool --firrtl-grand-central --verilog --annotation-file %s.anno.json %s > %t.one-file.sv && verilator --sv --lint-only %t.one-file.sv
+; REQUIRES: verilator
 
 circuit Top :
   module Submodule :
@@ -100,94 +101,3 @@ circuit Top :
     out.vec[0] <= dut.out.vec[0]
     out.vec[1] <= dut.out.vec[1]
     out.uint <= dut.out.uint
-
-    ; NOEXTRACT:      module MyView_companion();
-    ; NOEXTRACT-NEXT:   MyView_mapping MyView_mapping{{ *}}();
-    ; NOEXTRACT-NEXT: endmodule
-
-    ; CHECK:          module DUT
-    ; CHECK-NOT:      endmodule
-    ; EXTRACT:          // MyInterface MyView();
-    ; NOEXTRACT:        {{^ *}}MyInterface MyView();
-    ; EXTRACT:          // MyView_companion MyView_companion
-    ; NOEXTRACT:        {{^ *}}MyView_companion MyView_companion
-
-    ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"
-    ; EXTRACT-NOT:    FILE
-    ; EXTRACT:        bind DUT MyInterface MyView{{ *}}(.*);
-    ; EXTRACT:        bind DUT MyView_companion MyView_companion{{ *}}();
-    ; NOEXTRACT-NOT:  FILE "Wire/firrtl/bindings.sv"
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_companion.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_companion.sv
-    ; EXTRACT:        module MyView_companion();
-    ; EXTRACT-NEXT:     MyView_mapping MyView_mapping{{ *}}();
-    ; EXTRACT-NEXT:   endmodule
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyView_mapping.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyView_mapping.sv
-    ; CHECK:          module MyView_mapping();
-    ; CHECK-NEXT:       assign MyView.uint = dut.w_uint;
-    ; CHECK-NEXT:       assign MyView.vec[0] = dut.w_vec_0;
-    ; CHECK-NEXT:       assign MyView.vec[1] = dut.w_vec_1;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].sint = dut.w_vecOfBundle_0_sint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[0].uint = dut.w_vecOfBundle_0_uint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].sint = dut.w_vecOfBundle_1_sint;
-    ; CHECK-NEXT:       assign MyView.vecOfBundle[1].uint = dut.w_vecOfBundle_1_uint;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.sint = dut.w_otherOther_other_sint;
-    ; CHECK-NEXT:       assign MyView.otherOther.other.uint = dut.w_otherOther_other_uint;
-    ; CHECK-NEXT:       assign MyView.sub_uint = dut.submodule.w_uint;
-    ; CHECK-NEXT:       assign MyView.sub_vec[0] = dut.submodule.w_vec_0;
-    ; CHECK-NEXT:       assign MyView.sub_vec[1] = dut.submodule.w_vec_1;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].sint = dut.submodule.w_vecOfBundle_0_sint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[0].uint = dut.submodule.w_vecOfBundle_0_uint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].sint = dut.submodule.w_vecOfBundle_1_sint;
-    ; CHECK-NEXT:       assign MyView.sub_vecOfBundle[1].uint = dut.submodule.w_vecOfBundle_1_uint;
-    ; CHECK:          endmodule
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/MyInterface.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/MyInterface.sv
-    ; CHECK:          interface MyInterface;
-    ; CHECK-NEXT:       // a wire called 'uint'
-    ; CHECK-NEXT:       logic uint;
-    ; CHECK-NEXT:       // a vector called 'vec'
-    ; CHECK-NEXT:       logic vec[0:1];
-    ; CHECK-NEXT:       // a vector of a bundle
-    ; CHECK-NEXT:       VecOfBundle vecOfBundle[2]();
-    ; CHECK-NEXT:       // another bundle
-    ; CHECK-NEXT:       OtherOther otherOther();
-    ; CHECK-NEXT:       // a wire called 'uint' in the submodule
-    ; CHECK-NEXT:       logic sub_uint;
-    ; CHECK-NEXT:       // a vector called 'vec' in the submodule
-    ; CHECK-NEXT:       logic sub_vec[0:1];
-    ; CHECK-NEXT:       // a vector of a bundle in the submodule with a
-    ; CHECK-NEXT:       // multiline comment
-    ; CHECK-NEXT:       Sub_vecOfBundle sub_vecOfBundle[2]();
-    ; CHECK-NEXT:     endinterface
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/VecOfBundle.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/VecOfBundle.sv
-    ; CHECK:          interface VecOfBundle;
-    ; CHECK-NEXT:       logic [1:0] sint;
-    ; CHECK-NEXT:       logic [3:0] uint;
-    ; CHECK-NEXT:     endinterface
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/OtherOther.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/OtherOther.sv
-    ; CHECK:          interface OtherOther;
-    ; CHECK-NEXT:       Other other();
-    ; CHECK:          endinterface
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/Other.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/Other.sv
-    ; CHECK:          interface Other;
-    ; CHECK-NEXT:       logic [1:0] sint;
-    ; CHECK-NEXT:       logic [3:0] uint;
-    ; CHECK:          endinterface
-
-    ; EXTRACT:        FILE "Wire/firrtl/gct/Sub_vecOfBundle.sv"
-    ; NOEXTRACT-NOT:  FILE {{.*}}/Sub_vecOfBundle.sv
-    ; CHECK:          interface Sub_vecOfBundle;
-    ; CHECK-NEXT:       logic [1:0] sint;
-    ; CHECK-NEXT:       logic [3:0] uint;
-    ; CHECK:          endinterface

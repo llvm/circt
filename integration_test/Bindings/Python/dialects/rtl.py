@@ -31,7 +31,7 @@ with Context() as ctx, Location.unknown():
 
   m = Module.create()
   with InsertionPoint(m.body):
-    # CHECK: hw.module @MyWidget(%my_input: i32) -> (%my_output: i32)
+    # CHECK: hw.module @MyWidget(%my_input: i32) -> (my_output: i32)
     # CHECK:   hw.output %my_input : i32
     op = hw.HWModuleOp(
         name='MyWidget',
@@ -39,20 +39,20 @@ with Context() as ctx, Location.unknown():
         output_ports=[('my_output', i32)],
         body_builder=lambda module: hw.OutputOp([module.my_input]))
 
-    # CHECK: hw.module.extern @FancyThing(%input0: i32) -> (%output0: i32)
+    # CHECK: hw.module.extern @FancyThing(%input0: i32) -> (output0: i32)
     extern = hw.HWModuleExternOp(name="FancyThing",
                                  input_ports=[("input0", i32)],
                                  output_ports=[("output0", i32)])
 
-    # CHECK: hw.module @swap(%a: i32, %b: i32) -> (%{{.+}}: i32, %{{.+}}: i32)
+    # CHECK: hw.module @swap(%a: i32, %b: i32) -> ({{.+}}: i32, {{.+}}: i32)
     # CHECK:   hw.output %b, %a : i32, i32
     @hw.HWModuleOp.from_py_func(i32, i32)
     def swap(a, b):
       return b, a
 
-    # CHECK: hw.module @top(%a: i32, %b: i32) -> (%{{.+}}: i32, %{{.+}}: i32)
-    # CHECK:   %[[a0:.+]], %[[b0:.+]] = hw.instance "" @swap(%a, %b)
-    # CHECK:   %[[a1:.+]], %[[b1:.+]] = hw.instance "" @swap(%[[a0]], %[[b0]])
+    # CHECK: hw.module @top(%a: i32, %b: i32) -> ({{.+}}: i32, {{.+}}: i32)
+    # CHECK:   %[[a0:.+]], %[[b0:.+]] = hw.instance "" @swap(a: %a: i32, b: %b: i32)
+    # CHECK:   %[[a1:.+]], %[[b1:.+]] = hw.instance "" @swap(a: %[[a0]]: i32, b: %[[b0]]: i32)
     # CHECK:   hw.output %[[a1:.+]], %[[b1:.+]] : i32, i32
     @hw.HWModuleOp.from_py_func(i32, i32)
     def top(a, b):
@@ -95,14 +95,14 @@ with Context() as ctx, Location.unknown():
       # CHECK: %[[INST1_RESULT:.+]] = hw.instance "inst1" @one_output()
       inst1 = one_output.create("inst1")
 
-      # CHECK: hw.instance "inst2" @one_input(%[[INST1_RESULT]])
+      # CHECK: hw.instance "inst2" @one_input(a: %[[INST1_RESULT]]: i32)
       inst2 = one_input.create("inst2", a=inst1.a)
 
-      # CHECK: hw.instance "inst4" @two_inputs(%[[INST1_RESULT]], %[[INST1_RESULT]])
+      # CHECK: hw.instance "inst4" @two_inputs(a: %[[INST1_RESULT]]: i32, b: %[[INST1_RESULT]]: i32)
       inst4 = two_inputs.create("inst4", a=inst1.a)
       connect(inst4.b, inst1.a)
 
-      # CHECK: %[[INST5_RESULT:.+]] = hw.instance "inst5" @MyWidget(%[[INST5_RESULT]])
+      # CHECK: %[[INST5_RESULT:.+]] = hw.instance "inst5" @MyWidget(my_input: %[[INST5_RESULT]]: i32)
       inst5 = op.create("inst5")
       connect(inst5.my_input, inst5.my_output)
 

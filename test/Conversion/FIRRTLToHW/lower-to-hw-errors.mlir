@@ -68,7 +68,7 @@ firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnota
 
 // -----
 
-// The following annotations should be whitelisted and not trigger a warning
+// The following annotations should be ignored and not trigger a warning
 // when lowering to HW.
 firrtl.circuit "Foo" {
     firrtl.module @Foo() attributes {annotations = [

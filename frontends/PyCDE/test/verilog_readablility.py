@@ -26,7 +26,7 @@ class WireNames:
 sys = System([WireNames])
 sys.generate()
 sys.print()
-# CHECK:  hw.module @pycde.WireNames(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2) -> (%a: i32, %b: i32) {
+# CHECK:  hw.module @pycde.WireNames(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2) -> (a: i32, b: i32) {
 # CHECK:    %c0_i2 = hw.constant 0 : i2
 # CHECK:    %0 = hw.array_get %data_in[%c0_i2] {name = "foo"} : !hw.array<3xi32>
 # CHECK:    %c1_i32 = hw.constant 1 : i32

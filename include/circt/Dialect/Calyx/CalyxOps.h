@@ -37,6 +37,27 @@ public:
   }
 };
 
+/// A helper function to verify a combinational operation.
+LogicalResult verifyCombinationalOp(Operation *op);
+
+/// Signals that the following operation is combinational.
+template <typename ConcreteType>
+class Combinational
+    : public mlir::OpTrait::TraitBase<ConcreteType, Combinational> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    Attribute staticAttribute = op->getAttr("static");
+    if (staticAttribute == nullptr)
+      return success();
+
+    // If the operation has the static attribute, verify it is zero.
+    APInt staticValue = staticAttribute.cast<IntegerAttr>().getValue();
+    assert(staticValue == 0 && "If combinational, it should take 0 cycles.");
+
+    return success();
+  }
+};
+
 /// The port direction attribute follows the implementation style of FIRRTL
 /// module port direction attributes.
 enum Direction { Input = 0, Output };
@@ -101,6 +122,9 @@ struct PortInfo {
 
 /// A helper function to verify each operation with the Cell trait.
 LogicalResult verifyCell(Operation *op);
+
+/// A helper function to verify each operation with the Group Interface trait.
+LogicalResult verifyGroupInterface(Operation *op);
 
 /// Returns port information for the block argument provided.
 PortInfo getPortInfo(BlockArgument arg);

@@ -6,6 +6,27 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssertionsAnnotation", directory = "dir3",  filename = "./dir3/filename3" }]}
 {
 
+  //These come from MemSimple, IncompleteRead, and MemDepth1
+  // CHECK-LABEL: hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite"]
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_1, 
+  // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1) -> (ro_data_0: i32) 
+  // CHECK-SAME: attributes {depth = 1 : i64, numReadPorts = 1 : ui32, 
+  // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, 
+  // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 1 : ui32, 
+  // CHECK-SAME: width = 32 : ui32, writeLatency = 1 : ui32}
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_42_12_0_1_0, 
+  // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i4) -> (ro_data_0: i42) 
+  // CHECK-SAME: attributes {depth = 12 : i64, numReadPorts = 1 : ui32,
+  // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, 
+  // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
+  // CHECK-SAME: width = 42 : ui32, writeLatency = 1 : ui32}
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_0, 
+  // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i4, %rw_clock_0: i1, %rw_en_0: i1, %rw_addr_0: i4, %rw_wmode_0: i1, %rw_wmask_0: i1, %rw_wdata_0: i42, %wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i4, %wo_mask_0: i1, %wo_data_0: i42) -> (ro_data_0: i42, rw_rdata_0: i42) 
+  // CHECK-SAME: attributes {depth = 12 : i64, numReadPorts = 1 : ui32, 
+  // CHECK-SAME: numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, 
+  // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
+  // CHECK-SAME: width = 42 : ui32, writeLatency = 1 : ui32}
+
   // CHECK-LABEL: hw.module @Simple
   firrtl.module @Simple(in %in1: !firrtl.uint<4>,
                         in %in2: !firrtl.uint<2>,
@@ -878,4 +899,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.force %out, %in : !firrtl.uint<42>, !firrtl.uint<42>
   }
 
+  // CHECK-LABEL: hw.module @FooDUT
+  // CHECK: attributes {DesignUnderTest}
+  firrtl.module @FooDUT() attributes {annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 }

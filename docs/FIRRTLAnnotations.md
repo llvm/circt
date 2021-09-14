@@ -305,7 +305,7 @@ Example:
 
 | Property   | Type   | Description                             |
 | ---------- | ------ | -------------                           |
-| class      | string | `firrte.transforms.DontTouchAnnotation` |
+| class      | string | `firrtl.transforms.DontTouchAnnotation` |
 | target     | string | Reference target                        |
 
 The `DontTouchAnnotation` prevents the removal of elements through
@@ -735,4 +735,12 @@ Example:
   "source":"~GCTMemTap|GCTMemTap>mem"
 }
 ```
+#### Design Under Test
 
+| Property   | Type   | Description                                   |
+| ---------- | ------ | -------------                                 |
+| class      | string | `sifive.enterprise.firrtl.MarkDUTAnnotation`  |
+| target     | string | Reference target                              |
+
+Marks what is the DUT (and not the testbench). This annotation is lowered to the
+attribute `DesignUnderTest` to indicate the module which is the DUT.

@@ -922,12 +922,14 @@ static bool canonicalizeOrOfConcatsWithCstOperands(OrOp op, size_t concatIdx1,
       llvm::any_of(concat1->getOperands(), [&](Value operand) -> bool {
         return operand.getDefiningOp<hw::ConstantOp>();
       });
-  bool hasConstantOp2 =
-      llvm::any_of(concat2->getOperands(), [&](Value operand) -> bool {
-        return operand.getDefiningOp<hw::ConstantOp>();
-      });
-  if (!hasConstantOp1 && !hasConstantOp2)
-    return false;
+  if (!hasConstantOp1) {
+    bool hasConstantOp2 =
+        llvm::any_of(concat2->getOperands(), [&](Value operand) -> bool {
+          return operand.getDefiningOp<hw::ConstantOp>();
+        });
+    if (!hasConstantOp2)
+      return false;
+  }
 
   SmallVector<Value> newConcatOperands;
 

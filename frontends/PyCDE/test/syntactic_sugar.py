@@ -72,7 +72,7 @@ top.print()
 # CHECK:  %c7_i12_0 = hw.constant 7 : i12
 # CHECK:  %2 = hw.struct_create (%c7_i12_0) : !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
 
-# CHECK:  hw.module @pycde.Taps() -> (%taps: !hw.array<3xi8>)
+# CHECK:  hw.module @pycde.Taps() -> (taps: !hw.array<3xi8>)
 # CHECK:    %c-53_i8 = hw.constant -53 : i8
 # CHECK:    %c100_i8 = hw.constant 100 : i8
 # CHECK:    %c23_i8 = hw.constant 23 : i8
@@ -82,7 +82,7 @@ top.print()
 sys = System([ComplexPorts])
 sys.generate()
 sys.print()
-# CHECK:  hw.module @pycde.Comple_Ports(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (%a: i32, %b: i32, %c: i32) {
+# CHECK:  hw.module @pycde.Comple_Ports(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32) {
 # CHECK:    %c0_i2 = hw.constant 0 : i2
 # CHECK:    [[REG0:%.+]] = hw.array_get %data_in[%c0_i2] {name = "data_in__0"} : !hw.array<3xi32>
 # CHECK:    [[REGR1:%data_in__0__reg1]] = seq.compreg [[REG0]], %clk : i32

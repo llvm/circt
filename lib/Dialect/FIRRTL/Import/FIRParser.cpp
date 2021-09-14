@@ -1783,8 +1783,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   consumeToken();
 
   // Parse the operands and constant integer arguments.
-  SmallVector<Value, 4> operands;
-  SmallVector<int64_t, 4> integers;
+  SmallVector<Value, 3> operands;
+  SmallVector<int64_t, 3> integers;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         // Handle the integer constant case if present.
         if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
@@ -1811,7 +1811,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
 
   locationProcessor.setLoc(loc);
 
-  SmallVector<FIRRTLType, 4> opTypes;
+  SmallVector<FIRRTLType, 3> opTypes;
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
@@ -1852,7 +1852,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
 
   if (operands.size() != numOperandsExpected) {
     assert(numOperandsExpected <= 3);
-    const char *numberName[] = {"zero", "one", "two", "three"};
+    static const char *numberName[] = {"zero", "one", "two", "three"};
     const char *optionalS = &"s"[numOperandsExpected == 1];
     return emitError(loc, "operation requires ")
            << numberName[numOperandsExpected] << " operand" << optionalS;

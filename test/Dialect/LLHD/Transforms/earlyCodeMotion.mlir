@@ -38,7 +38,7 @@ llhd.proc @check_dont_move_sideeffect() -> (%sig : !llhd.sig<i32>) {
 // CHECK-LABEL:   llhd.proc @check_move_prb1(
 // CHECK-SAME:                               %[[VAL_0:.*]] : !llhd.sig<i32>) -> () {
 // CHECK:           %[[VAL_1:.*]] = hw.constant 4 : i32
-// CHECK:           %[[VAL_2:.*]] = addi %[[VAL_1]], %[[VAL_1]] : i32
+// CHECK:           %[[VAL_2:.*]] = comb.add %[[VAL_1]], %[[VAL_1]] : i32
 // CHECK:           br ^bb1
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_3:.*]] = llhd.prb %[[VAL_0]] : !llhd.sig<i32>
@@ -57,7 +57,7 @@ llhd.proc @check_move_prb1(%sig : !llhd.sig<i32>) -> () {
   br ^bb2
 ^bb2:
   // TR: 0
-  %double = addi %c, %c : i32
+  %double = comb.add %c, %c : i32
   %prb2 = llhd.prb %sig : !llhd.sig<i32>
   llhd.wait ^bb1
 }
@@ -67,7 +67,7 @@ llhd.proc @check_move_prb1(%sig : !llhd.sig<i32>) -> () {
 // CHECK-LABEL:   llhd.proc @check_move_prb2(
 // CHECK-SAME:                               %[[VAL_0:.*]] : !llhd.sig<i32>) -> () {
 // CHECK:           %[[VAL_1:.*]] = hw.constant 4 : i32
-// CHECK:           %[[VAL_2:.*]] = addi %[[VAL_1]], %[[VAL_1]] : i32
+// CHECK:           %[[VAL_2:.*]] = comb.add %[[VAL_1]], %[[VAL_1]] : i32
 // CHECK:           br ^bb1
 // CHECK:         ^bb1:
 // CHECK:           %[[VAL_3:.*]] = llhd.prb %[[VAL_0]] : !llhd.sig<i32>
@@ -86,7 +86,7 @@ llhd.proc @check_move_prb2(%sig : !llhd.sig<i32>) -> () {
   llhd.wait ^bb2
 ^bb2:
   // TR: 0
-  %double = addi %c, %c : i32
+  %double = comb.add %c, %c : i32
   %prb2 = llhd.prb %sig : !llhd.sig<i32>
   br ^bb1
 }
@@ -96,7 +96,7 @@ llhd.proc @check_move_prb2(%sig : !llhd.sig<i32>) -> () {
 // CHECK:           %[[VAL_1:.*]] = hw.constant 4 : i32
 // CHECK:           br ^bb1(%[[VAL_1]] : i32)
 // CHECK:         ^bb1(%[[VAL_2:.*]]: i32):
-// CHECK:           %[[VAL_3:.*]] = addi %[[VAL_2]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_3:.*]] = comb.add %[[VAL_2]], %[[VAL_2]] : i32
 // CHECK:           llhd.halt
 // CHECK:         }
 llhd.proc @check_blockarg(%sig : !llhd.sig<i32>) -> () {
@@ -105,7 +105,7 @@ llhd.proc @check_blockarg(%sig : !llhd.sig<i32>) -> () {
   br ^bb1(%c : i32)
 ^bb1(%a : i32):
   // TR: -1
-  %double = addi %a, %a : i32
+  %double = comb.add %a, %a : i32
   llhd.halt
 }
 
@@ -121,14 +121,14 @@ llhd.proc @check_blockarg(%sig : !llhd.sig<i32>) -> () {
 // CHECK:           br ^bb2
 // CHECK:         ^bb2:
 // CHECK:           %[[VAL_6:.*]] = llhd.load %[[VAL_5]] : !llhd.ptr<i32>
-// CHECK:           %[[VAL_7:.*]] = cmpi ult, %[[VAL_6]], %[[VAL_2]] : i32
+// CHECK:           %[[VAL_7:.*]] = comb.icmp ult %[[VAL_6]], %[[VAL_2]] : i32
 // CHECK:           %[[VAL_8:.*]] = llhd.prb %[[VAL_0]] : !llhd.sig<i2>
 // CHECK:           cond_br %[[VAL_7]], ^bb4, ^bb3
 // CHECK:         ^bb3:
 // CHECK:           llhd.wait (%[[VAL_0]] : !llhd.sig<i2>), ^bb1
 // CHECK:         ^bb4:
 // CHECK:           %[[VAL_9:.*]] = llhd.load %[[VAL_5]] : !llhd.ptr<i32>
-// CHECK:           %[[VAL_10:.*]] = addi %[[VAL_9]], %[[VAL_4]] : i32
+// CHECK:           %[[VAL_10:.*]] = comb.add %[[VAL_9]], %[[VAL_4]] : i32
 // CHECK:           llhd.store %[[VAL_5]], %[[VAL_10]] : !llhd.ptr<i32>
 // CHECK:           br ^bb2
 // CHECK:         }
@@ -144,7 +144,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
   // TR: 1
   %i_ld = llhd.load %i : !llhd.ptr<i32>
   %1 = hw.constant 2 : i32
-  %2 = cmpi ult, %i_ld, %1 : i32
+  %2 = comb.icmp ult %i_ld, %1 : i32
   cond_br %2, ^loop_continue, ^check
 ^check:
   // TR: 1
@@ -155,7 +155,7 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
   %5 = hw.constant 1 : i32
   %prb = llhd.prb %in_i : !llhd.sig<i2>
   %i_ld4 = llhd.load %i : !llhd.ptr<i32>
-  %14 = addi %i_ld4, %5 : i32
+  %14 = comb.add %i_ld4, %5 : i32
   llhd.store %i, %14 : !llhd.ptr<i32>
   br ^loop_body
 }
