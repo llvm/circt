@@ -760,35 +760,44 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
 /// Verifies the defining operation of a value is combinational.
 static LogicalResult isCombinational(Value value, GroupInterface group) {
   Operation *definingOp = value.getDefiningOp();
-  if (definingOp == nullptr)
+  if (definingOp == nullptr || definingOp->hasTrait<Combinational>())
+    // This is a port of the parent component or combinational.
     return success();
 
-  // For now, assumes all component instances may be combinational. Once
-  // combinational components are supported, this can be changed.
+  // For now, assumes all component instances are combinational. Once
+  // combinational components are supported, this can be strictly enforced.
   if (isa<InstanceOp>(definingOp))
+    return success();
+
+  // Constants and logical operations are OK.
+  if (isa<comb::CombDialect, hw::HWDialect>(definingOp->getDialect()))
     return success();
 
   // Reads to MemoryOp and RegisterOp are combinational. Writes are not.
   if (auto r = dyn_cast<RegisterOp>(definingOp)) {
-    if (value != r.outPort())
-      return group->emitOpError()
-             << "with register: \""
-             << cast<CellInterface>(definingOp).instanceName()
-             << "\" is conducting a memory store. This is not combinational.";
+    return value == r.outPort()
+               ? success()
+               : group->emitOpError()
+                     << "with register: \"" << r.instanceName()
+                     << "\" is conducting a memory store. This is not "
+                        "combinational.";
   } else if (auto m = dyn_cast<MemoryOp>(definingOp)) {
-    if (llvm::none_of(m.getReadPorts(), [&](Value p) { return p == value; }))
-      return group->emitOpError()
-             << "with memory: \""
-             << cast<CellInterface>(definingOp).instanceName()
-             << "\" is conducting a memory store. This is not combinational.";
+    auto writePorts = {m.writeData(), m.writeEn()};
+    return (llvm::none_of(writePorts, [&](Value p) { return p == value; }))
+               ? success()
+               : group->emitOpError()
+                     << "with memory: \"" << m.instanceName()
+                     << "\" is conducting a memory store. This "
+                        "is not combinational.";
   }
 
-  return success();
+  StringRef portName = valueName(group->getParentOfType<ComponentOp>(), value);
+  return group->emitOpError() << "with port: " << portName
+                              << ". This operation is not combinational.";
 }
 
 /// Verifies a combinational group may contain only combinational primitives or
 /// perform combinational logic.
-// TODO(www.github.com/llvm/circt/issues/1739): Add Combinational trait.
 static LogicalResult verifyCombGroupOp(CombGroupOp group) {
 
   for (auto &&op : *group.getBody()) {
