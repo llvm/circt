@@ -32,12 +32,13 @@ using namespace circt;
 using namespace firrtl;
 using circt::comb::ICmpPredicate;
 
-static const StringRef assertAnnoClass =
+static const char assertAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractAssertionsAnnotation";
-static const StringRef assumeAnnoClass =
+static const char assumeAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
-static const StringRef coverAnnoClass =
+static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
@@ -293,8 +294,7 @@ void CircuitLoweringState::processRemainingAnnotations(
             // The following are inspected (but not consumed) by FIRRTL/GCT
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
-            "sifive.enterprise.firrtl.ScalaClassAnnotation",
-            "sifive.enterprise.firrtl.MarkDUTAnnotation",
+            "sifive.enterprise.firrtl.ScalaClassAnnotation", dutAnnoClass,
             // The following will be handled while lowering the verification
             // ops.
             assertAnnoClass, assumeAnnoClass, coverAnnoClass))
@@ -713,8 +713,6 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (failed(lowerPorts(firrtlPorts, ports, oldModule, loweringState)))
     return {};
 
-  loweringState.processRemainingAnnotations(oldModule,
-                                            AnnotationSet(oldModule));
   // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
@@ -722,6 +720,10 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
   if (auto outputFile = oldModule->getAttr("output_file"))
     newModule->setAttr("output_file", outputFile);
+  if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
+    newModule->setAttr("DesignUnderTest", builder.getBoolArrayAttr(true));
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
   return newModule;
 }
 
