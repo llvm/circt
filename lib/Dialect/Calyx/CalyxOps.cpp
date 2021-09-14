@@ -93,7 +93,7 @@ static LogicalResult verifyNotComplexSource(Op op) {
     // This is a port of the parent component.
     return success();
 
-  if (isa<comb::XorOp, comb::AndOp, comb::OrOp>(definingOp))
+  if (auto dialect = definingOp->getDialect(); isa<comb::CombDialect>(dialect))
     return op->emitOpError("has source that is not a port or constant. "
                            "Complex logic should be conducted in the guard.");
 
