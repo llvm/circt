@@ -80,8 +80,15 @@ static IntType getWidestIntType(Type t1, Type t2) {
 static Value castToFIRRTLType(Value val, Type type,
                               ImplicitLocOpBuilder &builder) {
   auto firType = type.cast<FIRRTLType>();
-  val = builder.create<mlir::UnrealizedConversionCastOp>(firType, val)
-            .getResult(0);
+
+  // Use UnrealizedConversionCastOp except for a bundle type.
+  if (BundleType bundle = type.dyn_cast<BundleType>()) {
+    val = builder.createOrFold<HWStructCastOp>(firType.getPassiveType(), val);
+  } else {
+    val = builder.create<mlir::UnrealizedConversionCastOp>(firType, val)
+              .getResult(0);
+  }
+
   return val;
 }
 
@@ -2152,31 +2159,33 @@ LogicalResult FIRRTLLowering::lowerNoopCast(Operation *op) {
 LogicalResult FIRRTLLowering::visitExpr(mlir::UnrealizedConversionCastOp op) {
   // Conversions from standard integer types to FIRRTL types are lowered as
   // the input operand.
-  if (auto opIntType = op.getOperand(0).getType().dyn_cast<IntegerType>()) {
+  auto operand = op.getOperand(0);
+  auto result = op.getResult(0);
+  if (auto opIntType = operand.getType().dyn_cast<IntegerType>()) {
     if (opIntType.getWidth() != 0)
-      return setLowering(op.getResult(0), op.getOperand(0));
+      return setLowering(result, operand);
     else
-      return setLowering(op.getResult(0), Value());
+      return setLowering(result, Value());
   }
 
   // Standard -> FIRRTL.
-  if (!op.getOperand(0).getType().isa<FIRRTLType>())
-    return setLowering(op.getResult(0), op.getOperand(0));
+  if (!operand.getType().isa<FIRRTLType>())
+    return setLowering(result, operand);
 
   // Otherwise must be a conversion from FIRRTL type to standard int type.
-  auto result = getLoweredValue(op.getOperand(0));
-  if (!result) {
+  auto lowered_result = getLoweredValue(operand);
+  if (!lowered_result) {
     // If this is a conversion from a zero bit HW type to firrtl value, then
     // we want to successfully lower this to a null Value.
-    if (op.getOperand(0).getType().isSignlessInteger(0)) {
-      return setLowering(op.getResult(0), Value());
+    if (operand.getType().isSignlessInteger(0)) {
+      return setLowering(result, Value());
     }
     return failure();
   }
 
   // We lower builtin.unrealized_conversion_cast converting from a firrtl type
   // to a standard type into the lowered operand.
-  op.getResult(0).replaceAllUsesWith(result);
+  result.replaceAllUsesWith(lowered_result);
   return success();
 }
 
