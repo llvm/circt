@@ -28,17 +28,23 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
     sv.verbatim.expr allows operand substitutions with {{0}} syntax.
     }];
 
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
+  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
+                  DefaultValuedAttr<SymRefArrayAttr,"{}">:$symbols);
   let results = (outs AnySignlessIntegerOrInOutType:$result);
   let assemblyFormat = [{
-    $string attr-dict (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result)
+    $string (`(` $operands^ `)`)?
+      `:` functional-type($operands, $result) attr-dict 
   }];
 
   let builders = [
     OpBuilder<(ins "Type":$resultType, "Twine":$string),
                "build(odsBuilder, odsState, resultType, "
-               "odsBuilder.getStringAttr(string), ValueRange{});">
+               "odsBuilder.getStringAttr(string), ValueRange{}," 
+               "odsBuilder.getArrayAttr({}));">,
+    OpBuilder<(ins "Type":$resultType, "StringAttr":$string, "ValueRange":$operands),
+               "build(odsBuilder, odsState, resultType, "
+               "string, operands," 
+               "odsBuilder.getArrayAttr({}));">
   ];
 }
 
@@ -56,17 +62,19 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
     sv.verbatim.se.expr allows operand substitutions with {{0}} syntax.
     }];
 
-  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands);
+  let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
+                 DefaultValuedAttr<SymRefArrayAttr,"{}">:$symbols );
   let results = (outs AnySignlessIntegerOrInOutType:$result);
   let assemblyFormat = [{
-    $string attr-dict (`(` $operands^ `)`)?
-      `:` functional-type($operands, $result)
+    $string (`(` $operands^ `)`)?
+      `:` functional-type($operands, $result) attr-dict 
   }];
 
   let builders = [
     OpBuilder<(ins "Type":$resultType, "Twine":$string),
                "build(odsBuilder, odsState, resultType, "
-               "odsBuilder.getStringAttr(string), ValueRange{});">
+               "odsBuilder.getStringAttr(string), ValueRange{},"
+               "odsBuilder.getArrayAttr({}));">
   ];
 }
 
