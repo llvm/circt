@@ -224,25 +224,46 @@ firrtl.circuit "testDontTouch"  {
 }
 
 firrtl.circuit "OutPortTop" {
-    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1>) attributes {
-      portAnnotations =[[{class = "firrtl.transforms.DontTouchAnnotation"}]]} {
-      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-      firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    }
-    firrtl.module @OutPortChild2(out %out: !firrtl.uint<1>) {
-      %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-      firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+  firrtl.module @OutPortChild1(out %out: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.module @OutPortChild2(out %out: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
   // CHECK-LABEL: firrtl.module @OutPortTop
-    firrtl.module @OutPortTop(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
-      %c_out = firrtl.instance @OutPortChild1  {name = "c"} : !firrtl.uint<1>
-      %c_out_0 = firrtl.instance @OutPortChild2  {name = "c"} : !firrtl.uint<1>
-      // CHECK: %0 = firrtl.and %x, %c_out
-      %0 = firrtl.and %x, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      // CHECK: %1 = firrtl.and %0, %c0_ui1
-      %1 = firrtl.and %0, %c_out_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      firrtl.connect %z, %1 : !firrtl.uint<1>, !firrtl.uint<1>
-    }
+  firrtl.module @OutPortTop(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
+    %child1_out = firrtl.instance @OutPortChild1  {name = "child1"} : !firrtl.uint<1>
+    // CHECK: firrtl.connect %y, %child1_out : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %y, %child1_out : !firrtl.uint<1>, !firrtl.uint<1>
+
+    %child2_out = firrtl.instance @OutPortChild2  {name = "child2"} : !firrtl.uint<1>
+    // CHECK: firrtl.connect %z, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %z, %child2_out : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// Output ports marked as DontTouch are Overdefined and not Unknown.  When an
+// Unkown value is used in a mux, then the mux can be replaced with the known
+// operand.  This should not happen for output ports.
+//
+// - https://github.com/llvm/circt/issues/1793
+firrtl.circuit "CheckNotUnkownOutputPort" {
+  firrtl.module @foo(out %b: !firrtl.uint<3> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}) {
+    %c1_ui3 = firrtl.constant 1 : !firrtl.uint<3>
+    firrtl.connect %b, %c1_ui3 : !firrtl.uint<3>, !firrtl.uint<3>
+  }
+  // CHECK-LABEL: firrtl.module @CheckNotUnkownOutputPort
+  firrtl.module @CheckNotUnkownOutputPort(out %b : !firrtl.uint<3>, in %c : !firrtl.uint<1>) {
+    %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
+    %int_b = firrtl.instance @foo  {name = "int"} : !firrtl.uint<3>
+    // CHECK: %0 = firrtl.mux(%c, %int_b, %c2_ui3)
+    // CHECK: firrtl.connect %b, %0 : !firrtl.uint<3>, !firrtl.uint<3>
+    // CHECK-NOT: firrtl.connect %b, %c2_ui3
+    %0 = firrtl.mux(%c, %int_b, %c2_ui3) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+    firrtl.connect %b, %0 : !firrtl.uint<3>, !firrtl.uint<3>
+  }
 }
 
 firrtl.circuit "InputPortTop"   {
