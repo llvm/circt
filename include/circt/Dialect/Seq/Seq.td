@@ -45,9 +45,8 @@ def CompRegOp : SeqOp<"compreg",
   let summary = "Register a value, storing it for one cycle";
   let description = "See the Seq dialect rationale for a longer description";
 
-  let arguments = (ins AnyType:$input, I1:$clk,
-    Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-    OptionalAttr<StrAttr>:$name);
+  let arguments = (ins AnyType:$input, I1:$clk, StrAttr:$name,
+    Optional<I1>:$reset, Optional<AnyType>:$resetValue);
   let results = (outs AnyType:$data);
 
   let printer = "return ::print$cppClass(p, *this);";

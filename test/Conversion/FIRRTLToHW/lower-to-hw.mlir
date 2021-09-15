@@ -899,4 +899,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.force %out, %in : !firrtl.uint<42>, !firrtl.uint<42>
   }
 
+  // CHECK-LABEL: hw.module @FooDUT
+  // CHECK: attributes {firrtl.DesignUnderTest}
+  firrtl.module @FooDUT() attributes {annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 }

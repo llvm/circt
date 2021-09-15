@@ -42,6 +42,6 @@ hw.module @structs(%clk:i1, %rstn:i1) -> () {
 
 hw.module @top(%clk: i1, %rstn: i1) {
   hw.instance "ints" @ints (clk: %clk: i1, rstn: %rstn: i1) -> ()
-  hw.instance "array" @array(clk: %clk: i1, clk: %rstn: i1) -> ()
+  hw.instance "array" @array(clk: %clk: i1, rstn: %rstn: i1) -> ()
   hw.instance "structs" @structs(clk: %clk: i1, rstn: %rstn: i1) -> ()
 }

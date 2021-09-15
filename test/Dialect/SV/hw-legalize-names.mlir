@@ -88,7 +88,7 @@ hw.module @ModuleWithCollision(%reg: i1) -> (wire: i1) {
   hw.output %reg : i1
 }
 hw.module @InstanceWithCollisions(%a: i1) {
-  hw.instance "parameter" @ModuleWithCollision(r: %a: i1) -> (wire: i1)
+  hw.instance "parameter" @ModuleWithCollision(reg: %a: i1) -> (wire: i1)
 }
 
 // TODO: Renaming the above interface declarations currently does not rename

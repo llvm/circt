@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -76,8 +78,32 @@ SmallVector<Direction> direction::unpackAttribute(Operation *component) {
 // Utilities
 //===----------------------------------------------------------------------===//
 
-// Convenience function for getting the SSA name of @p v under the scope of
-// operation @p scopeOp
+/// Verify that the value is not a "complex" value. For example, the source
+/// of an AssignOp should be a constant or port, e.g.
+/// %and = comb.and %a, %b : i1
+/// calyx.assign %port = %and, %c1_i1 ? : i1   // Incorrect
+/// calyx.assign %port = %c1_i1, %and ? : i1   // Correct
+/// TODO(Calyx): This is useful to verify current MLIR can be lowered to the
+/// native compiler. Remove this when Calyx supports wire declarations.
+/// See: https://github.com/llvm/circt/pull/1774 for context.
+template <typename Op>
+static LogicalResult verifyNotComplexSource(Op op) {
+  Operation *definingOp = op.src().getDefiningOp();
+  if (definingOp == nullptr)
+    // This is a port of the parent component.
+    return success();
+
+  // Currently, we use the Combinational dialect to perform logical operations
+  // on wires, i.e. comb::AndOp, comb::OrOp, comb::XorOp.
+  if (auto dialect = definingOp->getDialect(); isa<comb::CombDialect>(dialect))
+    return op->emitOpError("has source that is not a port or constant. "
+                           "Complex logic should be conducted in the guard.");
+
+  return success();
+}
+
+/// Convenience function for getting the SSA name of @p v under the scope of
+/// operation @p scopeOp
 static std::string valueName(Operation *scopeOp, Value v) {
   std::string s;
   llvm::raw_string_ostream os(s);
@@ -734,35 +760,45 @@ static LogicalResult verifyWiresOp(WiresOp wires) {
 /// Verifies the defining operation of a value is combinational.
 static LogicalResult isCombinational(Value value, GroupInterface group) {
   Operation *definingOp = value.getDefiningOp();
-  if (definingOp == nullptr)
+  if (definingOp == nullptr || definingOp->hasTrait<Combinational>())
+    // This is a port of the parent component or combinational.
     return success();
 
-  // For now, assumes all component instances may be combinational. Once
-  // combinational components are supported, this can be changed.
+  // For now, assumes all component instances are combinational. Once
+  // combinational components are supported, this can be strictly enforced.
   if (isa<InstanceOp>(definingOp))
+    return success();
+
+  // Constants and logical operations are OK.
+  if (isa<comb::CombDialect, hw::HWDialect>(definingOp->getDialect()))
     return success();
 
   // Reads to MemoryOp and RegisterOp are combinational. Writes are not.
   if (auto r = dyn_cast<RegisterOp>(definingOp)) {
-    if (value != r.outPort())
-      return group->emitOpError()
-             << "with register: \""
-             << cast<CellInterface>(definingOp).instanceName()
-             << "\" is conducting a memory store. This is not combinational.";
+    return value == r.outPort()
+               ? success()
+               : group->emitOpError()
+                     << "with register: \"" << r.instanceName()
+                     << "\" is conducting a memory store. This is not "
+                        "combinational.";
   } else if (auto m = dyn_cast<MemoryOp>(definingOp)) {
-    if (llvm::none_of(m.getReadPorts(), [&](Value p) { return p == value; }))
-      return group->emitOpError()
-             << "with memory: \""
-             << cast<CellInterface>(definingOp).instanceName()
-             << "\" is conducting a memory store. This is not combinational.";
+    auto writePorts = {m.writeData(), m.writeEn()};
+    return (llvm::none_of(writePorts, [&](Value p) { return p == value; }))
+               ? success()
+               : group->emitOpError()
+                     << "with memory: \"" << m.instanceName()
+                     << "\" is conducting a memory store. This "
+                        "is not combinational.";
   }
 
-  return success();
+  std::string portName =
+      valueName(group->getParentOfType<ComponentOp>(), value);
+  return group->emitOpError() << "with port: " << portName
+                              << ". This operation is not combinational.";
 }
 
 /// Verifies a combinational group may contain only combinational primitives or
 /// perform combinational logic.
-// TODO(www.github.com/llvm/circt/issues/1739): Add Combinational trait.
 static LogicalResult verifyCombGroupOp(CombGroupOp group) {
 
   for (auto &&op : *group.getBody()) {
@@ -845,6 +881,7 @@ static LogicalResult verifyPortDirection(AssignOp op, Value value,
 /// `isDestination` is used to distinguish whether the destination
 /// or source of the AssignOp is to be verified.
 static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
+  bool isSource = !isDestination;
   Value value = isDestination ? op.dest() : op.src();
   if (isPort(value))
     return verifyPortDirection(op, value, isDestination);
@@ -853,6 +890,8 @@ static LogicalResult verifyAssignOpValue(AssignOp op, bool isDestination) {
   if (isDestination && !isa<GroupGoOp, GroupDoneOp>(value.getDefiningOp()))
     return op->emitOpError(
         "has an invalid destination port. It must be drive-able.");
+  else if (isSource)
+    return verifyNotComplexSource(op);
 
   return success();
 }
@@ -881,6 +920,53 @@ ComponentOp InstanceOp::getReferencedComponent() {
   return program.lookupSymbol<ComponentOp>(componentName());
 }
 
+/// Verifies the port information in comparison with the referenced component
+/// of an instance. This helper function avoids conducting a lookup for the
+/// referenced component twice.
+static LogicalResult verifyInstanceOpType(InstanceOp instance,
+                                          ComponentOp referencedComponent) {
+  if (instance.componentName() == "main")
+    return instance.emitOpError("cannot reference the entry point.");
+
+  // Verify the instance result ports with those of its referenced component.
+  SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
+  size_t numPorts = componentPorts.size();
+
+  size_t numResults = instance.getNumResults();
+  if (numResults != numPorts)
+    return instance.emitOpError()
+           << "has a wrong number of results; expected: " << numPorts
+           << " but got " << numResults;
+
+  for (size_t i = 0; i != numResults; ++i) {
+    auto resultType = instance.getResult(i).getType();
+    auto expectedType = componentPorts[i].type;
+    if (resultType == expectedType)
+      continue;
+    return instance.emitOpError()
+           << "result type for " << componentPorts[i].name << " must be "
+           << expectedType << ", but got " << resultType;
+  }
+  return success();
+}
+
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *referencedComponent =
+      symbolTable.lookupNearestSymbolFrom(*this, componentNameAttr());
+  if (referencedComponent == nullptr)
+    return emitError() << "referencing component: " << componentName()
+                       << ", which does not exist.";
+
+  // Verify the referenced component is not instantiating itself.
+  auto parentComponent = (*this)->getParentOfType<ComponentOp>();
+  if (parentComponent == referencedComponent)
+    return emitError() << "recursive instantiation of its parent component: "
+                       << componentName();
+
+  assert(isa<ComponentOp>(referencedComponent) && "Should be a ComponentOp.");
+  return verifyInstanceOpType(*this, cast<ComponentOp>(referencedComponent));
+}
+
 /// Provide meaningful names to the result values of an InstanceOp.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   getCellAsmResultNames(setNameFn, *this, this->portNames());
@@ -907,49 +993,13 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
   return portAttributes;
 }
 
-static LogicalResult verifyInstanceOp(InstanceOp instance) {
-  if (instance.componentName() == "main")
-    return instance.emitOpError("cannot reference the entry point.");
-
-  // Verify the referenced component exists in this program.
-  ComponentOp referencedComponent = instance.getReferencedComponent();
-  if (!referencedComponent)
-    return instance.emitOpError()
-           << "is referencing component: " << instance.componentName()
-           << ", which does not exist.";
-
-  // Verify the referenced component is not instantiating itself.
-  auto parentComponent = instance->getParentOfType<ComponentOp>();
-  if (parentComponent == referencedComponent)
-    return instance.emitOpError()
-           << "is a recursive instantiation of its parent component: "
-           << instance.componentName();
-
-  // Verify the instance result ports with those of its referenced component.
-  SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
-  size_t numPorts = componentPorts.size();
-
-  size_t numResults = instance.getNumResults();
-  if (numResults != numPorts)
-    return instance.emitOpError()
-           << "has a wrong number of results; expected: " << numPorts
-           << " but got " << numResults;
-
-  for (size_t i = 0; i != numResults; ++i) {
-    auto resultType = instance.getResult(i).getType();
-    auto expectedType = componentPorts[i].type;
-    if (resultType == expectedType)
-      continue;
-    return instance.emitOpError()
-           << "result type for " << componentPorts[i].name << " must be "
-           << expectedType << ", but got " << resultType;
-  }
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // GroupGoOp
 //===----------------------------------------------------------------------===//
+
+static LogicalResult verifyGroupGoOp(GroupGoOp goOp) {
+  return verifyNotComplexSource(goOp);
+}
 
 /// Provide meaningful names to the result value of a GroupGoOp.
 void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
@@ -957,6 +1007,28 @@ void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto name = parent.sym_name();
   std::string resultName = name.str() + ".go";
   setNameFn(getResult(), resultName);
+}
+
+//===----------------------------------------------------------------------===//
+// GroupDoneOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
+  Operation *srcOp = doneOp.src().getDefiningOp();
+  Value optionalGuard = doneOp.guard();
+  Operation *guardOp = optionalGuard ? optionalGuard.getDefiningOp() : nullptr;
+  bool noGuard = (guardOp == nullptr);
+
+  if (srcOp == nullptr)
+    // This is a port of the parent component.
+    return success();
+
+  if (isa<hw::ConstantOp>(srcOp) && (noGuard || isa<hw::ConstantOp>(guardOp)))
+    return doneOp->emitOpError()
+           << "with constant source" << (noGuard ? "" : " and constant guard")
+           << ". This should be a combinational group.";
+
+  return verifyNotComplexSource(doneOp);
 }
 
 //===----------------------------------------------------------------------===//

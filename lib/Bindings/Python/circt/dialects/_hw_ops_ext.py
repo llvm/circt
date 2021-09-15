@@ -31,7 +31,11 @@ class InstanceBuilder(support.NamedValueOpView):
     if sym_name:
       sym_name = StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
-    post_args = [parameters, sym_name]
+    post_args = [
+        ArrayAttr.get([StringAttr.get(x) for x in self.operand_names()]),
+        ArrayAttr.get([StringAttr.get(x) for x in self.result_names()]),
+        parameters, sym_name
+    ]
     if results is None:
       results = module.type.results
 
@@ -272,114 +276,6 @@ class HWModuleOp(ModuleLike):
       raise IndexError('The module already has an entry block')
     self.body.blocks.append(*self.type.inputs)
     return self.body.blocks[0]
-
-  @classmethod
-  def from_py_func(HWModuleOp,
-                   *inputs: Type,
-                   results: Optional[Sequence[Type]] = None,
-                   name: Optional[str] = None):
-    """Decorator to define an MLIR HWModuleOp specified as a python function.
-    Requires that an `mlir.ir.InsertionPoint` and `mlir.ir.Location` are
-    active for the current thread (i.e. established in a `with` block).
-    When applied as a decorator to a Python function, an entry block will
-    be constructed for the HWModuleOp with types as specified in `*inputs`. The
-    block arguments will be passed positionally to the Python function. In
-    addition, if the Python function accepts keyword arguments generally or
-    has a corresponding keyword argument, the following will be passed:
-      * `module_op`: The `module` op being defined.
-    By default, the function name will be the Python function `__name__`. This
-    can be overriden by passing the `name` argument to the decorator.
-    If `results` is not specified, then the decorator will implicitly
-    insert a `OutputOp` with the `Value`'s returned from the decorated
-    function. It will also set the `HWModuleOp` type with the actual return
-    value types. If `results` is specified, then the decorated function
-    must return `None` and no implicit `OutputOp` is added (nor are the result
-    types updated). The implicit behavior is intended for simple, single-block
-    cases, and users should specify result types explicitly for any complicated
-    cases.
-    The decorated function can further be called from Python and will insert
-    a `InstanceOp` at the then-current insertion point, returning either None (
-    if no return values), a unary Value (for one result), or a list of Values).
-    This mechanism cannot be used to emit recursive calls (by construction).
-    """
-
-    def decorator(f):
-      from circt.dialects import hw
-      # Introspect the callable for optional features.
-      sig = inspect.signature(f)
-      has_arg_module_op = False
-      for param in sig.parameters.values():
-        if param.kind == param.VAR_KEYWORD:
-          has_arg_module_op = True
-        if param.name == "module_op" and (param.kind
-                                          == param.POSITIONAL_OR_KEYWORD or
-                                          param.kind == param.KEYWORD_ONLY):
-          has_arg_module_op = True
-
-      # Emit the HWModuleOp.
-      implicit_return = results is None
-      symbol_name = name or f.__name__
-      input_names = [v.name for v in sig.parameters.values()]
-      input_types = [port_type for port_type in inputs]
-      input_ports = zip(input_names, input_types)
-
-      if implicit_return:
-        output_ports = []
-      else:
-        result_types = [port_type for port_type in results]
-        output_ports = zip([None] * len(result_types), result_types)
-
-      module_op = HWModuleOp(name=symbol_name,
-                             input_ports=input_ports,
-                             output_ports=output_ports)
-      with InsertionPoint(module_op.add_entry_block()):
-        module_args = module_op.entry_block.arguments
-        module_kwargs = {}
-        if has_arg_module_op:
-          module_kwargs["module_op"] = module_op
-        return_values = f(*module_args, **module_kwargs)
-        if not implicit_return:
-          return_types = list(results)
-          assert return_values is None, (
-              "Capturing a python function with explicit `results=` "
-              "requires that the wrapped function returns None.")
-        else:
-          # Coerce return values, add OutputOp and rewrite func type.
-          if return_values is None:
-            return_values = []
-          elif isinstance(return_values, Value):
-            return_values = [return_values]
-          else:
-            return_values = list(return_values)
-          hw.OutputOp(return_values)
-          # Recompute the function type.
-          return_types = [v.type for v in return_values]
-          function_type = FunctionType.get(inputs=inputs, results=return_types)
-          module_op.attributes["type"] = TypeAttr.get(function_type)
-          # Set required resultNames attribute. Could we infer real names here?
-          resultNames = [
-              StringAttr.get('result' + str(i))
-              for i in range(len(return_values))
-          ]
-          module_op.attributes["resultNames"] = ArrayAttr.get(resultNames)
-
-      def emit_instance_op(*call_args):
-        call_op = hw.InstanceOp(return_types, StringAttr.get(''),
-                                FlatSymbolRefAttr.get(symbol_name), call_args,
-                                DictAttr.get({}), None)
-        if return_types is None:
-          return None
-        elif len(return_types) == 1:
-          return call_op.result
-        else:
-          return call_op.results
-
-      wrapped = emit_instance_op
-      wrapped.__name__ = f.__name__
-      wrapped.module_op = module_op
-      return wrapped
-
-    return decorator
 
 
 class HWModuleExternOp(ModuleLike):

@@ -44,22 +44,6 @@ with Context() as ctx, Location.unknown():
                                  input_ports=[("input0", i32)],
                                  output_ports=[("output0", i32)])
 
-    # CHECK: hw.module @swap(%a: i32, %b: i32) -> ({{.+}}: i32, {{.+}}: i32)
-    # CHECK:   hw.output %b, %a : i32, i32
-    @hw.HWModuleOp.from_py_func(i32, i32)
-    def swap(a, b):
-      return b, a
-
-    # CHECK: hw.module @top(%a: i32, %b: i32) -> ({{.+}}: i32, {{.+}}: i32)
-    # CHECK:   %[[a0:.+]], %[[b0:.+]] = hw.instance "" @swap(a: %a: i32, b: %b: i32)
-    # CHECK:   %[[a1:.+]], %[[b1:.+]] = hw.instance "" @swap(a: %[[a0]]: i32, b: %[[b0]]: i32)
-    # CHECK:   hw.output %[[a1:.+]], %[[b1:.+]] : i32, i32
-    @hw.HWModuleOp.from_py_func(i32, i32)
-    def top(a, b):
-      a, b = swap(a, b)
-      a, b = swap(a, b)
-      return a, b
-
     one_input = hw.HWModuleOp(
         name="one_input",
         input_ports=[("a", i32)],
@@ -128,6 +112,4 @@ with Context() as ctx, Location.unknown():
   pm.run(m)
   # CHECK: module MyWidget
   # CHECK: external module FancyThing
-  # CHECK: module swap
-  # CHECK: module top
   circt.export_verilog(m, sys.stdout)

@@ -28,7 +28,7 @@ module {
     // Instantiate @B as a HW module with result-as-output sementics
     %r1, %r2 = hw.instance "b1" @B(a: %d: i1) -> (nameOfPortInSV: i1, "": i1)
     // Instantiate @C with a public symbol on the instance
-    %f, %g = hw.instance "c1" sym @E @C(a: %d: i1) -> ("": i1, "": i1)
+    %f, %g = hw.instance "c1" sym @E @C(nameOfPortInSV: %d: i1) -> ("": i1, "": i1)
     // Connect the inout port with %f
     sv.assign %e, %f : i1
     // Output values

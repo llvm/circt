@@ -11,7 +11,9 @@ class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
     Op<MSFTDialect, mnemonic, traits>;
 
 def InstanceOp : MSFTOp<"instance", [
-        DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]> ]> {
+        DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>
+    ]> {
   let summary = "Create an instance of a module";
 
   let arguments = (ins StrAttr:$instanceName,
