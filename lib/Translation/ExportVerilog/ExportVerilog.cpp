@@ -2093,7 +2093,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   // VerbatimOp can have an attribute of symbols, which can be used for macro
   // substitution.
   SmallVector<Operation *, 8> symOps;
-  for (auto sym : op.symRefs())
+  for (auto sym : op.symbols())
     if (auto symOp =
             state.symbolCache.getDefinition(sym.cast<FlatSymbolRefAttr>()))
       symOps.push_back(symOp);

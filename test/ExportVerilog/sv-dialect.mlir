@@ -810,10 +810,10 @@ hw.module @verbatim_M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A reg=reg1, verbatim_M2, verbatim_inout_2, verbatim_schema~aa1,reg2 = reg2 )
   sv.verbatim  "MACRO({{0}}, {{1}} reg={{2}}, {{3}}, {{4}}, {{5}}~{{6}},reg2 = {{7}} )" 
           (%add, %xor)  : i8,i8
-          {symRefs = [@verbatim_reg1, @verbatim_M2, 
+          {symbols = [@verbatim_reg1, @verbatim_M2, 
           @verbatim_inout_2, @verbatim_schema, @verbatim_b1, @verbatim_reg2]}
   // CHECK: Wire : wire25
-  sv.verbatim " Wire : {{0}}" {symRefs = [@verbatim_wireSym1]}
+  sv.verbatim " Wire : {{0}}" {symbols = [@verbatim_wireSym1]}
 }
 
 // CHECK-LABEL: module verbatim_M2(
@@ -825,7 +825,7 @@ hw.module @verbatim_M2(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A, verbatim_M1 -- verbatim_M2)
   sv.verbatim  "MACRO({{0}}, {{1}}, {{2}} -- {{3}})" 
                 (%add, %xor)  : i8,i8 
-                {symRefs = [@verbatim_M1, @verbatim_M2, @verbatim_b1]}
+                {symbols = [@verbatim_M1, @verbatim_M2, @verbatim_b1]}
 }
 
 // CHECK-LABEL: module InlineAutomaticLogicInit(

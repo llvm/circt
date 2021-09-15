@@ -464,7 +464,7 @@ def VerbatimOp : SVOp<"verbatim"> {
     sv.verbatim allows operand substitutions with {{0}} syntax.
   }];
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
-                  DefaultValuedAttr<SymRefArrayAttr,"{}">:$symRefs);
+                  DefaultValuedAttr<SymRefArrayAttr,"{}">:$symbols);
 
   let assemblyFormat =
     "$string (`(` $operands^ `)` `:` type($operands))? attr-dict";
