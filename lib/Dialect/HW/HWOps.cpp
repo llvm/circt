@@ -13,6 +13,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWVisitors.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 
@@ -29,19 +30,6 @@ static bool isValidKeyword(StringRef name) {
   }
 
   return true;
-}
-
-// Parse a portname as a keyword or a quote surrounded string, followed by a
-// colon.
-static StringAttr parsePortName(OpAsmParser &parser) {
-  StringAttr result;
-  StringRef keyword;
-  if (succeeded(parser.parseOptionalKeyword(&keyword))) {
-    result = parser.getBuilder().getStringAttr(keyword);
-  } else if (parser.parseAttribute(result,
-                                   parser.getBuilder().getType<NoneType>()))
-    return {};
-  return succeeded(parser.parseColon()) ? result : StringAttr();
 }
 
 /// Return true if the specified operation is a combinatorial logic op.
@@ -385,74 +373,6 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
   return results;
 }
 
-static StringAttr getPortNameAttr(MLIRContext *context, StringRef name) {
-  if (!name.empty()) {
-    // Ignore numeric names like %42
-    assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
-    if (isdigit(name[1]))
-      name = StringRef();
-    else
-      name = name.drop_front();
-  }
-  return StringAttr::get(context, name);
-}
-
-/// Parse a function result list.
-///
-///   function-result-list ::= function-result-list-parens
-///   function-result-list-parens ::= `(` `)`
-///                                 | `(` function-result-list-no-parens `)`
-///   function-result-list-no-parens ::= function-result (`,` function-result)*
-///   function-result ::= (percent-identifier `:`) type attribute-dict?
-///
-static ParseResult
-parseFunctionResultList(OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
-                        SmallVectorImpl<NamedAttrList> &resultAttrs,
-                        SmallVectorImpl<Attribute> &resultNames) {
-  if (parser.parseLParen())
-    return failure();
-
-  // Special case for an empty set of parens.
-  if (succeeded(parser.parseOptionalRParen()))
-    return success();
-
-  // Parse individual function results.
-  do {
-    resultNames.push_back(parsePortName(parser));
-    if (!resultNames.back())
-      return failure();
-
-    resultTypes.emplace_back();
-    resultAttrs.emplace_back();
-    if (parser.parseType(resultTypes.back()) ||
-        parser.parseOptionalAttrDict(resultAttrs.back()))
-      return failure();
-  } while (succeeded(parser.parseOptionalComma()));
-  return parser.parseRParen();
-}
-
-/// This is a variant of mlor::parseFunctionSignature that allows names on
-/// result arguments.
-static ParseResult parseModuleFunctionSignature(
-    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &argNames,
-    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
-    bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
-    SmallVectorImpl<NamedAttrList> &resultAttrs,
-    SmallVectorImpl<Attribute> &resultNames) {
-
-  using namespace mlir::function_like_impl;
-  bool allowArgAttrs = true;
-  bool allowVariadic = false;
-  if (parseFunctionArgumentList(parser, allowArgAttrs, allowVariadic, argNames,
-                                argTypes, argAttrs, isVariadic))
-    return failure();
-
-  if (succeeded(parser.parseOptionalArrow()))
-    return parseFunctionResultList(parser, resultTypes, resultAttrs,
-                                   resultNames);
-  return success();
-}
-
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
     if (argAttr.first == name)
@@ -490,9 +410,9 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   // Parse the function signature.
   bool isVariadic = false;
   SmallVector<Attribute> resultNames;
-  if (parseModuleFunctionSignature(parser, entryArgs, argTypes, argAttrs,
-                                   isVariadic, resultTypes, resultAttrs,
-                                   resultNames))
+  if (module_like_impl::parseModuleFunctionSignature(
+          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
+          resultAttrs, resultNames))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -517,7 +437,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> argNames;
   if (!entryArgs.empty()) {
     for (auto &arg : entryArgs)
-      argNames.push_back(getPortNameAttr(context, arg.name));
+      argNames.push_back(module_like_impl::getPortNameAttr(context, arg.name));
   } else if (!argTypes.empty()) {
     // The parser returns empty names in a special way.
     argNames.assign(argTypes.size(), StringAttr::get(context, ""));
@@ -907,7 +827,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
                             result.attributes) ||
       parser.getCurrentLocation(&inputsOperandsLoc) ||
       parseCommaSeparatedList([&]() -> ParseResult {
-        argNames.push_back(parsePortName(parser));
+        argNames.push_back(module_like_impl::parsePortName(parser));
         if (!argNames.back())
           return failure();
         inputsOperands.push_back({});
@@ -919,7 +839,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
       parser.parseArrow() || parseCommaSeparatedList([&]() -> ParseResult {
-        resultNames.push_back(parsePortName(parser));
+        resultNames.push_back(module_like_impl::parsePortName(parser));
         if (!resultNames.back())
           return failure();
         allResultTypes.push_back({});

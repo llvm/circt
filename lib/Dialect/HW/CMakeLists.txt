@@ -1,6 +1,8 @@
-file(GLOB globbed *.cpp)
 add_circt_dialect_library(CIRCTHW
-  ${globbed}
+  HWDialect.cpp
+  HWOps.cpp
+  HWTypes.cpp
+  ModuleImplementation.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/HW
