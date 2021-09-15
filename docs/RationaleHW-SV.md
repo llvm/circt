@@ -408,7 +408,7 @@ the total number of operands and symbols.
 For example, 
 sv.verbatim  "MACRO({{0}}, {{1}} reg={{4}}, {{3}})" 
           (%add, %xor)  : i8,i8
-          {symRefs = [@reg1, @Mudule, @instance]}
+          {symRefs = [@reg1, @Module1, @instance1]}
 
 ### Cost Model
 
