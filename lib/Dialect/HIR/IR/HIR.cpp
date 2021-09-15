@@ -822,7 +822,7 @@ static ParseResult parseFuncExternOp(OpAsmParser &parser,
   body->push_back(new Block);
   body->front().addArguments(entryArgTypes);
   parser.parseOptionalAttrDict(result.attributes);
-  FuncOp::ensureTerminator(*body, builder, result.location);
+  FuncExternOp::ensureTerminator(*body, builder, result.location);
   return success();
 }
 

@@ -183,7 +183,8 @@ def FuncOp : HIR_Op<"func",
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def FuncExternOp : HIR_Op<"func.extern", [Symbol, FuncLike, HasParent<"mlir::ModuleOp">]> {
+def FuncExternOp : HIR_Op<"func.extern", 
+[Symbol, SingleBlockImplicitTerminator<"ReturnOp">, FuncLike, HasParent<"mlir::ModuleOp">]> {
   let summary = "Function declaration";
 
   let description = [{

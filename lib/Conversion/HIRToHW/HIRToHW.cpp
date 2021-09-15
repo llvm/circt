@@ -20,6 +20,7 @@ private:
   LogicalResult visitRegion(mlir::Region &);
   LogicalResult visitOperation(Operation *);
   LogicalResult visitOp(hir::FuncOp);
+  LogicalResult visitOp(hir::FuncExternOp);
   LogicalResult visitOp(mlir::ConstantOp);
   LogicalResult visitOp(hir::BusOp);
   LogicalResult visitOp(hir::CommentOp);
@@ -29,6 +30,7 @@ private:
   OpBuilder *builder;
   llvm::DenseMap<Value, Value> mapHIRToHWValue;
   llvm::DenseMap<StringRef, uint64_t> mapFuncNameToInstanceCount;
+  SmallVector<Operation *> opsToErase;
 };
 
 LogicalResult HIRToHWPass::visitOp(mlir::ConstantOp op) {
@@ -84,7 +86,7 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
     hwResultTypes.push_back(convertType(ty));
 
   auto instanceName = builder->getStringAttr(
-      op.callee().str() + "_" +
+      op.callee().str() + "_inst" +
       std::to_string(mapFuncNameToInstanceCount[op.callee()]++));
 
   auto instanceOp = builder->create<hw::InstanceOp>(
@@ -105,6 +107,19 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
   for (uint64_t j = 0; i + j < instanceOp.getNumResults(); j++)
     mapHIRToHWValue[op.getResult(j)] = instanceOp.getResult(i + j);
 
+  return success();
+}
+
+LogicalResult HIRToHWPass::visitOp(hir::FuncExternOp op) {
+  builder = new OpBuilder(op);
+  builder->setInsertionPoint(op);
+  auto portInfoList = getHWModulePortInfoList(
+      *builder, op.getFuncType(), op.getInputNames(), op.getResultNames());
+  auto name = builder->getStringAttr(op.getNameAttr().getValue().str());
+  auto hwModuleOp =
+      builder->create<hw::HWModuleOp>(op.getLoc(), name, portInfoList);
+  delete (builder);
+  opsToErase.push_back(op);
   return success();
 }
 
@@ -131,8 +146,6 @@ LogicalResult HIRToHWPass::visitRegion(mlir::Region &region) {
 }
 
 LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
-  if (auto op = dyn_cast<hir::FuncOp>(operation))
-    return visitOp(op);
   if (auto op = dyn_cast<mlir::ConstantOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::BusOp>(operation))
@@ -152,6 +165,9 @@ void HIRToHWPass::runOnOperation() {
     if (auto op = dyn_cast<hir::FuncOp>(operation)) {
       if (failed(visitOp(op)))
         return WalkResult::interrupt();
+    } else if (auto op = dyn_cast<hir::FuncExternOp>(operation)) {
+      if (failed(visitOp(op)))
+        return WalkResult::interrupt();
     }
     return WalkResult::advance();
   });
@@ -160,6 +176,7 @@ void HIRToHWPass::runOnOperation() {
     signalPassFailure();
     return;
   }
+  helper::eraseOps(opsToErase);
 }
 
 /// hir-to-hw pass Constructor

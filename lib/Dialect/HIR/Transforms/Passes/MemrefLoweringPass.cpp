@@ -114,7 +114,11 @@ Operation *declareExternalFuncForCall(hir::CallOp callOp, ArrayAttr inputNames,
   auto declOp = builder.create<hir::FuncExternOp>(
       builder.getUnknownLoc(), callOp.calleeAttr().getAttr(),
       TypeAttr::get(callOp.getFuncType()));
-
+  declOp.getFuncBody().push_back(new Block);
+  OpBuilder declOpBuilder(declOp);
+  FuncExternOp::ensureTerminator(declOp.getFuncBody(), declOpBuilder,
+                                 builder.getUnknownLoc());
+  // declOp.getFuncBody().front();
   assert(inputNames.size() == callOp.getFuncType().getInputTypes().size() + 1);
   declOp->setAttr("argNames", inputNames);
 
@@ -280,25 +284,28 @@ MemrefLoweringPass::createBusInstantiationsAndCallOp(hir::AllocaOp op) {
   Type funcTy = hir::FuncType::get(builder.getContext(), inputBusTypes,
                                    inputBusAttrs, {}, {});
 
+  auto elementWidth = helper::getBitWidth(memrefTy.getElementType()).getValue();
+  auto addrWidth = helper::clog2(memrefTy.getNumElementsPerBank());
+  auto tensorSize = memrefTy.getNumBanks();
+  auto memModuleName = FlatSymbolRefAttr::get(
+      builder.getContext(),
+      StringRef(op.mem_type().str() + "x" + std::to_string(tensorSize) + "x" +
+                std::to_string(memrefTy.getNumElementsPerBank()) + "x" +
+                std::to_string(elementWidth)));
   auto callOp = builder.create<hir::CallOp>(
-      builder.getUnknownLoc(), SmallVector<Type>(),
-      FlatSymbolRefAttr::get(builder.getContext(), op.mem_type()),
+      builder.getUnknownLoc(), SmallVector<Type>(), memModuleName,
       TypeAttr::get(funcTy), inputBuses, tstartRegion, IntegerAttr());
   inputBusNames.push_back("t");
 
-  // declareExternalFuncForCall(callOp, builder.getStrArrayAttr(inputBusNames),
-  //                           ArrayAttr());
+  declareExternalFuncForCall(callOp, builder.getStrArrayAttr(inputBusNames),
+                             ArrayAttr());
 
   auto params = builder.getDictionaryAttr(
-      {builder.getNamedAttr(
-           "ELEMENT_WIDTH",
-           builder.getI64IntegerAttr(
-               helper::getBitWidth(memrefTy.getElementType()).getValue())),
-       builder.getNamedAttr(
-           "ADDR_WIDTH", builder.getI64IntegerAttr(
-                             helper::clog2(memrefTy.getNumElementsPerBank()))),
-       builder.getNamedAttr(
-           "TENSOR_SIZE", builder.getI64IntegerAttr(memrefTy.getNumBanks()))});
+      {builder.getNamedAttr("ELEMENT_WIDTH",
+                            builder.getI64IntegerAttr(elementWidth)),
+       builder.getNamedAttr("ADDR_WIDTH", builder.getI64IntegerAttr(addrWidth)),
+       builder.getNamedAttr("TENSOR_SIZE",
+                            builder.getI64IntegerAttr(tensorSize))});
 
   callOp->setAttr("params", params);
 
