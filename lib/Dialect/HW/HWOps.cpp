@@ -754,16 +754,12 @@ Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {
       return result;
 
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
 
   return topLevelModuleOp.lookupSymbol(moduleName());
 }
 
 // Helper function to verify instance op types
 static LogicalResult verifyInstanceOpTypes(InstanceOp op, Operation *module) {
-  assert(module && "referenced module must not be null");
-
   // Make sure our port and result names match.
   ArrayAttr argNames = op.argNamesAttr();
   ArrayAttr modArgNames = module->getAttrOfType<ArrayAttr>("argNames");
