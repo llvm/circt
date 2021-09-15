@@ -32,19 +32,6 @@ static bool isValidKeyword(StringRef name) {
   return true;
 }
 
-// Parse a portname as a keyword or a quote surrounded string, followed by a
-// colon.
-static StringAttr parsePortName(OpAsmParser &parser) {
-  StringAttr result;
-  StringRef keyword;
-  if (succeeded(parser.parseOptionalKeyword(&keyword))) {
-    result = parser.getBuilder().getStringAttr(keyword);
-  } else if (parser.parseAttribute(result,
-                                   parser.getBuilder().getType<NoneType>()))
-    return {};
-  return succeeded(parser.parseColon()) ? result : StringAttr();
-}
-
 /// Return true if the specified operation is a combinatorial logic op.
 bool hw::isCombinatorial(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
@@ -386,18 +373,6 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
   return results;
 }
 
-static StringAttr getPortNameAttr(MLIRContext *context, StringRef name) {
-  if (!name.empty()) {
-    // Ignore numeric names like %42
-    assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
-    if (isdigit(name[1]))
-      name = StringRef();
-    else
-      name = name.drop_front();
-  }
-  return StringAttr::get(context, name);
-}
-
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
     if (argAttr.first == name)
@@ -462,7 +437,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<Attribute> argNames;
   if (!entryArgs.empty()) {
     for (auto &arg : entryArgs)
-      argNames.push_back(getPortNameAttr(context, arg.name));
+      argNames.push_back(module_like_impl::getPortNameAttr(context, arg.name));
   } else if (!argTypes.empty()) {
     // The parser returns empty names in a special way.
     argNames.assign(argTypes.size(), StringAttr::get(context, ""));
@@ -504,6 +479,71 @@ FunctionType getHWModuleOpType(Operation *op) {
   return typeAttr.getValue().cast<FunctionType>();
 }
 
+static void printModuleSignature(OpAsmPrinter &p, Operation *op,
+                                 ArrayRef<Type> argTypes, bool isVariadic,
+                                 ArrayRef<Type> resultTypes,
+                                 bool &needArgNamesAttr) {
+  using namespace mlir::function_like_impl;
+
+  Region &body = op->getRegion(0);
+  bool isExternal = body.empty();
+  SmallString<32> resultNameStr;
+
+  p << '(';
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    if (i > 0)
+      p << ", ";
+
+    auto argName = getModuleArgumentName(op, i);
+
+    if (!isExternal) {
+      // Get the printed format for the argument name.
+      resultNameStr.clear();
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(body.front().getArgument(i), tmpStream);
+
+      // If the name wasn't printable in a way that agreed with argName, make
+      // sure to print out an explicit argNames attribute.
+      if (tmpStream.str().drop_front() != argName)
+        needArgNamesAttr = true;
+
+      p << tmpStream.str() << ": ";
+    } else if (!argName.empty()) {
+      p << '%' << argName << ": ";
+    }
+
+    p.printType(argTypes[i]);
+    p.printOptionalAttrDict(getArgAttrs(op, i));
+  }
+
+  if (isVariadic) {
+    if (!argTypes.empty())
+      p << ", ";
+    p << "...";
+  }
+
+  p << ')';
+
+  // We print result types specially since we support named arguments.
+  if (!resultTypes.empty()) {
+    p << " -> (";
+    for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
+      if (i != 0)
+        p << ", ";
+      StringAttr name = getModuleResultNameAttr(op, i);
+      if (isValidKeyword(name.getValue()))
+        p << name.getValue();
+      else
+        p << name;
+      p << ": ";
+
+      p.printType(resultTypes[i]);
+      p.printOptionalAttrDict(getResultAttrs(op, i));
+    }
+    p << ')';
+  }
+}
+
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_like_impl;
@@ -521,8 +561,8 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   }
 
   bool needArgNamesAttr = false;
-  module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
-                                         resultTypes, needArgNamesAttr);
+  printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes,
+                       needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (modKind == GenMod)
@@ -787,7 +827,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
                             result.attributes) ||
       parser.getCurrentLocation(&inputsOperandsLoc) ||
       parseCommaSeparatedList([&]() -> ParseResult {
-        argNames.push_back(parsePortName(parser));
+        argNames.push_back(module_like_impl::parsePortName(parser));
         if (!argNames.back())
           return failure();
         inputsOperands.push_back({});
@@ -799,7 +839,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
       parser.parseArrow() || parseCommaSeparatedList([&]() -> ParseResult {
-        resultNames.push_back(parsePortName(parser));
+        resultNames.push_back(module_like_impl::parsePortName(parser));
         if (!resultNames.back())
           return failure();
         allResultTypes.push_back({});

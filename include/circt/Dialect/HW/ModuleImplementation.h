@@ -24,6 +24,14 @@ namespace hw {
 
 namespace module_like_impl {
 
+/// Parse a portname as a keyword or a quote surrounded string, followed by a
+/// colon.
+StringAttr parsePortName(OpAsmParser &parser);
+
+/// Get the portname from an SSA value string, if said value name is not a
+/// number.
+StringAttr getPortNameAttr(MLIRContext *context, StringRef name);
+
 /// This is a variant of mlor::parseFunctionSignature that allows names on
 /// result arguments.
 ParseResult parseModuleFunctionSignature(

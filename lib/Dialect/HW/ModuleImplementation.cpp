@@ -15,8 +15,12 @@
 #include "mlir/IR/FunctionImplementation.h"
 
 using namespace mlir;
+using namespace circt::hw;
 
-static StringAttr getPortNameAttr(MLIRContext *context, StringRef name) {
+/// Get the portname from an SSA value string, if said value name is not a
+/// number
+StringAttr module_like_impl::getPortNameAttr(MLIRContext *context,
+                                             StringRef name) {
   if (!name.empty()) {
     // Ignore numeric names like %42
     assert(name.size() > 1 && name[0] == '%' && "Unknown MLIR name");
@@ -28,6 +32,19 @@ static StringAttr getPortNameAttr(MLIRContext *context, StringRef name) {
   return StringAttr::get(context, name);
 }
 
+/// Parse a portname as a keyword or a quote surrounded string, followed by a
+/// colon.
+StringAttr module_like_impl::parsePortName(OpAsmParser &parser) {
+  StringAttr result;
+  StringRef keyword;
+  if (succeeded(parser.parseOptionalKeyword(&keyword))) {
+    result = parser.getBuilder().getStringAttr(keyword);
+  } else if (parser.parseAttribute(result,
+                                   parser.getBuilder().getType<NoneType>()))
+    return {};
+  return succeeded(parser.parseColon()) ? result : StringAttr();
+}
+
 /// Parse a function result list.
 ///
 ///   function-result-list ::= function-result-list-parens
@@ -36,7 +53,7 @@ static StringAttr getPortNameAttr(MLIRContext *context, StringRef name) {
 ///   function-result-list-no-parens ::= function-result (`,` function-result)*
 ///   function-result ::= (percent-identifier `:`) type attribute-dict?
 ///
-ParseResult circt::hw::module_like_impl::parseFunctionResultList(
+ParseResult module_like_impl::parseFunctionResultList(
     OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
     SmallVectorImpl<NamedAttrList> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames) {
@@ -47,24 +64,14 @@ ParseResult circt::hw::module_like_impl::parseFunctionResultList(
   if (succeeded(parser.parseOptionalRParen()))
     return success();
 
-  auto *context = parser.getBuilder().getContext();
   // Parse individual function results.
   do {
+    resultNames.push_back(parsePortName(parser));
+    if (!resultNames.back())
+      return failure();
+
     resultTypes.emplace_back();
     resultAttrs.emplace_back();
-
-    OpAsmParser::OperandType operandName;
-    auto namePresent = parser.parseOptionalOperand(operandName);
-    StringRef implicitName;
-    if (namePresent.hasValue()) {
-      if (namePresent.getValue() || parser.parseColon())
-        return failure();
-
-      // If the name was specified, then we will use it.
-      implicitName = operandName.name;
-    }
-    resultNames.push_back(getPortNameAttr(context, implicitName));
-
     if (parser.parseType(resultTypes.back()) ||
         parser.parseOptionalAttrDict(resultAttrs.back()))
       return failure();
@@ -74,7 +81,7 @@ ParseResult circt::hw::module_like_impl::parseFunctionResultList(
 
 /// This is a variant of mlor::parseFunctionSignature that allows names on
 /// result arguments.
-ParseResult circt::hw::module_like_impl::parseModuleFunctionSignature(
+ParseResult module_like_impl::parseModuleFunctionSignature(
     OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &argNames,
     SmallVectorImpl<Type> &argTypes, SmallVectorImpl<NamedAttrList> &argAttrs,
     bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
