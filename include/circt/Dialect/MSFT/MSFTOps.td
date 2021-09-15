@@ -45,13 +45,13 @@ def OneOrNoBlocksRegion : Region<
 
 def MSFTModuleOp : MSFTOp<"module",
       [IsolatedFromAbove, FunctionLike, Symbol, RegionKindInterface,
-       SingleBlockImplicitTerminator<"::circt::hw::OutputOp">,
        HasParent<"mlir::ModuleOp">]>{
-  let summary = "HW Module";
+  let summary = "MSFT HW Module";
   let description = [{
-    The "hw.module" operation represents a Verilog module, including a given
-    name, a list of ports, and a body that represents the connections within
-    the module.
+    A lot like `hw.module`, but with a few differences:
+      - Can exist without a body. The body is filled in by a generator post op
+      creation.
+      - MSFT-specific methods and arguments will be added later on.
   }];
   let arguments = (ins
       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
@@ -113,5 +113,21 @@ def MSFTModuleOp : MSFTOp<"module",
 
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verify$cppClass(*this);";
+  // let verifier = "return ::verify$cppClass(*this);";
+}
+
+
+def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
+                                NoSideEffect, ReturnLike]> {
+  let summary = "termination operation";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+
+  // let builders = [
+  //   OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
+  // ];
+
+  let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+
+  // let verifier = "return ::verifyOutputOp(this);";
 }
