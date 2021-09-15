@@ -29,8 +29,10 @@ firrtl.circuit "Top" {
 
 
 // Check that basic module prefixing is working.
-firrtl.circuit "Top0" {
-  firrtl.module @Top0()
+firrtl.circuit "Top" {
+  // The annotation should be removed.
+  // CHECK:  firrtl.module @Top() {
+  firrtl.module @Top()
     attributes {annotations = [{
       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
       prefix = "T_",

@@ -146,6 +146,10 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto prefixInfo = getPrefixInfo(module);
   auto innerPrefix = prefixInfo.prefix;
 
+  // Remove the annotation from the module.
+  AnnotationSet::removeAnnotations(
+      module, "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation");
+
   // We only add the annotated prefix to the module name if it is inclusive.
   auto moduleName = module.getName().str();
   if (prefixInfo.inclusive)
