@@ -111,6 +111,18 @@ public:
     return getValue().dyn_cast_or_null<IntegerAttr>();
   }
 
+  void dump() const {
+    if (isInvalidValue())
+      llvm::errs() << "invalid";
+    if (isUnknown())
+      llvm::errs() << "unknown";
+    if (isOverdefined())
+      llvm::errs() << "overdefined";
+    if (isConstant()) {
+      llvm::errs() << "constant(" << getConstant().getValue() << ")";
+    }
+  }
+
   /// Merge in the value of the 'rhs' lattice into this one. Returns true if the
   /// lattice value changed.
   bool mergeIn(LatticeValue rhs) {
@@ -474,6 +486,11 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     // Otherwise we have a result from the instance.  We need to forward results
     // from the body to this instance result's SSA value, so remember it.
     BlockArgument modulePortVal = fModule.getPortArgument(resultNo);
+
+    // Mark don't touch results as overdefined
+    if (AnnotationSet::get(modulePortVal).hasDontTouch())
+      markOverdefined(modulePortVal);
+
     resultPortToInstanceResultMapping[modulePortVal].push_back(instancePortVal);
 
     // If there is already a value known for modulePortVal make sure to forward

@@ -169,6 +169,7 @@ firrtl.circuit "Issue1188"  {
 }
 
 // -----
+
 // DontTouch annotation should block constant propagation.
 firrtl.circuit "testDontTouch"  {
   // CHECK-LABEL: firrtl.module @blockProp
@@ -223,9 +224,10 @@ firrtl.circuit "testDontTouch"  {
 
 }
 
+// -----
+
 firrtl.circuit "OutPortTop" {
-    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1>) attributes {
-      portAnnotations =[[{class = "firrtl.transforms.DontTouchAnnotation"}]]} {
+    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}) {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
@@ -234,16 +236,22 @@ firrtl.circuit "OutPortTop" {
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
   // CHECK-LABEL: firrtl.module @OutPortTop
-    firrtl.module @OutPortTop(in %x: !firrtl.uint<1>, out %z: !firrtl.uint<1>) {
+    firrtl.module @OutPortTop(in %x: !firrtl.uint<1>, out %zc: !firrtl.uint<1>, out %zn: !firrtl.uint<1>) {
       %c_out = firrtl.instance @OutPortChild1  {name = "c"} : !firrtl.uint<1>
       %c_out_0 = firrtl.instance @OutPortChild2  {name = "c"} : !firrtl.uint<1>
       // CHECK: %0 = firrtl.and %x, %c_out
       %0 = firrtl.and %x, %c_out : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      // CHECK: %1 = firrtl.and %0, %c0_ui1
-      %1 = firrtl.and %0, %c_out_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-      firrtl.connect %z, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK: %c0_ui1_1 = firrtl.constant 0 
+      %1 = firrtl.and %x, %c_out_0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      // CHECK: firrtl.connect %zn, %0
+      firrtl.connect %zn, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+      // CHECK: firrtl.connect %zc, %c0_ui1_1
+      firrtl.connect %zc, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
 }
+
+
+// -----
 
 firrtl.circuit "InputPortTop"   {
   // CHECK-LABEL: firrtl.module @InputPortChild2
@@ -272,6 +280,9 @@ firrtl.circuit "InputPortTop"   {
     firrtl.connect %c2_in1, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
 firrtl.circuit "InstanceOut"   {
   firrtl.extmodule @Ext(in %a: !firrtl.uint<1>)
 
@@ -286,6 +297,9 @@ firrtl.circuit "InstanceOut"   {
     firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
 firrtl.circuit "InstanceOut2"   {
   firrtl.module @Ext(in %a: !firrtl.uint<1>) {
   }
@@ -301,6 +315,9 @@ firrtl.circuit "InstanceOut2"   {
     firrtl.connect %b, %w : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
 firrtl.circuit "invalidReg1"   {
   // CHECK_LABEL: @invalidReg1
   firrtl.module @invalidReg1(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
@@ -313,6 +330,9 @@ firrtl.circuit "invalidReg1"   {
       firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
+
 firrtl.circuit "invalidReg2"   {
   // CHECK_LABEL: @invalidReg2
   firrtl.module @invalidReg2(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
@@ -323,6 +343,8 @@ firrtl.circuit "invalidReg2"   {
     firrtl.connect %a, %foobar : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
+
+// -----
 
 // This test is checking the behavior of a RegOp, "r", and a RegResetOp, "s",
 // that are combinationally connected to themselves through simple and weird
@@ -413,6 +435,8 @@ firrtl.circuit "Oscillators"   {
   }
 }
 
+// -----
+
 // This test checks that an output port sink, used as a RHS of a connect, is not
 // optimized away.  This is similar to the oscillator tests above, but more
 // reduced. See:
@@ -438,6 +462,7 @@ firrtl.circuit "rhs_sink_output_used_as_wire" {
   }
 }
 
+// -----
 
 firrtl.circuit "constRegReset" {
 // CHECK-LABEL: firrtl.module @constRegReset
@@ -452,6 +477,8 @@ firrtl.module @constRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1
 }
 }
 
+// -----
+
 firrtl.circuit "constRegReset2" {
 // CHECK-LABEL: firrtl.module @constRegReset2
 firrtl.module @constRegReset2(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
@@ -465,6 +492,8 @@ firrtl.module @constRegReset2(in %clock: !firrtl.clock, in %reset: !firrtl.uint<
   firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
 }
 }
+
+// -----
 
 firrtl.circuit "regMuxTree"   {
   // CHECK-LABEL: firrtl.module @regMuxTree
@@ -491,5 +520,25 @@ firrtl.circuit "regMuxTree"   {
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
     // CHECK:  %[[c7_ui8:.+]] = firrtl.constant 7 : !firrtl.uint<8>
     // CHECK:  firrtl.connect %z, %[[c7_ui8]] : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// issue 1793
+// Ensure don't touch on output port is seen by instances
+firrtl.circuit "dntOutput" {
+  // CHECK-LABEL: firrtl.module @dntOutput
+  // CHECK: %0 = firrtl.mux(%c, %int_b, %c2_ui3)
+  // CHECK-NEXT: firrtl.connect %b, %0
+  firrtl.module @dntOutput(out %b : !firrtl.uint<3>, in %c : !firrtl.uint<1>) {
+    %const = firrtl.constant 2 : !firrtl.uint<3>
+    %int_b = firrtl.instance @foo  {name = "int"} : !firrtl.uint<3>
+    %m = firrtl.mux(%c, %int_b, %const) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
+    firrtl.connect %b, %m : !firrtl.uint<3>, !firrtl.uint<3>
+  }
+  firrtl.module @foo(out %b: !firrtl.uint<3> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}) {
+    %const = firrtl.constant 1 : !firrtl.uint<3>
+    firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
   }
 }
