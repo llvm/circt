@@ -2445,10 +2445,9 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
+  // Use the specified name or the symbol name as appropriate.
   auto *moduleOp = op.getReferencedModule(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
-
-  // Use the specified name or the symbol name as appropriate.
   auto verilogName = getVerilogModuleNameAttr(moduleOp);
   emitter.verifyModuleName(op, verilogName);
   indent() << prefix << verilogName.getValue();
@@ -2510,7 +2509,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
 
   os << ' ' << names.getName(op) << " (";
 
-  SmallVector<PortInfo> portInfo = getAllModulePortInfos(moduleOp);
+  SmallVector<PortInfo> portInfo = getAllModulePortInfos(op);
 
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
