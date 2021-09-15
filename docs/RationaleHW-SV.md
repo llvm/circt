@@ -391,24 +391,28 @@ over time.
 #### Verbatim op
 The verbatim operation produces a typed value expressed by a string of
 SystemVerilog.  This can be used to access macros and other values that are
-only sensible as Verilog text.
+only sensible as Verilog text. There are three kinds of verbatim operation, 
+ 1. VerbatimOp(`verbatim`, the statement form
+ 2. VerbatimExprOp(`verbatim.expr`), the expression form.
+ 3. VerbatimExprSEOp(`verbatim.expr.se`), the expression form.
 
 The text string is expected to have the highest precedence, so you should
-include parentheses in the string if it isn't a single token.  This is also
-assumed to not have side effects (use sv.verbatim.expr.se) if you need them.
+include parentheses in the string if it isn't a single token. `verbatim`
+and `verbatim.expr` are assumed to not have side effects, 
+whereas `sv.verbatim.expr.se` can have side effects.
 
-sv.verbatim allows operand substitutions with {{0}} syntax.
+Verbatim allows operand substitutions with '{{0}}' syntax.
 For macro substitution, optional operands and symbols can be added after the 
 string. Verbatim op takes an optional attribute, which is an array of
 symbol references.
 The indexing begins at 0, and if the index is greater than the
 number of operands, then it is used to index into the symbols array.
-ExportVerilog will error out if the macro indices are greater than
-the total number of operands and symbols.
-For example, 
-sv.verbatim  "MACRO({{0}}, {{1}} reg={{4}}, {{3}})" 
+It is invalid to have macro indices greater than the total number 
+of operands and symbols.
+Example, 
+`sv.verbatim  "MACRO({{0}}, {{1}} reg={{4}}, {{3}})" 
           (%add, %xor)  : i8,i8
-          {symRefs = [@reg1, @Module1, @instance1]}
+          {symRefs = [@reg1, @Module1, @instance1]}`
 
 ### Cost Model
 
