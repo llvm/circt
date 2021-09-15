@@ -24,6 +24,7 @@ using namespace msft;
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  assert(topLevelModuleOp && "Required to have a ModuleOp parent.");
   return topLevelModuleOp.lookupSymbol(moduleName());
 }
 

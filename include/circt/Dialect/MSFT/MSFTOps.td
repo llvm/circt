@@ -12,8 +12,7 @@ class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
 
 def InstanceOp : MSFTOp<"instance", [
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
-        DeclareOpInterfaceMethods<SymbolUserOpInterface>,
-        HasParent<"hw::HWModuleOp">
+        DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
   let summary = "Create an instance of a module";
 
