@@ -8,7 +8,6 @@ include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
-include "circt/Dialect/HIR/IR/HIRInterfaces.td"
 
 // Dialect
 def HIR_Dialect : Dialect {
@@ -23,6 +22,8 @@ def HIR_Dialect : Dialect {
   let cppNamespace = "::circt::hir";
   let hasConstantMaterializer = 1;
 }
+//Op Interfaces
+include "HIROpInterfaces.td"
 
 // Types
 def HIR_TimeType : DialectType<HIR_Dialect,CPred<"$_self.isa<TimeType>()">, "HIR time type">,
@@ -109,7 +110,7 @@ def YieldOp : HIR_Op<"yield", [ParentOneOf<["IfOp"]>,Terminator] > {
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
+def ReturnOp : HIR_Op<"return", [ParentOneOf<["FuncOp","FuncExternOp"]>, Terminator]> {
   let summary = "Return from function";
 
   let description = [{
@@ -125,7 +126,8 @@ def ReturnOp : HIR_Op<"return", [HasParent<"FuncOp">, Terminator]> {
   let assemblyFormat = [{ attr-dict (`(` $operands^ `)` `:` `(` type($operands) `)`)? }];
 }
 
-def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike,
+def FuncOp : HIR_Op<"func", 
+  [Symbol, SingleBlockImplicitTerminator<"ReturnOp">, FunctionLike, FuncLike,
   IsolatedFromAbove, CallableOpInterface, HasParent<"mlir::ModuleOp">]> {
 
   let summary = "Function definition";
@@ -134,7 +136,7 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike,
       Example:
 
       ```mlir 
-      hir.func @foo (%x, %A) at %t : (!hir.val,!hir.memref) -> (!hir.val,!hir.val)
+      hir.func @foo (%x, %A) at %t : (i4,!hir.memref<...>) -> (f32,!hir.time)
       ```
   }];
 
@@ -172,12 +174,56 @@ def FuncOp : HIR_Op<"func", [Symbol, SingleBlock, FunctionLike,
       }
       void updateArguments(ArrayRef<DictionaryAttr>);
       hir::FuncType getFuncType(){return funcTy().dyn_cast<hir::FuncType>();}
+      llvm::Optional<Block*> getOptionalFuncBodyBlock(){ return &getFuncBody().front();}
       ArrayAttr getInputNames(){return
       (*this)->getAttr("argNames").dyn_cast_or_null<ArrayAttr>();}
       ArrayAttr getResultNames(){return
       (*this)->getAttr("resultNames").dyn_cast_or_null<ArrayAttr>();}
   }];
   let verifier =[{return verify$cppClass(*this);}];
+}
+
+def FuncExternOp : HIR_Op<"func.extern", [Symbol, FuncLike, HasParent<"mlir::ModuleOp">]> {
+  let summary = "Function declaration";
+
+  let description = [{
+    This Op declares a new external function.
+      Example:
+      ```mlir 
+      hir.func.extern @foo (%x, %A) at %t : (i4,!hir.memref<...>) -> (f32,!hir.time)
+      ```
+  }];
+
+  let arguments = (ins
+      StrAttr:$sym_name,
+      TypeAttr:$funcTy 
+      );
+
+  let regions = (region SizedRegion<1>:$body);
+  let results = (outs );
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
+  let extraClassDeclaration = [{
+    public:
+      // FunctionLike interface.
+      friend class OpTrait::FunctionLike<FuncOp>;
+
+      unsigned getNumFuncArguments() { return getFuncType().getInputTypes().size(); }
+      unsigned getNumFuncResults() { return getFuncType().getResultTypes().size(); }
+      public:
+      LogicalResult verifyType();
+
+    public:
+    //FuncLike op interface.
+      hir::FuncType getFuncType(){return funcTy().dyn_cast<hir::FuncType>();}
+      Region& getFuncBody(){ return body();}
+      void updateArguments(ArrayRef<DictionaryAttr>);
+      ArrayAttr getInputNames(){return
+      (*this)->getAttr("argNames").dyn_cast_or_null<ArrayAttr>();}
+      ArrayAttr getResultNames(){return
+      (*this)->getAttr("resultNames").dyn_cast_or_null<ArrayAttr>();}
+  }];
+  //let verifier =[{return verify$cppClass(*this);}];
 }
 
 def CommentOp : HIR_Op<"comment", []> {
@@ -456,6 +502,9 @@ def CallOp : HIR_Op<"call", [CallOpInterface,AttrSizedOperandSegments] > {
     CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<SymbolRefAttr>("callee");
     }
+
+    /// Lookup the FuncOp/ExternalFuncOp for the callee. This returns null on invalid IR.
+    Operation* getCalleeDecl() ;
   }];
 }
 

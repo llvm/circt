@@ -137,6 +137,34 @@ LogicalResult verifyYieldOp(hir::YieldOp op) {
   }
   return success();
 }
+
+LogicalResult verifyFuncExternOp(hir::FuncExternOp op) {
+  auto funcTy = op.funcTy().dyn_cast<hir::FuncType>();
+  if (!funcTy)
+    return op.emitError("OpVerifier failed. hir::FuncOp::funcTy must be of "
+                        "type hir::FuncType.");
+  for (Type arg : funcTy.getInputTypes()) {
+    if (arg.isa<IndexType>())
+      return op.emitError(
+          "hir.func op does not support index type in argument location.");
+  }
+
+  auto inputTypes = funcTy.getInputTypes();
+  auto resultTypes = funcTy.getResultTypes();
+  if (!inputTypes.empty()) {
+    auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+    // argNames also contains the start time.
+    if ((!argNames) || (argNames.size() - 1 != inputTypes.size()))
+      return op.emitError("Mismatch in number of argument names.");
+  }
+  if (!resultTypes.empty()) {
+    auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
+    if ((!resultNames) || (resultNames.size() != resultTypes.size()))
+      return op.emitError("Mismatch in number of result names.");
+  }
+  return success();
+}
+
 LogicalResult verifyCallOp(hir::CallOp op) {
   auto inputTypes = op.getFuncType().getInputTypes();
   auto operands = op.getOperands();
@@ -147,6 +175,19 @@ LogicalResult verifyCallOp(hir::CallOp op) {
                      << inputTypes[i] << "' vs '" << operands[i].getType();
       return failure();
     }
+  }
+  auto *calleeDeclOperation = op.getCalleeDecl();
+  // if (!calleeDeclOperation)
+  //  return op.emitError() << "Could not find declaration of the callee.";
+
+  if (auto funcOp = dyn_cast_or_null<hir::FuncOp>(calleeDeclOperation)) {
+    if (!(funcOp.getFuncType() == op.getFuncType()))
+      return op.emitError("Mismatch with function definition.").attachNote()
+             << "Function defined here." << funcOp;
+  } else if (hir::FuncExternOp funcExternOp =
+                 dyn_cast_or_null<hir::FuncExternOp>(calleeDeclOperation)) {
+    if (!(funcExternOp.getFuncType() == op.getFuncType()))
+      return op.emitError("Mismatch with function declaration.");
   }
   return success();
 }

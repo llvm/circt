@@ -14,7 +14,6 @@
 
 namespace circt {
 namespace hir {
-#include "circt/Dialect/HIR/IR/HIRInterfaces.h.inc"
 enum PortKind { rd = 0, wr = 1, rw = 2 };
 enum BusDirection { SAME = 0, FLIP = 1 };
 
@@ -369,6 +368,8 @@ public:
 
 } // namespace hir.
 } // namespace circt
+
+#include "circt/Dialect/HIR/IR/HIROpInterfaces.h.inc"
 #define GET_OP_CLASSES
 #include "circt/Dialect/HIR/IR/HIR.h.inc"
 

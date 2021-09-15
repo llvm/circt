@@ -32,7 +32,7 @@ def SeqScheduler : Pass<"hir-seq-scheduler", "hir::FuncOp"> {
   let constructor = "circt::hir::createSeqSchedulerPass()";
 }
 
-def MemrefLowering : Pass<"hir-lower-memref", "hir::FuncOp"> {
+def MemrefLowering : Pass<"hir-lower-memref", "mlir::ModuleOp"> {
   let summary = "Lower hir.memref to hir.bus.";
   let description = [{This pass lowers hir.memref to hir.bus for codegen.}];
 

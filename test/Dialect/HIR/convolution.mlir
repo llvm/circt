@@ -3,6 +3,8 @@
 #w_reg = {"wr_latency"=1}
 #w_bram = {"wr_latency"=1}
 // RUN: circt-opt %s
+hir.func.extern @weighted_average at %t(%wndw : !hir.memref<(bank 3)x(bank 3)xi32> ports [#r_reg,#w_reg]) -> (%res: i32 delay 2)
+
 hir.func @convolution at %t(
 %A :!hir.memref<16x16xi32> ports [#r_bram],
 %B :!hir.memref<16x16xi32> ports [#w_bram]){

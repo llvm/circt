@@ -471,7 +471,7 @@ static void printFuncType(FuncType moduleTy, DialectAsmPrinter &printer) {
     if (i > 0)
       printer << ", ";
     printer << resultTypes[i];
-    if (!helper::isBuiltinSizedType(inputTypes[i]))
+    if (!helper::isBuiltinSizedType(resultTypes[i]))
       continue;
     auto delay = helper::extractDelayFromDict(resultAttrs[i]);
     if (delay != 0)

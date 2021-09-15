@@ -71,6 +71,24 @@ void hir::FuncOp::updateArguments(ArrayRef<DictionaryAttr> inputAttrs) {
   this->setAllArgAttrs(inputAttrs);
 }
 
+void hir::FuncExternOp::updateArguments(ArrayRef<DictionaryAttr> inputAttrs) {
+  auto &entryBlock = this->getFuncBody().front();
+  SmallVector<Type> inputTypes;
+  for (uint64_t i = 0; i < entryBlock.getNumArguments() - 1; i++) {
+    auto ty = entryBlock.getArgumentTypes()[i];
+    inputTypes.push_back(ty);
+  }
+  assert(inputTypes.size() == inputAttrs.size() ||
+         succeeded(this->emitError("Mismatch in number of types and attrs")));
+
+  auto newFuncTy =
+      hir::FuncType::get(this->getContext(), inputTypes, inputAttrs,
+                         this->getFuncType().getResultTypes(),
+                         this->getFuncType().getResultAttrs());
+
+  this->funcTyAttr(TypeAttr::get(newFuncTy));
+}
+
 SmallVector<Value, 4> hir::CallOp::getOperands() {
   SmallVector<Value, 4> operands;
   for (Value arg : this->operands().slice(0, this->getNumOperands() - 1))
@@ -124,4 +142,12 @@ SmallVector<Value> WhileOp::getCapturedValues() {
         return;
       });
   return capturedValues;
+}
+
+Operation *CallOp::getCalleeDecl() {
+  auto topLevelModuleOp = (*this)->getParentOfType<mlir::ModuleOp>();
+  if (!topLevelModuleOp)
+    return nullptr;
+
+  return topLevelModuleOp.lookupSymbol(callee());
 }

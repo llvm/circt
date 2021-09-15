@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTHIRTransforms
   PassRegistration.cpp
 
   DEPENDS
+  CIRCTHIR
   CIRCTHIRTransformsIncGen
 
   LINK_LIBS PUBLIC

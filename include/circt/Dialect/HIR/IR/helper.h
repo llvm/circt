@@ -50,4 +50,6 @@ mlir::Value lookupOrOriginal(mlir::BlockAndValueMapping &mapper,
 void setNames(mlir::Operation *, mlir::ArrayRef<mlir::StringRef>);
 
 mlir::SmallVector<mlir::Type> getTypes(mlir::ArrayRef<mlir::Value>);
+llvm::Optional<mlir::StringRef> getOptionalName(mlir::Operation *operation,
+                                                uint64_t resultNum);
 } // namespace helper

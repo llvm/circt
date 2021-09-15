@@ -245,4 +245,19 @@ SmallVector<Type> getTypes(ArrayRef<Value> values) {
     types.push_back(value.getType());
   return types;
 }
+
+llvm::Optional<StringRef> getOptionalName(Operation *operation,
+                                          uint64_t resultNum) {
+  auto namesAttr = operation->getAttr("names").dyn_cast_or_null<ArrayAttr>();
+  if (!namesAttr)
+    return llvm::None;
+  auto nameAttr = namesAttr[resultNum].dyn_cast_or_null<StringAttr>();
+  if (!nameAttr)
+    return llvm::None;
+  auto name = nameAttr.getValue();
+  if (name.size() == 0)
+    return llvm::None;
+  return name;
+}
+
 } // namespace helper

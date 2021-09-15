@@ -18,7 +18,7 @@ std::unique_ptr<OperationPass<hir::FuncOp>> createSimplifyLoopPass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createIndexLoweringPass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createRegisterAllocationPass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createSeqSchedulerPass();
-std::unique_ptr<OperationPass<hir::FuncOp>> createMemrefLoweringPass();
+std::unique_ptr<OperationPass<mlir::ModuleOp>> createMemrefLoweringPass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createScheduleVerificationPass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createLoopUnrollPass();
 

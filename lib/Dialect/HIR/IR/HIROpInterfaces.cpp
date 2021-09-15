@@ -2,4 +2,5 @@
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 
 using namespace circt;
-using namespace hir;
+
+#include "circt/Dialect/HIR/IR/HIROpInterfaces.cpp.inc"

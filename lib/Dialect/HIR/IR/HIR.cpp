@@ -732,10 +732,11 @@ parseFuncSignature(OpAsmParser &parser, hir::FuncType &funcTy,
                               argAttrs, resultTypes, resultAttrs);
   return success();
 }
+static ParseResult
+parseFuncDecl(OpAsmParser &parser, OperationState &result,
+              SmallVectorImpl<OpAsmParser::OperandType> &inputVars,
+              hir::FuncType &funcTy) {
 
-// Parse method.
-static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
   SmallVector<OpAsmParser::OperandType, 4> resultArgs;
   OpAsmParser::OperandType tstart;
   auto &builder = parser.getBuilder();
@@ -753,39 +754,75 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
            << "Expected valid name for start time.";
   auto loc = parser.getCurrentLocation();
   // Parse the function signature.
-  hir::FuncType funcTy;
-  if (parseFuncSignature(parser, funcTy, entryArgs, resultArgs))
+  if (parseFuncSignature(parser, funcTy, inputVars, resultArgs))
     return failure();
-  entryArgs.push_back(tstart);
+  inputVars.push_back(tstart);
 
-  auto functionTy = funcTy.getFunctionType();
-  result.addAttribute(mlir::function_like_impl::getTypeAttrName(),
-                      TypeAttr::get(functionTy));
   result.addAttribute("funcTy", TypeAttr::get(funcTy));
 
   // Use the argument and result names if not already specified.
-  if (failed(addNamesAttribute(context, "argNames", entryArgs, result)))
+  if (failed(addNamesAttribute(context, "argNames", inputVars, result)))
     return parser.emitError(loc)
-           << "FuncOp input arguments must have a valid name.";
+           << "Function input arguments must have a valid name.";
   if (failed(addNamesAttribute(context, "resultNames", resultArgs, result)))
     return parser.emitError(loc)
-           << "FuncOp return arguments must have a valid name.";
+           << "Function return arguments must have a valid name.";
 
-  // Add the attributes to the function arguments.
+  // Add the attributes for FunctionLike interface.
+  auto functionTy = funcTy.getFunctionType();
+  result.addAttribute(mlir::function_like_impl::getTypeAttrName(),
+                      TypeAttr::get(functionTy));
+
   mlir::function_like_impl::addArgAndResultAttrs(
       builder, result, funcTy.getInputAttrs(), funcTy.getResultAttrs());
-  // Parse the optional function body.
+
+  return success();
+}
+
+static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  hir::FuncType funcTy;
+
+  auto &builder = parser.getBuilder();
+
+  if (parseFuncDecl(parser, result, entryArgs, funcTy))
+    return failure();
+
+  // Parse the function body.
   auto *body = result.addRegion();
   SmallVector<Type> entryArgTypes;
   for (auto ty : funcTy.getFunctionType().getInputs()) {
     entryArgTypes.push_back(ty);
   }
-  entryArgTypes.push_back(helper::getTimeType(context));
-  auto r = parser.parseOptionalRegion(*body, entryArgs, entryArgTypes);
+  entryArgTypes.push_back(TimeType::get(builder.getContext()));
+
+  if (parser.parseRegion(*body, entryArgs, entryArgTypes))
+    return failure();
+
   parser.parseOptionalAttrDict(result.attributes);
-  // FuncOp::ensureTerminator(*body, builder, result.location);
-  if (r.hasValue())
-    return r.getValue();
+  FuncOp::ensureTerminator(*body, builder, result.location);
+  return success();
+}
+
+static ParseResult parseFuncExternOp(OpAsmParser &parser,
+                                     OperationState &result) {
+
+  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  hir::FuncType funcTy;
+  if (parseFuncDecl(parser, result, entryArgs, funcTy))
+    return failure();
+  // Parse the function body.
+  auto *body = result.addRegion();
+  SmallVector<Type> entryArgTypes;
+  for (auto ty : funcTy.getFunctionType().getInputs()) {
+    entryArgTypes.push_back(ty);
+  }
+  auto &builder = parser.getBuilder();
+  entryArgTypes.push_back(TimeType::get(builder.getContext()));
+  body->push_back(new Block);
+  body->front().addArguments(entryArgTypes);
+  parser.parseOptionalAttrDict(result.attributes);
+  FuncOp::ensureTerminator(*body, builder, result.location);
   return success();
 }
 
@@ -815,16 +852,12 @@ static ParseResult printArgList(OpAsmPrinter &printer, ArrayAttr argNames,
   return success();
 }
 
-static void printFuncSignature(OpAsmPrinter &printer, hir::FuncOp op) {
-  auto fnType = op.getType();
-  auto inputTypes = fnType.getInputs();
-  auto resultTypes = fnType.getResults();
-  ArrayRef<DictionaryAttr> inputAttrs =
-      op.funcTy().dyn_cast<FuncType>().getInputAttrs();
-  ArrayRef<DictionaryAttr> resultAttrs =
-      op.funcTy().dyn_cast<FuncType>().getResultAttrs();
-  auto inputNames = op->getAttr("argNames").dyn_cast_or_null<ArrayAttr>();
-  auto resultNames = op->getAttr("resultNames").dyn_cast_or_null<ArrayAttr>();
+static void printFuncSignature(OpAsmPrinter &printer, hir::FuncType funcTy,
+                               ArrayAttr inputNames, ArrayAttr resultNames) {
+  auto inputTypes = funcTy.getInputTypes();
+  auto resultTypes = funcTy.getResultTypes();
+  ArrayRef<DictionaryAttr> inputAttrs = funcTy.getInputAttrs();
+  ArrayRef<DictionaryAttr> resultAttrs = funcTy.getResultAttrs();
 
   printArgList(printer, inputNames, inputTypes, inputAttrs);
 
@@ -836,6 +869,22 @@ static void printFuncSignature(OpAsmPrinter &printer, hir::FuncOp op) {
   printArgList(printer, resultNames, resultTypes, resultAttrs);
 }
 
+static void printFuncExternOp(OpAsmPrinter &printer, hir::FuncExternOp op) {
+  // Print function name, signature, and control.
+  printer << " ";
+  printer.printSymbolName(op.sym_name());
+  auto inputNames = op.getInputNames();
+  printer << " at "
+          << "%"
+          << inputNames[inputNames.size() - 1].dyn_cast<StringAttr>().getValue()
+          << " ";
+  printFuncSignature(printer, op.getFuncType(), op.getInputNames(),
+                     op.getResultNames());
+  printer.printOptionalAttrDict(op->getAttrs(),
+                                {"funcTy", "type", "arg_attrs", "res_attrs",
+                                 "sym_name", "argNames", "resultNames"});
+}
+
 static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
   // Print function name, signature, and control.
   printer << " ";
@@ -845,16 +894,17 @@ static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
           << body.front().getArgument(body.front().getNumArguments() - 1)
           << " ";
 
-  printFuncSignature(printer, op);
+  printFuncSignature(printer, op.getFuncType(), op.getInputNames(),
+                     op.getResultNames());
 
-  // Print the body if this is not an external function.
-  if (!body.empty())
-    printer.printRegion(body, /*printEntryBlockArgs=*/false,
-                        /*printBlockTerminators=*/true);
+  printer.printRegion(body, /*printEntryBlockArgs=*/false,
+                      /*printBlockTerminators=*/true);
   printer.printOptionalAttrDict(op->getAttrs(),
                                 {"funcTy", "type", "arg_attrs", "res_attrs",
                                  "sym_name", "argNames", "resultNames"});
 }
+
+LogicalResult hir::FuncExternOp::verifyType() { return success(); }
 
 LogicalResult hir::FuncOp::verifyType() {
   auto type = getTypeAttr().getValue();

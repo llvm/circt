@@ -46,7 +46,11 @@ LogicalResult HIRToHWPass::visitOp(mlir::ConstantOp op) {
 LogicalResult HIRToHWPass::visitOp(hir::BusOp op) {
   // Add a placeholder SSA Var for the buses. CallOp visit will replace them.
   // We need to do this because HW dialect does not have SSA dominance.
-  auto placeHolderSSAVar = getConstantX(builder, op.getType())->getResult(0);
+  auto *constantXOp = getConstantX(builder, op.getType());
+  auto placeHolderSSAVar = constantXOp->getResult(0);
+  auto name = helper::getOptionalName(constantXOp, 0);
+  if (name)
+    helper::setNames(constantXOp, {name.getValue()});
   mapHIRToHWValue[op.res()] = placeHolderSSAVar;
   return success();
 }
