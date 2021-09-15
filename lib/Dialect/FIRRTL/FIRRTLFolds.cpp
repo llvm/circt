@@ -1376,50 +1376,6 @@ LogicalResult ConnectOp::canonicalize(ConnectOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// Conversions
-//===----------------------------------------------------------------------===//
-
-OpFoldResult StdIntCastOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<StdIntCastOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AnalogInOutCastOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<AnalogInOutCastOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AsPassivePrimOp::fold(ArrayRef<Attribute> operands) {
-  // If the input is already passive, then we don't need a conversion.
-  if (getOperand().getType() == getType())
-    return getOperand();
-
-  if (auto castInput =
-          dyn_cast_or_null<AsNonPassivePrimOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AsNonPassivePrimOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<AsPassivePrimOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-//===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
 

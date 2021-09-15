@@ -2341,75 +2341,6 @@ void VerbatimWireOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
-// Conversions to/from fixed-width signless integer types in standard dialect.
-//===----------------------------------------------------------------------===//
-
-static LogicalResult verifyStdIntCastOp(StdIntCastOp cast) {
-  // Either the input or result must have signless standard integer type, the
-  // other must be a FIRRTL type that lowers to one, and their widths must
-  // match.
-  FIRRTLType firType;
-  IntegerType integerType;
-  if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
-    integerType = cast.getType().dyn_cast<IntegerType>();
-    if (!integerType)
-      return cast.emitError("result type must be a signless integer");
-  } else if ((firType = cast.getType().dyn_cast<FIRRTLType>())) {
-    integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
-    if (!integerType)
-      return cast.emitError("operand type must be a signless integer");
-  } else {
-    return cast.emitError("either source or result type must be integer type");
-  }
-
-  int32_t intWidth = firType.getBitWidthOrSentinel();
-  if (intWidth == -2)
-    return cast.emitError("firrtl type isn't simple bit type");
-  if (intWidth == -1)
-    return cast.emitError("SInt/UInt type must have a width");
-  if (!integerType.isSignless())
-    return cast.emitError("standard integer type must be signless");
-  if (unsigned(intWidth) != integerType.getWidth())
-    return cast.emitError("source and result width must match");
-
-  return success();
-}
-
-static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
-  AnalogType firType;
-  hw::InOutType inoutType;
-
-  if ((firType = cast.getOperand().getType().dyn_cast<AnalogType>())) {
-    inoutType = cast.getType().dyn_cast<hw::InOutType>();
-    if (!inoutType)
-      return cast.emitError("result type must be an inout type");
-  } else if ((firType = cast.getType().dyn_cast<AnalogType>())) {
-    inoutType = cast.getOperand().getType().dyn_cast<hw::InOutType>();
-    if (!inoutType)
-      return cast.emitError("operand type must be an inout type");
-  } else {
-    return cast.emitError("either source or result type must be analog type");
-  }
-
-  // The inout type must wrap an integer.
-  auto integerType = inoutType.getElementType().dyn_cast<IntegerType>();
-  if (!integerType)
-    return cast.emitError("inout type must wrap an integer");
-
-  int32_t width = firType.getBitWidthOrSentinel();
-  if (width == -2)
-    return cast.emitError("firrtl type isn't simple bit type");
-  if (width == -1)
-    return cast.emitError("Analog type must have a width");
-  if (!integerType.isSignless())
-    return cast.emitError("standard integer type must be signless");
-  if (unsigned(width) != integerType.getWidth())
-    return cast.emitError("source and result width must match");
-
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // Conversions to/from structs in the standard dialect.
 //===----------------------------------------------------------------------===//
 
@@ -2449,12 +2380,6 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
   }
 
   return success();
-}
-
-void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
-                            Value input) {
-  result.addOperands(input);
-  result.addTypes(input.getType().cast<FIRRTLType>().getPassiveType());
 }
 
 //===----------------------------------------------------------------------===//
