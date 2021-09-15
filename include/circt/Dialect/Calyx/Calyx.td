@@ -79,6 +79,7 @@ class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
     Optional<I1>:$guard
   );
   let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 include "circt/Dialect/Calyx/CalyxStructure.td"

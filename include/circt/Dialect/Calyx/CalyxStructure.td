@@ -59,18 +59,15 @@ def ComponentOp : CalyxOp<"component", [
   ]> {
   let summary = "Calyx Component";
   let description = [{
-    The "calyx.component" operation represents an overall
-    Calyx component containing:
-    (1) In- and output port definitions
-        that define the interface.
+    The "calyx.component" operation represents an overall Calyx component containing:
+    (1) In- and output port definitions that define the interface.
     (2) The cells, wires, and control schedule.
 
-    A Calyx component requires the following ports with bit width 1:
-    - Input ports: `go`, `clk`, and `reset`.
-    - Output ports: `done`.
+    A Calyx component requires attributes `clk`, `go`, and `reset` on separate input ports, 
+    and `done` on an output port.
 
     ```mlir
-      calyx.component @MyComponent(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i16, %done: i1) {
+      calyx.component @C(%in: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i16, %done: i1 {done}) {
         ...
         calyx.wires { ... }
         calyx.control { ... }
@@ -152,11 +149,11 @@ def WiresOp : CalyxContainer<"wires", [
 }
 
 def InstanceOp : CalyxCell<"instance", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
   ]> {
   let summary = "Calyx Component Instance";
   let description = [{
-    Represents an instance of a Calyx component,
-    which may include state.
+    Represents an instance of a Calyx component, which may include state.
 
     ```mlir
       %name.in, %name.out = calyx.instance "name" @MyComponent : i64, i16
@@ -178,7 +175,6 @@ def InstanceOp : CalyxCell<"instance", [
   let assemblyFormat = [{
     $instanceName $componentName attr-dict (`:` type($results)^)?
   }];
-  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def GroupOp : CalyxOp<"group", [

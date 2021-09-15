@@ -43,15 +43,13 @@ public:
     Location loc = reg.getLoc();
 
     StringAttr name = reg.nameAttr();
-    if (!name)
+    if (reg.name().empty())
       name = rewriter.getStringAttr("_compreg");
     auto svReg =
         rewriter.create<sv::RegOp>(loc, reg.getResult().getType(), name);
-    DictionaryAttr regAttrs = reg->getAttrDictionary();
-    if (!regAttrs.empty())
-      svReg->setAttrs(regAttrs);
-    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
+    svReg->setDialectAttrs(reg->getDialectAttrs());
 
+    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.reset() && reg.resetValue()) {
       rewriter.create<sv::AlwaysFFOp>(
           loc, sv::EventControl::AtPosEdge, reg.clk(), ResetType::SyncReset,

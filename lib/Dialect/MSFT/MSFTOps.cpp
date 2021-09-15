@@ -24,18 +24,12 @@ using namespace msft;
 /// invalid IR.
 Operation *InstanceOp::getReferencedModule() {
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-  if (!topLevelModuleOp)
-    return nullptr;
-
+  assert(topLevelModuleOp && "Required to have a ModuleOp parent.");
   return topLevelModuleOp.lookupSymbol(moduleName());
 }
 
 StringAttr InstanceOp::getResultName(size_t idx) {
-  auto *module = getReferencedModule();
-  if (!module)
-    return {};
-
-  return hw::getModuleResultNameAttr(module, idx);
+  return hw::getModuleResultNameAttr(getReferencedModule(), idx);
 }
 
 /// Suggest a name for each result value based on the saved result names
@@ -54,6 +48,18 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       name += std::to_string(i);
     setNameFn(getResult(i), name);
   }
+}
+
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
+  if (module == nullptr)
+    return emitError("Cannot find module definition '") << moduleName() << "'";
+
+  // It must be some sort of module.
+  if (!hw::isAnyModule(module))
+    return emitError("symbol reference '")
+           << moduleName() << "' isn't a module";
+  return success();
 }
 
 #define GET_OP_CLASSES

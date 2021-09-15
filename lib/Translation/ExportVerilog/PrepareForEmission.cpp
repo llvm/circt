@@ -43,7 +43,7 @@ static bool isSimpleReadOrPort(Value v) {
 
 // Given an invisible instance, make sure all inputs are driven from
 // wires or ports.
-static void lowerBoundInstance(InstanceOp op, const SymbolCache &cache) {
+static void lowerBoundInstance(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -52,7 +52,7 @@ static void lowerBoundInstance(InstanceOp op, const SymbolCache &cache) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextOpNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule(&cache)).inputs) {
+  for (auto &port : getModulePortInfo(op).inputs) {
     auto src = op.getOperand(nextOpNo);
     ++nextOpNo;
 
@@ -83,7 +83,7 @@ static bool onlyUseIsAssign(Value v) {
 }
 
 // Ensure that each output of an instance are used only by a wire
-static void lowerInstanceResults(InstanceOp op, const SymbolCache &cache) {
+static void lowerInstanceResults(InstanceOp op) {
   Block *block = op->getParentOfType<HWModuleOp>().getBodyBlock();
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
@@ -92,7 +92,7 @@ static void lowerInstanceResults(InstanceOp op, const SymbolCache &cache) {
   auto namePrefixSize = nameTmp.size();
 
   size_t nextResultNo = 0;
-  for (auto &port : getModulePortInfo(op.getReferencedModule(&cache)).outputs) {
+  for (auto &port : getModulePortInfo(op).outputs) {
     auto result = op.getResult(nextResultNo);
     ++nextResultNo;
 
@@ -346,8 +346,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
 void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
-                                    const LoweringOptions &options,
-                                    const SymbolCache &cache) {
+                                    const LoweringOptions &options) {
   // True if these operations are in a procedural region.
   bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
 
@@ -358,7 +357,7 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
     // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prepareHWModule(region.front(), names, options, cache);
+        prepareHWModule(region.front(), names, options);
     }
 
     // Lower variadic fully-associative operations with more than two operands
@@ -402,10 +401,10 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
     TypeSwitch<Operation *>(&op)
         .Case<InstanceOp>([&](auto op) {
           // Anchor return values to wires early
-          lowerInstanceResults(op, cache);
+          lowerInstanceResults(op);
           // Anchor ports of bound instances
           if (op->hasAttr("doNotPrint"))
-            lowerBoundInstance(op, cache);
+            lowerBoundInstance(op);
           names.addLegalName(op, op.instanceName(), op);
         })
         .Case<WireOp, RegOp, LocalParamOp, InterfaceInstanceOp>(
