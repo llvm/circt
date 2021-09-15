@@ -439,7 +439,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK-NEXT:  %hits_1_7 = sv.wire sym @__foo__hits_1_7
     // CHECK-NEXT:  sv.assign %hits_1_7, [[IO]] : i1
-    %1455 = firrtl.asPassive %hits_1_7 : !firrtl.uint<1>
+    %1455 = builtin.unrealized_conversion_cast %hits_1_7 : !firrtl.uint<1> to !firrtl.uint<1>
   }
 
   // CHECK: sv.bind @[[bazSymbol:.+]] in @bindTest

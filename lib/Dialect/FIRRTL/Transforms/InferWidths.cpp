@@ -1374,9 +1374,10 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       // Handle operations whose output width matches the input width.
-      .Case<NotPrimOp, AsSIntPrimOp, AsUIntPrimOp, AsPassivePrimOp,
-            AsNonPassivePrimOp>(
+      .Case<NotPrimOp, AsSIntPrimOp, AsUIntPrimOp>(
           [&](auto op) { setExpr(op.getResult(), getExpr(op.input())); })
+      .Case<mlir::UnrealizedConversionCastOp>(
+          [&](auto op) { setExpr(op.getResult(0), getExpr(op.getOperand(0))); })
 
       // Handle operations with a single result type that always has a
       // well-known width.
