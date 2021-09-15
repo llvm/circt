@@ -311,10 +311,6 @@ ModulePortInfo hw::getModulePortInfo(Operation *op) {
   assert((isa<InstanceOp>(op) || isAnyModule(op)) &&
          "Can only get module ports from an instance or module");
 
-  // TODO: Remove when argNames/resultNames are stored on instances.
-  if (auto instance = dyn_cast<InstanceOp>(op))
-    op = instance.getReferencedModule();
-
   SmallVector<PortInfo> inputs, outputs;
   auto argTypes = getModuleType(op).getInputs();
 
