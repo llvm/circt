@@ -606,11 +606,10 @@ public:
     os << '\n';
   }
 
-  void emitTextWithSubstitutions(
-      StringRef string, Operation *op,
-      std::function<void(Value)> operandEmitter,
-      llvm::Optional<SmallVector<Operation *, 8>> symOps = None,
-      llvm::Optional<ModuleNameManager> names = None);
+  void emitTextWithSubstitutions(StringRef string, Operation *op,
+                                 std::function<void(Value)> operandEmitter,
+                                 ArrayRef<Operation *> symOps = {},
+                                 ModuleNameManager *names = nullptr);
 
 private:
   void operator=(const EmitterBase &) = delete;
@@ -620,15 +619,14 @@ private:
 
 void EmitterBase::emitTextWithSubstitutions(
     StringRef string, Operation *op, std::function<void(Value)> operandEmitter,
-    llvm::Optional<SmallVector<Operation *, 8>> symOps,
-    llvm::Optional<ModuleNameManager> names) {
+    ArrayRef<Operation *> symOps, ModuleNameManager *names) {
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
 
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
   // returning true.  This returns false if no substitution is found.
-  unsigned numSymOps = symOps == None ? 0 : symOps.getValue().size();
+  unsigned numSymOps = symOps.size();
   auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
     size_t start = 0;
     while (1) {
@@ -671,7 +669,7 @@ void EmitterBase::emitTextWithSubstitutions(
         operandEmitter(op->getOperand(operandNo));
       else if ((operandNo - op->getNumOperands()) < numSymOps) {
         unsigned symOpNum = operandNo - op->getNumOperands();
-        Operation *symOp = symOps.getValue()[symOpNum];
+        Operation *symOp = symOps[symOpNum];
         // Get the verilog name of the operation, add the name if not already
         // done.
         if (!names->hasName(symOp)) {
@@ -2122,7 +2120,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
     // Emit each chunk of the line.
     emitTextWithSubstitutions(
         lhsRhs.first, op, [&](Value operand) { emitExpression(operand, ops); },
-        symOps, names);
+        symOps, &names);
     string = lhsRhs.second;
   }
 
