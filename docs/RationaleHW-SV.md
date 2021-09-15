@@ -388,6 +388,28 @@ still many things in SystemVerilog that we cannot currently express in the SV
 dialect, this design makes it easy to incrementally build out new capabilities
 over time.
 
+#### Verbatim op
+The verbatim operation produces a typed value expressed by a string of
+SystemVerilog.  This can be used to access macros and other values that are
+only sensible as Verilog text.
+
+The text string is expected to have the highest precedence, so you should
+include parentheses in the string if it isn't a single token.  This is also
+assumed to not have side effects (use sv.verbatim.expr.se) if you need them.
+
+sv.verbatim allows operand substitutions with {{0}} syntax.
+For macro substitution, optional operands and symbols can be added after the 
+string. Verbatim op takes an optional attribute, which is an array of
+symbol references.
+The indexing begins at 0, and if the index is greater than the
+number of operands, then it is used to index into the symbols array.
+ExportVerilog will error out if the macro indices are greater than
+the total number of operands and symbols.
+For example, 
+sv.verbatim  "MACRO({{0}}, {{1}} reg={{4}}, {{3}})" 
+          (%add, %xor)  : i8,i8
+          {symRefs = [@reg1, @Mudule, @instance]}
+
 ### Cost Model
 
 The SV dialect is primarily designed for human consumption, not machines.  As

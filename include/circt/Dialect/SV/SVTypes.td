@@ -49,6 +49,8 @@ class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "sv::getInOutElementType($_self)">;
 
+// This type is an array of FlatSymbolRefAttr.
+//TODO: This should be moved to mlir, it does not depend on HW dialect.
 def SymRefArrayAttr: ArrayAttrBase<
     And<[
       // Guarantee this is an ArrayAttr first
