@@ -41,10 +41,20 @@ struct ModuleNameManager {
   }
 
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
-  StringRef getName(Operation *op) { return getName(ValueOrOp(op)); }
+  StringRef getName(Operation *op) {
+    // If this operation has a result, get the name of the result.
+    if (op->getNumResults() == 1 && hasName(op->getResult(0)))
+      return getName(op->getResult(0));
+    return getName(ValueOrOp(op));
+  }
 
   bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
-  bool hasName(Operation *op) { return nameTable.count(ValueOrOp(op)); }
+  bool hasName(Operation *op) {
+    // If this operation has a result, get the name of the result.
+    if (op->getNumResults() == 1 && hasName(op->getResult(0)))
+      return true;
+    return nameTable.count(ValueOrOp(op));
+  }
 
   void addOutputNames(StringRef name, Operation *module) {
     outputNames.push_back(addLegalName(nullptr, name, module));

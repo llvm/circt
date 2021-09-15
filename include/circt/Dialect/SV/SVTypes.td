@@ -49,7 +49,6 @@ class InOutElementConstraint<string value, string inoutValue>
   : TypesMatchWith<"type should be element of inout type",
                    inoutValue, value, "sv::getInOutElementType($_self)">;
 
-
 def SymRefArrayAttr: ArrayAttrBase<
     And<[
       // Guarantee this is an ArrayAttr first
@@ -61,4 +60,3 @@ def SymRefArrayAttr: ArrayAttrBase<
     ""> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
-
