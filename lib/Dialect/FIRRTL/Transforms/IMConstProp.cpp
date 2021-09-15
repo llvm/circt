@@ -111,18 +111,6 @@ public:
     return getValue().dyn_cast_or_null<IntegerAttr>();
   }
 
-  void dump() const {
-    if (isInvalidValue())
-      llvm::errs() << "invalid";
-    if (isUnknown())
-      llvm::errs() << "unknown";
-    if (isOverdefined())
-      llvm::errs() << "overdefined";
-    if (isConstant()) {
-      llvm::errs() << "constant(" << getConstant().getValue() << ")";
-    }
-  }
-
   /// Merge in the value of the 'rhs' lattice into this one. Returns true if the
   /// lattice value changed.
   bool mergeIn(LatticeValue rhs) {
