@@ -614,8 +614,7 @@ public:
 
   void emitTextWithSubstitutions(StringRef string, Operation *op,
                                  std::function<void(Value)> operandEmitter,
-                                 ArrayRef<Operation *> symOps = {},
-                                 ModuleNameManager *names = nullptr);
+                                 ArrayAttr symAttrs, ModuleNameManager &names);
 
 private:
   void operator=(const EmitterBase &) = delete;
@@ -625,10 +624,15 @@ private:
 
 void EmitterBase::emitTextWithSubstitutions(
     StringRef string, Operation *op, std::function<void(Value)> operandEmitter,
-    ArrayRef<Operation *> symOps, ModuleNameManager *names) {
+    ArrayAttr symAttrs, ModuleNameManager &names) {
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
 
+  SmallVector<Operation *, 8> symOps;
+  for (auto sym : symAttrs)
+    if (auto symOp =
+            state.symbolCache.getDefinition(sym.cast<FlatSymbolRefAttr>()))
+      symOps.push_back(symOp);
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
   // returning true.  This returns false if no substitution is found.
@@ -678,11 +682,11 @@ void EmitterBase::emitTextWithSubstitutions(
         Operation *symOp = symOps[symOpNum];
         // Get the verilog name of the operation, add the name if not already
         // done.
-        if (!names->hasName(symOp)) {
+        if (!names.hasName(symOp)) {
           StringRef symOpName = getSymOpName(symOp);
-          names->addName(symOp, symOpName);
+          names.addName(symOp, symOpName);
         }
-        os << names->getName(symOp);
+        os << names.getName(symOp);
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
@@ -873,9 +877,13 @@ private:
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
-  SubExprInfo visitVerbatimExprOp(Operation *op);
-  SubExprInfo visitSV(VerbatimExprOp op) { return visitVerbatimExprOp(op); }
-  SubExprInfo visitSV(VerbatimExprSEOp op) { return visitVerbatimExprOp(op); }
+  SubExprInfo visitVerbatimExprOp(Operation *op, ArrayAttr symbols);
+  SubExprInfo visitSV(VerbatimExprOp op) {
+    return visitVerbatimExprOp(op, op.symbols());
+  }
+  SubExprInfo visitSV(VerbatimExprSEOp op) {
+    return visitVerbatimExprOp(op, op.symbols());
+  }
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1305,11 +1313,11 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   return {Selection, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op) {
-  emitTextWithSubstitutions(op->getAttrOfType<StringAttr>("string").getValue(),
-                            op, [&](Value operand) {
-                              emitSubExpr(operand, LowestPrecedence, OOLBinary);
-                            });
+SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
+  emitTextWithSubstitutions(
+      op->getAttrOfType<StringAttr>("string").getValue(), op,
+      [&](Value operand) { emitSubExpr(operand, LowestPrecedence, OOLBinary); },
+      symbols, names);
 
   return {Unary, IsUnsigned};
 }
@@ -2126,7 +2134,7 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
     // Emit each chunk of the line.
     emitTextWithSubstitutions(
         lhsRhs.first, op, [&](Value operand) { emitExpression(operand, ops); },
-        symOps, &names);
+        op.symbols(), names);
     string = lhsRhs.second;
   }
 
