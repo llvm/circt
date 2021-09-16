@@ -139,10 +139,10 @@ static ParseResult parseMSFTModuleOp(OpAsmParser &parser,
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
 
-  // Add the attributes to the function arguments.
+  // Add the attributes to the module arguments.
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
 
-  // Parse the optional function body.
+  // Parse the optional module body.
   auto regionSuccess = parser.parseOptionalRegion(
       *result.addRegion(), entryArgs,
       entryArgs.empty() ? ArrayRef<Type>() : argTypes);

@@ -59,12 +59,6 @@ def MSFTModuleOp : MSFTOp<"module",
   let results = (outs);
   let regions = (region OneOrNoBlocksRegion:$body);
 
-  // let skipDefaultBuilders = 1;
-  // let builders = [
-  //   OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
-  //                  CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
-  // ];
-
   let extraClassDeclaration = [{
     using FunctionLike::front;
     using FunctionLike::getBody;
@@ -113,7 +107,6 @@ def MSFTModuleOp : MSFTOp<"module",
 
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
-  // let verifier = "return ::verify$cppClass(*this);";
 }
 
 
@@ -123,11 +116,5 @@ def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
 
   let arguments = (ins Variadic<AnyType>:$operands);
 
-  // let builders = [
-  //   OpBuilder<(ins), "build($_builder, $_state, llvm::None);">
-  // ];
-
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
-
-  // let verifier = "return ::verifyOutputOp(this);";
 }
