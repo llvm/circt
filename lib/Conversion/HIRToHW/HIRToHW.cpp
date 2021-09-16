@@ -29,6 +29,7 @@ private:
   LogicalResult visitOp(hir::CommentOp);
   LogicalResult visitOp(hir::CallOp);
   LogicalResult visitOp(hir::TimeOp);
+  LogicalResult visitOp(hir::WhileOp);
 
 private:
   OpBuilder *builder;
@@ -62,7 +63,11 @@ LogicalResult HIRToHWPass::visitOp(hir::BusOp op) {
   return success();
 }
 
-LogicalResult HIRToHWPass::visitOp(hir::CommentOp) { return success(); }
+LogicalResult HIRToHWPass::visitOp(hir::CommentOp op) {
+  builder->create<sv::VerbatimOp>(builder->getUnknownLoc(),
+                                  "//COMMENT: " + op.comment());
+  return success();
+}
 
 LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
   auto filteredOperands = filterCallOpArgs(op.getFuncType(), op.operands());
@@ -98,17 +103,18 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
       op.getLoc(), hwResultTypes, instanceName, op.calleeAttr(), hwInputs,
       op->getAttr("params").dyn_cast_or_null<DictionaryAttr>(), StringAttr());
 
+  // Map callop input send buses to the results of the instance op and replace
+  // all prev uses of the placeholder hw ssa vars corresponding to these send
+  // buses.
   uint64_t i;
-
-  // Replace the placeholder HW SSA var (for HIR buses) with the results of the
-  // instance op.
   for (i = 0; i < sendBuses.size(); i++) {
     auto placeHolderSSAVar = mapHIRToHWValue[sendBuses[i]];
     assert(placeHolderSSAVar);
     placeHolderSSAVar.replaceAllUsesWith(instanceOp.getResult(i));
+    mapHIRToHWValue[sendBuses[i]] = instanceOp.getResult(i);
   }
 
-  // Map the HIR SSA vars to HW SSA vars.
+  // Map the CallOp return vars to instance op return vars.
   for (uint64_t j = 0; i + j < instanceOp.getNumResults(); j++)
     mapHIRToHWValue[op.getResult(j)] = instanceOp.getResult(i + j);
 
@@ -134,6 +140,8 @@ LogicalResult HIRToHWPass::visitOp(hir::TimeOp op) {
   mapHIRToHWValue[op.res()] = tOut;
   return success();
 }
+
+LogicalResult HIRToHWPass::visitOp(hir::WhileOp) { return success(); }
 
 LogicalResult HIRToHWPass::visitOp(hir::FuncExternOp op) {
   builder = new OpBuilder(op);
@@ -204,6 +212,8 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
   if (auto op = dyn_cast<hir::CallOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::TimeOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::WhileOp>(operation))
     return visitOp(op);
 
   // operation->emitRemark() << "Unsupported operation for hir-to-hw pass.";
