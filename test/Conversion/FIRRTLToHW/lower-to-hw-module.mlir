@@ -1,8 +1,6 @@
 // RUN: circt-opt -lower-firrtl-to-hw %s -verify-diagnostics | FileCheck %s
 
-// The firrtl.circuit should be removed, the main module name moved to an
-// attribute on the module.
-// CHECK-LABEL: {{^}}module attributes {firrtl.mainModule = "Simple"} {
+// The firrtl.circuit should be removed.
 // CHECK-NOT: firrtl.circuit
 
 // We should get a large header boilerplate.
@@ -20,7 +18,7 @@ firrtl.circuit "Simple" {
                                 FORMAT = "xyz_timeout=%d\0A",
                                 WIDTH = 32 : i8}}
 
-   // CHECK-LABEL: hw.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (out4: i4) {
+   // CHECK-LABEL: hw.module @Simple(%in1: i4, %in2: i2, %in3: i8) -> (out4: i4) attributes {firrtl.moduleHierarchyFile
    firrtl.module @Simple(in %in1: !firrtl.uint<4>,
                          in %in2: !firrtl.uint<2>,
                          in %in3: !firrtl.sint<8>,

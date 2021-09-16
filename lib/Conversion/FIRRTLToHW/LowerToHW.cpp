@@ -41,6 +41,10 @@ static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 
+/// Attribute that indicates that the module hierarchy starting at the annotated
+/// module should be dumped to a file.
+static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
+
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
 static Type lowerType(Type type) {
@@ -425,19 +429,27 @@ void FIRRTLModuleLowering::runOnOperation() {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
 
+  // Add attributes specific to the new main module, since the notion of a
+  // "main" module goes away after lowering to HW.
+  auto *newMainModule = state.oldToNewModuleMap[circuit.getMainModule()];
+  newMainModule->setAttr(
+      moduleHierarchyFileAttrName,
+      hw::OutputFileAttr::get(
+          StringAttr::get(circuit.getContext(), ""),
+          StringAttr::get(circuit.getContext(), "testharness_hier.json"),
+          /*exclude_from_filelist=*/
+          BoolAttr::get(circuit.getContext(), true),
+          /*exclude_replicated_ops=*/
+          BoolAttr::get(circuit.getContext(), true), circuit.getContext()));
+
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
     oldNew.first->erase();
 
-  // Now that the modules are moved over, remove the Circuit.  We pop the 'main
-  // module' specified in the Circuit into an attribute on the top level module.
-  getOperation()->setAttr(
-      "firrtl.mainModule",
-      StringAttr::get(circuit.getContext(), circuit.name()));
-
   // Emit all the macros and preprocessor gunk at the start of the file.
   lowerFileHeader(circuit, state);
 
+  // Now that the modules are moved over, remove the Circuit.
   circuit.erase();
 }
 
@@ -723,8 +735,16 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
   if (auto outputFile = oldModule->getAttr("output_file"))
     newModule->setAttr("output_file", outputFile);
+  // Mark the design under test as a module of interest for exporting module
+  // hierarchy information.
   if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
-    newModule->setAttr("firrtl.DesignUnderTest", builder.getUnitAttr());
+    newModule->setAttr(moduleHierarchyFileAttrName,
+                       hw::OutputFileAttr::get(
+                           builder.getStringAttr(""),
+                           builder.getStringAttr("module_hier.json"),
+                           /*exclude_from_filelist=*/builder.getBoolAttr(true),
+                           /*exclude_replicated_ops=*/builder.getBoolAttr(true),
+                           &getContext()));
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;
