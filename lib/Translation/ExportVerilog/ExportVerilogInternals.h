@@ -42,17 +42,17 @@ struct ModuleNameManager {
 
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(Operation *op) {
-    // If this operation has a result, get the name of the result.
-    if (op->getNumResults() == 1 && hasName(op->getResult(0)))
+    // If RegOp or WireOp, then result has the name.
+    if (isa<sv::WireOp, sv::RegOp>(op))
       return getName(op->getResult(0));
     return getName(ValueOrOp(op));
   }
 
   bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
   bool hasName(Operation *op) {
-    // If this operation has a result, get the name of the result.
-    if (op->getNumResults() == 1 && hasName(op->getResult(0)))
-      return true;
+    // If RegOp or WireOp, then result has the name.
+    if (isa<sv::WireOp, sv::RegOp>(op))
+      return nameTable.count(op->getResult(0));
     return nameTable.count(ValueOrOp(op));
   }
 

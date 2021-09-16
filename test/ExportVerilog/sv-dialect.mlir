@@ -786,7 +786,6 @@ hw.module @DontDuplicateSideEffectingVerbatim() {
     %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
     // CHECK: automatic logic [41:0] _T_0 = b;
     %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [@regSym]}
-    // CHECK: automatic logic [41:0] _T = SIDEEFFECT;
     // CHECK: a = _T;
     sv.bpassign %a, %tmp : i42
     // CHECK: a = _T;
