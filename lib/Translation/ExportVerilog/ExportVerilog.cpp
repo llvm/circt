@@ -84,10 +84,16 @@ static StringRef getSymOpName(Operation *symOp) {
       .Case<InstanceOp>([&](InstanceOp op) { return op.getName().getValue(); })
       .Case<WireOp>([&](WireOp op) { return op.name(); })
       .Case<RegOp>([&](RegOp op) { return op.name(); })
+      .Case<InterfaceOp>([&](InterfaceOp op) {
+        return getVerilogModuleNameAttr(op).getValue();
+      })
+      .Case<InterfaceSignalOp>(
+          [&](InterfaceSignalOp op) { return op.sym_name(); })
+      .Case<InterfaceModportOp>(
+          [&](InterfaceModportOp op) { return op.sym_name(); })
       .Default([&](Operation *op) {
-        return op->hasAttrOfType<StringAttr>("name")
-                   ? op->getAttrOfType<StringAttr>("name").getValue()
-                   : "";
+        op->emitError("unknown operation with symbol, cannot determine name");
+        return "";
       });
 }
 
@@ -3334,16 +3340,9 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
     for (Operation &op : *moduleOp.getBodyBlock()) {
       // Populate the symbolCache with all operations that can define a symbol.
-      if (auto instance = dyn_cast<InstanceOp>(op)) {
-        if (auto sym = instance.sym_nameAttr())
-          symbolCache.addDefinition(sym, instance);
-      } else if (auto reg = dyn_cast<RegOp>(op)) {
-        if (auto sym = reg.sym_nameAttr())
-          symbolCache.addDefinition(sym, reg);
-      } else if (auto wire = dyn_cast<WireOp>(op)) {
-        if (auto sym = wire.sym_nameAttr())
-          symbolCache.addDefinition(sym, wire);
-      }
+      if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+        if (auto name = symOp.getNameAttr())
+          symbolCache.addDefinition(name, symOp);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     }
