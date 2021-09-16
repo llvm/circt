@@ -230,8 +230,8 @@ LogicalResult SExtOp::canonicalize(SExtOp op, PatternRewriter &rewriter) {
     // appropriate constant.
     unsigned numBits =
         op.getType().getWidth() - op.input().getType().getIntOrFloatBitWidth();
-    APInt cstBits = knownBits.isNegative() ? APInt::getAllOnesValue(numBits)
-                                           : APInt(numBits, 0);
+    APInt cstBits = knownBits.isNegative() ? APInt::getAllOnes(numBits)
+                                           : APInt::getZero(numBits);
     auto signBits = rewriter.create<hw::ConstantOp>(op.getLoc(), cstBits);
     rewriter.replaceOpWithNewOp<ConcatOp>(op, signBits, op.input());
     return success();
@@ -259,11 +259,11 @@ OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
     if (shift == 0)
       return getOperand(0);
     if (width <= shift)
-      return getIntAttr(APInt::getNullValue(width), getContext());
+      return getIntAttr(APInt::getZero(width), getContext());
   }
 
   return constFoldBinaryOp<IntegerAttr>(
-      operands, [](APInt a, APInt b) { return a.shl(b); });
+      operands, [](const APInt &a, const APInt &b) { return a.shl(b); });
 }
 
 LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
@@ -280,7 +280,7 @@ LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
     return failure();
 
   auto zeros =
-      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
+      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(shift));
 
   // Remove the high bits which would be removed by the Shl.
   auto extract =
@@ -298,10 +298,10 @@ OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
 
     unsigned width = getType().getIntOrFloatBitWidth();
     if (width <= shift)
-      return getIntAttr(APInt::getNullValue(width), getContext());
+      return getIntAttr(APInt::getZero(width), getContext());
   }
   return constFoldBinaryOp<IntegerAttr>(
-      operands, [](APInt a, APInt b) { return a.lshr(b); });
+      operands, [](const APInt &a, const APInt &b) { return a.lshr(b); });
 }
 
 LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
@@ -318,7 +318,7 @@ LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
     return failure();
 
   auto zeros =
-      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getNullValue(shift));
+      rewriter.create<hw::ConstantOp>(op.getLoc(), APInt::getZero(shift));
 
   // Remove the low bits which would be removed by the Shr.
   auto extract =
@@ -334,7 +334,7 @@ OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
       return getOperand(0);
   }
   return constFoldBinaryOp<IntegerAttr>(
-      operands, [](APInt a, APInt b) { return a.ashr(b); });
+      operands, [](const APInt &a, const APInt &b) { return a.ashr(b); });
 }
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
@@ -723,7 +723,7 @@ static bool canonicalizeLogicalCstWithConcat(Operation *logicalOp,
 }
 
 OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
-  APInt value = APInt::getAllOnesValue(getType().getWidth());
+  APInt value = APInt::getAllOnes(getType().getWidth());
 
   // and(x, 01, 10) -> 00 -- annulment.
   for (auto operand : constants) {
@@ -751,7 +751,8 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
         auto srcVal = xorOp.getOperand(0);
         for (Value arg2 : inputs())
           if (arg2 == srcVal)
-            return getIntAttr(APInt(getType().getWidth(), 0), getContext());
+            return getIntAttr(APInt::getZero(getType().getWidth()),
+                              getContext());
       }
 
   // Constant fold
@@ -815,18 +816,17 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
           unsigned resultWidth = op.getType().getIntOrFloatBitWidth();
           auto trailingZeros = value.countTrailingZeros();
 
-          // We have to dance around the top and bottom bits because we can't
-          // make zero bit wide APInts.
+          // Don't add zero bit constants unnecessarily.
           SmallVector<Value, 3> concatOperands;
           if (trailingZeros != resultWidth - 1) {
             auto highZeros = rewriter.create<hw::ConstantOp>(
-                op.getLoc(), APInt(resultWidth - trailingZeros - 1, 0));
+                op.getLoc(), APInt::getZero(resultWidth - trailingZeros - 1));
             concatOperands.push_back(highZeros);
           }
           concatOperands.push_back(sextOperand);
           if (trailingZeros != 0) {
             auto lowZeros = rewriter.create<hw::ConstantOp>(
-                op.getLoc(), APInt(trailingZeros, 0));
+                op.getLoc(), APInt::getZero(trailingZeros));
             concatOperands.push_back(lowZeros);
           }
           rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(),
@@ -855,7 +855,7 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
-  APInt value(/*numBits=*/getType().getWidth(), 0, /*isSigned=*/false);
+  auto value = APInt::getZero(getType().getWidth());
 
   // or(x, 10, 01) -> 11
   for (auto operand : constants) {
@@ -883,7 +883,8 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
         auto srcVal = xorOp.getOperand(0);
         for (Value arg2 : inputs())
           if (arg2 == srcVal)
-            return getIntAttr(APInt(getType().getWidth(), -1), getContext());
+            return getIntAttr(APInt::getAllOnes(getType().getWidth()),
+                              getContext());
       }
 
   // Constant fold
@@ -1169,12 +1170,12 @@ OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
 
   // sub(x - x) -> 0
   if (rhs() == lhs())
-    return getIntAttr(APInt(lhs().getType().getIntOrFloatBitWidth(), 0),
+    return getIntAttr(APInt::getZero(lhs().getType().getIntOrFloatBitWidth()),
                       getContext());
 
   // Constant fold
-  return constFoldBinaryOp<IntegerAttr>(constants,
-                                        [](APInt a, APInt b) { return a - b; });
+  return constFoldBinaryOp<IntegerAttr>(
+      constants, [](const APInt &a, const APInt &b) { return a - b; });
 }
 
 LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
@@ -1323,7 +1324,7 @@ LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
   }
 
   // mul(..., 1) -> mul(...) -- identity
-  if (matchPattern(inputs.back(), m_RConstant(value)) && (value == 1u)) {
+  if (matchPattern(inputs.back(), m_RConstant(value)) && value.isOne()) {
     rewriter.replaceOpWithNewOp<MulOp>(op, op.getType(), inputs.drop_back());
     return success();
   }
@@ -1357,9 +1358,10 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
       return {};
   }
 
-  return constFoldBinaryOp<IntegerAttr>(constants, [](APInt a, APInt b) {
-    return isSigned ? a.sdiv(b) : a.udiv(b);
-  });
+  return constFoldBinaryOp<IntegerAttr>(
+      constants, [](const APInt &a, const APInt &b) {
+        return isSigned ? a.sdiv(b) : a.udiv(b);
+      });
 }
 
 OpFoldResult DivUOp::fold(ArrayRef<Attribute> constants) {
@@ -1375,7 +1377,7 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
   if (auto rhs_value = constants[1].dyn_cast_or_null<IntegerAttr>()) {
     // modu(x, 1) -> 0, mods(x, 1) -> 0
     if (rhs_value.getValue() == 1)
-      return getIntAttr(APInt(op.getType().getIntOrFloatBitWidth(), 0),
+      return getIntAttr(APInt::getZero(op.getType().getIntOrFloatBitWidth()),
                         op.getContext());
 
     // If the divisor is zero, do not fold for now.
@@ -1386,13 +1388,14 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
   if (auto lhs_value = constants[0].dyn_cast_or_null<IntegerAttr>()) {
     // modu(0, x) -> 0, mods(0, x) -> 0
     if (lhs_value.getValue().isZero())
-      return getIntAttr(APInt(op.getType().getIntOrFloatBitWidth(), 0),
+      return getIntAttr(APInt::getZero(op.getType().getIntOrFloatBitWidth()),
                         op.getContext());
   }
 
-  return constFoldBinaryOp<IntegerAttr>(constants, [](APInt a, APInt b) {
-    return isSigned ? a.srem(b) : a.urem(b);
-  });
+  return constFoldBinaryOp<IntegerAttr>(
+      constants, [](const APInt &a, const APInt &b) {
+        return isSigned ? a.srem(b) : a.urem(b);
+      });
 }
 
 OpFoldResult ModUOp::fold(ArrayRef<Attribute> constants) {
@@ -1425,7 +1428,7 @@ OpFoldResult ConcatOp::fold(ArrayRef<Attribute> constants) {
   for (auto attr : constants) {
     auto chunk = attr.cast<IntegerAttr>().getValue();
     nextInsertion -= chunk.getBitWidth();
-    result |= chunk.zext(resultWidth) << nextInsertion;
+    result.insertBits(chunk, nextInsertion);
   }
 
   return getIntAttr(result, getContext());
@@ -1960,7 +1963,7 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
   // which we bail out early), otherwise build a list of values to concat and a
   // smaller constant to compare against.
   SmallVector<Value> newConcatOperands;
-  APInt newConstant;
+  auto newConstant = APInt::getZeroWidth();
 
   // Ok, some (maybe all) bits are known and some others may be unknown.
   // Extract out segments of the operand and compare against the
@@ -1987,15 +1990,14 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
 
     // Add this info to the concat we're generating.
     newConcatOperands.push_back(spanOperand);
-    newConstant = (newConstant.zext(newConstant.getBitWidth() + unknownBits)
-                   << unknownBits);
-    newConstant |= spanConstant.zext(newConstant.getBitWidth());
+    // TODO (llvm merge): newConstant = newConstant.concat(spanConstant);
+    newConstant =
+        newConstant.zext(spanConstant.getBitWidth() + newConstant.getBitWidth())
+        << spanConstant.getBitWidth();
+    newConstant.insertBits(spanConstant, 0);
 
-    // Drop the unknown bits in prep for the next chunk.  Dance around APInts
-    // limitation of not being able to do zero bit things.
+    // Drop the unknown bits in prep for the next chunk.
     unsigned newWidth = bitsKnown.getBitWidth() - unknownBits;
-    if (newWidth == 0)
-      break;
     bitsKnown = bitsKnown.trunc(newWidth);
     knownMSB = bitsKnown.countLeadingOnes();
   }
@@ -2012,11 +2014,6 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
   // If we have a single operand remaining, use it, otherwise form a concat.
   Value concatResult =
       rewriter.createOrFold<ConcatOp>(operand.getLoc(), newConcatOperands);
-
-  // The default APInt constructor adds an extra bit to the top of the APInt
-  // constructor, trim it off now.
-  newConstant =
-      newConstant.trunc(concatResult.getType().getIntOrFloatBitWidth());
 
   // Form the comparison against the smaller constant.
   auto newConstantOp = rewriter.create<hw::ConstantOp>(
@@ -2038,7 +2035,7 @@ static void combineEqualityICmpWithXorOfConstant(ICmpOp cmpOp, XorOp xorOp,
   case 1:
     // This isn't common but is defined so we need to handle it.
     newLHS = rewriter.create<hw::ConstantOp>(xorOp.getLoc(),
-                                             APInt(rhs.getBitWidth(), 0));
+                                             APInt::getZero(rhs.getBitWidth()));
     break;
   case 2:
     // The binary case is the most common.
