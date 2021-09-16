@@ -37,11 +37,13 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
   }];
 
   let builders = [
-    OpBuilder<(ins "Type":$resultType, "Twine":$string),
+    OpBuilder<(ins "Type":$resultType, "Twine":$string,
+                CArg<"ValueRange", "{}">:$operands),
                "build(odsBuilder, odsState, resultType, "
-               "odsBuilder.getStringAttr(string), ValueRange{}," 
+               "odsBuilder.getStringAttr(string), operands," 
                "odsBuilder.getArrayAttr({}));">,
-    OpBuilder<(ins "Type":$resultType, "StringAttr":$string, "ValueRange":$operands),
+    OpBuilder<(ins "Type":$resultType, "StringAttr":$string,
+                CArg<"ValueRange", "{}">:$operands),
                "build(odsBuilder, odsState, resultType, "
                "string, operands," 
                "odsBuilder.getArrayAttr({}));">
