@@ -12,9 +12,11 @@
 
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/ModuleImplementation.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/FunctionImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
@@ -60,6 +62,130 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitError("symbol reference '")
            << moduleName() << "' isn't a module";
   return success();
+}
+
+static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
+  for (auto &argAttr : attrs)
+    if (argAttr.first == name)
+      return true;
+  return false;
+}
+
+static ParseResult parseMSFTModuleOp(OpAsmParser &parser,
+                                     OperationState &result) {
+  using namespace mlir::function_like_impl;
+
+  auto loc = parser.getCurrentLocation();
+
+  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  SmallVector<NamedAttrList, 4> argAttrs;
+  SmallVector<NamedAttrList, 4> resultAttrs;
+  SmallVector<Type, 4> argTypes;
+  SmallVector<Type, 4> resultTypes;
+  auto &builder = parser.getBuilder();
+
+  // Parse the name as a symbol.
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  // Parse the parameters
+  DictionaryAttr paramsAttr;
+  if (parser.parseAttribute(paramsAttr))
+    return failure();
+  result.addAttribute("parameters", paramsAttr);
+
+  // Parse the function signature.
+  bool isVariadic = false;
+  SmallVector<Attribute> resultNames;
+  if (hw::module_like_impl::parseModuleFunctionSignature(
+          parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
+          resultAttrs, resultNames))
+    return failure();
+
+  // Record the argument and result types as an attribute.  This is necessary
+  // for external modules.
+  auto type = builder.getFunctionType(argTypes, resultTypes);
+  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+
+  // If function attributes are present, parse them.
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  auto *context = result.getContext();
+
+  if (hasAttribute("argNames", result.attributes) ||
+      hasAttribute("resultNames", result.attributes)) {
+    parser.emitError(
+        loc, "explicit argNames and resultNames attributes not allowed");
+    return failure();
+  }
+
+  // Use the argument and result names if not already specified.
+  SmallVector<Attribute> argNames;
+  if (!entryArgs.empty()) {
+    for (auto &arg : entryArgs)
+      argNames.push_back(
+          hw::module_like_impl::getPortNameAttr(context, arg.name));
+  } else if (!argTypes.empty()) {
+    // The parser returns empty names in a special way.
+    argNames.assign(argTypes.size(), StringAttr::get(context, ""));
+  }
+
+  result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
+
+  assert(argAttrs.size() == argTypes.size());
+  assert(resultAttrs.size() == resultTypes.size());
+
+  // Add the attributes to the module arguments.
+  addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
+
+  // Parse the optional module body.
+  auto regionSuccess = parser.parseOptionalRegion(
+      *result.addRegion(), entryArgs,
+      entryArgs.empty() ? ArrayRef<Type>() : argTypes);
+  if (regionSuccess.hasValue() && failed(*regionSuccess))
+    return failure();
+
+  return success();
+}
+
+static void printMSFTModuleOp(OpAsmPrinter &p, MSFTModuleOp mod) {
+  using namespace mlir::function_like_impl;
+
+  FunctionType fnType = mod.getType();
+  auto argTypes = fnType.getInputs();
+  auto resultTypes = fnType.getResults();
+
+  // Print the operation and the function name.
+  p << ' ';
+  p.printSymbolName(SymbolTable::getSymbolName(mod).getValue());
+
+  // Print the parameterization.
+  p << ' ';
+  p.printAttribute(mod.parametersAttr());
+
+  p << ' ';
+  bool needArgNamesAttr = false;
+  hw::module_like_impl::printModuleSignature(
+      p, mod, argTypes, /*isVariadic=*/false, resultTypes, needArgNamesAttr);
+
+  SmallVector<StringRef, 3> omittedAttrs;
+  if (!needArgNamesAttr)
+    omittedAttrs.push_back("argNames");
+  omittedAttrs.push_back("resultNames");
+  omittedAttrs.push_back("parameters");
+
+  printFunctionAttributes(p, mod, argTypes.size(), resultTypes.size(),
+                          omittedAttrs);
+
+  // Print the body if this is not an external function.
+  Region &body = mod.getBody();
+  if (!body.empty())
+    p.printRegion(body, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/true);
 }
 
 #define GET_OP_CLASSES

@@ -10,3 +10,14 @@ hw.module @top () {
   // CHECK: %foo.x = msft.instance "foo" @fooMod() : () -> i32
   // HWLOW: %foo.x = hw.instance "foo" @fooMod() -> (x: i32)
 }
+
+// CHECK-LABEL: msft.module @B {WIDTH = 1 : i64} (%a: i1) -> (nameOfPortInSV: i1) {
+msft.module @B { "WIDTH" = 1 } (%a: i1) -> (nameOfPortInSV: i1) {
+  %0 = comb.or %a, %a : i1
+  // CHECK: comb.or %a, %a : i1
+  %1 = comb.and %a, %a : i1
+  msft.output %0, %1: i1, i1
+}
+
+// CHECK-LABEL: msft.module @UnGenerated {DEPTH = 3 : i64} (%a: i1) -> (nameOfPortInSV: i1)
+msft.module @UnGenerated { DEPTH = 3 } (%a: i1) -> (nameOfPortInSV: i1)

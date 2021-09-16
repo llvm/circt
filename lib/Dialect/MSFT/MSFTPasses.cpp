@@ -191,6 +191,8 @@ void LowerToHWPass::runOnOperation() {
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(*ctxt);
   target.addIllegalDialect<MSFTDialect>();
+  target.addLegalOp<MSFTModuleOp>(); // TODO: Remove me!
+  target.addLegalOp<OutputOp>();     // TODO: Remove me!
   target.addLegalDialect<hw::HWDialect>();
 
   // Add all the conversion patterns.
