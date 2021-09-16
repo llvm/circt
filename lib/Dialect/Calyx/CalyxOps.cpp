@@ -683,7 +683,8 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 
   std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
   std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
-  SmallVector<Attribute> portAttributes;
+  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>>
+      portIOAttributes;
   SmallVector<Direction, 8> portDirections;
   // Avoid using llvm::partition or llvm::sort to preserve relative ordering
   // between individual inputs and outputs.
@@ -691,10 +692,12 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
     bool isInput = port.direction == Direction::Input;
     (isInput ? portIOTypes.first : portIOTypes.second).push_back(port.type);
     (isInput ? portIONames.first : portIONames.second).push_back(port.name);
-    portAttributes.push_back(port.attributes);
+    (isInput ? portIOAttributes.first : portIOAttributes.second)
+        .push_back(port.attributes);
   }
   auto portTypes = concat(portIOTypes.first, portIOTypes.second);
   auto portNames = concat(portIONames.first, portIONames.second);
+  auto portAttributes = concat(portIOAttributes.first, portIOAttributes.second);
 
   // Build the function type of the component.
   auto functionType = builder.getFunctionType(portTypes, {});
