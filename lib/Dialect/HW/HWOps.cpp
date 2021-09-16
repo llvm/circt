@@ -20,18 +20,6 @@
 using namespace circt;
 using namespace hw;
 
-/// Return true if this string parses as a valid MLIR keyword, false otherwise.
-static bool isValidKeyword(StringRef name) {
-  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
-    return false;
-  for (auto c : name.drop_front()) {
-    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
-      return false;
-  }
-
-  return true;
-}
-
 /// Return true if the specified operation is a combinatorial logic op.
 bool hw::isCombinatorial(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
@@ -475,71 +463,6 @@ FunctionType getHWModuleOpType(Operation *op) {
   return typeAttr.getValue().cast<FunctionType>();
 }
 
-static void printModuleSignature(OpAsmPrinter &p, Operation *op,
-                                 ArrayRef<Type> argTypes, bool isVariadic,
-                                 ArrayRef<Type> resultTypes,
-                                 bool &needArgNamesAttr) {
-  using namespace mlir::function_like_impl;
-
-  Region &body = op->getRegion(0);
-  bool isExternal = body.empty();
-  SmallString<32> resultNameStr;
-
-  p << '(';
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    if (i > 0)
-      p << ", ";
-
-    auto argName = getModuleArgumentName(op, i);
-
-    if (!isExternal) {
-      // Get the printed format for the argument name.
-      resultNameStr.clear();
-      llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(body.front().getArgument(i), tmpStream);
-
-      // If the name wasn't printable in a way that agreed with argName, make
-      // sure to print out an explicit argNames attribute.
-      if (tmpStream.str().drop_front() != argName)
-        needArgNamesAttr = true;
-
-      p << tmpStream.str() << ": ";
-    } else if (!argName.empty()) {
-      p << '%' << argName << ": ";
-    }
-
-    p.printType(argTypes[i]);
-    p.printOptionalAttrDict(getArgAttrs(op, i));
-  }
-
-  if (isVariadic) {
-    if (!argTypes.empty())
-      p << ", ";
-    p << "...";
-  }
-
-  p << ')';
-
-  // We print result types specially since we support named arguments.
-  if (!resultTypes.empty()) {
-    p << " -> (";
-    for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
-      if (i != 0)
-        p << ", ";
-      StringAttr name = getModuleResultNameAttr(op, i);
-      if (isValidKeyword(name.getValue()))
-        p << name.getValue();
-      else
-        p << name;
-      p << ": ";
-
-      p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(getResultAttrs(op, i));
-    }
-    p << ')';
-  }
-}
-
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_like_impl;
@@ -557,8 +480,8 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   }
 
   bool needArgNamesAttr = false;
-  printModuleSignature(p, op, argTypes, /*isVariadic=*/false, resultTypes,
-                       needArgNamesAttr);
+  module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
+                                         resultTypes, needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (modKind == GenMod)
@@ -866,7 +789,7 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
     // Print this as a bareword if it can be parsed as an MLIR keyword,
     // otherwise print it as a quoted string.
     StringAttr name = portList[nextPort++].name;
-    if (isValidKeyword(name.getValue()))
+    if (module_like_impl::isValidKeyword(name.getValue()))
       p << name.getValue();
     else
       p << name;
