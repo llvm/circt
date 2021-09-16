@@ -3412,9 +3412,15 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<InterfaceOp>([&](auto intf) {
+        .Case<InterfaceOp>([&](InterfaceOp intf) {
           // Build the IR cache.
           symbolCache.addDefinition(intf.getNameAttr(), intf);
+          // Populate the symbolCache with all operations that can define a
+          // symbol.
+          for (auto &op : *intf.getBodyBlock())
+            if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+              if (auto name = symOp.getNameAttr())
+                symbolCache.addDefinition(name, symOp);
 
           // Emit into a separate file named after the interface.
           if (attr || separateModules)
