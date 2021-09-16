@@ -474,6 +474,11 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
     // Otherwise we have a result from the instance.  We need to forward results
     // from the body to this instance result's SSA value, so remember it.
     BlockArgument modulePortVal = fModule.getPortArgument(resultNo);
+
+    // Mark don't touch results as overdefined
+    if (AnnotationSet::get(modulePortVal).hasDontTouch())
+      markOverdefined(modulePortVal);
+
     resultPortToInstanceResultMapping[modulePortVal].push_back(instancePortVal);
 
     // If there is already a value known for modulePortVal make sure to forward
