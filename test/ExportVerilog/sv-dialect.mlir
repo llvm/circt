@@ -3,7 +3,7 @@
 // CHECK-LABEL: module M1(
 hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.reg : !hw.inout<i42>
-  %forceWire = sv.wire : !hw.inout<i1>
+  %forceWire = sv.wire sym @wire1 : !hw.inout<i1>
  
   %c11_i42 = hw.constant 11: i42
   // CHECK: localparam [41:0] param_x = 42'hB;
@@ -20,11 +20,12 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
-  // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond)
+  // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond & forceWire)
       %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
+      %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [@wire1] }
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
-      %tmp3 = comb.and %tmp, %tmp1, %tmp2, %tmp2, %cond : i1
+      %tmp3 = comb.and %tmp, %tmp1, %tmp2, %tmp2, %cond, %verb_tmp : i1
       sv.if %tmp3 {
   // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
         sv.fwrite "Hi\n"
@@ -778,15 +779,23 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (aa: i3, bb: i3){
 // CHECK-LABEL: module DontDuplicateSideEffectingVerbatim(
 hw.module @DontDuplicateSideEffectingVerbatim() {
   %a = sv.reg : !hw.inout<i42>
+  %b = sv.reg sym @regSym : !hw.inout<i42>
 
   sv.initial {
     // CHECK: automatic logic [41:0] _T = SIDEEFFECT;
     %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
+    // CHECK: automatic logic [41:0] _T_0 = b;
+    %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [@regSym]}
+    // CHECK: automatic logic [41:0] _T = SIDEEFFECT;
     // CHECK: a = _T;
     sv.bpassign %a, %tmp : i42
     // CHECK: a = _T;
     sv.bpassign %a, %tmp : i42
 
+    // CHECK: a = _T_0;
+    sv.bpassign %a, %verb_tmp : i42
+    // CHECK: a = _T_0;
+    sv.bpassign %a, %verb_tmp : i42
     %tmp2 = sv.verbatim.expr "NO_EFFECT_" : () -> i42
     // CHECK: a = NO_EFFECT_;
     sv.bpassign %a, %tmp2 : i42
