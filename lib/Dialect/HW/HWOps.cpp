@@ -96,7 +96,7 @@ void ConstantOp::getAsmResultNames(
 
   // Sugar i1 constants with 'true' and 'false'.
   if (intTy.getWidth() == 1)
-    return setNameFn(getResult(), intCst.isNullValue() ? "false" : "true");
+    return setNameFn(getResult(), intCst.isZero() ? "false" : "true");
 
   // Otherwise, build a complex name with the value and type.
   SmallVector<char, 32> specialNameBuffer;

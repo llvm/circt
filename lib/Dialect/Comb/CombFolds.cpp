@@ -549,8 +549,8 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
     if (auto cstRHS = inputOp->getOperand(1).getDefiningOp<hw::ConstantOp>()) {
       auto extractedCst =
           cstRHS.getValue().lshr(op.lowBit()).trunc(op.getType().getWidth());
-      if ((isa<AndOp>(inputOp) && extractedCst.isAllOnesValue()) ||
-          (isa<OrOp, XorOp>(inputOp) && extractedCst.isNullValue())) {
+      if ((isa<AndOp>(inputOp) && extractedCst.isAllOnes()) ||
+          (isa<OrOp, XorOp>(inputOp) && extractedCst.isZero())) {
         rewriter.replaceOpWithNewOp<ExtractOp>(
             op, op.getType(), inputOp->getOperand(0), op.lowBit());
         return success();
@@ -563,7 +563,7 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
   if (op.getType().getWidth() == 1 && inputOp)
     if (auto shlOp = dyn_cast<ShlOp>(inputOp))
       if (auto lhsCst = shlOp.getOperand(0).getDefiningOp<hw::ConstantOp>())
-        if (lhsCst.getValue().isOneValue()) {
+        if (lhsCst.getValue().isOne()) {
           auto newCst = rewriter.create<hw::ConstantOp>(
               shlOp.getLoc(),
               APInt(lhsCst.getValue().getBitWidth(), op.lowBit()));
@@ -730,13 +730,13 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
     if (!operand)
       continue;
     value &= operand.cast<IntegerAttr>().getValue();
-    if (value.isNullValue())
+    if (value.isZero())
       return getIntAttr(value, getContext());
   }
 
   // and(x, -1) -> x.
   if (constants.size() == 2 && constants[1] &&
-      constants[1].cast<IntegerAttr>().getValue().isAllOnesValue())
+      constants[1].cast<IntegerAttr>().getValue().isAllOnes())
     return inputs()[0];
 
   // and(x, x, x) -> x.  This also handles and(x) -> x.
@@ -787,7 +787,7 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   APInt value;
   if (matchPattern(inputs.back(), m_RConstant(value))) {
     // and(..., '1) -> and(...) -- identity
-    if (value.isAllOnesValue()) {
+    if (value.isAllOnes()) {
       rewriter.replaceOpWithNewOp<AndOp>(op, op.getType(), inputs.drop_back());
       return success();
     }
@@ -862,13 +862,13 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
     if (!operand)
       continue;
     value |= operand.cast<IntegerAttr>().getValue();
-    if (value.isAllOnesValue())
+    if (value.isAllOnes())
       return getIntAttr(value, getContext());
   }
 
   // or(x, 0) -> x
   if (constants.size() == 2 && constants[1] &&
-      constants[1].cast<IntegerAttr>().getValue().isNullValue())
+      constants[1].cast<IntegerAttr>().getValue().isZero())
     return inputs()[0];
 
   // or(x, x, x) -> x.  This also handles or(x) -> x
@@ -1006,7 +1006,7 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
   APInt value;
   if (matchPattern(inputs.back(), m_RConstant(value))) {
     // or(..., '0) -> or(...) -- identity
-    if (value.isNullValue()) {
+    if (value.isZero()) {
       rewriter.replaceOpWithNewOp<OrOp>(op, op.getType(), inputs.drop_back());
       return success();
     }
@@ -1062,7 +1062,7 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
 
   // xor(x, 0) -> x
   if (constants.size() == 2 && constants[1] &&
-      constants[1].cast<IntegerAttr>().getValue().isNullValue())
+      constants[1].cast<IntegerAttr>().getValue().isZero())
     return inputs()[0];
 
   // xor(xor(x,1),1) -> x
@@ -1116,7 +1116,7 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   APInt value;
   if (matchPattern(inputs.back(), m_RConstant(value))) {
     // xor(..., 0) -> xor(...) -- identity
-    if (value.isNullValue()) {
+    if (value.isZero()) {
       rewriter.replaceOpWithNewOp<XorOp>(op, op.getType(), inputs.drop_back());
       return success();
     }
@@ -1164,7 +1164,7 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
 OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
   APInt value;
   // sub(x - 0) -> x
-  if (matchPattern(rhs(), m_RConstant(value)) && value.isNullValue())
+  if (matchPattern(rhs(), m_RConstant(value)) && value.isZero())
     return lhs();
 
   // sub(x - x) -> 0
@@ -1209,7 +1209,7 @@ LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
   APInt value, value2;
 
   // add(..., 0) -> add(...) -- identity
-  if (matchPattern(inputs.back(), m_RConstant(value)) && value.isNullValue()) {
+  if (matchPattern(inputs.back(), m_RConstant(value)) && value.isZero()) {
     rewriter.replaceOpWithNewOp<AddOp>(op, op.getType(), inputs.drop_back());
     return success();
   }
@@ -1294,7 +1294,7 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
     if (!operand)
       continue;
     value *= operand.cast<IntegerAttr>().getValue();
-    if (value.isNullValue())
+    if (value.isZero())
       return getIntAttr(value, getContext());
   }
 
@@ -1353,7 +1353,7 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
       return op.lhs();
 
     // If the divisor is zero, do not fold for now.
-    if (rhs_value.getValue().isNullValue())
+    if (rhs_value.getValue().isZero())
       return {};
   }
 
@@ -1379,13 +1379,13 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
                         op.getContext());
 
     // If the divisor is zero, do not fold for now.
-    if (rhs_value.getValue().isNullValue())
+    if (rhs_value.getValue().isZero())
       return {};
   }
 
   if (auto lhs_value = constants[0].dyn_cast_or_null<IntegerAttr>()) {
     // modu(0, x) -> 0, mods(0, x) -> 0
-    if (lhs_value.getValue().isNullValue())
+    if (lhs_value.getValue().isZero())
       return getIntAttr(APInt(op.getType().getIntOrFloatBitWidth(), 0),
                         op.getContext());
   }
@@ -1552,7 +1552,7 @@ OpFoldResult MuxOp::fold(ArrayRef<Attribute> constants) {
   // mux(0, a, b) -> b
   // mux(1, a, b) -> a
   if (auto pred = constants[0].dyn_cast_or_null<IntegerAttr>()) {
-    if (pred.getValue().isNullValue())
+    if (pred.getValue().isZero())
       return falseValue();
     return trueValue();
   }
@@ -1683,14 +1683,14 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
 
   // mux(a, 1, b) -> or(a, b) for single-bit values.
   if (matchPattern(op.trueValue(), m_RConstant(value)) &&
-      value.getBitWidth() == 1 && value.isAllOnesValue()) {
+      value.getBitWidth() == 1 && value.isAllOnes()) {
     rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
     return success();
   }
 
   // mux(a, b, 0) -> and(a, b) for single-bit values.
-  if (matchPattern(op.falseValue(), m_RConstant(value)) &&
-      value.isNullValue() && value.getBitWidth() == 1) {
+  if (matchPattern(op.falseValue(), m_RConstant(value)) && value.isZero() &&
+      value.getBitWidth() == 1) {
     rewriter.replaceOpWithNewOp<AndOp>(op, op.cond(), op.trueValue());
     return success();
   }
@@ -2165,13 +2165,13 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       return replaceWith(ICmpPredicate::ugt, op.lhs(), getConstant(rhs - 1));
     case ICmpPredicate::eq:
       if (rhs.getBitWidth() == 1) {
-        if (rhs.isNullValue()) {
+        if (rhs.isZero()) {
           // x == 0 -> x ^ 1
           rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
                                              getConstant(APInt(1, 1)));
           return success();
         }
-        if (rhs.isAllOnesValue()) {
+        if (rhs.isAllOnes()) {
           // x == 1 -> x
           rewriter.replaceOp(op, op.lhs());
           return success();
@@ -2180,12 +2180,12 @@ LogicalResult ICmpOp::canonicalize(ICmpOp op, PatternRewriter &rewriter) {
       break;
     case ICmpPredicate::ne:
       if (rhs.getBitWidth() == 1) {
-        if (rhs.isNullValue()) {
+        if (rhs.isZero()) {
           // x != 0 -> x
           rewriter.replaceOp(op, op.lhs());
           return success();
         }
-        if (rhs.isAllOnesValue()) {
+        if (rhs.isAllOnes()) {
           // x != 1 -> x ^ 1
           rewriter.replaceOpWithNewOp<XorOp>(op, op.lhs(),
                                              getConstant(APInt(1, 1)));
