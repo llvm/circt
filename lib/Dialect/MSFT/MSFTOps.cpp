@@ -152,83 +152,6 @@ static ParseResult parseMSFTModuleOp(OpAsmParser &parser,
   return success();
 }
 
-/// Return true if this string parses as a valid MLIR keyword, false otherwise.
-static bool isValidKeyword(StringRef name) {
-  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
-    return false;
-  for (auto c : name.drop_front()) {
-    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
-      return false;
-  }
-
-  return true;
-}
-
-static void printModuleSignature(OpAsmPrinter &p, Operation *op,
-                                 ArrayRef<Type> argTypes, bool isVariadic,
-                                 ArrayRef<Type> resultTypes,
-                                 bool &needArgNamesAttr) {
-  using namespace mlir::function_like_impl;
-
-  Region &body = op->getRegion(0);
-  bool isExternal = body.empty();
-  SmallString<32> resultNameStr;
-
-  p << '(';
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
-    if (i > 0)
-      p << ", ";
-
-    auto argName = hw::getModuleArgumentName(op, i);
-
-    if (!isExternal) {
-      // Get the printed format for the argument name.
-      resultNameStr.clear();
-      llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(body.front().getArgument(i), tmpStream);
-
-      // If the name wasn't printable in a way that agreed with argName, make
-      // sure to print out an explicit argNames attribute.
-      if (tmpStream.str().drop_front() != argName)
-        needArgNamesAttr = true;
-
-      p << tmpStream.str() << ": ";
-    } else if (!argName.empty()) {
-      p << '%' << argName << ": ";
-    }
-
-    p.printType(argTypes[i]);
-    p.printOptionalAttrDict(getArgAttrs(op, i));
-  }
-
-  if (isVariadic) {
-    if (!argTypes.empty())
-      p << ", ";
-    p << "...";
-  }
-
-  p << ')';
-
-  // We print result types specially since we support named arguments.
-  if (!resultTypes.empty()) {
-    p << " -> (";
-    for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
-      if (i != 0)
-        p << ", ";
-      StringAttr name = hw::getModuleResultNameAttr(op, i);
-      if (isValidKeyword(name.getValue()))
-        p << name.getValue();
-      else
-        p << name;
-      p << ": ";
-
-      p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(getResultAttrs(op, i));
-    }
-    p << ')';
-  }
-}
-
 static void printMSFTModuleOp(OpAsmPrinter &p, MSFTModuleOp mod) {
   using namespace mlir::function_like_impl;
 
@@ -246,8 +169,8 @@ static void printMSFTModuleOp(OpAsmPrinter &p, MSFTModuleOp mod) {
 
   p << ' ';
   bool needArgNamesAttr = false;
-  printModuleSignature(p, mod, argTypes, /*isVariadic=*/false, resultTypes,
-                       needArgNamesAttr);
+  hw::module_like_impl::printModuleSignature(
+      p, mod, argTypes, /*isVariadic=*/false, resultTypes, needArgNamesAttr);
 
   SmallVector<StringRef, 3> omittedAttrs;
   if (!needArgNamesAttr)
