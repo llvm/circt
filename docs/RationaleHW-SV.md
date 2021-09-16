@@ -392,13 +392,13 @@ over time.
 The verbatim operation produces a typed value expressed by a string of
 SystemVerilog.  This can be used to access macros and other values that are
 only sensible as Verilog text. There are three kinds of verbatim operation, 
- 1. VerbatimOp(`verbatim`, the statement form
- 2. VerbatimExprOp(`verbatim.expr`), the expression form.
- 3. VerbatimExprSEOp(`verbatim.expr.se`), the expression form.
+ 1. VerbatimOp(`sv.verbatim`, the statement form
+ 2. VerbatimExprOp(`sv.verbatim.expr`), the expression form.
+ 3. VerbatimExprSEOp(`sv.verbatim.expr.se`), the expression form.
 
-The text string is expected to have the highest precedence, so you should
-include parentheses in the string if it isn't a single token. `verbatim`
-and `verbatim.expr` are assumed to not have side effects, 
+For the verbatim expression form, the text string is expected to have the
+highest precedence, so parentheses is required if it isn't a single token.
+`sv.verbatim` and `sv.verbatim.expr` are assumed to not have side effects, 
 whereas `sv.verbatim.expr.se` can have side effects.
 
 Verbatim allows operand substitutions with '{{0}}' syntax.
