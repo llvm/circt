@@ -137,6 +137,11 @@ static cl::opt<bool>
                 cl::desc("run the reset inference pass on firrtl"),
                 cl::init(true));
 
+static cl::opt<bool>
+    prefixModules("prefix-modules",
+                  cl::desc("prefix modules with NestedPrefixAnnotation"),
+                  cl::init(true));
+
 static cl::opt<bool> extractTestCode("extract-test-code",
                                      cl::desc("run the extract test code pass"),
                                      cl::init(false));
@@ -269,6 +274,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (inferResets)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResetsPass());
+
+  if (prefixModules)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createPrefixModulesPass());
 
   if (blackBoxMemory)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createBlackBoxMemoryPass());
