@@ -17,6 +17,9 @@ public:
   void runOnOperation() override;
 
 private:
+  void updateHIRToHWMapForFuncInputs(hw::HWModuleOp,
+                                     mlir::Block::BlockArgListType,
+                                     FuncToHWModulePortMap);
   LogicalResult visitRegion(mlir::Region &);
   LogicalResult visitOperation(Operation *);
   LogicalResult visitOp(hir::FuncOp);
@@ -25,12 +28,14 @@ private:
   LogicalResult visitOp(hir::BusOp);
   LogicalResult visitOp(hir::CommentOp);
   LogicalResult visitOp(hir::CallOp);
+  LogicalResult visitOp(hir::TimeOp);
 
 private:
   OpBuilder *builder;
   llvm::DenseMap<Value, Value> mapHIRToHWValue;
   llvm::DenseMap<StringRef, uint64_t> mapFuncNameToInstanceCount;
   SmallVector<Operation *> opsToErase;
+  Value clk;
 };
 
 LogicalResult HIRToHWPass::visitOp(mlir::ConstantOp op) {
@@ -110,29 +115,73 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
   return success();
 }
 
+LogicalResult HIRToHWPass::visitOp(hir::TimeOp op) {
+  auto tIn = mapHIRToHWValue[op.timevar()];
+  if (!tIn) // FIXME
+    return success();
+
+  auto name = helper::getOptionalName(op, 0);
+  auto nameAttr = name ? builder->getStringAttr(name.getValue()) : StringAttr();
+  auto reg =
+      builder->create<sv::RegOp>(op.getLoc(), builder->getI1Type(), nameAttr);
+  builder->create<sv::AlwaysOp>(
+      op.getLoc(), sv::EventControl::AtPosEdge, clk, [&reg, tIn, this] {
+        this->builder->create<sv::PAssignOp>(builder->getUnknownLoc(),
+                                             reg.result(), tIn);
+      });
+
+  auto tOut = builder->create<sv::ReadInOutOp>(op.getLoc(), reg);
+  mapHIRToHWValue[op.res()] = tOut;
+  return success();
+}
+
 LogicalResult HIRToHWPass::visitOp(hir::FuncExternOp op) {
   builder = new OpBuilder(op);
   builder->setInsertionPoint(op);
-  auto portInfoList = getHWModulePortInfoList(
-      *builder, op.getFuncType(), op.getInputNames(), op.getResultNames());
+  auto portMap = getHWModulePortMap(*builder, op.getFuncType(),
+                                    op.getInputNames(), op.getResultNames());
   auto name = builder->getStringAttr(op.getNameAttr().getValue().str());
-  auto hwModuleOp =
-      builder->create<hw::HWModuleOp>(op.getLoc(), name, portInfoList);
+
+  builder->create<hw::HWModuleOp>(op.getLoc(), name, portMap.getPortInfoList());
+
   delete (builder);
   opsToErase.push_back(op);
   return success();
 }
 
+void HIRToHWPass::updateHIRToHWMapForFuncInputs(
+    hw::HWModuleOp hwModuleOp, mlir::Block::BlockArgListType funcArgs,
+    FuncToHWModulePortMap portMap) {
+  for (size_t i = 0; i < funcArgs.size(); i++) {
+    auto modulePortInfo = portMap.getPortInfoForFuncInput(i);
+    if (modulePortInfo.direction == hw::PortDirection::INPUT) {
+      auto hwArg =
+          hwModuleOp.getBodyBlock()->getArgument(modulePortInfo.argNum);
+      mapHIRToHWValue[funcArgs[i]] = hwArg;
+    } else {
+      mapHIRToHWValue[funcArgs[i]] =
+          getConstantX(builder, funcArgs[i].getType())->getResult(0);
+    }
+  }
+}
+
 LogicalResult HIRToHWPass::visitOp(hir::FuncOp op) {
-  builder = new OpBuilder(op);
-  builder->setInsertionPoint(op);
-  auto portInfoList = getHWModulePortInfoList(
-      *builder, op.getFuncType(), op.getInputNames(), op.getResultNames());
+  this->builder = new OpBuilder(op);
+  this->builder->setInsertionPoint(op);
+  auto portMap = getHWModulePortMap(*builder, op.getFuncType(),
+                                    op.getInputNames(), op.getResultNames());
   auto name = builder->getStringAttr("hw_" + op.getNameAttr().getValue().str());
-  auto hwModuleOp =
-      builder->create<hw::HWModuleOp>(op.getLoc(), name, portInfoList);
-  builder->setInsertionPointToStart(hwModuleOp.getBodyBlock());
+
+  auto hwModuleOp = builder->create<hw::HWModuleOp>(op.getLoc(), name,
+                                                    portMap.getPortInfoList());
+  this->builder->setInsertionPointToStart(hwModuleOp.getBodyBlock());
+
+  updateHIRToHWMapForFuncInputs(
+      hwModuleOp, op.getFuncBody().front().getArguments(), portMap);
+
+  this->clk = hwModuleOp.getBodyBlock()->getArguments().back();
   auto visitResult = visitRegion(op.getFuncBody());
+
   delete (builder);
   return visitResult;
 }
@@ -153,6 +202,8 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
   if (auto op = dyn_cast<hir::CommentOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::CallOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::TimeOp>(operation))
     return visitOp(op);
 
   // operation->emitRemark() << "Unsupported operation for hir-to-hw pass.";

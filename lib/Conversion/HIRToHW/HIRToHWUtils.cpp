@@ -1,8 +1,50 @@
 #include "HIRToHWUtils.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "circt/Dialect/HW/HWOps.h"
 
-bool isRecvBus(DictionaryAttr busAttr) {
-  return helper::extractBusPortFromDict(busAttr) == "recv";
+void FuncToHWModulePortMap::addFuncInput(StringAttr name,
+                                         hw::PortDirection direction,
+                                         Type type) {
+  assert(name);
+  assert(type);
+  assert(direction != hw::PortDirection::INOUT);
+
+  size_t argNum = (direction == hw::PortDirection::INPUT)
+                      ? (hwModuleInputArgNum++)
+                      : (hwModuleResultArgNum++);
+
+  portInfoList.push_back(
+      {.name = name, .direction = direction, .type = type, .argNum = argNum});
+
+  mapFuncInputToHWModulePortInfo.push_back(&portInfoList.back());
+}
+void FuncToHWModulePortMap::addClk(OpBuilder &builder) {
+  auto clkName = builder.getStringAttr("clk");
+  portInfoList.push_back({.name = clkName,
+                          .direction = hw::PortDirection::INPUT,
+                          .type = builder.getI1Type(),
+                          .argNum = hwModuleInputArgNum++});
+}
+void FuncToHWModulePortMap::addFuncResult(StringAttr name, Type type) {
+  assert(name);
+  assert(type);
+  portInfoList.push_back({.name = name,
+                          .direction = hw::PortDirection::OUTPUT,
+                          .type = type,
+                          .argNum = hwModuleResultArgNum++});
+}
+
+bool isSendBus(DictionaryAttr busAttr) {
+  return helper::extractBusPortFromDict(busAttr) == "send";
+}
+
+ArrayRef<hw::ModulePortInfo> FuncToHWModulePortMap::getPortInfoList() {
+  return portInfoList;
+}
+
+const hw::ModulePortInfo
+FuncToHWModulePortMap::getPortInfoForFuncInput(size_t inputArgNum) {
+  return *mapFuncInputToHWModulePortInfo[inputArgNum];
 }
 
 IntegerType convertToIntegerType(Type ty) {
@@ -43,6 +85,8 @@ Type convertType(Type type) {
     return convertBusType(ty);
   if (auto ty = type.dyn_cast<mlir::TensorType>())
     return convertTensorType(ty);
+  if (type.isa<hir::TimeType>())
+    return IntegerType::get(type.getContext(), 1);
   return type;
 }
 
@@ -52,7 +96,7 @@ filterCallOpArgs(hir::FuncType funcTy, OperandRange args) {
   SmallVector<Value> results;
   for (uint64_t i = 0; i < funcTy.getInputTypes().size(); i++) {
     auto ty = funcTy.getInputTypes()[i];
-    if (helper::isBusType(ty) && !isRecvBus(funcTy.getInputAttrs()[i])) {
+    if (helper::isBusType(ty) && isSendBus(funcTy.getInputAttrs()[i])) {
       results.push_back(args[i]);
       continue;
     }
@@ -62,16 +106,11 @@ filterCallOpArgs(hir::FuncType funcTy, OperandRange args) {
   return std::make_pair(inputs, results);
 }
 
-SmallVector<hw::ModulePortInfo> getHWModulePortInfoList(OpBuilder &builder,
-                                                        hir::FuncType funcTy,
-                                                        ArrayAttr inputNames,
-                                                        ArrayAttr resultNames) {
-  SmallVector<hw::ModulePortInfo> portInfoList;
-
-  SmallVector<Type> hwInputTypes;
-  SmallVector<Type> hwResultTypes;
-  SmallVector<StringAttr> hwInputNames;
-  SmallVector<StringAttr> hwResultNames;
+FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
+                                         hir::FuncType funcTy,
+                                         ArrayAttr inputNames,
+                                         ArrayAttr resultNames) {
+  FuncToHWModulePortMap portMap;
 
   // filter the input and output types and names.
   uint64_t i;
@@ -80,52 +119,29 @@ SmallVector<hw::ModulePortInfo> getHWModulePortInfoList(OpBuilder &builder,
     auto hwTy = convertType(originalTy);
     assert(hwTy);
     auto attr = funcTy.getInputAttrs()[i];
-    if (helper::isBusType(originalTy) && !isRecvBus(attr)) {
-      hwResultTypes.push_back(hwTy);
-      auto name = inputNames[i].dyn_cast<StringAttr>();
-      assert(name);
-      hwResultNames.push_back(name);
-      continue;
-    }
-    hwInputTypes.push_back(hwTy);
     auto name = inputNames[i].dyn_cast<StringAttr>();
-    assert(name);
-    hwInputNames.push_back(name);
+    if (helper::isBusType(originalTy) && isSendBus(attr)) {
+      portMap.addFuncInput(name, hw::PortDirection::OUTPUT, hwTy);
+    } else {
+      portMap.addFuncInput(name, hw::PortDirection::INPUT, hwTy);
+    }
   }
 
-  // Add time type.
-  hwInputTypes.push_back(hir::TimeType::get(builder.getContext()));
-  auto name = inputNames[i].dyn_cast<StringAttr>();
-  assert(name);
-  hwInputNames.push_back(name);
+  // Add time input arg.
+  auto timeVarName = inputNames[i].dyn_cast<StringAttr>();
+  portMap.addFuncInput(timeVarName, hw::PortDirection::INPUT,
+                       builder.getI1Type());
+
+  // Add clk input arg.
+  portMap.addClk(builder);
 
   for (uint64_t i = 0; i < funcTy.getResultTypes().size(); i++) {
-    auto ty = convertType(funcTy.getResultTypes()[i]);
-    assert(ty);
-    hwResultTypes.push_back(ty);
+    auto hwTy = convertType(funcTy.getResultTypes()[i]);
     auto name = resultNames[i].dyn_cast<StringAttr>();
-    assert(name);
-    hwResultNames.push_back(name);
+    portMap.addFuncResult(name, hwTy);
   }
 
-  // insert input args;
-  for (i = 0; i < hwInputTypes.size(); i++) {
-    hw::ModulePortInfo portInfo;
-    portInfo.argNum = i;
-    portInfo.direction = hw::PortDirection::INPUT;
-    portInfo.name = hwInputNames[i];
-    portInfo.type = hwInputTypes[i];
-    portInfoList.push_back(portInfo);
-  }
-  for (uint64_t j = 0; j < hwResultTypes.size(); j++) {
-    hw::ModulePortInfo portInfo;
-    portInfo.argNum = i + j;
-    portInfo.direction = hw::PortDirection::OUTPUT;
-    portInfo.name = hwResultNames[j];
-    portInfo.type = hwResultTypes[j];
-    portInfoList.push_back(portInfo);
-  }
-  return portInfoList;
+  return portMap;
 }
 
 Operation *getConstantX(OpBuilder *builder, Type originalTy) {
