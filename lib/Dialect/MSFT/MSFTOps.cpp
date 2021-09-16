@@ -143,20 +143,127 @@ static ParseResult parseMSFTModuleOp(OpAsmParser &parser,
   addArgAndResultAttrs(builder, result, argAttrs, resultAttrs);
 
   // Parse the optional function body.
-  auto *body = result.addRegion();
-  mlir::OptionalParseResult regionSuccess = parser.parseOptionalRegion(
-      *body, entryArgs, entryArgs.empty() ? ArrayRef<Type>() : argTypes);
-  if (regionSuccess.hasValue()) {
-    if (*regionSuccess)
-      return failure();
-    // MSFTModuleOp::ensureTerminator(*body, parser.getBuilder(),
-    // result.location);
-  }
+  auto regionSuccess = parser.parseOptionalRegion(
+      *result.addRegion(), entryArgs,
+      entryArgs.empty() ? ArrayRef<Type>() : argTypes);
+  if (regionSuccess.hasValue() && failed(*regionSuccess))
+    return failure();
 
   return success();
 }
 
-static void printMSFTModuleOp(OpAsmPrinter &p, MSFTModuleOp mod) {}
+/// Return true if this string parses as a valid MLIR keyword, false otherwise.
+static bool isValidKeyword(StringRef name) {
+  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
+    return false;
+  for (auto c : name.drop_front()) {
+    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
+      return false;
+  }
+
+  return true;
+}
+
+static void printModuleSignature(OpAsmPrinter &p, Operation *op,
+                                 ArrayRef<Type> argTypes, bool isVariadic,
+                                 ArrayRef<Type> resultTypes,
+                                 bool &needArgNamesAttr) {
+  using namespace mlir::function_like_impl;
+
+  Region &body = op->getRegion(0);
+  bool isExternal = body.empty();
+  SmallString<32> resultNameStr;
+
+  p << '(';
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    if (i > 0)
+      p << ", ";
+
+    auto argName = hw::getModuleArgumentName(op, i);
+
+    if (!isExternal) {
+      // Get the printed format for the argument name.
+      resultNameStr.clear();
+      llvm::raw_svector_ostream tmpStream(resultNameStr);
+      p.printOperand(body.front().getArgument(i), tmpStream);
+
+      // If the name wasn't printable in a way that agreed with argName, make
+      // sure to print out an explicit argNames attribute.
+      if (tmpStream.str().drop_front() != argName)
+        needArgNamesAttr = true;
+
+      p << tmpStream.str() << ": ";
+    } else if (!argName.empty()) {
+      p << '%' << argName << ": ";
+    }
+
+    p.printType(argTypes[i]);
+    p.printOptionalAttrDict(getArgAttrs(op, i));
+  }
+
+  if (isVariadic) {
+    if (!argTypes.empty())
+      p << ", ";
+    p << "...";
+  }
+
+  p << ')';
+
+  // We print result types specially since we support named arguments.
+  if (!resultTypes.empty()) {
+    p << " -> (";
+    for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
+      if (i != 0)
+        p << ", ";
+      StringAttr name = hw::getModuleResultNameAttr(op, i);
+      if (isValidKeyword(name.getValue()))
+        p << name.getValue();
+      else
+        p << name;
+      p << ": ";
+
+      p.printType(resultTypes[i]);
+      p.printOptionalAttrDict(getResultAttrs(op, i));
+    }
+    p << ')';
+  }
+}
+
+static void printMSFTModuleOp(OpAsmPrinter &p, MSFTModuleOp mod) {
+  using namespace mlir::function_like_impl;
+
+  FunctionType fnType = mod.getType();
+  auto argTypes = fnType.getInputs();
+  auto resultTypes = fnType.getResults();
+
+  // Print the operation and the function name.
+  p << ' ';
+  p.printSymbolName(SymbolTable::getSymbolName(mod).getValue());
+
+  // Print the parameterization.
+  p << ' ';
+  p.printAttribute(mod.parametersAttr());
+
+  p << ' ';
+  bool needArgNamesAttr = false;
+  printModuleSignature(p, mod, argTypes, /*isVariadic=*/false, resultTypes,
+                       needArgNamesAttr);
+
+  SmallVector<StringRef, 3> omittedAttrs;
+  if (!needArgNamesAttr)
+    omittedAttrs.push_back("argNames");
+  omittedAttrs.push_back("resultNames");
+  omittedAttrs.push_back("parameters");
+
+  printFunctionAttributes(p, mod, argTypes.size(), resultTypes.size(),
+                          omittedAttrs);
+
+  // Print the body if this is not an external function.
+  Region &body = mod.getBody();
+  if (!body.empty())
+    p.printRegion(body, /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/true);
+}
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/MSFT/MSFT.cpp.inc"
