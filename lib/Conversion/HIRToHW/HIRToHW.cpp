@@ -141,7 +141,7 @@ LogicalResult HIRToHWPass::visitOp(hir::TimeOp op) {
   return success();
 }
 
-LogicalResult HIRToHWPass::visitOp(hir::WhileOp) { return success(); }
+LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) { return success(); }
 
 LogicalResult HIRToHWPass::visitOp(hir::FuncExternOp op) {
   builder = new OpBuilder(op);

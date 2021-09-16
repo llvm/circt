@@ -43,26 +43,28 @@ class HIR_Op<string mnemonic, list<OpTrait> traits = []>
 : Op<HIR_Dialect, mnemonic, traits>;
 
 
-def NextIterOp : HIR_Op<"next_iter", [ParentOneOf<["ForOp","WhileOp"]>,Terminator] > {
-  let summary = "specifies the time at which the next iteration of for loop starts.";
+def NextIterOp : HIR_Op<"next_iter", [AttrSizedOperandSegments, ParentOneOf<["ForOp","WhileOp"]>,Terminator] > {
+  let summary = "specifies the time at which the next iteration of the loop starts.";
   let description = [{
-    This op specifies when the next iteration of the hir.for loop starts.
+    This op specifies when the next iteration of the loop starts.
     If the current iteration is the last iteration then it specifies the time 
-    returned by the hir.for op.
+    returned by the op.
+    If a condition is provided then the loop breaks when the condition is false;
 
     This instruction must be the last instruction in for loop body.
 
       Example:
 
-      ```mlir hir.for.next_iter at %t```
+      ```mlir hir.next_iter condition %continue at %t```
+      ```mlir hir.next_iter at %t```
   }];
 
-  let arguments = (ins Optional<HIR_TimeType> : $tstart, 
+  let arguments = (ins Optional<I1> :$condition, Optional<HIR_TimeType> : $tstart, 
     OptionalAttr<I64Attr>: $offset);
 
   let results = (outs );
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = [{ `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict }];
+  let assemblyFormat = [{ (`condition` $condition^)? `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict }];
 }
 
 def IsFirstIterOp :HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>,NoSideEffect]>{
@@ -70,24 +72,6 @@ def IsFirstIterOp :HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>,NoSi
   let results = (outs I1:$res);
 
   let assemblyFormat = [{ custom<WithSSANames>(attr-dict) `:` type($res)}];
-}
-
-def ConditionOp : HIR_Op<"condition", [ParentOneOf<["WhileOp"]>] > {
-  let summary = "specifies the condition for hir.while.";
-  let description = [{
-    This op specifies the condition for the hir.while loop. 
-    If the condition is zero then the loop breaks.
-
-    Example:
-
-      ```mlir hir.condition %b ```
-  }];
-
-  let arguments = (ins I1:$condition);
-
-  let results = (outs );
-
-  let assemblyFormat = [{ $condition attr-dict }];
 }
 
 def YieldOp : HIR_Op<"yield", [ParentOneOf<["IfOp"]>,Terminator] > {

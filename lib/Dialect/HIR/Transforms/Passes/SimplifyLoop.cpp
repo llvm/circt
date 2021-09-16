@@ -104,10 +104,13 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
 
     // Copy the loop body.
     for (auto &operation : forOp.getLoopBody().front()) {
-      if (llvm::isa<hir::NextIterOp>(operation)) {
-        builder.create<hir::ConditionOp>(builder.getUnknownLoc(), condition);
+      if (auto nextIterOp = dyn_cast<hir::NextIterOp>(operation)) {
+        builder.create<hir::NextIterOp>(builder.getUnknownLoc(), condition,
+                                        operandMap.lookup(nextIterOp.tstart()),
+                                        nextIterOp.offsetAttr());
+      } else {
+        builder.clone(operation, operandMap);
       }
-      builder.clone(operation, operandMap);
     }
   }
 
