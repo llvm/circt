@@ -30,6 +30,7 @@ struct FIRParserOptions {
   /// If this is set to true, the @info locators are ignored, and the locations
   /// are set to the location in the .fir file.
   bool ignoreInfoLocators = false;
+  bool rawAnnotations = false;
 };
 
 mlir::OwningModuleRef importFIRFile(llvm::SourceMgr &sourceMgr,

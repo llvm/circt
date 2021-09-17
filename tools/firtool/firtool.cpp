@@ -164,6 +164,9 @@ static cl::opt<bool>
     checkCombCycles("firrtl-check-comb-cycles",
                     cl::desc("check combinational cycles on firrtl"),
                     cl::init(false));
+static cl::opt<bool> newAnno("new-anno",
+                             cl::desc("enable new annotation handling"),
+                             cl::init(false));
 
 enum OutputFormatKind {
   OutputMLIR,
@@ -234,6 +237,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
+    options.rawAnnotations = newAnno;
     module = importFIRFile(sourceMgr, &context, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
@@ -268,8 +272,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
-      disableAnnotationsUnknown, disableAnnotationsClassless));
+  if (newAnno)
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown,
+                                                 disableAnnotationsClassless));
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
