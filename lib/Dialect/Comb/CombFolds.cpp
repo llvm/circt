@@ -1719,6 +1719,28 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     }
   }
 
+  // When both inputs are constants, push the mux expression into each bit of
+  // the inputs and attempt to fold each bitwise mux.
+  // E.g. mux(a, 2, 0) -> concat(mux(a, 1, 0), 0) -> concat(a, 0)
+  if (matchPattern(op.trueValue(), m_RConstant(value)) &&
+      value.getBitWidth() > 1) {
+    APInt value2;
+    if (matchPattern(op.falseValue(), m_RConstant(value2))) {
+      SmallVector<Value> operands;
+      // Iterate from MSB to LSB, constructing a mux op on each bit.
+      for (int64_t i = value.getBitWidth() - 1; i >= 0; --i) {
+        auto trueValue =
+            rewriter.createOrFold<ExtractOp>(op.getLoc(), op.trueValue(), i, 1);
+        auto falseValue = rewriter.createOrFold<ExtractOp>(
+            op.getLoc(), op.falseValue(), i, 1);
+        operands.push_back(rewriter.createOrFold<comb::MuxOp>(
+            op.getLoc(), op.cond(), trueValue, falseValue));
+      }
+      rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(), operands);
+      return success();
+    }
+  }
+
   if (auto falseMux =
           dyn_cast_or_null<MuxOp>(op.falseValue().getDefiningOp())) {
     // mux(selector, x, mux(selector, y, z) = mux(selector, x, z)

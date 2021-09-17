@@ -10,6 +10,28 @@ hw.module @narrowMux(%a: i8, %b: i8, %c: i1) -> (o: i4) {
   hw.output %1 : i4
 }
 
+// CHECK-LABEL: @muxConstantInputs
+hw.module @muxConstantInputs(%cond: i1) -> (o: i2) {
+// CHECK-NEXT: %false = hw.constant false
+// CHECK-NEXT: %0 = comb.concat %cond, %false : (i1, i1) -> i2
+  %c0 = hw.constant 2 : i2
+  %c1 = hw.constant 0 : i2
+  %0 = comb.mux %cond, %c0, %c1 : i2
+  hw.output %0 : i2
+}
+
+// CHECK-LABEL: @muxConstantInputs2
+hw.module @muxConstantInputs2(%cond: i1) -> (o: i2) {
+// CHECK-NEXT: %true = hw.constant true
+// CHECK-NEXT: %false = hw.constant false
+// CHECK-NEXT: %0 = comb.xor %cond, %true : i1
+// CHECK-NEXT: %1 = comb.concat %0, %false : (i1, i1) -> i2
+  %c0 = hw.constant 0 : i2
+  %c1 = hw.constant 2 : i2
+  %0 = comb.mux %cond, %c0, %c1: i2
+  hw.output %0 : i2
+}
+
 // CHECK-LABEL: @notMux
 hw.module @notMux(%a: i4, %b: i4, %c: i1) -> (o: i4) {
 // CHECK-NEXT: comb.mux %c, %b, %a : i4
@@ -141,6 +163,22 @@ hw.module @orMultipleExclusiveConcats(%arg0: i2, %arg1: i2, %arg2: i2) -> (o: i6
   %2 = comb.concat %c4, %arg2: (i4, i2) -> i6
   %out = comb.or %0, %1, %2 : i6
   hw.output %out : i6
+}
+
+// CHECK-LABEL: hw.module @orConcatsWithMux
+hw.module @orConcatsWithMux(%bit: i1, %cond: i1) -> (o: i6) {
+  // CHECK-NEXT:    [[RES:%[a-z0-9_-]+]] = hw.constant 0 : i4
+  // CHECK-NEXT:    %0 = comb.concat [[RES]], %cond, %bit : (i4, i1, i1) -> i6
+  // CHECK-NEXT:    hw.output %0 : i6
+  %c0 = hw.constant 0 : i5
+  %0 = comb.concat %c0, %bit: (i5, i1) -> i6
+  %c1 = hw.constant 0 : i4
+  %c2 = hw.constant 2 : i2
+  %c3 = hw.constant 0 : i2
+  %1 = comb.mux %cond, %c2, %c3 : i2
+  %2 = comb.concat %c1, %1 : (i4, i2) -> i6
+  %3 = comb.or %0, %2 : i6
+  hw.output %3 : i6
 }
 
 // CHECK-LABEL: @extractNested
@@ -735,11 +773,13 @@ hw.module @SevenSegmentDecoder(%in: i4) -> (out: i7) {
   %28 = comb.mux %27, %c-7_i7, %26 : i7
   %29 = comb.icmp eq %in, %c-1_i4 : i4
   %30 = comb.mux %29, %c-15_i7, %28 : i7
-  // CHECK: %0 = comb.icmp eq %in, %c1_i4 : i4
-  // CHECK: %1 = comb.mux %0, %c6_i6, %c-1_i6 : i6
-  // CHECK: %2 = comb.concat %false, %1 : (i1, i6) -> i7
-  // CHECK: %3 = hw.array_create %c-15_i7, %c-7_i7, %c-34_i7, %c57_i7, %c-4_i7, %c-9_i7, %c-17_i7, %c-1_i7, %c7_i7, %c-3_i7, %c-19_i7, %c-26_i7, %c-49_i7, %c-37_i7, %2, %2 : i7
-  // CHECK: %4 = hw.array_get %3[%in]
+  // CHECK: %1 = comb.xor %0, %true : i1
+  // CHECK: %2 = comb.xor %0, %true : i1
+  // CHECK: %3 = comb.xor %0, %true : i1
+  // CHECK: %4 = comb.xor %0, %true : i1
+  // CHECK: %5 = comb.concat %false, %1, %2, %3, %c-1_i2, %4 : (i1, i1, i1, i1, i2, i1) -> i7
+  // CHECK: %6 = hw.array_create %c-15_i7, %c-7_i7, %c-34_i7, %c57_i7, %c-4_i7, %c-9_i7, %c-17_i7, %c-1_i7, %c7_i7, %c-3_i7, %c-19_i7, %c-26_i7, %c-49_i7, %c-37_i7, %5, %5 : i7
+  // CHECK: %7 = hw.array_get %6[%in] : !hw.array<16xi7>
   hw.output %30 : i7
 }
 
