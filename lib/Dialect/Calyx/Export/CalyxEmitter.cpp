@@ -359,21 +359,24 @@ private:
     os << semicolonEndL();
   }
 
-  /// Recursively emits the Calyx control.
+  /// Recursively emits the Calyx control. The regionIndex will always be zero
+  /// (i.e. the body) with one exception: The Else region of an IfOp.
   template <typename OpTy>
-  void emitCalyxControl(OpTy controlOp) {
+  void emitCalyxControl(OpTy controlOp, size_t regionIndex = 0) {
     // Check to see if this is a stand-alone EnableOp.
     if (isa<EnableOp>(controlOp)) {
       emitEnable(cast<EnableOp>(controlOp));
       return;
     }
-    for (auto &&bodyOp : *controlOp.getBody()) {
+
+    Region *region = &controlOp->getRegion(regionIndex);
+    for (auto &&regionOp : region->front()) {
       // Attribute dictionary is prepended for a control operation.
       auto prependAttributes = [&](StringRef sym) {
-        return (getAttributes(&bodyOp) + sym).str();
+        return (getAttributes(&regionOp) + sym).str();
       };
 
-      TypeSwitch<Operation *>(&bodyOp)
+      TypeSwitch<Operation *>(&regionOp)
           .template Case<SeqOp>([&](auto op) {
             emitCalyxSection(prependAttributes("seq"),
                              [&]() { emitCalyxControl(op); });
@@ -382,9 +385,21 @@ private:
             emitCalyxSection(prependAttributes("par"),
                              [&]() { emitCalyxControl(op); });
           })
-          .template Case<IfOp, WhileOp>([&](auto op) {
-            StringRef sym = (isa<IfOp>(op) ? "if " : "while ");
-            indent() << prependAttributes(sym);
+          .template Case<IfOp>([&](auto op) {
+            indent() << prependAttributes("if ");
+            emitValue(op.cond(), /*isIndented=*/false);
+            if (auto groupName = op.groupName(); groupName.hasValue())
+              os << " with " << groupName.getValue();
+            // Emit the ThenRegion.
+            emitCalyxBody([&]() { emitCalyxControl(op); });
+
+            bool elseRegionExists = !op.getRegion(1).empty();
+            if (elseRegionExists)
+              emitCalyxSection(
+                  "else", [&]() { emitCalyxControl(op, /*regionIndex=*/1); });
+          })
+          .template Case<WhileOp>([&](auto op) {
+            indent() << prependAttributes("while ");
             emitValue(op.cond(), /*isIndented=*/false);
             if (auto groupName = op.groupName(); groupName.hasValue())
               os << " with " << groupName.getValue();
