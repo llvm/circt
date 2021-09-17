@@ -125,6 +125,18 @@ static void getBlackBoxPortsForMemOp(MemOp op,
       auto direction = Direction::In;
       if (bundleElement.isFlip)
         direction = Direction::Out;
+      // If data or mask field is of vector type, then merge all elements.
+      // This is to ensure LowerTypes does not create multiple ports after
+      // lowering the vector. Assumption: vector elements are signed/unsigned
+      // integer type with known width.
+      if (auto vecType = type.dyn_cast_or_null<FVectorType>()) {
+        auto elemType = vecType.getElementType();
+        auto width = elemType.getBitWidthOrSentinel();
+        assert(width >= 1 && "Only ground type vector elements supported");
+        auto numElems = vecType.getNumElements();
+        type = IntType::get(builder.getContext(), elemType.isSignedInteger(),
+                            numElems * width);
+      }
       extPorts.push_back(
           {builder.getStringAttr(name), type, direction, op.getLoc()});
     }
@@ -226,12 +238,49 @@ static FModuleOp createWrapperModule(MemOp op,
          llvm::enumerate(memPortType.cast<BundleType>().getElements())) {
       auto fieldValue =
           builder.create<SubfieldOp>(op.getLoc(), memPort, field.index());
-      // Create the connection between module arguments and the external module,
-      // making sure that sinks are on the LHS
-      if (!field.value().isFlip)
-        builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
-      else
-        builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
+      auto fieldType = field.value().type.cast<FIRRTLType>();
+      bool isReadPort = field.value().isFlip;
+      if (fieldType.isa<FVectorType>()) {
+        auto fVecType = fieldType.dyn_cast<FVectorType>();
+        auto elemWidth = fVecType.getElementType().getBitWidthOrSentinel();
+        WireOp lastIndexWire;
+        // Map vector elements to memory fields.
+        // Read data is mapped to vector elements using bit extraction.
+        // Write data is mapped from vector elements using bit concat.
+        // Mask data is mapped from vector elements using bit concat.
+        for (size_t vecI = 0, numElems = fVecType.getNumElements();
+             vecI < numElems; ++vecI) {
+          auto vI = builder.create<SubindexOp>(op.getLoc(), fieldValue, vecI);
+          if (isReadPort) {
+            auto extractBits = builder.create<BitsPrimOp>(
+                op.getLoc(), (*extResultIt), (vecI * elemWidth + elemWidth - 1),
+                (vecI * elemWidth));
+            builder.create<ConnectOp>(op.getLoc(), vI, extractBits);
+          } else {
+            FIRRTLType wireType;
+            CatPrimOp catOp;
+            if (vecI == 0)
+              wireType = fVecType.getElementType();
+            else {
+              catOp = builder.create<CatPrimOp>(op.getLoc(), vI, lastIndexWire);
+              wireType = catOp.getType();
+            }
+            auto writeCatWire = builder.create<WireOp>(op.getLoc(), wireType);
+            if (vecI == 0)
+              builder.create<ConnectOp>(op.getLoc(), writeCatWire, vI);
+            else
+              builder.create<ConnectOp>(op.getLoc(), writeCatWire, catOp);
+            lastIndexWire = writeCatWire;
+          }
+        }
+        if (!isReadPort)
+          builder.create<ConnectOp>(op.getLoc(), (*extResultIt), lastIndexWire);
+      } else {
+        if (!isReadPort)
+          builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
+        else
+          builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
+      }
       // advance the external module field iterator
       ++extResultIt;
     }
@@ -423,6 +472,12 @@ struct BlackBoxMemoryPass : public BlackBoxMemoryBase<BlackBoxMemoryPass> {
     // A memory must have read and write latencies of 1 in order to be
     // blackboxed. In the future this will probably be configurable.
     auto shouldReplace = [](MemOp memOp) -> bool {
+      auto memDataType = memOp.getDataType();
+      if (memDataType.isa<BundleType>())
+        return false;
+      if (auto vec = memDataType.dyn_cast<FVectorType>())
+        if (vec.getElementType().getBitWidthOrSentinel() < 1)
+          return false;
       return memOp.readLatency() == 1 && memOp.writeLatency() == 1;
     };
     auto anythingChanged = false;
