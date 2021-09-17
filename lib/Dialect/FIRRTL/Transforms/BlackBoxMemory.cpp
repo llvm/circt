@@ -80,7 +80,7 @@ struct MemOpInfo : public llvm::DenseMapInfo<MemOp> {
 /// Create an instance of a Module using the module name and the port list.
 static InstanceOp createInstance(OpBuilder builder, Location loc,
                                  StringRef moduleName, StringAttr instanceName,
-                                 ArrayRef<ModulePortInfo> modulePorts) {
+                                 ArrayRef<PortInfo> modulePorts) {
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
   resultTypes.reserve(modulePorts.size());
@@ -94,9 +94,9 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
 /// Get the pohwist for an external module representing a blackbox memory. This
 /// external module must be compatible with the modules which are generated for
 /// `vlsi_mem_gen`, which can be found in the rocketchip project.
-static void
-getBlackBoxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
-                         SmallVectorImpl<ModulePortInfo> &extPorts) {
+static void getBlackBoxPortsForMemOp(MemOp op,
+                                     ArrayRef<MemOp::NamedPort> memPorts,
+                                     SmallVectorImpl<PortInfo> &extPorts) {
   OpBuilder builder(op);
   unsigned readPorts = 0;
   unsigned writePorts = 0;
@@ -122,9 +122,9 @@ getBlackBoxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
     for (auto bundleElement : type.cast<BundleType>().getElements()) {
       auto name = (prefix + bundleElement.name.getValue()).str();
       auto type = bundleElement.type;
-      auto direction = Direction::Input;
+      auto direction = Direction::In;
       if (bundleElement.isFlip)
-        direction = Direction::Output;
+        direction = Direction::Out;
       extPorts.push_back(
           {builder.getStringAttr(name), type, direction, op.getLoc()});
     }
@@ -133,8 +133,8 @@ getBlackBoxPortsForMemOp(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
 
 /// Create an external module black box representing the memory operation.
 /// Returns the port list of the external module.
-static FExtModuleOp
-createBlackboxModuleForMem(MemOp op, ArrayRef<ModulePortInfo> extPorts) {
+static FExtModuleOp createBlackboxModuleForMem(MemOp op,
+                                               ArrayRef<PortInfo> extPorts) {
 
   OpBuilder builder(op->getContext());
 
@@ -179,10 +179,11 @@ createBlackboxModuleForMem(MemOp op, ArrayRef<ModulePortInfo> extPorts) {
 /// and connects to the flattened parameters of the external module. This is
 /// done for compatibility with the Scala FIRRTL compiler and it is unclear if
 /// this will be needed in the long run.
-static FModuleOp
-createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
-                    FExtModuleOp extModuleOp, ArrayRef<ModulePortInfo> extPorts,
-                    SmallVectorImpl<ModulePortInfo> &modPorts) {
+static FModuleOp createWrapperModule(MemOp op,
+                                     ArrayRef<MemOp::NamedPort> memPorts,
+                                     FExtModuleOp extModuleOp,
+                                     ArrayRef<PortInfo> extPorts,
+                                     SmallVectorImpl<PortInfo> &modPorts) {
   OpBuilder builder(op->getContext());
 
   // The wrapper module's name is the name of the memory.
@@ -195,7 +196,7 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
   for (size_t i = 0, e = memPorts.size(); i != e; ++i) {
     auto name = op.getPortName(i);
     auto type = op.getPortType(i);
-    modPorts.push_back({name, type, Direction::Input, op.getLoc()});
+    modPorts.push_back({name, type, Direction::In, op.getLoc()});
   }
   auto moduleOp = builder.create<FModuleOp>(
       op.getLoc(), builder.getStringAttr(memName), modPorts);
@@ -244,7 +245,7 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
 /// bundles to match the memory return type.
 static void createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
                                       InstanceOp instanceOp,
-                                      ArrayRef<ModulePortInfo> extPorts,
+                                      ArrayRef<PortInfo> extPorts,
                                       SmallVectorImpl<Value> &results) {
 
   auto extResultIt = instanceOp.result_begin();
@@ -280,7 +281,7 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
   // suitable memory module already created, a new one representing the memory
   // will be created.
   FModuleOp moduleOp;
-  SmallVector<ModulePortInfo, 2> modPorts;
+  SmallVector<PortInfo, 2> modPorts;
 
   // Check if we have already created a suitable wrapper module. If we have not
   // seen a similar memory, create a new wrapper module.
@@ -298,7 +299,7 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
 
     // Get the pohwist for a module which represents the black box memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
-    SmallVector<ModulePortInfo, 9> extPortList;
+    SmallVector<PortInfo, 9> extPortList;
     getBlackBoxPortsForMemOp(memOp, memPorts, extPortList);
     auto extModuleOp = createBlackboxModuleForMem(memOp, extPortList);
     moduleOp = createWrapperModule(memOp, memPorts, extModuleOp, extPortList,
@@ -350,7 +351,7 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
                         MemOp memOp) {
 
   FExtModuleOp extModuleOp;
-  SmallVector<ModulePortInfo, 9> extPortList;
+  SmallVector<PortInfo, 9> extPortList;
 
   auto it = knownMems.find(memOp);
   auto found = it != knownMems.end();

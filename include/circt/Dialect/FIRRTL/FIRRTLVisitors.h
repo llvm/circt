@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_FIRRTL_FIRRTLVISITORS_H
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -43,13 +44,10 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp, VerbatimExprOp, AsPassivePrimOp, AsNonPassivePrimOp,
-
-            // Conversion from FIRRTL to HW dialect types.
-            StdIntCastOp, HWStructCastOp, AnalogInOutCastOp>(
-            [&](auto expr) -> ResultType {
-              return thisCast->visitExpr(expr, args...);
-            })
+            TailPrimOp, VerbatimExprOp, HWStructCastOp,
+            mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
+          return thisCast->visitExpr(expr, args...);
+        })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidExpr(op, args...);
         });
@@ -138,13 +136,10 @@ public:
   HANDLE(ShrPrimOp, Unhandled);
   HANDLE(TailPrimOp, Unhandled);
   HANDLE(VerbatimExprOp, Unhandled);
-  HANDLE(AsPassivePrimOp, Unhandled);
-  HANDLE(AsNonPassivePrimOp, Unhandled);
 
-  // Conversion from FIRRTL to HW dialect types.
-  HANDLE(StdIntCastOp, Unhandled);
+  // Conversions.
   HANDLE(HWStructCastOp, Unhandled);
-  HANDLE(AnalogInOutCastOp, Unhandled);
+  HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
 #undef HANDLE
 };
 
@@ -157,8 +152,8 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AttachOp, ConnectOp, MemoryPortOp, MemoryPortAccessOp,
-                       PartialConnectOp, PrintFOp, SkipOp, StopOp, WhenOp,
-                       AssertOp, AssumeOp, CoverOp>(
+                       PartialConnectOp, ForceOp, PrintFOp, SkipOp, StopOp,
+                       WhenOp, AssertOp, AssumeOp, CoverOp>(
             [&](auto opNode) -> ResultType {
               return thisCast->visitStmt(opNode, args...);
             })
@@ -189,6 +184,7 @@ public:
   HANDLE(MemoryPortOp);
   HANDLE(MemoryPortAccessOp);
   HANDLE(PartialConnectOp);
+  HANDLE(ForceOp);
   HANDLE(PrintFOp);
   HANDLE(SkipOp);
   HANDLE(StopOp);
@@ -208,9 +204,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<CombMemOp, InstanceOp, MemOp, NodeOp, RegOp, SeqMemOp,
-                       RegResetOp, WireOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitDecl(opNode, args...);
-        })
+                       RegResetOp, WireOp, VerbatimWireOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitDecl(opNode, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           return thisCast->visitInvalidDecl(op, args...);
         });
@@ -241,6 +238,7 @@ public:
   HANDLE(RegResetOp);
   HANDLE(SeqMemOp);
   HANDLE(WireOp);
+  HANDLE(VerbatimWireOp);
 #undef HANDLE
 };
 

@@ -23,6 +23,9 @@ class Instance:
     self.module = module
     self.instOp = instOp
     self.parent = parent
+    if parent is None:
+      self.devicedb = msft.DeviceDB(module.operation)
+      self.devicedb.add_design_placements()
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
 
@@ -44,6 +47,12 @@ class Instance:
     if self.parent is None:
       return self.module
     return self.parent.root_module
+
+  @property
+  def root_instance(self) -> Instance:
+    if self.parent is None:
+      return self
+    return self.parent.root_instance
 
   @property
   def path_attr(self) -> msft.RootedInstancePathAttr:
@@ -90,6 +99,14 @@ class Instance:
       inst.walk_instances(callback)
 
   def attach_attribute(self, attr_key: str, attr: ir.Attribute):
+    if isinstance(attr, msft.PhysLocationAttr):
+      assert attr_key.startswith("loc:")
+      db = self.root_instance.devicedb
+      rc = db.add_placement(attr, self.path_attr, attr_key[4:],
+                            self.instOp.operation)
+      if not rc:
+        raise ValueError("Failed to place")
+
     if attr_key not in self.instOp.attributes:
       cases = []
     else:
@@ -113,3 +130,9 @@ class Instance:
     if isinstance(subpath, list):
       subpath = "|".join(subpath)
     self.attach_attribute(f"loc:{subpath}", loc)
+
+  def get_instance_at(self, loc):
+    if isinstance(loc, tuple) and len(loc) == 2:
+      loc = loc[1]
+    assert isinstance(loc, msft.PhysLocationAttr)
+    return self.root_instance.devicedb.get_instance_at(loc)

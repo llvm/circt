@@ -4,31 +4,31 @@
 // Disable the SV test : circt-opt %s --lower-esi-ports --lower-esi-to-hw | circt-translate --export-verilog | FileCheck --check-prefix=SV %s
 // RUN: circt-translate %s -export-esi-capnp -verify-diagnostics | FileCheck --check-prefix=CAPNP %s
 
-hw.module.extern @Sender() -> (%x: !esi.channel<si14>)
+hw.module.extern @Sender() -> (x: !esi.channel<si14>)
 hw.module.extern @Reciever(%a: !esi.channel<i32>)
 hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 
-// CHECK-LABEL: hw.module.extern @Sender() -> (%x: !esi.channel<si14>)
+// CHECK-LABEL: hw.module.extern @Sender() -> (x: !esi.channel<si14>)
 // CHECK-LABEL: hw.module.extern @Reciever(%a: !esi.channel<i32>)
 // CHECK-LABEL: hw.module.extern @ArrReciever(%x: !esi.channel<!hw.array<4xsi64>>)
 
 hw.module @top(%clk:i1, %rstn:i1) -> () {
-  hw.instance "recv" @Reciever (%cosimRecv) : (!esi.channel<i32>) -> ()
-  // CHECK:  hw.instance "recv" @Reciever(%0)  : (!esi.channel<i32>) -> ()
+  hw.instance "recv" @Reciever (a: %cosimRecv: !esi.channel<i32>) -> ()
+  // CHECK:  hw.instance "recv" @Reciever(a: %0: !esi.channel<i32>) -> ()
 
-  %send.x = hw.instance "send" @Sender () : () -> (!esi.channel<si14>)
-  // CHECK:  %send.x = hw.instance "send" @Sender() : () -> !esi.channel<si14>
+  %send.x = hw.instance "send" @Sender () -> (x: !esi.channel<si14>)
+  // CHECK:  %send.x = hw.instance "send" @Sender() -> (x: !esi.channel<si14>)
 
   %cosimRecv = esi.cosim %clk, %rstn, %send.x, 1 {name="TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
   // CHECK:  esi.cosim %clk, %rstn, %send.x, 1 {name = "TestEP"} : !esi.channel<si14> -> !esi.channel<i32>
 
-  %send2.x = hw.instance "send2" @Sender () : () -> (!esi.channel<si14>)
-  // CHECK:  %send2.x = hw.instance "send2" @Sender() : () -> !esi.channel<si14>
+  %send2.x = hw.instance "send2" @Sender () -> (x: !esi.channel<si14>)
+  // CHECK:  %send2.x = hw.instance "send2" @Sender() -> (x: !esi.channel<si14>)
 
   %cosimArrRecv = esi.cosim %clk, %rstn, %send2.x, 2 {name="ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
   // CHECK:  esi.cosim %clk, %rstn, %send2.x, 2 {name = "ArrTestEP"} : !esi.channel<si14> -> !esi.channel<!hw.array<4xsi64>>
 
-  hw.instance "arrRecv" @ArrReciever (%cosimArrRecv) : (!esi.channel<!hw.array<4 x si64>>) -> ()
+  hw.instance "arrRecv" @ArrReciever (x: %cosimArrRecv: !esi.channel<!hw.array<4 x si64>>) -> ()
 
   // Ensure that the file hash is deterministic.
   // CAPNP: @0xccf233b58d85e822;
@@ -41,7 +41,7 @@ hw.module @top(%clk:i1, %rstn:i1) -> () {
   // CAPNP: list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
   // CAPNP: open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
-  // COSIM: hw.instance "TestEP" @Cosim_Endpoint(%clk, %rstn, %{{.+}}, %{{.+}}, %{{.+}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 10578209918096690139 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 11229133067582987457 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}} : (i1, i1, i1, i1, !hw.array<128xi1>) -> (i1, !hw.array<128xi1>, i1)
+  // COSIM: hw.instance "TestEP" @Cosim_Endpoint(clk: %clk: i1, rstn: %rstn: i1, {{.+}}, {{.+}}, {{.+}}) -> (DataOutValid: i1, DataOut: !hw.array<128xi1>, DataInReady: i1) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 10578209918096690139 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 11229133067582987457 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}}
 
   // SV: assign _T.valid = TestEP_DataOutValid;
   // SV: assign _T.data = dataSection[6'h0+:32];

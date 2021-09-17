@@ -7,10 +7,11 @@ from __future__ import annotations
 from .support import get_user_loc
 
 import circt.support as support
-from circt.dialects import hw, seq
+from circt.dialects import comb, hw, seq
 
 import mlir.ir as ir
 
+from typing import Union
 import re
 
 
@@ -28,6 +29,8 @@ class Value:
       return ListValue(value, type)
     if isinstance(type.strip, hw.StructType):
       return StructValue(value, type)
+    if isinstance(type.strip, ir.IntegerType):
+      return BitVectorValue(value, type)
     return RegularValue(value, type)
 
   _reg_name = re.compile(r"^(.*)__reg(\d+)$")
@@ -71,6 +74,35 @@ class RegularValue(Value):
   def __init__(self, value, type):
     self.value = value
     self.type = type
+
+
+class BitVectorValue(Value):
+
+  def __init__(self, value, type):
+    self.value = value
+    self.type = type
+
+  def __getitem__(self, idxOrSlice: Union[int, slice]):
+    if isinstance(idxOrSlice, int):
+      s = slice(idxOrSlice, idxOrSlice + 1)
+    elif isinstance(idxOrSlice, slice):
+      s = idxOrSlice
+    else:
+      raise TypeError("Expected int or slice")
+    idxs = s.indices(len(self))
+    if idxs[2] != 1:
+      raise ValueError("Integer / bitvector slices do not support steps")
+
+    from .pycde_types import types
+    ret_type = types.int(idxs[1] - idxs[0])
+    extracted = comb.ExtractOp.create(idxs[0], ret_type, self.value)
+    ret = Value.get(extracted.result)
+    if self.name is not None:
+      ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+    return ret
+
+  def __len__(self):
+    return self.type.width
 
 
 class ListValue(Value):

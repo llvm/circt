@@ -254,7 +254,7 @@ hw.module @always_basic(%arg0: i1, %arg1: i1) {
 
 
 // CHECK-LABEL: hw.module @alwayscomb_basic(
-hw.module @alwayscomb_basic(%a: i1, %b: i1) -> (%x: i1, %y: i1) {
+hw.module @alwayscomb_basic(%a: i1, %b: i1) -> (x: i1, y: i1) {
   %w1 = sv.reg : !hw.inout<i1>
   %w2 = sv.reg : !hw.inout<i1>
   // CHECK: sv.alwayscomb {

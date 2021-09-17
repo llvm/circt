@@ -12,6 +12,35 @@
 
 include "mlir/IR/OpBase.td"
 
+// Op interface for groups.
+def GroupOpInterface : OpInterface<"GroupInterface"> {
+  let cppNamespace = "::circt::calyx";
+
+  let description = [{
+    This is an op interface for Calyx Groups.
+  }];
+
+  let methods = [
+    InterfaceMethod<
+      "This returns the symbol name of the group.",
+      "mlir::StringAttr",
+      "symName",
+      (ins), [{
+        Operation* op = $_op;
+        return op->getAttrOfType<mlir::StringAttr>("sym_name");
+      }]>,
+    InterfaceMethod<
+      "This returns the body of the group.",
+      "Block*",
+      "getBody",
+      (ins), [{
+        Operation* op = $_op;
+        return &op->getRegion(0).front();
+      }]>
+  ];
+  let verify = [{ return verifyGroupInterface(op); }];
+}
+
 /// Op Interface for cells.
 def CellOpInterface : OpInterface<"CellInterface"> {
   let cppNamespace = "::circt::calyx";
@@ -29,6 +58,10 @@ def CellOpInterface : OpInterface<"CellInterface"> {
     InterfaceMethod<
       "This returns the port directions associated with the cell.",
       "SmallVector<circt::calyx::Direction>", "portDirections"
+    >,
+    InterfaceMethod<
+      "This returns the port attributes associated with the cell.",
+      "SmallVector<DictionaryAttr>", "portAttributes"
     >,
     InterfaceMethod<
       "This returns the instance name of the cell.",
@@ -56,26 +89,37 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       }]
     >,
     InterfaceMethod<
-      "This returns the ComponentPortInfo associated with all of the ports of a cell.",
-      "SmallVector<circt::calyx::ComponentPortInfo>",
-      "portInfos",
+      "This returns the PortInfo associated with all of the ports of a cell.",
+      "SmallVector<circt::calyx::PortInfo>",
+      "getPortInfo",
       (ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        SmallVector<circt::calyx::ComponentPortInfo> info;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections(),$_op.portNames()))
-          info.push_back(ComponentPortInfo{StringAttr::get($_op->getContext(),
-            std::get<2>(it)), std::get<0>(it).getType(), std::get<1>(it)});
-        return info;
+        SmallVector<circt::calyx::PortInfo> ports;
+        MLIRContext* context = $_op->getContext();
+        auto zippedPortInfo = llvm::zip(
+          $_op->getResults(),
+          $_op.portDirections(),
+          $_op.portNames(),
+          $_op.portAttributes()
+        );
+        for (auto&& [result, direction, name, attributes] : zippedPortInfo)
+          ports.push_back(PortInfo{
+              StringAttr::get(context, name),
+              result.getType(),
+              direction,
+              attributes
+          });
+        return ports;
     }]
     >,
     InterfaceMethod<
-      "This returns the ComponentPortInfo associated with the port of a cell.",
-      "circt::calyx::ComponentPortInfo",
+      "This returns the PortInfo associated with the port of a cell.",
+      "circt::calyx::PortInfo",
       "portInfo",
       (ins "Value":$port),
       /*methodBody=*/"",
-      /*defaultImplementation=*/[{ return portInfos()[portIndex(port)]; }]
+      /*defaultImplementation=*/[{ return getPortInfo()[portIndex(port)]; }]
     >,
     InterfaceMethod<
       "This returns the direction of a given port of a cell.",
@@ -94,30 +138,38 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*defaultImplementation=*/[{ return portInfo(port).name.getValue(); }]
     >,
     InterfaceMethod<
+      "This returns the attributes of a given port of a cell.",
+      "DictionaryAttr",
+      "portDictionaryAttr",
+      (ins "Value":$port),
+      /*methodBody=*/"",
+      /*defaultImplementation=*/[{ return portInfo(port).attributes; }]
+    >,
+    InterfaceMethod<
       "This returns the input ports of a cell.",
       "SmallVector<Value>",
-      "inputPorts",
+      "getInputPorts",
       (ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         SmallVector<Value> ports;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections()))
-          if (std::get<1>(it) == calyx::Direction::Input)
-            ports.push_back(std::get<0>(it));
+        for (auto&& [result, direction] : llvm::zip($_op->getResults(), $_op.portDirections()))
+          if (direction == calyx::Direction::Input)
+            ports.push_back(result);
         return ports;
       }]
     >,
     InterfaceMethod<
       "This returns the output ports of a cell.",
       "SmallVector<Value>",
-      "outputPorts",
+      "getOutputPorts",
       (ins),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         SmallVector<Value> ports;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portDirections()))
-          if (std::get<1>(it) == calyx::Direction::Output)
-            ports.push_back(std::get<0>(it));
+        for (auto&& [result, direction] : llvm::zip($_op->getResults(), $_op.portDirections()))
+          if (direction == calyx::Direction::Output)
+            ports.push_back(result);
         return ports;
       }]
     >,
@@ -128,24 +180,21 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       (ins "calyx::Direction":$dir),
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
-        // TODO(Calyx): Rewrite this once we've added attributes to the interface ports
-        auto isInterfacePort = [](StringRef portName) {
-          return portName == "clk" || portName == "reset" || portName == "go"
-            || portName == "done";
+        auto isInterfacePort = [](const PortInfo& port) {
+          return port.hasAttribute("go")   || port.hasAttribute("reset") ||
+                 port.hasAttribute("done") || port.hasAttribute("clk");
         };
 
         SmallVector<Value> filteredPorts;
-        for (auto it : llvm::zip($_op->getResults(), $_op.portInfos())) {
-          auto portInfo = std::get<1>(it);
-          if (portInfo.direction == dir && !isInterfacePort(portInfo.name.getValue()))
-            filteredPorts.push_back(std::get<0>(it));
+        for (auto&& [result, port] : llvm::zip($_op->getResults(), $_op.getPortInfo())) {
+          if (port.direction != dir || !isInterfacePort(port))
+            continue;
+          filteredPorts.push_back(result);
         }
         return filteredPorts;
       }]
     >
   ];
 
-  let verify = [{
-    return verifyCell(op);
-  }];
+  let verify = [{ return verifyCell(op); }];
 }

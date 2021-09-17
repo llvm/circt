@@ -85,11 +85,11 @@ firrtl.module @no_ports() {
 // stdIntCast can work with clock inputs/outputs too.
 // CHECK-LABEL: @ClockCast
 firrtl.module @ClockCast(in %clock: !firrtl.clock) {
-  // CHECK: %0 = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
-  %0 = firrtl.stdIntCast %clock : (!firrtl.clock) -> i1
+  // CHECK: %0 = builtin.unrealized_conversion_cast %clock : !firrtl.clock to i1
+  %0 = builtin.unrealized_conversion_cast %clock : !firrtl.clock to i1
 
-  // CHECK: %1 = firrtl.stdIntCast %0 : (i1) -> !firrtl.clock
-  %1 = firrtl.stdIntCast %0 : (i1) -> !firrtl.clock
+  // CHECK: %1 = builtin.unrealized_conversion_cast %0 : i1 to !firrtl.clock
+  %1 = builtin.unrealized_conversion_cast %0 : i1 to !firrtl.clock
 }
 
 

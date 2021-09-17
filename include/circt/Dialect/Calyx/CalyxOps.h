@@ -37,6 +37,27 @@ public:
   }
 };
 
+/// A helper function to verify a combinational operation.
+LogicalResult verifyCombinationalOp(Operation *op);
+
+/// Signals that the following operation is combinational.
+template <typename ConcreteType>
+class Combinational
+    : public mlir::OpTrait::TraitBase<ConcreteType, Combinational> {
+public:
+  static LogicalResult verifyTrait(Operation *op) {
+    Attribute staticAttribute = op->getAttr("static");
+    if (staticAttribute == nullptr)
+      return success();
+
+    // If the operation has the static attribute, verify it is zero.
+    APInt staticValue = staticAttribute.cast<IntegerAttr>().getValue();
+    assert(staticValue == 0 && "If combinational, it should take 0 cycles.");
+
+    return success();
+  }
+};
+
 /// The port direction attribute follows the implementation style of FIRRTL
 /// module port direction attributes.
 enum Direction { Input = 0, Output };
@@ -61,21 +82,52 @@ SmallVector<Direction> unpackAttribute(Operation *component);
 SmallVector<Direction> genInOutDirections(size_t nIns, size_t nOuts);
 } // namespace direction
 
-/// This holds the name and type that describes the component's ports.
-struct ComponentPortInfo {
+/// This holds information about the port to either a component or cell.
+struct PortInfo {
   StringAttr name;
   Type type;
   Direction direction;
+  DictionaryAttr attributes;
+
+  /// Returns whether the given port has attribute with Identifier `name`.
+  bool hasAttribute(StringRef identifier) const {
+    assert(attributes && "PortInfo::attributes should be instantiated.");
+    return llvm::any_of(attributes, [&](auto idToAttribute) {
+      return identifier == std::get<0>(idToAttribute);
+    });
+  }
+
+  /// Returns the attribute associated with the given name if it exists,
+  /// otherwise std::nullopt.
+  llvm::Optional<Attribute> getAttribute(StringRef identifier) const {
+    assert(attributes && "PortInfo::attributes should be instantiated.");
+    auto it = llvm::find_if(attributes, [&](auto idToAttribute) {
+      return identifier == std::get<0>(idToAttribute);
+    });
+    if (it == attributes.end())
+      return None;
+    return std::get<1>(*it);
+  }
+
+  /// Returns all identifiers for this dictionary attribute.
+  SmallVector<StringRef> getAllIdentifiers() const {
+    assert(attributes && "PortInfo::attributes should be instantiated.");
+    SmallVector<StringRef> identifiers;
+    llvm::transform(
+        attributes, std::back_inserter(identifiers),
+        [](auto idToAttribute) { return std::get<0>(idToAttribute); });
+    return identifiers;
+  }
 };
 
 /// A helper function to verify each operation with the Cell trait.
 LogicalResult verifyCell(Operation *op);
 
-/// Returns port information about a given component.
-SmallVector<ComponentPortInfo> getComponentPortInfo(Operation *op);
+/// A helper function to verify each operation with the Group Interface trait.
+LogicalResult verifyGroupInterface(Operation *op);
 
 /// Returns port information for the block argument provided.
-ComponentPortInfo getComponentPortInfo(BlockArgument arg);
+PortInfo getPortInfo(BlockArgument arg);
 
 } // namespace calyx
 } // namespace circt

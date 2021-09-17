@@ -99,11 +99,22 @@ def StopOp : FIRRTLOp<"stop"> {
   let assemblyFormat = "$clock `,` $cond `,` $exitCode custom<StopAttrs>(attr-dict)";
 }
 
+/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
+def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
+/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
+def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
+/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
+def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
+
+def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
+                                   [AtPosEdge, AtNegEdge, AtEdge]>  {}
+
 def AssertOp : FIRRTLOp<"assert"> {
   let summary = "Assert Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message, StrAttr:$name);
+    StrAttr:$message, StrAttr:$name, DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
+    DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl);
   let results = (outs);
 
   let assemblyFormat =
@@ -114,7 +125,8 @@ def AssumeOp : FIRRTLOp<"assume"> {
   let summary = "Assume Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message, StrAttr:$name);
+    StrAttr:$message, StrAttr:$name, DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
+    DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl);
   let results = (outs);
 
   let assemblyFormat =
@@ -125,7 +137,8 @@ def CoverOp : FIRRTLOp<"cover"> {
   let summary = "Cover Verification Statement";
 
   let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message, StrAttr:$name);
+    StrAttr:$message, StrAttr:$name, DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
+    DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl);
   let results = (outs);
 
   let assemblyFormat =
@@ -183,4 +196,13 @@ def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
       return OpBuilder::atBlockEnd(&body);
     }
   }];
+}
+
+def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {
+  let summary = "Force procedural statement";
+  let description = "Maps to the corresponding `sv.force` operation.";
+  let arguments = (ins FIRRTLType:$dest, FIRRTLType:$src);
+  let results = (outs);
+  let assemblyFormat =
+    "$dest `,` $src attr-dict `:` type($dest) `,` type($src)";
 }

@@ -18,6 +18,11 @@ class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
     let skipDefaultBuilders = 1;
 }
 
+/// Trait used to mark certain operations in the Calyx dialect as combinational.
+def Combinational : NativeOpTrait<"Combinational"> {
+  let cppNamespace = "::circt::calyx";
+}
+
 def RegisterOp : CalyxPrimitive<"register", [
     SameTypeConstraint<"in", "out">
   ]> {
@@ -33,13 +38,13 @@ def RegisterOp : CalyxPrimitive<"register", [
   let builders = [
     OpBuilder<(ins "StringAttr":$instanceName, "size_t":$width), [{
       $_state.addAttribute("instanceName", instanceName);
-      auto i1Type = $_builder.getI1Type();
-      auto widthType = $_builder.getIntegerType(width);
+      Type i1Type = $_builder.getI1Type();
+      Type widthType = $_builder.getIntegerType(width);
       $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});
     }]>,
-    OpBuilder<(ins "StringAttr":$name, "Type":$type), [{
-      $_state.addAttribute("name", name);
-      auto i1Type = $_builder.getI1Type();
+    OpBuilder<(ins "StringAttr":$instanceName, "Type":$type), [{
+      $_state.addAttribute("instanceName", instanceName);
+      Type i1Type = $_builder.getI1Type();
       $_state.addTypes({type, i1Type, i1Type, i1Type, type, i1Type});
     }]>
   ];
@@ -121,7 +126,7 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
 }
 
 class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
-  CalyxPrimitive<"std_" # mnemonic, traits> {
+  CalyxPrimitive<"std_" # mnemonic, !listconcat(traits, [Combinational])> {
 
   let summary = "Defines an operation which maps to a Calyx library primitive";
   let description = [{
@@ -143,6 +148,11 @@ class BoolBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
     SameTypeConstraint<"left", "right">
   ]> {
   let results = (outs AnyType:$left, AnyType:$right, I1:$out);
+  let extraClassDeclaration = [{
+    Value lhsPort() { return getResult(0); }
+    Value rhsPort() { return getResult(1); }
+    Value outPort() { return getResult(2); }
+  }];
 }
 
 def LtLibOp  : BoolBinaryLibraryOp<"lt"> {}
@@ -163,6 +173,11 @@ class ArithBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
     SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs AnyType:$left, AnyType:$right, AnyType:$out);
+  let extraClassDeclaration = [{
+    Value lhsPort() { return getResult(0); }
+    Value rhsPort() { return getResult(1); }
+    Value outPort() { return getResult(2); }
+  }];
 }
 
 def AddLibOp  : ArithBinaryLibraryOp<"add"> {}
@@ -178,6 +193,10 @@ def XorLibOp  : ArithBinaryLibraryOp<"xor"> {}
 class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
   ]> {
   let results = (outs AnyInteger:$in, AnyInteger:$out);
+  let extraClassDeclaration = [{
+    Value inPort()  { return getResult(0); }
+    Value outPort() { return getResult(1); }
+  }];
 }
 
 def PadLibOp : UnaryLibraryOp<"pad"> {
@@ -192,6 +211,7 @@ def SliceLibOp : UnaryLibraryOp<"slice"> {
   let verifier = [{
     unsigned inBits = getResult(0).getType().getIntOrFloatBitWidth();
     unsigned outBits = getResult(1).getType().getIntOrFloatBitWidth();
-    return success(inBits > outBits);  }];
+    return success(inBits > outBits);
+  }];
 }
 def NotLibOp  : UnaryLibraryOp<"not"> {}

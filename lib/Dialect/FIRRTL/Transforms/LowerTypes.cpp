@@ -238,14 +238,15 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   /// type lowering on all operations.
   void lowerModule(Operation *op);
 
-  bool lowerArg(
-      Operation *module, size_t argIndex,
-      SmallVectorImpl<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>>
-          &newArgs,
-      SmallVectorImpl<Value> &lowering);
-  std::pair<Value, firrtl::ModulePortInfo>
-  addArg(Operation *module, unsigned insertPt, FIRRTLType srcType,
-         FlatBundleFieldEntry field, ModulePortInfo &oldArg);
+  bool
+  lowerArg(Operation *module, size_t argIndex,
+           SmallVectorImpl<std::pair<PortInfo, SmallVector<NamedAttribute>>>
+               &newArgs,
+           SmallVectorImpl<Value> &lowering);
+  std::pair<Value, PortInfo> addArg(Operation *module, unsigned insertPt,
+                                    FIRRTLType srcType,
+                                    FlatBundleFieldEntry field,
+                                    PortInfo &oldArg);
 
   // Helpers to manage state.
   void visitDecl(FExtModuleOp op);
@@ -259,7 +260,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   void visitExpr(InvalidValueOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(MuxPrimOp op);
-  void visitExpr(AsPassivePrimOp op);
+  void visitExpr(mlir::UnrealizedConversionCastOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(PartialConnectOp op);
   void visitStmt(WhenOp op);
@@ -400,10 +401,10 @@ void TypeLoweringVisitor::lowerModule(Operation *op) {
 // Creates and returns a new block argument of the specified type to the
 // module. This also maintains the name attribute for the new argument,
 // possibly with a new suffix appended.
-std::pair<Value, firrtl::ModulePortInfo>
+std::pair<Value, PortInfo>
 TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             FIRRTLType srcType, FlatBundleFieldEntry field,
-                            ModulePortInfo &oldArg) {
+                            PortInfo &oldArg) {
   Value newValue;
   if (auto mod = dyn_cast<FModuleOp>(module)) {
     Block *body = mod.getBodyBlock();
@@ -422,16 +423,15 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   // Flip the direction if the field is an output.
   auto direction = (Direction)((unsigned)oldArg.direction ^ field.isOutput);
 
-  return std::make_pair(
-      newValue, firrtl::ModulePortInfo{name, field.type, direction, oldArg.loc,
-                                       AnnotationSet(newAnnotations)});
+  return std::make_pair(newValue,
+                        PortInfo{name, field.type, direction, oldArg.loc,
+                                 AnnotationSet(newAnnotations)});
 }
 
 // Lower arguments with bundle type by flattening them.
 bool TypeLoweringVisitor::lowerArg(
     Operation *module, size_t argIndex,
-    SmallVectorImpl<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>>
-        &newArgs,
+    SmallVectorImpl<std::pair<PortInfo, SmallVector<NamedAttribute>>> &newArgs,
     SmallVectorImpl<Value> &lowering) {
 
   // Flatten any bundle types.
@@ -681,7 +681,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
   // First get all the info for existing ports
-  SmallVector<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>> newArgs;
+  SmallVector<std::pair<PortInfo, SmallVector<NamedAttribute>>> newArgs;
   for (auto port : llvm::enumerate(extModule.getPorts())) {
     SmallVector<NamedAttribute> argAttrs;
     AnnotationSet::forPort(extModule, port.index(), argAttrs);
@@ -757,7 +757,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
   // First get all the info for existing ports
-  SmallVector<std::pair<ModulePortInfo, SmallVector<NamedAttribute>>> newArgs;
+  SmallVector<std::pair<PortInfo, SmallVector<NamedAttribute>>> newArgs;
   for (auto port : llvm::enumerate(module.getPorts())) {
     SmallVector<NamedAttribute> argAttrs;
     AnnotationSet::forPort(module, port.index(), argAttrs);
@@ -881,12 +881,12 @@ void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
   lowerProducer(op, clone);
 }
 
-// Expand AsPassivePrimOp of aggregates
-void TypeLoweringVisitor::visitExpr(AsPassivePrimOp op) {
+// Expand UnrealizedConversionCastOp of aggregates
+void TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
-    auto input = getSubWhatever(op.input(), field.index);
-    return builder->create<AsPassivePrimOp>(field.type, input);
+    auto input = getSubWhatever(op.getOperand(0), field.index);
+    return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input);
   };
   lowerProducer(op, clone);
 }

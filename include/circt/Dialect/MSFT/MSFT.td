@@ -15,7 +15,11 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Pass/PassBase.td"
+include "mlir/IR/RegionKindInterface.td"
 
 def MSFTDialect : Dialect {
   let name = "msft";
@@ -41,78 +45,8 @@ def MSFTDialect : Dialect {
   }];
 }
 
-// Base class for the operation in this dialect.
-class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
-    Op<MSFTDialect, mnemonic, traits>;
-
-def DeviceType : I32EnumAttr<"DeviceType",
-  "Type of device at physical location", [
-    I32EnumAttrCase<"M20K", 1>,
-    I32EnumAttrCase<"DSP", 2>,
-  ]>;
-
-class MSFT_Attr<string name, list<Trait> traits = [],
-                string baseCppClass = "::mlir::Attribute">
-    : AttrDef<MSFTDialect, name, traits, baseCppClass> {
-  let mnemonic = ?;
-}
-
-def RootedInstancePath : MSFT_Attr<"RootedInstancePath"> {
-  let summary = "A path through the instance hierarchy with the root module";
-  let parameters = (ins
-    "FlatSymbolRefAttr":$rootModule, ArrayRefParameter<"StringAttr">:$path);
-}
-
-def SwitchInstanceCase : MSFT_Attr<"SwitchInstanceCase"> {
-  let summary = "A switch case in the SwitchInstance attribute";
-  let parameters = (ins
-    "RootedInstancePathAttr":$inst, "mlir::Attribute":$attr);
-}
-
-def SwitchInstance : MSFT_Attr<"SwitchInstance"> {
-  let summary = "Select an attribute to be use based on the instance";
-  let mnemonic = "switch.inst";
-  let parameters = (ins
-    ArrayRefParameter<"SwitchInstanceCaseAttr">:$cases);
-
-  let extraClassDeclaration = [{
-    Attribute lookup(RootedInstancePathAttr);
-  }];
-}
-
-def PhysLocation : MSFT_Attr<"PhysLocation"> {
-  let summary = "Descibes a physical location on a device";
-  let description = [{
-    Annotate a particular entity within an op with the location of the device
-    on an FPGA to which it should mapped. The coordinates in this attribute
-    are absolute locations on the device, so if there are two instances of a
-    module with this annotation incorrect results will be generated. How to
-    solve this is a more general, open problem.
-  }];
-  let mnemonic = "physloc";
-  let parameters = (ins
-    "DeviceTypeAttr":$devType,
-    "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
-}
-
-def RunGenerators: Pass<"run-generators", "mlir::ModuleOp"> {
-  let summary = "Run the MSFT design entry generators";
-  let description = [{
-    Generators allow designers to model their system with high-level constructs
-    (which they define), then lower them down into synthesizable code.
-    High-level constructs are modeled as MLIR Operations. Generators are
-    essentially lowerings of those operations and they are registered along
-    with the name of an MLIR operation which they lower. Generators also have a
-    name so multiple can be registered per operation then one of them selected
-    by some criteria, allowing the designer to choose a particular
-    implementation of the same logical feature.
-  }];
-  let constructor = "circt::msft::createRunGeneratorsPass()";
-  let options = [
-    ListOption<"generators", "generators", "std::string",
-               "List of possible generators to run.",
-               "llvm::cl::OneOrMore, llvm::cl::MiscFlags::CommaSeparated">
-  ];
-}
+include "circt/Dialect/MSFT/MSFTAttributes.td"
+include "circt/Dialect/MSFT/MSFTOps.td"
+include "circt/Dialect/MSFT/MSFTPasses.td"
 
 #endif // MSFT_TD

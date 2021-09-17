@@ -18,7 +18,7 @@ module attributes {circt.loweringOptions = "badOption,anotherOne"} {}
 
 // expected-error @+2 {{name 'casex' changed during emission}}
 // expected-error @+1 {{name 'if' changed during emission}}
-hw.module @namechange(%casex: i4) -> (%if: i4) {
+hw.module @namechange(%casex: i4) -> (if: i4) {
   hw.output %casex : i4
 }
 
@@ -28,5 +28,5 @@ hw.module @A () {}
 
 hw.module @B() {
   // expected-error @+1 {{unknown extmodule parameter value 'width' = @Foo}}
-  hw.instance "foo" @A() { parameters = { width = @Foo } }: () -> ()
+  hw.instance "foo" @A() -> () { parameters = { width = @Foo } } 
 }

@@ -42,15 +42,11 @@ public:
                   ConversionPatternRewriter &rewriter) const final {
     Location loc = reg.getLoc();
 
-    auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType());
-    DictionaryAttr regAttrs = reg->getAttrDictionary();
-    if (!regAttrs.empty())
-      svReg->setAttrs(regAttrs);
-    if (!svReg->hasAttrOfType<StringAttr>("name"))
-      // sv.reg requires a name attribute.
-      svReg->setAttr("name", rewriter.getStringAttr(""));
-    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
+    auto svReg = rewriter.create<sv::RegOp>(loc, reg.getResult().getType(),
+                                            reg.nameAttr());
+    svReg->setDialectAttrs(reg->getDialectAttrs());
 
+    auto regVal = rewriter.create<sv::ReadInOutOp>(loc, svReg);
     if (reg.reset() && reg.resetValue()) {
       rewriter.create<sv::AlwaysFFOp>(
           loc, sv::EventControl::AtPosEdge, reg.clk(), ResetType::SyncReset,

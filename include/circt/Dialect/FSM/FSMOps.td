@@ -38,7 +38,7 @@ def MachineOp : FSMOp<"machine", [HasParent<"mlir::ModuleOp">, FunctionLike,
     StateOp getDefaultState();
 
     /// Get the port information of the machine.
-    void getHWPortInfo(SmallVectorImpl<circt::hw::ModulePortInfo> &);
+    void getHWPortInfo(SmallVectorImpl<hw::PortInfo> &);
 
   private:
     /// This trait needs access to the hooks defined below.

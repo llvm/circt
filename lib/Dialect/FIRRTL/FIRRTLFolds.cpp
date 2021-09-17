@@ -16,6 +16,10 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/StringExtras.h"
+
+// Forward Decl for patterns.
+static bool isUselessName(circt::StringRef name);
 
 // Declarative canonicalization patterns
 namespace circt {
@@ -70,6 +74,25 @@ static bool isUInt1(Type type) {
   if (!t || !t.hasWidth() || t.getWidth() != 1)
     return false;
   return true;
+}
+
+/// Return true if this is a useless temporary name produced by FIRRTL.  We
+/// drop these as they don't convey semantic meaning.
+static bool isUselessName(StringRef name) {
+  // Ignore _T and _T_123
+  if (name.startswith("_T")) {
+    if (name.size() == 2)
+      return true;
+    return name.size() > 3 && name[2] == '_' && llvm::isDigit(name[3]);
+  }
+
+  // Ignore _GEN and _GEN_123, these are produced by Namespace.scala.
+  if (name.startswith("_GEN")) {
+    if (name.size() == 4)
+      return true;
+    return name.size() > 5 && name[4] == '_' && llvm::isDigit(name[5]);
+  }
+  return false;
 }
 
 /// Implicitly replace the operand to a constant folding operation with a const
@@ -280,7 +303,7 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   /// be folded here because it increases the return type bitwidth by
   /// one and requires sign extension (a new op).
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>())
-    if (rhsCst.getValue().isOneValue() && lhs().getType() == getType())
+    if (rhsCst.getValue().isOne() && lhs().getType() == getType())
       return lhs();
 
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
@@ -343,11 +366,11 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
 
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// and(x, 0) -> 0
-    if (rhsCst.getValue().isNullValue() && rhs().getType() == getType())
+    if (rhsCst.getValue().isZero() && rhs().getType() == getType())
       return rhs();
 
     /// and(x, -1) -> x
-    if (rhsCst.getValue().isAllOnesValue() && lhs().getType() == getType() &&
+    if (rhsCst.getValue().isAllOnes() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
   }
@@ -377,11 +400,11 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
 
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// or(x, 0) -> x
-    if (rhsCst.getValue().isNullValue() && lhs().getType() == getType())
+    if (rhsCst.getValue().isZero() && lhs().getType() == getType())
       return lhs();
 
     /// or(x, -1) -> -1
-    if (rhsCst.getValue().isAllOnesValue() && rhs().getType() == getType() &&
+    if (rhsCst.getValue().isAllOnes() && rhs().getType() == getType() &&
         lhs().getType() == getType())
       return rhs();
   }
@@ -411,7 +434,7 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
 
   /// xor(x, 0) -> x
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>())
-    if (rhsCst.getValue().isNullValue() && lhs().getType() == getType())
+    if (rhsCst.getValue().isZero() && lhs().getType() == getType())
       return lhs();
 
   /// xor(x, x) -> 0
@@ -490,7 +513,7 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // lt(x, 0) -> 0 when x is unsigned
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
-    if (rhsCst.getValue().isNullValue() && lhs().getType().isa<UIntType>())
+    if (rhsCst.getValue().isZero() && lhs().getType().isa<UIntType>())
       return getIntAttr(getType(), APInt(1, 0));
   }
 
@@ -546,7 +569,7 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // geq(x, 0) -> 1 when x is unsigned
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
-    if (rhsCst.getValue().isNullValue() && lhs().getType().isa<UIntType>())
+    if (rhsCst.getValue().isZero() && lhs().getType().isa<UIntType>())
       return getIntAttr(getType(), APInt(1, 1));
   }
 
@@ -646,7 +669,7 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// eq(x, 1) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (rhsCst.getValue().isAllOnesValue() && lhs().getType() == getType() &&
+    if (rhsCst.getValue().isAllOnes() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
   }
@@ -662,21 +685,21 @@ LogicalResult EQPrimOp::canonicalize(EQPrimOp op, PatternRewriter &rewriter) {
     auto width = op.lhs().getType().cast<IntType>().getBitWidthOrSentinel();
 
     // eq(x, 0) ->  not(x) when x is 1 bit.
-    if (rhsCst.value().isNullValue() && op.lhs().getType() == op.getType() &&
+    if (rhsCst.value().isZero() && op.lhs().getType() == op.getType() &&
         op.rhs().getType() == op.getType()) {
       rewriter.replaceOpWithNewOp<NotPrimOp>(op, op.lhs());
       return success();
     }
 
     // eq(x, 0) -> not(orr(x)) when x is >1 bit
-    if (rhsCst.value().isNullValue() && width > 1) {
+    if (rhsCst.value().isZero() && width > 1) {
       auto orrOp = rewriter.create<OrRPrimOp>(op.getLoc(), op.lhs());
       rewriter.replaceOpWithNewOp<NotPrimOp>(op, orrOp);
       return success();
     }
 
     // eq(x, ~0) -> andr(x) when x is >1 bit
-    if (rhsCst.value().isAllOnesValue() && width > 1 &&
+    if (rhsCst.value().isAllOnes() && width > 1 &&
         op.lhs().getType() == op.rhs().getType()) {
       rewriter.replaceOpWithNewOp<AndRPrimOp>(op, op.lhs());
       return success();
@@ -694,7 +717,7 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// neq(x, 0) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (rhsCst.getValue().isNullValue() && lhs().getType() == getType() &&
+    if (rhsCst.getValue().isZero() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
   }
@@ -708,20 +731,20 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
   if (auto rhsCst = dyn_cast_or_null<ConstantOp>(op.rhs().getDefiningOp())) {
     auto width = op.lhs().getType().cast<IntType>().getBitWidthOrSentinel();
     // neq(x, 1) -> not(x) when x is 1 bit
-    if (rhsCst.value().isAllOnesValue() && op.lhs().getType() == op.getType() &&
+    if (rhsCst.value().isAllOnes() && op.lhs().getType() == op.getType() &&
         op.rhs().getType() == op.getType()) {
       rewriter.replaceOpWithNewOp<NotPrimOp>(op, op.lhs());
       return success();
     }
 
     // neq(x, 0) -> orr(x) when x is >1 bit
-    if (rhsCst.value().isNullValue() && width > 1) {
+    if (rhsCst.value().isZero() && width > 1) {
       rewriter.replaceOpWithNewOp<OrRPrimOp>(op, op.lhs());
       return success();
     }
 
     // neq(x, ~0) -> not(andr(x))) when x is >1 bit
-    if (rhsCst.value().isAllOnesValue() && width > 1 &&
+    if (rhsCst.value().isAllOnes() && width > 1 &&
         op.lhs().getType() == op.rhs().getType()) {
       auto andrOp = rewriter.create<AndRPrimOp>(op.getLoc(), op.lhs());
       rewriter.replaceOpWithNewOp<NotPrimOp>(op, andrOp);
@@ -847,7 +870,7 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // x == -1
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnesValue()));
+    return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnes()));
 
   // one bit is identity.  Only applies to UInt since we cann't make a cast
   // here.
@@ -863,7 +886,7 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // x != 0
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), APInt(1, !attr.getValue().isNullValue()));
+    return getIntAttr(getType(), APInt(1, !attr.getValue().isZero()));
 
   // one bit is identity.  Only applies to UInt since we cann't make a cast
   // here.
@@ -1035,9 +1058,9 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // mux(0/1, x, y) -> x or y
   if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {
-    if (cond.getValue().isNullValue() && low().getType() == getType())
+    if (cond.getValue().isZero() && low().getType() == getType())
       return low();
-    if (!cond.getValue().isNullValue() && high().getType() == getType())
+    if (!cond.getValue().isZero() && high().getType() == getType())
       return high();
   }
 
@@ -1049,7 +1072,7 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
           highCst.getValue() == lowCst.getValue())
         return highCst;
       // mux(cond, 1, 0) -> cond
-      if (highCst.getValue().isOneValue() && lowCst.getValue().isNullValue() &&
+      if (highCst.getValue().isOne() && lowCst.getValue().isZero() &&
           getType() == sel().getType())
         return sel();
 
@@ -1353,50 +1376,6 @@ LogicalResult ConnectOp::canonicalize(ConnectOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// Conversions
-//===----------------------------------------------------------------------===//
-
-OpFoldResult StdIntCastOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<StdIntCastOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AnalogInOutCastOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<AnalogInOutCastOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AsPassivePrimOp::fold(ArrayRef<Attribute> operands) {
-  // If the input is already passive, then we don't need a conversion.
-  if (getOperand().getType() == getType())
-    return getOperand();
-
-  if (auto castInput =
-          dyn_cast_or_null<AsNonPassivePrimOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AsNonPassivePrimOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<AsPassivePrimOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-//===----------------------------------------------------------------------===//
 // Statements
 //===----------------------------------------------------------------------===//
 
@@ -1492,8 +1471,29 @@ LogicalResult PartialConnectOp::canonicalize(PartialConnectOp op,
 
 void NodeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
-  results.insert<patterns::EmptyNode>(context);
+  results.insert<patterns::EmptyNode, patterns::DropNameNode>(context);
 }
+
+void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<patterns::DropNameWire>(context);
+}
+
+void CombMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.insert<patterns::DropNameCombMem>(context);
+}
+
+void SeqMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.insert<patterns::DropNameSeqMem>(context);
+}
+
+void MemoryPortOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                               MLIRContext *context) {
+  results.insert<patterns::DropNameMemoryPort>(context);
+}
+
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
 struct foldResetMux : public mlir::RewritePattern {
@@ -1551,11 +1551,15 @@ void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
   results.insert<patterns::RegresetWithZeroReset,
                  patterns::RegresetWithInvalidReset,
-                 patterns::RegresetWithInvalidResetValue, foldResetMux>(
-      context);
+                 patterns::RegresetWithInvalidResetValue, foldResetMux,
+                 patterns::DropNameRegReset>(context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {
+  patterns::DropNameMem dnm(op.getContext());
+  if (succeeded(dnm.matchAndRewrite(op, rewriter)))
+    return success();
+
   // If memory has known, but zero width, eliminate it.
   if (op.getDataType().getBitWidthOrSentinel() != 0)
     return failure();
@@ -1649,6 +1653,10 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
   if (!(AnnotationSet(op).hasDontTouch()) &&
       succeeded(foldHiddenReset(op, rewriter)))
+    return success();
+
+  patterns::DropNameReg dnr(op.getContext());
+  if (succeeded(dnr.matchAndRewrite(op, rewriter)))
     return success();
 
   return failure();

@@ -15,7 +15,7 @@ def build(mod, dummy_mod):
   connect(inst.x, inst.y)
   connect(inst.x, const)
   connect(inst.x, const.result)
-  # CHECK: hw.instance "d" @Dummy(%[[C0]])
+  # CHECK: hw.instance "d" @Dummy(x: %[[C0]]: i32)
 
 
 with mlir.ir.Context() as ctx, mlir.ir.Location.unknown():

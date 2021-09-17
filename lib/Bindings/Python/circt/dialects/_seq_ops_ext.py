@@ -41,7 +41,9 @@ class CompRegOp:
       operands.append(reset)
     if reset_value is not None:
       operands.append(reset_value)
-    if name is not None:
+    if name is None:
+      attributes["name"] = StringAttr.get("")
+    else:
       attributes["name"] = StringAttr.get(name)
 
     OpView.__init__(

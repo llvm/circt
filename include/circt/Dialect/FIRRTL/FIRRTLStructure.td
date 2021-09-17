@@ -69,7 +69,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, FunctionLike, Symbol,
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ModulePortInfo>":$ports,
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                CArg<"ArrayAttr","ArrayAttr()">:$annotations)>
   ];
 
@@ -92,7 +92,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, FunctionLike, Symbol,
     }
 
     /// Inserts the given ports.
-    void insertPorts(ArrayRef<std::pair<unsigned, ModulePortInfo>> ports);
+    void insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports);
 
     /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
     /// be in order and unique.
@@ -146,7 +146,7 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name,
-                      "ArrayRef<ModulePortInfo>":$ports,
+                      "ArrayRef<PortInfo>":$ports,
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];

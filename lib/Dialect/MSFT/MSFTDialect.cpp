@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -23,7 +24,39 @@ using namespace msft;
 // Dialect specification.
 //===----------------------------------------------------------------------===//
 
-void MSFTDialect::initialize() { registerAttributes(); }
+namespace {
+
+// We implement the OpAsmDialectInterface so that MSFT dialect operations
+// automatically interpret the name attribute on operations as their SSA name.
+struct MSFTOpAsmDialectInterface : public OpAsmDialectInterface {
+  using OpAsmDialectInterface::OpAsmDialectInterface;
+
+  /// Get a special name to use when printing the entry block arguments of the
+  /// region contained by an operation in this dialect.
+  void getAsmBlockArgumentNames(Block *block,
+                                OpAsmSetValueNameFn setNameFn) const override {
+    // Assign port names to the bbargs if this is a module.
+    auto modOp = dyn_cast<MSFTModuleOp>(block->getParentOp());
+    if (!modOp)
+      return;
+    ArrayAttr argNames = modOp.argNamesAttr();
+    for (size_t i = 0, e = block->getNumArguments(); i != e; ++i) {
+      auto name = argNames[i].cast<StringAttr>().getValue();
+      if (!name.empty())
+        setNameFn(block->getArgument(i), name);
+    }
+  }
+};
+} // end anonymous namespace
+
+void MSFTDialect::initialize() {
+  addOperations<
+#define GET_OP_LIST
+#include "circt/Dialect/MSFT/MSFT.cpp.inc"
+      >();
+  registerAttributes();
+  addInterfaces<MSFTOpAsmDialectInterface>();
+}
 
 /// Registered hook to materialize a single constant operation from a given
 /// attribute value with the desired resultant type. This method should use
@@ -74,5 +107,6 @@ hw::InstanceOp circt::msft::getInstance(hw::HWModuleOp root,
     path.push_back(sym.getValue());
   return ::getInstance(root, path);
 }
+
 #include "circt/Dialect/MSFT/MSFTDialect.cpp.inc"
 #include "circt/Dialect/MSFT/MSFTEnums.cpp.inc"

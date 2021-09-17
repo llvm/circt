@@ -567,41 +567,38 @@ def VerbatimExprOp : FIRRTLOp<"verbatim.expr",
   ];
 }
 
+def VerbatimWireOp : FIRRTLOp<"verbatim.wire",
+                              [NoSideEffect, HasCustomSSAName]> {
+  let summary = "Expression with wire semantics that expands to a value given "
+                "SystemVerilog text";
+  let description = [{
+    This operation produces a typed value with wire semantics, expressed by a
+    string of SystemVerilog. This can be used to access macros and other values
+    that are only sensible as Verilog text.
+
+    The text string is expected to have the highest precedence, so you should
+    include parentheses in the string if it isn't a single token. This is also
+    assumed to not have side effects (use `sv.verbatim` if you need them).
+
+    `firrtl.verbatim.wire` allows operand substitutions with `{{0}}` syntax.
+  }];
+
+  let arguments = (ins StrAttr:$text, Variadic<AnyType>:$operands);
+  let results = (outs FIRRTLType:$result);
+  let assemblyFormat = [{
+    $text attr-dict (`(` $operands^ `)`)?
+      `:` functional-type($operands, $result)
+  }];
+
+  let builders = [
+    OpBuilder<(ins "Type":$resultType, "StringRef":$text),
+               "build(odsBuilder, odsState, resultType, text, ValueRange{});">
+  ];
+}
 
 //===----------------------------------------------------------------------===//
 // Conversions to/from fixed-width signless integer types in standard dialect.
 //===----------------------------------------------------------------------===//
-
-// firrtl.stdIntCast takes inputs and results that are either signless integers
-// or integer-like things in the FIRRTL dialect.
-def IntCastType : AnyTypeOf<[PassiveType, AnySignlessInteger],
-                            "passive FIRRTL type or signless builtin integer">;
-
-// This operation converts from an SInt/UInt/Clock/etc to a signless integer
-// type, or visa-versa.  FIRRTL source/destination types must be passive.
-def StdIntCastOp : FIRRTLOp<"stdIntCast", [NoSideEffect]> {
-  let arguments = (ins IntCastType:$input);
-  let results = (outs IntCastType:$result);
-
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
-
-  let hasFolder = 1;
-  let verifier = "return ::verifyStdIntCastOp(*this);";
-}
-
-// This operation converts from an Analog type to an InOut type of the
-// corresponding width, or visa-versa.
-def AnalogInOutCastOp : FIRRTLOp<"analogInOutCast", [NoSideEffect]> {
-  let arguments = (ins AnyType:$input);
-  let results = (outs AnyType:$result);
-
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
-
-  let hasFolder = 1;
-  let verifier = "return ::verifyAnalogInOutCastOp(*this);";
-}
 
 // This operation converts from a struct to a bundle
 // type, or visa-versa.  FIRRTL source/destination types must be passive.
@@ -613,36 +610,4 @@ def HWStructCastOp : FIRRTLOp<"hwStructCast", [NoSideEffect]> {
     "$input attr-dict `:` functional-type($input, $result)";
 
   let verifier = "return ::verifyHWStructCastOp(*this);";
-}
-
-// MLIR specific pseudo ops.
-
-
-class PassiveConstraint<string value, string resultValue>
-  : TypesMatchWith<"type should be a passive type",
-                   value, resultValue,
-                   "firrtl::getPassiveType($_self)">;
-
-// Convert a value with non-passive type to a value with passive type.
-def AsPassivePrimOp : FIRRTLOp<"asPassive", [NoSideEffect,
-                               PassiveConstraint<"input", "result">]> {
-  let arguments = (ins FIRRTLType:$input);
-  let results = (outs PassiveType:$result);
-
-  let hasFolder = 1;
-  let assemblyFormat = "$input attr-dict `:` type($input)";
-
-  let builders = [
-    OpBuilder<(ins "Value":$input)>
-  ];
-}
-
-// Convert a passive value to a non-passive type.
-def AsNonPassivePrimOp : FIRRTLOp<"asNonPassive", [NoSideEffect,
-                                  PassiveConstraint<"result", "input">]> {
-  let arguments = (ins PassiveType:$input);
-  let results = (outs FIRRTLType:$result);
-
-  let hasFolder = 1;
-  let assemblyFormat = "$input attr-dict `:` type($result)";
 }

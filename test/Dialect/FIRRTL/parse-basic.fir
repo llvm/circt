@@ -362,12 +362,6 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.andr %n11 : (!firrtl.uint<10>) -> !firrtl.uint<1>
     node n12 = andr(n11)
 
-    ;  Test that _T and _GEN names are ignored by the parser.
-    ; CHECK: %{{[0-9]+}} = firrtl.wire
-    wire _T_42 : UInt<1>
-    ; CHECK: %{{[0-9]+}} = firrtl.node
-    node _GEN_43 = n12
-
     ; CHECK: = firrtl.not %auto : (!firrtl.uint<1>) -> !firrtl.uint<1>
     node n13 = not(auto)
 
@@ -401,26 +395,26 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire en: UInt <1>
     pred <= eq(i8, i8)
     en <= not(reset)
-    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false}
     assert(clock, pred, en, "X equals Y when Z is valid")
-    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" {name = "assert_0"}
+    ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false, name = "assert_0"}
     assert(clock, pred, en, "X equals Y when Z is valid") : assert_0
     ; CHECK: [[C:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.assert %clock, %pred, [[C]], "assert:X equals Y when Z is valid"
+    ; CHECK-NEXT: firrtl.assert %clock, %pred, %c1_ui1, "assert:X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = true}
     printf(clock, pred, "assert:X equals Y when Z is valid")
-    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false}
     assume(clock, pred, en, "X equals Y when Z is valid")
-    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" {name = "assume_0"}
+    ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" {eventControl = 0 : i32, isConcurrent = false, name = "assume_0"}
     assume(clock, pred, en, "X equals Y when Z is valid") : assume_0
     ; CHECK: [[C2:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.assume %clock, %pred, [[C2]], "assume:X equals Y when Z is valid"
+    ; CHECK-NEXT: firrtl.assume %clock, %pred, [[C2]], "assume:X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = true}
     printf(clock, pred, "assume:X equals Y when Z is valid")
-    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false}
     cover(clock, pred, en, "X equals Y when Z is valid")
-    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" {name = "cover_0"}
+    ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" {eventControl = 0 : i32, isConcurrent = false, name = "cover_0"}
     cover(clock, pred, en, "X equals Y when Z is valid") : cover_0
     ; CHECK: [[C3:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.cover %clock, %pred, [[C3]], "cover:X equals Y when Z is valid"
+    ; CHECK-NEXT: firrtl.cover %clock, %pred, [[C3]], "cover:X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = true}
     printf(clock, pred, "cover:X equals Y when Z is valid")
 
   ; CHECK-LABEL: firrtl.module @type_handling(
@@ -547,9 +541,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
   module flip_one :
     input bf: { flip int_1 : UInt<1>, int_out : UInt<2>}
     ; CHECK: %0 = firrtl.subfield %bf(0)
-    ; CHECK: %1 = firrtl.node %0
+    ; CHECK: %_T = firrtl.node %0
     node _T = bf.int_1
-    ; CHECK: firrtl.when %1 {
+    ; CHECK: firrtl.when %_T {
     when _T :
       skip
 

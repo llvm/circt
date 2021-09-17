@@ -42,39 +42,6 @@ using mlir::LocationAttr;
 
 namespace json = llvm::json;
 
-/// Return true if this is a useless temporary name produced by FIRRTL.  We
-/// drop these as they don't convey semantic meaning.
-static bool isUselessName(StringRef name) {
-  // Ignore _T and _T_123
-  if (name.startswith("_T")) {
-    if (name.size() == 2)
-      return true;
-    return name.size() > 3 && name[2] == '_' && llvm::isDigit(name[3]);
-  }
-
-  // Ignore _GEN and _GEN_123, these are produced by Namespace.scala.
-  if (name.startswith("_GEN")) {
-    if (name.size() == 4)
-      return true;
-    return name.size() > 5 && name[4] == '_' && llvm::isDigit(name[5]);
-  }
-  return false;
-}
-
-/// If the specified name is a useless temporary name produced by FIRRTL, return
-/// an empty string to ignore it.  Otherwise, return the argument unmodified.
-static StringRef filterUselessName(StringRef name) {
-  return isUselessName(name) ? "" : name;
-}
-
-/// Get an annotation with a class name field.
-static DictionaryAttr getAnnotationOfClass(MLIRContext *context,
-                                           StringRef classString) {
-  auto id = NamedAttribute(Identifier::get("class", context),
-                           StringAttr::get(context, classString));
-  return DictionaryAttr::getWithSorted(context, {id});
-}
-
 //===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
@@ -90,8 +57,6 @@ using TargetSet = StringSet<llvm::BumpPtrAllocator>;
 struct SharedParserConstants {
   SharedParserConstants(MLIRContext *context, FIRParserOptions options)
       : context(context), options(options),
-        dontTouchAnnotation(getAnnotationOfClass(
-            context, "firrtl.transforms.DontTouchAnnotation")),
         emptyArrayAttr(ArrayAttr::get(context, {})),
         loIdentifier(Identifier::get("lo", context)),
         hiIdentifier(Identifier::get("hi", context)),
@@ -115,9 +80,6 @@ struct SharedParserConstants {
   /// unapplied from the annotationMap.  This, like the annotationMap, should
   /// not be mutated directly unless the client is the Circuit parser.
   TargetSet targetSet;
-
-  /// Cached annotation for DontTouch.
-  const DictionaryAttr dontTouchAnnotation;
 
   /// An empty array attribute.
   const ArrayAttr emptyArrayAttr;
@@ -310,13 +272,6 @@ struct FIRParser {
   getSplitAnnotations(ArrayRef<Twine> targets, SMLoc loc,
                       ArrayRef<std::pair<StringAttr, Type>> ports,
                       TargetSet &targetSet);
-
-  /// Returns true if the annotation list contains the DontTouchAnnotation. This
-  /// method is slightly more efficient than other lookup methods, because it
-  /// uses a stashed copy of the annotation for lookup.
-  bool hasDontTouch(ArrayAttr annotations) {
-    return AnnotationSet(annotations).hasDontTouch();
-  }
 
 private:
   FIRParser(const FIRParser &) = delete;
@@ -1828,8 +1783,8 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
   consumeToken();
 
   // Parse the operands and constant integer arguments.
-  SmallVector<Value, 4> operands;
-  SmallVector<int64_t, 4> integers;
+  SmallVector<Value, 3> operands;
+  SmallVector<int64_t, 3> integers;
   if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
         // Handle the integer constant case if present.
         if (getToken().isAny(FIRToken::integer, FIRToken::signed_integer,
@@ -1856,7 +1811,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
 
   locationProcessor.setLoc(loc);
 
-  SmallVector<FIRRTLType, 4> opTypes;
+  SmallVector<FIRRTLType, 3> opTypes;
   for (auto v : operands)
     opTypes.push_back(v.getType().cast<FIRRTLType>());
 
@@ -1897,7 +1852,7 @@ ParseResult FIRStmtParser::parsePrimExp(Value &result) {
 
   if (operands.size() != numOperandsExpected) {
     assert(numOperandsExpected <= 3);
-    const char *numberName[] = {"zero", "one", "two", "three"};
+    static const char *numberName[] = {"zero", "one", "two", "three"};
     const char *optionalS = &"s"[numOperandsExpected == 1];
     return emitError(loc, "operation requires ")
            << numberName[numOperandsExpected] << " operand" << optionalS;
@@ -2269,7 +2224,6 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
 
   auto annotations = getAnnotations(getModuleTarget() + ">" + id, startLoc,
                                     moduleContext.targetsInModule, resultType);
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   locationProcessor.setLoc(startLoc);
 
@@ -2279,7 +2233,7 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointAfterValue(memory);
     auto memoryPortOp = builder.create<MemoryPortOp>(
-        resultType, CMemoryPortType::get(getContext()), memory, direction, name,
+        resultType, CMemoryPortType::get(getContext()), memory, direction, id,
         annotations);
     memoryData = memoryPortOp.getResult(0);
     memoryPort = memoryPortOp.getResult(1);
@@ -2321,28 +2275,29 @@ ParseResult FIRStmtParser::parsePrintf() {
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
   StringRef formatStringRef(formatStrUnescaped);
+  // Generate concurrent verification statements
   if (formatStringRef.startswith("cover:")) {
     APInt constOne(1, 1, false);
-    auto constTrue =
+    Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped,
-                            "");
+    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped, "",
+                            /*isConcurrent=*/true);
     return success();
   }
   if (formatStringRef.startswith("assert:")) {
     APInt constOne(1, 1, false);
-    auto constTrue =
+    Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "");
+                             "", /*isConcurrent=*/true);
     return success();
   }
   if (formatStringRef.startswith("assume:")) {
     APInt constOne(1, 1, false);
-    auto constTrue =
+    Value constTrue =
         builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
     builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "");
+                             "", /*isConcurrent=*/true);
     return success();
   }
 
@@ -2408,7 +2363,7 @@ ParseResult FIRStmtParser::parseAssert() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssertOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped), name);
+                           StringRef(messageUnescaped), name.getValue());
   return success();
 }
 
@@ -2430,8 +2385,8 @@ ParseResult FIRStmtParser::parseAssume() {
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssumeOp>(clock, predicate, enable,
-                           builder.getStringAttr(messageUnescaped), name);
+  builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
+                           name.getValue());
   return success();
 }
 
@@ -2453,8 +2408,8 @@ ParseResult FIRStmtParser::parseCover() {
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<CoverOp>(clock, predicate, enable,
-                          builder.getStringAttr(messageUnescaped), name);
+  builder.create<CoverOp>(clock, predicate, enable, messageUnescaped,
+                          name.getValue());
   return success();
 }
 
@@ -2633,7 +2588,7 @@ ParseResult FIRStmtParser::parseInstance() {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts =
+  SmallVector<PortInfo> modulePorts =
       cast<FModuleLike>(referencedModule).getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
@@ -2656,14 +2611,7 @@ ParseResult FIRStmtParser::parseInstance() {
        getModuleTarget() + "/" + id + ":" + moduleName},
       startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
-  // Keep the name if a dont touch exist on either the instance or its ports.
-  auto dontTouch = hasDontTouch(annotations.first) ||
-                   llvm::any_of(annotations.second, [&](Attribute a) {
-                     return hasDontTouch(a.cast<ArrayAttr>());
-                   });
-  auto name = dontTouch ? id : filterUselessName(id);
-
-  auto result = builder.create<InstanceOp>(resultTypes, moduleName, name,
+  auto result = builder.create<InstanceOp>(resultTypes, moduleName, id,
                                            annotations.first.getValue(),
                                            annotations.second.getValue());
 
@@ -2711,9 +2659,8 @@ ParseResult FIRStmtParser::parseCombMem() {
   auto annotations =
       getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                      moduleContext.targetsInModule, type);
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<CombMemOp>(memType, name, annotations);
+  auto result = builder.create<CombMemOp>(memType, id, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2749,9 +2696,8 @@ ParseResult FIRStmtParser::parseSeqMem() {
   auto annotations =
       getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                      moduleContext.targetsInModule, type);
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<SeqMemOp>(memType, ruw, name, annotations);
+  auto result = builder.create<SeqMemOp>(memType, ruw, id, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2878,16 +2824,9 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
       getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                           ports, moduleContext.targetsInModule);
 
-  // Keep the name if a dont touch exist on either the instance or its ports.
-  auto dontTouch = hasDontTouch(annotations.first) ||
-                   llvm::any_of(annotations.second, [&](Attribute a) {
-                     return hasDontTouch(a.cast<ArrayAttr>());
-                   });
-  auto name = dontTouch ? id : filterUselessName(id);
-
   auto result =
       builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth, ruw,
-                            builder.getArrayAttr(resultNames), name,
+                            builder.getArrayAttr(resultNames), id,
                             annotations.first, annotations.second);
 
   UnbundledValueEntry unbundledValueEntry;
@@ -2941,10 +2880,8 @@ ParseResult FIRStmtParser::parseNode() {
       getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                      moduleContext.targetsInModule, initializerType);
 
-  // Ignore useless names like _T.
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
-  Value result = builder.create<NodeOp>(initializer.getType(), initializer,
-                                        name, annotations);
+  Value result = builder.create<NodeOp>(initializer.getType(), initializer, id,
+                                        annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2969,9 +2906,8 @@ ParseResult FIRStmtParser::parseWire() {
   auto annotations =
       getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                      moduleContext.targetsInModule, type);
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
-  auto result = builder.create<WireOp>(type, name, annotations);
+  auto result = builder.create<WireOp>(type, id, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3060,14 +2996,13 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   auto annotations =
       getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                      moduleContext.targetsInModule, type);
-  auto name = hasDontTouch(annotations) ? id : filterUselessName(id);
 
   Value result;
   if (resetSignal)
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        name, annotations);
+                                        id, annotations);
   else
-    result = builder.create<RegOp>(type, clock, name, annotations);
+    result = builder.create<RegOp>(type, clock, id, annotations);
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
@@ -3093,12 +3028,12 @@ private:
   /// message
   ParseResult importAnnotations(CircuitOp circuit, SMLoc loc,
                                 StringRef circuitTarget,
-                                StringRef annotationsStr);
+                                StringRef annotationsStr, size_t &nlaNumber);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
 
-  ParseResult parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
+  ParseResult parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                             SmallVectorImpl<SMLoc> &resultPortLocs,
                             Location defaultLoc, StringRef moduleTarget,
                             unsigned indent);
@@ -3126,7 +3061,8 @@ private:
 
 ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
                                                 StringRef circuitTarget,
-                                                StringRef annotationsStr) {
+                                                StringRef annotationsStr,
+                                                size_t &nlaNumber) {
 
   auto annotations = json::parse(annotationsStr);
   if (auto err = annotations.takeError()) {
@@ -3140,7 +3076,7 @@ ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
   if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
-                circuit)) {
+                circuit, nlaNumber)) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3151,7 +3087,7 @@ ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
   }
 
   if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
-                                translateLocation(loc)))
+                                translateLocation(loc), nlaNumber))
     return failure();
 
   // Merge the attributes we just parsed into the global set we're accumulating.
@@ -3180,7 +3116,7 @@ ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
 /// port.
 ///
 ParseResult
-FIRCircuitParser::parsePortList(SmallVectorImpl<ModulePortInfo> &resultPorts,
+FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
                                 SmallVectorImpl<SMLoc> &resultPortLocs,
                                 Location defaultLoc, StringRef moduleTarget,
                                 unsigned indent) {
@@ -3249,7 +3185,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   bool isExtModule = getToken().is(FIRToken::kw_extmodule);
   consumeToken();
   StringAttr name;
-  SmallVector<ModulePortInfo, 8> portList;
+  SmallVector<PortInfo, 8> portList;
   SmallVector<SMLoc> portLocs;
 
   LocWithInfo info(getToken().getLoc(), this);
@@ -3270,7 +3206,7 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
   // Check for port name collisions.
   SmallDenseMap<Attribute, SMLoc> portIds;
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    ModulePortInfo &port = std::get<0>(portAndLoc);
+    PortInfo &port = std::get<0>(portAndLoc);
     auto &entry = portIds[port.name];
     if (!entry.isValid()) {
       entry = std::get<1>(portAndLoc);
@@ -3415,7 +3351,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
   auto argIt = moduleOp.args_begin();
   auto portList = moduleOp.getPorts();
   for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    ModulePortInfo &port = std::get<0>(portAndLoc);
+    PortInfo &port = std::get<0>(portAndLoc);
     if (moduleContext.addSymbolEntry(port.getName(), *argIt,
                                      std::get<1>(portAndLoc)))
       return failure();
@@ -3461,6 +3397,7 @@ ParseResult FIRCircuitParser::parseCircuit(
   auto circuit = b.create<CircuitOp>(info.getLoc(), name);
 
   std::string circuitTarget = "~" + name.getValue().str();
+  size_t nlaNumber = 0;
 
   // Deal with any inline annotations, if they exist.  These are processed first
   // to place any annotations from an annotation file *after* the inline
@@ -3468,13 +3405,13 @@ ParseResult FIRCircuitParser::parseCircuit(
   // semantics.
   if (!inlineAnnotations.empty())
     if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
-                          inlineAnnotations))
+                          inlineAnnotations, nlaNumber))
       return failure();
 
   // Deal with the annotation file if one was specified
   for (auto annotationsBuf : annotationsBufs)
     if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
-                          annotationsBuf->getBuffer()))
+                          annotationsBuf->getBuffer(), nlaNumber))
       return failure();
 
   // Get annotations associated with this circuit. These are either:

@@ -44,14 +44,14 @@ with Context() as ctx, Location.unknown():
               module.clk,
               reset=module.rstn,
               reset_value=custom_reset)
-      # CHECK: seq.compreg {{.+}} {name = "FuBar"}
+      # CHECK: %FuBar = seq.compreg {{.+}}
       seq.reg(reg_input, module.clk, name="FuBar")
 
-      # CHECK: seq.compreg %[[INPUT_VAL]], %clk {name = "reg1"}
+      # CHECK: %reg1 = seq.compreg %[[INPUT_VAL]], %clk
       reg1 = seq.CompRegOp.create(i32, clk=module.clk, name="reg1")
       connect(reg1.input, reg_input)
 
-      # CHECK: seq.compreg %[[INPUT_VAL]], %clk {name = "reg2"}
+      # CHECK: %reg2 = seq.compreg %[[INPUT_VAL]], %clk
       reg2 = seq.CompRegOp.create(i32, name="reg2")
       connect(reg2.input, reg_input)
       connect(reg2.clk, module.clk)
@@ -70,7 +70,7 @@ with Context() as ctx, Location.unknown():
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")
 
-  pm = PassManager.parse("lower-seq-to-sv")
+  pm = PassManager.parse("lower-seq-to-sv,hw-legalize-names")
   pm.run(m)
   # CHECK: always @(posedge clk)
   # CHECK: my_reg <= {{.+}}

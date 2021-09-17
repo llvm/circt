@@ -59,16 +59,15 @@ class InstanceGraphNode {
   using EdgeVec = std::deque<InstanceRecord>;
   using UseVec = std::vector<InstanceRecord *>;
 
-  static InstanceRecord *unwrap(EdgeVec::value_type &value) {
-    return &value;
-  }
+  static InstanceRecord *unwrap(EdgeVec::value_type &value) { return &value; }
   class InstanceIterator final
       : public llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)> {
   public:
     /// Initializes the result type iterator to the specified result iterator.
     InstanceIterator(EdgeVec::iterator it)
-        : llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)>(
-              it, &unwrap) {}
+        : llvm::mapped_iterator<EdgeVec::iterator, decltype(&unwrap)>(it,
+                                                                      &unwrap) {
+    }
   };
 
 public:
@@ -133,12 +132,12 @@ class InstanceGraph {
     return &value;
   }
   struct NodeIterator final
-      : public llvm::mapped_iterator<NodeVec::iterator,
-                                     decltype(&unwrap)> {
+      : public llvm::mapped_iterator<NodeVec::iterator, decltype(&unwrap)> {
     /// Initializes the result type iterator to the specified result iterator.
     NodeIterator(NodeVec::iterator it)
-        : llvm::mapped_iterator<NodeVec::iterator, decltype(&unwrap)>(
-              it, &unwrap) {}
+        : llvm::mapped_iterator<NodeVec::iterator, decltype(&unwrap)>(it,
+                                                                      &unwrap) {
+    }
   };
 
 public:
@@ -148,6 +147,9 @@ public:
 
   /// Get the node corresponding to the top-level module of a circuit.
   InstanceGraphNode *getTopLevelNode();
+
+  /// Get the module corresponding to the top-lebel module of a circuit.
+  FModuleLike getTopLevelModule();
 
   /// Look up an InstanceGraphNode for a module. Operation must be an FModuleOp
   /// or an FExtModuleOp.
@@ -180,6 +182,38 @@ private:
 
   /// This maps each operation to its graph node.
   llvm::StringMap<unsigned> nodeMap;
+};
+
+/// An absolute instance path.
+using InstancePath = ArrayRef<InstanceOp>;
+
+template <typename T>
+static T &operator<<(T &os, const InstancePath &path) {
+  os << "$root";
+  for (auto inst : path)
+    os << "/" << inst.name() << ":" << inst.moduleName();
+  return os;
+}
+
+/// A data structure that caches and provides absolute paths to module instances
+/// in the IR.
+struct InstancePathCache {
+  /// The instance graph of the IR.
+  InstanceGraph &instanceGraph;
+
+  explicit InstancePathCache(InstanceGraph &instanceGraph)
+      : instanceGraph(instanceGraph) {}
+  ArrayRef<InstancePath> getAbsolutePaths(Operation *op);
+
+private:
+  /// An allocator for individual instance paths and entire path lists.
+  llvm::BumpPtrAllocator allocator;
+
+  /// Cached absolute instance paths.
+  DenseMap<Operation *, ArrayRef<InstancePath>> absolutePathsCache;
+
+  /// Append an instance to a path.
+  InstancePath appendInstance(InstancePath path, InstanceOp inst);
 };
 
 } // namespace firrtl

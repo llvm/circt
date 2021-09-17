@@ -945,17 +945,17 @@ hw::HWModuleOp TypeSchemaImpl::buildEncoder(Value clk, Value valid,
   SmallString<64> modName;
   modName.append("encode");
   modName.append(name());
-  SmallVector<hw::ModulePortInfo, 4> ports;
-  ports.push_back(hw::ModulePortInfo{
-      b.getStringAttr("clk"), hw::PortDirection::INPUT, clk.getType(), 0});
-  ports.push_back(hw::ModulePortInfo{
-      b.getStringAttr("valid"), hw::PortDirection::INPUT, valid.getType(), 1});
-  ports.push_back(hw::ModulePortInfo{b.getStringAttr("unencodedInput"),
-                                     hw::PortDirection::INPUT,
-                                     operandVal.getType(), 2});
+  SmallVector<hw::PortInfo, 4> ports;
+  ports.push_back(hw::PortInfo{b.getStringAttr("clk"), hw::PortDirection::INPUT,
+                               clk.getType(), 0});
+  ports.push_back(hw::PortInfo{b.getStringAttr("valid"),
+                               hw::PortDirection::INPUT, valid.getType(), 1});
+  ports.push_back(hw::PortInfo{b.getStringAttr("unencodedInput"),
+                               hw::PortDirection::INPUT, operandVal.getType(),
+                               2});
   hw::ArrayType modOutputType = hw::ArrayType::get(b.getI1Type(), size());
-  ports.push_back(hw::ModulePortInfo{
-      b.getStringAttr("encoded"), hw::PortDirection::OUTPUT, modOutputType, 0});
+  ports.push_back(hw::PortInfo{b.getStringAttr("encoded"),
+                               hw::PortDirection::OUTPUT, modOutputType, 0});
   hw::HWModuleOp retMod = b.create<hw::HWModuleOp>(
       operandVal.getLoc(), b.getStringAttr(modName), ports);
 
@@ -1120,16 +1120,16 @@ hw::HWModuleOp TypeSchemaImpl::buildDecoder(Value clk, Value valid,
   SmallString<64> modName;
   modName.append("decode");
   modName.append(name());
-  SmallVector<hw::ModulePortInfo, 4> ports;
-  ports.push_back(hw::ModulePortInfo{
-      b.getStringAttr("clk"), hw::PortDirection::INPUT, clk.getType(), 0});
-  ports.push_back(hw::ModulePortInfo{
-      b.getStringAttr("valid"), hw::PortDirection::INPUT, valid.getType(), 1});
-  ports.push_back(hw::ModulePortInfo{b.getStringAttr("encodedInput"),
-                                     hw::PortDirection::INPUT,
-                                     operandVal.getType(), 2});
-  ports.push_back(hw::ModulePortInfo{b.getStringAttr("decoded"),
-                                     hw::PortDirection::OUTPUT, getType(), 0});
+  SmallVector<hw::PortInfo, 4> ports;
+  ports.push_back(hw::PortInfo{b.getStringAttr("clk"), hw::PortDirection::INPUT,
+                               clk.getType(), 0});
+  ports.push_back(hw::PortInfo{b.getStringAttr("valid"),
+                               hw::PortDirection::INPUT, valid.getType(), 1});
+  ports.push_back(hw::PortInfo{b.getStringAttr("encodedInput"),
+                               hw::PortDirection::INPUT, operandVal.getType(),
+                               2});
+  ports.push_back(hw::PortInfo{b.getStringAttr("decoded"),
+                               hw::PortDirection::OUTPUT, getType(), 0});
   hw::HWModuleOp retMod = b.create<hw::HWModuleOp>(
       operandVal.getLoc(), b.getStringAttr(modName), ports);
 
@@ -1267,10 +1267,9 @@ Value circt::esi::capnp::TypeSchema::buildEncoder(OpBuilder &builder, Value clk,
   instName.append("encode");
   instName.append(name());
   instName.append("Inst");
-  auto resTypes = hw::getModuleType(encImplMod).getResults();
-  auto encodeInst = builder.create<hw::InstanceOp>(
-      operand.getLoc(), resTypes, instName, encImplMod.getName(),
-      ValueRange{clk, valid, operand}, DictionaryAttr(), StringAttr());
+  auto encodeInst =
+      builder.create<hw::InstanceOp>(operand.getLoc(), encImplMod, instName,
+                                     ArrayRef<Value>{clk, valid, operand});
   return encodeInst.getResult(0);
 }
 
@@ -1290,9 +1289,8 @@ Value circt::esi::capnp::TypeSchema::buildDecoder(OpBuilder &builder, Value clk,
   instName.append("decode");
   instName.append(name());
   instName.append("Inst");
-  auto resTypes = hw::getModuleType(decImplMod).getResults();
-  auto decodeInst = builder.create<hw::InstanceOp>(
-      operand.getLoc(), resTypes, instName, decImplMod.getName(),
-      ValueRange{clk, valid, operand}, DictionaryAttr(), StringAttr());
+  auto decodeInst =
+      builder.create<hw::InstanceOp>(operand.getLoc(), decImplMod, instName,
+                                     ArrayRef<Value>{clk, valid, operand});
   return decodeInst.getResult(0);
 }

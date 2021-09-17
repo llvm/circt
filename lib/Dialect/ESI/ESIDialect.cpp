@@ -50,9 +50,8 @@ Operation *ESIDialect::materializeConstant(OpBuilder &builder, Attribute value,
 /// Try to find a valid/ready port for the specified data port. If found, append
 /// to 'names'.
 static void findValidReady(Operation *modOp,
-                           const llvm::StringMap<hw::ModulePortInfo> &nameMap,
-                           hw::ModulePortInfo dataPort, bool trimName,
-                           bool warn,
+                           const llvm::StringMap<hw::PortInfo> &nameMap,
+                           hw::PortInfo dataPort, bool trimName, bool warn,
                            SmallVectorImpl<ESIPortValidReadyMapping> &names) {
   if (dataPort.direction == hw::PortDirection::INOUT) {
     if (warn)
@@ -105,8 +104,8 @@ static void findValidReady(Operation *modOp,
 void circt::esi::findValidReadySignals(
     Operation *modOp, SmallVectorImpl<ESIPortValidReadyMapping> &names) {
 
-  SmallVector<hw::ModulePortInfo> ports = hw::getModulePortInfo(modOp);
-  llvm::StringMap<hw::ModulePortInfo> nameMap(ports.size());
+  SmallVector<hw::PortInfo> ports = hw::getAllModulePortInfos(modOp);
+  llvm::StringMap<hw::PortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
   for (auto port : ports)
@@ -119,8 +118,8 @@ void circt::esi::resolvePortNames(
     Operation *modOp, ArrayRef<StringRef> portNames,
     SmallVectorImpl<ESIPortValidReadyMapping> &names) {
 
-  SmallVector<hw::ModulePortInfo> ports = hw::getModulePortInfo(modOp);
-  llvm::StringMap<hw::ModulePortInfo> nameMap(ports.size());
+  SmallVector<hw::PortInfo> ports = hw::getAllModulePortInfos(modOp);
+  llvm::StringMap<hw::PortInfo> nameMap(ports.size());
   for (auto port : ports)
     nameMap[port.getName()] = port;
 
@@ -158,8 +157,6 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   auto *ctxt = b.getContext();
   Location loc = pearl->getLoc();
   FunctionType modType = hw::getModuleType(pearl);
-
-  SmallVector<hw::ModulePortInfo> pearlPorts = hw::getModulePortInfo(pearl);
 
   // -----
   // First, build up a set of data structures to use throughout this function.
@@ -210,17 +207,18 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // valid/ready, and converting the ESI data ports to the ESI channel port
   // type. Store some bookkeeping information.
 
-  SmallVector<hw::ModulePortInfo, 64> shellPorts;
+  SmallVector<hw::PortInfo, 64> shellPorts;
   // Map the shell operand to the pearl port.
-  SmallVector<hw::ModulePortInfo, 64> inputPortMap;
+  SmallVector<hw::PortInfo, 64> inputPortMap;
   // Map the shell result to the pearl port.
-  SmallVector<hw::ModulePortInfo, 64> outputPortMap;
+  SmallVector<hw::PortInfo, 64> outputPortMap;
 
+  SmallVector<hw::PortInfo> pearlPorts = hw::getAllModulePortInfos(pearl);
   for (const auto &port : pearlPorts) {
     if (controlPorts.contains(port.name.getValue()))
       continue;
 
-    hw::ModulePortInfo newPort = port;
+    hw::PortInfo newPort = port;
     if (dataPortMap.find(port.name.getValue()) != dataPortMap.end())
       newPort.type = esi::ChannelPort::get(ctxt, port.type);
 
@@ -306,10 +304,8 @@ circt::esi::buildESIWrapper(OpBuilder &b, Operation *pearl,
   // -----
   // Fifth, instantiate the pearl module.
 
-  auto pearlInst = modBuilder.create<hw::InstanceOp>(
-      modType.getResults(), "pearl",
-      SymbolTable::getSymbolName(pearl).getValue(), pearlOperands,
-      DictionaryAttr(), StringAttr());
+  auto pearlInst =
+      modBuilder.create<hw::InstanceOp>(pearl, "pearl", pearlOperands);
 
   // Hookup all the backedges.
   for (size_t i = 0, e = pearlInst.getNumResults(); i < e; ++i) {

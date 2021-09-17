@@ -21,11 +21,11 @@ namespace firrtl {
 
 class FIRRTLType;
 
-enum class Direction { Input = 0, Output };
+enum class Direction { In, Out };
 
 template <typename T>
 T &operator<<(T &os, const Direction &dir) {
-  return os << (dir == Direction::Input ? "input" : "output");
+  return os << (dir == Direction::In ? "input" : "output");
 }
 
 namespace direction {
@@ -48,7 +48,7 @@ SmallVector<Direction> unpackAttribute(Operation *module);
 } // namespace direction
 
 /// This holds the name and type that describes the module's ports.
-struct ModulePortInfo {
+struct PortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
@@ -62,7 +62,7 @@ struct ModulePortInfo {
   bool isOutput() {
     auto flags = type.getRecursiveTypeProperties();
     return flags.isPassive && !flags.containsAnalog &&
-           direction == Direction::Output;
+           direction == Direction::Out;
   }
 
   /// Return true if this is a simple input-only port.  If you want the
@@ -70,7 +70,7 @@ struct ModulePortInfo {
   bool isInput() {
     auto flags = type.getRecursiveTypeProperties();
     return flags.isPassive && !flags.containsAnalog &&
-           direction == Direction::Input;
+           direction == Direction::In;
   }
 
   /// Return true if this is an inout port.  This will be true if the port

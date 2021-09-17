@@ -34,7 +34,7 @@ enum PortDirection {
 };
 
 /// This holds the name, type, direction of a module's ports
-struct ModulePortInfo {
+struct PortInfo {
   StringAttr name;
   PortDirection direction;
   Type type;
@@ -44,6 +44,39 @@ struct ModulePortInfo {
   StringRef getName() const { return name.getValue(); }
   bool isOutput() const { return direction == OUTPUT; }
 };
+
+/// This holds a decoded list of input/inout and output ports for a module or
+/// instance.
+struct ModulePortInfo {
+  explicit ModulePortInfo(ArrayRef<PortInfo> inputs, ArrayRef<PortInfo> outputs)
+      : inputs(inputs.begin(), inputs.end()),
+        outputs(outputs.begin(), outputs.end()) {}
+
+  explicit ModulePortInfo(ArrayRef<PortInfo> mergedPorts) {
+    inputs.reserve(mergedPorts.size());
+    outputs.reserve(mergedPorts.size());
+    for (auto port : mergedPorts) {
+      if (port.isOutput())
+        outputs.push_back(port);
+      else
+        inputs.push_back(port);
+    }
+  }
+
+  /// This contains a list of the input and inout ports.
+  SmallVector<PortInfo> inputs;
+  /// This is a list of the output ports.
+  SmallVector<PortInfo> outputs;
+};
+
+/// Return an encapsulated set of information about input and output ports of
+/// the specified module or instance.
+ModulePortInfo getModulePortInfo(Operation *op);
+
+/// Return an encapsulated set of information about input and output ports of
+/// the specified module or instance.  The input ports always come before the
+/// output ports in the list.
+SmallVector<PortInfo> getAllModulePortInfos(Operation *op);
 
 // Helpers for working with modules.
 
@@ -74,9 +107,6 @@ static inline StringRef getModuleResultName(Operation *module,
 
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
 void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
-
-/// Return an encapsulated set of information about input and output ports.
-SmallVector<ModulePortInfo> getModulePortInfo(Operation *op);
 
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);

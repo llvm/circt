@@ -63,7 +63,9 @@ struct HWLegalizeNamesPass
 private:
   bool anythingChanged;
 
-  void runOnModule(hw::HWModuleOp module);
+  bool legalizePortNames(hw::HWModuleOp module);
+  void runOnModule(hw::HWModuleOp module,
+                   DenseMap<Attribute, HWModuleOp> &modulesWithRenamedPorts);
   void runOnInterface(sv::InterfaceOp intf, mlir::SymbolUserMap &symbolUsers);
 };
 } // end anonymous namespace
@@ -90,26 +92,34 @@ void HWLegalizeNamesPass::runOnOperation() {
 
   auto symbolAttrName = SymbolTable::getSymbolAttrName();
 
+  DenseMap<Attribute, HWModuleOp> modulesWithRenamedPorts;
+
   // Legalize module and interface names.
   for (auto &op : *root.getBody()) {
     if (!isa<HWModuleOp>(op) && !isa<InterfaceOp>(op))
       continue;
 
+    // If the module's symbol itself conflicts, then rename it and all uses of
+    // it.
     StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
     auto newName = nameResolver.getLegalName(oldName);
-    if (newName.empty())
-      continue;
+    if (!newName.empty()) {
+      auto newNameAttr = StringAttr::get(&getContext(), newName);
+      symbolUsers.replaceAllUsesWith(&op, newNameAttr);
+      SymbolTable::setSymbolName(&op, newNameAttr);
+      anythingChanged = true;
+    }
 
-    auto newNameAttr = StringAttr::get(&getContext(), newName);
-    symbolUsers.replaceAllUsesWith(&op, newNameAttr);
-    SymbolTable::setSymbolName(&op, newNameAttr);
-    anythingChanged = true;
+    if (auto module = dyn_cast<HWModuleOp>(op)) {
+      if (legalizePortNames(module))
+        modulesWithRenamedPorts[module.getNameAttr()] = module;
+    }
   }
 
   // Rename individual operations.
   for (auto &op : *root.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
-      runOnModule(module);
+      runOnModule(module, modulesWithRenamedPorts);
     } else if (auto intf = dyn_cast<InterfaceOp>(op)) {
       runOnInterface(intf, symbolUsers);
     } else if (auto extMod = dyn_cast<HWModuleExternOp>(op)) {
@@ -126,14 +136,17 @@ void HWLegalizeNamesPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-void HWLegalizeNamesPass::runOnModule(hw::HWModuleOp module) {
+/// Check to see if the port names of the specified module conflict with
+/// keywords or themselves.  If so, rename them and return true, otherwise
+/// return false.
+bool HWLegalizeNamesPass::legalizePortNames(hw::HWModuleOp module) {
   NameCollisionResolver nameResolver;
 
   bool changedArgNames = false, changedOutputNames = false;
   SmallVector<Attribute> argNames, outputNames;
 
   // Legalize the ports.
-  for (const ModulePortInfo &port : getModulePortInfo(module)) {
+  for (const PortInfo &port : getAllModulePortInfos(module)) {
     auto newName = nameResolver.getLegalName(port.name);
 
     auto &namesVector = port.isOutput() ? outputNames : argNames;
@@ -155,6 +168,18 @@ void HWLegalizeNamesPass::runOnModule(hw::HWModuleOp module) {
     setModuleResultNames(module, outputNames);
     anythingChanged = true;
   }
+  return changedArgNames | changedOutputNames;
+}
+
+void HWLegalizeNamesPass::runOnModule(
+    hw::HWModuleOp module,
+    DenseMap<Attribute, HWModuleOp> &modulesWithRenamedPorts) {
+  NameCollisionResolver nameResolver;
+
+  // All the ports are pre-legalized, just add their names to the map so we
+  // detect conflicts with them.
+  for (const PortInfo &port : getAllModulePortInfos(module))
+    (void)nameResolver.getLegalName(port.name);
 
   // Rename the instances, regs, and wires.
   for (auto &op : *module.getBodyBlock()) {
@@ -164,6 +189,17 @@ void HWLegalizeNamesPass::runOnModule(hw::HWModuleOp module) {
         instanceOp.setName(StringAttr::get(&getContext(), newName));
         anythingChanged = true;
       }
+
+      // If this instance is referring to a module with renamed ports, update
+      // them.
+      auto it =
+          modulesWithRenamedPorts.find(instanceOp.moduleNameAttr().getAttr());
+      if (it != modulesWithRenamedPorts.end()) {
+        auto mod = it->second;
+        instanceOp.setArgumentNames(mod.argNames());
+        instanceOp.setResultNames(mod.resultNames());
+      }
+
     } else if (isa<RegOp>(op) || isa<WireOp>(op)) {
       auto oldName = op.getAttrOfType<StringAttr>("name");
       auto newName = nameResolver.getLegalName(oldName);

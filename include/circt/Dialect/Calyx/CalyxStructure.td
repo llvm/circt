@@ -59,18 +59,15 @@ def ComponentOp : CalyxOp<"component", [
   ]> {
   let summary = "Calyx Component";
   let description = [{
-    The "calyx.component" operation represents an overall
-    Calyx component containing:
-    (1) In- and output port definitions
-        that define the interface.
+    The "calyx.component" operation represents an overall Calyx component containing:
+    (1) In- and output port definitions that define the interface.
     (2) The cells, wires, and control schedule.
 
-    A Calyx component requires the following ports with bit width 1:
-    - Input ports: `go`, `clk`, and `reset`.
-    - Output ports: `done`.
+    A Calyx component requires attributes `clk`, `go`, and `reset` on separate input ports, 
+    and `done` on an output port.
 
     ```mlir
-      calyx.component @MyComponent(%in: i32, %go: i1, %clk: i1, %reset: i1) -> (%out: i16, %done: i1) {
+      calyx.component @C(%in: i32, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i16, %done: i1 {done}) {
         ...
         calyx.wires { ... }
         calyx.control { ... }
@@ -86,7 +83,7 @@ def ComponentOp : CalyxOp<"component", [
   let regions = (region SizedRegion<1>: $body);
 
   let builders = [
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<ComponentPortInfo>":$ports)>
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports)>
   ];
 
   let extraClassDeclaration = [{
@@ -103,6 +100,15 @@ def ComponentOp : CalyxOp<"component", [
     public:
       /// Returns the body of a Calyx component.
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
+
+      /// Returns the port information for this component.
+      SmallVector<PortInfo> getPortInfo();
+
+      /// Returns the input port information for this component.
+      SmallVector<PortInfo> getInputPortInfo();
+
+      /// Returns the input port information for this component.
+      SmallVector<PortInfo> getOutputPortInfo();
 
       /// Returns the WiresOp of a Calyx Component.
       WiresOp getWiresOp();
@@ -143,11 +149,11 @@ def WiresOp : CalyxContainer<"wires", [
 }
 
 def InstanceOp : CalyxCell<"instance", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
   ]> {
   let summary = "Calyx Component Instance";
   let description = [{
-    Represents an instance of a Calyx component,
-    which may include state.
+    Represents an instance of a Calyx component, which may include state.
 
     ```mlir
       %name.in, %name.out = calyx.instance "name" @MyComponent : i64, i16
@@ -169,11 +175,11 @@ def InstanceOp : CalyxCell<"instance", [
   let assemblyFormat = [{
     $instanceName $componentName attr-dict (`:` type($results)^)?
   }];
-  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def GroupOp : CalyxOp<"group", [
     HasParent<"WiresOp">,
+    DeclareOpInterfaceMethods<GroupOpInterface>,
     NoRegionArguments,
     RegionKindInterface,
     SingleBlock,
@@ -212,9 +218,44 @@ def GroupOp : CalyxOp<"group", [
   let assemblyFormat = "$sym_name $body attr-dict";
 }
 
+def CombGroupOp : CalyxOp<"comb_group", [
+    HasParent<"WiresOp">,
+    DeclareOpInterfaceMethods<GroupOpInterface>,
+    NoRegionArguments,
+    RegionKindInterface,
+    SingleBlock,
+    Symbol,
+    NoTerminator
+  ]> {
+  let summary = "Calyx Combinational Group";
+  let description = [{
+    Represents a Calyx combinational group, which is a collection
+    of combinational assignments that are only active when the group
+    is run from the control execution schedule.
+    A combinational group does not have group_go or group_done operators.
+
+    ```mlir
+      calyx.comb_group @MyCombGroup {
+        calyx.assign %1 = %2 : i32
+      }
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr: $sym_name);
+
+  let extraClassDeclaration = [{
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
+  }];
+
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name $body attr-dict";
+  let verifier = "return ::verify$cppClass(*this);";
+}
+
 def AssignOp : CalyxOp<"assign", [
     SameTypeConstraint<"dest", "src">,
-    ParentOneOf<["GroupOp", "WiresOp"]>
+    ParentOneOf<["GroupOp", "CombGroupOp", "WiresOp"]>
   ]> {
   let summary = "Calyx Assignment";
   let description = [{

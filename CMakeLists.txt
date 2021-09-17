@@ -286,7 +286,7 @@ else()
   else()
     set(ENV{PKG_CONFIG_PATH}
       "${CMAKE_CURRENT_SOURCE_DIR}/ext/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    find_package(CapnProto CONFIG PATHS "${CMAKE_SOURCE_DIR}/ext")
+    find_package(CapnProto CONFIG PATHS "${CMAKE_CURRENT_SOURCE_DIR}/ext")
   endif()
 
   if(CapnProto_FOUND)

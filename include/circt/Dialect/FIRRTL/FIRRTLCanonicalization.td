@@ -23,6 +23,20 @@ def NonConstantOp : Constraint<CPred<"!$0.getDefiningOp<ConstantOp>()">>;
 // there are no FIRRTL annotation on an operation.
 def EmptyAttrDict : Constraint<CPred<"$0.empty()">>;
 
+// Constraint that matches annotation sets without dontTouch.
+def NoDontTouch : Constraint<CPred<"!AnnotationSet($0).hasDontTouch()">>;
+
+// Constraint that matches annotation sets without dontTouch.
+def NoPortsDontTouch : Constraint<CPred<[{
+  llvm::all_of($0, [](Attribute a) { 
+    if (auto b = a.dyn_cast<ArrayAttr>()) 
+      return !AnnotationSet(b).hasDontTouch();
+     return true;
+  })}]>>;
+
+def NonEmptyStringAttr : Constraint<CPred<"!$0.getValue().empty()">>;
+def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
+
 // Constraint that enforces equal types
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
 
@@ -35,7 +49,7 @@ def KnownWidth : Constraint<CPred<[{
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
 def ZeroConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
-        "$0.getDefiningOp<ConstantOp>().value().isNullValue()">,
+        "$0.getDefiningOp<ConstantOp>().value().isZero()">,
   CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
         "$0.getDefiningOp<SpecialConstantOp>().value() == false">
 ]>>;
@@ -43,6 +57,9 @@ def ZeroConstantOp : Constraint<Or<[
 def IsInvalid : Constraint<
   CPred<"$0.getDefiningOp<InvalidValueOp>()">
 >;
+
+def GetEmptyString : NativeCodeCall<
+  "StringAttr::get($_builder.getContext(), {}) ">;
 
 // leq(const, x) -> geq(x, const)
 def LEQWithConstLHS : Pat<
@@ -86,7 +103,7 @@ def MuxSameCondHigh : Pat<
 def EmptyNode : Pat<
   (NodeOp $x, $name, $annotations),
   (replaceWithValue $x),
-  [(EmptyAttrDict $annotations)]>;
+  [(NonEmptyStringAttr $name), (EmptyAttrDict $annotations)]>;
 
 // regreset(clock, invalidvalue, resetValue) -> reg(clock)
 def RegresetWithInvalidReset : Pat<
@@ -133,6 +150,58 @@ def SubWithInvalidOp : Pat<
   (PadPrimOp $x, (GetWidthAsIntAttr $result)), [
     (KnownWidth $x), (IsInvalid $y)
   ]>;
+
+////////////////////////////////////////////////////////////////////////////////
+// DontTouch application
+////////////////////////////////////////////////////////////////////////////////
+
+// node(x,name),!dnt -> node(x, "")
+def DropNameNode : Pat<
+  (NodeOp $x, $name, $annotations),
+  (NodeOp $x, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// wire(name),!dnt -> wire("")
+def DropNameWire : Pat<
+  (WireOp $name, $annotations),
+  (WireOp (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// reg(clk, name),!dnt -> reg(clk, "")
+def DropNameReg : Pat<
+  (RegOp $clk, $name, $annotations),
+  (RegOp $clk, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")
+def DropNameRegReset : Pat<
+  (RegResetOp $clk, $sig, $val, $name, $annotations),
+  (RegResetOp $clk, $sig, $val, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// Mem(...,name),!dnt -> Mem(...x, "")
+def DropNameMem : Pat<
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $annotations, $portAnno),
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations, $portAnno),
+  [(uselessNameAttr $name), (NoDontTouch $annotations), (NoPortsDontTouch $portAnno)]>;
+
+// CombMem(name),!dnt -> CombMem("")
+def DropNameCombMem : Pat<
+  (CombMemOp $name, $annotations),
+  (CombMemOp (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// SeqMem(ruw, name),!dnt -> SeqMem(ruw, "")
+def DropNameSeqMem : Pat<
+  (SeqMemOp $ruw, $name, $annotations),
+  (SeqMemOp $ruw, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
+
+// memoryport(..., name),!dnt -> memoryport(..., "")
+def DropNameMemoryPort : Pat<
+  (MemoryPortOp  $memory, $direction, $name, $annotations),
+  (MemoryPortOp  $memory, $direction, (GetEmptyString), $annotations),
+  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
 
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

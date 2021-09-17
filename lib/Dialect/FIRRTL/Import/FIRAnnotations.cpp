@@ -127,8 +127,8 @@ expandNonLocal(StringRef target) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-static void buildNLA(
-    CircuitOp circuit, StringRef targetStrRef,
+static FlatSymbolRefAttr buildNLA(
+    CircuitOp circuit, size_t nlaSuffix,
     SmallVectorImpl<std::tuple<std::string, std::string, std::string>> &nlas) {
   OpBuilder b(circuit.getBodyRegion());
   SmallVector<Attribute> mods;
@@ -140,7 +140,9 @@ static void buildNLA(
   }
   auto modAttr = ArrayAttr::get(circuit.getContext(), mods);
   auto instAttr = ArrayAttr::get(circuit.getContext(), insts);
-  b.create<NonLocalAnchor>(circuit.getLoc(), targetStrRef, modAttr, instAttr);
+  auto nla = b.create<NonLocalAnchor>(
+      circuit.getLoc(), "nla_" + std::to_string(nlaSuffix), modAttr, instAttr);
+  return FlatSymbolRefAttr::get(nla);
 }
 
 /// Append the argument `target` to the `annotation` using the key "target".
@@ -255,7 +257,8 @@ static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
 /// false if unsuccessful.
 bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
                              llvm::StringMap<ArrayAttr> &annotationMap,
-                             json::Path path, CircuitOp circuit) {
+                             json::Path path, CircuitOp circuit,
+                             size_t &nlaNumber) {
   auto context = circuit.getContext();
 
   /// Examine an Annotation JSON object and return an optional string indicating
@@ -390,11 +393,6 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
     auto leafTarget =
         splitAndAppendTarget(metadata, std::get<0>(NLATargets.back()), context)
             .first;
-    if (NLATargets.size() > 1) {
-      buildNLA(circuit, targetStrRef, NLATargets);
-      metadata.append("circt.nonlocal",
-                      FlatSymbolRefAttr::get(context, targetStrRef));
-    }
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(field.second, p)) {
         metadata.append(field.first, value);
@@ -402,13 +400,17 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
       }
       return false;
     }
+    FlatSymbolRefAttr nlaSym;
+    if (NLATargets.size() > 1) {
+      nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
+      metadata.append("circt.nonlocal", nlaSym);
+    }
     mutableAnnotationMap[leafTarget].push_back(
         DictionaryAttr::get(context, metadata));
 
     for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
       NamedAttrList pathmetadata;
-      pathmetadata.append("circt.nonlocal",
-                          FlatSymbolRefAttr::get(context, targetStrRef));
+      pathmetadata.append("circt.nonlocal", nlaSym);
       pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
       mutableAnnotationMap[std::get<0>(NLATargets[i])].push_back(
           DictionaryAttr::get(context, pathmetadata));
@@ -433,11 +435,18 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
 /// annotations:
 ///   1) Annotations necessary to build interfaces and store them at "~"
 ///   2) Scattered annotations for how components bind to interfaces
-static bool parseAugmentedType(
+static Optional<DictionaryAttr> parseAugmentedType(
     MLIRContext *context, DictionaryAttr augmentedType, DictionaryAttr root,
     llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
-    StringRef companion, StringAttr name, StringAttr defName, Location loc,
-    Twine clazz, Twine path = {}) {
+    StringRef companion, StringAttr name, StringAttr defName,
+    Optional<IntegerAttr> id, Optional<StringAttr>(description), Location loc,
+    unsigned &annotationID, Twine clazz, Twine path = {}) {
+
+  /// Return a new identifier that can be used to link scattered annotations
+  /// together.  This mutates the by-reference parameter annotationID.
+  auto newID = [&]() {
+    return IntegerAttr::get(IntegerType::get(context, 64), annotationID++);
+  };
 
   /// Optionally unpack a ReferenceTarget encoded as a DictionaryAttr.  Return
   /// either a pair containing the Target string (up to the reference) and an
@@ -534,7 +543,7 @@ static bool parseAugmentedType(
   auto classAttr =
       tryGetAs<StringAttr>(augmentedType, root, "class", loc, clazz, path);
   if (!classAttr)
-    return false;
+    return None;
   StringRef classBase = classAttr.getValue();
   if (!classBase.consume_front("sifive.enterprise.grandcentral.Augmented")) {
     mlir::emitError(loc,
@@ -543,7 +552,7 @@ static bool parseAugmentedType(
                         classAttr.getValue() + "' (Did you misspell it?)")
             .attachNote()
         << "see annotation: " << augmentedType;
-    return false;
+    return None;
   }
 
   // An AugmentedBundleType looks like:
@@ -553,7 +562,7 @@ static bool parseAugmentedType(
     defName =
         tryGetAs<StringAttr>(augmentedType, root, "defName", loc, clazz, path);
     if (!defName)
-      return false;
+      return None;
 
     // Each element is an AugmentedField with members:
     //   "name": String
@@ -563,7 +572,7 @@ static bool parseAugmentedType(
     auto elementsAttr =
         tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
     if (!elementsAttr)
-      return false;
+      return None;
     for (size_t i = 0, e = elementsAttr.size(); i != e; ++i) {
       auto field = elementsAttr[i].dyn_cast_or_null<DictionaryAttr>();
       if (!field) {
@@ -574,16 +583,20 @@ static bool parseAugmentedType(
                 "]' contained an unexpected type (expected a DictionaryAttr).")
                 .attachNote()
             << "The received element was: " << elementsAttr[i] << "\n";
-        return false;
+        return None;
       }
       auto ePath = (path + ".elements[" + Twine(i) + "]").str();
       auto name = tryGetAs<StringAttr>(field, root, "name", loc, clazz, ePath);
       auto tpe =
           tryGetAs<DictionaryAttr>(field, root, "tpe", loc, clazz, ePath);
-      if (!name || !tpe ||
-          !parseAugmentedType(context, tpe, root, newAnnotations, companion,
-                              name, defName, loc, clazz, path))
-        return false;
+      Optional<StringAttr> description = None;
+      if (auto maybeDescription = field.get("description"))
+        description = maybeDescription.cast<StringAttr>();
+      auto eltAttr = parseAugmentedType(
+          context, tpe, root, newAnnotations, companion, name, defName, None,
+          description, loc, annotationID, clazz, path);
+      if (!name || !tpe || !eltAttr)
+        return None;
 
       // Collect information necessary to build a module with this view later.
       // This includes the optional description and name.
@@ -592,7 +605,7 @@ static bool parseAugmentedType(
         attrs.append("description", maybeDescription.cast<StringAttr>());
       attrs.append("name", name);
       attrs.append("tpe", tpe.getAs<StringAttr>("class"));
-      elements.push_back(DictionaryAttr::getWithSorted(context, attrs));
+      elements.push_back(eltAttr.getValue());
     }
     // Add an annotation that stores information necessary to construct the
     // module for the view.  This needs the name of the module (defName) and the
@@ -600,10 +613,13 @@ static bool parseAugmentedType(
     NamedAttrList attrs;
     attrs.append("class", classAttr);
     attrs.append("defName", defName);
+    if (description)
+      attrs.append("description", description.getValue());
     attrs.append("elements", ArrayAttr::get(context, elements));
-    newAnnotations["~"].push_back(
-        DictionaryAttr::getWithSorted(context, attrs));
-    return true;
+    if (id)
+      attrs.append("id", id.getValue());
+    attrs.append("name", name);
+    return DictionaryAttr::getWithSorted(context, attrs);
   }
 
   // An AugmentedGroundType looks like:
@@ -618,25 +634,39 @@ static bool parseAugmentedType(
     if (!maybeTarget) {
       mlir::emitError(loc, "Failed to parse ReferenceTarget").attachNote()
           << "See the full Annotation here: " << root;
-      return false;
+      return None;
     }
+
+    auto id = newID();
+
     auto target = maybeTarget.getValue();
-    NamedAttrList attr, dontTouchAnn;
-    attr.append("class", classAttr);
-    attr.append("defName", defName);
-    attr.append("name", name);
-    dontTouchAnn.append(
+    NamedAttrList elementIface, elementScattered, dontTouch;
+
+    // Populate the annotation for the interface element.
+    elementIface.append("class", classAttr);
+    if (description)
+      elementIface.append("description", description.getValue());
+    elementIface.append("id", id);
+    elementIface.append("name", name);
+    // Populate an annotation that will be scattered onto the element.
+    elementScattered.append("class", classAttr);
+    elementScattered.append("id", id);
+    // Populate a dont touch annotation for the scattered element.
+    dontTouch.append(
         "class",
         StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+    // If there are sub-targets, then add these.
     if (target.second) {
-      attr.append("target", target.second);
-      dontTouchAnn.append("target", target.second);
+      elementScattered.append("target", target.second);
+      dontTouch.append("target", target.second);
     }
+
     newAnnotations[target.first].push_back(
-        DictionaryAttr::getWithSorted(context, attr));
+        DictionaryAttr::getWithSorted(context, elementScattered));
     newAnnotations[target.first].push_back(
-        DictionaryAttr::getWithSorted(context, dontTouchAnn));
-    return true;
+        DictionaryAttr::getWithSorted(context, dontTouch));
+
+    return DictionaryAttr::getWithSorted(context, elementIface);
   }
 
   // An AugmentedVectorType looks like:
@@ -645,13 +675,24 @@ static bool parseAugmentedType(
     auto elementsAttr =
         tryGetAs<ArrayAttr>(augmentedType, root, "elements", loc, clazz, path);
     if (!elementsAttr)
-      return false;
-    for (auto elt : elementsAttr)
-      if (!parseAugmentedType(context, elt.cast<DictionaryAttr>(), root,
-                              newAnnotations, companion, name, defName, loc,
-                              clazz, path))
-        return false;
-    return true;
+      return None;
+    SmallVector<Attribute> elements;
+    for (auto elt : elementsAttr) {
+      auto eltAttr = parseAugmentedType(context, elt.cast<DictionaryAttr>(),
+                                        root, newAnnotations, companion, name,
+                                        StringAttr::get(context, ""), id, None,
+                                        loc, annotationID, clazz, path);
+      if (!eltAttr)
+        return None;
+      elements.push_back(eltAttr.getValue());
+    }
+    NamedAttrList attrs;
+    attrs.append("class", classAttr);
+    if (description)
+      attrs.append("description", description.getValue());
+    attrs.append("elements", ArrayAttr::get(context, elements));
+    attrs.append("name", name);
+    return DictionaryAttr::getWithSorted(context, attrs);
   }
 
   // Any of the following are known and expected, but are legacy AugmentedTypes
@@ -665,7 +706,7 @@ static bool parseAugmentedType(
           .Cases("StringType", "BooleanType", "IntegerType", "DoubleType", true)
           .Default(false);
   if (isIgnorable)
-    return true;
+    return augmentedType;
 
   // Anything else is unexpected or a user error if they manually wrote
   // annotations.  Print an error and error out.
@@ -673,7 +714,7 @@ static bool parseAugmentedType(
                            "' (Did you misspell it?)")
           .attachNote()
       << "see annotation: " << augmentedType;
-  return false;
+  return None;
 }
 
 /// Convert known custom FIRRTL Annotations with compound targets to multiple
@@ -683,7 +724,7 @@ static bool parseAugmentedType(
 /// possible.
 bool circt::firrtl::scatterCustomAnnotations(
     llvm::StringMap<ArrayAttr> &annotationMap, CircuitOp circuit,
-    unsigned &annotationID, Location loc) {
+    unsigned &annotationID, Location loc, size_t &nlaNumber) {
   MLIRContext *context = circuit.getContext();
 
   // Exit if no anotations exist that target "~". Also ensure a spurious entry
@@ -812,10 +853,10 @@ bool circt::firrtl::scatterCustomAnnotations(
           auto NLATargets = expandNonLocal(*maybeSourceTarget);
           auto leafTarget = splitAndAppendTarget(
               source, std::get<0>(NLATargets.back()), context);
+          FlatSymbolRefAttr nlaSym;
           if (NLATargets.size() > 1) {
-            buildNLA(circuit, *maybeSourceTarget, NLATargets);
-            source.append("circt.nonlocal",
-                          FlatSymbolRefAttr::get(context, *maybeSourceTarget));
+            nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
+            source.append("circt.nonlocal", nlaSym);
           }
           if (leafTarget.second.hasValue())
             appendTarget(dontTouchAnn, leafTarget.second.getValue());
@@ -829,9 +870,7 @@ bool circt::firrtl::scatterCustomAnnotations(
 
           for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
             NamedAttrList pathmetadata;
-            pathmetadata.append(
-                "circt.nonlocal",
-                FlatSymbolRefAttr::get(context, *maybeSourceTarget));
+            pathmetadata.append("circt.nonlocal", nlaSym);
             pathmetadata.append("class",
                                 StringAttr::get(context, "circt.nonlocal"));
             newAnnotations[std::get<0>(NLATargets[i])].push_back(
@@ -950,7 +989,7 @@ bool circt::firrtl::scatterCustomAnnotations(
             splitAndAppendTarget(foo, std::get<0>(NLATargets.back()), context)
                 .first;
         if (NLATargets.size() > 1) {
-          buildNLA(circuit, *canonTarget, NLATargets);
+          buildNLA(circuit, ++nlaNumber, NLATargets);
           foo.append("circt.nonlocal",
                      FlatSymbolRefAttr::get(context, *canonTarget));
         }
@@ -970,7 +1009,8 @@ bool circt::firrtl::scatterCustomAnnotations(
     }
 
     if (clazz == "sifive.enterprise.grandcentral.GrandCentralView$"
-                 "SerializedViewAnnotation") {
+                 "SerializedViewAnnotation" ||
+        clazz == "sifive.enterprise.grandcentral.ViewAnnotation") {
       auto viewAnnotationClass = StringAttr::get(
           context, "sifive.enterprise.grandcentral.ViewAnnotation");
       auto id = newID();
@@ -981,11 +1021,10 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto viewAttr = tryGetAs<DictionaryAttr>(dict, dict, "view", loc, clazz);
       if (!viewAttr)
         return false;
-      auto defName =
-          tryGetAs<StringAttr>(viewAttr, viewAttr, "defName", loc, clazz);
-      if (!defName)
+      auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
+      if (!name)
         return false;
-      companionAttrs.append("defName", defName);
+      companionAttrs.append("name", name);
       auto companionAttr =
           tryGetAs<StringAttr>(dict, dict, "companion", loc, clazz);
       if (!companionAttr)
@@ -998,17 +1037,18 @@ bool circt::firrtl::scatterCustomAnnotations(
         return false;
       parentAttrs.append("class", viewAnnotationClass);
       parentAttrs.append("id", id);
-      auto name = tryGetAs<StringAttr>(dict, dict, "name", loc, clazz);
-      if (!name)
-        return false;
       parentAttrs.append("name", name);
       parentAttrs.append("type", StringAttr::get(context, "parent"));
-      parentAttrs.append("defName", defName);
+
       newAnnotations[parentAttr.getValue()].push_back(
           DictionaryAttr::get(context, parentAttrs));
-      if (!parseAugmentedType(context, viewAttr, dict, newAnnotations,
-                              companion, {}, {}, loc, clazz, "view"))
+      auto prunedAttr = parseAugmentedType(
+          context, viewAttr, dict, newAnnotations, companion, name, {}, id, {},
+          loc, annotationID, clazz, "view");
+      if (!prunedAttr)
         return false;
+
+      newAnnotations["~"].push_back(prunedAttr.getValue());
       continue;
     }
 

@@ -42,7 +42,7 @@ class ComplexPorts:
   clk = Input(types.i1)
   sel = Input(types.i2)
   data_in = Input(dim(32, 3))
-  struct_data_in = Input(types.struct({"foo": types.i32}))
+  struct_data_in = Input(types.struct({"foo": types.i36}))
 
   a = Output(types.i32)
   b = Output(types.i32)
@@ -54,7 +54,7 @@ class ComplexPorts:
     return {
         'a': mod.data_in[0].reg(mod.clk).reg(mod.clk),
         'b': mod.data_in[mod.sel],
-        'c': mod.struct_data_in.foo
+        'c': mod.struct_data_in.foo[:-4]
     }
 
 
@@ -72,7 +72,7 @@ top.print()
 # CHECK:  %c7_i12_0 = hw.constant 7 : i12
 # CHECK:  %2 = hw.struct_create (%c7_i12_0) : !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
 
-# CHECK:  hw.module @pycde.Taps() -> (%taps: !hw.array<3xi8>)
+# CHECK:  hw.module @pycde.Taps() -> (taps: !hw.array<3xi8>)
 # CHECK:    %c-53_i8 = hw.constant -53 : i8
 # CHECK:    %c100_i8 = hw.constant 100 : i8
 # CHECK:    %c23_i8 = hw.constant 23 : i8
@@ -82,13 +82,14 @@ top.print()
 sys = System([ComplexPorts])
 sys.generate()
 sys.print()
-# CHECK:  hw.module @pycde.Comple_Ports(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i32>) -> (%a: i32, %b: i32, %c: i32) {
+# CHECK:  hw.module @pycde.Comple_Ports(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32) {
 # CHECK:    %c0_i2 = hw.constant 0 : i2
 # CHECK:    [[REG0:%.+]] = hw.array_get %data_in[%c0_i2] {name = "data_in__0"} : !hw.array<3xi32>
-# CHECK:    [[REGR1:%.+]] = seq.compreg [[REG0]], %clk {name = "data_in__0__reg1"} : i32
-# CHECK:    [[REGR2:%.+]] = seq.compreg [[REGR1]], %clk {name = "data_in__0__reg2"} : i32
+# CHECK:    [[REGR1:%data_in__0__reg1]] = seq.compreg [[REG0]], %clk : i32
+# CHECK:    [[REGR2:%data_in__0__reg2]] = seq.compreg [[REGR1]], %clk : i32
 # CHECK:    [[REG1:%.+]] = hw.array_get %data_in[%sel] : !hw.array<3xi32>
-# CHECK:    [[REG2:%.+]] = hw.struct_extract %struct_data_in["foo"] {name = "struct_data_in__foo"} : !hw.struct<foo: i32>
-# CHECK:    hw.output [[REGR2]], [[REG1]], [[REG2]] : i32, i32, i32
+# CHECK:    [[REG2:%.+]] = hw.struct_extract %struct_data_in["foo"] {name = "struct_data_in__foo"} : !hw.struct<foo: i36>
+# CHECK:    [[REG3:%.+]] = comb.extract [[REG2]] from 0 {name = "struct_data_in__foo_0upto32"} : (i36) -> i32
+# CHECK:    hw.output [[REGR2]], [[REG1]], [[REG3]] : i32, i32, i32
 
 sys.print_verilog()

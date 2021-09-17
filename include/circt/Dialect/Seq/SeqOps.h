@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_SEQ_SEQOPS_H
 
 #include "circt/Dialect/Seq/SeqDialect.h"
+#include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #define GET_OP_CLASSES

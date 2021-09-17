@@ -105,7 +105,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
     auto direction = (Direction)cast<FModuleLike>(op)
                          .getPortDirections()
                          .getValue()[blockArg.getArgNumber()];
-    if (direction == Direction::Output)
+    if (direction == Direction::Out)
       return swap();
     return accumulatedFlow;
   }
@@ -126,7 +126,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
         for (auto arg : llvm::enumerate(inst.getResults()))
           if (arg.value() == val) {
             if (inst.getReferencedModule().getPortDirection(arg.index()) ==
-                Direction::Output)
+                Direction::Out)
               return accumulatedFlow;
             else
               return swap();
@@ -258,8 +258,8 @@ static LogicalResult verifyCircuitOp(CircuitOp circuit) {
     }
 
     // Check that the number of ports is exactly the same.
-    SmallVector<ModulePortInfo> ports = extModule.getPorts();
-    SmallVector<ModulePortInfo> collidingPorts = collidingExtModule.getPorts();
+    SmallVector<PortInfo> ports = extModule.getPorts();
+    SmallVector<PortInfo> collidingPorts = collidingExtModule.getPorts();
 
     if (ports.size() != collidingPorts.size()) {
       auto diag = op.emitOpError()
@@ -327,8 +327,8 @@ Block *CircuitOp::getBody() { return &getBodyRegion().front(); }
 
 /// This function can extract information about ports from a module and an
 /// extmodule.
-SmallVector<ModulePortInfo> FModuleOp::getPorts() {
-  SmallVector<ModulePortInfo> results;
+SmallVector<PortInfo> FModuleOp::getPorts() {
+  SmallVector<PortInfo> results;
 
   auto portNamesAttr = portNames();
   auto portDirections = getPortDirections().getValue();
@@ -348,8 +348,8 @@ SmallVector<ModulePortInfo> FModuleOp::getPorts() {
 
 /// This function can extract information about ports from a module and an
 /// extmodule.
-SmallVector<ModulePortInfo> FExtModuleOp::getPorts() {
-  SmallVector<ModulePortInfo> results;
+SmallVector<PortInfo> FExtModuleOp::getPorts() {
+  SmallVector<PortInfo> results;
 
   auto portNamesAttr = portNames();
   auto portDirections = getPortDirections().getValue();
@@ -374,8 +374,7 @@ BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
 /// Inserts the given ports. The insertion indices are expected to be in order.
 /// Insertion occurs in-order, such that ports with the same insertion index
 /// appear in the module in the same order they appeared in the list.
-void FModuleOp::insertPorts(
-    ArrayRef<std::pair<unsigned, ModulePortInfo>> ports) {
+void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   if (ports.empty())
     return;
   unsigned oldNumArgs = getNumArguments();
@@ -461,7 +460,7 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
-                        StringAttr name, ArrayRef<ModulePortInfo> ports,
+                        StringAttr name, ArrayRef<PortInfo> ports,
                         ArrayAttr annotations) {
   using namespace mlir::function_like_impl;
 
@@ -501,7 +500,7 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 }
 
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
-                      StringAttr name, ArrayRef<ModulePortInfo> ports,
+                      StringAttr name, ArrayRef<PortInfo> ports,
                       ArrayAttr annotations) {
   buildModule(builder, result, name, ports, annotations);
 
@@ -516,7 +515,7 @@ void FModuleOp::build(OpBuilder &builder, OperationState &result,
 }
 
 void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
-                         StringAttr name, ArrayRef<ModulePortInfo> ports,
+                         StringAttr name, ArrayRef<PortInfo> ports,
                          StringRef defnameAttr, ArrayAttr annotations) {
   buildModule(builder, result, name, ports, annotations);
   if (!defnameAttr.empty())
@@ -1011,7 +1010,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return failure();
   }
 
-  SmallVector<ModulePortInfo> modulePorts = referencedModule.getPorts();
+  SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
 
   // Check that result types are consistent with the referenced module's ports.
   size_t numResults = getNumResults();
@@ -2323,72 +2322,22 @@ void VerbatimExprOp::getAsmResultNames(
 }
 
 //===----------------------------------------------------------------------===//
-// Conversions to/from fixed-width signless integer types in standard dialect.
+// VerbatimWireOp
 //===----------------------------------------------------------------------===//
 
-static LogicalResult verifyStdIntCastOp(StdIntCastOp cast) {
-  // Either the input or result must have signless standard integer type, the
-  // other must be a FIRRTL type that lowers to one, and their widths must
-  // match.
-  FIRRTLType firType;
-  IntegerType integerType;
-  if ((firType = cast.getOperand().getType().dyn_cast<FIRRTLType>())) {
-    integerType = cast.getType().dyn_cast<IntegerType>();
-    if (!integerType)
-      return cast.emitError("result type must be a signless integer");
-  } else if ((firType = cast.getType().dyn_cast<FIRRTLType>())) {
-    integerType = cast.getOperand().getType().dyn_cast<IntegerType>();
-    if (!integerType)
-      return cast.emitError("operand type must be a signless integer");
-  } else {
-    return cast.emitError("either source or result type must be integer type");
-  }
-
-  int32_t intWidth = firType.getBitWidthOrSentinel();
-  if (intWidth == -2)
-    return cast.emitError("firrtl type isn't simple bit type");
-  if (intWidth == -1)
-    return cast.emitError("SInt/UInt type must have a width");
-  if (!integerType.isSignless())
-    return cast.emitError("standard integer type must be signless");
-  if (unsigned(intWidth) != integerType.getWidth())
-    return cast.emitError("source and result width must match");
-
-  return success();
-}
-
-static LogicalResult verifyAnalogInOutCastOp(AnalogInOutCastOp cast) {
-  AnalogType firType;
-  hw::InOutType inoutType;
-
-  if ((firType = cast.getOperand().getType().dyn_cast<AnalogType>())) {
-    inoutType = cast.getType().dyn_cast<hw::InOutType>();
-    if (!inoutType)
-      return cast.emitError("result type must be an inout type");
-  } else if ((firType = cast.getType().dyn_cast<AnalogType>())) {
-    inoutType = cast.getOperand().getType().dyn_cast<hw::InOutType>();
-    if (!inoutType)
-      return cast.emitError("operand type must be an inout type");
-  } else {
-    return cast.emitError("either source or result type must be analog type");
-  }
-
-  // The inout type must wrap an integer.
-  auto integerType = inoutType.getElementType().dyn_cast<IntegerType>();
-  if (!integerType)
-    return cast.emitError("inout type must wrap an integer");
-
-  int32_t width = firType.getBitWidthOrSentinel();
-  if (width == -2)
-    return cast.emitError("firrtl type isn't simple bit type");
-  if (width == -1)
-    return cast.emitError("Analog type must have a width");
-  if (!integerType.isSignless())
-    return cast.emitError("standard integer type must be signless");
-  if (unsigned(width) != integerType.getWidth())
-    return cast.emitError("source and result width must match");
-
-  return success();
+void VerbatimWireOp::getAsmResultNames(
+    function_ref<void(Value, StringRef)> setNameFn) {
+  // If the text is macro like, then use a pretty name.  We only take the
+  // text up to a weird character (like a paren) and currently ignore
+  // parenthesized expressions.
+  auto isOkCharacter = [](char c) { return llvm::isAlnum(c) || c == '_'; };
+  auto name = text();
+  // Ignore a leading ` in macro name.
+  if (name.startswith("`"))
+    name = name.drop_front();
+  name = name.take_while(isOkCharacter);
+  if (!name.empty())
+    setNameFn(getResult(), name);
 }
 
 //===----------------------------------------------------------------------===//
@@ -2431,12 +2380,6 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
   }
 
   return success();
-}
-
-void AsPassivePrimOp::build(OpBuilder &builder, OperationState &result,
-                            Value input) {
-  result.addOperands(input);
-  result.addTypes(input.getType().cast<FIRRTLType>().getPassiveType());
 }
 
 //===----------------------------------------------------------------------===//
@@ -2637,7 +2580,7 @@ IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
   // Pack the array of directions into an APInt.  Input is zero, output is one.
   APInt portDirections(size, 0);
   for (size_t i = 0, e = directions.size(); i != e; ++i)
-    if (directions[i] == Direction::Output)
+    if (directions[i] == Direction::Out)
       portDirections.setBit(i);
 
   return IntegerAttr::get(IntegerType::get(ctx, size), portDirections);

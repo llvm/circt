@@ -52,12 +52,12 @@ module {
     // CHECK: Rcvr rcvr1 ({{.*}}//{{.+}}
     // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
     // CHECK: );
-    hw.instance "rcvr1" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+    hw.instance "rcvr1" @Rcvr(m: %ifaceInPort: !sv.modport<@data_vr::@data_in>) -> ()
 
     // CHECK: Rcvr rcvr2 ({{.*}}//{{.+}}
     // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
     // CHECK: );
-    hw.instance "rcvr2" @Rcvr(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+    hw.instance "rcvr2" @Rcvr(m: %ifaceInPort: !sv.modport<@data_vr::@data_in>) -> ()
 
     %c1 = hw.constant 1 : i1
     // CHECK: assign iface.valid = 1'h1;
@@ -96,12 +96,12 @@ module {
     // CHECK: regStuff rcvr1 ({{.*}}//{{.+}}
     // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
     // CHECK: );
-    hw.instance "rcvr1" @regStuff(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+    hw.instance "rcvr1" @regStuff(m: %ifaceInPort: !sv.modport<@data_vr::@data_in>) -> ()
 
     // CHECK: regStuff rcvr2 ({{.*}}//{{.+}}
     // CHECK:   .m ([[IFACE]].data_in){{.*}}//{{.+}}
     // CHECK: );
-    hw.instance "rcvr2" @regStuff(%ifaceInPort) : (!sv.modport<@data_vr::@data_in>) -> ()
+    hw.instance "rcvr2" @regStuff(m: %ifaceInPort: !sv.modport<@data_vr::@data_in>) -> ()
   }
 
   // https://github.com/llvm/circt/issues/724
