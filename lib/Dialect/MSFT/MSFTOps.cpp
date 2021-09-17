@@ -52,6 +52,39 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   }
 }
 
+/// Return an encapsulated set of information about input and output ports of
+/// the specified module or instance.  The input ports always come before the
+/// output ports in the list.
+/// TODO: This should really be shared with the HW dialect instead of cloned.
+/// Consider adding a `HasModulePorts` op interface to facilitate.
+hw::ModulePortInfo MSFTModuleOp::getPorts() {
+  SmallVector<hw::PortInfo> inputs, outputs;
+  auto argTypes = getType().getInputs();
+
+  auto argNames = this->argNames();
+  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+    bool isInOut = false;
+    auto type = argTypes[i];
+
+    if (auto inout = type.dyn_cast<hw::InOutType>()) {
+      isInOut = true;
+      type = inout.getElementType();
+    }
+
+    auto direction =
+        isInOut ? hw::PortDirection::INOUT : hw::PortDirection::INPUT;
+    inputs.push_back({argNames[i].cast<StringAttr>(), direction, type, i});
+  }
+
+  auto resultNames = this->resultNames();
+  auto resultTypes = getType().getResults();
+  for (unsigned i = 0, e = resultTypes.size(); i < e; ++i) {
+    outputs.push_back({resultNames[i].cast<StringAttr>(),
+                       hw::PortDirection::OUTPUT, resultTypes[i], i});
+  }
+  return hw::ModulePortInfo(inputs, outputs);
+}
+
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
   if (module == nullptr)

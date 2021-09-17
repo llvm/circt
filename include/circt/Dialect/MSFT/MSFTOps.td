@@ -11,6 +11,7 @@ class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
     Op<MSFTDialect, mnemonic, traits>;
 
 def InstanceOp : MSFTOp<"instance", [
+        ParentOneOf<["::circt::hw::HWModuleOp", "MSFTModuleOp"]>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
@@ -69,7 +70,7 @@ def MSFTModuleOp : MSFTOp<"module",
     }
 
     // Decode information about the input and output ports on this module.
-    SmallVector<::circt::hw::ModulePortInfo> getPorts();
+    ::circt::hw::ModulePortInfo getPorts();
 
     // Get the module's symbolic name as StringAttr.
     StringAttr getNameAttr() {

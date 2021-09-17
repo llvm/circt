@@ -11,13 +11,15 @@ hw.module @top () {
   // HWLOW: %foo.x = hw.instance "foo" @fooMod() -> (x: i32)
 }
 
-// CHECK-LABEL: msft.module @B {WIDTH = 1 : i64} (%a: i1) -> (nameOfPortInSV: i1) {
-msft.module @B { "WIDTH" = 1 } (%a: i1) -> (nameOfPortInSV: i1) {
-  %0 = comb.or %a, %a : i1
-  // CHECK: comb.or %a, %a : i1
-  %1 = comb.and %a, %a : i1
-  msft.output %0, %1: i1, i1
+// CHECK-LABEL: msft.module @B {WIDTH = 1 : i64} (%a: i4) -> (nameOfPortInSV: i4) {
+// HWLOW-LABEL: hw.module @B(%a: i4) -> (nameOfPortInSV: i4) {
+msft.module @B { "WIDTH" = 1 } (%a: i4) -> (nameOfPortInSV: i4) {
+  %0 = comb.add %a, %a : i4
+  // CHECK: comb.add %a, %a : i4
+  // HWLOW: comb.add %a, %a : i4
+  msft.output %0: i4
 }
 
 // CHECK-LABEL: msft.module @UnGenerated {DEPTH = 3 : i64} (%a: i1) -> (nameOfPortInSV: i1)
+// HWLOW-LABEL: Module not generated: \22UnGenerated\22 params {DEPTH = 3 : i64}
 msft.module @UnGenerated { DEPTH = 3 } (%a: i1) -> (nameOfPortInSV: i1)
