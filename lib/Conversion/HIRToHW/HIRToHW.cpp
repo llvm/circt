@@ -46,8 +46,8 @@ LogicalResult HIRToHWPass::visitOp(mlir::ConstantOp op) {
     return op.emitError(
         "hir-to-hw pass only supports IntegerType/IndexType constants.");
 
-  builder->create<hw::ConstantOp>(op.getLoc(),
-                                  op.value().dyn_cast<IntegerAttr>());
+  mapHIRToHWValue[op.getResult()] = builder->create<hw::ConstantOp>(
+      op.getLoc(), op.value().dyn_cast<IntegerAttr>());
   return success();
 }
 
@@ -141,7 +141,62 @@ LogicalResult HIRToHWPass::visitOp(hir::TimeOp op) {
   return success();
 }
 
-LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) { return success(); }
+LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
+  auto &bb = op.body().front();
+  auto nextIterOp = dyn_cast<hir::NextIterOp>(bb.back());
+  assert(nextIterOp);
+  assert(!nextIterOp.offset() || nextIterOp.offset().getValue() == 0);
+  assert(!op.offset() || op.offset().getValue() == 0);
+
+  auto conditionBegin = mapHIRToHWValue[op.condition()];
+  auto tstartBegin = mapHIRToHWValue[op.tstart()];
+
+  // FIXME
+  if (!conditionBegin || !tstartBegin)
+    return success();
+
+  auto conditionTrue = builder->create<mlir::ConstantOp>(
+      builder->getUnknownLoc(),
+      builder->getIntegerAttr(builder->getI1Type(), 1));
+
+  // If no condition is provided in the next_iter op then condition is always
+  // true.
+  Value conditionIter;
+  if (nextIterOp.condition())
+    conditionIter = getConstantX(builder, builder->getI1Type())->getResult(0);
+  else
+    conditionIter = conditionTrue;
+
+  auto tstartIter = getConstantX(builder, builder->getI1Type())->getResult(0);
+
+  // Placeholder mappings. Will be replaced when next_iter op is processed.
+  if (nextIterOp.condition())
+    mapHIRToHWValue[nextIterOp.condition()] = conditionIter;
+  mapHIRToHWValue[nextIterOp.tstart()] = tstartIter;
+
+  auto tNextBegin = builder->create<comb::AndOp>(builder->getUnknownLoc(),
+                                                 tstartBegin, conditionBegin);
+  auto tNextIter = builder->create<comb::AndOp>(builder->getUnknownLoc(),
+                                                tstartIter, conditionIter);
+  auto iterTimeVar =
+      builder->create<comb::OrOp>(op.getLoc(), tNextBegin, tNextIter);
+  auto notConditionBegin = builder->create<comb::XorOp>(
+      builder->getUnknownLoc(), conditionBegin, conditionTrue);
+  auto notConditionIter = builder->create<comb::XorOp>(
+      builder->getUnknownLoc(), conditionIter, conditionTrue);
+  auto tLastBegin = builder->create<comb::AndOp>(
+      builder->getUnknownLoc(), tstartBegin, notConditionBegin);
+  auto tLastIter = builder->create<comb::AndOp>(builder->getUnknownLoc(),
+                                                tstartIter, notConditionIter);
+  auto tLast = builder->create<comb::OrOp>(op.getLoc(), tLastBegin, tLastIter);
+  auto tLastName = helper::getOptionalName(op, 0);
+  if (tLastName)
+    tLast->setAttr("name", builder->getStringAttr(tLastName.getValue()));
+
+  mapHIRToHWValue[op.getIterTimeVar()] = iterTimeVar;
+  mapHIRToHWValue[op.res()] = tLast;
+  return success();
+}
 
 LogicalResult HIRToHWPass::visitOp(hir::FuncExternOp op) {
   builder = new OpBuilder(op);

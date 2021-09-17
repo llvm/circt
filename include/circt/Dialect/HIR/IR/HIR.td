@@ -65,6 +65,7 @@ def NextIterOp : HIR_Op<"next_iter", [AttrSizedOperandSegments, ParentOneOf<["Fo
   let results = (outs );
   let hasCanonicalizeMethod = true;
   let assemblyFormat = [{ (`condition` $condition^)? `at` custom<TimeAndOffset>($tstart ,$offset) attr-dict }];
+  let verifier =[{return verify$cppClass(*this);}];
 }
 
 def IsFirstIterOp :HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>,NoSideEffect]>{

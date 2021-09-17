@@ -5,18 +5,19 @@
 
 namespace circt {
 namespace hir {
-LogicalResult verifyFuncOp(hir::FuncOp op);
-LogicalResult verifyFuncExternOp(hir::FuncExternOp op);
-LogicalResult verifyAllocaOp(hir::AllocaOp op);
-LogicalResult verifyCallOp(hir::CallOp op);
-LogicalResult verifyDelayOp(hir::DelayOp op);
-LogicalResult verifyYieldOp(hir::YieldOp op);
-LogicalResult verifyLatchOp(hir::LatchOp op);
-LogicalResult verifyTimeOp(hir::TimeOp op);
-LogicalResult verifyForOp(hir::ForOp op);
-LogicalResult verifyLoadOp(hir::LoadOp op);
-LogicalResult verifyStoreOp(hir::StoreOp op);
-LogicalResult verifyIfOp(hir::IfOp op);
+LogicalResult verifyFuncOp(hir::FuncOp);
+LogicalResult verifyFuncExternOp(hir::FuncExternOp);
+LogicalResult verifyAllocaOp(hir::AllocaOp);
+LogicalResult verifyCallOp(hir::CallOp);
+LogicalResult verifyDelayOp(hir::DelayOp);
+LogicalResult verifyYieldOp(hir::YieldOp);
+LogicalResult verifyLatchOp(hir::LatchOp);
+LogicalResult verifyTimeOp(hir::TimeOp);
+LogicalResult verifyForOp(hir::ForOp);
+LogicalResult verifyLoadOp(hir::LoadOp);
+LogicalResult verifyStoreOp(hir::StoreOp);
+LogicalResult verifyIfOp(hir::IfOp);
+LogicalResult verifyNextIterOp(hir::NextIterOp);
 } // namespace hir
 } // namespace circt
 

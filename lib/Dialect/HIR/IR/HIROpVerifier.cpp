@@ -254,6 +254,12 @@ LogicalResult verifyIfOp(hir::IfOp op) {
     return failure();
   return success();
 }
+LogicalResult verifyNextIterOp(hir::NextIterOp op) {
+  if (op.condition() && isa<hir::ForOp>(op->getParentOp()))
+    return op.emitError("condition is not supported in hir.next_iter when it "
+                        "is inside a hir.for op.");
+  return success();
+}
 //-----------------------------------------------------------------------------
 } // namespace hir
 } // namespace circt
