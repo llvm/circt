@@ -1741,17 +1741,9 @@ struct HandshakeDataflowPass
   void runOnOperation() override {
     ModuleOp m = getOperation();
 
-    WalkResult result = m.walk([&](mlir::FuncOp allocOp) {
-      if (failed(
-              lowerFuncOp(*m.getOps<mlir::FuncOp>().begin(), &getContext()))) {
+    for (auto funcOp : llvm::make_early_inc_range(m.getOps<mlir::FuncOp>())) {
+      if (failed(lowerFuncOp(funcOp, &getContext())))
         signalPassFailure();
-        return WalkResult::interrupt();
-      }
-      return WalkResult::advance();
-    });
-
-    if (result.wasInterrupted()) {
-      return;
     }
 
     // Legalize the resulting regions, which can have no basic blocks.
