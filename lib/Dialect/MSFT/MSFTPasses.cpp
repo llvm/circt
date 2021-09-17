@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
+#include "circt/Dialect/SV/SVOps.h"
 
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
@@ -179,6 +180,54 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
 }
 
 namespace {
+/// Lower MSFT's ModuleOp to HW's.
+struct ModuleOpLowering : public OpConversionPattern<MSFTModuleOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(MSFTModuleOp mod, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult
+ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, ArrayRef<Value> operands,
+                                  ConversionPatternRewriter &rewriter) const {
+  if (mod.body().empty()) {
+    std::string comment;
+    llvm::raw_string_ostream(comment)
+        << "// Module not generated: \"" << mod.getName() << "\" params "
+        << mod.parameters();
+    // TODO: replace this with proper comment op when it's created.
+    rewriter.replaceOpWithNewOp<sv::VerbatimOp>(mod, comment);
+    return success();
+  }
+
+  auto hwmod = rewriter.replaceOpWithNewOp<hw::HWModuleOp>(
+      mod, mod.getNameAttr(), mod.getPorts());
+  rewriter.eraseBlock(hwmod.getBodyBlock());
+  rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
+                              hwmod.getBody().end());
+  return success();
+}
+
+namespace {
+/// Lower MSFT's OutputOp to HW's.
+struct OutputOpLowering : public OpConversionPattern<OutputOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OutputOp out, ArrayRef<Value> operands,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<hw::OutputOp>(out, out.getOperands());
+    return success();
+  }
+};
+} // anonymous namespace
+
+namespace {
 struct LowerToHWPass : public LowerToHWBase<LowerToHWPass> {
   void runOnOperation() override;
 };
@@ -191,13 +240,14 @@ void LowerToHWPass::runOnOperation() {
   // Set up a conversion and give it a set of laws.
   ConversionTarget target(*ctxt);
   target.addIllegalDialect<MSFTDialect>();
-  target.addLegalOp<MSFTModuleOp>(); // TODO: Remove me!
-  target.addLegalOp<OutputOp>();     // TODO: Remove me!
   target.addLegalDialect<hw::HWDialect>();
+  target.addLegalDialect<sv::SVDialect>();
 
   // Add all the conversion patterns.
   RewritePatternSet patterns(ctxt);
   patterns.insert<InstanceOpLowering>(ctxt);
+  patterns.insert<ModuleOpLowering>(ctxt);
+  patterns.insert<OutputOpLowering>(ctxt);
 
   // Run the conversion.
   if (failed(applyPartialConversion(top, target, std::move(patterns))))

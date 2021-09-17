@@ -18,6 +18,7 @@ add_circt_dialect_library(CIRCTMSFT
 
   DEPENDS
   CIRCTHW
+  CIRCTSV
   MLIRMSFTIncGen
   MLIRMSFTExtraIncGen
   
@@ -28,6 +29,7 @@ add_circt_dialect_library(CIRCTMSFT
   MLIRIR
   MLIRTransforms
   CIRCTHW
+  CIRCTSV
    )
 
 add_dependencies(circt-headers MLIRMSFTIncGen)
