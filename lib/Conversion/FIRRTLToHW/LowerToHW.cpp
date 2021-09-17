@@ -134,6 +134,8 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   size_t readUnderWrite;
+  WUW writeUnderWrite;
+  SmallVector<int32_t> writeClockIDs;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
@@ -152,6 +154,13 @@ struct FirMemory {
     cmp3way(readLatency);
     cmp3way(writeLatency);
     cmp3way(readUnderWrite);
+    cmp3way(writeUnderWrite);
+    for (auto tuple : llvm::zip(writeClockIDs, rhs.writeClockIDs)) {
+      if (std::get<0>(tuple) < std::get<1>(tuple))
+        return true;
+      if (std::get<0>(tuple) > std::get<1>(tuple))
+        return false;
+    }
     return false;
 #undef cmp3way
   }
@@ -161,41 +170,70 @@ struct FirMemory {
            numReadWritePorts == rhs.numReadWritePorts &&
            dataWidth == rhs.dataWidth && depth == rhs.depth &&
            readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
-           readUnderWrite == rhs.readUnderWrite;
+           readUnderWrite == rhs.readUnderWrite &&
+           writeUnderWrite == rhs.writeUnderWrite &&
+           writeClockIDs.size() == rhs.writeClockIDs.size() &&
+           llvm::all_of_zip(writeClockIDs, rhs.writeClockIDs,
+                            [](auto a, auto b) { return a == b; });
   }
 };
 } // namespace
 
 static std::string getFirMemoryName(const FirMemory &mem) {
-  return llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}",
-                       mem.numReadPorts, mem.numWritePorts,
-                       mem.numReadWritePorts, mem.dataWidth, mem.depth,
-                       mem.readLatency, mem.writeLatency, mem.readUnderWrite);
+  SmallString<8> clocks;
+  for (auto a : mem.writeClockIDs)
+    clocks.append(Twine((char)(a + 'a')).str());
+  return llvm::formatv(
+      "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}{9}", mem.numReadPorts,
+      mem.numWritePorts, mem.numReadWritePorts, mem.dataWidth, mem.depth,
+      mem.readLatency, mem.writeLatency, mem.readUnderWrite,
+      (unsigned)mem.writeUnderWrite, clocks.empty() ? "" : "_" + clocks);
 }
 
 static FirMemory analyzeMemOp(MemOp op) {
   size_t numReadPorts = 0;
   size_t numWritePorts = 0;
   size_t numReadWritePorts = 0;
+  llvm::SmallDenseMap<Value, unsigned> clockToLeader;
+  SmallVector<int32_t> writeClockIDs;
 
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto portKind = op.getPortKind(i);
     if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
-    else if (portKind == MemOp::PortKind::Write)
+    else if (portKind == MemOp::PortKind::Write) {
+      for (auto *a : op.getResult(i).getUsers()) {
+        auto subfield = dyn_cast<SubfieldOp>(a);
+        if (!subfield || subfield.fieldIndex() != 2)
+          continue;
+        auto clockPort = a->getResult(0);
+        for (auto *b : clockPort.getUsers()) {
+          auto connect = dyn_cast<ConnectOp>(b);
+          if (!connect || connect.dest() != clockPort)
+            continue;
+          auto result = clockToLeader.insert({connect.src(), numWritePorts});
+          if (result.second) {
+            writeClockIDs.push_back(numWritePorts);
+          } else {
+            writeClockIDs.push_back(result.first->second);
+          }
+        }
+        break;
+      }
       ++numWritePorts;
-    else
+    } else
       ++numReadWritePorts;
   }
+
   auto width = op.getDataType().getBitWidthOrSentinel();
   if (width <= 0) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
 
-  return {numReadPorts,      numWritePorts,    numReadWritePorts,
-          (size_t)width,     op.depth(),       op.readLatency(),
-          op.writeLatency(), (size_t)op.ruw(), op.getLoc()};
+  return {numReadPorts,   numWritePorts,    numReadWritePorts, (size_t)width,
+          op.depth(),     op.readLatency(), op.writeLatency(), (size_t)op.ruw(),
+          WUW::PortOrder, writeClockIDs,    op.getLoc()};
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
@@ -460,9 +498,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
-  std::array<StringRef, 8> schemaFields = {
-      "depth",       "numReadPorts", "numWritePorts", "numReadWritePorts",
-      "readLatency", "writeLatency", "width",         "readUnderWrite"};
+  std::array<StringRef, 10> schemaFields = {
+      "depth",           "numReadPorts", "numWritePorts", "numReadWritePorts",
+      "readLatency",     "writeLatency", "width",         "readUnderWrite",
+      "writeUnderWrite", "writeClockIDs"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<hw::HWGeneratorSchemaOp>(
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -526,7 +565,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
         b.getNamedAttr("readUnderWrite",
-                       b.getUI32IntegerAttr(mem.readUnderWrite))};
+                       b.getUI32IntegerAttr(mem.readUnderWrite)),
+        b.getNamedAttr("writeUnderWrite",
+                       WUWAttr::get(b.getContext(), mem.writeUnderWrite)),
+        b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));
