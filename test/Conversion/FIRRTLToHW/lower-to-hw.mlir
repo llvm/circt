@@ -8,6 +8,29 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   //These come from MemSimple, IncompleteRead, and MemDepth1
   // CHECK-LABEL: hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
+  //
+  // This memory has two write ports where both write ports are driven by the
+  // same clock.
+  //
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_0_1_aa,
+  // CHECK-SAME: @FIRRTLMem(%wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i4, %wo_mask_0: i1, %wo_data_0: i8, %wo_clock_1: i1, %wo_en_1: i1, %wo_addr_1: i4, %wo_mask_1: i1, %wo_data_1: i8)
+  // CHECK-SAME: attributes {depth = 16 : i64, numReadPorts = 0 : ui32,
+  // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
+  // CHECK-SAME: readLatency = 1 : ui32, readUnderWrite = 0 : ui32,
+  // CHECK-SAME: width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32],
+  // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+  //
+  // This memory is the same as the above memory, but each write port is driven
+  // by a different clock.
+  //
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab,
+  // CHECK-SAME: @FIRRTLMem(%wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i4, %wo_mask_0: i1, %wo_data_0: i8, %wo_clock_1: i1, %wo_en_1: i1, %wo_addr_1: i4, %wo_mask_1: i1, %wo_data_1: i8)
+  // CHECK-SAME: attributes {depth = 16 : i64, numReadPorts = 0 : ui32,
+  // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
+  // CHECK-SAME: readLatency = 1 : ui32, readUnderWrite = 0 : ui32,
+  // CHECK-SAME: width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32],
+  // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+  //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_1_1,
   // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1) -> (ro_data_0: i32)
   // CHECK-SAME: attributes {depth = 1 : i64, numReadPorts = 1 : ui32,
@@ -906,4 +929,41 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK: attributes {firrtl.moduleHierarchyFile
   firrtl.module @FooDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
+
+  // CHECK-LABEL: hw.module @MemoryWritePortBehavior
+  firrtl.module @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
+    // This memory has both write ports driven by the same clock.  It should be
+    // lowered to an "aa" memory.
+    //
+    // CHECK: hw.instance "aa" @FIRRTLMem_0_2_0_8_16_1_1_0_1_aa
+    %memory_aa_w0, %memory_aa_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "aa", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %clk_aa_w0 = firrtl.subfield %memory_aa_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    %clk_aa_w1 = firrtl.subfield %memory_aa_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    firrtl.connect %clk_aa_w0, %clock1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %clk_aa_w1, %clock1 : !firrtl.clock, !firrtl.clock
+
+    // This memory has different clocks for each write port.  It should be
+    // lowered to an "ab" memory.
+    //
+    // CHECK: hw.instance "ab" @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab
+    %memory_ab_w0, %memory_ab_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %clk_ab_w0 = firrtl.subfield %memory_ab_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    %clk_ab_w1 = firrtl.subfield %memory_ab_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    firrtl.connect %clk_ab_w0, %clock1 : !firrtl.clock, !firrtl.clock
+    firrtl.connect %clk_ab_w1, %clock2 : !firrtl.clock, !firrtl.clock
+
+    // This memory is the same as the first memory, but a node is used to alias
+    // the second write port clock (e.g., this could be due to a dont touch
+    // annotation blocking this from being optimized away).  This should be
+    // lowered to an "ab" memory even though it is trivially convertible to an
+    // "aa" memory.
+    //
+    // CHECK: hw.instance "ab_node" @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab
+    %memory_ab_node_w0, %memory_ab_node_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab_node", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    %clk_ab_node_w0 = firrtl.subfield %memory_ab_node_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    %clk_ab_node_w1 = firrtl.subfield %memory_ab_node_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
+    firrtl.connect %clk_ab_node_w0, %clock1 : !firrtl.clock, !firrtl.clock
+    %tmp = firrtl.node %clock1 : !firrtl.clock
+    firrtl.connect %clk_ab_node_w1, %tmp : !firrtl.clock, !firrtl.clock
+  }
 }
