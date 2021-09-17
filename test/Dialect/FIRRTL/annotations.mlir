@@ -7,11 +7,13 @@
 // A non-local annotation should work.
 
 // CHECK-LABEL: firrtl.circuit "FooNL"
-// CHECK: firrtl.nla @nla [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
+// CHECK: firrtl.nla @nla_0 [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
+// CHECK: firrtl.nla @nla [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w2"] 
 // CHECK: firrtl.module @BarNL
-// CHECK: firrtl.wire {annotations = [{circt.nonlocal = @nla, class = "circt.test", nl = "nl"}]}
-// CHECK: firrtl.instance @BarNL {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}], name = "bar"}
-// CHECK: firrtl.instance @BazNL {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}], name = "baz"
+// CHECK: %w = firrtl.wire {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]}
+// CHECK: %w2 = firrtl.wire {annotations = [{circt.fieldID = 5 : i32, circt.nonlocal = @nla, class = "circt.test", nl = "nl2"}]} : !firrtl.bundle<a: uint, b: vector<uint, 4>> 
+// CHECK: firrtl.instance @BarNL {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}], name = "bar"}
+// CHECK: firrtl.instance @BazNL {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}], name = "baz"
 firrtl.circuit "FooNL"  attributes {annotations = [
   {class = "circt.test", nl = "nl", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w"},
   {class = "circt.test", nl = "nl2", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w2.b[2]"}
