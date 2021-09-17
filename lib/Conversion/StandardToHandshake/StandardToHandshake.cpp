@@ -775,19 +775,18 @@ void checkSuccessorBlocks(Operation *op, Value res) {
 }
 
 // Checks if merge predecessors are in appropriate block
-void checkMergePredecessors(Operation *op) {
-  auto mergeOp = dyn_cast<MergeLikeOpInterface>(op);
-  Block *block = op->getBlock();
-  unsigned operand_count = op->getNumOperands();
+void checkMergePredecessors(MergeLikeOpInterface mergeOp) {
+  Block *block = mergeOp->getBlock();
+  unsigned operand_count = mergeOp.dataOperands().size();
 
   // Merges in entry block have single predecessor (argument)
   if (block->isEntryBlock()) {
     if (operand_count != 1)
-      op->emitError("merge operations in entry block must have a ")
+      mergeOp->emitError("merge operations in entry block must have a ")
           << "single predecessor";
   } else {
     if (operand_count > getBlockPredecessorCount(block))
-      op->emitError("merge operation has ")
+      mergeOp->emitError("merge operation has ")
           << operand_count << " data inputs, but only "
           << getBlockPredecessorCount(block) << " predecessor blocks";
   }
@@ -803,14 +802,14 @@ void checkMergePredecessors(Operation *op) {
       }
     }
     if (!found)
-      op->emitError("missing predecessor from predecessor block");
+      mergeOp->emitError("missing predecessor from predecessor block");
   }
 
   // Select operand must come from same block
-  if (auto muxOp = dyn_cast<MuxOp>(op)) {
+  if (auto muxOp = dyn_cast<MuxOp>(mergeOp.getOperation())) {
     auto *operand = muxOp.selectOperand().getDefiningOp();
     if (operand->getBlock() != block)
-      op->emitError("mux select operand must be from same block");
+      mergeOp->emitError("mux select operand must be from same block");
   }
   return;
 }
@@ -827,8 +826,8 @@ void checkDataflowConversion(handshake::FuncOp f) {
             checkSuccessorBlocks(&op, result);
           }
         }
-        if (isa<MergeLikeOpInterface>(op))
-          checkMergePredecessors(&op);
+        if (auto mergeOp = dyn_cast<MergeLikeOpInterface>(op); mergeOp)
+          checkMergePredecessors(mergeOp);
       }
     }
   }
