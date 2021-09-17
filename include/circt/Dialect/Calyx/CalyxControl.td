@@ -72,10 +72,10 @@ def IfOp : CalyxContainer<"if", [
     Block *getThenRegion() {
       return &getOperation()->getRegion(0).front();
     }
+    bool elseRegionExists() { return !getOperation()->getRegion(1).empty(); }
     Block *getElseRegion() {
-      Region* region = &getOperation()->getRegion(1);
-      assert(!region->empty() && "Else region does not exist.");
-      return &region->front();
+      assert(elseRegionExists() && "Else region does not exist.");
+      return &getOperation()->getRegion(1).front();
     }
   }];
 }

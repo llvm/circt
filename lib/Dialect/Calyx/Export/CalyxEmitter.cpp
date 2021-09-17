@@ -359,53 +359,46 @@ private:
     os << semicolonEndL();
   }
 
-  /// Recursively emits the Calyx control. The regionIndex will always be zero
-  /// (i.e. the body) with one exception: The Else region of an IfOp.
-  template <typename OpTy>
-  void emitCalyxControl(OpTy controlOp, size_t regionIndex = 0) {
+  /// Recursively emits the Calyx control.
+  void emitCalyxControl(Operation *controlOp, Block *body) {
     // Check to see if this is a stand-alone EnableOp.
     if (isa<EnableOp>(controlOp)) {
       emitEnable(cast<EnableOp>(controlOp));
       return;
     }
-
-    Region *region = &controlOp->getRegion(regionIndex);
-    for (auto &&regionOp : region->front()) {
+    for (auto &&op : *body) {
       // Attribute dictionary is prepended for a control operation.
       auto prependAttributes = [&](StringRef sym) {
-        return (getAttributes(&regionOp) + sym).str();
+        return (getAttributes(&op) + sym).str();
       };
 
-      TypeSwitch<Operation *>(&regionOp)
-          .template Case<SeqOp>([&](auto op) {
+      TypeSwitch<Operation *>(&op)
+          .Case<SeqOp>([&](auto op) {
             emitCalyxSection(prependAttributes("seq"),
-                             [&]() { emitCalyxControl(op); });
+                             [&]() { emitCalyxControl(op, op.getBody()); });
           })
-          .template Case<ParOp>([&](auto op) {
+          .Case<ParOp>([&](auto op) {
             emitCalyxSection(prependAttributes("par"),
-                             [&]() { emitCalyxControl(op); });
+                             [&]() { emitCalyxControl(op, op.getBody()); });
           })
-          .template Case<IfOp>([&](auto op) {
-            indent() << prependAttributes("if ");
-            emitValue(op.cond(), /*isIndented=*/false);
-            if (auto groupName = op.groupName(); groupName.hasValue())
-              os << " with " << groupName.getValue();
-            // Emit the ThenRegion.
-            emitCalyxBody([&]() { emitCalyxControl(op); });
-
-            bool elseRegionExists = !op.getRegion(1).empty();
-            if (elseRegionExists)
-              emitCalyxSection(
-                  "else", [&]() { emitCalyxControl(op, /*regionIndex=*/1); });
-          })
-          .template Case<WhileOp>([&](auto op) {
+          .Case<WhileOp>([&](auto op) {
             indent() << prependAttributes("while ");
             emitValue(op.cond(), /*isIndented=*/false);
             if (auto groupName = op.groupName(); groupName.hasValue())
               os << " with " << groupName.getValue();
-            emitCalyxBody([&]() { emitCalyxControl(op); });
+            emitCalyxBody([&]() { emitCalyxControl(op, op.getBody()); });
           })
-          .template Case<EnableOp>([&](auto op) { emitEnable(op); })
+          .Case<IfOp>([&](auto op) {
+            indent() << prependAttributes("if ");
+            emitValue(op.cond(), /*isIndented=*/false);
+            if (auto groupName = op.groupName(); groupName.hasValue())
+              os << " with " << groupName.getValue();
+            emitCalyxBody([&]() { emitCalyxControl(op, op.getThenRegion()); });
+            if (op.elseRegionExists())
+              emitCalyxSection(
+                  "else", [&]() { emitCalyxControl(op, op.getElseRegion()); });
+          })
+          .Case<EnableOp>([&](auto op) { emitEnable(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside control.");
           });
@@ -615,7 +608,8 @@ void Emitter::emitEnable(EnableOp enable) {
 }
 
 void Emitter::emitControl(ControlOp control) {
-  emitCalyxSection("control", [&]() { emitCalyxControl(control); });
+  emitCalyxSection("control",
+                   [&]() { emitCalyxControl(control, control.getBody()); });
 }
 
 //===----------------------------------------------------------------------===//
