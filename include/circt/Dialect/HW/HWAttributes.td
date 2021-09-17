@@ -84,3 +84,8 @@ def VerbatimParameterValueAttr : AttrDef<HWDialect, "VerbatimParameterValue"> {
                         AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "verbatim.parameter.value";
 }
+
+def WUW_Undefined : I32EnumAttrCase<"Undefined", 0>;
+def WUW_PortOrder : I32EnumAttrCase<"PortOrder", 1>;
+def WUWAttr : I32EnumAttr<"WUW", "Write Under Write Behavior",
+                          [WUW_Undefined, WUW_PortOrder]>;
