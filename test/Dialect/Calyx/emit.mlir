@@ -24,17 +24,14 @@ calyx.program {
         calyx.group_done %r.done : i1
       }
     }
-    // CHECK-LABEL: control {
-    // CHECK-NEXT:    seq {
-    // CHECk-NEXT:      if r.out {
-    // CHECK-NEXT:        RegisterWrite;
-    // CHECK-NEXT:      else {
-    // CHECK-NEXT:        RegisterWrite;
-    // CHECK-NEXT:      }
-    // CHECK-NEXT:    }
-    // CHECK-NEXT:  }
+
     calyx.control {
       calyx.seq {
+        // CHECK-LABEL: if r.out {
+        // CHECK-NEXT:    RegisterWrite;
+        // CHECK-NEXT:  }
+        // CHECK-NEXT:  else {
+        // CHECK-NEXT:    RegisterWrite;
         calyx.if %r.out {
           calyx.enable @RegisterWrite
         } else {
