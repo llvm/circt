@@ -53,6 +53,11 @@ struct AnnoTarget {
 
   bool isPort() const { return op && portNum != ~0UL; }
   bool isInstance() const { return op && isa<InstanceOp>(op); }
+  FModuleOp getModule() const {
+    if (auto mod = dyn_cast<FModuleOp>(op))
+      return mod;
+    return op->getParentOfType<FModuleOp>();
+  }
   FIRRTLType getType() const {
     if (!op)
       return FIRRTLType();
@@ -101,6 +106,13 @@ struct applyState {
 
 } // namespace
 
+static StringRef getName(Operation *op) {
+  return TypeSwitch<Operation *, StringRef>(op)
+      .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
+            SeqMemOp, MemoryPortOp>([&](auto nop) { return nop.name(); })
+      .Default([](auto &) { return ""; });
+}
+
 static bool hasName(StringRef name, Operation *op) {
   return TypeSwitch<Operation *, bool>(op)
       .Case<InstanceOp, MemOp, NodeOp, RegOp, RegResetOp, WireOp, CombMemOp,
@@ -133,14 +145,6 @@ static AnnoTarget findNamedThing(StringRef name, Operation *op) {
   };
   op->walk(nameChecker);
   return retval;
-}
-
-static void addNamedAttr(Operation *op, StringRef name, StringAttr value) {
-  op->setAttr(name, value);
-}
-
-static void addNamedAttr(Operation *op, StringRef name) {
-  op->setAttr(name, BoolAttr::get(op->getContext(), true));
 }
 
 static ArrayAttr getAnnotationsFrom(Operation *op) {
@@ -197,31 +201,6 @@ static void addAnnotation(AnnoTarget ref, ArrayRef<NamedAttribute> anno) {
   ref.op->setAttr("portAnnotations", portAnno);
 }
 
-Optional<AnnoPathValue> resolveEntities(tokenAnnoTarget path, applyState state) {
-  if (!path.circuit.empty() && state.circuit.name() != path.circuit) {
-    state.circuit->emitError("circuit name doesn't match annotation '") << path.circuit << '\'';
-    return {};
-  }
-  SmallVector<InstanceOp> instances;
-  for (auto p : path.instances) {
-    auto mod = state.symTbl.lookup<FModuleOp>(p.first);
-    if (!mod) {
-      state.circuit->emitError("module doesn't exist '") << p.first << '\'';
-      return {};
-    }
-    auto resolved = findNamedThing(p.second, mod);
-    if (!resolved.isInstance()) {
-      state.circuit.emitError("cannot find instance '")
-          << p.second << "' in '" << mod.getName() << "'";
-      return {};
-    }
-    instances.push_back(cast<InstanceOp>(resolved.op));
-  }
-  assert(!path.module.empty());
-  assert(!path.name.empty());
-  return {}; //AnnoPathValue(instances);
-}
-
 // Some types have been expanded so the first layer of aggregate path is
 // a return value.
 static LogicalResult updateExpandedPort(StringRef field, AnnoTarget &entity) {
@@ -258,13 +237,75 @@ static LogicalResult updateStruct(StringRef field, AnnoTarget &entity) {
          << field << "' in subtype '" << bundle << "'";
 }
 
-static LogicalResult updateArray(unsigned index, AnnoTarget &entity) {
+static LogicalResult updateArray(StringRef indexStr, AnnoTarget &entity) {
+  size_t index;
+  if (indexStr.getAsInteger(10, index)) {
+    entity.op->emitError("Cannot convert '") << indexStr << "' to an integer";
+    return failure();
+  }
+
   auto vec = entity.getType().dyn_cast<FVectorType>();
   if (!vec)
     return entity.op->emitError("index access '")
            << index << "' into non-vector type '" << vec << "'";
   entity.fieldIdx += vec.getFieldID(index);
   return success();
+}
+
+Optional<AnnoPathValue> resolveEntities(tokenAnnoTarget path,
+                                        applyState state) {
+  if (!path.circuit.empty() && state.circuit.name() != path.circuit) {
+    state.circuit->emitError("circuit name doesn't match annotation '")
+        << path.circuit << '\'';
+    return {};
+  }
+  if (path.module.empty()) {
+    assert(path.name.empty() && path.instances.empty() && path.agg.empty());
+    return AnnoPathValue(state.circuit);
+  }
+
+  SmallVector<InstanceOp> instances;
+  for (auto p : path.instances) {
+    auto mod = state.symTbl.lookup<FModuleOp>(p.first);
+    if (!mod) {
+      state.circuit->emitError("module doesn't exist '") << p.first << '\'';
+      return {};
+    }
+    auto resolved = findNamedThing(p.second, mod);
+    if (!resolved.isInstance()) {
+      state.circuit.emitError("cannot find instance '")
+          << p.second << "' in '" << mod.getName() << "'";
+      return {};
+    }
+    instances.push_back(cast<InstanceOp>(resolved.op));
+  }
+  auto mod = state.symTbl.lookup<FModuleOp>(path.module);
+  if (!mod) {
+    state.circuit->emitError("module doesn't exist '") << path.module << '\'';
+    return {};
+  }
+  AnnoTarget ref;
+  if (path.name.empty()) {
+    assert(path.agg.empty());
+    ref = AnnoTarget(mod);
+  } else {
+    ref = findNamedThing(path.name, mod);
+    if (!ref) {
+      state.circuit->emitError("cannot find name '")
+          << path.name << "' in " << mod.getName();
+      return {};
+    }
+  }
+  for (auto agg : path.agg) {
+    if (agg.isIndex) {
+      if (failed(updateArray(agg.name, ref)))
+        return {};
+    } else {
+      if (failed(updateStruct(agg.name, ref)))
+        return {};
+    }
+  }
+  return AnnoPathValue(instances, ref);
 }
 
 /// Return an input \p target string in canonical form.  This converts a Legacy
@@ -298,11 +339,12 @@ static std::string canonicalizeTarget(StringRef target) {
 
 /// split a target string into it constituent parts.  This is the primary parser
 /// for targets.
-static Optional<tokenAnnoTarget>
-tokenizePath(StringRef origTarget) {
+static Optional<tokenAnnoTarget> tokenizePath(StringRef origTarget) {
   StringRef target = origTarget;
   tokenAnnoTarget retval;
   std::tie(retval.circuit, target) = target.split('|');
+  if (!retval.circuit.empty() && retval.circuit[0] == '~')
+    retval.circuit = retval.circuit.drop_front();
   while (target.count(':')) {
     StringRef nla;
     std::tie(nla, target) = target.split(':');
@@ -313,10 +355,8 @@ tokenizePath(StringRef origTarget) {
   // remove aggregate
   auto targetBase =
       target.take_until([](char c) { return c == '.' || c == '['; });
-      auto aggBase = target.drop_front(targetBase.size());
+  auto aggBase = target.drop_front(targetBase.size());
   std::tie(retval.module, retval.name) = targetBase.split('>');
-  if (retval.name.empty())
-    retval.name = retval.module;
   while (!aggBase.empty()) {
     if (aggBase[0] == '.') {
       aggBase = aggBase.drop_front();
@@ -338,20 +378,21 @@ tokenizePath(StringRef origTarget) {
 
 /// Make an anchor for a non-local annotation.  Use the expanded path to build
 /// the module and name list in the anchor.
-static FlatSymbolRefAttr buildNLA(
-                                  AnnoPathValue target, applyState state) {
+static FlatSymbolRefAttr buildNLA(AnnoPathValue target, applyState state) {
   OpBuilder b(state.circuit.getBodyRegion());
   SmallVector<Attribute> mods;
   SmallVector<Attribute> insts;
   for (auto inst : target.instances) {
-    mods.push_back(
-        FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
+    mods.push_back(FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
     insts.push_back(StringAttr::get(state.circuit.getContext(), inst.name()));
   }
+  mods.push_back(FlatSymbolRefAttr::get(target.ref.getModule()));
+  insts.push_back(
+      StringAttr::get(state.circuit.getContext(), getName(target.ref.op)));
   auto modAttr = ArrayAttr::get(state.circuit.getContext(), mods);
   auto instAttr = ArrayAttr::get(state.circuit.getContext(), insts);
-  auto nla = b.create<NonLocalAnchor>(
-      state.circuit.getLoc(), "nla", modAttr, instAttr);
+  auto nla = b.create<NonLocalAnchor>(state.circuit.getLoc(), "nla", modAttr,
+                                      instAttr);
   state.symTbl.insert(nla);
   return FlatSymbolRefAttr::get(nla);
 }
@@ -367,7 +408,8 @@ static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target,
 
   NamedAttrList pathmetadata;
   pathmetadata.append("circt.nonlocal", sym);
-  pathmetadata.append("class", StringAttr::get(state.circuit.getContext(), "circt.nonlocal"));
+  pathmetadata.append(
+      "class", StringAttr::get(state.circuit.getContext(), "circt.nonlocal"));
   for (auto item : target.instances)
     addAnnotation(AnnoTarget(item), pathmetadata);
 
@@ -432,20 +474,20 @@ ignoreAnno(AnnoPathValue target, DictionaryAttr anno,
 }
 
 static LogicalResult applyWithoutTargetImpl(AnnoPathValue target,
-                                                DictionaryAttr anno,
-                                                applyState state,
-                                                bool allowNonLocal) {
+                                            DictionaryAttr anno,
+                                            applyState state,
+                                            bool allowNonLocal) {
   if (!allowNonLocal && !target.isLocal())
     return failure();
   SmallVector<NamedAttribute> newAnnoAttrs;
   for (auto &na : anno) {
     if (na.first != "target") {
       newAnnoAttrs.push_back(na);
-      } else if (!target.isLocal()) {
-        auto sym = scatterNonLocalPath(target, state);
-        newAnnoAttrs.push_back(
+    } else if (!target.isLocal()) {
+      auto sym = scatterNonLocalPath(target, state);
+      newAnnoAttrs.push_back(
           {Identifier::get("circt.nonlocal", anno.getContext()), sym});
-      }
+    }
   }
   addAnnotation(target.ref, newAnnoAttrs);
   return success();
@@ -473,8 +515,7 @@ namespace {
 struct AnnoRecord {
   llvm::function_ref<Optional<AnnoPathValue>(DictionaryAttr, applyState)>
       resolver;
-  llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr,
-                                   applyState)>
+  llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr, applyState)>
       applier;
 };
 }; // namespace
@@ -515,8 +556,7 @@ struct LowerAnnotationsPass
 } // end anonymous namespace
 
 LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
-                                                    applyState state
-                                                                                                        ) {
+                                                    applyState state) {
   // Lookup the class
   StringRef annoClassVal;
   if (auto annoClass = anno.getNamed("class"))
@@ -529,7 +569,7 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   // See if we handle the class
   auto record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
   if (!record)
-      return state.circuit.emitWarning("Unhandled annotation: ") << anno;
+    return state.circuit.emitWarning("Unhandled annotation: ") << anno;
 
   // Try to apply the annotation
   auto target = record->resolver(anno, state);
@@ -547,13 +587,12 @@ void LowerAnnotationsPass::runOnOperation() {
   SymbolTable modules(circuit);
   // Grab the annotations.
   for (auto anno : circuit.annotations())
-    worklistAttrs.push_back(anno.cast < DictionaryAttr>());
+    worklistAttrs.push_back(anno.cast<DictionaryAttr>());
   // Clear the annotations.
   circuit.annotationsAttr(ArrayAttr::get(circuit.getContext(), {}));
   size_t numFailures = 0;
-  applyState state{circuit,
-                   modules, [&](DictionaryAttr ann){worklistAttrs.push_back(ann);
-}
+  applyState state{circuit, modules,
+                   [&](DictionaryAttr ann) { worklistAttrs.push_back(ann); }
 
   };
   while (!worklistAttrs.empty()) {
