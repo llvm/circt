@@ -87,6 +87,7 @@ class ModuleLike:
       input_ports=[],
       output_ports=[],
       *,
+      attributes={},
       body_builder=None,
       loc=None,
       ip=None,
@@ -104,7 +105,6 @@ class ModuleLike:
     """
     operands = []
     results = []
-    attributes = {}
     attributes["sym_name"] = StringAttr.get(str(name))
 
     input_types = []

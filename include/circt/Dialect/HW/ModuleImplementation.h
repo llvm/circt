@@ -52,6 +52,9 @@ void printModuleSignature(OpAsmPrinter &p, Operation *op,
                           ArrayRef<Type> argTypes, bool isVariadic,
                           ArrayRef<Type> resultTypes, bool &needArgNamesAttr);
 
+/// Return true if this string parses as a valid MLIR keyword, false otherwise.
+bool isValidKeyword(StringRef name);
+
 } // namespace module_like_impl
 } // namespace hw
 } // namespace circt

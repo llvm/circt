@@ -234,6 +234,30 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
   let dependentDialects = ["sv::SVDialect"];
 }
 
+def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
+  let summary = "Prefixes names of modules and mems in a hiearchy";
+  let description = [{
+
+    This pass looks for modules annotated with the
+    `NestedPrefixModulesAnnotation` and prefixes the names of all modules
+    instantiated underneath it.  If `inclusive` is true, it includes the target
+    module in the renaming.  If `inclusive` is false, it will only rename
+    modules instantiated underneath the target module.  If a module is required
+    to have two different prefixes, it will be cloned.
+
+    The supported annotation is:
+    ```
+      {
+        class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+        prefix = "MyPrefix_",
+        inclusive = true
+      }
+    ```
+
+  }];
+  let constructor = "circt::firrtl::createPrefixModulesPass()";
+}
+
 def PrintInstanceGraph
     : Pass<"firrtl-print-instance-graph", "firrtl::CircuitOp"> {
   let summary = "Print a DOT graph of the module hierarchy.";

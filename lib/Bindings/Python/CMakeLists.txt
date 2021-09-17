@@ -89,6 +89,15 @@ declare_mlir_dialect_python_bindings(
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
+  TD_FILE circt/dialects/MSFTOps.td
+  SOURCES
+    circt/dialects/msft.py
+    circt/dialects/_msft_ops_ext.py
+  DIALECT_NAME msft)
+
+declare_mlir_dialect_python_bindings(
+  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
+  ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE circt/dialects/SeqOps.td
   SOURCES
     circt/dialects/seq.py

@@ -49,7 +49,7 @@ def KnownWidth : Constraint<CPred<[{
 /// Constraint that matches a zero ConstantOp or SpecialConstantOp.
 def ZeroConstantOp : Constraint<Or<[
   CPred<"$0.getDefiningOp<ConstantOp>() &&"
-        "$0.getDefiningOp<ConstantOp>().value().isNullValue()">,
+        "$0.getDefiningOp<ConstantOp>().value().isZero()">,
   CPred<"$0.getDefiningOp<SpecialConstantOp>() &&"
         "$0.getDefiningOp<SpecialConstantOp>().value() == false">
 ]>>;

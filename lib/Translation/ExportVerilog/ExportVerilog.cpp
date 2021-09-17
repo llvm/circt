@@ -1021,7 +1021,7 @@ static Value isZeroExtension(Value value) {
     return {};
 
   auto constant = concat.getOperand(0).getDefiningOp<ConstantOp>();
-  if (constant && constant.getValue().isNullValue())
+  if (constant && constant.getValue().isZero())
     return concat.getOperand(1);
   return {};
 }

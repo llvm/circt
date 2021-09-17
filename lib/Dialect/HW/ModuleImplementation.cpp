@@ -101,9 +101,23 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
   return success();
 }
 
+/// Return true if this string parses as a valid MLIR keyword, false otherwise.
+bool circt::hw::module_like_impl::isValidKeyword(StringRef name) {
+  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
+    return false;
+  for (auto c : name.drop_front()) {
+    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
+      return false;
+  }
+
+  return true;
+}
+
 void circt::hw::module_like_impl::printModuleSignature(
     OpAsmPrinter &p, Operation *op, ArrayRef<Type> argTypes, bool isVariadic,
     ArrayRef<Type> resultTypes, bool &needArgNamesAttr) {
+  using namespace mlir::function_like_impl;
+
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
   SmallString<32> resultNameStr;
@@ -132,7 +146,7 @@ void circt::hw::module_like_impl::printModuleSignature(
     }
 
     p.printType(argTypes[i]);
-    p.printOptionalAttrDict(::mlir::function_like_impl::getArgAttrs(op, i));
+    p.printOptionalAttrDict(getArgAttrs(op, i));
   }
 
   if (isVariadic) {
@@ -145,19 +159,20 @@ void circt::hw::module_like_impl::printModuleSignature(
 
   // We print result types specially since we support named arguments.
   if (!resultTypes.empty()) {
-    auto &os = p.getStream();
-    os << " -> (";
+    p << " -> (";
     for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
       if (i != 0)
-        os << ", ";
-      StringRef name = getModuleResultName(op, i);
-      if (!name.empty())
-        os << '%' << name << ": ";
+        p << ", ";
+      StringAttr name = getModuleResultNameAttr(op, i);
+      if (isValidKeyword(name.getValue()))
+        p << name.getValue();
+      else
+        p << name;
+      p << ": ";
 
       p.printType(resultTypes[i]);
-      p.printOptionalAttrDict(
-          ::mlir::function_like_impl::getResultAttrs(op, i));
+      p.printOptionalAttrDict(getResultAttrs(op, i));
     }
-    os << ')';
+    p << ')';
   }
 }
