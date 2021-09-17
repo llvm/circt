@@ -390,8 +390,11 @@ private:
             emitValue(op.cond(), /*isIndented=*/false);
             if (auto groupName = op.groupName(); groupName.hasValue())
               os << " with " << groupName.getValue();
+            // Emit the ThenRegion.
             emitCalyxBody([&]() { emitCalyxControl(op); });
-            if (op.getRegions().size() == 2 && !op.getRegion(1).empty())
+
+            bool elseRegionExists = !op.getRegion(1).empty();
+            if (elseRegionExists)
               emitCalyxSection(
                   "else", [&]() { emitCalyxControl(op, /*regionIndex=*/1); });
           })
