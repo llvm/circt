@@ -1,14 +1,17 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --msft-lower-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=HWLOW
 
-hw.module.extern @fooMod () -> (x: i32)
+msft.module @Foo { "WIDTH" = 1 } () -> (x: i32) {
+  %c0 = hw.constant 0 : i32
+  msft.output %c0 : i32
+}
 
 // CHECK-LABEL: hw.module @top
 // HWLOW-LABEL: hw.module @top
 hw.module @top () {
-  msft.instance "foo" @fooMod () : () -> (i32)
-  // CHECK: %foo.x = msft.instance "foo" @fooMod() : () -> i32
-  // HWLOW: %foo.x = hw.instance "foo" @fooMod() -> (x: i32)
+  msft.instance "foo" @Foo() : () -> (i32)
+  // CHECK: %foo.x = msft.instance "foo" @Foo() : () -> i32
+  // HWLOW: %foo.x = hw.instance "foo" @Foo() -> (x: i32)
 }
 
 // CHECK-LABEL: msft.module @B {WIDTH = 1 : i64} (%a: i4) -> (nameOfPortInSV: i4) {

@@ -4,7 +4,7 @@
 
 import circt
 from circt import msft
-from circt.dialects import hw, seq
+from circt.dialects import hw, msft as msft_ops
 
 import mlir.ir as ir
 import sys
@@ -24,16 +24,24 @@ with ir.Context() as ctx, ir.Location.unknown():
                        input_ports=[],
                        output_ports=[],
                        body_builder=lambda module: hw.OutputOp([]))
+
     top = hw.HWModuleOp(name='top',
                         input_ports=[],
                         output_ports=[],
                         body_builder=lambda module: hw.OutputOp([]))
+
+    msft_mod = msft_ops.MSFTModuleOp(
+        name='msft_mod',
+        input_ports=[],
+        output_ports=[],
+        parameters={"WIDTH": ir.IntegerAttr.get(i32, 8)})
 
   with ir.InsertionPoint.at_block_terminator(op.body.blocks[0]):
     ext_inst = extmod.create("ext1")
 
   with ir.InsertionPoint.at_block_terminator(top.body.blocks[0]):
     path = op.create("inst1")
+    minst = msft_mod.create("minst")
 
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
   physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)
@@ -58,6 +66,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   # CHECK: hw.module @MyWidget()
   # CHECK:   hw.output
+  # CHECK: msft.module @msft_mod {WIDTH = 8 : i32} ()
   m.operation.print()
 
   db = msft.DeviceDB(top.operation)

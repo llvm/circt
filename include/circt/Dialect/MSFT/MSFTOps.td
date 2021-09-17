@@ -15,12 +15,11 @@ def InstanceOp : MSFTOp<"instance", [
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
-  let summary = "Create an instance of a module";
+  let summary = "Instantiate a module";
 
   let arguments = (ins StrAttr:$instanceName,
                        FlatSymbolRefAttr:$moduleName,
-                       Variadic<AnyType>:$inputs,
-                       OptionalAttr<DictionaryAttr>:$parameters);
+                       Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
 
   let extraClassDeclaration = [{
@@ -59,6 +58,12 @@ def MSFTModuleOp : MSFTOp<"module",
       DictionaryAttr:$parameters);
   let results = (outs);
   let regions = (region OneOrNoBlocksRegion:$body);
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<hw::PortInfo>":$ports,
+                   "ArrayRef<NamedAttribute>":$params)>
+  ];
 
   let extraClassDeclaration = [{
     using FunctionLike::front;
