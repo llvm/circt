@@ -1296,7 +1296,7 @@ class LowerFuncOpTarget : public ConversionTarget {
 public:
   explicit LowerFuncOpTarget(MLIRContext &context) : ConversionTarget(context) {
     loweredFuncs.clear();
-    addLegalDialect<HandshakeOpsDialect>();
+    addLegalDialect<HandshakeDialect>();
     addLegalDialect<StandardOpsDialect>();
     /// The root function operation to be replaced is marked dynamically legal
     /// based on the lowering status of the given function, see
