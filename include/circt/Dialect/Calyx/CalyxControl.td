@@ -68,6 +68,16 @@ def IfOp : CalyxContainer<"if", [
 
   let assemblyFormat = "$cond (`with` $groupName^)? $thenRegion (`else` $elseRegion^)? attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
+  let extraClassDeclaration = [{
+    Block *getThenRegion() {
+      return &getOperation()->getRegion(0).front();
+    }
+    Block *getElseRegion() {
+      Region* region = &getOperation()->getRegion(1);
+      assert(!region->empty() && "Else region does not exist.");
+      return &region->front();
+    }
+  }];
 }
 
 def SeqOp : CalyxContainer<"seq", [

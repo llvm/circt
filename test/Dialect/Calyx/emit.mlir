@@ -15,9 +15,33 @@ calyx.program {
 
   // CHECK-LABEL: component B(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
   calyx.component @B(%in: i1, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.assign %done = %c1_1 : i1 }
-    calyx.control {}
+    calyx.wires {
+      calyx.group @RegisterWrite {
+        calyx.assign %r.in = %c1_1 : i1
+        calyx.assign %r.write_en = %c1_1 : i1
+        calyx.group_done %r.done : i1
+      }
+    }
+    // CHECK-LABEL: control {
+    // CHECK-NEXT:    seq {
+    // CHECk-NEXT:      if r.out {
+    // CHECK-NEXT:        RegisterWrite;
+    // CHECK-NEXT:      else {
+    // CHECK-NEXT:        RegisterWrite;
+    // CHECK-NEXT:      }
+    // CHECK-NEXT:    }
+    // CHECK-NEXT:  }
+    calyx.control {
+      calyx.seq {
+        calyx.if %r.out {
+          calyx.enable @RegisterWrite
+        } else {
+          calyx.enable @RegisterWrite
+        }
+      }
+    }
   }
 
   // CHECK-LABEL: component main(@go go: 1, @clk clk: 1, @reset reset: 1) -> (@done done: 1) {
