@@ -900,7 +900,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @FooDUT
-  // CHECK: attributes {firrtl.DesignUnderTest}
+  // CHECK: attributes {firrtl.moduleHierarchyFile
   firrtl.module @FooDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 }
