@@ -247,7 +247,7 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
                   .getBitWidthOrSentinel() > 0) {
         // For read ports extract bits from the memory read port and distribute them over the vector elements. Example for an 8 bit vector element,
         // wrapper_readPort[0] = Mem_readPort[7:0];
-        // wrapper_readPort[1] = Mem_readPort[15:7];
+        // wrapper_readPort[1] = Mem_readPort[15:8];
         // ...
         // For write ports, concat all the vector elements and assign to the write port. Example for a vector with 4 elements.
         // Mem_writePort = {wrapper_writePort[3],wrapper_writePort[2],wrapper_writePort[1],wrapper_writePort[0]}
