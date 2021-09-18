@@ -2092,7 +2092,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   auto inst = builder.create<hw::InstanceOp>(
       resultTypes, builder.getStringAttr(memName), memModuleAttr, operands,
       builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
-      DictionaryAttr(), StringAttr());
+      /*parameters=*/builder.getArrayAttr({}), /*oldParams=*/DictionaryAttr(),
+      /*sym_name=*/StringAttr());
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
