@@ -1,4 +1,5 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-blackbox-memory{emit-wrapper=true})' %s | FileCheck --check-prefix=WRAPPER %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-blackbox-memory{emit-wrapper=false})' %s | FileCheck --check-prefix=INLINE %s
 
 firrtl.circuit "Read" {
   firrtl.module @Read() {

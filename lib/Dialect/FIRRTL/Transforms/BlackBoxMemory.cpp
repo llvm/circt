@@ -96,7 +96,8 @@ static InstanceOp createInstance(OpBuilder builder, Location loc,
 /// `vlsi_mem_gen`, which can be found in the rocketchip project.
 static void getBlackBoxPortsForMemOp(MemOp op,
                                      ArrayRef<MemOp::NamedPort> memPorts,
-                                     SmallVectorImpl<PortInfo> &extPorts) {
+                                     SmallVectorImpl<PortInfo> &extPorts,
+                                     bool flattenVector) {
   OpBuilder builder(op);
   unsigned readPorts = 0;
   unsigned writePorts = 0;
@@ -127,16 +128,16 @@ static void getBlackBoxPortsForMemOp(MemOp op,
         direction = Direction::Out;
       // If data or mask field is of vector type, then merge all elements.
       // This is to ensure LowerTypes does not create multiple ports after
-      // lowering the vector. Assumption: vector elements are signed/unsigned
-      // integer type with known width.
-      if (auto vecType = type.dyn_cast_or_null<FVectorType>()) {
-        auto elemType = vecType.getElementType();
-        auto width = elemType.getBitWidthOrSentinel();
-        assert(width >= 1 && "Only ground type vector elements supported");
-        auto numElems = vecType.getNumElements();
-        type = IntType::get(builder.getContext(), elemType.isSignedInteger(),
-                            numElems * width);
-      }
+      // lowering the vector.
+      if (flattenVector)
+        if (auto vecType = type.dyn_cast_or_null<FVectorType>()) {
+          auto elemType = vecType.getElementType();
+          auto width = elemType.getBitWidthOrSentinel();
+          if (width >= 1)
+            type =
+                IntType::get(builder.getContext(), elemType.isSignedInteger(),
+                             vecType.getNumElements() * width);
+        }
       extPorts.push_back(
           {builder.getStringAttr(name), type, direction, op.getLoc()});
     }
@@ -191,11 +192,10 @@ static FExtModuleOp createBlackboxModuleForMem(MemOp op,
 /// and connects to the flattened parameters of the external module. This is
 /// done for compatibility with the Scala FIRRTL compiler and it is unclear if
 /// this will be needed in the long run.
-static FModuleOp createWrapperModule(MemOp op,
-                                     ArrayRef<MemOp::NamedPort> memPorts,
-                                     FExtModuleOp extModuleOp,
-                                     ArrayRef<PortInfo> extPorts,
-                                     SmallVectorImpl<PortInfo> &modPorts) {
+static FModuleOp
+createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
+                    FExtModuleOp extModuleOp, ArrayRef<PortInfo> extPorts,
+                    SmallVectorImpl<PortInfo> &modPorts, bool flattenVector) {
   OpBuilder builder(op->getContext());
 
   // The wrapper module's name is the name of the memory.
@@ -240,7 +240,18 @@ static FModuleOp createWrapperModule(MemOp op,
           builder.create<SubfieldOp>(op.getLoc(), memPort, field.index());
       auto fieldType = field.value().type.cast<FIRRTLType>();
       bool isReadPort = field.value().isFlip;
-      if (fieldType.isa<FVectorType>()) {
+      // Flatten the vector, only if the elements of the vector are of simple ground type with known bitwidth. 
+      if (fieldType.isa<FVectorType>() && flattenVector &&
+          fieldType.dyn_cast<FVectorType>()
+                  .getElementType()
+                  .getBitWidthOrSentinel() > 0) {
+        // For read ports extract bits from the memory read port and distribute them over the vector elements. Example for an 8 bit vector element,
+        // wrapper_readPort[0] = Mem_readPort[7:0];
+        // wrapper_readPort[1] = Mem_readPort[15:7];
+        // ...
+        // For write ports, concat all the vector elements and assign to the write port. Example for a vector with 4 elements.
+        // Mem_writePort = {wrapper_writePort[3],wrapper_writePort[2],wrapper_writePort[1],wrapper_writePort[0]}
+        // Concat all mask bits to create a single multibit mask.
         auto fVecType = fieldType.dyn_cast<FVectorType>();
         auto elemWidth = fVecType.getElementType().getBitWidthOrSentinel();
         WireOp lastIndexWire;
@@ -324,7 +335,7 @@ static void createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
 
 static void
 replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
-                            MemOp memOp) {
+                            MemOp memOp, bool flattenVector) {
 
   // The module we will be replacing the MemOp with.  If we don't have a
   // suitable memory module already created, a new one representing the memory
@@ -349,10 +360,10 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
     // Get the pohwist for a module which represents the black box memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
     SmallVector<PortInfo, 9> extPortList;
-    getBlackBoxPortsForMemOp(memOp, memPorts, extPortList);
+    getBlackBoxPortsForMemOp(memOp, memPorts, extPortList, flattenVector);
     auto extModuleOp = createBlackboxModuleForMem(memOp, extPortList);
     moduleOp = createWrapperModule(memOp, memPorts, extModuleOp, extPortList,
-                                   modPorts);
+                                   modPorts, flattenVector);
     knownMems[memOp] = moduleOp;
   }
 
@@ -375,14 +386,15 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
 /// any memories were replaced.
 static bool
 replaceMemsWithWrapperModules(CircuitOp circuit,
-                              function_ref<bool(MemOp)> shouldReplace) {
+                              function_ref<bool(MemOp)> shouldReplace,
+                              bool flattenVector) {
   /// A set of replaced memory operations.  When two memory operations
   /// share the same types, they can share the same modules.
   DenseMap<MemOp, FModuleOp, MemOpInfo> knownMems;
   for (auto fmodule : circuit.getOps<FModuleOp>()) {
     for (auto memOp : llvm::make_early_inc_range(fmodule.getOps<MemOp>())) {
       if (shouldReplace(memOp)) {
-        replaceMemWithWrapperModule(knownMems, memOp);
+        replaceMemWithWrapperModule(knownMems, memOp, flattenVector);
       }
     }
   }
@@ -416,7 +428,7 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
 
     // Get the pohwist for a module which represents the black box memory.
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
-    getBlackBoxPortsForMemOp(memOp, memPorts, extPortList);
+    getBlackBoxPortsForMemOp(memOp, memPorts, extPortList, false);
     extModuleOp = createBlackboxModuleForMem(memOp, extPortList);
     knownMems[memOp] = extModuleOp;
   }
@@ -472,18 +484,12 @@ struct BlackBoxMemoryPass : public BlackBoxMemoryBase<BlackBoxMemoryPass> {
     // A memory must have read and write latencies of 1 in order to be
     // blackboxed. In the future this will probably be configurable.
     auto shouldReplace = [](MemOp memOp) -> bool {
-      auto memDataType = memOp.getDataType();
-      if (memDataType.isa<BundleType>())
-        return false;
-      if (auto vec = memDataType.dyn_cast<FVectorType>())
-        if (vec.getElementType().getBitWidthOrSentinel() < 1)
-          return false;
       return memOp.readLatency() == 1 && memOp.writeLatency() == 1;
     };
     auto anythingChanged = false;
     if (emitWrapper)
-      anythingChanged =
-          replaceMemsWithWrapperModules(getOperation(), shouldReplace);
+      anythingChanged = replaceMemsWithWrapperModules(
+          getOperation(), shouldReplace, flattenVector);
     else
       anythingChanged =
           replaceMemsWithExtModules(getOperation(), shouldReplace);
