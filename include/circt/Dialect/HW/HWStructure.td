@@ -25,18 +25,21 @@ def HWModuleOp : HWOp<"module",
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given
-    name, a list of ports, and a body that represents the connections within
-    the module.
+    name, a list of ports, a list of parameters, and a body that represents the
+    connections within the module.
   }];
-  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames);
+  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       ParameterArrayAttr:$parameters);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
+                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
+                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -113,6 +116,7 @@ def HWModuleExternOp : HWOp<"module.extern",
     parameterized types instead of just concrete types.
   }];
   let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       ParameterArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -121,9 +125,11 @@ def HWModuleExternOp : HWOp<"module.extern",
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -224,8 +230,9 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind,
-                       OptionalAttr<StrAttr>:$verilogName,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames);
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       ParameterArrayAttr:$parameters,
+                       OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -234,10 +241,12 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
     OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
                    "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
     OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
                    "const ModulePortInfo &":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 

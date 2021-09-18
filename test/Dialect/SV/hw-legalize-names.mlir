@@ -105,3 +105,10 @@ hw.module @InstanceWithCollisions(%a: i1) {
 hw.module.extern @inout_0 () -> ()
 hw.module.extern @inout_1 () -> ()
 hw.module.extern @inout_2 () -> ()
+
+
+// CHECK-LABEL: hw.module @parameters
+// CHECK: <p1_0: i42 = 17, wire_1: i1>(%p1: si8)
+hw.module @parameters<p1: i42 = 17, wire: i1>(%p1: si8) {
+
+}

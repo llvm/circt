@@ -21,6 +21,7 @@ include "mlir/IR/SymbolInterfaces.td"
 include "mlir/IR/RegionKindInterface.td"
 
 include "circt/Dialect/HW/HWDialect.td"
+include "circt/Dialect/HW/HWAttributes.td"
 
 include "circt/Dialect/HW/HWTypesImpl.td"
 include "circt/Dialect/HW/HWTypes.td"

@@ -85,13 +85,19 @@ hw::ModulePortInfo MSFTModuleOp::getPorts() {
   return hw::ModulePortInfo(inputs, outputs);
 }
 
+void MSFTModuleOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                         StringAttr name, ArrayRef<hw::PortInfo> ports,
+                         ArrayRef<NamedAttribute> params) {
+  assert(false && "Unimplemented");
+}
+
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
   if (module == nullptr)
     return emitError("Cannot find module definition '") << moduleName() << "'";
 
   // It must be some sort of module.
-  if (!hw::isAnyModule(module))
+  if (!hw::isAnyModule(module) && !isa<MSFTModuleOp>(module))
     return emitError("symbol reference '")
            << moduleName() << "' isn't a module";
   return success();

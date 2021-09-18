@@ -160,15 +160,37 @@ bool HWLegalizeNamesPass::legalizePortNames(hw::HWModuleOp module) {
     }
   }
 
-  if (changedArgNames) {
+  if (changedArgNames)
     setModuleArgumentNames(module, argNames);
-    anythingChanged = true;
-  }
-  if (changedOutputNames) {
+  if (changedOutputNames)
     setModuleResultNames(module, outputNames);
-    anythingChanged = true;
+
+  // Legalize the parameters.
+  SmallVector<Attribute> parameters;
+  bool changedParameters = false;
+  for (auto param : module.parameters()) {
+    auto paramAttr = param.cast<ParameterAttr>();
+    auto newName = nameResolver.getLegalName(paramAttr.name());
+    if (newName.empty())
+      parameters.push_back(param);
+    else {
+      auto newNameAttr = StringAttr::get(module.getContext(), newName);
+      parameters.push_back(ParameterAttr::get(newNameAttr, paramAttr.type(),
+                                              paramAttr.defaultValue(),
+                                              module.getContext()));
+      changedParameters = true;
+    }
   }
-  return changedArgNames | changedOutputNames;
+  if (changedParameters)
+    module->setAttr("parameters",
+                    ArrayAttr::get(module.getContext(), parameters));
+
+  if (changedArgNames | changedOutputNames | changedParameters) {
+    anythingChanged = true;
+    return true;
+  }
+
+  return false;
 }
 
 void HWLegalizeNamesPass::runOnModule(
