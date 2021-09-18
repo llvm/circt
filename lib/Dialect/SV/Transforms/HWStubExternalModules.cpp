@@ -54,7 +54,7 @@ void HWStubExternalModulesPass::runOnOperation() {
       if (useRange)
         for (auto &user : *useRange)
           if (auto inst = dyn_cast<hw::InstanceOp>(user.getUser()))
-            inst->removeAttr("parameters");
+            inst->removeAttr("oldParameters");
 
       // Done with the old module.
       module.erase();
