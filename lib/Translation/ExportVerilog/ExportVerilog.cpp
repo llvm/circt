@@ -3035,7 +3035,25 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
   auto moduleNameAttr = module.getNameAttr();
   verifyModuleName(module, moduleNameAttr);
-  os << "module " << moduleNameAttr.getValue() << '(';
+  os << "module " << moduleNameAttr.getValue();
+
+#if 0
+  // If we have any parameters, print them on their own line.
+  if (!module.parameters().empty()) {
+    os << "\n      #(";
+    // parameters             os
+    << ") ";
+
+r"
+module foo
+#(parameter[41 : 0] p1 = 17,
+    parameter [0:0] p2) (input clk);
+   
+endmodule";
+  }
+#endif
+
+  os << '(';
   if (!portInfo.empty())
     emitLocationInfoAndNewLine(moduleOpSet);
 

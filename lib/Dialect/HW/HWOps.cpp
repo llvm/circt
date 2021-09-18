@@ -820,6 +820,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   SmallVector<OpAsmParser::OperandType, 4> inputsOperands;
   SmallVector<Type> inputsTypes;
   SmallVector<Type> allResultTypes;
+  SmallVector<Attribute> argNames, resultNames;
   auto noneType = parser.getBuilder().getType<NoneType>();
 
   if (parser.parseAttribute(instanceNameAttr, noneType, "instanceName",
@@ -833,37 +834,34 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
                                          result.attributes);
   }
 
-  SmallVector<Attribute> argNames, resultNames;
+  auto parseInputPort = [&]() -> ParseResult {
+    argNames.push_back(module_like_impl::parsePortName(parser));
+    if (!argNames.back())
+      return failure();
+    inputsOperands.push_back({});
+    inputsTypes.push_back({});
+    return failure(parser.parseColon() ||
+                   parser.parseOperand(inputsOperands.back()) ||
+                   parser.parseColon() || parser.parseType(inputsTypes.back()));
+  };
+
+  auto parseResultPort = [&]() -> ParseResult {
+    resultNames.push_back(module_like_impl::parsePortName(parser));
+    if (!resultNames.back())
+      return failure();
+    allResultTypes.push_back({});
+    return parser.parseColonType(allResultTypes.back());
+  };
+
   llvm::SMLoc inputsOperandsLoc;
   if (parser.parseAttribute(moduleNameAttr, noneType, "moduleName",
                             result.attributes) ||
       parser.getCurrentLocation(&inputsOperandsLoc) ||
-      parseCommaSeparatedList(
-          parser, Delimiter::Paren,
-          [&]() -> ParseResult {
-            argNames.push_back(module_like_impl::parsePortName(parser));
-            if (!argNames.back())
-              return failure();
-            inputsOperands.push_back({});
-            inputsTypes.push_back({});
-            return failure(parser.parseColon() ||
-                           parser.parseOperand(inputsOperands.back()) ||
-                           parser.parseColon() ||
-                           parser.parseType(inputsTypes.back()));
-          }) ||
+      parseCommaSeparatedList(parser, Delimiter::Paren, parseInputPort) ||
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
       parser.parseArrow() ||
-      parseCommaSeparatedList(parser, Delimiter::Paren,
-                              [&]() -> ParseResult {
-                                resultNames.push_back(
-                                    module_like_impl::parsePortName(parser));
-                                if (!resultNames.back())
-                                  return failure();
-                                allResultTypes.push_back({});
-                                return parser.parseColonType(
-                                    allResultTypes.back());
-                              }) ||
+      parseCommaSeparatedList(parser, Delimiter::Paren, parseResultPort) ||
       parser.parseOptionalAttrDict(result.attributes)) {
     return failure();
   }
