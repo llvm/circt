@@ -3,7 +3,6 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from .pycde_types import types
-from .module import ModuleDefinition
 from .instance import Instance
 
 import mlir
@@ -15,9 +14,11 @@ import circt.support
 from circt.dialects import hw
 from circt import msft
 
-import gc
+from contextvars import ContextVar
 import sys
 import typing
+
+_current_system = ContextVar("current_pycde_system")
 
 
 class System:
@@ -35,29 +36,31 @@ class System:
       self.name = "__pycde_system_mod_instances"
 
     self.mod = ir.Module.create()
-    self.system_mod = None
+    self._generate_queue = []
 
     self.build()
 
-  def build(self):
-    if self.system_mod is not None:
+  def _get_ip(self):
+    return ir.InsertionPoint(self.mod.body)
+
+  @staticmethod
+  def current():
+    bb = _current_system.get(None)
+    if bb is None:
+      raise RuntimeError("No PyCDE system currently active!")
+    return bb
+
+  def __enter__(self):
+    self.old_system_token = _current_system.set(self)
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    if exc_value is not None:
       return
+    _current_system.reset(self.old_system_token)
 
-    with ir.InsertionPoint(self.mod.body):
-      self.system_mod = ModuleDefinition(modcls=None,
-                                         name=self.name,
-                                         input_ports=[],
-                                         output_ports=[])
-
-    # Add the module body. Don't use the `body_builder` to avoid using the
-    # `BackedgeBuilder` it creates.
-    bb = circt.support.BackedgeBuilder()
-    with ir.InsertionPoint(self.system_mod.add_entry_block()), bb:
-      self.mod_ops = set([m() for m in self.modules])
-      hw.OutputOp([])
-      # We don't care about the backedges since this module is supposed to be
-      # temporary.
-      bb.edges.clear()
+  def build(self):
+    with self:
+      [m._pycde_mod.create() for m in self.modules]
 
   @property
   def body(self):
@@ -73,17 +76,12 @@ class System:
     pm.run(self.mod)
 
   def generate(self, generator_names=[], iters=100):
-    pm = mlir.passmanager.PassManager.parse("run-generators{generators=" +
-                                            ",".join(generator_names) + "}")
-    for _ in range(iters):
-      pm.run(self.mod)
-      if self.system_mod is None:
-        continue
-      sys_mod_block = self.system_mod.operation.regions[0].blocks[0]
-      if all([op.operation.name not in self.mod_ops for op in sys_mod_block]):
-        self.system_mod.operation.erase()
-        self.system_mod = None
-        gc.collect()
+    with self:
+      for i in range(iters):
+        if len(self._generate_queue) == 0:
+          return
+        m = self._generate_queue.pop()
+        m.generate()
 
   def get_module(self, mod_name: str) -> hw.HWModuleOp:
     """Find the hw.module op with the specified name."""

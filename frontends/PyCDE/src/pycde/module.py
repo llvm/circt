@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Union
+from typing import Union, Dict
 
 from pycde.support import obj_to_value
 
@@ -19,6 +19,7 @@ import circt
 
 import mlir.ir
 
+import builtins
 import inspect
 
 OPERATION_NAMESPACE = "pycde."
@@ -48,27 +49,32 @@ class Input(ModuleDecl):
 
 class _SpecializedModule:
   __slots__ = [
-      "circt_mod", "generators", "modcls", "input_ports", "output_ports"
+      "circt_mod", "name", "generators", "modcls", "loc", "input_ports",
+      "input_port_lookup", "output_ports", "parameters", "extern_name"
   ]
 
   def __init__(self, cls: type, parameters: Union[dict, mlir.ir.DictAttr],
-               extern: bool):
+               extern_name: str):
     self.modcls = cls
-    loc = get_user_loc()
+    self.circt_mod = None
+    self.extern_name = extern_name
+    self.loc = get_user_loc()
     # Get the module name
     if "module_name" in dir(cls) and isinstance(cls.module_name, str):
-      name = cls.module_name
+      self.name = cls.module_name
     else:
-      name = cls.__name__
+      self.name = cls.__name__
 
     # Make sure 'parameters' is a DictAttr rather than a python value.
-    parameters = var_to_attribute(parameters)
-    assert isinstance(parameters, mlir.ir.DictAttr)
+    self.parameters = var_to_attribute(parameters)
+    assert isinstance(self.parameters, mlir.ir.DictAttr)
 
     # Inputs, Outputs, and parameters are all class members. We must populate
     # them.  First, scan 'cls' for them.
     self.input_ports = []
+    self.input_port_lookup: Dict[str, int] = {}
     self.output_ports = []
+    self.generators = {}
     for attr_name in dir(cls):
       if attr_name.startswith("_"):
         continue
@@ -77,25 +83,39 @@ class _SpecializedModule:
       if isinstance(attr, Input):
         attr.name = attr_name
         self.input_ports.append((attr.name, attr.type))
+        self.input_port_lookup[attr_name] = len(self.input_ports) - 1
       elif isinstance(attr, Output):
         attr.name = attr_name
         self.output_ports.append((attr.name, attr.type))
+      elif isinstance(attr, _Generate):
+        self.generators[attr_name] = attr
 
-    if not extern:
-      self.circt_mod = msft.MSFTModuleOp(name,
+  def create(self):
+    if self.circt_mod is not None:
+      return
+    from .system import System
+    sys = System.current()
+    if self.extern_name is None:
+      self.circt_mod = msft.MSFTModuleOp(self.name,
                                          self.input_ports,
                                          self.output_ports,
-                                         parameters,
-                                         loc=loc)
+                                         self.parameters,
+                                         loc=self.loc,
+                                         ip=sys._get_ip())
+      sys._generate_queue.append(self)
     else:
       self.circt_mod = hw.HWModuleExternOp(
-          name,
+          self.name,
           self.input_ports,
           self.output_ports,
-          attributes={"parameters": parameters},
-          loc=loc)
+          attributes={"parameters": self.parameters},
+          loc=self.loc,
+          ip=sys._get_ip())
     self.add_accessors()
-    self.generators = {}
+
+  @property
+  def is_created(self):
+    return self.circt_mod is not None
 
   def add_accessors(self):
     """Add accessors for each input and output port to emulate generated OpView
@@ -110,6 +130,12 @@ class _SpecializedModule:
           self.modcls, name,
           property(lambda self, idx=idx, type=type: Value.get(
               self._instantiation.results[idx], type)))
+
+  def generate(self):
+    assert len(self.generators) == 1
+    for g in self.generators.values():
+      g.generate(self)
+      return
 
 
 class Parameter:
@@ -126,7 +152,17 @@ class Parameter:
 no_connect = object()
 
 
-class module:
+def module(func_or_class):
+  if inspect.isclass(func_or_class):
+    # If it's just a module class, we should wrap it immediately
+    return _module_base(func_or_class, None)
+  elif inspect.isfunction(func_or_class):
+    return _parameterized_module(func_or_class, None)
+  raise TypeError(
+      "@module decorator must be on class or parameterization function")
+
+
+class _parameterized_module:
   """Decorator for module classes or functions which parameterize module
   classes."""
 
@@ -135,19 +171,12 @@ class module:
   extern_mod = None
 
   # When the decorator is attached, this runs.
-  def __init__(self, func_or_class, extern_name=None):
+  def __init__(self, func: builtins.function, extern_name):
     self.extern_name = extern_name
-    if inspect.isclass(func_or_class):
-      # If it's just a module class, we should wrap it immediately
-      self.mod = _module_base(func_or_class, extern_name is not None)
-      return
-    elif not inspect.isfunction(func_or_class):
-      raise TypeError(
-          "@module decorator must be on class or parameterization function")
 
     # If it's a module parameterization function, inspect the arguments to
     # ensure sanity.
-    self.func = func_or_class
+    self.func = func
     self.sig = inspect.signature(self.func)
     for (_, param) in self.sig.parameters.items():
       if param.kind == param.VAR_KEYWORD:
@@ -227,27 +256,34 @@ class module:
   #     return inst
 
 
-def externmodule(cls_or_name):
+def externmodule(to_be_wrapped, extern_name=None):
   """Wrap an externally implemented module. If no name given in the decorator
   argument, use the class name."""
 
-  if isinstance(cls_or_name, str):
-    return lambda cls: module(cls, cls_or_name)
-  return module(cls_or_name, cls_or_name.__name__)
+  if isinstance(to_be_wrapped, str):
+    return lambda cls, extern_name=to_be_wrapped: externmodule(cls, extern_name)
+
+  if extern_name is None:
+    extern_name = to_be_wrapped.__name__
+  if inspect.isclass(to_be_wrapped):
+    # If it's just a module class, we should wrap it immediately
+    return _module_base(to_be_wrapped, True)
+  return _parameterized_module(to_be_wrapped, extern_name)
 
 
-def _module_base(cls, extern: bool, params={}):
+def _module_base(cls, extern_name: str, params={}):
   """Wrap a class, making it a PyCDE module."""
 
   class mod(cls):
     __name__ = cls.__name__
-    _pycde_mod = _SpecializedModule(cls, params, extern)
+    _pycde_mod = _SpecializedModule(cls, params, extern_name)
 
     def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
       treat the inputs as operands and outputs as results."""
-
-      # Get the user callsite
+      # Ensure the module has been created.
+      mod._pycde_mod.create()
+      # Get the user callsite.
       loc = get_user_loc()
 
       inputs = {
@@ -306,21 +342,6 @@ def _module_base(cls, extern: bool, params={}):
   return mod
 
 
-def _register_generators(modcls, parameters: mlir.ir.Attribute):
-  """Scan the class, looking for and registering _Generators."""
-  for name in dir(modcls):
-    member = getattr(modcls, name)
-    if isinstance(member, _Generate):
-      member.modcls = modcls
-      _register_generator(modcls.__name__, name, member, parameters)
-
-
-def _register_generator(class_name, generator_name, generator, parameters):
-  circt.msft.register_generator(mlir.ir.Context.current,
-                                OPERATION_NAMESPACE + class_name,
-                                generator_name, generator, parameters)
-
-
 class _Generate:
   """Represents a generator. Stores the generate function and wraps it with the
   necessary logic to build an HWModule."""
@@ -332,70 +353,65 @@ class _Generate:
           "Generate functions must take one argument and do not support 'self'."
       )
     self.gen_func = gen_func
-    self.modcls = None
     self.loc = get_user_loc()
 
-  def _generate(self, mod):
-    outputs = self.gen_func(mod)
-    self._create_output_op(outputs)
-
-  def __call__(self, op):
+  def generate(self, specialized_mod: _SpecializedModule):
     """Build an HWModuleOp and run the generator as the body builder."""
 
-    # Find the top MLIR module.
-    mod = op
-    while mod.parent is not None:
-      mod = mod.parent
+    # # Find the top MLIR module.
+    # mod = op
+    # while mod.parent is not None:
+    #   mod = mod.parent
 
-    # Assemble the parameters.
-    self.params = {
-        nattr.name: support.attribute_to_var(nattr.attr)
-        for nattr in mlir.ir.DictAttr(op.attributes["parameters"])
-    }
+    # # Assemble the parameters.
+    # self.params = {
+    #     nattr.name: support.attribute_to_var(nattr.attr)
+    #     for nattr in mlir.ir.DictAttr(op.attributes["parameters"])
+    # }
 
-    attrs = {
-        nattr.name: nattr.attr
-        for nattr in op.attributes
-        if nattr.name not in ["opNames", "resultNames", "parameters"]
-    }
+    # attrs = {
+    #     nattr.name: nattr.attr
+    #     for nattr in op.attributes
+    #     if nattr.name not in ["opNames", "resultNames", "parameters"]
+    # }
 
-    # Build the replacement HWModuleOp in the outer module.
-    if "module_name" in self.params:
-      module_name = self.params["module_name"]
-    else:
-      module_name = self.create_module_name(op)
-      self.params["module_name"] = module_name
-    module_name = self.sanitize(module_name)
+    # # Build the replacement HWModuleOp in the outer module.
+    # if "module_name" in self.params:
+    #   module_name = self.params["module_name"]
+    # else:
+    #   module_name = self.create_module_name(op)
+    #   self.params["module_name"] = module_name
+    # module_name = self.sanitize(module_name)
 
-    # Track generated modules so we don't create unnecessary duplicates of
-    # modules that are structurally equivalent. If the module name exists in the
-    # top level MLIR module, assume that we've already generated it.
-    existing_module_names = [
-        o for o in mod.regions[0].blocks[0].operations
-        if mlir.ir.StringAttr(o.name).value == module_name
-    ]
+    # # Track generated modules so we don't create unnecessary duplicates of
+    # # modules that are structurally equivalent. If the module name exists in the
+    # # top level MLIR module, assume that we've already generated it.
+    # existing_module_names = [
+    #     o for o in mod.regions[0].blocks[0].operations
+    #     if mlir.ir.StringAttr(o.name).value == module_name
+    # ]
 
-    if not existing_module_names:
-      with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]), self.loc:
-        mod = ModuleDefinition(self.modcls,
-                               module_name,
-                               input_ports=self.modcls._input_ports,
-                               output_ports=self.modcls._output_ports,
-                               body_builder=self._generate)
-    else:
-      assert (len(existing_module_names) == 1)
-      mod = existing_module_names[0]
+    # if not existing_module_names:
+    entry_block = specialized_mod.circt_mod.add_entry_block()
+    with mlir.ir.InsertionPoint(entry_block), self.loc, BackedgeBuilder():
+      args = BlockArgs(specialized_mod)
+      outputs = self.gen_func(args)
+      self._create_output_op(outputs)
 
-    # Build a replacement instance at the op to be replaced.
-    op_names = [name for name, _ in self.modcls._input_ports]
-    with mlir.ir.InsertionPoint(op):
-      mapping = {name: op.operands[i] for i, name in enumerate(op_names)}
-      inst = mod.create(op.name, **mapping).operation
-      for (name, attr) in attrs.items():
-        if name == "parameters":
-          continue
-        inst.attributes[name] = attr
-      return inst
+    # else:
+    #   assert (len(existing_module_names) == 1)
+    #   mod = existing_module_names[0]
+
+    # # Build a replacement instance at the op to be replaced.
+    # op_names = [name for name, _ in self.modcls._input_ports]
+    # with mlir.ir.InsertionPoint(op):
+    #   mapping = {name: op.operands[i] for i, name in enumerate(op_names)}
+    #   inst = mod.create(op.name, **mapping).operation
+    #   for (name, attr) in attrs.items():
+    #     if name == "parameters":
+    #       continue
+    #     inst.attributes[name] = attr
+    #   return inst
 
   def create_module_name(self, op):
 
@@ -464,28 +480,15 @@ def generator(func):
   return _Generate(func)
 
 
-class ModuleDefinition(hw.HWModuleOp):
+class BlockArgs:
 
-  def __init__(self,
-               modcls,
-               name,
-               input_ports=[],
-               output_ports=[],
-               body_builder=None):
-    self.modcls = modcls
-    super().__init__(name,
-                     input_ports=input_ports,
-                     output_ports=output_ports,
-                     body_builder=body_builder)
+  def __init__(self, mod: _SpecializedModule):
+    self.mod = mod
 
   # Support attribute access to block arguments by name
   def __getattr__(self, name):
-    if name in self.input_indices:
-      index = self.input_indices[name]
-      val = self.entry_block.arguments[index]
-      if self.modcls:
-        ty = self.modcls._input_ports_lookup[name]
-      else:
-        ty = support.type_to_pytype(val.type)
-      return Value.get(val, ty)
-    raise AttributeError(f"unknown input port name {name}")
+    if name not in self.mod.input_port_lookup:
+      raise AttributeError(f"unknown input port name {name}")
+    idx = self.mod.input_port_lookup[name]
+    val = self.entry_block.arguments[idx]
+    return Value.get(val)
