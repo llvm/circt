@@ -3020,14 +3020,9 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
 }
 
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
-  // Rewrite the module body into compliance with our emission expectations, and
-  // collect/rename symbols within the body that conflict.
   ModuleNameManager names;
-  prepareHWModule(*module.getBodyBlock(), names, state.options);
-  if (names.hadError())
-    state.encounteredError = true;
 
-  // Add all the ports to the name table.
+  // Add all the ports to the name table so wires etc don't reuse the name.
   SmallVector<PortInfo> portInfo = module.getAllPorts();
   for (auto &port : portInfo) {
     StringRef name = port.getName();
@@ -3042,6 +3037,19 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     else
       names.addLegalName(module.getArgument(port.argNum), name, module);
   }
+
+  // Add all parameters to the name table.
+  for (auto param : module.parameters()) {
+    // Add the name to the name table so any conflicting wires are renamed.
+    names.addLegalName(nullptr, param.cast<ParameterAttr>().name().getValue(),
+                       module);
+  }
+
+  // Rewrite the module body into compliance with our emission expectations, and
+  // collect/rename symbols within the body that conflict.
+  prepareHWModule(*module.getBodyBlock(), names, state.options);
+  if (names.hadError())
+    state.encounteredError = true;
 
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
@@ -3071,6 +3079,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     size_t maxTypeWidth = 0;
     SmallString<8> scratch;
     for (auto param : module.parameters()) {
+      // Measure the type length by printing it to a temporary string.
       scratch.clear();
       printParamType(param.cast<ParameterAttr>().type().getValue(), scratch);
       maxTypeWidth = std::max(scratch.size(), maxTypeWidth);

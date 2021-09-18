@@ -796,6 +796,15 @@ hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
 // CHECK-NEXT:   parameter [0:0]  p2) (
 // CHECK-NEXT: input  [7:0] arg0,
 hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: si8) -> (out: si8) {
+  // Local values should not conflict with output or parameter names.
+
+  // expected-error @+1 {{'sv.wire' op name 'p1' changed during emission}}
+  %p1 = sv.wire : !hw.inout<i4>
+  // CHECK: wire [3:0] p1_0;
+
+  // expected-error @+1 {{'sv.wire' op name 'out' changed during emission}}
+  %out = sv.wire : !hw.inout<i4>
+  // CHECK: wire [3:0] out_1;
   hw.output %arg0 : si8
 }
 
