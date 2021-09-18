@@ -240,17 +240,20 @@ createWrapperModule(MemOp op, ArrayRef<MemOp::NamedPort> memPorts,
           builder.create<SubfieldOp>(op.getLoc(), memPort, field.index());
       auto fieldType = field.value().type.cast<FIRRTLType>();
       bool isReadPort = field.value().isFlip;
-      // Flatten the vector, only if the elements of the vector are of simple ground type with known bitwidth. 
+      // Flatten the vector, only if the elements of the vector are of simple
+      // ground type with known bitwidth.
       if (fieldType.isa<FVectorType>() && flattenVector &&
           fieldType.dyn_cast<FVectorType>()
                   .getElementType()
                   .getBitWidthOrSentinel() > 0) {
-        // For read ports extract bits from the memory read port and distribute them over the vector elements. Example for an 8 bit vector element,
+        // For read ports extract bits from the memory read port and distribute
+        // them over the vector elements. Example for an 8 bit vector element,
         // wrapper_readPort[0] = Mem_readPort[7:0];
         // wrapper_readPort[1] = Mem_readPort[15:8];
         // ...
-        // For write ports, concat all the vector elements and assign to the write port. Example for a vector with 4 elements.
-        // Mem_writePort = {wrapper_writePort[3],wrapper_writePort[2],wrapper_writePort[1],wrapper_writePort[0]}
+        // For write ports, concat all the vector elements and assign to the
+        // write port. Example for a vector with 4 elements. Mem_writePort =
+        // {wrapper_writePort[3],wrapper_writePort[2],wrapper_writePort[1],wrapper_writePort[0]}
         // Concat all mask bits to create a single multibit mask.
         auto fVecType = fieldType.dyn_cast<FVectorType>();
         auto elemWidth = fVecType.getElementType().getBitWidthOrSentinel();
