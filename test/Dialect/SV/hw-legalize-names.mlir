@@ -108,7 +108,12 @@ hw.module.extern @inout_2 () -> ()
 
 
 // CHECK-LABEL: hw.module @parameters
-// CHECK: <p1_0: i42 = 17, wire_1: i1>(%p1: si8)
-hw.module @parameters<p1: i42 = 17, wire: i1>(%p1: si8) {
-
+// CHECK: <p1_0: i42 = 17, wire_1: i1>(%p1: i8)
+hw.module @parameters<p1: i42 = 17, wire: i1>(%p1: i8) {
 }
+
+hw.module @use_parameters(%xxx: i8) {
+  // CHECK: hw.instance "inst" @parameters<p1_0: i42 = 27, wire_1: i1 = false>(
+  hw.instance "inst" @parameters<p1: i42 = 27, wire: i1 = 0>(p1: %xxx: i8) -> ()
+}
+

@@ -136,6 +136,13 @@ void HWLegalizeNamesPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
+/// Return the specified ParameterAttr with a different name.
+static ParameterAttr getParameterWithName(ParameterAttr param,
+                                          StringAttr name) {
+  return ParameterAttr::get(name, param.type(), param.value(),
+                            param.getContext());
+}
+
 /// Check to see if the port names of the specified module conflict with
 /// keywords or themselves.  If so, rename them and return true, otherwise
 /// return false.
@@ -174,10 +181,8 @@ bool HWLegalizeNamesPass::legalizePortNames(hw::HWModuleOp module) {
     if (newName.empty())
       parameters.push_back(param);
     else {
-      auto newNameAttr = StringAttr::get(module.getContext(), newName);
-      parameters.push_back(ParameterAttr::get(newNameAttr, paramAttr.type(),
-                                              paramAttr.value(),
-                                              module.getContext()));
+      auto newNameAttr = StringAttr::get(paramAttr.getContext(), newName);
+      parameters.push_back(getParameterWithName(paramAttr, newNameAttr));
       changedParameters = true;
     }
   }
@@ -191,6 +196,27 @@ bool HWLegalizeNamesPass::legalizePortNames(hw::HWModuleOp module) {
   }
 
   return false;
+}
+
+// If this instance is referring to a module with renamed ports or
+// parameter names, update them.
+static void updateInstanceForChangedModule(InstanceOp inst, HWModuleOp module) {
+  inst.argNamesAttr(module.argNames());
+  inst.resultNamesAttr(module.resultNames());
+
+  // If any module parameters changed names, take the new name.
+  SmallVector<Attribute> newAttrs;
+  auto instParameters = inst.parameters();
+  auto modParameters = module.parameters();
+  for (size_t i = 0, e = instParameters.size(); i != e; ++i) {
+    auto instParam = instParameters[i].cast<ParameterAttr>();
+    auto modParam = modParameters[i].cast<ParameterAttr>();
+    if (instParam.name() == modParam.name())
+      newAttrs.push_back(instParam);
+    else
+      newAttrs.push_back(getParameterWithName(instParam, modParam.name()));
+  }
+  inst.parametersAttr(ArrayAttr::get(inst.getContext(), newAttrs));
 }
 
 void HWLegalizeNamesPass::runOnModule(
@@ -212,15 +238,12 @@ void HWLegalizeNamesPass::runOnModule(
         anythingChanged = true;
       }
 
-      // If this instance is referring to a module with renamed ports, update
-      // them.
+      // If this instance is referring to a module with renamed ports or
+      // parameter names, update them.
       auto it =
           modulesWithRenamedPorts.find(instanceOp.moduleNameAttr().getAttr());
-      if (it != modulesWithRenamedPorts.end()) {
-        auto mod = it->second;
-        instanceOp.setArgumentNames(mod.argNames());
-        instanceOp.setResultNames(mod.resultNames());
-      }
+      if (it != modulesWithRenamedPorts.end())
+        updateInstanceForChangedModule(instanceOp, it->second);
 
     } else if (isa<RegOp>(op) || isa<WireOp>(op)) {
       auto oldName = op.getAttrOfType<StringAttr>("name");

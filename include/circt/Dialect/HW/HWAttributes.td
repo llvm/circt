@@ -33,7 +33,9 @@ def ParameterAttr : StructAttr<"ParameterAttr", HWDialect, [
   /// parameter for an instance when the applied value and the default value are
   /// the same.
   StructFieldAttr<"value", OptionalAttr<AnyAttr>>
-]>;
+]> {
+  let summary = "hw.module or hw.instance parameter";
+}
 
 /// An array of ParameterAttr's that may or may not have a 'value' specified,
 /// to be used on hw.module or hw.instance.  The hw.instance verifier further
