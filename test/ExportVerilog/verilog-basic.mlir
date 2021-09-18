@@ -301,11 +301,11 @@ hw.module @ExternMods(%a_in: i8) {
   // CHECK: MyParameterizedExtModule #(
   // CHECK:   .CFG(FOO)
   // CHECK: ) xyz2
-  hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {parameters = {CFG = #sv.verbatim.parameter<"FOO">}} 
+  hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {oldParameters = {CFG = #sv.verbatim.parameter<"FOO">}} 
   // CHECK: MyParameterizedExtModule #(
   // CHECK:   .CFG("STRING")
   // CHECK: ) xyz3
-  hw.instance "xyz3" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {parameters = {CFG = #sv.verbatim.parameter<"\"STRING\"">}} 
+  hw.instance "xyz3" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {oldParameters = {CFG = #sv.verbatim.parameter<"\"STRING\"">}} 
 }
 
 // CHECK-LABEL: module UseInstances
@@ -324,7 +324,7 @@ hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
   // CHECK:   .out (a_out2)
   // CHECK: );
   %xyz.out = hw.instance "xyz" @MyExtModule(in: %a_in: i8) -> (out: i1)
-  %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {parameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+  %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
   hw.output %xyz.out, %xyz2.out : i1, i1
 }
 

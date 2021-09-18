@@ -2502,7 +2502,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   indent() << prefix << verilogName.getValue();
 
   // If this is a parameterized module, then emit the parameters.
-  if (auto paramDictOpt = op.parameters()) {
+  if (auto paramDictOpt = op.oldParameters()) {
     DictionaryAttr paramDict = paramDictOpt.getValue();
     if (!paramDict.empty()) {
       os << " #(\n";

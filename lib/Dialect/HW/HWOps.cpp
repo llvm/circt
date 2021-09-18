@@ -684,14 +684,15 @@ static LogicalResult verifyHWModuleGeneratedOp(HWModuleGeneratedOp op) {
 /// Create a instance that refers to a known module.
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        Operation *module, StringAttr name,
-                       ArrayRef<Value> inputs, DictionaryAttr parameters,
+                       ArrayRef<Value> inputs, DictionaryAttr oldParameters,
                        StringAttr sym_name) {
   assert(isAnyModule(module) && "Can only reference a module");
   FunctionType modType = getModuleType(module);
   build(builder, result, modType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         module->getAttrOfType<ArrayAttr>("argNames"),
-        module->getAttrOfType<ArrayAttr>("resultNames"), parameters, sym_name);
+        module->getAttrOfType<ArrayAttr>("resultNames"), oldParameters,
+        sym_name);
 }
 
 /// Lookup the module or extmodule for the symbol.  This returns null on
@@ -702,7 +703,6 @@ Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {
       return result;
 
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-
   return topLevelModuleOp.lookupSymbol(moduleName());
 }
 

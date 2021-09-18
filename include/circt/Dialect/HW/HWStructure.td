@@ -316,15 +316,17 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
   let description = [{
     This represents an instance of a module. The inputs and results are
     the referenced module's inputs and outputs.  The `argNames` and
-    `resultNames` attributes must match the referenced module.  Any parameters
-    are stored in the `parameters` dictionary.
+    `resultNames` attributes must match the referenced module.
+    
+    Any parameters in the "old" format (slated to be removed) are stored in the
+    `oldParameters` dictionary.
   }];
 
   let arguments = (ins StrAttr:$instanceName,
                        Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-                       OptionalAttr<DictionaryAttr>:$parameters,
+                       OptionalAttr<DictionaryAttr>:$oldParameters,
                        OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs Variadic<AnyType>);
 
@@ -332,15 +334,15 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
     /// Create a instance that refers to a known module.
     OpBuilder<(ins "Operation*":$module, "StringAttr":$name,
                    "ArrayRef<Value>":$inputs,
-                   CArg<"DictionaryAttr", "{}">:$parameters,
+                   CArg<"DictionaryAttr", "{}">:$oldParameters,
                    CArg<"StringAttr", "{}">:$sym_name)>,
     /// Create a instance that refers to a known module.
     OpBuilder<(ins "Operation*":$module, "StringRef":$name,
                    "ArrayRef<Value>":$inputs,
-                   CArg<"DictionaryAttr", "{}">:$parameters,
+                   CArg<"DictionaryAttr", "{}">:$oldParameters,
                    CArg<"StringAttr", "{}">:$sym_name), [{
       build($_builder, $_state, module, $_builder.getStringAttr(name), inputs,
-            parameters, sym_name);
+            oldParameters, sym_name);
     }]>
   ];
 

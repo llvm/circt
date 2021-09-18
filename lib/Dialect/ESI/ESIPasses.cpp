@@ -564,8 +564,8 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
   // Clone the instance.
   b.setInsertionPointAfter(inst);
   DictionaryAttr parameters;
-  if (inst.parameters().hasValue())
-    parameters = inst.parameters().getValue();
+  if (inst.oldParameters().hasValue())
+    parameters = inst.oldParameters().getValue();
   auto newInst = b.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
                                       parameters, inst.sym_nameAttr());
 
@@ -802,8 +802,8 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
 
   // Create the new instance!
   DictionaryAttr parameters;
-  if (inst.parameters().hasValue())
-    parameters = inst.parameters().getValue();
+  if (inst.oldParameters().hasValue())
+    parameters = inst.oldParameters().getValue();
 
   InstanceOp newInst =
       instBuilder.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
