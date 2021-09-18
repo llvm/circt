@@ -20,7 +20,9 @@ class CompReg:
 
 
 mod = pycde.System([CompReg])
+mod.print()
 mod.generate()
+mod.print()
 mod.print_verilog()
 
 # CHECK: reg [7:0] [[NAME:.+]];

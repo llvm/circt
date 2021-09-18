@@ -41,7 +41,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   with ir.InsertionPoint.at_block_terminator(top.body.blocks[0]):
     path = op.create("inst1")
-    minst = msft_mod.create("minst", {})
+    minst = msft_mod.create("minst")
 
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
   physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)

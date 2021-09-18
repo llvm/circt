@@ -124,12 +124,13 @@ class _SpecializedModule:
       setattr(
           self.modcls, name,
           property(lambda self, idx=idx: OpOperandConnect(
-              self, idx, self._instantiation.operands[idx], self)))
+              self._instantiation.operation, idx, self._instantiation.operation.
+              operands[idx], self)))
     for (idx, (name, type)) in enumerate(self.output_ports):
       setattr(
           self.modcls, name,
           property(lambda self, idx=idx, type=type: Value.get(
-              self._instantiation.results[idx], type)))
+              self._instantiation.operation.results[idx], type)))
 
   def generate(self):
     assert len(self.generators) == 1
@@ -304,11 +305,11 @@ def _module_base(cls, extern_name: str, params={}):
 
       # Build a list of operand values for the operation we're gonna create.
       self.backedges: dict[str:BackedgeBuilder.Edge] = {}
-      for (name, type) in mod._pycde_mod.input_ports:
+      for (idx, (name, type)) in enumerate(mod._pycde_mod.input_ports):
         if name in inputs:
           input = inputs[name]
           if input == no_connect:
-            if not extern:
+            if extern_name is not None:
               raise ConnectionError(
                   "`no_connect` is only valid on extern module ports")
             else:
@@ -316,12 +317,20 @@ def _module_base(cls, extern_name: str, params={}):
           else:
             value = obj_to_value(input, type)
         else:
-          backedge = BackedgeBuilder.current().create(type, name, self, loc=loc)
-          self.backedges[name] = backedge
+          backedge = BackedgeBuilder.current().create(type,
+                                                      name,
+                                                      mod._pycde_mod.circt_mod,
+                                                      loc=loc)
+          self.backedges[idx] = backedge
           value = Value.get(backedge.result)
         inputs[name] = value
 
-      self._instantiation = mod._pycde_mod.circt_mod.create("", inputs, loc=loc)
+      instance_name = ""
+      if "instance_name" in dir(self):
+        instance_name = self.instance_name
+      self._instantiation = mod._pycde_mod.circt_mod.create(instance_name,
+                                                            **inputs,
+                                                            loc=loc)
 
     # def output_values(self):
     #   return {
@@ -396,7 +405,7 @@ class _Generate:
     with mlir.ir.InsertionPoint(entry_block), self.loc, BackedgeBuilder():
       args = BlockArgs(specialized_mod)
       outputs = self.gen_func(args)
-      self._create_output_op(outputs)
+      self._create_output_op(outputs, specialized_mod)
 
     # else:
     #   assert (len(existing_module_names) == 1)
@@ -435,15 +444,14 @@ class _Generate:
       sanitized_str = sanitized_str.replace(sub, "_")
     return sanitized_str
 
-  def _create_output_op(self, gen_ret):
+  def _create_output_op(self, gen_ret, modcls):
     """Create the hw.OutputOp from the generator returns."""
-    assert hasattr(self, "modcls")
-    output_ports = self.modcls._output_ports
+    output_ports = modcls.output_ports
 
     # If generator didn't return anything, this op mustn't have any outputs.
     if gen_ret is None:
       if len(output_ports) == 0:
-        hw.OutputOp([])
+        msft.OutputOp([])
         return
       raise support.ConnectionError("Generator must return dict")
 
@@ -472,7 +480,7 @@ class _Generate:
           "Could not map the following to output ports: " +
           ",".join(gen_ret.keys()))
 
-    hw.OutputOp(outputs)
+    msft.OutputOp(outputs)
 
 
 def generator(func):
@@ -490,5 +498,5 @@ class BlockArgs:
     if name not in self.mod.input_port_lookup:
       raise AttributeError(f"unknown input port name {name}")
     idx = self.mod.input_port_lookup[name]
-    val = self.entry_block.arguments[idx]
+    val = self.mod.circt_mod.entry_block.arguments[idx]
     return Value.get(val)

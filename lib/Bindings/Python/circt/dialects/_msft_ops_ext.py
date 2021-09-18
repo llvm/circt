@@ -72,8 +72,8 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
                      loc=loc,
                      ip=ip)
 
-  def create(self, name: str, input_port_mapping, loc=None, ip=None):
-    return InstanceBuilder(self, name, input_port_mapping, loc=loc, ip=ip)
+  def create(self, name: str, loc=None, ip=None, **kwargs):
+    return InstanceBuilder(self, name, kwargs, loc=loc, ip=ip)
 
   def add_entry_block(self):
     self.body.blocks.append(*self.type.inputs)

@@ -25,8 +25,8 @@ class System:
 
   mod = None
   passes = [
-      "lower-seq-to-sv", "hw-legalize-names", "hw.module(prettify-verilog)",
-      "hw.module(hw-cleanup)"
+      "lower-msft-to-hw", "lower-seq-to-sv", "hw-legalize-names",
+      "hw.module(prettify-verilog)", "hw.module(hw-cleanup)"
   ]
   passed = False
 
@@ -77,9 +77,7 @@ class System:
 
   def generate(self, generator_names=[], iters=100):
     with self:
-      for i in range(iters):
-        if len(self._generate_queue) == 0:
-          return
+      while len(self._generate_queue) > 0:
         m = self._generate_queue.pop()
         m.generate()
 

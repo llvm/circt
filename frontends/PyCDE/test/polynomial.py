@@ -91,6 +91,7 @@ class PolynomialSystem:
 
 
 poly = pycde.System([PolynomialSystem])
+poly.print()
 
 print("Generating 1...")
 poly.generate(iters=1)
