@@ -791,3 +791,12 @@ hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
   hw.output %3 : i18
 }
 
+// CHECK-LABEL: module parameters
+// CHECK-NEXT: #(parameter [41:0] p1 = 42'd17
+// CHECK-NEXT:   parameter [0:0]  p2) (
+// CHECK-NEXT: input  [7:0] arg0,
+hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: si8) -> (out: si8) {
+  hw.output %arg0 : si8
+}
+
+

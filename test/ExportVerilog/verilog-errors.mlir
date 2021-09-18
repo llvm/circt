@@ -27,6 +27,6 @@ hw.module @namechange(%casex: i4) -> (if: i4) {
 hw.module @A () {}
 
 hw.module @B() {
-  // expected-error @+1 {{unknown extmodule parameter value 'width' = @Foo}}
+  // expected-error @+1 {{unknown parameter value 'width' = @Foo}}
   hw.instance "foo" @A() -> () { parameters = { width = @Foo } } 
 }
