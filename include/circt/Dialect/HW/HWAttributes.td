@@ -19,3 +19,14 @@ def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
   StructFieldAttr<"exclude_replicated_ops",
     DefaultValuedAttr<BoolAttr, "true">>,
 ]>;
+
+/// An attribute describing a module parameter.
+def ParameterAttr : StructAttr<"ParameterAttr", HWDialect, [
+  StructFieldAttr<"name", StrAttr>,
+  StructFieldAttr<"type", TypeAttr>,
+  StructFieldAttr<"defaultValue", OptionalAttr<AnyAttr>>
+]>;
+
+/// An array of ParameterAttr's.
+def ParameterArrayAttr
+  : TypedArrayAttrBase<ParameterAttr, "parameter array attribute">;

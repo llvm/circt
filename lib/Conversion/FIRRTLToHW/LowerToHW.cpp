@@ -518,7 +518,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
-                                      StringRef(), genAttrs);
+                                      StringRef(),
+                                      ArrayRef<hw::ParameterAttr>(), genAttrs);
   }
 }
 

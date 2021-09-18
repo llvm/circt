@@ -19,9 +19,9 @@ module {
   hw.module.extern @explicitResultName() -> (FOO: i1)
   // CHECK-LABEL: hw.module.extern @explicitResultName() -> (FOO: i1)
 
-  hw.module.extern @D_ATTR(%a: i1) -> ("": i1, "": i1) attributes {filename = "test.v", parameters = {DEFAULT = 0 : i64}}
+  hw.module.extern @D_ATTR(%a: i1) -> ("": i1, "": i1) attributes {filename = "test.v", p = {DEFAULT = 0 : i64}}
 
-  // CHECK-LABEL: hw.module.extern @D_ATTR(%a: i1) -> ("": i1, "": i1) attributes {filename = "test.v", parameters = {DEFAULT = 0 : i64}}
+  // CHECK-LABEL: hw.module.extern @D_ATTR(%a: i1) -> ("": i1, "": i1) attributes {filename = "test.v", p = {DEFAULT = 0 : i64}}
   // CHECK-NOT: {
 
   hw.module @A(%d: i1, %e: !hw.inout<i1>) -> ("": i1, "": i1) {
@@ -58,4 +58,10 @@ module {
 
   // CHECK-LABEL: hw.module.extern @AnonArg(i42)
   hw.module.extern @AnonArg(i42)
+
+// CHECK-LABEL: hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: si8) -> (out: si8) {
+hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: si8) -> (out: si8) {
+  hw.output %arg0 : si8
 }
+}
+

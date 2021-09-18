@@ -31,6 +31,53 @@ bool hw::isCombinatorial(Operation *op) {
          IsCombClassifier().dispatchTypeOpVisitor(op);
 }
 
+enum class Delimiter {
+  None,
+  Paren,               // () enclosed list
+  OptionalLessGreater, // <> enclosed list or absent
+};
+
+/// Parse a paren-enclosed list of comma-separated items with an optional
+/// delimiter.  If a delimiter is provided, then an empty list is allowed.
+/// TODO: Move into MLIR.
+template <typename FnType>
+static ParseResult parseCommaSeparatedList(OpAsmParser &parser,
+                                           Delimiter delimiter, FnType fn) {
+  switch (delimiter) {
+  case Delimiter::None:
+    break;
+  case Delimiter::Paren:
+    if (parser.parseLParen())
+      return failure();
+    // Check for empty list.
+    if (succeeded(parser.parseOptionalRParen()))
+      return success();
+    break;
+  case Delimiter::OptionalLessGreater:
+    // Check for absent list.
+    if (failed(parser.parseOptionalLess()))
+      return success();
+    // Check for empty list.
+    if (succeeded(parser.parseOptionalGreater()))
+      return success();
+    break;
+  }
+
+  do {
+    if (failed(fn()))
+      return failure();
+  } while (succeeded(parser.parseOptionalComma()));
+
+  switch (delimiter) {
+  case Delimiter::None:
+    return success();
+  case Delimiter::Paren:
+    return parser.parseRParen();
+  case Delimiter::OptionalLessGreater:
+    return parser.parseGreater();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
@@ -183,6 +230,7 @@ enum ExternModKind { PlainMod, ExternMod, GenMod };
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, const ModulePortInfo &ports,
+                        ArrayRef<ParameterAttr> parameters,
                         ArrayRef<NamedAttribute> attributes) {
   using namespace mlir::function_like_impl;
 
@@ -205,19 +253,25 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     resultNames.push_back(elt.name);
   }
 
+  // Convert from ParameterAttr element to Attribute element.
+  SmallVector<Attribute, 4> parametersAttrs(parameters.begin(),
+                                            parameters.end());
+
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
+  result.addAttribute("parameters", builder.getArrayAttr(parametersAttrs));
   result.addAttributes(attributes);
   result.addRegion();
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, const ModulePortInfo &ports,
+                       ArrayRef<ParameterAttr> parameters,
                        ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, attributes);
+  buildModule(builder, result, name, ports, parameters, attributes);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -233,8 +287,9 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, ArrayRef<PortInfo> ports,
+                       ArrayRef<ParameterAttr> parameters,
                        ArrayRef<NamedAttribute> attributes) {
-  build(builder, result, name, ModulePortInfo(ports), attributes);
+  build(builder, result, name, ModulePortInfo(ports), parameters, attributes);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -259,8 +314,9 @@ StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, const ModulePortInfo &ports,
                              StringRef verilogName,
+                             ArrayRef<ParameterAttr> parameters,
                              ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, attributes);
+  buildModule(builder, result, name, ports, parameters, attributes);
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -269,16 +325,19 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, ArrayRef<PortInfo> ports,
                              StringRef verilogName,
+                             ArrayRef<ParameterAttr> parameters,
                              ArrayRef<NamedAttribute> attributes) {
-  build(builder, result, name, ModulePortInfo(ports), verilogName, attributes);
+  build(builder, result, name, ModulePortInfo(ports), verilogName, parameters,
+        attributes);
 }
 
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
                                 const ModulePortInfo &ports,
                                 StringRef verilogName,
+                                ArrayRef<ParameterAttr> parameters,
                                 ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, attributes);
+  buildModule(builder, result, name, ports, parameters, attributes);
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -287,9 +346,10 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
                                 ArrayRef<PortInfo> ports, StringRef verilogName,
+                                ArrayRef<ParameterAttr> parameters,
                                 ArrayRef<NamedAttribute> attributes) {
   build(builder, result, genKind, name, ModulePortInfo(ports), verilogName,
-        attributes);
+        parameters, attributes);
 }
 
 /// Return an encapsulated set of information about input and output ports of
@@ -364,6 +424,36 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
+/// Parse an parameter list if present.
+/// module-parameter-list ::= `<` parameter-decl (`,` parameter-decl)* `>`
+/// parameter-decl ::= identifier `:` type
+/// parameter-decl ::= identifier `:` type `=` attribute
+///
+static ParseResult parseOptionalParameters(OpAsmParser &parser,
+                                           SmallVector<Attribute> &parameters) {
+
+  return parseCommaSeparatedList(parser, Delimiter::OptionalLessGreater, [&]() {
+    StringAttr name;
+    Type type;
+    Attribute defaultValue;
+
+    if (!(name = module_like_impl::parsePortName(parser)) ||
+        parser.parseColonType(type))
+      return failure();
+
+    // Parse the optioanl default value.
+    if (succeeded(parser.parseOptionalEqual())) {
+      if (parser.parseAttribute(defaultValue, type))
+        return failure();
+    }
+
+    auto &builder = parser.getBuilder();
+    parameters.push_back(ParameterAttr::get(
+        name, TypeAttr::get(type), defaultValue, builder.getContext()));
+    return success();
+  });
+}
+
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
   using namespace mlir::function_like_impl;
@@ -375,6 +465,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
+  SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
 
   // Parse the name as a symbol.
@@ -394,9 +485,12 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   // Parse the function signature.
   bool isVariadic = false;
   SmallVector<Attribute> resultNames;
-  if (module_like_impl::parseModuleFunctionSignature(
+  if (parseOptionalParameters(parser, parameters) ||
+      module_like_impl::parseModuleFunctionSignature(
           parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
-          resultAttrs, resultNames))
+          resultAttrs, resultNames) ||
+      // If function attributes are present, parse them.
+      parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -404,16 +498,14 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
-  // If function attributes are present, parse them.
-  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
-    return failure();
-
   auto *context = result.getContext();
 
   if (hasAttribute("argNames", result.attributes) ||
-      hasAttribute("resultNames", result.attributes)) {
+      hasAttribute("resultNames", result.attributes) ||
+      hasAttribute("parameters", result.attributes)) {
     parser.emitError(
-        loc, "explicit argNames and resultNames attributes not allowed");
+        loc,
+        "explicit argNames, resultNames, or parameters attributes not allowed");
     return failure();
   }
 
@@ -429,6 +521,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
+  result.addAttribute("parameters", ArrayAttr::get(context, parameters));
 
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
@@ -479,6 +572,21 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
     p.printSymbolName(cast<HWModuleGeneratedOp>(op).generatorKind());
   }
 
+  // Print the parameter list if present.
+  auto parameters = op->getAttrOfType<ArrayAttr>("parameters");
+  if (!parameters.empty()) {
+    p << '<';
+    llvm::interleaveComma(parameters, p, [&](Attribute param) {
+      auto paramAttr = param.cast<ParameterAttr>();
+      p << paramAttr.name().getValue() << ": " << paramAttr.type();
+      if (paramAttr.defaultValue()) {
+        p << " = ";
+        p.printAttributeWithoutType(paramAttr.defaultValue());
+      }
+    });
+    p << '>';
+  }
+
   bool needArgNamesAttr = false;
   module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
                                          resultTypes, needArgNamesAttr);
@@ -489,6 +597,7 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   if (!needArgNamesAttr)
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("resultNames");
+  omittedAttrs.push_back("parameters");
 
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
@@ -724,46 +833,37 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
                                          result.attributes);
   }
 
-  // Parse a paren-enclosed list of comma-separated items.
-  auto parseCommaSeparatedList = [&](auto fn) -> ParseResult {
-    if (parser.parseLParen())
-      return failure();
-
-    // Empty list.
-    if (succeeded(parser.parseOptionalRParen()))
-      return success();
-
-    do {
-      if (failed(fn()))
-        return failure();
-    } while (succeeded(parser.parseOptionalComma()));
-    return parser.parseRParen();
-  };
-
   SmallVector<Attribute> argNames, resultNames;
   llvm::SMLoc inputsOperandsLoc;
   if (parser.parseAttribute(moduleNameAttr, noneType, "moduleName",
                             result.attributes) ||
       parser.getCurrentLocation(&inputsOperandsLoc) ||
-      parseCommaSeparatedList([&]() -> ParseResult {
-        argNames.push_back(module_like_impl::parsePortName(parser));
-        if (!argNames.back())
-          return failure();
-        inputsOperands.push_back({});
-        inputsTypes.push_back({});
-        return failure(parser.parseOperand(inputsOperands.back()) ||
-                       parser.parseColon() ||
-                       parser.parseType(inputsTypes.back()));
-      }) ||
+      parseCommaSeparatedList(
+          parser, Delimiter::Paren,
+          [&]() -> ParseResult {
+            argNames.push_back(module_like_impl::parsePortName(parser));
+            if (!argNames.back())
+              return failure();
+            inputsOperands.push_back({});
+            inputsTypes.push_back({});
+            return failure(parser.parseColon() ||
+                           parser.parseOperand(inputsOperands.back()) ||
+                           parser.parseColon() ||
+                           parser.parseType(inputsTypes.back()));
+          }) ||
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
-      parser.parseArrow() || parseCommaSeparatedList([&]() -> ParseResult {
-        resultNames.push_back(module_like_impl::parsePortName(parser));
-        if (!resultNames.back())
-          return failure();
-        allResultTypes.push_back({});
-        return parser.parseType(allResultTypes.back());
-      }) ||
+      parser.parseArrow() ||
+      parseCommaSeparatedList(parser, Delimiter::Paren,
+                              [&]() -> ParseResult {
+                                resultNames.push_back(
+                                    module_like_impl::parsePortName(parser));
+                                if (!resultNames.back())
+                                  return failure();
+                                allResultTypes.push_back({});
+                                return parser.parseColonType(
+                                    allResultTypes.back());
+                              }) ||
       parser.parseOptionalAttrDict(result.attributes)) {
     return failure();
   }
@@ -786,13 +886,7 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
       return;
     }
 
-    // Print this as a bareword if it can be parsed as an MLIR keyword,
-    // otherwise print it as a quoted string.
-    StringAttr name = portList[nextPort++].name;
-    if (module_like_impl::isValidKeyword(name.getValue()))
-      p << name.getValue();
-    else
-      p << name;
+    module_like_impl::printPortName(portList[nextPort++].name, p.getStream());
     p << ": ";
   };
 
