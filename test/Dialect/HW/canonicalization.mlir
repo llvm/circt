@@ -1049,7 +1049,7 @@ hw.module @sext_extract3(%arg0: i4) -> (a: i3) {
 
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
 // CHECK-NEXT:    %false = hw.constant false
-// CHECK-NEXT:    %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %3: i1) -> (out: i8)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+// CHECK-NEXT:    %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %3: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
 // CHECK-NEXT:    %0 = comb.concat %false, %arg0 : (i1, i2) -> i3
 // CHECK-NEXT:    %1 = comb.concat %false, %arg0 : (i1, i2) -> i3
 // CHECK-NEXT:    %2 = comb.add %0, %1 : i3
@@ -1060,7 +1060,7 @@ hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
   %false = hw.constant false
     %.in.wire = sv.wire  : !hw.inout<i1>
     %0 = sv.read_inout %.in.wire : !hw.inout<i1>
-    %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %0: i1) -> (out: i8)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+    %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %0: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
     %1 = comb.concat %false, %arg0 : (i1, i2) -> i3
     %2 = comb.concat %false, %arg0 : (i1, i2) -> i3
     %3 = comb.add %1, %2 : i3
@@ -1073,7 +1073,7 @@ hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
 // CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
 // CHECK-NEXT:   hw.instance "xyz" @Simple(in1: %0: i4, in2: %u2: i2, in3: %s8: i8)
 // CHECK-NEXT:   %0 = comb.concat %c0_i2, %u2 : (i2, i2) -> i4
-// CHECK-NEXT:   %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %reset: i1) -> (out: i8)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+// CHECK-NEXT:   %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %reset: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
 // CHECK-NEXT:   hw.output
 hw.module.extern @MyParameterizedExtModule(%in: i1) -> (out: i8) attributes {verilogName = "name_thing"}
 hw.module.extern @Simple(%in1: i4, %in2: i2, %in3: i8)
@@ -1092,7 +1092,7 @@ hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
   sv.assign %.in3.wire, %s8 : i8
   %.in.wire = sv.wire  : !hw.inout<i1>
   %4 = sv.read_inout %.in.wire : !hw.inout<i1>
-  %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %4: i1) -> (out: i8)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+  %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %4: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
   sv.assign %.in.wire, %reset : i1
   hw.output
 }
@@ -1105,7 +1105,7 @@ hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
 hw.module @instance_cyclic(%arg0: i2, %arg1: i2) {
   %.in.wire = sv.wire  : !hw.inout<i1>
   %0 = sv.read_inout %.in.wire : !hw.inout<i1>
-  %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %0: i1) -> (out: i8)  {parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+  %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %0: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
   %1 = comb.extract %myext.out from 2 : (i8) -> i1
   sv.assign %.in.wire, %1 : i1
   hw.output
