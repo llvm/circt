@@ -176,7 +176,7 @@ bool HWLegalizeNamesPass::legalizePortNames(hw::HWModuleOp module) {
     else {
       auto newNameAttr = StringAttr::get(module.getContext(), newName);
       parameters.push_back(ParameterAttr::get(newNameAttr, paramAttr.type(),
-                                              paramAttr.defaultValue(),
+                                              paramAttr.value(),
                                               module.getContext()));
       changedParameters = true;
     }

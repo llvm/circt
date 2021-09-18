@@ -435,21 +435,21 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
   return parseCommaSeparatedList(parser, Delimiter::OptionalLessGreater, [&]() {
     StringAttr name;
     Type type;
-    Attribute defaultValue;
+    Attribute value;
 
     if (!(name = module_like_impl::parsePortName(parser)) ||
         parser.parseColonType(type))
       return failure();
 
-    // Parse the optioanl default value.
+    // Parse the default value if present.
     if (succeeded(parser.parseOptionalEqual())) {
-      if (parser.parseAttribute(defaultValue, type))
+      if (parser.parseAttribute(value, type))
         return failure();
     }
 
     auto &builder = parser.getBuilder();
-    parameters.push_back(ParameterAttr::get(
-        name, TypeAttr::get(type), defaultValue, builder.getContext()));
+    parameters.push_back(ParameterAttr::get(name, TypeAttr::get(type), value,
+                                            builder.getContext()));
     return success();
   });
 }
@@ -579,9 +579,9 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
     llvm::interleaveComma(parameters, p, [&](Attribute param) {
       auto paramAttr = param.cast<ParameterAttr>();
       p << paramAttr.name().getValue() << ": " << paramAttr.type();
-      if (paramAttr.defaultValue()) {
+      if (auto value = paramAttr.value()) {
         p << " = ";
-        p.printAttributeWithoutType(paramAttr.defaultValue());
+        p.printAttributeWithoutType(value);
       }
     });
     p << '>';

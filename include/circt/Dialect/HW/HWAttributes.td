@@ -24,7 +24,12 @@ def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
 def ParameterAttr : StructAttr<"ParameterAttr", HWDialect, [
   StructFieldAttr<"name", StrAttr>,
   StructFieldAttr<"type", TypeAttr>,
-  StructFieldAttr<"defaultValue", OptionalAttr<AnyAttr>>
+  /// This is the value of the attribute - in a module, this is the default
+  /// value (and may be missing).  In an instance, this is a required field that
+  /// specifies the value being passed.  The verilog emitter omits printing the
+  /// parameter for an instance when the applied value and the default value are
+  /// the same.
+  StructFieldAttr<"value", OptionalAttr<AnyAttr>>
 ]>;
 
 /// An array of ParameterAttr's.

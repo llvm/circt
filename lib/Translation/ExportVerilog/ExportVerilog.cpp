@@ -3100,7 +3100,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
             os.indent(maxTypeWidth - scratch.size());
 
           os << paramAttr.name().getValue();
-          if (auto value = paramAttr.defaultValue()) {
+          if (auto value = paramAttr.value()) {
             os << " = ";
             printParamValue(value, module, paramAttr.name().getValue(), os);
           }
