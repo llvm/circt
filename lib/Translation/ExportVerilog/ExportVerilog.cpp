@@ -2520,6 +2520,38 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     }
   }
 
+  // Print out parameters if present.
+  if (!op.parameters().empty()) {
+    // All the parameters may be defaulted -- don't print out an empty list if
+    // so.
+    bool printed = false;
+    for (auto params :
+         llvm::zip(op.parameters(),
+                   moduleOp->getAttrOfType<ArrayAttr>("parameters"))) {
+      auto param = std::get<0>(params).cast<ParameterAttr>();
+      auto modParam = std::get<1>(params).cast<ParameterAttr>();
+      // Ignore values that line up with their default.
+      if (param.value() == modParam.value())
+        continue;
+
+      // Handle # if this is the first parameter we're printing.
+      if (!printed) {
+        os << " #(\n";
+        printed = true;
+      } else {
+        os << ",\n";
+      }
+      os.indent(state.currentIndent + INDENT_AMOUNT)
+          << prefix << '.' << param.name().getValue() << '(';
+      printParamValue(param.value(), op, param.name().getValue(), os);
+      os << ')';
+    }
+    if (printed) {
+      os << '\n';
+      indent() << prefix << ')';
+    }
+  }
+
   os << ' ' << names.getName(op) << " (";
 
   SmallVector<PortInfo> portInfo = getAllModulePortInfos(op);

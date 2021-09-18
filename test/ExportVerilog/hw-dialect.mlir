@@ -795,7 +795,7 @@ hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
 // CHECK-NEXT: #(parameter [41:0] p1 = 42'd17
 // CHECK-NEXT:   parameter [0:0]  p2) (
 // CHECK-NEXT: input  [7:0] arg0,
-hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: si8) -> (out: si8) {
+hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
   // Local values should not conflict with output or parameter names.
 
   // expected-error @+1 {{'sv.wire' op name 'p1' changed during emission}}
@@ -805,7 +805,48 @@ hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: si8) -> (out: si8) {
   // expected-error @+1 {{'sv.wire' op name 'out' changed during emission}}
   %out = sv.wire : !hw.inout<i4>
   // CHECK: wire [3:0] out_1;
-  hw.output %arg0 : si8
+  hw.output %arg0 : i8
 }
 
+hw.module.extern @parameters2<p1: i42 = 17, p2: i1 = 0>(%arg0: i8) -> (out: i8)
 
+// CHECK-LABEL: module UseParameterized(
+hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8) {
+  // Two parameters.
+  // CHECK:      parameters #(
+  // CHECK-NEXT:   .p1(42'd4),
+  // CHECK-NEXT:   .p2(0)
+  // CHECK-NEXT: ) inst1 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (ww)
+  // CHECK-NEXT: );
+  %r0 = hw.instance "inst1" @parameters<p1: i42 = 4, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
+
+  // Two parameters.
+  // CHECK:      parameters #(
+  // CHECK-NEXT:   .p1(42'd11),
+  // CHECK-NEXT:   .p2(1)
+  // CHECK-NEXT: ) inst2 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (xx)
+  // CHECK-NEXT: );
+  %r1 = hw.instance "inst2" @parameters<p1: i42 = 11, p2: i1 = 1>(arg0: %a: i8) -> (out: i8)
+
+  // One default, don't print it
+  // CHECK:      parameters #(
+  // CHECK-NEXT:   .p2(0)
+  // CHECK-NEXT: ) inst3 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (yy)
+  // CHECK-NEXT: );
+  %r2 = hw.instance "inst3" @parameters<p1: i42 = 17, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
+
+  // All defaults, don't print a parameter list at all.
+  // CHECK:      parameters2 inst4 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (zz)
+  // CHECK-NEXT: );
+  %r3 = hw.instance "inst4" @parameters2<p1: i42 = 17, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
+
+  hw.output %r0, %r1, %r2, %r3: i8, i8, i8, i8
+}
