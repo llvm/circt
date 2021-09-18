@@ -30,18 +30,18 @@ with ir.Context() as ctx, ir.Location.unknown():
                         output_ports=[],
                         body_builder=lambda module: hw.OutputOp([]))
 
-    msft_mod = msft_ops.MSFTModuleOp(
-        name='msft_mod',
-        input_ports=[],
-        output_ports=[],
-        parameters={"WIDTH": ir.IntegerAttr.get(i32, 8)})
+    msft_mod = msft_ops.MSFTModuleOp(name='msft_mod',
+                                     input_ports=[],
+                                     output_ports=[],
+                                     parameters=ir.DictAttr.get(
+                                         {"WIDTH": ir.IntegerAttr.get(i32, 8)}))
 
   with ir.InsertionPoint.at_block_terminator(op.body.blocks[0]):
     ext_inst = extmod.create("ext1")
 
   with ir.InsertionPoint.at_block_terminator(top.body.blocks[0]):
     path = op.create("inst1")
-    minst = msft_mod.create("minst")
+    minst = msft_mod.create("minst", {})
 
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
   physAttr = msft.PhysLocationAttr.get(msft.M20K, x=2, y=6, num=1)

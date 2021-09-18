@@ -53,7 +53,7 @@ class System:
     # `BackedgeBuilder` it creates.
     bb = circt.support.BackedgeBuilder()
     with ir.InsertionPoint(self.system_mod.add_entry_block()), bb:
-      self.mod_ops = set([m().operation.name for m in self.modules])
+      self.mod_ops = set([m() for m in self.modules])
       hw.OutputOp([])
       # We don't care about the backedges since this module is supposed to be
       # temporary.

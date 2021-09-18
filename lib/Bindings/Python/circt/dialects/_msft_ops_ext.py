@@ -17,7 +17,6 @@ class InstanceBuilder(support.NamedValueOpView):
                name,
                input_port_mapping,
                *,
-               results=None,
                sym_name=None,
                loc=None,
                ip=None):
@@ -27,8 +26,7 @@ class InstanceBuilder(support.NamedValueOpView):
     if sym_name:
       sym_name = _ir.StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
-    if results is None:
-      results = module.type.results
+    results = module.type.results
 
     super().__init__(_msft.InstanceOp,
                      results,
@@ -62,11 +60,11 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
       name,
       input_ports=[],
       output_ports=[],
-      parameters={},
+      parameters: _ir.DictAttr = None,
       loc=None,
       ip=None,
   ):
-    attrs = {"parameters": _ir.DictAttr.get(parameters)}
+    attrs = {"parameters": parameters}
     super().__init__(name,
                      input_ports,
                      output_ports,
@@ -74,5 +72,5 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
                      loc=loc,
                      ip=ip)
 
-  def create(self, name: str, results=None, loc=None, ip=None, **kwargs):
-    return InstanceBuilder(self, name, kwargs, results=results, loc=loc, ip=ip)
+  def create(self, name: str, input_port_mapping, loc=None, ip=None):
+    return InstanceBuilder(self, name, input_port_mapping, loc=loc, ip=ip)

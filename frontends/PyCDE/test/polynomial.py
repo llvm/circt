@@ -19,8 +19,6 @@ def PolynomialCompute(coefficients: Coefficients):
     x = Input(types.i32)
     y = Output(types.int(8 * 4))
 
-    unused_parameter = Parameter(True)
-
     def __init__(self, name: str):
       """coefficients is in 'd' -> 'a' order."""
       self.instanceName = name
@@ -100,9 +98,9 @@ poly.generate(iters=1)
 print("Printing...")
 poly.print()
 # CHECK-LABEL:  hw.module @pycde.PolynomialSystem() -> (y: i32)
-# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG1:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG2:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [1, 2, 3, 4, 5]}, module_name = "PolyComputeForCoeff_1_2_3_4_5", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6"}, resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG1:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6"}, resultNames = ["y"]} : (i32) -> i32
+# CHECK:    [[REG2:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [1, 2, 3, 4, 5]}, module_name = "PolyComputeForCoeff_1_2_3_4_5"}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    [[REG3:%.+]] = "pycde.CoolPolynomialCompute"(%c23_i32{{.*}}) {coefficients = [4, 42], opNames = ["x"], parameters = {}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
