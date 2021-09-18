@@ -139,15 +139,6 @@ class _SpecializedModule:
       return
 
 
-class Parameter:
-  __slots__ = ["name", "attr"]
-
-  def __init__(self, value=None, name: str = None):
-    if value is not None:
-      self.attr = var_to_attribute(value)
-    self.name = name
-
-
 # Set an input to no_connect to indicate not to connect it. Only valid for
 # external module inputs.
 no_connect = object()
@@ -195,28 +186,20 @@ class _parameterized_module:
   #   - A simple (non-parameterized) module has been wrapped and the user wants
   #   to construct one. Just forward to the module class' constructor.
   def __call__(self, *args, **kwargs):
-    if self.func is not None:
-      param_values = self.sig.bind(*args, **kwargs)
-      param_values.apply_defaults()
-      cls = self.func(*args, **kwargs)
-      if cls is None:
-        raise ValueError("Parameterization function must return module class")
+    assert self.func is not None
+    param_values = self.sig.bind(*args, **kwargs)
+    param_values.apply_defaults()
+    cls = self.func(*args, **kwargs)
+    if cls is None:
+      raise ValueError("Parameterization function must return module class")
 
-      # Function arguments which start with '_' don't become parameters.
-      params = {
-          n: v
-          for n, v in param_values.arguments.items()
-          if not n.startswith("_")
-      }
-      return _module_base(cls, self.extern_name is not None, params)
-
-      # if self.extern_name:
-      #   _register_generator(cls.__name__, "extern_instantiate",
-      #                       self._instantiate,
-      #                       mlir.ir.DictAttr.get(mod._parameters))
-      # return mod
-
-    return self.mod(*args, **kwargs)
+    # Function arguments which start with '_' don't become parameters.
+    params = {
+        n: v
+        for n, v in param_values.arguments.items()
+        if not n.startswith("_")
+    }
+    return _module_base(cls, self.extern_name is not None, params)
 
   # # Generator for external modules.
   # def _instantiate(self, op):
@@ -268,7 +251,7 @@ def externmodule(to_be_wrapped, extern_name=None):
     extern_name = to_be_wrapped.__name__
   if inspect.isclass(to_be_wrapped):
     # If it's just a module class, we should wrap it immediately
-    return _module_base(to_be_wrapped, True)
+    return _module_base(to_be_wrapped, extern_name)
   return _parameterized_module(to_be_wrapped, extern_name)
 
 
@@ -309,7 +292,7 @@ def _module_base(cls, extern_name: str, params={}):
         if name in inputs:
           input = inputs[name]
           if input == no_connect:
-            if extern_name is not None:
+            if extern_name is None:
               raise ConnectionError(
                   "`no_connect` is only valid on extern module ports")
             else:
@@ -325,7 +308,7 @@ def _module_base(cls, extern_name: str, params={}):
           value = Value.get(backedge.result)
         inputs[name] = value
 
-      instance_name = ""
+      instance_name = cls.__name__
       if "instance_name" in dir(self):
         instance_name = self.instance_name
       self._instantiation = mod._pycde_mod.circt_mod.create(instance_name,
