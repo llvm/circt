@@ -36,10 +36,10 @@ def HWModuleOp : HWOp<"module",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
-                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
-                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -125,11 +125,11 @@ def HWModuleExternOp : HWOp<"module.extern",
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
-                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
-                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -241,12 +241,12 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
     OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
                    "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
-                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
     OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
                    "const ModulePortInfo &":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
-                   CArg<"ArrayRef<ParameterAttr>", "{}">:$parameters,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 

@@ -230,7 +230,7 @@ enum ExternModKind { PlainMod, ExternMod, GenMod };
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, const ModulePortInfo &ports,
-                        ArrayRef<ParameterAttr> parameters,
+                        ArrayAttr parameters,
                         ArrayRef<NamedAttribute> attributes) {
   using namespace mlir::function_like_impl;
 
@@ -253,23 +253,23 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     resultNames.push_back(elt.name);
   }
 
-  // Convert from ParameterAttr element to Attribute element.
-  SmallVector<Attribute, 4> parametersAttrs(parameters.begin(),
-                                            parameters.end());
+  // Allow clients to pass in null for the parameters list.
+  if (!parameters)
+    parameters = builder.getArrayAttr({});
 
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
-  result.addAttribute("parameters", builder.getArrayAttr(parametersAttrs));
+  result.addAttribute("parameters", parameters);
   result.addAttributes(attributes);
   result.addRegion();
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, const ModulePortInfo &ports,
-                       ArrayRef<ParameterAttr> parameters,
+                       ArrayAttr parameters,
                        ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, parameters, attributes);
 
@@ -287,7 +287,7 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, ArrayRef<PortInfo> ports,
-                       ArrayRef<ParameterAttr> parameters,
+                       ArrayAttr parameters,
                        ArrayRef<NamedAttribute> attributes) {
   build(builder, result, name, ModulePortInfo(ports), parameters, attributes);
 }
@@ -313,8 +313,7 @@ StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, const ModulePortInfo &ports,
-                             StringRef verilogName,
-                             ArrayRef<ParameterAttr> parameters,
+                             StringRef verilogName, ArrayAttr parameters,
                              ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, parameters, attributes);
 
@@ -324,8 +323,7 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, ArrayRef<PortInfo> ports,
-                             StringRef verilogName,
-                             ArrayRef<ParameterAttr> parameters,
+                             StringRef verilogName, ArrayAttr parameters,
                              ArrayRef<NamedAttribute> attributes) {
   build(builder, result, name, ModulePortInfo(ports), verilogName, parameters,
         attributes);
@@ -334,8 +332,7 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
                                 const ModulePortInfo &ports,
-                                StringRef verilogName,
-                                ArrayRef<ParameterAttr> parameters,
+                                StringRef verilogName, ArrayAttr parameters,
                                 ArrayRef<NamedAttribute> attributes) {
   buildModule(builder, result, name, ports, parameters, attributes);
   result.addAttribute("generatorKind", genKind);
@@ -346,7 +343,7 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
                                 ArrayRef<PortInfo> ports, StringRef verilogName,
-                                ArrayRef<ParameterAttr> parameters,
+                                ArrayAttr parameters,
                                 ArrayRef<NamedAttribute> attributes) {
   build(builder, result, genKind, name, ModulePortInfo(ports), verilogName,
         parameters, attributes);

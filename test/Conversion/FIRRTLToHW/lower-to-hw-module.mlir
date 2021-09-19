@@ -9,7 +9,9 @@
 // CHECK-NEXT:  } else  {
 firrtl.circuit "Simple" {
 
-   // CHECK-LABEL: hw.module.extern @MyParameterizedExtModule(%in: i1) -> (out: i8)
+   // CHECK-LABEL: hw.module.extern @MyParameterizedExtModule
+   // CHECK-SAME: <DEFAULT: i64, DEPTH: f64, FORMAT: none, WIDTH: i8>
+   // CHECK-SAME: (%in: i1) -> (out: i8)
    // CHECK: attributes {verilogName = "name_thing"}
    firrtl.extmodule @MyParameterizedExtModule(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<8>)
       attributes {defname = "name_thing",
@@ -65,7 +67,7 @@ firrtl.circuit "Simple" {
     // Parameterized module reference.
     // hw.instance carries the parameters, unlike at the FIRRTL layer.
 
-    // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %reset: i1) -> (out: i8) {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+    // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in: %reset: i1) -> (out: i8)
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.uint<1>, !firrtl.uint<8>
 
@@ -142,7 +144,7 @@ firrtl.circuit "Simple" {
                               out %out0: !firrtl.uint<8>) {
     // CHECK: %false = hw.constant false
 
-    // CHECK-NEXT: hw.instance "myext" @MyParameterizedExtModule(in: [[ARG:%.+]]: i1) -> (out: i8) {oldParameters
+    // CHECK-NEXT: hw.instance "myext" @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in: [[ARG:%.+]]: i1) -> (out: i8)
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.uint<1>, !firrtl.uint<8>
 
@@ -164,7 +166,7 @@ firrtl.circuit "Simple" {
 
   // CHECK-LABEL: hw.module @instance_cyclic
   firrtl.module @instance_cyclic(in %arg0: !firrtl.uint<2>, in %arg1: !firrtl.uint<2>) {
-    // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %0: i1)
+    // CHECK: %myext.out = hw.instance "myext" @MyParameterizedExtModule<DEFAULT: i64 = 0, DEPTH: f64 = 3.242000e+01, FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32>(in: %0: i1)
     %myext:2 = firrtl.instance @MyParameterizedExtModule {name = "myext", portNames=["in", "out"]}
       : !firrtl.uint<1>, !firrtl.uint<8>
 

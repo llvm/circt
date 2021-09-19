@@ -530,8 +530,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
-                                      StringRef(),
-                                      ArrayRef<hw::ParameterAttr>(), genAttrs);
+                                      StringRef(), ArrayAttr(), genAttrs);
   }
 }
 
@@ -695,6 +694,31 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
   return success();
 }
 
+/// Map the parameter specifier on the specified extmodule into the HWModule
+/// representation for parameters.  If `ignoreValues` is true, all the values
+/// are dropped.
+static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
+  auto paramsOptional = module.parameters();
+  if (!paramsOptional.hasValue())
+    return {};
+
+  Builder builder(module);
+
+  // Map the attributes over from firrtl attributes to HW attributes
+  // directly.  MLIR's DictionaryAttr always stores keys in the dictionary
+  // in sorted order which is nicely stable.
+  SmallVector<Attribute> newParams;
+  for (const NamedAttribute &entry : paramsOptional.getValue()) {
+    auto name = builder.getStringAttr(entry.first.strref());
+    auto type = TypeAttr::get(entry.second.getType());
+    auto value = ignoreValues ? Attribute() : entry.second;
+    auto paramAttr =
+        hw::ParameterAttr::get(name, type, value, builder.getContext());
+    newParams.push_back(paramAttr);
+  }
+  return builder.getArrayAttr(newParams);
+}
+
 hw::HWModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule,
@@ -714,8 +738,12 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
+  // Map over parameters if present.  Drop all values as we do so so there are
+  // no known default values in the extmodule.  This ensures that the
+  // hw.instance will print all the parameters when generating verilog.
+  auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
   return builder.create<hw::HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                              ports, verilogName);
+                                              ports, verilogName, parameters);
 }
 
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
@@ -2111,10 +2139,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // If this is a referenced to a parameterized extmodule, then bring the
   // parameters over to this instance.
-  DictionaryAttr parameters;
+  ArrayAttr parameters;
   if (auto oldExtModule = dyn_cast<FExtModuleOp>(oldModule))
-    if (auto paramsOptional = oldExtModule.parameters())
-      parameters = paramsOptional.getValue();
+    parameters = getHWParameters(oldExtModule, /*ignoreValues=*/false);
 
   // Decode information about the input and output ports on the referenced
   // module.
