@@ -2502,25 +2502,6 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   indent() << prefix << verilogName.getValue();
 
   // If this is a parameterized module, then emit the parameters.
-  if (auto paramDictOpt = op.oldParameters()) {
-    DictionaryAttr paramDict = paramDictOpt.getValue();
-    if (!paramDict.empty()) {
-      os << " #(\n";
-      llvm::interleave(
-          paramDict, os,
-          [&](NamedAttribute elt) {
-            os.indent(state.currentIndent + INDENT_AMOUNT)
-                << prefix << '.' << elt.first << '(';
-            printParamValue(elt.second, op, elt.first, os);
-            os << ')';
-          },
-          ",\n");
-      os << '\n';
-      indent() << prefix << ')';
-    }
-  }
-
-  // Print out parameters if present.
   if (!op.parameters().empty()) {
     // All the parameters may be defaulted -- don't print out an empty list if
     // so.

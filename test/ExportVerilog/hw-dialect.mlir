@@ -189,19 +189,23 @@ hw.module @AAA(%d: i1, %e: i1) -> (f: i1) {
 
 
 /// TODO: Specify parameter declarations.
-hw.module.extern @EXT_W_PARAMS(%a: i1, %b: i0) -> (out: i1)
+hw.module.extern @EXT_W_PARAMS<DEFAULT: i64, DEPTH: f64, FORMAT: none,
+     WIDTH: i8>(%a: i1, %b: i0) -> (out: i1)
   attributes { verilogName="FooModule" }
 
-hw.module.extern @EXT_W_PARAMS2(%a: i2) -> (out: i1)
+hw.module.extern @EXT_W_PARAMS2<DEFAULT: i32>(%a: i2) -> (out: i1)
   attributes { verilogName="FooModule" }
 
 hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (y: i1, z: i1, p: i1, p2: i1) {
   %w2 = hw.instance "a1" @AAA(d: %w: i1, e: %w1: i1) -> (f: i1)
   %w1, %y = hw.instance "b1" @B(a: %w2: i1) -> (b: i1, c: i1)
 
-  %p = hw.instance "paramd" @EXT_W_PARAMS(a: %w: i1, b: %i3: i0) -> (out: i1) {oldParameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+  %p = hw.instance "paramd" @EXT_W_PARAMS<
+   DEFAULT: i64 = 14000240888948784983, DEPTH: f64 = 3.242000e+01,
+   FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32
+  >(a: %w: i1, b: %i3: i0) -> (out: i1)
 
-  %p2 = hw.instance "paramd2" @EXT_W_PARAMS2(a: %i2: i2) -> (out: i1) {oldParameters = {DEFAULT = 1 : i32}}
+  %p2 = hw.instance "paramd2" @EXT_W_PARAMS2<DEFAULT: i32 = 1>(a: %i2: i2) -> (out: i1)
 
   hw.output %y, %x, %p, %p2 : i1, i1, i1, i1
 }
@@ -713,10 +717,15 @@ hw.module @Chi() -> (Chi_output : i0) {
    // CHECK-NEXT:   .Wtricky(40'd4294967295)
    // CHECK-NEXT: ) bar ();
    
-   hw.instance "bar" @Bar1360() -> ()  {oldParameters = {WIDTH0 = 0 : i64, WIDTH1 = 4 : i4, WIDTH2 = 6812312123 : i40, WIDTH3 = -1 : si4, WIDTH4 = -88888888888888888 : si68, Wtricky = 4294967295 : i40}} 
+   hw.instance "bar" @Bar1360<
+     WIDTH0: i64 = 0, WIDTH1: i4 = 4, WIDTH2: i40 = 6812312123, WIDTH3: si4 = -1,
+     WIDTH4: si68 = -88888888888888888, Wtricky: i40 = 4294967295
+   >() -> ()
    hw.output
  }
- hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}
+ hw.module.extern @Bar1360<
+     WIDTH0: i64, WIDTH1: i4, WIDTH2: i40, WIDTH3: si4, WIDTH4: si68, Wtricky: i40
+   >() attributes {verilogName = "RealBar"}
 
 // CHECK-LABEL: module Issue1563(
 hw.module @Issue1563(%a: i32) -> (out : i32) {

@@ -697,23 +697,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   build(builder, result, modType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
         module->getAttrOfType<ArrayAttr>("argNames"),
-        module->getAttrOfType<ArrayAttr>("resultNames"), parameters,
-        /*oldParameters*/ DictionaryAttr(), sym_name);
-}
-
-/// TODO: Remove these builders that support the oldParameter format.
-/// Create a instance that refers to a known module.
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       Operation *module, StringAttr name,
-                       ArrayRef<Value> inputs, DictionaryAttr oldParameters,
-                       StringAttr sym_name) {
-  assert(isAnyModule(module) && "Can only reference a module");
-  FunctionType modType = getModuleType(module);
-  build(builder, result, modType.getResults(), name,
-        FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
-        module->getAttrOfType<ArrayAttr>("argNames"),
-        module->getAttrOfType<ArrayAttr>("resultNames"),
-        /*parameters*/ builder.getArrayAttr({}), oldParameters, sym_name);
+        module->getAttrOfType<ArrayAttr>("resultNames"), parameters, sym_name);
 }
 
 /// Lookup the module or extmodule for the symbol.  This returns null on

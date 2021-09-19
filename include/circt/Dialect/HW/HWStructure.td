@@ -327,7 +327,6 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParameterArrayAttr:$parameters,
-                       OptionalAttr<DictionaryAttr>:$oldParameters,
                        OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs Variadic<AnyType>);
 
@@ -345,21 +344,6 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
       build($_builder, $_state, module, $_builder.getStringAttr(name), inputs,
             parameters, sym_name);
     }]>,
-
-    /// TODO: Remove these builders that support the oldParameter format.
-    /// Create a instance that refers to a known module.
-    OpBuilder<(ins "Operation*":$module, "StringAttr":$name,
-                   "ArrayRef<Value>":$inputs,
-                   "DictionaryAttr":$oldParameters,
-                   CArg<"StringAttr", "{}">:$sym_name)>,
-    /// Create a instance that refers to a known module.
-    OpBuilder<(ins "Operation*":$module, "StringRef":$name,
-                   "ArrayRef<Value>":$inputs,
-                   "DictionaryAttr":$oldParameters,
-                   CArg<"StringAttr", "{}">:$sym_name), [{
-      build($_builder, $_state, module, $_builder.getStringAttr(name), inputs,
-            oldParameters, sym_name);
-    }]>
   ];
 
   let extraClassDeclaration = [{

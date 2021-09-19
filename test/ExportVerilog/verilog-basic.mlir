@@ -294,19 +294,22 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
 }
 
 hw.module.extern @MyExtModule(%in: i8) -> (out: i1) attributes {verilogName = "FooExtModule"}
-hw.module.extern @MyParameterizedExtModule(%in: i8) -> (out: i1)
+hw.module.extern @AParameterizedExtModule<CFG: none>(%in: i8) -> (out: i1)
 
 // CHECK-LABEL: module ExternMods
 hw.module @ExternMods(%a_in: i8) {
-  // CHECK: MyParameterizedExtModule #(
+  // CHECK: AParameterizedExtModule #(
   // CHECK:   .CFG(FOO)
   // CHECK: ) xyz2
-  hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {oldParameters = {CFG = #sv.verbatim.parameter<"FOO">}} 
-  // CHECK: MyParameterizedExtModule #(
+  hw.instance "xyz2" @AParameterizedExtModule<CFG: none = #sv.verbatim.parameter<"FOO">>(in: %a_in: i8) -> (out: i1)
+  // CHECK: AParameterizedExtModule #(
   // CHECK:   .CFG("STRING")
   // CHECK: ) xyz3
-  hw.instance "xyz3" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {oldParameters = {CFG = #sv.verbatim.parameter<"\"STRING\"">}} 
+  hw.instance "xyz3" @AParameterizedExtModule<CFG: none = #sv.verbatim.parameter<"\"STRING\"">>(in: %a_in: i8) -> (out: i1)
 }
+
+hw.module.extern @MyParameterizedExtModule<DEFAULT: i64, DEPTH: f64, FORMAT: none,
+     WIDTH: i8>(%in: i8) -> (out: i1)
 
 // CHECK-LABEL: module UseInstances
 hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
@@ -324,7 +327,10 @@ hw.module @UseInstances(%a_in: i8) -> (a_out1: i1, a_out2: i1) {
   // CHECK:   .out (a_out2)
   // CHECK: );
   %xyz.out = hw.instance "xyz" @MyExtModule(in: %a_in: i8) -> (out: i1)
-  %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule(in: %a_in: i8) -> (out: i1) {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.500000e+00 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+  %xyz2.out = hw.instance "xyz2" @MyParameterizedExtModule<
+     DEFAULT: i64 = 0, DEPTH: f64 = 3.500000e+00, FORMAT: none = "xyz_timeout=%d\0A",
+     WIDTH: i8 = 32
+  >(in: %a_in: i8) -> (out: i1)
   hw.output %xyz.out, %xyz2.out : i1, i1
 }
 
