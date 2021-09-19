@@ -14,6 +14,7 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVAttributes.h"
@@ -81,6 +82,8 @@ static void printParamValue(Attribute value, Operation *op, StringRef paramName,
     os << fpAttr.getValueAsDouble();
   } else if (auto verbatimParam = value.dyn_cast<VerbatimParameterAttr>()) {
     os << verbatimParam.getValue().getValue();
+  } else if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
+    os << parameterRef.getName().getValue();
   } else {
     os << "<<UNKNOWN MLIRATTR: " << value << ">>";
     emitError(op->getLoc(), "unknown parameter value '")

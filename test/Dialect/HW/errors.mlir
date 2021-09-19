@@ -239,4 +239,3 @@ hw.module @Use(%a: i8) -> (xx: i8) {
   %r0 = hw.instance "inst1" @p<p1: i42 = 4, p2: i1>(arg0: %a: i8) -> (out: i8)
   hw.output %r0: i8
 }
-

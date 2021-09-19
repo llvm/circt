@@ -27,6 +27,8 @@ def HWDialect : Dialect {
   let extraClassDeclaration = [{
     /// Register all HW types.
     void registerTypes();
+    /// Register all HW attributes.
+    void registerAttributes();
   }];
 }
 

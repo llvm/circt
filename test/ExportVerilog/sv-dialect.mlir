@@ -1,7 +1,8 @@
 // RUN: circt-translate %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF,exprInEventControl | FileCheck %s --strict-whitespace
 
-// CHECK-LABEL: module M1(
-hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
+// CHECK-LABEL: module M1
+// CHECK-NEXT:    #(parameter [41:0] param1) (
+hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.reg : !hw.inout<i42>
   %forceWire = sv.wire : !hw.inout<i1>
  
@@ -9,8 +10,8 @@ hw.module @M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: localparam [41:0] param_x = 42'd11;
   %param_x = sv.localparam : i42 { value = 11: i42 }
 
-  // CHECK: localparam [41:0] param_y = 42'd4;
-  %param_y = sv.localparam : i42 { value = 4: i42 }
+  // CHECK: localparam [41:0] param_y = xx;
+  %param_y = sv.localparam : i42 { value = #hw.parameter.ref<"xx">: i42 }
 
   // CHECK:      always @(posedge clock) begin
   sv.always posedge %clock {

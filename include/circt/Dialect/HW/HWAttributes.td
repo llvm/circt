@@ -42,3 +42,12 @@ def ParameterAttr : StructAttr<"ParameterAttr", HWDialect, [
 /// ensures that all the values are specified.
 def ParameterArrayAttr
   : TypedArrayAttrBase<ParameterAttr, "parameter array attribute">;
+
+/// This attribute models a reference to a named parameter within a module body.
+/// The type of the ParameterRef must always be the same as the type of the
+/// parameter being referenced.
+def ParameterRefAttr : AttrDef<HWDialect, "ParameterRef"> {
+  let summary = "Is a reference to a parameter value.";
+  let parameters = (ins "::mlir::StringAttr":$name, AttributeSelfTypeParameter<"">:$type);
+  let mnemonic = "parameter.ref";
+}

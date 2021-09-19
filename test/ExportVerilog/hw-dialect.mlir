@@ -859,3 +859,16 @@ hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8) {
 
   hw.output %r0, %r1, %r2, %r3: i8, i8, i8, i8
 }
+
+// CHECK-LABEL: module UseParameterValue
+hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out: i8) {
+  // CHECK-NEXT: #(parameter [41:0] xx) (
+
+  // CHECK:      parameters2 #(
+  // CHECK-NEXT:  .p1(xx)
+  // CHECK-NEXT: ) inst1 (
+  %a = hw.instance "inst1" @parameters2<p1: i42 = #hw.parameter.ref<"xx">, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
+
+  hw.output %a : i8
+}
+
