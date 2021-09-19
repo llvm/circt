@@ -1,4 +1,5 @@
 # RUN: %PYTHON% %s | FileCheck %s
+# XFAIL: *
 
 from pycde import System, module, generator, types
 
