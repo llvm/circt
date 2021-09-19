@@ -94,8 +94,12 @@ class _SpecializedModule:
     assert isinstance(self.parameters, mlir.ir.DictAttr)
 
     # Get the module name
-    if "module_name" in dir(cls) and isinstance(cls.module_name, str):
+    if extern_name is not None:
+      self.name = extern_name
+    elif "module_name" in dir(cls):
       self.name = cls.module_name
+    elif "get_module_name" in dir(cls):
+      self.name = cls.get_module_name()
     else:
       self.name = _create_module_name(cls.__name__, self.parameters)
 
@@ -126,6 +130,7 @@ class _SpecializedModule:
     from .system import System
     sys = System.current()
     symbol = sys.create_symbol(self.name)
+
     if self.extern_name is None:
       self.circt_mod = msft.MSFTModuleOp(symbol,
                                          self.input_ports,
@@ -141,7 +146,7 @@ class _SpecializedModule:
           self.output_ports,
           attributes={
               "parameters": self.parameters,
-              "verilogName": mlir.ir.StringAttr.get(self.name)
+              "verilogName": mlir.ir.StringAttr.get(self.extern_name)
           },
           loc=self.loc,
           ip=sys._get_ip())

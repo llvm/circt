@@ -20,7 +20,7 @@ def PolynomialCompute(coefficients: Coefficients):
 
     def __init__(self, name: str):
       """coefficients is in 'd' -> 'a' order."""
-      self.instanceName = name
+      self.instance_name = name
 
     @staticmethod
     def get_module_name():
@@ -97,23 +97,29 @@ poly.generate(iters=1)
 
 print("Printing...")
 poly.print()
-# CHECK-LABEL:  hw.module @pycde.PolynomialSystem() -> (y: i32)
-# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6"}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG1:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6"}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG2:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [1, 2, 3, 4, 5]}, module_name = "PolyComputeForCoeff_1_2_3_4_5"}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG3:%.+]] = "pycde.CoolPolynomialCompute"(%c23_i32{{.*}}) {coefficients = [4, 42], opNames = ["x"], parameters = {}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    hw.output [[REG0]] : i32
+# CHECK-LABEL: msft.module @PolynomialSystem {} () -> (y: i32) {
+# CHECK:         %example.y = msft.instance "example" @PolyComputeForCoeff_62_42_6(%c23_i32) : (i32) -> i32
+# CHECK:         %example2.y = msft.instance "example2" @PolyComputeForCoeff_62_42_6(%example.y) : (i32) -> i32
+# CHECK:         %example2.y_0 = msft.instance "example2" @PolyComputeForCoeff_1_2_3_4_5(%example.y) : (i32) -> i32
+# CHECK:         %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %{{.+}}: i32) -> (y: i32) {parameters = {}}
+# CHECK:         msft.output %example.y : i32
+# CHECK:       }
+# CHECK:       msft.module @PolyComputeForCoeff_62_42_6 {coefficients = {coeff = [62, 42, 6]}} (%x: i32) -> (y: i32)
+# CHECK:       msft.module @PolyComputeForCoeff_1_2_3_4_5 {coefficients = {coeff = [1, 2, 3, 4, 5]}} (%x: i32) -> (y: i32)
+# CHECK:       hw.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {parameters = {}, verilogName = "supercooldevice"}
 
 print("Generating rest...")
 poly.generate()
 
-print("Printing...")
+print("=== Post-generate IR...")
+poly.run_passes()
 poly.print()
-# CHECK-LABEL: hw.module @pycde.PolynomialSystem
-# CHECK: %example.y = hw.instance "example" @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32) {parameters = {}}
-# CHECK: %example2.y = hw.instance "example2" @PolyComputeForCoeff_62_42_6(x: %example.y: i32) -> (y: i32) {parameters = {}}
-# CHECK: %example2.y_0 = hw.instance "example2" @PolyComputeForCoeff_1_2_3_4_5(x: %example.y: i32) -> (y: i32) {parameters = {}}
-# CHECK: %pycde.CoolPolynomialCompute.y = hw.instance "pycde.CoolPolynomialCompute" @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32) {coefficients = [4, 42], parameters = {}}
+# CHECK-LABEL: === Post-generate IR...
+# CHECK: hw.module @PolynomialSystem
+# CHECK: %example.y = hw.instance "example" @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
+# CHECK: %example2.y = hw.instance "example2" @PolyComputeForCoeff_62_42_6(x: %example.y: i32) -> (y: i32)
+# CHECK: %example2_0.y = hw.instance "example2_0" @PolyComputeForCoeff_1_2_3_4_5(x: %example.y: i32) -> (y: i32)
+# CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
 # CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (y: i32)
 # CHECK: hw.constant 62
 # CHECK: hw.constant 42
