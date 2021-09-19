@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/Builders.h"
@@ -834,6 +835,66 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
       return emitOpError("parameter ") << param.name() << " must have a value";
   }
 
+  return success();
+}
+
+/// Check parameter specified by `value` to see if it is valid within the scope
+/// of the specified module `module`.  If not, emit an error at the location of
+/// `usingOp` and return failure, otherwise return success.
+static LogicalResult checkParameterInContext(Attribute value, HWModuleOp module,
+                                             Operation *usingOp) {
+  // Literals are always ok.  Their types are already known to match
+  // expectations.
+  if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
+      value.isa<StringAttr>() || value.isa<VerbatimParameterValueAttr>())
+    return success();
+
+  // Parameter references need more analysis to make sure they are valid within
+  // this module.
+  if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
+    auto nameAttr = parameterRef.getName();
+    // Find the corresponding attribute in the module.
+    for (auto param : module.parameters()) {
+      auto paramAttr = param.cast<ParameterAttr>();
+      if (paramAttr.name() != nameAttr)
+        continue;
+
+      // If the types match then the reference is ok.
+      if (paramAttr.type().getValue() == parameterRef.getType())
+        return success();
+
+      auto diag = usingOp->emitOpError("parameter ")
+                  << nameAttr << " used with type " << parameterRef.getType()
+                  << "; should have type " << paramAttr.type().getValue();
+      diag.attachNote(module->getLoc()) << "module declared here";
+      return failure();
+    }
+
+    auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
+    diag.attachNote(module->getLoc()) << "module declared here";
+    return failure();
+  }
+
+  return usingOp->emitOpError("invalid parameter value ") << value;
+}
+
+LogicalResult InstanceOp::verifyCustom() {
+  // Check that all the parameter values specified to the instance are
+  // structurally valid.
+  for (auto param : parameters()) {
+    auto paramAttr = param.cast<ParameterAttr>();
+    auto value = paramAttr.value();
+    assert(value && "SymbolUses verifier should already check this exists");
+
+    if (value.getType() != paramAttr.type().getValue())
+      return emitOpError("parameter ")
+             << paramAttr << " should have type " << paramAttr.type().getValue()
+             << "; has type " << value.getType();
+
+    if (failed(checkParameterInContext(
+            value, (*this)->getParentOfType<HWModuleOp>(), *this)))
+      return failure();
+  }
   return success();
 }
 

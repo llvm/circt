@@ -385,6 +385,8 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
       (*this)->setAttr("instanceName", name);
     }
 
+    LogicalResult verifyCustom();
+
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//
@@ -395,6 +397,7 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print$cppClass(p, *this);";
+  let verifier = "return this->verifyCustom();";
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,

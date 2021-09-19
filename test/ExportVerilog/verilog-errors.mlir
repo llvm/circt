@@ -29,6 +29,6 @@ hw.module @namechange(%casex: i4) -> (if: i4) {
 hw.module.extern @A<width: none> ()
 
 hw.module @B() {
-  // expected-error @+1 {{unknown parameter value 'width' = @Foo}}
+  // expected-error @+1 {{op invalid parameter value @Foo}}
   hw.instance "foo" @A<width: none = @Foo>() -> ()
 }
