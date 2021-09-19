@@ -711,24 +711,34 @@ Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {
   return topLevelModuleOp.lookupSymbol(moduleName());
 }
 
-// Helper function to verify instance op types
-static LogicalResult verifyInstanceOpTypes(InstanceOp op, Operation *module) {
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
+  if (module == nullptr)
+    return emitError("Cannot find module definition '") << moduleName() << "'";
+
+  // It must be some sort of module.
+  if (!isAnyModule(module))
+    return emitError("symbol reference '")
+           << moduleName() << "' isn't a module";
+
+  // Check that input and result types are consistent with the referenced
+  // module.
   // Emit an error message on the instance, with a note indicating which module
   // is being referenced.
   auto emitError =
       [&](std::function<void(InFlightDiagnostic & diag)> fn) -> LogicalResult {
-    auto diag = op.emitOpError();
+    auto diag = emitOpError();
     fn(diag);
     diag.attachNote(module->getLoc()) << "module declared here";
     return failure();
   };
 
   // Make sure our port and result names match.
-  ArrayAttr argNames = op.argNamesAttr();
+  ArrayAttr argNames = argNamesAttr();
   ArrayAttr modArgNames = module->getAttrOfType<ArrayAttr>("argNames");
 
   // Check operand types first.
-  auto numOperands = op->getNumOperands();
+  auto numOperands = getOperation()->getNumOperands();
   auto expectedOperandTypes = getModuleType(module).getInputs();
 
   if (expectedOperandTypes.size() != numOperands)
@@ -745,7 +755,7 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op, Operation *module) {
 
   for (size_t i = 0; i != numOperands; ++i) {
     auto expectedType = expectedOperandTypes[i];
-    auto operandType = op.getOperand(i).getType();
+    auto operandType = getOperand(i).getType();
     if (operandType != expectedType)
       return emitError([&](auto &diag) {
         diag << "operand type #" << i << " must be " << expectedType
@@ -760,9 +770,9 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op, Operation *module) {
   }
 
   // Check result types and labels.
-  auto numResults = op->getNumResults();
+  auto numResults = getOperation()->getNumResults();
   auto expectedResultTypes = getModuleType(module).getResults();
-  ArrayAttr resultNames = op.resultNamesAttr();
+  ArrayAttr resultNames = resultNamesAttr();
   ArrayAttr modResultNames = module->getAttrOfType<ArrayAttr>("resultNames");
 
   if (expectedResultTypes.size() != numResults)
@@ -778,7 +788,7 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op, Operation *module) {
 
   for (size_t i = 0; i != numResults; ++i) {
     auto expectedType = expectedResultTypes[i];
-    auto resultType = op.getResult(i).getType();
+    auto resultType = getResult(i).getType();
     if (resultType != expectedType)
       return emitError([&](auto &diag) {
         diag << "result type #" << i << " must be " << expectedType
@@ -793,7 +803,7 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op, Operation *module) {
   }
 
   // Check parameters match up.
-  ArrayAttr parameters = op.parameters();
+  ArrayAttr parameters = this->parameters();
   ArrayAttr modParameters = module->getAttrOfType<ArrayAttr>("parameters");
   auto numParameters = parameters.size();
   if (numParameters != modParameters.size())
@@ -821,26 +831,10 @@ static LogicalResult verifyInstanceOpTypes(InstanceOp op, Operation *module) {
     // All instance parameters must have a value.  Specify the same value as
     // a module's default value if you want the default.
     if (!param.value())
-      return op.emitOpError("parameter ")
-             << param.name() << " must have a value";
+      return emitOpError("parameter ") << param.name() << " must have a value";
   }
 
   return success();
-}
-
-LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *module = symbolTable.lookupNearestSymbolFrom(*this, moduleNameAttr());
-  if (module == nullptr)
-    return emitError("Cannot find module definition '") << moduleName() << "'";
-
-  // It must be some sort of module.
-  if (!isAnyModule(module))
-    return emitError("symbol reference '")
-           << moduleName() << "' isn't a module";
-
-  // Check that input and result types are consistent with the referenced
-  // module.
-  return verifyInstanceOpTypes(*this, module);
 }
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
