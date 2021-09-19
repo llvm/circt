@@ -229,7 +229,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 namespace {
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 
-  TypeLoweringVisitor(MLIRContext *context) : context(context) {}
+  TypeLoweringVisitor(MLIRContext *context, bool flattenVector) : context(context), flattenVector(flattenVector), memOpIdCounter(0) {}
   using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
@@ -275,14 +275,19 @@ private:
                                                     StringRef, ArrayAttr)>
                          clone);
   Value getSubWhatever(Value val, size_t index);
+  void mergeMemOps();
 
   MLIRContext *context;
+  const bool flattenVector;
 
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
 
   /// State to keep track of arguments and operations to clean up at the end.
   SmallVector<Operation *, 16> opsToRemove;
+
+  DenseMap<MemOp*, size_t> memOpId;
+  unsigned memOpIdCounter;
 };
 } // namespace
 
@@ -620,6 +625,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   SmallVector<FlatBundleFieldEntry> fields;
   if (!peelType(op.getDataType(), fields))
     return;
+  llvm::errs() << "\n memop::"<< op;
 
   SmallVector<MemOp> newMemories;
   SmallVector<Value> wireToOldResult;
@@ -635,9 +641,20 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     result.replaceAllUsesWith(wire.getResult());
   }
 
+    auto it = memOpId.find(&op);
+    size_t id ;
+    if (it != memOpId.end()) {
+      id = it->getSecond();
+      memOpId.erase(it);
+    }
+    else 
+      id = ++memOpIdCounter;
   // Memory for each field
-  for (auto field : fields)
-    newMemories.push_back(cloneMemWithNewType(builder, op, field));
+  for (auto field : fields) {
+    auto m = cloneMemWithNewType(builder, op, field);
+    newMemories.push_back(m);
+    memOpId[&m] = id;
+  }
 
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
@@ -754,6 +771,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Lower the operations.
   lowerBlock(body);
 
+
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
   // First get all the info for existing ports
@@ -820,6 +838,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Keep the module's type up-to-date.
   auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
   module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
+  mergeMemOps();
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
@@ -987,6 +1006,11 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   opsToRemove.push_back(op);
 }
 
+void TypeLoweringVisitor::mergeMemOps(){
+  for (auto memOp : memOpId){
+    llvm::errs() << "\n mem:"<< memOp.getFirst() << "\n = "<< memOp.second;
+  }
+}
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -1004,7 +1028,7 @@ void LowerTypesPass::runOnOperation() {
                  [&](Operation &op) { ops.push_back(&op); });
 
   mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
-    TypeLoweringVisitor(&getContext()).lowerModule(ops[index]);
+    TypeLoweringVisitor(&getContext(), flattenVector).lowerModule(ops[index]);
   });
 }
 

@@ -27,6 +27,11 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
     pass.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
+  let options = [
+    Option<"flattenVector", "flatten-vector", "bool", "false",
+           "Concat all elements of the vector data into a single element.">
+
+  ];
 }
 
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
