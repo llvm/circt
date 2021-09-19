@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 from typing import Union, Dict
+import typing
 
 from pycde.support import obj_to_value
 
@@ -71,6 +72,10 @@ def _create_module_name(name: str, params: mlir.ir.DictAttr):
   return ret.strip("_")
 
 
+# Two problems with this class:
+#   (1) It's not sensitive to the System.
+#   (2) It keeps references MLIR ops around.
+# Possible solution to both involves using System as storage.
 class _SpecializedModule:
   __slots__ = [
       "circt_mod", "name", "generators", "modcls", "loc", "input_ports",
@@ -183,6 +188,26 @@ def module(func_or_class):
       "@module decorator must be on class or parameterization function")
 
 
+class _ModuleCacheKey:
+
+  def __init__(self, func, params):
+    self.cls = func
+    if not isinstance(params, mlir.ir.DictAttr):
+      params = var_to_attribute(params)
+    self.params = params
+
+  def __eq__(self, other):
+    return self.cls == other.cls and self.params == other.params
+
+  def __hash__(self):
+    # TODO: using the string of the MLIR Attribute to compute the hash is a
+    # hack!
+    return hash((self.cls, str(self.params)))
+
+
+_module_cache: typing.Dict[_ModuleCacheKey, object] = {}
+
+
 class _parameterized_module:
   """Decorator for module classes or functions which parameterize module
   classes."""
@@ -218,15 +243,24 @@ class _parameterized_module:
     assert self.func is not None
     param_values = self.sig.bind(*args, **kwargs)
     param_values.apply_defaults()
-    cls = self.func(*args, **kwargs)
-    if cls is None:
-      raise ValueError("Parameterization function must return module class")
 
     # Function arguments which start with '_' don't become parameters.
     params = {
         n: v for n, v in param_values.arguments.items() if not n.startswith("_")
     }
-    return _module_base(cls, self.extern_name, params)
+
+    # Check cache
+    cache_key = _ModuleCacheKey(self.func, params)
+    if cache_key in _module_cache:
+      return _module_cache[cache_key]
+
+    cls = self.func(*args, **kwargs)
+    if cls is None:
+      raise ValueError("Parameterization function must return module class")
+
+    mod = _module_base(cls, self.extern_name, params)
+    _module_cache[cache_key] = mod
+    return mod
 
 
 def externmodule(to_be_wrapped, extern_name=None):
