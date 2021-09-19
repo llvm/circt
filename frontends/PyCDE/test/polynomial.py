@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pycde
-from pycde import (Input, Output, Parameter, module, externmodule, generator,
-                   types, dim)
+from pycde import (Input, Output, module, externmodule, generator, types, dim)
 from circt.dialects import comb, hw
 from circt.support import connect
 
@@ -105,8 +104,8 @@ poly.print()
 # CHECK:    [[REG3:%.+]] = "pycde.CoolPolynomialCompute"(%c23_i32{{.*}}) {coefficients = [4, 42], opNames = ["x"], parameters = {}, resultNames = ["y"]} : (i32) -> i32
 # CHECK:    hw.output [[REG0]] : i32
 
-print("Generating 2...")
-poly.generate(iters=1)
+print("Generating rest...")
+poly.generate()
 
 print("Printing...")
 poly.print()

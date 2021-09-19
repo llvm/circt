@@ -14,8 +14,7 @@ from .value import Value
 
 from circt import support
 from circt.dialects import hw, msft
-from circt.support import BackedgeBuilder
-import circt
+from circt.support import BackedgeBuilder, attribute_to_var
 
 import mlir.ir
 
@@ -47,6 +46,31 @@ class Input(ModuleDecl):
   pass
 
 
+def _create_module_name(name: str, params: mlir.ir.DictAttr):
+
+  def val_str(val):
+    if isinstance(val, mlir.ir.Type):
+      return create_type_string(val)
+    if isinstance(val, mlir.ir.Attribute):
+      return str(attribute_to_var(val))
+    return str(val)
+
+  param_strings = []
+  for p in params:
+    param_strings.append(p.name + val_str(p.attr))
+  for ps in sorted(param_strings):
+    name += "_" + ps
+
+  ret = ""
+  name = name.replace("!hw.", "")
+  for c in name:
+    if c.isalnum():
+      ret = ret + c
+    elif c not in "!>[],\"" and len(ret) > 0 and ret[-1] != "_":
+      ret = ret + "_"
+  return ret.strip("_")
+
+
 class _SpecializedModule:
   __slots__ = [
       "circt_mod", "name", "generators", "modcls", "loc", "input_ports",
@@ -59,15 +83,16 @@ class _SpecializedModule:
     self.circt_mod = None
     self.extern_name = extern_name
     self.loc = get_user_loc()
-    # Get the module name
-    if "module_name" in dir(cls) and isinstance(cls.module_name, str):
-      self.name = cls.module_name
-    else:
-      self.name = cls.__name__
 
     # Make sure 'parameters' is a DictAttr rather than a python value.
     self.parameters = var_to_attribute(parameters)
     assert isinstance(self.parameters, mlir.ir.DictAttr)
+
+    # Get the module name
+    if "module_name" in dir(cls) and isinstance(cls.module_name, str):
+      self.name = cls.module_name
+    else:
+      self.name = _create_module_name(cls.__name__, self.parameters)
 
     # Inputs, Outputs, and parameters are all class members. We must populate
     # them.  First, scan 'cls' for them.
@@ -95,8 +120,9 @@ class _SpecializedModule:
       return
     from .system import System
     sys = System.current()
+    symbol = sys.create_symbol(self.name)
     if self.extern_name is None:
-      self.circt_mod = msft.MSFTModuleOp(self.name,
+      self.circt_mod = msft.MSFTModuleOp(symbol,
                                          self.input_ports,
                                          self.output_ports,
                                          self.parameters,
@@ -105,10 +131,13 @@ class _SpecializedModule:
       sys._generate_queue.append(self)
     else:
       self.circt_mod = hw.HWModuleExternOp(
-          self.name,
+          symbol,
           self.input_ports,
           self.output_ports,
-          attributes={"parameters": self.parameters},
+          attributes={
+              "parameters": self.parameters,
+              "verilogName": mlir.ir.StringAttr.get(self.name)
+          },
           loc=self.loc,
           ip=sys._get_ip())
     self.add_accessors()
@@ -195,49 +224,9 @@ class _parameterized_module:
 
     # Function arguments which start with '_' don't become parameters.
     params = {
-        n: v
-        for n, v in param_values.arguments.items()
-        if not n.startswith("_")
+        n: v for n, v in param_values.arguments.items() if not n.startswith("_")
     }
-    return _module_base(cls, self.extern_name is not None, params)
-
-  # # Generator for external modules.
-  # def _instantiate(self, op):
-  #   # Get the port names from the attributes we stored them in.
-  #   op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
-  #   op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
-
-  #   if self.extern_mod is None:
-  #     # Find the top MLIR module.
-  #     mod = op
-  #     while mod.parent is not None:
-  #       mod = mod.parent
-
-  #     input_ports = [(n.value, o.type) for (n, o) in zip(op_names, op.operands)]
-  #     result_names_attrs = mlir.ir.ArrayAttr(op.attributes["resultNames"])
-  #     result_names = [mlir.ir.StringAttr(x) for x in result_names_attrs]
-  #     output_ports = [
-  #         (n.value, o.type) for (n, o) in zip(result_names, op.results)
-  #     ]
-
-  #     with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-  #       self.extern_mod = hw.HWModuleExternOp(self.extern_name, input_ports,
-  #                                             output_ports)
-
-  #   attrs = {
-  #       nattr.name: nattr.attr
-  #       for nattr in op.attributes
-  #       if nattr.name not in ["opNames", "resultNames"]
-  #   }
-
-  #   with mlir.ir.InsertionPoint(op):
-  #     mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
-  #     result_types = [x.type for x in op.results]
-  #     inst = self.extern_mod.create(op.name, **mapping,
-  #                                   results=result_types).operation
-  #     for (name, attr) in attrs.items():
-  #       inst.attributes[name] = attr
-  #     return inst
+    return _module_base(cls, self.extern_name, params)
 
 
 def externmodule(to_be_wrapped, extern_name=None):
@@ -350,82 +339,11 @@ class _Generate:
   def generate(self, specialized_mod: _SpecializedModule):
     """Build an HWModuleOp and run the generator as the body builder."""
 
-    # # Find the top MLIR module.
-    # mod = op
-    # while mod.parent is not None:
-    #   mod = mod.parent
-
-    # # Assemble the parameters.
-    # self.params = {
-    #     nattr.name: support.attribute_to_var(nattr.attr)
-    #     for nattr in mlir.ir.DictAttr(op.attributes["parameters"])
-    # }
-
-    # attrs = {
-    #     nattr.name: nattr.attr
-    #     for nattr in op.attributes
-    #     if nattr.name not in ["opNames", "resultNames", "parameters"]
-    # }
-
-    # # Build the replacement HWModuleOp in the outer module.
-    # if "module_name" in self.params:
-    #   module_name = self.params["module_name"]
-    # else:
-    #   module_name = self.create_module_name(op)
-    #   self.params["module_name"] = module_name
-    # module_name = self.sanitize(module_name)
-
-    # # Track generated modules so we don't create unnecessary duplicates of
-    # # modules that are structurally equivalent. If the module name exists in the
-    # # top level MLIR module, assume that we've already generated it.
-    # existing_module_names = [
-    #     o for o in mod.regions[0].blocks[0].operations
-    #     if mlir.ir.StringAttr(o.name).value == module_name
-    # ]
-
-    # if not existing_module_names:
     entry_block = specialized_mod.circt_mod.add_entry_block()
     with mlir.ir.InsertionPoint(entry_block), self.loc, BackedgeBuilder():
       args = BlockArgs(specialized_mod)
       outputs = self.gen_func(args)
       self._create_output_op(outputs, specialized_mod)
-
-    # else:
-    #   assert (len(existing_module_names) == 1)
-    #   mod = existing_module_names[0]
-
-    # # Build a replacement instance at the op to be replaced.
-    # op_names = [name for name, _ in self.modcls._input_ports]
-    # with mlir.ir.InsertionPoint(op):
-    #   mapping = {name: op.operands[i] for i, name in enumerate(op_names)}
-    #   inst = mod.create(op.name, **mapping).operation
-    #   for (name, attr) in attrs.items():
-    #     if name == "parameters":
-    #       continue
-    #     inst.attributes[name] = attr
-    #   return inst
-
-  def create_module_name(self, op):
-
-    def val_str(val):
-      if isinstance(val, mlir.ir.Type):
-        return create_type_string(val)
-      return str(val)
-
-    name = op.name
-    if len(self.params) > 0:
-      name += "_" + "_".join(
-          val_str(value) for (_, value) in sorted(self.params.items()))
-
-    return name
-
-  def sanitize(self, value):
-    sanitized_str = str(value)
-    for sub in ["!hw.", ">", "[", "]", ","]:
-      sanitized_str = sanitized_str.replace(sub, "")
-    for sub in ["<", "x", " "]:
-      sanitized_str = sanitized_str.replace(sub, "_")
-    return sanitized_str
 
   def _create_output_op(self, gen_ret, modcls):
     """Create the hw.OutputOp from the generator returns."""

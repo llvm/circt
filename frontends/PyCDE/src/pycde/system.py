@@ -23,25 +23,44 @@ _current_system = ContextVar("current_pycde_system")
 
 class System:
 
-  mod = None
+  __slots__ = [
+      "mod", "passed", "_old_system_token", "_symbols", "_generate_queue"
+  ]
+
   passes = [
       "lower-msft-to-hw", "lower-seq-to-sv", "hw-legalize-names",
       "hw.module(prettify-verilog)", "hw.module(hw-cleanup)"
   ]
-  passed = False
 
-  def __init__(self, modules=[]):
-    self.modules = modules
-    if not hasattr(self, "name"):
-      self.name = "__pycde_system_mod_instances"
-
+  def __init__(self, modules):
+    self.passed = False
     self.mod = ir.Module.create()
+    self._symbols: typing.Set[str] = None
     self._generate_queue = []
 
-    self.build()
+    with self:
+      [m._pycde_mod.create() for m in modules]
 
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
+
+  @property
+  def symbols(self) -> typing.Set[str]:
+    if self._symbols is None:
+      self._symbols = set()
+      for op in self.mod.operation.regions[0].blocks[0]:
+        if "sym_name" in op.attributes:
+          self._symbols.add(mlir.ir.StringAttr(op.attributes["sym_name"]).value)
+    return self._symbols
+
+  def create_symbol(self, basename: str) -> str:
+    ctr = 0
+    ret = basename
+    while ret in self.symbols:
+      ctr += 1
+      ret = basename + "_" + str(ctr)
+    self.symbols.add(ret)
+    return ret
 
   @staticmethod
   def current():
@@ -51,16 +70,12 @@ class System:
     return bb
 
   def __enter__(self):
-    self.old_system_token = _current_system.set(self)
+    self._old_system_token = _current_system.set(self)
 
   def __exit__(self, exc_type, exc_value, traceback):
     if exc_value is not None:
       return
-    _current_system.reset(self.old_system_token)
-
-  def build(self):
-    with self:
-      [m._pycde_mod.create() for m in self.modules]
+    _current_system.reset(self._old_system_token)
 
   @property
   def body(self):
@@ -75,11 +90,13 @@ class System:
                                             ("1" if short_names else "0") + "}")
     pm.run(self.mod)
 
-  def generate(self, generator_names=[], iters=100):
+  def generate(self, generator_names=[], iters=None):
+    i = 0
     with self:
-      while len(self._generate_queue) > 0:
+      while len(self._generate_queue) > 0 and (iters is None or i < iters):
         m = self._generate_queue.pop()
         m.generate()
+        i += 1
 
   def get_module(self, mod_name: str) -> hw.HWModuleOp:
     """Find the hw.module op with the specified name."""
@@ -106,6 +123,8 @@ class System:
     if self.passed:
       return
     pm = mlir.passmanager.PassManager.parse(",".join(self.passes))
+    # Invalidate the symbol cache
+    self._symbols = None
     pm.run(self.mod)
     types.declare_types(self.mod)
     self.passed = True
