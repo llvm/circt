@@ -98,24 +98,14 @@ class System:
         m.generate()
         i += 1
 
-  def get_module(self, mod_name: str) -> hw.HWModuleOp:
-    """Find the hw.module op with the specified name."""
-    for op in self.mod.body:
-      if not isinstance(op, (hw.HWModuleOp, hw.HWModuleExternOp)):
-        continue
-      op_modname = ir.StringAttr(op.attributes["sym_name"]).value
-      if op_modname == mod_name:
-        return op
-
   def get_instance(self, mod_name: str) -> Instance:
     assert self.passed
     root_mod = self.get_module(mod_name)
     return Instance(root_mod, None, None, self)
 
-  def walk_instances(self, mod_name: str, callback) -> None:
+  def walk_instances(self, root_mod, callback) -> None:
     """Walk the instance hierachy, calling 'callback' on each instance."""
     assert self.passed
-    root_mod = self.get_module(mod_name)
     inst = Instance(root_mod, None, None, self)
     inst.walk_instances(callback)
 
