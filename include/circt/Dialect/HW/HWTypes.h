@@ -14,6 +14,8 @@
 #ifndef CIRCT_DIALECT_HW_TYPES_H
 #define CIRCT_DIALECT_HW_TYPES_H
 
+#include "circt/Dialect/HW/HWDialect.h"
+
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Types.h"
 
@@ -58,6 +60,14 @@ int64_t getBitWidth(mlir::Type type);
 /// InOutType.  Unlike isHWValueType, this is not conservative, it only returns
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
+
+/// Construct and return a ParameterAttr with the given name and value. Get the
+/// type from the value.
+ParameterAttr getParameterWithValue(StringRef name, Attribute value);
+
+/// Construct and return a ParameterAttr with the given name and type. The
+/// ParameterAttr will not have a value.
+ParameterAttr getParameterNoValue(StringRef name, Type type);
 
 template <typename BaseTy>
 bool type_isa(Type type) {

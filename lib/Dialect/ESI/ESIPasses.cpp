@@ -231,9 +231,17 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpoint(Operation *symTable,
                       {dataInValid, PortDirection::INPUT, getI1Type(), 3},
                       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
                       {dataIn, PortDirection::INPUT, sendType, 4}};
+  SmallVector<Attribute, 8> params;
+  params.push_back(getParameterNoValue("ENDPOINT_ID", getI32Type()));
+  params.push_back(
+      getParameterNoValue("SEND_TYPE_ID", getIntegerType(64, false)));
+  params.push_back(getParameterNoValue("SEND_TYPE_SIZE_BITS", getI32Type()));
+  params.push_back(
+      getParameterNoValue("RECV_TYPE_ID", getIntegerType(64, false)));
+  params.push_back(getParameterNoValue("RECV_TYPE_SIZE_BITS", getI32Type()));
   endpoint = create<HWModuleExternOp>(
       constructUniqueSymbol(symTable, "Cosim_Endpoint"), ports,
-      "Cosim_Endpoint");
+      "Cosim_Endpoint", ArrayAttr::get(getContext(), params));
   return endpoint;
 }
 
@@ -1113,16 +1121,21 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
     return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
 
   // Set all the parameters.
-  NamedAttrList params;
-  params.set("ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID()));
-  params.set("SEND_TYPE_ID",
-             IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID()));
-  params.set("SEND_TYPE_SIZE_BITS",
-             rewriter.getI32IntegerAttr(sendTypeSchema.size()));
-  params.set("RECV_TYPE_ID",
-             IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID()));
-  params.set("RECV_TYPE_SIZE_BITS",
-             rewriter.getI32IntegerAttr(recvTypeSchema.size()));
+  SmallVector<Attribute, 8> params;
+  params.push_back(getParameterWithValue(
+      "ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID())));
+  params.push_back(getParameterWithValue(
+      "SEND_TYPE_ID",
+      IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID())));
+  params.push_back(
+      getParameterWithValue("SEND_TYPE_SIZE_BITS",
+                            rewriter.getI32IntegerAttr(sendTypeSchema.size())));
+  params.push_back(getParameterWithValue(
+      "RECV_TYPE_ID",
+      IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID())));
+  params.push_back(
+      getParameterWithValue("RECV_TYPE_SIZE_BITS",
+                            rewriter.getI32IntegerAttr(recvTypeSchema.size())));
 
   // Set up the egest route to drive the EP's send ports.
   ArrayType egestBitArrayType =
@@ -1152,7 +1165,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 
   auto cosimEpModule =
       rewriter.create<InstanceOp>(loc, endpoint, name, epInstInputs,
-                                  params.getDictionary(ctxt), StringAttr());
+                                  ArrayAttr::get(ctxt, params), StringAttr());
   sendReady.setValue(cosimEpModule.getResult(2));
 
   // Set up the injest path.

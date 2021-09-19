@@ -176,6 +176,27 @@ static void printHWElementType(Type element, DialectAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// Attribute helpers
+//===----------------------------------------------------------------------===//
+
+/// Construct and return a ParameterAttr with the given name and value. Get the
+/// type from the value.
+ParameterAttr circt::hw::getParameterWithValue(StringRef name,
+                                               Attribute value) {
+  auto *ctxt = value.getContext();
+  return ParameterAttr::get(StringAttr::get(ctxt, name),
+                            TypeAttr::get(value.getType()), value, ctxt);
+}
+
+/// Construct and return a ParameterAttr with the given name and type. The
+/// ParameterAttr will not have a value.
+ParameterAttr circt::hw::getParameterNoValue(StringRef name, Type type) {
+  auto *ctxt = type.getContext();
+  return ParameterAttr::get(StringAttr::get(ctxt, name), TypeAttr::get(type),
+                            {}, ctxt);
+}
+
+//===----------------------------------------------------------------------===//
 // Struct Type
 //===----------------------------------------------------------------------===//
 namespace circt {

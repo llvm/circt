@@ -86,7 +86,7 @@ static void printParamValue(Attribute value, Operation *op, StringRef paramName,
     emitError(op->getLoc(), "unknown parameter value '")
         << paramName << "' = " << value;
   }
-};
+}
 
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having

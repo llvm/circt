@@ -76,7 +76,7 @@ static ParseResult parseCommaSeparatedList(OpAsmParser &parser,
   case Delimiter::OptionalLessGreater:
     return parser.parseGreater();
   }
-};
+}
 
 //===----------------------------------------------------------------------===//
 // ConstantOp
