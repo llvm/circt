@@ -48,6 +48,15 @@ def ParameterArrayAttr
 /// parameter being referenced.
 def ParameterRefAttr : AttrDef<HWDialect, "ParameterRef"> {
   let summary = "Is a reference to a parameter value.";
-  let parameters = (ins "::mlir::StringAttr":$name, AttributeSelfTypeParameter<"">:$type);
+  let parameters = (ins "::mlir::StringAttr":$name,
+                        AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "parameter.ref";
+}
+
+def VerbatimParameterValueAttr : AttrDef<HWDialect, "VerbatimParameterValue"> {
+  let summary =
+    "Represents text to emit directly to SystemVerilog for a parameter";
+  let parameters = (ins "::mlir::StringAttr":$value,
+                        AttributeSelfTypeParameter<"">:$type);
+  let mnemonic = "verbatim.parameter.value";
 }

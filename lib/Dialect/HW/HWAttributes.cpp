@@ -52,15 +52,32 @@ void HWDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
 // ParameterRefAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParameterRefAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
+Attribute ParameterRefAttr::parse(MLIRContext *context, DialectAsmParser &p,
                                   Type type) {
   StringAttr name;
   if (p.parseLess() || p.parseAttribute(name) || p.parseGreater())
     return Attribute();
 
-  return ParameterRefAttr::get(ctxt, name, type);
+  return ParameterRefAttr::get(context, name, type);
 }
 
 void ParameterRefAttr::print(DialectAsmPrinter &p) const {
   p << "parameter.ref<" << getName() << ">";
+}
+
+//===----------------------------------------------------------------------===//
+// VerbatimParameterValueAttr
+//===----------------------------------------------------------------------===//
+
+Attribute VerbatimParameterValueAttr::parse(MLIRContext *context,
+                                            DialectAsmParser &p, Type type) {
+  StringAttr text;
+  if (p.parseLess() || p.parseAttribute(text) || p.parseGreater())
+    return Attribute();
+
+  return VerbatimParameterValueAttr::get(context, text, type);
+}
+
+void VerbatimParameterValueAttr::print(DialectAsmPrinter &p) const {
+  p << "verbatim.parameter.value<" << getValue() << ">";
 }

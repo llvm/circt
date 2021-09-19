@@ -17,7 +17,6 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
@@ -80,7 +79,8 @@ static void printParamValue(Attribute value, Operation *op, StringRef paramName,
   } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
     // TODO: relying on float printing to be precise is not a good idea.
     os << fpAttr.getValueAsDouble();
-  } else if (auto verbatimParam = value.dyn_cast<VerbatimParameterAttr>()) {
+  } else if (auto verbatimParam =
+                 value.dyn_cast<VerbatimParameterValueAttr>()) {
     os << verbatimParam.getValue().getValue();
   } else if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
     os << parameterRef.getName().getValue();

@@ -301,11 +301,11 @@ hw.module @ExternMods(%a_in: i8) {
   // CHECK: AParameterizedExtModule #(
   // CHECK:   .CFG(FOO)
   // CHECK: ) xyz2
-  hw.instance "xyz2" @AParameterizedExtModule<CFG: none = #sv.verbatim.parameter<"FOO">>(in: %a_in: i8) -> (out: i1)
+  hw.instance "xyz2" @AParameterizedExtModule<CFG: none = #hw.verbatim.parameter.value<"FOO">>(in: %a_in: i8) -> (out: i1)
   // CHECK: AParameterizedExtModule #(
   // CHECK:   .CFG("STRING")
   // CHECK: ) xyz3
-  hw.instance "xyz3" @AParameterizedExtModule<CFG: none = #sv.verbatim.parameter<"\"STRING\"">>(in: %a_in: i8) -> (out: i1)
+  hw.instance "xyz3" @AParameterizedExtModule<CFG: none = #hw.verbatim.parameter.value<"\"STRING\"">>(in: %a_in: i8) -> (out: i1)
 }
 
 hw.module.extern @MyParameterizedExtModule<DEFAULT: i64, DEPTH: f64, FORMAT: none,

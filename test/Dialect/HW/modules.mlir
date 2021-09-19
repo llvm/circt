@@ -54,7 +54,6 @@ hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {write_latenc
 // CHECK-LABEL: hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]
 // CHECK-NEXT: hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {ports = ["read", "write"], read_latency = 1 : i64, write_latency = 1 : i64}
 
-
 // CHECK-LABEL: hw.module.extern @AnonArg(i42)
 hw.module.extern @AnonArg(i42)
 
@@ -77,3 +76,13 @@ hw.module @UseParameterized(%a: i8) -> (xx: i8, yy: i8, zz: i8) {
   hw.output %r0, %r1, %r2: i8, i8, i8
 }
 
+
+// CHECK-LABEL: hw.module.extern @NoArg<param: i42>()
+hw.module.extern @NoArg<param: i42>()
+
+// CHECK-LABEL: hw.module @UseParameters<p1: i42>() {
+hw.module @UseParameters<p1: i42>() {
+  // CHECK: hw.instance "verbatimparam" @NoArg<param: i42 = #hw.verbatim.parameter.value<"\22FOO\22">>() -> () 
+  hw.instance "verbatimparam" @NoArg<param: i42 = #hw.verbatim.parameter.value<"\"FOO\"">>() -> ()
+  hw.output
+}
