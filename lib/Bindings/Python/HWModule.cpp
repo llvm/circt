@@ -29,6 +29,8 @@ using namespace mlir::python::adaptors;
 void circt::python::populateDialectHWSubmodule(py::module &m) {
   m.doc() = "HW dialect Python native extension";
 
+  m.def("get_bitwidth", &hwGetBitWidth);
+
   mlir_type_subclass(m, "ArrayType", hwTypeIsAArrayType)
       .def_classmethod("get",
                        [](py::object cls, MlirType elementType, intptr_t size) {

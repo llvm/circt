@@ -60,19 +60,17 @@ class ComplexPorts:
 
 top = System([Top])
 top.generate()
-top.generate()
+top.run_passes()
 top.print()
-# CHECK-LABEL: hw.module @pycde.Top()
+# CHECK-LABEL: hw.module @Top()
 # CHECK:  %c7_i12 = hw.constant 7 : i12
 # CHECK:  %0 = hw.struct_create (%c7_i12) : !hw.struct<foo: i12>
 # CHECK:  %c42_i8 = hw.constant 42 : i8
 # CHECK:  %c45_i8 = hw.constant 45 : i8
 # CHECK:  %1 = hw.array_create %c45_i8, %c42_i8 : i8
-# CHECK:  %c5_i8 = hw.constant 5 : i8
-# CHECK:  %c7_i12_0 = hw.constant 7 : i12
 # CHECK:  %2 = hw.struct_create (%c7_i12_0) : !hw.typealias<@pycde::@bar, !hw.struct<foo: i12>>
 
-# CHECK:  hw.module @pycde.Taps() -> (taps: !hw.array<3xi8>)
+# CHECK:  hw.module @Taps() -> (taps: !hw.array<3xi8>)
 # CHECK:    %c-53_i8 = hw.constant -53 : i8
 # CHECK:    %c100_i8 = hw.constant 100 : i8
 # CHECK:    %c23_i8 = hw.constant 23 : i8
@@ -82,7 +80,7 @@ top.print()
 sys = System([ComplexPorts])
 sys.generate()
 sys.print()
-# CHECK:  hw.module @pycde.Comple_Ports(%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32) {
+# CHECK:  msft.module @ComplexPorts {} (%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32) {
 # CHECK:    %c0_i2 = hw.constant 0 : i2
 # CHECK:    [[REG0:%.+]] = hw.array_get %data_in[%c0_i2] {name = "data_in__0"} : !hw.array<3xi32>
 # CHECK:    [[REGR1:%data_in__0__reg1]] = seq.compreg [[REG0]], %clk : i32
@@ -90,6 +88,6 @@ sys.print()
 # CHECK:    [[REG1:%.+]] = hw.array_get %data_in[%sel] : !hw.array<3xi32>
 # CHECK:    [[REG2:%.+]] = hw.struct_extract %struct_data_in["foo"] {name = "struct_data_in__foo"} : !hw.struct<foo: i36>
 # CHECK:    [[REG3:%.+]] = comb.extract [[REG2]] from 0 {name = "struct_data_in__foo_0upto32"} : (i36) -> i32
-# CHECK:    hw.output [[REGR2]], [[REG1]], [[REG3]] : i32, i32, i32
+# CHECK:    msft.output [[REGR2]], [[REG1]], [[REG3]] : i32, i32, i32
 
 sys.print_verilog()

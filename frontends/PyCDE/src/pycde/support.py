@@ -52,6 +52,12 @@ def get_user_loc() -> ir.Location:
   return ir.Location.unknown()
 
 
+def create_const_zero(type: ir.Type):
+  width = hw.get_bitwidth(type)
+  zero = hw.ConstantOp.create(ir.IntegerType.get_signless(width), 0)
+  return hw.BitcastOp(type, zero.result)
+
+
 class OpOperandConnect(support.OpOperand):
   """An OpOperand pycde extension which adds a connect method."""
 

@@ -10,7 +10,7 @@ from pycde.support import obj_to_value
 
 from .pycde_types import types
 from .support import (get_user_loc, var_to_attribute, OpOperandConnect,
-                      create_type_string)
+                      create_type_string, create_const_zero)
 from .value import Value
 
 from circt import support
@@ -324,7 +324,7 @@ def _module_base(cls, extern_name: str, params={}):
               raise ConnectionError(
                   "`no_connect` is only valid on extern module ports")
             else:
-              value = Value.get(hw.ConstantOp.create(types.i1, 0).result)
+              value = Value.get(create_const_zero(type))
           else:
             value = obj_to_value(input, type)
         else:
