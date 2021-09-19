@@ -95,20 +95,17 @@ def ConstantZOp : SVOp<"constantZ", [NoSideEffect, HasCustomSSAName]> {
 }
 
 def LocalParamOp : SVOp<"localparam",
-      [SameOperandsAndResultType, NoSideEffect, HasCustomSSAName]> {
+      [FirstAttrDerivedResultType, NoSideEffect, HasCustomSSAName]> {
   let summary = "Declare a localparam";
   let description = [{
     The localparam operation produces a `localparam` declaration. See SV spec
     6.20.4 p125.
-    ```
-      %result = hw.localparam %input : t1
-    ```
     }];
 
-  let arguments = (ins StrAttr:$name, HWIntegerType:$input);
-  let results = (outs HWIntegerType:$result);
+  let arguments = (ins AnyAttr:$value, StrAttr:$name);
+  let results = (outs HWValueType:$result);
 
   let assemblyFormat = [{
-    custom<ImplicitSSAName>(attr-dict) $input `:` type($result)
+    `:` type($result) custom<ImplicitSSAName>(attr-dict)
   }];
 }

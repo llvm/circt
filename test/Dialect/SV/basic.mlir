@@ -4,9 +4,9 @@
 // CHECK-LABEL: hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
 
-  %c11_i42 = hw.constant 11: i42
-  // CHECK: %param_x = sv.localparam %c11_i42 : i42
-  %param_x = sv.localparam %c11_i42 : i42
+  // CHECK: %param_x = sv.localparam : i42 {value = 11 : i42}
+  %param_x = sv.localparam : i42 {value = 11 : i42}
+
 
   // This corresponds to this block of system verilog code:
   //    always @(posedge arg0) begin

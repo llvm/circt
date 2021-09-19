@@ -2860,7 +2860,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
-      emitExpression(localparam.input(), opsForLocation, ForceEmitMultiUse);
+      printParamValue(localparam.value(), op, localparam.name(), os);
     }
 
     // Constants carry their assignment directly in the declaration.
