@@ -1026,24 +1026,17 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 }
 
 void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
-  ArrayRef<Operation *> allocOps;
-  std::vector<Operation *> opsToDelete = allocOps;
-
-  for (Block &block : f)
-    for (Operation &op : block) {
-      if (isa<memref::AllocOp>(op)) {
-        assert(op.getResult(0).hasOneUse());
-        for (auto &u : op.getResult(0).getUses()) {
-          Operation *useOp = u.getOwner();
-          if (isa<SinkOp>(useOp))
-            opsToDelete.push_back(&op);
-        }
-      }
+  std::vector<Operation *> opsToDelete;
+  for (auto allocOp : f.getOps<memref::AllocOp>()) {
+    assert(allocOp.getResult().hasOneUse());
+    for (auto &u : allocOp.getResult().getUses()) {
+      Operation *useOp = u.getOwner();
+      if (isa<SinkOp>(useOp))
+        opsToDelete.push_back(allocOp);
     }
-  for (unsigned i = 0, e = opsToDelete.size(); i != e; ++i) {
-    auto *op = opsToDelete[i];
-    rewriter.eraseOp(op);
   }
+
+  llvm::for_each(opsToDelete, [&](auto allocOp) { rewriter.eraseOp(allocOp); });
 }
 
 void removeRedundantSinks(handshake::FuncOp f,
