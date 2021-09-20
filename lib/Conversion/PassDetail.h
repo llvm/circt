@@ -13,6 +13,10 @@
 #include "mlir/Pass/Pass.h"
 
 namespace mlir {
+namespace scf {
+class SCFDialect;
+} // namespace scf
+
 namespace LLVM {
 class LLVMDialect;
 } // namespace LLVM

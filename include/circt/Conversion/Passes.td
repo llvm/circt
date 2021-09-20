@@ -16,6 +16,21 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
+// SCFToCalyx
+//===----------------------------------------------------------------------===//
+
+def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
+  let summary = "Lower SCF/Standard to Calyx";
+  let description = [{This pass lowers SCF / standard to calyx.}];
+  let constructor = "circt::createSCFToCalyxPass()";
+  let dependentDialects = [
+    "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect", "comb::CombDialect"];
+  let options =
+      [Option<"topLevelComponent", "top-level-component", "std::string", "",
+              "Identifier of top-level function to be the main component">];
+}
+
+//===----------------------------------------------------------------------===//
 // CalyxToHW
 //===----------------------------------------------------------------------===//
 
