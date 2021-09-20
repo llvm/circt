@@ -705,18 +705,17 @@ void insertFork(Operation *op, Value result, bool isLazy, OpBuilder &rewriter) {
 
 // Insert Fork Operation for every operation with more than one successor
 LogicalResult addForkOps(handshake::FuncOp f, OpBuilder &rewriter) {
-  for (Block &block : f) {
-    for (Operation &op : block) {
-      // Ignore terminators, and don't add Forks to Forks.
-      if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
-        for (auto result : op.getResults()) {
-          // If there is a result and it is used more than once
-          if (!result.use_empty() && !result.hasOneUse())
-            insertFork(&op, result, false, rewriter);
-        }
+  for (Operation &op : f.getOps()) {
+    // Ignore terminators, and don't add Forks to Forks.
+    if (op.getNumSuccessors() == 0 && !isa<ForkOp>(op)) {
+      for (auto result : op.getResults()) {
+        // If there is a result and it is used more than once
+        if (!result.use_empty() && !result.hasOneUse())
+          insertFork(&op, result, false, rewriter);
       }
     }
   }
+
   return success();
 }
 
@@ -800,22 +799,20 @@ void checkMergePredecessors(MergeLikeOpInterface mergeOp) {
 }
 
 void checkDataflowConversion(handshake::FuncOp f) {
-  for (Block &block : f) {
-    for (Operation &op : block) {
-      if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
-              mlir::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
-              op))
-        continue;
+  for (Operation &op : f.getOps()) {
+    if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
+            mlir::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
+            op))
+      continue;
 
-      if (op.getNumResults() > 0) {
-        for (auto result : op.getResults()) {
-          checkUseCount(&op, result);
-          checkSuccessorBlocks(&op, result);
-        }
+    if (op.getNumResults() > 0) {
+      for (auto result : op.getResults()) {
+        checkUseCount(&op, result);
+        checkSuccessorBlocks(&op, result);
       }
-      if (auto mergeOp = dyn_cast<MergeLikeOpInterface>(op); mergeOp)
-        checkMergePredecessors(mergeOp);
     }
+    if (auto mergeOp = dyn_cast<MergeLikeOpInterface>(op); mergeOp)
+      checkMergePredecessors(mergeOp);
   }
 }
 
@@ -867,76 +864,74 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
 
   // Replace load and store ops with the corresponding handshake ops
   // Need to traverse ops in blocks to store them in MemRefOps in program order
-  for (Block &block : f)
-    for (Operation &op : block) {
-      if (!isMemoryOp(&op))
-        continue;
+  for (Operation &op : f.getOps()) {
+    if (!isMemoryOp(&op))
+      continue;
 
-      rewriter.setInsertionPoint(&op);
-      Value memref = getOpMemRef(&op);
-      Operation *newOp = nullptr;
+    rewriter.setInsertionPoint(&op);
+    Value memref = getOpMemRef(&op);
+    Operation *newOp = nullptr;
 
-      llvm::TypeSwitch<Operation *>(&op)
-          .Case<memref::LoadOp>([&](auto loadOp) {
-            // Get operands which correspond to address indices
-            // This will add all operands except alloc
-            SmallVector<Value, 8> operands(loadOp.getIndices());
+    llvm::TypeSwitch<Operation *>(&op)
+        .Case<memref::LoadOp>([&](auto loadOp) {
+          // Get operands which correspond to address indices
+          // This will add all operands except alloc
+          SmallVector<Value, 8> operands(loadOp.getIndices());
 
-            newOp = rewriter.create<handshake::LoadOp>(op.getLoc(), memref,
-                                                       operands);
+          newOp =
+              rewriter.create<handshake::LoadOp>(op.getLoc(), memref, operands);
+          op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
+        })
+        .Case<memref::StoreOp>([&](auto storeOp) {
+          // Get operands which correspond to address indices
+          // This will add all operands except alloc and data
+          SmallVector<Value, 8> operands(storeOp.getIndices());
+
+          // Create new op where operands are store data and address indices
+          newOp = rewriter.create<handshake::StoreOp>(
+              op.getLoc(), storeOp.getValueToStore(), operands);
+        })
+        .Case<mlir::AffineReadOpInterface,
+              mlir::AffineWriteOpInterface>([&](auto) {
+          // Get essential memref access inforamtion.
+          MemRefAccess access(&op);
+          // The address of an affine load/store operation can be a result of
+          // an affine map, which is a linear combination of constants and
+          // parameters. Therefore, we should extract the affine map of each
+          // address and expand it into proper expressions that calculate the
+          // result.
+          AffineMap map;
+          if (auto loadOp = dyn_cast<mlir::AffineReadOpInterface>(op))
+            map = loadOp.getAffineMap();
+          else
+            map = dyn_cast<AffineWriteOpInterface>(op).getAffineMap();
+
+          // The returned object from expandAffineMap is an optional list of
+          // the expansion results from the given affine map, which are the
+          // actual address indices that can be used as operands for handshake
+          // LoadOp/StoreOp. The following processing requires it to be a
+          // valid result.
+          auto operands =
+              expandAffineMap(rewriter, op.getLoc(), map, access.indices);
+          assert(operands &&
+                 "Address operands of affine memref access cannot be reduced.");
+
+          if (isa<mlir::AffineReadOpInterface>(op)) {
+            newOp = rewriter.create<handshake::LoadOp>(
+                op.getLoc(), access.memref, *operands);
             op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-          })
-          .Case<memref::StoreOp>([&](auto storeOp) {
-            // Get operands which correspond to address indices
-            // This will add all operands except alloc and data
-            SmallVector<Value, 8> operands(storeOp.getIndices());
-
-            // Create new op where operands are store data and address indices
+          } else {
             newOp = rewriter.create<handshake::StoreOp>(
-                op.getLoc(), storeOp.getValueToStore(), operands);
-          })
-          .Case<mlir::AffineReadOpInterface,
-                mlir::AffineWriteOpInterface>([&](auto) {
-            // Get essential memref access inforamtion.
-            MemRefAccess access(&op);
-            // The address of an affine load/store operation can be a result of
-            // an affine map, which is a linear combination of constants and
-            // parameters. Therefore, we should extract the affine map of each
-            // address and expand it into proper expressions that calculate the
-            // result.
-            AffineMap map;
-            if (auto loadOp = dyn_cast<mlir::AffineReadOpInterface>(op))
-              map = loadOp.getAffineMap();
-            else
-              map = dyn_cast<AffineWriteOpInterface>(op).getAffineMap();
+                op.getLoc(), op.getOperand(0), *operands);
+          }
+        })
+        .Default([&](auto) {
+          op.emitError("Load/store operation cannot be handled.");
+        });
 
-            // The returned object from expandAffineMap is an optional list of
-            // the expansion results from the given affine map, which are the
-            // actual address indices that can be used as operands for handshake
-            // LoadOp/StoreOp. The following processing requires it to be a
-            // valid result.
-            auto operands =
-                expandAffineMap(rewriter, op.getLoc(), map, access.indices);
-            assert(
-                operands &&
-                "Address operands of affine memref access cannot be reduced.");
-
-            if (isa<mlir::AffineReadOpInterface>(op)) {
-              newOp = rewriter.create<handshake::LoadOp>(
-                  op.getLoc(), access.memref, *operands);
-              op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-            } else {
-              newOp = rewriter.create<handshake::StoreOp>(
-                  op.getLoc(), op.getOperand(0), *operands);
-            }
-          })
-          .Default([&](auto) {
-            op.emitError("Load/store operation cannot be handled.");
-          });
-
-      MemRefOps[memref].push_back(newOp);
-      opsToErase.push_back(&op);
-    }
+    MemRefOps[memref].push_back(newOp);
+    opsToErase.push_back(&op);
+  }
 
   // Erase old memory ops
   for (unsigned i = 0, e = opsToErase.size(); i != e; ++i) {
@@ -1788,21 +1783,20 @@ struct HandshakeAnalysisPass
       int branch_count = 0;
       int join_count = 0;
 
-      for (Block &block : func)
-        for (Operation &op : block) {
+      for (Operation &op : func.getOps()) {
 
-          if (isa<ForkOp>(op))
-            fork_count++;
-          else if (isa<MergeLikeOpInterface>(op))
-            merge_count++;
-          else if (isa<ConditionalBranchOp>(op))
-            branch_count++;
-          else if (isa<JoinOp>(op))
-            join_count++;
-          else if (!isa<handshake::BranchOp>(op) && !isa<SinkOp>(op) &&
-                   !isa<TerminatorOp>(op))
-            count++;
-        }
+        if (isa<ForkOp>(op))
+          fork_count++;
+        else if (isa<MergeLikeOpInterface>(op))
+          merge_count++;
+        else if (isa<ConditionalBranchOp>(op))
+          branch_count++;
+        else if (isa<JoinOp>(op))
+          join_count++;
+        else if (!isa<handshake::BranchOp>(op) && !isa<SinkOp>(op) &&
+                 !isa<TerminatorOp>(op))
+          count++;
+      }
 
       llvm::outs() << "// Fork count: " << fork_count << "\n";
       llvm::outs() << "// Merge count: " << merge_count << "\n";
