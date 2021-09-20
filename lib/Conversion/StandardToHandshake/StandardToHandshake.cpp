@@ -105,19 +105,20 @@ void dotPrint(FuncOp f, string name) {
     }
 
     for (Operation &op : block) {
-      if (op.getNumResults() > 0) {
-        for (auto result : op.getResults()) {
-          for (auto &u : result.getUses()) {
-            Operation *useOp = u.getOwner();
-            if (useOp->getBlock() == &block) {
-              outfile << "\t\t";
-              outfile << "\"" + op.getName().getStringRef().str() + "_" +
-                             to_string(opIDs[&op]) + "\"";
-              outfile << " -> ";
-              outfile << "\"" + useOp->getName().getStringRef().str() + "_" +
-                             to_string(opIDs[useOp]) + "\"";
-              outfile << "\n";
-            }
+      if (op.getNumResults() == 0)
+        continue;
+
+      for (auto result : op.getResults()) {
+        for (auto &u : result.getUses()) {
+          Operation *useOp = u.getOwner();
+          if (useOp->getBlock() == &block) {
+            outfile << "\t\t";
+            outfile << "\"" + op.getName().getStringRef().str() + "_" +
+                           to_string(opIDs[&op]) + "\"";
+            outfile << " -> ";
+            outfile << "\"" + useOp->getName().getStringRef().str() + "_" +
+                           to_string(opIDs[useOp]) + "\"";
+            outfile << "\n";
           }
         }
       }
@@ -126,19 +127,20 @@ void dotPrint(FuncOp f, string name) {
     outfile << "\t}\n";
 
     for (Operation &op : block) {
-      if (op.getNumResults() > 0) {
-        for (auto result : op.getResults()) {
-          for (auto &u : result.getUses()) {
-            Operation *useOp = u.getOwner();
-            if (useOp->getBlock() != &block) {
-              outfile << "\t\t";
-              outfile << "\"" + op.getName().getStringRef().str() + "_" +
-                             to_string(opIDs[&op]) + "\"";
-              outfile << " -> ";
-              outfile << "\"" + useOp->getName().getStringRef().str() + "_" +
-                             to_string(opIDs[useOp]) + "\"";
-              outfile << " [minlen = 3]\n";
-            }
+      if (op.getNumResults() == 0)
+        continue;
+
+      for (auto result : op.getResults()) {
+        for (auto &u : result.getUses()) {
+          Operation *useOp = u.getOwner();
+          if (useOp->getBlock() != &block) {
+            outfile << "\t\t";
+            outfile << "\"" + op.getName().getStringRef().str() + "_" +
+                           to_string(opIDs[&op]) + "\"";
+            outfile << " -> ";
+            outfile << "\"" + useOp->getName().getStringRef().str() + "_" +
+                           to_string(opIDs[useOp]) + "\"";
+            outfile << " [minlen = 3]\n";
           }
         }
       }
@@ -161,18 +163,18 @@ LogicalResult setControlOnlyPath(handshake::FuncOp f,
   // Replace original return ops with new returns with additional control input
   for (Block &block : f) {
     Operation *termOp = block.getTerminator();
-    if (isa<mlir::ReturnOp>(termOp)) {
+    if (!isa<mlir::ReturnOp>(termOp))
+      continue;
 
-      rewriter.setInsertionPoint(termOp);
+    rewriter.setInsertionPoint(termOp);
 
-      // Remove operands from old return op and add them to new op
-      SmallVector<Value, 8> operands(termOp->getOperands());
-      for (int i = 0, e = termOp->getNumOperands(); i < e; ++i)
-        termOp->eraseOperand(0);
-      assert(termOp->getNumOperands() == 0);
-      operands.push_back(startOp->getResult(0));
-      rewriter.replaceOpWithNewOp<handshake::ReturnOp>(termOp, operands);
-    }
+    // Remove operands from old return op and add them to new op
+    SmallVector<Value, 8> operands(termOp->getOperands());
+    for (int i = 0, e = termOp->getNumOperands(); i < e; ++i)
+      termOp->eraseOperand(0);
+    assert(termOp->getNumOperands() == 0);
+    operands.push_back(startOp->getResult(0));
+    rewriter.replaceOpWithNewOp<handshake::ReturnOp>(termOp, operands);
   }
   return success();
 }
@@ -587,16 +589,17 @@ LogicalResult addBranchOps(handshake::FuncOp f,
         else if (isa<mlir::BranchOp>(termOp))
           newOp = rewriter.create<handshake::BranchOp>(termOp->getLoc(), val);
 
-        if (newOp != nullptr) {
-          for (int i = 0, e = block.getNumSuccessors(); i < e; ++i) {
-            Block *succ = block.getSuccessor(i);
-            Value res = getSuccResult(termOp, newOp, succ);
+        if (newOp == nullptr)
+          continue;
 
-            for (auto &u : val.getUses()) {
-              if (u.getOwner()->getBlock() == succ) {
-                u.getOwner()->replaceUsesOfWith(val, res);
-                break;
-              }
+        for (int i = 0, e = block.getNumSuccessors(); i < e; ++i) {
+          Block *succ = block.getSuccessor(i);
+          Value res = getSuccResult(termOp, newOp, succ);
+
+          for (auto &u : val.getUses()) {
+            if (u.getOwner()->getBlock() == succ) {
+              u.getOwner()->replaceUsesOfWith(val, res);
+              break;
             }
           }
         }
@@ -609,17 +612,18 @@ LogicalResult addBranchOps(handshake::FuncOp f,
   // in Verifier.cpp)
   for (Block &block : f) {
     Operation *termOp = block.getTerminator();
-    if (isa<mlir::CondBranchOp>(termOp) || isa<mlir::BranchOp>(termOp)) {
-      SmallVector<mlir::Block *, 8> results(block.getSuccessors());
-      rewriter.setInsertionPointToEnd(&block);
-      rewriter.create<handshake::TerminatorOp>(termOp->getLoc(), results);
+    if (!(isa<mlir::CondBranchOp>(termOp) || isa<mlir::BranchOp>(termOp)))
+      continue;
 
-      // Remove the Operands to keep the single-use rule.
-      for (int i = 0, e = termOp->getNumOperands(); i < e; ++i)
-        termOp->eraseOperand(0);
-      assert(termOp->getNumOperands() == 0);
-      rewriter.eraseOp(termOp);
-    }
+    SmallVector<mlir::Block *, 8> results(block.getSuccessors());
+    rewriter.setInsertionPointToEnd(&block);
+    rewriter.create<handshake::TerminatorOp>(termOp->getLoc(), results);
+
+    // Remove the Operands to keep the single-use rule.
+    for (int i = 0, e = termOp->getNumOperands(); i < e; ++i)
+      termOp->eraseOperand(0);
+    assert(termOp->getNumOperands() == 0);
+    rewriter.eraseOp(termOp);
   }
   return success();
 }
@@ -634,17 +638,18 @@ LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
       // later remove We have already replaced these ops with their handshake
       // equivalents
       // TODO: should we use other indicator for op that has been erased?
-      if (!isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
-               mlir::AffineReadOpInterface, mlir::AffineForOp>(op)) {
+      if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
+              mlir::AffineReadOpInterface, mlir::AffineForOp>(op))
+        continue;
 
-        if (op.getNumResults() > 0) {
-          for (auto result : op.getResults())
-            if (result.use_empty()) {
-              rewriter.setInsertionPointAfter(&op);
-              rewriter.create<SinkOp>(op.getLoc(), result);
-            }
+      if (op.getNumResults() == 0)
+        continue;
+
+      for (auto result : op.getResults())
+        if (result.use_empty()) {
+          rewriter.setInsertionPointAfter(&op);
+          rewriter.create<SinkOp>(op.getLoc(), result);
         }
-      }
     }
   }
   return success();
@@ -813,18 +818,19 @@ void checkMergePredecessors(MergeLikeOpInterface mergeOp) {
 void checkDataflowConversion(handshake::FuncOp f) {
   for (Block &block : f) {
     for (Operation &op : block) {
-      if (!isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
-               mlir::ConstantOp, mlir::AffineReadOpInterface,
-               mlir::AffineForOp>(op)) {
-        if (op.getNumResults() > 0) {
-          for (auto result : op.getResults()) {
-            checkUseCount(&op, result);
-            checkSuccessorBlocks(&op, result);
-          }
+      if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
+              mlir::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
+              op))
+        continue;
+
+      if (op.getNumResults() > 0) {
+        for (auto result : op.getResults()) {
+          checkUseCount(&op, result);
+          checkSuccessorBlocks(&op, result);
         }
-        if (auto mergeOp = dyn_cast<MergeLikeOpInterface>(op); mergeOp)
-          checkMergePredecessors(mergeOp);
       }
+      if (auto mergeOp = dyn_cast<MergeLikeOpInterface>(op); mergeOp)
+        checkMergePredecessors(mergeOp);
     }
   }
 }
@@ -879,68 +885,69 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
   // Need to traverse ops in blocks to store them in MemRefOps in program order
   for (Block &block : f)
     for (Operation &op : block) {
-      if (isMemoryOp(&op)) {
-        rewriter.setInsertionPoint(&op);
-        Value memref = getOpMemRef(&op);
-        Operation *newOp = nullptr;
+      if (!isMemoryOp(&op))
+        continue;
 
-        if (memref::LoadOp loadOp = dyn_cast<memref::LoadOp>(op)) {
-          // Get operands which correspond to address indices
-          // This will add all operands except alloc
-          SmallVector<Value, 8> operands(loadOp.getIndices());
+      rewriter.setInsertionPoint(&op);
+      Value memref = getOpMemRef(&op);
+      Operation *newOp = nullptr;
 
-          newOp =
-              rewriter.create<handshake::LoadOp>(op.getLoc(), memref, operands);
+      if (memref::LoadOp loadOp = dyn_cast<memref::LoadOp>(op)) {
+        // Get operands which correspond to address indices
+        // This will add all operands except alloc
+        SmallVector<Value, 8> operands(loadOp.getIndices());
+
+        newOp =
+            rewriter.create<handshake::LoadOp>(op.getLoc(), memref, operands);
+        op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
+      } else if (memref::StoreOp storeOp = dyn_cast<memref::StoreOp>(op)) {
+        // Get operands which correspond to address indices
+        // This will add all operands except alloc and data
+        SmallVector<Value, 8> operands(storeOp.getIndices());
+
+        // Create new op where operands are store data and address indices
+        newOp = rewriter.create<handshake::StoreOp>(
+            op.getLoc(), storeOp.getValueToStore(), operands);
+      } else if (isa<mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(
+                     op)) {
+        // Get essential memref access inforamtion.
+        MemRefAccess access(&op);
+        // The address of an affine load/store operation can be a result of an
+        // affine map, which is a linear combination of constants and
+        // parameters. Therefore, we should extract the affine map of each
+        // address and expand it into proper expressions that calculate the
+        // result.
+        AffineMap map;
+        if (auto loadOp = dyn_cast<mlir::AffineReadOpInterface>(op))
+          map = loadOp.getAffineMap();
+        else
+          map = dyn_cast<AffineWriteOpInterface>(op).getAffineMap();
+
+        // The returned object from expandAffineMap is an optional list of the
+        // expansion results from the given affine map, which are the actual
+        // address indices that can be used as operands for handshake
+        // LoadOp/StoreOp. The following processing requires it to be a valid
+        // result.
+        auto operands =
+            expandAffineMap(rewriter, op.getLoc(), map, access.indices);
+        assert(operands &&
+               "Address operands of affine memref access cannot be reduced.");
+
+        if (isa<mlir::AffineReadOpInterface>(op)) {
+          newOp = rewriter.create<handshake::LoadOp>(op.getLoc(), access.memref,
+                                                     *operands);
           op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-        } else if (memref::StoreOp storeOp = dyn_cast<memref::StoreOp>(op)) {
-          // Get operands which correspond to address indices
-          // This will add all operands except alloc and data
-          SmallVector<Value, 8> operands(storeOp.getIndices());
-
-          // Create new op where operands are store data and address indices
-          newOp = rewriter.create<handshake::StoreOp>(
-              op.getLoc(), storeOp.getValueToStore(), operands);
-        } else if (isa<mlir::AffineReadOpInterface,
-                       mlir::AffineWriteOpInterface>(op)) {
-          // Get essential memref access inforamtion.
-          MemRefAccess access(&op);
-          // The address of an affine load/store operation can be a result of an
-          // affine map, which is a linear combination of constants and
-          // parameters. Therefore, we should extract the affine map of each
-          // address and expand it into proper expressions that calculate the
-          // result.
-          AffineMap map;
-          if (auto loadOp = dyn_cast<mlir::AffineReadOpInterface>(op))
-            map = loadOp.getAffineMap();
-          else
-            map = dyn_cast<AffineWriteOpInterface>(op).getAffineMap();
-
-          // The returned object from expandAffineMap is an optional list of the
-          // expansion results from the given affine map, which are the actual
-          // address indices that can be used as operands for handshake
-          // LoadOp/StoreOp. The following processing requires it to be a valid
-          // result.
-          auto operands =
-              expandAffineMap(rewriter, op.getLoc(), map, access.indices);
-          assert(operands &&
-                 "Address operands of affine memref access cannot be reduced.");
-
-          if (isa<mlir::AffineReadOpInterface>(op)) {
-            newOp = rewriter.create<handshake::LoadOp>(
-                op.getLoc(), access.memref, *operands);
-            op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-          } else {
-            newOp = rewriter.create<handshake::StoreOp>(
-                op.getLoc(), op.getOperand(0), *operands);
-          }
         } else {
-          op.emitError("Load/store operation cannot be handled.");
+          newOp = rewriter.create<handshake::StoreOp>(
+              op.getLoc(), op.getOperand(0), *operands);
         }
-
-        MemRefOps[memref].push_back(newOp);
-
-        opsToErase.push_back(&op);
+      } else {
+        op.emitError("Load/store operation cannot be handled.");
       }
+
+      MemRefOps[memref].push_back(newOp);
+
+      opsToErase.push_back(&op);
     }
 
   // Erase old memory ops
@@ -1038,10 +1045,12 @@ void removeRedundantSinks(handshake::FuncOp f,
 
   for (Block &block : f)
     for (Operation &op : block) {
-      if (isa<SinkOp>(op))
-        if (!op.getOperand(0).hasOneUse() ||
-            isa<memref::AllocOp>(op.getOperand(0).getDefiningOp()))
-          redundantSinks.push_back(&op);
+      if (!isa<SinkOp>(op))
+        continue;
+
+      if (!op.getOperand(0).hasOneUse() ||
+          isa<memref::AllocOp>(op.getOperand(0).getDefiningOp()))
+        redundantSinks.push_back(&op);
     }
   for (unsigned i = 0, e = redundantSinks.size(); i != e; ++i) {
     auto *op = redundantSinks[i];
