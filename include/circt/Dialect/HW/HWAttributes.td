@@ -53,6 +53,12 @@ def ParameterAttr : AttrDef<HWDialect, "Parameter"> {
       "return get(StringAttr::get(value.getContext(), name), value);">
   ];
 
+  let extraClassDeclaration = [{
+    static ParameterAttr getWithName(ParameterAttr param,
+                                     ::mlir::StringAttr name) {
+      return get(param.getContext(), name, param.getType(), param.getValue());
+    }
+  }];
 }
 
 /// An array of ParameterAttr's that may or may not have a 'value' specified,

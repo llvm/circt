@@ -152,13 +152,6 @@ void HWLegalizeNamesPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-/// Return the specified ParameterAttr with a different name.
-static ParameterAttr getParameterWithName(ParameterAttr param,
-                                          StringAttr name) {
-  return ParameterAttr::get(param.getContext(), name, param.getType(),
-                            param.getValue());
-}
-
 /// Check to see if the port names of the specified module conflict with
 /// keywords or themselves.  If so, rename them and return true, otherwise
 /// return false.
@@ -199,7 +192,7 @@ bool HWLegalizeNamesPass::legalizePortNames(
       parameters.push_back(param);
     else {
       auto newNameAttr = StringAttr::get(paramAttr.getContext(), newName);
-      parameters.push_back(getParameterWithName(paramAttr, newNameAttr));
+      parameters.push_back(ParameterAttr::getWithName(paramAttr, newNameAttr));
       changedParameters = true;
       renamedParameterInfo[std::make_pair(module, paramAttr.getName())] =
           newNameAttr;
@@ -260,7 +253,8 @@ static void updateInstanceForChangedModule(InstanceOp inst, HWModuleOp module) {
     if (instParam.getName() == modParam.getName())
       newAttrs.push_back(instParam);
     else
-      newAttrs.push_back(getParameterWithName(instParam, modParam.getName()));
+      newAttrs.push_back(
+          ParameterAttr::getWithName(instParam, modParam.getName()));
   }
   inst.parametersAttr(ArrayAttr::get(inst.getContext(), newAttrs));
 }
