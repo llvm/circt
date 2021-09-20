@@ -32,7 +32,9 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
+
 #include <map>
 
 using namespace mlir;
@@ -892,61 +894,65 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
       Value memref = getOpMemRef(&op);
       Operation *newOp = nullptr;
 
-      if (memref::LoadOp loadOp = dyn_cast<memref::LoadOp>(op)) {
-        // Get operands which correspond to address indices
-        // This will add all operands except alloc
-        SmallVector<Value, 8> operands(loadOp.getIndices());
+      llvm::TypeSwitch<Operation *>(&op)
+          .Case<memref::LoadOp>([&](auto loadOp) {
+            // Get operands which correspond to address indices
+            // This will add all operands except alloc
+            SmallVector<Value, 8> operands(loadOp.getIndices());
 
-        newOp =
-            rewriter.create<handshake::LoadOp>(op.getLoc(), memref, operands);
-        op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-      } else if (memref::StoreOp storeOp = dyn_cast<memref::StoreOp>(op)) {
-        // Get operands which correspond to address indices
-        // This will add all operands except alloc and data
-        SmallVector<Value, 8> operands(storeOp.getIndices());
+            newOp = rewriter.create<handshake::LoadOp>(op.getLoc(), memref,
+                                                       operands);
+            op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
+          })
+          .Case<memref::StoreOp>([&](auto storeOp) {
+            // Get operands which correspond to address indices
+            // This will add all operands except alloc and data
+            SmallVector<Value, 8> operands(storeOp.getIndices());
 
-        // Create new op where operands are store data and address indices
-        newOp = rewriter.create<handshake::StoreOp>(
-            op.getLoc(), storeOp.getValueToStore(), operands);
-      } else if (isa<mlir::AffineReadOpInterface, mlir::AffineWriteOpInterface>(
-                     op)) {
-        // Get essential memref access inforamtion.
-        MemRefAccess access(&op);
-        // The address of an affine load/store operation can be a result of an
-        // affine map, which is a linear combination of constants and
-        // parameters. Therefore, we should extract the affine map of each
-        // address and expand it into proper expressions that calculate the
-        // result.
-        AffineMap map;
-        if (auto loadOp = dyn_cast<mlir::AffineReadOpInterface>(op))
-          map = loadOp.getAffineMap();
-        else
-          map = dyn_cast<AffineWriteOpInterface>(op).getAffineMap();
+            // Create new op where operands are store data and address indices
+            newOp = rewriter.create<handshake::StoreOp>(
+                op.getLoc(), storeOp.getValueToStore(), operands);
+          })
+          .Case<mlir::AffineReadOpInterface,
+                mlir::AffineWriteOpInterface>([&](auto) {
+            // Get essential memref access inforamtion.
+            MemRefAccess access(&op);
+            // The address of an affine load/store operation can be a result of
+            // an affine map, which is a linear combination of constants and
+            // parameters. Therefore, we should extract the affine map of each
+            // address and expand it into proper expressions that calculate the
+            // result.
+            AffineMap map;
+            if (auto loadOp = dyn_cast<mlir::AffineReadOpInterface>(op))
+              map = loadOp.getAffineMap();
+            else
+              map = dyn_cast<AffineWriteOpInterface>(op).getAffineMap();
 
-        // The returned object from expandAffineMap is an optional list of the
-        // expansion results from the given affine map, which are the actual
-        // address indices that can be used as operands for handshake
-        // LoadOp/StoreOp. The following processing requires it to be a valid
-        // result.
-        auto operands =
-            expandAffineMap(rewriter, op.getLoc(), map, access.indices);
-        assert(operands &&
-               "Address operands of affine memref access cannot be reduced.");
+            // The returned object from expandAffineMap is an optional list of
+            // the expansion results from the given affine map, which are the
+            // actual address indices that can be used as operands for handshake
+            // LoadOp/StoreOp. The following processing requires it to be a
+            // valid result.
+            auto operands =
+                expandAffineMap(rewriter, op.getLoc(), map, access.indices);
+            assert(
+                operands &&
+                "Address operands of affine memref access cannot be reduced.");
 
-        if (isa<mlir::AffineReadOpInterface>(op)) {
-          newOp = rewriter.create<handshake::LoadOp>(op.getLoc(), access.memref,
-                                                     *operands);
-          op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
-        } else {
-          newOp = rewriter.create<handshake::StoreOp>(
-              op.getLoc(), op.getOperand(0), *operands);
-        }
-      } else {
-        op.emitError("Load/store operation cannot be handled.");
-      }
+            if (isa<mlir::AffineReadOpInterface>(op)) {
+              newOp = rewriter.create<handshake::LoadOp>(
+                  op.getLoc(), access.memref, *operands);
+              op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
+            } else {
+              newOp = rewriter.create<handshake::StoreOp>(
+                  op.getLoc(), op.getOperand(0), *operands);
+            }
+          })
+          .Default([&](auto) {
+            op.emitError("Load/store operation cannot be handled.");
+          });
 
       MemRefOps[memref].push_back(newOp);
-
       opsToErase.push_back(&op);
     }
 
