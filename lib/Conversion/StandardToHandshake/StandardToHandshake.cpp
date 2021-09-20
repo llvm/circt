@@ -426,25 +426,21 @@ void removeBlockOperands(handshake::FuncOp f) {
   }
 }
 
-Operation *getControlMerge(Block *block) {
-  // Returns CMerge of block
-  for (Operation &op : *block) {
-    if (isa<ControlMergeOp>(op)) {
-      return &op;
-    }
-  }
-  return nullptr;
+/// Returns the first occurance of an operation of type TOp, else, returns
+/// null op.
+template <typename TOp>
+Operation *getFirstOp(Block *block) {
+  auto ops = block->getOps<TOp>();
+  if (ops.empty())
+    return nullptr;
+  return *ops.begin();
 }
 
-Operation *getStartOp(Block *block) {
-  // Returns CMerge of block
-  for (Operation &op : *block) {
-    if (isa<StartOp>(op)) {
-      return &op;
-    }
-  }
-  return nullptr;
+Operation *getControlMerge(Block *block) {
+  return getFirstOp<ControlMergeOp>(block);
 }
+
+Operation *getStartOp(Block *block) { return getFirstOp<StartOp>(block); }
 
 void reconnectMergeOps(handshake::FuncOp f, BlockOps blockMerges,
                        blockArgPairs &mergePairs) {
