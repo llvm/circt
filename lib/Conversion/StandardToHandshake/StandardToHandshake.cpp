@@ -185,16 +185,12 @@ BlockValues getBlockUses(handshake::FuncOp f) {
   // Returns map of values used in block but defined outside of block
   // For liveness analysis
   BlockValues uses;
-
   for (Block &block : f) {
-
     // Operands of operations in b which do not originate from operations or
     // arguments of b
     for (Operation &op : block) {
       for (int i = 0, e = op.getNumOperands(); i < e; ++i) {
-
         Block *operandBlock;
-
         if (op.getOperand(i).isa<BlockArgument>()) {
           // Operand is block argument, get its owner block
           operandBlock = op.getOperand(i).cast<BlockArgument>().getOwner();
@@ -204,7 +200,6 @@ BlockValues getBlockUses(handshake::FuncOp f) {
           assert(operand != NULL);
           operandBlock = operand->getBlock();
         }
-
         // If operand defined in some other block, add to uses
         if (operandBlock != &block)
           // Add only unique uses
@@ -221,9 +216,7 @@ BlockValues getBlockDefs(handshake::FuncOp f) {
   // Returns map of values defined in each block
   // For liveness analysis
   BlockValues defs;
-
   for (Block &block : f) {
-
     // Values produced by operations in b
     for (Operation &op : block) {
       if (op.getNumResults() > 0) {
@@ -231,7 +224,6 @@ BlockValues getBlockDefs(handshake::FuncOp f) {
           defs[&block].push_back(result);
       }
     }
-
     // Argument values of b
     for (auto &arg : block.getArguments())
       defs[&block].push_back(arg);
@@ -255,7 +247,6 @@ std::vector<Value> vectorUnion(ArrayRef<Value> v1, ArrayRef<Value> v2) {
 std::vector<Value> vectorDiff(ArrayRef<Value> v1, ArrayRef<Value> v2) {
   // Returns v1 - v2
   std::vector<Value> d;
-
   for (int i = 0, e = v1.size(); i < e; ++i) {
     Value val = v1[i];
     if (std::find(v2.begin(), v2.end(), val) == v2.end())
@@ -305,7 +296,6 @@ BlockValues livenessAnalysis(handshake::FuncOp f) {
       }
     }
   }
-
   return blockLiveIns;
 }
 
@@ -344,17 +334,14 @@ BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
                         blockArgPairs &mergePairs,
                         ConversionPatternRewriter &rewriter) {
   BlockOps blockMerges;
-
   for (Block &block : f) {
     // Live-ins identified by liveness analysis
     rewriter.setInsertionPointToStart(&block);
-
     for (auto &val : blockLiveIns[&block]) {
       Operation *newOp = insertMerge(&block, val, rewriter);
       blockMerges[&block].push_back(newOp);
       mergePairs[val] = newOp;
     }
-
     // Block arguments are not in livein list as they are defined inside the
     // block
     for (auto &arg : block.getArguments()) {
@@ -363,7 +350,6 @@ BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
       mergePairs[arg] = newOp;
     }
   }
-
   return blockMerges;
 }
 
@@ -375,7 +361,6 @@ bool blockHasSrcOp(Value val, Block *block) {
 
   auto *op = val.getDefiningOp();
   assert(op != NULL);
-
   return (op->getBlock() == block);
 }
 
@@ -384,7 +369,6 @@ Value getMergeOperand(Operation *op, Block *predBlock, BlockOps blockMerges) {
   // Helper value (defining value of merge) to identify Merges which propagate
   // the same defining value
   Value srcVal = op->getOperand(0);
-
   Block *block = op->getBlock();
 
   // Value comes from predecessor block (i.e., not an argument of this block)
@@ -456,9 +440,7 @@ void reconnectMergeOps(handshake::FuncOp f, BlockOps blockMerges,
 
   for (Block &block : f) {
     for (Operation *op : blockMerges[&block]) {
-
       int count = 1;
-
       // Set appropriate operand from predecessor block
       for (auto *predBlock : block.getPredecessors()) {
         Value mgOperand = getMergeOperand(op, predBlock, blockMerges);
