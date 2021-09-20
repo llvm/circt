@@ -288,8 +288,7 @@ updateInstanceParameterRefs(InstanceOp instance,
       continue;
     }
     anyRenamed = true;
-    newParams.push_back(
-        getParameterWithValue(paramAttr.getName().getValue(), newValue));
+    newParams.push_back(ParameterAttr::get(paramAttr.getName(), newValue));
   }
 
   instance.parametersAttr(ArrayAttr::get(instance.getContext(), newParams));

@@ -62,14 +62,6 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
 
-/// Construct and return a ParameterAttr with the given name and value. Get the
-/// type from the value.
-ParameterAttr getParameterWithValue(StringRef name, Attribute value);
-
-/// Construct and return a ParameterAttr with the given name and type. The
-/// ParameterAttr will not have a value.
-ParameterAttr getParameterNoValue(StringRef name, Type type);
-
 template <typename BaseTy>
 bool type_isa(Type type) {
   // First check if the type is the requested type.

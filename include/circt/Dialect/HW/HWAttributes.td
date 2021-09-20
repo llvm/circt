@@ -33,8 +33,26 @@ def ParameterAttr : AttrDef<HWDialect, "Parameter"> {
   let parameters = (ins "::mlir::StringAttr":$name,
                         "::mlir::TypeAttr":$type,
                         "::mlir::Attribute":$value);
-
   let mnemonic = "parameter";
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
+                                         "::mlir::Type":$type),
+      "auto *context = type.getContext();\n"
+      "return $_get(context, name, TypeAttr::get(type), Attribute());">,
+    AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
+                                         "::mlir::Type":$type),
+      "return get(StringAttr::get(type.getContext(), name), type);">,
+
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
+                                        "::mlir::Attribute":$value),
+      "auto *context = value.getContext();\n"
+      "return $_get(context, name, TypeAttr::get(value.getType()), value);">,
+    AttrBuilderWithInferredContext<(ins "::mlir::StringRef":$name,
+                                        "::mlir::Attribute":$value),
+      "return get(StringAttr::get(value.getContext(), name), value);">
+  ];
+
 }
 
 /// An array of ParameterAttr's that may or may not have a 'value' specified,

@@ -232,13 +232,13 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpoint(Operation *symTable,
                       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
                       {dataIn, PortDirection::INPUT, sendType, 4}};
   SmallVector<Attribute, 8> params;
-  params.push_back(getParameterNoValue("ENDPOINT_ID", getI32Type()));
+  params.push_back(ParameterAttr::get("ENDPOINT_ID", getI32Type()));
   params.push_back(
-      getParameterNoValue("SEND_TYPE_ID", getIntegerType(64, false)));
-  params.push_back(getParameterNoValue("SEND_TYPE_SIZE_BITS", getI32Type()));
+      ParameterAttr::get("SEND_TYPE_ID", getIntegerType(64, false)));
+  params.push_back(ParameterAttr::get("SEND_TYPE_SIZE_BITS", getI32Type()));
   params.push_back(
-      getParameterNoValue("RECV_TYPE_ID", getIntegerType(64, false)));
-  params.push_back(getParameterNoValue("RECV_TYPE_SIZE_BITS", getI32Type()));
+      ParameterAttr::get("RECV_TYPE_ID", getIntegerType(64, false)));
+  params.push_back(ParameterAttr::get("RECV_TYPE_SIZE_BITS", getI32Type()));
   endpoint = create<HWModuleExternOp>(
       constructUniqueSymbol(symTable, "Cosim_Endpoint"), ports,
       "Cosim_Endpoint", ArrayAttr::get(getContext(), params));
