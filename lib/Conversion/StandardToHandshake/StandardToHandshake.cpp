@@ -240,19 +240,19 @@ BlockValues getBlockDefs(handshake::FuncOp f) {
   return defs;
 }
 
-std::vector<Value> vectorUnion(std::vector<Value> v1, std::vector<Value> v2) {
+std::vector<Value> vectorUnion(ArrayRef<Value> v1, ArrayRef<Value> v2) {
   // Returns v1 U v2
   // Assumes unique values in v1
-
+  std::vector<Value> v1c = v1;
   for (int i = 0, e = v2.size(); i < e; ++i) {
     Value val = v2[i];
     if (std::find(v1.begin(), v1.end(), val) == v1.end())
-      v1.push_back(val);
+      v1c.push_back(val);
   }
-  return v1;
+  return v1c;
 }
 
-std::vector<Value> vectorDiff(std::vector<Value> v1, std::vector<Value> v2) {
+std::vector<Value> vectorDiff(ArrayRef<Value> v1, ArrayRef<Value> v2) {
   // Returns v1 - v2
   std::vector<Value> d;
 
@@ -969,7 +969,7 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
   return MemRefOps;
 }
 
-std::vector<Block *> getOperationBlocks(std::vector<Operation *> ops) {
+std::vector<Block *> getOperationBlocks(ArrayRef<Operation *> ops) {
   // Get list of (unique) blocks which ops belong to
   // Used to connect control network to memory
   std::vector<Block *> blocks;
@@ -1026,7 +1026,8 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 }
 
 void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
-  std::vector<Operation *> allocOps;
+  ArrayRef<Operation *> allocOps;
+  std::vector<Operation *> opsToDelete = allocOps;
 
   for (Block &block : f)
     for (Operation &op : block) {
@@ -1035,12 +1036,12 @@ void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
         for (auto &u : op.getResult(0).getUses()) {
           Operation *useOp = u.getOwner();
           if (isa<SinkOp>(useOp))
-            allocOps.push_back(&op);
+            opsToDelete.push_back(&op);
         }
       }
     }
-  for (unsigned i = 0, e = allocOps.size(); i != e; ++i) {
-    auto *op = allocOps[i];
+  for (unsigned i = 0, e = opsToDelete.size(); i != e; ++i) {
+    auto *op = opsToDelete[i];
     rewriter.eraseOp(op);
   }
 }
@@ -1081,7 +1082,7 @@ Value getMemRefOperand(Value val) {
 }
 
 void addJoinOps(ConversionPatternRewriter &rewriter,
-                std::vector<Value> controlVals) {
+                ArrayRef<Value> controlVals) {
   for (auto val : controlVals) {
     assert(val.hasOneUse());
     auto srcOp = val.getDefiningOp();
@@ -1097,7 +1098,7 @@ void addJoinOps(ConversionPatternRewriter &rewriter,
   }
 }
 
-std::vector<Value> getControlValues(std::vector<Operation *> memOps) {
+std::vector<Value> getControlValues(ArrayRef<Operation *> memOps) {
   std::vector<Value> vals;
 
   for (Operation *op : memOps) {
@@ -1120,7 +1121,7 @@ void addValueToOperands(Operation *op, Value val) {
   op->setOperands(results);
 }
 
-void setLoadDataInputs(std::vector<Operation *> memOps, Operation *memOp) {
+void setLoadDataInputs(ArrayRef<Operation *> memOps, Operation *memOp) {
   // Set memory outputs as load input data
   int ld_count = 0;
   for (auto *op : memOps) {
@@ -1129,8 +1130,8 @@ void setLoadDataInputs(std::vector<Operation *> memOps, Operation *memOp) {
   }
 }
 
-void setJoinControlInputs(std::vector<Operation *> memOps, Operation *memOp,
-                          int offset, std::vector<int> cntrlInd) {
+void setJoinControlInputs(ArrayRef<Operation *> memOps, Operation *memOp,
+                          int offset, ArrayRef<int> cntrlInd) {
   // Connect all memory ops to the join of that block (ensures that all mem
   // ops terminate before a new block starts)
   for (int i = 0, e = memOps.size(); i < e; ++i) {
@@ -1145,8 +1146,8 @@ void setJoinControlInputs(std::vector<Operation *> memOps, Operation *memOp,
 }
 
 void setMemOpControlInputs(ConversionPatternRewriter &rewriter,
-                           std::vector<Operation *> memOps, Operation *memOp,
-                           int offset, std::vector<int> cntrlInd) {
+                           ArrayRef<Operation *> memOps, Operation *memOp,
+                           int offset, ArrayRef<int> cntrlInd) {
   for (int i = 0, e = memOps.size(); i < e; ++i) {
     std::vector<Value> controlOperands;
     Operation *currOp = memOps[i];
