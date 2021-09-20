@@ -99,6 +99,13 @@ static Value getComponentOutput(mlir::FuncOp funcOp, calyx::ComponentOp compOp,
   return compOp.getArgument(resIdx);
 }
 
+/// Creates a SeqOp containing an inner body block.
+static calyx::SeqOp createSeqOp(PatternRewriter &rewriter, Location loc) {
+  auto seqOp = rewriter.create<calyx::SeqOp>(loc);
+  rewriter.createBlock(&seqOp.getRegion());
+  return seqOp;
+}
+
 //===----------------------------------------------------------------------===//
 // Lowering state classes
 //===----------------------------------------------------------------------===//
@@ -209,6 +216,18 @@ public:
   void addBlockScheduleable(mlir::Block *block,
                             const Scheduleable &scheduleable) {
     blockScheduleables[block].push_back(scheduleable);
+  }
+
+  /// Returns an ordered list of schedulables which registered themselves to be
+  /// a result of lowering the block in the source program. The list order
+  /// follows def-use chains between the scheduleables in the block.
+  SmallVector<Scheduleable> getBlockScheduleables(mlir::Block *block) {
+    auto it = blockScheduleables.find(block);
+    if (it != blockScheduleables.end())
+      return it->second;
+    /// In cases of a block resulting in purely combinational logic, no
+    /// scheduleables registered themselves with the block.
+    return {};
   }
 
 private:
@@ -742,6 +761,145 @@ private:
   StringRef topLevelFunction;
 };
 
+/// Builds a control schedule by traversing the CFG of the function and
+/// associating this with the previously created groups.
+/// For simplicity, the generated control flow is expanded for all possible
+/// paths in the input DAG. This elaborated control flow is later reduced in
+/// the runControlFlowSimplification passes.
+class BuildControl : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    auto *entryBlock = &funcOp.getBlocks().front();
+    rewriter.setInsertionPointToStart(getComponent()->getControlOp().getBody());
+    auto topLevelSeqOp = createSeqOp(rewriter, funcOp.getLoc());
+    DenseSet<Block *> path;
+    return buildCFGControl(path, rewriter, topLevelSeqOp.getBody(), nullptr,
+                           entryBlock);
+  }
+
+private:
+  /// Sequentially schedules the groups that registered themselves with
+  /// 'block'.
+  LogicalResult scheduleBasicBlock(PatternRewriter &rewriter,
+                                   const DenseSet<Block *> &path,
+                                   mlir::Block *parentCtrlBlock,
+                                   mlir::Block *block) const {
+    auto compblockScheduleables =
+        getComponentState().getBlockScheduleables(block);
+    auto loc = block->front().getLoc();
+
+    if (compblockScheduleables.size() > 1) {
+      auto seqOp = createSeqOp(rewriter, loc);
+      parentCtrlBlock = seqOp.getBody();
+    }
+
+    rewriter.setInsertionPointToEnd(parentCtrlBlock);
+
+    for (auto &group : compblockScheduleables) {
+      if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
+        rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name(),
+                                         rewriter.getArrayAttr({}));
+      } else
+        llvm_unreachable("Unknown scheduleable");
+    }
+    return success();
+  }
+
+  /// Schedules a block by inserting a branch argument assignment block (if any)
+  /// before recursing into the scheduling of the block innards.
+  /// Blocks 'from' and 'to' refer to blocks in the source program.
+  /// parentCtrlBlock refers to the control block wherein control operations are
+  /// to be inserted.
+  LogicalResult schedulePath(PatternRewriter &rewriter,
+                             const DenseSet<Block *> &path, Location loc,
+                             Block *from, Block *to,
+                             Block *parentCtrlBlock) const {
+    /// In the following commits, basic block argument passing will be performed
+    /// here...
+    return buildCFGControl(path, rewriter, parentCtrlBlock, from, to);
+  }
+
+  LogicalResult buildCFGControl(DenseSet<Block *> path,
+                                PatternRewriter &rewriter,
+                                mlir::Block *parentCtrlBlock,
+                                mlir::Block *preBlock,
+                                mlir::Block *block) const {
+    if (path.count(block) != 0)
+      return preBlock->getTerminator()->emitError()
+             << "CFG backedge detected. Loops must be raised to 'scf.while' or "
+                "'scf.for' operations.";
+
+    rewriter.setInsertionPointToEnd(parentCtrlBlock);
+    LogicalResult bbSchedResult =
+        scheduleBasicBlock(rewriter, path, parentCtrlBlock, block);
+    if (bbSchedResult.failed())
+      return bbSchedResult;
+
+    path.insert(block);
+    auto successors = block->getSuccessors();
+    auto nSuccessors = successors.size();
+    if (nSuccessors > 0) {
+      auto brOp = dyn_cast<BranchOpInterface>(block->getTerminator());
+      assert(brOp);
+      if (nSuccessors > 1) {
+        /// @todo: we could choose to support ie. std.switch, but it would
+        /// probably be easier to just require it to be lowered beforehand.
+        assert(nSuccessors == 2 &&
+               "only conditional branches supported for now...");
+        /// Wrap each branch inside an if/else.
+        auto cond = brOp->getOperand(0);
+        auto condGroup =
+            getComponentState().getEvaluatingGroup<calyx::CombGroupOp>(cond);
+        auto symbolAttr = FlatSymbolRefAttr::get(
+            StringAttr::get(getContext(), condGroup.sym_name()));
+        auto ifOp =
+            rewriter.create<calyx::IfOp>(brOp->getLoc(), cond, symbolAttr);
+        auto *thenCtrlBlock =
+            rewriter.createBlock(&ifOp.thenRegion(), ifOp.thenRegion().end());
+        auto *elseCtrlBlock =
+            rewriter.createBlock(&ifOp.elseRegion(), ifOp.elseRegion().end());
+        rewriter.setInsertionPointToEnd(thenCtrlBlock);
+        auto thenSeqOp = createSeqOp(rewriter, brOp.getLoc());
+        rewriter.setInsertionPointToEnd(elseCtrlBlock);
+        auto elseSeqOp = createSeqOp(rewriter, brOp.getLoc());
+        bool trueBrSchedSuccess =
+            schedulePath(rewriter, path, brOp.getLoc(), block, successors[0],
+                         thenSeqOp.getBody())
+                .succeeded();
+        bool falseBrSchedSuccess = true;
+        if (trueBrSchedSuccess) {
+          falseBrSchedSuccess =
+              schedulePath(rewriter, path, brOp.getLoc(), block, successors[1],
+                           elseSeqOp.getBody())
+                  .succeeded();
+        }
+
+        return success(trueBrSchedSuccess && falseBrSchedSuccess);
+      } else {
+        /// Schedule sequentially within the current parent control block.
+        return schedulePath(rewriter, path, brOp.getLoc(), block,
+                            successors.front(), parentCtrlBlock);
+      }
+    }
+    return success();
+  }
+};
+
+/// Erases FuncOp operations.
+class CleanupFuncOps : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    rewriter.eraseOp(funcOp);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
@@ -921,6 +1079,15 @@ void SCFToCalyxPass::runOnOperation() {
   /// having a distinct group for each operation, groups are analogous to SSA
   /// values in the source program.
   addOncePattern<BuildOpGroups>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pattern traverses the CFG of the program and generates a control
+  /// schedule based on the calyx::GroupOp's which were registered for each
+  /// basic block in the source function.
+  addOncePattern<BuildControl>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pattern removes the source FuncOp which has now been converted into
+  /// a Calyx component.
+  addOncePattern<CleanupFuncOps>(loweringPatterns, funcMap, *loweringState);
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
