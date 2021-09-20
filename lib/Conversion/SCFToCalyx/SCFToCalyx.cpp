@@ -815,6 +815,54 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       rewriter, op, {op.getOperand().getType()}, {op.getType()});
 }
 
+/// Inlines Calyx ExecuteRegionOp operations within their parent blocks.
+/// An execution region op (ERO) is inlined by:
+///  i  : add a sink basic block for all yield operations inside the
+///       ERO to jump to
+///  ii : Rewrite scf.yield calls inside the ERO to branch to the sink block
+///  iii: inline the ERO region
+class InlineExecuteRegionOpPattern
+    : public OpRewritePattern<scf::ExecuteRegionOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(scf::ExecuteRegionOp execOp,
+                                PatternRewriter &rewriter) const override {
+    /// Determine type of "yield" operations inside the ERO.
+    TypeRange yieldTypes = execOp.getResultTypes();
+
+    /// Create sink basic block and rewrite uses of yield results to sink block
+    /// arguments.
+    rewriter.setInsertionPointAfter(execOp);
+    auto *sinkBlock = rewriter.splitBlock(
+        execOp->getBlock(),
+        execOp.getOperation()->getIterator()->getNextNode()->getIterator());
+    sinkBlock->addArguments(yieldTypes);
+    for (auto res : enumerate(execOp.getResults()))
+      res.value().replaceAllUsesWith(sinkBlock->getArgument(res.index()));
+
+    /// Rewrite yield calls as branches.
+    for (auto yieldOp :
+         make_early_inc_range(execOp.getRegion().getOps<scf::YieldOp>())) {
+      rewriter.setInsertionPointAfter(yieldOp);
+      rewriter.replaceOpWithNewOp<BranchOp>(yieldOp, sinkBlock,
+                                            yieldOp.getOperands());
+    }
+
+    /// Inline the regionOp.
+    auto *preBlock = execOp->getBlock();
+    auto *execOpEntryBlock = &execOp.getRegion().front();
+    auto *postBlock = execOp->getBlock()->splitBlock(execOp);
+    rewriter.inlineRegionBefore(execOp.getRegion(), postBlock);
+    rewriter.mergeBlocks(postBlock, preBlock);
+    rewriter.eraseOp(execOp);
+
+    /// Finally, erase the unused entry block of the execOp region.
+    rewriter.mergeBlocks(execOpEntryBlock, preBlock);
+
+    return success();
+  }
+};
+
 /// Creates a new Calyx component for each FuncOp in the program.
 struct FuncOpConversion : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
@@ -1387,6 +1435,9 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// Creates a new Calyx component for each FuncOp in the inpurt module.
   addOncePattern<FuncOpConversion>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pass inlines scf.ExecuteRegionOp's by adding control-flow.
+  addGreedyPattern<InlineExecuteRegionOpPattern>(loweringPatterns);
 
   /// This pattern creates registers for all basic-block arguments.
   addOncePattern<BuildBBRegs>(loweringPatterns, funcMap, *loweringState);
