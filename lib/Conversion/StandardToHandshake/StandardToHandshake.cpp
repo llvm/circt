@@ -76,7 +76,7 @@ void removeBasicBlocks(handshake::FuncOp funcOp) {
 }
 
 template <typename FuncOp>
-void dotPrint(FuncOp f, string name) {
+void dotPrint(FuncOp f, StringRef name) {
   // Prints DOT representation of the dataflow graph, used for debugging.
   DenseMap<Block *, unsigned> blockIDs;
   DenseMap<Operation *, unsigned> opIDs;
@@ -90,7 +90,7 @@ void dotPrint(FuncOp f, string name) {
   }
 
   std::error_code ec;
-  llvm::raw_fd_ostream outfile(name + ".dot", ec);
+  llvm::raw_fd_ostream outfile(name.str() + ".dot", ec);
 
   outfile << "Digraph G {\n\tsplines=spline;\n";
 
@@ -594,8 +594,8 @@ LogicalResult addBranchOps(handshake::FuncOp f,
         if (newOp == nullptr)
           continue;
 
-        for (int i = 0, e = block.getNumSuccessors(); i < e; ++i) {
-          Block *succ = block.getSuccessor(i);
+        for (int j = 0, e = block.getNumSuccessors(); j < e; ++j) {
+          Block *succ = block.getSuccessor(j);
           Value res = getSuccResult(termOp, newOp, succ);
 
           for (auto &u : val.getUses()) {
@@ -681,7 +681,7 @@ LogicalResult connectConstantsToControl(handshake::FuncOp f,
     // Erase StandardOp constants
     for (unsigned i = 0, e = cstOps.size(); i != e; ++i) {
       auto *op = cstOps[i];
-      for (int i = 0, e = op->getNumOperands(); i < e; ++i)
+      for (int j = 0, e = op->getNumOperands(); j < e; ++j)
         op->eraseOperand(0);
       assert(op->getNumOperands() == 0);
       rewriter.eraseOp(op);
@@ -959,7 +959,7 @@ MemRefToMemoryAccessOp replaceMemoryOps(handshake::FuncOp f,
   // Erase old memory ops
   for (unsigned i = 0, e = opsToErase.size(); i != e; ++i) {
     auto *op = opsToErase[i];
-    for (int i = 0, e = op->getNumOperands(); i < e; ++i)
+    for (int j = 0, e = op->getNumOperands(); j < e; ++j)
       op->eraseOperand(0);
     assert(op->getNumOperands() == 0);
 
@@ -1034,7 +1034,7 @@ void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
         assert(op.getResult(0).hasOneUse());
         for (auto &u : op.getResult(0).getUses()) {
           Operation *useOp = u.getOwner();
-          if (auto mg = dyn_cast<SinkOp>(useOp))
+          if (isa<SinkOp>(useOp))
             allocOps.push_back(&op);
         }
       }
@@ -1073,7 +1073,7 @@ Value getMemRefOperand(Value val) {
     assert(val.hasOneUse());
     for (auto &u : val.getUses()) {
       Operation *useOp = u.getOwner();
-      if (auto mg = dyn_cast<MergeOp>(useOp))
+      if (isa<MergeOp>(useOp))
         return useOp->getResult(0);
     }
   }
@@ -1342,7 +1342,7 @@ public:
         m_target(target), loweringRes(loweringResRef), m_fun(fun) {}
   using ConversionPattern::ConversionPattern;
   LogicalResult
-  matchAndRewrite(Operation *funcOp, ArrayRef<Value> operands,
+  matchAndRewrite(Operation *funcOp, ArrayRef<Value> /*operands*/,
                   ConversionPatternRewriter &rewriter) const override {
     assert(isa<TFuncOp>(funcOp));
     rewriter.updateRootInPlace(funcOp, [&] {
@@ -1510,7 +1510,7 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
       return failure();
   }
 
-  void rewrite(Operation *op, ArrayRef<Value> operands,
+  void rewrite(Operation *op, ArrayRef<Value> /*operands*/,
                ConversionPatternRewriter &rewriter) const override {
     op->emitWarning("skipping...");
     if (op->getNumSuccessors() == 0 && op->getNumResults() > 0 &&
@@ -1768,8 +1768,8 @@ struct HandshakeCanonicalizePass
   void runOnOperation() override {
     auto Op = getOperation();
     OpBuilder builder(Op);
-    addForkOps(Op, builder);
-    addSinkOps(Op, builder);
+    (void)addForkOps(Op, builder);
+    (void)addSinkOps(Op, builder);
 
     for (auto &block : Op)
       for (auto &nestedOp : block)
