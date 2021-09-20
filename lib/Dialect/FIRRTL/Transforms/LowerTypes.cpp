@@ -37,6 +37,7 @@
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include <deque>
+#include <set>
 
 using namespace circt;
 using namespace firrtl;
@@ -286,7 +287,7 @@ private:
   /// State to keep track of arguments and operations to clean up at the end.
   SmallVector<Operation *, 16> opsToRemove;
 
-  DenseMap<MemOp*, size_t> memOpId;
+  DenseMap<Operation*, size_t> memOpId;
   unsigned memOpIdCounter;
 };
 } // namespace
@@ -641,7 +642,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     result.replaceAllUsesWith(wire.getResult());
   }
 
-    auto it = memOpId.find(&op);
+    auto it = memOpId.find(op);
     size_t id ;
     if (it != memOpId.end()) {
       id = it->getSecond();
@@ -653,7 +654,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   for (auto field : fields) {
     auto m = cloneMemWithNewType(builder, op, field);
     newMemories.push_back(m);
-    memOpId[&m] = id;
+    memOpId[m] = id;
+    llvm::errs() << "\n id:"<< id << "::"<< m;
   }
 
   // Hook up the new memories to the wires the old memory was replaced with.
@@ -666,6 +668,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       auto oldField = builder->create<SubfieldOp>(result, fieldIndex);
       // data and mask depend on the memory type which was split.  They can also
       // go both directions, depending on the port direction.
+
       if (name == "data" || name == "mask" || name == "wdata" ||
           name == "wmask" || name == "rdata") {
         for (auto field : fields) {
@@ -1007,9 +1010,107 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 }
 
 void TypeLoweringVisitor::mergeMemOps(){
+  if (!memOpIdCounter)
+    return;
+  DenseMap<size_t, std::set<Operation*>> memGroups;
+  
   for (auto memOp : memOpId){
-    llvm::errs() << "\n mem:"<< memOp.getFirst() << "\n = "<< memOp.second;
+    if (memGroups.count(memOp.getSecond()-1) == 0)
+      memGroups[memOp.getSecond()-1] = {memOp.getFirst()};
+    else
+      memGroups[memOp.getSecond()-1].insert(memOp.getFirst());
   }
+  for (auto memG : memGroups) {
+    SmallVector<int32_t> memWidths;
+    MemOp mem0 = dyn_cast<MemOp>(*memG.getSecond().begin());
+    for (auto gOp : memG.getSecond()) {
+      auto mem = dyn_cast<MemOp>(gOp);
+      memWidths.push_back(mem.getDataType().getBitWidthOrSentinel());
+    }
+    // MaskGranularity : how many bits each mask bit controls.
+    size_t maskGran = memWidths[0];
+    size_t memFlatWidth = 0;
+    for (auto w : memWidths) {
+      memFlatWidth += w;
+      maskGran = llvm::GreatestCommonDivisor64(maskGran, w);
+    }
+    SmallVector<Type, 8> ports;
+    SmallVector<Attribute, 8> portNames;
+
+    auto flatType = IntType::get(context, mem0.getDataType().isSignedInteger(), memFlatWidth);
+    auto oldPorts = mem0.getPorts();
+    for (size_t portIdx = 0, e = oldPorts.size(); portIdx < e; ++portIdx) {
+      auto port = oldPorts[portIdx];
+      ports.push_back(MemOp::getTypeForPort(mem0.depth(), flatType, port.second));
+      portNames.push_back(port.first);
+    }
+
+    ImplicitLocOpBuilder builder(mem0.getLoc(), mem0);
+    auto flatMem = builder.create<MemOp>(
+        ports, mem0.readLatency(), mem0.writeLatency(), mem0.depth(), mem0.ruw(),
+        portNames, mem0.name(), mem0.annotations().getValue(),
+        mem0.portAnnotations().getValue());
+    // TODO: Copy annotations
+
+     DenseMap<size_t, SmallVector<Operation*, 8>> dataElems;
+     SmallVector<Operation*, 8> maskElems;
+    for (auto gOp : memG.getSecond()) {
+      auto mem = dyn_cast<MemOp>(gOp);
+      SmallVector<WireOp> oldPorts;
+
+      // Wires for old ports
+      for (unsigned int index = 0, end = mem.getNumResults(); index < end; ++index) {
+        dataElems[index] = {};
+        auto result = mem.getResult(index);
+        auto newRes = flatMem.getResult(index);
+        WireOp dataWire;
+        for (auto r : result.getUsers()){
+          if (auto sOp = dyn_cast<SubfieldOp>(r)){
+            llvm::errs() << "\n in type:"<< sOp.input().getType();
+            auto bType = sOp.input().getType().cast<BundleType>();
+            llvm::errs() << "\n user:"<< *sOp;
+            auto fName = bType.getElementName(sOp.fieldIndex());
+            auto flatFieldAccess = builder.create<SubfieldOp>(newRes, sOp.fieldIndex());
+            if ( fName == "addr" || fName == "en" || fName == "clk"){
+              sOp->replaceAllUsesWith(flatFieldAccess);
+              opsToRemove.push_back(sOp);
+              //sOp->erase();
+            }else if (fName == "data"){
+              auto dWire = builder.create<WireOp>(sOp.getResult().getType());
+              dataElems[index].push_back(dWire);
+            }
+
+          }
+        }
+       // auto wire = builder.create<WireOp>(result.getType());
+       // oldPorts.push_back(wire);
+       // result.replaceAllUsesWith(wire.getResult());
+
+       // // Hook up the new memories to the wires the old memory was replaced with.
+       // auto rType = result.getType().cast<BundleType>();
+       // for (size_t fieldIndex = 0, fend = rType.getNumElements();
+       //     fieldIndex != fend; ++fieldIndex) {
+       //   auto name = rType.getElement(fieldIndex).name.getValue();
+       //   auto oldField = builder.create<SubfieldOp>(wire, fieldIndex);
+       //   // data and mask depend on the memory type which was split.  They can also
+       //   // go both directions, depending on the port direction.
+
+
+       //   if (!(name == "data" || name == "mask" || name == "wdata" ||
+       //         name == "wmask" || name == "rdata")) {
+       //     auto newField =
+       //       builder.create<SubfieldOp>(flatMem.getResult(index), fieldIndex);
+       //     builder.create<ConnectOp>(newField, oldField);
+       //   }
+       // }
+      }
+
+    }
+
+  }
+      // for each mem of ground type, lowered from an aggregate mem.
+      //addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+
 }
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
