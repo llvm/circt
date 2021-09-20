@@ -49,6 +49,21 @@ void HWDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
 }
 
 //===----------------------------------------------------------------------===//
+// ParameterAttr
+//===----------------------------------------------------------------------===//
+
+Attribute ParameterAttr::parse(MLIRContext *context, DialectAsmParser &p,
+                               Type type) {
+  llvm::errs() << "Should never parse raw\n";
+  abort();
+}
+
+void ParameterAttr::print(DialectAsmPrinter &p) const {
+  llvm::errs() << "Should never print raw\n";
+  abort();
+}
+
+//===----------------------------------------------------------------------===//
 // ParameterRefAttr
 //===----------------------------------------------------------------------===//
 

@@ -109,16 +109,16 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
     // Find the corresponding attribute in the module.
     for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
       auto paramAttr = param.cast<ParameterAttr>();
-      if (paramAttr.name() != nameAttr)
+      if (paramAttr.getName() != nameAttr)
         continue;
 
       // If the types match then the reference is ok.
-      if (paramAttr.type().getValue() == parameterRef.getType())
+      if (paramAttr.getType().getValue() == parameterRef.getType())
         return success();
 
       auto diag = usingOp->emitOpError("parameter ")
                   << nameAttr << " used with type " << parameterRef.getType()
-                  << "; should have type " << paramAttr.type().getValue();
+                  << "; should have type " << paramAttr.getType().getValue();
       diag.attachNote(module->getLoc()) << "module declared here";
       return failure();
     }
@@ -498,8 +498,8 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
     }
 
     auto &builder = parser.getBuilder();
-    parameters.push_back(ParameterAttr::get(name, TypeAttr::get(type), value,
-                                            builder.getContext()));
+    parameters.push_back(ParameterAttr::get(builder.getContext(), name,
+                                            TypeAttr::get(type), value));
     return success();
   });
 }
@@ -614,8 +614,8 @@ static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
   p << '<';
   llvm::interleaveComma(parameters, p, [&](Attribute param) {
     auto paramAttr = param.cast<ParameterAttr>();
-    p << paramAttr.name().getValue() << ": " << paramAttr.type();
-    if (auto value = paramAttr.value()) {
+    p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
+    if (auto value = paramAttr.getValue()) {
       p << " = ";
       p.printAttributeWithoutType(value);
     }
@@ -692,14 +692,15 @@ static LogicalResult verifyModuleCommon(Operation *module) {
     auto paramAttr = param.cast<ParameterAttr>();
 
     // Default values are allowed to be missing.
-    auto value = paramAttr.value();
+    auto value = paramAttr.getValue();
     if (!value)
       continue;
 
-    if (value.getType() != paramAttr.type().getValue())
+    if (value.getType() != paramAttr.getType().getValue())
       return module->emitOpError("parameter ")
-             << paramAttr << " should have type " << paramAttr.type().getValue()
-             << "; has type " << value.getType();
+             << paramAttr << " should have type "
+             << paramAttr.getType().getValue() << "; has type "
+             << value.getType();
 
     // Verify that this is a valid parameter value, disallowing parameter
     // references.  We could allow parameters to refer to each other in the
@@ -891,22 +892,23 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     auto param = parameters[i].cast<ParameterAttr>();
     auto modParam = modParameters[i].cast<ParameterAttr>();
 
-    if (param.name() != modParam.name())
+    auto paramName = param.getName();
+    if (paramName != modParam.getName())
       return emitError([&](auto &diag) {
-        diag << "parameter #" << i << " should have name " << modParam.name()
-             << " but has name " << param.name();
+        diag << "parameter #" << i << " should have name " << modParam.getName()
+             << " but has name " << paramName;
       });
 
-    if (param.type() != modParam.type())
+    if (param.getType() != modParam.getType())
       return emitError([&](auto &diag) {
-        diag << "parameter " << param.name() << " should have type "
-             << modParam.type() << " but has type " << param.type();
+        diag << "parameter " << paramName << " should have type "
+             << modParam.getType() << " but has type " << param.getType();
       });
 
     // All instance parameters must have a value.  Specify the same value as
     // a module's default value if you want the default.
-    if (!param.value())
-      return emitOpError("parameter ") << param.name() << " must have a value";
+    if (!param.getValue())
+      return emitOpError("parameter ") << paramName << " must have a value";
   }
 
   return success();
@@ -917,13 +919,13 @@ LogicalResult InstanceOp::verifyCustom() {
   // structurally valid.
   for (auto param : parameters()) {
     auto paramAttr = param.cast<ParameterAttr>();
-    auto value = paramAttr.value();
+    auto value = paramAttr.getValue();
     assert(value && "SymbolUses verifier should already check this exists");
 
-    if (value.getType() != paramAttr.type().getValue())
-      return emitOpError("parameter ")
-             << paramAttr << " should have type " << paramAttr.type().getValue()
-             << "; has type " << value.getType();
+    if (value.getType() != paramAttr.getType().getValue())
+      return emitOpError("parameter ") << paramAttr << " should have type "
+                                       << paramAttr.getType().getValue()
+                                       << "; has type " << value.getType();
 
     if (failed(checkParameterInContext(
             value, (*this)->getParentOfType<HWModuleOp>(), *this)))

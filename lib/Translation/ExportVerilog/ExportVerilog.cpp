@@ -2515,7 +2515,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       auto param = std::get<0>(params).cast<ParameterAttr>();
       auto modParam = std::get<1>(params).cast<ParameterAttr>();
       // Ignore values that line up with their default.
-      if (param.value() == modParam.value())
+      if (param.getValue() == modParam.getValue())
         continue;
 
       // Handle # if this is the first parameter we're printing.
@@ -2526,8 +2526,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
         os << ",\n";
       }
       os.indent(state.currentIndent + INDENT_AMOUNT)
-          << prefix << '.' << param.name().getValue() << '(';
-      printParamValue(param.value(), op, param.name().getValue(), os);
+          << prefix << '.' << param.getName().getValue() << '(';
+      printParamValue(param.getValue(), op, param.getName().getValue(), os);
       os << ')';
     }
     if (printed) {
@@ -3057,8 +3057,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Add all parameters to the name table.
   for (auto param : module.parameters()) {
     // Add the name to the name table so any conflicting wires are renamed.
-    names.addLegalName(nullptr, param.cast<ParameterAttr>().name().getValue(),
-                       module);
+    names.addLegalName(
+        nullptr, param.cast<ParameterAttr>().getName().getValue(), module);
   }
 
   // Rewrite the module body into compliance with our emission expectations, and
@@ -3097,7 +3097,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     for (auto param : module.parameters()) {
       // Measure the type length by printing it to a temporary string.
       scratch.clear();
-      printParamType(param.cast<ParameterAttr>().type().getValue(), scratch);
+      printParamType(param.cast<ParameterAttr>().getType().getValue(), scratch);
       maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
     }
 
@@ -3110,15 +3110,15 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           auto paramAttr = param.cast<ParameterAttr>();
           os << "parameter ";
           scratch.clear();
-          printParamType(paramAttr.type().getValue(), scratch);
+          printParamType(paramAttr.getType().getValue(), scratch);
           os << scratch;
           if (scratch.size() < maxTypeWidth)
             os.indent(maxTypeWidth - scratch.size());
 
-          os << paramAttr.name().getValue();
-          if (auto value = paramAttr.value()) {
+          os << paramAttr.getName().getValue();
+          if (auto value = paramAttr.getValue()) {
             os << " = ";
-            printParamValue(value, module, paramAttr.name().getValue(), os);
+            printParamValue(value, module, paramAttr.getName().getValue(), os);
           }
         },
         ",\n    ");

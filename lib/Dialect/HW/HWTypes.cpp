@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
@@ -183,17 +184,17 @@ static void printHWElementType(Type element, DialectAsmPrinter &p) {
 /// type from the value.
 ParameterAttr circt::hw::getParameterWithValue(StringRef name,
                                                Attribute value) {
-  auto *ctxt = value.getContext();
-  return ParameterAttr::get(StringAttr::get(ctxt, name),
-                            TypeAttr::get(value.getType()), value, ctxt);
+  auto *context = value.getContext();
+  return ParameterAttr::get(context, StringAttr::get(context, name),
+                            TypeAttr::get(value.getType()), value);
 }
 
 /// Construct and return a ParameterAttr with the given name and type. The
 /// ParameterAttr will not have a value.
 ParameterAttr circt::hw::getParameterNoValue(StringRef name, Type type) {
-  auto *ctxt = type.getContext();
-  return ParameterAttr::get(StringAttr::get(ctxt, name), TypeAttr::get(type),
-                            {}, ctxt);
+  auto *context = type.getContext();
+  return ParameterAttr::get(context, StringAttr::get(context, name),
+                            TypeAttr::get(type), {});
 }
 
 //===----------------------------------------------------------------------===//

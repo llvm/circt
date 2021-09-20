@@ -13,8 +13,8 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
@@ -176,7 +176,7 @@ StringAttr ESIHWBuilder::constructInterfaceName(ChannelPort port) {
 ArrayAttr ESIHWBuilder::getStageParameterList(Attribute value) {
   auto type = IntegerType::get(width.getContext(), 32, IntegerType::Unsigned);
   auto widthParam =
-      ParameterAttr::get(width, TypeAttr::get(type), value, width.getContext());
+      ParameterAttr::get(width.getContext(), width, TypeAttr::get(type), value);
   return ArrayAttr::get(width.getContext(), widthParam);
 }
 

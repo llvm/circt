@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -713,7 +714,7 @@ static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
     auto type = TypeAttr::get(entry.second.getType());
     auto value = ignoreValues ? Attribute() : entry.second;
     auto paramAttr =
-        hw::ParameterAttr::get(name, type, value, builder.getContext());
+        hw::ParameterAttr::get(builder.getContext(), name, type, value);
     newParams.push_back(paramAttr);
   }
   return builder.getArrayAttr(newParams);

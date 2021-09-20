@@ -155,8 +155,8 @@ void HWLegalizeNamesPass::runOnOperation() {
 /// Return the specified ParameterAttr with a different name.
 static ParameterAttr getParameterWithName(ParameterAttr param,
                                           StringAttr name) {
-  return ParameterAttr::get(name, param.type(), param.value(),
-                            param.getContext());
+  return ParameterAttr::get(param.getContext(), name, param.getType(),
+                            param.getValue());
 }
 
 /// Check to see if the port names of the specified module conflict with
@@ -194,14 +194,14 @@ bool HWLegalizeNamesPass::legalizePortNames(
   bool changedParameters = false;
   for (auto param : module.parameters()) {
     auto paramAttr = param.cast<ParameterAttr>();
-    auto newName = nameResolver.getLegalName(paramAttr.name());
+    auto newName = nameResolver.getLegalName(paramAttr.getName());
     if (newName.empty())
       parameters.push_back(param);
     else {
       auto newNameAttr = StringAttr::get(paramAttr.getContext(), newName);
       parameters.push_back(getParameterWithName(paramAttr, newNameAttr));
       changedParameters = true;
-      renamedParameterInfo[std::make_pair(module, paramAttr.name())] =
+      renamedParameterInfo[std::make_pair(module, paramAttr.getName())] =
           newNameAttr;
     }
   }
@@ -257,10 +257,10 @@ static void updateInstanceForChangedModule(InstanceOp inst, HWModuleOp module) {
   for (size_t i = 0, e = instParameters.size(); i != e; ++i) {
     auto instParam = instParameters[i].cast<ParameterAttr>();
     auto modParam = modParameters[i].cast<ParameterAttr>();
-    if (instParam.name() == modParam.name())
+    if (instParam.getName() == modParam.getName())
       newAttrs.push_back(instParam);
     else
-      newAttrs.push_back(getParameterWithName(instParam, modParam.name()));
+      newAttrs.push_back(getParameterWithName(instParam, modParam.getName()));
   }
   inst.parametersAttr(ArrayAttr::get(inst.getContext(), newAttrs));
 }
@@ -281,15 +281,15 @@ updateInstanceParameterRefs(InstanceOp instance,
   bool anyRenamed = false;
   for (Attribute param : parameters) {
     auto paramAttr = param.cast<ParameterAttr>();
-    auto newValue = remapRenamedParameters(paramAttr.value(), curModule,
+    auto newValue = remapRenamedParameters(paramAttr.getValue(), curModule,
                                            renamedParameterInfo);
-    if (newValue == paramAttr.value()) {
+    if (newValue == paramAttr.getValue()) {
       newParams.push_back(param);
       continue;
     }
     anyRenamed = true;
     newParams.push_back(
-        getParameterWithValue(paramAttr.name().getValue(), newValue));
+        getParameterWithValue(paramAttr.getName().getValue(), newValue));
   }
 
   instance.parametersAttr(ArrayAttr::get(instance.getContext(), newParams));

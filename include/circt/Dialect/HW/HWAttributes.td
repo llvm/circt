@@ -22,19 +22,19 @@ def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
 
 /// An attribute describing a module parameter, or instance parameter
 /// specification.
-def ParameterAttr : StructAttr<"ParameterAttr", HWDialect, [
-  /// This is the name of the parameter.
-  StructFieldAttr<"name", StrAttr>,
-  /// This is the MLIR type for it.
-  StructFieldAttr<"type", TypeAttr>,
-  /// This is the value of the attribute - in a module, this is the default
+def ParameterAttr : AttrDef<HWDialect, "Parameter"> {
+  let summary = "module or instance parameter definition";
+
+  /// The value of the attribute - in a module, this is the default
   /// value (and may be missing).  In an instance, this is a required field that
   /// specifies the value being passed.  The verilog emitter omits printing the
   /// parameter for an instance when the applied value and the default value are
   /// the same.
-  StructFieldAttr<"value", OptionalAttr<AnyAttr>>
-]> {
-  let summary = "hw.module or hw.instance parameter";
+  let parameters = (ins "::mlir::StringAttr":$name,
+                        "::mlir::TypeAttr":$type,
+                        "::mlir::Attribute":$value);
+
+  let mnemonic = "parameter";
 }
 
 /// An array of ParameterAttr's that may or may not have a 'value' specified,
