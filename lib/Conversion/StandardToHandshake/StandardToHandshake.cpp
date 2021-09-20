@@ -1559,7 +1559,6 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
   (void)partiallyLowerFuncOp<mlir::FuncOp>(
       [&](mlir::FuncOp funcOp, PatternRewriter &rewriter) {
         auto noneType = rewriter.getNoneType();
-        argTypes.push_back(noneType);
         resTypes.push_back(noneType);
         auto func_type = rewriter.getFunctionType(argTypes, resTypes);
         newFuncOp = rewriter.create<handshake::FuncOp>(
@@ -1608,8 +1607,10 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
   // op.
   (void)partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, PatternRewriter &rewriter) {
-        auto noneType = rewriter.getNoneType();
-        auto ctrlArg = nfo.front().addArgument(noneType);
+        argTypes.push_back(rewriter.getNoneType());
+        auto funcType = rewriter.getFunctionType(argTypes, resTypes);
+        nfo.setType(funcType);
+        auto ctrlArg = nfo.front().addArgument(rewriter.getNoneType());
         Operation *startOp = findStartOp(&nfo.getRegion());
         startOp->getResult(0).replaceAllUsesWith(ctrlArg);
         rewriter.eraseOp(startOp);
