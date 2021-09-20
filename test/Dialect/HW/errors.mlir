@@ -261,3 +261,11 @@ hw.module @Use<xx: i41>() {
   // expected-error @+1 {{op parameter "xx" used with type 'i42'; should have type 'i41'}}
   hw.instance "inst1" @p<p: i42 = #hw.parameter.ref<"xx">>() -> ()
 }
+
+
+// -----
+// Check attribute validity for module parameters.
+
+// expected-error @+1 {{op parameter "p" cannot be used as a default value for a parameter}}
+hw.module.extern @p<p: i42 = #hw.parameter.ref<"p">>() -> ()
+

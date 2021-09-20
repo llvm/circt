@@ -79,6 +79,58 @@ static ParseResult parseCommaSeparatedList(OpAsmParser &parser,
   }
 }
 
+/// Check parameter specified by `value` to see if it is valid within the scope
+/// of the specified module `module`.  If not, emit an error at the location of
+/// `usingOp` and return failure, otherwise return success.
+///
+/// If `disallowParamRefs` is true, then parameter references are not allowed.
+LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
+                                          Operation *usingOp,
+                                          bool disallowParamRefs) {
+  // Literals are always ok.  Their types are already known to match
+  // expectations.
+  if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
+      value.isa<StringAttr>() || value.isa<VerbatimParameterValueAttr>())
+    return success();
+
+  // Parameter references need more analysis to make sure they are valid within
+  // this module.
+  if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
+    auto nameAttr = parameterRef.getName();
+
+    // Don't allow references to parameters from the default values of a
+    // parameter list.
+    if (disallowParamRefs) {
+      usingOp->emitOpError("parameter ")
+          << nameAttr << " cannot be used as a default value for a parameter";
+      return failure();
+    }
+
+    // Find the corresponding attribute in the module.
+    for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
+      auto paramAttr = param.cast<ParameterAttr>();
+      if (paramAttr.name() != nameAttr)
+        continue;
+
+      // If the types match then the reference is ok.
+      if (paramAttr.type().getValue() == parameterRef.getType())
+        return success();
+
+      auto diag = usingOp->emitOpError("parameter ")
+                  << nameAttr << " used with type " << parameterRef.getType()
+                  << "; should have type " << paramAttr.type().getValue();
+      diag.attachNote(module->getLoc()) << "module declared here";
+      return failure();
+    }
+
+    auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
+    diag.attachNote(module->getLoc()) << "module declared here";
+    return failure();
+  }
+
+  return usingOp->emitOpError("invalid parameter value ") << value;
+}
+
 //===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
@@ -634,6 +686,28 @@ static LogicalResult verifyModuleCommon(Operation *module) {
     return module->emitOpError("incorrect number of argument names");
   if (resultNames.size() != moduleType.getNumResults())
     return module->emitOpError("incorrect number of result names");
+
+  // Check parameter default values are sensible.
+  for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
+    auto paramAttr = param.cast<ParameterAttr>();
+
+    // Default values are allowed to be missing.
+    auto value = paramAttr.value();
+    if (!value)
+      continue;
+
+    if (value.getType() != paramAttr.type().getValue())
+      return module->emitOpError("parameter ")
+             << paramAttr << " should have type " << paramAttr.type().getValue()
+             << "; has type " << value.getType();
+
+    // Verify that this is a valid parameter value, disallowing parameter
+    // references.  We could allow parameters to refer to each other in the
+    // future with lexical ordering if there is a need.
+    if (failed(checkParameterInContext(value, module, module,
+                                       /*disallowParamRefs=*/true)))
+      return failure();
+  }
   return success();
 }
 
@@ -836,46 +910,6 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   }
 
   return success();
-}
-
-/// Check parameter specified by `value` to see if it is valid within the scope
-/// of the specified module `module`.  If not, emit an error at the location of
-/// `usingOp` and return failure, otherwise return success.
-static LogicalResult checkParameterInContext(Attribute value, HWModuleOp module,
-                                             Operation *usingOp) {
-  // Literals are always ok.  Their types are already known to match
-  // expectations.
-  if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
-      value.isa<StringAttr>() || value.isa<VerbatimParameterValueAttr>())
-    return success();
-
-  // Parameter references need more analysis to make sure they are valid within
-  // this module.
-  if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
-    auto nameAttr = parameterRef.getName();
-    // Find the corresponding attribute in the module.
-    for (auto param : module.parameters()) {
-      auto paramAttr = param.cast<ParameterAttr>();
-      if (paramAttr.name() != nameAttr)
-        continue;
-
-      // If the types match then the reference is ok.
-      if (paramAttr.type().getValue() == parameterRef.getType())
-        return success();
-
-      auto diag = usingOp->emitOpError("parameter ")
-                  << nameAttr << " used with type " << parameterRef.getType()
-                  << "; should have type " << paramAttr.type().getValue();
-      diag.attachNote(module->getLoc()) << "module declared here";
-      return failure();
-    }
-
-    auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
-    diag.attachNote(module->getLoc()) << "module declared here";
-    return failure();
-  }
-
-  return usingOp->emitOpError("invalid parameter value ") << value;
 }
 
 LogicalResult InstanceOp::verifyCustom() {

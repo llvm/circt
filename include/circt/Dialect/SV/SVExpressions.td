@@ -108,4 +108,6 @@ def LocalParamOp : SVOp<"localparam",
   let assemblyFormat = [{
     `:` type($result) custom<ImplicitSSAName>(attr-dict)
   }];
+
+  let verifier = "return ::verify$cppClass(*this);";
 }
