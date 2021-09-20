@@ -1122,20 +1122,20 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 
   // Set all the parameters.
   SmallVector<Attribute, 8> params;
-  params.push_back(getParameterWithValue(
+  params.push_back(ParameterAttr::get(
       "ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID())));
-  params.push_back(getParameterWithValue(
+  params.push_back(ParameterAttr::get(
       "SEND_TYPE_ID",
       IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID())));
   params.push_back(
-      getParameterWithValue("SEND_TYPE_SIZE_BITS",
-                            rewriter.getI32IntegerAttr(sendTypeSchema.size())));
-  params.push_back(getParameterWithValue(
+      ParameterAttr::get("SEND_TYPE_SIZE_BITS",
+                         rewriter.getI32IntegerAttr(sendTypeSchema.size())));
+  params.push_back(ParameterAttr::get(
       "RECV_TYPE_ID",
       IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID())));
   params.push_back(
-      getParameterWithValue("RECV_TYPE_SIZE_BITS",
-                            rewriter.getI32IntegerAttr(recvTypeSchema.size())));
+      ParameterAttr::get("RECV_TYPE_SIZE_BITS",
+                         rewriter.getI32IntegerAttr(recvTypeSchema.size())));
 
   // Set up the egest route to drive the EP's send ports.
   ArrayType egestBitArrayType =
