@@ -136,3 +136,12 @@ hw.module @signed_arrays(%arg0: si8) -> (out: !hw.array<2xsi8>) {
   %result = sv.read_inout %wireArray : !hw.inout<!hw.array<2xsi8>>
   hw.output %result : !hw.array<2xsi8>
 }
+
+/// Port names that aren't valid MLIR identifiers are handled with `argNames`
+/// attribute being explicitly printed.
+// https://github.com/llvm/circt/issues/1822
+
+// CHECK-LABEL: hw.module @argRenames
+// CHECK-SAME: attributes {argNames = [""]}
+hw.module @argRenames(%arg1: i32) attributes {argNames = [""]} {
+}

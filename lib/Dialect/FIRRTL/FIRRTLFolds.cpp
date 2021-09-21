@@ -303,7 +303,7 @@ OpFoldResult DivPrimOp::fold(ArrayRef<Attribute> operands) {
   /// be folded here because it increases the return type bitwidth by
   /// one and requires sign extension (a new op).
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>())
-    if (rhsCst.getValue().isOneValue() && lhs().getType() == getType())
+    if (rhsCst.getValue().isOne() && lhs().getType() == getType())
       return lhs();
 
   return constFoldFIRRTLBinaryOp(*this, operands, BinOpKind::DivideOrShift,
@@ -366,11 +366,11 @@ OpFoldResult AndPrimOp::fold(ArrayRef<Attribute> operands) {
 
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// and(x, 0) -> 0
-    if (rhsCst.getValue().isNullValue() && rhs().getType() == getType())
+    if (rhsCst.getValue().isZero() && rhs().getType() == getType())
       return rhs();
 
     /// and(x, -1) -> x
-    if (rhsCst.getValue().isAllOnesValue() && lhs().getType() == getType() &&
+    if (rhsCst.getValue().isAllOnes() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
   }
@@ -400,11 +400,11 @@ OpFoldResult OrPrimOp::fold(ArrayRef<Attribute> operands) {
 
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// or(x, 0) -> x
-    if (rhsCst.getValue().isNullValue() && lhs().getType() == getType())
+    if (rhsCst.getValue().isZero() && lhs().getType() == getType())
       return lhs();
 
     /// or(x, -1) -> -1
-    if (rhsCst.getValue().isAllOnesValue() && rhs().getType() == getType() &&
+    if (rhsCst.getValue().isAllOnes() && rhs().getType() == getType() &&
         lhs().getType() == getType())
       return rhs();
   }
@@ -434,7 +434,7 @@ OpFoldResult XorPrimOp::fold(ArrayRef<Attribute> operands) {
 
   /// xor(x, 0) -> x
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>())
-    if (rhsCst.getValue().isNullValue() && lhs().getType() == getType())
+    if (rhsCst.getValue().isZero() && lhs().getType() == getType())
       return lhs();
 
   /// xor(x, x) -> 0
@@ -513,7 +513,7 @@ OpFoldResult LTPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // lt(x, 0) -> 0 when x is unsigned
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
-    if (rhsCst.getValue().isNullValue() && lhs().getType().isa<UIntType>())
+    if (rhsCst.getValue().isZero() && lhs().getType().isa<UIntType>())
       return getIntAttr(getType(), APInt(1, 0));
   }
 
@@ -569,7 +569,7 @@ OpFoldResult GEQPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // geq(x, 0) -> 1 when x is unsigned
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
-    if (rhsCst.getValue().isNullValue() && lhs().getType().isa<UIntType>())
+    if (rhsCst.getValue().isZero() && lhs().getType().isa<UIntType>())
       return getIntAttr(getType(), APInt(1, 1));
   }
 
@@ -669,7 +669,7 @@ OpFoldResult EQPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// eq(x, 1) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (rhsCst.getValue().isAllOnesValue() && lhs().getType() == getType() &&
+    if (rhsCst.getValue().isAllOnes() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
   }
@@ -685,21 +685,21 @@ LogicalResult EQPrimOp::canonicalize(EQPrimOp op, PatternRewriter &rewriter) {
     auto width = op.lhs().getType().cast<IntType>().getBitWidthOrSentinel();
 
     // eq(x, 0) ->  not(x) when x is 1 bit.
-    if (rhsCst.value().isNullValue() && op.lhs().getType() == op.getType() &&
+    if (rhsCst.value().isZero() && op.lhs().getType() == op.getType() &&
         op.rhs().getType() == op.getType()) {
       rewriter.replaceOpWithNewOp<NotPrimOp>(op, op.lhs());
       return success();
     }
 
     // eq(x, 0) -> not(orr(x)) when x is >1 bit
-    if (rhsCst.value().isNullValue() && width > 1) {
+    if (rhsCst.value().isZero() && width > 1) {
       auto orrOp = rewriter.create<OrRPrimOp>(op.getLoc(), op.lhs());
       rewriter.replaceOpWithNewOp<NotPrimOp>(op, orrOp);
       return success();
     }
 
     // eq(x, ~0) -> andr(x) when x is >1 bit
-    if (rhsCst.value().isAllOnesValue() && width > 1 &&
+    if (rhsCst.value().isAllOnes() && width > 1 &&
         op.lhs().getType() == op.rhs().getType()) {
       rewriter.replaceOpWithNewOp<AndRPrimOp>(op, op.lhs());
       return success();
@@ -717,7 +717,7 @@ OpFoldResult NEQPrimOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhsCst = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     /// neq(x, 0) -> x when x is 1 bit.
     /// TODO: Support SInt<1> on the LHS etc.
-    if (rhsCst.getValue().isNullValue() && lhs().getType() == getType() &&
+    if (rhsCst.getValue().isZero() && lhs().getType() == getType() &&
         rhs().getType() == getType())
       return lhs();
   }
@@ -731,20 +731,20 @@ LogicalResult NEQPrimOp::canonicalize(NEQPrimOp op, PatternRewriter &rewriter) {
   if (auto rhsCst = dyn_cast_or_null<ConstantOp>(op.rhs().getDefiningOp())) {
     auto width = op.lhs().getType().cast<IntType>().getBitWidthOrSentinel();
     // neq(x, 1) -> not(x) when x is 1 bit
-    if (rhsCst.value().isAllOnesValue() && op.lhs().getType() == op.getType() &&
+    if (rhsCst.value().isAllOnes() && op.lhs().getType() == op.getType() &&
         op.rhs().getType() == op.getType()) {
       rewriter.replaceOpWithNewOp<NotPrimOp>(op, op.lhs());
       return success();
     }
 
     // neq(x, 0) -> orr(x) when x is >1 bit
-    if (rhsCst.value().isNullValue() && width > 1) {
+    if (rhsCst.value().isZero() && width > 1) {
       rewriter.replaceOpWithNewOp<OrRPrimOp>(op, op.lhs());
       return success();
     }
 
     // neq(x, ~0) -> not(andr(x))) when x is >1 bit
-    if (rhsCst.value().isAllOnesValue() && width > 1 &&
+    if (rhsCst.value().isAllOnes() && width > 1 &&
         op.lhs().getType() == op.rhs().getType()) {
       auto andrOp = rewriter.create<AndRPrimOp>(op.getLoc(), op.lhs());
       rewriter.replaceOpWithNewOp<NotPrimOp>(op, andrOp);
@@ -870,7 +870,7 @@ OpFoldResult AndRPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // x == -1
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnesValue()));
+    return getIntAttr(getType(), APInt(1, attr.getValue().isAllOnes()));
 
   // one bit is identity.  Only applies to UInt since we cann't make a cast
   // here.
@@ -886,7 +886,7 @@ OpFoldResult OrRPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // x != 0
   if (auto attr = operands[0].dyn_cast_or_null<IntegerAttr>())
-    return getIntAttr(getType(), APInt(1, !attr.getValue().isNullValue()));
+    return getIntAttr(getType(), APInt(1, !attr.getValue().isZero()));
 
   // one bit is identity.  Only applies to UInt since we cann't make a cast
   // here.
@@ -1058,9 +1058,9 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
 
   // mux(0/1, x, y) -> x or y
   if (auto cond = operands[0].dyn_cast_or_null<IntegerAttr>()) {
-    if (cond.getValue().isNullValue() && low().getType() == getType())
+    if (cond.getValue().isZero() && low().getType() == getType())
       return low();
-    if (!cond.getValue().isNullValue() && high().getType() == getType())
+    if (!cond.getValue().isZero() && high().getType() == getType())
       return high();
   }
 
@@ -1072,7 +1072,7 @@ OpFoldResult MuxPrimOp::fold(ArrayRef<Attribute> operands) {
           highCst.getValue() == lowCst.getValue())
         return highCst;
       // mux(cond, 1, 0) -> cond
-      if (highCst.getValue().isOneValue() && lowCst.getValue().isNullValue() &&
+      if (highCst.getValue().isOne() && lowCst.getValue().isZero() &&
           getType() == sel().getType())
         return sel();
 
@@ -1373,50 +1373,6 @@ LogicalResult ConnectOp::canonicalize(ConnectOp op, PatternRewriter &rewriter) {
     return success();
 
   return failure();
-}
-
-//===----------------------------------------------------------------------===//
-// Conversions
-//===----------------------------------------------------------------------===//
-
-OpFoldResult StdIntCastOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<StdIntCastOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AnalogInOutCastOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<AnalogInOutCastOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AsPassivePrimOp::fold(ArrayRef<Attribute> operands) {
-  // If the input is already passive, then we don't need a conversion.
-  if (getOperand().getType() == getType())
-    return getOperand();
-
-  if (auto castInput =
-          dyn_cast_or_null<AsNonPassivePrimOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
-}
-
-OpFoldResult AsNonPassivePrimOp::fold(ArrayRef<Attribute> operands) {
-  if (auto castInput =
-          dyn_cast_or_null<AsPassivePrimOp>(getOperand().getDefiningOp()))
-    if (castInput.getOperand().getType() == getType())
-      return castInput.getOperand();
-
-  return {};
 }
 
 //===----------------------------------------------------------------------===//

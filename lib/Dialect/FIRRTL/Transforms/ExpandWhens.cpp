@@ -126,8 +126,10 @@ public:
   /// If a value has an outer flip, convert the value to passive.
   Value convertToPassive(OpBuilder &builder, Location loc, Value input) {
     auto inType = input.getType().cast<FIRRTLType>();
-    return builder.createOrFold<AsPassivePrimOp>(loc, inType.getPassiveType(),
-                                                 input);
+    return builder
+        .create<mlir::UnrealizedConversionCastOp>(loc, inType.getPassiveType(),
+                                                  input)
+        .getResult(0);
   }
 
   /// Take two connection operations and merge them in to a new connect under a

@@ -111,6 +111,15 @@ void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
 /// Return true if the specified operation is a combinatorial logic op.
 bool isCombinatorial(Operation *op);
 
+/// Check parameter specified by `value` to see if it is valid within the scope
+/// of the specified module `module`.  If not, emit an error at the location of
+/// `usingOp` and return failure, otherwise return success.
+///
+/// If `disallowParamRefs` is true, then parameter references are not allowed.
+LogicalResult checkParameterInContext(Attribute value, Operation *module,
+                                      Operation *usingOp,
+                                      bool disallowParamRefs = false);
+
 /// This stores lookup tables to make manipulating and working with the IR more
 /// efficient.  There are two phases to this object: the "building" phase in
 /// which it is "write only" and then the "using" phase which is read-only (and

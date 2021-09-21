@@ -1,7 +1,7 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
-// CHECK: calyx.program {
-calyx.program {
+// CHECK: calyx.program "main" {
+calyx.program "main" {
   // CHECK-LABEL: calyx.component @A(%in: i8, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i8, %done: i1 {done}) {
   calyx.component @A(%in: i8, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i8, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1

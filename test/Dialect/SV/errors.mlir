@@ -173,3 +173,10 @@ hw.module @InternSrcMod() {
 }
 // expected-error @+1 {{Referenced instance isn't marked as doNotPrint}}
 sv.bind @A in @InternSrcMod
+
+// -----
+
+hw.module @test() {
+  // expected-error @+1 {{op invalid parameter value @test}}
+  %param_x = sv.localparam : i42 {value = @test}
+}

@@ -376,9 +376,10 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verifyProgramOp(ProgramOp program) {
-  if (!program.getMainComponent())
-    return program.emitOpError("must contain one component named "
-                               "\"main\" as the entry point.");
+  if (program.getEntryPointComponent() == nullptr)
+    return program.emitOpError() << "has undefined entry-point component: \""
+                                 << program.entryPointName() << "\".";
+
   return success();
 }
 
@@ -683,7 +684,8 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 
   std::pair<SmallVector<Type, 8>, SmallVector<Type, 8>> portIOTypes;
   std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>> portIONames;
-  SmallVector<Attribute> portAttributes;
+  std::pair<SmallVector<Attribute, 8>, SmallVector<Attribute, 8>>
+      portIOAttributes;
   SmallVector<Direction, 8> portDirections;
   // Avoid using llvm::partition or llvm::sort to preserve relative ordering
   // between individual inputs and outputs.
@@ -691,10 +693,12 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
     bool isInput = port.direction == Direction::Input;
     (isInput ? portIOTypes.first : portIOTypes.second).push_back(port.type);
     (isInput ? portIONames.first : portIONames.second).push_back(port.name);
-    portAttributes.push_back(port.attributes);
+    (isInput ? portIOAttributes.first : portIOAttributes.second)
+        .push_back(port.attributes);
   }
   auto portTypes = concat(portIOTypes.first, portIOTypes.second);
   auto portNames = concat(portIONames.first, portIONames.second);
+  auto portAttributes = concat(portIOAttributes.first, portIOAttributes.second);
 
   // Build the function type of the component.
   auto functionType = builder.getFunctionType(portTypes, {});
@@ -920,6 +924,57 @@ ComponentOp InstanceOp::getReferencedComponent() {
   return program.lookupSymbol<ComponentOp>(componentName());
 }
 
+/// Verifies the port information in comparison with the referenced component
+/// of an instance. This helper function avoids conducting a lookup for the
+/// referenced component twice.
+static LogicalResult verifyInstanceOpType(InstanceOp instance,
+                                          ComponentOp referencedComponent) {
+  auto program = instance->getParentOfType<ProgramOp>();
+  StringRef entryPointName = program.entryPointName();
+  if (instance.componentName() == entryPointName)
+    return instance.emitOpError()
+           << "cannot reference the entry-point component: \"" << entryPointName
+           << "\".";
+
+  // Verify the instance result ports with those of its referenced component.
+  SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
+  size_t numPorts = componentPorts.size();
+
+  size_t numResults = instance.getNumResults();
+  if (numResults != numPorts)
+    return instance.emitOpError()
+           << "has a wrong number of results; expected: " << numPorts
+           << " but got " << numResults;
+
+  for (size_t i = 0; i != numResults; ++i) {
+    auto resultType = instance.getResult(i).getType();
+    auto expectedType = componentPorts[i].type;
+    if (resultType == expectedType)
+      continue;
+    return instance.emitOpError()
+           << "result type for " << componentPorts[i].name << " must be "
+           << expectedType << ", but got " << resultType;
+  }
+  return success();
+}
+
+LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *referencedComponent =
+      symbolTable.lookupNearestSymbolFrom(*this, componentNameAttr());
+  if (referencedComponent == nullptr)
+    return emitError() << "referencing component: " << componentName()
+                       << ", which does not exist.";
+
+  // Verify the referenced component is not instantiating itself.
+  auto parentComponent = (*this)->getParentOfType<ComponentOp>();
+  if (parentComponent == referencedComponent)
+    return emitError() << "recursive instantiation of its parent component: "
+                       << componentName();
+
+  assert(isa<ComponentOp>(referencedComponent) && "Should be a ComponentOp.");
+  return verifyInstanceOpType(*this, cast<ComponentOp>(referencedComponent));
+}
+
 /// Provide meaningful names to the result values of an InstanceOp.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   getCellAsmResultNames(setNameFn, *this, this->portNames());
@@ -944,46 +999,6 @@ SmallVector<DictionaryAttr> InstanceOp::portAttributes() {
   for (const PortInfo &port : getReferencedComponent().getPortInfo())
     portAttributes.push_back(port.attributes);
   return portAttributes;
-}
-
-static LogicalResult verifyInstanceOp(InstanceOp instance) {
-  if (instance.componentName() == "main")
-    return instance.emitOpError("cannot reference the entry point.");
-
-  // Verify the referenced component exists in this program.
-  ComponentOp referencedComponent = instance.getReferencedComponent();
-  if (!referencedComponent)
-    return instance.emitOpError()
-           << "is referencing component: " << instance.componentName()
-           << ", which does not exist.";
-
-  // Verify the referenced component is not instantiating itself.
-  auto parentComponent = instance->getParentOfType<ComponentOp>();
-  if (parentComponent == referencedComponent)
-    return instance.emitOpError()
-           << "is a recursive instantiation of its parent component: "
-           << instance.componentName();
-
-  // Verify the instance result ports with those of its referenced component.
-  SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
-  size_t numPorts = componentPorts.size();
-
-  size_t numResults = instance.getNumResults();
-  if (numResults != numPorts)
-    return instance.emitOpError()
-           << "has a wrong number of results; expected: " << numPorts
-           << " but got " << numResults;
-
-  for (size_t i = 0; i != numResults; ++i) {
-    auto resultType = instance.getResult(i).getType();
-    auto expectedType = componentPorts[i].type;
-    if (resultType == expectedType)
-      continue;
-    return instance.emitOpError()
-           << "result type for " << componentPorts[i].name << " must be "
-           << expectedType << ", but got " << resultType;
-  }
-  return success();
 }
 
 //===----------------------------------------------------------------------===//

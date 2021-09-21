@@ -187,6 +187,12 @@ void LocalParamOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     setNameFn(getResult(), nameAttr.getValue());
 }
 
+static LogicalResult verifyLocalParamOp(LocalParamOp op) {
+  // Verify that this is a valid parameter value.
+  return hw::checkParameterInContext(op.value(),
+                                     op->getParentOfType<hw::HWModuleOp>(), op);
+}
+
 //===----------------------------------------------------------------------===//
 // RegOp
 //===----------------------------------------------------------------------===//

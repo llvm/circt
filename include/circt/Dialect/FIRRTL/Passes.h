@@ -42,6 +42,8 @@ std::unique_ptr<mlir::Pass> createInferWidthsPass();
 
 std::unique_ptr<mlir::Pass> createInferResetsPass();
 
+std::unique_ptr<mlir::Pass> createPrefixModulesPass();
+
 std::unique_ptr<mlir::Pass> createPrintInstanceGraphPass();
 
 std::unique_ptr<mlir::Pass>

@@ -132,7 +132,7 @@ hw.module @invalid_add(%a: i0) {  // i0 ports are ok.
 
 // -----
 
-// expected-note @+1 {{original module declared here}}
+// expected-note @+1 {{module declared here}}
 hw.module @empty() -> () {
   hw.output
 }
@@ -145,7 +145,7 @@ hw.module @test() -> () {
 
 // -----
 
-// expected-note @+1 {{original module declared here}}
+// expected-note @+1 {{module declared here}}
 hw.module @f() -> (a: i2) {
   %a = hw.constant 1 : i2
   hw.output %a : i2
@@ -159,7 +159,7 @@ hw.module @test() -> () {
 
 // -----
 
-// expected-note @+1 {{original module declared here}}
+// expected-note @+1 {{module declared here}}
 hw.module @empty() -> () {
   hw.output
 }
@@ -172,7 +172,7 @@ hw.module @test(%a: i1) -> () {
 
 // -----
 
-// expected-note @+1 {{original module declared here}}
+// expected-note @+1 {{module declared here}}
 hw.module @f(%a: i1) -> () {
   hw.output
 }
@@ -186,7 +186,7 @@ hw.module @test(%a: i2) -> () {
 
 // -----
 
-// expected-note @+1 {{original module declared here}}
+// expected-note @+1 {{module declared here}}
 hw.module @f(%a: i1) -> () {
   hw.output
 }
@@ -196,3 +196,76 @@ hw.module @test(%a: i1) -> () {
   hw.instance "test" @f(b: %a: i1) -> ()
   hw.output
 }
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
+
+hw.module @Use(%a: i8) -> (xx: i8) {
+  // expected-error @+1 {{op expected 2 parameters but had 1}}
+  %r0 = hw.instance "inst1" @p<p1: i42 = 4>(arg0: %a: i8) -> (out: i8)
+  hw.output %r0: i8
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
+
+hw.module @Use(%a: i8) -> (xx: i8) {
+  // expected-error @+1 {{op parameter #1 should have name "p2" but has name "p3"}}
+  %r0 = hw.instance "inst1" @p<p1: i42 = 4, p3: i1 = 0>(arg0: %a: i8) -> (out: i8)
+  hw.output %r0: i8
+}
+
+// -----
+
+// expected-note @+1 {{module declared here}}
+hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
+
+hw.module @Use(%a: i8) -> (xx: i8) {
+  // expected-error @+1 {{op parameter "p2" should have type i1 but has type i2}}
+  %r0 = hw.instance "inst1" @p<p1: i42 = 4, p2: i2 = 0>(arg0: %a: i8) -> (out: i8)
+  hw.output %r0: i8
+}
+
+// -----
+
+hw.module.extern @p<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8)
+
+hw.module @Use(%a: i8) -> (xx: i8) {
+  // expected-error @+1 {{op parameter "p2" must have a value}}
+  %r0 = hw.instance "inst1" @p<p1: i42 = 4, p2: i1>(arg0: %a: i8) -> (out: i8)
+  hw.output %r0: i8
+}
+
+// -----
+// Check attribute validity for parameters.
+
+hw.module.extern @p<p: i42>() -> ()
+
+// expected-note @+1 {{module declared here}}
+hw.module @Use() {
+  // expected-error @+1 {{op use of unknown parameter "FOO"}}
+  hw.instance "inst1" @p<p: i42 = #hw.parameter.ref<"FOO">>() -> ()
+}
+
+// -----
+// Check attribute validity for parameters.
+
+hw.module.extern @p<p: i42>() -> ()
+
+// expected-note @+1 {{module declared here}}
+hw.module @Use<xx: i41>() {
+  // expected-error @+1 {{op parameter "xx" used with type 'i42'; should have type 'i41'}}
+  hw.instance "inst1" @p<p: i42 = #hw.parameter.ref<"xx">>() -> ()
+}
+
+
+// -----
+// Check attribute validity for module parameters.
+
+// expected-error @+1 {{op parameter "p" cannot be used as a default value for a parameter}}
+hw.module.extern @p<p: i42 = #hw.parameter.ref<"p">>() -> ()
+

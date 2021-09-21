@@ -35,17 +35,24 @@ def ProgramOp : CalyxContainer<"program", [
   ]> {
   let summary = "Calyx Program";
   let description = [{
-    The "calyx.program" operation represents an overall Calyx program,
-    containing a list of Calyx components. This must include a "main"
-    component, the entry point of the program.
+    The "calyx.program" operation represents an overall Calyx
+    program, containing a list of Calyx components. This must
+    include an entry-point component.
+
+      ```mlir
+      calyx.program "main" { ... }
+      ```
   }];
-  let arguments = (ins);
+  let arguments = (ins StrAttr:$entryPointName);
 
   let extraClassDeclaration = [{
-    /// Returns the main component, representing the
-    /// entry point of the Calyx program.
-    ComponentOp getMainComponent() { return lookupSymbol<ComponentOp>("main"); }
+    /// Returns the entry-point component into the
+    /// Calyx program.
+    ComponentOp getEntryPointComponent() {
+      return lookupSymbol<ComponentOp>(entryPointName());
+    }
   }];
+  let assemblyFormat = "$entryPointName $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
 
@@ -149,6 +156,7 @@ def WiresOp : CalyxContainer<"wires", [
 }
 
 def InstanceOp : CalyxCell<"instance", [
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
   ]> {
   let summary = "Calyx Component Instance";
   let description = [{
@@ -174,7 +182,6 @@ def InstanceOp : CalyxCell<"instance", [
   let assemblyFormat = [{
     $instanceName $componentName attr-dict (`:` type($results)^)?
   }];
-  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def GroupOp : CalyxOp<"group", [

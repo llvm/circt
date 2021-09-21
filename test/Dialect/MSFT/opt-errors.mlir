@@ -13,3 +13,10 @@ module {
   // expected-error @+1 {{Unexpected msft attribute 'foo'}}
   hw.instance "foo1" @Foo() -> () {"loc:" = #msft.foo<""> } 
 }
+
+// -----
+
+hw.module @M() {
+  // expected-error @+1 {{Cannot find module definition 'Bar'}}
+  msft.instance "instance" @Bar () : () -> ()
+}

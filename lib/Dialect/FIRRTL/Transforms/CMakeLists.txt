@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   LowerCHIRRTL.cpp
   LowerTypes.cpp
   ModuleInliner.cpp
+  PrefixModules.cpp
   PrintInstanceGraph.cpp
 
   DEPENDS

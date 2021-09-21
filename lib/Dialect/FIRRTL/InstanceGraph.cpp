@@ -55,6 +55,10 @@ InstanceGraphNode *InstanceGraph::getTopLevelNode() {
   return &nodes[0];
 }
 
+FModuleLike InstanceGraph::getTopLevelModule() {
+  return getTopLevelNode()->getModule();
+}
+
 InstanceGraphNode *InstanceGraph::lookup(StringRef name) {
   auto it = nodeMap.find(name);
   assert(it != nodeMap.end() && "Module not in InstanceGraph!");
