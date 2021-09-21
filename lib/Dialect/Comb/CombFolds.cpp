@@ -1684,6 +1684,18 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   APInt value;
 
+  // mux(a, 0, 1) -> ~a for single-bit values.
+  if (matchPattern(op.trueValue(), m_RConstant(value)) &&
+      value.getBitWidth() == 1 && value.isZero()) {
+    APInt value2;
+    if (matchPattern(op.falseValue(), m_RConstant(value2)) &&
+        value2.isAllOnes()) {
+      auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
+      rewriter.replaceOpWithNewOp<XorOp>(op, op.cond(), one);
+      return success();
+    }
+  }
+
   // mux(a, 1, b) -> or(a, b) for single-bit values.
   if (matchPattern(op.trueValue(), m_RConstant(value)) &&
       value.getBitWidth() == 1 && value.isAllOnes()) {

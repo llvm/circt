@@ -19,6 +19,17 @@ hw.module @notMux(%a: i4, %b: i4, %c: i1) -> (o: i4) {
   hw.output %1 : i4
 }
 
+// CHECK-LABEL: @notMuxResult
+hw.module @notMuxResult(%cond: i1) -> (o: i1) {
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: %0 = comb.xor %cond, %true : i1
+  // CHECK-NEXT: hw.output %0
+  %c0 = hw.constant 0 : i1
+  %c1 = hw.constant 1 : i1
+  %0 = comb.mux %cond, %c0, %c1 : i1
+  hw.output %0 : i1
+}
+
 // CHECK-LABEL: @notNot
 hw.module @notNot(%a: i1) -> (o: i1) {
 // CHECK-NEXT: hw.output %a
