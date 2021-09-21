@@ -376,9 +376,9 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verifyProgramOp(ProgramOp program) {
-  if (!program.getMainComponent())
-    return program.emitOpError("must contain one component named "
-                               "\"main\" as the entry point.");
+  if (program.getEntryPointComponent() == nullptr)
+    return program.emitOpError("must contain an entry-point component.");
+
   return success();
 }
 

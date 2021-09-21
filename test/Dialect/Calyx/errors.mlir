@@ -1,11 +1,11 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-// expected-error @+1 {{'calyx.program' op must contain one component named "main" as the entry point.}}
-calyx.program {}
+// expected-error @+1 {{'calyx.program' op must contain an entry-point component.}}
+calyx.program "main" {}
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   // expected-error @+1 {{'calyx.component' op requires exactly one of each: 'calyx.wires', 'calyx.control'.}}
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     calyx.control {}
@@ -14,7 +14,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     // expected-error @+1 {{referencing component: A, which does not exist.}}
     calyx.instance "c" @A
@@ -26,7 +26,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     // expected-error @+1 {{recursive instantiation of its parent component: main}}
     calyx.instance "c" @main : i1, i1, i1, i1
@@ -38,7 +38,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%in: i16, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -55,7 +55,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @B(%in: i16, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -71,7 +71,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i16, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -95,7 +95,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     calyx.wires {}
     calyx.control {
@@ -109,7 +109,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
@@ -130,7 +130,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
@@ -149,7 +149,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -170,7 +170,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     calyx.wires {
@@ -205,7 +205,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -233,7 +233,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%in: i1, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -264,7 +264,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -285,7 +285,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -308,7 +308,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%in: i1, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -339,7 +339,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     // expected-error @+1 {{'calyx.memory' op mismatched number of dimensions (1) and address sizes (2)}}
     %m.addr0, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64] x 8> [6, 6] : i6, i8, i1, i1, i8, i1
@@ -350,7 +350,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     // expected-error @+1 {{'calyx.memory' op incorrect number of address ports, expected 2}}
     %m.addr0, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i8, i1, i1, i8, i1
@@ -361,7 +361,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     // expected-error @+1 {{'calyx.memory' op address size (5) for dimension 0 can't address the entire range (64)}}
     %m.addr0, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64] x 8> [5] : i5, i8, i1, i1, i5, i1
@@ -372,7 +372,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires {
@@ -385,7 +385,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires {
@@ -398,7 +398,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     calyx.wires {
@@ -411,7 +411,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     calyx.wires {
@@ -424,7 +424,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     calyx.wires {
@@ -437,7 +437,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
@@ -458,7 +458,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -486,7 +486,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -514,7 +514,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }
@@ -537,7 +537,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   // expected-error @+1 {{'calyx.component' op is missing the following required port attribute identifiers: done, go}}
   calyx.component @main(%go: i1, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1) {
     %c1_1 = hw.constant 1 : i1
@@ -548,7 +548,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
@@ -565,7 +565,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
     %c1_i8 = hw.constant 1 : i8
@@ -582,7 +582,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %gt.left, %gt.right, %gt.out = calyx.std_gt "gt" : i8, i8, i1
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
@@ -603,7 +603,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
@@ -622,7 +622,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
@@ -650,7 +650,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %m.addr0, %m.addr1, %m.write_data, %m.write_en, %m.clk, %m.read_data, %m.done = calyx.memory "m"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
@@ -683,7 +683,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
@@ -702,7 +702,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
@@ -721,7 +721,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
@@ -741,7 +741,7 @@ calyx.program {
 
 // -----
 
-calyx.program {
+calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires {

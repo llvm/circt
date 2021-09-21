@@ -1,7 +1,7 @@
 // RUN: circt-translate --export-calyx --verify-diagnostics %s | FileCheck %s --strict-whitespace
 
 // CHECK: import "primitives/core.futil";
-calyx.program {
+calyx.program "main" {
   // CHECK-LABEL: component A<"static"=1>(in: 32, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 32, @done done: 1) {
   calyx.component @A(%in: i32, %go: i1 {go = 1}, %clk: i1 {clk = 1}, %reset: i1 {reset = 1}) -> (%out: i32, %done: i1 {done = 1}) {
     %c1_1 = hw.constant 1 : i1
