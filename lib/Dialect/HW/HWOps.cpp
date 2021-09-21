@@ -40,7 +40,7 @@ enum class Delimiter {
 
 /// Parse a paren-enclosed list of comma-separated items with an optional
 /// delimiter.  If a delimiter is provided, then an empty list is allowed.
-/// TODO: Move into MLIR.
+/// TODO(LLVM Merge): Replace with parser.parseCommaSeparatedList.
 template <typename FnType>
 static ParseResult parseCommaSeparatedList(OpAsmParser &parser,
                                            Delimiter delimiter, FnType fn) {
