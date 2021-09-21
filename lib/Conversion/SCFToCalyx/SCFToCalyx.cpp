@@ -87,7 +87,7 @@ public:
   /// Furthermore, this function performs validation on the input function, to
   /// ensure that we've implemented the capabilities necessary to convert it.
   ///
-  /// @todo: this seems unnecessarily complicated:
+  /// TODO(mortbopet): this seems unnecessarily complicated;
   /// A restriction of the current infrastructure is that a top-level 'module'
   /// cannot be overwritten (even though this is essentially what is going on
   /// when replacing standard::ModuleOp with calyx::ProgramOp). see:
@@ -114,12 +114,12 @@ public:
       target.addDynamicallyLegalOp<mlir::ModuleOp>([](mlir::ModuleOp moduleOp) {
         // A module is legalized after we've added a nested
         // calyx::ProgramOp within it.
-        bool ok = false;
+        bool isLegalized = false;
         moduleOp.walk([&](calyx::ProgramOp) {
-          ok = true;
+          isLegalized = true;
           return WalkResult::interrupt();
         });
-        return ok;
+        return isLegalized;
       });
       return target;
     };
@@ -131,17 +131,11 @@ public:
   }
 
 private:
-  mlir::ModuleOp m_moduleOp;
-  calyx::ProgramOp m_programOp;
 };
 
 void SCFToCalyxPass::runOnOperation() {
-  m_moduleOp = getOperation();
-  std::string topLevelFunction;
-  if (topLevelComponent.empty())
-    topLevelFunction = "main";
-  else
-    topLevelFunction = topLevelComponent;
+  std::string topLevelFunction =
+      topLevelComponent.empty() ? std::string("main") : topLevelComponent;
 
   if (failed(mainFuncIsDefined(getOperation(), topLevelFunction))) {
     signalPassFailure();
@@ -149,11 +143,12 @@ void SCFToCalyxPass::runOnOperation() {
   }
 
   /// Start conversion
-  if (failed(createProgram(&m_programOp))) {
+  calyx::ProgramOp programOp;
+  if (failed(createProgram(&programOp))) {
     signalPassFailure();
     return;
   }
-  assert(m_programOp.getOperation() != nullptr &&
+  assert(programOp.getOperation() != nullptr &&
          "programOp should have been set during module "
          "conversion, if module conversion succeeded.");
 }
