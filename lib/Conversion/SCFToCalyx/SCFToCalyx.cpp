@@ -26,9 +26,10 @@ using namespace mlir;
 namespace circt {
 
 struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
-  ModuleOpConversion(MLIRContext *context, calyx::ProgramOp *programOpOutput)
+  ModuleOpConversion(MLIRContext *context, StringRef topLevelFunction,
+                     calyx::ProgramOp *programOpOutput)
       : OpRewritePattern<mlir::ModuleOp>(context),
-        programOpOutput(programOpOutput) {
+        programOpOutput(programOpOutput), topLevelFunction(topLevelFunction) {
     assert(programOpOutput->getOperation() == nullptr &&
            "this function will set programOpOutput post module conversion");
   }
@@ -41,7 +42,8 @@ struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
     rewriter.updateRootInPlace(moduleOp, [&] {
       // Create ProgramOp
       rewriter.setInsertionPointAfter(moduleOp);
-      auto programOp = rewriter.create<calyx::ProgramOp>(moduleOp.getLoc());
+      auto programOp = rewriter.create<calyx::ProgramOp>(
+          moduleOp.getLoc(), StringAttr::get(getContext(), topLevelFunction));
 
       // Inline the module body region
       rewriter.inlineRegionBefore(moduleOp.getBodyRegion(),
@@ -60,6 +62,7 @@ struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
 
 private:
   calyx::ProgramOp *programOpOutput = nullptr;
+  StringRef topLevelFunction;
 };
 
 //===----------------------------------------------------------------------===//
@@ -70,13 +73,30 @@ public:
   SCFToCalyxPass() : SCFToCalyxBase<SCFToCalyxPass>() {}
   void runOnOperation() override;
 
-  LogicalResult mainFuncIsDefined(mlir::ModuleOp moduleOp,
-                                  StringRef topLevelFunction) {
-    if (SymbolTable::lookupSymbolIn(moduleOp, topLevelFunction) == nullptr) {
-      moduleOp.emitError("Main function '" + topLevelFunction +
-                         "' not found in module.");
-      return failure();
+  LogicalResult setTopLevelFunction(mlir::ModuleOp moduleOp,
+                                    std::string &topLevelFunction) {
+    if (!topLevelFunctionOpt.empty()) {
+      if (SymbolTable::lookupSymbolIn(moduleOp, topLevelFunctionOpt) ==
+          nullptr) {
+        moduleOp.emitError() << "Top level function '" << topLevelFunctionOpt
+                             << "' not found in module.";
+        return failure();
+      }
+      topLevelFunction = topLevelFunctionOpt;
+    } else {
+      /// No top level function set; infer top level if the module only contains
+      /// a single function, else, throw error.
+      auto funcOps = moduleOp.getOps<mlir::FuncOp>();
+      if (std::distance(funcOps.begin(), funcOps.end()) == 1)
+        topLevelFunction = (*funcOps.begin()).sym_name().str();
+      else {
+        moduleOp.emitError()
+            << "Module contains multiple functions, but no top level "
+               "function was set. Please see --top-level-function";
+        return failure();
+      }
     }
+
     return success();
   }
 
@@ -84,26 +104,8 @@ public:
   /// inlined within.
   /// Furthermore, this function performs validation on the input function, to
   /// ensure that we've implemented the capabilities necessary to convert it.
-  LogicalResult createProgram(calyx::ProgramOp *programOpOut) {
-    auto createModuleConvTarget = [&]() {
-      ConversionTarget target(getContext());
-      target.addLegalDialect<calyx::CalyxDialect>();
-      target.addLegalDialect<scf::SCFDialect>();
-      target.addIllegalDialect<hw::HWDialect>();
-      target.addIllegalDialect<comb::CombDialect>();
-
-      // For loops should have been lowered to while loops
-      target.addIllegalOp<scf::ForOp>();
-
-      // Only accept std operations which we've added lowerings for
-      target.addIllegalDialect<StandardOpsDialect>();
-      target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShiftLeftOp,
-                        UnsignedShiftRightOp, SignedShiftRightOp, AndOp, XOrOp,
-                        OrOp, ZeroExtendIOp, TruncateIOp, CondBranchOp,
-                        BranchOp, ReturnOp, ConstantOp, IndexCastOp>();
-      return target;
-    };
-
+  LogicalResult createProgram(StringRef topLevelFunction,
+                              calyx::ProgramOp *programOpOut) {
     // Program legalization - the partial conversion driver will not run unless
     // some pattern is provided - provide a dummy pattern.
     struct DummyPattern : public OpRewritePattern<mlir::ModuleOp> {
@@ -113,9 +115,25 @@ public:
         return failure();
       }
     };
+
+    ConversionTarget target(getContext());
+    target.addLegalDialect<calyx::CalyxDialect>();
+    target.addLegalDialect<scf::SCFDialect>();
+    target.addIllegalDialect<hw::HWDialect>();
+    target.addIllegalDialect<comb::CombDialect>();
+
+    // For loops should have been lowered to while loops
+    target.addIllegalOp<scf::ForOp>();
+
+    // Only accept std operations which we've added lowerings for
+    target.addIllegalDialect<StandardOpsDialect>();
+    target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShiftLeftOp, UnsignedShiftRightOp,
+                      SignedShiftRightOp, AndOp, XOrOp, OrOp, ZeroExtendIOp,
+                      TruncateIOp, CondBranchOp, BranchOp, ReturnOp, ConstantOp,
+                      IndexCastOp>();
+
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
-    auto target = createModuleConvTarget();
     DenseSet<Operation *> legalizedOps;
     if (applyPartialConversion(getOperation(), target,
                                std::move(legalizePatterns))
@@ -123,26 +141,24 @@ public:
       return failure();
 
     // Program conversion
-    RewritePatternSet patterns(&getContext());
-    patterns.add<ModuleOpConversion>(&getContext(), programOpOut);
-    return applyOpPatternsAndFold(getOperation(), std::move(patterns));
+    RewritePatternSet conversionPatterns(&getContext());
+    conversionPatterns.add<ModuleOpConversion>(&getContext(), topLevelFunction,
+                                               programOpOut);
+    return applyOpPatternsAndFold(getOperation(),
+                                  std::move(conversionPatterns));
   }
-
-private:
 };
 
 void SCFToCalyxPass::runOnOperation() {
-  std::string topLevelFunction =
-      topLevelComponent.empty() ? std::string("main") : topLevelComponent;
-
-  if (failed(mainFuncIsDefined(getOperation(), topLevelFunction))) {
+  std::string topLevelFunction;
+  if (failed(setTopLevelFunction(getOperation(), topLevelFunction))) {
     signalPassFailure();
     return;
   }
 
   /// Start conversion
   calyx::ProgramOp programOp;
-  if (failed(createProgram(&programOp))) {
+  if (failed(createProgram(topLevelFunction, &programOp))) {
     signalPassFailure();
     return;
   }
