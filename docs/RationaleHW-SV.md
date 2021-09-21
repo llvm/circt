@@ -398,7 +398,7 @@ only sensible as Verilog text. There are three kinds of verbatim operation,
 
 For the verbatim expression form, the text string is expected to have the
 highest precedence, so parentheses is required if it isn't a single token.
-`sv.verbatim` and `sv.verbatim.expr` are assumed to not have side effects, 
+`sv.verbatim.expr` are assumed to not have side effects, 
 whereas `sv.verbatim.expr.se` can have side effects.
 
 Verbatim allows operand substitutions with '{{0}}' syntax.

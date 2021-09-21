@@ -1,6 +1,6 @@
 // RUN: circt-opt -pass-pipeline=hw-export-module-hierarchy %s | FileCheck %s
 
-// CHECK: sv.verbatim "{\22instance_name\22:\22TestHarness\22,\22module_name\22:\22TestHarness\22,\22instances\22:[{\22instance_name\22:\22main_design\22,\22module_name\22:\22MainDesign\22,\22instances\22:[{\22instance_name\22:\22inner\22,\22module_name\22:\22InnerModule\22,\22instances\22:[]}]}]}" {output_file = {directory = "", exclude_from_filelist = true, exclude_replicated_ops = true, name = "testharness_hier.json"}}
+// CHECK: sv.verbatim "{\22instance_name\22:\22TestHarness\22,\22module_name\22:\22TestHarness\22,\22instances\22:[{\22instance_name\22:\22main_design\22,\22module_name\22:\22MainDesign\22,\22instances\22:[{\22instance_name\22:\22inner\22,\22module_name\22:\22InnerModule\22,\22instances\22:[]}]}]}" {output_file = {directory = "", exclude_from_filelist = true, exclude_replicated_ops = true, name = "testharness_hier.json"}, symbols = []}
 
 hw.module @InnerModule(%in: i1) -> (out: i1) {
   hw.output %in : i1
