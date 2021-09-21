@@ -132,9 +132,7 @@ static StringRef getSymOpName(Operation *symOp) {
           [&](InterfaceSignalOp op) { return op.sym_name(); })
       .Case<InterfaceModportOp>(
           [&](InterfaceModportOp op) { return op.sym_name(); })
-      .Default([&](Operation *op) {
-        return "";
-      });
+      .Default([&](Operation *op) { return ""; });
 }
 
 /// This predicate returns true if the specified operation is considered a
