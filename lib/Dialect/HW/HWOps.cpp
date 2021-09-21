@@ -550,12 +550,10 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
 
   auto *context = result.getContext();
 
-  if (hasAttribute("argNames", result.attributes) ||
-      hasAttribute("resultNames", result.attributes) ||
+  if (hasAttribute("resultNames", result.attributes) ||
       hasAttribute("parameters", result.attributes)) {
     parser.emitError(
-        loc,
-        "explicit argNames, resultNames, or parameters attributes not allowed");
+        loc, "explicit `resultNames` / `parameters` attributes not allowed");
     return failure();
   }
 
@@ -569,7 +567,12 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
     argNames.assign(argTypes.size(), StringAttr::get(context, ""));
   }
 
-  result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  // An explicit `argNames` attribute overrides the MLIR names.  This is how
+  // we represent port names that aren't valid MLIR identifiers.  Result and
+  // parameter names are printed quoted when they aren't valid identifiers, so
+  // they don't need this affordance.
+  if (!hasAttribute("argNames", result.attributes))
+    result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
   result.addAttribute("parameters", ArrayAttr::get(context, parameters));
 
