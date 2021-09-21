@@ -189,7 +189,7 @@ def MemOp : FIRRTLOp<"mem"> {
 
     /// Return the type of a port given the memory depth, type, and kind
     static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                     PortKind portKind);
+                                     PortKind portKind, uint32_t maskWidth = 0);
 
     /// Return the name and kind of ports supported by this memory.
     SmallVector<NamedPort> getPorts();

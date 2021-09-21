@@ -1250,7 +1250,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
     // Compute the original port type as portBundleType may have
     // stripped outer flip information.
     auto originalType = mem.getResult(i).getType();
-    if (originalType != expectedType) {
+    if ( 0 && originalType != expectedType) {
       StringRef portKindName;
       switch (portKind) {
       case MemOp::PortKind::Read:
@@ -1291,9 +1291,11 @@ static LogicalResult verifyMemOp(MemOp mem) {
 }
 
 BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                 PortKind portKind) {
+                                 PortKind portKind, uint32_t maskWidth) {
 
   auto *context = dataType.getContext();
+  
+    auto maskType = maskWidth == 0 ? dataType.getMaskType() : UIntType::get(context, maskWidth);
 
   auto getId = [&](StringRef name) -> StringAttr {
     return StringAttr::get(context, name);
@@ -1315,14 +1317,14 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
 
   case PortKind::Write:
     portFields.push_back({getId("data"), false, dataType});
-    portFields.push_back({getId("mask"), false, dataType.getMaskType()});
+    portFields.push_back({getId("mask"), false, maskType});
     break;
 
   case PortKind::ReadWrite:
     portFields.push_back({getId("rdata"), true, dataType});
     portFields.push_back({getId("wmode"), false, UIntType::get(context, 1)});
     portFields.push_back({getId("wdata"), false, dataType});
-    portFields.push_back({getId("wmask"), false, dataType.getMaskType()});
+    portFields.push_back({getId("wmask"), false, maskType});
     break;
   }
 

@@ -37,7 +37,6 @@
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
 #include <deque>
-#include <set>
 
 using namespace circt;
 using namespace firrtl;
@@ -230,7 +229,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 namespace {
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 
-  TypeLoweringVisitor(MLIRContext *context, bool flattenVector) : context(context), flattenVector(flattenVector), memOpIdCounter(0) {}
+  TypeLoweringVisitor(MLIRContext *context, bool flattenVector) : context(context), flattenVector(flattenVector) {}
   using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
@@ -276,7 +275,7 @@ private:
                                                     StringRef, ArrayAttr)>
                          clone);
   Value getSubWhatever(Value val, size_t index);
-  void mergeMemOps();
+  void flattenData(SubfieldOp op, SmallVectorImpl<Value> &flatData);
 
   MLIRContext *context;
   const bool flattenVector;
@@ -286,9 +285,6 @@ private:
 
   /// State to keep track of arguments and operations to clean up at the end.
   SmallVector<Operation *, 16> opsToRemove;
-
-  DenseMap<Operation*, size_t> memOpId;
-  unsigned memOpIdCounter;
 };
 } // namespace
 
@@ -619,17 +615,98 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
   lowerBlock(&op.getElseBlock());
 }
 
+// Convert an aggregate type into a flat list of fields.  This is used
+// when working with instances and mems to flatten them.
+static void flattenType(FIRRTLType type,
+                        SmallVectorImpl<FlatBundleFieldEntry> &results) {
+  // Field ID is the index of each field when walking aggregate types in a
+  // depth-first order. See FieldRef for more information about how this
+  // works.
+  unsigned fieldID = 0;
+  std::function<void(FIRRTLType, StringRef, bool)> flatten =
+      [&](FIRRTLType type, StringRef suffixSoFar, bool isFlipped) {
+        TypeSwitch<FIRRTLType>(type)
+            .Case<BundleType>([&](auto bundle) {
+              SmallString<16> tmpSuffix(suffixSoFar);
+              // Increment the field ID to point to the first element.
+              fieldID++;
+
+              // Otherwise, we have a bundle type.  Break it down.
+              for (auto &elt : bundle.getElements()) {
+                // Construct the suffix to pass down.
+                tmpSuffix.resize(suffixSoFar.size());
+                tmpSuffix.push_back('_');
+                tmpSuffix.append(elt.name.getValue());
+                // Recursively process subelements.
+                flatten(elt.type, tmpSuffix, elt.isFlip);
+              }
+              return;
+            })
+            .Case<FVectorType>([&](auto vector) {
+              // Increment the field ID to point to the first element.
+              fieldID++;
+              for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
+                flatten(vector.getElementType(),
+                        (suffixSoFar + "_" + std::to_string(i)).str(),
+                        isFlipped);
+              }
+              return;
+            })
+            .Default([&](auto) {
+              results.push_back({type, fieldID,  fieldID, suffixSoFar.str(), isFlipped});
+              // Increment the field ID past this type. This is important when
+              // this type is nested in an aggregate type.
+              fieldID++;
+              return;
+            });
+      };
+
+  return flatten(type, "", false);
+}
+void TypeLoweringVisitor::flattenData(SubfieldOp op, SmallVectorImpl<Value> &flatData){
+  unsigned fieldID = 0;
+ std::function<void(Value val)> flatten =
+      [&](Value val) {
+        TypeSwitch<FIRRTLType>(val.getType().cast<FIRRTLType>())
+            .Case<BundleType>([&](BundleType bundle) {
+
+              // Otherwise, we have a bundle type.  Break it down.
+              for (auto &elt : llvm::enumerate(bundle.getElements())) {
+              
+                // Construct the suffix to pass down.
+                auto subF = builder->create<SubfieldOp>(val, elt.index());
+                // Recursively process subelements.
+                flatten(subF.getResult());
+              }
+              return;
+            })
+            .Case<FVectorType>([&](auto vector) {
+              // Increment the field ID to point to the first element.
+              fieldID++;
+              for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
+                auto subF = builder->create<SubindexOp>(val, i);
+                flatten(subF.getResult());
+              }
+              return;
+            })
+            .Default([&](auto) {
+                flatData.push_back(val);
+              return;
+            });
+      };
+
+  return flatten(op.getResult());
+}
 /// Lower memory operations. A new memory is created for every leaf
 /// element in a memory's data type.
 void TypeLoweringVisitor::visitDecl(MemOp op) {
+
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
   if (!peelType(op.getDataType(), fields))
     return;
-  llvm::errs() << "\n memop::"<< op;
 
   SmallVector<MemOp> newMemories;
-  SmallVector<Value> wireToOldResult;
   SmallVector<WireOp> oldPorts;
 
   // Wires for old ports
@@ -641,23 +718,49 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     oldPorts.push_back(wire);
     result.replaceAllUsesWith(wire.getResult());
   }
-
-    auto it = memOpId.find(op);
-    size_t id ;
-    if (it != memOpId.end()) {
-      id = it->getSecond();
-      memOpId.erase(it);
+  SmallVector<FlatBundleFieldEntry> flatMemType;
+  size_t maskGran = 1;
+  SmallVector<unsigned> maskBits;
+  if (flattenVector) {
+        SmallVector<Operation*, 8> flatData;
+    flattenType(op.getDataType(), flatMemType);
+    SmallVector<int32_t> memWidths;
+    for (auto f : flatMemType){
+      memWidths.push_back(f.type.getBitWidthOrSentinel());
     }
-    else 
-      id = ++memOpIdCounter;
-  // Memory for each field
-  for (auto field : fields) {
-    auto m = cloneMemWithNewType(builder, op, field);
-    newMemories.push_back(m);
-    memOpId[m] = id;
-    llvm::errs() << "\n id:"<< id << "::"<< m;
-  }
+    // MaskGranularity : how many bits each mask bit controls.
+    maskGran = memWidths[0];
+    size_t memFlatWidth = 0;
+    for (auto w : memWidths) {
+      memFlatWidth += w;
+      maskGran = llvm::GreatestCommonDivisor64(maskGran, w);
+    }
+    uint32_t totalMaskBits = 0;
+    for (auto w : memWidths) {
+      maskBits.push_back(w/maskGran);
+      totalMaskBits += w/maskGran;
+    }
+    SmallVector<Type, 8> ports;
+    SmallVector<Attribute, 8> portNames;
 
+    auto flatType = IntType::get(context, op.getDataType().isSignedInteger(), memFlatWidth);
+    auto opPorts = op.getPorts();
+    for (size_t portIdx = 0, e = opPorts.size(); portIdx < e; ++portIdx) {
+      auto port = opPorts[portIdx];
+      ports.push_back(MemOp::getTypeForPort(op.depth(), flatType, port.second, totalMaskBits));
+      portNames.push_back(port.first);
+    }
+
+    auto flatMem = builder->create<MemOp>(
+        ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
+        portNames, op.name(), op.annotations().getValue(),
+        op.portAnnotations().getValue());
+    newMemories.push_back(flatMem);
+  } else {
+  // Memory for each field
+  for (auto field : fields)
+    newMemories.push_back(cloneMemWithNewType(builder, op, field));
+  }
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
     auto result = oldPorts[index];
@@ -668,16 +771,61 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       auto oldField = builder->create<SubfieldOp>(result, fieldIndex);
       // data and mask depend on the memory type which was split.  They can also
       // go both directions, depending on the port direction.
-
       if (name == "data" || name == "mask" || name == "wdata" ||
           name == "wmask" || name == "rdata") {
-        for (auto field : fields) {
-          auto realOldField = getSubWhatever(oldField, field.index);
-          auto newField = getSubWhatever(
-              newMemories[field.index].getResult(index), fieldIndex);
-          if (rType.getElement(fieldIndex).isFlip)
-            std::swap(realOldField, newField);
-          builder->create<ConnectOp>(newField, realOldField);
+        if (flattenVector) {
+          SmallVector<Value, 8> flatData;
+          flattenData(oldField, flatData);
+          if (name == "mask" || name == "wmask"){
+              SmallVector<Value, 8> tmp ;
+            for (auto maskB : llvm::enumerate(maskBits)) {
+              auto m = flatData[maskB.index()];
+              for (unsigned repeat = 0 ; repeat <maskB.value() ; ++repeat)
+                tmp.push_back( m);
+            }
+              flatData = tmp;
+          }
+          auto newData = getSubWhatever(newMemories[0].getResult(index), fieldIndex);
+          size_t uptoBits = 0;
+          WireOp lastIndexWire;
+          bool isRead = rType.getElement(fieldIndex).isFlip;
+
+          for (auto fData : flatData)  {
+            auto fieldBits = fData.getType().cast<FIRRTLType>().getBitWidthOrSentinel();
+            if (isRead) {
+              auto extractBits = builder->create<BitsPrimOp>(newData, uptoBits + fieldBits-1, uptoBits);
+              builder->create<ConnectOp>(fData, extractBits);
+              uptoBits = uptoBits + fieldBits;
+            } else {
+              FIRRTLType wireType;
+              CatPrimOp catOp;
+              if (uptoBits == 0)
+                wireType = fData.getType().cast<FIRRTLType>();
+              else {
+                catOp = builder->create<CatPrimOp>(fData, lastIndexWire);
+                wireType = catOp.getType();
+              }
+              auto writeCatWire = builder->create<WireOp>(wireType);
+              if (uptoBits == 0)
+                builder->create<ConnectOp>(writeCatWire, fData);
+              else
+                builder->create<ConnectOp>(writeCatWire, catOp);
+              lastIndexWire = writeCatWire;
+              uptoBits += fieldBits;
+            }
+          }
+          if (!isRead )
+            builder->create<ConnectOp>(newData, lastIndexWire);
+
+        }else {
+          for (auto field : fields) {
+            auto realOldField = getSubWhatever(oldField, field.index);
+            auto newField = getSubWhatever(
+                newMemories[field.index].getResult(index), fieldIndex);
+            if (rType.getElement(fieldIndex).isFlip)
+              std::swap(realOldField, newField);
+            builder->create<ConnectOp>(newField, realOldField);
+          }
         }
       } else {
         for (auto mem : newMemories) {
@@ -774,7 +922,6 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Lower the operations.
   lowerBlock(body);
 
-
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
   // First get all the info for existing ports
@@ -841,7 +988,6 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Keep the module's type up-to-date.
   auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
   module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
-  mergeMemOps();
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
@@ -1009,109 +1155,6 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   opsToRemove.push_back(op);
 }
 
-void TypeLoweringVisitor::mergeMemOps(){
-  if (!memOpIdCounter)
-    return;
-  DenseMap<size_t, std::set<Operation*>> memGroups;
-  
-  for (auto memOp : memOpId){
-    if (memGroups.count(memOp.getSecond()-1) == 0)
-      memGroups[memOp.getSecond()-1] = {memOp.getFirst()};
-    else
-      memGroups[memOp.getSecond()-1].insert(memOp.getFirst());
-  }
-  for (auto memG : memGroups) {
-    SmallVector<int32_t> memWidths;
-    MemOp mem0 = dyn_cast<MemOp>(*memG.getSecond().begin());
-    for (auto gOp : memG.getSecond()) {
-      auto mem = dyn_cast<MemOp>(gOp);
-      memWidths.push_back(mem.getDataType().getBitWidthOrSentinel());
-    }
-    // MaskGranularity : how many bits each mask bit controls.
-    size_t maskGran = memWidths[0];
-    size_t memFlatWidth = 0;
-    for (auto w : memWidths) {
-      memFlatWidth += w;
-      maskGran = llvm::GreatestCommonDivisor64(maskGran, w);
-    }
-    SmallVector<Type, 8> ports;
-    SmallVector<Attribute, 8> portNames;
-
-    auto flatType = IntType::get(context, mem0.getDataType().isSignedInteger(), memFlatWidth);
-    auto oldPorts = mem0.getPorts();
-    for (size_t portIdx = 0, e = oldPorts.size(); portIdx < e; ++portIdx) {
-      auto port = oldPorts[portIdx];
-      ports.push_back(MemOp::getTypeForPort(mem0.depth(), flatType, port.second));
-      portNames.push_back(port.first);
-    }
-
-    ImplicitLocOpBuilder builder(mem0.getLoc(), mem0);
-    auto flatMem = builder.create<MemOp>(
-        ports, mem0.readLatency(), mem0.writeLatency(), mem0.depth(), mem0.ruw(),
-        portNames, mem0.name(), mem0.annotations().getValue(),
-        mem0.portAnnotations().getValue());
-    // TODO: Copy annotations
-
-     DenseMap<size_t, SmallVector<Operation*, 8>> dataElems;
-     SmallVector<Operation*, 8> maskElems;
-    for (auto gOp : memG.getSecond()) {
-      auto mem = dyn_cast<MemOp>(gOp);
-      SmallVector<WireOp> oldPorts;
-
-      // Wires for old ports
-      for (unsigned int index = 0, end = mem.getNumResults(); index < end; ++index) {
-        dataElems[index] = {};
-        auto result = mem.getResult(index);
-        auto newRes = flatMem.getResult(index);
-        WireOp dataWire;
-        for (auto r : result.getUsers()){
-          if (auto sOp = dyn_cast<SubfieldOp>(r)){
-            llvm::errs() << "\n in type:"<< sOp.input().getType();
-            auto bType = sOp.input().getType().cast<BundleType>();
-            llvm::errs() << "\n user:"<< *sOp;
-            auto fName = bType.getElementName(sOp.fieldIndex());
-            auto flatFieldAccess = builder.create<SubfieldOp>(newRes, sOp.fieldIndex());
-            if ( fName == "addr" || fName == "en" || fName == "clk"){
-              sOp->replaceAllUsesWith(flatFieldAccess);
-              opsToRemove.push_back(sOp);
-              //sOp->erase();
-            }else if (fName == "data"){
-              auto dWire = builder.create<WireOp>(sOp.getResult().getType());
-              dataElems[index].push_back(dWire);
-            }
-
-          }
-        }
-       // auto wire = builder.create<WireOp>(result.getType());
-       // oldPorts.push_back(wire);
-       // result.replaceAllUsesWith(wire.getResult());
-
-       // // Hook up the new memories to the wires the old memory was replaced with.
-       // auto rType = result.getType().cast<BundleType>();
-       // for (size_t fieldIndex = 0, fend = rType.getNumElements();
-       //     fieldIndex != fend; ++fieldIndex) {
-       //   auto name = rType.getElement(fieldIndex).name.getValue();
-       //   auto oldField = builder.create<SubfieldOp>(wire, fieldIndex);
-       //   // data and mask depend on the memory type which was split.  They can also
-       //   // go both directions, depending on the port direction.
-
-
-       //   if (!(name == "data" || name == "mask" || name == "wdata" ||
-       //         name == "wmask" || name == "rdata")) {
-       //     auto newField =
-       //       builder.create<SubfieldOp>(flatMem.getResult(index), fieldIndex);
-       //     builder.create<ConnectOp>(newField, oldField);
-       //   }
-       // }
-      }
-
-    }
-
-  }
-      // for each mem of ground type, lowered from an aggregate mem.
-      //addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-
-}
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
