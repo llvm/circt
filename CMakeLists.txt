@@ -140,7 +140,7 @@ include_directories(${CIRCT_INCLUDE_DIR})
 #-------------------------------------------------------------------------------
 # Verilator Configuration
 #-------------------------------------------------------------------------------
-
+set(VERILATOR_DISABLE ON)
 # If Verilator hasn't been explicitly disabled, find it.
 option(VERILATOR_DISABLE "Disable the Verilator tests.")
 if (VERILATOR_DISABLE)
@@ -272,6 +272,7 @@ endif()
 # capnp Configuration
 #-------------------------------------------------------------------------------
 
+set(CAPNP_DISABLE "1")
 # If capnp hasn't been explicitly disabled, find it.
 option(CAPNP_DISABLE "Disable Cap'nProto (needed for cosimulation).")
 if (CAPNP_DISABLE)
