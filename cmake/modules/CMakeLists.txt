@@ -39,6 +39,15 @@ set(CIRCT_CONFIG_LLVM_CMAKE_DIR)
 set(CIRCT_CONFIG_EXPORTS_FILE)
 set(CIRCT_CONFIG_INCLUDE_DIRS)
 
+# For compatibility with projects that include(CIRCTConfig)
+# via CMAKE_MODULE_PATH, place API modules next to it.
+# Upstream: "This should be removed in the future."
+file(COPY .
+  DESTINATION ${circt_cmake_builddir}
+  FILES_MATCHING PATTERN *.cmake
+  PATTERN CMakeFiles EXCLUDE
+  )
+
 # Generate CIRCTConfig.cmake for the install tree.
 set(CIRCT_CONFIG_CODE "
 # Compute the installation prefix from this LLVMConfig.cmake file location.

@@ -72,6 +72,8 @@ endif ()
   include(AddMLIR)
   include(HandleLLVMOptions)
 
+  set(MLIR_BINARY_DIR ${PROJECT_SOURCE_DIR}/llvm/build)
+
   set(CIRCT_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
 else()
