@@ -1,7 +1,18 @@
 // RUN: circt-opt %s -split-input-file -verify-diagnostics
 
-// expected-error @+1 {{'calyx.program' op must contain an entry-point component.}}
+// expected-error @+1 {{'calyx.program' op has undefined entry-point component: "main".}}
 calyx.program "main" {}
+
+// -----
+
+// expected-error @+1 {{'calyx.program' op has undefined entry-point component: "foo".}}
+calyx.program "foo" {
+  calyx.component @bar(%in: i16, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+}
 
 // -----
 
