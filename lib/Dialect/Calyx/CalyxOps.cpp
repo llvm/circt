@@ -929,8 +929,12 @@ ComponentOp InstanceOp::getReferencedComponent() {
 /// referenced component twice.
 static LogicalResult verifyInstanceOpType(InstanceOp instance,
                                           ComponentOp referencedComponent) {
-  if (instance.componentName() == "main")
-    return instance.emitOpError("cannot reference the entry point.");
+  auto program = instance->getParentOfType<ProgramOp>();
+  StringRef entryPointName = program.entryPointName();
+  if (instance.componentName() == entryPointName)
+    return instance.emitOpError()
+           << "cannot reference the entry-point component: \"" << entryPointName
+           << "\".";
 
   // Verify the instance result ports with those of its referenced component.
   SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
