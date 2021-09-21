@@ -1004,15 +1004,21 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
 void removeAllocOps(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
   std::vector<Operation *> opsToDelete;
-  for (auto allocOp : f.getOps<memref::AllocOp>()) {
-    assert(allocOp.getResult().hasOneUse());
-    for (auto &u : allocOp.getResult().getUses()) {
-      Operation *useOp = u.getOwner();
-      if (isa<SinkOp>(useOp))
-        opsToDelete.push_back(allocOp);
-    }
-  }
 
+  /// TODO(mortbopet): use explicit template parameter when moving to C++20
+  auto remover = [&](auto allocType) {
+    for (auto allocOp : f.getOps<decltype(allocType)>()) {
+      assert(allocOp.getResult().hasOneUse());
+      for (auto &u : allocOp.getResult().getUses()) {
+        Operation *useOp = u.getOwner();
+        if (isa<SinkOp>(useOp))
+          opsToDelete.push_back(allocOp);
+      }
+    }
+  };
+
+  remover(memref::AllocOp());
+  remover(memref::AllocaOp());
   llvm::for_each(opsToDelete, [&](auto allocOp) { rewriter.eraseOp(allocOp); });
 }
 
@@ -1026,7 +1032,8 @@ void removeRedundantSinks(handshake::FuncOp f,
         continue;
 
       if (!op.getOperand(0).hasOneUse() ||
-          isa<memref::AllocOp>(op.getOperand(0).getDefiningOp()))
+          isa<memref::AllocOp, memref::AllocaOp>(
+              op.getOperand(0).getDefiningOp()))
         redundantSinks.push_back(&op);
     }
   for (unsigned i = 0, e = redundantSinks.size(); i != e; ++i) {
