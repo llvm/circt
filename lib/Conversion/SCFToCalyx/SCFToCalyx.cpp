@@ -35,17 +35,15 @@ struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
 
   LogicalResult matchAndRewrite(mlir::ModuleOp moduleOp,
                                 PatternRewriter &rewriter) const override {
-    if (programOpOutput->getOperation() != nullptr) {
-      moduleOp.emitError() << "Multiple modules not supported";
+    if (!moduleOp.getOps<calyx::ProgramOp>().empty())
       return failure();
-    }
 
     rewriter.updateRootInPlace(moduleOp, [&] {
       // Create ProgramOp
       rewriter.setInsertionPointAfter(moduleOp);
       auto programOp = rewriter.create<calyx::ProgramOp>(moduleOp.getLoc());
 
-      // Inline the entire body region inside.
+      // Inline the module body region
       rewriter.inlineRegionBefore(moduleOp.getBodyRegion(),
                                   programOp.getBodyRegion(),
                                   programOp.getBodyRegion().end());
@@ -86,14 +84,7 @@ public:
   /// inlined within.
   /// Furthermore, this function performs validation on the input function, to
   /// ensure that we've implemented the capabilities necessary to convert it.
-  ///
-  /// TODO(mortbopet): this seems unnecessarily complicated;
-  /// A restriction of the current infrastructure is that a top-level 'module'
-  /// cannot be overwritten (even though this is essentially what is going on
-  /// when replacing standard::ModuleOp with calyx::ProgramOp). see:
-  /// https://llvm.discourse.group/t/de-privileging-moduleop-in-translation-apis/3733/26
   LogicalResult createProgram(calyx::ProgramOp *programOpOut) {
-    // Program conversion
     auto createModuleConvTarget = [&]() {
       ConversionTarget target(getContext());
       target.addLegalDialect<calyx::CalyxDialect>();
@@ -110,24 +101,31 @@ public:
                         UnsignedShiftRightOp, SignedShiftRightOp, AndOp, XOrOp,
                         OrOp, ZeroExtendIOp, TruncateIOp, CondBranchOp,
                         BranchOp, ReturnOp, ConstantOp, IndexCastOp>();
-
-      target.addDynamicallyLegalOp<mlir::ModuleOp>([](mlir::ModuleOp moduleOp) {
-        // A module is legalized after we've added a nested
-        // calyx::ProgramOp within it.
-        bool isLegalized = false;
-        moduleOp.walk([&](calyx::ProgramOp) {
-          isLegalized = true;
-          return WalkResult::interrupt();
-        });
-        return isLegalized;
-      });
       return target;
     };
 
+    // Program legalization - the partial conversion driver will not run unless
+    // some pattern is provided - provide a dummy pattern.
+    struct DummyPattern : public OpRewritePattern<mlir::ModuleOp> {
+      using OpRewritePattern::OpRewritePattern;
+      LogicalResult matchAndRewrite(mlir::ModuleOp,
+                                    PatternRewriter &) const override {
+        return failure();
+      }
+    };
+    RewritePatternSet legalizePatterns(&getContext());
+    legalizePatterns.add<DummyPattern>(&getContext());
+    auto target = createModuleConvTarget();
+    DenseSet<Operation *> legalizedOps;
+    if (applyPartialConversion(getOperation(), target,
+                               std::move(legalizePatterns))
+            .failed())
+      return failure();
+
+    // Program conversion
     RewritePatternSet patterns(&getContext());
     patterns.add<ModuleOpConversion>(&getContext(), programOpOut);
-    auto target = createModuleConvTarget();
-    return applyPartialConversion(getOperation(), target, std::move(patterns));
+    return applyOpPatternsAndFold(getOperation(), std::move(patterns));
   }
 
 private:
