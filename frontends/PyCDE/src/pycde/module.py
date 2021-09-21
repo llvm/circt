@@ -65,7 +65,7 @@ class module:
 
   mod = None
   func = None
-  extern_mod = None
+  extern_mod = dict()  # Track all parameterized versions of an external module
 
   # When the decorator is attached, this runs.
   def __init__(self, func_or_class, extern_name=None):
@@ -114,6 +114,7 @@ class module:
           for n, v in param_values.arguments.items()
           if not n.startswith("_")
       }
+
       mod = _module_base(cls, self.extern_name is not None, params)
 
       if self.extern_name:
@@ -129,8 +130,9 @@ class module:
     # Get the port names from the attributes we stored them in.
     op_names_attrs = mlir.ir.ArrayAttr(op.attributes["opNames"])
     op_names = [mlir.ir.StringAttr(x) for x in op_names_attrs]
+    params_str = str(op.attributes['parameters'])
 
-    if self.extern_mod is None:
+    if params_str not in self.extern_mod:
       # Find the top MLIR module.
       mod = op
       while mod.parent is not None:
@@ -144,8 +146,13 @@ class module:
       ]
 
       with mlir.ir.InsertionPoint(mod.regions[0].blocks[0]):
-        self.extern_mod = hw.HWModuleExternOp(self.extern_name, input_ports,
-                                              output_ports)
+        # Generate a unique symbol for this parameterization
+        module_symbol = f"{self.extern_name}_{params_str}"
+        # But specify the correct verilog name since it isn't the symbol
+        attributes = {"verilogName": mlir.ir.StringAttr.get(self.extern_name)}
+        extern_mod = hw.HWModuleExternOp(module_symbol, input_ports,
+                                         output_ports, attributes=attributes)
+        self.extern_mod[params_str] = extern_mod
 
     attrs = {
         nattr.name: nattr.attr
@@ -156,8 +163,8 @@ class module:
     with mlir.ir.InsertionPoint(op):
       mapping = {name.value: op.operands[i] for i, name in enumerate(op_names)}
       result_types = [x.type for x in op.results]
-      inst = self.extern_mod.create(op.name, **mapping,
-                                    results=result_types).operation
+      inst = self.extern_mod[params_str].create(op.name, **mapping,
+                                                results=result_types).operation
       for (name, attr) in attrs.items():
         inst.attributes[name] = attr
       return inst
@@ -320,7 +327,6 @@ def _module_base(cls, extern: bool, params={}):
             self.results[idx], type)))
     cls._dont_touch.add(name)
   mod._output_ports_lookup = dict(mod._output_ports)
-
   _register_generators(mod, mlir.ir.DictAttr.get(mod._parameters))
   return mod
 
