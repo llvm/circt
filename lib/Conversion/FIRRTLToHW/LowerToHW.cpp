@@ -446,11 +446,11 @@ void FIRRTLModuleLowering::runOnOperation() {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
         })
-        // GrandCentral can generate interfaces.  These need to be let through.
-        // Moving them to the end of the module has the effect of keeping them
-        // in the same spot in the IR.
-        .Case<sv::InterfaceOp>([&](auto passThrough) {
-          passThrough->moveBefore(topLevelModule, topLevelModule->end());
+        // These need to be let through.  EmitMetadata produces VerbatimOps and
+        // GrandCentral can generate interfaces.  Moving them to the end of the
+        // module has the effect of keeping them in the same spot in the IR.
+        .Case<sv::InterfaceOp, sv::VerbatimOp>([&](Operation *op) {
+          op->moveBefore(topLevelModule, topLevelModule->end());
         })
         // Otherwise we don't know what this is.  We are just going to drop
         // it, but emit an error so the client has some chance to know that

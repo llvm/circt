@@ -256,4 +256,10 @@ firrtl.circuit "Simple" {
     %result = firrtl.instance @bar740 {name = "fpga", portNames = ["led_0"]} : !firrtl.analog<1>
     firrtl.attach %result, %led_0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
+
+  // The following operations should be passed through without an error.
+  // CHECK: sv.verbatim "hello"
+  sv.verbatim "hello"
+  // CHECK: sv.interface @SVInterface
+  sv.interface @SVInterface { }
 }
