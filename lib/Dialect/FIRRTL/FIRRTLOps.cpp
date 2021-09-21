@@ -1128,6 +1128,19 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("portAnnotations",
                         builder.getArrayAttr(portAnnotations));
   }
+  // Default value for mask granularity is 0, which means a single bit mask.
+  result.addAttribute("maskGranularity", builder.getIntegerAttr(builder.getIntegerType(32), 0));
+}
+
+void MemOp::build(OpBuilder &builder, OperationState &result,
+                  TypeRange resultTypes, uint32_t readLatency,
+                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
+                  uint32_t maskGranularity,
+                  ArrayRef<Attribute> portNames, StringRef name,
+                  ArrayRef<Attribute> annotations,
+                  ArrayRef<Attribute> portAnnotations) {
+  result.addAttribute("maskGranularity", builder.getIntegerAttr(builder.getIntegerType(32), maskGranularity));
+  build(builder, result, resultTypes, readLatency, writeLatency, depth, ruw,  portNames, name, annotations, portAnnotations);
 }
 
 ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {
