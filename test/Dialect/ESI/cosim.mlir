@@ -41,7 +41,7 @@ hw.module @top(%clk:i1, %rstn:i1) -> () {
   // CAPNP: list @0 () -> (ifaces :List(EsiDpiInterfaceDesc));
   // CAPNP: open @1 [S, T] (iface :EsiDpiInterfaceDesc) -> (iface :EsiDpiEndpoint(S, T));
 
-  // COSIM: hw.instance "TestEP" @Cosim_Endpoint(clk: %clk: i1, rstn: %rstn: i1, {{.+}}, {{.+}}, {{.+}}) -> (DataOutValid: i1, DataOut: !hw.array<128xi1>, DataInReady: i1) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = 10578209918096690139 : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = 11229133067582987457 : ui64, SEND_TYPE_SIZE_BITS = 128 : i32}}
+  // COSIM: %TestEP.DataOutValid, %TestEP.DataOut, %TestEP.DataInReady = hw.instance "TestEP" @Cosim_Endpoint<ENDPOINT_ID: i32 = 1, SEND_TYPE_ID: ui64 = 11229133067582987457, SEND_TYPE_SIZE_BITS: i32 = 128, RECV_TYPE_ID: ui64 = 10578209918096690139, RECV_TYPE_SIZE_BITS: i32 = 128>(clk: %clk: i1, rstn: %rstn: i1, DataOutReady: %{{.*}}: i1, DataInValid: %{{.*}}: i1, DataIn: %encodeSi14Inst.encoded: !hw.array<128xi1>) -> (DataOutValid: i1, DataOut: !hw.array<128xi1>, DataInReady: i1)
 
   // SV: assign _T.valid = TestEP_DataOutValid;
   // SV: assign _T.data = dataSection[6'h0+:32];

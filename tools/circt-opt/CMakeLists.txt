@@ -24,6 +24,7 @@ target_link_libraries(circt-opt
   CIRCTMSFT
   CIRCTHW
   CIRCTHWToLLHD
+  CIRCTSCFToCalyx
   CIRCTScheduling
   CIRCTSchedulingTestPasses
   CIRCTSeq
@@ -41,4 +42,5 @@ target_link_libraries(circt-opt
   MLIRStandard
   MLIRSupport
   MLIRTransforms
+  MLIRSCF
   )

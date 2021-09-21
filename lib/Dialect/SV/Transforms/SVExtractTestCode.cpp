@@ -151,9 +151,11 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   SmallVector<hw::PortInfo> ports;
   {
     auto srcPorts = op.argNames();
-    for (auto port : llvm::enumerate(inputs))
-      ports.push_back({b.getStringAttr(getNameForPort(port.value(), srcPorts)),
-                       hw::INPUT, port.value().getType(), port.index()});
+    for (auto port : llvm::enumerate(inputs)) {
+      auto name = getNameForPort(port.value(), srcPorts);
+      ports.push_back({b.getStringAttr(name), hw::INPUT, port.value().getType(),
+                       port.index()});
+    }
   }
 
   // Create the module, setting the output path if indicated.
@@ -164,7 +166,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
     newMod->setAttr("output_file", hw::OutputFileAttr::get(
                                        b.getStringAttr(path),
                                        b.getStringAttr(""), b.getBoolAttr(true),
-                                       b.getBoolAttr(true), op.getContext()));
+                                       b.getBoolAttr(false), op.getContext()));
 
   // Update the mapping from old values to cloned values
   for (auto port : llvm::enumerate(inputs))
@@ -175,7 +177,7 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   b = OpBuilder::atBlockTerminator(op.getBodyBlock());
   auto inst = b.create<hw::InstanceOp>(
       op.getLoc(), newMod, ("InvisibleBind" + suffix).str(),
-      inputs.getArrayRef(), DictionaryAttr(),
+      inputs.getArrayRef(), ArrayAttr(),
       b.getStringAttr(
           ("__ETC_" + getVerilogModuleNameAttr(op).getValue() + suffix).str()));
   inst->setAttr("doNotPrint", b.getBoolAttr(true));

@@ -13,8 +13,8 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/ESI/ESITypes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
@@ -56,6 +56,8 @@ class ESIHWBuilder : public circt::ImplicitLocOpBuilder {
 public:
   ESIHWBuilder(Operation *top);
 
+  ArrayAttr getStageParameterList(Attribute value);
+
   HWModuleExternOp declareStage(Operation *symTable, Type);
   // Will be unused when CAPNP is undefined
   HWModuleExternOp declareCosimEndpoint(Operation *symTable, Type sendType,
@@ -69,7 +71,7 @@ public:
   const StringAttr dataOutValid, dataOutReady, dataOut, dataInValid,
       dataInReady, dataIn;
   const StringAttr clk, rstn;
-  const Identifier width;
+  const StringAttr width;
 
   // Various identifier strings. Keep them all here in case we rename them.
   static constexpr char dataStr[] = "data", validStr[] = "valid",
@@ -109,7 +111,7 @@ ESIHWBuilder::ESIHWBuilder(Operation *top)
       dataIn(StringAttr::get(getContext(), "DataIn")),
       clk(StringAttr::get(getContext(), "clk")),
       rstn(StringAttr::get(getContext(), "rstn")),
-      width(Identifier::get("WIDTH", getContext())) {
+      width(StringAttr::get(getContext(), "WIDTH")) {
 
   auto regions = top->getRegions();
   if (regions.size() == 0) {
@@ -170,6 +172,14 @@ StringAttr ESIHWBuilder::constructInterfaceName(ChannelPort port) {
   return constructUniqueSymbol(tableOp, proposedName);
 }
 
+/// Return a parameter list for the stage module with the specified value.
+ArrayAttr ESIHWBuilder::getStageParameterList(Attribute value) {
+  auto type = IntegerType::get(width.getContext(), 32, IntegerType::Unsigned);
+  auto widthParam =
+      ParameterAttr::get(width.getContext(), width, TypeAttr::get(type), value);
+  return ArrayAttr::get(width.getContext(), widthParam);
+}
+
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
 /// module implements pipeline stage, adding 1 cycle latency. This particular
 /// implementation is double-buffered and fully pipelines the reverse-flow ready
@@ -192,9 +202,10 @@ HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
                       {x, PortDirection::OUTPUT, dataType, 1},
                       {xValid, PortDirection::OUTPUT, getI1Type(), 2},
                       {xReady, PortDirection::INPUT, getI1Type(), 4}};
+
   stage = create<HWModuleExternOp>(
       constructUniqueSymbol(symTable, "ESI_PipelineStage"), ports,
-      "ESI_PipelineStage");
+      "ESI_PipelineStage", getStageParameterList({}));
   return stage;
 }
 
@@ -220,9 +231,17 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpoint(Operation *symTable,
                       {dataInValid, PortDirection::INPUT, getI1Type(), 3},
                       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
                       {dataIn, PortDirection::INPUT, sendType, 4}};
+  SmallVector<Attribute, 8> params;
+  params.push_back(ParameterAttr::get("ENDPOINT_ID", getI32Type()));
+  params.push_back(
+      ParameterAttr::get("SEND_TYPE_ID", getIntegerType(64, false)));
+  params.push_back(ParameterAttr::get("SEND_TYPE_SIZE_BITS", getI32Type()));
+  params.push_back(
+      ParameterAttr::get("RECV_TYPE_ID", getIntegerType(64, false)));
+  params.push_back(ParameterAttr::get("RECV_TYPE_SIZE_BITS", getI32Type()));
   endpoint = create<HWModuleExternOp>(
       constructUniqueSymbol(symTable, "Cosim_Endpoint"), ports,
-      "Cosim_Endpoint");
+      "Cosim_Endpoint", ArrayAttr::get(getContext(), params));
   return endpoint;
 }
 
@@ -563,11 +582,8 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
   // -----
   // Clone the instance.
   b.setInsertionPointAfter(inst);
-  DictionaryAttr parameters;
-  if (inst.parameters().hasValue())
-    parameters = inst.parameters().getValue();
   auto newInst = b.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
-                                      parameters, inst.sym_nameAttr());
+                                      inst.parameters(), inst.sym_nameAttr());
 
   // -----
   // Wrap the results back into ESI channels and connect up all the ready
@@ -801,13 +817,9 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   }
 
   // Create the new instance!
-  DictionaryAttr parameters;
-  if (inst.parameters().hasValue())
-    parameters = inst.parameters().getValue();
-
   InstanceOp newInst =
       instBuilder.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
-                                     parameters, inst.sym_nameAttr());
+                                     inst.parameters(), inst.sym_nameAttr());
 
   // Go through the old list of non-ESI result values, and replace them with the
   // new non-ESI results.
@@ -852,9 +864,10 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   Operation *symTable = stage->getParentWithTrait<OpTrait::SymbolTable>();
   auto stageModule = builder.declareStage(symTable, chPort.getInner());
 
-  NamedAttrList stageParams;
   size_t width = circt::hw::getBitWidth(chPort.getInner());
-  stageParams.set(builder.width, rewriter.getUI32IntegerAttr(width));
+
+  ArrayAttr stageParams =
+      builder.getStageParameterList(rewriter.getUI32IntegerAttr(width));
 
   // Unwrap the channel. The ready signal is a Value we haven't created yet, so
   // create a temp value and replace it later. Give this constant an odd-looking
@@ -872,9 +885,8 @@ LogicalResult PipelineStageLowering::matchAndRewrite(
   circt::Backedge stageReady = back.get(rewriter.getI1Type());
   Value operands[] = {stage.clk(), stage.rstn(), unwrap.rawOutput(),
                       unwrap.valid(), stageReady};
-  auto stageInst = rewriter.create<InstanceOp>(
-      loc, stageModule, pipeStageName, operands,
-      stageParams.getDictionary(rewriter.getContext()), StringAttr());
+  auto stageInst = rewriter.create<InstanceOp>(loc, stageModule, pipeStageName,
+                                               operands, stageParams);
   auto stageInstResults = stageInst.getResults();
 
   // Set a_ready (from the unwrap) back edge correctly to its output from stage.
@@ -1109,16 +1121,21 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
     return rewriter.notifyMatchFailure(ep, "Recv type not supported yet");
 
   // Set all the parameters.
-  NamedAttrList params;
-  params.set("ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID()));
-  params.set("SEND_TYPE_ID",
-             IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID()));
-  params.set("SEND_TYPE_SIZE_BITS",
-             rewriter.getI32IntegerAttr(sendTypeSchema.size()));
-  params.set("RECV_TYPE_ID",
-             IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID()));
-  params.set("RECV_TYPE_SIZE_BITS",
-             rewriter.getI32IntegerAttr(recvTypeSchema.size()));
+  SmallVector<Attribute, 8> params;
+  params.push_back(ParameterAttr::get(
+      "ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID())));
+  params.push_back(ParameterAttr::get(
+      "SEND_TYPE_ID",
+      IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID())));
+  params.push_back(
+      ParameterAttr::get("SEND_TYPE_SIZE_BITS",
+                         rewriter.getI32IntegerAttr(sendTypeSchema.size())));
+  params.push_back(ParameterAttr::get(
+      "RECV_TYPE_ID",
+      IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID())));
+  params.push_back(
+      ParameterAttr::get("RECV_TYPE_SIZE_BITS",
+                         rewriter.getI32IntegerAttr(recvTypeSchema.size())));
 
   // Set up the egest route to drive the EP's send ports.
   ArrayType egestBitArrayType =
@@ -1148,7 +1165,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 
   auto cosimEpModule =
       rewriter.create<InstanceOp>(loc, endpoint, name, epInstInputs,
-                                  params.getDictionary(ctxt), StringAttr());
+                                  ArrayAttr::get(ctxt, params), StringAttr());
   sendReady.setValue(cosimEpModule.getResult(2));
 
   // Set up the injest path.

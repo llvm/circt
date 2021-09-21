@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
@@ -80,8 +81,9 @@ struct HWInlinerInterface : public mlir::DialectInlinerInterface {
 } // end anonymous namespace
 
 void HWDialect::initialize() {
-  // Register types.
+  // Register types and attributes.
   registerTypes();
+  registerAttributes();
 
   // Register operations.
   addOperations<

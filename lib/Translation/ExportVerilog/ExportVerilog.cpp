@@ -14,9 +14,9 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
@@ -79,14 +79,17 @@ static void printParamValue(Attribute value, Operation *op, StringRef paramName,
   } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
     // TODO: relying on float printing to be precise is not a good idea.
     os << fpAttr.getValueAsDouble();
-  } else if (auto verbatimParam = value.dyn_cast<VerbatimParameterAttr>()) {
+  } else if (auto verbatimParam =
+                 value.dyn_cast<VerbatimParameterValueAttr>()) {
     os << verbatimParam.getValue().getValue();
+  } else if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
+    os << parameterRef.getName().getValue();
   } else {
     os << "<<UNKNOWN MLIRATTR: " << value << ">>";
     emitError(op->getLoc(), "unknown parameter value '")
         << paramName << "' = " << value;
   }
-};
+}
 
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
@@ -2502,19 +2505,32 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   indent() << prefix << verilogName.getValue();
 
   // If this is a parameterized module, then emit the parameters.
-  if (auto paramDictOpt = op.parameters()) {
-    DictionaryAttr paramDict = paramDictOpt.getValue();
-    if (!paramDict.empty()) {
-      os << " #(\n";
-      llvm::interleave(
-          paramDict, os,
-          [&](NamedAttribute elt) {
-            os.indent(state.currentIndent + INDENT_AMOUNT)
-                << prefix << '.' << elt.first << '(';
-            printParamValue(elt.second, op, elt.first, os);
-            os << ')';
-          },
-          ",\n");
+  if (!op.parameters().empty()) {
+    // All the parameters may be defaulted -- don't print out an empty list if
+    // so.
+    bool printed = false;
+    for (auto params :
+         llvm::zip(op.parameters(),
+                   moduleOp->getAttrOfType<ArrayAttr>("parameters"))) {
+      auto param = std::get<0>(params).cast<ParameterAttr>();
+      auto modParam = std::get<1>(params).cast<ParameterAttr>();
+      // Ignore values that line up with their default.
+      if (param.getValue() == modParam.getValue())
+        continue;
+
+      // Handle # if this is the first parameter we're printing.
+      if (!printed) {
+        os << " #(\n";
+        printed = true;
+      } else {
+        os << ",\n";
+      }
+      os.indent(state.currentIndent + INDENT_AMOUNT)
+          << prefix << '.' << param.getName().getValue() << '(';
+      printParamValue(param.getValue(), op, param.getName().getValue(), os);
+      os << ')';
+    }
+    if (printed) {
       os << '\n';
       indent() << prefix << ')';
     }
@@ -2847,7 +2863,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
-      emitExpression(localparam.input(), opsForLocation, ForceEmitMultiUse);
+      printParamValue(localparam.value(), op, localparam.name(), os);
     }
 
     // Constants carry their assignment directly in the declaration.
@@ -3041,8 +3057,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Add all parameters to the name table.
   for (auto param : module.parameters()) {
     // Add the name to the name table so any conflicting wires are renamed.
-    names.addLegalName(nullptr, param.cast<ParameterAttr>().name().getValue(),
-                       module);
+    names.addLegalName(
+        nullptr, param.cast<ParameterAttr>().getName().getValue(), module);
   }
 
   // Rewrite the module body into compliance with our emission expectations, and
@@ -3081,7 +3097,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     for (auto param : module.parameters()) {
       // Measure the type length by printing it to a temporary string.
       scratch.clear();
-      printParamType(param.cast<ParameterAttr>().type().getValue(), scratch);
+      printParamType(param.cast<ParameterAttr>().getType().getValue(), scratch);
       maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
     }
 
@@ -3094,15 +3110,15 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           auto paramAttr = param.cast<ParameterAttr>();
           os << "parameter ";
           scratch.clear();
-          printParamType(paramAttr.type().getValue(), scratch);
+          printParamType(paramAttr.getType().getValue(), scratch);
           os << scratch;
           if (scratch.size() < maxTypeWidth)
             os.indent(maxTypeWidth - scratch.size());
 
-          os << paramAttr.name().getValue();
-          if (auto value = paramAttr.defaultValue()) {
+          os << paramAttr.getName().getValue();
+          if (auto value = paramAttr.getValue()) {
             os << " = ";
-            printParamValue(value, module, paramAttr.name().getValue(), os);
+            printParamValue(value, module, paramAttr.getName().getValue(), os);
           }
         },
         ",\n    ");

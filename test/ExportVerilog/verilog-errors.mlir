@@ -4,6 +4,8 @@
 hw.module @Top(%out: f32) {
 }
 
+// -----
+
 // expected-error @+1 {{'hw.module' op name "parameter" is not allowed in Verilog output}}
 hw.module @parameter() {
 }
@@ -24,9 +26,9 @@ hw.module @namechange(%casex: i4) -> (if: i4) {
 
 // -----
 
-hw.module @A () {}
+hw.module.extern @A<width: none> ()
 
 hw.module @B() {
-  // expected-error @+1 {{unknown parameter value 'width' = @Foo}}
-  hw.instance "foo" @A() -> () { parameters = { width = @Foo } } 
+  // expected-error @+1 {{op invalid parameter value @Foo}}
+  hw.instance "foo" @A<width: none = @Foo>() -> ()
 }

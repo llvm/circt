@@ -18,5 +18,5 @@ hw.module @top(%clk:i1, %rstn:i1) -> () {
 // CAPNP-NEXT:   blob             @2 :List(UInt8);
 
 // COSIM: hw.instance "encodeStruct{{.+}}Inst" @encodeStruct{{.+}}(clk: %clk: i1, valid: %6: i1, unencodedInput: %7: !hw.struct<encrypted: i1, compressionLevel: ui4, blob: !hw.array<32xi8>>) -> (encoded: !hw.array<448xi1>)
-// COSIM: hw.instance "Compressor" @Cosim_Endpoint(clk: %clk: i1, rstn: %rstn: i1, {{.+}}, {{.+}}, {{.+}}) -> ({{.+}}) {parameters = {ENDPOINT_ID = 1 : i32, RECV_TYPE_ID = {{[0-9]+}} : ui64, RECV_TYPE_SIZE_BITS = 128 : i32, SEND_TYPE_ID = {{[0-9]+}} : ui64, SEND_TYPE_SIZE_BITS = 448 : i32}}
+// COSIM: hw.instance "Compressor" @Cosim_Endpoint<ENDPOINT_ID: i32 = 1, SEND_TYPE_ID: ui64 = 11116741711825659895, SEND_TYPE_SIZE_BITS: i32 = 448, RECV_TYPE_ID: ui64 = 17519082812652290511, RECV_TYPE_SIZE_BITS: i32 = 128>(clk: %clk: i1, rstn: %rstn: i1, {{.+}}, {{.+}}, {{.+}}) -> ({{.+}})
 // COSIM: hw.module @encode{{.+}}(%clk: i1, %valid: i1, %unencodedInput: !hw.struct<encrypted: i1, compressionLevel: ui4, blob: !hw.array<32xi8>>) -> (encoded: !hw.array<448xi1>)
