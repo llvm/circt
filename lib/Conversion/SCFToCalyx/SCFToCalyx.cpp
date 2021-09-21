@@ -31,9 +31,7 @@ namespace circt {
 //===----------------------------------------------------------------------===//
 
 /// A mapping is maintained between a function operation and its corresponding
-/// Calyx component. This facilitates translation when function and Calyx name
-/// are not identical, such as when the top-level function is renamed to
-/// 'main' to comply with Calyx conventions.
+/// Calyx component.
 using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 
 //===----------------------------------------------------------------------===//
@@ -402,7 +400,7 @@ public:
     if (runOnce)
       config.maxIterations = 1;
 
-    /// can't return applyPatternsAndFoldGreedily. Root isn't
+    /// Can't return applyPatternsAndFoldGreedily. Root isn't
     /// necessarily erased so it will always return failed(). Instead,
     /// forward the 'succeeded' value from PartialLoweringPatternBase.
     (void)applyPatternsAndFoldGreedily(getOperation(), std::move(pattern),
@@ -444,13 +442,13 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
-    auto res = runPartialPattern(pat.pattern,
-                                 /*runOnce=*/pat.strategy ==
-                                     LoweringPattern::Strategy::Once);
-    if (failed(res)) {
-      signalPassFailure();
-      return;
-    }
+    LogicalResult partialPatternRes = runPartialPattern(
+        pat.pattern,
+        /*runOnce=*/pat.strategy == LoweringPattern::Strategy::Once);
+    if (succeeded(partialPatternRes))
+      continue;
+    signalPassFailure();
+    return;
   }
 }
 
