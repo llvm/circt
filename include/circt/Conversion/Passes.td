@@ -26,8 +26,9 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
   let dependentDialects = [
     "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect", "comb::CombDialect"];
   let options =
-      [Option<"topLevelComponent", "top-level-component", "std::string", "",
-              "Identifier of top-level function to be the main component">];
+      [Option<"topLevelFunctionOpt", "top-level-function", "std::string", "",
+              "Identifier of top-level function to be the entry-point component"
+              " of the Calyx program.">];
 }
 
 //===----------------------------------------------------------------------===//
