@@ -9,6 +9,7 @@ module {
   // CHECK:         logic [7:0] uarrayData[0:3];
   // CHECK:         modport data_in(input data, input valid, output ready);
   // CHECK:         modport data_out(output data, output valid, input ready);
+  // CHECK:         MACRO(data, valid, ready -- data_in)
   // CHECK:       endinterface
   // CHECK-EMPTY:
   sv.interface @data_vr {
@@ -19,6 +20,8 @@ module {
     sv.interface.signal @uarrayData : !hw.uarray<4xi8>
     sv.interface.modport @data_in ("input" @data, "input" @valid, "output" @ready)
     sv.interface.modport @data_out ("output" @data, "output" @valid, "input" @ready)
+    sv.verbatim  "//MACRO({{0}}, {{1}}, {{2}} -- {{3}})" 
+                    {symbols = [@data, @valid, @ready, @data_in]}
   }
 
   // CHECK-LABEL: interface struct_vr;
@@ -43,6 +46,8 @@ module {
   hw.module @Top (%clk: i1) {
     // CHECK: data_vr [[IFACE:.+]]();
     %iface = sv.interface.instance : !sv.interface<@data_vr>
+    // CHECK: MACRO-Interface:data_vr
+    sv.verbatim "//MACRO-Interface:{{0}}" {symbols = [@data_vr]}
     // CHECK: struct_vr [[IFACEST:.+]]();
     %structIface = sv.interface.instance : !sv.interface<@struct_vr>
 
