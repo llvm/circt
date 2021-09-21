@@ -16,6 +16,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/AsmState.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include <variant>
@@ -24,6 +25,118 @@ using namespace llvm;
 using namespace mlir;
 
 namespace circt {
+
+//===----------------------------------------------------------------------===//
+// Lowering state classes
+//===----------------------------------------------------------------------===//
+
+/// ComponentLoweringState handles the current state of lowering of a Calyx
+/// component. It is mainly used as a key/value store for recording information
+/// during partial lowering, which is required at later lowering passes.
+class ProgramLoweringState;
+class ComponentLoweringState {
+public:
+  ComponentLoweringState(ProgramLoweringState &pls, calyx::ComponentOp compOp)
+      : programLoweringState(pls), compOp(compOp) {}
+
+  ProgramLoweringState &getProgramState() { return programLoweringState; }
+
+  /// Returns a unique name within compOp with the provided prefix.
+  std::string getUniqueName(StringRef prefix) {
+    std::string prefixStr = prefix.str();
+    unsigned idx = prefixIdMap[prefixStr];
+    ++prefixIdMap[prefixStr];
+    return (prefix + "_" + std::to_string(idx)).str();
+  }
+
+  /// Returns a unique name associated with a specific operation.
+  StringRef getUniqueName(Operation *op) {
+    auto it = opNames.find(op);
+    assert(it != opNames.end() && "A unique name should have been set for op");
+    return it->second;
+  }
+
+  /// Registers a unique name for a given operation using a provided prefix.
+  void setUniqueName(Operation *op, StringRef prefix) {
+    auto it = opNames.find(op);
+    assert(it == opNames.end() && "A unique name was already set for op");
+    opNames[op] = getUniqueName(prefix);
+  }
+
+private:
+  /// A reference to the parent program lowering state.
+  ProgramLoweringState &programLoweringState;
+
+  /// The component which this lowering state is associated to.
+  calyx::ComponentOp compOp;
+
+  /// A mapping of string prefixes and the current uniqueness counter for that
+  /// prefix. Used to generate unique names.
+  std::map<std::string, unsigned> prefixIdMap;
+
+  /// A mapping from Operations and previously assigned unique name of the op.
+  std::map<Operation *, std::string> opNames;
+};
+
+/// ProgramLoweringState handles the current state of lowering of a Calyx
+/// program. It is mainly used as a key/value store for recording information
+/// during partial lowering, which is required at later lowering passes.
+class ProgramLoweringState {
+public:
+  explicit ProgramLoweringState(calyx::ProgramOp program,
+                                StringRef topLevelFunction)
+      : m_topLevelFunction(topLevelFunction), program(program) {
+    getProgram();
+  }
+
+  /// Returns a meaningful name for a value within the program scope.
+  template <typename ValueOrBlock>
+  std::string irName(ValueOrBlock &v) {
+    std::string s;
+    llvm::raw_string_ostream os(s);
+    AsmState asmState(program);
+    v.printAsOperand(os, asmState);
+    return s;
+  }
+
+  /// Returns a meaningful name for a block within the program scope (removes
+  /// the ^ prefix from block names).
+  std::string blockName(Block *b) {
+    auto blockName = irName(*b);
+    blockName.erase(std::remove(blockName.begin(), blockName.end(), '^'),
+                    blockName.end());
+    return blockName;
+  }
+
+  /// Returns the component lowering state associated with compOp.
+  ComponentLoweringState &compLoweringState(calyx::ComponentOp compOp) {
+    auto it = compStates.find(compOp);
+    if (it != compStates.end())
+      return it->second;
+
+    /// Create a new ComponentLoweringState for the compOp.
+    auto newCompStateIt = compStates.try_emplace(compOp, *this, compOp);
+    return newCompStateIt.first->second;
+  }
+
+  /// Returns the current program.
+  calyx::ProgramOp getProgram() {
+    assert(program.getOperation() != nullptr);
+    return program;
+  }
+
+  /// Returns the name of the top-level function in the source program.
+  StringRef topLevelFunction() const { return m_topLevelFunction; }
+
+private:
+  StringRef m_topLevelFunction;
+  calyx::ProgramOp program;
+  DenseMap<Operation *, ComponentLoweringState> compStates;
+};
+
+//===----------------------------------------------------------------------===//
+// Conversion patterns
+//===----------------------------------------------------------------------===//
 
 struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
   ModuleOpConversion(MLIRContext *context, StringRef topLevelFunction,
@@ -147,6 +260,9 @@ public:
     return applyOpPatternsAndFold(getOperation(),
                                   std::move(conversionPatterns));
   }
+
+private:
+  std::shared_ptr<ProgramLoweringState> m_loweringState = nullptr;
 };
 
 void SCFToCalyxPass::runOnOperation() {
@@ -165,6 +281,8 @@ void SCFToCalyxPass::runOnOperation() {
   assert(programOp.getOperation() != nullptr &&
          "programOp should have been set during module "
          "conversion, if module conversion succeeded.");
+  m_loweringState =
+      std::make_shared<ProgramLoweringState>(programOp, topLevelFunction);
 }
 
 //===----------------------------------------------------------------------===//
