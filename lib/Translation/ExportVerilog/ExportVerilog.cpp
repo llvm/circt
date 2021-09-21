@@ -14,9 +14,9 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
-#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
@@ -49,6 +49,47 @@ constexpr int INDENT_AMOUNT = 2;
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
+
+/// Helper that prints a parameter constant value in a Verilog compatible way.
+/// paramName and "op" are used to diagnose an error on an invalid parameter.
+static void printParamValue(Attribute value, Operation *op, StringRef paramName,
+                            raw_ostream &os) {
+  if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
+    IntegerType intTy = intAttr.getType().cast<IntegerType>();
+    APInt value = intAttr.getValue();
+
+    // We omit the width specifier if the value is <= 32-bits in size, which
+    // makes this more compatible with unknown width extmodules.
+    if (intTy.getWidth() > 32) {
+      // Sign comes out before any width specifier.
+      if (intTy.isSigned() && value.isNegative()) {
+        os << '-';
+        value = -value;
+      }
+      if (intTy.isSigned())
+        os << intTy.getWidth() << "'sd";
+      else
+        os << intTy.getWidth() << "'d";
+    }
+    value.print(os, intTy.isSigned());
+  } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
+    os << '"';
+    os.write_escaped(strAttr.getValue());
+    os << '"';
+  } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
+    // TODO: relying on float printing to be precise is not a good idea.
+    os << fpAttr.getValueAsDouble();
+  } else if (auto verbatimParam =
+                 value.dyn_cast<VerbatimParameterValueAttr>()) {
+    os << verbatimParam.getValue().getValue();
+  } else if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
+    os << parameterRef.getName().getValue();
+  } else {
+    os << "<<UNKNOWN MLIRATTR: " << value << ">>";
+    emitError(op->getLoc(), "unknown parameter value '")
+        << paramName << "' = " << value;
+  }
+}
 
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
@@ -201,15 +242,16 @@ static Type stripUnpackedTypes(Type type) {
 /// those to the left of the name in verilog. implicitIntType controls whether
 /// to print a base type for (logic) for inteters or whether the caller will
 /// have handled this (with logic, wire, reg, etc).
-/// Returns whether anything was printed out
+/// Returns true when anything was printed out.
 static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
                                 SmallVectorImpl<int64_t> &dims,
-                                bool implicitIntType) {
+                                bool implicitIntType,
+                                bool singleBitDefaultType) {
   return TypeSwitch<Type, bool>(type)
       .Case<IntegerType>([&](IntegerType integerType) {
         if (!implicitIntType)
           os << "logic";
-        if (integerType.getWidth() != 1)
+        if (integerType.getWidth() != 1 || !singleBitDefaultType)
           dims.push_back(integerType.getWidth());
         if (!dims.empty() && !implicitIntType)
           os << ' ';
@@ -219,14 +261,15 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
       })
       .Case<InOutType>([&](InOutType inoutType) {
         return printPackedTypeImpl(inoutType.getElementType(), os, op, dims,
-                                   implicitIntType);
+                                   implicitIntType, singleBitDefaultType);
       })
       .Case<StructType>([&](StructType structType) {
         os << "struct packed {";
         for (auto &element : structType.getElements()) {
           SmallVector<int64_t, 8> structDims;
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, op,
-                              structDims, /*implicitIntType=*/false);
+                              structDims, /*implicitIntType=*/false,
+                              /*singleBitDefaultType=*/true);
           os << ' ' << element.name << "; ";
         }
         os << '}';
@@ -236,7 +279,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
       .Case<ArrayType>([&](ArrayType arrayType) {
         dims.push_back(arrayType.getSize());
         return printPackedTypeImpl(arrayType.getElementType(), os, op, dims,
-                                   implicitIntType);
+                                   implicitIntType, singleBitDefaultType);
       })
       .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
@@ -254,16 +297,25 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
         return true;
       })
       .Default([&](Type type) {
-        os << "<<invalid type>>";
+        os << "<<invalid type '" << type << "'>>";
         op->emitError("value has an unsupported verilog type ") << type;
         return true;
       });
 }
 
+/// Print the specified packed portion of the type to the specified stream.  The
+/// operation specified is used in the case of an error for its location.
+///  * When `implicitIntType` is false, a "logic" is printed.  This is used in
+///        struct fields and typedefs.
+///  * When `singleBitDefaultType` is false, single bit values are printed as
+///       `[0:0]`.  This is used in parameter lists.
+/// This returns true if anything was printed out.
 static bool printPackedType(Type type, raw_ostream &os, Operation *op,
-                            bool implicitIntType = true) {
+                            bool implicitIntType = true,
+                            bool singleBitDefaultType = true) {
   SmallVector<int64_t, 8> packedDimensions;
-  return printPackedTypeImpl(type, os, op, packedDimensions, implicitIntType);
+  return printPackedTypeImpl(type, os, op, packedDimensions, implicitIntType,
+                             singleBitDefaultType);
 }
 
 /// Output the unpacked array dimensions.  This is the part of the type that is
@@ -2452,56 +2504,33 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   emitter.verifyModuleName(op, verilogName);
   indent() << prefix << verilogName.getValue();
 
-  // Helper that prints a parameter constant value in a Verilog compatible way.
-  auto printParmValue = [&](Identifier paramName, Attribute value) {
-    if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-      IntegerType intTy = intAttr.getType().cast<IntegerType>();
-      APInt value = intAttr.getValue();
-
-      // We omit the width specifier if the value is <= 32-bits in size, which
-      // makes this more compatible with unknown width extmodules.
-      if (intTy.getWidth() > 32) {
-        // Sign comes out before any width specifier.
-        if (intTy.isSigned() && value.isNegative()) {
-          os << '-';
-          value = -value;
-        }
-        if (intTy.isSigned())
-          os << intTy.getWidth() << "'sd";
-        else
-          os << intTy.getWidth() << "'d";
-      }
-      value.print(os, intTy.isSigned());
-    } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
-      os << '"';
-      os.write_escaped(strAttr.getValue());
-      os << '"';
-    } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
-      // TODO: relying on float printing to be precise is not a good idea.
-      os << fpAttr.getValueAsDouble();
-    } else if (auto verbatimParam = value.dyn_cast<VerbatimParameterAttr>()) {
-      os << verbatimParam.getValue().getValue();
-    } else {
-      os << "<<UNKNOWN MLIRATTR: " << value << ">>";
-      emitOpError(op, "unknown extmodule parameter value '")
-          << paramName << "' = " << value;
-    }
-  };
-
   // If this is a parameterized module, then emit the parameters.
-  if (auto paramDictOpt = op.parameters()) {
-    DictionaryAttr paramDict = paramDictOpt.getValue();
-    if (!paramDict.empty()) {
-      os << " #(\n";
-      llvm::interleave(
-          paramDict, os,
-          [&](NamedAttribute elt) {
-            os.indent(state.currentIndent + INDENT_AMOUNT)
-                << prefix << '.' << elt.first << '(';
-            printParmValue(elt.first, elt.second);
-            os << ')';
-          },
-          ",\n");
+  if (!op.parameters().empty()) {
+    // All the parameters may be defaulted -- don't print out an empty list if
+    // so.
+    bool printed = false;
+    for (auto params :
+         llvm::zip(op.parameters(),
+                   moduleOp->getAttrOfType<ArrayAttr>("parameters"))) {
+      auto param = std::get<0>(params).cast<ParameterAttr>();
+      auto modParam = std::get<1>(params).cast<ParameterAttr>();
+      // Ignore values that line up with their default.
+      if (param.getValue() == modParam.getValue())
+        continue;
+
+      // Handle # if this is the first parameter we're printing.
+      if (!printed) {
+        os << " #(\n";
+        printed = true;
+      } else {
+        os << ",\n";
+      }
+      os.indent(state.currentIndent + INDENT_AMOUNT)
+          << prefix << '.' << param.getName().getValue() << '(';
+      printParamValue(param.getValue(), op, param.getName().getValue(), os);
+      os << ')';
+    }
+    if (printed) {
       os << '\n';
       indent() << prefix << ')';
     }
@@ -2834,7 +2863,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
-      emitExpression(localparam.input(), opsForLocation, ForceEmitMultiUse);
+      printParamValue(localparam.value(), op, localparam.name(), os);
     }
 
     // Constants carry their assignment directly in the declaration.
@@ -3007,14 +3036,9 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
 }
 
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
-  // Rewrite the module body into compliance with our emission expectations, and
-  // collect/rename symbols within the body that conflict.
   ModuleNameManager names;
-  prepareHWModule(*module.getBodyBlock(), names, state.options);
-  if (names.hadError())
-    state.encounteredError = true;
 
-  // Add all the ports to the name table.
+  // Add all the ports to the name table so wires etc don't reuse the name.
   SmallVector<PortInfo> portInfo = module.getAllPorts();
   for (auto &port : portInfo) {
     StringRef name = port.getName();
@@ -3030,12 +3054,78 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       names.addLegalName(module.getArgument(port.argNum), name, module);
   }
 
+  // Add all parameters to the name table.
+  for (auto param : module.parameters()) {
+    // Add the name to the name table so any conflicting wires are renamed.
+    names.addLegalName(
+        nullptr, param.cast<ParameterAttr>().getName().getValue(), module);
+  }
+
+  // Rewrite the module body into compliance with our emission expectations, and
+  // collect/rename symbols within the body that conflict.
+  prepareHWModule(*module.getBodyBlock(), names, state.options);
+  if (names.hadError())
+    state.encounteredError = true;
+
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
 
   auto moduleNameAttr = module.getNameAttr();
   verifyModuleName(module, moduleNameAttr);
-  os << "module " << moduleNameAttr.getValue() << '(';
+  os << "module " << moduleNameAttr.getValue();
+
+  // If we have any parameters, print them on their own line.
+  if (!module.parameters().empty()) {
+    os << "\n  #(";
+
+    auto printParamType = [&](Type type, SmallString<8> &result) {
+      llvm::raw_svector_ostream sstream(result);
+      // TODO: Don't print the type when there is a default value and an
+      // obvious match with the type (e.g. `parameter x = "string"` doesn't
+      // need an explicit type).  Plain-Verilog clients do not support
+      // type specifiers on parameters.
+      // TODO: Support some kind of 'int' type, maybe use index type?
+      printPackedType(type, sstream, module,
+                      /*implicitIntType=*/true,
+                      // Print single-bit values as explicit `[0:0]` type.
+                      /*singleBitDefaultType=*/false);
+    };
+
+    // Determine the max width of the parameter types so things are lined up.
+    size_t maxTypeWidth = 0;
+    SmallString<8> scratch;
+    for (auto param : module.parameters()) {
+      // Measure the type length by printing it to a temporary string.
+      scratch.clear();
+      printParamType(param.cast<ParameterAttr>().getType().getValue(), scratch);
+      maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
+    }
+
+    if (maxTypeWidth > 0) // add a space if any type exists.
+      maxTypeWidth += 1;
+
+    llvm::interleave(
+        module.parameters(), os,
+        [&](Attribute param) {
+          auto paramAttr = param.cast<ParameterAttr>();
+          os << "parameter ";
+          scratch.clear();
+          printParamType(paramAttr.getType().getValue(), scratch);
+          os << scratch;
+          if (scratch.size() < maxTypeWidth)
+            os.indent(maxTypeWidth - scratch.size());
+
+          os << paramAttr.getName().getValue();
+          if (auto value = paramAttr.getValue()) {
+            os << " = ";
+            printParamValue(value, module, paramAttr.getName().getValue(), os);
+          }
+        },
+        ",\n    ");
+    os << ") ";
+  }
+
+  os << '(';
   if (!portInfo.empty())
     emitLocationInfoAndNewLine(moduleOpSet);
 
@@ -3049,9 +3139,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     auto port = portInfo[i];
     hasOutputs |= port.isOutput();
     hasZeroWidth |= isZeroBitType(port.type);
-    if (!isZeroBitType(port.type)) {
+    if (!isZeroBitType(port.type))
       lastNonZeroPort = i;
-    }
 
     // Convert the port's type to a string and measure it.
     portTypeStrings.push_back({});
@@ -3283,9 +3372,9 @@ struct SharedEmitterState {
 /// of an explicit output file attribute.
 void SharedEmitterState::gatherFiles(bool separateModules) {
 
-  /// Collect all the instance symbols from the specified module and add them to
-  /// the IRCache.  Instances only exist at the top level of the module.  Also
-  /// keep track of any modules that contain bind operations.  These are
+  /// Collect all the instance symbols from the specified module and add them
+  /// to the IRCache.  Instances only exist at the top level of the module.
+  /// Also keep track of any modules that contain bind operations.  These are
   /// non-hierarchical references which we need to be careful about during
   /// emission.
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
@@ -3404,13 +3493,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         });
   }
 
-  // We've built the whole symbol cache.  Freeze it so things can start querying
-  // it (potentially concurrently).
+  // We've built the whole symbol cache.  Freeze it so things can start
+  // querying it (potentially concurrently).
   symbolCache.freeze();
 }
 
-/// Given a FileInfo, collect all the replicated and designated operations that
-/// go into it and append them to "thingsToEmit".
+/// Given a FileInfo, collect all the replicated and designated operations
+/// that go into it and append them to "thingsToEmit".
 void SharedEmitterState::collectOpsForFile(const FileInfo &file,
                                            EmissionList &thingsToEmit) {
   // If we're emitting replicated ops, keep track of where we are in the list.
@@ -3461,8 +3550,8 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       });
 }
 
-/// Actually emit the collected list of operations and strings to the specified
-/// file.
+/// Actually emit the collected list of operations and strings to the
+/// specified file.
 void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
                                  bool parallelize) {
   MLIRContext *context = rootOp->getContext();
@@ -3496,8 +3585,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
       return; // Ignore things that are already strings.
 
     // BindOp emission reaches into the hw.module of the instance, and that
-    // body may be being transformed by its own emission.  Defer their emission
-    // to the serial phase.  They are speedy to emit anyway.
+    // body may be being transformed by its own emission.  Defer their
+    // emission to the serial phase.  They are speedy to emit anyway.
     if (isa<BindOp>(op) || modulesContainingBinds.count(op))
       return;
 
@@ -3534,8 +3623,8 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
   SharedEmitterState::EmissionList list;
 
-  // Collect the contents of the main file. This is a container for anything not
-  // explicitly split out into a separate file.
+  // Collect the contents of the main file. This is a container for anything
+  // not explicitly split out into a separate file.
   emitter.collectOpsForFile(emitter.rootFile, list);
 
   // Emit the separate files.
@@ -3585,9 +3674,9 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
   emitter.collectOpsForFile(file, list);
 
   // Emit the file, copying the global options into the individual module
-  // state.  Don't parallelize emission of the ops within this file - we already
-  // parallelize per-file emission and we pay a string copy overhead for
-  // parallelization.
+  // state.  Don't parallelize emission of the ops within this file - we
+  // already parallelize per-file emission and we pay a string copy overhead
+  // for parallelization.
   emitter.emitOps(list, output->os(), /*parallelize=*/false);
   output->keep();
 }

@@ -14,7 +14,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
 
-using namespace mlir;
+using namespace circt;
 using namespace circt::hw;
 
 /// Get the portname from an SSA value string, if said value name is not a
@@ -32,17 +32,16 @@ StringAttr module_like_impl::getPortNameAttr(MLIRContext *context,
   return StringAttr::get(context, name);
 }
 
-/// Parse a portname as a keyword or a quote surrounded string, followed by a
-/// colon.
+/// Parse a portname as a keyword or a quote surrounded string.
 StringAttr module_like_impl::parsePortName(OpAsmParser &parser) {
   StringAttr result;
   StringRef keyword;
-  if (succeeded(parser.parseOptionalKeyword(&keyword))) {
-    result = parser.getBuilder().getStringAttr(keyword);
-  } else if (parser.parseAttribute(result,
-                                   parser.getBuilder().getType<NoneType>()))
+  if (succeeded(parser.parseOptionalKeyword(&keyword)))
+    return parser.getBuilder().getStringAttr(keyword);
+
+  if (parser.parseAttribute(result, parser.getBuilder().getType<NoneType>()))
     return {};
-  return succeeded(parser.parseColon()) ? result : StringAttr();
+  return result;
 }
 
 /// Parse a function result list.
@@ -72,7 +71,7 @@ ParseResult module_like_impl::parseFunctionResultList(
 
     resultTypes.emplace_back();
     resultAttrs.emplace_back();
-    if (parser.parseType(resultTypes.back()) ||
+    if (parser.parseColonType(resultTypes.back()) ||
         parser.parseOptionalAttrDict(resultAttrs.back()))
       return failure();
   } while (succeeded(parser.parseOptionalComma()));
@@ -102,7 +101,7 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
 }
 
 /// Return true if this string parses as a valid MLIR keyword, false otherwise.
-bool circt::hw::module_like_impl::isValidKeyword(StringRef name) {
+static bool isValidKeyword(StringRef name) {
   if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
     return false;
   for (auto c : name.drop_front()) {
@@ -113,9 +112,21 @@ bool circt::hw::module_like_impl::isValidKeyword(StringRef name) {
   return true;
 }
 
-void circt::hw::module_like_impl::printModuleSignature(
-    OpAsmPrinter &p, Operation *op, ArrayRef<Type> argTypes, bool isVariadic,
-    ArrayRef<Type> resultTypes, bool &needArgNamesAttr) {
+/// Print a port name as a MLIR keyword or quoted if necessary.
+void module_like_impl::printPortName(StringAttr name, llvm::raw_ostream &os) {
+  // Print this as a bareword if it can be parsed as an MLIR keyword,
+  // otherwise print it as a quoted string.
+  if (isValidKeyword(name.getValue()))
+    os << name.getValue();
+  else
+    os << name;
+}
+
+void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
+                                            ArrayRef<Type> argTypes,
+                                            bool isVariadic,
+                                            ArrayRef<Type> resultTypes,
+                                            bool &needArgNamesAttr) {
   using namespace mlir::function_like_impl;
 
   Region &body = op->getRegion(0);
@@ -163,13 +174,8 @@ void circt::hw::module_like_impl::printModuleSignature(
     for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
       if (i != 0)
         p << ", ";
-      StringAttr name = getModuleResultNameAttr(op, i);
-      if (isValidKeyword(name.getValue()))
-        p << name.getValue();
-      else
-        p << name;
+      printPortName(getModuleResultNameAttr(op, i), p.getStream());
       p << ": ";
-
       p.printType(resultTypes[i]);
       p.printOptionalAttrDict(getResultAttrs(op, i));
     }

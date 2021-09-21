@@ -16,6 +16,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
 
@@ -33,6 +34,8 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   size_t readUnderWrite;
+  WUW writeUnderWrite;
+  SmallVector<int32_t> writeClockIDs;
 };
 } // end anonymous namespace
 
@@ -57,6 +60,12 @@ static FirMemory analyzeMemOp(hw::HWModuleGeneratedOp op) {
   mem.dataWidth = op->getAttrOfType<IntegerAttr>("width").getUInt();
   mem.readUnderWrite =
       op->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt();
+  mem.writeUnderWrite =
+      op->getAttrOfType<WUWAttr>("writeUnderWrite").getValue();
+  if (auto clockIDsAttr = op->getAttrOfType<ArrayAttr>("writeClockIDs"))
+    for (auto clockID : clockIDsAttr)
+      mem.writeClockIDs.push_back(
+          clockID.cast<IntegerAttr>().getValue().getZExtValue());
   return mem;
 }
 
@@ -147,6 +156,7 @@ void HWMemSimImplPass::generateMemory(hw::HWModuleOp op, FirMemory mem) {
     outputs.push_back(rdata);
   }
 
+  DenseMap<unsigned, Operation *> writeProcesses;
   for (size_t i = 0; i < mem.numWritePorts; ++i) {
     auto numStages = mem.writeLatency - 1;
     Value clock = op.body().getArgument(inArg++);
@@ -160,14 +170,39 @@ void HWMemSimImplPass::generateMemory(hw::HWModuleOp op, FirMemory mem) {
     wmask = addPipelineStages(b, numStages, clock, wmask);
     wdata = addPipelineStages(b, numStages, clock, wdata);
 
-    // Write logic
-    b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clock, [&]() {
+    // Build write port logic.
+    auto writeLogic = [&] {
       auto wcond = b.createOrFold<comb::AndOp>(en, wmask);
       b.create<sv::IfOp>(wcond, [&]() {
         auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
         b.create<sv::PAssignOp>(slot, wdata);
       });
-    });
+    };
+
+    // Build a new always block with write port logic.
+    auto alwaysBlock = [&] {
+      return b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clock,
+                                      [&]() { writeLogic(); });
+    };
+
+    switch (mem.writeUnderWrite) {
+    // Undefined write order:  lower each write port into a separate always
+    // block.
+    case WUW::Undefined:
+      alwaysBlock();
+      break;
+    // Port-ordered write order:  lower each write port into an always block
+    // based on its clock ID.
+    case WUW::PortOrder:
+      if (auto *existingAlwaysBlock =
+              writeProcesses.lookup(mem.writeClockIDs[i])) {
+        b.setInsertionPointToEnd(
+            cast<sv::AlwaysFFOp>(existingAlwaysBlock).getBodyBlock());
+        writeLogic();
+      } else {
+        writeProcesses[i] = alwaysBlock();
+      }
+    }
   }
 
   auto outputOp = op.getBodyBlock()->getTerminator();

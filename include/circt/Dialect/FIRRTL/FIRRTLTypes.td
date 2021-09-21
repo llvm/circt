@@ -167,8 +167,7 @@ def AnnotationArrayAttr: ArrayAttrBase<
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
 
-def SubAnnotationAttr
-  : AttrDef<FIRRTLDialect, "SubAnnotation", [], "::mlir::Attribute"> {
+def SubAnnotationAttr : AttrDef<FIRRTLDialect, "SubAnnotation"> {
   let summary = "An Annotation that targets part of what it's attached to";
   let description = [{
     An Annotation that is only applicable to part of what it is attached to.
@@ -192,8 +191,7 @@ def PortAnnotationsAttr : ArrayAttrBase<
 }
 
 
-def InvalidValueAttr
-  : AttrDef<FIRRTLDialect, "InvalidValue", [], "::mlir::Attribute"> {
+def InvalidValueAttr : AttrDef<FIRRTLDialect, "InvalidValue"> {
   let summary = "A constant value of firrtl.invalid type";
   let description = [{
     Represents an firrtl.invalidvalue value, whose type is specified by the
@@ -233,7 +231,6 @@ def StringArrayAttr: ArrayAttrBase<
 }
 
 class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
-
   let parameters = (
     ins "DictionaryAttr":$underlying
   );

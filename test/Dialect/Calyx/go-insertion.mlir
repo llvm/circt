@@ -1,6 +1,6 @@
 // RUN: circt-opt -pass-pipeline='calyx.program(calyx.component(calyx-go-insertion))' %s | FileCheck %s
 
-calyx.program {
+calyx.program "main" {
   calyx.component @A(%in: i8, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i8, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }

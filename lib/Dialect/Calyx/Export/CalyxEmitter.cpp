@@ -360,37 +360,57 @@ private:
   }
 
   /// Recursively emits the Calyx control.
-  template <typename OpTy>
-  void emitCalyxControl(OpTy controlOp) {
-    // Check to see if this is a stand-alone EnableOp.
-    if (isa<EnableOp>(controlOp)) {
-      emitEnable(cast<EnableOp>(controlOp));
+  void emitCalyxControl(Block *body) {
+    Operation *parent = body->getParentOp();
+    assert(isa<ControlOp>(parent) ||
+           parent->hasTrait<ControlLike>() &&
+               "This should only be used to emit Calyx Control structures.");
+
+    // Check to see if this is a stand-alone EnableOp, i.e.
+    // calyx.control { calyx.enable @G }
+    if (auto enable = dyn_cast<EnableOp>(parent)) {
+      emitEnable(enable);
+      // Early return since an EnableOp has no body.
       return;
     }
-    for (auto &&bodyOp : *controlOp.getBody()) {
-      // Attribute dictionary is prepended for a control operation.
-      auto prependAttributes = [&](StringRef sym) {
-        return (getAttributes(&bodyOp) + sym).str();
-      };
+    // Attribute dictionary is always prepended for a control operation.
+    auto prependAttributes = [&](Operation *op, StringRef sym) {
+      return (getAttributes(op) + sym).str();
+    };
 
-      TypeSwitch<Operation *>(&bodyOp)
-          .template Case<SeqOp>([&](auto op) {
-            emitCalyxSection(prependAttributes("seq"),
-                             [&]() { emitCalyxControl(op); });
+    for (auto &&op : *body) {
+
+      TypeSwitch<Operation *>(&op)
+          .Case<SeqOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "seq"),
+                             [&]() { emitCalyxControl(op.getBody()); });
           })
-          .template Case<ParOp>([&](auto op) {
-            emitCalyxSection(prependAttributes("par"),
-                             [&]() { emitCalyxControl(op); });
+          .Case<ParOp>([&](auto op) {
+            emitCalyxSection(prependAttributes(op, "par"),
+                             [&]() { emitCalyxControl(op.getBody()); });
           })
-          .template Case<IfOp, WhileOp>([&](auto op) {
-            StringRef sym = (isa<IfOp>(op) ? "if " : "while ");
-            indent() << prependAttributes(sym);
+          .Case<WhileOp>([&](auto op) {
+            indent() << prependAttributes(op, "while ");
             emitValue(op.cond(), /*isIndented=*/false);
+
             if (auto groupName = op.groupName(); groupName.hasValue())
               os << " with " << groupName.getValue();
-            emitCalyxBody([&]() { emitCalyxControl(op); });
+
+            emitCalyxBody([&]() { emitCalyxControl(op.getBody()); });
           })
-          .template Case<EnableOp>([&](auto op) { emitEnable(op); })
+          .Case<IfOp>([&](auto op) {
+            indent() << prependAttributes(op, "if ");
+            emitValue(op.cond(), /*isIndented=*/false);
+
+            if (auto groupName = op.groupName(); groupName.hasValue())
+              os << " with " << groupName.getValue();
+
+            emitCalyxBody([&]() { emitCalyxControl(op.getThenRegion()); });
+            if (op.elseRegionExists())
+              emitCalyxSection("else",
+                               [&]() { emitCalyxControl(op.getElseRegion()); });
+          })
+          .Case<EnableOp>([&](auto op) { emitEnable(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside control.");
           });
@@ -600,7 +620,7 @@ void Emitter::emitEnable(EnableOp enable) {
 }
 
 void Emitter::emitControl(ControlOp control) {
-  emitCalyxSection("control", [&]() { emitCalyxControl(control); });
+  emitCalyxSection("control", [&]() { emitCalyxControl(control.getBody()); });
 }
 
 //===----------------------------------------------------------------------===//

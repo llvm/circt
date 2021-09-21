@@ -37,8 +37,8 @@ void HWStubExternalModulesPass::runOnOperation() {
     if (auto module = dyn_cast<hw::HWModuleExternOp>(op)) {
       hw::ModulePortInfo ports = module.getPorts();
       auto nameAttr = module.getNameAttr();
-      auto newModule =
-          builder.create<hw::HWModuleOp>(module.getLoc(), nameAttr, ports);
+      auto newModule = builder.create<hw::HWModuleOp>(
+          module.getLoc(), nameAttr, ports, module.parameters());
       auto outputOp = newModule.getBodyBlock()->getTerminator();
       OpBuilder innerBuilder(outputOp);
       SmallVector<Value, 8> outputs;
@@ -48,13 +48,6 @@ void HWStubExternalModulesPass::runOnOperation() {
             innerBuilder.create<sv::ConstantXOp>(outputOp->getLoc(), p.type));
       }
       outputOp->setOperands(outputs);
-
-      // Now update instances to drop parameters
-      auto useRange = SymbolTable::getSymbolUses(module, getOperation());
-      if (useRange)
-        for (auto &user : *useRange)
-          if (auto inst = dyn_cast<hw::InstanceOp>(user.getUser()))
-            inst->removeAttr("parameters");
 
       // Done with the old module.
       module.erase();

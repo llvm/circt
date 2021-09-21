@@ -152,16 +152,3 @@ def TypeAliasType : HWType<"TypeAlias"> {
   }];
 }
 
-//===----------------------------------------------------------------------===//
-// Attributes
-//===----------------------------------------------------------------------===//
-
-/// An attribute to indicate the output file an operation should be emitted to.
-def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
-  StructFieldAttr<"directory", OptionalAttr<StrAttr>>,
-  StructFieldAttr<"name", OptionalAttr<StrAttr>>,
-  StructFieldAttr<"exclude_from_filelist",
-    DefaultValuedAttr<BoolAttr, "false">>,
-  StructFieldAttr<"exclude_replicated_ops",
-    DefaultValuedAttr<BoolAttr, "true">>,
-]>;
