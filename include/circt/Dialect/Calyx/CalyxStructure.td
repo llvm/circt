@@ -35,9 +35,13 @@ def ProgramOp : CalyxContainer<"program", [
   ]> {
   let summary = "Calyx Program";
   let description = [{
-    The "calyx.program" operation represents an overall Calyx program,
-    containing a list of Calyx components. This must include an
-    entry-point component.
+    The "calyx.program" operation represents an overall Calyx
+    program, containing a list of Calyx components. This must
+    include an entry-point component.
+
+      ```mlir
+      calyx.program "main" { ... }
+      ```
   }];
   let arguments = (ins StrAttr:$entryPointName);
 
