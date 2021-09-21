@@ -746,3 +746,44 @@ Example:
   "source":"~GCTMemTap|GCTMemTap>mem"
 }
 ```
+
+## Attributes in SV
+
+Some annotations transfrom into attributes consumed by non-FIRRTL passes.  This
+section describes well-defined attributes used by HW/SV passes. 
+
+
+### firrtl.moduleHierarchyFile
+
+Used by HWExportModuleHierarchy.  Signifies a root from which to dump the module
+hierarchy as a json file.
+
+### firrtl.extract.assert
+
+Used by SVExtractTestCode.  Specifies the output directory for extracted
+modules.
+
+### firrtl.extract.assume
+
+Used by SVExtractTestCode.  Specifies the output directory for extracted
+modules.
+
+### firrtl.extract.cover
+
+Used by SVExtractTestCode.  Specifies the output directory for extracted
+modules.
+
+### firrtl.extract.assert.bindfile
+
+Used by SVExtractTestCode.  Specifies the output file for extracted
+modules' bind file.
+
+### firrtl.extract.assume.bindfile
+
+Used by SVExtractTestCode.  Specifies the output file for extracted
+modules' bind file.
+
+### firrtl.extract.cover.bindfile
+
+Used by SVExtractTestCode.  Specifies the output file for extracted
+modules' bind file.

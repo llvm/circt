@@ -141,6 +141,37 @@ static StringAttr getMetadataDir(CircuitOp circuit) {
   return dir.cast<StringAttr>();
 }
 
+/// Move a ExtractTestCode related annotation from annotations to an attribute.
+static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
+                          StringRef annoClass, StringRef attrBase) {
+  auto anno = annos.getAnnotation(annoClass);
+  auto ctx = top.getContext();
+  if (!anno)
+    return;
+  if (auto _dir = anno.get("directory"))
+    if (auto dir = _dir.cast<StringAttr>()) {
+      SmallVector<NamedAttribute> old;
+      for (auto i : top->getAttrs())
+        old.push_back(i);
+      old.emplace_back(Identifier::get(attrBase, ctx),
+                       hw::OutputFileAttr::get(dir, StringAttr::get(ctx, ""),
+                                               BoolAttr::get(ctx, false),
+                                               BoolAttr::get(ctx, true), ctx));
+      top->setAttrs(old);
+    }
+  if (auto _file = anno.get("filename"))
+    if (auto file = _file.cast<StringAttr>()) {
+      SmallVector<NamedAttribute> old;
+      for (auto i : top->getAttrs())
+        old.push_back(i);
+      old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
+                       hw::OutputFileAttr::get(StringAttr::get(ctx, ""), file,
+                                               BoolAttr::get(ctx, true),
+                                               BoolAttr::get(ctx, true), ctx));
+      top->setAttrs(old);
+    }
+}
+
 namespace {
 struct FirMemory {
   size_t numReadPorts;
@@ -432,7 +463,14 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
-  state.processRemainingAnnotations(circuit, AnnotationSet(circuit));
+  AnnotationSet circuitAnno(circuit);
+  moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass, "firrtl.assert");
+  moveVerifAnno(getOperation(), circuitAnno, assumeAnnoClass, "firrtl.assume");
+  moveVerifAnno(getOperation(), circuitAnno, coverAnnoClass, "firrtl.cover");
+  circuitAnno.removeAnnotationsWithClass(assertAnnoClass, assumeAnnoClass,
+                                         coverAnnoClass);
+
+  state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
@@ -2928,12 +2966,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
     label = op.nameAttr();
   else
     label = builder.getStringAttr("");
-  auto annoSet = AnnotationSet(circuitState.circuitOp);
-  StringRef fileName, dir;
-  if (auto a = annoSet.getAnnotation(annoClass)) {
-    fileName = a.getAs<StringAttr>("filename").getValue();
-    dir = a.getAs<StringAttr>("directory").getValue();
-  }
   Operation *svOp;
 
   if (!op.isConcurrent())
@@ -2961,13 +2993,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
         predicate, label);
   }
-  if (!fileName.empty() || !dir.empty())
-    svOp->setAttr("output_file",
-                  hw::OutputFileAttr::get(builder.getStringAttr(dir),
-                                          builder.getStringAttr(fileName),
-                                          builder.getBoolAttr(true),
-                                          builder.getBoolAttr(true),
-                                          svOp->getContext()));
   return success();
 }
 

@@ -142,8 +142,8 @@ static StringRef getNameForPort(Value val, ArrayAttr modulePorts) {
 static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
                                          SetVector<Value> &inputs,
                                          BlockAndValueMapping &cutMap,
-                                         StringRef suffix, StringRef path,
-                                         StringRef fileName) {
+                                         StringRef suffix, Attribute path,
+                                         Attribute fileName) {
   // Create the extracted module right next to the original one.
   OpBuilder b(op);
 
@@ -162,11 +162,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   auto newMod = b.create<hw::HWModuleOp>(
       op.getLoc(),
       b.getStringAttr(getVerilogModuleNameAttr(op).getValue() + suffix), ports);
-  if (!path.empty())
-    newMod->setAttr("output_file", hw::OutputFileAttr::get(
-                                       b.getStringAttr(path),
-                                       b.getStringAttr(""), b.getBoolAttr(true),
-                                       b.getBoolAttr(false), op.getContext()));
+  if (path)
+    newMod->setAttr("output_file", path);
 
   // Update the mapping from old values to cloned values
   for (auto port : llvm::enumerate(inputs))
@@ -186,12 +183,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
 
   auto bindOp = b.create<sv::BindOp>(op.getLoc(), SymbolRefAttr::get(inst),
                                      SymbolRefAttr::get(op.getNameAttr()));
-  if (!fileName.empty())
-    bindOp->setAttr(
-        "output_file",
-        hw::OutputFileAttr::get(b.getStringAttr(""), b.getStringAttr(fileName),
-                                b.getBoolAttr(true), b.getBoolAttr(true),
-                                op.getContext()));
+  if (fileName)
+    bindOp->setAttr("output_file", fileName);
   return newMod;
 }
 
@@ -265,7 +258,7 @@ struct SVExtractTestCodeImplPass
 
 private:
   void doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
-                StringRef suffix) {
+                StringRef suffix, Attribute path, Attribute bindFile) {
     // Find Operations of interest.
     SmallPtrSet<Operation *, 8> roots;
     module->walk([&fn, &roots](Operation *op) {
@@ -275,19 +268,6 @@ private:
     // No Ops?  No problem.
     if (roots.empty())
       return;
-    StringRef fileName, path;
-    // Check if the assert/assume/cover op has the output_file attribute.
-    // How to handle different path attributes on multiple ops?
-    for (auto extractOp : roots)
-      if (extractOp->hasAttr("output_file")) {
-        path = extractOp->getAttrOfType<hw::OutputFileAttr>("output_file")
-                   .directory()
-                   .getValue();
-        fileName = extractOp->getAttrOfType<hw::OutputFileAttr>("output_file")
-                       .name()
-                       .getValue();
-        break;
-      }
 
     // Find the data-flow and structural ops to clone.  Result includes roots.
     auto opsToClone = computeCloneSet(roots);
@@ -303,7 +283,7 @@ private:
     // Make a module to contain the clone set, with arguments being the cut
     BlockAndValueMapping cutMap;
     auto bmod =
-        createModuleForCut(module, inputs, cutMap, suffix, path, fileName);
+        createModuleForCut(module, inputs, cutMap, suffix, path, bindFile);
     // do the clone
     migrateOps(module, bmod, opsToClone, cutMap);
     // erase old operations of interest
@@ -315,25 +295,41 @@ private:
 } // end anonymous namespace
 
 void SVExtractTestCodeImplPass::runOnOperation() {
-  auto *topLevelModule = getOperation().getBody();
-  for (auto &op : topLevelModule->getOperations())
+  auto top = getOperation();
+  auto *topLevelModule = top.getBody();
+  auto assertDir =
+      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert");
+  auto assumeDir =
+      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assume");
+  auto coverDir =
+      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover");
+  auto assertBindFile =
+      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assert.bindfile");
+  auto assumeBindFile =
+      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.assume.bindfile");
+  auto coverBindFile =
+      top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover.bindfile");
+
+  auto isAssert = [](Operation *op) -> bool {
+    return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
+           isa<AssertConcurrentOp>(op);
+  };
+  auto isAssume = [](Operation *op) -> bool {
+    return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
+  };
+  auto isCover = [](Operation *op) -> bool {
+    return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
+  };
+
+  for (auto &op : topLevelModule->getOperations()) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
       // Extract two sets of ops to different modules
-      auto isAssert = [](Operation *op) -> bool {
-        return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
-               isa<AssertConcurrentOp>(op);
-      };
-      auto isAssume = [](Operation *op) -> bool {
-        return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
-      };
-      auto isCover = [](Operation *op) -> bool {
-        return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
-      };
 
-      doModule(rtlmod, isAssert, "_assert");
-      doModule(rtlmod, isAssume, "_assume");
-      doModule(rtlmod, isCover, "_cover");
+      doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile);
+      doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile);
+      doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile);
     }
+  }
 }
 
 std::unique_ptr<Pass> circt::sv::createSVExtractTestCodePass() {
