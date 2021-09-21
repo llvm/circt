@@ -46,6 +46,10 @@ static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 /// module should be dumped to a file.
 static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
 
+/// Attribute that indicates where some json files should be dumped.
+static const char metadataDirectoryAttrName[] =
+    "sifive.enterprise.firrtl.MetadataDirAnnotation";
+
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
 static Type lowerType(Type type) {
@@ -122,6 +126,19 @@ static Value castFromFIRRTLType(Value val, Type type,
 /// with zero bits.
 static bool isZeroBitFIRRTLType(Type type) {
   return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
+}
+
+static StringAttr getMetadataDir(CircuitOp circuit) {
+  AnnotationSet annos(circuit);
+  auto diranno = annos.getAnnotation(metadataDirectoryAttrName);
+  if (!diranno)
+    return StringAttr::get(circuit.getContext(), "");
+  auto dir = diranno.get("dirname");
+  if (!dir)
+    return StringAttr::get(circuit.getContext(), "");
+  if (!dir.isa<StringAttr>())
+    return StringAttr::get(circuit.getContext(), "");
+  return dir.cast<StringAttr>();
 }
 
 namespace {
@@ -474,7 +491,7 @@ void FIRRTLModuleLowering::runOnOperation() {
   newMainModule->setAttr(
       moduleHierarchyFileAttrName,
       hw::OutputFileAttr::get(
-          StringAttr::get(circuit.getContext(), ""),
+          getMetadataDir(circuit),
           StringAttr::get(circuit.getContext(), "testharness_hier.json"),
           /*exclude_from_filelist=*/
           BoolAttr::get(circuit.getContext(), true),
@@ -810,13 +827,14 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   // Mark the design under test as a module of interest for exporting module
   // hierarchy information.
   if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
-    newModule->setAttr(moduleHierarchyFileAttrName,
-                       hw::OutputFileAttr::get(
-                           builder.getStringAttr(""),
-                           builder.getStringAttr("module_hier.json"),
-                           /*exclude_from_filelist=*/builder.getBoolAttr(true),
-                           /*exclude_replicated_ops=*/builder.getBoolAttr(true),
-                           &getContext()));
+    newModule->setAttr(
+        moduleHierarchyFileAttrName,
+        hw::OutputFileAttr::get(
+            getMetadataDir(oldModule->getParentOfType<CircuitOp>()),
+            builder.getStringAttr("module_hier.json"),
+            /*exclude_from_filelist=*/builder.getBoolAttr(true),
+            /*exclude_replicated_ops=*/builder.getBoolAttr(true),
+            &getContext()));
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;
