@@ -92,7 +92,6 @@ static StringRef getSymOpName(Operation *symOp) {
       .Case<InterfaceModportOp>(
           [&](InterfaceModportOp op) { return op.sym_name(); })
       .Default([&](Operation *op) {
-        op->emitError("unknown operation with symbol, cannot determine name");
         return "";
       });
 }
@@ -684,6 +683,12 @@ void EmitterBase::emitTextWithSubstitutions(
         // done.
         if (!names.hasName(symOp)) {
           StringRef symOpName = getSymOpName(symOp);
+          std::string opStr;
+          llvm::raw_string_ostream tName(opStr);
+          tName << *symOp;
+          if (symOpName.empty())
+            op->emitError("Cannot get name for symbol:" + tName.str());
+
           names.addName(symOp, symOpName);
         }
         os << names.getName(symOp);
