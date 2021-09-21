@@ -756,34 +756,34 @@ section describes well-defined attributes used by HW/SV passes.
 ### firrtl.moduleHierarchyFile
 
 Used by HWExportModuleHierarchy.  Signifies a root from which to dump the module
-hierarchy as a json file.
+hierarchy as a json file. This attribute has type OutputFileAttr.
 
 ### firrtl.extract.assert
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
-modules.
+modules. This attribute has type OutputFileAttr.
 
 ### firrtl.extract.assume
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
-modules.
+modules. This attribute has type OutputFileAttr.
 
 ### firrtl.extract.cover
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
-modules.
+modules. This attribute has type OutputFileAttr.
 
 ### firrtl.extract.assert.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
-modules' bind file.
+modules' bind file. This attribute has type OutputFileAttr.
 
 ### firrtl.extract.assume.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
-modules' bind file.
+modules' bind file. This attribute has type OutputFileAttr.
 
 ### firrtl.extract.cover.bindfile
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
-modules' bind file.
+modules' bind file. This attribute has type OutputFileAttr.
