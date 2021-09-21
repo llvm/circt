@@ -204,14 +204,18 @@ public:
   // Returns the component operation associated with the currently executing
   // partial lowering.
   calyx::ComponentOp *getComponent() const {
-    assert(compOp != nullptr);
+    assert(
+        compOp != nullptr &&
+        "Expected component op to have been set during pattern construction");
     return compOp;
   }
 
   // Returns the component state associated with the currently executing
   // partial lowering.
   ComponentLoweringState &getComponentState() const {
-    assert(compLoweringState != nullptr);
+    assert(compLoweringState != nullptr &&
+           "Expected component lowering state to have been set during pattern "
+           "construction");
     return *compLoweringState;
   }
 
