@@ -3,6 +3,13 @@
 
 // CHECK-LABEL: module {
 module {
+
+  // Empty interface test
+  sv.interface @empty { }
+
+  // CHECK-NEXT: sv.interface @empty {
+  // CHECK-NEXT: }
+
   // Basic interface smoke test
 
   sv.interface @myinterface {
