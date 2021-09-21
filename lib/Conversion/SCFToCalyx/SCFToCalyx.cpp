@@ -93,7 +93,7 @@ class ProgramLoweringState {
 public:
   explicit ProgramLoweringState(calyx::ProgramOp program,
                                 StringRef topLevelFunction)
-      : m_topLevelFunction(topLevelFunction), program(program) {
+      : topLevelFunction(topLevelFunction), program(program) {
     getProgram();
   }
 
@@ -134,10 +134,10 @@ public:
   }
 
   /// Returns the name of the top-level function in the source program.
-  StringRef topLevelFunction() const { return m_topLevelFunction; }
+  StringRef getTopLevelFunction() const { return topLevelFunction; }
 
 private:
-  StringRef m_topLevelFunction;
+  StringRef topLevelFunction;
   calyx::ProgramOp program;
   DenseMap<Operation *, ComponentLoweringState> compStates;
 };
@@ -195,7 +195,7 @@ public:
     auto it = funcMap.find(funcOp);
     if (it != funcMap.end()) {
       compOp = &it->second;
-      compLoweringState = &pls.compLoweringState(*comp());
+      compLoweringState = &pls.compLoweringState(*getComponent());
     }
 
     return PartiallyLowerFuncToComp(funcOp, rewriter);
@@ -203,14 +203,14 @@ public:
 
   // Returns the component operation associated with the currently executing
   // partial lowering.
-  calyx::ComponentOp *comp() const {
+  calyx::ComponentOp *getComponent() const {
     assert(compOp != nullptr);
     return compOp;
   }
 
   // Returns the component state associated with the currently executing
   // partial lowering.
-  ComponentLoweringState &state() const {
+  ComponentLoweringState &getComponentState() const {
     assert(compLoweringState != nullptr);
     return *compLoweringState;
   }
@@ -281,7 +281,7 @@ private:
 class SCFToCalyxPass : public SCFToCalyxBase<SCFToCalyxPass> {
 public:
   SCFToCalyxPass()
-      : SCFToCalyxBase<SCFToCalyxPass>(), m_partialPatternRes(success()) {}
+      : SCFToCalyxBase<SCFToCalyxPass>(), partialPatternRes(success()) {}
   void runOnOperation() override;
 
   LogicalResult setTopLevelFunction(mlir::ModuleOp moduleOp,
@@ -372,7 +372,7 @@ public:
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
                       PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
-    ps.add<TPattern>(&getContext(), m_partialPatternRes, args...);
+    ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
         LoweringPattern{std::move(ps), LoweringPattern::Strategy::Once});
   }
@@ -405,12 +405,12 @@ public:
     /// forward the 'succeeded' value from PartialLoweringPatternBase.
     (void)applyPatternsAndFoldGreedily(getOperation(), std::move(pattern),
                                        config);
-    return m_partialPatternRes;
+    return partialPatternRes;
   }
 
 private:
-  LogicalResult m_partialPatternRes;
-  std::shared_ptr<ProgramLoweringState> m_loweringState = nullptr;
+  LogicalResult partialPatternRes;
+  std::shared_ptr<ProgramLoweringState> loweringState = nullptr;
 };
 
 void SCFToCalyxPass::runOnOperation() {
@@ -429,13 +429,13 @@ void SCFToCalyxPass::runOnOperation() {
   assert(programOp.getOperation() != nullptr &&
          "programOp should have been set during module "
          "conversion, if module conversion succeeded.");
-  m_loweringState =
+  loweringState =
       std::make_shared<ProgramLoweringState>(programOp, topLevelFunction);
 
   /// --------------------------------------------------------------------------
   /// If you are a developer, it may be helpful to add a
-  /// 'm_module.dump()' operation after the execution of each stage to view
-  /// the transformations that's going on.
+  /// 'getOperation()->dump()' call after the execution of each stage to
+  /// view the transformations that's going on.
   /// --------------------------------------------------------------------------
   FuncMapping funcMap;
   SmallVector<LoweringPattern, 8> loweringPatterns;
