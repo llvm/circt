@@ -37,6 +37,8 @@ namespace circt {
 /// Calyx component.
 using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 
+using Scheduleable = std::variant<calyx::GroupOp>;
+
 //===----------------------------------------------------------------------===//
 // Utility functions
 //===----------------------------------------------------------------------===//
@@ -83,6 +85,18 @@ static TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
   auto groupOp = rewriter.create<TGroup>(loc, uniqueName.str());
   rewriter.createBlock(&groupOp.getBodyRegion());
   return groupOp;
+}
+
+/// Get the index'th output of compOp, which is associated with
+/// funcOp.
+/// This assumes the invariant that both the ComponentOp and FuncOp have the
+/// same port ordering.
+static Value getComponentOutput(mlir::FuncOp funcOp, calyx::ComponentOp compOp,
+                                unsigned index) {
+  size_t resIdx = funcOp.getNumArguments() + 3 /*go, reset, clk*/ + index;
+  assert(compOp.getNumArguments() > resIdx &&
+         "Exceeded number of arguments in the Component");
+  return compOp.getArgument(resIdx);
 }
 
 //===----------------------------------------------------------------------===//
@@ -156,6 +170,47 @@ public:
     }
   }
 
+  /// Register reg as being the idx'th return value register.
+  void addReturnReg(calyx::RegisterOp reg, unsigned idx) {
+    assert(returnRegs.count(idx) == 0 &&
+           "A register was already registered for this index");
+    returnRegs[idx] = reg;
+  }
+
+  /// Returns the idx'th return value register.
+  calyx::RegisterOp getReturnReg(unsigned idx) {
+    assert(returnRegs.count(idx) && "No register registered for index!");
+    return returnRegs[idx];
+  }
+
+  /// Returns an SSA value for an arbitrary precision constant defined within
+  /// compOp. A new constant is created if no constant is found.
+  Value getConstant(PatternRewriter &rewriter, Location loc, int64_t value,
+                    unsigned width) {
+    IRRewriter::InsertionGuard guard(rewriter);
+    Value v;
+    auto it = constants.find(APInt(value, width));
+    if (it == constants.end()) {
+      rewriter.setInsertionPointToStart(compOp.getBody());
+      return v = rewriter.create<hw::ConstantOp>(loc, APInt(value, width));
+    }
+    return it->second;
+  }
+
+  /// Register 'scheduleable' as being generated through lowering 'block'.
+  ///
+  /// TODO(mortbopet): Add a post-insertion check to ensure that the use-def
+  /// ordering invariant holds for the groups. When the control schedule is
+  /// generated, scheduleables within a block are emitted sequentially based on
+  /// the order that this function was called during conversion.
+  ///
+  /// Currently, we assume this to always be true. Walking the FuncOp IR implies
+  /// sequential iteration over operations within basic blocks.
+  void addBlockScheduleable(mlir::Block *block,
+                            const Scheduleable &scheduleable) {
+    blockScheduleables[block].push_back(scheduleable);
+  }
+
 private:
   /// A reference to the parent program lowering state.
   ProgramLoweringState &programLoweringState;
@@ -172,6 +227,16 @@ private:
 
   /// A mapping between SSA values and the groups which assign them.
   DenseMap<Value, calyx::GroupInterface> valueGroupAssigns;
+
+  /// A mapping from return value indexes to return value registers.
+  DenseMap<unsigned, calyx::RegisterOp> returnRegs;
+
+  /// A mapping of currently available constants in this component.
+  DenseMap<APInt, Value> constants;
+
+  /// BlockScheduleables is a list of scheduleables that should be
+  /// sequentially executed when executing the associated basic block.
+  DenseMap<mlir::Block *, SmallVector<Scheduleable>> blockScheduleables;
 };
 
 /// ProgramLoweringState handles the current state of lowering of a Calyx
@@ -230,6 +295,21 @@ private:
   DenseMap<Operation *, ComponentLoweringState> compStates;
 };
 
+/// Creates register assignment operations within the provided groupOp.
+static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
+                                             PatternRewriter &rewriter,
+                                             calyx::GroupOp groupOp,
+                                             calyx::RegisterOp &reg,
+                                             Value inputValue) {
+  IRRewriter::InsertionGuard guard(rewriter);
+  auto loc = inputValue.getLoc();
+  rewriter.setInsertionPointToEnd(groupOp.getBody());
+  rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue, Value());
+  rewriter.create<calyx::AssignOp>(
+      loc, reg.write_en(), state.getConstant(rewriter, loc, 1, 1), Value());
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.donePort(), Value());
+}
+
 //===----------------------------------------------------------------------===//
 // Partial lowering infrastructure
 //===----------------------------------------------------------------------===//
@@ -260,6 +340,16 @@ public:
 private:
   LogicalResult &partialPatternRes;
 };
+
+/// Creates a new register within the component associated to 'compState'.
+static calyx::RegisterOp createReg(ComponentLoweringState &compState,
+                                   PatternRewriter &rewriter, Location loc,
+                                   Twine prefix, size_t width) {
+  IRRewriter::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPointToStart(compState.getComponentOp().getBody());
+  return rewriter.create<calyx::RegisterOp>(
+      loc, rewriter.getStringAttr(prefix + "_reg"), width);
+}
 
 //===----------------------------------------------------------------------===//
 // Partial lowering patterns
@@ -337,31 +427,31 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     /// We walk the operations of the funcOp to ensure that all def's have
     /// been visited before their uses.
-    bool res = true;
+    bool opBuiltSuccessfully = true;
     funcOp.walk([&](Operation *_op) {
-      res &=
-          TypeSwitch<mlir::Operation *, LogicalResult>(_op)
-              .template Case<ConstantOp,
+      opBuiltSuccessfully &=
+          TypeSwitch<mlir::Operation *, bool>(_op)
+              .template Case<ConstantOp, ReturnOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShiftLeftOp,
                              UnsignedShiftRightOp, SignedShiftRightOp, AndOp,
                              XOrOp, OrOp, ZeroExtendIOp, TruncateIOp>(
-                  [&](auto op) { return buildOp(rewriter, op); })
+                  [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp>(
                   [&](auto) {
                     /// Skip: these special cases will be handled separately.
-                    return success();
+                    return true;
                   })
               .Default([&](auto) {
                 assert(false && "Unhandled operation during BuildOpGroups()");
-                return failure();
-              })
-              .succeeded();
+                return false;
+              });
 
-      return res ? WalkResult::advance() : WalkResult::interrupt();
+      return opBuiltSuccessfully ? WalkResult::advance()
+                                 : WalkResult::interrupt();
     });
 
-    return success(res);
+    return success(opBuiltSuccessfully);
   }
 
 private:
@@ -379,6 +469,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, CmpIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, TruncateIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ZeroExtendIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, ReturnOp op) const;
 
   /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
   /// source operation TSrcOp.
@@ -440,6 +531,27 @@ private:
                                  block->front().getLoc(), groupName);
   }
 };
+
+/// For each return statement, we create a new group for assigning to the
+/// previously created return value registers.
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     ReturnOp retOp) const {
+  if (retOp.getNumOperands() == 0)
+    return success();
+
+  std::string groupName = getComponentState().getUniqueName("ret_assign");
+  Value anyRegDone;
+  auto groupOp = createGroup<calyx::GroupOp>(rewriter, *getComponent(),
+                                             retOp.getLoc(), groupName);
+  for (auto op : enumerate(retOp.getOperands())) {
+    auto reg = getComponentState().getReturnReg(op.index());
+    buildAssignmentsForRegisterWrite(getComponentState(), rewriter, groupOp,
+                                     reg, op.value());
+  }
+  /// Schedule group for execution for when executing the return op block.
+  getComponentState().addBlockScheduleable(retOp->getBlock(), groupOp);
+  return success();
+}
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      ConstantOp constOp) const {
@@ -559,6 +671,33 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
 
     /// Store function to component mapping for future reference.
     funcMap[funcOp] = compOp;
+    return success();
+  }
+};
+
+/// Builds registers for the return statement of the program and constant
+/// assignments to the component return value.
+class BuildReturnRegs : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+
+    for (auto argType : enumerate(funcOp.getType().getResults())) {
+      assert(argType.value().isa<IntegerType>() && "unsupported return type");
+      unsigned width = argType.value().getIntOrFloatBitWidth();
+      std::string name = "ret_arg" + std::to_string(argType.index());
+      auto reg = createReg(getComponentState(), rewriter, funcOp.getLoc(), name,
+                           width);
+      getComponentState().addReturnReg(reg, argType.index());
+
+      rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());
+      rewriter.create<calyx::AssignOp>(
+          funcOp->getLoc(),
+          getComponentOutput(funcOp, *getComponent(), argType.index()),
+          reg.out(), Value());
+    }
     return success();
   }
 };
@@ -770,6 +909,9 @@ void SCFToCalyxPass::runOnOperation() {
 
   /// Creates a new Calyx component for each FuncOp in the inpurt module.
   addOncePattern<FuncOpConversion>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pattern creates registers for the function return values.
+  addOncePattern<BuildReturnRegs>(loweringPatterns, funcMap, *loweringState);
 
   /// This pattern converts operations within basic blocks to Calyx library
   /// operators. Combinational operations are assigned inside a
