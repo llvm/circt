@@ -11,7 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Scheduling/Algorithms.h"
+#include "circt/Scheduling/Interfaces.h"
 
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 
@@ -404,6 +406,50 @@ void TestSimplexSchedulerPass::runOnFunction() {
 }
 
 //===----------------------------------------------------------------------===//
+// SchedulableOpInterface
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestSchedulableOpInterfacePass
+    : public PassWrapper<TestSchedulableOpInterfacePass, FunctionPass> {
+  void runOnFunction() override;
+  StringRef getArgument() const override {
+    return "test-schedulable-op-interface";
+  }
+  StringRef getDescription() const override {
+    return "Test the schedulable op interface.";
+  }
+};
+
+struct CombSchedulable
+    : public SchedulableOpInterface::FallbackModel<CombSchedulable> {
+  Problem::OperatorType getOperatorType(Operation *op) const {
+    return Problem::OperatorType::get("comb", op->getContext());
+  }
+};
+
+struct ThreeCycleSchedulable
+    : public SchedulableOpInterface::FallbackModel<ThreeCycleSchedulable> {
+  Problem::OperatorType getOperatorType(Operation *op) const {
+    return Problem::OperatorType::get("three-cycle", op->getContext());
+  }
+};
+
+} // anonymous namespace
+
+void TestSchedulableOpInterfacePass::runOnFunction() {
+  MLIRContext &context = getContext();
+
+  AddIOp::attachInterface<CombSchedulable>(context);
+  MulIOp::attachInterface<ThreeCycleSchedulable>(context);
+
+  getOperation().walk([&](SchedulableOpInterface op) {
+    op->setAttr("opr",
+                StringAttr::get(&context, op.getOperatorType().strref()));
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -427,6 +473,9 @@ void registerSchedulingTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestSimplexSchedulerPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestSchedulableOpInterfacePass>();
   });
 }
 } // namespace test

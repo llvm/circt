@@ -1,5 +1,6 @@
 set(LLVM_OPTIONAL_SOURCES
   ASAPScheduler.cpp
+  Interfaces.cpp
   Problems.cpp
   SimplexSchedulers.cpp
   TestPasses.cpp
@@ -16,10 +17,18 @@ add_circt_library(CIRCTScheduling
   MLIRSupport
   )
 
+add_circt_library(CIRCTSchedulingInterfaces
+  Interfaces.cpp
+
+  DEPENDS
+  MLIRSchedulingInterfacesIncGen
+  )
+
 add_circt_library(CIRCTSchedulingTestPasses
   TestPasses.cpp
 
   LINK_LIBS PUBLIC
   CIRCTScheduling
+  CIRCTSchedulingInterfaces
   MLIRPass
   )

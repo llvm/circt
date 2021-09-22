@@ -1,0 +1,5 @@
+set(LLVM_TARGET_DEFINITIONS SchedulingInterfaces.td)
+mlir_tablegen(SchedulingInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(SchedulingInterfaces.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(MLIRSchedulingInterfacesIncGen)
+add_dependencies(circt-headers MLIRSchedulingInterfacesIncGen)
