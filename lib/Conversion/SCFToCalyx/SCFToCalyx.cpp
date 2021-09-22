@@ -89,11 +89,13 @@ static TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
 
 /// Get the index'th output of compOp, which is associated with
 /// funcOp.
-
+/// This assumes the invariant that both the ComponentOp and FuncOp have the
+/// same port ordering.
 static Value getComponentOutput(mlir::FuncOp funcOp, calyx::ComponentOp compOp,
                                 unsigned index) {
   size_t resIdx = funcOp.getNumArguments() + 3 /*go, reset, clk*/ + index;
-  assert(compOp.getNumArguments() > resIdx);
+  assert(compOp.getNumArguments() > resIdx &&
+         "Exceeded number of arguments in the Component");
   return compOp.getArgument(resIdx);
 }
 
@@ -170,7 +172,8 @@ public:
 
   /// Register reg as being the idx'th return value register.
   void addReturnReg(calyx::RegisterOp reg, unsigned idx) {
-    assert(returnRegs.count(idx) == 0);
+    assert(returnRegs.count(idx) == 0 &&
+           "A register was already registered for this index");
     returnRegs[idx] = reg;
   }
 
@@ -201,9 +204,8 @@ public:
   /// generated, scheduleables within a block are emitted sequentially based on
   /// the order that this function was called during conversion.
   ///
-  /// Currently, we assume this to be always true since walking the IR implies
-  /// sequentially iterate over operations within blocks - which implies
-  /// this function being called in the correct order.
+  /// Currently, we assume this to always be true. Walking the FuncOp IR implies
+  /// sequential iteration over operations within basic blocks.
   void addBlockScheduleable(mlir::Block *block,
                             const Scheduleable &scheduleable) {
     blockScheduleables[block].push_back(scheduleable);
@@ -297,11 +299,12 @@ private:
 static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
                                              PatternRewriter &rewriter,
                                              calyx::GroupOp groupOp,
-                                             calyx::RegisterOp &reg, Value v) {
+                                             calyx::RegisterOp &reg,
+                                             Value inputValue) {
   IRRewriter::InsertionGuard guard(rewriter);
-  auto loc = v.getLoc();
+  auto loc = inputValue.getLoc();
   rewriter.setInsertionPointToEnd(groupOp.getBody());
-  rewriter.create<calyx::AssignOp>(loc, reg.in(), v, Value());
+  rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue, Value());
   rewriter.create<calyx::AssignOp>(
       loc, reg.write_en(), state.getConstant(rewriter, loc, 1, 1), Value());
   rewriter.create<calyx::GroupDoneOp>(loc, reg.donePort(), Value());
@@ -424,31 +427,31 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     /// We walk the operations of the funcOp to ensure that all def's have
     /// been visited before their uses.
-    bool res = true;
+    bool opBuiltSuccessfully = true;
     funcOp.walk([&](Operation *_op) {
-      res &=
-          TypeSwitch<mlir::Operation *, LogicalResult>(_op)
+      opBuiltSuccessfully &=
+          TypeSwitch<mlir::Operation *, bool>(_op)
               .template Case<ConstantOp, ReturnOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShiftLeftOp,
                              UnsignedShiftRightOp, SignedShiftRightOp, AndOp,
                              XOrOp, OrOp, ZeroExtendIOp, TruncateIOp>(
-                  [&](auto op) { return buildOp(rewriter, op); })
+                  [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp>(
                   [&](auto) {
                     /// Skip: these special cases will be handled separately.
-                    return success();
+                    return true;
                   })
               .Default([&](auto) {
                 assert(false && "Unhandled operation during BuildOpGroups()");
-                return failure();
-              })
-              .succeeded();
+                return false;
+              });
 
-      return res ? WalkResult::advance() : WalkResult::interrupt();
+      return opBuiltSuccessfully ? WalkResult::advance()
+                                 : WalkResult::interrupt();
     });
 
-    return success(res);
+    return success(opBuiltSuccessfully);
   }
 
 private:
@@ -545,7 +548,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     buildAssignmentsForRegisterWrite(getComponentState(), rewriter, groupOp,
                                      reg, op.value());
   }
-  /// Schedule group for execution for when executing the return op block
+  /// Schedule group for execution for when executing the return op block.
   getComponentState().addBlockScheduleable(retOp->getBlock(), groupOp);
   return success();
 }
