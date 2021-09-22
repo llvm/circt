@@ -154,9 +154,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
       for (auto i : top->getAttrs())
         old.push_back(i);
       old.emplace_back(Identifier::get(attrBase, ctx),
-                       hw::OutputFileAttr::get(dir, StringAttr::get(ctx, ""),
-                                               BoolAttr::get(ctx, false),
-                                               BoolAttr::get(ctx, true), ctx));
+                       hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
       top->setAttrs(old);
     }
   if (auto _file = anno.get("filename"))
@@ -165,9 +163,8 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
       for (auto i : top->getAttrs())
         old.push_back(i);
       old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
-                       hw::OutputFileAttr::get(StringAttr::get(ctx, ""), file,
-                                               BoolAttr::get(ctx, true),
-                                               BoolAttr::get(ctx, true), ctx));
+                       hw::OutputFileAttr::getFromFilename(
+                           ctx, file.getValue(), /*excludeFromFileList=*/true));
       top->setAttrs(old);
     }
 }
@@ -528,15 +525,12 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Add attributes specific to the new main module, since the notion of a
   // "main" module goes away after lowering to HW.
   auto *newMainModule = state.oldToNewModuleMap[circuit.getMainModule()];
-  newMainModule->setAttr(
-      moduleHierarchyFileAttrName,
-      hw::OutputFileAttr::get(
-          getMetadataDir(circuit),
-          StringAttr::get(circuit.getContext(), "testharness_hier.json"),
-          /*exclude_from_filelist=*/
-          BoolAttr::get(circuit.getContext(), true),
-          /*exclude_replicated_ops=*/
-          BoolAttr::get(circuit.getContext(), true), circuit.getContext()));
+  newMainModule->setAttr(moduleHierarchyFileAttrName,
+                         hw::OutputFileAttr::getFromDirectoryAndFilename(
+                             circuit.getContext(),
+                             getMetadataDir(circuit).getValue(),
+                             "testharness_hier.json",
+                             /*excludeFromFilelist=*/true));
 
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
@@ -874,12 +868,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
     newModule->setAttr(
         moduleHierarchyFileAttrName,
-        hw::OutputFileAttr::get(
-            getMetadataDir(oldModule->getParentOfType<CircuitOp>()),
-            builder.getStringAttr("module_hier.json"),
-            /*exclude_from_filelist=*/builder.getBoolAttr(true),
-            /*exclude_replicated_ops=*/builder.getBoolAttr(true),
-            &getContext()));
+        hw::OutputFileAttr::getFromDirectoryAndFilename(
+            &getContext(),
+            getMetadataDir(oldModule->getParentOfType<CircuitOp>()).getValue(),
+            "module_hier.json",
+            /*excludeFromFileList=*/true));
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;

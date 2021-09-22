@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -490,11 +491,10 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
   if (maybeExtractInfo)
     iface->setAttr("output_file",
-                   hw::OutputFileAttr::get(
-                       getOutputDirectory(),
-                       builder.getStringAttr(iFaceName + ".sv"),
-                       builder.getBoolAttr(true), builder.getBoolAttr(true),
-                       builder.getContext()));
+                   hw::OutputFileAttr::getFromDirectoryAndFilename(
+                       &getContext(), getOutputDirectory().getValue(),
+                       iFaceName + ".sv",
+                       /*excludFromFileList=*/true));
 
   builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBodyBlock());
 
@@ -773,14 +773,13 @@ void GrandCentralPass::runOnOperation() {
               auto mapping = builder.create<FModuleOp>(
                   circuitOp.getLoc(), builder.getStringAttr(mappingName),
                   ArrayRef<PortInfo>());
-              auto *ctx = builder.getContext();
               if (maybeExtractInfo)
                 mapping->setAttr(
                     "output_file",
-                    hw::OutputFileAttr::get(
-                        getOutputDirectory(),
-                        builder.getStringAttr(mapping.getName() + ".sv"),
-                        trueAttr, trueAttr, ctx));
+                    hw::OutputFileAttr::getFromDirectoryAndFilename(
+                        &getContext(), getOutputDirectory().getValue(),
+                        mapping.getName() + ".sv",
+                        /*excludeFromFilelist=*/true));
               companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.
@@ -801,15 +800,17 @@ void GrandCentralPass::runOnOperation() {
 
               instance.getValue()->setAttr("lowerToBind", trueAttr);
               instance.getValue()->setAttr(
-                  "output_file", hw::OutputFileAttr::get(
-                                     builder.getStringAttr(""),
-                                     maybeExtractInfo.getValue().bindFilename,
-                                     trueAttr, trueAttr, ctx));
+                  "output_file",
+                  hw::OutputFileAttr::getFromFilename(
+                      &getContext(),
+                      maybeExtractInfo.getValue().bindFilename.getValue(),
+                      /*excludeFromFileList=*/true));
               op->setAttr("output_file",
-                          hw::OutputFileAttr::get(
-                              maybeExtractInfo.getValue().directory,
-                              builder.getStringAttr(op.getName() + ".sv"),
-                              trueAttr, trueAttr, ctx));
+                          hw::OutputFileAttr::getFromDirectoryAndFilename(
+                              &getContext(),
+                              maybeExtractInfo.getValue().directory.getValue(),
+                              op.getName() + ".sv",
+                              /*excludeFromFileList=*/true));
               return true;
             }
 
@@ -983,10 +984,11 @@ void GrandCentralPass::runOnOperation() {
         getOperation().getLoc(),
         SymbolRefAttr::get(builder.getContext(),
                            instance.sym_name().getValue()));
-    bind->setAttr("output_file", hw::OutputFileAttr::get(
-                                     builder.getStringAttr(""),
-                                     maybeExtractInfo.getValue().bindFilename,
-                                     trueAttr, trueAttr, bind.getContext()));
+    bind->setAttr("output_file",
+                  hw::OutputFileAttr::getFromFilename(
+                      &getContext(),
+                      maybeExtractInfo.getValue().bindFilename.getValue(),
+                      /*excludeFromFileList=*/true));
   }
 
   // Signal pass failure if any errors were found while examining circuit

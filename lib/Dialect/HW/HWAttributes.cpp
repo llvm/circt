@@ -10,7 +10,11 @@
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 
 using namespace circt;
 using namespace circt::hw;
@@ -46,6 +50,97 @@ void HWDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
   if (succeeded(generatedAttributePrinter(attr, p)))
     return;
   llvm_unreachable("Unexpected attribute");
+}
+
+//===----------------------------------------------------------------------===//
+// OutputFileAttr
+//===----------------------------------------------------------------------===//
+
+static std::string canonicalizeFilename(const Twine &directory,
+                                        const Twine &filename) {
+  SmallString<128> fullPath;
+
+  // If the filename is an absolute path, we don't need the directory.
+  if (llvm::sys::path::is_absolute(filename))
+    filename.toVector(fullPath);
+  else
+    llvm::sys::path::append(fullPath, directory, filename);
+
+  // If this is a directory target, we need to ensure it ends with a `/`
+  if (filename.isTriviallyEmpty() && !fullPath.endswith("/"))
+    fullPath += "/";
+
+  return std::string(fullPath);
+}
+
+OutputFileAttr OutputFileAttr::getFromFilename(MLIRContext *context,
+                                               const Twine &filename,
+                                               bool excludeFromFileList,
+                                               bool includeReplicatedOps) {
+  return OutputFileAttr::getFromDirectoryAndFilename(
+      context, "", filename, excludeFromFileList, includeReplicatedOps);
+}
+
+OutputFileAttr OutputFileAttr::getFromDirectoryAndFilename(
+    MLIRContext *context, const Twine &directory, const Twine &filename,
+    bool excludeFromFileList, bool includeReplicatedOps) {
+  auto canonicalized = canonicalizeFilename(directory, filename);
+  return OutputFileAttr::get(StringAttr::get(context, canonicalized),
+                             BoolAttr::get(context, excludeFromFileList),
+                             BoolAttr::get(context, includeReplicatedOps));
+}
+
+OutputFileAttr OutputFileAttr::getAsDirectory(MLIRContext *context,
+                                              const Twine &directory,
+                                              bool excludeFromFileList,
+                                              bool includeReplicatedOps) {
+  return getFromDirectoryAndFilename(context, directory, "",
+                                     excludeFromFileList, includeReplicatedOps);
+}
+
+bool OutputFileAttr::isDirectory() {
+  return getFilename().getValue().endswith("/");
+}
+
+/// Option         ::= 'excludeFromFileList' | 'includeReplicatedOp'
+/// OutputFileAttr ::= 'output_file<' directory ',' name (',' Option)* '>'
+Attribute OutputFileAttr::parse(MLIRContext *context, DialectAsmParser &p,
+                                Type type) {
+  StringAttr filename;
+  if (p.parseLess() || p.parseAttribute<StringAttr>(filename))
+    return Attribute();
+
+  // Parse the additional keyword attributes.  Its easier to let people specify
+  // these more than once than to detect the problem and do something about it.
+  bool excludeFromFileList = false;
+  bool includeReplicatedOps = false;
+  while (true) {
+    if (p.parseOptionalComma())
+      break;
+    if (!p.parseOptionalKeyword("excludeFromFileList"))
+      excludeFromFileList = true;
+    else if (!p.parseKeyword("includeReplicatedOps",
+                             "or 'excludeFromFileList'"))
+      includeReplicatedOps = true;
+    else
+      return Attribute();
+  }
+
+  if (p.parseGreater())
+    return Attribute();
+
+  return OutputFileAttr::get(context, filename,
+                             BoolAttr::get(context, excludeFromFileList),
+                             BoolAttr::get(context, includeReplicatedOps));
+}
+
+void OutputFileAttr::print(DialectAsmPrinter &p) const {
+  p << "output_file<" << getFilename();
+  if (getExcludeFromFilelist().getValue())
+    p << ", excludeFromFileList";
+  if (getIncludeReplicatedOps().getValue())
+    p << ", includeReplicatedOps";
+  p << ">";
 }
 
 //===----------------------------------------------------------------------===//

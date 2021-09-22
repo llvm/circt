@@ -3503,18 +3503,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     if (attr) {
       LLVM_DEBUG(llvm::dbgs() << "Found output_file attribute " << attr
                               << " on " << op << "\n";);
-
-      if (auto directory = attr.directory())
-        appendPossiblyAbsolutePath(outputPath, directory.getValue());
-
-      if (auto name = attr.name())
-        if (!name.getValue().empty()) {
-          appendPossiblyAbsolutePath(outputPath, name.getValue());
-          hasFileName = true;
-        }
-
-      emitReplicatedOps = !attr.exclude_replicated_ops().getValue();
-      addToFilelist = !attr.exclude_from_filelist().getValue();
+      if (!attr.isDirectory())
+        hasFileName = true;
+      appendPossiblyAbsolutePath(outputPath, attr.getFilename().getValue());
+      emitReplicatedOps = attr.getIncludeReplicatedOps().getValue();
+      addToFilelist = !attr.getExcludeFromFilelist().getValue();
     }
 
     auto separateFile = [&](Operation *op, Twine defaultFileName = "") {

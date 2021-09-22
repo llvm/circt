@@ -54,8 +54,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME: {
 
 // CHECK: firrtl.module @View_companion
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "View_companion.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
 // CHECK-NEXT: firrtl.instance @View_mapping {name = "View_mapping"}
 
 // All Grand Central annotations are removed from the wires.
@@ -66,14 +65,12 @@ firrtl.circuit "InterfaceGroundType" attributes {
 // CHECK-SAME: annotations = [{a}]
 
 // CHECK: firrtl.module @View_mapping
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "View_mapping.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_mapping.sv"
 // CHECK-NEXT: sv.verbatim "assign View.foo = dut.a;"
 // CHECK-NEXT: sv.verbatim "assign View.bar = dut.b;"
 
 // CHECK: sv.interface {
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
 // CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i2
@@ -141,8 +138,7 @@ firrtl.circuit "InterfaceVectorType" attributes {
 // CHECK-SAME: {
 
 // CHECK: firrtl.module @View_companion
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "View_companion.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
 // CHECK-NEXT: firrtl.instance @View_mapping {name = "View_mapping"}
 
 // All Grand Central annotations are removed from the registers.
@@ -153,8 +149,7 @@ firrtl.circuit "InterfaceVectorType" attributes {
 // CHECK-SAME: annotations = [{a}]
 
 // CHECK: sv.interface {
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
 // CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : !hw.uarray<2xi1>
@@ -227,15 +222,13 @@ firrtl.circuit "InterfaceBundleType" attributes {
 // CHECK-SAME: annotations = [{a}]
 
 // CHECK: sv.interface {
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
 // CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of Bar"
 // CHECK-NEXT: Bar bar();
 
 // CHECK: sv.interface {
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "Bar.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Bar.sv"
 // CHECK-SAME: @Bar
 // CHECK-NEXT: sv.interface.signal @b : i2
 // CHECK-NEXT: sv.interface.signal @a : i1
@@ -349,8 +342,7 @@ firrtl.circuit "InterfaceNode" attributes {
 // CHECK-SAME: annotations = [{a}]
 
 // CHECK: sv.interface {
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
 // CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// some expression"
 // CHECK-NEXT: sv.interface.signal @foo : i2
@@ -407,8 +399,7 @@ firrtl.circuit "InterfacePort" attributes {
 // CHECK-SAME: %a: !firrtl.uint<4> {firrtl.annotations = [{a}]}
 
 // CHECK: sv.interface {
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
 // CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// description of foo"
 // CHECK-NEXT: sv.interface.signal @foo : i4
@@ -463,8 +454,7 @@ firrtl.circuit "UnsupportedTypes" attributes {
 // CHECK-SAME: {
 
 // CHECK: sv.interface {
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
 // CHECK-SAME: @Foo
 // CHECK-NEXT: sv.verbatim "// <unsupported string type> string;"
 // CHECK-NEXT: sv.verbatim "// <unsupported boolean type> boolean;"
@@ -541,8 +531,7 @@ firrtl.circuit "BindInterfaceTest"  attributes {
 
 // The interface is added.
 // CHECK: sv.interface {
-// CHECK-SAME: output_file = {directory = "gct-dir"
-// CHECK-SAME: name = "InterfaceName.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/InterfaceName.sv"
 // CHECK-SAME: @InterfaceName
 // CHECK-NEXT: sv.interface.signal @_a : i8
 
@@ -606,9 +595,9 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
 }
 
 // CHECK: sv.interface {
-// CHECK-SAME: name = "Foo.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Foo.sv"
 // CHECK-SAME: @Foo
 
 // CHECK: sv.interface {
-// CHECK-SAME: name = "Bar.sv"
+// CHECK-SAME: output_file = #hw.output_file<"gct-dir/Bar.sv"
 // CHECK-SAME: @Bar
