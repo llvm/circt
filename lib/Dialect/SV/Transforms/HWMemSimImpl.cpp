@@ -224,13 +224,19 @@ void HWMemSimImplPass::runOnOperation() {
 
     if (genOp.descriptor() == "FIRRTL_Memory") {
       auto mem = analyzeMemOp(oldModule);
+        OpBuilder builder(oldModule);
+        auto nameAttr = builder.getStringAttr(oldModule.getName());
+      if (mem.readLatency == 1 && mem.writeLatency == 1) {
+        builder.create<HWModuleExternOp>(oldModule.getLoc(), nameAttr,
+            oldModule.getPorts());
+      }else {
 
-      OpBuilder builder(oldModule);
-      auto nameAttr = builder.getStringAttr(oldModule.getName());
-      auto newModule = builder.create<HWModuleOp>(oldModule.getLoc(), nameAttr,
-                                                  oldModule.getPorts());
-      generateMemory(newModule, mem);
+        auto newModule = builder.create<HWModuleOp>(oldModule.getLoc(), nameAttr,
+            oldModule.getPorts());
+        generateMemory(newModule, mem);
+      }
       oldModule.erase();
+
       anythingChanged = true;
     }
   }

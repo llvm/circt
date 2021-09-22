@@ -203,6 +203,9 @@ def MemOp : FIRRTLOp<"mem"> {
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();
 
+    /// Return the number of mask bits.
+    size_t getMaskBits();
+
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo);
     StringRef getPortNameStr(size_t resultNo) {
