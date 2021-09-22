@@ -70,7 +70,10 @@ def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createBlackBoxMemoryPass()";
   let options = [
     Option<"emitWrapper", "emit-wrapper", "bool", "true",
-           "Create a wrapper module around the black box external module.">
+           "Create a wrapper module around the black box external module.">,
+    Option<"flattenVector", "flatten-vector", "bool", "true",
+           "Concat all elements of the vector data into a single element.">
+
   ];
 }
 
