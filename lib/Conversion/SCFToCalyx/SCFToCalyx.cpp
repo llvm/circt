@@ -42,7 +42,8 @@ using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 //===----------------------------------------------------------------------===//
 
 /// Tries to match a constant value defined by op. If the match was
-/// successful, returns true and binds the constant to 'value'.
+/// successful, returns true and binds the constant to 'value'. If unsuccessful,
+/// the value is unmodified.
 static bool matchConstantOp(Operation *op, APInt &value) {
   return mlir::detail::constant_int_op_binder(&value).match(op);
 }
@@ -55,9 +56,10 @@ static DictionaryAttr getMandatoryPortAttr(MLIRContext *ctx, StringRef name) {
 }
 
 /// Adds the mandatory Calyx component I/O ports (->[clk, reset, go], [done]->)
-/// to ports
-static void addMandatoryComponentPorts(PatternRewriter &rewriter,
-                                       SmallVector<calyx::PortInfo> &ports) {
+/// to ports.
+static void
+addMandatoryComponentPorts(PatternRewriter &rewriter,
+                           SmallVectorImpl<calyx::PortInfo> &ports) {
   MLIRContext *ctx = rewriter.getContext();
   ports.push_back({.name = rewriter.getStringAttr("clk"),
                    .type = rewriter.getI1Type(),
@@ -77,10 +79,10 @@ static void addMandatoryComponentPorts(PatternRewriter &rewriter,
                    .attributes = getMandatoryPortAttr(ctx, "done")});
 }
 
-/// Creates a new group within compOp.
-template <typename TGroup, typename TRet = TGroup>
-static TRet createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
-                        Location loc, Twine uniqueName) {
+/// Creates a new calyx::CombGroupOp or calyx::GroupOp group within compOp.
+template <typename TGroup>
+static TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
+                          Location loc, Twine uniqueName) {
 
   IRRewriter::InsertionGuard guard(rewriter);
   rewriter.setInsertionPointToEnd(compOp.getWiresOp().getBody());
@@ -353,7 +355,7 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                   [&](auto op) { return buildOp(rewriter, op); })
               .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp>(
                   [&](auto) {
-                    /// Skip: these special cases will be handled separately
+                    /// Skip: these special cases will be handled separately.
                     return success();
                   })
               .Default([&](auto) {
@@ -362,16 +364,14 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
               })
               .succeeded();
 
-      if (res)
-        return WalkResult::advance();
-      return WalkResult::interrupt();
+      return res ? WalkResult::advance() : WalkResult::interrupt();
     });
 
     return success(res);
   }
 
 private:
-  /// Op builder specializations
+  /// Op builder specializations.
   LogicalResult buildOp(PatternRewriter &rewriter, ConstantOp constOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
@@ -386,7 +386,8 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, TruncateIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ZeroExtendIOp op) const;
 
-  /// Helper functions
+  /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
+  /// source operation TSrcOp.
   template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
   LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op,
                                TypeRange srcTypes, TypeRange dstTypes) const {
@@ -412,14 +413,14 @@ private:
         "Expected an equal number of in/out ports in the Calyx library op with "
         "respect to the number of operands/results of the source operation.");
 
-    /// Create assignments to the inputs of the library op
+    /// Create assignments to the inputs of the library op.
     auto group = createGroupForOp<TGroupOp>(rewriter, op);
     rewriter.setInsertionPointToEnd(group.getBody());
     for (auto dstOp : enumerate(opInputPorts))
       rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
                                        op->getOperand(dstOp.index()), Value());
 
-    /// Replace the result values of the source operator with the new operator
+    /// Replace the result values of the source operator with the new operator.
     for (auto res : enumerate(opOutputPorts)) {
       getComponentState().registerEvaluatingGroup(res.value(), group);
       op->getResult(res.index()).replaceAllUsesWith(res.value());
@@ -427,12 +428,15 @@ private:
     return success();
   }
 
+  /// buildLibraryOp which provides in- and output types based on the operands
+  /// and results of the op argument.
   template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
   LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op) const {
     return buildLibraryOp<TGroupOp, TCalyxLibOp, TSrcOp>(
         rewriter, op, op.getOperandTypes(), op->getResultTypes());
   }
 
+  /// Creates a group named by the basic block which the input op resides in.
   template <typename TGroupOp>
   TGroupOp createGroupForOp(PatternRewriter &rewriter, Operation *op) const {
     Block *block = op->getBlock();
@@ -510,9 +514,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   case CmpIPredicate::sle:
     return buildLibraryOp<calyx::CombGroupOp, calyx::SleLibOp>(rewriter, op);
   default:
-    assert(false && "unsupported comparison predicate");
+    llvm_unreachable("unsupported comparison predicate");
   }
-  llvm_unreachable("unsupported comparison predicate");
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      TruncateIOp op) const {
@@ -532,7 +535,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
   LogicalResult
   PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    // Create I/O ports
+    /// Create I/O ports.
     SmallVector<calyx::PortInfo> ports;
     FunctionType funcType = funcOp.getType();
     for (auto &arg : enumerate(funcOp.getArguments()))
@@ -551,18 +554,18 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
 
     addMandatoryComponentPorts(rewriter, ports);
 
-    // Create a calyx::ComponentOp corresponding to the to-be-lowered function.
+    /// Create a calyx::ComponentOp corresponding to the to-be-lowered function.
     auto compOp = rewriter.create<calyx::ComponentOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.sym_name()), ports);
     rewriter.createBlock(&compOp.getWiresOp().getBodyRegion());
     rewriter.createBlock(&compOp.getControlOp().getBodyRegion());
 
-    // Rewrite the funcOp SSA argument values to the CompOp arguments
+    /// Rewrite the funcOp SSA argument values to the CompOp arguments.
     for (auto &arg : enumerate(funcOp.getArguments())) {
       arg.value().replaceAllUsesWith(compOp.getArgument(arg.index()));
     }
 
-    // Store function to component mapping for future reference
+    /// Store function to component mapping for future reference.
     funcMap[funcOp] = compOp;
     return success();
   }
