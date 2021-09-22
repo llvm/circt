@@ -49,50 +49,50 @@ void HWDialect::printAttribute(Attribute attr, DialectAsmPrinter &p) const {
 }
 
 //===----------------------------------------------------------------------===//
-// ParameterAttr
+// ParamDeclAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParameterAttr::parse(MLIRContext *context, DialectAsmParser &p,
+Attribute ParamDeclAttr::parse(MLIRContext *context, DialectAsmParser &p,
                                Type type) {
   llvm::errs() << "Should never parse raw\n";
   abort();
 }
 
-void ParameterAttr::print(DialectAsmPrinter &p) const {
+void ParamDeclAttr::print(DialectAsmPrinter &p) const {
   llvm::errs() << "Should never print raw\n";
   abort();
 }
 
 //===----------------------------------------------------------------------===//
-// ParameterRefAttr
+// ParamDeclRefAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParameterRefAttr::parse(MLIRContext *context, DialectAsmParser &p,
+Attribute ParamDeclRefAttr::parse(MLIRContext *context, DialectAsmParser &p,
                                   Type type) {
   StringAttr name;
   if (p.parseLess() || p.parseAttribute(name) || p.parseGreater())
     return Attribute();
 
-  return ParameterRefAttr::get(context, name, type);
+  return ParamDeclRefAttr::get(context, name, type);
 }
 
-void ParameterRefAttr::print(DialectAsmPrinter &p) const {
-  p << "parameter.ref<" << getName() << ">";
+void ParamDeclRefAttr::print(DialectAsmPrinter &p) const {
+  p << "param.decl.ref<" << getName() << ">";
 }
 
 //===----------------------------------------------------------------------===//
-// VerbatimParameterValueAttr
+// ParamVerbatimAttr
 //===----------------------------------------------------------------------===//
 
-Attribute VerbatimParameterValueAttr::parse(MLIRContext *context,
-                                            DialectAsmParser &p, Type type) {
+Attribute ParamVerbatimAttr::parse(MLIRContext *context, DialectAsmParser &p,
+                                   Type type) {
   StringAttr text;
   if (p.parseLess() || p.parseAttribute(text) || p.parseGreater())
     return Attribute();
 
-  return VerbatimParameterValueAttr::get(context, text, type);
+  return ParamVerbatimAttr::get(context, text, type);
 }
 
-void VerbatimParameterValueAttr::print(DialectAsmPrinter &p) const {
-  p << "verbatim.parameter.value<" << getValue() << ">";
+void ParamVerbatimAttr::print(DialectAsmPrinter &p) const {
+  p << "param.verbatim<" << getValue() << ">";
 }

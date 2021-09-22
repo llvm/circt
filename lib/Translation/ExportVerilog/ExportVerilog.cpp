@@ -79,10 +79,9 @@ static void printParamValue(Attribute value, Operation *op, StringRef paramName,
   } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
     // TODO: relying on float printing to be precise is not a good idea.
     os << fpAttr.getValueAsDouble();
-  } else if (auto verbatimParam =
-                 value.dyn_cast<VerbatimParameterValueAttr>()) {
+  } else if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
     os << verbatimParam.getValue().getValue();
-  } else if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
+  } else if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     os << parameterRef.getName().getValue();
   } else {
     os << "<<UNKNOWN MLIRATTR: " << value << ">>";
@@ -2564,8 +2563,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     for (auto params :
          llvm::zip(op.parameters(),
                    moduleOp->getAttrOfType<ArrayAttr>("parameters"))) {
-      auto param = std::get<0>(params).cast<ParameterAttr>();
-      auto modParam = std::get<1>(params).cast<ParameterAttr>();
+      auto param = std::get<0>(params).cast<ParamDeclAttr>();
+      auto modParam = std::get<1>(params).cast<ParamDeclAttr>();
       // Ignore values that line up with their default.
       if (param.getValue() == modParam.getValue())
         continue;
@@ -3110,7 +3109,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   for (auto param : module.parameters()) {
     // Add the name to the name table so any conflicting wires are renamed.
     names.addLegalName(
-        nullptr, param.cast<ParameterAttr>().getName().getValue(), module);
+        nullptr, param.cast<ParamDeclAttr>().getName().getValue(), module);
   }
 
   // Rewrite the module body into compliance with our emission expectations, and
@@ -3149,7 +3148,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     for (auto param : module.parameters()) {
       // Measure the type length by printing it to a temporary string.
       scratch.clear();
-      printParamType(param.cast<ParameterAttr>().getType().getValue(), scratch);
+      printParamType(param.cast<ParamDeclAttr>().getType().getValue(), scratch);
       maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
     }
 
@@ -3159,7 +3158,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     llvm::interleave(
         module.parameters(), os,
         [&](Attribute param) {
-          auto paramAttr = param.cast<ParameterAttr>();
+          auto paramAttr = param.cast<ParamDeclAttr>();
           os << "parameter ";
           scratch.clear();
           printParamType(paramAttr.getType().getValue(), scratch);

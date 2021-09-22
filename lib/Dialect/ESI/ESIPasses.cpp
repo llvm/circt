@@ -176,7 +176,7 @@ StringAttr ESIHWBuilder::constructInterfaceName(ChannelPort port) {
 ArrayAttr ESIHWBuilder::getStageParameterList(Attribute value) {
   auto type = IntegerType::get(width.getContext(), 32, IntegerType::Unsigned);
   auto widthParam =
-      ParameterAttr::get(width.getContext(), width, TypeAttr::get(type), value);
+      ParamDeclAttr::get(width.getContext(), width, TypeAttr::get(type), value);
   return ArrayAttr::get(width.getContext(), widthParam);
 }
 
@@ -232,13 +232,13 @@ HWModuleExternOp ESIHWBuilder::declareCosimEndpoint(Operation *symTable,
                       {dataInReady, PortDirection::OUTPUT, getI1Type(), 2},
                       {dataIn, PortDirection::INPUT, sendType, 4}};
   SmallVector<Attribute, 8> params;
-  params.push_back(ParameterAttr::get("ENDPOINT_ID", getI32Type()));
+  params.push_back(ParamDeclAttr::get("ENDPOINT_ID", getI32Type()));
   params.push_back(
-      ParameterAttr::get("SEND_TYPE_ID", getIntegerType(64, false)));
-  params.push_back(ParameterAttr::get("SEND_TYPE_SIZE_BITS", getI32Type()));
+      ParamDeclAttr::get("SEND_TYPE_ID", getIntegerType(64, false)));
+  params.push_back(ParamDeclAttr::get("SEND_TYPE_SIZE_BITS", getI32Type()));
   params.push_back(
-      ParameterAttr::get("RECV_TYPE_ID", getIntegerType(64, false)));
-  params.push_back(ParameterAttr::get("RECV_TYPE_SIZE_BITS", getI32Type()));
+      ParamDeclAttr::get("RECV_TYPE_ID", getIntegerType(64, false)));
+  params.push_back(ParamDeclAttr::get("RECV_TYPE_SIZE_BITS", getI32Type()));
   endpoint = create<HWModuleExternOp>(
       constructUniqueSymbol(symTable, "Cosim_Endpoint"), ports,
       "Cosim_Endpoint", ArrayAttr::get(getContext(), params));
@@ -1122,19 +1122,19 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
 
   // Set all the parameters.
   SmallVector<Attribute, 8> params;
-  params.push_back(ParameterAttr::get(
+  params.push_back(ParamDeclAttr::get(
       "ENDPOINT_ID", rewriter.getI32IntegerAttr(ep.endpointID())));
-  params.push_back(ParameterAttr::get(
+  params.push_back(ParamDeclAttr::get(
       "SEND_TYPE_ID",
       IntegerAttr::get(ui64Type, sendTypeSchema.capnpTypeID())));
   params.push_back(
-      ParameterAttr::get("SEND_TYPE_SIZE_BITS",
+      ParamDeclAttr::get("SEND_TYPE_SIZE_BITS",
                          rewriter.getI32IntegerAttr(sendTypeSchema.size())));
-  params.push_back(ParameterAttr::get(
+  params.push_back(ParamDeclAttr::get(
       "RECV_TYPE_ID",
       IntegerAttr::get(ui64Type, recvTypeSchema.capnpTypeID())));
   params.push_back(
-      ParameterAttr::get("RECV_TYPE_SIZE_BITS",
+      ParamDeclAttr::get("RECV_TYPE_SIZE_BITS",
                          rewriter.getI32IntegerAttr(recvTypeSchema.size())));
 
   // Set up the egest route to drive the EP's send ports.

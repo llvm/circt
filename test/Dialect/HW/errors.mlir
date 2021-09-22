@@ -248,7 +248,7 @@ hw.module.extern @p<p: i42>() -> ()
 // expected-note @+1 {{module declared here}}
 hw.module @Use() {
   // expected-error @+1 {{op use of unknown parameter "FOO"}}
-  hw.instance "inst1" @p<p: i42 = #hw.parameter.ref<"FOO">>() -> ()
+  hw.instance "inst1" @p<p: i42 = #hw.param.decl.ref<"FOO">>() -> ()
 }
 
 // -----
@@ -259,7 +259,7 @@ hw.module.extern @p<p: i42>() -> ()
 // expected-note @+1 {{module declared here}}
 hw.module @Use<xx: i41>() {
   // expected-error @+1 {{op parameter "xx" used with type 'i42'; should have type 'i41'}}
-  hw.instance "inst1" @p<p: i42 = #hw.parameter.ref<"xx">>() -> ()
+  hw.instance "inst1" @p<p: i42 = #hw.param.decl.ref<"xx">>() -> ()
 }
 
 
@@ -267,5 +267,5 @@ hw.module @Use<xx: i41>() {
 // Check attribute validity for module parameters.
 
 // expected-error @+1 {{op parameter "p" cannot be used as a default value for a parameter}}
-hw.module.extern @p<p: i42 = #hw.parameter.ref<"p">>() -> ()
+hw.module.extern @p<p: i42 = #hw.param.decl.ref<"p">>() -> ()
 

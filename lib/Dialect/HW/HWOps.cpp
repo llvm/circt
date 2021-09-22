@@ -90,12 +90,12 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
   // Literals are always ok.  Their types are already known to match
   // expectations.
   if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
-      value.isa<StringAttr>() || value.isa<VerbatimParameterValueAttr>())
+      value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
     return success();
 
   // Parameter references need more analysis to make sure they are valid within
   // this module.
-  if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
+  if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     auto nameAttr = parameterRef.getName();
 
     // Don't allow references to parameters from the default values of a
@@ -108,7 +108,7 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
 
     // Find the corresponding attribute in the module.
     for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
-      auto paramAttr = param.cast<ParameterAttr>();
+      auto paramAttr = param.cast<ParamDeclAttr>();
       if (paramAttr.getName() != nameAttr)
         continue;
 
@@ -498,7 +498,7 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
     }
 
     auto &builder = parser.getBuilder();
-    parameters.push_back(ParameterAttr::get(builder.getContext(), name,
+    parameters.push_back(ParamDeclAttr::get(builder.getContext(), name,
                                             TypeAttr::get(type), value));
     return success();
   });
@@ -616,7 +616,7 @@ static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
 
   p << '<';
   llvm::interleaveComma(parameters, p, [&](Attribute param) {
-    auto paramAttr = param.cast<ParameterAttr>();
+    auto paramAttr = param.cast<ParamDeclAttr>();
     p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
     if (auto value = paramAttr.getValue()) {
       p << " = ";
@@ -692,7 +692,7 @@ static LogicalResult verifyModuleCommon(Operation *module) {
 
   // Check parameter default values are sensible.
   for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
-    auto paramAttr = param.cast<ParameterAttr>();
+    auto paramAttr = param.cast<ParamDeclAttr>();
 
     // Default values are allowed to be missing.
     auto value = paramAttr.getValue();
@@ -892,8 +892,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     });
 
   for (size_t i = 0; i != numParameters; ++i) {
-    auto param = parameters[i].cast<ParameterAttr>();
-    auto modParam = modParameters[i].cast<ParameterAttr>();
+    auto param = parameters[i].cast<ParamDeclAttr>();
+    auto modParam = modParameters[i].cast<ParamDeclAttr>();
 
     auto paramName = param.getName();
     if (paramName != modParam.getName())
@@ -921,7 +921,7 @@ LogicalResult InstanceOp::verifyCustom() {
   // Check that all the parameter values specified to the instance are
   // structurally valid.
   for (auto param : parameters()) {
-    auto paramAttr = param.cast<ParameterAttr>();
+    auto paramAttr = param.cast<ParamDeclAttr>();
     auto value = paramAttr.getValue();
     assert(value && "SymbolUses verifier should already check this exists");
 

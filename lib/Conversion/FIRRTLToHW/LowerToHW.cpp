@@ -811,7 +811,7 @@ static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
     auto type = TypeAttr::get(entry.second.getType());
     auto value = ignoreValues ? Attribute() : entry.second;
     auto paramAttr =
-        hw::ParameterAttr::get(builder.getContext(), name, type, value);
+        hw::ParamDeclAttr::get(builder.getContext(), name, type, value);
     newParams.push_back(paramAttr);
   }
   return builder.getArrayAttr(newParams);
