@@ -38,47 +38,6 @@ enum class Delimiter {
   OptionalLessGreater, // <> enclosed list or absent
 };
 
-/// Parse a paren-enclosed list of comma-separated items with an optional
-/// delimiter.  If a delimiter is provided, then an empty list is allowed.
-/// TODO(LLVM Merge): Replace with parser.parseCommaSeparatedList.
-template <typename FnType>
-static ParseResult parseCommaSeparatedList(OpAsmParser &parser,
-                                           Delimiter delimiter, FnType fn) {
-  switch (delimiter) {
-  case Delimiter::None:
-    break;
-  case Delimiter::Paren:
-    if (parser.parseLParen())
-      return failure();
-    // Check for empty list.
-    if (succeeded(parser.parseOptionalRParen()))
-      return success();
-    break;
-  case Delimiter::OptionalLessGreater:
-    // Check for absent list.
-    if (failed(parser.parseOptionalLess()))
-      return success();
-    // Check for empty list.
-    if (succeeded(parser.parseOptionalGreater()))
-      return success();
-    break;
-  }
-
-  do {
-    if (failed(fn()))
-      return failure();
-  } while (succeeded(parser.parseOptionalComma()));
-
-  switch (delimiter) {
-  case Delimiter::None:
-    return success();
-  case Delimiter::Paren:
-    return parser.parseRParen();
-  case Delimiter::OptionalLessGreater:
-    return parser.parseGreater();
-  }
-}
-
 /// Check parameter specified by `value` to see if it is valid within the scope
 /// of the specified module `module`.  If not, emit an error at the location of
 /// `usingOp` and return failure, otherwise return success.
@@ -482,26 +441,27 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
 static ParseResult parseOptionalParameters(OpAsmParser &parser,
                                            SmallVector<Attribute> &parameters) {
 
-  return parseCommaSeparatedList(parser, Delimiter::OptionalLessGreater, [&]() {
-    StringAttr name;
-    Type type;
-    Attribute value;
+  return parser.parseCommaSeparatedList(
+      OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
+        StringAttr name;
+        Type type;
+        Attribute value;
 
-    if (!(name = module_like_impl::parsePortName(parser)) ||
-        parser.parseColonType(type))
-      return failure();
+        if (!(name = module_like_impl::parsePortName(parser)) ||
+            parser.parseColonType(type))
+          return failure();
 
-    // Parse the default value if present.
-    if (succeeded(parser.parseOptionalEqual())) {
-      if (parser.parseAttribute(value, type))
-        return failure();
-    }
+        // Parse the default value if present.
+        if (succeeded(parser.parseOptionalEqual())) {
+          if (parser.parseAttribute(value, type))
+            return failure();
+        }
 
-    auto &builder = parser.getBuilder();
-    parameters.push_back(ParamDeclAttr::get(builder.getContext(), name,
-                                            TypeAttr::get(type), value));
-    return success();
-  });
+        auto &builder = parser.getBuilder();
+        parameters.push_back(ParamDeclAttr::get(builder.getContext(), name,
+                                                TypeAttr::get(type), value));
+        return success();
+      });
 }
 
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
@@ -984,11 +944,13 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
       parser.getCurrentLocation(&parametersLoc) ||
       parseOptionalParameters(parser, parameters) ||
       parser.getCurrentLocation(&inputsOperandsLoc) ||
-      parseCommaSeparatedList(parser, Delimiter::Paren, parseInputPort) ||
+      parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseInputPort) ||
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
       parser.parseArrow() ||
-      parseCommaSeparatedList(parser, Delimiter::Paren, parseResultPort) ||
+      parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseResultPort) ||
       parser.parseOptionalAttrDict(result.attributes)) {
     return failure();
   }
@@ -1198,7 +1160,8 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
                                          Type &resultType) {
   Type elemType;
   uint64_t resultSize = 0;
-  do {
+
+  auto parseElement = [&]() -> ParseResult {
     Type ty;
     if (p.parseType(ty))
       return p.emitError(p.getCurrentLocation(), "Expected type");
@@ -1212,7 +1175,11 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
     elemType = arrTy.getElementType();
     inputTypes.push_back(ty);
     resultSize += arrTy.getSize();
-  } while (!p.parseOptionalComma());
+    return success();
+  };
+
+  if (p.parseCommaSeparatedList(parseElement))
+    return failure();
 
   resultType = ArrayType::get(elemType, resultSize);
   return success();
