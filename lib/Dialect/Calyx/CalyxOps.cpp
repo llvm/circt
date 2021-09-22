@@ -504,14 +504,13 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
                  SmallVectorImpl<OpAsmParser::OperandType> &ports,
                  SmallVectorImpl<Type> &portTypes,
                  SmallVectorImpl<NamedAttrList> &portAttrs) {
-  auto parseElt = [&]() -> ParseResult {
+  auto parsePort = [&]() -> ParseResult {
     OpAsmParser::OperandType port;
     Type portType;
-    // FIXME: This will parse an empty series of commas?
-    if (failed(parser.parseOptionalRegionArgument(port)) ||
-        failed(parser.parseOptionalColon()) ||
-        failed(parser.parseType(portType)))
-      return success();
+    // Expect each port to have the form `%<ssa-name> : <type>`
+    if (failed(parser.parseRegionArgument(port)) ||
+        failed(parser.parseColon()) || failed(parser.parseType(portType)))
+      return failure();
     ports.push_back(port);
     portTypes.push_back(portType);
 
@@ -523,7 +522,7 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
   };
 
   return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
-                                        parseElt);
+                                        parsePort);
 }
 
 /// Parses the signature of a Calyx component.
