@@ -861,7 +861,7 @@ hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8) {
 }
 
 // CHECK-LABEL: module UseParameterValue
-hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out: i8) {
+hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out1: i8, out2: i8) {
   // CHECK-NEXT: #(parameter [41:0] xx) (
 
   // CHECK:      parameters2 #(
@@ -869,6 +869,11 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out: i8) {
   // CHECK-NEXT: ) inst1 (
   %a = hw.instance "inst1" @parameters2<p1: i42 = #hw.param.decl.ref<"xx">, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 
-  hw.output %a : i8
+  // CHECK:      parameters2 #(
+  // CHECK-NEXT:  .p1(xx + 42'd17)
+  // CHECK-NEXT: ) inst2 (
+  %b = hw.instance "inst2" @parameters2<p1: i42 = #hw.param.binary<add #hw.param.verbatim<"xx">, 17>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
+ 
+  hw.output %a, %b : i8, i8
 }
 

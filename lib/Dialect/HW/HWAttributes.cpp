@@ -96,3 +96,34 @@ Attribute ParamVerbatimAttr::parse(MLIRContext *context, DialectAsmParser &p,
 void ParamVerbatimAttr::print(DialectAsmPrinter &p) const {
   p << "param.verbatim<" << getValue() << ">";
 }
+
+//===----------------------------------------------------------------------===//
+// ParamBinaryAttr
+//===----------------------------------------------------------------------===//
+
+Attribute ParamBinaryAttr::parse(MLIRContext *context, DialectAsmParser &p,
+                                 Type type) {
+  Attribute lhs, rhs;
+  StringRef opcodeStr;
+  auto loc = p.getCurrentLocation();
+  if (p.parseLess() || p.parseKeyword(&opcodeStr) ||
+      p.parseAttribute(lhs, type) || p.parseComma() ||
+      p.parseAttribute(rhs, type) || p.parseGreater())
+    return Attribute();
+
+  Optional<PBO> opcode = symbolizePBO(opcodeStr);
+  if (!opcode.hasValue()) {
+    p.emitError(loc, "unknown binary operator name");
+    return {};
+  }
+
+  return ParamBinaryAttr::get(context, *opcode, lhs, rhs, type);
+}
+
+void ParamBinaryAttr::print(DialectAsmPrinter &p) const {
+  p << "param.binary<" << stringifyPBO(getOpcode()) << " ";
+  p.printAttributeWithoutType(getLhs());
+  p << ", ";
+  p.printAttributeWithoutType(getRhs());
+  p << ">";
+}
