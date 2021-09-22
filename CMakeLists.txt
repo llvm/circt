@@ -72,9 +72,6 @@ endif ()
   include(AddMLIR)
   include(HandleLLVMOptions)
 
-  # Workaround for variable not set by MLIRConfig.cmake.
-  set(MLIR_BINARY_DIR ${LLVM_BINARY_DIR})
-
   set(CIRCT_BUILT_STANDALONE 1)
   set(BACKEND_PACKAGE_STRING "LLVM ${LLVM_PACKAGE_VERSION}")
 else()

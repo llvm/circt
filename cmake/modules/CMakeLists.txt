@@ -1,14 +1,8 @@
 set(CIRCT_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/circt)
 set(circt_cmake_builddir "${CMAKE_BINARY_DIR}/${CIRCT_INSTALL_PACKAGE_DIR}")
 
-# Keep this in sync with mlir/cmake/CMakeLists.txt!
-set(MLIR_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/mlir)
-set(mlir_cmake_builddir "${MLIR_BINARY_DIR}/${MLIR_INSTALL_PACKAGE_DIR}")
-
 # Keep this in sync with llvm/cmake/CMakeLists.txt!
 set(LLVM_INSTALL_PACKAGE_DIR lib${LLVM_LIBDIR_SUFFIX}/cmake/llvm)
-set(llvm_cmake_builddir "${LLVM_BINARY_DIR}/${LLVM_INSTALL_PACKAGE_DIR}")
-
 # Generate a list of CMake library targets so that other CMake projects can
 # link against them. LLVM calls its version of this file LLVMExports.cmake, but
 # the usual CMake convention seems to be ${Project}Targets.cmake.
@@ -23,8 +17,7 @@ get_property(CIRCT_ANALYSIS_LIBS GLOBAL PROPERTY CIRCT_ANALYSIS_LIBS)
 
 # Generate CIRCTConfig.cmake for the build tree.
 set(CIRCT_CONFIG_CMAKE_DIR "${circt_cmake_builddir}")
-set(CIRCT_CONFIG_LLVM_CMAKE_DIR "${llvm_cmake_builddir}")
-set(CIRCT_CONFIG_MLIR_CMAKE_DIR "${mlir_cmake_builddir}")
+set(CIRCT_CONFIG_MLIR_CMAKE_DIR "${MLIR_CMAKE_DIR}")
 set(CIRCT_CONFIG_EXPORTS_FILE "${circt_cmake_builddir}/CIRCTTargets.cmake")
 set(CIRCT_CONFIG_INCLUDE_DIRS
   "${CIRCT_SOURCE_DIR}/include"
@@ -35,7 +28,7 @@ configure_file(
   ${circt_cmake_builddir}/CIRCTConfig.cmake
   @ONLY)
 set(CIRCT_CONFIG_CMAKE_DIR)
-set(CIRCT_CONFIG_LLVM_CMAKE_DIR)
+set(CIRCT_CONFIG_MLIR_CMAKE_DIR)
 set(CIRCT_CONFIG_EXPORTS_FILE)
 set(CIRCT_CONFIG_INCLUDE_DIRS)
 
