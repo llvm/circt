@@ -83,6 +83,19 @@ static void printParamValue(Attribute value, Operation *op, StringRef paramName,
     os << verbatimParam.getValue().getValue();
   } else if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     os << parameterRef.getName().getValue();
+  } else if (auto paramBinOp = value.dyn_cast<ParamBinaryAttr>()) {
+    printParamValue(paramBinOp.getLhs(), op, paramName, os);
+
+    // FIXME: Handle precedence, support variadic versions of these.
+    switch (paramBinOp.getOpcode()) {
+    case PBO::Add:
+      os << " + ";
+      break;
+    case PBO::Mul:
+      os << " * ";
+      break;
+    }
+    printParamValue(paramBinOp.getRhs(), op, paramName, os);
   } else {
     os << "<<UNKNOWN MLIRATTR: " << value << ">>";
     emitError(op->getLoc(), "unknown parameter value '")
