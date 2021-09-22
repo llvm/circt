@@ -787,18 +787,18 @@ private:
                                    const DenseSet<Block *> &path,
                                    mlir::Block *parentCtrlBlock,
                                    mlir::Block *block) const {
-    auto compblockScheduleables =
+    auto compBlockScheduleables =
         getComponentState().getBlockScheduleables(block);
     auto loc = block->front().getLoc();
 
-    if (compblockScheduleables.size() > 1) {
+    if (compBlockScheduleables.size() > 1) {
       auto seqOp = createSeqOp(rewriter, loc);
       parentCtrlBlock = seqOp.getBody();
     }
 
     rewriter.setInsertionPointToEnd(parentCtrlBlock);
 
-    for (auto &group : compblockScheduleables) {
+    for (auto &group : compBlockScheduleables) {
       if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
         rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name(),
                                          rewriter.getArrayAttr({}));
