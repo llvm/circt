@@ -619,9 +619,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     return buildLibraryOp<calyx::CombGroupOp, calyx::SgtLibOp>(rewriter, op);
   case CmpIPredicate::sle:
     return buildLibraryOp<calyx::CombGroupOp, calyx::SleLibOp>(rewriter, op);
-  default:
-    llvm_unreachable("unsupported comparison predicate");
   }
+  llvm_unreachable("unsupported comparison predicate");
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      TruncateIOp op) const {
