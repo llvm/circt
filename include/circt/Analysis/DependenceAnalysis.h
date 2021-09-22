@@ -53,11 +53,20 @@ struct MemoryDependence {
 using MemoryDependenceResult =
     DenseMap<Operation *, SmallVector<MemoryDependence>>;
 
-/// getMemoryAccessDependences traverses any AffineForOps in the FuncOp body and
-/// checks for memory access dependences. Results are output into the 'results'
-/// argument.
-void getMemoryAccessDependences(mlir::FuncOp funcOp,
-                                MemoryDependenceResult &results);
+/// MemoryDependenceAnalysis traverses any AffineForOps in the FuncOp body and
+/// checks for memory access dependences. Results are captured in a
+/// MemoryDependenceResult, which can by queried by Operation.
+struct MemoryDependenceAnalysis {
+  // Construct the analysis from a FuncOp.
+  MemoryDependenceAnalysis(mlir::FuncOp funcOp);
+
+  // Get the dependences for a given Operation.
+  ArrayRef<MemoryDependence> getDependences(Operation *);
+
+private:
+  // Store dependence results.
+  MemoryDependenceResult results;
+};
 
 } // namespace analysis
 } // namespace circt

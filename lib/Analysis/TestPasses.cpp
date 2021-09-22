@@ -14,6 +14,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
+#include <mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h>
 
 using namespace mlir;
 using namespace circt::analysis;
@@ -36,13 +37,15 @@ struct TestDependenceAnalysisPass
 void TestDependenceAnalysisPass::runOnFunction() {
   MLIRContext *context = &getContext();
 
-  MemoryDependenceResult results;
-  getMemoryAccessDependences(getFunction(), results);
+  MemoryDependenceAnalysis analysis(getFunction());
 
-  for (auto sourceToDeps : results) {
+  getFunction().walk([&](Operation *op) {
+    if (!isa<AffineReadOpInterface, AffineWriteOpInterface>(op))
+      return;
+
     SmallVector<Attribute> deps;
 
-    for (auto dep : sourceToDeps.second) {
+    for (auto dep : analysis.getDependences(op)) {
       if (dep.dependenceType != mlir::DependenceResult::HasDependence)
         continue;
 
@@ -60,8 +63,8 @@ void TestDependenceAnalysisPass::runOnFunction() {
     }
 
     auto dependences = ArrayAttr::get(context, deps);
-    sourceToDeps.first->setAttr("dependences", dependences);
-  }
+    op->setAttr("dependences", dependences);
+  });
 }
 
 //===----------------------------------------------------------------------===//
