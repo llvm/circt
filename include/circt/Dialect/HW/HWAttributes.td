@@ -11,14 +11,75 @@
 //===----------------------------------------------------------------------===//
 
 /// An attribute to indicate the output file an operation should be emitted to.
-def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
-  StructFieldAttr<"directory", OptionalAttr<StrAttr>>,
-  StructFieldAttr<"name", OptionalAttr<StrAttr>>,
-  StructFieldAttr<"exclude_from_filelist",
-    DefaultValuedAttr<BoolAttr, "false">>,
-  StructFieldAttr<"exclude_replicated_ops",
-    DefaultValuedAttr<BoolAttr, "true">>,
-]>;
+def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
+  let summary = "Ouput file attribute";
+  let description = [{
+    This attribute represents an output file for something which will be
+    printed. The `filename` string is the file to be output to. If `filename`
+    ends in a `/` it is considered an output directory.
+
+    When ExportVerilog runs, one of the files produced is a list of all other
+    files which are produced. The flag `excludeFromFileList` controls if this
+    file should be included in this list. If any `OutputFileAttr` referring to
+    the same file sets this to `true`, it will be included in the file list.
+    This option defaults to `false`.
+
+    For each file emitted by the verilog emitter, certain prelude output will
+    be included before the main content. The flag `includeReplicatedOps` can
+    be used to disable the addition of the prelude text. All `OutputFileAttr`s
+    referring to the same file must use a consistent setting for this value.
+    This option defaults to `true`.
+
+    Examples:
+    ```mlir
+      #hw.ouput_file<"/home/tester/t.sv">
+      #hw.ouput_file<"t.sv", excludeFromFileList, includeReplicatedOps>
+    ```
+  }];
+  let mnemonic = "output_file";
+  let parameters = (ins "::mlir::StringAttr":$filename,
+                        "::mlir::BoolAttr":$excludeFromFilelist,
+                        "::mlir::BoolAttr":$includeReplicatedOps);
+  let builders = [
+    AttrBuilderWithInferredContext<(ins
+                                   "::mlir::StringAttr":$filename,
+                                   "::mlir::BoolAttr":$excludeFromFileList,
+                                   "::mlir::BoolAttr":$includeReplicatedOps), [{
+      return get(filename.getContext(), filename, excludeFromFileList,
+                 includeReplicatedOps);
+    }]>,
+  ];
+
+  let extraClassDeclaration = [{
+    /// Get an OutputFileAttr from a string filename, canonicalizing the
+    /// filename.
+    static OutputFileAttr getFromFilename(::mlir::MLIRContext *context,
+                                          const ::mlir::Twine &filename,
+                                          bool excludeFromFileList = false,
+                                          bool includeReplicatedOps = false);
+
+    /// Get an OutputFileAttr from a string filename, resolving it relative to
+    /// `directory`. If `filename` is an absolute path, the given `directory`
+    /// will not be used.
+    static OutputFileAttr getFromDirectoryAndFilename(
+                                          ::mlir::MLIRContext *context,
+                                          const ::mlir::Twine &directory,
+                                          const ::mlir::Twine &filename,
+                                          bool excludeFromFileList = false,
+                                          bool includeReplicatedOps = false);
+
+    /// Get an OutputFileAttr from a string directory name. The name will have
+    /// a trailing `/` added if it is not there, ensuring that this will be
+    /// an output directory.
+    static OutputFileAttr getAsDirectory(::mlir::MLIRContext *context,
+                                         const ::mlir::Twine &directory,
+                                         bool excludeFromFileList = false,
+                                         bool includeReplicatedOps = false);
+
+    /// Returns true if this a directory.
+    bool isDirectory();
+  }];
+}
 
 /// An attribute describing a module parameter, or instance parameter
 /// specification.

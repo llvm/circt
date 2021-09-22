@@ -470,32 +470,24 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK: sv.bind @[[bazSymbol:.+]] in @bindTest
   // CHECK-NOT: output_file
-  // CHECK-NEXT: sv.bind @[[quxSymbol:.+]] in @bindTest {output_file
-  // CHECK-SAME: directory = "outputDir", exclude_from_filelist = true
-  // CHECK-SAME: exclude_replicated_ops = true, name = "bindings.sv"
+  // CHECK-NEXT: sv.bind @[[quxSymbol:.+]] in @bindTest {
+  // CHECK-SAME: output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
   // CHECK-NEXT: hw.module @bindTest()
   firrtl.module @bindTest() {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
     %baz = firrtl.instance @bar {lowerToBind = true, name = "baz"} : !firrtl.uint<1>
     // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
-    %qux = firrtl.instance @bar {lowerToBind = true, name = "qux",
-      output_file = {
-        directory = "outputDir",
-        exclude_from_filelist = true,
-        exclude_replicated_ops = true,
-        name = "bindings.sv"}} : !firrtl.uint<1>
+    %qux = firrtl.instance @bar { lowerToBind = true, name = "qux",
+      output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
+    } : !firrtl.uint<1>
   }
 
 
   // CHECK-LABEL: hw.module @output_fileTest
-  // CHECK-SAME: directory = "output_fileTest/dir", exclude_from_filelist = true
-  // CHECK-SAME: exclude_replicated_ops = true, name = "output_fileTest.sv"
-  firrtl.module @output_fileTest() attributes {output_file = {
-    directory = "output_fileTest/dir",
-    exclude_from_filelist = true,
-    exclude_replicated_ops = true,
-    name = "output_fileTest.sv"
-  }} {
+  // CHECK-SAME: output_file = #hw.output_file<"output_fileTest/dir/output_fileTest.sv", excludeFromFileList>
+  firrtl.module @output_fileTest() attributes {output_file = #hw.output_file<
+    "output_fileTest/dir/output_fileTest.sv", excludeFromFileList
+  >} {
   }
 
   // https://github.com/llvm/circt/issues/314

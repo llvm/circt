@@ -22,6 +22,5 @@
 
 // Pull in all enum type definitions and utility function declarations.
 #include "circt/Dialect/HW/HWEnums.h.inc"
-#include "circt/Dialect/HW/HWStructs.h.inc"
 
 #endif // CIRCT_DIALECT_HW_HWDIALECT_H

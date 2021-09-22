@@ -145,3 +145,4 @@ hw.module @signed_arrays(%arg0: si8) -> (out: !hw.array<2xsi8>) {
 // CHECK-SAME: attributes {argNames = [""]}
 hw.module @argRenames(%arg1: i32) attributes {argNames = [""]} {
 }
+

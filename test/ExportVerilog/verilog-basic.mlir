@@ -408,7 +408,7 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
   hw.output %1 : i1
 }
 
-sv.bind @__BindEmissionInstance__ in @BindEmission {output_file = {directory = "BindTest", exclude_from_filelist = true, exclude_replicated_ops = true, name = "BindEmissionInstance.sv"}}
+sv.bind @__BindEmissionInstance__ in @BindEmission {output_file = #hw.output_file<"BindTest/BindEmissionInstance.sv", excludeFromFileList>}
 // CHECK-LABL: module BindEmissionInstance()
 hw.module @BindEmissionInstance() {
   hw.output
@@ -421,7 +421,7 @@ hw.module @BindEmission() -> () {
   hw.output
 }
 
-sv.bind.interface @__Interface__ {output_file = {directory = "BindTest", exclude_from_filelist = true, exclude_replicated_ops = true, name = "BindInterface.sv"}}
+sv.bind.interface @__Interface__ {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
 sv.interface @Interface {
   sv.interface.signal @a : i1
   sv.interface.signal @b : i1
