@@ -61,22 +61,16 @@ static void
 addMandatoryComponentPorts(PatternRewriter &rewriter,
                            SmallVectorImpl<calyx::PortInfo> &ports) {
   MLIRContext *ctx = rewriter.getContext();
-  ports.push_back({.name = rewriter.getStringAttr("clk"),
-                   .type = rewriter.getI1Type(),
-                   .direction = calyx::Direction::Input,
-                   .attributes = getMandatoryPortAttr(ctx, "clk")});
-  ports.push_back({.name = rewriter.getStringAttr("reset"),
-                   .type = rewriter.getI1Type(),
-                   .direction = calyx::Direction::Input,
-                   .attributes = getMandatoryPortAttr(ctx, "reset")});
-  ports.push_back({.name = rewriter.getStringAttr("go"),
-                   .type = rewriter.getI1Type(),
-                   .direction = calyx::Direction::Input,
-                   .attributes = getMandatoryPortAttr(ctx, "go")});
-  ports.push_back({.name = rewriter.getStringAttr("done"),
-                   .type = rewriter.getI1Type(),
-                   .direction = calyx::Direction::Output,
-                   .attributes = getMandatoryPortAttr(ctx, "done")});
+  ports.push_back({rewriter.getStringAttr("clk"), rewriter.getI1Type(),
+                   calyx::Direction::Input, getMandatoryPortAttr(ctx, "clk")});
+  ports.push_back({rewriter.getStringAttr("reset"), rewriter.getI1Type(),
+                   calyx::Direction::Input,
+                   getMandatoryPortAttr(ctx, "reset")});
+  ports.push_back({rewriter.getStringAttr("go"), rewriter.getI1Type(),
+                   calyx::Direction::Input, getMandatoryPortAttr(ctx, "go")});
+  ports.push_back({rewriter.getStringAttr("done"), rewriter.getI1Type(),
+                   calyx::Direction::Output,
+                   getMandatoryPortAttr(ctx, "done")});
 }
 
 /// Creates a new calyx::CombGroupOp or calyx::GroupOp group within compOp.
@@ -540,17 +534,15 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     FunctionType funcType = funcOp.getType();
     for (auto &arg : enumerate(funcOp.getArguments()))
       ports.push_back(calyx::PortInfo{
-          .name = rewriter.getStringAttr("in" + std::to_string(arg.index())),
-          .type = arg.value().getType(),
-          .direction = calyx::Direction::Input,
-          .attributes = DictionaryAttr::get(rewriter.getContext(), {})});
+          rewriter.getStringAttr("in" + std::to_string(arg.index())),
+          arg.value().getType(), calyx::Direction::Input,
+          DictionaryAttr::get(rewriter.getContext(), {})});
 
     for (auto &res : enumerate(funcType.getResults()))
       ports.push_back(calyx::PortInfo{
-          .name = rewriter.getStringAttr("out" + std::to_string(res.index())),
-          .type = res.value(),
-          .direction = calyx::Direction::Output,
-          .attributes = DictionaryAttr::get(rewriter.getContext(), {})});
+          rewriter.getStringAttr("out" + std::to_string(res.index())),
+          res.value(), calyx::Direction::Output,
+          DictionaryAttr::get(rewriter.getContext(), {})});
 
     addMandatoryComponentPorts(rewriter, ports);
 
