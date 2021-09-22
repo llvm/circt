@@ -114,14 +114,14 @@ hw.module @parameters<p1: i42 = 17, wire: i1>(%p1: i8) {
 
   // CHECK: sv.ifdef "SOMEMACRO"
   sv.ifdef "SOMEMACRO" {
-    // CHECK: %local = sv.localparam : i1 {value = #hw.parameter.ref<"wire_1">}
-    %local = sv.localparam : i1 { value = #hw.parameter.ref<"wire">: i1 }
+    // CHECK: %local = sv.localparam : i1 {value = #hw.param.decl.ref<"wire_1">}
+    %local = sv.localparam : i1 { value = #hw.param.decl.ref<"wire">: i1 }
   }
 
   // "wire" param getting updated should update in this instance.
   
-  // CHECK: hw.instance "inst" @module_with_bool<bparam: i1 = #hw.parameter.ref<"wire_1">>
-  hw.instance "inst" @module_with_bool<bparam: i1 = #hw.parameter.ref<"wire">>() -> ()
+  // CHECK: hw.instance "inst" @module_with_bool<bparam: i1 = #hw.param.decl.ref<"wire_1">>
+  hw.instance "inst" @module_with_bool<bparam: i1 = #hw.param.decl.ref<"wire">>() -> ()
 }
 
 // CHECK-LABEL: hw.module @use_parameters

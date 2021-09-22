@@ -22,7 +22,7 @@ def OutputFileAttr : StructAttr<"OutputFileAttr", HWDialect, [
 
 /// An attribute describing a module parameter, or instance parameter
 /// specification.
-def ParameterAttr : AttrDef<HWDialect, "Parameter"> {
+def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
   let summary = "module or instance parameter definition";
 
   /// The value of the attribute - in a module, this is the default
@@ -33,7 +33,7 @@ def ParameterAttr : AttrDef<HWDialect, "Parameter"> {
   let parameters = (ins "::mlir::StringAttr":$name,
                         "::mlir::TypeAttr":$type,
                         "::mlir::Attribute":$value);
-  let mnemonic = "parameter";
+  let mnemonic = "param.decl";
 
   let builders = [
     AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
@@ -54,38 +54,40 @@ def ParameterAttr : AttrDef<HWDialect, "Parameter"> {
   ];
 
   let extraClassDeclaration = [{
-    static ParameterAttr getWithName(ParameterAttr param,
+    static ParamDeclAttr getWithName(ParamDeclAttr param,
                                      ::mlir::StringAttr name) {
       return get(param.getContext(), name, param.getType(), param.getValue());
     }
   }];
 }
 
-/// An array of ParameterAttr's that may or may not have a 'value' specified,
+/// An array of ParamDeclAttr's that may or may not have a 'value' specified,
 /// to be used on hw.module or hw.instance.  The hw.instance verifier further
 /// ensures that all the values are specified.
-def ParameterArrayAttr
-  : TypedArrayAttrBase<ParameterAttr, "parameter array attribute">;
+def ParamDeclArrayAttr
+  : TypedArrayAttrBase<ParamDeclAttr, "parameter array attribute">;
 
 /// This attribute models a reference to a named parameter within a module body.
-/// The type of the ParameterRef must always be the same as the type of the
+/// The type of the ParamDeclRefAttr must always be the same as the type of the
 /// parameter being referenced.
-def ParameterRefAttr : AttrDef<HWDialect, "ParameterRef"> {
+def ParamDeclRefAttr : AttrDef<HWDialect, "ParamDeclRef"> {
   let summary = "Is a reference to a parameter value.";
   let parameters = (ins "::mlir::StringAttr":$name,
                         AttributeSelfTypeParameter<"">:$type);
-  let mnemonic = "parameter.ref";
+  let mnemonic = "param.decl.ref";
 }
 
-def VerbatimParameterValueAttr : AttrDef<HWDialect, "VerbatimParameterValue"> {
+def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim"> {
   let summary =
     "Represents text to emit directly to SystemVerilog for a parameter";
   let parameters = (ins "::mlir::StringAttr":$value,
                         AttributeSelfTypeParameter<"">:$type);
-  let mnemonic = "verbatim.parameter.value";
+  let mnemonic = "param.verbatim";
 }
 
+let cppNamespace = "circt::hw" in {
 def WUW_Undefined : I32EnumAttrCase<"Undefined", 0>;
 def WUW_PortOrder : I32EnumAttrCase<"PortOrder", 1>;
 def WUWAttr : I32EnumAttr<"WUW", "Write Under Write Behavior",
                           [WUW_Undefined, WUW_PortOrder]>;
+}

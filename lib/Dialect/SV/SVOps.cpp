@@ -797,22 +797,21 @@ Type InterfaceOp::getSignalType(StringRef signalName) {
 
 static ParseResult parseModportStructs(OpAsmParser &parser,
                                        ArrayAttr &portsAttr) {
-  if (parser.parseLParen())
-    return failure();
 
   auto context = parser.getBuilder().getContext();
 
   SmallVector<Attribute, 8> ports;
-  do {
+  auto parseElement = [&]() -> ParseResult {
     StringAttr direction;
     FlatSymbolRefAttr signal;
     if (parser.parseAttribute(direction) || parser.parseAttribute(signal))
       return failure();
 
     ports.push_back(ModportStructAttr::get(direction, signal, context));
-  } while (succeeded(parser.parseOptionalComma()));
-
-  if (parser.parseRParen())
+    return success();
+  };
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseElement))
     return failure();
 
   portsAttr = ArrayAttr::get(context, ports);

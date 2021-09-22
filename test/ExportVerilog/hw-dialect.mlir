@@ -867,7 +867,7 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out: i8) {
   // CHECK:      parameters2 #(
   // CHECK-NEXT:  .p1(xx)
   // CHECK-NEXT: ) inst1 (
-  %a = hw.instance "inst1" @parameters2<p1: i42 = #hw.parameter.ref<"xx">, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
+  %a = hw.instance "inst1" @parameters2<p1: i42 = #hw.param.decl.ref<"xx">, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 
   hw.output %a : i8
 }

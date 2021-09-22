@@ -19,6 +19,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace circt;
+using namespace hw;
 
 //===----------------------------------------------------------------------===//
 // HWMemSimImplPass Pass
@@ -44,11 +45,11 @@ struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
 
 private:
-  void generateMemory(hw::HWModuleOp op, FirMemory mem);
+  void generateMemory(HWModuleOp op, FirMemory mem);
 };
 } // end anonymous namespace
 
-static FirMemory analyzeMemOp(hw::HWModuleGeneratedOp op) {
+static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   FirMemory mem;
   mem.depth = op->getAttrOfType<IntegerAttr>("depth").getInt();
   mem.numReadPorts = op->getAttrOfType<IntegerAttr>("numReadPorts").getUInt();
@@ -86,14 +87,13 @@ static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
   return data;
 }
 
-void HWMemSimImplPass::generateMemory(hw::HWModuleOp op, FirMemory mem) {
+void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBody());
 
   // Create a register for the memory.
   auto dataType = b.getIntegerType(mem.dataWidth);
-  Value reg =
-      b.create<sv::RegOp>(hw::UnpackedArrayType::get(dataType, mem.depth),
-                          b.getStringAttr("Memory"));
+  Value reg = b.create<sv::RegOp>(UnpackedArrayType::get(dataType, mem.depth),
+                                  b.getStringAttr("Memory"));
 
   SmallVector<Value, 4> outputs;
 
@@ -139,7 +139,7 @@ void HWMemSimImplPass::generateMemory(hw::HWModuleOp op, FirMemory mem) {
     Value rcond = b.createOrFold<comb::AndOp>(
         en, b.createOrFold<comb::ICmpOp>(
                 comb::ICmpPredicate::eq, wmode,
-                b.createOrFold<hw::ConstantOp>(wmode.getType(), 0)));
+                b.createOrFold<ConstantOp>(wmode.getType(), 0)));
     Value slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
     Value x = b.create<sv::ConstantXOp>(dataType);
     b.create<sv::AssignOp>(
@@ -212,14 +212,14 @@ void HWMemSimImplPass::generateMemory(hw::HWModuleOp op, FirMemory mem) {
 void HWMemSimImplPass::runOnOperation() {
   auto topModule = getOperation().getBody();
 
-  SmallVector<hw::HWModuleGeneratedOp> toErase;
+  SmallVector<HWModuleGeneratedOp> toErase;
   bool anythingChanged = false;
 
-  for (auto op : llvm::make_early_inc_range(
-           topModule->getOps<hw::HWModuleGeneratedOp>())) {
-    auto oldModule = cast<hw::HWModuleGeneratedOp>(op);
+  for (auto op :
+       llvm::make_early_inc_range(topModule->getOps<HWModuleGeneratedOp>())) {
+    auto oldModule = cast<HWModuleGeneratedOp>(op);
     auto gen = oldModule.generatorKind();
-    auto genOp = cast<hw::HWGeneratorSchemaOp>(
+    auto genOp = cast<HWGeneratorSchemaOp>(
         SymbolTable::lookupSymbolIn(getOperation(), gen));
 
     if (genOp.descriptor() == "FIRRTL_Memory") {
@@ -227,8 +227,8 @@ void HWMemSimImplPass::runOnOperation() {
 
       OpBuilder builder(oldModule);
       auto nameAttr = builder.getStringAttr(oldModule.getName());
-      auto newModule = builder.create<hw::HWModuleOp>(
-          oldModule.getLoc(), nameAttr, oldModule.getPorts());
+      auto newModule = builder.create<HWModuleOp>(oldModule.getLoc(), nameAttr,
+                                                  oldModule.getPorts());
       generateMemory(newModule, mem);
       oldModule.erase();
       anythingChanged = true;

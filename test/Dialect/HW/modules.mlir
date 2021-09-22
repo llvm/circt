@@ -82,7 +82,7 @@ hw.module.extern @NoArg<param: i42>()
 
 // CHECK-LABEL: hw.module @UseParameters<p1: i42>() {
 hw.module @UseParameters<p1: i42>() {
-  // CHECK: hw.instance "verbatimparam" @NoArg<param: i42 = #hw.verbatim.parameter.value<"\22FOO\22">>() -> () 
-  hw.instance "verbatimparam" @NoArg<param: i42 = #hw.verbatim.parameter.value<"\"FOO\"">>() -> ()
+  // CHECK: hw.instance "verbatimparam" @NoArg<param: i42 = #hw.param.verbatim<"\22FOO\22">>() -> () 
+  hw.instance "verbatimparam" @NoArg<param: i42 = #hw.param.verbatim<"\"FOO\"">>() -> ()
   hw.output
 }

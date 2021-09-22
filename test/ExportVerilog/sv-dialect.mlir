@@ -4,14 +4,14 @@
 // CHECK-NEXT:    #(parameter [41:0] param1) (
 hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.reg : !hw.inout<i42>
-  %forceWire = sv.wire : !hw.inout<i1>
+  %forceWire = sv.wire sym @wire1 : !hw.inout<i1>
  
   %c11_i42 = hw.constant 11: i42
   // CHECK: localparam [41:0] param_x = 42'd11;
   %param_x = sv.localparam : i42 { value = 11: i42 }
 
   // CHECK: localparam [41:0] param_y = param1;
-  %param_y = sv.localparam : i42 { value = #hw.parameter.ref<"param1">: i42 }
+  %param_y = sv.localparam : i42 { value = #hw.param.decl.ref<"param1">: i42 }
 
   // CHECK:      always @(posedge clock) begin
   sv.always posedge %clock {
@@ -20,11 +20,12 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:   `ifndef SYNTHESIS
     sv.ifdef.procedural "SYNTHESIS" {
     } else {
-  // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond)
+  // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond & forceWire)
       %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
+      %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [@wire1] }
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
-      %tmp3 = comb.and %tmp, %tmp1, %tmp2, %tmp2, %cond : i1
+      %tmp3 = comb.and %tmp, %tmp1, %tmp2, %tmp2, %cond, %verb_tmp : i1
       sv.if %tmp3 {
   // CHECK-NEXT:       $fwrite(32'h80000002, "Hi\n");
         sv.fwrite "Hi\n"
@@ -778,15 +779,22 @@ hw.module @MultiUseReadInOut(%auto_in_ar_bits_id : i2) -> (aa: i3, bb: i3){
 // CHECK-LABEL: module DontDuplicateSideEffectingVerbatim(
 hw.module @DontDuplicateSideEffectingVerbatim() {
   %a = sv.reg : !hw.inout<i42>
+  %b = sv.reg sym @regSym : !hw.inout<i42>
 
   sv.initial {
     // CHECK: automatic logic [41:0] _T = SIDEEFFECT;
     %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
+    // CHECK: automatic logic [41:0] _T_0 = b;
+    %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [@regSym]}
     // CHECK: a = _T;
     sv.bpassign %a, %tmp : i42
     // CHECK: a = _T;
     sv.bpassign %a, %tmp : i42
 
+    // CHECK: a = _T_0;
+    sv.bpassign %a, %verb_tmp : i42
+    // CHECK: a = _T_0;
+    sv.bpassign %a, %verb_tmp : i42
     %tmp2 = sv.verbatim.expr "NO_EFFECT_" : () -> i42
     // CHECK: a = NO_EFFECT_;
     sv.bpassign %a, %tmp2 : i42
@@ -795,6 +803,38 @@ hw.module @DontDuplicateSideEffectingVerbatim() {
   }
 }
 
+hw.generator.schema @verbatim_schema, "Simple", ["ports", "write_latency", "read_latency"]
+hw.module.extern @verbatim_inout_2 () -> ()
+// CHECK-LABEL: module verbatim_M1(
+hw.module @verbatim_M1(%clock : i1, %cond : i1, %val : i8) {
+  %c42 = hw.constant 42 : i8
+  %reg1 = sv.reg sym @verbatim_reg1: !hw.inout<i8>
+  %reg2 = sv.reg sym @verbatim_reg2: !hw.inout<i8>
+  %wire25 = sv.wire sym @verbatim_wireSym1 : !hw.inout<i23>
+  %add = comb.add %val, %c42 : i8
+  %c42_2 = hw.constant 42 : i8
+  %xor = comb.xor %val, %c42_2 : i8
+  hw.instance "aa1" sym @verbatim_b1 @verbatim_inout_2() ->()
+  // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A reg=reg1, verbatim_M2, verbatim_inout_2, verbatim_schema~aa1,reg2 = reg2 )
+  sv.verbatim  "MACRO({{0}}, {{1}} reg={{2}}, {{3}}, {{4}}, {{5}}~{{6}},reg2 = {{7}} )" 
+          (%add, %xor)  : i8,i8
+          {symbols = [@verbatim_reg1, @verbatim_M2, 
+          @verbatim_inout_2, @verbatim_schema, @verbatim_b1, @verbatim_reg2]}
+  // CHECK: Wire : wire25
+  sv.verbatim " Wire : {{0}}" {symbols = [@verbatim_wireSym1]}
+}
+
+// CHECK-LABEL: module verbatim_M2(
+hw.module @verbatim_M2(%clock : i1, %cond : i1, %val : i8) {
+  %c42 = hw.constant 42 : i8
+  %add = comb.add %val, %c42 : i8
+  %c42_2 = hw.constant 42 : i8
+  %xor = comb.xor %val, %c42_2 : i8
+  // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A, verbatim_M1 -- verbatim_M2)
+  sv.verbatim  "MACRO({{0}}, {{1}}, {{2}} -- {{3}})" 
+                (%add, %xor)  : i8,i8 
+                {symbols = [@verbatim_M1, @verbatim_M2, @verbatim_b1]}
+}
 
 // CHECK-LABEL: module InlineAutomaticLogicInit(
 // Issue #1567: https://github.com/llvm/circt/issues/1567
@@ -944,3 +984,4 @@ sv.bind @bindInst2 in @remoteInstDut
 // CHECK-NEXT:   ._k (a2__k)
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
+

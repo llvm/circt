@@ -29,7 +29,7 @@ def HWModuleOp : HWOp<"module",
     connections within the module.
   }];
   let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-                       ParameterArrayAttr:$parameters);
+                       ParamDeclArrayAttr:$parameters);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
@@ -116,7 +116,7 @@ def HWModuleExternOp : HWOp<"module.extern",
     parameterized types instead of just concrete types.
   }];
   let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-                       ParameterArrayAttr:$parameters,
+                       ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -231,7 +231,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-                       ParameterArrayAttr:$parameters,
+                       ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -326,7 +326,7 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
                        Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-                       ParameterArrayAttr:$parameters,
+                       ParamDeclArrayAttr:$parameters,
                        OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs Variadic<AnyType>);
 

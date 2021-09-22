@@ -79,10 +79,9 @@ static void printParamValue(Attribute value, Operation *op, StringRef paramName,
   } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
     // TODO: relying on float printing to be precise is not a good idea.
     os << fpAttr.getValueAsDouble();
-  } else if (auto verbatimParam =
-                 value.dyn_cast<VerbatimParameterValueAttr>()) {
+  } else if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
     os << verbatimParam.getValue().getValue();
-  } else if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
+  } else if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     os << parameterRef.getName().getValue();
   } else {
     os << "<<UNKNOWN MLIRATTR: " << value << ">>";
@@ -111,6 +110,28 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
   }
 
   return false;
+}
+
+/// Return the verilog name of the operations that can define a symbol.
+static StringRef getSymOpName(Operation *symOp) {
+  // Typeswitch of operation types which can define a symbol.
+  return TypeSwitch<Operation *, StringRef>(symOp)
+      .Case<HWModuleOp>([&](HWModuleOp op) { return op.getName(); })
+      .Case<HWModuleExternOp>(
+          [&](HWModuleExternOp op) { return op.getVerilogModuleName(); })
+      .Case<HWGeneratorSchemaOp>(
+          [&](HWGeneratorSchemaOp op) { return op.sym_name(); })
+      .Case<InstanceOp>([&](InstanceOp op) { return op.getName().getValue(); })
+      .Case<WireOp>([&](WireOp op) { return op.name(); })
+      .Case<RegOp>([&](RegOp op) { return op.name(); })
+      .Case<InterfaceOp>([&](InterfaceOp op) {
+        return getVerilogModuleNameAttr(op).getValue();
+      })
+      .Case<InterfaceSignalOp>(
+          [&](InterfaceSignalOp op) { return op.sym_name(); })
+      .Case<InterfaceModportOp>(
+          [&](InterfaceModportOp op) { return op.sym_name(); })
+      .Default([&](Operation *op) { return ""; });
 }
 
 /// This predicate returns true if the specified operation is considered a
@@ -640,7 +661,8 @@ public:
   }
 
   void emitTextWithSubstitutions(StringRef string, Operation *op,
-                                 std::function<void(Value)> operandEmitter);
+                                 std::function<void(Value)> operandEmitter,
+                                 ArrayAttr symAttrs, ModuleNameManager &names);
 
 private:
   void operator=(const EmitterBase &) = delete;
@@ -649,14 +671,20 @@ private:
 } // end anonymous namespace
 
 void EmitterBase::emitTextWithSubstitutions(
-    StringRef string, Operation *op,
-    std::function<void(Value)> operandEmitter) {
+    StringRef string, Operation *op, std::function<void(Value)> operandEmitter,
+    ArrayAttr symAttrs, ModuleNameManager &names) {
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
 
+  SmallVector<Operation *, 8> symOps;
+  for (auto sym : symAttrs)
+    if (auto symOp =
+            state.symbolCache.getDefinition(sym.cast<FlatSymbolRefAttr>()))
+      symOps.push_back(symOp);
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
   // returning true.  This returns false if no substitution is found.
+  unsigned numSymOps = symOps.size();
   auto emitUntilSubstitution = [&](size_t next = 0) -> bool {
     size_t start = 0;
     while (1) {
@@ -688,17 +716,35 @@ void EmitterBase::emitTextWithSubstitutions(
       }
       next += 2;
 
-      if (operandNo >= op->getNumOperands()) {
-        emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
-        continue;
-      }
+      Value emitOp;
 
       // Emit any text before the substitution.
       os << string.take_front(start - 2);
+      // operantNo can either refer to Operands or symOps. Assumption is symOps
+      // are sequentially referenced after the operands.
+      if (operandNo < op->getNumOperands())
+        // Emit the operand.
+        operandEmitter(op->getOperand(operandNo));
+      else if ((operandNo - op->getNumOperands()) < numSymOps) {
+        unsigned symOpNum = operandNo - op->getNumOperands();
+        Operation *symOp = symOps[symOpNum];
+        // Get the verilog name of the operation, add the name if not already
+        // done.
+        if (!names.hasName(symOp)) {
+          StringRef symOpName = getSymOpName(symOp);
+          std::string opStr;
+          llvm::raw_string_ostream tName(opStr);
+          tName << *symOp;
+          if (symOpName.empty())
+            op->emitError("Cannot get name for symbol:" + tName.str());
 
-      // Emit the operand.
-      operandEmitter(op->getOperand(operandNo));
-
+          names.addName(symOp, symOpName);
+        }
+        os << names.getName(symOp);
+      } else {
+        emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
+        continue;
+      }
       // Forget about the part we emitted.
       string = string.drop_front(next);
       return true;
@@ -885,9 +931,13 @@ private:
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
-  SubExprInfo visitVerbatimExprOp(Operation *op);
-  SubExprInfo visitSV(VerbatimExprOp op) { return visitVerbatimExprOp(op); }
-  SubExprInfo visitSV(VerbatimExprSEOp op) { return visitVerbatimExprOp(op); }
+  SubExprInfo visitVerbatimExprOp(Operation *op, ArrayAttr symbols);
+  SubExprInfo visitSV(VerbatimExprOp op) {
+    return visitVerbatimExprOp(op, op.symbols());
+  }
+  SubExprInfo visitSV(VerbatimExprSEOp op) {
+    return visitVerbatimExprOp(op, op.symbols());
+  }
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
 
@@ -1317,11 +1367,11 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
   return {Selection, IsUnsigned};
 }
 
-SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op) {
-  emitTextWithSubstitutions(op->getAttrOfType<StringAttr>("string").getValue(),
-                            op, [&](Value operand) {
-                              emitSubExpr(operand, LowestPrecedence, OOLBinary);
-                            });
+SubExprInfo ExprEmitter::visitVerbatimExprOp(Operation *op, ArrayAttr symbols) {
+  emitTextWithSubstitutions(
+      op->getAttrOfType<StringAttr>("string").getValue(), op,
+      [&](Value operand) { emitSubExpr(operand, LowestPrecedence, OOLBinary); },
+      symbols, names);
 
   return {Unary, IsUnsigned};
 }
@@ -2130,7 +2180,8 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
 
     // Emit each chunk of the line.
     emitTextWithSubstitutions(
-        lhsRhs.first, op, [&](Value operand) { emitExpression(operand, ops); });
+        lhsRhs.first, op, [&](Value operand) { emitExpression(operand, ops); },
+        op.symbols(), names);
     string = lhsRhs.second;
   }
 
@@ -2512,8 +2563,8 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     for (auto params :
          llvm::zip(op.parameters(),
                    moduleOp->getAttrOfType<ArrayAttr>("parameters"))) {
-      auto param = std::get<0>(params).cast<ParameterAttr>();
-      auto modParam = std::get<1>(params).cast<ParameterAttr>();
+      auto param = std::get<0>(params).cast<ParamDeclAttr>();
+      auto modParam = std::get<1>(params).cast<ParamDeclAttr>();
       // Ignore values that line up with their default.
       if (param.getValue() == modParam.getValue())
         continue;
@@ -3058,7 +3109,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   for (auto param : module.parameters()) {
     // Add the name to the name table so any conflicting wires are renamed.
     names.addLegalName(
-        nullptr, param.cast<ParameterAttr>().getName().getValue(), module);
+        nullptr, param.cast<ParamDeclAttr>().getName().getValue(), module);
   }
 
   // Rewrite the module body into compliance with our emission expectations, and
@@ -3097,7 +3148,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     for (auto param : module.parameters()) {
       // Measure the type length by printing it to a temporary string.
       scratch.clear();
-      printParamType(param.cast<ParameterAttr>().getType().getValue(), scratch);
+      printParamType(param.cast<ParamDeclAttr>().getType().getValue(), scratch);
       maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
     }
 
@@ -3107,7 +3158,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     llvm::interleave(
         module.parameters(), os,
         [&](Attribute param) {
-          auto paramAttr = param.cast<ParameterAttr>();
+          auto paramAttr = param.cast<ParamDeclAttr>();
           os << "parameter ";
           scratch.clear();
           printParamType(paramAttr.getType().getValue(), scratch);
@@ -3379,9 +3430,10 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   /// emission.
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
     for (Operation &op : *moduleOp.getBodyBlock()) {
-      if (auto instance = dyn_cast<InstanceOp>(op))
-        if (auto sym = instance.sym_nameAttr())
-          symbolCache.addDefinition(sym, instance);
+      // Populate the symbolCache with all operations that can define a symbol.
+      if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+        if (auto name = symOp.getNameAttr())
+          symbolCache.addDefinition(name, symOp);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     }
@@ -3451,9 +3503,15 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<InterfaceOp>([&](auto intf) {
+        .Case<InterfaceOp>([&](InterfaceOp intf) {
           // Build the IR cache.
           symbolCache.addDefinition(intf.getNameAttr(), intf);
+          // Populate the symbolCache with all operations that can define a
+          // symbol.
+          for (auto &op : *intf.getBodyBlock())
+            if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+              if (auto name = symOp.getNameAttr())
+                symbolCache.addDefinition(name, symOp);
 
           // Emit into a separate file named after the interface.
           if (attr || separateModules)
@@ -3477,8 +3535,8 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           } else
             separateFile(op, "");
         })
-        .Case<HWGeneratorSchemaOp>([&](auto) {
-          // Empty.
+        .Case<HWGeneratorSchemaOp>([&](auto schemaOp) {
+          symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
         })
         .Case<BindOp, BindInterfaceOp>([&](auto op) {
           if (!attr) {
