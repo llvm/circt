@@ -418,6 +418,42 @@ Example:
   "inclusive": true
 }
 ```
+
+### RetimeModuleAnnotation
+
+| Property   | Type   | Description                                              |
+| ---------- | ------ | -------------                                            |
+| class      | string | `sifive.enterprise.firrtl.RetimeModuleAnnotation` |
+
+This annotation is used to mark modules which should be retimed, and is
+generally just passed through to other tools.
+
+Example:
+```json
+{
+    "class": "sifive.enterprise.firrtl.RetimeModuleAnnotation"
+}
+```
+
+### RetimeModulesAnnotation
+
+| Property   | Type   | Description                                              |
+| ---------- | ------ | -------------                                            |
+| class      | string | `sifive.enterprise.firrtl.RetimeModulesAnnotation` |
+| filename   | string | The filename with full path where it will be written     |
+
+This annotation triggers the creation of a file containing a JSON array
+containing the names of all modules annotated with the
+`RetimeModuleAnnotation`.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.RetimeModuleAnnotation",
+  "filename": "retime_modules.json"
+}
+```
+
 ## FIRRTL specific attributes applied to HW Modules
 
 ### Design Under Test
