@@ -1056,7 +1056,7 @@ private:
       parentCtrlBlock = seqOp.getBody();
     }
 
-    for (auto &group : compblockScheduleables) {
+    for (auto &group : compBlockScheduleables) {
       rewriter.setInsertionPointToEnd(parentCtrlBlock);
       if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
         rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name(),
