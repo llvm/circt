@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 def InstanceOp : FIRRTLOp<"instance", [
+    Symbol,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
@@ -21,7 +22,8 @@ def InstanceOp : FIRRTLOp<"instance", [
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
-                       BoolAttr:$lowerToBind);
+                       BoolAttr:$lowerToBind,
+                       OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs Variadic<FIRRTLType>:$results);
 
   let assemblyFormat =
@@ -35,7 +37,8 @@ def InstanceOp : FIRRTLOp<"instance", [
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"bool","false">:$lowerToBind)>,
+                   CArg<"bool","false">:$lowerToBind,
+                   CArg<"StringRef", "{}">:$sym_name)>,
 
     /// Constructor that creates a version of the specified instance, but that
     /// erases some number of results from it.
@@ -60,6 +63,8 @@ def InstanceOp : FIRRTLOp<"instance", [
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    bool isOptionalSymbol() { return true; }
   }];
 }
 

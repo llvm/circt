@@ -944,12 +944,16 @@ FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
                        StringRef name, ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
+                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
+                       StringRef symName) {
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
   result.addAttribute("name", builder.getStringAttr(name));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
+  if (!symName.empty())
+    result.addAttribute(SymbolTable::getSymbolAttrName(),
+                        builder.getStringAttr(symName));
   result.addTypes(resultTypes);
 
   if (portAnnotations.empty()) {

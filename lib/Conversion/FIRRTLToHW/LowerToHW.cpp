@@ -2297,9 +2297,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // it and generate a bind op.  Enter the bind into global CircuitLoweringState
   // so that this can be moved outside of module once we're guaranteed to not be
   // a parallel context.
-  StringAttr symbol;
+  StringAttr symbol = oldInstance.sym_nameAttr();
   if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
-    symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
+    if (!symbol)
+      symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
     auto instanceSymbol = SymbolRefAttr::get(symbol);
     auto moduleSymbol = SymbolRefAttr::get(theModule.getNameAttr());
     auto bindOp = builder.create<sv::BindOp>(instanceSymbol, moduleSymbol);
