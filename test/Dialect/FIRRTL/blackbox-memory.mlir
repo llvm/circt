@@ -488,3 +488,82 @@ firrtl.circuit "Duplicate" {
 // INLINE-NEXT:     firrtl.connect %WriteMemory2_W0_mask, %32 : !firrtl.uint<1>, !firrtl.uint<1>
 // INLINE-NEXT:   }
 // INLINE-NEXT: }
+
+firrtl.circuit "MemSimple" {
+  firrtl.module @MemSimple(in %clock: !firrtl.clock,
+      in %indata: !firrtl.vector<uint<8>, 4>,
+      in %addr: !firrtl.uint<13>, 
+      out %read : !firrtl.vector<uint<8>, 4>) {
+    %invalid = firrtl.invalidvalue : !firrtl.vector<uint<1>, 4>  
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %mem_MPORT, %mem_MPORT_1 = firrtl.mem Undefined  {depth = 8192 : i64, name = "mem", portNames = ["MPORT", "MPORT_1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>, !firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>
+    %64 = firrtl.subfield %mem_MPORT(0) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.uint<13>
+    firrtl.connect %64, %addr : !firrtl.uint<13>, !firrtl.uint<13>
+    %65 = firrtl.subfield %mem_MPORT(1) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.uint<1>
+    firrtl.connect %65, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %66 = firrtl.subfield %mem_MPORT(2) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.clock
+    firrtl.connect %66, %clock : !firrtl.clock, !firrtl.clock
+    %67 = firrtl.subfield %mem_MPORT(3) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.vector<uint<8>, 4>
+    firrtl.connect %read, %67 : !firrtl.vector<uint<8>, 4>, !firrtl.vector<uint<8>, 4>
+    %68 = firrtl.subfield %mem_MPORT_1(0) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.uint<13>
+    firrtl.connect %68, %addr : !firrtl.uint<13>, !firrtl.uint<13>
+    %69 = firrtl.subfield %mem_MPORT_1(1) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.uint<1>
+    firrtl.connect %69, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %70 = firrtl.subfield %mem_MPORT_1(2) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.clock
+    firrtl.connect %70, %clock : !firrtl.clock, !firrtl.clock
+    %71 = firrtl.subfield %mem_MPORT_1(3) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.vector<uint<8>, 4>
+    firrtl.connect %71, %indata : !firrtl.vector<uint<8>, 4>, !firrtl.vector<uint<8>, 4>
+    %72 = firrtl.subfield %mem_MPORT_1(4) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.vector<uint<1>, 4>
+     firrtl.connect %72, %invalid : !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
+  }
+// WRAPPER-LABEL: firrtl.circuit "MemSimple"
+// WRAPPER:    firrtl.extmodule @mem_ext
+// WRAPPER:    firrtl.module @mem
+// WRAPPER-SAME:     in %MPORT: !firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>,
+// WRAPPER-SAME:     in %MPORT_1: !firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>
+// WRAPPER-NEXT:      [[mem_R0_addr:.+]], [[mem_R0_en:.+]] [[mem_R0_clk:.+]], [[mem_R0_data:.+]],[[mem_W0_addr:.+]],[[mem_W0_en:.+]], [[mem_W0_clk:.+]], [[mem_W0_data:.+]], [[mem_W0_mask:.+]] = firrtl.instance @mem_ext  {name = "mem"} : !firrtl.uint<13>, !firrtl.uint<1>, !firrtl.clock, !firrtl.uint<32>, !firrtl.uint<13>, !firrtl.uint<1>, !firrtl.clock, !firrtl.uint<32>, !firrtl.uint<4>
+// WRAPPER:      %[[v3:.+]] = firrtl.subfield %MPORT(3)
+// WRAPPER:      %[[v4:.+]] = firrtl.subindex %[[v3]][0]
+// WRAPPER:      %[[v5:.+]] = firrtl.bits [[mem_R0_data]] 7 to 0
+// WRAPPER:      firrtl.connect %[[v4]], %[[v5]]
+// WRAPPER:      %[[v6:.+]] = firrtl.subindex %[[v3]][1] : !firrtl.vector<uint<8>, 4>
+// WRAPPER:      %[[v7:.+]] = firrtl.bits [[mem_R0_data]] 15 to 8 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+// WRAPPER:      firrtl.connect %[[v6]], %[[v7]]
+// WRAPPER:      %[[v8:.+]] = firrtl.subindex %[[v3]][2] : !firrtl.vector<uint<8>, 4>
+// WRAPPER:      %[[v9:.+]] = firrtl.bits [[mem_R0_data]] 23 to 16 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+// WRAPPER:      firrtl.connect %[[v8]], %[[v9]]
+// WRAPPER:      %[[v10:.+]] = firrtl.subindex %[[v3]][3] : !firrtl.vector<uint<8>, 4>
+// WRAPPER:      %[[v11:.+]] = firrtl.bits [[mem_R0_data]] 31 to 24 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+// WRAPPER:      firrtl.connect %[[v10]], %[[v11]]
+// WRAPPER:      %[[v15:.+]] = firrtl.subfield %MPORT_1(3) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.vector<uint<8>, 4>
+// WRAPPER:      %[[v16:.+]] = firrtl.subindex %[[v15]][0] : !firrtl.vector<uint<8>, 4>
+// WRAPPER:      %[[v17:.+]] = firrtl.wire  : !firrtl.uint<8>
+// WRAPPER:      firrtl.connect %[[v17]], %[[v16]] : !firrtl.uint<8>, !firrtl.uint<8>
+// WRAPPER:      %[[v18:.+]] = firrtl.subindex %[[v15]][1] : !firrtl.vector<uint<8>, 4>
+// WRAPPER:      %[[v19:.+]] = firrtl.cat %[[v18]], %[[v17]] : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
+// WRAPPER:      %[[v20:.+]] = firrtl.wire  : !firrtl.uint<16>
+// WRAPPER:      firrtl.connect %[[v20]], %[[v19]] : !firrtl.uint<16>, !firrtl.uint<16>
+// WRAPPER:      %[[v21:.+]] = firrtl.subindex %[[v15]][2] : !firrtl.vector<uint<8>, 4>
+// WRAPPER:      %[[v22:.+]] = firrtl.cat %[[v21]], %[[v20]]
+// WRAPPER:      %[[v23:.+]] = firrtl.wire  : !firrtl.uint<24>
+// WRAPPER:      firrtl.connect %[[v23]], %[[v22]] : !firrtl.uint<24>, !firrtl.uint<24>
+// WRAPPER:      %[[v24:.+]] = firrtl.subindex %[[v15]][3]
+// WRAPPER:      %[[v25:.+]] = firrtl.cat %[[v24]], %[[v23]] : (!firrtl.uint<8>, !firrtl.uint<24>) -> !firrtl.uint<32>
+// WRAPPER:      %[[v26:.+]] = firrtl.wire  : !firrtl.uint<32>
+// WRAPPER:      firrtl.connect %[[v26]], %[[v25]] : !firrtl.uint<32>, !firrtl.uint<32>
+// WRAPPER:      firrtl.connect [[mem_W0_data]], %[[v26]] : !firrtl.uint<32>, !firrtl.uint<32>
+// WRAPPER:      %[[v27:.+]] = firrtl.subfield %MPORT_1(4) : (!firrtl.bundle<addr: uint<13>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.vector<uint<1>, 4>
+// WRAPPER:      %[[v28:.+]] = firrtl.subindex %[[v27]][0] : !firrtl.vector<uint<1>, 4>
+// WRAPPER:      %[[v30:.+]] = firrtl.subindex %[[v27]][1] : !firrtl.vector<uint<1>, 4>
+// WRAPPER:      %[[v31:.+]] = firrtl.cat %[[v30]]
+// WRAPPER:      %[[v32:.+]] = firrtl.wire  : !firrtl.uint<2>
+// WRAPPER:      firrtl.connect %[[v32]], %[[v31]] : !firrtl.uint<2>, !firrtl.uint<2>
+// WRAPPER:      %[[v33:.+]] = firrtl.subindex %[[v27]][2] : !firrtl.vector<uint<1>, 4>
+// WRAPPER:      %[[v34:.+]] = firrtl.cat %[[v33]], %[[v32]] : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+// WRAPPER:      %[[v36:.+]] = firrtl.subindex %27[3] : !firrtl.vector<uint<1>, 4>
+// WRAPPER:      %[[v37:.+]] = firrtl.cat %[[v36]]
+// WRAPPER:      %[[v38:.+]] = firrtl.wire  : !firrtl.uint<4>
+// WRAPPER:      firrtl.connect %[[v38]], %[[v37]] : !firrtl.uint<4>, !firrtl.uint<4>
+// WRAPPER:      firrtl.connect [[mem_W0_mask]], %[[v38]] : !firrtl.uint<4>, !firrtl.uint<4>
+
+}
