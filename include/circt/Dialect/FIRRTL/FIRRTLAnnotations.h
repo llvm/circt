@@ -28,6 +28,9 @@ class FModuleLike;
 /// Return the name of the attribute used for annotations on FIRRTL ops.
 inline StringRef getAnnotationAttrName() { return "annotations"; }
 
+/// Return the name of the attribute used for port annotations on FIRRTL ops.
+inline StringRef getPortAnnotationAttrName() { return "portAnnotations"; }
+
 /// Return the name of the dialect-prefixed attribute used for annotations.
 inline StringRef getDialectAnnotationAttrName() { return "firrtl.annotations"; }
 
