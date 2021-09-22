@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OperationSupport.h"
+#include "set"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
 
@@ -181,7 +182,7 @@ static FExtModuleOp createBlackboxModuleForMem(MemOp op,
 /// this will be needed in the long run.
 static FModuleOp createWrapperModule(MemOp op,
                                      ArrayRef<MemOp::NamedPort> memPorts,
-                                     FExtModuleOp extModuleOp,
+                                     ModuleOp memModuleOp,
                                      ArrayRef<PortInfo> extPorts,
                                      SmallVectorImpl<PortInfo> &modPorts) {
   OpBuilder builder(op->getContext());
@@ -207,34 +208,28 @@ static FModuleOp createWrapperModule(MemOp op,
   SymbolTable symbolTable(circuitOp);
   symbolTable.insert(moduleOp);
 
-  // Move the module right after the external module, for readability purposes.
-  moduleOp->moveAfter(extModuleOp);
-
   // Create the module
   builder.setInsertionPointToStart(moduleOp.getBodyBlock());
-  auto instanceOp = createInstance(builder, op.getLoc(), extModuleOp.getName(),
-                                   op.nameAttr(), extPorts);
+
+  auto oldPorts = op.getPorts();
+  SmallVector<Type, 8> ports;
+  for (size_t portIdx = 0, e = oldPorts.size(); portIdx < e; ++portIdx) {
+    auto port = oldPorts[portIdx];
+    ports.push_back(
+        MemOp::getTypeForPort(op.depth(), op.getDataType(), port.second));
+  }
+  auto newMemOp = builder.create<MemOp>(
+      op.getLoc(), ports, op.readLatency(), op.writeLatency(), op.depth(),
+      op.ruw(), op.portNames().getValue(), op.name().str(),
+      op.annotations().getValue(), op.portAnnotations().getValue());
 
   // Connect the ports between the memory module and the instance of the black
   // box memory module. The outer module has a single bundle representing each
   // Memory port, while the inner module has a separate field for each memory
   // port bundle in the memory bundle.
-  auto extResultIt = instanceOp.result_begin();
-  for (auto memPort : moduleOp.getArguments()) {
-    auto memPortType = memPort.getType().cast<FIRRTLType>();
-    for (auto field :
-         llvm::enumerate(memPortType.cast<BundleType>().getElements())) {
-      auto fieldValue =
-          builder.create<SubfieldOp>(op.getLoc(), memPort, field.index());
-      // Create the connection between module arguments and the external module,
-      // making sure that sinks are on the LHS
-      if (!field.value().isFlip)
-        builder.create<ConnectOp>(op.getLoc(), *extResultIt, fieldValue);
-      else
-        builder.create<ConnectOp>(op.getLoc(), fieldValue, *extResultIt);
-      // advance the external module field iterator
-      ++extResultIt;
-    }
+  for (auto memPort : llvm::enumerate(moduleOp.getArguments())) {
+    builder.create<ConnectOp>(op.getLoc(), newMemOp.getResult(memPort.index()),
+                              memPort.value());
   }
 
   return moduleOp;
@@ -275,7 +270,7 @@ static void createWiresForMemoryPorts(OpBuilder builder, Location loc, MemOp op,
 
 static void
 replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
-                            MemOp memOp) {
+                            MemOp memOp, std::set<FModuleOp> &newMods) {
 
   // The module we will be replacing the MemOp with.  If we don't have a
   // suitable memory module already created, a new one representing the memory
@@ -301,10 +296,12 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
     // Typically has 1R + 1W memory port, which has 4+5=9 fields.
     SmallVector<PortInfo, 9> extPortList;
     getBlackBoxPortsForMemOp(memOp, memPorts, extPortList);
-    auto extModuleOp = createBlackboxModuleForMem(memOp, extPortList);
-    moduleOp = createWrapperModule(memOp, memPorts, extModuleOp, extPortList,
-                                   modPorts);
+    auto memMod = memOp->getParentOfType<ModuleOp>(); // createBlackboxModuleForMem(memOp,
+                                                      // extPortList);
+    moduleOp =
+        createWrapperModule(memOp, memPorts, memMod, extPortList, modPorts);
     knownMems[memOp] = moduleOp;
+    newMods.insert(moduleOp);
   }
 
   // Create an instance of the wrapping module
@@ -330,10 +327,14 @@ replaceMemsWithWrapperModules(CircuitOp circuit,
   /// A set of replaced memory operations.  When two memory operations
   /// share the same types, they can share the same modules.
   DenseMap<MemOp, FModuleOp, MemOpInfo> knownMems;
-  for (auto fmodule : circuit.getOps<FModuleOp>()) {
+  std::set<FModuleOp> newMods;
+  auto mods = circuit.getOps<FModuleOp>();
+  for (auto fmodule : mods) {
+    if (newMods.count(fmodule))
+      continue;
     for (auto memOp : llvm::make_early_inc_range(fmodule.getOps<MemOp>())) {
       if (shouldReplace(memOp)) {
-        replaceMemWithWrapperModule(knownMems, memOp);
+        replaceMemWithWrapperModule(knownMems, memOp, newMods);
       }
     }
   }
