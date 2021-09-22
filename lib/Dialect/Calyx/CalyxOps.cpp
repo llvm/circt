@@ -507,9 +507,9 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
   auto parsePort = [&]() -> ParseResult {
     OpAsmParser::OperandType port;
     Type portType;
-    // Expect each port to have the form `%<ssa-name> : <type>`
-    if (failed(parser.parseRegionArgument(port)) ||
-        failed(parser.parseColon()) || failed(parser.parseType(portType)))
+    // Expect each port to have the form `%<ssa-name> : <type>`.
+    if (parser.parseRegionArgument(port) || parser.parseColon() ||
+        parser.parseType(portType))
       return failure();
     ports.push_back(port);
     portTypes.push_back(portType);
