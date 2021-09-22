@@ -182,7 +182,7 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   size_t readUnderWrite;
-  WUW writeUnderWrite;
+  hw::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
 
   // Location is carried along but not considered part of the identity of this.
@@ -279,9 +279,10 @@ static FirMemory analyzeMemOp(MemOp op) {
     width = 0;
   }
 
-  return {numReadPorts,   numWritePorts,    numReadWritePorts, (size_t)width,
-          op.depth(),     op.readLatency(), op.writeLatency(), (size_t)op.ruw(),
-          WUW::PortOrder, writeClockIDs,    op.getLoc()};
+  return {numReadPorts,      numWritePorts,    numReadWritePorts,
+          (size_t)width,     op.depth(),       op.readLatency(),
+          op.writeLatency(), (size_t)op.ruw(), hw::WUW::PortOrder,
+          writeClockIDs,     op.getLoc()};
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
@@ -622,7 +623,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("readUnderWrite",
                        b.getUI32IntegerAttr(mem.readUnderWrite)),
         b.getNamedAttr("writeUnderWrite",
-                       WUWAttr::get(b.getContext(), mem.writeUnderWrite)),
+                       hw::WUWAttr::get(b.getContext(), mem.writeUnderWrite)),
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory

@@ -85,7 +85,9 @@ def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim"> {
   let mnemonic = "param.verbatim";
 }
 
+let cppNamespace = "circt::hw" in {
 def WUW_Undefined : I32EnumAttrCase<"Undefined", 0>;
 def WUW_PortOrder : I32EnumAttrCase<"PortOrder", 1>;
 def WUWAttr : I32EnumAttr<"WUW", "Write Under Write Behavior",
                           [WUW_Undefined, WUW_PortOrder]>;
+}
