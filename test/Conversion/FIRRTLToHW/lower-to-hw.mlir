@@ -966,4 +966,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %tmp = firrtl.node %clock1 : !firrtl.clock
     firrtl.connect %clk_ab_node_w1, %tmp : !firrtl.clock, !firrtl.clock
   }
+
+  // CHECK-LABEL: hw.module @InstanceWithSymbol
+  firrtl.module @InstanceWithSymbol() {
+    // CHECK-NEXT: hw.instance "dut" sym @__dut__ @FooDUT
+    firrtl.instance @FooDUT {name = "dut", sym_name = "__dut__"}
+  }
+
 }
