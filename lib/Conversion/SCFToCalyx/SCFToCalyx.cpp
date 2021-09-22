@@ -821,6 +821,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 ///       ERO to jump to
 ///  ii : Rewrite scf.yield calls inside the ERO to branch to the sink block
 ///  iii: inline the ERO region
+/// TODO(#1850) evaluate the usefulness of this lowering pattern.
 class InlineExecuteRegionOpPattern
     : public OpRewritePattern<scf::ExecuteRegionOp> {
   using OpRewritePattern::OpRewritePattern;
