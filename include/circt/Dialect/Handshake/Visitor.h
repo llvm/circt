@@ -96,14 +96,14 @@ public:
   ResultType dispatchStdExprVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<
-            // Integer binary expressions.
-            CmpIOp, AddIOp, SubIOp, MulIOp, SignedDivIOp, SignedRemIOp,
-            UnsignedDivIOp, UnsignedRemIOp, XOrOp, AndOp, OrOp, ShiftLeftOp,
-            SignedShiftRightOp, UnsignedShiftRightOp>(
-            [&](auto opNode) -> ResultType {
-              return thisCast->visitStdExpr(opNode, args...);
-            })
+        .template Case<IndexCastOp, ZeroExtendIOp, TruncateIOp,
+                       // Integer binary expressions.
+                       CmpIOp, AddIOp, SubIOp, MulIOp, SignedDivIOp,
+                       SignedRemIOp, UnsignedDivIOp, UnsignedRemIOp, XOrOp,
+                       AndOp, OrOp, ShiftLeftOp, SignedShiftRightOp,
+                       UnsignedShiftRightOp>([&](auto opNode) -> ResultType {
+          return thisCast->visitStdExpr(opNode, args...);
+        })
         .Default([&](auto opNode) -> ResultType {
           return thisCast->visitInvalidOp(op, args...);
         });
@@ -125,6 +125,10 @@ public:
   ResultType visitStdExpr(OPTYPE op, ExtraArgs... args) {                      \
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);   \
   }
+
+  HANDLE(IndexCastOp);
+  HANDLE(ZeroExtendIOp);
+  HANDLE(TruncateIOp);
 
   // Integer binary expressions.
   HANDLE(CmpIOp);
