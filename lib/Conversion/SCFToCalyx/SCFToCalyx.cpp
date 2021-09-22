@@ -13,11 +13,14 @@
 #include "circt/Conversion/SCFToCalyx/SCFToCalyx.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #include <variant>
 
@@ -35,6 +38,60 @@ namespace circt {
 using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 
 //===----------------------------------------------------------------------===//
+// Utility functions
+//===----------------------------------------------------------------------===//
+
+/// Tries to match a constant value defined by op. If the match was
+/// successful, returns true and binds the constant to 'value'. If unsuccessful,
+/// the value is unmodified.
+static bool matchConstantOp(Operation *op, APInt &value) {
+  return mlir::detail::constant_int_op_binder(&value).match(op);
+}
+
+/// Creates a DictionaryAttr containing a unit attribute 'name'. Used for
+/// defining mandatory port attributes for calyx::ComponentOp's.
+static DictionaryAttr getMandatoryPortAttr(MLIRContext *ctx, StringRef name) {
+  return DictionaryAttr::get(
+      ctx, {NamedAttribute(Identifier::get(name, ctx), UnitAttr::get(ctx))});
+}
+
+/// Adds the mandatory Calyx component I/O ports (->[clk, reset, go], [done]->)
+/// to ports.
+static void
+addMandatoryComponentPorts(PatternRewriter &rewriter,
+                           SmallVectorImpl<calyx::PortInfo> &ports) {
+  MLIRContext *ctx = rewriter.getContext();
+  ports.push_back({.name = rewriter.getStringAttr("clk"),
+                   .type = rewriter.getI1Type(),
+                   .direction = calyx::Direction::Input,
+                   .attributes = getMandatoryPortAttr(ctx, "clk")});
+  ports.push_back({.name = rewriter.getStringAttr("reset"),
+                   .type = rewriter.getI1Type(),
+                   .direction = calyx::Direction::Input,
+                   .attributes = getMandatoryPortAttr(ctx, "reset")});
+  ports.push_back({.name = rewriter.getStringAttr("go"),
+                   .type = rewriter.getI1Type(),
+                   .direction = calyx::Direction::Input,
+                   .attributes = getMandatoryPortAttr(ctx, "go")});
+  ports.push_back({.name = rewriter.getStringAttr("done"),
+                   .type = rewriter.getI1Type(),
+                   .direction = calyx::Direction::Output,
+                   .attributes = getMandatoryPortAttr(ctx, "done")});
+}
+
+/// Creates a new calyx::CombGroupOp or calyx::GroupOp group within compOp.
+template <typename TGroup>
+static TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
+                          Location loc, Twine uniqueName) {
+
+  IRRewriter::InsertionGuard guard(rewriter);
+  rewriter.setInsertionPointToEnd(compOp.getWiresOp().getBody());
+  auto groupOp = rewriter.create<TGroup>(loc, uniqueName.str());
+  rewriter.createBlock(&groupOp.getBodyRegion());
+  return groupOp;
+}
+
+//===----------------------------------------------------------------------===//
 // Lowering state classes
 //===----------------------------------------------------------------------===//
 
@@ -48,6 +105,9 @@ public:
       : programLoweringState(pls), compOp(compOp) {}
 
   ProgramLoweringState &getProgramState() { return programLoweringState; }
+
+  /// Returns the calyx::ComponentOp associated with this lowering state.
+  calyx::ComponentOp getComponentOp() { return compOp; }
 
   /// Returns a unique name within compOp with the provided prefix.
   std::string getUniqueName(StringRef prefix) {
@@ -71,6 +131,37 @@ public:
     opNames[op] = getUniqueName(prefix);
   }
 
+  template <typename TLibraryOp>
+  TLibraryOp getNewLibraryOpInstance(PatternRewriter &rewriter, Location loc,
+                                     TypeRange resTypes) {
+    IRRewriter::InsertionGuard guard(rewriter);
+    rewriter.setInsertionPoint(compOp.getBody(), compOp.getBody()->begin());
+    auto name = TLibraryOp::getOperationName().split(".").second;
+    auto uniqueName = getUniqueName(name);
+    return rewriter.create<TLibraryOp>(loc, rewriter.getStringAttr(uniqueName),
+                                       resTypes);
+  }
+
+  /// Register value v as being evaluated when scheduling group.
+  void registerEvaluatingGroup(Value v, calyx::GroupInterface group) {
+    valueGroupAssigns[v] = group;
+  }
+
+  /// Return the group which evaluates the value v. Optionally, caller may
+  /// specify the expected type of the group.
+  template <typename TGroupOp = calyx::GroupInterface>
+  TGroupOp getEvaluatingGroup(Value v) {
+    auto it = valueGroupAssigns.find(v);
+    assert(it != valueGroupAssigns.end() && "No group evaluating value!");
+    if constexpr (std::is_same<TGroupOp, calyx::GroupInterface>::value)
+      return it->second;
+    else {
+      auto group = dyn_cast<TGroupOp>(it->second.getOperation());
+      assert(group && "Actual group type differed from expected group type");
+      return group;
+    }
+  }
+
 private:
   /// A reference to the parent program lowering state.
   ProgramLoweringState &programLoweringState;
@@ -84,6 +175,9 @@ private:
 
   /// A mapping from Operations and previously assigned unique name of the op.
   std::map<Operation *, std::string> opNames;
+
+  /// A mapping between SSA values and the groups which assign them.
+  DenseMap<Value, calyx::GroupInterface> valueGroupAssigns;
 };
 
 /// ProgramLoweringState handles the current state of lowering of a Calyx
@@ -238,6 +332,244 @@ private:
 //===----------------------------------------------------------------------===//
 // Conversion patterns
 //===----------------------------------------------------------------------===//
+
+/// Iterate through the operations of a source function and instantiate
+/// components or primitives based on the type of the operations.
+class BuildOpGroups : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    /// We walk the operations of the funcOp to ensure that all def's have
+    /// been visited before their uses.
+    bool res = true;
+    funcOp.walk([&](Operation *_op) {
+      res &=
+          TypeSwitch<mlir::Operation *, LogicalResult>(_op)
+              .template Case<ConstantOp,
+                             /// standard arithmetic
+                             AddIOp, SubIOp, CmpIOp, ShiftLeftOp,
+                             UnsignedShiftRightOp, SignedShiftRightOp, AndOp,
+                             XOrOp, OrOp, ZeroExtendIOp, TruncateIOp>(
+                  [&](auto op) { return buildOp(rewriter, op); })
+              .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp>(
+                  [&](auto) {
+                    /// Skip: these special cases will be handled separately.
+                    return success();
+                  })
+              .Default([&](auto) {
+                assert(false && "Unhandled operation during BuildOpGroups()");
+                return failure();
+              })
+              .succeeded();
+
+      return res ? WalkResult::advance() : WalkResult::interrupt();
+    });
+
+    return success(res);
+  }
+
+private:
+  /// Op builder specializations.
+  LogicalResult buildOp(PatternRewriter &rewriter, ConstantOp constOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        UnsignedShiftRightOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, SignedShiftRightOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, ShiftLeftOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, AndOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, OrOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, XOrOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, CmpIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, TruncateIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, ZeroExtendIOp op) const;
+
+  /// buildLibraryOp will build a TCalyxLibOp inside a TGroupOp based on the
+  /// source operation TSrcOp.
+  template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
+  LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op,
+                               TypeRange srcTypes, TypeRange dstTypes) const {
+    SmallVector<Type> types;
+    llvm::append_range(types, srcTypes);
+    llvm::append_range(types, dstTypes);
+
+    auto calyxOp = getComponentState().getNewLibraryOpInstance<TCalyxLibOp>(
+        rewriter, op.getLoc(), types);
+
+    auto directions = calyxOp.portDirections();
+    SmallVector<Value, 4> opInputPorts;
+    SmallVector<Value, 4> opOutputPorts;
+    for (auto dir : enumerate(directions)) {
+      if (dir.value() == calyx::Direction::Input)
+        opInputPorts.push_back(calyxOp.getResult(dir.index()));
+      else
+        opOutputPorts.push_back(calyxOp.getResult(dir.index()));
+    }
+    assert(
+        opInputPorts.size() == op->getNumOperands() &&
+        opOutputPorts.size() == op->getNumResults() &&
+        "Expected an equal number of in/out ports in the Calyx library op with "
+        "respect to the number of operands/results of the source operation.");
+
+    /// Create assignments to the inputs of the library op.
+    auto group = createGroupForOp<TGroupOp>(rewriter, op);
+    rewriter.setInsertionPointToEnd(group.getBody());
+    for (auto dstOp : enumerate(opInputPorts))
+      rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
+                                       op->getOperand(dstOp.index()), Value());
+
+    /// Replace the result values of the source operator with the new operator.
+    for (auto res : enumerate(opOutputPorts)) {
+      getComponentState().registerEvaluatingGroup(res.value(), group);
+      op->getResult(res.index()).replaceAllUsesWith(res.value());
+    }
+    return success();
+  }
+
+  /// buildLibraryOp which provides in- and output types based on the operands
+  /// and results of the op argument.
+  template <typename TGroupOp, typename TCalyxLibOp, typename TSrcOp>
+  LogicalResult buildLibraryOp(PatternRewriter &rewriter, TSrcOp op) const {
+    return buildLibraryOp<TGroupOp, TCalyxLibOp, TSrcOp>(
+        rewriter, op, op.getOperandTypes(), op->getResultTypes());
+  }
+
+  /// Creates a group named by the basic block which the input op resides in.
+  template <typename TGroupOp>
+  TGroupOp createGroupForOp(PatternRewriter &rewriter, Operation *op) const {
+    Block *block = op->getBlock();
+    auto groupName = getComponentState().getUniqueName(
+        getComponentState().getProgramState().blockName(block));
+    return createGroup<TGroupOp>(rewriter, getComponentState().getComponentOp(),
+                                 block->front().getLoc(), groupName);
+  }
+};
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     ConstantOp constOp) const {
+  /// Move constant operations to the compOp body as hw::ConstantOp's.
+  APInt value;
+  matchConstantOp(constOp, value);
+  auto hwConstOp = rewriter.replaceOpWithNewOp<hw::ConstantOp>(constOp, value);
+  hwConstOp->moveAfter(getComponent()->getBody(),
+                       getComponent()->getBody()->begin());
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     AddIOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::AddLibOp>(rewriter, op);
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     SubIOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::SubLibOp>(rewriter, op);
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     UnsignedShiftRightOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::RshLibOp>(rewriter, op);
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     SignedShiftRightOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::SrshLibOp>(rewriter, op);
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     ShiftLeftOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::LshLibOp>(rewriter, op);
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     AndOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::AndLibOp>(rewriter, op);
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter, OrOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::OrLibOp>(rewriter, op);
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     XOrOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::XorLibOp>(rewriter, op);
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     CmpIOp op) const {
+  switch (op.predicate()) {
+  case CmpIPredicate::eq:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::EqLibOp>(rewriter, op);
+  case CmpIPredicate::ne:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::NeqLibOp>(rewriter, op);
+  case CmpIPredicate::uge:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::GeLibOp>(rewriter, op);
+  case CmpIPredicate::ult:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::LtLibOp>(rewriter, op);
+  case CmpIPredicate::ugt:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::GtLibOp>(rewriter, op);
+  case CmpIPredicate::ule:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::LeLibOp>(rewriter, op);
+  case CmpIPredicate::sge:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::SgeLibOp>(rewriter, op);
+  case CmpIPredicate::slt:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::SltLibOp>(rewriter, op);
+  case CmpIPredicate::sgt:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::SgtLibOp>(rewriter, op);
+  case CmpIPredicate::sle:
+    return buildLibraryOp<calyx::CombGroupOp, calyx::SleLibOp>(rewriter, op);
+  default:
+    llvm_unreachable("unsupported comparison predicate");
+  }
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     TruncateIOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::SliceLibOp>(
+      rewriter, op, {op.getOperand().getType()}, {op.getType()});
+}
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     ZeroExtendIOp op) const {
+  return buildLibraryOp<calyx::CombGroupOp, calyx::PadLibOp>(
+      rewriter, op, {op.getOperand().getType()}, {op.getType()});
+}
+
+/// Creates a new Calyx component for each FuncOp in the program.
+struct FuncOpConversion : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    /// Create I/O ports.
+    SmallVector<calyx::PortInfo> ports;
+    FunctionType funcType = funcOp.getType();
+    for (auto &arg : enumerate(funcOp.getArguments()))
+      ports.push_back(calyx::PortInfo{
+          .name = rewriter.getStringAttr("in" + std::to_string(arg.index())),
+          .type = arg.value().getType(),
+          .direction = calyx::Direction::Input,
+          .attributes = DictionaryAttr::get(rewriter.getContext(), {})});
+
+    for (auto &res : enumerate(funcType.getResults()))
+      ports.push_back(calyx::PortInfo{
+          .name = rewriter.getStringAttr("out" + std::to_string(res.index())),
+          .type = res.value(),
+          .direction = calyx::Direction::Output,
+          .attributes = DictionaryAttr::get(rewriter.getContext(), {})});
+
+    addMandatoryComponentPorts(rewriter, ports);
+
+    /// Create a calyx::ComponentOp corresponding to the to-be-lowered function.
+    auto compOp = rewriter.create<calyx::ComponentOp>(
+        funcOp.getLoc(), rewriter.getStringAttr(funcOp.sym_name()), ports);
+    rewriter.createBlock(&compOp.getWiresOp().getBodyRegion());
+    rewriter.createBlock(&compOp.getControlOp().getBodyRegion());
+
+    /// Rewrite the funcOp SSA argument values to the CompOp arguments.
+    for (auto &arg : enumerate(funcOp.getArguments())) {
+      arg.value().replaceAllUsesWith(compOp.getArgument(arg.index()));
+    }
+
+    /// Store function to component mapping for future reference.
+    funcMap[funcOp] = compOp;
+    return success();
+  }
+};
 
 struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
   ModuleOpConversion(MLIRContext *context, StringRef topLevelFunction,
@@ -443,6 +775,18 @@ void SCFToCalyxPass::runOnOperation() {
   /// --------------------------------------------------------------------------
   FuncMapping funcMap;
   SmallVector<LoweringPattern, 8> loweringPatterns;
+
+  /// Creates a new Calyx component for each FuncOp in the inpurt module.
+  addOncePattern<FuncOpConversion>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pattern converts operations within basic blocks to Calyx library
+  /// operators. Combinational operations are assigned inside a
+  /// calyx::CombGroupOp, and sequential inside calyx::GroupOps.
+  /// Sequential groups are registered with the Block* of which the operation
+  /// originated from. This is used during control schedule generation. By
+  /// having a distinct group for each operation, groups are analogous to SSA
+  /// values in the source program.
+  addOncePattern<BuildOpGroups>(loweringPatterns, funcMap, *loweringState);
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
