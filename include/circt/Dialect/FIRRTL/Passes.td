@@ -15,6 +15,22 @@
 
 include "mlir/Pass/PassBase.td"
 
+def LowerFIRRTLAnnotations : Pass<"firrtl-lower-annotations", "firrtl::CircuitOp"> {
+  let summary = "Lower FIRRTL annotations to usable entities";
+  let description = [{
+    Lower FIRRTL annotations to usable forms.  FIRRTL annotations are a big bag
+    of semi-structured, irregular json.  This pass normalizes all supported
+    annotations and annotation paths.
+  }];
+  let constructor = "circt::firrtl::createLowerFIRRTLAnnotationsPass()";
+  let options = [
+    Option<"ignoreAnnotationClassless", "disable-annotation-classless", "bool", "false",
+      "Ignore classless annotations.">,
+    Option<"ignoreAnnotationUnknown", "disable-annotation-unknown", "bool", "true",
+      "Ignore unknown annotations.">
+  ];
+}
+
 def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   let summary = "Lower FIRRTL types to ground types";
   let description = [{

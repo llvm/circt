@@ -40,6 +40,9 @@ bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
                               CircuitOp circuit, unsigned &annotationID,
                               Location loc, size_t &nlaNumber);
 
+bool fromJSONRaw(llvm::json::Value &value, StringRef circuitTarget,
+                 SmallVectorImpl<Attribute> &attrs, llvm::json::Path path,
+                 MLIRContext *context);
 } // namespace firrtl
 } // namespace circt
 

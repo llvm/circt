@@ -85,6 +85,22 @@ def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim"> {
   let mnemonic = "param.verbatim";
 }
 
+
+let cppNamespace = "circt::hw" in {
+def PBO_Add : I32EnumAttrCase<"Add", 0, "add">;
+def PBO_Mul : I32EnumAttrCase<"Mul", 1, "mul">;
+def PBOAttr : I32EnumAttr<"PBO", "Parameter Binary Operation Code",
+                          [PBO_Add, PBO_Mul]>;
+}
+
+def ParamBinaryAttr : AttrDef<HWDialect, "ParamBinary"> {
+  let summary = "Binary operation combining two parameter expressions";
+  let parameters = (ins "PBO":$opcode,
+                        "::mlir::Attribute":$lhs, "::mlir::Attribute":$rhs,
+                        AttributeSelfTypeParameter<"">:$type);
+  let mnemonic = "param.binary";
+}
+
 let cppNamespace = "circt::hw" in {
 def WUW_Undefined : I32EnumAttrCase<"Undefined", 0>;
 def WUW_PortOrder : I32EnumAttrCase<"PortOrder", 1>;

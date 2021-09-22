@@ -220,6 +220,19 @@ remapRenamedParameters(Attribute value, HWModuleOp module,
       value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
     return value;
 
+  // Remap leaves of expressions if needed.
+  if (auto binOp = value.dyn_cast<ParamBinaryAttr>()) {
+    auto newLHS =
+        remapRenamedParameters(binOp.getLhs(), module, renamedParameterInfo);
+    auto newRHS =
+        remapRenamedParameters(binOp.getRhs(), module, renamedParameterInfo);
+    // Don't rebuild an attribute if nothing changed.
+    if (newLHS == binOp.getLhs() && newRHS == binOp.getRhs())
+      return value;
+    return ParamBinaryAttr::get(value.getContext(), binOp.getOpcode(), newLHS,
+                                newRHS, value.getType());
+  }
+
   // TODO: Handle nested expressions when we support them.
 
   // Otherwise this must be a parameter reference.

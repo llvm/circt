@@ -37,7 +37,16 @@ namespace circt {
 /// Calyx component.
 using FuncMapping = DenseMap<FuncOp, calyx::ComponentOp>;
 
-using Scheduleable = std::variant<calyx::GroupOp>;
+struct WhileScheduleable {
+  /// While operation to schedule.
+  scf::WhileOp whileOp;
+  /// The group to schedule before the while operation This group should set the
+  /// initial values of the loop init_args registers.
+  calyx::GroupOp initGroup;
+};
+
+// A variant of types representing scheduleable operations.
+using Scheduleable = std::variant<calyx::GroupOp, WhileScheduleable>;
 
 //===----------------------------------------------------------------------===//
 // Utility functions
@@ -97,6 +106,13 @@ static Value getComponentOutput(mlir::FuncOp funcOp, calyx::ComponentOp compOp,
   assert(compOp.getNumArguments() > resIdx &&
          "Exceeded number of arguments in the Component");
   return compOp.getArgument(resIdx);
+}
+
+/// Creates a SeqOp containing an inner body block.
+static calyx::SeqOp createSeqOp(PatternRewriter &rewriter, Location loc) {
+  auto seqOp = rewriter.create<calyx::SeqOp>(loc);
+  rewriter.createBlock(&seqOp.getRegion());
+  return seqOp;
 }
 
 //===----------------------------------------------------------------------===//
@@ -211,6 +227,82 @@ public:
     blockScheduleables[block].push_back(scheduleable);
   }
 
+  /// Returns an ordered list of schedulables which registered themselves to be
+  /// a result of lowering the block in the source program. The list order
+  /// follows def-use chains between the scheduleables in the block.
+  SmallVector<Scheduleable> getBlockScheduleables(mlir::Block *block) {
+    auto it = blockScheduleables.find(block);
+    if (it != blockScheduleables.end())
+      return it->second;
+    /// In cases of a block resulting in purely combinational logic, no
+    /// scheduleables registered themselves with the block.
+    return {};
+  }
+
+  /// Register 'grp' as a group which performs block argument
+  /// register transfer when transitioning from basic block from to to.
+  void addBlockArgGroup(Block *from, Block *to, calyx::GroupOp grp) {
+    blockArgGroups[from][to].push_back(grp);
+  }
+
+  /// Returns a list of groups to be evaluated to perform the block argument
+  /// register assignments when transitioning from basic block 'from' to 'to'.
+  ArrayRef<calyx::GroupOp> getBlockArgGroups(Block *from, Block *to) {
+    return blockArgGroups[from][to];
+  }
+
+  /// Register reg as being the idx'th argument register for block.
+  void addBlockArgReg(Block *block, calyx::RegisterOp reg, unsigned idx) {
+    assert(blockArgRegs[block].count(idx) == 0);
+    assert(idx < block->getArguments().size());
+    blockArgRegs[block][idx] = reg;
+  }
+
+  /// Return a mapping of block argument indices to block argument registers.
+  const DenseMap<unsigned, calyx::RegisterOp> &getBlockArgRegs(Block *block) {
+    return blockArgRegs[block];
+  }
+
+  /// Register reg as being the idx'th iter_args register for 'whileOp'.
+  void addWhileIterReg(scf::WhileOp whileOp, calyx::RegisterOp reg,
+                       unsigned idx) {
+    assert(whileIterRegs[whileOp].count(idx) == 0 &&
+           "A register was already registered for the given while iter_arg "
+           "index");
+    assert(idx < whileOp.getAfterArguments().size());
+    whileIterRegs[whileOp][idx] = reg;
+  }
+
+  /// Return a mapping of block argument indices to block argument registers.
+  calyx::RegisterOp getWhileIterReg(scf::WhileOp whileOp, unsigned idx) {
+    auto iterRegs = getWhileIterRegs(whileOp);
+    auto it = iterRegs.find(idx);
+    assert(it != iterRegs.end() &&
+           "No iter arg register set for the provided index");
+    return it->second;
+  }
+
+  /// Return a mapping of block argument indices to block argument registers.
+  const DenseMap<unsigned, calyx::RegisterOp> &
+  getWhileIterRegs(scf::WhileOp whileOp) {
+    return whileIterRegs[whileOp];
+  }
+
+  /// Registers grp to be the while latch group of whileOp.
+  void setWhileLatchGroup(scf::WhileOp whileOp, calyx::GroupOp grp) {
+    assert(whileLatchGroups.count(whileOp) == 0 &&
+           "A latch group was already set for this whileOp");
+    whileLatchGroups[whileOp] = grp;
+  }
+
+  /// Retrieve the while latch group registerred for whileOp.
+  calyx::GroupOp getWhileLatchGroup(scf::WhileOp whileOp) {
+    auto it = whileLatchGroups.find(whileOp);
+    assert(it != whileLatchGroups.end() &&
+           "No while latch group was set for this whileOp");
+    return it->second;
+  }
+
 private:
   /// A reference to the parent program lowering state.
   ProgramLoweringState &programLoweringState;
@@ -237,6 +329,24 @@ private:
   /// BlockScheduleables is a list of scheduleables that should be
   /// sequentially executed when executing the associated basic block.
   DenseMap<mlir::Block *, SmallVector<Scheduleable>> blockScheduleables;
+
+  /// A mapping from blocks to block argument registers.
+  DenseMap<Block *, DenseMap<unsigned, calyx::RegisterOp>> blockArgRegs;
+
+  /// Block arg groups is a list of groups that should be sequentially
+  /// executed when passing control from the source to destination block.
+  /// Block arg groups are executed before blockScheduleables (akin to a
+  /// phi-node).
+  DenseMap<Block *, DenseMap<Block *, SmallVector<calyx::GroupOp>>>
+      blockArgGroups;
+
+  /// A while latch group is a group that should be sequentially executed when
+  /// finishing a while loop body. The execution of this group will write the
+  /// yield'ed loop body values to the iteration argument registers.
+  DenseMap<Operation *, calyx::GroupOp> whileLatchGroups;
+
+  /// A mapping from while ops to iteration argument registers.
+  DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> whileIterRegs;
 };
 
 /// ProgramLoweringState handles the current state of lowering of a Calyx
@@ -308,6 +418,26 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
   rewriter.create<calyx::AssignOp>(
       loc, reg.write_en(), state.getConstant(rewriter, loc, 1, 1), Value());
   rewriter.create<calyx::GroupDoneOp>(loc, reg.donePort(), Value());
+}
+
+static calyx::GroupOp buildWhileIterArgAssignments(
+    PatternRewriter &rewriter, ComponentLoweringState &state, Location loc,
+    scf::WhileOp whileOp, Twine uniqueSuffix, ValueRange ops) {
+  assert(whileOp);
+  /// Pass iteration arguments through registers. This follows closely
+  /// to what is done for branch ops.
+  auto groupName = "assign_" + uniqueSuffix;
+  auto groupOp = createGroup<calyx::GroupOp>(rewriter, state.getComponentOp(),
+                                             loc, groupName);
+  // Create register assignment for each iter_arg. a calyx::GroupDone signal
+  // is created for each register. This is later cleaned up in
+  // GroupDoneCleanupPattern.
+  for (auto arg : enumerate(ops)) {
+    auto reg = state.getWhileIterReg(whileOp, arg.index());
+    buildAssignmentsForRegisterWrite(state, rewriter, groupOp, reg,
+                                     arg.value());
+  }
+  return groupOp;
 }
 
 //===----------------------------------------------------------------------===//
@@ -431,7 +561,9 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
     funcOp.walk([&](Operation *_op) {
       opBuiltSuccessfully &=
           TypeSwitch<mlir::Operation *, bool>(_op)
-              .template Case<ConstantOp, ReturnOp,
+              .template Case<ConstantOp, ReturnOp, BranchOpInterface,
+                             /// SCF
+                             scf::YieldOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShiftLeftOp,
                              UnsignedShiftRightOp, SignedShiftRightOp, AndOp,
@@ -456,6 +588,9 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
 
 private:
   /// Op builder specializations.
+  LogicalResult buildOp(PatternRewriter &rewriter, scf::YieldOp yieldOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        BranchOpInterface brOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ConstantOp constOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
@@ -531,6 +666,53 @@ private:
                                  block->front().getLoc(), groupName);
   }
 };
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     scf::YieldOp yieldOp) const {
+  if (yieldOp.getOperands().size() == 0)
+    return success();
+  auto whileOp = dyn_cast<scf::WhileOp>(yieldOp->getParentOp());
+  assert(whileOp);
+  yieldOp.getOperands();
+  auto assignGroup = buildWhileIterArgAssignments(
+      rewriter, getComponentState(), yieldOp.getLoc(), whileOp,
+      getComponentState().getUniqueName(whileOp) + "_latch",
+      yieldOp.getOperands());
+  getComponentState().setWhileLatchGroup(whileOp, assignGroup);
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     BranchOpInterface brOp) const {
+  /// Branch argument passing group creation
+  /// Branch operands are passed through registers. In BuildBBRegs we
+  /// created registers for all branch arguments of each block. We now
+  /// create groups for assigning values to these registers.
+  Block *srcBlock = brOp->getBlock();
+  for (auto succBlock : enumerate(brOp->getSuccessors())) {
+    auto succOperands = brOp.getSuccessorOperands(succBlock.index());
+    if (!succOperands.hasValue() || succOperands.getValue().size() == 0)
+      continue;
+    // Create operand passing group
+    std::string groupName = progState().blockName(srcBlock) + "_to_" +
+                            progState().blockName(succBlock.value());
+    auto groupOp = createGroup<calyx::GroupOp>(rewriter, *getComponent(),
+                                               brOp.getLoc(), groupName);
+    // Fetch block argument registers associated with the basic block
+    auto dstBlockArgRegs =
+        getComponentState().getBlockArgRegs(succBlock.value());
+    // Create register assignment for each block argument
+    for (auto arg : enumerate(succOperands.getValue())) {
+      auto reg = dstBlockArgRegs[arg.index()];
+      buildAssignmentsForRegisterWrite(getComponentState(), rewriter, groupOp,
+                                       reg, arg.value());
+    }
+    /// Register the group as a block argument group, to be executed
+    /// when entering the successor block from this block (srcBlock).
+    getComponentState().addBlockArgGroup(srcBlock, succBlock.value(), groupOp);
+  }
+  return success();
+}
 
 /// For each return statement, we create a new group for assigning to the
 /// previously created return value registers.
@@ -619,9 +801,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     return buildLibraryOp<calyx::CombGroupOp, calyx::SgtLibOp>(rewriter, op);
   case CmpIPredicate::sle:
     return buildLibraryOp<calyx::CombGroupOp, calyx::SleLibOp>(rewriter, op);
-  default:
-    llvm_unreachable("unsupported comparison predicate");
   }
+  llvm_unreachable("unsupported comparison predicate");
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      TruncateIOp op) const {
@@ -633,6 +814,55 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return buildLibraryOp<calyx::CombGroupOp, calyx::PadLibOp>(
       rewriter, op, {op.getOperand().getType()}, {op.getType()});
 }
+
+/// Inlines Calyx ExecuteRegionOp operations within their parent blocks.
+/// An execution region op (ERO) is inlined by:
+///  i  : add a sink basic block for all yield operations inside the
+///       ERO to jump to
+///  ii : Rewrite scf.yield calls inside the ERO to branch to the sink block
+///  iii: inline the ERO region
+/// TODO(#1850) evaluate the usefulness of this lowering pattern.
+class InlineExecuteRegionOpPattern
+    : public OpRewritePattern<scf::ExecuteRegionOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(scf::ExecuteRegionOp execOp,
+                                PatternRewriter &rewriter) const override {
+    /// Determine type of "yield" operations inside the ERO.
+    TypeRange yieldTypes = execOp.getResultTypes();
+
+    /// Create sink basic block and rewrite uses of yield results to sink block
+    /// arguments.
+    rewriter.setInsertionPointAfter(execOp);
+    auto *sinkBlock = rewriter.splitBlock(
+        execOp->getBlock(),
+        execOp.getOperation()->getIterator()->getNextNode()->getIterator());
+    sinkBlock->addArguments(yieldTypes);
+    for (auto res : enumerate(execOp.getResults()))
+      res.value().replaceAllUsesWith(sinkBlock->getArgument(res.index()));
+
+    /// Rewrite yield calls as branches.
+    for (auto yieldOp :
+         make_early_inc_range(execOp.getRegion().getOps<scf::YieldOp>())) {
+      rewriter.setInsertionPointAfter(yieldOp);
+      rewriter.replaceOpWithNewOp<BranchOp>(yieldOp, sinkBlock,
+                                            yieldOp.getOperands());
+    }
+
+    /// Inline the regionOp.
+    auto *preBlock = execOp->getBlock();
+    auto *execOpEntryBlock = &execOp.getRegion().front();
+    auto *postBlock = execOp->getBlock()->splitBlock(execOp);
+    rewriter.inlineRegionBefore(execOp.getRegion(), postBlock);
+    rewriter.mergeBlocks(postBlock, preBlock);
+    rewriter.eraseOp(execOp);
+
+    /// Finally, erase the unused entry block of the execOp region.
+    rewriter.mergeBlocks(execOpEntryBlock, preBlock);
+
+    return success();
+  }
+};
 
 /// Creates a new Calyx component for each FuncOp in the program.
 struct FuncOpConversion : public FuncOpPartialLoweringPattern {
@@ -671,6 +901,104 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
 
     /// Store function to component mapping for future reference.
     funcMap[funcOp] = compOp;
+    return success();
+  }
+};
+
+/// In BuildWhileGroups, a register is created for each iteration argumenet of
+/// the while op. These registers are then written to on the while op
+/// terminating yield operation alongside before executing the whileOp in the
+/// schedule, to set the initial values of the argument registers.
+class BuildWhileGroups : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    LogicalResult res = success();
+    funcOp.walk([&](scf::WhileOp whileOp) {
+      getComponentState().setUniqueName(whileOp.getOperation(), "while");
+
+      /// Check for do-while loops.
+      /// TODO(mortbopet) can we support these? for now, do not support loops
+      /// where iterargs are changed in the 'before' region. scf.WhileOp also
+      /// has support for different types of iter_args and return args which we
+      /// also do not support; iter_args and while return values are placed in
+      /// the same registers.
+      for (auto barg : enumerate(whileOp.before().front().getArguments())) {
+        auto condOp = whileOp.getConditionOp().args()[barg.index()];
+        if (barg.value() != condOp) {
+          res = whileOp.emitError()
+                << progState().irName(barg.value())
+                << " != " << progState().irName(condOp)
+                << "do-while loops not supported; expected iter-args to "
+                   "remain untransformed in the 'before' region of the "
+                   "scf.while op.";
+          return WalkResult::interrupt();
+        }
+      }
+
+      /// Create iteration argument registers.
+      /// The iteration argument registers will be referenced:
+      /// - In the "before" part of the while loop, calculating the conditional,
+      /// - In the "after" part of the while loop,
+      /// - Outside the while loop, rewriting the while loop return values.
+      for (auto arg : enumerate(whileOp.getAfterArguments())) {
+        std::string name = getComponentState().getUniqueName(whileOp).str() +
+                           "_arg" + std::to_string(arg.index());
+        auto reg =
+            createReg(getComponentState(), rewriter, arg.value().getLoc(), name,
+                      arg.value().getType().getIntOrFloatBitWidth());
+        getComponentState().addWhileIterReg(whileOp, reg, arg.index());
+        arg.value().replaceAllUsesWith(reg.out());
+
+        /// Also replace uses in the "before" region of the while loop
+        whileOp.before()
+            .front()
+            .getArgument(arg.index())
+            .replaceAllUsesWith(reg.out());
+      }
+
+      /// Create iter args initial value assignment group
+      auto initGroupOp = buildWhileIterArgAssignments(
+          rewriter, getComponentState(), whileOp.getLoc(), whileOp,
+          getComponentState().getUniqueName(whileOp) + "_init",
+          whileOp.getOperands());
+
+      /// Add the while op to the list of scheduleable things in the current
+      /// block.
+      getComponentState().addBlockScheduleable(
+          whileOp->getBlock(), WhileScheduleable{whileOp, initGroupOp});
+      return WalkResult::advance();
+    });
+    return res;
+  }
+};
+
+/// Builds registers for each block argument in the program.
+class BuildBBRegs : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    funcOp.walk([&](Block *block) {
+      /// Do not register component input values.
+      if (block == &block->getParent()->front())
+        return;
+
+      for (auto arg : enumerate(block->getArguments())) {
+        Type argType = arg.value().getType();
+        assert(argType.isa<IntegerType>() && "unsupported block argument type");
+        unsigned width = argType.getIntOrFloatBitWidth();
+        std::string name =
+            progState().blockName(block) + "_arg" + std::to_string(arg.index());
+        auto reg = createReg(getComponentState(), rewriter,
+                             arg.value().getLoc(), name, width);
+        getComponentState().addBlockArgReg(block, reg, arg.index());
+        arg.value().replaceAllUsesWith(reg.out());
+      }
+    });
     return success();
   }
 };
@@ -740,6 +1068,205 @@ struct ModuleOpConversion : public OpRewritePattern<mlir::ModuleOp> {
 private:
   calyx::ProgramOp *programOpOutput = nullptr;
   StringRef topLevelFunction;
+};
+
+/// Builds a control schedule by traversing the CFG of the function and
+/// associating this with the previously created groups.
+/// For simplicity, the generated control flow is expanded for all possible
+/// paths in the input DAG. This elaborated control flow is later reduced in
+/// the runControlFlowSimplification passes.
+class BuildControl : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    auto *entryBlock = &funcOp.getBlocks().front();
+    rewriter.setInsertionPointToStart(getComponent()->getControlOp().getBody());
+    auto topLevelSeqOp = createSeqOp(rewriter, funcOp.getLoc());
+    DenseSet<Block *> path;
+    return buildCFGControl(path, rewriter, topLevelSeqOp.getBody(), nullptr,
+                           entryBlock);
+  }
+
+private:
+  /// Sequentially schedules the groups that registered themselves with
+  /// 'block'.
+  LogicalResult scheduleBasicBlock(PatternRewriter &rewriter,
+                                   const DenseSet<Block *> &path,
+                                   mlir::Block *parentCtrlBlock,
+                                   mlir::Block *block) const {
+    auto compBlockScheduleables =
+        getComponentState().getBlockScheduleables(block);
+    auto loc = block->front().getLoc();
+
+    if (compBlockScheduleables.size() > 1) {
+      auto seqOp = createSeqOp(rewriter, loc);
+      parentCtrlBlock = seqOp.getBody();
+    }
+
+    for (auto &group : compBlockScheduleables) {
+      rewriter.setInsertionPointToEnd(parentCtrlBlock);
+      if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
+        rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name(),
+                                         rewriter.getArrayAttr({}));
+      } else if (auto whileSchedPtr = std::get_if<WhileScheduleable>(&group);
+                 whileSchedPtr) {
+        auto &whileOp = whileSchedPtr->whileOp;
+
+        /// Insert while iter arg initialization group.
+        rewriter.create<calyx::EnableOp>(
+            loc, whileSchedPtr->initGroup.getName(), rewriter.getArrayAttr({}));
+
+        auto cond = whileOp.getConditionOp().getOperand(0);
+        auto condGroup =
+            getComponentState().getEvaluatingGroup<calyx::CombGroupOp>(cond);
+        auto symbolAttr = FlatSymbolRefAttr::get(
+            StringAttr::get(getContext(), condGroup.sym_name()));
+        auto whileCtrlOp =
+            rewriter.create<calyx::WhileOp>(loc, cond, symbolAttr);
+        auto *whileCtrlBlock = rewriter.createBlock(&whileCtrlOp.body(),
+                                                    whileCtrlOp.body().begin());
+        rewriter.setInsertionPointToEnd(whileCtrlBlock);
+        auto whileSeqOp = createSeqOp(rewriter, whileOp.getLoc());
+
+        /// Only schedule the after block. The 'before' block is
+        /// implicitly scheduled when evaluating the while condition.
+        LogicalResult res =
+            buildCFGControl(path, rewriter, whileSeqOp.getBody(), block,
+                            &whileOp.after().front());
+        // Insert loop-latch at the end of the while group
+        rewriter.setInsertionPointToEnd(whileSeqOp.getBody());
+        rewriter.create<calyx::EnableOp>(
+            loc, getComponentState().getWhileLatchGroup(whileOp).getName(),
+            rewriter.getArrayAttr({}));
+        if (res.failed())
+          return res;
+      } else
+        llvm_unreachable("Unknown scheduleable");
+    }
+    return success();
+  }
+
+  /// Schedules a block by inserting a branch argument assignment block (if any)
+  /// before recursing into the scheduling of the block innards.
+  /// Blocks 'from' and 'to' refer to blocks in the source program.
+  /// parentCtrlBlock refers to the control block wherein control operations are
+  /// to be inserted.
+  LogicalResult schedulePath(PatternRewriter &rewriter,
+                             const DenseSet<Block *> &path, Location loc,
+                             Block *from, Block *to,
+                             Block *parentCtrlBlock) const {
+    /// Schedule any registered block arguments to be executed before the body
+    /// of the branch.
+    rewriter.setInsertionPointToEnd(parentCtrlBlock);
+    auto preSeqOp = createSeqOp(rewriter, loc);
+    rewriter.setInsertionPointToEnd(preSeqOp.getBody());
+    for (auto barg : getComponentState().getBlockArgGroups(from, to))
+      rewriter.create<calyx::EnableOp>(loc, barg.sym_name(),
+                                       rewriter.getArrayAttr({}));
+
+    return buildCFGControl(path, rewriter, parentCtrlBlock, from, to);
+  }
+
+  LogicalResult buildCFGControl(DenseSet<Block *> path,
+                                PatternRewriter &rewriter,
+                                mlir::Block *parentCtrlBlock,
+                                mlir::Block *preBlock,
+                                mlir::Block *block) const {
+    if (path.count(block) != 0)
+      return preBlock->getTerminator()->emitError()
+             << "CFG backedge detected. Loops must be raised to 'scf.while' or "
+                "'scf.for' operations.";
+
+    rewriter.setInsertionPointToEnd(parentCtrlBlock);
+    LogicalResult bbSchedResult =
+        scheduleBasicBlock(rewriter, path, parentCtrlBlock, block);
+    if (bbSchedResult.failed())
+      return bbSchedResult;
+
+    path.insert(block);
+    auto successors = block->getSuccessors();
+    auto nSuccessors = successors.size();
+    if (nSuccessors > 0) {
+      auto brOp = dyn_cast<BranchOpInterface>(block->getTerminator());
+      assert(brOp);
+      if (nSuccessors > 1) {
+        /// TODO(mortbopet): we could choose to support ie. std.switch, but it
+        /// would probably be easier to just require it to be lowered
+        /// beforehand.
+        assert(nSuccessors == 2 &&
+               "only conditional branches supported for now...");
+        /// Wrap each branch inside an if/else.
+        auto cond = brOp->getOperand(0);
+        auto condGroup =
+            getComponentState().getEvaluatingGroup<calyx::CombGroupOp>(cond);
+        auto symbolAttr = FlatSymbolRefAttr::get(
+            StringAttr::get(getContext(), condGroup.sym_name()));
+        auto ifOp =
+            rewriter.create<calyx::IfOp>(brOp->getLoc(), cond, symbolAttr);
+        auto *thenCtrlBlock =
+            rewriter.createBlock(&ifOp.thenRegion(), ifOp.thenRegion().end());
+        auto *elseCtrlBlock =
+            rewriter.createBlock(&ifOp.elseRegion(), ifOp.elseRegion().end());
+        rewriter.setInsertionPointToEnd(thenCtrlBlock);
+        auto thenSeqOp = createSeqOp(rewriter, brOp.getLoc());
+        rewriter.setInsertionPointToEnd(elseCtrlBlock);
+        auto elseSeqOp = createSeqOp(rewriter, brOp.getLoc());
+        bool trueBrSchedSuccess =
+            schedulePath(rewriter, path, brOp.getLoc(), block, successors[0],
+                         thenSeqOp.getBody())
+                .succeeded();
+        bool falseBrSchedSuccess = true;
+        if (trueBrSchedSuccess) {
+          falseBrSchedSuccess =
+              schedulePath(rewriter, path, brOp.getLoc(), block, successors[1],
+                           elseSeqOp.getBody())
+                  .succeeded();
+        }
+
+        return success(trueBrSchedSuccess && falseBrSchedSuccess);
+      } else {
+        /// Schedule sequentially within the current parent control block.
+        return schedulePath(rewriter, path, brOp.getLoc(), block,
+                            successors.front(), parentCtrlBlock);
+      }
+    }
+    return success();
+  }
+};
+
+/// LateSSAReplacement contains various functions for replacing SSA values that
+/// were not replaced during op construction.
+class LateSSAReplacement : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                                         PatternRewriter &) const override {
+    funcOp.walk([&](scf::WhileOp whileOp) {
+      /// The yielded values returned from the while op will be present in the
+      /// iterargs registers post execution of the loop.
+      /// This is done now, as opposed to during BuildWhileGroups since if the
+      /// results of the whileOp were replaced before
+      /// BuildOpGroups/BuildControl, the whileOp would get dead-code
+      /// eliminated.
+      for (auto res : getComponentState().getWhileIterRegs(whileOp))
+        whileOp.getResults()[res.first].replaceAllUsesWith(res.second.out());
+    });
+    return success();
+  }
+};
+
+/// Erases FuncOp operations.
+class CleanupFuncOps : public FuncOpPartialLoweringPattern {
+  using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
+
+  LogicalResult
+  PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
+                           PatternRewriter &rewriter) const override {
+    rewriter.eraseOp(funcOp);
+    return success();
+  }
 };
 
 //===----------------------------------------------------------------------===//
@@ -910,8 +1437,19 @@ void SCFToCalyxPass::runOnOperation() {
   /// Creates a new Calyx component for each FuncOp in the inpurt module.
   addOncePattern<FuncOpConversion>(loweringPatterns, funcMap, *loweringState);
 
+  /// This pass inlines scf.ExecuteRegionOp's by adding control-flow.
+  addGreedyPattern<InlineExecuteRegionOpPattern>(loweringPatterns);
+
+  /// This pattern creates registers for all basic-block arguments.
+  addOncePattern<BuildBBRegs>(loweringPatterns, funcMap, *loweringState);
+
   /// This pattern creates registers for the function return values.
   addOncePattern<BuildReturnRegs>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pattern creates registers for iteration arguments of scf.while
+  /// operations. Additionally, creates a group for assigning the initial
+  /// value of the iteration argument registers.
+  addOncePattern<BuildWhileGroups>(loweringPatterns, funcMap, *loweringState);
 
   /// This pattern converts operations within basic blocks to Calyx library
   /// operators. Combinational operations are assigned inside a
@@ -921,6 +1459,19 @@ void SCFToCalyxPass::runOnOperation() {
   /// having a distinct group for each operation, groups are analogous to SSA
   /// values in the source program.
   addOncePattern<BuildOpGroups>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pattern traverses the CFG of the program and generates a control
+  /// schedule based on the calyx::GroupOp's which were registered for each
+  /// basic block in the source function.
+  addOncePattern<BuildControl>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pattern performs various SSA replacements that must be done
+  /// after control generation.
+  addOncePattern<LateSSAReplacement>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pattern removes the source FuncOp which has now been converted into
+  /// a Calyx component.
+  addOncePattern<CleanupFuncOps>(loweringPatterns, funcMap, *loweringState);
 
   /// Sequentially apply each lowering pattern.
   for (auto &pat : loweringPatterns) {
