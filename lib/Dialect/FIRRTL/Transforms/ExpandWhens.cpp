@@ -492,9 +492,11 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
+namespace {
 class ExpandWhensPass : public ExpandWhensBase<ExpandWhensPass> {
   void runOnOperation() override;
 };
+} // end anonymous namespace
 
 void ExpandWhensPass::runOnOperation() {
   // Pass returns failure if something went wrong, or a bool indicating whether
