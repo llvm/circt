@@ -36,18 +36,18 @@
 // CHECK-NEXT:               calyx.seq  {
 // CHECK-NEXT:               }
 // CHECK-NEXT:               calyx.seq  {
-// CHECK-NEXT:                 calyx.enable @bb1_to_bb3 {compiledGroups = []}
+// CHECK-NEXT:                 calyx.enable @bb1_to_bb3
 // CHECK-NEXT:               }
-// CHECK-NEXT:               calyx.enable @ret_assign_0 {compiledGroups = []}
+// CHECK-NEXT:               calyx.enable @ret_assign_0
 // CHECK-NEXT:             }
 // CHECK-NEXT:           } else  {
 // CHECK-NEXT:             calyx.seq  {
 // CHECK-NEXT:               calyx.seq  {
 // CHECK-NEXT:               }
 // CHECK-NEXT:               calyx.seq  {
-// CHECK-NEXT:                 calyx.enable @bb2_to_bb3 {compiledGroups = []}
+// CHECK-NEXT:                 calyx.enable @bb2_to_bb3
 // CHECK-NEXT:               }
-// CHECK-NEXT:               calyx.enable @ret_assign_0 {compiledGroups = []}
+// CHECK-NEXT:               calyx.enable @ret_assign_0
 // CHECK-NEXT:             }
 // CHECK-NEXT:           }
 // CHECK-NEXT:         }
@@ -102,13 +102,13 @@ module {
 // CHECK-NEXT:       calyx.control  {
 // CHECK-NEXT:         calyx.seq  {
 // CHECK-NEXT:           calyx.seq  {
-// CHECK-NEXT:             calyx.enable @assign_while_0_init {compiledGroups = []}
+// CHECK-NEXT:             calyx.enable @assign_while_0_init
 // CHECK-NEXT:             calyx.while %std_slt_0.out with @bb0_0  {
 // CHECK-NEXT:               calyx.seq  {
-// CHECK-NEXT:                 calyx.enable @assign_while_0_latch {compiledGroups = []}
+// CHECK-NEXT:                 calyx.enable @assign_while_0_latch
 // CHECK-NEXT:               }
 // CHECK-NEXT:             }
-// CHECK-NEXT:             calyx.enable @ret_assign_0 {compiledGroups = []}
+// CHECK-NEXT:             calyx.enable @ret_assign_0
 // CHECK-NEXT:           }
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
@@ -185,7 +185,7 @@ module {
 //       calyx.control  {
 //         calyx.seq  {
 //           calyx.seq  {
-//             calyx.enable @assign_while_0_init {compiledGroups = []}
+//             calyx.enable @assign_while_0_init
 //             calyx.while %std_slt_0.out with @bb0_0  {
 //               calyx.seq  {
 //                 calyx.if %std_slt_1.out with @bb0_1  {
@@ -193,10 +193,10 @@ module {
 //                     calyx.seq  {
 //                     }
 //                     calyx.seq  {
-//                       calyx.enable @bb1_to_bb3 {compiledGroups = []}
+//                       calyx.enable @bb1_to_bb3
 //                     }
 //                     calyx.seq  {
-//                       calyx.enable @bb3_to_bb4 {compiledGroups = []}
+//                       calyx.enable @bb3_to_bb4
 //                     }
 //                   }
 //                 } else  {
@@ -204,17 +204,17 @@ module {
 //                     calyx.seq  {
 //                     }
 //                     calyx.seq  {
-//                       calyx.enable @bb2_to_bb3 {compiledGroups = []}
+//                       calyx.enable @bb2_to_bb3
 //                     }
 //                     calyx.seq  {
-//                       calyx.enable @bb3_to_bb4 {compiledGroups = []}
+//                       calyx.enable @bb3_to_bb4
 //                     }
 //                   }
 //                 }
-//                 calyx.enable @assign_while_0_latch {compiledGroups = []}
+//                 calyx.enable @assign_while_0_latch
 //               }
 //             }
-//             calyx.enable @ret_assign_0 {compiledGroups = []}
+//             calyx.enable @ret_assign_0
 //           }
 //         }
 //       }
