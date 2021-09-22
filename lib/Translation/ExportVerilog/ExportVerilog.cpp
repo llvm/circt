@@ -52,8 +52,8 @@ constexpr int INDENT_AMOUNT = 2;
 
 /// Helper that prints a parameter constant value in a Verilog compatible way.
 /// paramName and "op" are used to diagnose an error on an invalid parameter.
-static void printParamValue(Attribute value, Operation *op, StringRef paramName,
-                            raw_ostream &os) {
+static void printParamValue(Attribute value, raw_ostream &os,
+                            function_ref<InFlightDiagnostic()> emitError) {
   if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
     IntegerType intTy = intAttr.getType().cast<IntegerType>();
     APInt value = intAttr.getValue();
@@ -84,7 +84,7 @@ static void printParamValue(Attribute value, Operation *op, StringRef paramName,
   } else if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     os << parameterRef.getName().getValue();
   } else if (auto paramBinOp = value.dyn_cast<ParamBinaryAttr>()) {
-    printParamValue(paramBinOp.getLhs(), op, paramName, os);
+    printParamValue(paramBinOp.getLhs(), os, emitError);
 
     // FIXME: Handle precedence, support variadic versions of these.
     switch (paramBinOp.getOpcode()) {
@@ -95,11 +95,10 @@ static void printParamValue(Attribute value, Operation *op, StringRef paramName,
       os << " * ";
       break;
     }
-    printParamValue(paramBinOp.getRhs(), op, paramName, os);
+    printParamValue(paramBinOp.getRhs(), os, emitError);
   } else {
     os << "<<UNKNOWN MLIRATTR: " << value << ">>";
-    emitError(op->getLoc(), "unknown parameter value '")
-        << paramName << "' = " << value;
+    emitError() << " = " << value;
   }
 }
 
@@ -2591,7 +2590,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       }
       os.indent(state.currentIndent + INDENT_AMOUNT)
           << prefix << '.' << param.getName().getValue() << '(';
-      printParamValue(param.getValue(), op, param.getName().getValue(), os);
+      printParamValue(param.getValue(), os, [&]() {
+        return op->emitOpError("invalid instance parameter '")
+               << param.getName().getValue() << "' value";
+      });
       os << ')';
     }
     if (printed) {
@@ -2927,7 +2929,9 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
-      printParamValue(localparam.value(), op, localparam.name(), os);
+      printParamValue(localparam.value(), os, [&]() {
+        return op->emitOpError("invalid localparam value");
+      });
     }
 
     // Constants carry their assignment directly in the declaration.
@@ -3182,7 +3186,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           os << paramAttr.getName().getValue();
           if (auto value = paramAttr.getValue()) {
             os << " = ";
-            printParamValue(value, module, paramAttr.getName().getValue(), os);
+            printParamValue(value, os, [&]() {
+              return module->emitError("parameter '")
+                     << paramAttr.getName().getValue() << "' has invalid value";
+            });
           }
         },
         ",\n    ");
