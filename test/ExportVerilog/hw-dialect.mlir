@@ -874,6 +874,11 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out1: i8, out2: i8) {
   // CHECK-NEXT: ) inst2 (
   %b = hw.instance "inst2" @parameters2<p1: i42 = #hw.param.binary<add #hw.param.verbatim<"xx">, 17>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
  
+  // CHECK:      parameters2 #(
+  // CHECK-NEXT:  .p1((xx + 42'd17) * yy)
+  // CHECK-NEXT: ) inst3 (
+  %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.binary<mul #hw.param.binary<add #hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
+ 
   hw.output %a, %b : i8, i8
 }
 

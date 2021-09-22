@@ -46,13 +46,37 @@ using namespace ExportVerilog;
 
 constexpr int INDENT_AMOUNT = 2;
 
+namespace {
+/// This enum keeps track of the precedence level of various binary operators,
+/// where a lower number binds tighter.
+enum VerilogPrecedence {
+  // Normal precedence levels.
+  Symbol,          // Atomic symbol like "foo" and {a,b}
+  Selection,       // () , [] , :: , .
+  Unary,           // Unary operators like ~foo
+  Multiply,        // * , / , %
+  Addition,        // + , -
+  Shift,           // << , >>, <<<, >>>
+  Comparison,      // > , >= , < , <=
+  Equality,        // == , !=
+  And,             // &
+  Xor,             // ^ , ^~
+  Or,              // |
+  AndShortCircuit, // &&
+  Conditional,     // ? :
+
+  LowestPrecedence,  // Sentinel which is always the lowest precedence.
+  ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
+};
+} // end anonymous namespace
+
 //===----------------------------------------------------------------------===//
 // Helper routines
 //===----------------------------------------------------------------------===//
 
 /// Helper that prints a parameter constant value in a Verilog compatible way.
-/// paramName and "op" are used to diagnose an error on an invalid parameter.
 static void printParamValue(Attribute value, raw_ostream &os,
+                            VerilogPrecedence parenthesizeIfLooserThan,
                             function_ref<InFlightDiagnostic()> emitError) {
   if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
     IntegerType intTy = intAttr.getType().cast<IntegerType>();
@@ -72,34 +96,62 @@ static void printParamValue(Attribute value, raw_ostream &os,
         os << intTy.getWidth() << "'d";
     }
     value.print(os, intTy.isSigned());
-  } else if (auto strAttr = value.dyn_cast<StringAttr>()) {
+    return;
+  }
+  if (auto strAttr = value.dyn_cast<StringAttr>()) {
     os << '"';
     os.write_escaped(strAttr.getValue());
     os << '"';
-  } else if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
+    return;
+  }
+  if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
     // TODO: relying on float printing to be precise is not a good idea.
     os << fpAttr.getValueAsDouble();
-  } else if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
+    return;
+  }
+  if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
     os << verbatimParam.getValue().getValue();
-  } else if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
+    return;
+  }
+  if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     os << parameterRef.getName().getValue();
-  } else if (auto paramBinOp = value.dyn_cast<ParamBinaryAttr>()) {
-    printParamValue(paramBinOp.getLhs(), os, emitError);
+    return;
+  }
 
-    // FIXME: Handle precedence, support variadic versions of these.
+  if (auto paramBinOp = value.dyn_cast<ParamBinaryAttr>()) {
+    StringRef operatorStr;
+    VerilogPrecedence subprecedence;
+
+    // TODO: Support variadic versions of these.
     switch (paramBinOp.getOpcode()) {
     case PBO::Add:
-      os << " + ";
+      operatorStr = " + ";
+      subprecedence = Addition;
       break;
     case PBO::Mul:
-      os << " * ";
+      operatorStr = " * ";
+      subprecedence = Multiply;
       break;
     }
-    printParamValue(paramBinOp.getRhs(), os, emitError);
-  } else {
-    os << "<<UNKNOWN MLIRATTR: " << value << ">>";
-    emitError() << " = " << value;
+
+    if (subprecedence > parenthesizeIfLooserThan)
+      os << '(';
+    printParamValue(paramBinOp.getLhs(), os, subprecedence, emitError);
+    os << operatorStr;
+    printParamValue(paramBinOp.getRhs(), os, subprecedence, emitError);
+    if (subprecedence > parenthesizeIfLooserThan)
+      os << ')';
+    return;
   }
+
+  os << "<<UNKNOWN MLIRATTR: " << value << ">>";
+  emitError() << " = " << value;
+}
+
+/// Prints a parameter attribute expression in a Verilog compatible way.
+static void printParamValue(Attribute value, raw_ostream &os,
+                            function_ref<InFlightDiagnostic()> emitError) {
+  printParamValue(value, os, VerilogPrecedence::LowestPrecedence, emitError);
 }
 
 /// Return true for nullary operations that are better emitted multiple
@@ -429,30 +481,6 @@ static StringRef getNameRemotely(Value value,
     return localparam.name();
   return {};
 }
-
-namespace {
-/// This enum keeps track of the precedence level of various binary operators,
-/// where a lower number binds tighter.
-enum VerilogPrecedence {
-  // Normal precedence levels.
-  Symbol,          // Atomic symbol like "foo" and {a,b}
-  Selection,       // () , [] , :: , .
-  Unary,           // Unary operators like ~foo
-  Multiply,        // * , / , %
-  Addition,        // + , -
-  Shift,           // << , >>, <<<, >>>
-  Comparison,      // > , >= , < , <=
-  Equality,        // == , !=
-  And,             // &
-  Xor,             // ^ , ^~
-  Or,              // |
-  AndShortCircuit, // &&
-  Conditional,     // ? :
-
-  LowestPrecedence,  // Sentinel which is always the lowest precedence.
-  ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
-};
-} // end anonymous namespace
 
 /// Pull any FileLineCol locs out of the specified location and add it to the
 /// specified set.
