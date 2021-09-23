@@ -104,6 +104,18 @@ MLIR_CAPI_EXPORTED MlirStringRef hwTypeAliasTypeGetName(MlirType typeAlias);
 
 MLIR_CAPI_EXPORTED MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias);
 
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGet(MlirStringRef name,
+                                                    MlirAttribute type,
+                                                    MlirAttribute value);
+MLIR_CAPI_EXPORTED MlirStringRef hwParamDeclAttrGetName(MlirAttribute decl);
+MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetType(MlirAttribute decl);
+MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetValue(MlirAttribute decl);
+
 #ifdef __cplusplus
 }
 #endif
