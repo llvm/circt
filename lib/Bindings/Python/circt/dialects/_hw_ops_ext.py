@@ -123,29 +123,32 @@ class ModuleLike:
       an InsertionPoint context already set for the block. The callback is
       expected to insert a terminator in the block.
     """
+    # Copy the mutable default arguments. 'Cause python.
+    input_ports = list(input_ports)
+    output_ports = list(output_ports)
+    parameters = list(parameters)
+    attributes = dict(attributes)
+
     operands = []
     results = []
     attributes["sym_name"] = StringAttr.get(str(name))
 
     input_types = []
     input_names = []
-    input_ports = list(input_ports)
-    for i in range(len(input_ports)):
-      port_name, port_type = input_ports[i]
+    for (i, (port_name, port_type)) in enumerate(input_ports):
       input_types.append(port_type)
       input_names.append(StringAttr.get(str(port_name)))
     attributes["argNames"] = ArrayAttr.get(input_names)
 
     output_types = []
     output_names = []
-    output_ports = list(output_ports)
-    for i in range(len(output_ports)):
-      port_name, port_type = output_ports[i]
+    for (i, (port_name, port_type)) in enumerate(output_ports):
       output_types.append(port_type)
       output_names.append(StringAttr.get(str(port_name)))
     attributes["resultNames"] = ArrayAttr.get(output_names)
 
-    attributes["parameters"] = ArrayAttr.get(parameters)
+    if len(parameters) > 0 or "parameters" not in attributes:
+      attributes["parameters"] = ArrayAttr.get(parameters)
 
     attributes["type"] = TypeAttr.get(
         FunctionType.get(inputs=input_types, results=output_types))
