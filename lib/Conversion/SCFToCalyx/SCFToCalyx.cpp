@@ -1262,48 +1262,54 @@ public:
     /// Starting from the matched originGroup, we traverse use-def chains of
     /// combinational logic, and inline assignments from the defining
     /// combinational groups.
-    std::function<void(calyx::GroupInterface, bool)> recurseInline =
-        [&](calyx::GroupInterface recGroupOp, bool init) {
-          inlinedGroups.insert(recGroupOp);
-          for (auto assignOp :
-               recGroupOp.getBody()->getOps<calyx::AssignOp>()) {
-            if (!init) {
-              /// Inline the assignment into the originGroup.
-              auto clonedAssignOp = rewriter.clone(*assignOp.getOperation());
-              clonedAssignOp->moveBefore(originGroup.getBody(),
-                                         originGroup.getBody()->end());
-            }
-            auto src = assignOp.src();
-            auto srcDefOp = src.getDefiningOp();
-
-            /// Things which stop recursive inlining (or in other words, what
-            /// breaks combinational paths).
-            /// - Component inputs
-            /// - Register and memory reads
-            /// - Constant ops
-            /// - 'While' return values (these are registers, however, 'while'
-            ///   return values have at the current point of conversion not yet
-            ///   been rewritten to their register outputs, see comment in
-            ///   LateSSAReplacement)
-            if (src.isa<BlockArgument>() ||
-                isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-                    ConstantOp, scf::WhileOp>(srcDefOp))
-              continue;
-
-            auto srcCombGroup =
-                state.getEvaluatingGroup<calyx::CombGroupOp>(src);
-            assert(srcCombGroup && "expected combinational group");
-            if (inlinedGroups.count(srcCombGroup))
-              continue;
-
-            recurseInline(srcCombGroup, false);
-          }
-        };
-    recurseInline(originGroup, true);
+    recurseInlineCombGroups(
+        rewriter, state, inlinedGroups, originGroup, originGroup,
+        /*disable inlining of the originGroup itself*/ false);
     return success();
   }
 
 private:
+  void
+  recurseInlineCombGroups(PatternRewriter &rewriter,
+                          ComponentLoweringState &state,
+                          llvm::SmallSetVector<Operation *, 8> &inlinedGroups,
+                          calyx::GroupInterface originGroup,
+                          calyx::GroupInterface recGroup, bool doInline) const {
+    inlinedGroups.insert(recGroup);
+    for (auto assignOp : recGroup.getBody()->getOps<calyx::AssignOp>()) {
+      if (doInline) {
+        /// Inline the assignment into the originGroup.
+        auto clonedAssignOp = rewriter.clone(*assignOp.getOperation());
+        clonedAssignOp->moveBefore(originGroup.getBody(),
+                                   originGroup.getBody()->end());
+      }
+      auto src = assignOp.src();
+      auto srcDefOp = src.getDefiningOp();
+
+      /// Things which stop recursive inlining (or in other words, what
+      /// breaks combinational paths).
+      /// - Component inputs
+      /// - Register and memory reads
+      /// - Constant ops (constant ops are not evaluated by any group)
+      /// - 'While' return values (these are registers, however, 'while'
+      ///   return values have at the current point of conversion not yet
+      ///   been rewritten to their register outputs, see comment in
+      ///   LateSSAReplacement)
+      if (src.isa<BlockArgument>() ||
+          isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp, ConstantOp,
+              scf::WhileOp>(srcDefOp))
+        continue;
+
+      auto srcCombGroup = state.getEvaluatingGroup<calyx::CombGroupOp>(src);
+      assert(srcCombGroup && "expected combinational group");
+      if (inlinedGroups.count(srcCombGroup))
+        continue;
+
+      recurseInlineCombGroups(rewriter, state, inlinedGroups, originGroup,
+                              srcCombGroup, true);
+    }
+  }
+
   ProgramLoweringState &pls;
 };
 

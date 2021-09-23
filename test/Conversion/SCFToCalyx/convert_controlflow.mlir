@@ -61,7 +61,7 @@ module {
 
 // -----
 
-// Test a while op where the loop body contains basic blocks that may be simplified
+// Test a while op where the loop body contains basic blocks that may be simplified.
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
@@ -317,7 +317,7 @@ module {
 
 // -----
 
-// Test controlflow where the conditional is computed as a sequence of
+// Test control flow where the conditional is computed as a sequence of
 // combinational operations. We expect all combinational logic in this sequence
 // to be inlined into the combinational group. This also tests multiple returns.
 
