@@ -1278,7 +1278,7 @@ struct EliminateEmptyOpPattern : mlir::OpRewritePattern<TOp> {
 
   LogicalResult matchAndRewrite(TOp op,
                                 PatternRewriter &rewriter) const override {
-    if (op.getRegion().empty() || op.getRegion().front().empty()) {
+    if (op.getBody()->empty()) {
       rewriter.eraseOp(op);
       return success();
     }
@@ -1293,7 +1293,7 @@ struct EliminateEmptyOpPattern<calyx::IfOp>
 
   LogicalResult matchAndRewrite(calyx::IfOp op,
                                 PatternRewriter &rewriter) const override {
-    if (op.thenRegion().empty() || op.thenRegion().front().empty()) {
+    if (!op.thenRegionExists()) {
       rewriter.eraseOp(op);
       return success();
     }
@@ -1432,13 +1432,11 @@ struct CommonIfTailEnablePattern : mlir::OpRewritePattern<calyx::IfOp> {
     /// Check if there's anything in the branches; if not,
     /// EliminateEmptyOpPattern will eliminate a potentially
     /// empty/invalid if statement.
-    if (ifOp.thenRegion().empty() || ifOp.thenRegion().front().empty())
-      return failure();
-    if (ifOp.elseRegion().empty() || ifOp.elseRegion().front().empty())
+    if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
       return failure();
 
-    auto &thenOpStructureOp = ifOp.thenRegion().front().front();
-    auto &elseOpStructureOp = ifOp.elseRegion().front().front();
+    auto &thenOpStructureOp = ifOp.getThenBody()->front();
+    auto &elseOpStructureOp = ifOp.getElseBody()->front();
     if (isa<calyx::ParOp>(thenOpStructureOp) ||
         isa<calyx::ParOp>(elseOpStructureOp))
       return failure();
