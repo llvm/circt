@@ -1254,7 +1254,8 @@ static LogicalResult verifyMemOp(MemOp mem) {
     // for this port.  This catches situations of extraneous port
     // fields beind included or the fields being named incorrectly.
     FIRRTLType expectedType =
-        mem.getTypeForPort(mem.depth(), dataType, portKind, dataType.isGround() ? mem.getMaskBits() : 0);
+        mem.getTypeForPort(mem.depth(), dataType, portKind,
+                           dataType.isGround() ? mem.getMaskBits() : 0);
     // Compute the original port type as portBundleType may have
     // stripped outer flip information.
     auto originalType = mem.getResult(i).getType();
@@ -1303,8 +1304,9 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
 
   auto *context = dataType.getContext();
   FIRRTLType maskType;
+  // maskBits not specified (==0), then get the mask type from the dataType.
   if (maskBits == 0)
-    maskType = dataType.getMaskType() ;
+    maskType = dataType.getMaskType();
   else
     maskType = UIntType::get(context, maskBits);
 
@@ -1378,24 +1380,26 @@ MemOp::PortKind MemOp::getPortKind(size_t resultNo) {
   return getMemPortKindFromType(
       getResult(resultNo).getType().cast<FIRRTLType>());
 }
-//
-/// Return the data-type field of the memory, the type of each element.
+
+/// Return the number of bits in the mask for the memory.
 size_t MemOp::getMaskBits() {
   assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
-  for (auto res : getResults()){
+  for (auto res : getResults()) {
     auto firstPortType = res.getType().cast<FIRRTLType>();
     if (getMemPortKindFromType(firstPortType) == PortKind::Read)
       continue;
 
-    FIRRTLType mType ;
-    for (auto t : firstPortType.getPassiveType().cast<BundleType>().getElements()){
+    FIRRTLType mType;
+    for (auto t :
+         firstPortType.getPassiveType().cast<BundleType>().getElements()) {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }
     if (mType.dyn_cast_or_null<UIntType>())
-      return  mType.getBitWidthOrSentinel();
+      return mType.getBitWidthOrSentinel();
   }
+  // Default is 1 bit.
   return 1;
 }
 
