@@ -196,6 +196,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     case WUW::PortOrder:
       if (auto *existingAlwaysBlock =
               writeProcesses.lookup(mem.writeClockIDs[i])) {
+        OpBuilder::InsertionGuard guard(b);
         b.setInsertionPointToEnd(
             cast<sv::AlwaysFFOp>(existingAlwaysBlock).getBodyBlock());
         writeLogic();

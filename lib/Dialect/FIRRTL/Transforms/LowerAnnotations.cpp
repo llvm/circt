@@ -444,9 +444,9 @@ static FlatSymbolRefAttr scatterNonLocalPath(AnnoPathValue target,
   return sym;
 }
 
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 // Standard Utility Resolvers
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 
 /// Always resolve to the circuit, ignoring the annotation.
 static Optional<AnnoPathValue> noResolve(DictionaryAttr anno,
@@ -498,16 +498,9 @@ static Optional<AnnoPathValue> tryResolve(DictionaryAttr anno,
   return AnnoPathValue(state.circuit);
 }
 
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 // Standard Utility Appliers
-////////////////////////////////////////////////////////////////////////////////
-
-/// A generic applier that drops the annotation.
-static LogicalResult
-ignoreAnno(AnnoPathValue target, DictionaryAttr anno,
-           llvm::function_ref<void(ArrayAttr)> addToWorklist) {
-  return success();
-}
+//===----------------------------------------------------------------------===//
 
 /// An applier which puts the annotation on the target and drops the 'target'
 /// field from the annotaiton.  Optionally handles non-local annotations.
@@ -550,9 +543,9 @@ static LogicalResult applyWithoutTarget(AnnoPathValue target,
   return applyWithoutTargetImpl(target, anno, state, allowNonLocal);
 }
 
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 // Driving table
-////////////////////////////////////////////////////////////////////////////////
+//===----------------------------------------------------------------------===//
 
 namespace {
 struct AnnoRecord {
