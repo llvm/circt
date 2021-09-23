@@ -1108,15 +1108,14 @@ private:
     for (auto &group : compBlockScheduleables) {
       rewriter.setInsertionPointToEnd(parentCtrlBlock);
       if (auto groupPtr = std::get_if<calyx::GroupOp>(&group); groupPtr) {
-        rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name(),
-                                         rewriter.getArrayAttr({}));
+        rewriter.create<calyx::EnableOp>(loc, groupPtr->sym_name());
       } else if (auto whileSchedPtr = std::get_if<WhileScheduleable>(&group);
                  whileSchedPtr) {
         auto &whileOp = whileSchedPtr->whileOp;
 
         /// Insert while iter arg initialization group.
-        rewriter.create<calyx::EnableOp>(
-            loc, whileSchedPtr->initGroup.getName(), rewriter.getArrayAttr({}));
+        rewriter.create<calyx::EnableOp>(loc,
+                                         whileSchedPtr->initGroup.getName());
 
         auto cond = whileOp.getConditionOp().getOperand(0);
         auto condGroup =
@@ -1138,8 +1137,7 @@ private:
         // Insert loop-latch at the end of the while group
         rewriter.setInsertionPointToEnd(whileSeqOp.getBody());
         rewriter.create<calyx::EnableOp>(
-            loc, getComponentState().getWhileLatchGroup(whileOp).getName(),
-            rewriter.getArrayAttr({}));
+            loc, getComponentState().getWhileLatchGroup(whileOp).getName());
         if (res.failed())
           return res;
       } else
@@ -1163,8 +1161,7 @@ private:
     auto preSeqOp = createSeqOp(rewriter, loc);
     rewriter.setInsertionPointToEnd(preSeqOp.getBody());
     for (auto barg : getComponentState().getBlockArgGroups(from, to))
-      rewriter.create<calyx::EnableOp>(loc, barg.sym_name(),
-                                       rewriter.getArrayAttr({}));
+      rewriter.create<calyx::EnableOp>(loc, barg.sym_name());
 
     return buildCFGControl(path, rewriter, parentCtrlBlock, from, to);
   }

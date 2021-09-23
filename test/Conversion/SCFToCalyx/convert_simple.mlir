@@ -35,7 +35,7 @@ module {
 // CHECK-NEXT:       }
 // CHECK-NEXT:       calyx.control  {
 // CHECK-NEXT:         calyx.seq  {
-// CHECK-NEXT:           calyx.enable @ret_assign_0 {compiledGroups = []}
+// CHECK-NEXT:           calyx.enable @ret_assign_0
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
 // CHECK-NEXT:     }
