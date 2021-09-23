@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/HW.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
@@ -127,4 +128,29 @@ MlirStringRef hwTypeAliasTypeGetName(MlirType typeAlias) {
 MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias) {
   TypeAliasType type = unwrap(typeAlias).cast<TypeAliasType>();
   return wrap(type.getRef().getRootReference().getValue());
+}
+
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<ParamDeclAttr>();
+}
+MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGet(MlirStringRef cName,
+                                                    MlirAttribute cType,
+                                                    MlirAttribute cValue) {
+  TypeAttr type = unwrap(cType).cast<TypeAttr>();
+  auto name = StringAttr::get(type.getContext(), unwrap(cName));
+  return wrap(
+      ParamDeclAttr::get(type.getContext(), name, type, unwrap(cValue)));
+}
+MLIR_CAPI_EXPORTED MlirStringRef hwParamDeclAttrGetName(MlirAttribute decl) {
+  return wrap(unwrap(decl).cast<ParamDeclAttr>().getName().getValue());
+}
+MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetType(MlirAttribute decl) {
+  return wrap(unwrap(decl).cast<ParamDeclAttr>().getType());
+}
+MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetValue(MlirAttribute decl) {
+  return wrap(unwrap(decl).cast<ParamDeclAttr>().getValue());
 }
