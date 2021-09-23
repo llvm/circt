@@ -13,6 +13,7 @@
 #ifndef CIRCT_CONVERSION_PASSES_H
 #define CIRCT_CONVERSION_PASSES_H
 
+#include "circt/Conversion/AffineToStaticLogic/AffineToStaticLogic.h"
 #include "circt/Conversion/CalyxToHW/CalyxToHW.h"
 #include "circt/Conversion/FIRRTLToHW/FIRRTLToHW.h"
 #include "circt/Conversion/HWToLLHD/HWToLLHD.h"
