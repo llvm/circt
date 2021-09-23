@@ -82,7 +82,6 @@ def ComponentOp : CalyxOp<"component", [
     ```
   }];
 
-  // TODO(Calyx): Allow explicit port naming?
   let arguments = (ins
     ArrayAttr:$portNames
   );
