@@ -11,14 +11,14 @@ public:
   void addFuncInput(StringAttr name, hw::PortDirection direction, Type type);
   void addFuncResult(StringAttr name, Type type);
   void addClk(OpBuilder &);
-  ArrayRef<hw::ModulePortInfo> getPortInfoList();
-  const hw::ModulePortInfo getPortInfoForFuncInput(size_t inputArgNum);
+  ArrayRef<hw::PortInfo> getPortInfoList();
+  const hw::PortInfo getPortInfoForFuncInput(size_t inputArgNum);
 
 private:
   size_t hwModuleInputArgNum = 0;
   size_t hwModuleResultArgNum = 0;
-  SmallVector<hw::ModulePortInfo> portInfoList;
-  SmallVector<hw::ModulePortInfo *> mapFuncInputToHWModulePortInfo;
+  SmallVector<hw::PortInfo> portInfoList;
+  SmallVector<hw::PortInfo *> mapFuncInputToHWPortInfo;
 };
 
 Type convertType(Type type);

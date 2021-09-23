@@ -243,7 +243,7 @@ public:
   Type getElementType() { return getImpl()->elementType; }
   ArrayRef<DimKind> getDimKinds() { return getImpl()->dimKinds; }
 
-  int getNumElementsPerBank() {
+  uint64_t getNumElementsPerBank() {
     int count = 1;
     auto dimKinds = getDimKinds();
     auto shape = getShape();

@@ -16,7 +16,7 @@ void FuncToHWModulePortMap::addFuncInput(StringAttr name,
   portInfoList.push_back(
       {.name = name, .direction = direction, .type = type, .argNum = argNum});
 
-  mapFuncInputToHWModulePortInfo.push_back(&portInfoList.back());
+  mapFuncInputToHWPortInfo.push_back(&portInfoList.back());
 }
 void FuncToHWModulePortMap::addClk(OpBuilder &builder) {
   auto clkName = builder.getStringAttr("clk");
@@ -38,13 +38,13 @@ bool isSendBus(DictionaryAttr busAttr) {
   return helper::extractBusPortFromDict(busAttr) == "send";
 }
 
-ArrayRef<hw::ModulePortInfo> FuncToHWModulePortMap::getPortInfoList() {
+ArrayRef<hw::PortInfo> FuncToHWModulePortMap::getPortInfoList() {
   return portInfoList;
 }
 
-const hw::ModulePortInfo
+const hw::PortInfo
 FuncToHWModulePortMap::getPortInfoForFuncInput(size_t inputArgNum) {
-  return *mapFuncInputToHWModulePortInfo[inputArgNum];
+  return *mapFuncInputToHWPortInfo[inputArgNum];
 }
 
 IntegerType convertToIntegerType(Type ty) {

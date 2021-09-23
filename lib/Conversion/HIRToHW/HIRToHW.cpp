@@ -82,6 +82,11 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
       return success();
     hwInputs.push_back(hwInput);
   }
+  assert(!op.offset() || op.offset().getValue() == 0);
+
+  hwInputs.push_back(mapHIRToHWValue[op.tstart()]);
+  hwInputs.push_back(this->clk);
+
   auto hwInputTypes = helper::getTypes(hwInputs);
 
   auto sendBuses = filteredOperands.second;
@@ -99,9 +104,22 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
       op.callee().str() + "_inst" +
       std::to_string(mapFuncNameToInstanceCount[op.callee()]++));
 
-  auto instanceOp = builder->create<hw::InstanceOp>(
-      op.getLoc(), hwResultTypes, instanceName, op.calleeAttr(), hwInputs,
-      op->getAttr("params").dyn_cast_or_null<DictionaryAttr>(), StringAttr());
+  auto calleeHWModule = dyn_cast_or_null<hw::HWModuleOp>(op.getCalleeDecl());
+  auto calleeHWModuleExtern =
+      dyn_cast_or_null<hw::HWModuleExternOp>(op.getCalleeDecl());
+  if (!(calleeHWModule || calleeHWModuleExtern)) {
+    op.emitError() << "Could not find decl for the hw module.";
+    return success();
+  }
+  hw::InstanceOp instanceOp;
+  if (calleeHWModule)
+    instanceOp = builder->create<hw::InstanceOp>(
+        op.getLoc(), calleeHWModule, instanceName, hwInputs,
+        op->getAttr("params").dyn_cast_or_null<DictionaryAttr>(), StringAttr());
+  else
+    instanceOp = builder->create<hw::InstanceOp>(
+        op.getLoc(), calleeHWModuleExtern, instanceName, hwInputs,
+        op->getAttr("params").dyn_cast_or_null<DictionaryAttr>(), StringAttr());
 
   // Map callop input send buses to the results of the instance op and replace
   // all prev uses of the placeholder hw ssa vars corresponding to these send
@@ -205,7 +223,8 @@ LogicalResult HIRToHWPass::visitOp(hir::FuncExternOp op) {
                                     op.getInputNames(), op.getResultNames());
   auto name = builder->getStringAttr(op.getNameAttr().getValue().str());
 
-  builder->create<hw::HWModuleOp>(op.getLoc(), name, portMap.getPortInfoList());
+  builder->create<hw::HWModuleExternOp>(op.getLoc(), name,
+                                        portMap.getPortInfoList());
 
   delete (builder);
   opsToErase.push_back(op);

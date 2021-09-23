@@ -165,6 +165,34 @@ LogicalResult verifyFuncExternOp(hir::FuncExternOp op) {
   return success();
 }
 
+llvm::Optional<std::string> typeMismatch(Location loc, hir::FuncType ta,
+                                         hir::FuncType tb) {
+
+  auto inputTypesA = ta.getInputTypes();
+  auto inputTypesB = tb.getInputTypes();
+  if (inputTypesA.size() != inputTypesB.size())
+    return std::string("Mismatch with function declaration. Mismatched number "
+                       "of input types.");
+  for (size_t i = 0; i < inputTypesA.size(); i++) {
+    if (inputTypesA[i] != inputTypesB[i])
+      return std::string("Type Mismatch in input arg ") + std::to_string(i);
+  }
+
+  auto resultTypesA = ta.getResultTypes();
+  auto resultTypesB = tb.getResultTypes();
+  if (resultTypesA.size() != resultTypesB.size())
+    return std::string("Mismatch with function declaration. Mismatched number "
+                       "of result types.");
+  for (size_t i = 0; i < resultTypesA.size(); i++) {
+    if (resultTypesA[i] != resultTypesB[i])
+      return std::string("Type Mismatch in result arg ") + std::to_string(i);
+  }
+
+  if (ta != tb)
+    return std::string("Mismatch in function types.");
+  return llvm::None;
+}
+
 LogicalResult verifyCallOp(hir::CallOp op) {
   auto inputTypes = op.getFuncType().getInputTypes();
   auto operands = op.getOperands();
@@ -181,13 +209,20 @@ LogicalResult verifyCallOp(hir::CallOp op) {
   //  return op.emitError() << "Could not find declaration of the callee.";
 
   if (auto funcOp = dyn_cast_or_null<hir::FuncOp>(calleeDeclOperation)) {
-    if (!(funcOp.getFuncType() == op.getFuncType()))
-      return op.emitError("Mismatch with function definition.").attachNote()
-             << "Function defined here." << funcOp;
+    auto error =
+        typeMismatch(op.getLoc(), funcOp.getFuncType(), op.getFuncType());
+    if (error)
+      return op.emitError("Mismatch with function definition.")
+                 .attachNote(funcOp.getLoc())
+             << error.getValue();
   } else if (hir::FuncExternOp funcExternOp =
                  dyn_cast_or_null<hir::FuncExternOp>(calleeDeclOperation)) {
-    if (!(funcExternOp.getFuncType() == op.getFuncType()))
-      return op.emitError("Mismatch with function declaration.");
+    auto error =
+        typeMismatch(op.getLoc(), funcExternOp.getFuncType(), op.getFuncType());
+    if (error)
+      return op.emitError("Mismatch with function declaration.")
+                 .attachNote(funcExternOp.getLoc())
+             << error.getValue();
   }
   return success();
 }
