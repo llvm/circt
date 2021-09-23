@@ -181,8 +181,8 @@ def DropNameRegReset : Pat<
 
 // Mem(...,name),!dnt -> Mem(...x, "")
 def DropNameMem : Pat<
-  (MemOp $rd, $rw, $depth, $ruw, $maskGranulatiry, $portNames, $name, $annotations, $portAnno),
-  (MemOp $rd, $rw, $depth, $ruw, $maskGranulatiry, $portNames, (GetEmptyString), $annotations, $portAnno),
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $annotations, $portAnno),
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations, $portAnno),
   [(uselessNameAttr $name), (NoDontTouch $annotations), (NoPortsDontTouch $portAnno)]>;
 
 // CombMem(name),!dnt -> CombMem("")

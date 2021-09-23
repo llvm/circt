@@ -161,7 +161,6 @@ def MemOp : FIRRTLOp<"mem"> {
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
          Confined<I32Attr, [IntMinValue<1>]>:$writeLatency,
          Confined<I64Attr, [IntMinValue<1>]>:$depth, RUWAttr:$ruw,
-         Confined<I32Attr, [IntMinValue<1>]>:$maskGranulatiry,
          StrArrayAttr:$portNames, StrAttr:$name,
          AnnotationArrayAttr:$annotations,
          PortAnnotationsAttr:$portAnnotations);
@@ -173,14 +172,6 @@ def MemOp : FIRRTLOp<"mem"> {
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "uint32_t":$readLatency, "uint32_t":$writeLatency,
                    "uint64_t":$depth, "RUWAttr":$ruw,
-                   "ArrayRef<Attribute>":$portNames,
-                   CArg<"StringRef", "{}">:$name,
-                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
-                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations)>,
-    OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
-                   "uint32_t":$readLatency, "uint32_t":$writeLatency,
-                   "uint64_t":$depth, "RUWAttr":$ruw,
-                   "uint32_t":$maskGranulatiry,
                    "ArrayRef<Attribute>":$portNames,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
@@ -198,7 +189,7 @@ def MemOp : FIRRTLOp<"mem"> {
 
     /// Return the type of a port given the memory depth, type, and kind
     static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                     PortKind portKind, uint32_t maskWidth = 0);
+                                     PortKind portKind, unsigned maskBits = 0);
 
     /// Return the name and kind of ports supported by this memory.
     SmallVector<NamedPort> getPorts();
@@ -211,6 +202,9 @@ def MemOp : FIRRTLOp<"mem"> {
 
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();
+
+    /// Return the number of mask bits.
+    size_t getMaskBits();
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo);

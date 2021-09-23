@@ -44,8 +44,8 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
   let options = [
-    Option<"flattenVector", "flatten-vector", "bool", "false",
-           "Concat all elements of the vector data into a single element.">
+    Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
+           "Concat all elements of the aggregate data into a single element.">
 
   ];
 }
@@ -91,10 +91,7 @@ def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
   let constructor = "circt::firrtl::createBlackBoxMemoryPass()";
   let options = [
     Option<"emitWrapper", "emit-wrapper", "bool", "true",
-           "Create a wrapper module around the black box external module.">,
-    Option<"flattenVector", "flatten-vector", "bool", "true",
-           "Concat all elements of the vector data into a single element.">
-
+           "Create a wrapper module around the black box external module.">
   ];
 }
 

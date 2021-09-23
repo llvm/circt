@@ -1136,19 +1136,6 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("portAnnotations",
                         builder.getArrayAttr(portAnnotations));
   }
-  // Default value for mask granularity is 0, which means a single bit mask.
-  result.addAttribute("maskGranularity", builder.getIntegerAttr(builder.getIntegerType(32), 0));
-}
-
-void MemOp::build(OpBuilder &builder, OperationState &result,
-                  TypeRange resultTypes, uint32_t readLatency,
-                  uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
-                  uint32_t maskGranularity,
-                  ArrayRef<Attribute> portNames, StringRef name,
-                  ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations) {
-  result.addAttribute("maskGranularity", builder.getIntegerAttr(builder.getIntegerType(32), maskGranularity));
-  build(builder, result, resultTypes, readLatency, writeLatency, depth, ruw,  portNames, name, annotations, portAnnotations);
 }
 
 ArrayAttr MemOp::getPortAnnotation(unsigned portIdx) {
@@ -1267,11 +1254,12 @@ static LogicalResult verifyMemOp(MemOp mem) {
     // for this port.  This catches situations of extraneous port
     // fields beind included or the fields being named incorrectly.
     FIRRTLType expectedType =
-        mem.getTypeForPort(mem.depth(), dataType, portKind);
+        mem.getTypeForPort(mem.depth(), dataType, portKind,
+                           dataType.isGround() ? mem.getMaskBits() : 0);
     // Compute the original port type as portBundleType may have
     // stripped outer flip information.
     auto originalType = mem.getResult(i).getType();
-    if ( 0 && originalType != expectedType) {
+    if (originalType != expectedType) {
       StringRef portKindName;
       switch (portKind) {
       case MemOp::PortKind::Read:
@@ -1312,11 +1300,15 @@ static LogicalResult verifyMemOp(MemOp mem) {
 }
 
 BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                 PortKind portKind, uint32_t maskWidth) {
+                                 PortKind portKind, unsigned maskBits) {
 
   auto *context = dataType.getContext();
-  
-    auto maskType = maskWidth == 0 ? dataType.getMaskType() : UIntType::get(context, maskWidth);
+  FIRRTLType maskType;
+  // maskBits not specified (==0), then get the mask type from the dataType.
+  if (maskBits == 0)
+    maskType = dataType.getMaskType();
+  else
+    maskType = UIntType::get(context, maskBits);
 
   auto getId = [&](StringRef name) -> StringAttr {
     return StringAttr::get(context, name);
@@ -1387,6 +1379,28 @@ MemOp::PortKind MemOp::getPortKind(StringRef portName) {
 MemOp::PortKind MemOp::getPortKind(size_t resultNo) {
   return getMemPortKindFromType(
       getResult(resultNo).getType().cast<FIRRTLType>());
+}
+
+/// Return the number of bits in the mask for the memory.
+size_t MemOp::getMaskBits() {
+  assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
+
+  for (auto res : getResults()) {
+    auto firstPortType = res.getType().cast<FIRRTLType>();
+    if (getMemPortKindFromType(firstPortType) == PortKind::Read)
+      continue;
+
+    FIRRTLType mType;
+    for (auto t :
+         firstPortType.getPassiveType().cast<BundleType>().getElements()) {
+      if (t.name.getValue().contains("mask"))
+        mType = t.type;
+    }
+    if (mType.dyn_cast_or_null<UIntType>())
+      return mType.getBitWidthOrSentinel();
+  }
+  // Default is 1 bit.
+  return 1;
 }
 
 /// Return the data-type field of the memory, the type of each element.
