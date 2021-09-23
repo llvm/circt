@@ -26,15 +26,34 @@ class InstanceBuilder(support.NamedValueOpView):
     self.module = module
     instance_name = StringAttr.get(name)
     module_name = FlatSymbolRefAttr.get(StringAttr(module.name).value)
-    parameters = {k: Attribute.parse(str(v)) for (k, v) in parameters.items()}
-    parameters = DictAttr.get(parameters)
+
+    mod_param_decls = module.parameters
+    mod_param_decls_idxs = {
+        decl.name: idx for (idx, decl) in enumerate(mod_param_decls)
+    }
+    inst_param_array = [None] * len(module.parameters)
+    # Fill in all the parameters specified.
+    for (pname, pval) in parameters.items():
+      if pname not in mod_param_decls_idxs:
+        raise ValueError(
+            f"Could not find parameter '{pname}' in module parameter decls")
+      idx = mod_param_decls_idxs[pname]
+      param_decl = mod_param_decls[idx]
+      inst_param_array[idx] = hw.ParamDeclAttr.get(pname, param_decl.param_type,
+                                                   pval)
+    # Fill in the defaults from the module param decl.
+    for (idx, pval) in enumerate(inst_param_array):
+      if pval is not None:
+        continue
+      inst_param_array[idx] = mod_param_decls[idx]
+
     if sym_name:
       sym_name = StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
     post_args = [
         ArrayAttr.get([StringAttr.get(x) for x in self.operand_names()]),
         ArrayAttr.get([StringAttr.get(x) for x in self.result_names()]),
-        parameters, sym_name
+        ArrayAttr.get(inst_param_array), sym_name
     ]
     if results is None:
       results = module.type.results
@@ -87,6 +106,7 @@ class ModuleLike:
       input_ports=[],
       output_ports=[],
       *,
+      parameters=[],
       attributes={},
       body_builder=None,
       loc=None,
@@ -125,6 +145,8 @@ class ModuleLike:
       output_names.append(StringAttr.get(str(port_name)))
     attributes["resultNames"] = ArrayAttr.get(output_names)
 
+    attributes["parameters"] = ArrayAttr.get(parameters)
+
     attributes["type"] = TypeAttr.get(
         FunctionType.get(inputs=input_types, results=output_types))
 
@@ -154,6 +176,12 @@ class ModuleLike:
   @property
   def is_external(self):
     return len(self.regions[0].blocks) == 0
+
+  @property
+  def parameters(self) -> list[ParamDeclAttr]:
+    return [
+        hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
+    ]
 
   def create(self,
              name: str,

@@ -47,6 +47,10 @@ with Context() as ctx, Location.unknown():
     one_input = hw.HWModuleOp(
         name="one_input",
         input_ports=[("a", i32)],
+        parameters=[
+            hw.ParamDeclAttr.get("BANKS", TypeAttr.get(i32),
+                                 IntegerAttr.get(i32, 5))
+        ],
         body_builder=lambda m: hw.OutputOp([]),
     )
     two_inputs = hw.HWModuleOp(
@@ -79,8 +83,8 @@ with Context() as ctx, Location.unknown():
       # CHECK: %[[INST1_RESULT:.+]] = hw.instance "inst1" @one_output()
       inst1 = one_output.create("inst1")
 
-      # CHECK: hw.instance "inst2" @one_input(a: %[[INST1_RESULT]]: i32)
-      inst2 = one_input.create("inst2", a=inst1.a)
+      # CHECK: hw.instance "inst2" @one_input<BANKS: i32 = 5>(a: %[[INST1_RESULT]]: i32)
+      one_input.create("inst2", a=inst1.a)
 
       # CHECK: hw.instance "inst4" @two_inputs(a: %[[INST1_RESULT]]: i32, b: %[[INST1_RESULT]]: i32)
       inst4 = two_inputs.create("inst4", a=inst1.a)
@@ -90,8 +94,10 @@ with Context() as ctx, Location.unknown():
       inst5 = op.create("inst5")
       connect(inst5.my_input, inst5.my_output)
 
-      # CHECK: hw.instance "inst6" {{.*}} {BANKS = 2 : i64}
-      one_input.create("inst6", a=inst1.a, parameters={"BANKS": 2})
+      # CHECK: hw.instance "inst6" @one_input<BANKS: i32 = 2>(a:
+      one_input.create("inst6",
+                               a=inst1.a,
+                               parameters={"BANKS": IntegerAttr.get(i32, 2)})
 
     instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
                                            body_builder=instance_builder_body)
