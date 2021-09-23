@@ -13,6 +13,7 @@
 #include "circt/Conversion/SCFToCalyx/SCFToCalyx.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
@@ -1267,6 +1268,210 @@ class CleanupFuncOps : public FuncOpPartialLoweringPattern {
 };
 
 //===----------------------------------------------------------------------===//
+// Simplification patterns
+//===----------------------------------------------------------------------===//
+
+/// Removes operations which have an empty body.
+template <typename TOp>
+struct EliminateEmptyOpPattern : mlir::OpRewritePattern<TOp> {
+  using mlir::OpRewritePattern<TOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(TOp op,
+                                PatternRewriter &rewriter) const override {
+    if (op.getRegion().empty() || op.getRegion().front().empty()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+    return failure();
+  }
+};
+
+template <>
+struct EliminateEmptyOpPattern<calyx::IfOp>
+    : mlir::OpRewritePattern<calyx::IfOp> {
+  using mlir::OpRewritePattern<calyx::IfOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::IfOp op,
+                                PatternRewriter &rewriter) const override {
+    if (op.thenRegion().empty() || op.thenRegion().front().empty()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+    return failure();
+  }
+};
+
+/// Removes nested seq operations, e.g.:
+/// seq { seq { ... } } ->  seq { ... }
+struct NestedSeqPattern : mlir::OpRewritePattern<calyx::SeqOp> {
+  using mlir::OpRewritePattern<calyx::SeqOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::SeqOp seqOp,
+                                PatternRewriter &rewriter) const override {
+    if (isa<calyx::SeqOp>(seqOp->getParentOp())) {
+      if (auto *body = seqOp.getBody()) {
+        for (auto &op : make_early_inc_range(*body))
+          op.moveBefore(seqOp);
+        rewriter.eraseOp(seqOp);
+        return success();
+      }
+    }
+    return failure();
+  }
+};
+
+/// Removes calyx::CombGroupOps which are unused. These correspond to
+/// combinational groups created during op building that, after conversion,
+/// have either been inlined into calyx::GroupOps or are referenced by an
+/// if/while with statement.
+/// We do not eliminate unused calyx::GroupOps; this should never happen, and is
+/// considered an error. In these cases, the program will be invalidated when
+/// the Calyx verifiers execute.
+struct EliminateUnusedCombGroups : mlir::OpRewritePattern<calyx::CombGroupOp> {
+  using mlir::OpRewritePattern<calyx::CombGroupOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::CombGroupOp combGroupOp,
+                                PatternRewriter &rewriter) const override {
+    auto control =
+        combGroupOp->getParentOfType<calyx::ComponentOp>().getControlOp();
+    if (!SymbolTable::symbolKnownUseEmpty(combGroupOp.sym_nameAttr(), control))
+      return failure();
+
+    rewriter.eraseOp(combGroupOp);
+    return success();
+  }
+};
+
+/// GroupDoneOp's are terminator operations and should therefore be the last
+/// operator in a group. During group construction, we always append assignments
+/// to the end of a group, resulting in group_done ops migrating away from the
+/// terminator position. This pattern moves such ops to the end of their group.
+struct NonTerminatingGroupDonePattern
+    : mlir::OpRewritePattern<calyx::GroupDoneOp> {
+  using mlir::OpRewritePattern<calyx::GroupDoneOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::GroupDoneOp groupDoneOp,
+                                PatternRewriter & /*rewriter*/) const override {
+    Block *block = groupDoneOp->getBlock();
+    if (&block->back() == groupDoneOp)
+      return failure();
+
+    groupDoneOp->moveBefore(groupDoneOp->getBlock(),
+                            groupDoneOp->getBlock()->end());
+    return success();
+  }
+};
+
+/// When building groups which contain accesses to multiple sequential
+/// components, a group_done op is created for each of these. This pattern
+/// and's each of the group_done values into a single group_done.
+struct MultipleGroupDonePattern : mlir::OpRewritePattern<calyx::GroupOp> {
+  using mlir::OpRewritePattern<calyx::GroupOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::GroupOp groupOp,
+                                PatternRewriter &rewriter) const override {
+    auto groupDoneOps = SmallVector<calyx::GroupDoneOp>(
+        groupOp.getBody()->getOps<calyx::GroupDoneOp>());
+
+    if (groupDoneOps.size() <= 1)
+      return failure();
+
+    /// Create an and-tree of all calyx::GroupDoneOp's.
+    rewriter.setInsertionPointToEnd(groupDoneOps[0]->getBlock());
+    Value acc = groupDoneOps[0].src();
+    for (auto groupDoneOp : llvm::makeArrayRef(groupDoneOps).drop_front(1)) {
+      auto newAndOp = rewriter.create<comb::AndOp>(groupDoneOp.getLoc(), acc,
+                                                   groupDoneOp.src());
+      acc = newAndOp.getResult();
+    }
+
+    /// Create a group done op with the complex expression as a guard.
+    rewriter.create<calyx::GroupDoneOp>(
+        groupOp.getLoc(),
+        rewriter.create<hw::ConstantOp>(groupOp.getLoc(), APInt(1, 1)), acc);
+    for (auto groupDoneOp : groupDoneOps)
+      rewriter.eraseOp(groupDoneOp);
+
+    return success();
+  }
+};
+
+/// Returns the last calyx::EnableOp within the child tree of 'parentSeqOp'.
+/// If no EnableOp was found (for instance, if a "par" group is present),
+/// returns nullptr.
+static Operation *getLastSeqEnableOp(calyx::SeqOp parentSeqOp) {
+  auto &lastOp = parentSeqOp.getBody()->back();
+  if (auto enableOp = dyn_cast<calyx::EnableOp>(lastOp))
+    return enableOp.getOperation();
+  else if (auto seqOp = dyn_cast<calyx::SeqOp>(lastOp))
+    return getLastSeqEnableOp(seqOp);
+  return nullptr;
+}
+
+/// Removes common tail enable operations for sequential 'then'/'else'
+/// branches inside an 'if' operation.
+///
+///   if %a with %A {           if %a with %A {
+///     seq {                     seq {
+///       ...                       ...
+///       calyx.enable @B       } else {
+///     }                         seq {
+///   } else {              ->      ...
+///     seq {                     }
+///       ...                   }
+///       calyx.enable @B       calyx.enable @B
+///     }
+///   }
+/// TODO(#1861): This pass only considers shared tail operations within SeqOps.
+/// A similar pattern should be implemented for ParOps.
+struct CommonIfTailEnablePattern : mlir::OpRewritePattern<calyx::IfOp> {
+  using mlir::OpRewritePattern<calyx::IfOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(calyx::IfOp ifOp,
+                                PatternRewriter &rewriter) const override {
+    /// Check if there's anything in the branches; if not,
+    /// EliminateEmptyOpPattern will eliminate a potentially
+    /// empty/invalid if statement.
+    if (ifOp.thenRegion().empty() || ifOp.thenRegion().front().empty())
+      return failure();
+    if (ifOp.elseRegion().empty() || ifOp.elseRegion().front().empty())
+      return failure();
+
+    auto &thenOpStructureOp = ifOp.thenRegion().front().front();
+    auto &elseOpStructureOp = ifOp.elseRegion().front().front();
+    if (isa<calyx::ParOp>(thenOpStructureOp) ||
+        isa<calyx::ParOp>(elseOpStructureOp))
+      return failure();
+
+    /// At this point, only sequence ops are valid inside the IfOp branches.
+    auto thenSeqOp = dyn_cast<calyx::SeqOp>(thenOpStructureOp);
+    auto elseSeqOp = dyn_cast<calyx::SeqOp>(elseOpStructureOp);
+    assert(thenSeqOp && elseSeqOp &&
+           "expected nested seq ops in both branches of a calyx.IfOp");
+
+    auto lastThenEnableOp =
+        dyn_cast<calyx::EnableOp>(getLastSeqEnableOp(thenSeqOp));
+    auto lastElseEnableOp =
+        dyn_cast<calyx::EnableOp>(getLastSeqEnableOp(elseSeqOp));
+
+    if (!(lastThenEnableOp && lastElseEnableOp))
+      return failure();
+
+    if (lastThenEnableOp.groupName() != lastElseEnableOp.groupName())
+      return failure();
+
+    /// Erase both enable operations and add group enable operation after the
+    /// shared IfOp parent.
+    rewriter.setInsertionPointAfter(ifOp);
+    rewriter.create<calyx::EnableOp>(ifOp.getLoc(),
+                                     lastThenEnableOp.groupName());
+    rewriter.eraseOp(lastThenEnableOp);
+    rewriter.eraseOp(lastElseEnableOp);
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
 class SCFToCalyxPass : public SCFToCalyxBase<SCFToCalyxPass> {
@@ -1477,6 +1682,26 @@ void SCFToCalyxPass::runOnOperation() {
         /*runOnce=*/pat.strategy == LoweringPattern::Strategy::Once);
     if (succeeded(partialPatternRes))
       continue;
+    signalPassFailure();
+    return;
+  }
+
+  //===----------------------------------------------------------------------===//
+  // Cleanup patterns
+  //===----------------------------------------------------------------------===//
+  RewritePatternSet cleanupPatterns(&getContext());
+  cleanupPatterns
+      .add<EliminateEmptyOpPattern<calyx::CombGroupOp>,
+           EliminateEmptyOpPattern<calyx::GroupOp>,
+           EliminateEmptyOpPattern<calyx::SeqOp>,
+           EliminateEmptyOpPattern<calyx::ParOp>,
+           EliminateEmptyOpPattern<calyx::IfOp>,
+           EliminateEmptyOpPattern<calyx::WhileOp>, NestedSeqPattern,
+           CommonIfTailEnablePattern, MultipleGroupDonePattern,
+           NonTerminatingGroupDonePattern, EliminateUnusedCombGroups>(
+          &getContext());
+  if (failed(applyPatternsAndFoldGreedily(getOperation(),
+                                          std::move(cleanupPatterns)))) {
     signalPassFailure();
     return;
   }

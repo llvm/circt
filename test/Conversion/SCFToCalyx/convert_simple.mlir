@@ -2,26 +2,6 @@
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK-NEXT:     calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
-// CHECK-NEXT:       calyx.wires  {
-// CHECK-NEXT:       }
-// CHECK-NEXT:       calyx.control  {
-// CHECK-NEXT:         calyx.seq  {
-// CHECK-NEXT:         }
-// CHECK-NEXT:       }
-// CHECK-NEXT:     }
-// CHECK-NEXT:   }
-// CHECK-NEXT: }
-module {
-  func @main() {
-    return
-  }
-}
-
-// -----
-
-// CHECK:      module  {
-// CHECK-NEXT:   calyx.program "main"  {
 // CHECK-NEXT:     calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-NEXT:       %true = hw.constant true
 // CHECK-NEXT:       %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register "ret_arg0_reg" : i32, i1, i1, i1, i32, i1
