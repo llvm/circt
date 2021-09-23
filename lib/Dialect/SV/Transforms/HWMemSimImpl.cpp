@@ -99,9 +99,9 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
 
   size_t inArg = 0;
   for (size_t i = 0; i < mem.numReadPorts; ++i) {
-    Value addr = op.body().getArgument(inArg++);
-    Value en = op.body().getArgument(inArg++);
     Value clock = op.body().getArgument(inArg++);
+    Value en = op.body().getArgument(inArg++);
+    Value addr = op.body().getArgument(inArg++);
     // Add pipeline stages
     en = addPipelineStages(b, mem.readLatency, clock, en);
     addr = addPipelineStages(b, mem.readLatency, clock, addr);
@@ -117,19 +117,19 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
 
   for (size_t i = 0; i < mem.numReadWritePorts; ++i) {
     auto numStages = std::max(mem.readLatency, mem.writeLatency) - 1;
-    Value addr = op.body().getArgument(inArg++);
-    Value en = op.body().getArgument(inArg++);
     Value clock = op.body().getArgument(inArg++);
+    Value en = op.body().getArgument(inArg++);
+    Value addr = op.body().getArgument(inArg++);
     Value wmode = op.body().getArgument(inArg++);
-    Value wdata = op.body().getArgument(inArg++);
     Value wmask = op.body().getArgument(inArg++);
+    Value wdata = op.body().getArgument(inArg++);
 
     // Add pipeline stages
-    addr = addPipelineStages(b, numStages, clock, addr);
     en = addPipelineStages(b, numStages, clock, en);
+    addr = addPipelineStages(b, numStages, clock, addr);
     wmode = addPipelineStages(b, numStages, clock, wmode);
-    wdata = addPipelineStages(b, numStages, clock, wdata);
     wmask = addPipelineStages(b, numStages, clock, wmask);
+    wdata = addPipelineStages(b, numStages, clock, wdata);
 
     // wire to store read result
     auto rWire = b.create<sv::WireOp>(wdata.getType());
@@ -159,16 +159,16 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   DenseMap<unsigned, Operation *> writeProcesses;
   for (size_t i = 0; i < mem.numWritePorts; ++i) {
     auto numStages = mem.writeLatency - 1;
-    Value addr = op.body().getArgument(inArg++);
-    Value en = op.body().getArgument(inArg++);
     Value clock = op.body().getArgument(inArg++);
-    Value wdata = op.body().getArgument(inArg++);
+    Value en = op.body().getArgument(inArg++);
+    Value addr = op.body().getArgument(inArg++);
     Value wmask = op.body().getArgument(inArg++);
+    Value wdata = op.body().getArgument(inArg++);
     // Add pipeline stages
-    addr = addPipelineStages(b, numStages, clock, addr);
     en = addPipelineStages(b, numStages, clock, en);
-    wdata = addPipelineStages(b, numStages, clock, wdata);
+    addr = addPipelineStages(b, numStages, clock, addr);
     wmask = addPipelineStages(b, numStages, clock, wmask);
+    wdata = addPipelineStages(b, numStages, clock, wdata);
 
     // Build write port logic.
     auto writeLogic = [&] {
@@ -224,19 +224,13 @@ void HWMemSimImplPass::runOnOperation() {
 
     if (genOp.descriptor() == "FIRRTL_Memory") {
       auto mem = analyzeMemOp(oldModule);
-        OpBuilder builder(oldModule);
-        auto nameAttr = builder.getStringAttr(oldModule.getName());
-      if (mem.readLatency == 1 && mem.writeLatency == 1) {
-        builder.create<HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-            oldModule.getPorts());
-      }else {
 
-        auto newModule = builder.create<HWModuleOp>(oldModule.getLoc(), nameAttr,
-            oldModule.getPorts());
-        generateMemory(newModule, mem);
-      }
+      OpBuilder builder(oldModule);
+      auto nameAttr = builder.getStringAttr(oldModule.getName());
+      auto newModule = builder.create<HWModuleOp>(oldModule.getLoc(), nameAttr,
+                                                  oldModule.getPorts());
+      generateMemory(newModule, mem);
       oldModule.erase();
-
       anythingChanged = true;
     }
   }
