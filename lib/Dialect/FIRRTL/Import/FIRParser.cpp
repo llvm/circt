@@ -2222,8 +2222,10 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
                      "memory port should have behavioral memory type");
   auto resultType = memVType.getElementType();
 
-  auto annotations = getAnnotations(getModuleTarget() + ">" + id, startLoc,
-                                    moduleContext.targetsInModule, resultType);
+  ArrayAttr annotations = getConstants().emptyArrayAttr;
+  if (!getConstants().options.rawAnnotations)
+    annotations = getAnnotations(getModuleTarget() + ">" + id, startLoc,
+                                 moduleContext.targetsInModule, resultType);
 
   locationProcessor.setLoc(startLoc);
 
@@ -2601,19 +2603,24 @@ ParseResult FIRStmtParser::parseInstance() {
     resultNamesAndTypes.push_back({port.name, port.type});
   }
 
-  // Combine annotations that are ReferenceTargets and InstanceTargets.  By
-  // example, this will lookup all annotations with either of the following
-  // formats:
-  //     ~Foo|Foo>bar
-  //     ~Foo|Foo/bar:Bar
-  auto annotations = getSplitAnnotations(
-      {getModuleTarget() + ">" + id,
-       getModuleTarget() + "/" + id + ":" + moduleName},
-      startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
+  InstanceOp result;
+  if (getConstants().options.rawAnnotations) {
+    result = builder.create<InstanceOp>(resultTypes, moduleName, id);
+  } else {
+    // Combine annotations that are ReferenceTargets and InstanceTargets.  By
+    // example, this will lookup all annotations with either of the following
+    // formats:
+    //     ~Foo|Foo>bar
+    //     ~Foo|Foo/bar:Bar
+    auto annotations = getSplitAnnotations(
+        {getModuleTarget() + ">" + id,
+         getModuleTarget() + "/" + id + ":" + moduleName},
+        startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
-  auto result = builder.create<InstanceOp>(resultTypes, moduleName, id,
-                                           annotations.first.getValue(),
-                                           annotations.second.getValue());
+    result = builder.create<InstanceOp>(resultTypes, moduleName, id,
+                                        annotations.first.getValue(),
+                                        annotations.second.getValue());
+  }
 
   // Since we are implicitly unbundling the instance results, we need to keep
   // track of the mapping from bundle fields to results in the unbundledValues
@@ -2656,9 +2663,11 @@ ParseResult FIRStmtParser::parseCombMem() {
   auto memType = CMemoryType::get(vectorType.getElementType(),
                                   vectorType.getNumElements());
 
-  auto annotations =
-      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                     moduleContext.targetsInModule, type);
+  auto annotations = getConstants().emptyArrayAttr;
+  if (!getConstants().options.rawAnnotations)
+    annotations =
+        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                       moduleContext.targetsInModule, type);
 
   auto result = builder.create<CombMemOp>(memType, id, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
@@ -2693,9 +2702,11 @@ ParseResult FIRStmtParser::parseSeqMem() {
   auto memType = CMemoryType::get(getContext(), vectorType.getElementType(),
                                   vectorType.getNumElements());
 
-  auto annotations =
-      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                     moduleContext.targetsInModule, type);
+  auto annotations = getConstants().emptyArrayAttr;
+  if (!getConstants().options.rawAnnotations)
+    annotations =
+        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                       moduleContext.targetsInModule, type);
 
   auto result = builder.create<SeqMemOp>(memType, ruw, id, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
@@ -2820,14 +2831,25 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto annotations =
-      getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                          ports, moduleContext.targetsInModule);
+  MemOp result;
+  if (getConstants().options.rawAnnotations) {
+    SmallVector<Attribute, 4> portAnnotations(ports.size(),
+                                              ArrayAttr::get(getContext(), {}));
 
-  auto result =
-      builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth, ruw,
-                            builder.getArrayAttr(resultNames), id,
-                            annotations.first, annotations.second);
+    result = builder.create<MemOp>(
+        resultTypes, readLatency, writeLatency, depth, ruw,
+        builder.getArrayAttr(resultNames), id, getConstants().emptyArrayAttr,
+        builder.getArrayAttr(portAnnotations));
+  } else {
+    auto annotations =
+        getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                            ports, moduleContext.targetsInModule);
+
+    result =
+        builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
+                              ruw, builder.getArrayAttr(resultNames), id,
+                              annotations.first, annotations.second);
+  }
 
   UnbundledValueEntry unbundledValueEntry;
   unbundledValueEntry.reserve(result.getNumResults());
@@ -2876,9 +2898,11 @@ ParseResult FIRStmtParser::parseNode() {
     return failure();
   }
 
-  auto annotations =
-      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                     moduleContext.targetsInModule, initializerType);
+  auto annotations = getConstants().emptyArrayAttr;
+  if (!getConstants().options.rawAnnotations)
+    annotations =
+        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                       moduleContext.targetsInModule, initializerType);
 
   Value result = builder.create<NodeOp>(initializer.getType(), initializer, id,
                                         annotations);
@@ -2903,9 +2927,11 @@ ParseResult FIRStmtParser::parseWire() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto annotations =
-      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                     moduleContext.targetsInModule, type);
+  auto annotations = getConstants().emptyArrayAttr;
+  if (!getConstants().options.rawAnnotations)
+    annotations =
+        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                       moduleContext.targetsInModule, type);
 
   auto result = builder.create<WireOp>(type, id, annotations);
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
@@ -2993,9 +3019,11 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto annotations =
-      getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
-                     moduleContext.targetsInModule, type);
+  ArrayAttr annotations = getConstants().emptyArrayAttr;
+  if (!getConstants().options.rawAnnotations)
+    annotations =
+        getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
+                       moduleContext.targetsInModule, type);
 
   Value result;
   if (resetSignal)
@@ -3029,6 +3057,9 @@ private:
   ParseResult importAnnotations(CircuitOp circuit, SMLoc loc,
                                 StringRef circuitTarget,
                                 StringRef annotationsStr, size_t &nlaNumber);
+  ParseResult importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
+                                   StringRef annotationsStr,
+                                   SmallVector<Attribute> &attrs);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
@@ -3058,6 +3089,35 @@ private:
 };
 
 } // end anonymous namespace
+ParseResult
+FIRCircuitParser::importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
+                                       StringRef annotationsStr,
+                                       SmallVector<Attribute> &attrs) {
+
+  auto annotations = json::parse(annotationsStr);
+  if (auto err = annotations.takeError()) {
+    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
+      auto diag = emitError(loc, "Failed to parse JSON Annotations");
+      diag.attachNote() << a.message();
+    });
+    return failure();
+  }
+
+  json::Path::Root root;
+  llvm::StringMap<ArrayAttr> thisAnnotationMap;
+  if (!fromJSONRaw(annotations.get(), circuitTarget, attrs, root,
+                   getContext())) {
+    auto diag = emitError(loc, "Invalid/unsupported annotation format");
+    std::string jsonErrorMessage =
+        "See inline comments for problem area in JSON:\n";
+    llvm::raw_string_ostream s(jsonErrorMessage);
+    root.printErrorContext(annotations.get(), s);
+    diag.attachNote() << jsonErrorMessage;
+    return failure();
+  }
+
+  return success();
+}
 
 ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
                                                 StringRef circuitTarget,
@@ -3156,10 +3216,11 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
     // compile time creating too many unique locations.
     info.setDefaultLoc(defaultLoc);
 
-    AnnotationSet annotations(
-        getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
-                       getConstants().targetSet, type));
-
+    AnnotationSet annotations(getContext());
+    if (!getConstants().options.rawAnnotations)
+      annotations = AnnotationSet(
+          getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
+                         getConstants().targetSet, type));
     resultPorts.push_back(
         {name, type, direction::get(isOutput), info.getLoc(), annotations});
     resultPortLocs.push_back(info.getFIRLoc());
@@ -3193,8 +3254,10 @@ ParseResult FIRCircuitParser::parseModule(CircuitOp circuit,
     return failure();
 
   auto moduleTarget = (circuitTarget + "|" + name.getValue()).str();
-  ArrayAttr annotations = getAnnotations({moduleTarget}, info.getFIRLoc(),
-                                         getConstants().targetSet);
+  ArrayAttr annotations = getConstants().emptyArrayAttr;
+  if (!getConstants().options.rawAnnotations)
+    annotations = getAnnotations({moduleTarget}, info.getFIRLoc(),
+                                 getConstants().targetSet);
 
   if (parseToken(FIRToken::colon, "expected ':' in module definition") ||
       info.parseOptionalInfo() ||
@@ -3399,27 +3462,52 @@ ParseResult FIRCircuitParser::parseCircuit(
   std::string circuitTarget = "~" + name.getValue().str();
   size_t nlaNumber = 0;
 
-  // Deal with any inline annotations, if they exist.  These are processed first
-  // to place any annotations from an annotation file *after* the inline
-  // annotations.  While arbitrary, this makes the annotation file have "append"
-  // semantics.
-  if (!inlineAnnotations.empty())
-    if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
-                          inlineAnnotations, nlaNumber))
-      return failure();
+  ArrayAttr annotations;
+  if (getConstants().options.rawAnnotations) {
+    SmallVector<Attribute> rawAnno;
+    // Deal with any inline annotations, if they exist.  These are processed
+    // first to place any annotations from an annotation file *after* the inline
+    // annotations.  While arbitrary, this makes the annotation file have
+    // "append" semantics.
+    if (!inlineAnnotations.empty())
+      if (importAnnotationsRaw(inlineAnnotationsLoc, circuitTarget,
+                               inlineAnnotations, rawAnno))
+        return failure();
 
-  // Deal with the annotation file if one was specified
-  for (auto annotationsBuf : annotationsBufs)
-    if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
-                          annotationsBuf->getBuffer(), nlaNumber))
-      return failure();
+    // Deal with the annotation file if one was specified
+    for (auto annotationsBuf : annotationsBufs)
+      if (importAnnotationsRaw(info.getFIRLoc(), circuitTarget,
+                               annotationsBuf->getBuffer(), rawAnno))
+        return failure();
 
-  // Get annotations associated with this circuit. These are either:
-  //   1. Annotations with no target (which we use "~" to identify)
-  //   2. Annotations targeting the circuit, e.g., "~Foo"
-  ArrayAttr annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
-                                         getConstants().targetSet);
+    // Get annotations associated with this circuit. These are either:
+    //   1. Annotations with no target (which we use "~" to identify)
+    //   2. Annotations targeting the circuit, e.g., "~Foo"
+    annotations = b.getArrayAttr(rawAnno);
 
+  } else {
+
+    // Deal with any inline annotations, if they exist.  These are processed
+    // first to place any annotations from an annotation file *after* the inline
+    // annotations.  While arbitrary, this makes the annotation file have
+    // "append" semantics.
+    if (!inlineAnnotations.empty())
+      if (importAnnotations(circuit, inlineAnnotationsLoc, circuitTarget,
+                            inlineAnnotations, nlaNumber))
+        return failure();
+
+    // Deal with the annotation file if one was specified
+    for (auto annotationsBuf : annotationsBufs)
+      if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
+                            annotationsBuf->getBuffer(), nlaNumber))
+        return failure();
+
+    // Get annotations associated with this circuit. These are either:
+    //   1. Annotations with no target (which we use "~" to identify)
+    //   2. Annotations targeting the circuit, e.g., "~Foo"
+    annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
+                                 getConstants().targetSet);
+  }
   circuit->setAttr("annotations", annotations);
   deferredModules.reserve(16);
 

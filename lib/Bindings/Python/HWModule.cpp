@@ -104,4 +104,23 @@ void circt::python::populateDialectHWSubmodule(py::module &m) {
         MlirStringRef cStr = hwTypeAliasTypeGetScope(self);
         return std::string(cStr.data, cStr.length);
       });
+
+  mlir_attribute_subclass(m, "ParamDeclAttr", hwAttrIsAParamDeclAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, std::string name, MlirAttribute type,
+             MlirAttribute value) {
+            return cls(hwParamDeclAttrGet(
+                mlirStringRefCreateFromCString(name.c_str()), type, value));
+          })
+      .def_property_readonly(
+          "value",
+          [](MlirAttribute self) { return hwParamDeclAttrGetValue(self); })
+      .def_property_readonly(
+          "param_type",
+          [](MlirAttribute self) { return hwParamDeclAttrGetType(self); })
+      .def_property_readonly("name", [](MlirAttribute self) {
+        MlirStringRef cStr = hwParamDeclAttrGetName(self);
+        return std::string(cStr.data, cStr.length);
+      });
 }

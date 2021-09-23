@@ -376,9 +376,10 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verifyProgramOp(ProgramOp program) {
-  if (!program.getMainComponent())
-    return program.emitOpError("must contain one component named "
-                               "\"main\" as the entry point.");
+  if (program.getEntryPointComponent() == nullptr)
+    return program.emitOpError() << "has undefined entry-point component: \""
+                                 << program.entryPointName() << "\".";
+
   return success();
 }
 
@@ -503,16 +504,13 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
                  SmallVectorImpl<OpAsmParser::OperandType> &ports,
                  SmallVectorImpl<Type> &portTypes,
                  SmallVectorImpl<NamedAttrList> &portAttrs) {
-  if (parser.parseLParen())
-    return failure();
-
-  do {
+  auto parsePort = [&]() -> ParseResult {
     OpAsmParser::OperandType port;
     Type portType;
-    if (failed(parser.parseOptionalRegionArgument(port)) ||
-        failed(parser.parseOptionalColon()) ||
-        failed(parser.parseType(portType)))
-      continue;
+    // Expect each port to have the form `%<ssa-name> : <type>`.
+    if (parser.parseRegionArgument(port) || parser.parseColon() ||
+        parser.parseType(portType))
+      return failure();
     ports.push_back(port);
     portTypes.push_back(portType);
 
@@ -520,10 +518,11 @@ parsePortDefList(OpAsmParser &parser, OperationState &result,
     portAttrs.push_back(succeeded(parser.parseOptionalAttrDict(portAttr))
                             ? portAttr
                             : NamedAttrList());
+    return success();
+  };
 
-  } while (succeeded(parser.parseOptionalComma()));
-
-  return parser.parseRParen();
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parsePort);
 }
 
 /// Parses the signature of a Calyx component.
@@ -928,8 +927,12 @@ ComponentOp InstanceOp::getReferencedComponent() {
 /// referenced component twice.
 static LogicalResult verifyInstanceOpType(InstanceOp instance,
                                           ComponentOp referencedComponent) {
-  if (instance.componentName() == "main")
-    return instance.emitOpError("cannot reference the entry point.");
+  auto program = instance->getParentOfType<ProgramOp>();
+  StringRef entryPointName = program.entryPointName();
+  if (instance.componentName() == entryPointName)
+    return instance.emitOpError()
+           << "cannot reference the entry-point component: \"" << entryPointName
+           << "\".";
 
   // Verify the instance result ports with those of its referenced component.
   SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();

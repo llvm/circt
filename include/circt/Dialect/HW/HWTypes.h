@@ -14,11 +14,14 @@
 #ifndef CIRCT_DIALECT_HW_TYPES_H
 #define CIRCT_DIALECT_HW_TYPES_H
 
+#include "circt/Dialect/HW/HWDialect.h"
+
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Types.h"
 
 namespace circt {
 namespace hw {
+class ParamDeclAttr;
 class TypedeclOp;
 namespace detail {
 /// Struct defining a field. Used in structs and unions.

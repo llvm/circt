@@ -129,7 +129,11 @@ struct LoweringOptionsParser : public llvm::cl::parser<LoweringOptions> {
 /// the command line arguments in multiple tools.
 struct LoweringCLOptions {
   llvm::cl::opt<LoweringOptions, false, LoweringOptionsParser> loweringOptions{
-      "lowering-options", llvm::cl::desc("Style options"),
+      "lowering-options",
+      llvm::cl::desc(
+          "Style options.  Valid flags include: alwaysFF, "
+          "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
+          "disallowLocalVariables, verifLabels, emittedLineLength=<n>"),
       llvm::cl::value_desc("option")};
 };
 } // namespace

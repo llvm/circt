@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
@@ -178,6 +179,7 @@ static void printHWElementType(Type element, DialectAsmPrinter &p) {
 //===----------------------------------------------------------------------===//
 // Struct Type
 //===----------------------------------------------------------------------===//
+
 namespace circt {
 namespace hw {
 namespace detail {

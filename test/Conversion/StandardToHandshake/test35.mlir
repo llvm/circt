@@ -62,7 +62,7 @@
 // CHECK:       }
 
     %10 = memref.alloc() : memref<10xf32>
-    %11 = memref.alloc() : memref<10xf32>
+    %11 = memref.alloca() : memref<10xf32>
     %c0 = constant 0 : index
     %c10 = constant 10 : index
     %5 = memref.load %10[%c10] : memref<10xf32>

@@ -82,7 +82,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   num_failed = db.add_design_placements()
   assert num_failed == 1
-  # ERR: error: 'hw.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by hw.instance "ext1" @MyExternMod() -> () {"loc:subpath" = #msft.switch.inst<@top["inst1","ext1"]=#msft.physloc<M20K, 2, 6, 1>>, parameters = {}}
+  # ERR: error: 'hw.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by hw.instance "ext1" @MyExternMod
 
   # CHECK-LABEL: === tcl ===
   print("=== tcl ===")
