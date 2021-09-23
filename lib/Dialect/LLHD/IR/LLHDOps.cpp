@@ -434,10 +434,7 @@ static ParseResult
 parseArgumentList(OpAsmParser &parser,
                   SmallVectorImpl<OpAsmParser::OperandType> &args,
                   SmallVectorImpl<Type> &argTypes) {
-  if (parser.parseLParen())
-    return failure();
-
-  do {
+  auto parseElt = [&]() -> ParseResult {
     OpAsmParser::OperandType argument;
     Type argType;
     if (succeeded(parser.parseOptionalRegionArgument(argument))) {
@@ -446,12 +443,11 @@ parseArgumentList(OpAsmParser &parser,
         argTypes.push_back(argType);
       }
     }
-  } while (succeeded(parser.parseOptionalComma()));
+    return success();
+  };
 
-  if (parser.parseRParen())
-    return failure();
-
-  return success();
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parseElt);
 }
 
 /// parse an entity signature with syntax:

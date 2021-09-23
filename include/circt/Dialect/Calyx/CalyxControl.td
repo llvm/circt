@@ -138,6 +138,14 @@ def EnableOp : CalyxOp<"enable", [
     FlatSymbolRefAttr:$groupName,
     OptionalAttr<ArrayAttr>:$compiledGroups
   );
+  let builders = [
+    OpBuilder<(ins "StringRef":$groupName), [{
+      $_state.addAttribute(
+        "groupName",
+        FlatSymbolRefAttr::get($_builder.getContext(), groupName)
+      );
+    }]>
+  ];
   let assemblyFormat = "$groupName attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }

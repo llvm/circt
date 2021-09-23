@@ -178,9 +178,10 @@ static std::string getSubModuleName(Operation *oldOp) {
     if (ctrlAttr.getValue())
       subModuleName += "_ctrl";
     else
-      oldOp->emitError("non-control component has invalid data type");
+      oldOp->emitError() << "non-control component has invalid data type '"
+                         << type << "'";
   } else
-    oldOp->emitError("unsupported data type");
+    oldOp->emitError() << "unsupported data type '" << type << "'";
 
   // Add memory ID.
   if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))

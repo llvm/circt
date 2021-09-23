@@ -41,7 +41,7 @@ def FModuleLike : OpInterface<"FModuleLike"> {
       return $_op.portNames()[portIndex].template cast<StringAttr>(); 
     }]>,
 
-    InterfaceMethod<"Get infromation about all ports",
+    InterfaceMethod<"Get information about all ports",
     "SmallVector<PortInfo>", "getPorts">,
 
     InterfaceMethod<"Get the module port directions",

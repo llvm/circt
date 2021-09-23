@@ -38,47 +38,6 @@ enum class Delimiter {
   OptionalLessGreater, // <> enclosed list or absent
 };
 
-/// Parse a paren-enclosed list of comma-separated items with an optional
-/// delimiter.  If a delimiter is provided, then an empty list is allowed.
-/// TODO(LLVM Merge): Replace with parser.parseCommaSeparatedList.
-template <typename FnType>
-static ParseResult parseCommaSeparatedList(OpAsmParser &parser,
-                                           Delimiter delimiter, FnType fn) {
-  switch (delimiter) {
-  case Delimiter::None:
-    break;
-  case Delimiter::Paren:
-    if (parser.parseLParen())
-      return failure();
-    // Check for empty list.
-    if (succeeded(parser.parseOptionalRParen()))
-      return success();
-    break;
-  case Delimiter::OptionalLessGreater:
-    // Check for absent list.
-    if (failed(parser.parseOptionalLess()))
-      return success();
-    // Check for empty list.
-    if (succeeded(parser.parseOptionalGreater()))
-      return success();
-    break;
-  }
-
-  do {
-    if (failed(fn()))
-      return failure();
-  } while (succeeded(parser.parseOptionalComma()));
-
-  switch (delimiter) {
-  case Delimiter::None:
-    return success();
-  case Delimiter::Paren:
-    return parser.parseRParen();
-  case Delimiter::OptionalLessGreater:
-    return parser.parseGreater();
-  }
-}
-
 /// Check parameter specified by `value` to see if it is valid within the scope
 /// of the specified module `module`.  If not, emit an error at the location of
 /// `usingOp` and return failure, otherwise return success.
@@ -90,12 +49,22 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
   // Literals are always ok.  Their types are already known to match
   // expectations.
   if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
-      value.isa<StringAttr>() || value.isa<VerbatimParameterValueAttr>())
+      value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
     return success();
+
+  // Check both arms of an expression.
+  if (auto binop = value.dyn_cast<ParamBinaryAttr>()) {
+    if (failed(checkParameterInContext(binop.getLhs(), module, usingOp,
+                                       disallowParamRefs)) ||
+        failed(checkParameterInContext(binop.getRhs(), module, usingOp,
+                                       disallowParamRefs)))
+      return failure();
+    return success();
+  }
 
   // Parameter references need more analysis to make sure they are valid within
   // this module.
-  if (auto parameterRef = value.dyn_cast<ParameterRefAttr>()) {
+  if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     auto nameAttr = parameterRef.getName();
 
     // Don't allow references to parameters from the default values of a
@@ -108,7 +77,7 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
 
     // Find the corresponding attribute in the module.
     for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
-      auto paramAttr = param.cast<ParameterAttr>();
+      auto paramAttr = param.cast<ParamDeclAttr>();
       if (paramAttr.getName() != nameAttr)
         continue;
 
@@ -482,26 +451,27 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
 static ParseResult parseOptionalParameters(OpAsmParser &parser,
                                            SmallVector<Attribute> &parameters) {
 
-  return parseCommaSeparatedList(parser, Delimiter::OptionalLessGreater, [&]() {
-    StringAttr name;
-    Type type;
-    Attribute value;
+  return parser.parseCommaSeparatedList(
+      OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
+        StringAttr name;
+        Type type;
+        Attribute value;
 
-    if (!(name = module_like_impl::parsePortName(parser)) ||
-        parser.parseColonType(type))
-      return failure();
+        if (!(name = module_like_impl::parsePortName(parser)) ||
+            parser.parseColonType(type))
+          return failure();
 
-    // Parse the default value if present.
-    if (succeeded(parser.parseOptionalEqual())) {
-      if (parser.parseAttribute(value, type))
-        return failure();
-    }
+        // Parse the default value if present.
+        if (succeeded(parser.parseOptionalEqual())) {
+          if (parser.parseAttribute(value, type))
+            return failure();
+        }
 
-    auto &builder = parser.getBuilder();
-    parameters.push_back(ParameterAttr::get(builder.getContext(), name,
-                                            TypeAttr::get(type), value));
-    return success();
-  });
+        auto &builder = parser.getBuilder();
+        parameters.push_back(ParamDeclAttr::get(builder.getContext(), name,
+                                                TypeAttr::get(type), value));
+        return success();
+      });
 }
 
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
@@ -616,7 +586,7 @@ static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
 
   p << '<';
   llvm::interleaveComma(parameters, p, [&](Attribute param) {
-    auto paramAttr = param.cast<ParameterAttr>();
+    auto paramAttr = param.cast<ParamDeclAttr>();
     p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
     if (auto value = paramAttr.getValue()) {
       p << " = ";
@@ -692,7 +662,7 @@ static LogicalResult verifyModuleCommon(Operation *module) {
 
   // Check parameter default values are sensible.
   for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
-    auto paramAttr = param.cast<ParameterAttr>();
+    auto paramAttr = param.cast<ParamDeclAttr>();
 
     // Default values are allowed to be missing.
     auto value = paramAttr.getValue();
@@ -892,8 +862,8 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     });
 
   for (size_t i = 0; i != numParameters; ++i) {
-    auto param = parameters[i].cast<ParameterAttr>();
-    auto modParam = modParameters[i].cast<ParameterAttr>();
+    auto param = parameters[i].cast<ParamDeclAttr>();
+    auto modParam = modParameters[i].cast<ParamDeclAttr>();
 
     auto paramName = param.getName();
     if (paramName != modParam.getName())
@@ -921,7 +891,7 @@ LogicalResult InstanceOp::verifyCustom() {
   // Check that all the parameter values specified to the instance are
   // structurally valid.
   for (auto param : parameters()) {
-    auto paramAttr = param.cast<ParameterAttr>();
+    auto paramAttr = param.cast<ParamDeclAttr>();
     auto value = paramAttr.getValue();
     assert(value && "SymbolUses verifier should already check this exists");
 
@@ -984,11 +954,13 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
       parser.getCurrentLocation(&parametersLoc) ||
       parseOptionalParameters(parser, parameters) ||
       parser.getCurrentLocation(&inputsOperandsLoc) ||
-      parseCommaSeparatedList(parser, Delimiter::Paren, parseInputPort) ||
+      parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseInputPort) ||
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
       parser.parseArrow() ||
-      parseCommaSeparatedList(parser, Delimiter::Paren, parseResultPort) ||
+      parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseResultPort) ||
       parser.parseOptionalAttrDict(result.attributes)) {
     return failure();
   }
@@ -1198,7 +1170,8 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
                                          Type &resultType) {
   Type elemType;
   uint64_t resultSize = 0;
-  do {
+
+  auto parseElement = [&]() -> ParseResult {
     Type ty;
     if (p.parseType(ty))
       return p.emitError(p.getCurrentLocation(), "Expected type");
@@ -1212,7 +1185,11 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
     elemType = arrTy.getElementType();
     inputTypes.push_back(ty);
     resultSize += arrTy.getSize();
-  } while (!p.parseOptionalComma());
+    return success();
+  };
+
+  if (p.parseCommaSeparatedList(parseElement))
+    return failure();
 
   resultType = ArrayType::get(elemType, resultSize);
   return success();

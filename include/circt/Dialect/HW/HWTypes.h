@@ -21,7 +21,7 @@
 
 namespace circt {
 namespace hw {
-class ParameterAttr;
+class ParamDeclAttr;
 class TypedeclOp;
 namespace detail {
 /// Struct defining a field. Used in structs and unions.

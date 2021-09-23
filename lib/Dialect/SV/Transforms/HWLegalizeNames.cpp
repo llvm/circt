@@ -186,13 +186,13 @@ bool HWLegalizeNamesPass::legalizePortNames(
   SmallVector<Attribute> parameters;
   bool changedParameters = false;
   for (auto param : module.parameters()) {
-    auto paramAttr = param.cast<ParameterAttr>();
+    auto paramAttr = param.cast<ParamDeclAttr>();
     auto newName = nameResolver.getLegalName(paramAttr.getName());
     if (newName.empty())
       parameters.push_back(param);
     else {
       auto newNameAttr = StringAttr::get(paramAttr.getContext(), newName);
-      parameters.push_back(ParameterAttr::getWithName(paramAttr, newNameAttr));
+      parameters.push_back(ParamDeclAttr::getWithName(paramAttr, newNameAttr));
       changedParameters = true;
       renamedParameterInfo[std::make_pair(module, paramAttr.getName())] =
           newNameAttr;
@@ -217,13 +217,26 @@ remapRenamedParameters(Attribute value, HWModuleOp module,
                        const RenamedParameterMapTy &renamedParameterInfo) {
   // Literals are always fine and never change.
   if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
-      value.isa<StringAttr>() || value.isa<VerbatimParameterValueAttr>())
+      value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
     return value;
+
+  // Remap leaves of expressions if needed.
+  if (auto binOp = value.dyn_cast<ParamBinaryAttr>()) {
+    auto newLHS =
+        remapRenamedParameters(binOp.getLhs(), module, renamedParameterInfo);
+    auto newRHS =
+        remapRenamedParameters(binOp.getRhs(), module, renamedParameterInfo);
+    // Don't rebuild an attribute if nothing changed.
+    if (newLHS == binOp.getLhs() && newRHS == binOp.getRhs())
+      return value;
+    return ParamBinaryAttr::get(value.getContext(), binOp.getOpcode(), newLHS,
+                                newRHS, value.getType());
+  }
 
   // TODO: Handle nested expressions when we support them.
 
   // Otherwise this must be a parameter reference.
-  auto parameterRef = value.dyn_cast<ParameterRefAttr>();
+  auto parameterRef = value.dyn_cast<ParamDeclRefAttr>();
   assert(parameterRef && "Unknown kind of parameter expression");
 
   // If this parameter is un-renamed, then leave it alone.
@@ -233,7 +246,7 @@ remapRenamedParameters(Attribute value, HWModuleOp module,
     return value;
 
   // Okay, it was renamed, return the new name with the right type.
-  return ParameterRefAttr::get(value.getContext(),
+  return ParamDeclRefAttr::get(value.getContext(),
                                it->second.cast<StringAttr>(), value.getType());
 }
 
@@ -248,13 +261,13 @@ static void updateInstanceForChangedModule(InstanceOp inst, HWModuleOp module) {
   auto instParameters = inst.parameters();
   auto modParameters = module.parameters();
   for (size_t i = 0, e = instParameters.size(); i != e; ++i) {
-    auto instParam = instParameters[i].cast<ParameterAttr>();
-    auto modParam = modParameters[i].cast<ParameterAttr>();
+    auto instParam = instParameters[i].cast<ParamDeclAttr>();
+    auto modParam = modParameters[i].cast<ParamDeclAttr>();
     if (instParam.getName() == modParam.getName())
       newAttrs.push_back(instParam);
     else
       newAttrs.push_back(
-          ParameterAttr::getWithName(instParam, modParam.getName()));
+          ParamDeclAttr::getWithName(instParam, modParam.getName()));
   }
   inst.parametersAttr(ArrayAttr::get(inst.getContext(), newAttrs));
 }
@@ -262,7 +275,7 @@ static void updateInstanceForChangedModule(InstanceOp inst, HWModuleOp module) {
 /// Rename any parameter values being specified for an instance if they are
 /// referring to parameters that got renamed.
 static void
-updateInstanceParameterRefs(InstanceOp instance,
+updateInstanceParamDeclRefs(InstanceOp instance,
                             RenamedParameterMapTy &renamedParameterInfo) {
   auto parameters = instance.parameters();
   if (parameters.empty())
@@ -274,7 +287,7 @@ updateInstanceParameterRefs(InstanceOp instance,
   newParams.reserve(parameters.size());
   bool anyRenamed = false;
   for (Attribute param : parameters) {
-    auto paramAttr = param.cast<ParameterAttr>();
+    auto paramAttr = param.cast<ParamDeclAttr>();
     auto newValue = remapRenamedParameters(paramAttr.getValue(), curModule,
                                            renamedParameterInfo);
     if (newValue == paramAttr.getValue()) {
@@ -282,7 +295,7 @@ updateInstanceParameterRefs(InstanceOp instance,
       continue;
     }
     anyRenamed = true;
-    newParams.push_back(ParameterAttr::get(paramAttr.getName(), newValue));
+    newParams.push_back(ParamDeclAttr::get(paramAttr.getName(), newValue));
   }
 
   instance.parametersAttr(ArrayAttr::get(instance.getContext(), newParams));
@@ -309,7 +322,7 @@ rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
         updateInstanceForChangedModule(instanceOp, it->second);
 
       if (moduleHasRenamedInterface)
-        updateInstanceParameterRefs(instanceOp, renamedParameterInfo);
+        updateInstanceParamDeclRefs(instanceOp, renamedParameterInfo);
       continue;
     }
 

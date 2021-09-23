@@ -12,6 +12,13 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
+namespace circt {
+namespace hw {
+class PBOAttr;
+enum class PBO : uint32_t;
+} // namespace hw
+} // namespace circt
+
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/HW/HWAttributes.h.inc"
 

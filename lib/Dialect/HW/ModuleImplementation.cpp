@@ -56,15 +56,8 @@ ParseResult module_like_impl::parseFunctionResultList(
     OpAsmParser &parser, SmallVectorImpl<Type> &resultTypes,
     SmallVectorImpl<NamedAttrList> &resultAttrs,
     SmallVectorImpl<Attribute> &resultNames) {
-  if (parser.parseLParen())
-    return failure();
 
-  // Special case for an empty set of parens.
-  if (succeeded(parser.parseOptionalRParen()))
-    return success();
-
-  // Parse individual function results.
-  do {
+  auto parseElt = [&]() -> ParseResult {
     resultNames.push_back(parsePortName(parser));
     if (!resultNames.back())
       return failure();
@@ -74,8 +67,11 @@ ParseResult module_like_impl::parseFunctionResultList(
     if (parser.parseColonType(resultTypes.back()) ||
         parser.parseOptionalAttrDict(resultAttrs.back()))
       return failure();
-  } while (succeeded(parser.parseOptionalComma()));
-  return parser.parseRParen();
+    return success();
+  };
+
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parseElt);
 }
 
 /// This is a variant of mlor::parseFunctionSignature that allows names on
