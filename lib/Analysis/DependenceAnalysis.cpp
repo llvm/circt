@@ -27,7 +27,6 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
                                   unsigned depth,
                                   MemoryDependenceResult &results) {
   for (auto *source : memoryOps) {
-    results[source] = SmallVector<MemoryDependence>();
     for (auto *destination : memoryOps) {
       if (source == destination)
         continue;
@@ -39,7 +38,10 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       DependenceResult result = checkMemrefAccessDependence(
           src, dst, depth, &dependenceConstraints, &depComps, true);
 
-      results[source].emplace_back(destination, result.value, depComps);
+      if (results.count(destination) == 0)
+        results[destination] = SmallVector<MemoryDependence>();
+
+      results[destination].emplace_back(source, result.value, depComps);
     }
   }
 }
@@ -65,7 +67,7 @@ circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
     checkMemrefDependence(memoryOps, depth, results);
 }
 
-/// Returns the dependences, if any, that originate from the given Operation.
+/// Returns the dependences, if any, that the given Operation depends on.
 ArrayRef<MemoryDependence>
 circt::analysis::MemoryDependenceAnalysis::getDependences(Operation *op) {
   return results[op];

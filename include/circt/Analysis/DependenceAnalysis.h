@@ -30,15 +30,15 @@ namespace analysis {
 /// It represents the destination of the dependence edge, the type of the
 /// dependence, and the components associated with each enclosing loop.
 struct MemoryDependence {
-  MemoryDependence(Operation *destination,
+  MemoryDependence(Operation *source,
                    mlir::DependenceResult::ResultEnum dependenceType,
                    ArrayRef<mlir::DependenceComponent> dependenceComponents)
-      : destination(destination), dependenceType(dependenceType),
+      : source(source), dependenceType(dependenceType),
         dependenceComponents(dependenceComponents.begin(),
                              dependenceComponents.end()) {}
 
-  // The dependence is from some source operation to this destination operation.
-  Operation *destination;
+  // The source Operation where this dependence originates.
+  Operation *source;
 
   // The dependence type denotes whether or not there is a dependence.
   mlir::DependenceResult::ResultEnum dependenceType;
@@ -48,19 +48,22 @@ struct MemoryDependence {
 };
 
 /// MemoryDependenceResult captures a set of memory dependences. The map key is
-/// the operation from which the dependence originates, and the map value is
-/// zero or more MemoryDependences for that operation.
+/// the operation to which the dependences exist, and the map value is zero or
+/// more MemoryDependences for that operation.
 using MemoryDependenceResult =
     DenseMap<Operation *, SmallVector<MemoryDependence>>;
 
 /// MemoryDependenceAnalysis traverses any AffineForOps in the FuncOp body and
-/// checks for memory access dependences. Results are captured in a
-/// MemoryDependenceResult, which can by queried by Operation.
+/// checks for affine memory access dependences. Non-affine memory dependences
+/// are currently not supported. Results are captured in a
+/// MemoryDependenceResult, and an API is exposed to query dependences of a
+/// given Operation.
+/// TODO(mikeurbach): consider upstreaming this to MLIR's AffineAnalysis.
 struct MemoryDependenceAnalysis {
   // Construct the analysis from a FuncOp.
   MemoryDependenceAnalysis(mlir::FuncOp funcOp);
 
-  // Get the dependences for a given Operation.
+  // Returns the dependences, if any, that the given Operation depends on.
   ArrayRef<MemoryDependence> getDependences(Operation *);
 
 private:
