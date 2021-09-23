@@ -1201,7 +1201,7 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
 
   Optional<StringRef> optGroupName = ifOp.groupName();
   if (!optGroupName.hasValue()) {
-    /// No combinational group was provided
+    // No combinational group was provided.
     return success();
   }
   StringRef groupName = optGroupName.getValue();
