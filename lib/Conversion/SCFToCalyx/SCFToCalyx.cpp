@@ -714,9 +714,9 @@ private:
     assert(addrPorts.size() == addressValues.size() &&
            "Mismatch between number of address ports of the provided memory "
            "and address assignment values");
-    for (auto &idx : enumerate(addressValues))
-      rewriter.create<calyx::AssignOp>(loc, addrPorts[idx.index()],
-                                       idx.value());
+    for (auto &address : enumerate(addressValues))
+      rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
+                                       address.value());
   }
 };
 
