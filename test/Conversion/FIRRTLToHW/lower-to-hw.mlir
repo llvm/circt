@@ -7,14 +7,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 {
 
   //These come from MemSimple, IncompleteRead, and MemDepth1
-  // CHECK-LABEL: hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
+  // CHECK-LABEL: hw.generator.schema @FIRRTLMem, "FIRRTL_Memory", ["depth", "numReadPorts", "numWritePorts", "numReadWritePorts", "readLatency", "writeLatency", "width", "maskGran", "readUnderWrite", "writeUnderWrite", "writeClockIDs"]
   //
   // This memory has two write ports where both write ports are driven by the
   // same clock.
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_0_1_aa,
   // CHECK-SAME: @FIRRTLMem(%wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i4, %wo_mask_0: i1, %wo_data_0: i8, %wo_clock_1: i1, %wo_en_1: i1, %wo_addr_1: i4, %wo_mask_1: i1, %wo_data_1: i8)
-  // CHECK-SAME: attributes {depth = 16 : i64, numReadPorts = 0 : ui32,
+  // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
   // CHECK-SAME: readLatency = 1 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32],
@@ -25,7 +25,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab,
   // CHECK-SAME: @FIRRTLMem(%wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i4, %wo_mask_0: i1, %wo_data_0: i8, %wo_clock_1: i1, %wo_en_1: i1, %wo_addr_1: i4, %wo_mask_1: i1, %wo_data_1: i8)
-  // CHECK-SAME: attributes {depth = 16 : i64, numReadPorts = 0 : ui32,
+  // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
   // CHECK-SAME: readLatency = 1 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32],
@@ -33,14 +33,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_1_1,
   // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1) -> (ro_data_0: i32)
-  // CHECK-SAME: attributes {depth = 1 : i64, numReadPorts = 1 : ui32,
+  // CHECK-SAME: attributes {depth = 1 : i64, maskGran = 32 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 1 : ui32,
   // CHECK-SAME: width = 32 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_42_12_0_1_0_1,
   // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i4) -> (ro_data_0: i42)
-  // CHECK-SAME: attributes {depth = 12 : i64, numReadPorts = 1 : ui32,
+  // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [],
@@ -54,7 +54,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   //CHECK-SAME: (ro_data_0: i40, rw_rdata_0: i40)
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_0_1_a,
   // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i4, %rw_clock_0: i1, %rw_en_0: i1, %rw_addr_0: i4, %rw_wmode_0: i1, %rw_wmask_0: i1, %rw_wdata_0: i42, %wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i4, %wo_mask_0: i1, %wo_data_0: i42) -> (ro_data_0: i42, rw_rdata_0: i42)
-  // CHECK-SAME: attributes {depth = 12 : i64, numReadPorts = 1 : ui32,
+  // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [0 : i32],

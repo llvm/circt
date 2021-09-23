@@ -181,8 +181,8 @@ struct FirMemory {
   size_t depth;
   size_t readLatency;
   size_t writeLatency;
-  size_t readUnderWrite;
   size_t maskBits;
+  size_t readUnderWrite;
   hw::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
 
@@ -282,7 +282,7 @@ static FirMemory analyzeMemOp(MemOp op) {
 
   return {numReadPorts,       numWritePorts,    numReadWritePorts,
           (size_t)width,      op.depth(),       op.readLatency(),
-          op.writeLatency(),  (size_t)op.ruw(), op.getMaskBits(),
+          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
           hw::WUW::PortOrder, writeClockIDs,    op.getLoc()};
 }
 
@@ -555,10 +555,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
-  std::array<StringRef, 10> schemaFields = {
-      "depth",           "numReadPorts", "numWritePorts", "numReadWritePorts",
-      "readLatency",     "writeLatency", "width",         "readUnderWrite",
-      "writeUnderWrite", "writeClockIDs"};
+  std::array<StringRef, 11> schemaFields = {
+      "depth",          "numReadPorts",    "numWritePorts", "numReadWritePorts",
+      "readLatency",    "writeLatency",    "width",         "maskGran",
+      "readUnderWrite", "writeUnderWrite", "writeClockIDs"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<hw::HWGeneratorSchemaOp>(
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -622,6 +622,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("readLatency", b.getUI32IntegerAttr(mem.readLatency)),
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
+        b.getNamedAttr("maskGran",
+                       b.getUI32IntegerAttr(mem.dataWidth / mem.maskBits)),
         b.getNamedAttr("readUnderWrite",
                        b.getUI32IntegerAttr(mem.readUnderWrite)),
         b.getNamedAttr("writeUnderWrite",
