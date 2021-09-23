@@ -1234,6 +1234,79 @@ private:
   }
 };
 
+/// This pass recursively inlines use-def chains of combinational logic (from
+/// non-stateful groups) into groups referenced in the control schedule.
+class InlineCombGroups
+    : public PartialLoweringPattern<calyx::GroupInterface,
+                                    OpInterfaceRewritePattern> {
+public:
+  InlineCombGroups(MLIRContext *context, LogicalResult &resRef,
+                   ProgramLoweringState &pls)
+      : PartialLoweringPattern(context, resRef), pls(pls) {}
+
+  LogicalResult partiallyLower(calyx::GroupInterface originGroup,
+                               PatternRewriter &rewriter) const override {
+    auto &state = pls.compLoweringState(
+        originGroup->getParentOfType<calyx::ComponentOp>());
+
+    /// Filter groups which are not part of the control schedule.
+    if (SymbolTable::symbolKnownUseEmpty(originGroup.symName(),
+                                         state.getComponentOp().getControlOp()))
+      return success();
+
+    /// Maintain a set of the groups which we've inlined so far. The group
+    /// itself is implicitly inlined.
+    llvm::SmallSetVector<Operation *, 8> inlinedGroups;
+    inlinedGroups.insert(originGroup);
+
+    /// Starting from the matched originGroup, we traverse use-def chains of
+    /// combinational logic, and inline assignments from the defining
+    /// combinational groups.
+    std::function<void(calyx::GroupInterface, bool)> recurseInline =
+        [&](calyx::GroupInterface recGroupOp, bool init) {
+          inlinedGroups.insert(recGroupOp);
+          for (auto assignOp :
+               recGroupOp.getBody()->getOps<calyx::AssignOp>()) {
+            if (!init) {
+              /// Inline the assignment into the originGroup.
+              auto clonedAssignOp = rewriter.clone(*assignOp.getOperation());
+              clonedAssignOp->moveBefore(originGroup.getBody(),
+                                         originGroup.getBody()->end());
+            }
+            auto src = assignOp.src();
+            auto srcDefOp = src.getDefiningOp();
+
+            /// Things which stop recursive inlining (or in other words, what
+            /// breaks combinational paths).
+            /// - Component inputs
+            /// - Register and memory reads
+            /// - Constant ops
+            /// - 'While' return values (these are registers, however, 'while'
+            ///   return values have at the current point of conversion not yet
+            ///   been rewritten to their register outputs, see comment in
+            ///   LateSSAReplacement)
+            if (src.isa<BlockArgument>() ||
+                isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
+                    ConstantOp, scf::WhileOp>(srcDefOp))
+              continue;
+
+            auto srcCombGroup =
+                state.getEvaluatingGroup<calyx::CombGroupOp>(src);
+            assert(srcCombGroup && "expected combinational group");
+            if (inlinedGroups.count(srcCombGroup))
+              continue;
+
+            recurseInline(srcCombGroup, false);
+          }
+        };
+    recurseInline(originGroup, true);
+    return success();
+  }
+
+private:
+  ProgramLoweringState &pls;
+};
+
 /// LateSSAReplacement contains various functions for replacing SSA values that
 /// were not replaced during op construction.
 class LateSSAReplacement : public FuncOpPartialLoweringPattern {
@@ -1666,6 +1739,10 @@ void SCFToCalyxPass::runOnOperation() {
   /// schedule based on the calyx::GroupOp's which were registered for each
   /// basic block in the source function.
   addOncePattern<BuildControl>(loweringPatterns, funcMap, *loweringState);
+
+  /// This pass recursively inlines use-def chains of combinational logic (from
+  /// non-stateful groups) into groups referenced in the control schedule.
+  addOncePattern<InlineCombGroups>(loweringPatterns, *loweringState);
 
   /// This pattern performs various SSA replacements that must be done
   /// after control generation.
