@@ -67,3 +67,28 @@ firrtl.circuit "Div" {
     firrtl.partialconnect %7, %c0_ui25 : !firrtl.uint<0>, !firrtl.uint<25>
   }
 }
+
+// -----
+
+// Constant check should handle trivial cases.
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{reset value defined here:}}
+  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
+    // expected-error @+2 {{register with async reset requires constant reset value}}
+    // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
+    %0 = firrtl.regreset %clock, %reset, %v : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Constant check should see through nodes.
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %v: !firrtl.uint<8>) {
+    // expected-note @+1 {{reset value defined here:}}
+    %node = firrtl.node %v : !firrtl.uint<8>
+    // expected-error @+2 {{register with async reset requires constant reset value}}
+    // expected-error @+1 {{'firrtl.regreset' op LowerToHW couldn't handle this operation}}
+    %1 = firrtl.regreset %clock, %reset, %node : !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}

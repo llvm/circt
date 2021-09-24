@@ -106,20 +106,20 @@ def EmptyNode : Pat<
   [(NonEmptyStringAttr $name), (EmptyAttrDict $annotations)]>;
 
 // regreset(clock, invalidvalue, resetValue) -> reg(clock)
-def RegresetWithInvalidReset : Pat<
+def RegResetWithInvalidReset : Pat<
   (RegResetOp $clock, (InvalidValueOp), $_, $name, $annotations),
   (RegOp $clock, $name, $annotations),
   []>;
 
 // regreset(clock, reset, invalidvalue) -> reg(clock)
 // This is handled by the `RemoveReset` pass in the original Scala code.
-def RegresetWithInvalidResetValue : Pat<
+def RegResetWithInvalidResetValue : Pat<
   (RegResetOp $clock, $_, (InvalidValueOp), $name, $annotations),
   (RegOp $clock, $name, $annotations),
   []>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
-def RegresetWithZeroReset : Pat<
+def RegResetWithZeroReset : Pat<
   (RegResetOp $clock, $reset, $_, $name, $annotations),
   (RegOp $clock, $name, $annotations), [(ZeroConstantOp $reset)]>;
 
