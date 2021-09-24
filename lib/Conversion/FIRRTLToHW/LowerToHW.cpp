@@ -1056,7 +1056,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     newModule->setAttr("output_file", outputFile);
   // Mark the design under test as a module of interest for exporting module
   // hierarchy information.
-  if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
+  if (AnnotationSet(oldModule).hasAnnotation(dutAnnoClass))
     newModule->setAttr(
         moduleHierarchyFileAttrName,
         hw::OutputFileAttr::get(
