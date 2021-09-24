@@ -52,9 +52,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [0 : i32],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK: sv.verbatim "name {{0}} depth 16 width 8 ports mwrite mask_gran 8 \0A name {{1}} depth 16 width 8 ports mwrite mask_gran 8 \0A name {{2}} depth 1 width 32 ports read mask_gran 32 \0A name {{3}} depth 12 width 42 ports read mask_gran 42 \0A "
+
+  // CHECK-LABEL: sv.verbatim 
+  // CHECK-SAME: "name
+  // CHECK-SAME: depth 16 width 8 ports mwrite mask_gran 8 \0A name 
+  // CHECK-SAME: depth 16 width 8 ports mwrite mask_gran 8 \0A name 
+  // CHECK-SAME: depth 1 width 32 ports read mask_gran 32 \0A name
   // CHECK-SAME: {output_file = {directory = "", exclude_from_filelist = true, exclude_replicated_ops = true, name = "memory.config"}
-  // symbols = [@FIRRTLMem_0_2_0_8_16_1_1_0_1_aa, @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab, @FIRRTLMem_1_0_0_32_1_1_1_1_1, @FIRRTLMem_1_0_0_42_12_1_1_0_1, @FIRRTLMem_1_1_1_42_12_0_1_0_1_a]}
+  // CHECK-SAME: symbols = [@FIRRTLMem_0_2_0_8_16_1_1_0_1_aa, @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab, @FIRRTLMem_1_0_0_32_1_1_1_1_1, @FIRRTLMem_1_0_0_42_12_1_1_0_1, @FIRRTLMem_1_1_1_42_12_0_1_0_1_a]}
+  // CHECK: sv.verbatim "[\22{\\\22module_name\\\22:\\\22aa\\\22,\\\22depth\\\22:16,\\\22width\\\22:8,\\\22mask\\\22:\\\22true\\\22,\\\22read\\\22:\\\22false\\\22,\\\22write\\\22:\\\22true\\\22,\\\22readwrite\\\22:\\\22false\\\22,\\\22mask_granularity\\\22:8,\\\22extra_ports\\\22:[],\\\22hierarchy\\\22:[\\\22MemoryWritePortBehavior.aa\\\22],\\\22verification_only_data\\\22:{\\\22MemoryWritePortBehavior.aa\\\22:{\\\22baseAddress\\\22:2147483648,\\\22dataBits\\\22:8,\\\22eccBits\\\22:0,\\\22eccIndices\\\22:[],\\\22eccScheme\\\22:\\\22none\\\22}}}\22]" {output_file = {directory = "", exclude_from_filelist = true, exclude_replicated_ops = true, name = "seq_mems.json"}, symbols = []}
+  // CHECK: sv.verbatim "[\22{\\\22module_name\\\22:\\\22_M\\\22,\\\22depth\\\22:12,\\\22width\\\22:42,\\\22mask\\\22:\\\22true\\\22,\\\22read\\\22:\\\22true\\\22,\\\22write\\\22:\\\22true\\\22,\\\22readwrite\\\22:\\\22true\\\22,\\\22mask_granularity\\\22:42,\\\22extra_ports\\\22:[],\\\22hierarchy\\\22:[\\\22MemSimple._M\\\22],\\\22verification_only_data\\\22:{\\\22MemSimple._M\\\22:{\\\22baseAddress\\\22:2147483648,\\\22dataBits\\\22:8,\\\22eccBits\\\22:0,\\\22eccIndices\\\22:[],\\\22eccScheme\\\22:\\\22none\\\22}}}\22,\22{\\\22module_name\\\22:\\\22_M\\\22,\\\22depth\\\22:12,\\\22width\\\22:42,\\\22mask\\\22:\\\22true\\\22,\\\22read\\\22:\\\22true\\\22,\\\22write\\\22:\\\22false\\\22,\\\22readwrite\\\22:\\\22false\\\22,\\\22mask_granularity\\\22:42,\\\22extra_ports\\\22:[],\\\22hierarchy\\\22:[\\\22IncompleteRead._M\\\22],\\\22verification_only_data\\\22:{\\\22IncompleteRead._M\\\22:{\\\22baseAddress\\\22:2147483648,\\\22dataBits\\\22:8,\\\22eccBits\\\22:0,\\\22eccIndices\\\22:[],\\\22eccScheme\\\22:\\\22none\\\22}}}\22]" {output_file = {directory = "", exclude_from_filelist = true, exclude_replicated_ops = true, name = "tb_seq_mems.json"}, symbols = []}
 
   // CHECK-LABEL: hw.module @Simple
   firrtl.module @Simple(in %in1: !firrtl.uint<4>,

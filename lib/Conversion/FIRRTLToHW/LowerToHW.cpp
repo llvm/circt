@@ -766,7 +766,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(
     }
   }
   auto config =
-      b.create<sv::VerbatimOp>(state.circuitOp.getLoc(), seqMemConfStr,
+      b.create<sv::VerbatimOp>(b.getUnknownLoc(), seqMemConfStr,
                                ValueRange(), b.getArrayAttr({symbolsVerbatim}));
   config->setAttr(
       "output_file",
@@ -789,7 +789,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(
       }
     });
     auto seqMem =
-        b.create<sv::VerbatimOp>(state.circuitOp.getLoc(), resultBuffer);
+        b.create<sv::VerbatimOp>(b.getUnknownLoc(), resultBuffer);
     seqMem->setAttr(
         "output_file",
         hw::OutputFileAttr::get(
