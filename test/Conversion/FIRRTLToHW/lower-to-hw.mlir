@@ -936,7 +936,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 
   // CHECK-LABEL: hw.module @MemoryWritePortBehavior
-  firrtl.module @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) {
+  firrtl.module @MemoryWritePortBehavior(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock) attributes {annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]}{
     // This memory has both write ports driven by the same clock.  It should be
     // lowered to an "aa" memory.
     //
