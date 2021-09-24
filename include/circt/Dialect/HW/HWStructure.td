@@ -309,7 +309,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
+def InstanceOp : HWOp<"instance", [Symbol,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Create an instance of a module";

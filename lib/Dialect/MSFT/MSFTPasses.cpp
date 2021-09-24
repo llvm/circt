@@ -237,20 +237,29 @@ void LowerToHWPass::runOnOperation() {
   auto top = getOperation();
   auto ctxt = &getContext();
 
-  // Set up a conversion and give it a set of laws.
+  // The `hw::InstanceOp` (which `msft::InstanceOp` lowers to) convenience
+  // builder gets its argNames and resultNames from the `hw::HWModuleOp`. So we
+  // have to lower `msft::MSFTModuleOp` before we lower `msft::InstanceOp`.
+
+  // Convert everything except instance ops first.
+
   ConversionTarget target(*ctxt);
-  target.addIllegalDialect<MSFTDialect>();
+  target.addIllegalOp<MSFTModuleOp, OutputOp>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<sv::SVDialect>();
 
-  // Add all the conversion patterns.
   RewritePatternSet patterns(ctxt);
-  patterns.insert<InstanceOpLowering>(ctxt);
   patterns.insert<ModuleOpLowering>(ctxt);
   patterns.insert<OutputOpLowering>(ctxt);
 
-  // Run the conversion.
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
+    signalPassFailure();
+
+  // Then, convert the InstanceOps
+  target.addIllegalDialect<MSFTDialect>();
+  RewritePatternSet instancePatterns(ctxt);
+  instancePatterns.insert<InstanceOpLowering>(ctxt);
+  if (failed(applyPartialConversion(top, target, std::move(instancePatterns))))
     signalPassFailure();
 }
 
