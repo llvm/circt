@@ -1696,12 +1696,12 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
           rewriter.replaceOpWithNewOp<XorOp>(op, op.cond(), op.falseValue());
           return success();
         }
-      } else {
+      } else { // !value.isZero() => value is a single-bit 1.
         // mux(a, 1, b) -> or(a, b) for single-bit values.
         rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
         return success();
       }
-    } else {
+    } else { // value.getBitWidth() > 1
       APInt value2;
       if (matchPattern(op.falseValue(), m_RConstant(value2))) {
         // When both inputs are constants and differ by only one bit, we can
