@@ -444,10 +444,10 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
   IRRewriter::InsertionGuard guard(rewriter);
   auto loc = inputValue.getLoc();
   rewriter.setInsertionPointToEnd(groupOp.getBody());
-  rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue, Value());
-  rewriter.create<calyx::AssignOp>(
-      loc, reg.write_en(), state.getConstant(rewriter, loc, 1, 1), Value());
-  rewriter.create<calyx::GroupDoneOp>(loc, reg.donePort(), Value());
+  rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
+  rewriter.create<calyx::AssignOp>(loc, reg.write_en(),
+                                   state.getConstant(rewriter, loc, 1, 1));
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.donePort());
 }
 
 static calyx::GroupOp buildWhileIterArgAssignments(
@@ -675,7 +675,7 @@ private:
     rewriter.setInsertionPointToEnd(group.getBody());
     for (auto dstOp : enumerate(opInputPorts))
       rewriter.create<calyx::AssignOp>(op.getLoc(), dstOp.value(),
-                                       op->getOperand(dstOp.index()), Value());
+                                       op->getOperand(dstOp.index()));
 
     /// Replace the result values of the source operator with the new operator.
     for (auto res : enumerate(opOutputPorts)) {
@@ -714,9 +714,9 @@ private:
     assert(addrPorts.size() == addressValues.size() &&
            "Mismatch between number of address ports of the provided memory "
            "and address assignment values");
-    for (auto &idx : enumerate(addressValues))
-      rewriter.create<calyx::AssignOp>(loc, addrPorts[idx.index()], idx.value(),
-                                       Value());
+    for (auto &address : enumerate(addressValues))
+      rewriter.create<calyx::AssignOp>(loc, addrPorts[address.index()],
+                                       address.value());
   }
 };
 
@@ -777,13 +777,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                      storeOp.getIndices());
   rewriter.setInsertionPointToEnd(group.getBody());
   rewriter.create<calyx::AssignOp>(storeOp.getLoc(), memoryOp.writeData(),
-                                   storeOp.getValueToStore(), Value());
+                                   storeOp.getValueToStore());
   rewriter.create<calyx::AssignOp>(
       storeOp.getLoc(), memoryOp.writeEn(),
-      getComponentState().getConstant(rewriter, storeOp.getLoc(), 1, 1),
-      Value());
-  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryOp.done(),
-                                      Value());
+      getComponentState().getConstant(rewriter, storeOp.getLoc(), 1, 1));
+  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryOp.done());
   return success();
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
@@ -1019,7 +1017,7 @@ public:
       rewriter.setInsertionPoint(assignOp->getBlock(),
                                  assignOp->getBlock()->begin());
       rewriter.create<calyx::AssignOp>(assignOp->getLoc(), sliceOp.getResult(0),
-                                       src, Value());
+                                       src);
       assignOp.setOperand(1, sliceOp.getResult(1));
     } else
       return assignOp.emitError()
@@ -1274,7 +1272,7 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
       rewriter.create<calyx::AssignOp>(
           funcOp->getLoc(),
           getComponentOutput(funcOp, *getComponent(), argType.index()),
-          reg.out(), Value());
+          reg.out());
     }
     return success();
   }

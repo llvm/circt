@@ -1193,16 +1193,15 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   auto component = ifOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  if (ifOp.thenRegion().front().empty())
+  if (ifOp.getThenBody()->empty())
     return ifOp.emitError() << "empty 'then' region.";
 
-  if (ifOp.elseRegion().getBlocks().size() != 0 &&
-      ifOp.elseRegion().front().empty())
+  if (ifOp.elseRegionExists() && ifOp.getElseBody()->empty())
     return ifOp.emitError() << "empty 'else' region.";
 
   Optional<StringRef> optGroupName = ifOp.groupName();
   if (!optGroupName.hasValue()) {
-    /// No combinational group was provided
+    // No combinational group was provided.
     return success();
   }
   StringRef groupName = optGroupName.getValue();
