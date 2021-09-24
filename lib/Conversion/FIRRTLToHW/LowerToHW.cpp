@@ -243,7 +243,7 @@ static std::string getFirMemoryName(const FirMemory &mem) {
 void static getHierarchichalNames(FModuleOp op, SmallVector<std::string> &names,
                                   const std::string path,
                                   mlir::SymbolUserMap symbolUsers,
-                                  bool isUnderDUT) {
+                                  bool &isUnderDUT) {
 
   if (!op)
     return;
@@ -362,10 +362,12 @@ analyzeMemOp(MemOp op, llvm::Optional<mlir::SymbolUserMap> symbolUsersO = None,
         });
       });
     }
-    if (seqMemMetadata)
-      seqMemMetadata->push_back(resultBuffer);
-    else
-      tbSeqMemMetadata->push_back(resultBuffer);
+    if (!resultBuffer.empty()) {
+      if (seqMemMetadata && isUnderDUT)
+        seqMemMetadata->push_back(resultBuffer);
+      else if (tbSeqMemMetadata)
+        tbSeqMemMetadata->push_back(resultBuffer);
+    }
   }
 
   return {numReadPorts,      numWritePorts,    numReadWritePorts,
