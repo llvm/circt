@@ -64,6 +64,15 @@ class CoolPolynomialCompute:
     self.coefficients = coefficients
 
 
+@externmodule("parameterized_extern")
+def ExternWithParams(a, b):
+
+  class M:
+    pass
+
+  return M
+
+
 class Coefficients:
 
   def __init__(self, coeff):
@@ -86,6 +95,10 @@ class PolynomialSystem:
 
     cp = CoolPolynomialCompute([4, 42])
     cp.x.connect(23)
+
+    m = ExternWithParams(8, 3)()
+    m.name = "pexternInst"
+
     return {"y": poly.y}
 
 
@@ -101,12 +114,14 @@ poly.print()
 # CHECK:         %example.y = msft.instance "example" @PolyComputeForCoeff_62_42_6(%c23_i32) : (i32) -> i32
 # CHECK:         %example2.y = msft.instance "example2" @PolyComputeForCoeff_62_42_6(%example.y) : (i32) -> i32
 # CHECK:         %example2.y_0 = msft.instance "example2" @PolyComputeForCoeff_1_2_3_4_5(%example.y) : (i32) -> i32
-# CHECK:         %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %{{.+}}: i32) -> (y: i32) {parameters = {}}
+# CHECK:         %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %{{.+}}: i32) -> (y: i32)
+# CHECK:         hw.instance "M" @parameterized_extern<a: i64 = 8, b: i64 = 3>() -> ()
 # CHECK:         msft.output %example.y : i32
 # CHECK:       }
 # CHECK:       msft.module @PolyComputeForCoeff_62_42_6 {coefficients = {coeff = [62, 42, 6]}} (%x: i32) -> (y: i32)
 # CHECK:       msft.module @PolyComputeForCoeff_1_2_3_4_5 {coefficients = {coeff = [1, 2, 3, 4, 5]}} (%x: i32) -> (y: i32)
-# CHECK:       hw.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {parameters = {}, verilogName = "supercooldevice"}
+# CHECK:       hw.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
+# CHECK:       hw.module.extern @parameterized_extern<a: i64, b: i64>() attributes {verilogName = "parameterized_extern"}
 
 print("Generating rest...")
 poly.generate()

@@ -140,14 +140,17 @@ class _SpecializedModule:
                                          ip=sys._get_ip())
       sys._generate_queue.append(self)
     else:
+      paramdecl_list = [
+          hw.ParamDeclAttr.get_nodefault(i.name,
+                                         mlir.ir.TypeAttr.get(i.attr.type))
+          for i in self.parameters
+      ]
       self.circt_mod = hw.HWModuleExternOp(
           symbol,
           self.input_ports,
           self.output_ports,
-          attributes={
-              "parameters": self.parameters,
-              "verilogName": mlir.ir.StringAttr.get(self.extern_name)
-          },
+          parameters=paramdecl_list,
+          attributes={"verilogName": mlir.ir.StringAttr.get(self.extern_name)},
           loc=self.loc,
           ip=sys._get_ip())
     self.add_accessors()
@@ -155,6 +158,15 @@ class _SpecializedModule:
   @property
   def is_created(self):
     return self.circt_mod is not None
+
+  def instantiate(self, instance_name: str, inputs: dict, loc):
+    if self.extern_name is None:
+      return self.circt_mod.create(instance_name, **inputs, loc=loc)
+    else:
+      return self.circt_mod.create(instance_name,
+                                   **inputs,
+                                   parameters=self.parameters,
+                                   loc=loc)
 
   def add_accessors(self):
     """Add accessors for each input and output port to emulate generated OpView
@@ -339,9 +351,9 @@ def _module_base(cls, extern_name: str, params={}):
       instance_name = cls.__name__
       if "instance_name" in dir(self):
         instance_name = self.instance_name
-      self._instantiation = mod._pycde_mod.circt_mod.create(instance_name,
-                                                            **inputs,
-                                                            loc=loc)
+      self._instantiation = mod._pycde_mod.instantiate(instance_name,
+                                                       inputs,
+                                                       loc=loc)
 
     # def output_values(self):
     #   return {

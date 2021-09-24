@@ -33,6 +33,8 @@ class InstanceBuilder(support.NamedValueOpView):
     }
     inst_param_array = [None] * len(module.parameters)
     # Fill in all the parameters specified.
+    if isinstance(parameters, DictAttr):
+      parameters = {i.name: i.attr for i in parameters}
     for (pname, pval) in parameters.items():
       if pname not in mod_param_decls_idxs:
         raise ValueError(
@@ -180,12 +182,6 @@ class ModuleLike:
   def is_external(self):
     return len(self.regions[0].blocks) == 0
 
-  @property
-  def parameters(self) -> list[ParamDeclAttr]:
-    return [
-        hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
-    ]
-
   def create(self,
              name: str,
              parameters: Dict[str, object] = {},
@@ -308,10 +304,21 @@ class HWModuleOp(ModuleLike):
     self.body.blocks.append(*self.type.inputs)
     return self.body.blocks[0]
 
+  @property
+  def parameters(self) -> list[ParamDeclAttr]:
+    return [
+        hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
+    ]
+
 
 class HWModuleExternOp(ModuleLike):
   """Specialization for the HW module op class."""
-  pass
+
+  @property
+  def parameters(self) -> list[ParamDeclAttr]:
+    return [
+        hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
+    ]
 
 
 class ConstantOp:
