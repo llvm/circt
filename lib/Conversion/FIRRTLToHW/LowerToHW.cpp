@@ -2080,6 +2080,11 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   };
 
   if (op.resetSignal().getType().isa<AsyncResetType>()) {
+    if (!firrtl::isConstant(op.resetValue()))
+      return op.emitError(
+                   "register with async reset requires constant reset value")
+                 .attachNote(op.resetValue().getLoc())
+             << "reset value defined here:";
     addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal,
                        ::ResetType::AsyncReset, sv::EventControl::AtPosEdge,
                        resetSignal, std::function<void()>(), resetFn);

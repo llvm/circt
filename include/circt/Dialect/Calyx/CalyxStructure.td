@@ -82,7 +82,6 @@ def ComponentOp : CalyxOp<"component", [
     ```
   }];
 
-  // TODO(Calyx): Allow explicit port naming?
   let arguments = (ins
     ArrayAttr:$portNames
   );
@@ -282,6 +281,11 @@ def AssignOp : CalyxOp<"assign", [
     AnyType:$src,
     Optional<I1>:$guard
   );
+  let builders = [
+    OpBuilder<(ins "Value":$dest, "Value":$src), [{
+      $_state.addOperands({dest, src});
+    }]>
+  ];
   let verifier = "return ::verify$cppClass(*this);";
 
   // TODO(Calyx): Calyx IR typically represents a
@@ -307,6 +311,11 @@ def GroupDoneOp : CalyxGroupPort<"group_done", [
     ```
   }];
   let results = (outs);
+  let builders = [
+    OpBuilder<(ins "Value":$src), [{
+      $_state.addOperands(src);
+    }]>
+  ];
 }
 
 def GroupGoOp : CalyxGroupPort<"group_go", [
@@ -329,11 +338,9 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
   }];
   let results = (outs I1);
   let builders = [
-    OpBuilder<(ins "Value":$src, CArg<"Value", "{}">:$guard), [{
+    OpBuilder<(ins "Value":$src), [{
       $_state.addTypes($_builder.getI1Type());
       $_state.addOperands(src);
-      if (guard)
-        $_state.addOperands(guard);
     }]>
   ];
 }

@@ -59,8 +59,10 @@ Attribute ParamDeclAttr::parse(MLIRContext *context, DialectAsmParser &p,
 }
 
 void ParamDeclAttr::print(DialectAsmPrinter &p) const {
-  llvm::errs() << "Should never print raw\n";
-  abort();
+  p << "param.decl<" << getName() << ": " << getType();
+  if (getValue())
+    p << " = " << getValue();
+  p << ">";
 }
 
 //===----------------------------------------------------------------------===//

@@ -1,10 +1,5 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --msft-lower-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=HWLOW
-
-msft.module @Foo { "WIDTH" = 1 } () -> (x: i32) {
-  %c0 = hw.constant 0 : i32
-  msft.output %c0 : i32
-}
+// RUN: circt-opt %s --lower-msft-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s --check-prefix=HWLOW
 
 // CHECK-LABEL: hw.module @top
 // HWLOW-LABEL: hw.module @top
@@ -26,3 +21,8 @@ msft.module @B { "WIDTH" = 1 } (%a: i4) -> (nameOfPortInSV: i4) {
 // CHECK-LABEL: msft.module @UnGenerated {DEPTH = 3 : i64} (%a: i1) -> (nameOfPortInSV: i1)
 // HWLOW-LABEL: Module not generated: \22UnGenerated\22 params {DEPTH = 3 : i64}
 msft.module @UnGenerated { DEPTH = 3 } (%a: i1) -> (nameOfPortInSV: i1)
+
+msft.module @Foo { "WIDTH" = 1 } () -> (x: i32) {
+  %c0 = hw.constant 0 : i32
+  msft.output %c0 : i32
+}
