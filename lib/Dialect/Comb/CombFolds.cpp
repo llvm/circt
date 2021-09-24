@@ -1684,23 +1684,23 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   APInt value;
 
-  // mux(a, 0, 1) -> ~a for single-bit values.
   if (matchPattern(op.trueValue(), m_RConstant(value)) &&
-      value.getBitWidth() == 1 && value.isZero()) {
-    APInt value2;
-    if (matchPattern(op.falseValue(), m_RConstant(value2)) &&
-        value2.isAllOnes()) {
-      auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
-      rewriter.replaceOpWithNewOp<XorOp>(op, op.cond(), one);
+      value.getBitWidth() == 1) {
+    if (value.isZero()) {
+      // mux(a, 0, 1) -> ~a for single-bit values.
+      APInt value2;
+      if (matchPattern(op.falseValue(), m_RConstant(value2)) &&
+          value2.isAllOnes()) {
+        // falseValue() is known to be a single-bit 1, which we can use for the
+        // 1 in the representation of ~ using xor.
+        rewriter.replaceOpWithNewOp<XorOp>(op, op.cond(), op.falseValue());
+        return success();
+      }
+    } else {
+      // mux(a, 1, b) -> or(a, b) for single-bit values.
+      rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
       return success();
     }
-  }
-
-  // mux(a, 1, b) -> or(a, b) for single-bit values.
-  if (matchPattern(op.trueValue(), m_RConstant(value)) &&
-      value.getBitWidth() == 1 && value.isAllOnes()) {
-    rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
-    return success();
   }
 
   // mux(a, b, 0) -> and(a, b) for single-bit values.
