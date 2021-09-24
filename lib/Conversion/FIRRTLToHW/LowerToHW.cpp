@@ -28,6 +28,7 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/Parallel.h"
 
 using namespace circt;
@@ -40,6 +41,8 @@ static const char assumeAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
 static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+static const char SeqMemAnnoClass[] =
+    "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation";
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 
 /// Attribute that indicates that the module hierarchy starting at the annotated
@@ -182,7 +185,6 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   size_t readUnderWrite;
-  size_t maskBits;
   hw::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
 
@@ -220,7 +222,7 @@ struct FirMemory {
            dataWidth == rhs.dataWidth && depth == rhs.depth &&
            readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
            readUnderWrite == rhs.readUnderWrite &&
-           writeUnderWrite == rhs.writeUnderWrite && maskBits == rhs.maskBits &&
+           writeUnderWrite == rhs.writeUnderWrite &&
            writeClockIDs.size() == rhs.writeClockIDs.size() &&
            llvm::all_of_zip(writeClockIDs, rhs.writeClockIDs,
                             [](auto a, auto b) { return a == b; });
@@ -238,8 +240,32 @@ static std::string getFirMemoryName(const FirMemory &mem) {
       mem.readLatency, mem.writeLatency, mem.readUnderWrite,
       (unsigned)mem.writeUnderWrite, clocks.empty() ? "" : "_" + clocks);
 }
+void static getHierarchichalNames(FModuleOp op, SmallVector<std::string> &names,
+                                  const std::string path,
+                                  mlir::SymbolUserMap symbolUsers,
+                                  bool isUnderDUT) {
 
-static FirMemory analyzeMemOp(MemOp op) {
+  if (!op)
+    return;
+  bool parentFound = false;
+  if (AnnotationSet(op).hasAnnotation(dutAnnoClass))
+    isUnderDUT = true;
+  for (auto u : symbolUsers.getUsers(op)) {
+    if (auto inst = dyn_cast<InstanceOp>(u)) {
+      auto opPath = inst.name().str() + "." + path;
+      getHierarchichalNames(inst->getParentOfType<FModuleOp>(), names, opPath,
+                            symbolUsers, isUnderDUT);
+      parentFound = true;
+    }
+  }
+  if (!parentFound)
+    names.push_back(op.getName().str() + "." + path);
+}
+
+static FirMemory
+analyzeMemOp(MemOp op, llvm::Optional<mlir::SymbolUserMap> symbolUsersO = None,
+             SmallVectorImpl<std::string> *seqMemMetadata = nullptr,
+             SmallVectorImpl<std::string> *tbSeqMemMetadata = nullptr) {
   size_t numReadPorts = 0;
   size_t numWritePorts = 0;
   size_t numReadWritePorts = 0;
@@ -279,17 +305,83 @@ static FirMemory analyzeMemOp(MemOp op) {
     op.emitError("'firrtl.mem' should have simple type and known width");
     width = 0;
   }
+  if (symbolUsersO.hasValue()) {
+    mlir::SymbolUserMap symbolUsers = symbolUsersO.getValue();
+    std::string resultBuffer;
+    bool isUnderDUT = false;
+    AnnotationSet anno = AnnotationSet(op);
+    DictionaryAttr verifData;
+    if (auto v = anno.getAnnotation(SeqMemAnnoClass)) {
+      llvm::raw_string_ostream os(resultBuffer);
+      llvm::json::OStream J(os);
+      verifData = v.get("data").cast<DictionaryAttr>();
+      J.object([&] {
+        auto modName = op.name();
+        J.attribute("module_name", modName);
+        J.attribute("depth", op.depth());
+        J.attribute("width", width);
+        J.attribute("mask", "true");
+        J.attribute("read", numReadPorts ? "true" : "false");
+        J.attribute("write", numWritePorts ? "true" : "false");
+        J.attribute("readwrite", numReadWritePorts ? "true" : "false");
+        J.attribute("mask_granularity", width);
+        J.attributeArray("extra_ports", [&] {});
+        SmallVector<std::string> hierNames;
+        getHierarchichalNames(op->getParentOfType<FModuleOp>(), hierNames,
+                              op.name().str(), symbolUsers, isUnderDUT);
 
-  return {numReadPorts,       numWritePorts,    numReadWritePorts,
-          (size_t)width,      op.depth(),       op.readLatency(),
-          op.writeLatency(),  (size_t)op.ruw(), op.getMaskBits(),
-          hw::WUW::PortOrder, writeClockIDs,    op.getLoc()};
+        J.attributeArray("hierarchy", [&] {
+          for (auto h : hierNames)
+            J.value(h);
+        });
+        J.attributeObject("verification_only_data", [&] {
+          for (auto h : hierNames) {
+            J.attributeObject(h, [&] {
+              for (auto a : verifData) {
+                auto id = a.first.str();
+                auto v = a.second;
+                if (auto intV = v.dyn_cast<IntegerAttr>())
+                  J.attribute(id, intV.getValue().getZExtValue());
+                else if (auto strV = v.dyn_cast<StringAttr>())
+                  J.attribute(id, strV.getValue().str());
+                else if (auto arrV = v.dyn_cast<ArrayAttr>()) {
+                  std::string indices;
+                  J.attributeArray(id, [&] {
+                    for (auto arrI : llvm::enumerate(arrV)) {
+                      auto i = arrI.value();
+                      if (auto intV = i.dyn_cast<IntegerAttr>())
+                        J.value(std::to_string(intV.getValue().getZExtValue()));
+                      else if (auto strV = i.dyn_cast<StringAttr>())
+                        J.value(strV.getValue().str());
+                    }
+                  });
+                }
+              }
+            });
+          }
+        });
+      });
+    }
+    if (seqMemMetadata)
+      seqMemMetadata->push_back(resultBuffer);
+    else
+      tbSeqMemMetadata->push_back(resultBuffer);
+  }
+
+  return {numReadPorts,      numWritePorts,    numReadWritePorts,
+          (size_t)width,     op.depth(),       op.readLatency(),
+          op.writeLatency(), (size_t)op.ruw(), hw::WUW::PortOrder,
+          writeClockIDs,     op.getLoc()};
 }
 
-static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
+static SmallVector<FirMemory>
+collectFIRRTLMemories(FModuleOp module, mlir::SymbolUserMap symbolUsers,
+                      SmallVectorImpl<std::string> &seqMemMetadata,
+                      SmallVectorImpl<std::string> &tbSeqMemMetadata) {
   SmallVector<FirMemory> retval;
   for (auto op : module.getBody().getOps<MemOp>())
-    retval.push_back(analyzeMemOp(op));
+    retval.push_back(
+        analyzeMemOp(op, symbolUsers, &seqMemMetadata, &tbSeqMemMetadata));
   return retval;
 }
 
@@ -393,7 +485,7 @@ void CircuitLoweringState::processRemainingAnnotations(
             "sifive.enterprise.firrtl.ScalaClassAnnotation", dutAnnoClass,
             // The following will be handled while lowering the verification
             // ops.
-            assertAnnoClass, assumeAnnoClass, coverAnnoClass))
+            assertAnnoClass, assumeAnnoClass, coverAnnoClass, SeqMemAnnoClass))
       continue;
 
     mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +
@@ -425,8 +517,10 @@ private:
   void lowerModuleOperations(hw::HWModuleOp module,
                              CircuitLoweringState &loweringState);
 
-  void lowerMemoryDecls(ArrayRef<FirMemory> mems,
-                        CircuitLoweringState &loweringState);
+  void lowerMemoryDecls(ArrayRef<FirMemory> mems, CircuitLoweringState &state,
+                        const SmallVector<std::string, 8> &seqMemMetadata,
+                        SmallVectorImpl<std::string> &tbSeqMemMetadata);
+  std::string seqMemConfStr;
 };
 
 } // end anonymous namespace
@@ -458,7 +552,8 @@ void FIRRTLModuleLowering::runOnOperation() {
     return;
 
   auto *circuitBody = circuit.getBody();
-
+  mlir::SymbolTableCollection symbolTable;
+  mlir::SymbolUserMap symbolUsers(symbolTable, circuit);
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
   CircuitLoweringState state(circuit, enableAnnotationWarning);
@@ -502,17 +597,24 @@ void FIRRTLModuleLowering::runOnOperation() {
   }
 
   SmallVector<FirMemory> memories;
+  SmallVector<std::string, 8> seqMemMetadata, tbSeqMemMetadata;
   if (getContext().isMultithreadingEnabled()) {
     // TODO: Update this to use a mlir::parallelTransformReduce once it exists.
     memories = llvm::parallelTransformReduce(
         modulesToProcess.begin(), modulesToProcess.end(),
-        SmallVector<FirMemory>(), mergeFIRRTLMemories, collectFIRRTLMemories);
+        SmallVector<FirMemory>(), mergeFIRRTLMemories, [&](FModuleOp op) {
+          return collectFIRRTLMemories(op, symbolUsers, seqMemMetadata,
+                                       tbSeqMemMetadata);
+        });
   } else {
     for (auto m : modulesToProcess)
-      memories = mergeFIRRTLMemories(memories, collectFIRRTLMemories(m));
+      memories = mergeFIRRTLMemories(
+          memories, collectFIRRTLMemories(m, symbolUsers, seqMemMetadata,
+                                          tbSeqMemMetadata));
   }
+
   if (!memories.empty())
-    lowerMemoryDecls(memories, state);
+    lowerMemoryDecls(memories, state, seqMemMetadata, tbSeqMemMetadata);
 
   // Now that we've lowered all of the modules, move the bodies over and update
   // any instances that refer to the old modules.
@@ -549,8 +651,10 @@ void FIRRTLModuleLowering::runOnOperation() {
   circuit.erase();
 }
 
-void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
-                                            CircuitLoweringState &state) {
+void FIRRTLModuleLowering::lowerMemoryDecls(
+    ArrayRef<FirMemory> mems, CircuitLoweringState &state,
+    const SmallVector<std::string, 8> &seqMemMetadata,
+    SmallVectorImpl<std::string> &tbSeqMemMetadata) {
   assert(!mems.empty());
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
@@ -564,8 +668,9 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
   auto memorySchema = SymbolRefAttr::get(schema);
 
+  SmallVector<Attribute> symbolsVerbatim;
+  unsigned index = 0;
   Type b1Type = IntegerType::get(&getContext(), 1);
-
   for (auto &mem : mems) {
     SmallVector<hw::PortInfo> ports;
     size_t inputPin = 0;
@@ -582,7 +687,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
 
     Type bDataType =
         IntegerType::get(&getContext(), std::max((size_t)1, mem.dataWidth));
-    Type maskType = IntegerType::get(&getContext(), mem.maskBits);
+    Type maskType = IntegerType::get(&getContext(), 1);
 
     Type bAddrType = IntegerType::get(
         &getContext(), std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
@@ -630,8 +735,90 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
 
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));
-    b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
-                                      StringRef(), ArrayAttr(), genAttrs);
+    hw::HWModuleGeneratedOp hmod = b.create<hw::HWModuleGeneratedOp>(
+        mem.loc, memorySchema, memoryName, ports, StringRef(), ArrayAttr(),
+        genAttrs);
+
+    symbolsVerbatim.push_back(SymbolRefAttr::get(hmod));
+    if (mem.writeLatency == 1 && mem.readLatency == 1 &&
+        mem.numReadPorts <= 1 &&
+        (mem.numWritePorts <= 1 || mem.numReadWritePorts <= 1)) {
+      std::string portStr;
+      if (mem.numWritePorts)
+        portStr += "mwrite";
+      if (mem.numReadPorts) {
+        if (!portStr.empty())
+          portStr += ",";
+        portStr += "read";
+      }
+      if (mem.numReadWritePorts) {
+        portStr = "mrw";
+      }
+      auto maskGran = mem.dataWidth;
+      seqMemConfStr += "name {{" + std::to_string(index) + "}} depth " +
+                       std::to_string(mem.depth) + " width " +
+                       std::to_string(mem.dataWidth) + " ports " + portStr +
+                       " mask_gran " + std::to_string(maskGran);
+      seqMemConfStr += " \n ";
+      index++;
+    }
+  }
+  auto config =
+      b.create<sv::VerbatimOp>(state.circuitOp.getLoc(), seqMemConfStr,
+                               ValueRange(), b.getArrayAttr({symbolsVerbatim}));
+  config->setAttr(
+      "output_file",
+      hw::OutputFileAttr::get(
+          getMetadataDir(state.circuitOp),
+          StringAttr::get(state.circuitOp.getContext(), "memory.config"),
+          /*exclude_from_filelist=*/
+          BoolAttr::get(state.circuitOp.getContext(), true),
+          /*exclude_replicated_ops=*/
+          BoolAttr::get(state.circuitOp.getContext(), true),
+          state.circuitOp.getContext()));
+
+  {
+    std::string resultBuffer;
+    llvm::raw_string_ostream os(resultBuffer);
+    llvm::json::OStream J(os);
+    J.array([&] {
+      for (auto sd : seqMemMetadata) {
+        J.value(sd);
+      }
+    });
+    auto seqMem =
+        b.create<sv::VerbatimOp>(state.circuitOp.getLoc(), resultBuffer);
+    seqMem->setAttr(
+        "output_file",
+        hw::OutputFileAttr::get(
+            getMetadataDir(state.circuitOp),
+            StringAttr::get(state.circuitOp.getContext(), "seq_mems.json"),
+            /*exclude_from_filelist=*/
+            BoolAttr::get(state.circuitOp.getContext(), true),
+            /*exclude_replicated_ops=*/
+            BoolAttr::get(state.circuitOp.getContext(), true),
+            state.circuitOp.getContext()));
+  }
+  {
+    std::string resultBuffer;
+    llvm::raw_string_ostream os(resultBuffer);
+    llvm::json::OStream J(os);
+    J.array([&] {
+      for (auto sd : tbSeqMemMetadata) {
+        J.value(sd);
+      }
+    });
+    auto tb = b.create<sv::VerbatimOp>(state.circuitOp.getLoc(), resultBuffer);
+    tb->setAttr(
+        "output_file",
+        hw::OutputFileAttr::get(
+            getMetadataDir(state.circuitOp),
+            StringAttr::get(state.circuitOp.getContext(), "tb_seq_mems.json"),
+            /*exclude_from_filelist=*/
+            BoolAttr::get(state.circuitOp.getContext(), true),
+            /*exclude_replicated_ops=*/
+            BoolAttr::get(state.circuitOp.getContext(), true),
+            state.circuitOp.getContext()));
   }
 }
 
@@ -2205,14 +2392,14 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         addInput("rw_en_", "en", 1);
         addInput("rw_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
         addInput("rw_wmode_", "wmode", 1);
-        addInput("rw_wmask_", "wmask", memSummary.maskBits);
+        addInput("rw_wmask_", "wmask", 1);
         addInput("rw_wdata_", "wdata", memSummary.dataWidth);
         addOutput("rw_rdata_", "rdata", memSummary.dataWidth);
       } else {
         addInput("wo_clock_", "clk", 1);
         addInput("wo_en_", "en", 1);
         addInput("wo_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        addInput("wo_mask_", "mask", memSummary.maskBits);
+        addInput("wo_mask_", "mask", 1);
         addInput("wo_data_", "data", memSummary.dataWidth);
       }
 
