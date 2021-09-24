@@ -22,6 +22,13 @@ _current_system = ContextVar("current_pycde_system")
 
 
 class System:
+  """The 'System' contains the user's design and some private bookkeeping. On
+  construction, specify a list of 'root' modules which you wish to generate.
+  Upon generation, the design will be fleshed out and all the dependant modules
+  will be created.
+
+  'System' also has methods to run through the CIRCT lowering, output tcl, and
+  output SystemVerilog."""
 
   __slots__ = [
       "mod", "passed", "_old_system_token", "_symbols", "_generate_queue"
@@ -46,6 +53,8 @@ class System:
 
   @property
   def symbols(self) -> typing.Set[str]:
+    """Get the set of top level symbols in the design. Read from a cache which
+    will be invalidated whenever control is given to CIRCT."""
     if self._symbols is None:
       self._symbols = set()
       for op in self.mod.operation.regions[0].blocks[0]:
@@ -54,6 +63,8 @@ class System:
     return self._symbols
 
   def create_symbol(self, basename: str) -> str:
+    """Create a unique symbol and add it to the cache. If it is to be preserved,
+    the caller must use it as the symbol on a top-level op."""
     ctr = 0
     ret = basename
     while ret in self.symbols:
@@ -64,6 +75,7 @@ class System:
 
   @staticmethod
   def current():
+    """Get the top-most system in the stack created by `with System()`."""
     bb = _current_system.get(None)
     if bb is None:
       raise RuntimeError("No PyCDE system currently active!")
@@ -91,6 +103,8 @@ class System:
     pm.run(self.mod)
 
   def generate(self, generator_names=[], iters=None):
+    """Fully generate the system unless iters is specified. Iters specifies the
+    number of generators to run. Useful for debugging. Maybe."""
     i = 0
     with self:
       while len(self._generate_queue) > 0 and (iters is None or i < iters):
@@ -98,11 +112,13 @@ class System:
         m.generate()
         i += 1
 
+  # Broken ATM
   def get_instance(self, mod_name: str) -> Instance:
     assert self.passed
     root_mod = self.get_module(mod_name)
     return Instance(root_mod, None, None, self)
 
+  # Broken ATM
   def walk_instances(self, root_mod, callback) -> None:
     """Walk the instance hierachy, calling 'callback' on each instance."""
     assert self.passed

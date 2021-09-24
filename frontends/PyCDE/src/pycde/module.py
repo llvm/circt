@@ -116,9 +116,9 @@ class _SpecializedModule:
       self.name = _create_module_name(cls.__name__, self.parameters)
 
     # Inputs, Outputs, and parameters are all class members. We must populate
-    # them.  First, scan 'cls' for them.
+    # them. Scan 'cls' for them.
     self.input_ports = []
-    self.input_port_lookup: Dict[str, int] = {}
+    self.input_port_lookup: Dict[str, int] = {}  # Used by 'BlockArgs' below.
     self.output_ports = []
     self.generators = {}
     for attr_name in dir(cls):

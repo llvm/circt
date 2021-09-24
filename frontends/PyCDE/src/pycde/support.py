@@ -53,6 +53,8 @@ def get_user_loc() -> ir.Location:
 
 
 def create_const_zero(type: ir.Type):
+  """Create a 'default' constant value of zero. Used for creating dummy values
+  to connect to extern modules with input ports we want to ignore."""
   width = hw.get_bitwidth(type)
   zero = hw.ConstantOp.create(ir.IntegerType.get_signless(width), 0)
   return hw.BitcastOp(type, zero.result)
