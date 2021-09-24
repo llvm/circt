@@ -112,6 +112,16 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
   return Value();
 }
 
+static Type getHandshakeBundleDataType(BundleType bundle) {
+  if (auto dataType = bundle.getElementType("data")) {
+    auto intType = dataType.cast<firrtl::IntType>();
+    return IntegerType::get(bundle.getContext(), intType.getWidthOrSentinel(),
+                            intType.isSigned() ? IntegerType::Signed
+                                               : IntegerType::Unsigned);
+  } else
+    return NoneType::get(bundle.getContext());
+}
+
 static Type getHandshakeDataType(Operation *op) {
   if (auto memOp = dyn_cast<MemoryOp>(op))
     return memOp.getMemRefType().getElementType();
@@ -121,14 +131,7 @@ static Type getHandshakeDataType(Operation *op) {
     // to a bundled FIRRTLType, here we convert it back to a normal data type.
     // Is there a better way to do this?
     auto type = sinkOp.getOperand().getType().cast<BundleType>();
-
-    if (auto dataType = type.getElementType("data")) {
-      auto intType = dataType.cast<firrtl::IntType>();
-      return IntegerType::get(type.getContext(), intType.getWidthOrSentinel(),
-                              intType.isSigned() ? IntegerType::Signed
-                                                 : IntegerType::Unsigned);
-    } else
-      return NoneType::get(type.getContext());
+    return getHandshakeBundleDataType(type);
   } else
     return op->getResult(0).getType();
 }
@@ -577,6 +580,9 @@ public:
   bool visitInvalidOp(Operation *op) { return false; }
 
   bool visitStdExpr(CmpIOp op);
+  bool visitStdExpr(ZeroExtendIOp op);
+  bool visitStdExpr(TruncateIOp op);
+  bool visitStdExpr(IndexCastOp op);
 
 #define HANDLE(OPTYPE, FIRRTLTYPE)                                             \
   bool visitStdExpr(OPTYPE op) { return buildBinaryLogic<FIRRTLTYPE>(), true; }
@@ -595,6 +601,9 @@ public:
   HANDLE(SignedShiftRightOp, DShrPrimOp);
   HANDLE(UnsignedShiftRightOp, DShrPrimOp);
 #undef HANDLE
+
+  bool buildZeroExtendOp(unsigned dstWidth);
+  bool buildTruncateOp(unsigned dstWidth);
 
 private:
   ValueVectorList portList;
@@ -623,6 +632,88 @@ bool StdExprBuilder::visitStdExpr(CmpIOp op) {
     return buildBinaryLogic<GEQPrimOp>(), true;
   }
   llvm_unreachable("invalid CmpIOp");
+}
+
+bool StdExprBuilder::buildZeroExtendOp(unsigned dstWidth) {
+  ValueVector arg0Subfield = portList[0];
+  ValueVector resultSubfields = portList[1];
+
+  Value arg0Valid = arg0Subfield[0];
+  Value arg0Ready = arg0Subfield[1];
+  Value arg0Data = arg0Subfield[2];
+  Value resultValid = resultSubfields[0];
+  Value resultReady = resultSubfields[1];
+  Value resultData = resultSubfields[2];
+
+  Value resultDataOp =
+      rewriter.create<PadPrimOp>(insertLoc, arg0Data, dstWidth);
+  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
+
+  // Generate valid signal.
+  rewriter.create<ConnectOp>(insertLoc, resultValid, arg0Valid);
+
+  // Generate ready signal.
+  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                               resultReady, arg0Valid);
+  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  return true;
+}
+
+bool StdExprBuilder::buildTruncateOp(unsigned int dstWidth) {
+  ValueVector arg0Subfield = portList[0];
+  ValueVector resultSubfields = portList[1];
+
+  Value arg0Valid = arg0Subfield[0];
+  Value arg0Ready = arg0Subfield[1];
+  Value arg0Data = arg0Subfield[2];
+  Value resultValid = resultSubfields[0];
+  Value resultReady = resultSubfields[1];
+  Value resultData = resultSubfields[2];
+
+  Value resultDataOp =
+      rewriter.create<BitsPrimOp>(insertLoc, arg0Data, dstWidth - 1, 0);
+  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
+
+  // Generate valid signal.
+  rewriter.create<ConnectOp>(insertLoc, resultValid, arg0Valid);
+
+  // Generate ready signal.
+  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                               resultReady, arg0Valid);
+  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  return true;
+}
+
+/// Extracts the type of the data-carrying type of opType. If opType is a
+/// bundle, getHandshakeBundleDataType extracts the data-carrying type, else,
+/// assume that opType itself is the data-carrying type.
+static Type getOperandDataType(Type opType) {
+  if (auto bundleType = opType.dyn_cast<BundleType>(); bundleType)
+    return getHandshakeBundleDataType(bundleType);
+  return opType;
+}
+
+bool StdExprBuilder::visitStdExpr(ZeroExtendIOp op) {
+  return buildZeroExtendOp(
+      getFIRRTLType(getOperandDataType(op.getOperand().getType()))
+          .getBitWidthOrSentinel());
+}
+
+bool StdExprBuilder::visitStdExpr(TruncateIOp op) {
+  return buildTruncateOp(
+      getFIRRTLType(getOperandDataType(op.getOperand().getType()))
+          .getBitWidthOrSentinel());
+}
+
+bool StdExprBuilder::visitStdExpr(IndexCastOp op) {
+  FIRRTLType sourceType =
+      getFIRRTLType(getOperandDataType(op.getOperand().getType()));
+  FIRRTLType targetType =
+      getFIRRTLType(getOperandDataType(op.getResult().getType()));
+  unsigned targetBits = targetType.getBitWidthOrSentinel();
+  unsigned sourceBits = sourceType.getBitWidthOrSentinel();
+  return (targetBits < sourceBits ? buildTruncateOp(targetBits)
+                                  : buildZeroExtendOp(targetBits));
 }
 
 /// Please refer to simple_addi.mlir test case.
