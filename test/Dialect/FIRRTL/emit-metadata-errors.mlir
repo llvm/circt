@@ -34,3 +34,71 @@ firrtl.circuit "MultipleAnnotations" attributes { annotations = [{
   firrtl.module @MultipleAnnotations() { }
 }
 
+// -----
+
+//===----------------------------------------------------------------------===//
+// SitestBlackbox
+//===----------------------------------------------------------------------===//
+
+// expected-error @+1 {{sifive.enterprise.firrtl.SitestBlackBoxAnnotation requires a filename}}
+firrtl.circuit "sitest" attributes { annotations = [{
+    class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation"
+  }]} {
+  firrtl.module @sitest() { }
+}
+
+// -----
+
+// expected-error @+1 {{sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation requires a filename}}
+firrtl.circuit "sitest" attributes { annotations = [{
+    class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation"
+  }]} {
+  firrtl.module @sitest() { }
+}
+
+// -----
+
+// expected-error @+1 {{sifive.enterprise.firrtl.SitestBlackBoxAnnotation requires a non-empty filename}}
+firrtl.circuit "sitest" attributes { annotations = [{
+    class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
+    filename = ""
+  }]} {
+  firrtl.module @sitest() { }
+}
+
+// -----
+
+// expected-error @+1 {{sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation requires a non-empty filename}}
+firrtl.circuit "sitest" attributes { annotations = [{
+    class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
+    filename = ""
+  }]} {
+  firrtl.module @sitest() { }
+}
+
+// -----
+
+// expected-error @+1 {{more than one sifive.enterprise.firrtl.SitestBlackBoxAnnotation annotation attached}}
+firrtl.circuit "sitest" attributes { annotations = [{
+    class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
+    filename = "test.json"
+  }, {
+    class = "sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
+    filename = "test.json"
+  }]} {
+  firrtl.module @sitest() { }
+}
+
+// -----
+
+// expected-error @+1 {{more than one sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation annotation attached}}
+firrtl.circuit "sitest" attributes { annotations = [{
+    class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
+    filename = "test.json"
+  }, {
+    class = "sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
+    filename = "test.json"
+  }]} {
+  firrtl.module @sitest() { }
+}
+

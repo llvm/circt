@@ -106,6 +106,11 @@ static cl::opt<bool> disableAnnotationsUnknown(
     "disable-annotation-unknown",
     cl::desc("Ignore unknown annotations when parsing"), cl::init(false));
 
+static cl::opt<bool>
+    emitMetadata("emit-metadata",
+                 cl::desc("emit metadata for metadata annotations"),
+                 cl::init(true));
+
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -279,6 +284,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown,
                                                  disableAnnotationsClassless));
+  if (emitMetadata)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createEmitMetadataPass());
+
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
