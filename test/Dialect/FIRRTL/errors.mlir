@@ -418,6 +418,14 @@ firrtl.circuit "MemoryPortInvalidReturnType" {
 
 // -----
 
+firrtl.circuit "MemoryInvalidmask" {
+  firrtl.module @MemoryInvalidmask() {
+    // expected-error @+1 {{'firrtl.mem' op the mask width cannot be greater than data width}}
+    %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<9>>
+  }
+}
+// -----
+
 firrtl.circuit "MemoryNegativeReadLatency" {
   firrtl.module @MemoryNegativeReadLatency() {
     // expected-error @+1 {{'firrtl.mem' op attribute 'readLatency' failed to satisfy constraint}}

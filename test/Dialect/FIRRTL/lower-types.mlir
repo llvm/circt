@@ -261,6 +261,78 @@ firrtl.circuit "TopLevel" {
     // FLATTEN:  firrtl.connect %[[memory_w_data_b]], %wData_b : !firrtl.uint<8>, !firrtl.uint<8>
   }
 
+  firrtl.module @Mem2_flatten(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out
+  %rData: !firrtl.bundle<a: uint<8>, b: uint<16>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask:
+  !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<16>>) {
+    %memory_r, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency
+    = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a:
+    uint<8>, b: uint<16>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>
+    %0 = firrtl.subfield %memory_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a:
+    uint<8>, b: uint<16>>>) -> !firrtl.clock
+    firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
+    %1 = firrtl.subfield %memory_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<16>>>) -> !firrtl.uint<1>
+    firrtl.connect %1, %rEn : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.subfield %memory_r(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<16>>>) -> !firrtl.uint<4>
+    firrtl.connect %2, %rAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    %3 = firrtl.subfield %memory_r(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a:
+    uint<8>, b: uint<16>>>) -> !firrtl.bundle<a: uint<8>, b: uint<16>>
+    firrtl.connect %rData, %3 : !firrtl.bundle<a: uint<8>, b: uint<16>>, !firrtl.bundle<a: uint<8>, b: uint<16>>
+    %4 = firrtl.subfield %memory_w(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.clock
+    firrtl.connect %4, %clock : !firrtl.clock, !firrtl.clock
+    %5 = firrtl.subfield %memory_w(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.uint<1>
+    firrtl.connect %5, %wEn : !firrtl.uint<1>, !firrtl.uint<1>
+    %6 = firrtl.subfield %memory_w(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.uint<4>
+    firrtl.connect %6, %wAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    %7 = firrtl.subfield %memory_w(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.connect %7, %wMask : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %8 = firrtl.subfield %memory_w(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.bundle<a: uint<8>, b: uint<16>>
+    firrtl.connect %8, %wData : !firrtl.bundle<a: uint<8>, b: uint<16>>, !firrtl.bundle<a: uint<8>, b: uint<16>>
+
+
+    // ---------------------------------------------------------------------------------
+    // If flatten memory data is enabled
+    // FLATTEN: %memory_r, %memory_w = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<24>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<24>, mask: uint<3>>
+      // FLATTEN: %0 = firrtl.subfield %memory_r(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<24>>) -> !firrtl.uint<4>
+      // FLATTEN: firrtl.connect %0, %memory_r_addr : !firrtl.uint<4>, !firrtl.uint<4>
+      // FLATTEN: %1 = firrtl.subfield %memory_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<24>>) -> !firrtl.uint<1>
+      // FLATTEN: firrtl.connect %1, %memory_r_en : !firrtl.uint<1>, !firrtl.uint<1>
+      // FLATTEN: %2 = firrtl.subfield %memory_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<24>>) -> !firrtl.clock
+      // FLATTEN: firrtl.connect %2, %memory_r_clk : !firrtl.clock, !firrtl.clock
+      // FLATTEN: %3 = firrtl.subfield %memory_r(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<24>>) -> !firrtl.uint<24>
+    //
+    // ---------------------------------------------------------------------------------
+    // Read ports
+    // FLATTEN:  %4 = firrtl.bits %3 7 to 0 : (!firrtl.uint<24>) -> !firrtl.uint<8>
+    // FLATTEN:  firrtl.connect %[[memory_r_data_a:.+]], %4 : !firrtl.uint<8>, !firrtl.uint<8>
+    // FLATTEN:  %5 = firrtl.bits %3 23 to 8 : (!firrtl.uint<24>) -> !firrtl.uint<8>
+    // FLATTEN:  firrtl.connect %[[memory_r_data_b:.+]], %5 : !firrtl.uint<16>, !firrtl.uint<16>
+    // --------------------------------------------------------------------------------
+    // Write Ports
+    // FLATTEN:  %9 = firrtl.subfield %memory_w(3)
+    // FLATTEN:  %10 = firrtl.wire  : !firrtl.uint<8>
+    // FLATTEN:  firrtl.connect %10, %[[memory_w_data_a:.+]] : !firrtl.uint<8>, !firrtl.uint<8>
+    // FLATTEN:  %11 = firrtl.cat %[[memory_w_data_b:.+]], %10
+    // FLATTEN:  %12 = firrtl.wire
+    // FLATTEN:  firrtl.connect %12, %11
+    // FLATTEN:  firrtl.connect %9, %12
+    //
+    // --------------------------------------------------------------------------------
+    // Mask Ports
+    //  FLATTEN: %13 = firrtl.subfield %memory_w(4)
+    //  FLATTEN: %14 = firrtl.wire  : !firrtl.uint<1>
+    //  FLATTEN: firrtl.connect %14, %[[memory_w_mask_a:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
+    //  FLATTEN: %15 = firrtl.cat %[[memory_w_mask_b:.+]], %14 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    //  FLATTEN: %16 = firrtl.wire  : !firrtl.uint<2>
+    //  FLATTEN: firrtl.connect %16, %15 : !firrtl.uint<2>, !firrtl.uint<2>
+    //  FLATTEN: firrtl.connect %13, %16 : !firrtl.uint<2>, !firrtl.uint<2>
+    // Connections to module ports
+    // FLATTEN:  firrtl.connect %rData_a, %[[memory_r_data_a]] : !firrtl.uint<8>, !firrtl.uint<8>
+    // FLATTEN:  firrtl.connect %rData_b, %[[memory_r_data_b]] : !firrtl.uint<8>, !firrtl.uint<8>
+    // FLATTEN:  firrtl.connect %[[memory_w_mask_a]], %wMask_a : !firrtl.uint<1>, !firrtl.uint<1>
+    // FLATTEN:  firrtl.connect %[[memory_w_mask_b]], %wMask_b : !firrtl.uint<1>, !firrtl.uint<1>
+    // FLATTEN:  firrtl.connect %[[memory_w_data_a]], %wData_a : !firrtl.uint<8>, !firrtl.uint<8>
+    // FLATTEN:  firrtl.connect %[[memory_w_data_b]], %wData_b : !firrtl.uint<8>, !firrtl.uint<8>
+  }
 // Test that a memory with a readwrite port is split into 1r1w
 //
 // circuit Foo:
