@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from typing import Union, Dict
+from typing import Tuple, Union, Dict
 import typing
 
 from pycde.support import obj_to_value
@@ -48,6 +48,8 @@ class Input(ModuleDecl):
 
 
 def _create_module_name(name: str, params: mlir.ir.DictAttr):
+  """Create a "reasonable" module name from a base name and a set of
+  parameters. E.g. PolyComputeForCoeff_62_42_6."""
 
   def val_str(val):
     if isinstance(val, mlir.ir.Type):
@@ -77,6 +79,16 @@ def _create_module_name(name: str, params: mlir.ir.DictAttr):
 #   (2) It keeps references MLIR ops around.
 # Possible solution to both involves using System as storage.
 class _SpecializedModule:
+  """SpecializedModule serves two purposes:
+
+  (1) As a level of indirection between pure python and python CIRCT op
+  classes. This indirection makes it possible to invalidate the reference and
+  clean up when those ops may not exist anymore.
+
+  (2) It delays module op creation until there is a valid context and system to
+  create it in. As a result of how the delayed creation works, module ops are
+  only created if said module is instantiated."""
+
   __slots__ = [
       "circt_mod", "name", "generators", "modcls", "loc", "input_ports",
       "input_port_lookup", "output_ports", "parameters", "extern_name"
@@ -124,7 +136,26 @@ class _SpecializedModule:
       elif isinstance(attr, _Generate):
         self.generators[attr_name] = attr
 
+  def add_accessors(self):
+    """Add accessors for each input and output port to emulate generated OpView
+     subclasses."""
+    for (idx, (name, type)) in enumerate(self.input_ports):
+      setattr(
+          self.modcls, name,
+          property(lambda self, idx=idx: OpOperandConnect(
+              self._instantiation.operation, idx, self._instantiation.operation.
+              operands[idx], self)))
+    for (idx, (name, type)) in enumerate(self.output_ports):
+      setattr(
+          self.modcls, name,
+          property(lambda self, idx=idx, type=type: Value.get(
+              self._instantiation.operation.results[idx], type)))
+
+  # Bug: currently only works with one System. See notes at the top of this
+  # class.
   def create(self):
+    """Create the module op. Should not be called outside of a 'System'
+    context."""
     if self.circt_mod is not None:
       return
     from .system import System
@@ -160,6 +191,7 @@ class _SpecializedModule:
     return self.circt_mod is not None
 
   def instantiate(self, instance_name: str, inputs: dict, loc):
+    """Create a instance op."""
     if self.extern_name is None:
       return self.circt_mod.create(instance_name, **inputs, loc=loc)
     else:
@@ -168,22 +200,9 @@ class _SpecializedModule:
                                    parameters=self.parameters,
                                    loc=loc)
 
-  def add_accessors(self):
-    """Add accessors for each input and output port to emulate generated OpView
-     subclasses."""
-    for (idx, (name, type)) in enumerate(self.input_ports):
-      setattr(
-          self.modcls, name,
-          property(lambda self, idx=idx: OpOperandConnect(
-              self._instantiation.operation, idx, self._instantiation.operation.
-              operands[idx], self)))
-    for (idx, (name, type)) in enumerate(self.output_ports):
-      setattr(
-          self.modcls, name,
-          property(lambda self, idx=idx, type=type: Value.get(
-              self._instantiation.operation.results[idx], type)))
-
   def generate(self):
+    """Fill in (generate) this module. Only supports a single generator
+    currently."""
     assert len(self.generators) == 1
     for g in self.generators.values():
       g.generate(self)
@@ -196,6 +215,10 @@ no_connect = object()
 
 
 def module(func_or_class):
+  """Decorator to signal that a class should be treated as a module or a
+  function should be treated as a module parameterization function. In the
+  latter case, the function must return a python class to be treated as the
+  parameterized module."""
   if inspect.isclass(func_or_class):
     # If it's just a module class, we should wrap it immediately
     return _module_base(func_or_class, None)
@@ -205,24 +228,13 @@ def module(func_or_class):
       "@module decorator must be on class or parameterization function")
 
 
-class _ModuleCacheKey:
-
-  def __init__(self, func, params):
-    self.cls = func
-    if not isinstance(params, mlir.ir.DictAttr):
-      params = var_to_attribute(params)
-    self.params = params
-
-  def __eq__(self, other):
-    return self.cls == other.cls and self.params == other.params
-
-  def __hash__(self):
-    # TODO: using the string of the MLIR Attribute to compute the hash is a
-    # hack!
-    return hash((self.cls, str(self.params)))
+def _ModuleCacheKey(func, params):
+  if not isinstance(params, mlir.ir.DictAttr):
+    params = var_to_attribute(params)
+  return mlir.ir.Attribute(params)
 
 
-_module_cache: typing.Dict[_ModuleCacheKey, object] = {}
+_module_cache: typing.Dict[Tuple[object, mlir.ir.DictAttr], object] = {}
 
 
 class _parameterized_module:
