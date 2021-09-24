@@ -318,7 +318,7 @@ analyzeMemOp(MemOp op, llvm::Optional<mlir::SymbolUserMap> symbolUsersO = None,
       J.object([&] {
         auto modName = op.name();
         J.attribute("module_name", modName);
-        J.attribute("depth", op.depth());
+        J.attribute("depth", static_cast<int64_t>(op.depth()));
         J.attribute("width", width);
         J.attribute("mask", "true");
         J.attribute("read", numReadPorts ? "true" : "false");
@@ -341,7 +341,8 @@ analyzeMemOp(MemOp op, llvm::Optional<mlir::SymbolUserMap> symbolUsersO = None,
                 auto id = a.first.str();
                 auto v = a.second;
                 if (auto intV = v.dyn_cast<IntegerAttr>())
-                  J.attribute(id, intV.getValue().getZExtValue());
+                  J.attribute(
+                      id, static_cast<int64_t>(intV.getValue().getZExtValue()));
                 else if (auto strV = v.dyn_cast<StringAttr>())
                   J.attribute(id, strV.getValue().str());
                 else if (auto arrV = v.dyn_cast<ArrayAttr>()) {
@@ -766,8 +767,8 @@ void FIRRTLModuleLowering::lowerMemoryDecls(
     }
   }
   auto config =
-      b.create<sv::VerbatimOp>(b.getUnknownLoc(), seqMemConfStr,
-                               ValueRange(), b.getArrayAttr({symbolsVerbatim}));
+      b.create<sv::VerbatimOp>(b.getUnknownLoc(), seqMemConfStr, ValueRange(),
+                               b.getArrayAttr({symbolsVerbatim}));
   config->setAttr(
       "output_file",
       hw::OutputFileAttr::get(
@@ -788,8 +789,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(
         J.value(sd);
       }
     });
-    auto seqMem =
-        b.create<sv::VerbatimOp>(b.getUnknownLoc(), resultBuffer);
+    auto seqMem = b.create<sv::VerbatimOp>(b.getUnknownLoc(), resultBuffer);
     seqMem->setAttr(
         "output_file",
         hw::OutputFileAttr::get(
