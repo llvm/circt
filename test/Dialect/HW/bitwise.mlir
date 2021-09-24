@@ -9,9 +9,9 @@ func @bitwise(%a: i7, %b: i7) -> i21 {
   %or1  = comb.or  %a, %b : i7
   %xor1 = comb.and %a, %b, %a : i7
 
-// CHECK-NEXT:    [[RESULT:%[0-9]+]] = comb.concat [[RES0]], [[RES1]], [[RES2]] : (i7, i7, i7) -> i21
+// CHECK-NEXT:    [[RESULT:%[0-9]+]] = comb.concat [[RES0]], [[RES1]], [[RES2]] : i7, i7, i7
 // CHECK-NEXT:    return [[RESULT]] : i21
-  %result = comb.concat %and1, %or1, %xor1 : (i7, i7, i7) -> i21
+  %result = comb.concat %and1, %or1, %xor1 : i7, i7, i7
   return %result : i21
 }
 

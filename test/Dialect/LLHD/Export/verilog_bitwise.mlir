@@ -52,7 +52,7 @@ llhd.entity @check_bitwise() -> () {
   %14 = comb.sext %13 : (i32) -> i64
 
   // CHECK-NEXT: wire [191:0] _{{.*}} = {_[[A]], _[[SEXT]], _[[A]]};
-  %15 = comb.concat %a, %14, %a : (i64, i64, i64) -> i192
+  %15 = comb.concat %a, %14, %a : i64, i64, i64
 
   // CHECK-NEXT: wire _[[COND:.*]] = 1'd1;
   // CHECK-NEXT: wire [63:0] _{{.*}} = _[[COND]] ? _[[A]] : _[[SEXT]];

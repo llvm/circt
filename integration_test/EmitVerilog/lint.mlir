@@ -72,7 +72,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
   %21 = comb.icmp ugt %a, %b : i4
   %22 = comb.icmp uge %a, %b : i4
   %23 = comb.parity %a : i4
-  %24 = comb.concat %a, %a, %b : (i4, i4, i4) -> i12
+  %24 = comb.concat %a, %a, %b : i4, i4, i4
   %25 = comb.extract %a from 1 : (i4) -> i2
   %26 = comb.sext %a : (i4) -> i9
   %27 = comb.mux %cond, %a, %b : i4
