@@ -1307,7 +1307,7 @@ static LogicalResult verifyMemOp(MemOp mem) {
 }
 
 BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                 PortKind portKind, unsigned maskBits) {
+                                 PortKind portKind, size_t maskBits) {
 
   auto *context = dataType.getContext();
   FIRRTLType maskType;
