@@ -966,4 +966,35 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %tmp = firrtl.node %clock1 : !firrtl.clock
     firrtl.connect %clk_ab_node_w1, %tmp : !firrtl.clock, !firrtl.clock
   }
+
+  // CHECK-LABEL: hw.module @AsyncResetBasic(
+  firrtl.module @AsyncResetBasic(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset, in %srst: !firrtl.uint<1>) {
+    %c9_ui42 = firrtl.constant 9 : !firrtl.uint<42>
+    %c-9_si42 = firrtl.constant -9 : !firrtl.sint<42>
+    // The following should not error because the reset values are constant.
+    %r0 = firrtl.regreset %clock, %arst, %c9_ui42 : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
+    %r1 = firrtl.regreset %clock, %srst, %c9_ui42 : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    %r2 = firrtl.regreset %clock, %arst, %c-9_si42 : !firrtl.asyncreset, !firrtl.sint<42>, !firrtl.sint<42>
+    %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>
+  }
+
+  // CHECK-LABEL: hw.module @AsyncResetThroughWires(
+  firrtl.module @AsyncResetThroughWires(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
+    %c9000_ui42 = firrtl.constant 9000 : !firrtl.uint<42>
+    %c9001_ui42 = firrtl.constant 9001 : !firrtl.uint<42>
+    %constWire = firrtl.wire : !firrtl.uint<42>
+    firrtl.connect %constWire, %c9000_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
+    firrtl.connect %constWire, %c9001_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
+    // The following should not error because the reset values are constant.
+    %r0 = firrtl.regreset %clock, %arst, %constWire : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
+  }
+
+  // CHECK-LABEL: hw.module @AsyncResetThroughNodes(
+  firrtl.module @AsyncResetThroughNodes(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
+    %c1337_ui42 = firrtl.constant 1337 : !firrtl.uint<42>
+    %constNode = firrtl.node %c1337_ui42 : !firrtl.uint<42>
+    // The following should not error because the reset values are constant.
+    %r0 = firrtl.regreset %clock, %arst, %constNode : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
+  }
+
 }
