@@ -454,6 +454,7 @@ def generator(func):
 
 class BlockArgs:
   """Get the input ports."""
+
   def __init__(self, mod: _SpecializedModule):
     self.mod = mod
 
