@@ -122,18 +122,73 @@ static Type getHandshakeBundleDataType(BundleType bundle) {
     return NoneType::get(bundle.getContext());
 }
 
-static Type getHandshakeDataType(Operation *op) {
-  if (auto memOp = dyn_cast<MemoryOp>(op))
-    return memOp.getMemRefType().getElementType();
+/// Extracts the type of the data-carrying type of opType. If opType is a
+/// bundle, getHandshakeBundleDataType extracts the data-carrying type, else,
+/// assume that opType itself is the data-carrying type.
+static Type getOperandDataType(Value op) {
+  auto opType = op.getType();
+  if (auto bundleType = opType.dyn_cast<BundleType>(); bundleType)
+    return getHandshakeBundleDataType(bundleType);
+  return opType;
+}
 
-  else if (auto sinkOp = dyn_cast<SinkOp>(op)) {
-    // As SinkOp only has one argument, which at this stage is already converted
-    // to a bundled FIRRTLType, here we convert it back to a normal data type.
-    // Is there a better way to do this?
-    auto type = sinkOp.getOperand().getType().cast<BundleType>();
-    return getHandshakeBundleDataType(type);
+/// Filters types of type TypeToFilter from the input.
+template <typename TypeToFilter>
+static SmallVector<Type> filterTypes(ArrayRef<Type> input) {
+  SmallVector<Type> filterRes;
+  llvm::copy_if(input, std::back_inserter(filterRes),
+                [](Type type) { return !type.isa<TypeToFilter>(); });
+  return filterRes;
+}
+
+/// Returns a set of types which may uniquely identify the provided op. Return
+/// value is <inputTypes, outputTypes>.
+using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
+static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
+  return TypeSwitch<Operation *, DiscriminatingTypes>(op)
+      .Case<MemoryOp>([&](auto memOp) {
+        return DiscriminatingTypes{{},
+                                   {memOp.getMemRefType().getElementType()}};
+      })
+      .Default([&](auto) {
+        // By default, all in- and output types which is not a control type
+        // (NoneType) are discriminating types.
+        std::vector<Type> inTypes, outTypes;
+        llvm::transform(op->getOperands(), std::back_inserter(inTypes),
+                        getOperandDataType);
+        llvm::transform(op->getResults(), std::back_inserter(outTypes),
+                        getOperandDataType);
+        return DiscriminatingTypes{filterTypes<NoneType>(inTypes),
+                                   filterTypes<NoneType>(outTypes)};
+      });
+}
+
+/// Get type name. Currently we only support integer or index types.
+/// The emitted type aligns with the getFIRRTLType() method. Thus all integers
+/// other than signed integers will be emitted as unsigned.
+static std::string getTypeName(Operation *oldOp, Type type) {
+  std::string typeName;
+  // Builtin types
+  if (type.isIntOrIndex()) {
+    if (auto indexType = type.dyn_cast<IndexType>())
+      typeName += "_ui" + std::to_string(indexType.kInternalStorageBitWidth);
+    else if (type.isSignedInteger())
+      typeName += "_si" + std::to_string(type.getIntOrFloatBitWidth());
+    else
+      typeName += "_ui" + std::to_string(type.getIntOrFloatBitWidth());
+  }
+  // FIRRTL types
+  else if (type.isa<SIntType, UIntType>()) {
+    if (auto sintType = type.dyn_cast<SIntType>(); sintType)
+      typeName += "_si" + std::to_string(sintType.getWidthOrSentinel());
+    else {
+      auto uintType = type.cast<UIntType>();
+      typeName += "_ui" + std::to_string(uintType.getWidthOrSentinel());
+    }
   } else
-    return op->getResult(0).getType();
+    oldOp->emitError() << "unsupported data type '" << type << "'";
+
+  return typeName;
 }
 
 /// Construct a name for creating FIRRTL sub-module.
@@ -141,12 +196,8 @@ static std::string getSubModuleName(Operation *oldOp) {
   // The dialect name is separated from the operation name by '.', which is not
   // valid in SystemVerilog module names. In case this name is used in
   // SystemVerilog output, replace '.' with '_'.
-  std::string prefix = oldOp->getName().getStringRef().str();
-  std::replace(prefix.begin(), prefix.end(), '.', '_');
-
-  std::string subModuleName = prefix + "_" +
-                              std::to_string(oldOp->getNumOperands()) + "ins_" +
-                              std::to_string(oldOp->getNumResults()) + "outs";
+  std::string subModuleName = oldOp->getName().getStringRef().str();
+  std::replace(subModuleName.begin(), subModuleName.end(), '.', '_');
 
   // Add value of the constant operation.
   if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
@@ -163,28 +214,17 @@ static std::string getSubModuleName(Operation *oldOp) {
       oldOp->emitError("unsupported constant type");
   }
 
-  // Add operation data type. Currently we only support integer or index types.
-  // The emitted type aligns with the getFIRRTLType() method. Thus all integers
-  // other than signed integers will be emitted as unsigned.
-  auto type = getHandshakeDataType(oldOp);
-  if (type.isIntOrIndex()) {
-    if (auto indexType = type.dyn_cast<IndexType>())
-      subModuleName +=
-          "_ui" + std::to_string(indexType.kInternalStorageBitWidth);
-    else if (type.isSignedInteger())
-      subModuleName += "_si" + std::to_string(type.getIntOrFloatBitWidth());
-    else
-      subModuleName += "_ui" + std::to_string(type.getIntOrFloatBitWidth());
+  // Add discriminating in- and output types.
+  auto [inTypes, outTypes] = getHandshakeDiscriminatingTypes(oldOp);
+  if (!inTypes.empty())
+    subModuleName += "_in";
+  for (auto inType : inTypes)
+    subModuleName += getTypeName(oldOp, inType);
 
-  } else if (type.isa<NoneType>()) {
-    auto ctrlAttr = oldOp->getAttrOfType<BoolAttr>("control");
-    if (ctrlAttr.getValue())
-      subModuleName += "_ctrl";
-    else
-      oldOp->emitError() << "non-control component has invalid data type '"
-                         << type << "'";
-  } else
-    oldOp->emitError() << "unsupported data type '" << type << "'";
+  if (!outTypes.empty())
+    subModuleName += "_out";
+  for (auto outType : outTypes)
+    subModuleName += getTypeName(oldOp, outType);
 
   // Add memory ID.
   if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
@@ -199,6 +239,21 @@ static std::string getSubModuleName(Operation *oldOp) {
     subModuleName += "_" + std::to_string(bufferOp.slots()) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
+  }
+
+  // Add control information.
+  if (auto ctrlAttr = oldOp->getAttrOfType<BoolAttr>("control");
+      ctrlAttr && ctrlAttr.getValue()) {
+    // Add some additional discriminating info for non-typed operations.
+    subModuleName += "_" + std::to_string(oldOp->getNumOperands()) + "ins_" +
+                     std::to_string(oldOp->getNumResults()) + "outs";
+    subModuleName += "_ctrl";
+  } else {
+    if (inTypes.empty() && outTypes.empty()) {
+      oldOp->emitError()
+          << "Non-control operators must provide discriminating type info";
+      assert(false);
+    }
   }
 
   return subModuleName;
@@ -684,32 +739,19 @@ bool StdExprBuilder::buildTruncateOp(unsigned int dstWidth) {
   return true;
 }
 
-/// Extracts the type of the data-carrying type of opType. If opType is a
-/// bundle, getHandshakeBundleDataType extracts the data-carrying type, else,
-/// assume that opType itself is the data-carrying type.
-static Type getOperandDataType(Type opType) {
-  if (auto bundleType = opType.dyn_cast<BundleType>(); bundleType)
-    return getHandshakeBundleDataType(bundleType);
-  return opType;
-}
-
 bool StdExprBuilder::visitStdExpr(ZeroExtendIOp op) {
-  return buildZeroExtendOp(
-      getFIRRTLType(getOperandDataType(op.getOperand().getType()))
-          .getBitWidthOrSentinel());
+  return buildZeroExtendOp(getFIRRTLType(getOperandDataType(op.getOperand()))
+                               .getBitWidthOrSentinel());
 }
 
 bool StdExprBuilder::visitStdExpr(TruncateIOp op) {
-  return buildTruncateOp(
-      getFIRRTLType(getOperandDataType(op.getOperand().getType()))
-          .getBitWidthOrSentinel());
+  return buildTruncateOp(getFIRRTLType(getOperandDataType(op.getOperand()))
+                             .getBitWidthOrSentinel());
 }
 
 bool StdExprBuilder::visitStdExpr(IndexCastOp op) {
-  FIRRTLType sourceType =
-      getFIRRTLType(getOperandDataType(op.getOperand().getType()));
-  FIRRTLType targetType =
-      getFIRRTLType(getOperandDataType(op.getResult().getType()));
+  FIRRTLType sourceType = getFIRRTLType(getOperandDataType(op.getOperand()));
+  FIRRTLType targetType = getFIRRTLType(getOperandDataType(op.getResult()));
   unsigned targetBits = targetType.getBitWidthOrSentinel();
   unsigned sourceBits = sourceType.getBitWidthOrSentinel();
   return (targetBits < sourceBits ? buildTruncateOp(targetBits)
