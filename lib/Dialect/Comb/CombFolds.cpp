@@ -1684,22 +1684,63 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   APInt value;
 
-  if (matchPattern(op.trueValue(), m_RConstant(value)) &&
-      value.getBitWidth() == 1) {
-    if (value.isZero()) {
-      // mux(a, 0, 1) -> ~a for single-bit values.
-      APInt value2;
-      if (matchPattern(op.falseValue(), m_RConstant(value2)) &&
-          value2.isAllOnes()) {
-        // falseValue() is known to be a single-bit 1, which we can use for the
-        // 1 in the representation of ~ using xor.
-        rewriter.replaceOpWithNewOp<XorOp>(op, op.cond(), op.falseValue());
+  if (matchPattern(op.trueValue(), m_RConstant(value))) {
+    if (value.getBitWidth() == 1) {
+      if (value.isZero()) {
+        // mux(a, 0, 1) -> ~a for single-bit values.
+        APInt value2;
+        if (matchPattern(op.falseValue(), m_RConstant(value2)) &&
+            value2.isAllOnes()) {
+          // falseValue() is known to be a single-bit 1, which we can use for
+          // the 1 in the representation of ~ using xor.
+          rewriter.replaceOpWithNewOp<XorOp>(op, op.cond(), op.falseValue());
+          return success();
+        }
+      } else {
+        // mux(a, 1, b) -> or(a, b) for single-bit values.
+        rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
         return success();
       }
     } else {
-      // mux(a, 1, b) -> or(a, b) for single-bit values.
-      rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
-      return success();
+      APInt value2;
+      if (matchPattern(op.falseValue(), m_RConstant(value2))) {
+        // When both inputs are constants and differ by only one bit, we can
+        // simplify by splitting the mux into up to three contiguous chunks: one
+        // for the differing bit and up to two for the bits that are the same.
+        // E.g. mux(a, 3'h2, 0) -> concat(0, mux(a, 1, 0), 0) -> concat(0, a, 0)
+        APInt xorValue = value ^ value2;
+        if (xorValue.isPowerOf2()) {
+          unsigned leadingZeros = xorValue.countLeadingZeros();
+          unsigned trailingZeros = value.getBitWidth() - leadingZeros - 1;
+          SmallVector<Value, 3> operands;
+
+          // Concat operands go from MSB to LSB, so we handle chunks in reverse
+          // order of bit indexes.
+          // For the chunks that are identical (i.e. correspond to 0s in
+          // xorValue), we can extract directly from either input value, and we
+          // arbitrarily pick the trueValue().
+
+          if (leadingZeros > 0)
+            operands.push_back(rewriter.createOrFold<ExtractOp>(
+                op.getLoc(), op.trueValue(), trailingZeros + 1, leadingZeros));
+
+          // Handle the differing bit, which should simplify into either cond or
+          // ~cond.
+          operands.push_back(rewriter.createOrFold<MuxOp>(
+              op.getLoc(), op.cond(),
+              rewriter.createOrFold<ExtractOp>(op.getLoc(), op.trueValue(),
+                                               trailingZeros, 1),
+              rewriter.createOrFold<ExtractOp>(op.getLoc(), op.falseValue(),
+                                               trailingZeros, 1)));
+
+          if (trailingZeros > 0)
+            operands.push_back(rewriter.createOrFold<ExtractOp>(
+                op.getLoc(), op.trueValue(), 0, trailingZeros));
+
+          rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(), operands);
+          return success();
+        }
+      }
     }
   }
 
@@ -1715,28 +1756,6 @@ LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
     if (xorOp.isBinaryNot()) {
       rewriter.replaceOpWithNewOp<MuxOp>(op, op.getType(), xorOp.inputs()[0],
                                          op.falseValue(), op.trueValue());
-      return success();
-    }
-  }
-
-  // When both inputs are constants, push the mux expression into each bit of
-  // the inputs and attempt to fold each bitwise mux.
-  // E.g. mux(a, 2, 0) -> concat(mux(a, 1, 0), 0) -> concat(a, 0)
-  if (matchPattern(op.trueValue(), m_RConstant(value)) &&
-      value.getBitWidth() > 1) {
-    APInt value2;
-    if (matchPattern(op.falseValue(), m_RConstant(value2))) {
-      SmallVector<Value> operands;
-      // Iterate from MSB to LSB, constructing a mux op on each bit.
-      for (int64_t i = value.getBitWidth() - 1; i >= 0; --i) {
-        auto trueValue =
-            rewriter.createOrFold<ExtractOp>(op.getLoc(), op.trueValue(), i, 1);
-        auto falseValue = rewriter.createOrFold<ExtractOp>(
-            op.getLoc(), op.falseValue(), i, 1);
-        operands.push_back(rewriter.createOrFold<comb::MuxOp>(
-            op.getLoc(), op.cond(), trueValue, falseValue));
-      }
-      rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(), operands);
       return success();
     }
   }

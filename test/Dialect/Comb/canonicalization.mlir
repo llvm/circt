@@ -32,6 +32,17 @@ hw.module @muxConstantInputs2(%cond: i1) -> (o: i2) {
   hw.output %0 : i2
 }
 
+// CHECK-LABEL: @muxConstantInputsNegated
+hw.module @muxConstantInputsNegated(%cond: i1) -> (o: i2) {
+// CHECK-NEXT: %true = hw.constant true
+// CHECK-NEXT: %0 = comb.xor %cond, %true : i1
+// CHECK-NEXT: %1 = comb.concat %true, %0 : (i1, i1) -> i2
+  %c0 = hw.constant 2 : i2
+  %c1 = hw.constant 3 : i2
+  %0 = comb.mux %cond, %c0, %c1: i2
+  hw.output %0 : i2
+}
+
 // CHECK-LABEL: @notMux
 hw.module @notMux(%a: i4, %b: i4, %c: i1) -> (o: i4) {
 // CHECK-NEXT: comb.mux %c, %b, %a : i4
@@ -773,13 +784,11 @@ hw.module @SevenSegmentDecoder(%in: i4) -> (out: i7) {
   %28 = comb.mux %27, %c-7_i7, %26 : i7
   %29 = comb.icmp eq %in, %c-1_i4 : i4
   %30 = comb.mux %29, %c-15_i7, %28 : i7
-  // CHECK: %1 = comb.xor %0, %true : i1
-  // CHECK: %2 = comb.xor %0, %true : i1
-  // CHECK: %3 = comb.xor %0, %true : i1
-  // CHECK: %4 = comb.xor %0, %true : i1
-  // CHECK: %5 = comb.concat %false, %1, %2, %3, %c-1_i2, %4 : (i1, i1, i1, i1, i2, i1) -> i7
-  // CHECK: %6 = hw.array_create %c-15_i7, %c-7_i7, %c-34_i7, %c57_i7, %c-4_i7, %c-9_i7, %c-17_i7, %c-1_i7, %c7_i7, %c-3_i7, %c-19_i7, %c-26_i7, %c-49_i7, %c-37_i7, %5, %5 : i7
-  // CHECK: %7 = hw.array_get %6[%in] : !hw.array<16xi7>
+  // CHECK: %0 = comb.icmp eq %in, %c1_i4 : i4
+  // CHECK: %1 = comb.mux %0, %c6_i6, %c-1_i6 : i6
+  // CHECK: %2 = comb.concat %false, %1 : (i1, i6) -> i7
+  // CHECK: %3 = hw.array_create %c-15_i7, %c-7_i7, %c-34_i7, %c57_i7, %c-4_i7, %c-9_i7, %c-17_i7, %c-1_i7, %c7_i7, %c-3_i7, %c-19_i7, %c-26_i7, %c-49_i7, %c-37_i7, %2, %2 : i7
+  // CHECK: %4 = hw.array_get %3[%in]
   hw.output %30 : i7
 }
 
