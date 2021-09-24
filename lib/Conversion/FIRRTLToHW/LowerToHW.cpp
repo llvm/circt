@@ -181,6 +181,7 @@ struct FirMemory {
   size_t depth;
   size_t readLatency;
   size_t writeLatency;
+  size_t maskBits;
   size_t readUnderWrite;
   hw::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
@@ -219,7 +220,7 @@ struct FirMemory {
            dataWidth == rhs.dataWidth && depth == rhs.depth &&
            readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
            readUnderWrite == rhs.readUnderWrite &&
-           writeUnderWrite == rhs.writeUnderWrite &&
+           writeUnderWrite == rhs.writeUnderWrite && maskBits == rhs.maskBits &&
            writeClockIDs.size() == rhs.writeClockIDs.size() &&
            llvm::all_of_zip(writeClockIDs, rhs.writeClockIDs,
                             [](auto a, auto b) { return a == b; });
@@ -279,10 +280,10 @@ static FirMemory analyzeMemOp(MemOp op) {
     width = 0;
   }
 
-  return {numReadPorts,      numWritePorts,    numReadWritePorts,
-          (size_t)width,     op.depth(),       op.readLatency(),
-          op.writeLatency(), (size_t)op.ruw(), hw::WUW::PortOrder,
-          writeClockIDs,     op.getLoc()};
+  return {numReadPorts,       numWritePorts,    numReadWritePorts,
+          (size_t)width,      op.depth(),       op.readLatency(),
+          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
+          hw::WUW::PortOrder, writeClockIDs,    op.getLoc()};
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
@@ -554,10 +555,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
-  std::array<StringRef, 10> schemaFields = {
-      "depth",           "numReadPorts", "numWritePorts", "numReadWritePorts",
-      "readLatency",     "writeLatency", "width",         "readUnderWrite",
-      "writeUnderWrite", "writeClockIDs"};
+  std::array<StringRef, 11> schemaFields = {
+      "depth",          "numReadPorts",    "numWritePorts", "numReadWritePorts",
+      "readLatency",    "writeLatency",    "width",         "maskGran",
+      "readUnderWrite", "writeUnderWrite", "writeClockIDs"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<hw::HWGeneratorSchemaOp>(
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -581,6 +582,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
 
     Type bDataType =
         IntegerType::get(&getContext(), std::max((size_t)1, mem.dataWidth));
+    Type maskType = IntegerType::get(&getContext(), mem.maskBits);
 
     Type bAddrType = IntegerType::get(
         &getContext(), std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
@@ -595,7 +597,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
       ports.push_back({b.getStringAttr("rw_wmode_" + Twine(i)), hw::INPUT,
                        b1Type, inputPin++});
       ports.push_back({b.getStringAttr("rw_wmask_" + Twine(i)), hw::INPUT,
-                       b1Type, inputPin++});
+                       maskType, inputPin++});
       ports.push_back({b.getStringAttr("rw_wdata_" + Twine(i)), hw::INPUT,
                        bDataType, inputPin++});
       ports.push_back({b.getStringAttr("rw_rdata_" + Twine(i)), hw::OUTPUT,
@@ -605,7 +607,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
     for (size_t i = 0, e = mem.numWritePorts; i != e; ++i) {
       makePortCommon("wo", i, bAddrType);
       ports.push_back({b.getStringAttr("wo_mask_" + Twine(i)), hw::INPUT,
-                       b1Type, inputPin++});
+                       maskType, inputPin++});
       ports.push_back({b.getStringAttr("wo_data_" + Twine(i)), hw::INPUT,
                        bDataType, inputPin++});
     }
@@ -620,6 +622,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("readLatency", b.getUI32IntegerAttr(mem.readLatency)),
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
+        b.getNamedAttr("maskGran",
+                       b.getUI32IntegerAttr(mem.maskBits > 0
+                                                ? mem.dataWidth / mem.maskBits
+                                                : 0)),
         b.getNamedAttr("readUnderWrite",
                        b.getUI32IntegerAttr(mem.readUnderWrite)),
         b.getNamedAttr("writeUnderWrite",
@@ -2203,14 +2209,14 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         addInput("rw_en_", "en", 1);
         addInput("rw_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
         addInput("rw_wmode_", "wmode", 1);
-        addInput("rw_wmask_", "wmask", 1);
+        addInput("rw_wmask_", "wmask", memSummary.maskBits);
         addInput("rw_wdata_", "wdata", memSummary.dataWidth);
         addOutput("rw_rdata_", "rdata", memSummary.dataWidth);
       } else {
         addInput("wo_clock_", "clk", 1);
         addInput("wo_en_", "en", 1);
         addInput("wo_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        addInput("wo_mask_", "mask", 1);
+        addInput("wo_mask_", "mask", memSummary.maskBits);
         addInput("wo_data_", "data", memSummary.dataWidth);
       }
 
