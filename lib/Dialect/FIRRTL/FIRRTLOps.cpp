@@ -1292,6 +1292,13 @@ static LogicalResult verifyMemOp(MemOp mem) {
     oldDataType = dataType;
   }
 
+  auto maskWidth = mem.getMaskBits();
+
+  auto dataWidth = mem.getDataType().getBitWidthOrSentinel();
+  if (dataWidth > 0 && maskWidth > (size_t)dataWidth)
+    return mem.emitOpError("the mask width cannot be greater than "
+                           "data width");
+
   if (mem.portAnnotations().size() != mem.getNumResults())
     return mem.emitOpError("the number of result annotations should be "
                            "equal to the number of results");
@@ -1383,7 +1390,6 @@ MemOp::PortKind MemOp::getPortKind(size_t resultNo) {
 
 /// Return the number of bits in the mask for the memory.
 size_t MemOp::getMaskBits() {
-  assert(getNumResults() != 0 && "Mems with no read/write ports are illegal");
 
   for (auto res : getResults()) {
     auto firstPortType = res.getType().cast<FIRRTLType>();
@@ -1399,8 +1405,9 @@ size_t MemOp::getMaskBits() {
     if (mType.dyn_cast_or_null<UIntType>())
       return mType.getBitWidthOrSentinel();
   }
-  // Default is 1 bit.
-  return 1;
+  // Mask of zero bits means, either there are no write/readwrite ports or the
+  // mask is of aggregate type.
+  return 0;
 }
 
 /// Return the data-type field of the memory, the type of each element.

@@ -623,7 +623,9 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
         b.getNamedAttr("maskGran",
-                       b.getUI32IntegerAttr(mem.dataWidth / mem.maskBits)),
+                       b.getUI32IntegerAttr(mem.maskBits > 0
+                                                ? mem.dataWidth / mem.maskBits
+                                                : 0)),
         b.getNamedAttr("readUnderWrite",
                        b.getUI32IntegerAttr(mem.readUnderWrite)),
         b.getNamedAttr("writeUnderWrite",
