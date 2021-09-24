@@ -19,7 +19,7 @@
 #include <utility>
 
 namespace mlir {
-class DependenceComponent;
+struct DependenceComponent;
 class FuncOp;
 } // namespace mlir
 
