@@ -1,4 +1,4 @@
-# Comb Dialect Rationale
+# `comb` Dialect Rationale
 
 This document describes various design points of the Comb dialect, a common
 dialect that is typically used in conjunction with the HW and SV dialects.
@@ -6,16 +6,19 @@ Please see the [RationaleHW.md](HW Dialect Rationale) for high level insight
 on how these work together.  This follows in the spirit of
 other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
-- [Comb Dialect Rationale](#comb-dialect-rationale)
-  - [Introduction](#introduction)
+- [`comb` Dialect Rationale](#comb-dialect-rationale)
+  - [Introduction to the `comb` Dialect](#introduction-to-the-comb-dialect)
   - [Comb Operations](#comb-operations)
+    - [No implicit extensions of operands](#no-implicit-extensions-of-operands)
+    - [No "Replication", "ZExt", or "Complement" Operators](#no-replication-zext-or-complement-operators)
+    - [No multibit mux operations](#no-multibit-mux-operations)
   - [Endianness: operand ordering and internal representation](#endianness-operand-ordering-and-internal-representation)
   - [Bitcasts](#bitcasts)
   - [Cost Model](#cost-model)
 
-## Introduction
+## Introduction to the `comb` Dialect
 
-The Comb dialect contains a collection of operations reflecting a mid-level
+The `comb` dialect contains a collection of operations reflecting a mid-level
 compiler IR for combinational logic.   It is *not* designed to model
 SystemVerilog or any other hardware design language directly.  Instead, it is
 designed to be easy to analyze and transform, and be a flexible and extensible
@@ -26,7 +29,25 @@ substrate that may be extended with higher level dialects mixed into it.
 TODO: Why is add variadic?  Why consistent operand types instead of allowing
 implicit extensions?
 
-**No "Replication", "ZExt", or "Complement" Operators**
+### No implicit extensions of operands
+
+Verilog and many other HDL's allow combination operations like `+` to work with
+mixed size operands, and some have complicated contextual rules about how wide
+the result is (e.g. adding two 12 bit integers gives you a 13 bit result).
+
+While this is convenient for source programmers, this makes the job of compiler
+analysis and optimization extremely challenging: peephole optimizations and
+dataflow transformations need to reason about these pervasively.  Because the
+`comb` dialect is designed as a "mid-level" dialect focused on optimization,
+it doesn't allow implicit extensions: for example, `comb.add` takes the same
+width inputs and returns the same width result.
+
+There is room in the future for other options: for example, it might be useful
+to add an `sv.add` operation that allows mixed operands to get better separation
+of concerns in the Verilog printer if we wanted really fancy extension elision.
+So far, very simple techniques have been enough to get reasonable output.
+
+### No "Replication", "ZExt", or "Complement" Operators
 
 We choose to omit several operators that you might expect, in order to make the
 IR more regular, easy to transform, and have fewer canonical forms.
@@ -39,7 +60,7 @@ IR more regular, easy to transform, and have fewer canonical forms.
    same operand multiple times) instead.
 
  * No zero extension operator to add high zero bits.  This is strictly redundant
-   with `concat(zero, value)`.  The `hw.sext` operator exists because it
+   with `concat(zero, value)`.  The `comb.sext` operator exists because it
    efficiently models large sign extensions which are common, and would require
    many operands if modeled as a concat operator (in contrast, a zero extension
    always requires a single zero value).
@@ -47,7 +68,7 @@ IR more regular, easy to transform, and have fewer canonical forms.
 The absence of these operations doesn't affect the expressive ability of the IR,
 and ExportVerilog will notice these and generate the compact Verilog syntax.
 
-**No multibit mux operations**
+### No multibit mux operations
 
 The comb dialect in CIRCT doesn't have a first-class multibit mux.  Instead we
 prefer to use two array operations to represent this.  For example, consider
@@ -110,13 +131,13 @@ Combinatorial operations like add and multiply work on values of signless
 standard integer types, e.g. `i42`, but they do not allow zero bit inputs.  This
 design point is motivated by a couple of reasons:
 
-1) The semantics of some operations (e.g. `hw.sext`) do not have an obvious
+1) The semantics of some operations (e.g. `comb.sext`) do not have an obvious
    definition with a zero bit input.
 
 1) Zero bit operations are useless for operations that are definable, and their
    presence makes the compiler more complicated.
 
-On the second point, consider an example like `hw.mux` which could allow zero
+On the second point, consider an example like `comb.mux` which could allow zero
 bit inputs and therefore produce zero bit results.  Allowing that as a design
 point would require us to special case this in our cost models, and we would
 have that optimizes it away.
@@ -124,40 +145,34 @@ have that optimizes it away.
 By rejecting zero bit operations, we choose to put the complexity into the
 lowering passes that generate the HW dialect (e.g. LowerToHW from FIRRTL).
 
-Note that this decision only affects the core operations in the HW dialect
+Note that this decision only affects the core operations in the `comb` dialect
 itself - it is perfectly reasonable to define your operations and mix them into
-other HW constructs.  Also, certain other operations do support zero bit
-declarations in limited ways:
-
- - The `hw.module` operation allows zero bit ports, since it supports an open
-   type system.  They are dropped from Verilog emission.
- - Interface signals are allowed to be zero bits wide.  They are dropped from
-   Verilog emission.
+other `comb` constructs. 
 
 ## Endianness: operand ordering and internal representation
 
-Certain operations require ordering to be defined (i.e. `hw.concat`,
+Certain operations require ordering to be defined (i.e. `comb.concat`,
 `hw.array_concat`, and `hw.array_create`). There are two places where this
 is relevant: in the MLIR assembly and in the MLIR C++ model.
 
 In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 
 ```mlir
-%msb = hw.constant 0xEF : i8
-%mid = hw.constant 0x7 : i4
-%lsb = hw.constant 0xA018 : i16
-%result = hw.concat %msb, %mid, %lsb : (i8, i4, i16) -> i28
+%msb = comb.constant 0xEF : i8
+%mid = comb.constant 0x7 : i4
+%lsb = comb.constant 0xA018 : i16
+%result = comb.concat %msb, %mid, %lsb : (i8, i4, i16) -> i28
 // %result is 0xEF7A018
 ```
 
 **Note**: Integers are always written in left-to-right lexical order. Operand
-ordering for `hw.concat` was chosen to be consistent with simply abutting
+ordering for `concat.concat` was chosen to be consistent with simply abutting
 them in lexical order.
 
 ```mlir
-%1 = hw.constant 0x1 : i4
-%2 = hw.constant 0x2 : i4
-%3 = hw.constant 0x3 : i4
+%1 = comb.constant 0x1 : i4
+%2 = comb.constant 0x2 : i4
+%3 = comb.constant 0x3 : i4
 %arr123 = hw.array_create %1, %2, %3 : i4
 // %arr123[0] = 0x3
 // %arr123[1] = 0x2
@@ -165,7 +180,7 @@ them in lexical order.
 
 %arr456 = ... // {0x4, 0x5, 0x6}
 %arr78  = ... // {0x7, 0x8}
-%arr = hw.array_concat %arr123, %arr456, %arr78 : !hw.array<3 x i4>, !hw.array<3 x i4>, !hw.array<2 x i4>
+%arr = comb.array_concat %arr123, %arr456, %arr78 : !hw.array<3 x i4>, !hw.array<3 x i4>, !hw.array<2 x i4>
 // %arr[0] = 0x6
 // %arr[1] = 0x5
 // %arr[2] = 0x4

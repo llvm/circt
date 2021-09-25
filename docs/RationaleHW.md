@@ -68,6 +68,16 @@ InOut types live at the SV dialect level and not the HW dialect level.  This
 allows connects, wires and other syntactic constructs that aren't necessary for
 combinational logic, but are nonetheless pretty useful when generating Verilog.
 
+
+**Zero Bit Integers**
+
+Certain operations support zero bit declarations:
+
+ - The `hw.module` operation allows zero bit ports, since it supports an open
+   type system.  They are dropped from Verilog emission.
+ - Interface signals are allowed to be zero bits wide.  They are dropped from
+   Verilog emission.
+
 ## `hw` Operations
 
 TODO: Spotlight on module.  Allows arbitrary types for ports.
