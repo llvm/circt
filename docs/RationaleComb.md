@@ -1,61 +1,27 @@
-# HW and SV Dialect Rationale
+# Comb Dialect Rationale
 
-This document describes various design points of the HW and SV dialects, why
-they are the way they are, and current status.  This follows in the spirit of
+This document describes various design points of the Comb dialect, a common
+dialect that is typically used in conjunction with the HW and SV dialects.
+Please see the [RationaleHW.md](HW Dialect Rationale) for high level insight
+on how these work together.  This follows in the spirit of
 other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
+
+- [Comb Dialect Rationale](#comb-dialect-rationale)
+  - [Introduction](#introduction)
+  - [Comb Operations](#comb-operations)
+  - [Endianness: operand ordering and internal representation](#endianness-operand-ordering-and-internal-representation)
+  - [Bitcasts](#bitcasts)
+  - [Cost Model](#cost-model)
 
 ## Introduction
 
-[SystemVerilog](https://en.wikipedia.org/wiki/SystemVerilog) is an industry
-standard language for hardware design and verification, is known by a large
-number of engineers who write it directly, and is
-an important interchange format between EDA tools.  However, while it is
-ubiquitous, SystemVerilog is not easy to generate or transform.  Furthermore, it
-is non-trivial for compiler tools to generate high quality human readable
-SystemVerilog.
+The Comb dialect contains a collection of operations reflecting a mid-level
+compiler IR for combinational logic.   It is *not* designed to model
+SystemVerilog or any other hardware design language directly.  Instead, it is
+designed to be easy to analyze and transform, and be a flexible and extensible
+substrate that may be extended with higher level dialects mixed into it.
 
-The HW and SV dialects attempt to address these problems with three major
-contributions: 
-
- 1) By providing the HW dialect, which contains a common set of abstractions
-    for combinational logic.  This dialect is designed to allow easy analysis
-    and transformation, is allows other dialects to "mix in" with it to provide
-    higher level functionality.
- 2) By providing the SV dialect, which provides direct access to a wide variety
-    of SystemVerilog constructs, including behavioral constructs, syntactic
-    sugar constructs, and even idioms like `ifdef` blocks.
- 3) By providing a high quality implementation and a number of useful compiler
-    passes for analyzing and transforming these dialects, and a SystemVerilog
-    emitter that generates pretty output.
-
-The combination of these capabilities provides a useful suite of functionality
-for compiler tools that want to generate high quality SystemVerilog.
-
-## The HW Dialect
-
-The HW dialect is designed as a mid-level compiler IR for combinational logic.
-It is *not* designed to model SystemVerilog or any other hardware design
-language directly.  Instead, it is designed to be easy to analyze and transform,
-and be a flexible and extensible substrate that may be extended with higher
-level dialects mixed into it.
-
-The HW dialect defines a set of common functionality, such as `hw.module` for
-representing hardware modules, and operations like `hw.add` and `hw.mux` for
-logic.
-
-### Type System
-
-TODO: Describe inout types.  Analogy to lvalues vs rvalues.  Array indices for
-both forms.  Arrays, structs,
-moving [UnpackedArray](https://github.com/llvm/circt/issues/389) to SV someday.
-
-InOut types live at the SV dialect level and not the HW dialect level.  This
-allows connects, wires and other syntactic constructs that aren't necessary for
-combinational logic, but are nonetheless pretty useful when generating Verilog.
-
-### Operations
-
-TODO: Spotlight on module.  Allows arbitrary types for ports.
+## Comb Operations
 
 TODO: Why is add variadic?  Why consistent operand types instead of allowing
 implicit extensions?
@@ -168,7 +134,7 @@ declarations in limited ways:
  - Interface signals are allowed to be zero bits wide.  They are dropped from
    Verilog emission.
 
-### Endianness: operand ordering and internal representation
+## Endianness: operand ordering and internal representation
 
 Certain operations require ordering to be defined (i.e. `hw.concat`,
 `hw.array_concat`, and `hw.array_create`). There are two places where this
@@ -232,7 +198,7 @@ ArrayConcatOp arr = builder.create<ArrayConcatOp>(..., {arr123, arr456});
 operands. These indexes are the _runtime_ index, **not** the index in the
 operand list which created the array upon which the op is running.
 
-### Bitcasts
+## Bitcasts
 
 The bitcast operation represents a bitwise reinerpretation (cast) of a value.
 This always synthesizes away in hardware, though it may or may not be
@@ -255,7 +221,7 @@ type bitcast layout. In cases where the member types have different bit widths,
 all members start at the 0th bit and are padded up to the width of the widest
 member. The value with which they are padded is undefined.
 
-#### Example figure
+**Example figure**
 
 ```
 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0 
@@ -278,7 +244,7 @@ member. The value with which they are padded is undefined.
                                                    b: 2 element array of 5 bit integer vectors
 ```
 
-### Cost Model
+## Cost Model
 
 As a very general mid-level IR, it is important to define the principles that
 canonicalizations and other general purpose transformations should optimize for.
@@ -343,159 +309,3 @@ because
 
 Both forms perform similarly on hardware, since they are simply bit-copies.
 
-## The SV Dialect
-
-The SV dialect is one of the dialects that can be mixed into the HW dialect,
-providing
-access to a range of syntactic and behavioral constructs.  The driving focus of
-this dialect is to provide simple and predictable access to SystemVerilog
-features: it is not focused primarily on being easy to analyze and transform.
-
-The SV dialect is designed to build on top of the HW dialect, so it does not
-have its own operations for combinational logic, modules, or other base
-functionality defined in the HW dialect.
-
-### Type System
-
-Like the HW dialect, the SV dialect is designed to tolerate unknown types where
-possible, allowing other dialects to mix in with it.  In addition to these
-external types, and the types used by the HW dialect, the SV dialect defines
-types for SystemVerilog interfaces.
-
-TODO: Describe interface types, modports, etc.
-
-### Operations
-
-Because the SV dialect aims to align with the textual nature of SystemVerilog,
-many of the constructs in the SV dialect have an "AST" style of representation.
-The major classes of operations you'll find are:
-
-1) Statements like `sv.if`, `sv.ifdef`, `sv.always` and `sv.initial` that
-   expose primary task-like operations and the behavioral model.
-1) Procedural assignment operators, including the `sv.bpassign` and `sv.passign`
-   operators that expose the blocking (`x = y`) and non-blocking (`x <= y`)
-   procedural operators.
-1) Directives like `sv.finish` and `sv.alias` and behavioral functions like
-   `sv.fwrite`.
-1) Access to verification constructs with `sv.assert`, `sv.assume`, and
-   `sv.cover`.
-1) Escape hatches that allow direct integration of textual expressions
-   (`sv.verbatim.expr`) and full statements (`sv.verbatim`).
-
-These operations are designed to directly model the syntax of the SystemVerilog
-language and to be easily printable by the ExportVerilog pass.  While there are
-still many things in SystemVerilog that we cannot currently express in the SV
-dialect, this design makes it easy to incrementally build out new capabilities
-over time.
-
-#### Verbatim op
-The verbatim operation produces a typed value expressed by a string of
-SystemVerilog.  This can be used to access macros and other values that are
-only sensible as Verilog text. There are three kinds of verbatim operation, 
- 1. VerbatimOp(`sv.verbatim`, the statement form
- 2. VerbatimExprOp(`sv.verbatim.expr`), the expression form.
- 3. VerbatimExprSEOp(`sv.verbatim.expr.se`), the expression form.
-
-For the verbatim expression form, the text string is expected to have the
-highest precedence, so parentheses is required if it isn't a single token.
-`sv.verbatim.expr` are assumed to not have side effects, 
-whereas `sv.verbatim.expr.se` can have side effects.
-
-Verbatim allows operand substitutions with '{{0}}' syntax.
-For macro substitution, optional operands and symbols can be added after the 
-string. Verbatim op takes an optional attribute, which is an array of
-symbol references.
-The indexing begins at 0, and if the index is greater than the
-number of operands, then it is used to index into the symbols array.
-It is invalid to have macro indices greater than the total number 
-of operands and symbols.
-Example, 
-`sv.verbatim  "MACRO({{0}}, {{1}} reg={{4}}, {{3}})" 
-          (%add, %xor)  : i8,i8
-          {symRefs = [@reg1, @Module1, @instance1]}`
-
-### Cost Model
-
-The SV dialect is primarily designed for human consumption, not machines.  As
-such, transformations should aim to reduce redundancy, eliminate useless
-constructs (e.g. eliminate empty ifdef and if blocks), etc.
-
-## Symbols and Visibility
-
-Verilog has a broad notion of what can be named outside the context of its
-declaration.  This is compounded by the many tools which have additional source
-files which refer to verilog names (e.g. tcl files).  However, we do not want to
-require that every wire, register, instance, localparam, port, etc which can be
-named not be touched by passes.  We want only entities marked as public facing
-to impede transformation.
-
-For this reason, wires, registers, and instances may optionally define a symbol.
-When the symbol is defined, the entity is considered part of the visible
-interface and should be preserved in transformation.  Entities without a symbol
-defined are considered private and may be changed by transformation.
-
-### Implementation constraints
-
-Currently, MLIR restricts symbol resolution to looking in and downward through
-any nested symbol tables when resolving symbols.  This assumption has
-implications for verification, the pass manager, and threading.  Until symbol
-references are more general, SV and HW dialects do not define symbol tables for
-modules.  Therefore, wires, registers, and interfaces exist in the same
-namespace as modules.  It is encouraged that one prefaces the names to avoid
-conflict with modules.  The symbol names on these entities has no bearing on the
-output verilog, each of these entities has a defined way to assign its name (SSA
-value name for wires and regs, a non-optional string for instances).
-
-As MLIR symbol support improves, it is desired to move to per-module symbol
-tables and to unify names with symbol names.
-
-### Ports
-
-Module ports are remotely namable entities in Verilog, but are not easily named
-with symbols.  A suggested workaround is to attach a wire to a port and use its
-symbol for remote references.
-
-Instance ports have a similar problem.
-
-## Future Directions
-
-There are many possible future directions that we anticipate tackling, when and
-if the need arises:
-
-**First Class Parametric IR**
-
-Many in the CIRCT community are interested in adding first-class support for
-parametric modules -- similar but more general than SystemVerilog module
-parameters.  It isn't clear yet whether this should be part of the HW dialect
-or something higher level.
-
-Separate from a "good" representation of parametric modules, the SV dialect
-could grow direct support for representing the SystemVerilog functionality
-in this space, including even things like "generate" blocks.
-
-**EDA Tool-specific Subdialects**
-
-The EDA tool ecosystem is filled with a wide range of tools with different
-capabilities -- for example [see this
-table](https://symbiflow.github.io/sv-tests-results/) for one compilation of
-different systems and their capabilities.  As such, we expect that the day will
-come where a frontend wants to generate fancy features for some modern systems,
-but cannot afford to break compatibility with other ecosystem tools.
-
-Given the design of the HW/SV dialects, there is no need to resort to "lowest
-common denominator" approach here: we can allow frontends to generate "fancy"
-features, then use progressive lowering when dealing with tools that can't
-handle them.  This can also allow IP providers to decide what flavor
-of features they want to provide to their customers (or provide multiple
-different choices).
-
-**SystemVerilog Parser**
-
-As the SV dialect grows out, it becomes natural to think about building a high
-quality parser that reads SystemVerilog source code and parses it into the SV
-dialect.  Such functionality could be very useful to help build tooling for the
-SystemVerilog ecosystem.
-
-Such a parser should follow clang-style principles of producing high quality
-diagnostics, preserving source location information, being built as a library,
-etc.
