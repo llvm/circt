@@ -607,8 +607,8 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                     /// Skip: these special cases will be handled separately.
                     return true;
                   })
-              .Default([&](auto) {
-                assert(false && "Unhandled operation during BuildOpGroups()");
+              .Default([&](auto op) {
+                op->emitError() << "Unhandled operation during BuildOpGroups()";
                 return false;
               });
 
