@@ -38,14 +38,11 @@ static void mergeBlock(Block &destination, Block::iterator insertPoint,
 //===----------------------------------------------------------------------===//
 
 namespace {
-
 /// This visitor visits process a block resolving last connect semantics
-/// and expanding WhenOps.
+/// and recursively expanding WhenOps.
 template <typename ConcreteT>
 class LastConnectResolver : public FIRRTLVisitor<ConcreteT> {
 protected:
-  bool changed = false;
-
   /// Map of destinations and the operation which is driving a value to it in
   /// the current scope. This is used for resolving last connect semantics, and
   /// for retrieving the responsible connect operation.
@@ -123,15 +120,6 @@ public:
     declare(type, flow);
   }
 
-  /// If a value has an outer flip, convert the value to passive.
-  Value convertToPassive(OpBuilder &builder, Location loc, Value input) {
-    auto inType = input.getType().cast<FIRRTLType>();
-    return builder
-        .create<mlir::UnrealizedConversionCastOp>(loc, inType.getPassiveType(),
-                                                  input)
-        .getResult(0);
-  }
-
   /// Take two connection operations and merge them in to a new connect under a
   /// condition.  Destination of both connects should be `dest`.
   ConnectOp flattenConditionalConnections(OpBuilder &b, Location loc,
@@ -191,6 +179,8 @@ public:
   void visitStmt(ConnectOp op) {
     setLastConnect(getFieldRefFromValue(op.dest()), op);
   }
+
+  void processWhenOp(WhenOp whenOp, Value outerCondition);
 
   /// Combine the connect statements from each side of the block. There are 5
   /// cases to consider. If all are set, last connect semantics dictate that it
@@ -289,8 +279,9 @@ public:
 // WhenOpVisitor
 //===----------------------------------------------------------------------===//
 
-/// This extends the ModuleVisitor with additional funcationality that is only
-/// required in side a WhenOp.  This visitor handles all Simulation constructs.
+/// This extends the LastConnectVisitor to handle all Simulation related
+/// constructs which do not neet any processing at the module scope, but need to
+/// be processed inside of a WhenOp.
 namespace {
 class WhenOpVisitor : public LastConnectResolver<WhenOpVisitor> {
 
@@ -330,7 +321,6 @@ private:
 } // namespace
 
 void WhenOpVisitor::process(Block &block) {
-
   for (auto &op : llvm::make_early_inc_range(block)) {
     dispatchVisitor(&op);
   }
@@ -357,17 +347,37 @@ void WhenOpVisitor::visitStmt(CoverOp op) {
 }
 
 void WhenOpVisitor::visitStmt(WhenOp whenOp) {
+  processWhenOp(whenOp, condition);
+}
+
+/// This is a common helper that is dispatched to by the concrete visitors.
+/// This condition should be the conjunction of all surrounding WhenOp
+/// condititions.
+///
+/// This requires WhenOpVisitor to be fully defined.
+template<typename ConcreteT>
+void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp, Value outerCondition) {
+
   OpBuilder b(whenOp);
+  auto loc = whenOp.getLoc();
   Block *parentBlock = whenOp->getBlock();
   auto condition = whenOp.condition();
+  auto ui1Type = condition.getType();
 
   // Process both sides of the the WhenOp, fixing up all simulation
-  // contructs, and resolving last connect semantics in each block. This process
-  // returns the set of connects in each side of the when op.
+  // contructs, and resolving last connect semantics in each block. This
+  // process returns the set of connects in each side of the when op.
 
   // Process the `then` block.
   ScopeMap thenScope;
-  auto thenCondition = andWithCondition(whenOp, condition);
+
+  // if we are already in a whenblock, the we need to conjoin ('and') the
+  // conditions.
+  auto thenCondition = whenOp.condition();
+  if (outerCondition)
+    thenCondition =
+        b.createOrFold<AndPrimOp>(loc, ui1Type, outerCondition, thenCondition);
+
   auto &thenBlock = whenOp.getThenBlock();
   WhenOpVisitor(thenScope, thenCondition).process(thenBlock);
   mergeBlock(*parentBlock, Block::iterator(whenOp), thenBlock);
@@ -375,9 +385,12 @@ void WhenOpVisitor::visitStmt(WhenOp whenOp) {
   // Process the `else` block.
   ScopeMap elseScope;
   if (whenOp.hasElseRegion()) {
-    auto notOp = b.createOrFold<NotPrimOp>(whenOp.getLoc(), condition.getType(),
-                                           condition);
-    Value elseCondition = andWithCondition(whenOp, notOp);
+    // Else condition is the compliment of the then condition.
+    auto elseCondition =
+        b.createOrFold<NotPrimOp>(loc, condition.getType(), condition);
+    if (outerCondition)
+      elseCondition = b.createOrFold<AndPrimOp>(loc, ui1Type, outerCondition,
+                                                elseCondition);
     auto &elseBlock = whenOp.getElseBlock();
     WhenOpVisitor(elseScope, elseCondition).process(elseBlock);
     mergeBlock(*parentBlock, Block::iterator(whenOp), elseBlock);
@@ -394,23 +407,19 @@ void WhenOpVisitor::visitStmt(WhenOp whenOp) {
 //===----------------------------------------------------------------------===//
 
 namespace {
+/// This extends the LastConnectResolver to track if anything has changed.
 class ModuleVisitor : public LastConnectResolver<ModuleVisitor> {
 public:
   ModuleVisitor() : LastConnectResolver<ModuleVisitor>(outerScope) {}
 
-  // Unshadow the overloads.
   using LastConnectResolver<ModuleVisitor>::visitExpr;
   using LastConnectResolver<ModuleVisitor>::visitDecl;
   using LastConnectResolver<ModuleVisitor>::visitStmt;
-
   void visitStmt(WhenOp whenOp);
   void visitStmt(ConnectOp connectOp);
 
-  /// Run expand whens on the Module.  This will emit an error for each
-  /// incomplete initialization found. If an initialiazation error was detected,
-  /// this will return failure and leave the IR in an inconsistent state.  If
-  /// the pass was a success, returns true if nothing changed.
-  mlir::FailureOr<bool> run(FModuleOp op);
+  bool run(FModuleOp op);
+  LogicalResult checkInitialization();
 
 private:
   /// The outermost scope of the module body.
@@ -421,7 +430,10 @@ private:
 };
 } // namespace
 
-mlir::FailureOr<bool> ModuleVisitor::run(FModuleOp module) {
+/// Run expand whens on the Module.  This will emit an error for each
+/// incomplete initialization found. If an initialiazation error was detected,
+/// this will return failure and leave the IR in an inconsistent state.
+bool ModuleVisitor::run(FModuleOp module) {
   // Track any results (flipped arguments) of the module for init coverage.
   for (auto it : llvm::enumerate(module.getArguments())) {
     auto flow = module.getPortDirection(it.index()) == Direction::In
@@ -434,8 +446,22 @@ mlir::FailureOr<bool> ModuleVisitor::run(FModuleOp module) {
   for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
     dispatchVisitor(&op);
   }
+  return anythingChanged;
+}
 
-  // Check for any incomplete initialization.
+void ModuleVisitor::visitStmt(ConnectOp op) {
+  anythingChanged |= setLastConnect(getFieldRefFromValue(op.dest()), op);
+}
+
+void ModuleVisitor::visitStmt(WhenOp whenOp) {
+  // If we are deleting a WhenOp something definitely changed.
+  anythingChanged = true;
+  processWhenOp(whenOp, /*outerCondition=*/{});
+}
+
+/// Perform initialization checking.  This uses the built up state from
+/// running on a module. Returns failure in the event of bad initialization.
+LogicalResult ModuleVisitor::checkInitialization() {
   for (auto destAndConnect : outerScope) {
     // If there is valid connection to this destination, everything is good.
     auto *connect = std::get<1>(destAndConnect);
@@ -447,45 +473,7 @@ mlir::FailureOr<bool> ModuleVisitor::run(FModuleOp module) {
                                     "\" not fully initialized");
     return failure();
   }
-  return mlir::FailureOr<bool>(anythingChanged);
-}
-
-void ModuleVisitor::visitStmt(ConnectOp op) {
-  anythingChanged |= setLastConnect(getFieldRefFromValue(op.dest()), op);
-}
-
-void ModuleVisitor::visitStmt(WhenOp whenOp) {
-  Block *parentBlock = whenOp->getBlock();
-  auto condition = whenOp.condition();
-
-  // Process both sides of the the WhenOp, fixing up all simulation contructs,
-  // and resolving last connect semantics in each block. This process returns
-  // the set of connects in each side of the when op.
-
-  // Process the `then` block.
-  ScopeMap thenScope;
-  auto &thenBlock = whenOp.getThenBlock();
-  WhenOpVisitor(thenScope, condition).process(thenBlock);
-  mergeBlock(*parentBlock, Block::iterator(whenOp), thenBlock);
-
-  // Process the `else` block.
-  ScopeMap elseScope;
-  if (whenOp.hasElseRegion()) {
-    OpBuilder b(whenOp);
-    auto notCondition = b.createOrFold<NotPrimOp>(
-        whenOp.getLoc(), condition.getType(), condition);
-    auto &elseBlock = whenOp.getElseBlock();
-    WhenOpVisitor(elseScope, notCondition).process(elseBlock);
-    mergeBlock(*parentBlock, Block::iterator(whenOp), elseBlock);
-  }
-
-  mergeScopes(thenScope, elseScope, condition);
-
-  // If we are deleting a WhenOp something definitely changed.
-  anythingChanged = true;
-
-  // Delete the now empty WhenOp.
-  whenOp.erase();
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -499,14 +487,11 @@ class ExpandWhensPass : public ExpandWhensBase<ExpandWhensPass> {
 } // end anonymous namespace
 
 void ExpandWhensPass::runOnOperation() {
-  // Pass returns failure if something went wrong, or a bool indicating whether
-  // something changed.
-  auto failureOrChanged = ModuleVisitor().run(getOperation());
-  if (failed(failureOrChanged)) {
-    signalPassFailure();
-  } else if (!*failureOrChanged) {
+  ModuleVisitor visitor;
+  if (!visitor.run(getOperation()))
     markAllAnalysesPreserved();
-  }
+  if (failed(visitor.checkInitialization()))
+    signalPassFailure();
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createExpandWhensPass() {
