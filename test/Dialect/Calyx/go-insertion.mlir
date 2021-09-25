@@ -13,13 +13,13 @@ calyx.program "main" {
       // CHECK-LABEL: calyx.group @Group1 {
       // CHECK-NEXT:    %Group1.go = calyx.group_go %0 : i1
       // CHECK-NEXT:    %1 = comb.and %c0.done, %Group1.go : i1
-      // CHECK-NEXT:    calyx.assign %c0.in = %c0.out, %Group1.go ? : i8
-      // CHECK-NEXT:    calyx.assign %c0.in = %c0.out, %1 ? : i8
+      // CHECK-NEXT:    calyx.assign %c0.in = %Group1.go ? %c0.out : i8
+      // CHECK-NEXT:    calyx.assign %c0.in =  %1 ? %c0.out : i8
       // CHECK-NEXT:    calyx.group_done %c0.done : i1
       // CHECK-NEXT:  }
       calyx.group @Group1 {
         calyx.assign %c0.in = %c0.out : i8
-        calyx.assign %c0.in = %c0.out, %c0.done ? : i8
+        calyx.assign %c0.in = %c0.done ? %c0.out : i8
         calyx.group_done %c0.done : i1
       }
     }

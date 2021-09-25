@@ -90,7 +90,7 @@ module {
 // CHECK-NEXT:           calyx.assign %while_0_arg2_reg.write_en = %true : i1
 // CHECK-NEXT:           %0 = comb.and %while_0_arg0_reg.done, %while_0_arg1_reg.done : i1
 // CHECK-NEXT:           %1 = comb.and %0, %while_0_arg2_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %true, %1 ? : i1
+// CHECK-NEXT:           calyx.group_done %1 ? %true : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.comb_group @bb0_0  {
 // CHECK-NEXT:           calyx.assign %std_slt_0.left = %while_0_arg0_reg.out : i32
@@ -108,7 +108,7 @@ module {
 // CHECK-NEXT:           calyx.assign %std_add_0.left = %while_0_arg1_reg.out : i32
 // CHECK-NEXT:           calyx.assign %std_add_0.right = %while_0_arg2_reg.out : i32
 // CHECK-NEXT:           %0 = comb.and %bb3_arg0_reg.done, %bb3_arg1_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %true, %0 ? : i1
+// CHECK-NEXT:           calyx.group_done %0 ? %true : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.group @bb2_to_bb3  {
 // CHECK-NEXT:           calyx.assign %bb3_arg0_reg.in = %std_add_1.out : i32
@@ -118,7 +118,7 @@ module {
 // CHECK-NEXT:           calyx.assign %std_add_1.left = %while_0_arg1_reg.out : i32
 // CHECK-NEXT:           calyx.assign %std_add_1.right = %while_0_arg2_reg.out : i32
 // CHECK-NEXT:           %0 = comb.and %bb3_arg0_reg.done, %bb3_arg1_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %true, %0 ? : i1
+// CHECK-NEXT:           calyx.group_done %0 ? %true : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.group @assign_while_0_latch  {
 // CHECK-NEXT:           calyx.assign %while_0_arg0_reg.in = %std_add_2.out : i32
@@ -131,7 +131,7 @@ module {
 // CHECK-NEXT:           calyx.assign %std_add_2.right = %in2 : i32
 // CHECK-NEXT:           %0 = comb.and %while_0_arg0_reg.done, %while_0_arg1_reg.done : i1
 // CHECK-NEXT:           %1 = comb.and %0, %while_0_arg2_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %true, %1 ? : i1
+// CHECK-NEXT:           calyx.group_done %1 ? %true : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.group @ret_assign_0  {
 // CHECK-NEXT:           calyx.assign %ret_arg0_reg.in = %while_0_arg2_reg.out : i32
@@ -218,7 +218,7 @@ module {
 // CHECK-NEXT:           calyx.assign %while_0_arg2_reg.write_en = %true : i1
 // CHECK-NEXT:           %0 = comb.and %while_0_arg0_reg.done, %while_0_arg1_reg.done : i1
 // CHECK-NEXT:           %1 = comb.and %0, %while_0_arg2_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %true, %1 ? : i1
+// CHECK-NEXT:           calyx.group_done %1 ? %true : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.comb_group @bb0_0  {
 // CHECK-NEXT:           calyx.assign %std_slt_0.left = %while_0_arg0_reg.out : i32
@@ -236,7 +236,7 @@ module {
 // CHECK-NEXT:           calyx.assign %std_add_0.left = %while_0_arg1_reg.out : i32
 // CHECK-NEXT:           calyx.assign %std_add_0.right = %while_0_arg2_reg.out : i32
 // CHECK-NEXT:           %0 = comb.and %bb3_arg0_reg.done, %bb3_arg1_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %true, %0 ? : i1
+// CHECK-NEXT:           calyx.group_done %0 ? %true : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.group @bb2_to_bb3  {
 // CHECK-NEXT:           calyx.assign %bb3_arg0_reg.in = %std_sub_0.out : i32
@@ -246,7 +246,7 @@ module {
 // CHECK-NEXT:           calyx.assign %std_sub_0.left = %while_0_arg1_reg.out : i32
 // CHECK-NEXT:           calyx.assign %std_sub_0.right = %while_0_arg2_reg.out : i32
 // CHECK-NEXT:           %0 = comb.and %bb3_arg0_reg.done, %bb3_arg1_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %true, %0 ? : i1
+// CHECK-NEXT:           calyx.group_done %0 ? %true : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.group @assign_while_0_latch  {
 // CHECK-NEXT:           calyx.assign %while_0_arg0_reg.in = %std_add_1.out : i32
@@ -259,7 +259,7 @@ module {
 // CHECK-NEXT:           calyx.assign %std_add_1.right = %in2 : i32
 // CHECK-NEXT:           %0 = comb.and %while_0_arg0_reg.done, %while_0_arg1_reg.done : i1
 // CHECK-NEXT:           %1 = comb.and %0, %while_0_arg2_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %true, %1 ? : i1
+// CHECK-NEXT:           calyx.group_done %1 ? %true : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:         calyx.group @ret_assign_0  {
 // CHECK-NEXT:           calyx.assign %ret_arg0_reg.in = %while_0_arg2_reg.out : i32

@@ -86,7 +86,7 @@ calyx.program "main" {
         %not = comb.xor %c1.out, %c1 : i1
         %and = comb.and %c1.out, %c1, %not : i1
         %or = comb.or %c1.out, %and : i1
-        calyx.assign %c1.in = %c1.out, %or ? : i1
+        calyx.assign %c1.in = %or ? %c1.out : i1
       }
       // CHECK-LABEL: group Group3 {
       // CHECK-NEXT:     r.in = s0.out;

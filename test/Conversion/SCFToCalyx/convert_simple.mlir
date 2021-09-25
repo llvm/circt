@@ -58,7 +58,7 @@ module {
 // CHECK-NEXT:           calyx.assign %ret_arg1_reg.in = %in1 : i32
 // CHECK-NEXT:           calyx.assign %ret_arg1_reg.write_en = %true : i1
 // CHECK-NEXT:           %0 = comb.and %ret_arg0_reg.done, %ret_arg1_reg.done : i1
-// CHECK-NEXT:           calyx.group_done %true, %0 ? : i1
+// CHECK-NEXT:           calyx.group_done %0 ? %true : i1
 // CHECK-NEXT:         }
 // CHECK-NEXT:       }
 // CHECK-NEXT:       calyx.control  {
