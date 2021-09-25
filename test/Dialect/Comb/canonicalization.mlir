@@ -52,16 +52,62 @@ hw.module @notMux(%a: i4, %b: i4, %c: i1) -> (o: i4) {
   hw.output %1 : i4
 }
 
+// mux(a, 0, 1) -> ~a
 // CHECK-LABEL: @notMuxResult
-hw.module @notMuxResult(%cond: i1) -> (o: i1) {
+hw.module @notMuxResult(%a: i1) -> (o: i1) {
   // CHECK-NEXT: %true = hw.constant true
-  // CHECK-NEXT: %0 = comb.xor %cond, %true : i1
+  // CHECK-NEXT: %0 = comb.xor %a, %true : i1
   // CHECK-NEXT: hw.output %0
   %c0 = hw.constant 0 : i1
   %c1 = hw.constant 1 : i1
-  %0 = comb.mux %cond, %c0, %c1 : i1
+  %0 = comb.mux %a, %c0, %c1 : i1
   hw.output %0 : i1
 }
+
+// mux(a, 0, b) -> and(~a, b)
+// CHECK-LABEL: @muxSingleBitConstantInputs
+hw.module @muxSingleBitConstantInputs(%a: i1, %b: i1) -> (o: i1) {
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: %0 = comb.xor %a, %true : i1
+  // CHECK-NEXT: %1 = comb.and %0, %b : i1
+  // CHECK-NEXT: hw.output %1
+  %c0 = hw.constant 0 : i1
+  %0 = comb.mux %a, %c0, %b : i1
+  hw.output %0 : i1
+}
+
+// mux(a, 1, b) -> or(a, b)
+// CHECK-LABEL: @muxSingleBitConstantInputs2
+hw.module @muxSingleBitConstantInputs2(%a: i1, %b: i1) -> (o: i1) {
+  // CHECK-NEXT: %0 = comb.or %a, %b : i1
+  // CHECK-NEXT: hw.output %0
+  %c0 = hw.constant 1 : i1
+  %0 = comb.mux %a, %c0, %b : i1
+  hw.output %0 : i1
+}
+
+// mux(a, b, 0) -> and(a, b)
+// CHECK-LABEL: @muxSingleBitConstantInputs3
+hw.module @muxSingleBitConstantInputs3(%a: i1, %b: i1) -> (o: i1) {
+  // CHECK-NEXT: %0 = comb.and %a, %b : i1
+  // CHECK-NEXT: hw.output %0
+  %c0 = hw.constant 0 : i1
+  %0 = comb.mux %a, %b, %c0 : i1
+  hw.output %0 : i1
+}
+
+// mux(a, b, 1) -> or(~a, b)
+// CHECK-LABEL: @muxSingleBitConstantInputs4
+hw.module @muxSingleBitConstantInputs4(%cond: i1, %arg0: i1) -> (o: i1) {
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: %0 = comb.xor %cond, %true : i1
+  // CHECK-NEXT: %1 = comb.or %0, %arg0 : i1
+  // CHECK-NEXT: hw.output %1
+  %c0 = hw.constant 1 : i1
+  %0 = comb.mux %cond, %arg0, %c0 : i1
+  hw.output %0 : i1
+}
+
 
 // CHECK-LABEL: @notNot
 hw.module @notNot(%a: i1) -> (o: i1) {
