@@ -1,14 +1,18 @@
 # `comb` Dialect Rationale
 
 This document describes various design points of the Comb dialect, a common
-dialect that is typically used in conjunction with the HW and SV dialects.
-Please see the [RationaleHW.md](HW Dialect Rationale) for high level insight
+dialect that is typically used in conjunction with the `hw` and `sv` dialects.
+Please see the [`hw` Dialect Rationale](RationaleHW.md) for high level insight
 on how these work together.  This follows in the spirit of
 other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
 - [`comb` Dialect Rationale](#comb-dialect-rationale)
   - [Introduction to the `comb` Dialect](#introduction-to-the-comb-dialect)
+  - [Type System for `comb` Dialect](#type-system-for-comb-dialect)
+    - [Zero-bit integer width is not supported](#zero-bit-integer-width-is-not-supported)
   - [Comb Operations](#comb-operations)
+    - [Fully associative operations are variadic](#fully-associative-operations-are-variadic)
+    - [Operators carry signs instead of types](#operators-carry-signs-instead-of-types)
     - [No implicit extensions of operands](#no-implicit-extensions-of-operands)
     - [No "Replication", "ZExt", or "Complement" Operators](#no-replication-zext-or-complement-operators)
     - [No multibit mux operations](#no-multibit-mux-operations)
@@ -18,20 +22,57 @@ other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
 ## Introduction to the `comb` Dialect
 
-The `comb` dialect contains a collection of operations reflecting a mid-level
+The `comb` dialect provides a collection of operations that define a mid-level
 compiler IR for combinational logic.   It is *not* designed to model
 SystemVerilog or any other hardware design language directly.  Instead, it is
 designed to be easy to analyze and transform, and be a flexible and extensible
 substrate that may be extended with higher level dialects mixed into it.
 
+## Type System for `comb` Dialect
+
+TODO: Simple integer types, eventually parametricly wide integer type
+`hw.int<width>`.  Supports type aliases.  See HW rationale for more info.
+
+### Zero-bit integer width is not supported
+
+Combinatorial operations like add and multiply work on values of signless
+standard integer types, e.g. `i42`, but they do not allow zero bit inputs.  This
+design point is motivated by a couple of reasons:
+
+1) The semantics of some operations (e.g. `comb.sext`) do not have an obvious
+   definition with a zero bit input.
+
+1) Zero bit operations are useless for operations that are definable, and their
+   presence makes the compiler more complicated.
+
+On the second point, consider an example like `comb.mux` which could allow zero
+bit inputs and therefore produce zero bit results.  Allowing that as a design
+point would require us to special case this in our cost models, and we would
+have that optimizes it away.
+
+By rejecting zero bit operations, we choose to put the complexity into the
+lowering passes that generate the HW dialect (e.g. LowerToHW from FIRRTL).
+
+Note that this decision only affects the core operations in the `comb` dialect
+itself - it is perfectly reasonable to define your operations and mix them into
+other `comb` constructs. 
+
 ## Comb Operations
 
-TODO: Why is add variadic?  Why consistent operand types instead of allowing
-implicit extensions?
+This section contains notes about design decisions relating to
+operations in the `comb` dialect.
+
+### Fully associative operations are variadic
+
+TODO: describe why add/xor/or are variadic
+
+### Operators carry signs instead of types
+
+TODO: describe why we have divu/divs but not addu/adds, and not sint vs uint.
 
 ### No implicit extensions of operands
 
-Verilog and many other HDL's allow combination operations like `+` to work with
+Verilog and many other HDL's allow operators like `+` to work with
 mixed size operands, and some have complicated contextual rules about how wide
 the result is (e.g. adding two 12 bit integers gives you a 13 bit result).
 
@@ -42,10 +83,11 @@ dataflow transformations need to reason about these pervasively.  Because the
 it doesn't allow implicit extensions: for example, `comb.add` takes the same
 width inputs and returns the same width result.
 
-There is room in the future for other options: for example, it might be useful
-to add an `sv.add` operation that allows mixed operands to get better separation
-of concerns in the Verilog printer if we wanted really fancy extension elision.
-So far, very simple techniques have been enough to get reasonable output.
+There is room in the future for other points in the design space: for example,
+it might be useful to add an `sv.add` operation that allows mixed operands to
+get better separation of concerns in the Verilog printer if we wanted really
+fancy extension elision. So far, very simple techniques have been enough to get
+reasonable output.
 
 ### No "Replication", "ZExt", or "Complement" Operators
 
@@ -124,30 +166,6 @@ move has some advantages and disadvantages:
 We agreed that we'd revisit in the future if there were a specific reason to
 add it.  Until then we represent the array_create/array_get pattern for
 frontends that want to generate this.
-
-**Zero Bit Integers**
-
-Combinatorial operations like add and multiply work on values of signless
-standard integer types, e.g. `i42`, but they do not allow zero bit inputs.  This
-design point is motivated by a couple of reasons:
-
-1) The semantics of some operations (e.g. `comb.sext`) do not have an obvious
-   definition with a zero bit input.
-
-1) Zero bit operations are useless for operations that are definable, and their
-   presence makes the compiler more complicated.
-
-On the second point, consider an example like `comb.mux` which could allow zero
-bit inputs and therefore produce zero bit results.  Allowing that as a design
-point would require us to special case this in our cost models, and we would
-have that optimizes it away.
-
-By rejecting zero bit operations, we choose to put the complexity into the
-lowering passes that generate the HW dialect (e.g. LowerToHW from FIRRTL).
-
-Note that this decision only affects the core operations in the `comb` dialect
-itself - it is perfectly reasonable to define your operations and mix them into
-other `comb` constructs. 
 
 ## Endianness: operand ordering and internal representation
 

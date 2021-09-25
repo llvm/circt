@@ -1,31 +1,34 @@
 # SV Dialect Rationale
 
-This document describes various design points of the SV dialect, a common
-dialect that is typically used in conjunction with the HW and Comb dialects.
+This document describes various design points of the `sv` dialect, a common
+dialect that is typically used in conjunction with the `hw` and `comb` dialects.
 Please see the [RationaleHW.md](HW Dialect Rationale) for high level insight
 on how these work together.  This follows in the spirit of
 other [MLIR Rationale docs](https://mlir.llvm.org/docs/Rationale/).
 
 - [SV Dialect Rationale](#sv-dialect-rationale)
-  - [Introduction](#introduction)
-  - [Type System](#type-system)
-  - [Operations](#operations)
+  - [Introduction to the `sv` dialect](#introduction-to-the-sv-dialect)
+  - [`sv` Type System](#sv-type-system)
+  - [Overview of `sv` dialect operations](#overview-of-sv-dialect-operations)
+  - [Statements](#statements)
+  - [Declarations](#declarations)
+  - [Expressions](#expressions)
     - [Verbatim op](#verbatim-op)
   - [Cost Model](#cost-model)
 
-## Introduction
+## Introduction to the `sv` dialect
 
-The SV dialect is one of the dialects that can be mixed into the HW dialect,
-providing
-access to a range of syntactic and behavioral constructs.  The driving focus of
-this dialect is to provide simple and predictable access to SystemVerilog
-features: it is not focused primarily on being easy to analyze and transform.
+The `sv` dialect is one of the dialects that can be mixed into the HW dialect,
+providing access to a range of syntactic and behavioral constructs in
+SystemVerilog.  The driving focus of this dialect is to provide simple and
+predictable access to these features: it is not focused primarily on being easy
+to analyze and transform.
 
-The SV dialect is designed to build on top of the HW dialect, so it does not
-have its own operations for combinational logic, modules, or other base
-functionality defined in the HW dialect.
+The `sv` dialect is designed to build on top of the `hw` dialect and is often
+used in conjunction with the `comb` or other dialects, so it does not have its
+own operations for combinational logic, modules, or other common functionality.
 
-## Type System
+## `sv` Type System
 
 Like the HW dialect, the SV dialect is designed to tolerate unknown types where
 possible, allowing other dialects to mix in with it.  In addition to these
@@ -34,7 +37,7 @@ types for SystemVerilog interfaces.
 
 TODO: Describe interface types, modports, etc.
 
-## Operations
+## Overview of `sv` dialect operations
 
 Because the SV dialect aims to align with the textual nature of SystemVerilog,
 many of the constructs in the SV dialect have an "AST" style of representation.
@@ -57,6 +60,18 @@ language and to be easily printable by the ExportVerilog pass.  While there are
 still many things in SystemVerilog that we cannot currently express in the SV
 dialect, this design makes it easy to incrementally build out new capabilities
 over time.
+
+## Statements
+
+TODO.
+
+## Declarations
+
+TODO: Describe `sv.wire`, `sv.reg`, 
+
+## Expressions
+
+TODO: Describe `sv.read_inout` and `sv.array_index_inout`.
 
 ### Verbatim op
 
