@@ -404,8 +404,9 @@ static ParseResult parseGroupPort(OpAsmParser &parser, OperationState &result) {
 // A helper function for printing group ports, i.e. GroupGoOp and GroupDoneOp.
 template <typename GroupPortType>
 static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
-  bool isValidGroupPort = isa<GroupGoOp, GroupDoneOp>(&op);
-  assert(isValidGroupPort && "Should be a Calyx Group port.");
+  static_assert(std::is_same<GroupGoOp, GroupPortType>() ||
+                    std::is_same<GroupDoneOp, GroupPortType>(),
+                "Should be a Calyx Group port.");
 
   p << " ";
   // The guard is optional.
