@@ -595,7 +595,8 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              /// SCF
                              scf::YieldOp,
                              /// memref
-                             memref::AllocOp, memref::LoadOp, memref::StoreOp,
+                             memref::AllocOp, memref::AllocaOp, memref::LoadOp,
+                             memref::StoreOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShiftLeftOp,
                              UnsignedShiftRightOp, SignedShiftRightOp, AndOp,
@@ -640,6 +641,7 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, ReturnOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, IndexCastOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocaOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::LoadOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::StoreOp op) const;
 
@@ -784,9 +786,11 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryOp.done());
   return success();
 }
-LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     memref::AllocOp allocOp) const {
-  rewriter.setInsertionPointToStart(getComponent()->getBody());
+
+template <typename TAllocOp>
+static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
+                                  PatternRewriter &rewriter, TAllocOp allocOp) {
+  rewriter.setInsertionPointToStart(componentState.getComponentOp().getBody());
   MemRefType memtype = allocOp.getType();
   SmallVector<int64_t> addrSizes;
   SmallVector<int64_t> sizes;
@@ -795,10 +799,20 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
     addrSizes.push_back(llvm::Log2_64_Ceil(dim));
   }
   auto memoryOp = rewriter.create<calyx::MemoryOp>(
-      allocOp.getLoc(), getComponentState().getUniqueName("mem"),
+      allocOp.getLoc(), componentState.getUniqueName("mem"),
       memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
-  getComponentState().registerMemory(allocOp.getResult(), memoryOp);
+  componentState.registerMemory(allocOp.getResult(), memoryOp);
   return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     memref::AllocOp allocOp) const {
+  return buildAllocOp(getComponentState(), rewriter, allocOp);
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     memref::AllocaOp allocOp) const {
+  return buildAllocOp(getComponentState(), rewriter, allocOp);
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
