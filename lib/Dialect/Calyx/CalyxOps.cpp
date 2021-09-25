@@ -409,9 +409,10 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
 
   p << " ";
   // The guard is optional.
-  if (op.guard())
-    p << op.guard() << " ? ";
-  p << op.src() << " : " << op.src().getType();
+  Value guard = op.guard(), source = op.src();
+  if (guard)
+    p << guard << " ? ";
+  p << source << " : " << source.getType();
 }
 
 //===----------------------------------------------------------------------===//
@@ -995,17 +996,15 @@ static ParseResult parseAssignOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printAssignOp(OpAsmPrinter &p, AssignOp op) {
-  p << " ";
-  p << op.dest() << " = ";
+  p << " " << op.dest() << " = ";
 
-  Value guard = op.guard();
+  Value guard = op.guard(), source = op.src();
   // The guard is optional.
   if (guard)
     p << guard << " ? ";
 
   // We only need to print a single type; the destination and source are
   // guaranteed to be the same type.
-  Value source = op.src();
   p << source << " : " << source.getType();
 }
 
