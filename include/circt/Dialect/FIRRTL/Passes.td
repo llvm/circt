@@ -292,7 +292,6 @@ def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
                                       "FModuleOp"> {
   let summary = "Generate signal mappings that force/probe remote signals";
   let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
-  let dependentDialects = ["sv::SVDialect"];
 }
 
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {

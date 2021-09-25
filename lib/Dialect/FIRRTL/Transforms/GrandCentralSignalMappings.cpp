@@ -14,7 +14,6 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Dialect/SV/SVDialect.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Debug.h"
@@ -161,13 +160,13 @@ void ModuleSignalMappings::emitMappingsModule() {
 
   // Determine what ports this module will have, given the signal mappings we
   // are supposed to emit.
-  SmallVector<ModulePortInfo> ports;
+  SmallVector<PortInfo> ports;
   for (auto &mapping : mappings) {
-    ports.push_back(ModulePortInfo{mapping.localName, mapping.type,
-                                   mapping.dir == MappingDirection::DriveRemote
-                                       ? Direction::In
-                                       : Direction::Out,
-                                   module.getLoc()});
+    ports.push_back(PortInfo{mapping.localName, mapping.type,
+                             mapping.dir == MappingDirection::DriveRemote
+                                 ? Direction::In
+                                 : Direction::Out,
+                             module.getLoc()});
     LLVM_DEBUG(llvm::dbgs() << "  - Adding port " << mapping.localName << "\n");
   }
 

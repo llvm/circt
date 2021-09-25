@@ -1180,7 +1180,6 @@ bool circt::firrtl::scatterCustomAnnotations(
 
       // Indicate which modules have embedded `SignalDriverAnnotation`s.
       for (auto &module : annotatedModules) {
-        llvm::errs() << "- Annotate module `" << module.getKey() << "`\n";
         NamedAttrList fields;
         fields.append("class", classAttr);
         fields.append("id", id);
