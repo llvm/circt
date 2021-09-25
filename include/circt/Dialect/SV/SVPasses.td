@@ -117,4 +117,17 @@ def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
+def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
+                                   "mlir::ModuleOp"> {
+  let summary = "Export module and instance hierarchy information";
+  let description = [{
+    This pass exports the module and instance hierarchy tree for each module
+    with the firrtl.moduleHierarchyFile attribute. These are lowered to
+    sv.verbatim ops with the output_file attribute.
+  }];
+
+  let constructor = "circt::sv::createHWExportModuleHierarchyPass()";
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
+
 #endif // CIRCT_DIALECT_SV_SVPASSES

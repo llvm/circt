@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/Builders.h"
@@ -29,6 +30,74 @@ bool hw::isCombinatorial(Operation *op) {
 
   return (op->getDialect() && op->getDialect()->getNamespace() == "comb") ||
          IsCombClassifier().dispatchTypeOpVisitor(op);
+}
+
+enum class Delimiter {
+  None,
+  Paren,               // () enclosed list
+  OptionalLessGreater, // <> enclosed list or absent
+};
+
+/// Check parameter specified by `value` to see if it is valid within the scope
+/// of the specified module `module`.  If not, emit an error at the location of
+/// `usingOp` and return failure, otherwise return success.
+///
+/// If `disallowParamRefs` is true, then parameter references are not allowed.
+LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
+                                          Operation *usingOp,
+                                          bool disallowParamRefs) {
+  // Literals are always ok.  Their types are already known to match
+  // expectations.
+  if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
+      value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
+    return success();
+
+  // Check both arms of an expression.
+  if (auto binop = value.dyn_cast<ParamBinaryAttr>()) {
+    if (failed(checkParameterInContext(binop.getLhs(), module, usingOp,
+                                       disallowParamRefs)) ||
+        failed(checkParameterInContext(binop.getRhs(), module, usingOp,
+                                       disallowParamRefs)))
+      return failure();
+    return success();
+  }
+
+  // Parameter references need more analysis to make sure they are valid within
+  // this module.
+  if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
+    auto nameAttr = parameterRef.getName();
+
+    // Don't allow references to parameters from the default values of a
+    // parameter list.
+    if (disallowParamRefs) {
+      usingOp->emitOpError("parameter ")
+          << nameAttr << " cannot be used as a default value for a parameter";
+      return failure();
+    }
+
+    // Find the corresponding attribute in the module.
+    for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
+      auto paramAttr = param.cast<ParamDeclAttr>();
+      if (paramAttr.getName() != nameAttr)
+        continue;
+
+      // If the types match then the reference is ok.
+      if (paramAttr.getType().getValue() == parameterRef.getType())
+        return success();
+
+      auto diag = usingOp->emitOpError("parameter ")
+                  << nameAttr << " used with type " << parameterRef.getType()
+                  << "; should have type " << paramAttr.getType().getValue();
+      diag.attachNote(module->getLoc()) << "module declared here";
+      return failure();
+    }
+
+    auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
+    diag.attachNote(module->getLoc()) << "module declared here";
+    return failure();
+  }
+
+  return usingOp->emitOpError("invalid parameter value ") << value;
 }
 
 //===----------------------------------------------------------------------===//
@@ -183,6 +252,7 @@ enum ExternModKind { PlainMod, ExternMod, GenMod };
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, const ModulePortInfo &ports,
+                        ArrayAttr parameters,
                         ArrayRef<NamedAttribute> attributes) {
   using namespace mlir::function_like_impl;
 
@@ -205,19 +275,25 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     resultNames.push_back(elt.name);
   }
 
+  // Allow clients to pass in null for the parameters list.
+  if (!parameters)
+    parameters = builder.getArrayAttr({});
+
   // Record the argument and result types as an attribute.
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
+  result.addAttribute("parameters", parameters);
   result.addAttributes(attributes);
   result.addRegion();
 }
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, const ModulePortInfo &ports,
+                       ArrayAttr parameters,
                        ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, attributes);
+  buildModule(builder, result, name, ports, parameters, attributes);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -233,8 +309,9 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 
 void HWModuleOp::build(OpBuilder &builder, OperationState &result,
                        StringAttr name, ArrayRef<PortInfo> ports,
+                       ArrayAttr parameters,
                        ArrayRef<NamedAttribute> attributes) {
-  build(builder, result, name, ModulePortInfo(ports), attributes);
+  build(builder, result, name, ModulePortInfo(ports), parameters, attributes);
 }
 
 /// Return the name to use for the Verilog module that we're referencing
@@ -258,9 +335,9 @@ StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, const ModulePortInfo &ports,
-                             StringRef verilogName,
+                             StringRef verilogName, ArrayAttr parameters,
                              ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, attributes);
+  buildModule(builder, result, name, ports, parameters, attributes);
 
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -268,17 +345,18 @@ void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
                              StringAttr name, ArrayRef<PortInfo> ports,
-                             StringRef verilogName,
+                             StringRef verilogName, ArrayAttr parameters,
                              ArrayRef<NamedAttribute> attributes) {
-  build(builder, result, name, ModulePortInfo(ports), verilogName, attributes);
+  build(builder, result, name, ModulePortInfo(ports), verilogName, parameters,
+        attributes);
 }
 
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
                                 const ModulePortInfo &ports,
-                                StringRef verilogName,
+                                StringRef verilogName, ArrayAttr parameters,
                                 ArrayRef<NamedAttribute> attributes) {
-  buildModule(builder, result, name, ports, attributes);
+  buildModule(builder, result, name, ports, parameters, attributes);
   result.addAttribute("generatorKind", genKind);
   if (!verilogName.empty())
     result.addAttribute("verilogName", builder.getStringAttr(verilogName));
@@ -287,9 +365,10 @@ void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
 void HWModuleGeneratedOp::build(OpBuilder &builder, OperationState &result,
                                 FlatSymbolRefAttr genKind, StringAttr name,
                                 ArrayRef<PortInfo> ports, StringRef verilogName,
+                                ArrayAttr parameters,
                                 ArrayRef<NamedAttribute> attributes) {
   build(builder, result, genKind, name, ModulePortInfo(ports), verilogName,
-        attributes);
+        parameters, attributes);
 }
 
 /// Return an encapsulated set of information about input and output ports of
@@ -364,6 +443,37 @@ static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   return false;
 }
 
+/// Parse an parameter list if present.
+/// module-parameter-list ::= `<` parameter-decl (`,` parameter-decl)* `>`
+/// parameter-decl ::= identifier `:` type
+/// parameter-decl ::= identifier `:` type `=` attribute
+///
+static ParseResult parseOptionalParameters(OpAsmParser &parser,
+                                           SmallVector<Attribute> &parameters) {
+
+  return parser.parseCommaSeparatedList(
+      OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
+        StringAttr name;
+        Type type;
+        Attribute value;
+
+        if (!(name = module_like_impl::parsePortName(parser)) ||
+            parser.parseColonType(type))
+          return failure();
+
+        // Parse the default value if present.
+        if (succeeded(parser.parseOptionalEqual())) {
+          if (parser.parseAttribute(value, type))
+            return failure();
+        }
+
+        auto &builder = parser.getBuilder();
+        parameters.push_back(ParamDeclAttr::get(builder.getContext(), name,
+                                                TypeAttr::get(type), value));
+        return success();
+      });
+}
+
 static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
                                    ExternModKind modKind = PlainMod) {
   using namespace mlir::function_like_impl;
@@ -375,6 +485,7 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   SmallVector<NamedAttrList, 4> resultAttrs;
   SmallVector<Type, 4> argTypes;
   SmallVector<Type, 4> resultTypes;
+  SmallVector<Attribute> parameters;
   auto &builder = parser.getBuilder();
 
   // Parse the name as a symbol.
@@ -394,9 +505,12 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   // Parse the function signature.
   bool isVariadic = false;
   SmallVector<Attribute> resultNames;
-  if (module_like_impl::parseModuleFunctionSignature(
+  if (parseOptionalParameters(parser, parameters) ||
+      module_like_impl::parseModuleFunctionSignature(
           parser, entryArgs, argTypes, argAttrs, isVariadic, resultTypes,
-          resultAttrs, resultNames))
+          resultAttrs, resultNames) ||
+      // If function attributes are present, parse them.
+      parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
   // Record the argument and result types as an attribute.  This is necessary
@@ -404,16 +518,12 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
   auto type = builder.getFunctionType(argTypes, resultTypes);
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
 
-  // If function attributes are present, parse them.
-  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
-    return failure();
-
   auto *context = result.getContext();
 
-  if (hasAttribute("argNames", result.attributes) ||
-      hasAttribute("resultNames", result.attributes)) {
+  if (hasAttribute("resultNames", result.attributes) ||
+      hasAttribute("parameters", result.attributes)) {
     parser.emitError(
-        loc, "explicit argNames and resultNames attributes not allowed");
+        loc, "explicit `resultNames` / `parameters` attributes not allowed");
     return failure();
   }
 
@@ -427,8 +537,14 @@ static ParseResult parseHWModuleOp(OpAsmParser &parser, OperationState &result,
     argNames.assign(argTypes.size(), StringAttr::get(context, ""));
   }
 
-  result.addAttribute("argNames", ArrayAttr::get(context, argNames));
+  // An explicit `argNames` attribute overrides the MLIR names.  This is how
+  // we represent port names that aren't valid MLIR identifiers.  Result and
+  // parameter names are printed quoted when they aren't valid identifiers, so
+  // they don't need this affordance.
+  if (!hasAttribute("argNames", result.attributes))
+    result.addAttribute("argNames", ArrayAttr::get(context, argNames));
   result.addAttribute("resultNames", ArrayAttr::get(context, resultNames));
+  result.addAttribute("parameters", ArrayAttr::get(context, parameters));
 
   assert(argAttrs.size() == argTypes.size());
   assert(resultAttrs.size() == resultTypes.size());
@@ -463,6 +579,23 @@ FunctionType getHWModuleOpType(Operation *op) {
   return typeAttr.getValue().cast<FunctionType>();
 }
 
+/// Print a parameter list for a module or instance.
+static void printParameterList(ArrayAttr parameters, OpAsmPrinter &p) {
+  if (parameters.empty())
+    return;
+
+  p << '<';
+  llvm::interleaveComma(parameters, p, [&](Attribute param) {
+    auto paramAttr = param.cast<ParamDeclAttr>();
+    p << paramAttr.getName().getValue() << ": " << paramAttr.getType();
+    if (auto value = paramAttr.getValue()) {
+      p << " = ";
+      p.printAttributeWithoutType(value);
+    }
+  });
+  p << '>';
+}
+
 static void printModuleOp(OpAsmPrinter &p, Operation *op,
                           ExternModKind modKind) {
   using namespace mlir::function_like_impl;
@@ -479,6 +612,9 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
     p.printSymbolName(cast<HWModuleGeneratedOp>(op).generatorKind());
   }
 
+  // Print the parameter list if present.
+  printParameterList(op->getAttrOfType<ArrayAttr>("parameters"), p);
+
   bool needArgNamesAttr = false;
   module_like_impl::printModuleSignature(p, op, argTypes, /*isVariadic=*/false,
                                          resultTypes, needArgNamesAttr);
@@ -489,6 +625,7 @@ static void printModuleOp(OpAsmPrinter &p, Operation *op,
   if (!needArgNamesAttr)
     omittedAttrs.push_back("argNames");
   omittedAttrs.push_back("resultNames");
+  omittedAttrs.push_back("parameters");
 
   printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
                           omittedAttrs);
@@ -522,6 +659,29 @@ static LogicalResult verifyModuleCommon(Operation *module) {
     return module->emitOpError("incorrect number of argument names");
   if (resultNames.size() != moduleType.getNumResults())
     return module->emitOpError("incorrect number of result names");
+
+  // Check parameter default values are sensible.
+  for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
+    auto paramAttr = param.cast<ParamDeclAttr>();
+
+    // Default values are allowed to be missing.
+    auto value = paramAttr.getValue();
+    if (!value)
+      continue;
+
+    if (value.getType() != paramAttr.getType().getValue())
+      return module->emitOpError("parameter ")
+             << paramAttr << " should have type "
+             << paramAttr.getType().getValue() << "; has type "
+             << value.getType();
+
+    // Verify that this is a valid parameter value, disallowing parameter
+    // references.  We could allow parameters to refer to each other in the
+    // future with lexical ordering if there is a need.
+    if (failed(checkParameterInContext(value, module, module,
+                                       /*disallowParamRefs=*/true)))
+      return failure();
+  }
   return success();
 }
 
@@ -575,9 +735,13 @@ static LogicalResult verifyHWModuleGeneratedOp(HWModuleGeneratedOp op) {
 /// Create a instance that refers to a known module.
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        Operation *module, StringAttr name,
-                       ArrayRef<Value> inputs, DictionaryAttr parameters,
+                       ArrayRef<Value> inputs, ArrayAttr parameters,
                        StringAttr sym_name) {
   assert(isAnyModule(module) && "Can only reference a module");
+
+  if (!parameters)
+    parameters = builder.getArrayAttr({});
+
   FunctionType modType = getModuleType(module);
   build(builder, result, modType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
@@ -593,99 +757,7 @@ Operation *InstanceOp::getReferencedModule(const SymbolCache *cache) {
       return result;
 
   auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
-
   return topLevelModuleOp.lookupSymbol(moduleName());
-}
-
-// Helper function to verify instance op types
-static LogicalResult verifyInstanceOpTypes(InstanceOp op, Operation *module) {
-  // Make sure our port and result names match.
-  ArrayAttr argNames = op.argNamesAttr();
-  ArrayAttr modArgNames = module->getAttrOfType<ArrayAttr>("argNames");
-
-  // Check operand types first.
-  auto numOperands = op->getNumOperands();
-  auto expectedOperandTypes = getModuleType(module).getInputs();
-
-  if (expectedOperandTypes.size() != numOperands) {
-    auto diag = op.emitOpError()
-                << "has a wrong number of operands; expected "
-                << expectedOperandTypes.size() << " but got " << numOperands;
-    diag.attachNote(module->getLoc()) << "original module declared here";
-    return failure();
-  }
-
-  if (argNames.size() != numOperands) {
-    auto diag = op.emitOpError()
-                << "has a wrong number of input port names; expected "
-                << numOperands << " but got " << argNames.size();
-    diag.attachNote(module->getLoc()) << "original module declared here";
-    return failure();
-  }
-
-  for (size_t i = 0; i != numOperands; ++i) {
-    auto expectedType = expectedOperandTypes[i];
-    auto operandType = op.getOperand(i).getType();
-    if (operandType != expectedType) {
-      auto diag = op.emitOpError()
-                  << "operand type #" << i << " must be " << expectedType
-                  << ", but got " << operandType;
-      diag.attachNote(module->getLoc()) << "original module declared here";
-      return failure();
-    }
-
-    if (argNames[i] != modArgNames[i]) {
-      auto diag = op.emitOpError()
-                  << "input label #" << i << " must be " << modArgNames[i]
-                  << ", but got " << argNames[i];
-      diag.attachNote(module->getLoc()) << "original module declared here";
-      module->dump();
-      return failure();
-    }
-  }
-
-  // Check result types and labels.
-  auto numResults = op->getNumResults();
-  auto expectedResultTypes = getModuleType(module).getResults();
-  ArrayAttr resultNames = op.resultNamesAttr();
-  ArrayAttr modResultNames = module->getAttrOfType<ArrayAttr>("resultNames");
-
-  if (expectedResultTypes.size() != numResults) {
-    auto diag = op.emitOpError()
-                << "has a wrong number of results; expected "
-                << expectedResultTypes.size() << " but got " << numResults;
-    diag.attachNote(module->getLoc()) << "original module declared here";
-    return failure();
-  }
-  if (resultNames.size() != numResults) {
-    auto diag = op.emitOpError()
-                << "has a wrong number of results port labels; expected "
-                << numResults << " but got " << resultNames.size();
-    diag.attachNote(module->getLoc()) << "original module declared here";
-    return failure();
-  }
-
-  for (size_t i = 0; i != numResults; ++i) {
-    auto expectedType = expectedResultTypes[i];
-    auto resultType = op.getResult(i).getType();
-    if (resultType != expectedType) {
-      auto diag = op.emitOpError()
-                  << "result type #" << i << " must be " << expectedType
-                  << ", but got " << resultType;
-      diag.attachNote(module->getLoc()) << "original module declared here";
-      return failure();
-    }
-
-    if (resultNames[i] != modResultNames[i]) {
-      auto diag = op.emitOpError()
-                  << "input label #" << i << " must be " << modResultNames[i]
-                  << ", but got " << resultNames[i];
-      diag.attachNote(module->getLoc()) << "original module declared here";
-      return failure();
-    }
-  }
-
-  return success();
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -700,7 +772,139 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   // Check that input and result types are consistent with the referenced
   // module.
-  return verifyInstanceOpTypes(*this, module);
+  // Emit an error message on the instance, with a note indicating which module
+  // is being referenced.
+  auto emitError =
+      [&](std::function<void(InFlightDiagnostic & diag)> fn) -> LogicalResult {
+    auto diag = emitOpError();
+    fn(diag);
+    diag.attachNote(module->getLoc()) << "module declared here";
+    return failure();
+  };
+
+  // Make sure our port and result names match.
+  ArrayAttr argNames = argNamesAttr();
+  ArrayAttr modArgNames = module->getAttrOfType<ArrayAttr>("argNames");
+
+  // Check operand types first.
+  auto numOperands = getOperation()->getNumOperands();
+  auto expectedOperandTypes = getModuleType(module).getInputs();
+
+  if (expectedOperandTypes.size() != numOperands)
+    return emitError([&](auto &diag) {
+      diag << "has a wrong number of operands; expected "
+           << expectedOperandTypes.size() << " but got " << numOperands;
+    });
+
+  if (argNames.size() != numOperands)
+    return emitError([&](auto &diag) {
+      diag << "has a wrong number of input port names; expected " << numOperands
+           << " but got " << argNames.size();
+    });
+
+  for (size_t i = 0; i != numOperands; ++i) {
+    auto expectedType = expectedOperandTypes[i];
+    auto operandType = getOperand(i).getType();
+    if (operandType != expectedType)
+      return emitError([&](auto &diag) {
+        diag << "operand type #" << i << " must be " << expectedType
+             << ", but got " << operandType;
+      });
+
+    if (argNames[i] != modArgNames[i])
+      return emitError([&](auto &diag) {
+        diag << "input label #" << i << " must be " << modArgNames[i]
+             << ", but got " << argNames[i];
+      });
+  }
+
+  // Check result types and labels.
+  auto numResults = getOperation()->getNumResults();
+  auto expectedResultTypes = getModuleType(module).getResults();
+  ArrayAttr resultNames = resultNamesAttr();
+  ArrayAttr modResultNames = module->getAttrOfType<ArrayAttr>("resultNames");
+
+  if (expectedResultTypes.size() != numResults)
+    return emitError([&](auto &diag) {
+      diag << "has a wrong number of results; expected "
+           << expectedResultTypes.size() << " but got " << numResults;
+    });
+  if (resultNames.size() != numResults)
+    return emitError([&](auto &diag) {
+      diag << "has a wrong number of results port labels; expected "
+           << numResults << " but got " << resultNames.size();
+    });
+
+  for (size_t i = 0; i != numResults; ++i) {
+    auto expectedType = expectedResultTypes[i];
+    auto resultType = getResult(i).getType();
+    if (resultType != expectedType)
+      return emitError([&](auto &diag) {
+        diag << "result type #" << i << " must be " << expectedType
+             << ", but got " << resultType;
+      });
+
+    if (resultNames[i] != modResultNames[i])
+      return emitError([&](auto &diag) {
+        diag << "input label #" << i << " must be " << modResultNames[i]
+             << ", but got " << resultNames[i];
+      });
+  }
+
+  // Check parameters match up.
+  ArrayAttr parameters = this->parameters();
+  ArrayAttr modParameters = module->getAttrOfType<ArrayAttr>("parameters");
+  auto numParameters = parameters.size();
+  if (numParameters != modParameters.size())
+    return emitError([&](auto &diag) {
+      diag << "expected " << modParameters.size() << " parameters but had "
+           << numParameters;
+    });
+
+  for (size_t i = 0; i != numParameters; ++i) {
+    auto param = parameters[i].cast<ParamDeclAttr>();
+    auto modParam = modParameters[i].cast<ParamDeclAttr>();
+
+    auto paramName = param.getName();
+    if (paramName != modParam.getName())
+      return emitError([&](auto &diag) {
+        diag << "parameter #" << i << " should have name " << modParam.getName()
+             << " but has name " << paramName;
+      });
+
+    if (param.getType() != modParam.getType())
+      return emitError([&](auto &diag) {
+        diag << "parameter " << paramName << " should have type "
+             << modParam.getType() << " but has type " << param.getType();
+      });
+
+    // All instance parameters must have a value.  Specify the same value as
+    // a module's default value if you want the default.
+    if (!param.getValue())
+      return emitOpError("parameter ") << paramName << " must have a value";
+  }
+
+  return success();
+}
+
+LogicalResult InstanceOp::verifyCustom() {
+  // Check that all the parameter values specified to the instance are
+  // structurally valid.
+  for (auto param : parameters()) {
+    auto paramAttr = param.cast<ParamDeclAttr>();
+    auto value = paramAttr.getValue();
+    assert(value && "SymbolUses verifier should already check this exists");
+
+    if (value.getType() != paramAttr.getType().getValue())
+      return emitOpError("parameter ") << paramAttr << " should have type "
+                                       << paramAttr.getType().getValue()
+                                       << "; has type " << value.getType();
+
+    if (failed(checkParameterInContext(
+            value, (*this)->getParentOfType<HWModuleOp>(), *this)))
+      return failure();
+  }
+  return success();
 }
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
@@ -711,6 +915,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   SmallVector<OpAsmParser::OperandType, 4> inputsOperands;
   SmallVector<Type> inputsTypes;
   SmallVector<Type> allResultTypes;
+  SmallVector<Attribute> argNames, resultNames, parameters;
   auto noneType = parser.getBuilder().getType<NoneType>();
 
   if (parser.parseAttribute(instanceNameAttr, noneType, "instanceName",
@@ -724,46 +929,38 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
                                          result.attributes);
   }
 
-  // Parse a paren-enclosed list of comma-separated items.
-  auto parseCommaSeparatedList = [&](auto fn) -> ParseResult {
-    if (parser.parseLParen())
+  auto parseInputPort = [&]() -> ParseResult {
+    argNames.push_back(module_like_impl::parsePortName(parser));
+    if (!argNames.back())
       return failure();
-
-    // Empty list.
-    if (succeeded(parser.parseOptionalRParen()))
-      return success();
-
-    do {
-      if (failed(fn()))
-        return failure();
-    } while (succeeded(parser.parseOptionalComma()));
-    return parser.parseRParen();
+    inputsOperands.push_back({});
+    inputsTypes.push_back({});
+    return failure(parser.parseColon() ||
+                   parser.parseOperand(inputsOperands.back()) ||
+                   parser.parseColon() || parser.parseType(inputsTypes.back()));
   };
 
-  SmallVector<Attribute> argNames, resultNames;
-  llvm::SMLoc inputsOperandsLoc;
+  auto parseResultPort = [&]() -> ParseResult {
+    resultNames.push_back(module_like_impl::parsePortName(parser));
+    if (!resultNames.back())
+      return failure();
+    allResultTypes.push_back({});
+    return parser.parseColonType(allResultTypes.back());
+  };
+
+  llvm::SMLoc parametersLoc, inputsOperandsLoc;
   if (parser.parseAttribute(moduleNameAttr, noneType, "moduleName",
                             result.attributes) ||
+      parser.getCurrentLocation(&parametersLoc) ||
+      parseOptionalParameters(parser, parameters) ||
       parser.getCurrentLocation(&inputsOperandsLoc) ||
-      parseCommaSeparatedList([&]() -> ParseResult {
-        argNames.push_back(module_like_impl::parsePortName(parser));
-        if (!argNames.back())
-          return failure();
-        inputsOperands.push_back({});
-        inputsTypes.push_back({});
-        return failure(parser.parseOperand(inputsOperands.back()) ||
-                       parser.parseColon() ||
-                       parser.parseType(inputsTypes.back()));
-      }) ||
+      parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseInputPort) ||
       parser.resolveOperands(inputsOperands, inputsTypes, inputsOperandsLoc,
                              result.operands) ||
-      parser.parseArrow() || parseCommaSeparatedList([&]() -> ParseResult {
-        resultNames.push_back(module_like_impl::parsePortName(parser));
-        if (!resultNames.back())
-          return failure();
-        allResultTypes.push_back({});
-        return parser.parseType(allResultTypes.back());
-      }) ||
+      parser.parseArrow() ||
+      parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                     parseResultPort) ||
       parser.parseOptionalAttrDict(result.attributes)) {
     return failure();
   }
@@ -771,6 +968,8 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   result.addAttribute("argNames", parser.getBuilder().getArrayAttr(argNames));
   result.addAttribute("resultNames",
                       parser.getBuilder().getArrayAttr(resultNames));
+  result.addAttribute("parameters",
+                      parser.getBuilder().getArrayAttr(parameters));
   result.addTypes(allResultTypes);
   return success();
 }
@@ -786,13 +985,7 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
       return;
     }
 
-    // Print this as a bareword if it can be parsed as an MLIR keyword,
-    // otherwise print it as a quoted string.
-    StringAttr name = portList[nextPort++].name;
-    if (module_like_impl::isValidKeyword(name.getValue()))
-      p << name.getValue();
-    else
-      p << name;
+    module_like_impl::printPortName(portList[nextPort++].name, p.getStream());
     p << ": ";
   };
 
@@ -804,6 +997,7 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
   }
   p << ' ';
   p.printAttributeWithoutType(op.moduleNameAttr());
+  printParameterList(op.parameters(), p);
   p << '(';
   llvm::interleaveComma(op.inputs(), p, [&](Value op) {
     printPortName(nextInputPort, portInfo.inputs);
@@ -815,9 +1009,9 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
     p << res.getType();
   });
   p << ')';
-  p.printOptionalAttrDict(
-      op->getAttrs(), /*elidedAttrs=*/{"instanceName", "sym_name", "moduleName",
-                                       "argNames", "resultNames"});
+  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{
+                              "instanceName", "sym_name", "moduleName",
+                              "argNames", "resultNames", "parameters"});
 }
 
 /// Return the name of the specified input port or null if it cannot be
@@ -976,7 +1170,8 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
                                          Type &resultType) {
   Type elemType;
   uint64_t resultSize = 0;
-  do {
+
+  auto parseElement = [&]() -> ParseResult {
     Type ty;
     if (p.parseType(ty))
       return p.emitError(p.getCurrentLocation(), "Expected type");
@@ -990,7 +1185,11 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
     elemType = arrTy.getElementType();
     inputTypes.push_back(ty);
     resultSize += arrTy.getSize();
-  } while (!p.parseOptionalComma());
+    return success();
+  };
+
+  if (p.parseCommaSeparatedList(parseElement))
+    return failure();
 
   resultType = ArrayType::get(elemType, resultSize);
   return success();

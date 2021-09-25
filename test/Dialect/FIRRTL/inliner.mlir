@@ -219,4 +219,11 @@ firrtl.module @declarations(in %clock : !firrtl.clock, in %u8 : !firrtl.uint<8>,
   }
 }
 
+// Test that non-module operations should not be deleted.
+firrtl.circuit "PreserveUnknownOps" {
+firrtl.module @PreserveUnknownOps() { }
+// CHECK: sv.verbatim "hello"
+sv.verbatim "hello"
+}
+
 }

@@ -97,6 +97,15 @@ static cl::opt<bool> enableAnnotationWarning(
     cl::desc("Warn about annotations that were not removed by lower-to-hw"),
     cl::init(false));
 
+static cl::opt<bool> disableAnnotationsClassless(
+    "disable-annotation-classless",
+    cl::desc("Ignore annotations without a class when parsing"),
+    cl::init(false));
+
+static cl::opt<bool> disableAnnotationsUnknown(
+    "disable-annotation-unknown",
+    cl::desc("Ignore unknown annotations when parsing"), cl::init(false));
+
 static cl::opt<bool> imconstprop(
     "imconstprop",
     cl::desc(
@@ -150,11 +159,17 @@ static cl::opt<bool>
                  cl::desc("create interfaces and data/memory taps from SiFive "
                           "Grand Central annotations"),
                  cl::init(false));
+static cl::opt<bool> exportModuleHierarchy(
+    "export-module-hierarchy",
+    cl::desc("export module and instance hierarchy as JSON"), cl::init(false));
 
 static cl::opt<bool>
     checkCombCycles("firrtl-check-comb-cycles",
                     cl::desc("check combinational cycles on firrtl"),
                     cl::init(false));
+static cl::opt<bool> newAnno("new-anno",
+                             cl::desc("enable new annotation handling"),
+                             cl::init(false));
 
 enum OutputFormatKind {
   OutputMLIR,
@@ -225,6 +240,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     auto parserTimer = ts.nest("FIR Parser");
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
+    options.rawAnnotations = newAnno;
     module = importFIRFile(sourceMgr, &context, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
@@ -259,6 +275,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
+  if (newAnno)
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown,
+                                                 disableAnnotationsClassless));
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
@@ -359,6 +379,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
+
+    if (exportModuleHierarchy)
+      pm.addPass(sv::createHWExportModuleHierarchyPass());
   }
 
   // Load the emitter options from the command line. Command line options if

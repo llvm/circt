@@ -15,7 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 def InterfaceOp : SVOp<"interface",
-    [NoTerminator, Symbol, SymbolTable]> {
+    [SingleBlock, NoTerminator, Symbol, SymbolTable]> {
   let summary = "Operation to define a SystemVerilog interface";
 
   let description = [{

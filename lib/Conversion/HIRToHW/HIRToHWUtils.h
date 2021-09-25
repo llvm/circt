@@ -33,4 +33,6 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
                                          ArrayAttr inputNames,
                                          ArrayAttr resultNames);
 
-Operation *getConstantX(OpBuilder *builder, Type originalTy);
+Operation *getConstantX(OpBuilder *, Type);
+
+ArrayAttr getHWParams(Attribute);

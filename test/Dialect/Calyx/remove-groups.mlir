@@ -1,6 +1,6 @@
 // RUN: circt-opt -pass-pipeline='calyx.program(calyx.component(calyx-remove-groups))' %s | FileCheck %s
 
-calyx.program {
+calyx.program "main" {
   calyx.component @Z(%go: i1 {go}, %reset: i1 {reset}, %clk: i1 {clk}) -> (%flag: i1, %out :i2, %done: i1 {done}) {
     %c1_1 = hw.constant 1 : i1
     calyx.wires { calyx.assign %done = %c1_1 : i1 }

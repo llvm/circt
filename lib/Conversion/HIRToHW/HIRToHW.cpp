@@ -115,11 +115,11 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
   if (calleeHWModule)
     instanceOp = builder->create<hw::InstanceOp>(
         op.getLoc(), calleeHWModule, instanceName, hwInputs,
-        op->getAttr("params").dyn_cast_or_null<DictionaryAttr>(), StringAttr());
+        getHWParams(op->getAttr("params")), StringAttr());
   else
     instanceOp = builder->create<hw::InstanceOp>(
         op.getLoc(), calleeHWModuleExtern, instanceName, hwInputs,
-        op->getAttr("params").dyn_cast_or_null<DictionaryAttr>(), StringAttr());
+        getHWParams(op->getAttr("params")), StringAttr());
 
   // Map callop input send buses to the results of the instance op and replace
   // all prev uses of the placeholder hw ssa vars corresponding to these send

@@ -1,5 +1,6 @@
 #include "HIRToHWUtils.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 
 void FuncToHWModulePortMap::addFuncInput(StringAttr name,
@@ -160,4 +161,24 @@ Operation *getConstantX(OpBuilder *builder, Type originalTy) {
   }
   assert(hwTy.isa<IntegerType>());
   return builder->create<sv::ConstantXOp>(builder->getUnknownLoc(), hwTy);
+}
+
+ArrayAttr getHWParams(Attribute paramsAttr) {
+  if (!paramsAttr)
+    return ArrayAttr();
+
+  auto params = paramsAttr.dyn_cast<DictionaryAttr>();
+  assert(params);
+
+  Builder builder(params.getContext());
+  SmallVector<Attribute> hwParams;
+  for (const NamedAttribute &param : params) {
+    auto name = builder.getStringAttr(param.first.strref());
+    auto type = TypeAttr::get(param.second.getType());
+    auto value = param.second;
+    auto hwParam =
+        hw::ParamDeclAttr::get(builder.getContext(), name, type, value);
+    hwParams.push_back(hwParam);
+  }
+  return ArrayAttr::get(builder.getContext(), hwParams);
 }

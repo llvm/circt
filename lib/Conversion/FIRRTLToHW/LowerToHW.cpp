@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -40,6 +41,14 @@ static const char assumeAnnoClass[] =
 static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
+
+/// Attribute that indicates that the module hierarchy starting at the annotated
+/// module should be dumped to a file.
+static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
+
+/// Attribute that indicates where some json files should be dumped.
+static const char metadataDirectoryAttrName[] =
+    "sifive.enterprise.firrtl.MetadataDirAnnotation";
 
 /// Given a FIRRTL type, return the corresponding type for the HW dialect.
 /// This returns a null type if it cannot be lowered.
@@ -119,6 +128,50 @@ static bool isZeroBitFIRRTLType(Type type) {
   return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
 }
 
+static StringAttr getMetadataDir(CircuitOp circuit) {
+  AnnotationSet annos(circuit);
+  auto diranno = annos.getAnnotation(metadataDirectoryAttrName);
+  if (!diranno)
+    return StringAttr::get(circuit.getContext(), "");
+  auto dir = diranno.get("dirname");
+  if (!dir)
+    return StringAttr::get(circuit.getContext(), "");
+  if (!dir.isa<StringAttr>())
+    return StringAttr::get(circuit.getContext(), "");
+  return dir.cast<StringAttr>();
+}
+
+/// Move a ExtractTestCode related annotation from annotations to an attribute.
+static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
+                          StringRef annoClass, StringRef attrBase) {
+  auto anno = annos.getAnnotation(annoClass);
+  auto ctx = top.getContext();
+  if (!anno)
+    return;
+  if (auto _dir = anno.get("directory"))
+    if (auto dir = _dir.cast<StringAttr>()) {
+      SmallVector<NamedAttribute> old;
+      for (auto i : top->getAttrs())
+        old.push_back(i);
+      old.emplace_back(Identifier::get(attrBase, ctx),
+                       hw::OutputFileAttr::get(dir, StringAttr::get(ctx, ""),
+                                               BoolAttr::get(ctx, false),
+                                               BoolAttr::get(ctx, true), ctx));
+      top->setAttrs(old);
+    }
+  if (auto _file = anno.get("filename"))
+    if (auto file = _file.cast<StringAttr>()) {
+      SmallVector<NamedAttribute> old;
+      for (auto i : top->getAttrs())
+        old.push_back(i);
+      old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
+                       hw::OutputFileAttr::get(StringAttr::get(ctx, ""), file,
+                                               BoolAttr::get(ctx, true),
+                                               BoolAttr::get(ctx, true), ctx));
+      top->setAttrs(old);
+    }
+}
+
 namespace {
 struct FirMemory {
   size_t numReadPorts;
@@ -129,6 +182,8 @@ struct FirMemory {
   size_t readLatency;
   size_t writeLatency;
   size_t readUnderWrite;
+  hw::WUW writeUnderWrite;
+  SmallVector<int32_t> writeClockIDs;
 
   // Location is carried along but not considered part of the identity of this.
   Location loc;
@@ -147,6 +202,13 @@ struct FirMemory {
     cmp3way(readLatency);
     cmp3way(writeLatency);
     cmp3way(readUnderWrite);
+    cmp3way(writeUnderWrite);
+    for (auto tuple : llvm::zip(writeClockIDs, rhs.writeClockIDs)) {
+      if (std::get<0>(tuple) < std::get<1>(tuple))
+        return true;
+      if (std::get<0>(tuple) > std::get<1>(tuple))
+        return false;
+    }
     return false;
 #undef cmp3way
   }
@@ -156,32 +218,61 @@ struct FirMemory {
            numReadWritePorts == rhs.numReadWritePorts &&
            dataWidth == rhs.dataWidth && depth == rhs.depth &&
            readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
-           readUnderWrite == rhs.readUnderWrite;
+           readUnderWrite == rhs.readUnderWrite &&
+           writeUnderWrite == rhs.writeUnderWrite &&
+           writeClockIDs.size() == rhs.writeClockIDs.size() &&
+           llvm::all_of_zip(writeClockIDs, rhs.writeClockIDs,
+                            [](auto a, auto b) { return a == b; });
   }
 };
 } // namespace
 
 static std::string getFirMemoryName(const FirMemory &mem) {
-  return llvm::formatv("FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}",
-                       mem.numReadPorts, mem.numWritePorts,
-                       mem.numReadWritePorts, mem.dataWidth, mem.depth,
-                       mem.readLatency, mem.writeLatency, mem.readUnderWrite);
+  SmallString<8> clocks;
+  for (auto a : mem.writeClockIDs)
+    clocks.append(Twine((char)(a + 'a')).str());
+  return llvm::formatv(
+      "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}{9}", mem.numReadPorts,
+      mem.numWritePorts, mem.numReadWritePorts, mem.dataWidth, mem.depth,
+      mem.readLatency, mem.writeLatency, mem.readUnderWrite,
+      (unsigned)mem.writeUnderWrite, clocks.empty() ? "" : "_" + clocks);
 }
 
 static FirMemory analyzeMemOp(MemOp op) {
   size_t numReadPorts = 0;
   size_t numWritePorts = 0;
   size_t numReadWritePorts = 0;
+  llvm::SmallDenseMap<Value, unsigned> clockToLeader;
+  SmallVector<int32_t> writeClockIDs;
 
   for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
     auto portKind = op.getPortKind(i);
     if (portKind == MemOp::PortKind::Read)
       ++numReadPorts;
-    else if (portKind == MemOp::PortKind::Write)
+    else if (portKind == MemOp::PortKind::Write) {
+      for (auto *a : op.getResult(i).getUsers()) {
+        auto subfield = dyn_cast<SubfieldOp>(a);
+        if (!subfield || subfield.fieldIndex() != 2)
+          continue;
+        auto clockPort = a->getResult(0);
+        for (auto *b : clockPort.getUsers()) {
+          auto connect = dyn_cast<ConnectOp>(b);
+          if (!connect || connect.dest() != clockPort)
+            continue;
+          auto result = clockToLeader.insert({connect.src(), numWritePorts});
+          if (result.second) {
+            writeClockIDs.push_back(numWritePorts);
+          } else {
+            writeClockIDs.push_back(result.first->second);
+          }
+        }
+        break;
+      }
       ++numWritePorts;
-    else
+    } else
       ++numReadWritePorts;
   }
+
   auto width = op.getDataType().getBitWidthOrSentinel();
   if (width <= 0) {
     op.emitError("'firrtl.mem' should have simple type and known width");
@@ -190,7 +281,8 @@ static FirMemory analyzeMemOp(MemOp op) {
 
   return {numReadPorts,      numWritePorts,    numReadWritePorts,
           (size_t)width,     op.depth(),       op.readLatency(),
-          op.writeLatency(), (size_t)op.ruw(), op.getLoc()};
+          op.writeLatency(), (size_t)op.ruw(), hw::WUW::PortOrder,
+          writeClockIDs,     op.getLoc()};
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
@@ -372,7 +464,14 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   SmallVector<FModuleOp, 32> modulesToProcess;
 
-  state.processRemainingAnnotations(circuit, AnnotationSet(circuit));
+  AnnotationSet circuitAnno(circuit);
+  moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass, "firrtl.assert");
+  moveVerifAnno(getOperation(), circuitAnno, assumeAnnoClass, "firrtl.assume");
+  moveVerifAnno(getOperation(), circuitAnno, coverAnnoClass, "firrtl.cover");
+  circuitAnno.removeAnnotationsWithClass(assertAnnoClass, assumeAnnoClass,
+                                         coverAnnoClass);
+
+  state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
@@ -386,11 +485,11 @@ void FIRRTLModuleLowering::runOnOperation() {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
         })
-        // GrandCentral can generate interfaces.  These need to be let through.
-        // Moving them to the end of the module has the effect of keeping them
-        // in the same spot in the IR.
-        .Case<sv::InterfaceOp>([&](auto passThrough) {
-          passThrough->moveBefore(topLevelModule, topLevelModule->end());
+        // These need to be let through.  EmitMetadata produces VerbatimOps and
+        // GrandCentral can generate interfaces.  Moving them to the end of the
+        // module has the effect of keeping them in the same spot in the IR.
+        .Case<sv::InterfaceOp, sv::VerbatimOp>([&](Operation *op) {
+          op->moveBefore(topLevelModule, topLevelModule->end());
         })
         // Otherwise we don't know what this is.  We are just going to drop
         // it, but emit an error so the client has some chance to know that
@@ -425,19 +524,27 @@ void FIRRTLModuleLowering::runOnOperation() {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
 
+  // Add attributes specific to the new main module, since the notion of a
+  // "main" module goes away after lowering to HW.
+  auto *newMainModule = state.oldToNewModuleMap[circuit.getMainModule()];
+  newMainModule->setAttr(
+      moduleHierarchyFileAttrName,
+      hw::OutputFileAttr::get(
+          getMetadataDir(circuit),
+          StringAttr::get(circuit.getContext(), "testharness_hier.json"),
+          /*exclude_from_filelist=*/
+          BoolAttr::get(circuit.getContext(), true),
+          /*exclude_replicated_ops=*/
+          BoolAttr::get(circuit.getContext(), true), circuit.getContext()));
+
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
     oldNew.first->erase();
 
-  // Now that the modules are moved over, remove the Circuit.  We pop the 'main
-  // module' specified in the Circuit into an attribute on the top level module.
-  getOperation()->setAttr(
-      "firrtl.mainModule",
-      StringAttr::get(circuit.getContext(), circuit.name()));
-
   // Emit all the macros and preprocessor gunk at the start of the file.
   lowerFileHeader(circuit, state);
 
+  // Now that the modules are moved over, remove the Circuit.
   circuit.erase();
 }
 
@@ -447,9 +554,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
-  std::array<StringRef, 8> schemaFields = {
-      "depth",       "numReadPorts", "numWritePorts", "numReadWritePorts",
-      "readLatency", "writeLatency", "width",         "readUnderWrite"};
+  std::array<StringRef, 10> schemaFields = {
+      "depth",           "numReadPorts", "numWritePorts", "numReadWritePorts",
+      "readLatency",     "writeLatency", "width",         "readUnderWrite",
+      "writeUnderWrite", "writeClockIDs"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<hw::HWGeneratorSchemaOp>(
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -513,12 +621,15 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
         b.getNamedAttr("readUnderWrite",
-                       b.getUI32IntegerAttr(mem.readUnderWrite))};
+                       b.getUI32IntegerAttr(mem.readUnderWrite)),
+        b.getNamedAttr("writeUnderWrite",
+                       hw::WUWAttr::get(b.getContext(), mem.writeUnderWrite)),
+        b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory
     auto memoryName = b.getStringAttr(getFirMemoryName(mem));
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
-                                      StringRef(), genAttrs);
+                                      StringRef(), ArrayAttr(), genAttrs);
   }
 }
 
@@ -682,6 +793,31 @@ LogicalResult FIRRTLModuleLowering::lowerPorts(
   return success();
 }
 
+/// Map the parameter specifier on the specified extmodule into the HWModule
+/// representation for parameters.  If `ignoreValues` is true, all the values
+/// are dropped.
+static ArrayAttr getHWParameters(FExtModuleOp module, bool ignoreValues) {
+  auto paramsOptional = module.parameters();
+  if (!paramsOptional.hasValue())
+    return {};
+
+  Builder builder(module);
+
+  // Map the attributes over from firrtl attributes to HW attributes
+  // directly.  MLIR's DictionaryAttr always stores keys in the dictionary
+  // in sorted order which is nicely stable.
+  SmallVector<Attribute> newParams;
+  for (const NamedAttribute &entry : paramsOptional.getValue()) {
+    auto name = builder.getStringAttr(entry.first.strref());
+    auto type = TypeAttr::get(entry.second.getType());
+    auto value = ignoreValues ? Attribute() : entry.second;
+    auto paramAttr =
+        hw::ParamDeclAttr::get(builder.getContext(), name, type, value);
+    newParams.push_back(paramAttr);
+  }
+  return builder.getArrayAttr(newParams);
+}
+
 hw::HWModuleExternOp
 FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
                                      Block *topLevelModule,
@@ -701,8 +837,12 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
+  // Map over parameters if present.  Drop all values as we do so so there are
+  // no known default values in the extmodule.  This ensures that the
+  // hw.instance will print all the parameters when generating verilog.
+  auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
   return builder.create<hw::HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                              ports, verilogName);
+                                              ports, verilogName, parameters);
 }
 
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
@@ -723,8 +863,17 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
   if (auto outputFile = oldModule->getAttr("output_file"))
     newModule->setAttr("output_file", outputFile);
+  // Mark the design under test as a module of interest for exporting module
+  // hierarchy information.
   if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
-    newModule->setAttr("firrtl.DesignUnderTest", builder.getUnitAttr());
+    newModule->setAttr(
+        moduleHierarchyFileAttrName,
+        hw::OutputFileAttr::get(
+            getMetadataDir(oldModule->getParentOfType<CircuitOp>()),
+            builder.getStringAttr("module_hier.json"),
+            /*exclude_from_filelist=*/builder.getBoolAttr(true),
+            /*exclude_replicated_ops=*/builder.getBoolAttr(true),
+            &getContext()));
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;
@@ -2071,7 +2220,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   auto inst = builder.create<hw::InstanceOp>(
       resultTypes, builder.getStringAttr(memName), memModuleAttr, operands,
       builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
-      DictionaryAttr(), StringAttr());
+      /*parameters=*/builder.getArrayAttr({}),
+      /*sym_name=*/StringAttr());
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
@@ -2089,10 +2239,9 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
 
   // If this is a referenced to a parameterized extmodule, then bring the
   // parameters over to this instance.
-  DictionaryAttr parameters;
+  ArrayAttr parameters;
   if (auto oldExtModule = dyn_cast<FExtModuleOp>(oldModule))
-    if (auto paramsOptional = oldExtModule.parameters())
-      parameters = paramsOptional.getValue();
+    parameters = getHWParameters(oldExtModule, /*ignoreValues=*/false);
 
   // Decode information about the input and output ports on the referenced
   // module.
@@ -2818,12 +2967,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
     label = op.nameAttr();
   else
     label = builder.getStringAttr("");
-  auto annoSet = AnnotationSet(circuitState.circuitOp);
-  StringRef fileName, dir;
-  if (auto a = annoSet.getAnnotation(annoClass)) {
-    fileName = a.getAs<StringAttr>("filename").getValue();
-    dir = a.getAs<StringAttr>("directory").getValue();
-  }
   Operation *svOp;
 
   if (!op.isConcurrent())
@@ -2851,13 +2994,6 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
         predicate, label);
   }
-  if (!fileName.empty() || !dir.empty())
-    svOp->setAttr("output_file",
-                  hw::OutputFileAttr::get(builder.getStringAttr(dir),
-                                          builder.getStringAttr(fileName),
-                                          builder.getBoolAttr(true),
-                                          builder.getBoolAttr(true),
-                                          svOp->getContext()));
   return success();
 }
 

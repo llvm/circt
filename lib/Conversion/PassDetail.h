@@ -15,6 +15,10 @@
 namespace mlir {
 class StandardOpsDialect;
 
+namespace scf {
+class SCFDialect;
+} // namespace scf
+
 namespace LLVM {
 class LLVMDialect;
 } // namespace LLVM

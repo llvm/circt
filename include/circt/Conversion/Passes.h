@@ -19,6 +19,7 @@
 #include "circt/Conversion/HWToLLHD/HWToLLHD.h"
 #include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
 #include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
+#include "circt/Conversion/SCFToCalyx/SCFToCalyx.h"
 #include "circt/Conversion/StandardToHIR/StandardToHIR.h"
 #include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
 #include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"

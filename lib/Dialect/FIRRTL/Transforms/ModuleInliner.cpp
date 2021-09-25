@@ -340,7 +340,7 @@ void Inliner::run() {
 
   // Delete all unreferenced modules.
   for (auto &op : llvm::make_early_inc_range(*circuit.getBody())) {
-    if (!liveModules.count(&op))
+    if (isa<FExtModuleOp, FModuleOp>(op) && !liveModules.count(&op))
       op.erase();
   }
 }

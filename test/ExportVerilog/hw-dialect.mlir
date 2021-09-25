@@ -189,19 +189,23 @@ hw.module @AAA(%d: i1, %e: i1) -> (f: i1) {
 
 
 /// TODO: Specify parameter declarations.
-hw.module.extern @EXT_W_PARAMS(%a: i1, %b: i0) -> (out: i1)
+hw.module.extern @EXT_W_PARAMS<DEFAULT: i64, DEPTH: f64, FORMAT: none,
+     WIDTH: i8>(%a: i1, %b: i0) -> (out: i1)
   attributes { verilogName="FooModule" }
 
-hw.module.extern @EXT_W_PARAMS2(%a: i2) -> (out: i1)
+hw.module.extern @EXT_W_PARAMS2<DEFAULT: i32>(%a: i2) -> (out: i1)
   attributes { verilogName="FooModule" }
 
 hw.module @AB(%w: i1, %x: i1, %i2: i2, %i3: i0) -> (y: i1, z: i1, p: i1, p2: i1) {
   %w2 = hw.instance "a1" @AAA(d: %w: i1, e: %w1: i1) -> (f: i1)
   %w1, %y = hw.instance "b1" @B(a: %w2: i1) -> (b: i1, c: i1)
 
-  %p = hw.instance "paramd" @EXT_W_PARAMS(a: %w: i1, b: %i3: i0) -> (out: i1) {parameters = {DEFAULT = 14000240888948784983 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+  %p = hw.instance "paramd" @EXT_W_PARAMS<
+   DEFAULT: i64 = 14000240888948784983, DEPTH: f64 = 3.242000e+01,
+   FORMAT: none = "xyz_timeout=%d\0A", WIDTH: i8 = 32
+  >(a: %w: i1, b: %i3: i0) -> (out: i1)
 
-  %p2 = hw.instance "paramd2" @EXT_W_PARAMS2(a: %i2: i2) -> (out: i1) {parameters = {DEFAULT = 1 : i32}}
+  %p2 = hw.instance "paramd2" @EXT_W_PARAMS2<DEFAULT: i32 = 1>(a: %i2: i2) -> (out: i1)
 
   hw.output %y, %x, %p, %p2 : i1, i1, i1, i1
 }
@@ -713,10 +717,15 @@ hw.module @Chi() -> (Chi_output : i0) {
    // CHECK-NEXT:   .Wtricky(40'd4294967295)
    // CHECK-NEXT: ) bar ();
    
-   hw.instance "bar" @Bar1360() -> ()  {parameters = {WIDTH0 = 0 : i64, WIDTH1 = 4 : i4, WIDTH2 = 6812312123 : i40, WIDTH3 = -1 : si4, WIDTH4 = -88888888888888888 : si68, Wtricky = 4294967295 : i40}} 
+   hw.instance "bar" @Bar1360<
+     WIDTH0: i64 = 0, WIDTH1: i4 = 4, WIDTH2: i40 = 6812312123, WIDTH3: si4 = -1,
+     WIDTH4: si68 = -88888888888888888, Wtricky: i40 = 4294967295
+   >() -> ()
    hw.output
  }
- hw.module.extern @Bar1360() attributes {verilogName = "RealBar"}
+ hw.module.extern @Bar1360<
+     WIDTH0: i64, WIDTH1: i4, WIDTH2: i40, WIDTH3: si4, WIDTH4: si68, Wtricky: i40
+   >() attributes {verilogName = "RealBar"}
 
 // CHECK-LABEL: module Issue1563(
 hw.module @Issue1563(%a: i32) -> (out : i32) {
@@ -789,5 +798,87 @@ hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
   %2 = comb.shrs %a, %1 : i18
   %3 = comb.xor %2, %c2856_i18 : i18
   hw.output %3 : i18
+}
+
+// CHECK-LABEL: module parameters
+// CHECK-NEXT: #(parameter [41:0] p1 = 42'd17
+// CHECK-NEXT:   parameter [0:0]  p2) (
+// CHECK-NEXT: input  [7:0] arg0,
+hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
+  // Local values should not conflict with output or parameter names.
+
+  // expected-error @+1 {{'sv.wire' op name 'p1' changed during emission}}
+  %p1 = sv.wire : !hw.inout<i4>
+  // CHECK: wire [3:0] p1_0;
+
+  // expected-error @+1 {{'sv.wire' op name 'out' changed during emission}}
+  %out = sv.wire : !hw.inout<i4>
+  // CHECK: wire [3:0] out_1;
+  hw.output %arg0 : i8
+}
+
+hw.module.extern @parameters2<p1: i42 = 17, p2: i1 = 0>(%arg0: i8) -> (out: i8)
+
+// CHECK-LABEL: module UseParameterized(
+hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8) {
+  // Two parameters.
+  // CHECK:      parameters #(
+  // CHECK-NEXT:   .p1(42'd4),
+  // CHECK-NEXT:   .p2(0)
+  // CHECK-NEXT: ) inst1 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (ww)
+  // CHECK-NEXT: );
+  %r0 = hw.instance "inst1" @parameters<p1: i42 = 4, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
+
+  // Two parameters.
+  // CHECK:      parameters #(
+  // CHECK-NEXT:   .p1(42'd11),
+  // CHECK-NEXT:   .p2(1)
+  // CHECK-NEXT: ) inst2 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (xx)
+  // CHECK-NEXT: );
+  %r1 = hw.instance "inst2" @parameters<p1: i42 = 11, p2: i1 = 1>(arg0: %a: i8) -> (out: i8)
+
+  // One default, don't print it
+  // CHECK:      parameters #(
+  // CHECK-NEXT:   .p2(0)
+  // CHECK-NEXT: ) inst3 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (yy)
+  // CHECK-NEXT: );
+  %r2 = hw.instance "inst3" @parameters<p1: i42 = 17, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
+
+  // All defaults, don't print a parameter list at all.
+  // CHECK:      parameters2 inst4 (
+  // CHECK-NEXT:   .arg0 (a),
+  // CHECK-NEXT:   .out  (zz)
+  // CHECK-NEXT: );
+  %r3 = hw.instance "inst4" @parameters2<p1: i42 = 17, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
+
+  hw.output %r0, %r1, %r2, %r3: i8, i8, i8, i8
+}
+
+// CHECK-LABEL: module UseParameterValue
+hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out1: i8, out2: i8) {
+  // CHECK-NEXT: #(parameter [41:0] xx) (
+
+  // CHECK:      parameters2 #(
+  // CHECK-NEXT:  .p1(xx)
+  // CHECK-NEXT: ) inst1 (
+  %a = hw.instance "inst1" @parameters2<p1: i42 = #hw.param.decl.ref<"xx">, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
+
+  // CHECK:      parameters2 #(
+  // CHECK-NEXT:  .p1(xx + 42'd17)
+  // CHECK-NEXT: ) inst2 (
+  %b = hw.instance "inst2" @parameters2<p1: i42 = #hw.param.binary<add #hw.param.verbatim<"xx">, 17>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
+ 
+  // CHECK:      parameters2 #(
+  // CHECK-NEXT:  .p1((xx + 42'd17) * yy)
+  // CHECK-NEXT: ) inst3 (
+  %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.binary<mul #hw.param.binary<add #hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
+ 
+  hw.output %a, %b : i8, i8
 }
 

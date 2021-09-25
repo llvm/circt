@@ -25,18 +25,21 @@ def HWModuleOp : HWOp<"module",
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given
-    name, a list of ports, and a body that represents the connections within
-    the module.
+    name, a list of ports, a list of parameters, and a body that represents the
+    connections within the module.
   }];
-  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames);
+  let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       ParamDeclArrayAttr:$parameters);
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -113,6 +116,7 @@ def HWModuleExternOp : HWOp<"module.extern",
     parameterized types instead of just concrete types.
   }];
   let arguments = (ins StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       ParamDeclArrayAttr:$parameters,
                        OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -121,9 +125,11 @@ def HWModuleExternOp : HWOp<"module.extern",
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
     OpBuilder<(ins "StringAttr":$name, "const ModulePortInfo &":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -224,8 +230,9 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
     module name in Verilog we can use.  See hw.module for an explanation.
   }];
   let arguments = (ins FlatSymbolRefAttr:$generatorKind,
-                       OptionalAttr<StrAttr>:$verilogName,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames);
+                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
+                       ParamDeclArrayAttr:$parameters,
+                       OptionalAttr<StrAttr>:$verilogName);
   let results = (outs);
   let regions = (region AnyRegion:$body);
 
@@ -234,10 +241,12 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
     OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
                    "ArrayRef<PortInfo>":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>,
     OpBuilder<(ins "FlatSymbolRefAttr":$genKind, "StringAttr":$name,
                    "const ModulePortInfo &":$ports,
                    CArg<"StringRef", "StringRef()">:$verilogName,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"ArrayRef<NamedAttribute>", "{}">:$attributes)>
   ];
 
@@ -307,15 +316,17 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
   let description = [{
     This represents an instance of a module. The inputs and results are
     the referenced module's inputs and outputs.  The `argNames` and
-    `resultNames` attributes must match the referenced module.  Any parameters
-    are stored in the `parameters` dictionary.
+    `resultNames` attributes must match the referenced module.
+    
+    Any parameters in the "old" format (slated to be removed) are stored in the
+    `oldParameters` dictionary.
   }];
 
   let arguments = (ins StrAttr:$instanceName,
                        Confined<FlatSymbolRefAttr, [isModuleSymbol]>:$moduleName,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-                       OptionalAttr<DictionaryAttr>:$parameters,
+                       ParamDeclArrayAttr:$parameters,
                        OptionalAttr<SymbolNameAttr>:$sym_name);
   let results = (outs Variadic<AnyType>);
 
@@ -323,16 +334,16 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
     /// Create a instance that refers to a known module.
     OpBuilder<(ins "Operation*":$module, "StringAttr":$name,
                    "ArrayRef<Value>":$inputs,
-                   CArg<"DictionaryAttr", "{}">:$parameters,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"StringAttr", "{}">:$sym_name)>,
     /// Create a instance that refers to a known module.
     OpBuilder<(ins "Operation*":$module, "StringRef":$name,
                    "ArrayRef<Value>":$inputs,
-                   CArg<"DictionaryAttr", "{}">:$parameters,
+                   CArg<"ArrayAttr", "{}">:$parameters,
                    CArg<"StringAttr", "{}">:$sym_name), [{
       build($_builder, $_state, module, $_builder.getStringAttr(name), inputs,
             parameters, sym_name);
-    }]>
+    }]>,
   ];
 
   let extraClassDeclaration = [{
@@ -374,6 +385,8 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
       (*this)->setAttr("instanceName", name);
     }
 
+    LogicalResult verifyCustom();
+
     //===------------------------------------------------------------------===//
     // SymbolOpInterface Methods
     //===------------------------------------------------------------------===//
@@ -384,6 +397,7 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
 
   let parser = "return ::parse$cppClass(parser, result);";
   let printer = "return ::print$cppClass(p, *this);";
+  let verifier = "return this->verifyCustom();";
 }
 
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,

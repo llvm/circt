@@ -73,11 +73,11 @@ if config.bindings_python_enabled:
       append_path=True)
 
 tool_dirs = [
-    config.circt_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir
+    config.circt_tools_dir, config.circt_utils_dir, config.mlir_tools_dir, config.llvm_tools_dir
 ]
 tools = [
     'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
-    'esi-cosim-runner.py'
+    'esi-cosim-runner.py', 'equiv-rtl.sh'
 ]
 
 # Enable yosys if it has been detected.

@@ -152,6 +152,14 @@ DeclKind firrtl::getDeclarationKind(Value val) {
       .Default([](auto) { return DeclKind::Other; });
 }
 
+size_t firrtl::getNumPorts(Operation *op) {
+  if (auto extmod = dyn_cast<FExtModuleOp>(op))
+    return extmod.getType().getInputs().size();
+  if (auto mod = dyn_cast<FModuleOp>(op))
+    return mod.getBodyBlock()->getArguments().size();
+  return op->getNumResults();
+}
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//

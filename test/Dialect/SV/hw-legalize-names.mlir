@@ -105,3 +105,37 @@ hw.module @InstanceWithCollisions(%a: i1) {
 hw.module.extern @inout_0 () -> ()
 hw.module.extern @inout_1 () -> ()
 hw.module.extern @inout_2 () -> ()
+
+hw.module.extern @module_with_bool<bparam: i1>() -> ()
+
+// CHECK-LABEL: hw.module @parameters
+// CHECK: <p1_0: i42 = 17, wire_1: i1>(%p1: i8)
+hw.module @parameters<p1: i42 = 17, wire: i1>(%p1: i8) {
+
+  // CHECK: sv.ifdef "SOMEMACRO"
+  sv.ifdef "SOMEMACRO" {
+    // CHECK: %local = sv.localparam : i1 {value = #hw.param.decl.ref<"wire_1">}
+    %local = sv.localparam : i1 { value = #hw.param.decl.ref<"wire">: i1 }
+  }
+
+  // "wire" param getting updated should update in this instance.
+  
+  // CHECK: hw.instance "inst" @module_with_bool<bparam: i1 = #hw.param.decl.ref<"wire_1">>
+  hw.instance "inst" @module_with_bool<bparam: i1 = #hw.param.decl.ref<"wire">>() -> ()
+
+  // CHECK: hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.binary<add #hw.param.verbatim<"wire">, true>>()
+  hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.binary<add #hw.param.verbatim<"wire">, true>>() -> ()
+}
+
+// CHECK-LABEL: hw.module @use_parameters
+hw.module @use_parameters(%xxx: i8) {
+  // CHECK: hw.instance "inst" @parameters<p1_0: i42 = 27, wire_1: i1 = false>(
+  hw.instance "inst" @parameters<p1: i42 = 27, wire: i1 = 0>(p1: %xxx: i8) -> ()
+
+  // CHECK: sv.ifdef "SOMEMACRO"
+  sv.ifdef "SOMEMACRO" {
+    // CHECK: %xxx_0 = sv.reg : !hw.inout<i4>
+    %0 = sv.reg  { name = "xxx" } : !hw.inout<i4>
+  }
+}
+
