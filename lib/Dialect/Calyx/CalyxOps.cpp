@@ -371,6 +371,51 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   return verifyControlBody(op);
 }
 
+// Helper function for parsing a group port operation, i.e. GroupDoneOp and
+// GroupPortOp. These may take one of two different forms:
+// (1) %<guard> ? %<src> : i1
+// (2) %<src> : i1
+static ParseResult parseGroupPort(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::OperandType, 2> operandInfos;
+  OpAsmParser::OperandType guardOrSource;
+  if (parser.parseOperand(guardOrSource))
+    return failure();
+
+  if (succeeded(parser.parseOptionalQuestion())) {
+    OpAsmParser::OperandType source;
+    // The guard exists.
+    if (parser.parseOperand(source))
+      return failure();
+    operandInfos.push_back(source);
+  }
+  // No matter if this is the source or guard, it should be last.
+  operandInfos.push_back(guardOrSource);
+
+  Type type;
+  // Resolving the operands with the same type works here since the source and
+  // guard of a group port is always i1.
+  if (parser.parseColonType(type) ||
+      parser.resolveOperands(operandInfos, type, result.operands))
+    return failure();
+
+  return success();
+}
+
+// A helper function for printing group ports, i.e. GroupGoOp and GroupDoneOp.
+template <typename GroupPortType>
+static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
+  static_assert(std::is_same<GroupGoOp, GroupPortType>() ||
+                    std::is_same<GroupDoneOp, GroupPortType>(),
+                "Should be a Calyx Group port.");
+
+  p << " ";
+  // The guard is optional.
+  Value guard = op.guard(), source = op.src();
+  if (guard)
+    p << guard << " ? ";
+  p << source << " : " << source.getType();
+}
+
 //===----------------------------------------------------------------------===//
 // ProgramOp
 //===----------------------------------------------------------------------===//
@@ -908,6 +953,62 @@ static LogicalResult verifyAssignOp(AssignOp assign) {
   return success();
 }
 
+static ParseResult parseAssignOp(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::OperandType destination;
+  if (parser.parseOperand(destination) || parser.parseEqual())
+    return failure();
+
+  // An AssignOp takes one of the two following forms:
+  // (1) %<dest> = %<src> : <type>
+  // (2) %<dest> = %<guard> ? %<src> : <type>
+  OpAsmParser::OperandType guardOrSource;
+  if (parser.parseOperand(guardOrSource))
+    return failure();
+
+  // Since the guard is optional, we need to check if there is an accompanying
+  // `?` symbol.
+  OpAsmParser::OperandType source;
+  bool hasGuard = succeeded(parser.parseOptionalQuestion());
+  if (hasGuard) {
+    // The guard exists. Parse the source.
+    if (parser.parseOperand(source))
+      return failure();
+  }
+
+  Type type;
+  if (parser.parseColonType(type) ||
+      parser.resolveOperand(destination, type, result.operands))
+    return failure();
+
+  if (hasGuard) {
+    Type i1Type = parser.getBuilder().getI1Type();
+    // Since the guard is optional, it is listed last in the arguments of the
+    // AssignOp. Therefore, we must parse the source first.
+    if (parser.resolveOperand(source, type, result.operands) ||
+        parser.resolveOperand(guardOrSource, i1Type, result.operands))
+      return failure();
+  } else {
+    // This is actually a source.
+    if (parser.resolveOperand(guardOrSource, type, result.operands))
+      return failure();
+  }
+
+  return success();
+}
+
+static void printAssignOp(OpAsmPrinter &p, AssignOp op) {
+  p << " " << op.dest() << " = ";
+
+  Value guard = op.guard(), source = op.src();
+  // The guard is optional.
+  if (guard)
+    p << guard << " ? ";
+
+  // We only need to print a single type; the destination and source are
+  // guaranteed to be the same type.
+  p << source << " : " << source.getType();
+}
+
 //===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
@@ -1015,6 +1116,18 @@ void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), resultName);
 }
 
+static void printGroupGoOp(OpAsmPrinter &p, GroupGoOp op) {
+  printGroupPort(p, op);
+}
+
+static ParseResult parseGroupGoOp(OpAsmParser &parser, OperationState &result) {
+  if (parseGroupPort(parser, result))
+    return failure();
+
+  result.addTypes(parser.getBuilder().getI1Type());
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // GroupDoneOp
 //===----------------------------------------------------------------------===//
@@ -1035,6 +1148,15 @@ static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
            << ". This should be a combinational group.";
 
   return verifyNotComplexSource(doneOp);
+}
+
+static void printGroupDoneOp(OpAsmPrinter &p, GroupDoneOp op) {
+  printGroupPort(p, op);
+}
+
+static ParseResult parseGroupDoneOp(OpAsmParser &parser,
+                                    OperationState &result) {
+  return parseGroupPort(parser, result);
 }
 
 //===----------------------------------------------------------------------===//

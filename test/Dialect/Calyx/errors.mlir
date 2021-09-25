@@ -719,7 +719,7 @@ calyx.program "main" {
       calyx.group @A {
         %and = comb.and %c1_1, %c1_1 : i1
         // expected-error @+1 {{'calyx.assign' op has source that is not a port or constant. Complex logic should be conducted in the guard.}}
-        calyx.assign %r.in = %and, %c1_1 ? : i1
+        calyx.assign %r.in = %c1_1 ? %and : i1
         calyx.assign %r.write_en = %c1_1: i1
         calyx.group_done %r.done : i1
       }
@@ -775,7 +775,7 @@ calyx.program "main" {
     calyx.wires {
       calyx.group @A {
         // expected-error @+1 {{'calyx.group_done' op with constant source and constant guard. This should be a combinational group.}}
-        calyx.group_done %c1_1, %c1_1 ? : i1
+        calyx.group_done %c1_1 ? %c1_1 : i1
       }
     }
     calyx.control { calyx.enable @A }

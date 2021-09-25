@@ -78,7 +78,6 @@ class CalyxGroupPort<string mnemonic, list<OpTrait> traits = []> :
     I1:$src,
     Optional<I1>:$guard
   );
-  let assemblyFormat = "$src (`,` $guard^ `?`)? attr-dict `:` type($src)";
   let verifier = "return ::verify$cppClass(*this);";
 }
 
