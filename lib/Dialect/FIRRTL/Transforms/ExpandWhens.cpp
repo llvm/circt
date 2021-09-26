@@ -22,16 +22,63 @@
 using namespace circt;
 using namespace firrtl;
 
-/// This is a determistic mapping of a FieldRef to the last operation which set
-/// a value to it.
-using ScopeMap = llvm::MapVector<FieldRef, Operation *>;
-
 /// Move all operations from a source block in to a destination block. Leaves
 /// the source block empty.
 static void mergeBlock(Block &destination, Block::iterator insertPoint,
                        Block &source) {
   destination.getOperations().splice(insertPoint, source.getOperations());
 }
+
+/// This is a stack of hashtables, if lookup fails in the top-most hashtable,
+/// it will attempt to lookup in lower hashtables.  This class is used instead
+/// of a ScopedHashTable so we can manually pop off a scope and keep it around.
+///
+/// This only allows inserting into the outermost scope.
+template <typename KeyT, typename ValueT>
+struct HashTableStack {
+  using ScopeT = typename llvm::MapVector<KeyT, ValueT>;
+  using StackT = typename llvm::SmallVector<ScopeT, 3>;
+
+  HashTableStack() {
+    // We require at least one scope.
+    pushScope();
+  }
+
+  // TODO: This class will need its own iterator eventually.
+  using iterator = typename ScopeT::iterator;
+
+  iterator end() { return iterator(); }
+
+  iterator find(const KeyT &key) {
+    // Try to find a hashtable with the missing value.
+    for (auto &map : llvm::reverse(mapStack)) {
+      auto it = map.find(key);
+      if (it != map.end())
+        return it;
+    }
+    return iterator();
+  }
+
+  ScopeT &getLastScope() { return mapStack.back(); }
+
+  void pushScope() { mapStack.emplace_back(); }
+
+  ScopeT popScope() {
+    assert(mapStack.size() > 1 && "Cannot pop the last scope");
+    return mapStack.pop_back_val();
+  }
+
+  // This class lets you insert into the top scope.
+  ValueT &operator[](const KeyT &key) { return mapStack.back()[key]; }
+
+private:
+  StackT mapStack;
+};
+
+/// This is a determistic mapping of a FieldRef to the last operation which set
+/// a value to it.
+using ScopedDriverMap = HashTableStack<FieldRef, Operation *>;
+using DriverMap = ScopedDriverMap::ScopeT;
 
 //===----------------------------------------------------------------------===//
 // Last Connect Resolver
@@ -46,21 +93,21 @@ protected:
   /// Map of destinations and the operation which is driving a value to it in
   /// the current scope. This is used for resolving last connect semantics, and
   /// for retrieving the responsible connect operation.
-  ScopeMap &scope;
+  ScopedDriverMap &driverMap;
 
 public:
-  LastConnectResolver(ScopeMap &scope) : scope(scope) {}
+  LastConnectResolver(ScopedDriverMap &driverMap) : driverMap(driverMap) {}
 
   using FIRRTLVisitor<ConcreteT>::visitExpr;
   using FIRRTLVisitor<ConcreteT>::visitDecl;
   using FIRRTLVisitor<ConcreteT>::visitStmt;
 
-  /// Records a connection to a destination. This will delete a previous
-  /// connection to a destination if there was one. Returns true if an old
-  /// connect was erased.
+  /// Records a connection to a destination in the current scope. This will
+  /// delete a previous connection to a destination if there was one. Returns
+  /// true if an old connect was erased.
   bool setLastConnect(FieldRef dest, Operation *connection) {
     // Try to insert, if it doesn't insert, replace the previous value.
-    auto itAndInserted = scope.insert({dest, connection});
+    auto itAndInserted = driverMap.getLastScope().insert({dest, connection});
     if (!std::get<1>(itAndInserted)) {
       auto iterator = std::get<0>(itAndInserted);
       auto changed = false;
@@ -115,12 +162,12 @@ public:
       // If it is a leaf node with Flow::Sink or Flow::Duplex, it must be
       // initialized.
       if (flow != Flow::Source)
-        scope[{value, id}] = nullptr;
+        driverMap[{value, id}] = nullptr;
     };
     declare(type, flow);
   }
 
-  /// Take two connection operations and merge them in to a new connect under a
+  /// Take two connection operations and merge them into a new connect under a
   /// condition.  Destination of both connects should be `dest`.
   ConnectOp flattenConditionalConnections(OpBuilder &b, Location loc,
                                           Value dest, Value cond,
@@ -130,8 +177,6 @@ public:
     auto whenFalse = getConnectedValue(whenFalseConn);
     auto newValue = b.createOrFold<MuxPrimOp>(loc, cond, whenTrue, whenFalse);
     auto newConnect = b.create<ConnectOp>(loc, dest, newValue);
-    whenTrueConn->erase();
-    whenFalseConn->erase();
     return newConnect;
   }
 
@@ -142,7 +187,7 @@ public:
     // TODO: register of bundle type are not supported.
     auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                        .create<ConnectOp>(op.getLoc(), op, op);
-    scope[getFieldRefFromValue(op.result())] = connect;
+    driverMap[getFieldRefFromValue(op.result())] = connect;
   }
 
   void visitDecl(RegResetOp op) {
@@ -152,7 +197,7 @@ public:
            "registers can't be bundle type");
     auto connect = OpBuilder(op->getBlock(), ++Block::iterator(op))
                        .create<ConnectOp>(op.getLoc(), op, op);
-    scope[getFieldRefFromValue(op.result())] = connect;
+    driverMap[getFieldRefFromValue(op.result())] = connect;
   }
 
   void visitDecl(InstanceOp op) {
@@ -190,14 +235,15 @@ public:
   /// -----|------|------|-------
   ///      |  set |      | then
   ///      |      |  set | else
-  ///      |  set |  set | mux(p, then, else)
+  ///  set |  set |  set | mux(p, then, else)
+  ///      |  set |  set | impossible
   ///  set |  set |      | mux(p, then, prev)
   ///  set |      |  set | mux(p, prev, else)
   ///
   /// If the value was declared in the block, then it does not need to have been
   /// assigned a previous value.  If the value was declared before the block,
   /// then there is an incomplete initialization error.
-  void mergeScopes(ScopeMap &thenScope, ScopeMap &elseScope,
+  void mergeScopes(DriverMap &thenScope, DriverMap &elseScope,
                    Value thenCondition) {
 
     // Process all connects in the `then` block.
@@ -205,43 +251,56 @@ public:
       auto dest = std::get<0>(destAndConnect);
       auto thenConnect = std::get<1>(destAndConnect);
 
-      // `dest` is set in `then` only.
-      auto itAndInserted = scope.insert({dest, thenConnect});
-      if (std::get<1>(itAndInserted))
+      auto outerIt = driverMap.find(dest);
+      if (outerIt == driverMap.end()) {
+        // `dest` is set in `then` only. This indicates it was created in the
+        // `then` block, so just copy it into the outer scope.
+        driverMap[dest] = thenConnect;
         continue;
-      auto outerIt = std::get<0>(itAndInserted);
+      }
 
-      // `dest` is set in `then` and `else`.
       auto elseIt = elseScope.find(dest);
       if (elseIt != elseScope.end()) {
-        auto &elseConnect = std::get<1>(*elseIt);
+        // `dest` is set in `then` and `else`. We need to combine them into and
+        // delete any previous connect.
+
         // Create a new connect with `mux(p, then, else)`.
+        auto &elseConnect = std::get<1>(*elseIt);
         OpBuilder connectBuilder(elseConnect);
         auto newConnect = flattenConditionalConnections(
             connectBuilder, elseConnect->getLoc(),
             getDestinationValue(thenConnect), thenCondition, thenConnect,
             elseConnect);
+
+        // Delete all old connections.
+        thenConnect->erase();
+        elseConnect->erase();
         setLastConnect(dest, newConnect);
+
         // Do not process connect in the else scope.
         elseScope.erase(dest);
         continue;
       }
 
-      // `dest` is null in the outer scope.
       auto &outerConnect = std::get<1>(*outerIt);
       if (!outerConnect) {
+        // `dest` is null in the outer scope. This indicate an initialization
+        // problem: `mux(p, then, nullptr)`. Just delete the broken connect.
         thenConnect->erase();
         continue;
       }
 
-      // `dest` is set in the outer scope.
-      // Create a new connect with mux(p, then, outer)
+      // `dest` is set in `then` and the outer scope.  Create a new connect with
+      // `mux(p, then, outer)`.
       OpBuilder connectBuilder(thenConnect);
       auto newConnect = flattenConditionalConnections(
           connectBuilder, thenConnect->getLoc(),
           getDestinationValue(thenConnect), thenCondition, thenConnect,
           outerConnect);
-      outerIt->second = newConnect;
+
+      // Delete all old connections.
+      thenConnect->erase();
+      setLastConnect(dest, newConnect);
     }
 
     // Process all connects in the `else` block.
@@ -249,27 +308,33 @@ public:
       auto dest = std::get<0>(destAndConnect);
       auto elseConnect = std::get<1>(destAndConnect);
 
-      // `dest` is set in `then` only.
-      auto itAndInserted = scope.insert({dest, elseConnect});
-      if (std::get<1>(itAndInserted))
+      auto outerIt = driverMap.find(dest);
+      if (outerIt == driverMap.end()) {
+        // `dest` is set in `else` only. This indicates it was created in the
+        // `else` block, so just copy it into the outer scope.
+        driverMap[dest] = elseConnect;
         continue;
+      }
 
-      // `dest` is null in the outer scope.
-      auto outerIt = std::get<0>(itAndInserted);
       auto &outerConnect = std::get<1>(*outerIt);
       if (!outerConnect) {
+        // `dest` is null in the outer scope. This indicate an initialization
+        // problem: `mux(p, null, else)`. Just delete the broken connect.
         elseConnect->erase();
         continue;
       }
 
-      // `dest` is set in the outer scope.
-      // Create a new connect with mux(p, outer, else).
+      // `dest` is set in the `else` and outer scope. Create a new connect with
+      // `mux(p, outer, else)`.
       OpBuilder connectBuilder(elseConnect);
       auto newConnect = flattenConditionalConnections(
           connectBuilder, elseConnect->getLoc(),
           getDestinationValue(outerConnect), thenCondition, outerConnect,
           elseConnect);
-      outerIt->second = newConnect;
+
+      // Delete all old connections.
+      elseConnect->erase();
+      setLastConnect(dest, newConnect);
     }
   }
 };
@@ -286,8 +351,8 @@ namespace {
 class WhenOpVisitor : public LastConnectResolver<WhenOpVisitor> {
 
 public:
-  WhenOpVisitor(ScopeMap &scope, Value condition)
-      : LastConnectResolver<WhenOpVisitor>(scope), condition(condition) {}
+  WhenOpVisitor(ScopedDriverMap &driverMap, Value condition)
+      : LastConnectResolver<WhenOpVisitor>(driverMap), condition(condition) {}
 
   using LastConnectResolver<WhenOpVisitor>::visitExpr;
   using LastConnectResolver<WhenOpVisitor>::visitDecl;
@@ -355,9 +420,9 @@ void WhenOpVisitor::visitStmt(WhenOp whenOp) {
 /// condititions.
 ///
 /// This requires WhenOpVisitor to be fully defined.
-template<typename ConcreteT>
-void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp, Value outerCondition) {
-
+template <typename ConcreteT>
+void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp,
+                                                   Value outerCondition) {
   OpBuilder b(whenOp);
   auto loc = whenOp.getLoc();
   Block *parentBlock = whenOp->getBlock();
@@ -368,32 +433,34 @@ void LastConnectResolver<ConcreteT>::processWhenOp(WhenOp whenOp, Value outerCon
   // contructs, and resolving last connect semantics in each block. This
   // process returns the set of connects in each side of the when op.
 
-  // Process the `then` block.
-  ScopeMap thenScope;
-
-  // if we are already in a whenblock, the we need to conjoin ('and') the
-  // conditions.
+  // Process the `then` block. If we are already in a whenblock, the we need to
+  // conjoin ('and') the outer conditions.
   auto thenCondition = whenOp.condition();
   if (outerCondition)
     thenCondition =
         b.createOrFold<AndPrimOp>(loc, ui1Type, outerCondition, thenCondition);
 
   auto &thenBlock = whenOp.getThenBlock();
-  WhenOpVisitor(thenScope, thenCondition).process(thenBlock);
+  driverMap.pushScope();
+  WhenOpVisitor(driverMap, thenCondition).process(thenBlock);
   mergeBlock(*parentBlock, Block::iterator(whenOp), thenBlock);
+  auto thenScope = driverMap.popScope();
 
   // Process the `else` block.
-  ScopeMap elseScope;
+  DriverMap elseScope;
   if (whenOp.hasElseRegion()) {
     // Else condition is the compliment of the then condition.
     auto elseCondition =
         b.createOrFold<NotPrimOp>(loc, condition.getType(), condition);
+    // Conjoin the when condition with the outer condition.
     if (outerCondition)
       elseCondition = b.createOrFold<AndPrimOp>(loc, ui1Type, outerCondition,
                                                 elseCondition);
     auto &elseBlock = whenOp.getElseBlock();
-    WhenOpVisitor(elseScope, elseCondition).process(elseBlock);
+    driverMap.pushScope();
+    WhenOpVisitor(driverMap, elseCondition).process(elseBlock);
     mergeBlock(*parentBlock, Block::iterator(whenOp), elseBlock);
+    elseScope = driverMap.popScope();
   }
 
   mergeScopes(thenScope, elseScope, condition);
@@ -410,7 +477,7 @@ namespace {
 /// This extends the LastConnectResolver to track if anything has changed.
 class ModuleVisitor : public LastConnectResolver<ModuleVisitor> {
 public:
-  ModuleVisitor() : LastConnectResolver<ModuleVisitor>(outerScope) {}
+  ModuleVisitor() : LastConnectResolver<ModuleVisitor>(driverMap) {}
 
   using LastConnectResolver<ModuleVisitor>::visitExpr;
   using LastConnectResolver<ModuleVisitor>::visitDecl;
@@ -423,7 +490,7 @@ public:
 
 private:
   /// The outermost scope of the module body.
-  ScopeMap outerScope;
+  ScopedDriverMap driverMap;
 
   /// Tracks if anything in the IR has changed.
   bool anythingChanged = false;
@@ -462,11 +529,12 @@ void ModuleVisitor::visitStmt(WhenOp whenOp) {
 /// Perform initialization checking.  This uses the built up state from
 /// running on a module. Returns failure in the event of bad initialization.
 LogicalResult ModuleVisitor::checkInitialization() {
-  for (auto destAndConnect : outerScope) {
+  for (auto destAndConnect : driverMap.getLastScope()) {
     // If there is valid connection to this destination, everything is good.
     auto *connect = std::get<1>(destAndConnect);
     if (connect)
       continue;
+
     // Get the op which defines the sink, and emit an error.
     auto dest = std::get<0>(destAndConnect);
     dest.getDefiningOp()->emitError("sink \"" + getFieldName(dest) +
