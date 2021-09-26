@@ -1653,25 +1653,6 @@ struct EliminateEmptyOpPattern<calyx::IfOp>
   }
 };
 
-/// Removes nested seq operations, e.g.:
-/// seq { seq { ... } } ->  seq { ... }
-struct NestedSeqPattern : mlir::OpRewritePattern<calyx::SeqOp> {
-  using mlir::OpRewritePattern<calyx::SeqOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(calyx::SeqOp seqOp,
-                                PatternRewriter &rewriter) const override {
-    if (isa<calyx::SeqOp>(seqOp->getParentOp())) {
-      if (auto *body = seqOp.getBody()) {
-        for (auto &op : make_early_inc_range(*body))
-          op.moveBefore(seqOp);
-        rewriter.eraseOp(seqOp);
-        return success();
-      }
-    }
-    return failure();
-  }
-};
-
 /// Removes calyx::CombGroupOps which are unused. These correspond to
 /// combinational groups created during op building that, after conversion,
 /// have either been inlined into calyx::GroupOps or are referenced by an
@@ -1916,7 +1897,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&...args) {
+                      PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1925,7 +1906,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&...args) {
+                        PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(
@@ -2058,10 +2039,9 @@ void SCFToCalyxPass::runOnOperation() {
            EliminateEmptyOpPattern<calyx::SeqOp>,
            EliminateEmptyOpPattern<calyx::ParOp>,
            EliminateEmptyOpPattern<calyx::IfOp>,
-           EliminateEmptyOpPattern<calyx::WhileOp>, NestedSeqPattern,
-           CommonIfTailEnablePattern, MultipleGroupDonePattern,
-           NonTerminatingGroupDonePattern, EliminateUnusedCombGroups>(
-          &getContext());
+           EliminateEmptyOpPattern<calyx::WhileOp>, CommonIfTailEnablePattern,
+           MultipleGroupDonePattern, NonTerminatingGroupDonePattern,
+           EliminateUnusedCombGroups>(&getContext());
   if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                           std::move(cleanupPatterns)))) {
     signalPassFailure();

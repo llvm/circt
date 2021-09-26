@@ -416,6 +416,25 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
   p << source << " : " << source.getType();
 }
 
+// Collapse nested control of the same type for SeqOp and ParOp, e.g.
+// calyx.seq { calyx.seq { ... } } -> calyx.seq { ... }
+template <typename OpTy>
+LogicalResult collapseControl(OpTy controlOp, PatternRewriter &rewriter) {
+  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
+                "Should be a SeqOp or ParOp.");
+
+  if (isa<OpTy>(controlOp->getParentOp())) {
+    Block *controlBody = controlOp.getBody();
+    for (auto &op : make_early_inc_range(*controlBody))
+      op.moveBefore(controlOp);
+
+    rewriter.eraseOp(controlOp);
+    return success();
+  }
+
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // ProgramOp
 //===----------------------------------------------------------------------===//
@@ -778,6 +797,28 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyControlOp(ControlOp control) {
   return verifyControlBody(control);
+}
+
+//===----------------------------------------------------------------------===//
+// SeqOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SeqOp::canonicalize(SeqOp seqOp, PatternRewriter &rewriter) {
+  if (succeeded(collapseControl(seqOp, rewriter)))
+    return success();
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ParOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ParOp::canonicalize(ParOp parOp, PatternRewriter &rewriter) {
+  if (succeeded(collapseControl(parOp, rewriter)))
+    return success();
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

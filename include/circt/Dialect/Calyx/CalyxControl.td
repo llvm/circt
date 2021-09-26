@@ -101,6 +101,7 @@ def SeqOp : CalyxContainer<"seq", [
       }
     ```
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def ParOp : CalyxContainer<"par", [
@@ -121,6 +122,7 @@ def ParOp : CalyxContainer<"par", [
       }
     ```
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def EnableOp : CalyxOp<"enable", [
