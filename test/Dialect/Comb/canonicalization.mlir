@@ -10,6 +10,39 @@ hw.module @narrowMux(%a: i8, %b: i8, %c: i1) -> (o: i4) {
   hw.output %1 : i4
 }
 
+// CHECK-LABEL: @muxConstantInputs
+hw.module @muxConstantInputs(%cond: i1) -> (o: i2) {
+// CHECK-NEXT: %false = hw.constant false
+// CHECK-NEXT: %0 = comb.concat %cond, %false : (i1, i1) -> i2
+  %c0 = hw.constant 2 : i2
+  %c1 = hw.constant 0 : i2
+  %0 = comb.mux %cond, %c0, %c1 : i2
+  hw.output %0 : i2
+}
+
+// CHECK-LABEL: @muxConstantInputs2
+hw.module @muxConstantInputs2(%cond: i1) -> (o: i2) {
+// CHECK-NEXT: %true = hw.constant true
+// CHECK-NEXT: %false = hw.constant false
+// CHECK-NEXT: %0 = comb.xor %cond, %true : i1
+// CHECK-NEXT: %1 = comb.concat %0, %false : (i1, i1) -> i2
+  %c0 = hw.constant 0 : i2
+  %c1 = hw.constant 2 : i2
+  %0 = comb.mux %cond, %c0, %c1: i2
+  hw.output %0 : i2
+}
+
+// CHECK-LABEL: @muxConstantInputsNegated
+hw.module @muxConstantInputsNegated(%cond: i1) -> (o: i2) {
+// CHECK-NEXT: %true = hw.constant true
+// CHECK-NEXT: %0 = comb.xor %cond, %true : i1
+// CHECK-NEXT: %1 = comb.concat %true, %0 : (i1, i1) -> i2
+  %c0 = hw.constant 2 : i2
+  %c1 = hw.constant 3 : i2
+  %0 = comb.mux %cond, %c0, %c1: i2
+  hw.output %0 : i2
+}
+
 // CHECK-LABEL: @notMux
 hw.module @notMux(%a: i4, %b: i4, %c: i1) -> (o: i4) {
 // CHECK-NEXT: comb.mux %c, %b, %a : i4
@@ -18,6 +51,63 @@ hw.module @notMux(%a: i4, %b: i4, %c: i1) -> (o: i4) {
   %1 = comb.mux %0, %a, %b : i4
   hw.output %1 : i4
 }
+
+// mux(a, 0, 1) -> ~a
+// CHECK-LABEL: @notMuxResult
+hw.module @notMuxResult(%a: i1) -> (o: i1) {
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: %0 = comb.xor %a, %true : i1
+  // CHECK-NEXT: hw.output %0
+  %c0 = hw.constant 0 : i1
+  %c1 = hw.constant 1 : i1
+  %0 = comb.mux %a, %c0, %c1 : i1
+  hw.output %0 : i1
+}
+
+// mux(a, 0, b) -> and(~a, b)
+// CHECK-LABEL: @muxSingleBitConstantInputs
+hw.module @muxSingleBitConstantInputs(%a: i1, %b: i1) -> (o: i1) {
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: %0 = comb.xor %a, %true : i1
+  // CHECK-NEXT: %1 = comb.and %0, %b : i1
+  // CHECK-NEXT: hw.output %1
+  %c0 = hw.constant 0 : i1
+  %0 = comb.mux %a, %c0, %b : i1
+  hw.output %0 : i1
+}
+
+// mux(a, 1, b) -> or(a, b)
+// CHECK-LABEL: @muxSingleBitConstantInputs2
+hw.module @muxSingleBitConstantInputs2(%a: i1, %b: i1) -> (o: i1) {
+  // CHECK-NEXT: %0 = comb.or %a, %b : i1
+  // CHECK-NEXT: hw.output %0
+  %c0 = hw.constant 1 : i1
+  %0 = comb.mux %a, %c0, %b : i1
+  hw.output %0 : i1
+}
+
+// mux(a, b, 0) -> and(a, b)
+// CHECK-LABEL: @muxSingleBitConstantInputs3
+hw.module @muxSingleBitConstantInputs3(%a: i1, %b: i1) -> (o: i1) {
+  // CHECK-NEXT: %0 = comb.and %a, %b : i1
+  // CHECK-NEXT: hw.output %0
+  %c0 = hw.constant 0 : i1
+  %0 = comb.mux %a, %b, %c0 : i1
+  hw.output %0 : i1
+}
+
+// mux(a, b, 1) -> or(~a, b)
+// CHECK-LABEL: @muxSingleBitConstantInputs4
+hw.module @muxSingleBitConstantInputs4(%cond: i1, %arg0: i1) -> (o: i1) {
+  // CHECK-NEXT: %true = hw.constant true
+  // CHECK-NEXT: %0 = comb.xor %cond, %true : i1
+  // CHECK-NEXT: %1 = comb.or %0, %arg0 : i1
+  // CHECK-NEXT: hw.output %1
+  %c0 = hw.constant 1 : i1
+  %0 = comb.mux %cond, %arg0, %c0 : i1
+  hw.output %0 : i1
+}
+
 
 // CHECK-LABEL: @notNot
 hw.module @notNot(%a: i1) -> (o: i1) {
@@ -130,6 +220,22 @@ hw.module @orMultipleExclusiveConcats(%arg0: i2, %arg1: i2, %arg2: i2) -> (o: i6
   %2 = comb.concat %c4, %arg2: (i4, i2) -> i6
   %out = comb.or %0, %1, %2 : i6
   hw.output %out : i6
+}
+
+// CHECK-LABEL: hw.module @orConcatsWithMux
+hw.module @orConcatsWithMux(%bit: i1, %cond: i1) -> (o: i6) {
+  // CHECK-NEXT:    [[RES:%[a-z0-9_-]+]] = hw.constant 0 : i4
+  // CHECK-NEXT:    %0 = comb.concat [[RES]], %cond, %bit : (i4, i1, i1) -> i6
+  // CHECK-NEXT:    hw.output %0 : i6
+  %c0 = hw.constant 0 : i5
+  %0 = comb.concat %c0, %bit: (i5, i1) -> i6
+  %c1 = hw.constant 0 : i4
+  %c2 = hw.constant 2 : i2
+  %c3 = hw.constant 0 : i2
+  %1 = comb.mux %cond, %c2, %c3 : i2
+  %2 = comb.concat %c1, %1 : (i4, i2) -> i6
+  %3 = comb.or %0, %2 : i6
+  hw.output %3 : i6
 }
 
 // CHECK-LABEL: @extractNested
