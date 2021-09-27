@@ -74,7 +74,8 @@ def BitcastOp: HWOp<"bitcast", [NoSideEffect]> {
 }
 
 def ParamValueOp : HWOp<"param.value",
-                        [FirstAttrDerivedResultType, NoSideEffect]> {
+                        [FirstAttrDerivedResultType, NoSideEffect,
+                         ConstantLike]> {
   let summary = [{
     Return the value of a parameter expression as an SSA value that may be used
     by other ops.
@@ -83,4 +84,5 @@ def ParamValueOp : HWOp<"param.value",
   let arguments = (ins AnyAttr:$value);
   let results = (outs HWValueType:$result);
   let assemblyFormat = "custom<ParamValue>($value, type($result)) attr-dict";
+  let verifier = "return ::verifyParamValueOp(*this);";
 }

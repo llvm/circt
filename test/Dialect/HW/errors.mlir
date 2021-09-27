@@ -269,3 +269,10 @@ hw.module @Use<xx: i41>() {
 // expected-error @+1 {{op parameter "p" cannot be used as a default value for a parameter}}
 hw.module.extern @p<p: i42 = #hw.param.decl.ref<"p">>() -> ()
 
+// -----
+
+// expected-note @+1 {{module declared here}}
+hw.module @Use<xx: i41>() {
+  // expected-error @+1 {{'hw.param.value' op parameter "xx" used with type 'i40'; should have type 'i41'}}
+  %0 = hw.param.value i40 = #hw.param.decl.ref<"xx">
+}

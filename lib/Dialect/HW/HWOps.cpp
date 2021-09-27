@@ -40,7 +40,8 @@ enum class Delimiter {
 
 /// Check parameter specified by `value` to see if it is valid within the scope
 /// of the specified module `module`.  If not, emit an error at the location of
-/// `usingOp` and return failure, otherwise return success.
+/// `usingOp` and return failure, otherwise return success.  If `usingOp` is
+/// null, then no diagnostic is generated.
 ///
 /// If `disallowParamRefs` is true, then parameter references are not allowed.
 LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
@@ -70,8 +71,9 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
     // Don't allow references to parameters from the default values of a
     // parameter list.
     if (disallowParamRefs) {
-      usingOp->emitOpError("parameter ")
-          << nameAttr << " cannot be used as a default value for a parameter";
+      if (usingOp)
+        usingOp->emitOpError("parameter ")
+            << nameAttr << " cannot be used as a default value for a parameter";
       return failure();
     }
 
@@ -85,19 +87,31 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
       if (paramAttr.getType().getValue() == parameterRef.getType())
         return success();
 
-      auto diag = usingOp->emitOpError("parameter ")
-                  << nameAttr << " used with type " << parameterRef.getType()
-                  << "; should have type " << paramAttr.getType().getValue();
-      diag.attachNote(module->getLoc()) << "module declared here";
+      if (usingOp) {
+        auto diag = usingOp->emitOpError("parameter ")
+                    << nameAttr << " used with type " << parameterRef.getType()
+                    << "; should have type " << paramAttr.getType().getValue();
+        diag.attachNote(module->getLoc()) << "module declared here";
+      }
       return failure();
     }
 
-    auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
-    diag.attachNote(module->getLoc()) << "module declared here";
+    if (usingOp) {
+      auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
+      diag.attachNote(module->getLoc()) << "module declared here";
+    }
     return failure();
   }
 
-  return usingOp->emitOpError("invalid parameter value ") << value;
+  if (usingOp)
+    usingOp->emitOpError("invalid parameter value ") << value;
+  return failure();
+}
+
+/// Return true if the specified attribute tree is made up of nodes that are
+/// valid in a parameter expression.
+bool hw::isValidParameterExpression(Attribute attr, Operation *module) {
+  return succeeded(checkParameterInContext(attr, module, nullptr, false));
 }
 
 //===----------------------------------------------------------------------===//
@@ -180,7 +194,7 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 }
 
 //===----------------------------------------------------------------------===//
-// ConstantOp
+// ParamValueOp
 //===----------------------------------------------------------------------===//
 
 static ParseResult parseParamValue(OpAsmParser &p, Attribute &value,
@@ -195,6 +209,12 @@ static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
                             Type resultType) {
   p << resultType << " = ";
   p.printAttributeWithoutType(value);
+}
+
+static LogicalResult verifyParamValueOp(ParamValueOp op) {
+  // Check that the attribute expression is valid in this module.
+  return checkParameterInContext(op.value(),
+                                 op->getParentOfType<hw::HWModuleOp>(), op);
 }
 
 //===----------------------------------------------------------------------===//

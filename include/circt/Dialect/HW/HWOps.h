@@ -111,6 +111,10 @@ void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
 /// Return true if the specified operation is a combinational logic op.
 bool isCombinational(Operation *op);
 
+/// Return true if the specified attribute tree is made up of nodes that are
+/// valid in a parameter expression.
+bool isValidParameterExpression(Attribute attr, Operation *module);
+
 /// Check parameter specified by `value` to see if it is valid within the scope
 /// of the specified module `module`.  If not, emit an error at the location of
 /// `usingOp` and return failure, otherwise return success.
