@@ -292,13 +292,13 @@ void HWMemSimImplPass::runOnOperation() {
                      " mask_gran " + std::to_string(mem.maskGran);
     seqMemConfStr += " \n";
     J.attribute("module_name", "{{" + std::to_string(index) + "}}");
-    J.attribute("depth", (size_t)mem.depth);
-    J.attribute("width", mem.dataWidth);
+    J.attribute("depth", (int64_t)mem.depth);
+    J.attribute("width", (int64_t)mem.dataWidth);
     J.attribute("mask", "true");
     J.attribute("read", mem.numReadPorts ? "true" : "false");
     J.attribute("write", mem.numWritePorts ? "true" : "false");
     J.attribute("readwrite", mem.numReadWritePorts ? "true" : "false");
-    J.attribute("mask_granularity", mem.maskGran);
+    J.attribute("mask_granularity", (int64_t)mem.maskGran);
     J.attributeArray("extra_ports", [&] {});
     for (auto userOp : genToMemMap[hwModule]) {
       InstanceOp instOp = dyn_cast<InstanceOp>(userOp);
@@ -318,7 +318,7 @@ void HWMemSimImplPass::runOnOperation() {
               auto id = a.first.strref().str();
               auto v = a.second;
               if (auto intV = v.dyn_cast<IntegerAttr>())
-                J.attribute(id, intV.getValue().getZExtValue());
+                J.attribute(id, (int64_t)intV.getValue().getZExtValue());
               else if (auto strV = v.dyn_cast<StringAttr>())
                 J.attribute(id, strV.getValue().str());
               else if (auto arrV = v.dyn_cast<ArrayAttr>()) {
