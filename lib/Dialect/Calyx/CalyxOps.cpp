@@ -1387,6 +1387,70 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   return success();
 }
 
+/// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
+/// EnableOp was found (e.g. a "calyx.par" operation is present), returns
+/// nullptr.
+static Operation *getLastSeqEnableOp(SeqOp parentSeqOp) {
+  auto &lastOp = parentSeqOp.getBody()->back();
+  if (auto enableOp = dyn_cast<EnableOp>(lastOp))
+    return enableOp.getOperation();
+  else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
+    return getLastSeqEnableOp(seqOp);
+  return nullptr;
+}
+
+/// Removes common tail enable operations for sequential 'then'/'else'
+/// branches inside an 'if' operation.
+///
+///   if %a with %A {                       if %a with %A {
+///     seq { calyx.enable @B ... }           seq { ... }
+///   else {                          ->    } else {
+///     seq { calyx.enable @B ... }           seq { ... }
+///   }                                     }
+///                                         calyx.enable @B
+static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
+                                               PatternRewriter &rewriter) {
+  // Check if the branches exist.
+  if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
+    return failure();
+
+  auto &thenOpStructureOp = ifOp.getThenBody()->front();
+  auto &elseOpStructureOp = ifOp.getElseBody()->front();
+  // TODO(circt/#1861): ParOps have less restrictive conditions.
+  if (isa<ParOp>(thenOpStructureOp) || isa<ParOp>(elseOpStructureOp))
+    return failure();
+
+  // At this point, only sequential operations are valid inside the branches.
+  auto thenSeqOp = dyn_cast<SeqOp>(thenOpStructureOp);
+  auto elseSeqOp = dyn_cast<SeqOp>(elseOpStructureOp);
+  assert(thenSeqOp && elseSeqOp &&
+         "expected nested seq ops in both branches of a calyx.IfOp");
+
+  auto lastThenEnableOp = dyn_cast<EnableOp>(getLastSeqEnableOp(thenSeqOp));
+  auto lastElseEnableOp = dyn_cast<EnableOp>(getLastSeqEnableOp(elseSeqOp));
+
+  if (lastThenEnableOp == nullptr || lastElseEnableOp == nullptr)
+    return failure();
+
+  if (lastThenEnableOp.groupName() != lastElseEnableOp.groupName())
+    return failure();
+
+  // Erase both enable operations and add group enable operation after the
+  // shared IfOp parent.
+  rewriter.setInsertionPointAfter(ifOp);
+  rewriter.create<EnableOp>(ifOp.getLoc(), lastThenEnableOp.groupName());
+  rewriter.eraseOp(lastThenEnableOp);
+  rewriter.eraseOp(lastElseEnableOp);
+  return success();
+}
+
+LogicalResult IfOp::canonicalize(IfOp ifOp, PatternRewriter &rewriter) {
+  if (succeeded(eliminateCommonTailEnable(ifOp, rewriter)))
+    return success();
+
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // WhileOp
 //===----------------------------------------------------------------------===//

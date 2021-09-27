@@ -1729,79 +1729,6 @@ struct MultipleGroupDonePattern : mlir::OpRewritePattern<calyx::GroupOp> {
   }
 };
 
-/// Returns the last calyx::EnableOp within the child tree of 'parentSeqOp'.
-/// If no EnableOp was found (for instance, if a "par" group is present),
-/// returns nullptr.
-static Operation *getLastSeqEnableOp(calyx::SeqOp parentSeqOp) {
-  auto &lastOp = parentSeqOp.getBody()->back();
-  if (auto enableOp = dyn_cast<calyx::EnableOp>(lastOp))
-    return enableOp.getOperation();
-  else if (auto seqOp = dyn_cast<calyx::SeqOp>(lastOp))
-    return getLastSeqEnableOp(seqOp);
-  return nullptr;
-}
-
-/// Removes common tail enable operations for sequential 'then'/'else'
-/// branches inside an 'if' operation.
-///
-///   if %a with %A {           if %a with %A {
-///     seq {                     seq {
-///       ...                       ...
-///       calyx.enable @B       } else {
-///     }                         seq {
-///   } else {              ->      ...
-///     seq {                     }
-///       ...                   }
-///       calyx.enable @B       calyx.enable @B
-///     }
-///   }
-/// TODO(#1861): This pass only considers shared tail operations within SeqOps.
-/// A similar pattern should be implemented for ParOps.
-struct CommonIfTailEnablePattern : mlir::OpRewritePattern<calyx::IfOp> {
-  using mlir::OpRewritePattern<calyx::IfOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(calyx::IfOp ifOp,
-                                PatternRewriter &rewriter) const override {
-    /// Check if there's anything in the branches; if not,
-    /// EliminateEmptyOpPattern will eliminate a potentially
-    /// empty/invalid if statement.
-    if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
-      return failure();
-
-    auto &thenOpStructureOp = ifOp.getThenBody()->front();
-    auto &elseOpStructureOp = ifOp.getElseBody()->front();
-    if (isa<calyx::ParOp>(thenOpStructureOp) ||
-        isa<calyx::ParOp>(elseOpStructureOp))
-      return failure();
-
-    /// At this point, only sequence ops are valid inside the IfOp branches.
-    auto thenSeqOp = dyn_cast<calyx::SeqOp>(thenOpStructureOp);
-    auto elseSeqOp = dyn_cast<calyx::SeqOp>(elseOpStructureOp);
-    assert(thenSeqOp && elseSeqOp &&
-           "expected nested seq ops in both branches of a calyx.IfOp");
-
-    auto lastThenEnableOp =
-        dyn_cast<calyx::EnableOp>(getLastSeqEnableOp(thenSeqOp));
-    auto lastElseEnableOp =
-        dyn_cast<calyx::EnableOp>(getLastSeqEnableOp(elseSeqOp));
-
-    if (!(lastThenEnableOp && lastElseEnableOp))
-      return failure();
-
-    if (lastThenEnableOp.groupName() != lastElseEnableOp.groupName())
-      return failure();
-
-    /// Erase both enable operations and add group enable operation after the
-    /// shared IfOp parent.
-    rewriter.setInsertionPointAfter(ifOp);
-    rewriter.create<calyx::EnableOp>(ifOp.getLoc(),
-                                     lastThenEnableOp.groupName());
-    rewriter.eraseOp(lastThenEnableOp);
-    rewriter.eraseOp(lastElseEnableOp);
-    return success();
-  }
-};
-
 //===----------------------------------------------------------------------===//
 // Pass driver
 //===----------------------------------------------------------------------===//
@@ -1897,7 +1824,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&...args) {
+                      PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1906,7 +1833,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&...args) {
+                        PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(
@@ -2039,9 +1966,9 @@ void SCFToCalyxPass::runOnOperation() {
            EliminateEmptyOpPattern<calyx::SeqOp>,
            EliminateEmptyOpPattern<calyx::ParOp>,
            EliminateEmptyOpPattern<calyx::IfOp>,
-           EliminateEmptyOpPattern<calyx::WhileOp>, CommonIfTailEnablePattern,
-           MultipleGroupDonePattern, NonTerminatingGroupDonePattern,
-           EliminateUnusedCombGroups>(&getContext());
+           EliminateEmptyOpPattern<calyx::WhileOp>, MultipleGroupDonePattern,
+           NonTerminatingGroupDonePattern, EliminateUnusedCombGroups>(
+          &getContext());
   if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                           std::move(cleanupPatterns)))) {
     signalPassFailure();
