@@ -251,16 +251,22 @@ void HWMemSimImplPass::runOnOperation() {
   SmallDenseMap<Operation *, bool> testBenchOps;
   llvm::SetVector<Operation *> dutOps;
   llvm::SetVector<Operation *> tbOps;
+  Attribute tbMetadataFile;
+  Attribute dutMetadataFile;
   for (auto op : topModule.getBody()->getOps<HWModuleGeneratedOp>()) {
     auto hwModule = cast<HWModuleGeneratedOp>(op);
     genToMemMap[op] = {};
     for (auto u : symbolUsers.getUsers(hwModule))
       if (auto inst = dyn_cast<InstanceOp>(u)) {
         genToMemMap[op].push_back(inst);
-        if (inst->hasAttr(testbenchMemAttrName))
+        if (inst->hasAttr(testbenchMemAttrName)) {
+          dutMetadataFile = inst->getAttr(testbenchMemAttrName);
           dutOps.insert(hwModule);
-        else if (inst->hasAttr(dutMemoryAttrName))
+        }
+        else if (inst->hasAttr(dutMemoryAttrName)) {
+          tbMetadataFile = inst->getAttr(dutMemoryAttrName);
           tbOps.insert(hwModule);
+        }
       }
   }
 
@@ -336,7 +342,7 @@ void HWMemSimImplPass::runOnOperation() {
   SmallVector<Attribute> confSymbolsVerbatim;
   std::string seqMemConfStr;
   auto seqMemjson = [&](llvm::SetVector<Operation *> &opsSet,
-                        StringRef fileName, unsigned confIndex) {
+                       Attribute fileAttr, unsigned confIndex) {
     std::string seqmemJsonBuffer;
     llvm::raw_string_ostream os(seqmemJsonBuffer);
     llvm::json::OStream J(os);
@@ -355,13 +361,10 @@ void HWMemSimImplPass::runOnOperation() {
     });
     auto v =
         builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqmemJsonBuffer, ValueRange(), builder.getArrayAttr({jsonSymbolsVerbatim}));
-    auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-        builder.getContext(), "metadata", fileName,
-        /*excludeFromFilelist=*/true);
     v->setAttr("output_file", fileAttr);
   };
-  seqMemjson(tbOps, "tb_seq_mems.json", 0);
-  seqMemjson(dutOps, "seq_mems.json", tbOps.size());
+  seqMemjson(tbOps, tbMetadataFile, 0);
+  seqMemjson(dutOps, dutMetadataFile, tbOps.size());
   auto configV = builder.create<sv::VerbatimOp>(
       builder.getUnknownLoc(), seqMemConfStr, ValueRange(),
       builder.getArrayAttr({confSymbolsVerbatim}));

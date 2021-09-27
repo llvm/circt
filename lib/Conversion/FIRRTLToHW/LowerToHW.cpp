@@ -431,7 +431,7 @@ private:
   void lowerModuleBody(FModuleOp oldModule,
                        CircuitLoweringState &loweringState);
   void lowerModuleOperations(hw::HWModuleOp module,
-                             CircuitLoweringState &loweringState, bool isDUT);
+                             CircuitLoweringState &loweringState, bool isDUT, std::string metadataStr);
 
   void lowerMemoryDecls(ArrayRef<FirMemory> mems,
                         CircuitLoweringState &loweringState);
@@ -1127,9 +1127,10 @@ void FIRRTLModuleLowering::lowerModuleBody(
   // We are done with our cursor op.
   cursor.erase();
 
+  auto metadataStr= getMetadataDir(oldModule->getParentOfType<CircuitOp>()).getValue().str();
   // Lower all of the other operations.
   lowerModuleOperations(newModule, loweringState,
-                        designUnderTestModules.contains(oldModule));
+                        designUnderTestModules.contains(oldModule), metadataStr );
 }
 
 //===----------------------------------------------------------------------===//
@@ -1140,9 +1141,9 @@ namespace {
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState,
-                 bool isDUT)
+                 bool isDUT, std::string &metadataDir)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()), isDUT(isDUT) {}
+        builder(module.getLoc(), module.getContext()), isDUT(isDUT), metadataDir(metadataDir) {}
 
   void run();
 
@@ -1371,12 +1372,13 @@ private:
   bool randomizePrologEmitted;
   /// This is true if this module is part of the design under test hierarchy.
   bool isDUT;
+  const StringRef metadataDir;
 };
 } // end anonymous namespace
 
 void FIRRTLModuleLowering::lowerModuleOperations(
-    hw::HWModuleOp module, CircuitLoweringState &loweringState, bool isDUT) {
-  FIRRTLLowering(module, loweringState, isDUT).run();
+    hw::HWModuleOp module, CircuitLoweringState &loweringState, bool isDUT, std::string metadataStr) {
+  FIRRTLLowering(module, loweringState, isDUT, metadataStr).run();
 }
 
 // This is the main entrypoint for the lowering pass.
@@ -2269,9 +2271,17 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     // Mark the memory as design under test or testbenh. This is required tp
     // appropriately generate the metadata.
     if (isDUT)
-      inst->setAttr(dutMemoryAttrName, builder.getUnitAttr());
+      inst->setAttr(dutMemoryAttrName, hw::OutputFileAttr::getFromDirectoryAndFilename(
+            op.getContext(),
+            metadataDir,
+            "seq_mems.json",
+            /*excludeFromFileList=*/true));
     else
-      inst->setAttr(testbenchMemAttrName, builder.getUnitAttr());
+      inst->setAttr(testbenchMemAttrName, hw::OutputFileAttr::getFromDirectoryAndFilename(
+            op.getContext(),
+            metadataDir,
+            "tb_seq_mems.json",
+            /*excludeFromFileList=*/true));
     verifData = v.get("data").cast<DictionaryAttr>();
     // Lower the annotation SeqMemAnnoClass, to the attribute for metadata
     // generation.
