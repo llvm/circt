@@ -13,10 +13,13 @@
 
 #include "PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/JSON.h"
 
 using namespace circt;
 using namespace hw;
@@ -25,6 +28,10 @@ using namespace hw;
 // HWMemSimImplPass Pass
 //===----------------------------------------------------------------------===//
 
+static const char testbenchMemAttrName[] = "firrtl.testbenchMemory";
+static const char dutMemoryAttrName[] = "firrtl.dutMemory";
+static const char seqMemMetadataAttrName[] = "firrtl.seq_mem_verif_data";
+
 namespace {
 struct FirMemory {
   size_t numReadPorts;
@@ -32,6 +39,7 @@ struct FirMemory {
   size_t numReadWritePorts;
   size_t dataWidth;
   size_t depth;
+  size_t maskGran;
   size_t readLatency;
   size_t writeLatency;
   size_t readUnderWrite;
@@ -59,6 +67,7 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   mem.readLatency = op->getAttrOfType<IntegerAttr>("readLatency").getUInt();
   mem.writeLatency = op->getAttrOfType<IntegerAttr>("writeLatency").getUInt();
   mem.dataWidth = op->getAttrOfType<IntegerAttr>("width").getUInt();
+  mem.maskGran = op->getAttrOfType<IntegerAttr>("maskGran").getUInt();
   mem.readUnderWrite =
       op->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt();
   mem.writeUnderWrite =
@@ -210,14 +219,159 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   outputOp->setOperands(outputs);
 }
 
+// Get all the hierarchichal names for a HWModuleOp.
+void static getHierarchichalNames(HWModuleOp op,
+                                  SmallVector<std::string> &names,
+                                  const std::string path,
+                                  mlir::SymbolUserMap &symbolUsers) {
+
+  if (!op)
+    return;
+  bool parentFound = false;
+  for (auto u : symbolUsers.getUsers(op)) {
+    if (auto inst = dyn_cast<InstanceOp>(u)) {
+      auto opPath = inst.instanceName().str() + "." + path;
+      getHierarchichalNames(inst->getParentOfType<HWModuleOp>(), names, opPath,
+                            symbolUsers);
+      parentFound = true;
+    }
+  }
+  if (!parentFound)
+    names.push_back(op.getName().str() + "." + path);
+}
+
 void HWMemSimImplPass::runOnOperation() {
-  auto topModule = getOperation().getBody();
+  auto topModule = getOperation();
+  mlir::SymbolTableCollection symbolTable;
+  mlir::SymbolUserMap symbolUsers(symbolTable, topModule);
 
   SmallVector<HWModuleGeneratedOp> toErase;
   bool anythingChanged = false;
+  DenseMap<Operation *, SmallVector<Operation *, 8>> genToMemMap;
+  SmallDenseMap<Operation *, bool> testBenchOps;
+  llvm::SetVector<Operation *> dutOps;
+  llvm::SetVector<Operation *> tbOps;
+  for (auto op : topModule.getBody()->getOps<HWModuleGeneratedOp>()) {
+    auto hwModule = cast<HWModuleGeneratedOp>(op);
+    genToMemMap[op] = {};
+    for (auto u : symbolUsers.getUsers(hwModule))
+      if (auto inst = dyn_cast<InstanceOp>(u)) {
+        genToMemMap[op].push_back(inst);
+        if (inst->hasAttr(testbenchMemAttrName))
+          dutOps.insert(hwModule);
+        else if (inst->hasAttr(dutMemoryAttrName))
+          tbOps.insert(hwModule);
+      }
+  }
 
-  for (auto op :
-       llvm::make_early_inc_range(topModule->getOps<HWModuleGeneratedOp>())) {
+  auto genJson = [&](llvm::json::OStream &J, HWModuleGeneratedOp hwModule,
+                     std::string &seqMemConfStr, unsigned index,
+                     unsigned confIndex) {
+    auto mem = analyzeMemOp(hwModule);
+    std::string portStr;
+    if (mem.numWritePorts)
+      portStr += "mwrite";
+    if (mem.numReadPorts) {
+      if (!portStr.empty())
+        portStr += ",";
+      portStr += "read";
+    }
+    if (mem.numReadWritePorts)
+      portStr = "mrw";
+
+    seqMemConfStr += "name {{" + std::to_string(confIndex) + "}} depth " +
+                     std::to_string(mem.depth) + " width " +
+                     std::to_string(mem.depth) + " ports " + portStr +
+                     " mask_gran " + std::to_string(mem.maskGran);
+    seqMemConfStr += " \n";
+    J.attribute("module_name", "{{" + std::to_string(index) + "}}");
+    J.attribute("depth", (size_t)mem.depth);
+    J.attribute("width", mem.dataWidth);
+    J.attribute("mask", "true");
+    J.attribute("read", mem.numReadPorts ? "true" : "false");
+    J.attribute("write", mem.numWritePorts ? "true" : "false");
+    J.attribute("readwrite", mem.numReadWritePorts ? "true" : "false");
+    J.attribute("mask_granularity", mem.maskGran);
+    J.attributeArray("extra_ports", [&] {});
+    for (auto userOp : genToMemMap[hwModule]) {
+      InstanceOp instOp = dyn_cast<InstanceOp>(userOp);
+      auto verifData =
+          instOp->getAttrOfType<DictionaryAttr>(seqMemMetadataAttrName);
+      SmallVector<std::string> hierNames;
+      getHierarchichalNames(instOp->getParentOfType<HWModuleOp>(), hierNames,
+                            instOp.instanceName().str(), symbolUsers);
+      J.attributeArray("hierarchy", [&] {
+        for (auto h : hierNames)
+          J.value(h);
+      });
+      J.attributeObject("verification_only_data", [&] {
+        for (auto h : hierNames) {
+          J.attributeObject(h, [&] {
+            for (auto a : verifData) {
+              auto id = a.first.strref().str();
+              auto v = a.second;
+              if (auto intV = v.dyn_cast<IntegerAttr>())
+                J.attribute(id, intV.getValue().getZExtValue());
+              else if (auto strV = v.dyn_cast<StringAttr>())
+                J.attribute(id, strV.getValue().str());
+              else if (auto arrV = v.dyn_cast<ArrayAttr>()) {
+                std::string indices;
+                J.attributeArray(id, [&] {
+                  for (auto arrI : llvm::enumerate(arrV)) {
+                    auto i = arrI.value();
+                    if (auto intV = i.dyn_cast<IntegerAttr>())
+                      J.value(std::to_string(intV.getValue().getZExtValue()));
+                    else if (auto strV = i.dyn_cast<StringAttr>())
+                      J.value(strV.getValue().str());
+                  }
+                });
+              }
+            }
+          });
+        }
+      });
+    }
+  };
+  auto builder = OpBuilder::atBlockEnd(topModule.getBody());
+  SmallVector<Attribute> confSymbolsVerbatim;
+  std::string seqMemConfStr;
+  auto seqMemjson = [&](llvm::SetVector<Operation *> &opsSet,
+                        StringRef fileName, unsigned confIndex) {
+    std::string seqmemJsonBuffer;
+    llvm::raw_string_ostream os(seqmemJsonBuffer);
+    llvm::json::OStream J(os);
+    SmallVector<Attribute> jsonSymbolsVerbatim;
+    J.array([&] {
+      for (auto opIndex : llvm::enumerate(opsSet)) {
+        auto hwModule = cast<HWModuleGeneratedOp>(opIndex.value());
+        J.object([&] {
+          genJson(J, hwModule, seqMemConfStr, opIndex.index(),
+                  confIndex + opIndex.index());
+        });
+        auto symRef = SymbolRefAttr::get(hwModule);
+        confSymbolsVerbatim.push_back(symRef);
+        jsonSymbolsVerbatim.push_back(symRef);
+      }
+    });
+    auto v =
+        builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqmemJsonBuffer, ValueRange(), builder.getArrayAttr({jsonSymbolsVerbatim}));
+    auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
+        builder.getContext(), "metadata", fileName,
+        /*excludeFromFilelist=*/true);
+    v->setAttr("output_file", fileAttr);
+  };
+  seqMemjson(tbOps, "tb_seq_mems.json", 0);
+  seqMemjson(dutOps, "seq_mems.json", tbOps.size());
+  auto configV = builder.create<sv::VerbatimOp>(
+      builder.getUnknownLoc(), seqMemConfStr, ValueRange(),
+      builder.getArrayAttr({confSymbolsVerbatim}));
+  configV->setAttr("output_file",
+                   hw::OutputFileAttr::getFromDirectoryAndFilename(
+                       builder.getContext(), "metadata", "memory.conf",
+                       /*excludeFromFilelist=*/true));
+
+  for (auto op : llvm::make_early_inc_range(
+           topModule.getBody()->getOps<HWModuleGeneratedOp>())) {
     auto oldModule = cast<HWModuleGeneratedOp>(op);
     auto gen = oldModule.generatorKind();
     auto genOp = cast<HWGeneratorSchemaOp>(
