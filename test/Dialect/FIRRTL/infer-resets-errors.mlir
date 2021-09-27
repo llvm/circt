@@ -223,3 +223,10 @@ firrtl.circuit "Top" {
     firrtl.connect %foo_clock, %clock : !firrtl.clock, !firrtl.clock
   }
 }
+
+// -----
+
+firrtl.circuit "UninferredReset" {
+  // expected-error @+1 {{contains an abstract reset type after InferResets}}
+  firrtl.module @UninferredReset(in %reset: !firrtl.reset) {}
+}
