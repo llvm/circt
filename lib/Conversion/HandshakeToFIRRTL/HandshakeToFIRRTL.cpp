@@ -132,12 +132,11 @@ static Type getOperandDataType(Value op) {
   return opType;
 }
 
-/// Filters types of type TypeToFilter from the input.
-template <typename TypeToFilter>
-static SmallVector<Type> filterTypes(ArrayRef<Type> input) {
+/// Filters NoneType's from the input.
+static SmallVector<Type> filterNoneTypes(ArrayRef<Type> input) {
   SmallVector<Type> filterRes;
   llvm::copy_if(input, std::back_inserter(filterRes),
-                [](Type type) { return !type.isa<TypeToFilter>(); });
+                [](Type type) { return !type.isa<NoneType>(); });
   return filterRes;
 }
 
@@ -158,8 +157,8 @@ static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
                         getOperandDataType);
         llvm::transform(op->getResults(), std::back_inserter(outTypes),
                         getOperandDataType);
-        return DiscriminatingTypes{filterTypes<NoneType>(inTypes),
-                                   filterTypes<NoneType>(outTypes)};
+        return DiscriminatingTypes{filterNoneTypes(inTypes),
+                                   filterNoneTypes(outTypes)};
       });
 }
 
@@ -249,11 +248,8 @@ static std::string getSubModuleName(Operation *oldOp) {
                      std::to_string(oldOp->getNumResults()) + "outs";
     subModuleName += "_ctrl";
   } else {
-    if (inTypes.empty() && outTypes.empty()) {
-      oldOp->emitError()
-          << "Non-control operators must provide discriminating type info";
-      assert(false);
-    }
+    if (inTypes.empty() && outTypes.empty())
+      assert("Non-control operators must provide discriminating type info");
   }
 
   return subModuleName;
