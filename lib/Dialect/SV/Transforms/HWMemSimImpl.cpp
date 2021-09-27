@@ -31,6 +31,7 @@ using namespace hw;
 static const char testbenchMemAttrName[] = "firrtl.testbenchMemory";
 static const char dutMemoryAttrName[] = "firrtl.dutMemory";
 static const char seqMemMetadataAttrName[] = "firrtl.seq_mem_verif_data";
+static const char memConfAttrName[] = "firrtl.memConfigFile";
 
 namespace {
 struct FirMemory {
@@ -251,8 +252,7 @@ void HWMemSimImplPass::runOnOperation() {
   SmallDenseMap<Operation *, bool> testBenchOps;
   llvm::SetVector<Operation *> dutOps;
   llvm::SetVector<Operation *> tbOps;
-  Attribute tbMetadataFile;
-  Attribute dutMetadataFile;
+  Attribute tbMetadataFile, dutMetadataFile, memConfAttr;
   for (auto op : topModule.getBody()->getOps<HWModuleGeneratedOp>()) {
     auto hwModule = cast<HWModuleGeneratedOp>(op);
     genToMemMap[op] = {};
@@ -262,11 +262,12 @@ void HWMemSimImplPass::runOnOperation() {
         if (inst->hasAttr(testbenchMemAttrName)) {
           dutMetadataFile = inst->getAttr(testbenchMemAttrName);
           dutOps.insert(hwModule);
-        }
-        else if (inst->hasAttr(dutMemoryAttrName)) {
+        } else if (inst->hasAttr(dutMemoryAttrName)) {
           tbMetadataFile = inst->getAttr(dutMemoryAttrName);
           tbOps.insert(hwModule);
         }
+        if (inst->hasAttr(memConfAttrName))
+          memConfAttr = inst->getAttr(memConfAttrName);
       }
   }
 
@@ -342,7 +343,9 @@ void HWMemSimImplPass::runOnOperation() {
   SmallVector<Attribute> confSymbolsVerbatim;
   std::string seqMemConfStr;
   auto seqMemjson = [&](llvm::SetVector<Operation *> &opsSet,
-                       Attribute fileAttr, unsigned confIndex) {
+                        Attribute fileAttr, unsigned confIndex) {
+    if (opsSet.empty())
+      return;
     std::string seqmemJsonBuffer;
     llvm::raw_string_ostream os(seqmemJsonBuffer);
     llvm::json::OStream J(os);
@@ -359,20 +362,19 @@ void HWMemSimImplPass::runOnOperation() {
         jsonSymbolsVerbatim.push_back(symRef);
       }
     });
-    auto v =
-        builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqmemJsonBuffer, ValueRange(), builder.getArrayAttr({jsonSymbolsVerbatim}));
+    auto v = builder.create<sv::VerbatimOp>(
+        builder.getUnknownLoc(), seqmemJsonBuffer, ValueRange(),
+        builder.getArrayAttr({jsonSymbolsVerbatim}));
     v->setAttr("output_file", fileAttr);
   };
   seqMemjson(tbOps, tbMetadataFile, 0);
   seqMemjson(dutOps, dutMetadataFile, tbOps.size());
-  auto configV = builder.create<sv::VerbatimOp>(
-      builder.getUnknownLoc(), seqMemConfStr, ValueRange(),
-      builder.getArrayAttr({confSymbolsVerbatim}));
-  configV->setAttr("output_file",
-                   hw::OutputFileAttr::getFromDirectoryAndFilename(
-                       builder.getContext(), "metadata", "memory.conf",
-                       /*excludeFromFilelist=*/true));
-
+  if (memConfAttr) {
+    auto configV = builder.create<sv::VerbatimOp>(
+        builder.getUnknownLoc(), seqMemConfStr, ValueRange(),
+        builder.getArrayAttr({confSymbolsVerbatim}));
+    configV->setAttr("output_file", memConfAttr);
+  }
   for (auto op : llvm::make_early_inc_range(
            topModule.getBody()->getOps<HWModuleGeneratedOp>())) {
     auto oldModule = cast<HWModuleGeneratedOp>(op);

@@ -49,6 +49,8 @@ static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 /// module should be dumped to a file.
 static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
 
+/// Attribute that is used to store the file for sequential memory metadata.
+static const char memConfAttrName[] = "firrtl.memConfigFile";
 /// Attribute that indicates that a sequential memory is part of testbench, this
 /// is required for metadata geneation.
 static const char testbenchMemAttrName[] = "firrtl.testbenchMemory";
@@ -431,7 +433,8 @@ private:
   void lowerModuleBody(FModuleOp oldModule,
                        CircuitLoweringState &loweringState);
   void lowerModuleOperations(hw::HWModuleOp module,
-                             CircuitLoweringState &loweringState, bool isDUT, std::string metadataStr);
+                             CircuitLoweringState &loweringState, bool isDUT,
+                             std::string metadataStr);
 
   void lowerMemoryDecls(ArrayRef<FirMemory> mems,
                         CircuitLoweringState &loweringState);
@@ -1127,10 +1130,12 @@ void FIRRTLModuleLowering::lowerModuleBody(
   // We are done with our cursor op.
   cursor.erase();
 
-  auto metadataStr= getMetadataDir(oldModule->getParentOfType<CircuitOp>()).getValue().str();
+  auto metadataStr =
+      getMetadataDir(oldModule->getParentOfType<CircuitOp>()).getValue().str();
   // Lower all of the other operations.
   lowerModuleOperations(newModule, loweringState,
-                        designUnderTestModules.contains(oldModule), metadataStr );
+                        designUnderTestModules.contains(oldModule),
+                        metadataStr);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1143,7 +1148,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState,
                  bool isDUT, std::string &metadataDir)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()), isDUT(isDUT), metadataDir(metadataDir) {}
+        builder(module.getLoc(), module.getContext()), isDUT(isDUT),
+        metadataDir(metadataDir) {}
 
   void run();
 
@@ -1377,7 +1383,8 @@ private:
 } // end anonymous namespace
 
 void FIRRTLModuleLowering::lowerModuleOperations(
-    hw::HWModuleOp module, CircuitLoweringState &loweringState, bool isDUT, std::string metadataStr) {
+    hw::HWModuleOp module, CircuitLoweringState &loweringState, bool isDUT,
+    std::string metadataStr) {
   FIRRTLLowering(module, loweringState, isDUT, metadataStr).run();
 }
 
@@ -2271,17 +2278,19 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     // Mark the memory as design under test or testbenh. This is required tp
     // appropriately generate the metadata.
     if (isDUT)
-      inst->setAttr(dutMemoryAttrName, hw::OutputFileAttr::getFromDirectoryAndFilename(
-            op.getContext(),
-            metadataDir,
-            "seq_mems.json",
-            /*excludeFromFileList=*/true));
+      inst->setAttr(dutMemoryAttrName,
+                    hw::OutputFileAttr::getFromDirectoryAndFilename(
+                        op.getContext(), metadataDir, "seq_mems.json",
+                        /*excludeFromFileList=*/true));
     else
-      inst->setAttr(testbenchMemAttrName, hw::OutputFileAttr::getFromDirectoryAndFilename(
-            op.getContext(),
-            metadataDir,
-            "tb_seq_mems.json",
-            /*excludeFromFileList=*/true));
+      inst->setAttr(testbenchMemAttrName,
+                    hw::OutputFileAttr::getFromDirectoryAndFilename(
+                        op.getContext(), metadataDir, "tb_seq_mems.json",
+                        /*excludeFromFileList=*/true));
+    inst->setAttr(memConfAttrName,
+                  hw::OutputFileAttr::getFromDirectoryAndFilename(
+                      op.getContext(), metadataDir, "memory.conf",
+                      /*excludeFromFileList=*/true));
     verifData = v.get("data").cast<DictionaryAttr>();
     // Lower the annotation SeqMemAnnoClass, to the attribute for metadata
     // generation.
