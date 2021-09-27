@@ -746,6 +746,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
       firrtl.connect %14, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
+  firrtl.module @DUT_MemSimple_mask(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock,
+                           in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<40>,
+                           out %result: !firrtl.sint<40>,
+                           out %result2: !firrtl.sint<40>) attributes {annotations = [
+      {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]}{
+        %1,%2,%3,%4,%5,%6 = firrtl.instance @MemSimple_mask {name = "MemSimple_mask"} : !firrtl.clock, !firrtl.clock,
+                           !firrtl.uint<1>, !firrtl.sint<40>, 
+                          !firrtl.sint<40>,
+                           !firrtl.sint<40>
+      }
   // CHECK-LABEL: hw.module @MemSimple_mask(
   firrtl.module @MemSimple_mask(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock,
                            in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<40>,
@@ -757,8 +767,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
-    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 1022 : i64, name = "_M_mask", portNames = ["read", "rw", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
+    %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {annotations = [{class =
+    "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation", data = {baseAddress = 2147483648 : i64, dataBits = 8 :
+    i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}}], depth = 1022 : i64, name = "_M_mask", portNames = ["read", "rw", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
     // CHECK: %_M_mask.ro_data_0, %_M_mask.rw_rdata_0 = hw.instance "_M_mask" @FIRRTLMem_1_1_1_40_1022_1_1_0_1_a(ro_clock_0: %clock1: i1, ro_en_0: %true: i1, ro_addr_0: %c0_i10: i10, rw_clock_0: %clock1: i1, rw_en_0: %true: i1, rw_addr_0: %c0_i10: i10, rw_wmode_0: %true: i1, rw_wmask_0: %c0_i4: i4, rw_wdata_0: %0: i40, wo_clock_0: %clock2: i1, wo_en_0: %inpred: i1, wo_addr_0: %c0_i10: i10, wo_mask_0: %c0_i4: i4, wo_data_0: %indata: i40) -> (ro_data_0: i40, rw_rdata_0: i40)
+    // CHECK-SAME: {firrtl.dutMemory, firrtl.seq_mem_verif_data = {baseAddress = 2147483648 : i64, dataBits = 8 : i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}}
     // CHECK: hw.output %_M_mask.ro_data_0, %_M_mask.rw_rdata_0 : i40, i40
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>) -> !firrtl.sint<40>
@@ -802,7 +815,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
     // CHECK:  %_M.ro_data_0 = hw.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0_1(ro_clock_0: %clock1: i1, ro_en_0: %true: i1, ro_addr_0: %c0_i4: i4) -> (ro_data_0: i42)
-    %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
+    // CHECK-SAME: {firrtl.seq_mem_verif_data = {baseAddress = 214483648 : i64, dataBits = 8 : i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}, firrtl.testbenchMemory}
+    %_M_read = firrtl.mem Undefined {annotations = [{class =
+    "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation", data = {baseAddress = 214483648 : i64, dataBits = 8 :
+    i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}}], depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     // Read port.
     %6 = firrtl.subfield %_M_read(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.uint<4>
     firrtl.connect %6, %c0_ui1 : !firrtl.uint<4>, !firrtl.uint<1>
