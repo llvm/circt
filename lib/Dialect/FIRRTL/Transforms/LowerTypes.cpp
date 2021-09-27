@@ -621,25 +621,33 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
 
 // Convert an aggregate type into a flat list of fields.  This is used
 // when working with instances and mems to flatten them.
-static void flattenType(FIRRTLType type, SmallVectorImpl<FIRRTLType> &results) {
-  std::function<void(FIRRTLType)> flatten = [&](FIRRTLType type) {
-    TypeSwitch<FIRRTLType>(type)
+static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
+  std::function<bool(FIRRTLType)> flatten = [&](FIRRTLType type) -> bool {
+    return TypeSwitch<FIRRTLType, bool>(type)
         .Case<BundleType>([&](auto bundle) {
           for (auto &elt : bundle.getElements())
-            flatten(elt.type);
-          return;
+            if (!flatten(elt.type))
+              return false;
+          return true;
         })
         .Case<FVectorType>([&](auto vector) {
           for (size_t i = 0, e = vector.getNumElements(); i != e; ++i)
-            flatten(vector.getElementType());
-          return;
+            if (!flatten(vector.getElementType()))
+              return false;
+          return true;
+        })
+        .Case<IntType>([&](auto iType) {
+          results.push_back({iType});
+          return iType.getWidth().hasValue();
         })
         .Default([&](auto) {
-          results.push_back({type});
-          return;
-        });
+            return false;
+            });
   };
-  return flatten(type);
+  if (flatten(type))
+    return true;
+  results.clear();
+  return false;
 }
 
 // Create subfield and subaccess to access all the leaf elements of the result
@@ -739,15 +747,14 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     oldPorts.push_back(wire);
     result.replaceAllUsesWith(wire.getResult());
   }
-  SmallVector<FIRRTLType> flatMemType;
+  SmallVector<IntType> flatMemType;
   size_t maskGran = 1;
   SmallVector<unsigned> maskBits;
-  if (flattenAggregateMemData) {
+  if (flattenAggregateMemData && flattenType(op.getDataType(), flatMemType)) {
     SmallVector<Operation *, 8> flatData;
-    flattenType(op.getDataType(), flatMemType);
     SmallVector<int32_t> memWidths;
     for (auto f : flatMemType) {
-      memWidths.push_back(f.getBitWidthOrSentinel());
+      memWidths.push_back(f.getWidth().getValue());
     }
     // MaskGranularity : how many bits each mask bit controls.
     maskGran = memWidths[0];
@@ -797,7 +804,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       if (name == "data" || name == "mask" || name == "wdata" ||
           name == "wmask" || name == "rdata") {
         bool isRead = rType.getElement(fieldIndex).isFlip;
-        if (flattenAggregateMemData) {
+        if (!flatMemType.empty()) {
           flattenMem(oldField, name, maskBits, newMemories[0].getResult(index),
                      fieldIndex, isRead);
         } else {
