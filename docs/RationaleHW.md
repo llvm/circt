@@ -61,9 +61,9 @@ The `hw` dialect defines a set of common functionality, such as `hw.module` and
 `hw.array<xx>`) and attributes.   It is *not* designed to model SystemVerilog or
 any other hardware
 design language directly, and doesn't contain combinational or sequential
-operations.  Instead, it is designed to be a flexible and extensible substrate
-that may be extended with higher level dialects mixed into it (like `sv`,
-`comb`, `seq`, etc).
+operations and does not have "connect" semantics.  Instead, it is designed to be
+a flexible and extensible substrate that may be extended with higher level
+dialects mixed into it (like `sv`, `comb`, and `seq` in the future, etc).
 
 ## `hw` Type System
 
@@ -71,8 +71,9 @@ TODO: Describe inout types.  Analogy to lvalues vs rvalues.  Array indices for
 both forms.  Arrays, structs,
 moving [UnpackedArray](https://github.com/llvm/circt/issues/389) to SV someday.
 
-InOut types should live at the SV dialect level and not the HW dialect level. 
-This allows connects, wires and other syntactic constructs that aren't necessary
+CLEANUP: InOut types is defined in the `hw` dialect, but logically lives at the
+`sv` dialect level.  `sv` provides connects, wires and other syntactic
+constructs that work with the inout type.  These aren't necessary
 for combinational logic, but are nonetheless pretty useful when generating
 Verilog.
 
@@ -120,7 +121,7 @@ The signature of a modules have these major components:
    described in more detail in the "[Parameterized 
    Modules](#parameterized-modules) section below.
 5) The `verilogName` attribute can be used to override the name for an external
-   module.  We hope to eliminate this in the future and just use the symbol.
+   module.  TODO: we should eliminate this in the future and just use the symbol.
 6) Other ad-hoc attributes.  The `hw` dialect is intended to allow open
    extensibility by other dialects.  Ad-hoc attributes put on `hw` dialect 
    modules should be namespace qualified according to the dialect they come
@@ -193,6 +194,12 @@ is used when the instance and the module default are the same (e.g. in the
 example above, `p1` is not printed at the instance site because it is the same
 as the default.
 
+The `sv` dialect provides the `sv.localparam` operation, which is used for
+naming constants.  These may be derived from module parameters or may just be
+nicely named constants intended to improve readability.  This is part of the
+`sv` dialect (not the `hw` dialect) because it only makes sense as a concept
+when generating Verilog.
+
 ### Valid Parameter Expression Attributes
 
 The following attributes may be used as expressions involving parameters at
@@ -209,7 +216,8 @@ module:
   representations.
 - `#hw.param.verbatim<"some string">` may be used to provide an opaque blob of
   textual verilog that is uniqued by its string contents.  This is intended
-  as a general "escape hatch" that allows frontend authors to CIRCT does not
+  as a general "escape hatch" that allows frontend authors to express anything
+  Verilog cannot, even if first-class IR support doesn't exist yet.  CIRCT does not
   provide any checking to ensure that this is correct or safe, and assumes it
   is single expression - parenthesize the string contents if not to be safe.
   This [should eventually support
@@ -259,7 +267,7 @@ This set includes:
 
 ### Using parameters in the body of a module
 
-Parameters are not SSA values, so they cannot directly be used within the body
+Parameters are not [SSA values](https://en.wikipedia.org/wiki/Static_single_assignment_form), so they cannot directly be used within the body
 of the module.  Just like you use `hw.constant` to project a constant integer
 value into the SSA domain, you can use the `hw.param.value` to project an
 parameter expression, like so:
@@ -344,7 +352,8 @@ All that said, using attributes is the right thing for a number of reasons:
    parameter.
 3) We need to support parameterized types like `!hw.int<n>`: because MLIR types
    are immortal and uniqued, they can refer to attributes but cannot refer to
-   SSA values (which may be destoyed).
+   [SSA values](https://en.wikipedia.org/wiki/Static_single_assignment_form)
+   (which may be destoyed).
 4) Operations need to be able to compute their own type without creating other
    operations.  For example, we need to compute that the result type of
    `comb.concat %a, %b : (i1, !hw.int<n>)` is `!hw.int<n+1>` without introducing
