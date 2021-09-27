@@ -8,7 +8,6 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -17,8 +16,6 @@
 using namespace mlir;
 using namespace circt;
 using namespace comb;
-
-using mlir::constFoldBinaryOp;
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
@@ -252,6 +249,24 @@ OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
 // Binary Operations
 //===----------------------------------------------------------------------===//
 
+/// Performs constant folding `calculate` with element-wise behavior on the two
+/// attributes in `operands` and returns the result if possible.
+template <class CalculationFn = function_ref<APInt(APInt, APInt)>>
+static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
+                                   const CalculationFn &calculate) {
+  assert(operands.size() == 2 && "binary op takes two operands");
+  if (!operands[0] || !operands[1])
+    return {};
+  if (operands[0].getType() != operands[1].getType())
+    return {};
+
+  if (auto lhs = operands[0].dyn_cast<IntegerAttr>())
+    if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+      return IntegerAttr::get(lhs.getType(),
+                              calculate(lhs.getValue(), rhs.getValue()));
+  return {};
+}
+
 OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
@@ -262,7 +277,7 @@ OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
       return getIntAttr(APInt::getZero(width), getContext());
   }
 
-  return constFoldBinaryOp<IntegerAttr>(
+  return constFoldBinaryOp(
       operands, [](const APInt &a, const APInt &b) { return a.shl(b); });
 }
 
@@ -300,7 +315,7 @@ OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
     if (width <= shift)
       return getIntAttr(APInt::getZero(width), getContext());
   }
-  return constFoldBinaryOp<IntegerAttr>(
+  return constFoldBinaryOp(
       operands, [](const APInt &a, const APInt &b) { return a.lshr(b); });
 }
 
@@ -333,7 +348,7 @@ OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
     if (rhs.getValue().getZExtValue() == 0)
       return getOperand(0);
   }
-  return constFoldBinaryOp<IntegerAttr>(
+  return constFoldBinaryOp(
       operands, [](const APInt &a, const APInt &b) { return a.ashr(b); });
 }
 
@@ -612,28 +627,24 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
 
 // Reduce all operands to a single value by applying the `calculate` function.
 // This will fail if any of the operands are not constant.
-template <class AttrElementT,
-          class ElementValueT = typename AttrElementT::ValueType,
-          class CalculationT =
-              function_ref<ElementValueT(ElementValueT, ElementValueT)>>
+template <class CalculationFn = function_ref<void(APInt &, APInt)>>
 static Attribute constFoldVariadicOp(ArrayRef<Attribute> operands,
-                                     const CalculationT &calculate) {
+                                     const CalculationFn &calculate) {
   if (!operands.size())
     return {};
 
-  if (!operands[0])
+  auto attr0 = operands[0].dyn_cast_or_null<IntegerAttr>();
+  if (!attr0)
     return {};
-
-  ElementValueT accum = operands[0].cast<AttrElementT>().getValue();
-  for (auto i = operands.begin() + 1, end = operands.end(); i != end; ++i) {
-    auto attr = *i;
-    if (!attr)
+  APInt accum = attr0.getValue();
+  for (auto op : operands.drop_front()) {
+    auto typedAttr = op.dyn_cast_or_null<IntegerAttr>();
+    if (!typedAttr)
       return {};
 
-    auto typedAttr = attr.cast<AttrElementT>();
     calculate(accum, typedAttr.getValue());
   }
-  return AttrElementT::get(operands[0].getType(), accum);
+  return IntegerAttr::get(operands[0].getType(), accum);
 }
 
 /// When we find a logical operation (and, or, xor) with a constant e.g.
@@ -756,8 +767,8 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
       }
 
   // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a &= b; });
+  return constFoldVariadicOp(constants,
+                             [](APInt &a, const APInt &b) { a &= b; });
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
@@ -888,8 +899,8 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
       }
 
   // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a |= b; });
+  return constFoldVariadicOp(constants,
+                             [](APInt &a, const APInt &b) { a |= b; });
 }
 
 /// Simplify concat ops in an or op when a constant operand is present in either
@@ -1074,8 +1085,8 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a ^= b; });
+  return constFoldVariadicOp(constants,
+                             [](APInt &a, const APInt &b) { a ^= b; });
 }
 
 // xor(icmp, a, b, 1) -> xor(icmp, a, b) if icmp has one user.
@@ -1174,7 +1185,7 @@ OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
                       getContext());
 
   // Constant fold
-  return constFoldBinaryOp<IntegerAttr>(
+  return constFoldBinaryOp(
       constants, [](const APInt &a, const APInt &b) { return a - b; });
 }
 
@@ -1198,8 +1209,8 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
     return inputs()[0];
 
   // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a += b; });
+  return constFoldVariadicOp(constants,
+                             [](APInt &a, const APInt &b) { a += b; });
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
@@ -1300,8 +1311,8 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a *= b; });
+  return constFoldVariadicOp(constants,
+                             [](APInt &a, const APInt &b) { a *= b; });
 }
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
@@ -1358,10 +1369,9 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
       return {};
   }
 
-  return constFoldBinaryOp<IntegerAttr>(
-      constants, [](const APInt &a, const APInt &b) {
-        return isSigned ? a.sdiv(b) : a.udiv(b);
-      });
+  return constFoldBinaryOp(constants, [](const APInt &a, const APInt &b) {
+    return isSigned ? a.sdiv(b) : a.udiv(b);
+  });
 }
 
 OpFoldResult DivUOp::fold(ArrayRef<Attribute> constants) {
@@ -1392,10 +1402,9 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
                         op.getContext());
   }
 
-  return constFoldBinaryOp<IntegerAttr>(
-      constants, [](const APInt &a, const APInt &b) {
-        return isSigned ? a.srem(b) : a.urem(b);
-      });
+  return constFoldBinaryOp(constants, [](const APInt &a, const APInt &b) {
+    return isSigned ? a.srem(b) : a.urem(b);
+  });
 }
 
 OpFoldResult ModUOp::fold(ArrayRef<Attribute> constants) {
