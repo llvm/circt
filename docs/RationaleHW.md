@@ -260,7 +260,23 @@ This set includes:
 ### Using parameters in the body of a module
 
 Parameters are not SSA values, so they cannot directly be used within the body
-of the module.  To project them with a specific name, you can use the
+of the module.  Just like you use `hw.constant` to project a constant integer
+value into the SSA domain, you can use the `hw.param.value` to project an
+parameter expression, like so:
+
+```mlir
+hw.module @M1<param1: i1>(%clock : i1, ...) {
+  ...
+  %param1 = sv.param.value i1 = #hw.param.decl.ref<"param1">
+  ...
+    sv.if %param1 {  // Compile-time conditional on parameter.
+      sv.fwrite "Only happens when the parameter is set\n"
+    }
+  ...
+}
+```
+
+Alternately, you can project them with a specific name, you can use the
 `sv.localparam` declaration like so:
 
 ```mlir
@@ -275,8 +291,9 @@ hw.module @M1<param1: i1>(%clock : i1, ...) {
 }
 ```
 
-Alternatively, if you don't want to introduce a local name, you can use a 
-**TODO**: yet-to-be-implemented new op.
+Using `sv.localparam` is helpful when you're looking to produce specifically
+pretty Verilog for human consumption.  The optimizer won't fold aggressively
+around these names.
 
 ### Parameterized Types
 

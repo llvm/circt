@@ -233,8 +233,6 @@ remapRenamedParameters(Attribute value, HWModuleOp module,
                                 newRHS, value.getType());
   }
 
-  // TODO: Handle nested expressions when we support them.
-
   // Otherwise this must be a parameter reference.
   auto parameterRef = value.dyn_cast<ParamDeclRefAttr>();
   assert(parameterRef && "Unknown kind of parameter expression");
@@ -340,6 +338,16 @@ rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
         auto curModule = op.getParentOfType<HWModuleOp>();
         localParam.valueAttr(remapRenamedParameters(
             localParam.value(), curModule, renamedParameterInfo));
+      }
+      continue;
+    }
+
+    if (auto paramValue = dyn_cast<ParamValueOp>(op)) {
+      // If the initializer value in the local param was renamed then update it.
+      if (moduleHasRenamedInterface) {
+        auto curModule = op.getParentOfType<HWModuleOp>();
+        paramValue.valueAttr(remapRenamedParameters(
+            paramValue.value(), curModule, renamedParameterInfo));
       }
       continue;
     }

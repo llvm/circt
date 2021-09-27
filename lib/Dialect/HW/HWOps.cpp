@@ -180,6 +180,24 @@ OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
 }
 
 //===----------------------------------------------------------------------===//
+// ConstantOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseParamValue(OpAsmParser &p, Attribute &value,
+                                   Type &resultType) {
+  if (p.parseType(resultType) || p.parseEqual() ||
+      p.parseAttribute(value, resultType))
+    return failure();
+  return success();
+}
+
+static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
+                            Type resultType) {
+  p << resultType << " = ";
+  p.printAttributeWithoutType(value);
+}
+
+//===----------------------------------------------------------------------===//
 // HWModuleOp
 //===----------------------------------------------------------------------===/
 
@@ -1174,7 +1192,7 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
   auto parseElement = [&]() -> ParseResult {
     Type ty;
     if (p.parseType(ty))
-      return p.emitError(p.getCurrentLocation(), "Expected type");
+      return failure();
     auto arrTy = type_dyn_cast<ArrayType>(ty);
     if (!arrTy)
       return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");

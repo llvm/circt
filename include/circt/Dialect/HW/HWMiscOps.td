@@ -57,12 +57,8 @@ def KnownBitWidthType : Type<CPred<[{getBitWidth($_self) != -1}]>,
 def BitcastOp: HWOp<"bitcast", [NoSideEffect]> {
   let summary = [{
     Reinterpret one value to another value of the same size and
-    potentially different type.
-  }];
-
-  let description = [{
-    See the HW-SV rationale document for a longer description, including an
-    example.
+    potentially different type.  See the `hw` dialect rationale document for
+    more details.
   }];
 
   let arguments = (ins KnownBitWidthType:$input);
@@ -74,7 +70,17 @@ def BitcastOp: HWOp<"bitcast", [NoSideEffect]> {
     return success();
   }];
 
-  let assemblyFormat = [{
-    $input attr-dict `:` functional-type($input, $result)
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+}
+
+def ParamValueOp : HWOp<"param.value",
+                        [FirstAttrDerivedResultType, NoSideEffect]> {
+  let summary = [{
+    Return the value of a parameter expression as an SSA value that may be used
+    by other ops.
   }];
+
+  let arguments = (ins AnyAttr:$value);
+  let results = (outs HWValueType:$result);
+  let assemblyFormat = "custom<ParamValue>($value, type($result)) attr-dict";
 }

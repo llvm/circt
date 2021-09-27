@@ -33,7 +33,7 @@ public:
                        // Struct operations
                        StructCreateOp, StructExtractOp, StructInjectOp,
                        // Cast operation
-                       BitcastOp>([&](auto expr) -> ResultType {
+                       BitcastOp, ParamValueOp>([&](auto expr) -> ResultType {
           return thisCast->visitTypeOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -61,6 +61,7 @@ public:
 
   HANDLE(ConstantOp, Unhandled);
   HANDLE(BitcastOp, Unhandled);
+  HANDLE(ParamValueOp, Unhandled);
   HANDLE(StructCreateOp, Unhandled);
   HANDLE(StructExtractOp, Unhandled);
   HANDLE(StructInjectOp, Unhandled);
