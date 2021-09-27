@@ -35,7 +35,7 @@ TODO: Simple integer types, eventually parametricly wide integer type
 
 ### Zero-bit integer width is not supported
 
-Combinatorial operations like add and multiply work on values of signless
+Combinational operations like add and multiply work on values of signless
 standard integer types, e.g. `i42`, but they do not allow zero bit inputs.  This
 design point is motivated by a couple of reasons:
 

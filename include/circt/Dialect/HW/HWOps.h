@@ -108,8 +108,8 @@ static inline StringRef getModuleResultName(Operation *module,
 void setModuleArgumentNames(Operation *module, ArrayRef<Attribute> names);
 void setModuleResultNames(Operation *module, ArrayRef<Attribute> names);
 
-/// Return true if the specified operation is a combinatorial logic op.
-bool isCombinatorial(Operation *op);
+/// Return true if the specified operation is a combinational logic op.
+bool isCombinational(Operation *op);
 
 /// Check parameter specified by `value` to see if it is valid within the scope
 /// of the specified module `module`.  If not, emit an error at the location of

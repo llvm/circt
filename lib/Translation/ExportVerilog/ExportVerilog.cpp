@@ -215,9 +215,9 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
   if (isa<ReadInOutOp, ArrayIndexInOutOp, ParamValueOp>(op))
     return true;
 
-  // All HW combinatorial logic ops and SV expression ops are Verilog
+  // All HW combinational logic ops and SV expression ops are Verilog
   // expressions.
-  return isCombinatorial(op) || isExpression(op);
+  return isCombinational(op) || isExpression(op);
 }
 
 /// Return the width of the specified type in bits or -1 if it isn't

@@ -270,7 +270,7 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
     // expression inline in the best case, and better scopes the temporary wire
     // they generate in the worst case.  Our overall traversal order is
     // post-order here which means all users will already be sunk.
-    if (hw::isCombinatorial(&op) || sv::isExpression(&op)) {
+    if (hw::isCombinational(&op) || sv::isExpression(&op)) {
       sinkExpression(&op);
       continue;
     }

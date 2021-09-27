@@ -21,8 +21,8 @@
 using namespace circt;
 using namespace hw;
 
-/// Return true if the specified operation is a combinatorial logic op.
-bool hw::isCombinatorial(Operation *op) {
+/// Return true if the specified operation is a combinational logic op.
+bool hw::isCombinational(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
     bool visitInvalidTypeOp(Operation *op) { return false; }
     bool visitUnhandledTypeOp(Operation *op) { return true; }
