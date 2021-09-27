@@ -195,32 +195,45 @@ void ParamVerbatimAttr::print(DialectAsmPrinter &p) const {
 }
 
 //===----------------------------------------------------------------------===//
-// ParamBinaryAttr
+// ParamExprAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamBinaryAttr::parse(MLIRContext *context, DialectAsmParser &p,
-                                 Type type) {
-  Attribute lhs, rhs;
+Attribute ParamExprAttr::parse(MLIRContext *context, DialectAsmParser &p,
+                               Type type) {
   StringRef opcodeStr;
   auto loc = p.getCurrentLocation();
+
+  SmallVector<Attribute> operands;
+  operands.push_back({});
   if (p.parseLess() || p.parseKeyword(&opcodeStr) ||
-      p.parseAttribute(lhs, type) || p.parseComma() ||
-      p.parseAttribute(rhs, type) || p.parseGreater())
+      // FIXME(LLVM Merge): use parseCommaSeparatedList
+      p.parseAttribute(operands.back(), type))
     return Attribute();
 
-  Optional<PBO> opcode = symbolizePBO(opcodeStr);
+  while (succeeded(p.parseOptionalComma())) {
+    operands.push_back({});
+    if (p.parseAttribute(operands.back(), type))
+      return Attribute();
+  }
+
+  if (p.parseGreater())
+    return Attribute();
+
+  Optional<PEO> opcode = symbolizePEO(opcodeStr);
   if (!opcode.hasValue()) {
-    p.emitError(loc, "unknown binary operator name");
+    p.emitError(loc, "unknown parameter expr operator name");
     return {};
   }
 
-  return ParamBinaryAttr::get(context, *opcode, lhs, rhs, type);
+  return ParamExprAttr::get(*opcode, operands);
 }
 
-void ParamBinaryAttr::print(DialectAsmPrinter &p) const {
-  p << "param.binary<" << stringifyPBO(getOpcode()) << " ";
-  p.printAttributeWithoutType(getLhs());
-  p << ", ";
-  p.printAttributeWithoutType(getRhs());
+void ParamExprAttr::print(DialectAsmPrinter &p) const {
+  p << "param.expr<" << stringifyPEO(getOpcode()) << " ";
+  p.printAttributeWithoutType(getOperands()[0]);
+  for (auto op : ArrayRef(getOperands()).drop_front()) {
+    p << ", ";
+    p.printAttributeWithoutType(op);
+  }
   p << ">";
 }

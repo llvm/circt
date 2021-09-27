@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Implement Pass to transform combinatorial processes to entities.
+// Implement Pass to transform combinational processes to entities.
 //
 //===----------------------------------------------------------------------===//
 

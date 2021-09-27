@@ -71,7 +71,7 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 
 // -----
 
-// CHECK-LABEL: firrtl.module @handshake_fork_1ins_2outs_ui64(
+// CHECK-LABEL: firrtl.module @handshake_fork_in_ui64_out_ui64_ui64(
 // CHECK-SAME: in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 // CHECK:   %[[ARG_DATA:.+]] = firrtl.subfield %arg0(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
 // CHECK:   %[[RES0_DATA:.+]] = firrtl.subfield %arg1(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
@@ -89,7 +89,7 @@ handshake.func @test_fork(%arg0: none, %arg1: none, ...) -> (none, none, none) {
 // CHECK-SAME:  in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_fork_data(%arg0: index, %arg1: none, ...) -> (index, index, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_clock, %inst_reset = firrtl.instance @handshake_fork_1ins_2outs_ui64 {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.clock, !firrtl.uint<1>
+  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_clock, %inst_reset = firrtl.instance @handshake_fork_in_ui64_out_ui64_ui64 {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.clock, !firrtl.uint<1>
   %0:2 = "handshake.fork"(%arg0) {control = false} : (index) -> (index, index)
   handshake.return %0#0, %0#1, %arg1 : index, index, none
 }

@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL: firrtl.module @handshake_store_3ins_2outs_ui8
+// CHECK-LABEL: firrtl.module @handshake_store_in_ui8_ui64_out_ui8_ui64
 // CHECK: %[[IN_DATA_VALID:.+]] = firrtl.subfield %arg0(0)
 // CHECK: %[[IN_DATA_READY:.+]] = firrtl.subfield %arg0(1)
 // CHECK: %[[IN_DATA_DATA:.+]] = firrtl.subfield %arg0(2)
@@ -39,7 +39,7 @@
 
 // CHECK-LABEL: firrtl.module @main
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: none, ...) -> (i8, index, none) {
-  // CHECK: {{.+}} = firrtl.instance @handshake_store_3ins_2outs_ui8
+  // CHECK: {{.+}} = firrtl.instance @handshake_store_in_ui8_ui64_out_ui8_ui64
   %0:2 = "handshake.store"(%arg0, %arg1, %arg2) : (i8, index, none) -> (i8, index)
 
   handshake.return %0#0, %0#1, %arg2 : i8, index, none
