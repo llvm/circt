@@ -217,6 +217,11 @@ static LogicalResult verifyParamValueOp(ParamValueOp op) {
                                  op->getParentOfType<hw::HWModuleOp>(), op);
 }
 
+OpFoldResult ParamValueOp::fold(ArrayRef<Attribute> constants) {
+  assert(constants.empty() && "hw.param.value has no operands");
+  return valueAttr();
+}
+
 //===----------------------------------------------------------------------===//
 // HWModuleOp
 //===----------------------------------------------------------------------===/

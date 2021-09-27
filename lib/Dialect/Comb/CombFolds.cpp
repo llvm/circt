@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
@@ -1208,9 +1209,17 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
   if (size == 1u)
     return inputs()[0];
 
-  // Constant fold
-  return constFoldVariadicOp(constants,
-                             [](APInt &a, const APInt &b) { a += b; });
+  // Constant fold integer operands.
+  if (Attribute attr = constFoldVariadicOp(
+          constants, [](APInt &a, const APInt &b) { a += b; }))
+    return attr;
+
+  // If this is a binary add of parameter compatible values, fold it.
+  // TODO: Generalize this after cleaning up ParamBinaryAttr.
+  if (constants.size() == 2 && constants[1] && constants[0])
+    return hw::ParamBinaryAttr::get(getContext(), hw::PBO::Add, constants[0],
+                                    constants[1], constants[0].getType());
+  return {};
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {

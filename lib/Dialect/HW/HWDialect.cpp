@@ -104,10 +104,18 @@ void HWDialect::initialize() {
 /// constant value. Otherwise, it should return null on failure.
 Operation *HWDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                           Type type, Location loc) {
-  // Integer constants.
+  // Integer constants can materialize into hw.constant
   if (auto intType = type.dyn_cast<IntegerType>())
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
-      return builder.create<hw::ConstantOp>(loc, type, attrValue);
+      return builder.create<ConstantOp>(loc, type, attrValue);
+
+  // Parameter expressions materialize into hw.param.value.
+  auto parentOp = builder.getBlock()->getParentOp();
+  auto curModule = dyn_cast<HWModuleOp>(parentOp);
+  if (!curModule)
+    curModule = parentOp->getParentOfType<HWModuleOp>();
+  if (curModule && isValidParameterExpression(value, curModule))
+    return builder.create<ParamValueOp>(loc, type, value);
 
   return nullptr;
 }

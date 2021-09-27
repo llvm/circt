@@ -85,4 +85,5 @@ def ParamValueOp : HWOp<"param.value",
   let results = (outs HWValueType:$result);
   let assemblyFormat = "custom<ParamValue>($value, type($result)) attr-dict";
   let verifier = "return ::verifyParamValueOp(*this);";
+  let hasFolder = true;
 }
