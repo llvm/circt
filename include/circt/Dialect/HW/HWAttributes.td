@@ -153,11 +153,16 @@ let cppNamespace = "circt::hw" in {
 /// Fully Associative Expression Opcodes.
 def PEO_Add : I32EnumAttrCase<"Add", 0, "add">;
 def PEO_Mul : I32EnumAttrCase<"Mul", 1, "mul">;
+def PEO_And : I32EnumAttrCase<"And", 2, "and">;
+def PEO_Or  : I32EnumAttrCase<"Or",  3, "or">;
+def PEO_Xor : I32EnumAttrCase<"Xor", 4, "xor">;
+
 // Binary Expression Opcodes.
-def PEO_Shl  : I32EnumAttrCase<"Shl", 2, "shl">;
-def PEO_ShrU : I32EnumAttrCase<"ShrU", 3, "shru">;
+def PEO_Shl  : I32EnumAttrCase<"Shl" , 5, "shl">;
+def PEO_ShrU : I32EnumAttrCase<"ShrU", 6, "shru">;
 def PEOAttr  : I32EnumAttr<"PEO", "Parameter Expression Opcode",
-                           [PEO_Add, PEO_Mul, PEO_Shl, PEO_ShrU]>;
+                           [PEO_Add, PEO_Mul, PEO_And, PEO_Or, PEO_Xor,
+                            PEO_Shl, PEO_ShrU]>;
 }
 
 def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {

@@ -629,23 +629,43 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
 // Reduce all operands to a single value by applying the `calculate` function.
 // This will fail if any of the operands are not constant.
 template <class CalculationFn = function_ref<void(APInt &, APInt)>>
-static Attribute constFoldVariadicOp(ArrayRef<Attribute> operands,
-                                     const CalculationFn &calculate) {
-  if (!operands.size())
+static Attribute constFoldAssociativeOp(ArrayRef<Attribute> operands,
+                                        hw::PEO paramOpcode,
+                                        const CalculationFn &calculate) {
+  assert(operands.size() > 1 && "caller should handle one-operand case");
+  // We can only fold anything in the case where all operands are known to be
+  // constants.  Check the least common one first for an early out.
+  if (!operands[1] || !operands[0])
     return {};
 
-  auto attr0 = operands[0].dyn_cast_or_null<IntegerAttr>();
-  if (!attr0)
-    return {};
-  APInt accum = attr0.getValue();
-  for (auto op : operands.drop_front()) {
-    auto typedAttr = op.dyn_cast_or_null<IntegerAttr>();
-    if (!typedAttr)
-      return {};
+  // If all the operands are known constant integer values then we can fold into
+  // a hw.constant.
+  if (auto attr0 = operands[0].dyn_cast<IntegerAttr>()) {
+    if (auto attr1 = operands[1].dyn_cast<IntegerAttr>()) {
+      APInt accum = attr0.getValue();
+      calculate(accum, attr1.getValue());
 
-    calculate(accum, typedAttr.getValue());
+      bool allPresent = true;
+
+      // Handle the rest of the operands if present.
+      for (auto op : operands.drop_front(2)) {
+        auto typedAttr = op.dyn_cast_or_null<IntegerAttr>();
+        if (!typedAttr)
+          allPresent = false;
+        else
+          calculate(accum, typedAttr.getValue());
+      }
+      if (allPresent)
+        return IntegerAttr::get(operands[0].getType(), accum);
+    }
   }
-  return IntegerAttr::get(operands[0].getType(), accum);
+
+  // Otherwise, it must be a parameter-compatible constant.  Fold into a
+  // hw.param.value constant.
+  if (llvm::all_of(operands.drop_front(2), [&](Attribute in) { return !!in; }))
+    return hw::ParamExprAttr::get(paramOpcode, operands);
+
+  return {};
 }
 
 /// When we find a logical operation (and, or, xor) with a constant e.g.
@@ -768,8 +788,8 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
       }
 
   // Constant fold
-  return constFoldVariadicOp(constants,
-                             [](APInt &a, const APInt &b) { a &= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::And,
+                                [](APInt &a, const APInt &b) { a &= b; });
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
@@ -900,8 +920,8 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
       }
 
   // Constant fold
-  return constFoldVariadicOp(constants,
-                             [](APInt &a, const APInt &b) { a |= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Or,
+                                [](APInt &a, const APInt &b) { a |= b; });
 }
 
 /// Simplify concat ops in an or op when a constant operand is present in either
@@ -1086,8 +1106,8 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // Constant fold
-  return constFoldVariadicOp(constants,
-                             [](APInt &a, const APInt &b) { a ^= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Xor,
+                                [](APInt &a, const APInt &b) { a ^= b; });
 }
 
 // xor(icmp, a, b, 1) -> xor(icmp, a, b) if icmp has one user.
@@ -1209,18 +1229,9 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
   if (size == 1u)
     return inputs()[0];
 
-  // Constant fold integer operands.
-  if (Attribute attr = constFoldVariadicOp(
-          constants, [](APInt &a, const APInt &b) { a += b; }))
-    return attr;
-
-  // If this is a binary add of parameter compatible values, fold it.
-  // TODO: Merge this into constFoldVariadicOp.
-  if (constants[1] && constants[0] &&
-      llvm::all_of(constants, [&](auto in) { return !!in; })) {
-    return hw::ParamExprAttr::get(hw::PEO::Add, constants);
-  }
-  return {};
+  // Constant fold constant operands.
+  return constFoldAssociativeOp(constants, hw::PEO::Add,
+                                [](APInt &a, const APInt &b) { a += b; });
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
@@ -1321,8 +1332,8 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // Constant fold
-  return constFoldVariadicOp(constants,
-                             [](APInt &a, const APInt &b) { a *= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Mul,
+                                [](APInt &a, const APInt &b) { a *= b; });
 }
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {

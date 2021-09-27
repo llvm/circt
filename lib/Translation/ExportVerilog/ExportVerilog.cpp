@@ -134,6 +134,18 @@ printParamValue(Attribute value, raw_ostream &os,
       operatorStr = " * ";
       subprecedence = Multiply;
       break;
+    case PEO::And:
+      operatorStr = " & ";
+      subprecedence = And;
+      break;
+    case PEO::Or:
+      operatorStr = " | ";
+      subprecedence = Or;
+      break;
+    case PEO::Xor:
+      operatorStr = " ^ ";
+      subprecedence = Xor;
+      break;
     case PEO::Shl:
       operatorStr = " << ";
       subprecedence = Shift;
