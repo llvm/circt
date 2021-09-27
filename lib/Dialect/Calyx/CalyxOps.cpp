@@ -419,7 +419,8 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
 // Collapse nested control of the same type for SeqOp and ParOp, e.g.
 // calyx.seq { calyx.seq { ... } } -> calyx.seq { ... }
 template <typename OpTy>
-LogicalResult collapseControl(OpTy controlOp, PatternRewriter &rewriter) {
+static LogicalResult collapseControl(OpTy controlOp,
+                                     PatternRewriter &rewriter) {
   static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
                 "Should be a SeqOp or ParOp.");
 
