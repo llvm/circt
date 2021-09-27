@@ -1402,8 +1402,11 @@ size_t MemOp::getMaskBits() {
       if (t.name.getValue().contains("mask"))
         mType = t.type;
     }
-    if (mType.dyn_cast<UIntType>())
+    // mType can be a bundle, return 0 for aggregate data type.
+    if (mType.dyn_cast_or_null<UIntType>())
       return mType.getBitWidthOrSentinel();
+    else
+      break;
   }
   // Mask of zero bits means, either there are no write/readwrite ports or the
   // mask is of aggregate type.

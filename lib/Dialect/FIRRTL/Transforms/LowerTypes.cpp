@@ -278,7 +278,7 @@ private:
   Value getSubWhatever(Value val, size_t index);
   void crerateAggregateAccess(SubfieldOp op, SmallVectorImpl<Value> &flatData);
 
-  void flattenMem(SubfieldOp oldField, StringRef name,
+  void genMemoryPortConnects(SubfieldOp oldField, StringRef name,
                   SmallVectorImpl<unsigned> &maskBits, Value newMemRes,
                   unsigned fieldIndex, bool isRead);
   MLIRContext *context;
@@ -679,7 +679,7 @@ void TypeLoweringVisitor::crerateAggregateAccess(
 }
 
 /// Map the flattened memory ports to the original memory.
-void TypeLoweringVisitor::flattenMem(SubfieldOp oldField, StringRef name,
+void TypeLoweringVisitor::genMemoryPortConnects(SubfieldOp oldField, StringRef name,
                                      SmallVectorImpl<unsigned> &maskBits,
                                      Value newMemRes, unsigned fieldIndex,
                                      bool isRead) {
@@ -803,10 +803,9 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       // go both directions, depending on the port direction.
       if (name == "data" || name == "mask" || name == "wdata" ||
           name == "wmask" || name == "rdata") {
-        bool isRead = rType.getElement(fieldIndex).isFlip;
         if (!flatMemType.empty()) {
-          flattenMem(oldField, name, maskBits, newMemories[0].getResult(index),
-                     fieldIndex, isRead);
+          genMemoryPortConnects(oldField, name, maskBits, newMemories[0].getResult(index),
+                     fieldIndex, rType.getElement(fieldIndex).isFlip);
         } else {
           for (auto field : fields) {
             auto realOldField = getSubWhatever(oldField, field.index);
