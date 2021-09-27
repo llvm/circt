@@ -19,6 +19,10 @@
 using namespace circt;
 using namespace circt::hw;
 
+// Internal method used for .mlir file parsing, defined below.
+static Attribute parseParamExprWithOpcode(StringRef opcode, DialectAsmParser &p,
+                                          Type type);
+
 //===----------------------------------------------------------------------===//
 // ODS Boilerplate
 //===----------------------------------------------------------------------===//
@@ -42,6 +46,14 @@ Attribute HWDialect::parseAttribute(DialectAsmParser &p, Type type) const {
       generatedAttributeParser(getContext(), p, attrName, type, attr);
   if (parseResult.hasValue())
     return attr;
+
+  // Parse "#hw.param.expr.add" as ParamExprAttr.
+  if (attrName.startswith(ParamExprAttr::getMnemonic())) {
+    auto string = attrName.drop_front(ParamExprAttr::getMnemonic().size());
+    if (string.front() == '.')
+      return parseParamExprWithOpcode(string.drop_front(), p, type);
+  }
+
   p.emitError(p.getNameLoc(), "Unexpected hw attribute '" + attrName + "'");
   return {};
 }
@@ -209,28 +221,34 @@ ParamExprAttr ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operands) {
 
 Attribute ParamExprAttr::parse(MLIRContext *context, DialectAsmParser &p,
                                Type type) {
-  StringRef opcodeStr;
-  auto loc = p.getCurrentLocation();
+  // We require an opcode suffix like `#hw.param.expr.add`, we don't allow
+  // parsing a plain `#hw.param.expr` on its own.
+  p.emitError(p.getNameLoc(), "#hw.param.expr should have opcode suffix");
+  return {};
+}
 
+/// Internal method used for .mlir file parsing when parsing the
+/// "#hw.param.expr.mul" form of the attribute.
+static Attribute parseParamExprWithOpcode(StringRef opcodeStr,
+                                          DialectAsmParser &p, Type type) {
+  // FIXME(LLVM Merge): use parseCommaSeparatedList
   SmallVector<Attribute> operands;
   operands.push_back({});
-  if (p.parseLess() || p.parseKeyword(&opcodeStr) ||
-      // FIXME(LLVM Merge): use parseCommaSeparatedList
-      p.parseAttribute(operands.back(), type))
-    return Attribute();
+  if (p.parseLess() || p.parseAttribute(operands.back(), type))
+    return {};
 
   while (succeeded(p.parseOptionalComma())) {
     operands.push_back({});
     if (p.parseAttribute(operands.back(), type))
-      return Attribute();
+      return {};
   }
 
   if (p.parseGreater())
-    return Attribute();
+    return {};
 
   Optional<PEO> opcode = symbolizePEO(opcodeStr);
   if (!opcode.hasValue()) {
-    p.emitError(loc, "unknown parameter expr operator name");
+    p.emitError(p.getNameLoc(), "unknown parameter expr operator name");
     return {};
   }
 
@@ -238,11 +256,8 @@ Attribute ParamExprAttr::parse(MLIRContext *context, DialectAsmParser &p,
 }
 
 void ParamExprAttr::print(DialectAsmPrinter &p) const {
-  p << "param.expr<" << stringifyPEO(getOpcode()) << " ";
-  p.printAttributeWithoutType(getOperands()[0]);
-  for (auto op : ArrayRef(getOperands()).drop_front()) {
-    p << ", ";
-    p.printAttributeWithoutType(op);
-  }
-  p << ">";
+  p << "param.expr." << stringifyPEO(getOpcode()) << '<';
+  llvm::interleaveComma(getOperands(), p.getStream(),
+                        [&](Attribute op) { p.printAttributeWithoutType(op); });
+  p << '>';
 }
