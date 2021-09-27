@@ -1623,36 +1623,6 @@ class CleanupFuncOps : public FuncOpPartialLoweringPattern {
 // Simplification patterns
 //===----------------------------------------------------------------------===//
 
-/// Removes operations which have an empty body.
-template <typename TOp>
-struct EliminateEmptyOpPattern : mlir::OpRewritePattern<TOp> {
-  using mlir::OpRewritePattern<TOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(TOp op,
-                                PatternRewriter &rewriter) const override {
-    if (op.getBody()->empty()) {
-      rewriter.eraseOp(op);
-      return success();
-    }
-    return failure();
-  }
-};
-
-template <>
-struct EliminateEmptyOpPattern<calyx::IfOp>
-    : mlir::OpRewritePattern<calyx::IfOp> {
-  using mlir::OpRewritePattern<calyx::IfOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(calyx::IfOp op,
-                                PatternRewriter &rewriter) const override {
-    if (!op.thenRegionExists()) {
-      rewriter.eraseOp(op);
-      return success();
-    }
-    return failure();
-  }
-};
-
 /// Removes calyx::CombGroupOps which are unused. These correspond to
 /// combinational groups created during op building that, after conversion,
 /// have either been inlined into calyx::GroupOps or are referenced by an
@@ -1960,15 +1930,8 @@ void SCFToCalyxPass::runOnOperation() {
   // Cleanup patterns
   //===----------------------------------------------------------------------===//
   RewritePatternSet cleanupPatterns(&getContext());
-  cleanupPatterns
-      .add<EliminateEmptyOpPattern<calyx::CombGroupOp>,
-           EliminateEmptyOpPattern<calyx::GroupOp>,
-           EliminateEmptyOpPattern<calyx::SeqOp>,
-           EliminateEmptyOpPattern<calyx::ParOp>,
-           EliminateEmptyOpPattern<calyx::IfOp>,
-           EliminateEmptyOpPattern<calyx::WhileOp>, MultipleGroupDonePattern,
-           NonTerminatingGroupDonePattern, EliminateUnusedCombGroups>(
-          &getContext());
+  cleanupPatterns.add<MultipleGroupDonePattern, NonTerminatingGroupDonePattern,
+                      EliminateUnusedCombGroups>(&getContext());
   if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                           std::move(cleanupPatterns)))) {
     signalPassFailure();
