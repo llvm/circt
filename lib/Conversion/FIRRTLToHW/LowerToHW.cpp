@@ -403,7 +403,7 @@ void CircuitLoweringState::processRemainingAnnotations(
             "sifive.enterprise.firrtl.ScalaClassAnnotation", dutAnnoClass,
             // The following will be handled while lowering the verification
             // ops.
-            assertAnnoClass, assumeAnnoClass, coverAnnoClass))
+            assertAnnoClass, assumeAnnoClass, coverAnnoClass, SeqMemAnnoClass))
       continue;
 
     mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +

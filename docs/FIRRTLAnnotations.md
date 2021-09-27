@@ -871,6 +871,32 @@ section describes well-defined attributes used by HW/SV passes.
 Used by HWExportModuleHierarchy.  Signifies a root from which to dump the module
 hierarchy as a json file. This attribute has type OutputFileAttr.
 
+### firrtl.memConfigFile
+
+Used by HWMemSimImpl.  Specifies the output file for generating the 
+metadata related to memory generator. This attribute has type
+OutputFileAttr.
+
+### firrtl.testbenchMemory
+
+Used by HWMemSimImpl.  Specifies the output file for generating the 
+metadata related to memory generator for test-bench memory.
+This attribute has type OutputFileAttr.
+
+### firrtl.dutMemory
+
+Used by HWMemSimImpl.  Specifies the output file for generating the 
+metadata related to memory generator for the memory under 
+design-under-test hierarchy.
+This attribute has type OutputFileAttr.
+
+### firrtl.seq_mem_verif_data
+
+Used by HWMemSimImpl. Used to lower the annotation 
+`sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation`
+and the associated verification data with it.
+This attribute has type DictionaryAttr.
+
 ### firrtl.extract.assert
 
 Used by SVExtractTestCode.  Specifies the output directory for extracted
