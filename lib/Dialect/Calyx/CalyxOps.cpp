@@ -1390,12 +1390,12 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
 /// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
 /// EnableOp was found (e.g. a "calyx.par" operation is present), returns
 /// nullptr.
-static Operation *getLastSeqEnableOp(SeqOp parentSeqOp) {
-  auto &lastOp = parentSeqOp.getBody()->back();
+static EnableOp getLastEnableOp(SeqOp parent) {
+  auto &lastOp = parent.getBody()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
-    return enableOp.getOperation();
+    return enableOp;
   else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
-    return getLastSeqEnableOp(seqOp);
+    return getLastEnableOp(seqOp);
   return nullptr;
 }
 
@@ -1426,8 +1426,8 @@ static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
   assert(thenSeqOp && elseSeqOp &&
          "expected nested seq ops in both branches of a calyx.IfOp");
 
-  auto lastThenEnableOp = dyn_cast<EnableOp>(getLastSeqEnableOp(thenSeqOp));
-  auto lastElseEnableOp = dyn_cast<EnableOp>(getLastSeqEnableOp(elseSeqOp));
+  EnableOp lastThenEnableOp = getLastEnableOp(thenSeqOp);
+  EnableOp lastElseEnableOp = getLastEnableOp(elseSeqOp);
 
   if (lastThenEnableOp == nullptr || lastElseEnableOp == nullptr)
     return failure();
