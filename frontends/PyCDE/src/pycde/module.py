@@ -22,7 +22,9 @@ import mlir.ir
 import builtins
 import inspect
 
-OPERATION_NAMESPACE = "pycde."
+# A memoization table for module parameterization function calls.
+_MODULE_CACHE: typing.Dict[Tuple[builtins.function, mlir.ir.DictAttr],
+                           object] = {}
 
 
 class ModuleDecl:
@@ -238,11 +240,6 @@ def _get_module_cache_key(func,
   return (func, mlir.ir.Attribute(params))
 
 
-# A memoization table for module parameterization function calls.
-_module_cache: typing.Dict[Tuple[builtins.function, mlir.ir.DictAttr],
-                           object] = {}
-
-
 class _parameterized_module:
   """When the @module decorator detects that it is decorating a function, use
   this class to wrap it."""
@@ -286,15 +283,15 @@ class _parameterized_module:
 
     # Check cache
     cache_key = _get_module_cache_key(self.func, params)
-    if cache_key in _module_cache:
-      return _module_cache[cache_key]
+    if cache_key in _MODULE_CACHE:
+      return _MODULE_CACHE[cache_key]
 
     cls = self.func(*args, **kwargs)
     if cls is None:
       raise ValueError("Parameterization function must return module class")
 
     mod = _module_base(cls, self.extern_name, params)
-    _module_cache[cache_key] = mod
+    _MODULE_CACHE[cache_key] = mod
     return mod
 
 

@@ -24,7 +24,7 @@ _current_system = ContextVar("current_pycde_system")
 class System:
   """The 'System' contains the user's design and some private bookkeeping. On
   construction, specify a list of 'root' modules which you wish to generate.
-  Upon generation, the design will be fleshed out and all the dependant modules
+  Upon generation, the design will be fleshed out and all the dependent modules
   will be created.
 
   'System' also has methods to run through the CIRCT lowering, output tcl, and
@@ -114,6 +114,7 @@ class System:
 
   # Broken ATM
   def get_instance(self, mod_name: str) -> Instance:
+    raise NotImplementedError()
     assert self.passed
     root_mod = self.get_module(mod_name)
     return Instance(root_mod, None, None, self)
