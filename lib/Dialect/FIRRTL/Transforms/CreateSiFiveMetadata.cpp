@@ -1,4 +1,4 @@
-//===- EmitMetadata.cpp - Emit various types of metadata --------*- C++ -*-===//
+//===- CreateSiFiveMetadata.cpp - Create various metadata -------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the EmitMetadata pass.
+// This file defines the CreateSiFiveMetadata pass.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,7 +26,8 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-class EmitMetadataPass : public EmitMetadataBase<EmitMetadataPass> {
+class CreateSiFiveMetadataPass
+    : public CreateSiFiveMetadataBase<CreateSiFiveMetadataPass> {
   LogicalResult emitRetimeModulesMetadata();
   LogicalResult emitSitestBlackboxMetadata();
   void getDependentDialects(mlir::DialectRegistry &registry) const override;
@@ -81,7 +82,7 @@ static LogicalResult removeAnnotationWithFilename(Operation *op,
 
 /// This function collects the name of each module annotated and prints them
 /// all as a JSON array.
-LogicalResult EmitMetadataPass::emitRetimeModulesMetadata() {
+LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
 
   // Circuit level annotation.
   auto *retimeModulesAnnoClass =
@@ -136,7 +137,7 @@ LogicalResult EmitMetadataPass::emitRetimeModulesMetadata() {
 
 /// This function finds all external modules which will need to be generated for
 /// the test harness to run.
-LogicalResult EmitMetadataPass::emitSitestBlackboxMetadata() {
+LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
   auto *dutBlackboxAnnoClass =
       "sifive.enterprise.firrtl.SitestBlackBoxAnnotation";
   auto *testBlackboxAnnoClass =
@@ -255,13 +256,13 @@ LogicalResult EmitMetadataPass::emitSitestBlackboxMetadata() {
   return success();
 }
 
-void EmitMetadataPass::getDependentDialects(
+void CreateSiFiveMetadataPass::getDependentDialects(
     mlir::DialectRegistry &registry) const {
   // We need this for SV verbatim and HW attributes.
   registry.insert<hw::HWDialect, sv::SVDialect>();
 }
 
-void EmitMetadataPass::runOnOperation() {
+void CreateSiFiveMetadataPass::runOnOperation() {
   if (failed(emitRetimeModulesMetadata()) ||
       failed(emitSitestBlackboxMetadata()))
     return signalPassFailure();
@@ -270,6 +271,6 @@ void EmitMetadataPass::runOnOperation() {
   markAnalysesPreserved<InstanceGraph>();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createEmitMetadataPass() {
-  return std::make_unique<EmitMetadataPass>();
+std::unique_ptr<mlir::Pass> circt::firrtl::createCreateSiFiveMetadataPass() {
+  return std::make_unique<CreateSiFiveMetadataPass>();
 }
