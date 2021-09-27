@@ -1217,8 +1217,7 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
   // If this is a binary add of parameter compatible values, fold it.
   // TODO: Generalize this after cleaning up ParamBinaryAttr.
   if (constants.size() == 2 && constants[1] && constants[0])
-    return hw::ParamBinaryAttr::get(getContext(), hw::PBO::Add, constants[0],
-                                    constants[1], constants[0].getType());
+    return hw::ParamBinaryAttr::get(hw::PBO::Add, constants[0], constants[1]);
   return {};
 }
 

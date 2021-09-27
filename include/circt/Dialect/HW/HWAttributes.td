@@ -160,6 +160,15 @@ def ParamBinaryAttr : AttrDef<HWDialect, "ParamBinary"> {
                         "::mlir::Attribute":$lhs, "::mlir::Attribute":$rhs,
                         AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "param.binary";
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins
+                                   "PBO":$opcode,
+                                   "::mlir::Attribute":$lhs,
+                                   "::mlir::Attribute":$rhs), [{
+      return get(lhs.getContext(), opcode, lhs, rhs, lhs.getType());
+    }]>,
+  ];
 }
 
 let cppNamespace = "circt::hw" in {

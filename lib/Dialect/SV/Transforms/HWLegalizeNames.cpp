@@ -229,8 +229,7 @@ remapRenamedParameters(Attribute value, HWModuleOp module,
     // Don't rebuild an attribute if nothing changed.
     if (newLHS == binOp.getLhs() && newRHS == binOp.getRhs())
       return value;
-    return ParamBinaryAttr::get(value.getContext(), binOp.getOpcode(), newLHS,
-                                newRHS, value.getType());
+    return ParamBinaryAttr::get(binOp.getOpcode(), newLHS, newRHS);
   }
 
   // Otherwise this must be a parameter reference.

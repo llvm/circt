@@ -214,7 +214,7 @@ Attribute ParamBinaryAttr::parse(MLIRContext *context, DialectAsmParser &p,
     return {};
   }
 
-  return ParamBinaryAttr::get(context, *opcode, lhs, rhs, type);
+  return ParamBinaryAttr::get(*opcode, lhs, rhs);
 }
 
 void ParamBinaryAttr::print(DialectAsmPrinter &p) const {
