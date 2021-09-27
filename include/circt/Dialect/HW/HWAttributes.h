@@ -14,8 +14,8 @@
 
 namespace circt {
 namespace hw {
-class PBOAttr;
-enum class PBO : uint32_t;
+class PEOAttr;
+enum class PEO : uint32_t;
 } // namespace hw
 } // namespace circt
 

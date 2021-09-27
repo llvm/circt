@@ -53,13 +53,12 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
       value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
     return success();
 
-  // Check both arms of an expression.
-  if (auto binop = value.dyn_cast<ParamBinaryAttr>()) {
-    if (failed(checkParameterInContext(binop.getLhs(), module, usingOp,
-                                       disallowParamRefs)) ||
-        failed(checkParameterInContext(binop.getRhs(), module, usingOp,
-                                       disallowParamRefs)))
-      return failure();
+  // Check both subexpressions of an expression.
+  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
+    for (auto op : expr.getOperands())
+      if (failed(
+              checkParameterInContext(op, module, usingOp, disallowParamRefs)))
+        return failure();
     return success();
   }
 

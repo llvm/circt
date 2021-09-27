@@ -221,15 +221,18 @@ remapRenamedParameters(Attribute value, HWModuleOp module,
     return value;
 
   // Remap leaves of expressions if needed.
-  if (auto binOp = value.dyn_cast<ParamBinaryAttr>()) {
-    auto newLHS =
-        remapRenamedParameters(binOp.getLhs(), module, renamedParameterInfo);
-    auto newRHS =
-        remapRenamedParameters(binOp.getRhs(), module, renamedParameterInfo);
+  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
+    SmallVector<Attribute> newOperands;
+    bool anyChanged = false;
+    for (auto op : expr.getOperands()) {
+      newOperands.push_back(
+          remapRenamedParameters(op, module, renamedParameterInfo));
+      anyChanged |= newOperands.back() != op;
+    }
     // Don't rebuild an attribute if nothing changed.
-    if (newLHS == binOp.getLhs() && newRHS == binOp.getRhs())
+    if (!anyChanged)
       return value;
-    return ParamBinaryAttr::get(binOp.getOpcode(), newLHS, newRHS);
+    return ParamExprAttr::get(expr.getOpcode(), newOperands);
   }
 
   // Otherwise this must be a parameter reference.

@@ -210,7 +210,7 @@ module:
 - The `#hw.param.decl.ref` attribute is used to refer to the value of a
   parameter in the current module.  This is valid in most positions where a
   parameter attribute is used - except in the default value for a module.
-- The `#hw.param.binary` operator allows combining other parameter expressions
+- The `#hw.param.expr` operator allows combining other parameter expressions
   into an expression tree.  Expression trees have important canonicalization
   rules to ensure important cases are canonicalized to uniquable
   representations.

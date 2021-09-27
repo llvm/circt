@@ -120,27 +120,37 @@ printParamValue(Attribute value, raw_ostream &os,
     return Symbol;
   }
 
-  if (auto paramBinOp = value.dyn_cast<ParamBinaryAttr>()) {
+  // Handle nested expressions.
+  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
     StringRef operatorStr;
-    VerilogPrecedence subprecedence;
+    VerilogPrecedence subprecedence = ForceEmitMultiUse;
 
-    // TODO: Support variadic versions of these.
-    switch (paramBinOp.getOpcode()) {
-    case PBO::Add:
+    switch (expr.getOpcode()) {
+    case PEO::Add:
       operatorStr = " + ";
       subprecedence = Addition;
       break;
-    case PBO::Mul:
+    case PEO::Mul:
       operatorStr = " * ";
       subprecedence = Multiply;
+      break;
+    case PEO::Shl:
+      operatorStr = " << ";
+      subprecedence = Shift;
+      break;
+    case PEO::ShrU:
+      operatorStr = " >> ";
+      subprecedence = Shift;
       break;
     }
 
     if (subprecedence > parenthesizeIfLooserThan)
       os << '(';
-    printParamValue(paramBinOp.getLhs(), os, subprecedence, emitError);
-    os << operatorStr;
-    printParamValue(paramBinOp.getRhs(), os, subprecedence, emitError);
+    printParamValue(expr.getOperands()[0], os, subprecedence, emitError);
+    for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
+      os << operatorStr;
+      printParamValue(op, os, subprecedence, emitError);
+    }
     if (subprecedence > parenthesizeIfLooserThan) {
       os << ')';
       return Symbol;

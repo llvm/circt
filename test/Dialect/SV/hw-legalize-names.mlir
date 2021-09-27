@@ -126,8 +126,8 @@ hw.module @parameters<p1: i42 = 17, wire: i1>(%p1: i8) {
   // CHECK: hw.instance "inst" @module_with_bool<bparam: i1 = #hw.param.decl.ref<"wire_1">>
   hw.instance "inst" @module_with_bool<bparam: i1 = #hw.param.decl.ref<"wire">>() -> ()
 
-  // CHECK: hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.binary<add #hw.param.verbatim<"wire">, true>>()
-  hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.binary<add #hw.param.verbatim<"wire">, true>>() -> ()
+  // CHECK: hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.expr<add #hw.param.verbatim<"wire">, true>>()
+  hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.expr<add #hw.param.verbatim<"wire">, true>>() -> ()
 }
 
 // CHECK-LABEL: hw.module @use_parameters

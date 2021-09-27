@@ -1096,11 +1096,12 @@ hw.module @orWithNegation(%arg0: i32) -> (o1: i32) {
 
 // CHECK-LABEL: @addParam
 hw.module @addParam<p1: i4>(%a: i4) -> (o1: i4) {
-// CHECK-NEXT: %0 = hw.param.value i4 = #hw.param.binary<add #hw.param.verbatim<"p1">, 4>
+// CHECK-NEXT: %0 = hw.param.value i4 =
+// CHECK-SAME:     #hw.param.expr<add #hw.param.verbatim<"p1">, 4, #hw.param.verbatim<"p1">>
 // CHECK-NEXT: hw.output %0
   %c1 = hw.constant 4 : i4
   %p = hw.param.value i4 = #hw.param.verbatim<"p1">
-  %b = comb.add %p, %c1 : i4
+  %b = comb.add %p, %c1, %p : i4
   hw.output %b : i4
 }
 

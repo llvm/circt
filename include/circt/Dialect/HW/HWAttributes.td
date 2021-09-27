@@ -147,29 +147,44 @@ def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim"> {
 }
 
 
+/// Parameter Expression Opcodes.
 let cppNamespace = "circt::hw" in {
-def PBO_Add : I32EnumAttrCase<"Add", 0, "add">;
-def PBO_Mul : I32EnumAttrCase<"Mul", 1, "mul">;
-def PBOAttr : I32EnumAttr<"PBO", "Parameter Binary Operation Code",
-                          [PBO_Add, PBO_Mul]>;
+
+/// Fully Associative Expression Opcodes.
+def PEO_Add : I32EnumAttrCase<"Add", 0, "add">;
+def PEO_Mul : I32EnumAttrCase<"Mul", 1, "mul">;
+// Binary Expression Opcodes.
+def PEO_Shl  : I32EnumAttrCase<"Shl", 2, "shl">;
+def PEO_ShrU : I32EnumAttrCase<"ShrU", 3, "shru">;
+def PEOAttr  : I32EnumAttr<"PEO", "Parameter Expression Opcode",
+                           [PEO_Add, PEO_Mul, PEO_Shl, PEO_ShrU]>;
 }
 
-def ParamBinaryAttr : AttrDef<HWDialect, "ParamBinary"> {
-  let summary = "Binary operation combining two parameter expressions";
-  let parameters = (ins "PBO":$opcode,
-                        "::mlir::Attribute":$lhs, "::mlir::Attribute":$rhs,
+def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
+  let summary = "Parameter expression combining operands";
+  let parameters = (ins "PEO":$opcode,
+                        ArrayRefParameter<"::mlir::Attribute">:$operands,
                         AttributeSelfTypeParameter<"">:$type);
-  let mnemonic = "param.binary";
+  let mnemonic = "param.expr";
 
   let builders = [
     AttrBuilderWithInferredContext<(ins
-                                   "PBO":$opcode,
+                                   "PEO":$opcode,
                                    "::mlir::Attribute":$lhs,
                                    "::mlir::Attribute":$rhs), [{
-      return get(lhs.getContext(), opcode, lhs, rhs, lhs.getType());
+      Attribute operands[] = { lhs, rhs };
+      return get(lhs.getContext(), opcode, operands, lhs.getType());
+    }]>,
+    AttrBuilderWithInferredContext<(ins
+                                   "PEO":$opcode,
+                            "::llvm::ArrayRef<::mlir::Attribute>":$operands), [{
+      assert(!operands.empty() && "Cannot have expr with no operands");
+      return get(operands[0].getContext(), opcode, operands,
+                 operands[0].getType());
     }]>,
   ];
 }
+
 
 let cppNamespace = "circt::hw" in {
 def WUW_Undefined : I32EnumAttrCase<"Undefined", 0>;

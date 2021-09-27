@@ -872,17 +872,17 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out1: i8, out2: i8, out3: i
   // CHECK:      parameters2 #(
   // CHECK-NEXT:  .p1(xx + 42'd17)
   // CHECK-NEXT: ) inst2 (
-  %b = hw.instance "inst2" @parameters2<p1: i42 = #hw.param.binary<add #hw.param.verbatim<"xx">, 17>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
+  %b = hw.instance "inst2" @parameters2<p1: i42 = #hw.param.expr<add #hw.param.verbatim<"xx">, 17>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
  
   // CHECK:      parameters2 #(
   // CHECK-NEXT:  .p1((xx + 42'd17) * yy)
   // CHECK-NEXT: ) inst3 (
-  %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.binary<mul #hw.param.binary<add #hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
+  %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.expr<mul #hw.param.expr<add #hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 
   // CHECK: localparam [41:0] _T = xx + 42'd17;
   // CHECK-NEXT: wire [7:0] _T_0 = _T[7:0];
   // CHECK-NEXT: assign out3 = _T_0 + _T_0;
-  %d = hw.param.value i42 = #hw.param.binary<add #hw.param.verbatim<"xx">, 17>
+  %d = hw.param.value i42 = #hw.param.expr<add #hw.param.verbatim<"xx">, 17>
   %e = comb.extract %d from 0 : (i42) -> i8
   %f = comb.add %e, %e : i8
 
