@@ -1403,9 +1403,9 @@ static Operation *getLastSeqEnableOp(SeqOp parentSeqOp) {
 /// branches inside an 'if' operation.
 ///
 ///   if %a with %A {                       if %a with %A {
-///     seq { calyx.enable @B ... }           seq { ... }
+///     seq { ... calyx.enable @B }           seq { ... }
 ///   else {                          ->    } else {
-///     seq { calyx.enable @B ... }           seq { ... }
+///     seq { ... calyx.enable @B }           seq { ... }
 ///   }                                     }
 ///                                         calyx.enable @B
 static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
