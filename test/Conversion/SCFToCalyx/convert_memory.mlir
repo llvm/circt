@@ -2,7 +2,7 @@
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main" {
-// CHECK-LABEL:     calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
+// CHECK-LABEL:    calyx.component @main(%clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%done: i1 {done}) {
 // CHECK-DAG:        %c64_i32 = hw.constant 64 : i32
 // CHECK-DAG:        %c0_i32 = hw.constant 0 : i32
 // CHECK-DAG:        %c1_i32 = hw.constant 1 : i32
@@ -85,7 +85,7 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main" {
-// CHECK-LABEL:     calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+// CHECK-LABEL:    calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-DAG:        %c0_i32 = hw.constant 0 : i32
 // CHECK-DAG:        %c1_i32 = hw.constant 1 : i32
 // CHECK-DAG:        %true = hw.constant true
@@ -140,7 +140,7 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main" {
-// CHECK-LABEL:     calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+// CHECK-LABEL:    calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-DAG:        %c0_i32 = hw.constant 0 : i32
 // CHECK-DAG:        %c1_i32 = hw.constant 1 : i32
 // CHECK-DAG:        %true = hw.constant true
@@ -200,7 +200,7 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK-LABEL:     calyx.component @main(%in0: i6, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+// CHECK-LABEL:    calyx.component @main(%in0: i6, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-DAG:        %c1_i32 = hw.constant 1 : i32
 // CHECK-DAG:        %true = hw.constant true
 // CHECK-DAG:        %std_slice_1.in, %std_slice_1.out = calyx.std_slice "std_slice_1" : i32, i6

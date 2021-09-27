@@ -65,7 +65,7 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK-NEXT:     calyx.component @main(%in0: i32, %in1: i32, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+// CHECK-LABEL:    calyx.component @main(%in0: i32, %in1: i32, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
 // CHECK-DAG:        %c0_i32 = hw.constant 0 : i32
 // CHECK-DAG:        %std_add_2.left, %std_add_2.right, %std_add_2.out = calyx.std_add "std_add_2" : i32, i32, i32
@@ -191,7 +191,7 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK-NEXT:     calyx.component @main(%in0: i32, %in1: i32, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+// CHECK-LABEL:    calyx.component @main(%in0: i32, %in1: i32, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
 // CHECK-DAG:        %c0_i32 = hw.constant 0 : i32
 // CHECK-DAG:        %std_add_1.left, %std_add_1.right, %std_add_1.out = calyx.std_add "std_add_1" : i32, i32, i32
@@ -319,7 +319,7 @@ module {
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
-// CHECK-NEXT:     calyx.component @main(%in0: i32, %in1: i32, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+// CHECK-LABEL:    calyx.component @main(%in0: i32, %in1: i32, %in2: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
 // CHECK-DAG:        %std_ge_0.left, %std_ge_0.right, %std_ge_0.out = calyx.std_ge "std_ge_0" : i32, i32, i1
 // CHECK-DAG:        %std_add_1.left, %std_add_1.right, %std_add_1.out = calyx.std_add "std_add_1" : i32, i32, i32
