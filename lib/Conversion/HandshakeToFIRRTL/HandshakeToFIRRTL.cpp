@@ -248,8 +248,8 @@ static std::string getSubModuleName(Operation *oldOp) {
                      std::to_string(oldOp->getNumResults()) + "outs";
     subModuleName += "_ctrl";
   } else {
-    if (inTypes.empty() && outTypes.empty())
-      assert("Non-control operators must provide discriminating type info");
+    assert((!inTypes.empty() || !outTypes.empty()) &&
+           "Non-control operators must provide discriminating type info");
   }
 
   return subModuleName;
