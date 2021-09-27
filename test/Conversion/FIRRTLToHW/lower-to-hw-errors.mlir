@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw=warn-on-unprocessed-annotations -verify-diagnostics  -split-input-file  %s
+// RUN: circt-opt -lower-firrtl-to-hw=warn-on-unprocessed-annotations -verify-diagnostics -split-input-file -allow-unregistered-dialect  %s
 // The firrtl.circuit should be removed, the main module name moved to an
 // attribute on the module.
 // CHECK-NOT: firrtl.circuit
@@ -14,11 +14,46 @@ firrtl.circuit "InvalidBundle" {
     // expected-error @+1 {{unsupported type}}
     %0 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
   }
+}
 
-  // expected-error @+1 {{unexpected operation 'builtin.func' in a firrtl.circuit}}
-  builtin.func private @UnknownFunction() {
+// -----
+
+firrtl.circuit "OperandTypeIsFIRRTL" {
+  firrtl.module @OperandTypeIsFIRRTL() { }
+  builtin.func @Test() {
+    // expected-error @+1 {{Found unhandled FIRRTL operation 'firrtl.constant'}}
+    %a = firrtl.constant 0 : !firrtl.uint<1>
     return
   }
+}
+
+// -----
+
+firrtl.circuit "ResultTypeIsFIRRTL" {
+  firrtl.module @ResultTypeIsFIRRTL() { }
+  // expected-error @+1 {{fake_op' op found unhandled FIRRTL type}}
+  %1 = "fake_op"() : () -> (!firrtl.uint<1>)
+}
+
+// -----
+
+firrtl.circuit "RecursiveCheck" {
+  firrtl.module @RecursiveCheck() { }
+  builtin.func private @CheckRecursive() {
+    // expected-error @+1 {{fake_op' op found unhandled FIRRTL type}}
+    %1 = "fake_op"() : () -> (!firrtl.uint<1>)
+  }
+}
+
+// -----
+
+firrtl.circuit "BlockArgType" {
+  firrtl.module @BlockArgType() { }
+  // expected-error @+1 {{fake_op' op found unhandled FIRRTL type}}
+  "fake_op"() ({
+    ^bb0(%a: !firrtl.uint<1>):
+      "fake_return"() : () -> ()
+    }): () -> ()
 }
 
 // -----
