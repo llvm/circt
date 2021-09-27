@@ -815,6 +815,23 @@ LogicalResult SeqOp::canonicalize(SeqOp seqOp, PatternRewriter &rewriter) {
 // ParOp
 //===----------------------------------------------------------------------===//
 
+static LogicalResult verifyParOp(ParOp parOp) {
+  llvm::SmallSet<StringRef, 8> groupNames;
+  Block *body = parOp.getBody();
+
+  // Add loose requirement that the body of a ParOp may not enable the same
+  // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
+  for (EnableOp op : body->getOps<EnableOp>()) {
+    StringRef groupName = op.groupName();
+    if (groupNames.count(groupName))
+      return parOp->emitOpError() << "cannot enable the same group: \""
+                                  << groupName << "\" more than once.";
+    groupNames.insert(groupName);
+  }
+
+  return success();
+}
+
 LogicalResult ParOp::canonicalize(ParOp parOp, PatternRewriter &rewriter) {
   if (succeeded(collapseControl(parOp, rewriter)))
     return success();
