@@ -172,21 +172,19 @@ def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
                         AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "param.expr";
 
+  // Force all clients to go through our building logic so we can canonicalize
+  // during building.
+  let skipDefaultBuilders = 1;
   let builders = [
     AttrBuilderWithInferredContext<(ins
                                    "PEO":$opcode,
                                    "::mlir::Attribute":$lhs,
                                    "::mlir::Attribute":$rhs), [{
       Attribute operands[] = { lhs, rhs };
-      return get(lhs.getContext(), opcode, operands, lhs.getType());
+      return get(opcode, operands);
     }]>,
-    AttrBuilderWithInferredContext<(ins
-                                   "PEO":$opcode,
-                            "::llvm::ArrayRef<::mlir::Attribute>":$operands), [{
-      assert(!operands.empty() && "Cannot have expr with no operands");
-      return get(operands[0].getContext(), opcode, operands,
-                 operands[0].getType());
-    }]>,
+    AttrBuilderWithInferredContext<(ins "PEO":$opcode,
+                            "::llvm::ArrayRef<::mlir::Attribute>":$operands)>,
   ];
 }
 

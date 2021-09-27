@@ -198,6 +198,15 @@ void ParamVerbatimAttr::print(DialectAsmPrinter &p) const {
 // ParamExprAttr
 //===----------------------------------------------------------------------===//
 
+ParamExprAttr ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operands) {
+  assert(!operands.empty() && "Cannot have expr with no operands");
+
+  // TODO: Canonicalize parameter expressions.
+
+  return Base::get(operands[0].getContext(), opcode, operands,
+                   operands[0].getType());
+}
+
 Attribute ParamExprAttr::parse(MLIRContext *context, DialectAsmParser &p,
                                Type type) {
   StringRef opcodeStr;
