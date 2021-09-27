@@ -124,6 +124,7 @@ def ParOp : CalyxContainer<"par", [
     ```
   }];
   let hasCanonicalizeMethod = true;
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def EnableOp : CalyxOp<"enable", [
