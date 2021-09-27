@@ -439,6 +439,8 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   LogicalResult implementAsyncReset(FModuleOp module, ResetDomain &domain);
   void implementAsyncReset(Operation *op, FModuleOp module, Value actualReset);
 
+  LogicalResult verifyNoAbstractReset();
+
   //===--------------------------------------------------------------------===//
   // Utilities
 
@@ -516,6 +518,10 @@ void InferResetsPass::runOnOperationInner() {
 
   // Implement the async resets.
   if (failed(implementAsyncReset()))
+    return signalPassFailure();
+
+  // Require that no Abstract Resets exist on ports in the design.
+  if (failed(verifyNoAbstractReset()))
     return signalPassFailure();
 }
 
@@ -1506,4 +1512,21 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     regOp.resetSignalMutable().assign(actualReset);
     regOp.resetValueMutable().assign(zero);
   }
+}
+
+LogicalResult InferResetsPass::verifyNoAbstractReset() {
+  bool hasAbstractResetPorts = false;
+  for (FModuleLike module : getOperation().getBody()->getOps<FModuleLike>()) {
+    for (PortInfo port : module.getPorts()) {
+      if (port.type.isa<ResetType>()) {
+        module->emitOpError()
+            << "contains an abstract reset type after InferResets";
+        hasAbstractResetPorts = true;
+      }
+    }
+  }
+
+  if (hasAbstractResetPorts)
+    return failure();
+  return success();
 }
