@@ -25,6 +25,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -40,11 +41,21 @@ static const char assumeAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation";
 static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
+static const char SeqMemAnnoClass[] =
+    "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation";
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 
 /// Attribute that indicates that the module hierarchy starting at the annotated
 /// module should be dumped to a file.
 static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
+
+/// Attribute that indicates that a sequential memory is part of testbench, this
+/// is required for metadata geneation.
+static const char testbenchMemAttrName[] = "firrtl.testbenchMemory";
+/// Attribute that indicates that a sequential memory is part of the design
+/// under test, this is required for metadata geneation.
+static const char dutMemoryAttrName[] = "firrtl.dutMemory";
+static const char seqMemMetadataAttrName[] = "firrtl.seq_mem_verif_data";
 
 /// Attribute that indicates where some json files should be dumped.
 static const char metadataDirectoryAttrName[] =
@@ -420,10 +431,13 @@ private:
   void lowerModuleBody(FModuleOp oldModule,
                        CircuitLoweringState &loweringState);
   void lowerModuleOperations(hw::HWModuleOp module,
-                             CircuitLoweringState &loweringState);
+                             CircuitLoweringState &loweringState, bool isDUT);
 
   void lowerMemoryDecls(ArrayRef<FirMemory> mems,
                         CircuitLoweringState &loweringState);
+
+  /// The set of modules that are part of design under test.
+  llvm::SetVector<FModuleOp> designUnderTestModules;
 };
 
 } // end anonymous namespace
@@ -496,6 +510,22 @@ void FIRRTLModuleLowering::runOnOperation() {
           other->emitError("unexpected operation '")
               << other->getName() << "' in a firrtl.circuit";
         });
+  }
+  // Iteratively collect all the modules that are instantiated within the design
+  // under test.
+  SmallVector<FModuleOp> workSet(designUnderTestModules.begin(),
+                                 designUnderTestModules.end());
+  llvm::SetVector<FModuleOp> visitedSet;
+  while (!workSet.empty()) {
+    auto mod = workSet.pop_back_val();
+    if (visitedSet.contains(mod))
+      continue;
+    designUnderTestModules.insert(mod);
+    // Find all the modules instantiated within design under test.
+    for (auto inst : mod.getOps<InstanceOp>())
+      if (auto fmod = dyn_cast_or_null<FModuleOp>(
+              state.circuitOp.lookupSymbol(inst.moduleName())))
+        workSet.push_back(fmod);
   }
 
   SmallVector<FirMemory> memories;
@@ -865,7 +895,10 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
     newModule->setAttr("output_file", outputFile);
   // Mark the design under test as a module of interest for exporting module
   // hierarchy information.
-  if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
+  if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass)) {
+    // The module marked with this annotation is the top level module for desgin
+    // under test. Use this as a seed to find all the design under test modules.
+    designUnderTestModules.insert(oldModule);
     newModule->setAttr(
         moduleHierarchyFileAttrName,
         hw::OutputFileAttr::getFromDirectoryAndFilename(
@@ -873,6 +906,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
             getMetadataDir(oldModule->getParentOfType<CircuitOp>()).getValue(),
             "module_hier.json",
             /*excludeFromFileList=*/true));
+  }
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;
@@ -1094,7 +1128,8 @@ void FIRRTLModuleLowering::lowerModuleBody(
   cursor.erase();
 
   // Lower all of the other operations.
-  lowerModuleOperations(newModule, loweringState);
+  lowerModuleOperations(newModule, loweringState,
+                        designUnderTestModules.contains(oldModule));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1104,9 +1139,10 @@ void FIRRTLModuleLowering::lowerModuleBody(
 namespace {
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
-  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
+  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState,
+                 bool isDUT)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()) {}
+        builder(module.getLoc(), module.getContext()), isDUT(isDUT) {}
 
   void run();
 
@@ -1333,12 +1369,14 @@ private:
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial
   /// block in this module already.
   bool randomizePrologEmitted;
+  /// This is true if this module is part of the design under test hierarchy.
+  bool isDUT;
 };
 } // end anonymous namespace
 
 void FIRRTLModuleLowering::lowerModuleOperations(
-    hw::HWModuleOp module, CircuitLoweringState &loweringState) {
-  FIRRTLLowering(module, loweringState).run();
+    hw::HWModuleOp module, CircuitLoweringState &loweringState, bool isDUT) {
+  FIRRTLLowering(module, loweringState, isDUT).run();
 }
 
 // This is the main entrypoint for the lowering pass.
@@ -2219,13 +2257,26 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
   auto memModuleAttr =
       SymbolRefAttr::get(op.getContext(), getFirMemoryName(memSummary));
-
+  AnnotationSet anno = AnnotationSet(op);
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(
       resultTypes, builder.getStringAttr(memName), memModuleAttr, operands,
       builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
       /*parameters=*/builder.getArrayAttr({}),
       /*sym_name=*/StringAttr());
+  DictionaryAttr verifData;
+  if (auto v = anno.getAnnotation(SeqMemAnnoClass)) {
+    // Mark the memory as design under test or testbenh. This is required tp
+    // appropriately generate the metadata.
+    if (isDUT)
+      inst->setAttr(dutMemoryAttrName, builder.getUnitAttr());
+    else
+      inst->setAttr(testbenchMemAttrName, builder.getUnitAttr());
+    verifData = v.get("data").cast<DictionaryAttr>();
+    // Lower the annotation SeqMemAnnoClass, to the attribute for metadata
+    // generation.
+    inst->setAttr(seqMemMetadataAttrName, verifData);
+  }
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
