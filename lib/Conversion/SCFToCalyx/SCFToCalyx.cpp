@@ -1907,6 +1907,11 @@ void SCFToCalyxPass::runOnOperation() {
   /// after control generation.
   addOncePattern<LateSSAReplacement>(loweringPatterns, funcMap, *loweringState);
 
+  /// Eliminate any unused combinational groups. This is done before
+  /// RewriteMemoryAccesses to avoid inferring slice components for groups that
+  /// will be removed.
+  addGreedyPattern<EliminateUnusedCombGroups>(loweringPatterns);
+
   /// This pattern rewrites accesses to memories which are too wide due to
   /// index types being converted to a fixed-width integer type.
   addOncePattern<RewriteMemoryAccesses>(loweringPatterns, *loweringState);
@@ -1930,8 +1935,8 @@ void SCFToCalyxPass::runOnOperation() {
   // Cleanup patterns
   //===----------------------------------------------------------------------===//
   RewritePatternSet cleanupPatterns(&getContext());
-  cleanupPatterns.add<MultipleGroupDonePattern, NonTerminatingGroupDonePattern,
-                      EliminateUnusedCombGroups>(&getContext());
+  cleanupPatterns.add<MultipleGroupDonePattern, NonTerminatingGroupDonePattern>(
+      &getContext());
   if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                           std::move(cleanupPatterns)))) {
     signalPassFailure();
