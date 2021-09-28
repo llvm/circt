@@ -125,6 +125,14 @@ static calyx::SeqOp createSeqOp(PatternRewriter &rewriter, Location loc) {
   return seqOp;
 }
 
+/// If the provided type is an index type, converts it to i32, else, returns the
+/// unmodified type.
+static Type convIndexType(PatternRewriter &rewriter, Type type) {
+  if (type.isIndex())
+    return rewriter.getI32Type();
+  return type;
+}
+
 //===----------------------------------------------------------------------===//
 // Lowering state classes
 //===----------------------------------------------------------------------===//
@@ -965,10 +973,8 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      IndexCastOp op) const {
-  Type sourceType = op.getOperand().getType();
-  sourceType = sourceType.isIndex() ? rewriter.getI32Type() : sourceType;
-  Type targetType = op.getResult().getType();
-  targetType = targetType.isIndex() ? rewriter.getI32Type() : targetType;
+  Type sourceType = convIndexType(rewriter, op.getOperand().getType());
+  Type targetType = convIndexType(rewriter, op.getResult().getType());
   unsigned targetBits = targetType.getIntOrFloatBitWidth();
   unsigned sourceBits = sourceType.getIntOrFloatBitWidth();
   LogicalResult res = success();
@@ -1054,16 +1060,16 @@ class ConvertIndexTypes : public FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     funcOp.walk([&](Block *block) {
       for (auto arg : block->getArguments())
-        if (arg.getType().isIndex())
-          arg.setType(rewriter.getI32Type());
+        arg.setType(convIndexType(rewriter, arg.getType()));
     });
 
     funcOp.walk([&](Operation *op) {
       for (auto res : op->getResults()) {
-        if (!res.getType().isIndex())
+        auto resType = res.getType();
+        if (!resType.isIndex())
           continue;
 
-        res.setType(rewriter.getI32Type());
+        res.setType(convIndexType(rewriter, resType));
         if (auto constOp = dyn_cast<ConstantOp>(op)) {
           APInt value;
           matchConstantOp(constOp, value);
@@ -1139,13 +1145,14 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     for (auto &arg : enumerate(funcOp.getArguments()))
       ports.push_back(calyx::PortInfo{
           rewriter.getStringAttr("in" + std::to_string(arg.index())),
-          arg.value().getType(), calyx::Direction::Input,
+          convIndexType(rewriter, arg.value().getType()),
+          calyx::Direction::Input,
           DictionaryAttr::get(rewriter.getContext(), {})});
 
     for (auto &res : enumerate(funcType.getResults()))
       ports.push_back(calyx::PortInfo{
           rewriter.getStringAttr("out" + std::to_string(res.index())),
-          res.value(), calyx::Direction::Output,
+          convIndexType(rewriter, res.value()), calyx::Direction::Output,
           DictionaryAttr::get(rewriter.getContext(), {})});
 
     addMandatoryComponentPorts(rewriter, ports);
@@ -1274,18 +1281,19 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
   PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
 
-    for (auto argType : enumerate(funcOp.getType().getResults())) {
-      assert(argType.value().isa<IntegerType>() && "unsupported return type");
-      unsigned width = argType.value().getIntOrFloatBitWidth();
-      std::string name = "ret_arg" + std::to_string(argType.index());
+    for (auto argTypeIt : enumerate(funcOp.getType().getResults())) {
+      auto argType = convIndexType(rewriter, argTypeIt.value());
+      assert(argType.isa<IntegerType>() && "unsupported return type");
+      unsigned width = argType.getIntOrFloatBitWidth();
+      std::string name = "ret_arg" + std::to_string(argTypeIt.index());
       auto reg = createReg(getComponentState(), rewriter, funcOp.getLoc(), name,
                            width);
-      getComponentState().addReturnReg(reg, argType.index());
+      getComponentState().addReturnReg(reg, argTypeIt.index());
 
       rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());
       rewriter.create<calyx::AssignOp>(
           funcOp->getLoc(),
-          getComponentOutput(funcOp, *getComponent(), argType.index()),
+          getComponentOutput(funcOp, *getComponent(), argTypeIt.index()),
           reg.out());
     }
     return success();
@@ -1870,8 +1878,7 @@ void SCFToCalyxPass::runOnOperation() {
   /// This pass inlines scf.ExecuteRegionOp's by adding control-flow.
   addGreedyPattern<InlineExecuteRegionOpPattern>(loweringPatterns);
 
-  /// This pattern converts all index types to a predefined width (currently
-  /// i32).
+  /// This pattern converts all index typed values to an i32 integer.
   addOncePattern<ConvertIndexTypes>(loweringPatterns, funcMap, *loweringState);
 
   /// This pattern creates registers for all basic-block arguments.
