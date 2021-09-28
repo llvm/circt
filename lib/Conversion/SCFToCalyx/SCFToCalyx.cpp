@@ -1281,19 +1281,19 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
   PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
 
-    for (auto argTypeIt : enumerate(funcOp.getType().getResults())) {
-      auto argType = convIndexType(rewriter, argTypeIt.value());
-      assert(argType.isa<IntegerType>() && "unsupported return type");
-      unsigned width = argType.getIntOrFloatBitWidth();
-      std::string name = "ret_arg" + std::to_string(argTypeIt.index());
+    for (auto argType : enumerate(funcOp.getType().getResults())) {
+      auto convArgType = convIndexType(rewriter, argType.value());
+      assert(convArgType.isa<IntegerType>() && "unsupported return type");
+      unsigned width = convArgType.getIntOrFloatBitWidth();
+      std::string name = "ret_arg" + std::to_string(argType.index());
       auto reg = createReg(getComponentState(), rewriter, funcOp.getLoc(), name,
                            width);
-      getComponentState().addReturnReg(reg, argTypeIt.index());
+      getComponentState().addReturnReg(reg, argType.index());
 
       rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());
       rewriter.create<calyx::AssignOp>(
           funcOp->getLoc(),
-          getComponentOutput(funcOp, *getComponent(), argTypeIt.index()),
+          getComponentOutput(funcOp, *getComponent(), argType.index()),
           reg.out());
     }
     return success();

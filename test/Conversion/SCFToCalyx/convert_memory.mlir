@@ -259,7 +259,7 @@ module {
 
 // -----
 
-// Test index types as inputs
+// Test index types as inputs.
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
@@ -296,7 +296,7 @@ module {
 
 // -----
 
-// Test index types as outputs
+// Test index types as outputs.
 
 // CHECH:      module  {
 // CHECH-NEXT:   calyx.program "main"  {
