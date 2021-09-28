@@ -46,6 +46,14 @@ Operation *CombDialect::materializeConstant(OpBuilder &builder, Attribute value,
     if (auto attrValue = value.dyn_cast<IntegerAttr>())
       return builder.create<hw::ConstantOp>(loc, type, attrValue);
 
+  // Parameter expressions materialize into hw.param.value.
+  auto parentOp = builder.getBlock()->getParentOp();
+  auto curModule = dyn_cast<hw::HWModuleOp>(parentOp);
+  if (!curModule)
+    curModule = parentOp->getParentOfType<hw::HWModuleOp>();
+  if (curModule && isValidParameterExpression(value, curModule))
+    return builder.create<hw::ParamValueOp>(loc, type, value);
+
   return nullptr;
 }
 

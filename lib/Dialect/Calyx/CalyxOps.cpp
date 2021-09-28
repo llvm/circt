@@ -371,6 +371,71 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   return verifyControlBody(op);
 }
 
+// Helper function for parsing a group port operation, i.e. GroupDoneOp and
+// GroupPortOp. These may take one of two different forms:
+// (1) %<guard> ? %<src> : i1
+// (2) %<src> : i1
+static ParseResult parseGroupPort(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::OperandType, 2> operandInfos;
+  OpAsmParser::OperandType guardOrSource;
+  if (parser.parseOperand(guardOrSource))
+    return failure();
+
+  if (succeeded(parser.parseOptionalQuestion())) {
+    OpAsmParser::OperandType source;
+    // The guard exists.
+    if (parser.parseOperand(source))
+      return failure();
+    operandInfos.push_back(source);
+  }
+  // No matter if this is the source or guard, it should be last.
+  operandInfos.push_back(guardOrSource);
+
+  Type type;
+  // Resolving the operands with the same type works here since the source and
+  // guard of a group port is always i1.
+  if (parser.parseColonType(type) ||
+      parser.resolveOperands(operandInfos, type, result.operands))
+    return failure();
+
+  return success();
+}
+
+// A helper function for printing group ports, i.e. GroupGoOp and GroupDoneOp.
+template <typename GroupPortType>
+static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
+  static_assert(std::is_same<GroupGoOp, GroupPortType>() ||
+                    std::is_same<GroupDoneOp, GroupPortType>(),
+                "Should be a Calyx Group port.");
+
+  p << " ";
+  // The guard is optional.
+  Value guard = op.guard(), source = op.src();
+  if (guard)
+    p << guard << " ? ";
+  p << source << " : " << source.getType();
+}
+
+// Collapse nested control of the same type for SeqOp and ParOp, e.g.
+// calyx.seq { calyx.seq { ... } } -> calyx.seq { ... }
+template <typename OpTy>
+static LogicalResult collapseControl(OpTy controlOp,
+                                     PatternRewriter &rewriter) {
+  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
+                "Should be a SeqOp or ParOp.");
+
+  if (isa<OpTy>(controlOp->getParentOp())) {
+    Block *controlBody = controlOp.getBody();
+    for (auto &op : make_early_inc_range(*controlBody))
+      op.moveBefore(controlOp);
+
+    rewriter.eraseOp(controlOp);
+    return success();
+  }
+
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // ProgramOp
 //===----------------------------------------------------------------------===//
@@ -736,6 +801,45 @@ static LogicalResult verifyControlOp(ControlOp control) {
 }
 
 //===----------------------------------------------------------------------===//
+// SeqOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SeqOp::canonicalize(SeqOp seqOp, PatternRewriter &rewriter) {
+  if (succeeded(collapseControl(seqOp, rewriter)))
+    return success();
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ParOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyParOp(ParOp parOp) {
+  llvm::SmallSet<StringRef, 8> groupNames;
+  Block *body = parOp.getBody();
+
+  // Add loose requirement that the body of a ParOp may not enable the same
+  // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
+  for (EnableOp op : body->getOps<EnableOp>()) {
+    StringRef groupName = op.groupName();
+    if (groupNames.count(groupName))
+      return parOp->emitOpError() << "cannot enable the same group: \""
+                                  << groupName << "\" more than once.";
+    groupNames.insert(groupName);
+  }
+
+  return success();
+}
+
+LogicalResult ParOp::canonicalize(ParOp parOp, PatternRewriter &rewriter) {
+  if (succeeded(collapseControl(parOp, rewriter)))
+    return success();
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
 // WiresOp
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyWiresOp(WiresOp wires) {
@@ -908,6 +1012,62 @@ static LogicalResult verifyAssignOp(AssignOp assign) {
   return success();
 }
 
+static ParseResult parseAssignOp(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::OperandType destination;
+  if (parser.parseOperand(destination) || parser.parseEqual())
+    return failure();
+
+  // An AssignOp takes one of the two following forms:
+  // (1) %<dest> = %<src> : <type>
+  // (2) %<dest> = %<guard> ? %<src> : <type>
+  OpAsmParser::OperandType guardOrSource;
+  if (parser.parseOperand(guardOrSource))
+    return failure();
+
+  // Since the guard is optional, we need to check if there is an accompanying
+  // `?` symbol.
+  OpAsmParser::OperandType source;
+  bool hasGuard = succeeded(parser.parseOptionalQuestion());
+  if (hasGuard) {
+    // The guard exists. Parse the source.
+    if (parser.parseOperand(source))
+      return failure();
+  }
+
+  Type type;
+  if (parser.parseColonType(type) ||
+      parser.resolveOperand(destination, type, result.operands))
+    return failure();
+
+  if (hasGuard) {
+    Type i1Type = parser.getBuilder().getI1Type();
+    // Since the guard is optional, it is listed last in the arguments of the
+    // AssignOp. Therefore, we must parse the source first.
+    if (parser.resolveOperand(source, type, result.operands) ||
+        parser.resolveOperand(guardOrSource, i1Type, result.operands))
+      return failure();
+  } else {
+    // This is actually a source.
+    if (parser.resolveOperand(guardOrSource, type, result.operands))
+      return failure();
+  }
+
+  return success();
+}
+
+static void printAssignOp(OpAsmPrinter &p, AssignOp op) {
+  p << " " << op.dest() << " = ";
+
+  Value guard = op.guard(), source = op.src();
+  // The guard is optional.
+  if (guard)
+    p << guard << " ? ";
+
+  // We only need to print a single type; the destination and source are
+  // guaranteed to be the same type.
+  p << source << " : " << source.getType();
+}
+
 //===----------------------------------------------------------------------===//
 // InstanceOp
 //===----------------------------------------------------------------------===//
@@ -1015,6 +1175,18 @@ void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   setNameFn(getResult(), resultName);
 }
 
+static void printGroupGoOp(OpAsmPrinter &p, GroupGoOp op) {
+  printGroupPort(p, op);
+}
+
+static ParseResult parseGroupGoOp(OpAsmParser &parser, OperationState &result) {
+  if (parseGroupPort(parser, result))
+    return failure();
+
+  result.addTypes(parser.getBuilder().getI1Type());
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // GroupDoneOp
 //===----------------------------------------------------------------------===//
@@ -1035,6 +1207,15 @@ static LogicalResult verifyGroupDoneOp(GroupDoneOp doneOp) {
            << ". This should be a combinational group.";
 
   return verifyNotComplexSource(doneOp);
+}
+
+static void printGroupDoneOp(OpAsmPrinter &p, GroupDoneOp op) {
+  printGroupPort(p, op);
+}
+
+static ParseResult parseGroupDoneOp(OpAsmParser &parser,
+                                    OperationState &result) {
+  return parseGroupPort(parser, result);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1193,16 +1374,15 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   auto component = ifOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  if (ifOp.thenRegion().front().empty())
+  if (ifOp.getThenBody()->empty())
     return ifOp.emitError() << "empty 'then' region.";
 
-  if (ifOp.elseRegion().getBlocks().size() != 0 &&
-      ifOp.elseRegion().front().empty())
+  if (ifOp.elseRegionExists() && ifOp.getElseBody()->empty())
     return ifOp.emitError() << "empty 'else' region.";
 
   Optional<StringRef> optGroupName = ifOp.groupName();
   if (!optGroupName.hasValue()) {
-    /// No combinational group was provided
+    // No combinational group was provided.
     return success();
   }
   StringRef groupName = optGroupName.getValue();
@@ -1222,6 +1402,70 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
            << "' but no driver was found.";
 
   return success();
+}
+
+/// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
+/// EnableOp was found (e.g. a "calyx.par" operation is present), returns
+/// nullptr.
+static EnableOp getLastEnableOp(SeqOp parent) {
+  auto &lastOp = parent.getBody()->back();
+  if (auto enableOp = dyn_cast<EnableOp>(lastOp))
+    return enableOp;
+  else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
+    return getLastEnableOp(seqOp);
+  return nullptr;
+}
+
+/// Removes common tail enable operations for sequential 'then'/'else'
+/// branches inside an 'if' operation.
+///
+///   if %a with %A {                       if %a with %A {
+///     seq { ... calyx.enable @B }           seq { ... }
+///   else {                          ->    } else {
+///     seq { ... calyx.enable @B }           seq { ... }
+///   }                                     }
+///                                         calyx.enable @B
+static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
+                                               PatternRewriter &rewriter) {
+  // Check if the branches exist.
+  if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
+    return failure();
+
+  auto &thenOpStructureOp = ifOp.getThenBody()->front();
+  auto &elseOpStructureOp = ifOp.getElseBody()->front();
+  // TODO(circt/#1861): ParOps have less restrictive conditions.
+  if (isa<ParOp>(thenOpStructureOp) || isa<ParOp>(elseOpStructureOp))
+    return failure();
+
+  // At this point, only sequential operations are valid inside the branches.
+  auto thenSeqOp = dyn_cast<SeqOp>(thenOpStructureOp);
+  auto elseSeqOp = dyn_cast<SeqOp>(elseOpStructureOp);
+  assert(thenSeqOp && elseSeqOp &&
+         "expected nested seq ops in both branches of a calyx.IfOp");
+
+  EnableOp lastThenEnableOp = getLastEnableOp(thenSeqOp);
+  EnableOp lastElseEnableOp = getLastEnableOp(elseSeqOp);
+
+  if (lastThenEnableOp == nullptr || lastElseEnableOp == nullptr)
+    return failure();
+
+  if (lastThenEnableOp.groupName() != lastElseEnableOp.groupName())
+    return failure();
+
+  // Erase both enable operations and add group enable operation after the
+  // shared IfOp parent.
+  rewriter.setInsertionPointAfter(ifOp);
+  rewriter.create<EnableOp>(ifOp.getLoc(), lastThenEnableOp.groupName());
+  rewriter.eraseOp(lastThenEnableOp);
+  rewriter.eraseOp(lastElseEnableOp);
+  return success();
+}
+
+LogicalResult IfOp::canonicalize(IfOp ifOp, PatternRewriter &rewriter) {
+  if (succeeded(eliminateCommonTailEnable(ifOp, rewriter)))
+    return success();
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

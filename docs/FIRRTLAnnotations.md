@@ -395,6 +395,23 @@ Example:
   "target": "~Foo|Bar/d:Baz"
 }
 ```
+### MarkDUTAnnotation
+
+| Property   | Type   | Description                                  |
+| ---------- | ------ | -------------                                |
+| class      | string | `sifive.enterprise.firrtl.MarkDUTAnnotation` |
+| target     | string | Reference target                             |
+
+This annotation is used to mark the top module of the device under test. This
+can be used to distinguish modules in the test harness from modules in the DUT.
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.MarkDUTAnnotation",
+  "target":"Core.Core"
+}
+```
 
 ### NestedPrefixModulesAnnotation
 
@@ -418,6 +435,102 @@ Example:
   "inclusive": true
 }
 ```
+
+### RetimeModuleAnnotation
+
+| Property   | Type   | Description                                              |
+| ---------- | ------ | -------------                                            |
+| class      | string | `sifive.enterprise.firrtl.RetimeModuleAnnotation` |
+
+This annotation is used to mark modules which should be retimed, and is
+generally just passed through to other tools.
+
+Example:
+```json
+{
+    "class": "sifive.enterprise.firrtl.RetimeModuleAnnotation"
+}
+```
+
+### RetimeModulesAnnotation
+
+| Property   | Type   | Description                                              |
+| ---------- | ------ | -------------                                            |
+| class      | string | `sifive.enterprise.firrtl.RetimeModulesAnnotation` |
+| filename   | string | The filename with full path where it will be written     |
+
+This annotation triggers the creation of a file containing a JSON array
+containing the names of all modules annotated with the
+`RetimeModuleAnnotation`.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.RetimeModuleAnnotation",
+  "filename": "retime_modules.json"
+}
+```
+
+### ScalaClassAnnotation
+
+| Property   | Type   | Description                                     |
+| ---------- | ------ | -------------                                   |
+| class      | string | `sifive.enterprise.firrtl.ScalaClassAnnotation` |
+| target     | string | Reference target                                |
+| className  | string | The corresponding class name                    |
+
+This annotation records the name of the Java or Scala class which corresponds
+to the module.
+
+Example:
+```
+  {
+    "class":"sifive.enterprise.firrtl.ScalaClassAnnotation",
+    "target":"Top.ClockGroupAggregator",
+    "className":"freechips.rocketchip.prci.ClockGroupAggregator"
+  },
+```
+
+### SitestBlackBoxAnnotation
+
+| Property   | Type   | Description                                         |
+| ---------- | ------ | -------------                                       |
+| class      | string | `sifive.enterprise.firrtl.SitestBlackBoxAnnotation` |
+| filename   | string | The file to write to                                |
+
+This annotation triggers the creation of a file containing a JSON array of the
+names of all external modules in the device under test which are not imported
+or inlined blackbox modules. This will only collect modules which are
+instantiated under a module annotated with `MarkDUTAnnotation`.
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.SitestBlackBoxAnnotation",
+  "filename":"./blackboxes.json"
+}
+```
+
+### SitestTestHarnessBlackBoxAnnotation
+
+| Property   | Type   | Description                                                     |
+| ---------- | ------ | -------------                                                   |
+| class      | string | `sifive.enterprise.firrtl.SittestTestHarnessBlackBoxAnnotation` |
+| filename   | string | The file to write to                                            |
+
+This annotation triggers the creation of a file containing a JSON array of the
+names of all external modules in the test harness which are not imported or
+inlined blackbox modules. This will only collect modules which are not
+instantiated under a module annotated with `MarkDUTAnnotation`.
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
+  "filename":"./testharness_blackboxes.json"
+}
+```
+
 ## FIRRTL specific attributes applied to HW Modules
 
 ### Design Under Test

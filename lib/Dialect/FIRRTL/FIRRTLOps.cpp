@@ -1762,6 +1762,48 @@ static LogicalResult verifySubfieldOp(SubfieldOp op) {
   return success();
 }
 
+/// Return true if the specified operation has a constant value. This trivially
+/// checks for `firrtl.constant` and friends, but also looks through subaccesses
+/// and correctly handles wires driven with only constant values.
+bool firrtl::isConstant(Operation *op) {
+  // Worklist of ops that need to be examined that should all be constant in
+  // order for the input operation to be constant.
+  SmallVector<Operation *, 8> worklist({op});
+
+  // Mutable state indicating if this op is a constant.  Assume it is a constant
+  // and look for counterexamples.
+  bool constant = true;
+
+  // While we haven't found a counterexample and there are still ops in the
+  // worklist, pull ops off the worklist.  If it provides a counterexample, set
+  // the `constant` to false (and exit on the next loop iteration).  Otherwise,
+  // look through the op or spawn off more ops to look at.
+  while (constant && !(worklist.empty()))
+    TypeSwitch<Operation *>(worklist.pop_back_val())
+        .Case<NodeOp, AsSIntPrimOp, AsUIntPrimOp>([&](auto op) {
+          if (auto definingOp = op.input().getDefiningOp())
+            worklist.push_back(definingOp);
+          constant = false;
+        })
+        .Case<WireOp, SubindexOp, SubfieldOp>([&](auto op) {
+          for (auto &use : op.getResult().getUses())
+            worklist.push_back(use.getOwner());
+        })
+        .Case<ConstantOp, SpecialConstantOp>([](auto) {})
+        .Default([&](auto) { constant = false; });
+
+  return constant;
+}
+
+/// Return true if the specified value is a constant. This trivially checks for
+/// `firrtl.constant` and friends, but also looks through subaccesses and
+/// correctly handles wires driven with only constant values.
+bool firrtl::isConstant(Value value) {
+  if (auto *op = value.getDefiningOp())
+    return isConstant(op);
+  return false;
+}
+
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        Optional<Location> loc) {

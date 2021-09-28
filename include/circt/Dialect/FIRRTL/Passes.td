@@ -95,6 +95,14 @@ def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
   ];
 }
 
+def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
+  let summary = "Emit metadata of the FIRRTL modules";
+  let description = [{
+    This pass handles the emission of several different kinds of metadata.
+  }];
+  let constructor = "circt::firrtl::createCreateSiFiveMetadataPass()";
+}
+
 def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
   let summary = "Remove all when conditional blocks.";
   let description = [{

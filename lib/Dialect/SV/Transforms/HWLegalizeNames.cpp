@@ -221,19 +221,19 @@ remapRenamedParameters(Attribute value, HWModuleOp module,
     return value;
 
   // Remap leaves of expressions if needed.
-  if (auto binOp = value.dyn_cast<ParamBinaryAttr>()) {
-    auto newLHS =
-        remapRenamedParameters(binOp.getLhs(), module, renamedParameterInfo);
-    auto newRHS =
-        remapRenamedParameters(binOp.getRhs(), module, renamedParameterInfo);
+  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
+    SmallVector<Attribute> newOperands;
+    bool anyChanged = false;
+    for (auto op : expr.getOperands()) {
+      newOperands.push_back(
+          remapRenamedParameters(op, module, renamedParameterInfo));
+      anyChanged |= newOperands.back() != op;
+    }
     // Don't rebuild an attribute if nothing changed.
-    if (newLHS == binOp.getLhs() && newRHS == binOp.getRhs())
+    if (!anyChanged)
       return value;
-    return ParamBinaryAttr::get(value.getContext(), binOp.getOpcode(), newLHS,
-                                newRHS, value.getType());
+    return ParamExprAttr::get(expr.getOpcode(), newOperands);
   }
-
-  // TODO: Handle nested expressions when we support them.
 
   // Otherwise this must be a parameter reference.
   auto parameterRef = value.dyn_cast<ParamDeclRefAttr>();
@@ -340,6 +340,16 @@ rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
         auto curModule = op.getParentOfType<HWModuleOp>();
         localParam.valueAttr(remapRenamedParameters(
             localParam.value(), curModule, renamedParameterInfo));
+      }
+      continue;
+    }
+
+    if (auto paramValue = dyn_cast<ParamValueOp>(op)) {
+      // If the initializer value in the local param was renamed then update it.
+      if (moduleHasRenamedInterface) {
+        auto curModule = op.getParentOfType<HWModuleOp>();
+        paramValue.valueAttr(remapRenamedParameters(
+            paramValue.value(), curModule, renamedParameterInfo));
       }
       continue;
     }

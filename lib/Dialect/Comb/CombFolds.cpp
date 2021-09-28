@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "mlir/Dialect/CommonFolders.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -17,8 +17,6 @@
 using namespace mlir;
 using namespace circt;
 using namespace comb;
-
-using mlir::constFoldBinaryOp;
 
 static Attribute getIntAttr(const APInt &value, MLIRContext *context) {
   return IntegerAttr::get(IntegerType::get(context, value.getBitWidth()),
@@ -252,6 +250,24 @@ OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
 // Binary Operations
 //===----------------------------------------------------------------------===//
 
+/// Performs constant folding `calculate` with element-wise behavior on the two
+/// attributes in `operands` and returns the result if possible.
+template <class CalculationFn = function_ref<APInt(APInt, APInt)>>
+static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
+                                   const CalculationFn &calculate) {
+  assert(operands.size() == 2 && "binary op takes two operands");
+  if (!operands[0] || !operands[1])
+    return {};
+  if (operands[0].getType() != operands[1].getType())
+    return {};
+
+  if (auto lhs = operands[0].dyn_cast<IntegerAttr>())
+    if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+      return IntegerAttr::get(lhs.getType(),
+                              calculate(lhs.getValue(), rhs.getValue()));
+  return {};
+}
+
 OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
   if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
     unsigned shift = rhs.getValue().getZExtValue();
@@ -262,7 +278,7 @@ OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
       return getIntAttr(APInt::getZero(width), getContext());
   }
 
-  return constFoldBinaryOp<IntegerAttr>(
+  return constFoldBinaryOp(
       operands, [](const APInt &a, const APInt &b) { return a.shl(b); });
 }
 
@@ -300,7 +316,7 @@ OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
     if (width <= shift)
       return getIntAttr(APInt::getZero(width), getContext());
   }
-  return constFoldBinaryOp<IntegerAttr>(
+  return constFoldBinaryOp(
       operands, [](const APInt &a, const APInt &b) { return a.lshr(b); });
 }
 
@@ -333,7 +349,7 @@ OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
     if (rhs.getValue().getZExtValue() == 0)
       return getOperand(0);
   }
-  return constFoldBinaryOp<IntegerAttr>(
+  return constFoldBinaryOp(
       operands, [](const APInt &a, const APInt &b) { return a.ashr(b); });
 }
 
@@ -612,28 +628,44 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
 
 // Reduce all operands to a single value by applying the `calculate` function.
 // This will fail if any of the operands are not constant.
-template <class AttrElementT,
-          class ElementValueT = typename AttrElementT::ValueType,
-          class CalculationT =
-              function_ref<ElementValueT(ElementValueT, ElementValueT)>>
-static Attribute constFoldVariadicOp(ArrayRef<Attribute> operands,
-                                     const CalculationT &calculate) {
-  if (!operands.size())
+template <class CalculationFn = function_ref<void(APInt &, APInt)>>
+static Attribute constFoldAssociativeOp(ArrayRef<Attribute> operands,
+                                        hw::PEO paramOpcode,
+                                        const CalculationFn &calculate) {
+  assert(operands.size() > 1 && "caller should handle one-operand case");
+  // We can only fold anything in the case where all operands are known to be
+  // constants.  Check the least common one first for an early out.
+  if (!operands[1] || !operands[0])
     return {};
 
-  if (!operands[0])
-    return {};
+  // If all the operands are known constant integer values then we can fold into
+  // a hw.constant.
+  if (auto attr0 = operands[0].dyn_cast<IntegerAttr>()) {
+    if (auto attr1 = operands[1].dyn_cast<IntegerAttr>()) {
+      APInt accum = attr0.getValue();
+      calculate(accum, attr1.getValue());
 
-  ElementValueT accum = operands[0].cast<AttrElementT>().getValue();
-  for (auto i = operands.begin() + 1, end = operands.end(); i != end; ++i) {
-    auto attr = *i;
-    if (!attr)
-      return {};
+      bool allPresent = true;
 
-    auto typedAttr = attr.cast<AttrElementT>();
-    calculate(accum, typedAttr.getValue());
+      // Handle the rest of the operands if present.
+      for (auto op : operands.drop_front(2)) {
+        auto typedAttr = op.dyn_cast_or_null<IntegerAttr>();
+        if (!typedAttr)
+          allPresent = false;
+        else
+          calculate(accum, typedAttr.getValue());
+      }
+      if (allPresent)
+        return IntegerAttr::get(operands[0].getType(), accum);
+    }
   }
-  return AttrElementT::get(operands[0].getType(), accum);
+
+  // Otherwise, it must be a parameter-compatible constant.  Fold into a
+  // hw.param.value constant.
+  if (llvm::all_of(operands.drop_front(2), [&](Attribute in) { return !!in; }))
+    return hw::ParamExprAttr::get(paramOpcode, operands);
+
+  return {};
 }
 
 /// When we find a logical operation (and, or, xor) with a constant e.g.
@@ -756,8 +788,8 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
       }
 
   // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a &= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::And,
+                                [](APInt &a, const APInt &b) { a &= b; });
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
@@ -888,8 +920,8 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
       }
 
   // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a |= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Or,
+                                [](APInt &a, const APInt &b) { a |= b; });
 }
 
 /// Simplify concat ops in an or op when a constant operand is present in either
@@ -1074,8 +1106,8 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a ^= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Xor,
+                                [](APInt &a, const APInt &b) { a ^= b; });
 }
 
 // xor(icmp, a, b, 1) -> xor(icmp, a, b) if icmp has one user.
@@ -1174,7 +1206,7 @@ OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
                       getContext());
 
   // Constant fold
-  return constFoldBinaryOp<IntegerAttr>(
+  return constFoldBinaryOp(
       constants, [](const APInt &a, const APInt &b) { return a - b; });
 }
 
@@ -1197,9 +1229,9 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
   if (size == 1u)
     return inputs()[0];
 
-  // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a += b; });
+  // Constant fold constant operands.
+  return constFoldAssociativeOp(constants, hw::PEO::Add,
+                                [](APInt &a, const APInt &b) { a += b; });
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
@@ -1300,8 +1332,8 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // Constant fold
-  return constFoldVariadicOp<IntegerAttr>(
-      constants, [](APInt &a, const APInt &b) { a *= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Mul,
+                                [](APInt &a, const APInt &b) { a *= b; });
 }
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
@@ -1358,10 +1390,9 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
       return {};
   }
 
-  return constFoldBinaryOp<IntegerAttr>(
-      constants, [](const APInt &a, const APInt &b) {
-        return isSigned ? a.sdiv(b) : a.udiv(b);
-      });
+  return constFoldBinaryOp(constants, [](const APInt &a, const APInt &b) {
+    return isSigned ? a.sdiv(b) : a.udiv(b);
+  });
 }
 
 OpFoldResult DivUOp::fold(ArrayRef<Attribute> constants) {
@@ -1392,10 +1423,9 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
                         op.getContext());
   }
 
-  return constFoldBinaryOp<IntegerAttr>(
-      constants, [](const APInt &a, const APInt &b) {
-        return isSigned ? a.srem(b) : a.urem(b);
-      });
+  return constFoldBinaryOp(constants, [](const APInt &a, const APInt &b) {
+    return isSigned ? a.srem(b) : a.urem(b);
+  });
 }
 
 OpFoldResult ModUOp::fold(ArrayRef<Attribute> constants) {
@@ -1684,17 +1714,77 @@ static bool foldMuxChain(MuxOp rootMux, bool isFalseSide,
 LogicalResult MuxOp::canonicalize(MuxOp op, PatternRewriter &rewriter) {
   APInt value;
 
-  // mux(a, 1, b) -> or(a, b) for single-bit values.
-  if (matchPattern(op.trueValue(), m_RConstant(value)) &&
-      value.getBitWidth() == 1 && value.isAllOnes()) {
-    rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
-    return success();
+  if (matchPattern(op.trueValue(), m_RConstant(value))) {
+    if (value.getBitWidth() == 1) {
+      // mux(a, 0, b) -> and(~a, b) for single-bit values.
+      if (value.isZero()) {
+        auto one = rewriter.create<hw::ConstantOp>(op.getLoc(), APInt(1, 1));
+        auto notCond =
+            rewriter.createOrFold<XorOp>(op.getLoc(), op.cond(), one);
+        rewriter.replaceOpWithNewOp<AndOp>(op, notCond, op.falseValue());
+        return success();
+      }
+
+      // mux(a, 1, b) -> or(a, b) for single-bit values.
+      rewriter.replaceOpWithNewOp<OrOp>(op, op.cond(), op.falseValue());
+      return success();
+    }
+
+    // When both inputs are constants and differ by only one bit, we can
+    // simplify by splitting the mux into up to three contiguous chunks: one
+    // for the differing bit and up to two for the bits that are the same.
+    // E.g. mux(a, 3'h2, 0) -> concat(0, mux(a, 1, 0), 0) -> concat(0, a, 0)
+    APInt value2;
+    if (matchPattern(op.falseValue(), m_RConstant(value2))) {
+      APInt xorValue = value ^ value2;
+      if (xorValue.isPowerOf2()) {
+        unsigned leadingZeros = xorValue.countLeadingZeros();
+        unsigned trailingZeros = value.getBitWidth() - leadingZeros - 1;
+        SmallVector<Value, 3> operands;
+
+        // Concat operands go from MSB to LSB, so we handle chunks in reverse
+        // order of bit indexes.
+        // For the chunks that are identical (i.e. correspond to 0s in
+        // xorValue), we can extract directly from either input value, and we
+        // arbitrarily pick the trueValue().
+
+        if (leadingZeros > 0)
+          operands.push_back(rewriter.createOrFold<ExtractOp>(
+              op.getLoc(), op.trueValue(), trailingZeros + 1, leadingZeros));
+
+        // Handle the differing bit, which should simplify into either cond or
+        // ~cond.
+        operands.push_back(rewriter.createOrFold<MuxOp>(
+            op.getLoc(), op.cond(),
+            rewriter.createOrFold<ExtractOp>(op.getLoc(), op.trueValue(),
+                                             trailingZeros, 1),
+            rewriter.createOrFold<ExtractOp>(op.getLoc(), op.falseValue(),
+                                             trailingZeros, 1)));
+
+        if (trailingZeros > 0)
+          operands.push_back(rewriter.createOrFold<ExtractOp>(
+              op.getLoc(), op.trueValue(), 0, trailingZeros));
+
+        rewriter.replaceOpWithNewOp<ConcatOp>(op, op.getType(), operands);
+        return success();
+      }
+    }
   }
 
-  // mux(a, b, 0) -> and(a, b) for single-bit values.
-  if (matchPattern(op.falseValue(), m_RConstant(value)) && value.isZero() &&
+  if (matchPattern(op.falseValue(), m_RConstant(value)) &&
       value.getBitWidth() == 1) {
-    rewriter.replaceOpWithNewOp<AndOp>(op, op.cond(), op.trueValue());
+    // mux(a, b, 0) -> and(a, b) for single-bit values.
+    if (value.isZero()) {
+      rewriter.replaceOpWithNewOp<AndOp>(op, op.cond(), op.trueValue());
+      return success();
+    }
+
+    // mux(a, b, 1) -> or(~a, b) for single-bit values.
+    // falseValue() is known to be a single-bit 1, which we can use for
+    // the 1 in the representation of ~ using xor.
+    auto notCond =
+        rewriter.createOrFold<XorOp>(op.getLoc(), op.cond(), op.falseValue());
+    rewriter.replaceOpWithNewOp<OrOp>(op, notCond, op.trueValue());
     return success();
   }
 

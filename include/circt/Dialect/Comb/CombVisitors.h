@@ -19,7 +19,7 @@
 namespace circt {
 namespace comb {
 
-/// This helps visit Combinatorial nodes.
+/// This helps visit Combinational nodes.
 template <typename ConcreteType, typename ResultType = void,
           typename... ExtraArgs>
 class CombinationalVisitor {
@@ -52,7 +52,7 @@ public:
     abort();
   }
 
-  /// This callback is invoked on any combinatorial operations that are not
+  /// This callback is invoked on any combinational operations that are not
   /// handled by the concrete visitor.
   ResultType visitUnhandledComb(Operation *op, ExtraArgs... args) {
     return ResultType();

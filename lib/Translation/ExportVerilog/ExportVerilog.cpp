@@ -75,9 +75,11 @@ enum VerilogPrecedence {
 //===----------------------------------------------------------------------===//
 
 /// Helper that prints a parameter constant value in a Verilog compatible way.
-static void printParamValue(Attribute value, raw_ostream &os,
-                            VerilogPrecedence parenthesizeIfLooserThan,
-                            function_ref<InFlightDiagnostic()> emitError) {
+/// This returns the precedence of the generated string.
+static VerilogPrecedence
+printParamValue(Attribute value, raw_ostream &os,
+                VerilogPrecedence parenthesizeIfLooserThan,
+                function_ref<InFlightDiagnostic()> emitError) {
   if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
     IntegerType intTy = intAttr.getType().cast<IntegerType>();
     APInt value = intAttr.getValue();
@@ -96,62 +98,90 @@ static void printParamValue(Attribute value, raw_ostream &os,
         os << intTy.getWidth() << "'d";
     }
     value.print(os, intTy.isSigned());
-    return;
+    return Symbol;
   }
   if (auto strAttr = value.dyn_cast<StringAttr>()) {
     os << '"';
     os.write_escaped(strAttr.getValue());
     os << '"';
-    return;
+    return Symbol;
   }
   if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
     // TODO: relying on float printing to be precise is not a good idea.
     os << fpAttr.getValueAsDouble();
-    return;
+    return Symbol;
   }
   if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
     os << verbatimParam.getValue().getValue();
-    return;
+    return Symbol;
   }
   if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     os << parameterRef.getName().getValue();
-    return;
+    return Symbol;
   }
 
-  if (auto paramBinOp = value.dyn_cast<ParamBinaryAttr>()) {
+  // Handle nested expressions.
+  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
     StringRef operatorStr;
-    VerilogPrecedence subprecedence;
+    VerilogPrecedence subprecedence = ForceEmitMultiUse;
 
-    // TODO: Support variadic versions of these.
-    switch (paramBinOp.getOpcode()) {
-    case PBO::Add:
+    switch (expr.getOpcode()) {
+    case PEO::Add:
       operatorStr = " + ";
       subprecedence = Addition;
       break;
-    case PBO::Mul:
+    case PEO::Mul:
       operatorStr = " * ";
       subprecedence = Multiply;
+      break;
+    case PEO::And:
+      operatorStr = " & ";
+      subprecedence = And;
+      break;
+    case PEO::Or:
+      operatorStr = " | ";
+      subprecedence = Or;
+      break;
+    case PEO::Xor:
+      operatorStr = " ^ ";
+      subprecedence = Xor;
+      break;
+    case PEO::Shl:
+      operatorStr = " << ";
+      subprecedence = Shift;
+      break;
+    case PEO::ShrU:
+      operatorStr = " >> ";
+      subprecedence = Shift;
       break;
     }
 
     if (subprecedence > parenthesizeIfLooserThan)
       os << '(';
-    printParamValue(paramBinOp.getLhs(), os, subprecedence, emitError);
-    os << operatorStr;
-    printParamValue(paramBinOp.getRhs(), os, subprecedence, emitError);
-    if (subprecedence > parenthesizeIfLooserThan)
+    printParamValue(expr.getOperands()[0], os, subprecedence, emitError);
+    for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
+      os << operatorStr;
+      printParamValue(op, os, subprecedence, emitError);
+    }
+    if (subprecedence > parenthesizeIfLooserThan) {
       os << ')';
-    return;
+      return Symbol;
+    }
+    return subprecedence;
   }
 
   os << "<<UNKNOWN MLIRATTR: " << value << ">>";
   emitError() << " = " << value;
+  return LowestPrecedence;
 }
 
 /// Prints a parameter attribute expression in a Verilog compatible way.
-static void printParamValue(Attribute value, raw_ostream &os,
-                            function_ref<InFlightDiagnostic()> emitError) {
-  printParamValue(value, os, VerilogPrecedence::LowestPrecedence, emitError);
+/// This returns the precedence of the generated string.
+static VerilogPrecedence
+printParamValue(Attribute value, raw_ostream &os,
+                function_ref<InFlightDiagnostic()> emitError) {
+  return printParamValue(value, os, VerilogPrecedence::LowestPrecedence,
+                         emitError);
 }
 
 /// Return true for nullary operations that are better emitted multiple
@@ -204,12 +234,12 @@ static StringRef getSymOpName(Operation *symOp) {
 /// MemoryEffects should be checked if a client cares.
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
-  if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
+  if (isa<ReadInOutOp, ArrayIndexInOutOp, ParamValueOp>(op))
     return true;
 
-  // All HW combinatorial logic ops and SV expression ops are Verilog
+  // All HW combinational logic ops and SV expression ops are Verilog
   // expressions.
-  return isCombinatorial(op) || isExpression(op);
+  return isCombinational(op) || isExpression(op);
 }
 
 /// Return the width of the specified type in bits or -1 if it isn't
@@ -441,7 +471,7 @@ static StringRef getVerilogDeclWord(Operation *op,
   }
   if (isa<WireOp>(op))
     return "wire";
-  if (isa<ConstantOp, LocalParamOp>(op))
+  if (isa<ConstantOp, LocalParamOp, ParamValueOp>(op))
     return "localparam";
 
   // Interfaces instances use the name of the declared interface.
@@ -991,6 +1021,7 @@ private:
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
   SubExprInfo visitTypeOp(BitcastOp op);
+  SubExprInfo visitTypeOp(ParamValueOp op);
   SubExprInfo visitTypeOp(ArraySliceOp op);
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
@@ -1453,6 +1484,13 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   }
   os << valueStr;
   return {Unary, signPreference == RequireSigned ? IsSigned : IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
+  auto prec = printParamValue(op.value(), os, [&]() {
+    return op->emitOpError("invalid parameter use");
+  });
+  return {prec, IsUnsigned};
 }
 
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
@@ -3503,18 +3541,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     if (attr) {
       LLVM_DEBUG(llvm::dbgs() << "Found output_file attribute " << attr
                               << " on " << op << "\n";);
-
-      if (auto directory = attr.directory())
-        appendPossiblyAbsolutePath(outputPath, directory.getValue());
-
-      if (auto name = attr.name())
-        if (!name.getValue().empty()) {
-          appendPossiblyAbsolutePath(outputPath, name.getValue());
-          hasFileName = true;
-        }
-
-      emitReplicatedOps = !attr.exclude_replicated_ops().getValue();
-      addToFilelist = !attr.exclude_from_filelist().getValue();
+      if (!attr.isDirectory())
+        hasFileName = true;
+      appendPossiblyAbsolutePath(outputPath, attr.getFilename().getValue());
+      emitReplicatedOps = attr.getIncludeReplicatedOps().getValue();
+      addToFilelist = !attr.getExcludeFromFilelist().getValue();
     }
 
     auto separateFile = [&](Operation *op, Twine defaultFileName = "") {

@@ -82,7 +82,6 @@ def ComponentOp : CalyxOp<"component", [
     ```
   }];
 
-  // TODO(Calyx): Allow explicit port naming?
   let arguments = (ins
     ArrayAttr:$portNames
   );
@@ -273,8 +272,8 @@ def AssignOp : CalyxOp<"assign", [
     "calyx.wires" section or a "calyx.group".
 
     ```mlir
-      calyx.assign %1 = %2 : i16
-      calyx.assign %1 = %2, %guard ? : i16
+      calyx.assign %dest = %src : i16
+      calyx.assign %dest = %guard ? %src : i16
     ```
   }];
   let arguments = (ins
@@ -282,13 +281,14 @@ def AssignOp : CalyxOp<"assign", [
     AnyType:$src,
     Optional<I1>:$guard
   );
+  let builders = [
+    OpBuilder<(ins "Value":$dest, "Value":$src), [{
+      $_state.addOperands({dest, src});
+    }]>
+  ];
   let verifier = "return ::verify$cppClass(*this);";
-
-  // TODO(Calyx): Calyx IR typically represents a
-  // guarded assignments as `%dest = %guard ? %src`
-  let assemblyFormat = [{
-    $dest `=` $src (`,` $guard^ `?`)? attr-dict `:` type($dest)
-  }];
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
 }
 
 def GroupDoneOp : CalyxGroupPort<"group_done", [
@@ -302,11 +302,18 @@ def GroupDoneOp : CalyxGroupPort<"group_done", [
     when the group's done operation should be active.
 
     ```mlir
-      calyx.group_done %v1 : i1
-      calyx.group_done %v2, %guard ? : i1
+      calyx.group_done %src : i1
+      calyx.group_done %guard ? %src : i1
     ```
   }];
   let results = (outs);
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+  let builders = [
+    OpBuilder<(ins "Value":$src), [{
+      $_state.addOperands(src);
+    }]>
+  ];
 }
 
 def GroupGoOp : CalyxGroupPort<"group_go", [
@@ -323,17 +330,17 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
     receive a source until the Compile Control pass.
 
     ```mlir
-      %group_name1.go = calyx.group_go %0 : i1
-      %group_name2.go = calyx.group_go %3, %guard ? : i1
+      %group_name1.go = calyx.group_go %src : i1
+      %group_name2.go = calyx.group_go %guard ? %src : i1
     ```
   }];
   let results = (outs I1);
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
   let builders = [
-    OpBuilder<(ins "Value":$src, CArg<"Value", "{}">:$guard), [{
+    OpBuilder<(ins "Value":$src), [{
       $_state.addTypes($_builder.getI1Type());
       $_state.addOperands(src);
-      if (guard)
-        $_state.addOperands(guard);
     }]>
   ];
 }

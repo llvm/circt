@@ -7,25 +7,20 @@
 circuit Example :
   module Example :
     input clock : Clock
-    input rst : Reset
     input arst : AsyncReset
     input srst : UInt<1>
     input in : UInt<1>
-    output out : UInt<1>[3]
+    output out : UInt<1>[2]
     wire bar : UInt<1>
     bar is invalid
     ; CHECK: %foo0 = firrtl.reg %clock :
     ; CHECK: %foo1 = firrtl.reg %clock :
-    ; CHECK: %foo2 = firrtl.reg %clock :
-    reg foo0 : UInt<1>, clock with : (reset => (rst, bar))
-    reg foo1 : UInt<1>, clock with : (reset => (arst, bar))
-    reg foo2 : UInt<1>, clock with : (reset => (srst, bar))
+    reg foo0 : UInt<1>, clock with : (reset => (arst, bar))
+    reg foo1 : UInt<1>, clock with : (reset => (srst, bar))
     foo0 <= in
     foo1 <= in
-    foo2 <= in
     out[0] <= foo0
     out[1] <= foo1
-    out[2] <= foo2
 
 // -----
 
@@ -36,34 +31,27 @@ circuit Example :
 circuit Example :
   module Example :
     input clock : Clock
-    input rst : Reset
     input arst : AsyncReset
     input srst : UInt<1>
     input in :  {a : UInt<1>[2], b : UInt<1>}
-    output out :  {a : UInt<1>[2], b : UInt<1>}[3]
+    output out :  {a : UInt<1>[2], b : UInt<1>}[2]
 
     wire bar : {a : UInt<1>[2], b : UInt<1>}
     bar is invalid
     bar.a[1] <= UInt<1>(0)
 
     ; CHECK: %foo0_a_0 = firrtl.reg %clock :
-    ; CHECK: %foo0_a_1 = firrtl.regreset %clock, %rst,
+    ; CHECK: %foo0_a_1 = firrtl.regreset %clock, %arst,
     ; CHECK: %foo0_b = firrtl.reg %clock :
     ; CHECK: %foo1_a_0 = firrtl.reg %clock :
-    ; CHECK: %foo1_a_1 = firrtl.regreset %clock, %arst,
+    ; CHECK: %foo1_a_1 = firrtl.regreset %clock, %srst,
     ; CHECK: %foo1_b = firrtl.reg %clock :
-    ; CHECK: %foo2_a_0 = firrtl.reg %clock :
-    ; CHECK: %foo2_a_1 = firrtl.regreset %clock, %srst,
-    ; CHECK: %foo2_b = firrtl.reg %clock :
-    reg foo0 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (rst, bar))
-    reg foo1 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (arst, bar))
-    reg foo2 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (srst, bar))
+    reg foo0 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (arst, bar))
+    reg foo1 : {a : UInt<1>[2], b : UInt<1>}, clock with : (reset => (srst, bar))
     foo0 <= in
     foo1 <= in
-    foo2 <= in
     out[0] <= foo0
     out[1] <= foo1
-    out[2] <= foo2
 
 // -----
 
@@ -74,11 +62,10 @@ circuit Example :
 circuit Example :
   module Example :
     input clock : Clock
-    input rst : Reset
     input arst : AsyncReset
     input srst : UInt<1>
     input in : { a : UInt<1>, b : UInt<1> }
-    output out : { a : UInt<1>, b : UInt<1> }[3]
+    output out : { a : UInt<1>, b : UInt<1> }[2]
 
     wire bar : { a : UInt<1>, b : UInt<1> }
     bar is invalid
@@ -88,21 +75,16 @@ circuit Example :
     baz is invalid
     baz <= bar
 
-    ; CHECK: %foo0_a = firrtl.regreset %clock, %rst,
+    ; CHECK: %foo0_a = firrtl.regreset %clock, %arst,
     ; CHECK: %foo0_b = firrtl.reg %clock :
-    ; CHECK: %foo1_a = firrtl.regreset %clock, %arst,
+    ; CHECK: %foo1_a = firrtl.regreset %clock, %srst,
     ; CHECK: %foo1_b = firrtl.reg %clock :
-    ; CHECK: %foo2_a = firrtl.regreset %clock, %srst,
-    ; CHECK: %foo2_b = firrtl.reg %clock :
-    reg foo0 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (rst, baz))
-    reg foo1 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (arst, baz))
-    reg foo2 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (srst, baz))
+    reg foo0 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (arst, baz))
+    reg foo1 : { a : UInt<1>, b : UInt<1> }, clock with : (reset => (srst, baz))
     foo0 <= in
     foo1 <= in
-    foo2 <= in
     out[0] <= foo0
     out[1] <= foo1
-    out[2] <= foo2
 
 // -----
 

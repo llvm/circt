@@ -2,6 +2,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   BlackBoxMemory.cpp
   BlackBoxReader.cpp
   CheckCombCycles.cpp
+  CreateSiFiveMetadata.cpp
   ExpandWhens.cpp
   GrandCentral.cpp
   GrandCentralTaps.cpp
@@ -14,10 +15,10 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   ModuleInliner.cpp
   PrefixModules.cpp
   PrintInstanceGraph.cpp
-
+  
   DEPENDS
   CIRCTFIRRTLTransformsIncGen
-
+  
   LINK_LIBS PUBLIC
   CIRCTFIRRTL
   CIRCTHW

@@ -275,8 +275,9 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
+
     ```
-      %name = firrtl.reg %clockVal : t1
+    %name = firrtl.reg %clockVal : t1
     ```
     }];
 
@@ -308,7 +309,7 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal, ResetType:$resetSignal, PassiveType:$resetValue,
+    ins ClockType:$clockVal, AnyResetType:$resetSignal, PassiveType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 

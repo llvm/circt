@@ -25,6 +25,7 @@
 // Defined in the test directory, no public header.
 namespace circt {
 namespace test {
+void registerAnalysisTestPasses();
 void registerSchedulingTestPasses();
 } // namespace test
 } // namespace circt
@@ -49,6 +50,7 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
 
   // Register test passes
+  circt::test::registerAnalysisTestPasses();
   circt::test::registerSchedulingTestPasses();
 
   return mlir::failed(
