@@ -59,8 +59,11 @@ struct CalyxMemoryPorts {
   Value writeEn;
 };
 
-/// CalyxMemoryInterface defines an interface for accessing either a
-/// calyx::MemoryOp or a CalyxMemoryPorts struct.
+/// The various lowering passes are agnostic wrt. whether working with a
+/// calyx::MemoryOp (internally allocated memory) or external memory (through
+/// CalyxMemoryPort). This is achieved through the following
+/// CalyxMemoryInterface for accessing either a calyx::MemoryOp or a
+/// CalyxMemoryPorts struct.
 struct CalyxMemoryInterface {
   CalyxMemoryInterface() {}
   explicit CalyxMemoryInterface(const CalyxMemoryPorts &ports) : impl(ports) {}
@@ -345,7 +348,7 @@ public:
     whileLatchGroups[whileOp] = grp;
   }
 
-  /// Retrieve the while latch group registerred for whileOp.
+  /// Retrieve the while latch group registered for whileOp.
   calyx::GroupOp getWhileLatchGroup(scf::WhileOp whileOp) {
     auto it = whileLatchGroups.find(whileOp);
     assert(it != whileLatchGroups.end() &&
@@ -356,7 +359,7 @@ public:
   /// Registers a memory interface as being associated with a memory identified
   /// by 'memref'.
   void registerMemoryInterface(Value memref,
-                               CalyxMemoryInterface memoryInterface) {
+                               const CalyxMemoryInterface &memoryInterface) {
     assert(memref.getType().isa<MemRefType>());
     assert(memories.find(memref) == memories.end() &&
            "Memory already registered for memref");
@@ -371,16 +374,16 @@ public:
     return it->second;
   }
 
-  /// If v is an input to any memory registerred within this component, returns
+  /// If v is an input to any memory registered within this component, returns
   /// a pointer to said memory. If not, returns null.
-  CalyxMemoryInterface *isInputPortOfMemory(Value v) {
+  Optional<CalyxMemoryInterface> isInputPortOfMemory(Value v) {
     for (auto &memIf : memories) {
       auto &mem = memIf.getSecond();
       if (mem.writeEn() == v || mem.writeData() == v ||
           llvm::any_of(mem.addrPorts(), [=](Value port) { return port == v; }))
-        return &mem;
+        return {mem};
     }
-    return nullptr;
+    return {};
   }
 
   /// Assign a mapping between the source funcOp result indices and the
@@ -389,7 +392,7 @@ public:
     funcOpResultMapping = mapping;
   }
 
-  /// Get the output port index of this component of which the funcReturnIdx of
+  /// Get the output port index of this component for which the funcReturnIdx of
   /// the original function maps to.
   unsigned getFuncOpResultMapping(unsigned funcReturnIdx) {
     auto it = funcOpResultMapping.find(funcReturnIdx);
@@ -1080,7 +1083,7 @@ public:
         pls.compLoweringState(assignOp->getParentOfType<calyx::ComponentOp>());
 
     auto dest = assignOp.dest();
-    if (!state.isInputPortOfMemory(dest))
+    if (state.isInputPortOfMemory(dest).hasValue())
       return success();
 
     auto src = assignOp.src();
@@ -1187,10 +1190,11 @@ class InlineExecuteRegionOpPattern
   }
 };
 
-static std::pair<SmallVector<calyx::PortInfo>, SmallVector<calyx::PortInfo>>
-getPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
-                          Value memref) {
-  SmallVector<calyx::PortInfo> inPorts, outPorts;
+static void
+appendPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
+                             Value memref,
+                             SmallVectorImpl<calyx::PortInfo> &inPorts,
+                             SmallVectorImpl<calyx::PortInfo> &outPorts) {
   MemRefType memrefType = memref.getType().cast<MemRefType>();
 
   /// Read data
@@ -1223,8 +1227,6 @@ getPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
       calyx::PortInfo{rewriter.getStringAttr(memName + "_write_en"),
                       rewriter.getI1Type(), calyx::Direction::Output,
                       DictionaryAttr::get(rewriter.getContext(), {})});
-
-  return {inPorts, outPorts};
 }
 
 /// Creates a new Calyx component for each FuncOp in the program.
@@ -1247,8 +1249,8 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     /// map to the memory ports. The pair denotes the start index of the memory
     /// ports in the in- and output ports of the component. Ports are expected
     /// to be ordered in the same manner as they are added by
-    /// getPortsForExternalMemref.
-    DenseMap<Value, std::pair<unsigned, unsigned>> extMemories;
+    /// appendPortsForExternalMemref.
+    DenseMap<Value, std::pair<unsigned, unsigned>> extMemoryCompPortIndices;
 
     /// Create I/O ports. Maintain separate in/out port vectors to determine
     /// which port index each function argument will eventually map to.
@@ -1257,12 +1259,12 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     for (auto &arg : enumerate(funcOp.getArguments())) {
       if (arg.value().getType().isa<MemRefType>()) {
         /// External memories
-        auto memName = "ext_mem" + std::to_string(extMemories.size());
-        extMemories[arg.value()] = {inPorts.size(), outPorts.size()};
-        auto [memInPorts, memOutPorts] =
-            getPortsForExternalMemref(rewriter, memName, arg.value());
-        llvm::append_range(inPorts, memInPorts);
-        llvm::append_range(outPorts, memOutPorts);
+        auto memName =
+            "ext_mem" + std::to_string(extMemoryCompPortIndices.size());
+        extMemoryCompPortIndices[arg.value()] = {inPorts.size(),
+                                                 outPorts.size()};
+        appendPortsForExternalMemref(rewriter, memName, arg.value(), inPorts,
+                                     outPorts);
       } else {
         /// Single-port arguments
         auto inName = "in" + std::to_string(arg.index());
@@ -1305,25 +1307,28 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
           compOp.getArgument(mapping.getSecond()));
 
     /// Register external memories
-    for (auto extMem : extMemories) {
+    for (auto extMemPortIndices : extMemoryCompPortIndices) {
       /// Create a mapping for the in- and output ports using the Calyx memory
       /// port structure.
       CalyxMemoryPorts extMemPorts;
-      unsigned inPortsIt = extMem.getSecond().first;
-      unsigned outPortsIt =
-          extMem.getSecond().second + compOp.getInputPortInfo().size();
+      unsigned inPortsIt = extMemPortIndices.getSecond().first;
+      unsigned outPortsIt = extMemPortIndices.getSecond().second +
+                            compOp.getInputPortInfo().size();
       extMemPorts.readData = compOp.getArgument(inPortsIt++);
       extMemPorts.done = compOp.getArgument(inPortsIt);
       extMemPorts.writeData = compOp.getArgument(outPortsIt++);
-      unsigned nAddresses =
-          extMem.getFirst().getType().cast<MemRefType>().getShape().size();
+      unsigned nAddresses = extMemPortIndices.getFirst()
+                                .getType()
+                                .cast<MemRefType>()
+                                .getShape()
+                                .size();
       for (unsigned j = 0; j < nAddresses; ++j)
         extMemPorts.addrPorts.push_back(compOp.getArgument(outPortsIt++));
       extMemPorts.writeEn = compOp.getArgument(outPortsIt);
 
       /// Register the external memory ports as a memory interface within the
       /// component.
-      compState.registerMemoryInterface(extMem.getFirst(),
+      compState.registerMemoryInterface(extMemPortIndices.getFirst(),
                                         CalyxMemoryInterface(extMemPorts));
     }
 
