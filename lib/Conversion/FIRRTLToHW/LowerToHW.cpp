@@ -2125,6 +2125,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     switch (memportKindIdx) {
     default:
       assert(0 && "invalid idx");
+      break; // Silence warning
     case 0:
       memportKind = MemOp::PortKind::Read;
       break;
