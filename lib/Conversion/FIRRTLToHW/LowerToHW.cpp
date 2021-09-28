@@ -81,45 +81,42 @@ static Type lowerType(Type type) {
 }
 
 /// This verifies that the target operation has been lowered to a legal
-// operation.  This checks that the operation recursively has no FIRRTL
-// operations or types.
+/// operation.  This checks that the operation recursively has no FIRRTL
+/// operations or types.
 static LogicalResult verifyOpLegality(Operation *op) {
-  SmallVector<Operation *> worklist = {op};
-  while (!worklist.empty()) {
-    op = worklist.pop_back_val();
-
+  auto checkTypes = [](Operation *op) -> WalkResult {
     // Check that this operation is not a FIRRTL op.
-    if (op->getDialect() && (FIRRTLDialect::getDialectNamespace() ==
-                             op->getDialect()->getNamespace()))
+    if (isa_and_nonnull<FIRRTLDialect>(op->getDialect()))
       return op->emitError("Found unhandled FIRRTL operation '")
              << op->getName() << "'";
 
     // Helper to check a TypeRange for any FIRRTL types.
-    auto checkTypes = [&](TypeRange types) -> LogicalResult {
+    auto checkTypeRange = [&](TypeRange types) -> LogicalResult {
       if (llvm::any_of(types, [](Type type) {
-            return type.getDialect().getNamespace() ==
-                   FIRRTLDialect::getDialectNamespace();
+            return isa<FIRRTLDialect>(type.getDialect());
           }))
         return op->emitOpError("found unhandled FIRRTL type");
       return success();
     };
 
     // Check operand and result types.
-    if (failed(checkTypes(op->getOperandTypes())) ||
-        failed(checkTypes(op->getResultTypes())))
-      return failure();
+    if (failed(checkTypeRange(op->getOperandTypes())) ||
+        failed(checkTypeRange(op->getResultTypes())))
+      return WalkResult::interrupt();
 
     // Recursively verify this operation.
-    for (auto &region : op->getRegions()) {
-      for (auto &block : region) {
+    for (auto &region : op->getRegions())
+      for (auto &block : region)
         // Check the block argument types.
-        if (failed(checkTypes(block.getArgumentTypes())))
-          return failure();
-        for (auto &childOp : block)
-          worklist.push_back(&childOp);
-      }
-    }
-  }
+        if (failed(checkTypeRange(block.getArgumentTypes())))
+          return WalkResult::interrupt();
+
+    // Continue to the next operation.
+    return WalkResult::advance();
+  };
+
+  if (checkTypes(op).wasInterrupted() || op->walk(checkTypes).wasInterrupted())
+    return failure();
   return success();
 }
 
