@@ -55,7 +55,7 @@ Problem::DependenceRange Problem::getDependences(Operation *op) {
                          DependenceIterator(*this, op, /*end=*/true));
 }
 
-LogicalResult Problem::checkOperation(Operation *op) {
+LogicalResult Problem::checkLinkedOperatorType(Operation *op) {
   if (!getLinkedOperatorType(op))
     return op->emitError("Operation is not linked to an operator type");
   if (!hasOperatorType(*getLinkedOperatorType(op)))
@@ -63,9 +63,7 @@ LogicalResult Problem::checkOperation(Operation *op) {
   return success();
 }
 
-LogicalResult Problem::checkDependence(Dependence dep) { return success(); }
-
-LogicalResult Problem::checkOperatorType(OperatorType opr) {
+LogicalResult Problem::checkLatency(OperatorType opr) {
   if (!getLatency(opr))
     return getContainingOp()->emitError()
            << "Operator type '" << opr << "' has no latency";
@@ -73,33 +71,25 @@ LogicalResult Problem::checkOperatorType(OperatorType opr) {
   return success();
 }
 
-LogicalResult Problem::checkProblem() { return success(); }
-
-/// Check overall problem by delegating to the component-specific checkers.
 LogicalResult Problem::check() {
   for (auto *op : getOperations())
-    if (failed(checkOperation(op)))
+    if (failed(checkLinkedOperatorType(op)))
       return failure();
-
-  for (auto *op : getOperations())
-    for (auto &dep : getDependences(op))
-      if (failed(checkDependence(dep)))
-        return failure();
 
   for (auto opr : getOperatorTypes())
-    if (failed(checkOperatorType(opr)))
+    if (failed(checkLatency(opr)))
       return failure();
 
-  return checkProblem();
+  return success();
 }
 
-LogicalResult Problem::verifyOperation(Operation *op) {
+LogicalResult Problem::verifyStartTime(Operation *op) {
   if (!getStartTime(op))
     return op->emitError("Operation has no start time");
   return success();
 }
 
-LogicalResult Problem::verifyDependence(Dependence dep) {
+LogicalResult Problem::verifyPrecedence(Dependence dep) {
   Operation *i = dep.getSource();
   Operation *j = dep.getDestination();
 
@@ -117,39 +107,24 @@ LogicalResult Problem::verifyDependence(Dependence dep) {
   return success();
 }
 
-LogicalResult Problem::verifyOperatorType(OperatorType opr) {
-  return success();
-}
-
-LogicalResult Problem::verifyProblem() { return success(); }
-
-/// Verify overall solution by delegating to the component-specific verifiers.
 LogicalResult Problem::verify() {
   for (auto *op : getOperations())
-    if (failed(verifyOperation(op)))
+    if (failed(verifyStartTime(op)))
       return failure();
 
   for (auto *op : getOperations())
     for (auto &dep : getDependences(op))
-      if (failed(verifyDependence(dep)))
+      if (failed(verifyPrecedence(dep)))
         return failure();
 
-  for (auto opr : getOperatorTypes())
-    if (failed(verifyOperatorType(opr)))
-      return failure();
-
-  return verifyProblem();
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
 // CyclicProblem
 //===----------------------------------------------------------------------===//
 
-LogicalResult CyclicProblem::verifyDependence(Dependence dep) {
-  // fail early if II is not set or invalid
-  if (!getInitiationInterval() || *getInitiationInterval() == 0)
-    return getContainingOp()->emitError("Invalid initiation interval");
-
+LogicalResult CyclicProblem::verifyPrecedence(Dependence dep) {
   Operation *i = dep.getSource();
   Operation *j = dep.getDestination();
 
@@ -170,9 +145,15 @@ LogicalResult CyclicProblem::verifyDependence(Dependence dep) {
   return success();
 }
 
-LogicalResult CyclicProblem::verifyProblem() {
+LogicalResult CyclicProblem::verifyInitiationInterval() {
   if (!getInitiationInterval() || *getInitiationInterval() == 0)
     return getContainingOp()->emitError("Invalid initiation interval");
+  return success();
+}
+
+LogicalResult CyclicProblem::verify() {
+  if (failed(verifyInitiationInterval()) || failed(Problem::verify()))
+    return failure();
   return success();
 }
 
@@ -180,9 +161,8 @@ LogicalResult CyclicProblem::verifyProblem() {
 // SharedPipelinedOperatorsProblem
 //===----------------------------------------------------------------------===//
 
-LogicalResult
-SharedPipelinedOperatorsProblem::checkOperatorType(OperatorType opr) {
-  if (failed(Problem::checkOperatorType(opr)))
+LogicalResult SharedPipelinedOperatorsProblem::checkLatency(OperatorType opr) {
+  if (failed(Problem::checkLatency(opr)))
     return failure();
 
   auto limit = getLimit(opr);
@@ -193,7 +173,7 @@ SharedPipelinedOperatorsProblem::checkOperatorType(OperatorType opr) {
 }
 
 LogicalResult
-SharedPipelinedOperatorsProblem::verifyOperatorType(OperatorType opr) {
+SharedPipelinedOperatorsProblem::verifyUtilization(OperatorType opr) {
   auto limit = getLimit(opr);
   if (!limit)
     return success();
@@ -213,15 +193,22 @@ SharedPipelinedOperatorsProblem::verifyOperatorType(OperatorType opr) {
   return success();
 }
 
+LogicalResult SharedPipelinedOperatorsProblem::verify() {
+  if (failed(Problem::verify()))
+    return failure();
+
+  for (auto opr : getOperatorTypes())
+    if (failed(verifyUtilization(opr)))
+      return failure();
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // ModuloProblem
 //===----------------------------------------------------------------------===//
 
-LogicalResult ModuloProblem::verifyOperatorType(OperatorType opr) {
-  // fail early if II is not set or invalid
-  if (!getInitiationInterval() || *getInitiationInterval() == 0)
-    return getContainingOp()->emitError("Invalid initiation interval");
-
+LogicalResult ModuloProblem::verifyUtilization(OperatorType opr) {
   auto limit = getLimit(opr);
   if (!limit)
     return success();
@@ -238,6 +225,19 @@ LogicalResult ModuloProblem::verifyOperatorType(OperatorType opr) {
              << "Operator type '" << opr << "' is oversubscribed."
              << "\n  congruence class: " << kv.first
              << "\n  #operations: " << kv.second << "\n  limit: " << *limit;
+
+  return success();
+}
+
+LogicalResult ModuloProblem::verify() {
+  if (failed(CyclicProblem::verify()))
+    return failure();
+
+  // Don't call SharedPipelinedOperatorsProblem::verify() here to prevent
+  // redundant verification of the base problem.
+  for (auto opr : getOperatorTypes())
+    if (failed(verifyUtilization(opr)))
+      return failure();
 
   return success();
 }
