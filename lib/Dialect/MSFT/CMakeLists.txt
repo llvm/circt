@@ -11,7 +11,7 @@ add_circt_dialect_library(CIRCTMSFT
   MSFTDialect.cpp
   MSFTOps.cpp
   MSFTPasses.cpp
-  DeviceDB.cpp
+  PlacementDB.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/MSFT

@@ -1,4 +1,4 @@
-//===- DeviceDB.cpp - Implement a device database -------------------------===//
+//===- PlacementDB.cpp - Implement a device database -------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/MSFT/DeviceDB.h"
+#include "circt/Dialect/MSFT/PlacementDB.h"
 
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -20,12 +20,12 @@ using namespace msft;
 // not an immediate goal.
 //===----------------------------------------------------------------------===//
 
-DeviceDB::DeviceDB(Operation *top) : ctxt(top->getContext()), top(top) {}
+PlacementDB::PlacementDB(Operation *top) : ctxt(top->getContext()), top(top) {}
 
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
-LogicalResult DeviceDB::addPlacement(PhysLocationAttr loc,
-                                     PlacedInstance inst) {
+LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
+                                        PlacedInstance inst) {
   PlacedInstance &cell = placements[loc.getX()][loc.getY()][loc.getNum()]
                                    [loc.getDevType().getValue()];
   if (cell.op != nullptr)
@@ -37,7 +37,7 @@ LogicalResult DeviceDB::addPlacement(PhysLocationAttr loc,
 
 /// Using the operation attributes, add the proper placements to the database.
 /// Return the number of placements which weren't added due to conflicts.
-size_t DeviceDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
+size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
   size_t numFailed = 0;
   for (NamedAttribute attr : op->getAttrs()) {
     StringRef attrName = attr.first;
@@ -82,7 +82,7 @@ size_t DeviceDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
 }
 
 /// Walk the entire design adding placements.
-size_t DeviceDB::addDesignPlacements() {
+size_t PlacementDB::addDesignPlacements() {
   size_t failed = 0;
   FlatSymbolRefAttr rootModule = FlatSymbolRefAttr::get(top);
   auto mlirModule = top->getParentOfType<mlir::ModuleOp>();
@@ -92,8 +92,8 @@ size_t DeviceDB::addDesignPlacements() {
 }
 
 /// Lookup the instance at a particular location.
-Optional<DeviceDB::PlacedInstance>
-DeviceDB::getInstanceAt(PhysLocationAttr loc) {
+Optional<PlacementDB::PlacedInstance>
+PlacementDB::getInstanceAt(PhysLocationAttr loc) {
   auto innerMap = placements[loc.getX()][loc.getY()][loc.getNum()];
   auto instF = innerMap.find(loc.getDevType().getValue());
   if (instF == innerMap.end())
@@ -102,7 +102,7 @@ DeviceDB::getInstanceAt(PhysLocationAttr loc) {
 }
 
 /// Walker for placements.
-void DeviceDB::walkPlacements(
+void PlacementDB::walkPlacements(
     function_ref<void(PhysLocationAttr, PlacedInstance)> callback) {
   // X loop.
   for (auto colF = placements.begin(), colE = placements.end(); colF != colE;

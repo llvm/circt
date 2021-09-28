@@ -24,7 +24,7 @@ class Instance:
     self.instOp = instOp
     self.parent = parent
     if parent is None:
-      self.devicedb = msft.DeviceDB(module.operation)
+      self.devicedb = msft.PlacementDB(module.operation)
       self.devicedb.add_design_placements()
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
