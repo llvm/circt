@@ -104,10 +104,9 @@ static LogicalResult verifyOpLegality(Operation *op) {
         failed(checkTypeRange(op->getResultTypes())))
       return WalkResult::interrupt();
 
-    // Recursively verify this operation.
+    // Check the block argument types.
     for (auto &region : op->getRegions())
       for (auto &block : region)
-        // Check the block argument types.
         if (failed(checkTypeRange(block.getArgumentTypes())))
           return WalkResult::interrupt();
 
