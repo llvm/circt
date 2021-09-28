@@ -58,9 +58,9 @@ circuit Qux:
 ; CHECK-NEXT:    %[[v0:.+]] = sv.reg  : !hw.inout<i1>
 ; CHECK-NEXT:    %[[v1:.+]] = sv.read_inout %[[v0]] : !hw.inout<i1>
 ; CHECK-NEXT:    %[[v2:.+]] = sv.reg  : !hw.inout<i4>
-; CHECK-NEXT:    sv.alwaysff(posedge %ro_clock_0)  {
-; CHECK-NEXT:      sv.passign %[[v0]], %ro_en_0 : i1
-; CHECK-NEXT:      sv.passign %[[v2]], %ro_addr_0 : i4
+; CHECK-NEXT:    sv.alwaysff(posedge %R0_clk)  {
+; CHECK-NEXT:      sv.passign %[[v0]], %R0_en : i1
+; CHECK-NEXT:      sv.passign %[[v2]], %R0_addr : i4
 ; CHECK-NEXT:    }
 ; CHECK-NEXT:    %[[v3:.+]] = sv.read_inout %[[v2]] : !hw.inout<i4>
 ; CHECK-NEXT:    %[[v4:.+]] = sv.array_index_inout %[[vMemory]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
