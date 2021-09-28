@@ -1083,7 +1083,7 @@ public:
         pls.compLoweringState(assignOp->getParentOfType<calyx::ComponentOp>());
 
     auto dest = assignOp.dest();
-    if (state.isInputPortOfMemory(dest).hasValue())
+    if (!state.isInputPortOfMemory(dest).hasValue())
       return success();
 
     auto src = assignOp.src();
@@ -1457,7 +1457,7 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
           funcOp->getLoc(),
           getComponentOutput(
               *getComponent(),
-              getComponentState().getFuncOpResultMapping(argTypeIt.index())),
+              getComponentState().getFuncOpResultMapping(argType.index())),
           reg.out());
     }
     return success();
@@ -2113,6 +2113,8 @@ void SCFToCalyxPass::runOnOperation() {
     signalPassFailure();
     return;
   }
+
+  getOperation().dump();
 }
 
 //===----------------------------------------------------------------------===//
