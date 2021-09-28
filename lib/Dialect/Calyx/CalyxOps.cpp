@@ -1416,7 +1416,8 @@ static EnableOp getLastEnableOp(SeqOp parent) {
   return nullptr;
 }
 
-/// Returns all EnableOps within the immediate ParOp's body.
+/// Returns a mapping of {Enabled Group, EnableOp} for all EnableOps within the
+/// immediate ParOp's body.
 static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
   llvm::StringMap<EnableOp> enables;
   Block *body = parent.getBody();
@@ -1430,8 +1431,7 @@ static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
 /// in SeqOp and ParOp. This canonicalization is stringent about not entering
 /// nested control operations, as this may cause unintentional changes in
 /// behavior.
-static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
-                                               PatternRewriter &rewriter) {
+static LogicalResult eliminateCommonTail(IfOp ifOp, PatternRewriter &rewriter) {
   if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
     return failure();
   rewriter.setInsertionPointAfter(ifOp);
@@ -1456,14 +1456,18 @@ static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
     llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(r1),
                               B = getAllEnableOpsInImmediateBody(r2);
 
-    // Compute the intersection between `A` and `B`, saving the pair of
-    // EnableOps with the same enabled Group for deletion later.
-    SmallVector<std::pair<EnableOp, EnableOp>> intersection;
-    for (auto it = A.begin(); it != A.end(); ++it) {
-      EnableOp enable = it->getValue();
-      // Check if this enable is also an element in B.
-      if (auto found = B.find(enable.groupName()); found != B.end())
-        intersection.push_back(std::pair(enable, found->getValue()));
+    // Compute the intersection between `A` and `B`.
+    SmallVector<StringRef> groupNames;
+    for (auto a = A.begin(); a != A.end(); ++a) {
+      StringRef groupName = a->getValue().groupName();
+      auto b = B.find(groupName);
+      if (b == B.end())
+        continue;
+      // This is also an element in B.
+      groupNames.push_back(groupName);
+      // Since these are being pulled out, erase them.
+      rewriter.eraseOp(a->getValue());
+      rewriter.eraseOp(b->getValue());
     }
     // Place the IfOp and EnableOp(s) inside a parallel region, in case this
     // IfOp is nested in a SeqOp. This avoids unintentionally sequentializing
@@ -1476,11 +1480,8 @@ static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
 
     // Pull out the intersection between these two sets, and erase their
     // counterparts in the Then and Else regions.
-    for (auto &&[e1, e2] : intersection) {
-      rewriter.create<EnableOp>(parOp.getLoc(), e1.groupName());
-      rewriter.eraseOp(e1);
-      rewriter.eraseOp(e2);
-    }
+    for (StringRef groupName : groupNames)
+      rewriter.create<EnableOp>(parOp.getLoc(), groupName);
 
     return success();
   } else if (auto r1 = dyn_cast<SeqOp>(thenControl);
@@ -1519,7 +1520,7 @@ static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
 }
 
 LogicalResult IfOp::canonicalize(IfOp ifOp, PatternRewriter &rewriter) {
-  if (succeeded(eliminateCommonTailEnable(ifOp, rewriter)))
+  if (succeeded(eliminateCommonTail(ifOp, rewriter)))
     return success();
 
   return failure();
