@@ -416,6 +416,26 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
   p << source << " : " << source.getType();
 }
 
+// Collapse nested control of the same type for SeqOp and ParOp, e.g.
+// calyx.seq { calyx.seq { ... } } -> calyx.seq { ... }
+template <typename OpTy>
+static LogicalResult collapseControl(OpTy controlOp,
+                                     PatternRewriter &rewriter) {
+  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
+                "Should be a SeqOp or ParOp.");
+
+  if (isa<OpTy>(controlOp->getParentOp())) {
+    Block *controlBody = controlOp.getBody();
+    for (auto &op : make_early_inc_range(*controlBody))
+      op.moveBefore(controlOp);
+
+    rewriter.eraseOp(controlOp);
+    return success();
+  }
+
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // ProgramOp
 //===----------------------------------------------------------------------===//
@@ -778,6 +798,45 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyControlOp(ControlOp control) {
   return verifyControlBody(control);
+}
+
+//===----------------------------------------------------------------------===//
+// SeqOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SeqOp::canonicalize(SeqOp seqOp, PatternRewriter &rewriter) {
+  if (succeeded(collapseControl(seqOp, rewriter)))
+    return success();
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ParOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyParOp(ParOp parOp) {
+  llvm::SmallSet<StringRef, 8> groupNames;
+  Block *body = parOp.getBody();
+
+  // Add loose requirement that the body of a ParOp may not enable the same
+  // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
+  for (EnableOp op : body->getOps<EnableOp>()) {
+    StringRef groupName = op.groupName();
+    if (groupNames.count(groupName))
+      return parOp->emitOpError() << "cannot enable the same group: \""
+                                  << groupName << "\" more than once.";
+    groupNames.insert(groupName);
+  }
+
+  return success();
+}
+
+LogicalResult ParOp::canonicalize(ParOp parOp, PatternRewriter &rewriter) {
+  if (succeeded(collapseControl(parOp, rewriter)))
+    return success();
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1343,6 +1402,70 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
            << "' but no driver was found.";
 
   return success();
+}
+
+/// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
+/// EnableOp was found (e.g. a "calyx.par" operation is present), returns
+/// nullptr.
+static EnableOp getLastEnableOp(SeqOp parent) {
+  auto &lastOp = parent.getBody()->back();
+  if (auto enableOp = dyn_cast<EnableOp>(lastOp))
+    return enableOp;
+  else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
+    return getLastEnableOp(seqOp);
+  return nullptr;
+}
+
+/// Removes common tail enable operations for sequential 'then'/'else'
+/// branches inside an 'if' operation.
+///
+///   if %a with %A {                       if %a with %A {
+///     seq { ... calyx.enable @B }           seq { ... }
+///   else {                          ->    } else {
+///     seq { ... calyx.enable @B }           seq { ... }
+///   }                                     }
+///                                         calyx.enable @B
+static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
+                                               PatternRewriter &rewriter) {
+  // Check if the branches exist.
+  if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
+    return failure();
+
+  auto &thenOpStructureOp = ifOp.getThenBody()->front();
+  auto &elseOpStructureOp = ifOp.getElseBody()->front();
+  // TODO(circt/#1861): ParOps have less restrictive conditions.
+  if (isa<ParOp>(thenOpStructureOp) || isa<ParOp>(elseOpStructureOp))
+    return failure();
+
+  // At this point, only sequential operations are valid inside the branches.
+  auto thenSeqOp = dyn_cast<SeqOp>(thenOpStructureOp);
+  auto elseSeqOp = dyn_cast<SeqOp>(elseOpStructureOp);
+  assert(thenSeqOp && elseSeqOp &&
+         "expected nested seq ops in both branches of a calyx.IfOp");
+
+  EnableOp lastThenEnableOp = getLastEnableOp(thenSeqOp);
+  EnableOp lastElseEnableOp = getLastEnableOp(elseSeqOp);
+
+  if (lastThenEnableOp == nullptr || lastElseEnableOp == nullptr)
+    return failure();
+
+  if (lastThenEnableOp.groupName() != lastElseEnableOp.groupName())
+    return failure();
+
+  // Erase both enable operations and add group enable operation after the
+  // shared IfOp parent.
+  rewriter.setInsertionPointAfter(ifOp);
+  rewriter.create<EnableOp>(ifOp.getLoc(), lastThenEnableOp.groupName());
+  rewriter.eraseOp(lastThenEnableOp);
+  rewriter.eraseOp(lastElseEnableOp);
+  return success();
+}
+
+LogicalResult IfOp::canonicalize(IfOp ifOp, PatternRewriter &rewriter) {
+  if (succeeded(eliminateCommonTailEnable(ifOp, rewriter)))
+    return success();
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

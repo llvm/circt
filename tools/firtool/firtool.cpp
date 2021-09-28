@@ -285,7 +285,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown,
                                                  disableAnnotationsClassless));
   if (emitMetadata)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createEmitMetadataPass());
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createCreateSiFiveMetadataPass());
 
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(

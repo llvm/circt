@@ -29,8 +29,10 @@ def LLHD_ConstantTimeOp : LLHD_Op<"constant_time",
   let builders = [
     /// Build a ConstantTimeOp from an ArrayRef with three values
     /// (real-time, delta, epsilon) and a string for the real-time unit.
-    OpBuilder<(ins "const ArrayRef<unsigned int> &":$timeValues,
-                   "const StringRef &":$timeUnit)>
+    OpBuilder<(ins "unsigned":$time,
+                   "const StringRef &":$timeUnit,
+                   "unsigned":$delta,
+                   "unsigned":$epsilon)>
   ];
 
   let arguments = (ins LLHD_TimeAttr: $value);

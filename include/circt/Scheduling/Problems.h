@@ -287,6 +287,28 @@ protected:
   virtual LogicalResult verifyOperatorType(OperatorType opr) override;
 };
 
+/// This class models the modulo scheduling problem as the composition of the
+/// cyclic problem and the resource-constrained problem with fully-pipelined
+/// shared operators.
+///
+/// A solution to this problem comprises an integer II and integer start times
+/// for all registered operations, and is feasible iff:
+///  (1) The precedence constraints implied by the `CyclicProblem`'s dependence
+///      edges are satisfied, and
+///  (2) The number of operations that use a certain limited operator type,
+///      and start in the same congruence class (= start time *mod* II), does
+///      not exceed the operator type's limit.
+class ModuloProblem : public virtual CyclicProblem,
+                      public virtual SharedPipelinedOperatorsProblem {
+public:
+  ModuloProblem(Operation *containingOp)
+      : Problem(containingOp), CyclicProblem(containingOp),
+        SharedPipelinedOperatorsProblem(containingOp) {}
+
+protected:
+  virtual LogicalResult verifyOperatorType(OperatorType opr) override;
+};
+
 } // namespace scheduling
 } // namespace circt
 

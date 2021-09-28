@@ -178,12 +178,11 @@ OpFoldResult llhd::ConstantTimeOp::fold(ArrayRef<Attribute> operands) {
 }
 
 void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
-                                 const ArrayRef<unsigned int> &timeValues,
-                                 const StringRef &timeUnit) {
-
-  auto type = TimeType::get(builder.getContext());
-  auto attr = TimeAttr::get(type, timeValues, timeUnit);
-  return build(builder, result, type, attr);
+                                 unsigned time, const StringRef &timeUnit,
+                                 unsigned delta, unsigned epsilon) {
+  auto *ctx = builder.getContext();
+  auto attr = TimeAttr::get(ctx, time, timeUnit, delta, epsilon);
+  return build(builder, result, TimeType::get(ctx), attr);
 }
 
 //===----------------------------------------------------------------------===//

@@ -214,6 +214,35 @@ SharedPipelinedOperatorsProblem::verifyOperatorType(OperatorType opr) {
 }
 
 //===----------------------------------------------------------------------===//
+// ModuloProblem
+//===----------------------------------------------------------------------===//
+
+LogicalResult ModuloProblem::verifyOperatorType(OperatorType opr) {
+  // fail early if II is not set or invalid
+  if (!getInitiationInterval() || *getInitiationInterval() == 0)
+    return getContainingOp()->emitError("Invalid initiation interval");
+
+  auto limit = getLimit(opr);
+  if (!limit)
+    return success();
+
+  unsigned ii = *getInitiationInterval();
+  llvm::SmallDenseMap<unsigned, unsigned> nOpsPerCongruenceClass;
+  for (auto *op : getOperations())
+    if (opr == *getLinkedOperatorType(op))
+      ++nOpsPerCongruenceClass[*getStartTime(op) % ii];
+
+  for (auto &kv : nOpsPerCongruenceClass)
+    if (kv.second > *limit)
+      return getContainingOp()->emitError()
+             << "Operator type '" << opr << "' is oversubscribed."
+             << "\n  congruence class: " << kv.first
+             << "\n  #operations: " << kv.second << "\n  limit: " << *limit;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Dependence
 //===----------------------------------------------------------------------===//
 

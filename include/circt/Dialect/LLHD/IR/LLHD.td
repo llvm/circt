@@ -33,6 +33,12 @@ def LLHD_Dialect : Dialect {
   let cppNamespace = "::circt::llhd";
 
   let hasConstantMaterializer = 1;
+  let extraClassDeclaration = [{
+    /// Register all LLHD types.
+    void registerTypes();
+    /// Register all LLHD attributes.
+    void registerAttributes();
+  }];
 }
 
 //===----------------------------------------------------------------------===//
@@ -45,9 +51,11 @@ include "circt/Dialect/HW/HWTypes.td"
 // LLHD type definitions
 //===----------------------------------------------------------------------===//
 
+include "LLHDTypesImpl.td"
+
 // LLHD Time Type
 def LLHD_TimeType : DialectType<LLHD_Dialect,
-    CPred<"$_self.isa<TimeType>()">, "LLHD time type">,
+    CPred<"$_self.isa<TimeType>()">, "LLHD time type", "TimeType">,
     BuildableType<"TimeType::get($_builder.getContext())">;
 
 // Legal underlying types for signals and pointers.
@@ -70,18 +78,6 @@ class LLHD_PtrType<list<Type> allowedTypes>
 def LLHD_AnyPtrType : LLHD_PtrType<[LLHD_AnyUnderlyingType]>;
 
 //===----------------------------------------------------------------------===//
-// LLDH attribute definitions
-//===----------------------------------------------------------------------===//
-
-// LLHD time attr
-def LLHD_TimeAttr : DialectAttr<LLHD_Dialect,
-    CPred<"$_self.isa<TimeAttr>()">, "LLHD time attribute"> {
-  let storageType= [{ TimeAttr }];
-  let returnType = [{ llvm::ArrayRef<unsigned> }];
-  let valueType = LLHD_TimeType;
-}
-
-//===----------------------------------------------------------------------===//
 // LLHD op definition
 //===----------------------------------------------------------------------===//
 
@@ -97,21 +93,6 @@ class LLHD_Op<string mnemonic, list<OpTrait> traits = []>
   // * static void print<op-c++-class-name>(OpAsmPrinter &p, <op-c++-class-name> op)
   let parser = [{ return ::parse$cppClass(parser, result); }];
   let printer = [{ ::print$cppClass(p, *this); }];
-}
-
-class LLHD_ArithmeticOrBitwiseOp<string mnemonic, list<OpTrait> traits = []>
-    : Op<LLHD_Dialect, mnemonic,
-         !listconcat(traits, [NoSideEffect, SameOperandsAndResultType])> {
-
-  let results = (outs HWIntegerType);
-
-  let parser = [{
-      return mlir::impl::parseOneResultSameOperandTypeOp(parser, result);
-  }];
-
-  let printer = [{
-      mlir::impl::printOneResultOp(this->getOperation(), p);
-  }];
 }
 
 //===----------------------------------------------------------------------===//
