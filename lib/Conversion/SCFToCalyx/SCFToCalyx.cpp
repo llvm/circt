@@ -47,8 +47,43 @@ struct WhileScheduleable {
   calyx::GroupOp initGroup;
 };
 
-// A variant of types representing scheduleable operations.
+/// A variant of types representing scheduleable operations.
 using Scheduleable = std::variant<calyx::GroupOp, WhileScheduleable>;
+
+/// A structure representing a set of ports which act as a memory interface.
+struct CalyxMemoryPorts {
+  Value readData;
+  Value done;
+  Value writeData;
+  SmallVector<Value> addrPorts;
+  Value writeEn;
+};
+
+/// CalyxMemoryInterface defines an interface for accessing either a
+/// calyx::MemoryOp or a CalyxMemoryPorts struct.
+struct CalyxMemoryInterface {
+  CalyxMemoryInterface() {}
+  explicit CalyxMemoryInterface(const CalyxMemoryPorts &ports) : impl(ports) {}
+  explicit CalyxMemoryInterface(calyx::MemoryOp memOp) : impl(memOp) {}
+
+#define memoryInterfaceGetter(portName, TRet)                                  \
+  TRet portName() {                                                            \
+    if (auto memOp = std::get_if<calyx::MemoryOp>(&impl); memOp)               \
+      return memOp->portName();                                                \
+    else                                                                       \
+      return std::get<CalyxMemoryPorts>(impl).portName;                        \
+  }
+
+  memoryInterfaceGetter(readData, Value);
+  memoryInterfaceGetter(done, Value);
+  memoryInterfaceGetter(writeData, Value);
+  memoryInterfaceGetter(writeEn, Value);
+  memoryInterfaceGetter(addrPorts, ValueRange);
+#undef memoryInterfaceGetter
+
+private:
+  std::variant<calyx::MemoryOp, CalyxMemoryPorts> impl;
+};
 
 //===----------------------------------------------------------------------===//
 // Utility functions
@@ -106,13 +141,10 @@ static TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
   return groupOp;
 }
 
-/// Get the index'th output of compOp, which is associated with
-/// funcOp.
-/// This assumes the invariant that both the ComponentOp and FuncOp have the
-/// same port ordering.
-static Value getComponentOutput(mlir::FuncOp funcOp, calyx::ComponentOp compOp,
-                                unsigned index) {
-  size_t resIdx = funcOp.getNumArguments() + 3 /*go, reset, clk*/ + index;
+/// Get the index'th output port of compOp.
+static Value getComponentOutput(calyx::ComponentOp compOp,
+                                unsigned outPortIdx) {
+  size_t resIdx = compOp.getInputPortInfo().size() + outPortIdx;
   assert(compOp.getNumArguments() > resIdx &&
          "Exceeded number of arguments in the Component");
   return compOp.getArgument(resIdx);
@@ -321,20 +353,49 @@ public:
     return it->second;
   }
 
-  /// Registers a calyx::MemoryOp as being associated with a memory identified
+  /// Registers a memory interface as being associated with a memory identified
   /// by 'memref'.
-  void registerMemory(Value memref, calyx::MemoryOp memoryOp) {
+  void registerMemoryInterface(Value memref,
+                               CalyxMemoryInterface memoryInterface) {
     assert(memref.getType().isa<MemRefType>());
     assert(memories.find(memref) == memories.end() &&
            "Memory already registered for memref");
-    memories[memref] = memoryOp;
+    memories[memref] = memoryInterface;
   }
 
-  /// Returns a calyx::MemoryOp registered for the given memref.
-  calyx::MemoryOp getMemory(Value memref) {
+  /// Returns the memory interface registered for the given memref.
+  CalyxMemoryInterface getMemoryInterface(Value memref) {
     assert(memref.getType().isa<MemRefType>());
     auto it = memories.find(memref);
     assert(it != memories.end() && "No memory registered for memref");
+    return it->second;
+  }
+
+  /// If v is an input to any memory registerred within this component, returns
+  /// a pointer to said memory. If not, returns null.
+  CalyxMemoryInterface *isInputPortOfMemory(Value v) {
+    for (auto &memIf : memories) {
+      auto &mem = memIf.getSecond();
+      if (mem.writeEn() == v || mem.writeData() == v ||
+          llvm::any_of(mem.addrPorts(), [=](Value port) { return port == v; }))
+        return &mem;
+    }
+    return nullptr;
+  }
+
+  /// Assign a mapping between the source funcOp result indices and the
+  /// corresponding output port indices of this componentOp.
+  void setFuncOpResultMapping(const DenseMap<unsigned, unsigned> &mapping) {
+    funcOpResultMapping = mapping;
+  }
+
+  /// Get the output port index of this component of which the funcReturnIdx of
+  /// the original function maps to.
+  unsigned getFuncOpResultMapping(unsigned funcReturnIdx) {
+    auto it = funcOpResultMapping.find(funcReturnIdx);
+    assert(it != funcOpResultMapping.end() &&
+           "No component return port index recorded for the requested function "
+           "return index");
     return it->second;
   }
 
@@ -383,8 +444,12 @@ private:
   /// A mapping from while ops to iteration argument registers.
   DenseMap<Operation *, DenseMap<unsigned, calyx::RegisterOp>> whileIterRegs;
 
-  /// A mapping from memref's to their corresponding calyx memory op.
-  DenseMap<Value, calyx::MemoryOp> memories;
+  /// A mapping from memref's to their corresponding Calyx memory interface.
+  DenseMap<Value, CalyxMemoryInterface> memories;
+
+  /// A mapping between the source funcOp result indices and the corresponding
+  /// output port indices of this componentOp.
+  DenseMap<unsigned, unsigned> funcOpResultMapping;
 };
 
 /// ProgramLoweringState handles the current state of lowering of a Calyx
@@ -716,11 +781,12 @@ private:
   /// Creates assignments within the provided group to the address ports of the
   /// memoryOp based on the provided addressValues.
   void assignAddressPorts(PatternRewriter &rewriter, Location loc,
-                          calyx::GroupInterface group, calyx::MemoryOp memoryOp,
+                          calyx::GroupInterface group,
+                          CalyxMemoryInterface memoryInterface,
                           Operation::operand_range addressValues) const {
     IRRewriter::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToEnd(group.getBody());
-    auto addrPorts = memoryOp.addrPorts();
+    auto addrPorts = memoryInterface.addrPorts();
     assert(addrPorts.size() == addressValues.size() &&
            "Mismatch between number of address ports of the provided memory "
            "and address assignment values");
@@ -732,27 +798,28 @@ private:
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::LoadOp loadOp) const {
-  auto memoryOp = getComponentState().getMemory(loadOp.memref());
+  auto memoryInterface =
+      getComponentState().getMemoryInterface(loadOp.memref());
   if (singleLoadFromMemory(loadOp)) {
     /// Single load from memory; Combinational case - we do not have to consider
     /// adding registers in front of the memory.
     auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, loadOp);
-    assignAddressPorts(rewriter, loadOp.getLoc(), combGroup, memoryOp,
+    assignAddressPorts(rewriter, loadOp.getLoc(), combGroup, memoryInterface,
                        loadOp.getIndices());
 
-    /// We refrain from replacing the loadOp result with memoryOp.readData,
-    /// since multiple loadOp's need to be converted to a single memory's
-    /// ReadData. If this replacement is done now, we lose the link between
-    /// which SSA memref::LoadOp values map to which groups for loading a value
-    /// from the Calyx memory. At this point of lowering, we keep the
-    /// memref::LoadOp SSA value, and do value replacement _after_ control has
-    /// been generated (see LateSSAReplacement). This is *vital* for things such
-    /// as InlineCombGroups to be able to properly track which memory assignment
-    /// groups belong to which accesses.
+    /// We refrain from replacing the loadOp result with
+    /// memoryInterface.readData, since multiple loadOp's need to be converted
+    /// to a single memory's ReadData. If this replacement is done now, we lose
+    /// the link between which SSA memref::LoadOp values map to which groups for
+    /// loading a value from the Calyx memory. At this point of lowering, we
+    /// keep the memref::LoadOp SSA value, and do value replacement _after_
+    /// control has been generated (see LateSSAReplacement). This is *vital* for
+    /// things such as InlineCombGroups to be able to properly track which
+    /// memory assignment groups belong to which accesses.
     getComponentState().registerEvaluatingGroup(loadOp.getResult(), combGroup);
   } else {
     auto group = createGroupForOp<calyx::GroupOp>(rewriter, loadOp);
-    assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryOp,
+    assignAddressPorts(rewriter, loadOp.getLoc(), group, memoryInterface,
                        loadOp.getIndices());
 
     /// Multiple loads from the same memory; In this case, we _may_ have a
@@ -767,7 +834,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                          getComponentState().getUniqueName("load"),
                          loadOp.getMemRefType().getElementTypeBitWidth());
     buildAssignmentsForRegisterWrite(getComponentState(), rewriter, group, reg,
-                                     memoryOp.readData());
+                                     memoryInterface.readData());
     loadOp.getResult().replaceAllUsesWith(reg.out());
     getComponentState().addBlockScheduleable(loadOp->getBlock(), group);
   }
@@ -776,22 +843,23 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
                                      memref::StoreOp storeOp) const {
-  auto memoryOp = getComponentState().getMemory(storeOp.memref());
+  auto memoryInterface =
+      getComponentState().getMemoryInterface(storeOp.memref());
   auto group = createGroupForOp<calyx::GroupOp>(rewriter, storeOp);
 
   /// This is a sequential group, so register it as being scheduleable for the
   /// block.
   getComponentState().addBlockScheduleable(storeOp->getBlock(),
                                            cast<calyx::GroupOp>(group));
-  assignAddressPorts(rewriter, storeOp.getLoc(), group, memoryOp,
+  assignAddressPorts(rewriter, storeOp.getLoc(), group, memoryInterface,
                      storeOp.getIndices());
   rewriter.setInsertionPointToEnd(group.getBody());
-  rewriter.create<calyx::AssignOp>(storeOp.getLoc(), memoryOp.writeData(),
-                                   storeOp.getValueToStore());
   rewriter.create<calyx::AssignOp>(
-      storeOp.getLoc(), memoryOp.writeEn(),
+      storeOp.getLoc(), memoryInterface.writeData(), storeOp.getValueToStore());
+  rewriter.create<calyx::AssignOp>(
+      storeOp.getLoc(), memoryInterface.writeEn(),
       getComponentState().getConstant(rewriter, storeOp.getLoc(), 1, 1));
-  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryOp.done());
+  rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
   return success();
 }
 
@@ -809,7 +877,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   auto memoryOp = rewriter.create<calyx::MemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
       memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
-  componentState.registerMemory(allocOp.getResult(), memoryOp);
+  componentState.registerMemoryInterface(allocOp.getResult(),
+                                         CalyxMemoryInterface(memoryOp));
   return success();
 }
 
@@ -1007,42 +1076,28 @@ public:
 
   LogicalResult partiallyLower(calyx::AssignOp assignOp,
                                PatternRewriter &rewriter) const override {
-    auto dest = assignOp.dest();
-    auto destDefOp = dest.getDefiningOp();
-    ///  Is this an assignment to a memory op?
-    if (!destDefOp)
-      return success();
-    auto destDefMem = dyn_cast<calyx::MemoryOp>(destDefOp);
-    if (!destDefMem)
-      return success();
-
-    /// Is this an assignment to an address port of the memory op?
-    bool isAssignToAddrPort = llvm::any_of(
-        destDefMem.addrPorts(), [&](auto port) { return port == dest; });
-
-    auto src = assignOp.src();
     auto &state =
         pls.compLoweringState(assignOp->getParentOfType<calyx::ComponentOp>());
 
+    auto dest = assignOp.dest();
+    if (!state.isInputPortOfMemory(dest))
+      return success();
+
+    auto src = assignOp.src();
     unsigned srcBits = src.getType().getIntOrFloatBitWidth();
     unsigned dstBits = dest.getType().getIntOrFloatBitWidth();
     if (srcBits == dstBits)
       return success();
 
-    if (isAssignToAddrPort) {
-      SmallVector<Type> types = {rewriter.getIntegerType(srcBits),
-                                 rewriter.getIntegerType(dstBits)};
-      auto sliceOp = state.getNewLibraryOpInstance<calyx::SliceLibOp>(
-          rewriter, assignOp.getLoc(), types);
-      rewriter.setInsertionPoint(assignOp->getBlock(),
-                                 assignOp->getBlock()->begin());
-      rewriter.create<calyx::AssignOp>(assignOp->getLoc(), sliceOp.getResult(0),
-                                       src);
-      assignOp.setOperand(1, sliceOp.getResult(1));
-    } else
-      return assignOp.emitError()
-             << "Will only infer slice operators for assign width mismatches "
-                "to memory address ports.";
+    SmallVector<Type> types = {rewriter.getIntegerType(srcBits),
+                               rewriter.getIntegerType(dstBits)};
+    auto sliceOp = state.getNewLibraryOpInstance<calyx::SliceLibOp>(
+        rewriter, assignOp.getLoc(), types);
+    rewriter.setInsertionPoint(assignOp->getBlock(),
+                               assignOp->getBlock()->begin());
+    rewriter.create<calyx::AssignOp>(assignOp->getLoc(), sliceOp.getResult(0),
+                                     src);
+    assignOp.setOperand(1, sliceOp.getResult(1));
 
     return success();
   }
@@ -1132,6 +1187,46 @@ class InlineExecuteRegionOpPattern
   }
 };
 
+static std::pair<SmallVector<calyx::PortInfo>, SmallVector<calyx::PortInfo>>
+getPortsForExternalMemref(PatternRewriter &rewriter, StringRef memName,
+                          Value memref) {
+  SmallVector<calyx::PortInfo> inPorts, outPorts;
+  MemRefType memrefType = memref.getType().cast<MemRefType>();
+
+  /// Read data
+  inPorts.push_back(
+      calyx::PortInfo{rewriter.getStringAttr(memName + "_read_data"),
+                      memrefType.getElementType(), calyx::Direction::Input,
+                      DictionaryAttr::get(rewriter.getContext(), {})});
+
+  /// Done
+  inPorts.push_back(calyx::PortInfo{
+      rewriter.getStringAttr(memName + "_done"), rewriter.getI1Type(),
+      calyx::Direction::Input, DictionaryAttr::get(rewriter.getContext(), {})});
+
+  /// Write data
+  outPorts.push_back(
+      calyx::PortInfo{rewriter.getStringAttr(memName + "_write_data"),
+                      memrefType.getElementType(), calyx::Direction::Output,
+                      DictionaryAttr::get(rewriter.getContext(), {})});
+
+  /// Memory address outputs
+  for (auto dim : enumerate(memrefType.getShape())) {
+    outPorts.push_back(calyx::PortInfo{
+        rewriter.getStringAttr(memName + "_addr" + std::to_string(dim.index())),
+        rewriter.getIntegerType(dim.value()), calyx::Direction::Output,
+        DictionaryAttr::get(rewriter.getContext(), {})});
+  }
+
+  /// Write enable
+  outPorts.push_back(
+      calyx::PortInfo{rewriter.getStringAttr(memName + "_write_en"),
+                      rewriter.getI1Type(), calyx::Direction::Output,
+                      DictionaryAttr::get(rewriter.getContext(), {})});
+
+  return {inPorts, outPorts};
+}
+
 /// Creates a new Calyx component for each FuncOp in the program.
 struct FuncOpConversion : public FuncOpPartialLoweringPattern {
   using FuncOpPartialLoweringPattern::FuncOpPartialLoweringPattern;
@@ -1139,22 +1234,58 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
   LogicalResult
   PartiallyLowerFuncToComp(mlir::FuncOp funcOp,
                            PatternRewriter &rewriter) const override {
-    /// Create I/O ports.
-    SmallVector<calyx::PortInfo> ports;
-    FunctionType funcType = funcOp.getType();
-    for (auto &arg : enumerate(funcOp.getArguments()))
-      ports.push_back(calyx::PortInfo{
-          rewriter.getStringAttr("in" + std::to_string(arg.index())),
-          convIndexType(rewriter, arg.value().getType()),
-          calyx::Direction::Input,
-          DictionaryAttr::get(rewriter.getContext(), {})});
+    /// Maintain a mapping between funcOp input arguments and the port index
+    /// which the argument will eventually map to.
+    DenseMap<Value, unsigned> funcOpArgRewrites;
 
-    for (auto &res : enumerate(funcType.getResults()))
-      ports.push_back(calyx::PortInfo{
+    /// Maintain a mapping between funcOp output indexes and the component
+    /// output port index which the return value will eventually map to.
+    DenseMap<unsigned, unsigned> funcOpResultMapping;
+
+    /// Maintain a mapping between an external memory argument (identified by a
+    /// memref) and eventual component input- and output port indicies that will
+    /// map to the memory ports. The pair denotes the start index of the memory
+    /// ports in the in- and output ports of the component. Ports are expected
+    /// to be ordered in the same manner as they are added by
+    /// getPortsForExternalMemref.
+    DenseMap<Value, std::pair<unsigned, unsigned>> extMemories;
+
+    /// Create I/O ports. Maintain separate in/out port vectors to determine
+    /// which port index each function argument will eventually map to.
+    SmallVector<calyx::PortInfo> inPorts, outPorts;
+    FunctionType funcType = funcOp.getType();
+    for (auto &arg : enumerate(funcOp.getArguments())) {
+      if (arg.value().getType().isa<MemRefType>()) {
+        /// External memories
+        auto memName = "ext_mem" + std::to_string(extMemories.size());
+        extMemories[arg.value()] = {inPorts.size(), outPorts.size()};
+        auto [memInPorts, memOutPorts] =
+            getPortsForExternalMemref(rewriter, memName, arg.value());
+        llvm::append_range(inPorts, memInPorts);
+        llvm::append_range(outPorts, memOutPorts);
+      } else {
+        /// Single-port arguments
+        auto inName = "in" + std::to_string(arg.index());
+        funcOpArgRewrites[arg.value()] = inPorts.size();
+        inPorts.push_back(
+            calyx::PortInfo{rewriter.getStringAttr(inName),
+                            convIndexType(rewriter, arg.value().getType()),
+                            calyx::Direction::Input,
+                            DictionaryAttr::get(rewriter.getContext(), {})});
+      }
+    }
+    for (auto &res : enumerate(funcType.getResults())) {
+      funcOpResultMapping[res.index()] = outPorts.size();
+      outPorts.push_back(calyx::PortInfo{
           rewriter.getStringAttr("out" + std::to_string(res.index())),
           convIndexType(rewriter, res.value()), calyx::Direction::Output,
           DictionaryAttr::get(rewriter.getContext(), {})});
+    }
 
+    /// We've now recorded all necessary indicies. Merge in- and output ports
+    /// and add the required mandatory component ports.
+    auto ports = inPorts;
+    llvm::append_range(ports, outPorts);
     addMandatoryComponentPorts(rewriter, ports);
 
     /// Create a calyx::ComponentOp corresponding to the to-be-lowered function.
@@ -1163,13 +1294,39 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     rewriter.createBlock(&compOp.getWiresOp().getBodyRegion());
     rewriter.createBlock(&compOp.getControlOp().getBodyRegion());
 
-    /// Rewrite the funcOp SSA argument values to the CompOp arguments.
-    for (auto &arg : enumerate(funcOp.getArguments())) {
-      arg.value().replaceAllUsesWith(compOp.getArgument(arg.index()));
+    /// Store the function-to-component mapping.
+    funcMap[funcOp] = compOp;
+    auto &compState = progState().compLoweringState(compOp);
+    compState.setFuncOpResultMapping(funcOpResultMapping);
+
+    /// Rewrite funcOp SSA argument values to the CompOp arguments.
+    for (auto &mapping : funcOpArgRewrites)
+      mapping.getFirst().replaceAllUsesWith(
+          compOp.getArgument(mapping.getSecond()));
+
+    /// Register external memories
+    for (auto extMem : extMemories) {
+      /// Create a mapping for the in- and output ports using the Calyx memory
+      /// port structure.
+      CalyxMemoryPorts extMemPorts;
+      unsigned inPortsIt = extMem.getSecond().first;
+      unsigned outPortsIt =
+          extMem.getSecond().second + compOp.getInputPortInfo().size();
+      extMemPorts.readData = compOp.getArgument(inPortsIt++);
+      extMemPorts.done = compOp.getArgument(inPortsIt);
+      extMemPorts.writeData = compOp.getArgument(outPortsIt++);
+      unsigned nAddresses =
+          extMem.getFirst().getType().cast<MemRefType>().getShape().size();
+      for (unsigned j = 0; j < nAddresses; ++j)
+        extMemPorts.addrPorts.push_back(compOp.getArgument(outPortsIt++));
+      extMemPorts.writeEn = compOp.getArgument(outPortsIt);
+
+      /// Register the external memory ports as a memory interface within the
+      /// component.
+      compState.registerMemoryInterface(extMem.getFirst(),
+                                        CalyxMemoryInterface(extMemPorts));
     }
 
-    /// Store function to component mapping for future reference.
-    funcMap[funcOp] = compOp;
     return success();
   }
 };
@@ -1293,7 +1450,9 @@ class BuildReturnRegs : public FuncOpPartialLoweringPattern {
       rewriter.setInsertionPointToStart(getComponent()->getWiresOp().getBody());
       rewriter.create<calyx::AssignOp>(
           funcOp->getLoc(),
-          getComponentOutput(funcOp, *getComponent(), argType.index()),
+          getComponentOutput(
+              *getComponent(),
+              getComponentState().getFuncOpResultMapping(argTypeIt.index())),
           reg.out());
     }
     return success();
@@ -1607,7 +1766,7 @@ class LateSSAReplacement : public FuncOpPartialLoweringPattern {
         /// memory op) and a readData result. Now, we may replace these SSA
         /// values with their memoryOp readData output.
         loadOp.getResult().replaceAllUsesWith(
-            getComponentState().getMemory(loadOp.memref()).readData());
+            getComponentState().getMemoryInterface(loadOp.memref()).readData());
       }
     });
 
