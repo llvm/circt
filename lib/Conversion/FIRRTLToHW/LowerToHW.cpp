@@ -112,14 +112,11 @@ static LogicalResult verifyOpLegality(Operation *op) {
     // Recursively verify this operation.
     for (auto &region : op->getRegions()) {
       for (auto &block : region) {
-
         // Check the block argument types.
         if (failed(checkTypes(block.getArgumentTypes())))
           return failure();
-
-        for (auto &childOp : block) {
+        for (auto &childOp : block)
           worklist.push_back(&childOp);
-        }
       }
     }
   }
@@ -533,9 +530,8 @@ void FIRRTLModuleLowering::runOnOperation() {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
           // we can forward the operation.  Otherwise, we emit an error and drop
           // the operation from the circuit.
-          if (succeeded(verifyOpLegality(op))) {
+          if (succeeded(verifyOpLegality(op)))
             op->moveBefore(topLevelModule, topLevelModule->end());
-          }
         });
   }
 
