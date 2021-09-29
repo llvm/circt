@@ -331,8 +331,21 @@ static Attribute simplifyXor(SmallVector<Attribute, 4> &operands) {
 
 static Attribute simplifyShl(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
-  // TODO: Implement support for identities like `x << cst` => `x * (1<<cst)`.
-  return foldBinaryOp(operands, [](auto a, auto b) { return a.shl(b); });
+
+  if (auto rhs = operands[1].dyn_cast<IntegerAttr>()) {
+    // Constant fold simple integers.
+    if (auto lhs = operands[0].dyn_cast<IntegerAttr>())
+      return IntegerAttr::get(lhs.getType(),
+                              lhs.getValue().shl(rhs.getValue()));
+
+    // Canonicalize `x << cst` => `x * (1<<cst)` to compose correctly with
+    // add/mul canonicalization.
+    auto rhsCst = APInt::getOneBitSet(rhs.getValue().getBitWidth(),
+                                      rhs.getValue().getZExtValue());
+    return ParamExprAttr::get(PEO::Mul, operands[0],
+                              IntegerAttr::get(rhs.getType(), rhsCst));
+  }
+  return {};
 }
 
 static Attribute simplifyShrU(SmallVector<Attribute, 4> &operands) {

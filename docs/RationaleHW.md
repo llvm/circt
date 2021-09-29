@@ -276,6 +276,9 @@ This set includes:
    into `(add x, 6)`.
   - Fully associative operators flatten subexpressions, e.g.
     `(add x, (add y, z)` into `(add x, y, z)`.
+  - Shift left by constant is canonicalized into multiply to compose correctly
+    with affine expression canonicalization, e.g. `(shl x, 1)` into
+    `(mul x, 2)`.
 
 ### Using parameters in the body of a module
 
