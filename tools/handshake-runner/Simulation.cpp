@@ -111,7 +111,7 @@ Any readValueWithType(mlir::Type type, std::string in) {
     APFloat aparg(x);
     return aparg;
   } else {
-    assert(0 && "unknown argument type!\n");
+    assert(false && "unknown argument type!");
     return {};
   }
 }
@@ -147,8 +147,8 @@ void scheduleUses(std::list<mlir::Operation *> &readyList,
 }
 
 // Allocate a new matrix with dimensions given by the type, in the
-// given store.  Return the pseuddo-pointer to the new matrix in the
-// store (i.e. the first dimension index)
+// given store.  Return the pseudo-pointer to the new matrix in the
+// store (i.e. the first dimension index).
 unsigned allocateMemRef(mlir::MemRefType type, std::vector<Any> &in,
                         std::vector<std::vector<Any>> &store,
                         std::vector<double> &storeTimes) {
@@ -205,34 +205,48 @@ public:
                     std::vector<double> &storeTimes,
                     mlir::OwningModuleRef &module);
 
+  bool succeeded() const { return successFlag; }
+
 private:
   /// Operation execution visitors
-  void execute(mlir::ConstantIndexOp, std::vector<Any> & /*inputs*/,
-               std::vector<Any> & /*outputs*/);
-  void execute(mlir::ConstantIntOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::AddIOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::AddFOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::CmpIOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::CmpFOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::SubIOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::SubFOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::MulIOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::MulFOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::SignedDivIOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::UnsignedDivIOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::DivFOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::IndexCastOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::SignExtendIOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::ZeroExtendIOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(memref::LoadOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(memref::StoreOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(memref::AllocOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::BranchOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::CondBranchOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::ReturnOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(handshake::ReturnOp, std::vector<Any> &, std::vector<Any> &);
-  void execute(mlir::CallOpInterface, std::vector<Any> &, std::vector<Any> &);
-  void execute(handshake::InstanceOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::ConstantIndexOp, std::vector<Any> & /*inputs*/,
+                        std::vector<Any> & /*outputs*/);
+  LogicalResult execute(mlir::ConstantIntOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::AddIOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::AddFOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::CmpIOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::CmpFOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::SubIOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::SubFOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::MulIOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::MulFOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::SignedDivIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::UnsignedDivIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::DivFOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::IndexCastOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::SignExtendIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::ZeroExtendIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(memref::LoadOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(memref::StoreOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(memref::AllocOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::BranchOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(mlir::CondBranchOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::ReturnOp, std::vector<Any> &, std::vector<Any> &);
+  LogicalResult execute(handshake::ReturnOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::CallOpInterface, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(handshake::InstanceOp, std::vector<Any> &,
+                        std::vector<Any> &);
 
 private:
   /// Execution context variables
@@ -245,113 +259,150 @@ private:
   double time;
   mlir::OwningModuleRef *module = nullptr;
 
+  /// Flag indicating whether execution was successful.
+  bool successFlag = true;
+
   /// An iterator which walks over the instructions.
   mlir::Block::iterator instIter;
 };
 
-void HandshakeExecuter::execute(mlir::ConstantIndexOp op, std::vector<Any> &,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::ConstantIndexOp op,
+                                         std::vector<Any> &,
+                                         std::vector<Any> &out) {
   auto attr = op->getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue().sextOrTrunc(INDEX_WIDTH);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::ConstantIntOp op, std::vector<Any> &,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::ConstantIntOp op,
+                                         std::vector<Any> &,
+                                         std::vector<Any> &out) {
   auto attr = op->getAttrOfType<mlir::IntegerAttr>("value");
   out[0] = attr.getValue();
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::AddIOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::AddIOp, std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   out[0] = any_cast<APInt>(in[0]) + any_cast<APInt>(in[1]);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::AddFOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::AddFOp, std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) + any_cast<APFloat>(in[1]);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::CmpIOp op, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::CmpIOp op, std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   APInt in0 = any_cast<APInt>(in[0]);
   APInt in1 = any_cast<APInt>(in[1]);
   APInt out0(1, mlir::applyCmpPredicate(op.getPredicate(), in0, in1));
   out[0] = out0;
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::CmpFOp op, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::CmpFOp op, std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   APFloat in0 = any_cast<APFloat>(in[0]);
   APFloat in1 = any_cast<APFloat>(in[1]);
   APInt out0(1, mlir::applyCmpPredicate(op.getPredicate(), in0, in1));
   out[0] = out0;
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::SubIOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::SubIOp, std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   out[0] = any_cast<APInt>(in[0]) - any_cast<APInt>(in[1]);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::SubFOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::SubFOp, std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) + any_cast<APFloat>(in[1]);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::MulIOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::MulIOp, std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   out[0] = any_cast<APInt>(in[0]) * any_cast<APInt>(in[1]);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::MulFOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::MulFOp, std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) * any_cast<APFloat>(in[1]);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::SignedDivIOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
-  assert(any_cast<APInt>(in[1]).getZExtValue() && "Division By Zero!");
+LogicalResult HandshakeExecuter::execute(mlir::SignedDivIOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  if (!any_cast<APInt>(in[1]).getZExtValue())
+    return op.emitError() << "Division By Zero!";
+
   out[0] = any_cast<APInt>(in[0]).sdiv(any_cast<APInt>(in[1]));
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::UnsignedDivIOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
-  assert(any_cast<APInt>(in[1]).getZExtValue() && "Division By Zero!");
+LogicalResult HandshakeExecuter::execute(mlir::UnsignedDivIOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
+  if (!any_cast<APInt>(in[1]).getZExtValue())
+    return op.emitError() << "Division By Zero!";
   out[0] = any_cast<APInt>(in[0]).udiv(any_cast<APInt>(in[1]));
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::DivFOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::DivFOp, std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) / any_cast<APFloat>(in[1]);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::IndexCastOp, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::IndexCastOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   out[0] = in[0];
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::SignExtendIOp op, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::SignExtendIOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   int64_t width = op.getType().getIntOrFloatBitWidth();
   out[0] = any_cast<APInt>(in[0]).sext(width);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::ZeroExtendIOp op, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::ZeroExtendIOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   int64_t width = op.getType().getIntOrFloatBitWidth();
   out[0] = any_cast<APInt>(in[0]).zext(width);
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::memref::LoadOp op, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::memref::LoadOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   ArrayRef<int64_t> shape = op.getMemRefType().getShape();
   unsigned address = 0;
   for (unsigned i = 0; i < shape.size(); ++i) {
     address = address * shape[i] + any_cast<APInt>(in[i + 1]).getZExtValue();
   }
   unsigned ptr = any_cast<unsigned>(in[0]);
-  assert(ptr < store.size());
+  if (ptr >= store.size())
+    return op.emitError() << "Unknown memory identified by pointer '" << ptr
+                          << "'";
+
   auto &ref = store[ptr];
-  assert(address < ref.size());
+  if (address >= ref.size())
+    return op.emitError() << "Out-of-bounds access to memory '" << ptr
+                          << "'. Memory has " << ref.size()
+                          << " elements but requested element " << address;
+
   //  LLVM_DEBUG(dbgs() << "Load " << ref[address] << " from " << ptr << "[" <<
   //  address << "]\n");
   Any result = ref[address];
@@ -361,38 +412,49 @@ void HandshakeExecuter::execute(mlir::memref::LoadOp op, std::vector<Any> &in,
   LLVM_DEBUG(dbgs() << "STORE: " << storeTime << "\n");
   time = std::max(time, storeTime);
   storeTimes[ptr] = time;
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::memref::StoreOp op, std::vector<Any> &in,
-                                std::vector<Any> &) {
+LogicalResult HandshakeExecuter::execute(mlir::memref::StoreOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &) {
   ArrayRef<int64_t> shape = op.getMemRefType().getShape();
   unsigned address = 0;
   for (unsigned i = 0; i < shape.size(); ++i) {
     address = address * shape[i] + any_cast<APInt>(in[i + 2]).getZExtValue();
   }
   unsigned ptr = any_cast<unsigned>(in[1]);
-  assert(ptr < store.size());
+  if (ptr >= store.size())
+    return op.emitError() << "Unknown memory identified by pointer '" << ptr
+                          << "'";
   auto &ref = store[ptr];
   //  LLVM_DEBUG(dbgs() << "Store " << in[0] << " to " << ptr << "[" << address
   //  << "]\n");
-  assert(address < ref.size());
+  if (address >= ref.size())
+    return op.emitError() << "Out-of-bounds access to memory '" << ptr
+                          << "'. Memory has " << ref.size()
+                          << " elements but requested element " << address;
   ref[address] = in[0];
 
   double storeTime = storeTimes[ptr];
   LLVM_DEBUG(dbgs() << "STORE: " << storeTime << "\n");
   time = std::max(time, storeTime);
   storeTimes[ptr] = time;
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::memref::AllocOp op, std::vector<Any> &in,
-                                std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(mlir::memref::AllocOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   out[0] = allocateMemRef(op.getType(), in, store, storeTimes);
   unsigned ptr = any_cast<unsigned>(out[0]);
   storeTimes[ptr] = time;
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::BranchOp branchOp, std::vector<Any> &in,
-                                std::vector<Any> &) {
+LogicalResult HandshakeExecuter::execute(mlir::BranchOp branchOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &) {
   mlir::Block *dest = branchOp.getDest();
   for (auto out : enumerate(dest->getArguments())) {
     LLVM_DEBUG(debugArg("ARG", out.value(), in[out.index()], time));
@@ -400,10 +462,12 @@ void HandshakeExecuter::execute(mlir::BranchOp branchOp, std::vector<Any> &in,
     timeMap[out.value()] = time;
   }
   instIter = dest->begin();
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::CondBranchOp condBranchOp,
-                                std::vector<Any> &in, std::vector<Any> &) {
+LogicalResult HandshakeExecuter::execute(mlir::CondBranchOp condBranchOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &) {
   APInt condition = any_cast<APInt>(in[0]);
   mlir::Block *dest;
   std::vector<Any> inArgs;
@@ -433,26 +497,32 @@ void HandshakeExecuter::execute(mlir::CondBranchOp condBranchOp,
     timeMap[out.value()] = time;
   }
   instIter = dest->begin();
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::ReturnOp op, std::vector<Any> &in,
-                                std::vector<Any> &) {
+LogicalResult HandshakeExecuter::execute(mlir::ReturnOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &) {
   for (unsigned i = 0; i < results.size(); ++i) {
     results[i] = in[i];
     resultTimes[i] = timeMap[op.getOperand(i)];
   }
+  return success();
 }
 
-void HandshakeExecuter::execute(handshake::ReturnOp op, std::vector<Any> &in,
-                                std::vector<Any> &) {
+LogicalResult HandshakeExecuter::execute(handshake::ReturnOp op,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &) {
   for (unsigned i = 0; i < results.size(); ++i) {
     results[i] = in[i];
     resultTimes[i] = timeMap[op.getOperand(i)];
   }
+  return success();
 }
 
-void HandshakeExecuter::execute(mlir::CallOpInterface callOp,
-                                std::vector<Any> &in, std::vector<Any> &) {
+LogicalResult HandshakeExecuter::execute(mlir::CallOpInterface callOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &) {
   // implement function calls.
   auto op = callOp.getOperation();
   mlir::Operation *calledOp = callOp.resolveCallable();
@@ -481,11 +551,14 @@ void HandshakeExecuter::execute(mlir::CallOpInterface callOp,
     }
     ++instIter;
   } else
-    fatalValueError("Callable was not a Function", *op);
+    return op->emitError() << "Callable was not a function";
+
+  return success();
 }
 
-void HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
-                                std::vector<Any> &in, std::vector<Any> &out) {
+LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
+                                         std::vector<Any> &in,
+                                         std::vector<Any> &out) {
   // Execute the instance op and create associations in the current
   // scope's value and time maps for the returned values.
 
@@ -532,12 +605,14 @@ void HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
         timeMap[instanceOp.getResults()[nestedRes.index()]] =
             nestedResTimes[nestedRes.index()];
       }
-      return;
+      return success();
     } else {
-      fatalValueError("Function not found in module", funcSym);
+      return instanceOp.emitError()
+             << "Function '" << funcSym << "' not found in module";
     }
   } else
-    fatalValueError("Missing 'module' attribute for InstanceOp", instanceOp);
+    return instanceOp.emitError()
+           << "Missing 'module' attribute for InstanceOp";
 
   llvm_unreachable("Fatal error reached before this point");
 }
@@ -551,6 +626,7 @@ HandshakeExecuter::HandshakeExecuter(
     std::vector<double> &storeTimes)
     : valueMap(valueMap), timeMap(timeMap), results(results),
       resultTimes(resultTimes), store(store), storeTimes(storeTimes) {
+  successFlag = true;
   mlir::Block &entryBlock = toplevel.getBody().front();
   instIter = entryBlock.begin();
 
@@ -569,30 +645,35 @@ HandshakeExecuter::HandshakeExecuter(
                           timeMap[in.value()]));
     }
 
-    unsigned strat =
-        llvm::TypeSwitch<Operation *, ExecuteStrategy>(&op)
+    unsigned strat = ExecuteStrategy::Default;
+    auto res =
+        llvm::TypeSwitch<Operation *, LogicalResult>(&op)
             .Case<mlir::ConstantIndexOp, mlir::ConstantIntOp, mlir::AddIOp,
                   mlir::AddFOp, mlir::CmpIOp, mlir::CmpFOp, mlir::SubIOp,
                   mlir::SubFOp, mlir::MulIOp, mlir::MulFOp, mlir::SignedDivIOp,
                   mlir::UnsignedDivIOp, mlir::DivFOp, mlir::IndexCastOp,
                   mlir::SignExtendIOp, mlir::ZeroExtendIOp, memref::AllocOp,
                   memref::LoadOp, memref::StoreOp>([&](auto op) {
-              execute(op, inValues, outValues);
-              return ExecuteStrategy::Default;
+              strat = ExecuteStrategy::Default;
+              return execute(op, inValues, outValues);
             })
             .Case<mlir::BranchOp, mlir::CondBranchOp, mlir::CallOpInterface>(
                 [&](auto op) {
-                  execute(op, inValues, outValues);
-                  return ExecuteStrategy::Continue;
+                  strat = ExecuteStrategy::Continue;
+                  return execute(op, inValues, outValues);
                 })
             .Case<mlir::ReturnOp>([&](auto op) {
-              execute(op, inValues, outValues);
-              return ExecuteStrategy::Return;
+              strat = ExecuteStrategy::Return;
+              return execute(op, inValues, outValues);
             })
             .Default([](auto op) {
-              fatalValueError("Unknown operation!\n", *op);
-              return ExecuteStrategy::Default;
+              return op->emitError() << "Unknown operation!";
             });
+
+    if (res.failed()) {
+      successFlag = false;
+      return;
+    }
 
     if (strat & ExecuteStrategy::Continue)
       continue;
@@ -618,6 +699,7 @@ HandshakeExecuter::HandshakeExecuter(
     : valueMap(valueMap), timeMap(timeMap), results(results),
       resultTimes(resultTimes), store(store), storeTimes(storeTimes),
       module(&module) {
+  successFlag = true;
   mlir::Block &entryBlock = func.getBody().front();
   // The arguments of the entry block.
   mlir::Block::BlockArgListType blockArgs = entryBlock.getArguments();
@@ -646,7 +728,8 @@ HandshakeExecuter::HandshakeExecuter(
         for (auto t
              : valueMap) { debugArg("Value:", t.first, t.second, 0.0); });
 #endif
-    assert(readyList.size() > 0);
+    assert(readyList.size() > 0 &&
+           "Expected some instruction to be ready for execution");
     mlir::Operation &op = *readyList.front();
     readyList.pop_front();
 
@@ -687,25 +770,29 @@ HandshakeExecuter::HandshakeExecuter(
     for (mlir::Value in : op.getOperands())
       valueMap.erase(in);
 
-    ExecuteStrategy strat =
-        llvm::TypeSwitch<Operation *, ExecuteStrategy>(&op)
+    ExecuteStrategy strat = ExecuteStrategy::Default;
+    LogicalResult res =
+        llvm::TypeSwitch<Operation *, LogicalResult>(&op)
             .Case<mlir::ConstantIndexOp, mlir::ConstantIntOp, mlir::AddIOp,
                   mlir::AddFOp, mlir::CmpIOp, mlir::CmpFOp, mlir::SubIOp,
                   mlir::SubFOp, mlir::MulIOp, mlir::MulFOp, mlir::SignedDivIOp,
                   mlir::UnsignedDivIOp, mlir::DivFOp, mlir::IndexCastOp,
                   mlir::SignExtendIOp, mlir::ZeroExtendIOp,
                   handshake::InstanceOp>([&](auto op) {
-              execute(op, inValues, outValues);
-              return ExecuteStrategy::Default;
+              strat = ExecuteStrategy::Default;
+              return execute(op, inValues, outValues);
             })
             .Case<handshake::ReturnOp>([&](auto op) {
-              execute(op, inValues, outValues);
-              return ExecuteStrategy::Return;
+              strat = ExecuteStrategy::Return;
+              return execute(op, inValues, outValues);
             })
-            .Default([](auto op) {
-              fatalValueError("Unknown operation!\n", *op);
-              return ExecuteStrategy::Default;
-            });
+            .Default(
+                [](auto op) { return op->emitError() << "Unknown operation"; });
+
+    if (res.failed()) {
+      successFlag = false;
+      return;
+    }
 
     if (strat & ExecuteStrategy::Return)
       return;
@@ -827,15 +914,22 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
 
   std::vector<Any> results(realOutputs);
   std::vector<double> resultTimes(realOutputs);
+  bool succeeded = false;
   if (mlir::FuncOp toplevel =
           module->lookupSymbol<mlir::FuncOp>(toplevelFunction)) {
-    HandshakeExecuter(toplevel, valueMap, timeMap, results, resultTimes, store,
-                      storeTimes);
+    succeeded = HandshakeExecuter(toplevel, valueMap, timeMap, results,
+                                  resultTimes, store, storeTimes)
+                    .succeeded();
   } else if (handshake::FuncOp toplevel =
                  module->lookupSymbol<handshake::FuncOp>(toplevelFunction)) {
-    HandshakeExecuter(toplevel, valueMap, timeMap, results, resultTimes, store,
-                      storeTimes, module);
+    succeeded = HandshakeExecuter(toplevel, valueMap, timeMap, results,
+                                  resultTimes, store, storeTimes, module)
+                    .succeeded();
   }
+
+  if (!succeeded)
+    return 1;
+
   double time = 0.0;
   for (unsigned i = 0; i < results.size(); ++i) {
     mlir::Type t = ftype.getResult(i);
