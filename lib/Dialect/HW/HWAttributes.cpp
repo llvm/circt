@@ -228,31 +228,31 @@ static Attribute foldBinaryOp(
 /// constant operands and move them to the right.  If the whole expression is
 /// constant, then return that, otherwise update the operands list.
 static Attribute simplifyAssocOp(
-    SmallVector<Attribute, 4> &operands,
-    llvm::function_ref<APInt(const APInt &, const APInt &)> calculate) {
+    PEO opcode, SmallVector<Attribute, 4> &operands,
+    llvm::function_ref<APInt(const APInt &, const APInt &)> calculateFn,
+    llvm::function_ref<bool(const APInt &)> identityConstantFn,
+    llvm::function_ref<bool(const APInt &)> destructiveConstantFn = {}) {
   auto type = operands[0].getType();
   assert(isHWIntegerType(type));
   if (operands.size() == 1)
     return operands[0];
 
-  // Fast path the normal case: binary operator.
-  if (operands.size() == 2) {
-    // No change for (x, cst) or (x, y).
-    auto lhsCst = operands[0].dyn_cast<IntegerAttr>();
-    if (!lhsCst)
-      return {};
-
-    // (cst1, cst2) -> cst
-    if (auto rhsCst = operands[1].dyn_cast<IntegerAttr>())
-      return IntegerAttr::get(type,
-                              calculate(lhsCst.getValue(), rhsCst.getValue()));
-
-    // (cst, x) -> (x, cst)
-    std::swap(operands[0], operands[1]);
-    return {};
+  // Flatten any of the same operation into the operand list:
+  // `(add x, (add y, z))` => `(add x, y, z)`.
+  for (size_t i = 0, e = operands.size(); i != e; ++i) {
+    if (auto subexpr = operands[i].dyn_cast<ParamExprAttr>()) {
+      if (subexpr.getOpcode() == opcode) {
+        std::swap(operands[i], operands.back());
+        operands.pop_back();
+        --e;
+        --i;
+        operands.append(subexpr.getOperands().begin(),
+                        subexpr.getOperands().end());
+      }
+    }
   }
 
-  // More than two operands, scan for the first constant.
+  // Scan for any constants.
   size_t i = 0, e = operands.size();
   for (; i != e && !operands[i].isa<IntegerAttr>(); ++i)
     ;
@@ -270,7 +270,7 @@ static Attribute simplifyAssocOp(
   // Scan for any more constants, merging them into this one.
   while (i != e) {
     if (auto cst2 = operands[i].dyn_cast<IntegerAttr>()) {
-      cst = calculate(cst, cst2.getValue());
+      cst = calculateFn(cst, cst2.getValue());
       operands[i] = operands.back();
       operands.pop_back();
       --e;
@@ -279,63 +279,95 @@ static Attribute simplifyAssocOp(
     }
   }
 
-  // Add it back at the end.  If all operands are constants, then fold to
-  // a constant.
-  operands.push_back(IntegerAttr::get(type, cst));
+  // All operands were constants, then that is our answer.
+  auto resultConstant = IntegerAttr::get(type, cst);
+  if (operands.empty())
+    return resultConstant;
+
+  // If the resulting constant is the destructive constant (e.g. `x*0`), then
+  // return it.
+  if (destructiveConstantFn && destructiveConstantFn(cst))
+    return resultConstant;
+
+  // Add the constant back to our operand list unless it is the identity
+  // constant for this operator (e.g. `x*1`).
+  if (!identityConstantFn(cst))
+    operands.push_back(resultConstant);
+
   return operands.size() == 1 ? operands[0] : Attribute();
 }
 
 static Attribute simplifyAdd(SmallVector<Attribute, 4> &operands) {
-  return simplifyAssocOp(operands, [](auto a, auto b) { return a + b; });
+  return simplifyAssocOp(
+      PEO::Add, operands, [](auto a, auto b) { return a + b; },
+      /*identityCst*/ [](auto cst) { return cst.isZero(); });
 }
 
 static Attribute simplifyMul(SmallVector<Attribute, 4> &operands) {
-  return simplifyAssocOp(operands, [](auto a, auto b) { return a * b; });
+  return simplifyAssocOp(
+      PEO::Mul, operands, [](auto a, auto b) { return a * b; },
+      /*identityCst*/ [](auto cst) { return cst.isOne(); },
+      /*destructiveCst*/ [](auto cst) { return cst.isZero(); });
 }
 static Attribute simplifyAnd(SmallVector<Attribute, 4> &operands) {
-  return simplifyAssocOp(operands, [](auto a, auto b) { return a & b; });
+  return simplifyAssocOp(
+      PEO::And, operands, [](auto a, auto b) { return a & b; },
+      /*identityCst*/ [](auto cst) { return cst.isAllOnes(); },
+      /*destructiveCst*/ [](auto cst) { return cst.isZero(); });
 }
 
 static Attribute simplifyOr(SmallVector<Attribute, 4> &operands) {
-  return simplifyAssocOp(operands, [](auto a, auto b) { return a | b; });
+  return simplifyAssocOp(
+      PEO::Or, operands, [](auto a, auto b) { return a | b; },
+      /*identityCst*/ [](auto cst) { return cst.isZero(); },
+      /*destructiveCst*/ [](auto cst) { return cst.isAllOnes(); });
 }
 
 static Attribute simplifyXor(SmallVector<Attribute, 4> &operands) {
-  return simplifyAssocOp(operands, [](auto a, auto b) { return a ^ b; });
+  return simplifyAssocOp(
+      PEO::Xor, operands, [](auto a, auto b) { return a ^ b; },
+      /*identityCst*/ [](auto cst) { return cst.isZero(); });
 }
 
 static Attribute simplifyShl(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
+  // TODO: Implement support for identities like `x << cst` => `x * (1<<cst)`.
   return foldBinaryOp(operands, [](auto a, auto b) { return a.shl(b); });
 }
 
 static Attribute simplifyShrU(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
+  // TODO: Implement support for identities like `x >> 0`.
   return foldBinaryOp(operands, [](auto a, auto b) { return a.lshr(b); });
 }
 
 static Attribute simplifyShrS(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
+  // TODO: Implement support for identities like `x >> 0`.
   return foldBinaryOp(operands, [](auto a, auto b) { return a.ashr(b); });
 }
 
 static Attribute simplifyDivU(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
+  // TODO: Implement support for identities like `x/1`.
   return foldBinaryOp(operands, [](auto a, auto b) { return a.udiv(b); });
 }
 
 static Attribute simplifyDivS(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
+  // TODO: Implement support for identities like `x/1`.
   return foldBinaryOp(operands, [](auto a, auto b) { return a.sdiv(b); });
 }
 
 static Attribute simplifyModU(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
+  // TODO: Implement support for identities like `x%1`.
   return foldBinaryOp(operands, [](auto a, auto b) { return a.urem(b); });
 }
 
 static Attribute simplifyModS(SmallVector<Attribute, 4> &operands) {
   assert(isHWIntegerType(operands[0].getType()));
+  // TODO: Implement support for identities like `x%1`.
   return foldBinaryOp(operands, [](auto a, auto b) { return a.srem(b); });
 }
 
