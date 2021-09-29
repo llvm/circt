@@ -68,6 +68,24 @@ enum VerilogPrecedence {
   LowestPrecedence,  // Sentinel which is always the lowest precedence.
   ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
 };
+
+/// This enum keeps track of whether the emitted subexpression is signed or
+/// unsigned as seen from the Verilog language perspective.
+enum SubExprSignResult { IsSigned, IsUnsigned };
+
+/// This is information precomputed about each subexpression in the tree we
+/// are emitting as a unit.
+struct SubExprInfo {
+  /// The precedence of this expression.
+  VerilogPrecedence precedence;
+
+  /// The signedness of the expression.
+  SubExprSignResult signedness;
+
+  SubExprInfo(VerilogPrecedence precedence, SubExprSignResult signedness)
+      : precedence(precedence), signedness(signedness) {}
+};
+
 } // end anonymous namespace
 
 //===----------------------------------------------------------------------===//
@@ -76,7 +94,7 @@ enum VerilogPrecedence {
 
 /// Helper that prints a parameter constant value in a Verilog compatible way.
 /// This returns the precedence of the generated string.
-static VerilogPrecedence
+static SubExprInfo
 printParamValue(Attribute value, raw_ostream &os,
                 VerilogPrecedence parenthesizeIfLooserThan,
                 function_ref<InFlightDiagnostic()> emitError) {
@@ -98,32 +116,34 @@ printParamValue(Attribute value, raw_ostream &os,
         os << intTy.getWidth() << "'d";
     }
     value.print(os, intTy.isSigned());
-    return Symbol;
+    return {Symbol, intTy.isSigned() ? IsSigned : IsUnsigned};
   }
   if (auto strAttr = value.dyn_cast<StringAttr>()) {
     os << '"';
     os.write_escaped(strAttr.getValue());
     os << '"';
-    return Symbol;
+    return {Symbol, IsUnsigned};
   }
   if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
     // TODO: relying on float printing to be precise is not a good idea.
     os << fpAttr.getValueAsDouble();
-    return Symbol;
+    return {Symbol, IsUnsigned};
   }
   if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
     os << verbatimParam.getValue().getValue();
-    return Symbol;
+    return {Symbol, IsUnsigned};
   }
   if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     os << parameterRef.getName().getValue();
-    return Symbol;
+    // TODO: Should we support signed parameters?
+    return {Symbol, IsUnsigned};
   }
 
   // Handle nested expressions.
   if (auto expr = value.dyn_cast<ParamExprAttr>()) {
     StringRef operatorStr;
     VerilogPrecedence subprecedence = ForceEmitMultiUse;
+    SubExprSignResult resultSignedness = IsUnsigned;
 
     switch (expr.getOpcode()) {
     case PEO::Add:
@@ -165,19 +185,19 @@ printParamValue(Attribute value, raw_ostream &os,
     }
     if (subprecedence > parenthesizeIfLooserThan) {
       os << ')';
-      return Symbol;
+      subprecedence = Symbol;
     }
-    return subprecedence;
+    return {subprecedence, resultSignedness};
   }
 
   os << "<<UNKNOWN MLIRATTR: " << value << ">>";
   emitError() << " = " << value;
-  return LowestPrecedence;
+  return {LowestPrecedence, IsUnsigned};
 }
 
 /// Prints a parameter attribute expression in a Verilog compatible way.
 /// This returns the precedence of the generated string.
-static VerilogPrecedence
+static SubExprInfo
 printParamValue(Attribute value, raw_ostream &os,
                 function_ref<InFlightDiagnostic()> emitError) {
   return printParamValue(value, os, VerilogPrecedence::LowestPrecedence,
@@ -878,27 +898,6 @@ void ModuleEmitter::verifyModuleName(Operation *op, StringAttr nameAttr) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-
-/// This enum keeps track of whether the emitted subexpression is signed or
-/// unsigned as seen from the Verilog language perspective.
-enum SubExprSignResult { IsSigned, IsUnsigned };
-
-/// This is information precomputed about each subexpression in the tree we
-/// are emitting as a unit.
-struct SubExprInfo {
-  /// The precedence of this expression.
-  VerilogPrecedence precedence;
-
-  /// The signedness of the expression.
-  SubExprSignResult signedness;
-
-  SubExprInfo(VerilogPrecedence precedence, SubExprSignResult signedness)
-      : precedence(precedence), signedness(signedness) {}
-};
-
-} // namespace
-
-namespace {
 /// This builds a recursively nested expression from an SSA use-def graph.  This
 /// uses a post-order walk, but it needs to obey precedence and signedness
 /// constraints that depend on the behavior of the child nodes.  To handle this,
@@ -1487,10 +1486,9 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
-  auto prec = printParamValue(op.value(), os, [&]() {
+  return printParamValue(op.value(), os, [&]() {
     return op->emitOpError("invalid parameter use");
   });
-  return {prec, IsUnsigned};
 }
 
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
