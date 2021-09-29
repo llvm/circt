@@ -394,12 +394,10 @@ void HandshakeExecuter::execute(mlir::memref::AllocOp op, std::vector<Any> &in,
 void HandshakeExecuter::execute(mlir::BranchOp branchOp, std::vector<Any> &in,
                                 std::vector<Any> &) {
   mlir::Block *dest = branchOp.getDest();
-  unsigned arg = 0;
-  for (mlir::Value out : dest->getArguments()) {
-    LLVM_DEBUG(debugArg("ARG", out, in[arg], time));
-    valueMap[out] = in[arg];
-    timeMap[out] = time;
-    arg++;
+  for (auto out : enumerate(dest->getArguments())) {
+    LLVM_DEBUG(debugArg("ARG", out.value(), in[out.index()], time));
+    valueMap[out.value()] = in[out.index()];
+    timeMap[out.value()] = time;
   }
   instIter = dest->begin();
 }
@@ -410,32 +408,29 @@ void HandshakeExecuter::execute(mlir::CondBranchOp condBranchOp,
   mlir::Block *dest;
   std::vector<Any> inArgs;
   double time = 0.0;
-  int i = 0;
   if (condition != 0) {
     dest = condBranchOp.getTrueDest();
     inArgs.resize(condBranchOp.getNumTrueOperands());
-    for (mlir::Value in : condBranchOp.getTrueOperands()) {
-      inArgs[i] = valueMap[in];
-      time = std::max(time, timeMap[in]);
-      LLVM_DEBUG(debugArg("IN", in, inArgs[i], timeMap[in]));
-      i++;
+    for (auto in : enumerate(condBranchOp.getTrueOperands())) {
+      inArgs[in.index()] = valueMap[in.value()];
+      time = std::max(time, timeMap[in.value()]);
+      LLVM_DEBUG(
+          debugArg("IN", in.value(), inArgs[in.index()], timeMap[in.value()]));
     }
   } else {
     dest = condBranchOp.getFalseDest();
     inArgs.resize(condBranchOp.getNumFalseOperands());
-    for (mlir::Value in : condBranchOp.getFalseOperands()) {
-      inArgs[i] = valueMap[in];
-      time = std::max(time, timeMap[in]);
-      LLVM_DEBUG(debugArg("IN", in, inArgs[i], timeMap[in]));
-      i++;
+    for (auto in : enumerate(condBranchOp.getFalseOperands())) {
+      inArgs[in.index()] = valueMap[in.value()];
+      time = std::max(time, timeMap[in.value()]);
+      LLVM_DEBUG(
+          debugArg("IN", in.value(), inArgs[in.index()], timeMap[in.value()]));
     }
   }
-  int64_t arg = 0;
-  for (mlir::Value out : dest->getArguments()) {
-    LLVM_DEBUG(debugArg("ARG", out, inArgs[arg], time));
-    valueMap[out] = inArgs[arg];
-    timeMap[out] = time;
-    arg++;
+  for (auto out : enumerate(dest->getArguments())) {
+    LLVM_DEBUG(debugArg("ARG", out.value(), inArgs[out.index()], time));
+    valueMap[out.value()] = inArgs[out.index()];
+    timeMap[out.value()] = time;
   }
   instIter = dest->begin();
 }
@@ -463,7 +458,6 @@ void HandshakeExecuter::execute(mlir::CallOpInterface callOp,
   mlir::Operation *calledOp = callOp.resolveCallable();
   if (auto funcOp = dyn_cast<mlir::FuncOp>(calledOp)) {
     mlir::FunctionType ftype = funcOp.getType();
-    unsigned inputs = ftype.getNumInputs();
     unsigned outputs = ftype.getNumResults();
     llvm::DenseMap<mlir::Value, Any> newValueMap;
     llvm::DenseMap<mlir::Value, double> newTimeMap;
@@ -474,22 +468,20 @@ void HandshakeExecuter::execute(mlir::CallOpInterface callOp,
     mlir::Block &entryBlock = funcOp.getBody().front();
     mlir::Block::BlockArgListType blockArgs = entryBlock.getArguments();
 
-    for (unsigned i = 0; i < inputs; i++) {
-      newValueMap[blockArgs[i]] = in[i];
-      newTimeMap[blockArgs[i]] = timeMap[op->getOperand(i)];
+    for (auto inIt : enumerate(in)) {
+      newValueMap[blockArgs[inIt.index()]] = inIt.value();
+      newTimeMap[blockArgs[inIt.index()]] =
+          timeMap[op->getOperand(inIt.index())];
     }
     HandshakeExecuter(funcOp, newValueMap, newTimeMap, results, resultTimes,
                       store, storeTimes);
-    int i = 0;
-    for (mlir::Value out : op->getResults()) {
-      valueMap[out] = results[i];
-      timeMap[out] = resultTimes[i];
-      i++;
+    for (auto out : enumerate(op->getResults())) {
+      valueMap[out.value()] = results[out.index()];
+      timeMap[out.value()] = resultTimes[out.index()];
     }
     instIter++;
-  } else {
+  } else
     fatalValueError("Callable was not a Function", *op);
-  }
 }
 
 void HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
@@ -518,32 +510,35 @@ void HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
 
       // Associate each input argument with the arguments of the called
       // function
-      for (size_t i = 0; i < in.size(); i++) {
-        scopeValueMap[instanceBlockArgs[i]] = in[i];
-        scopeTimeMap[instanceBlockArgs[i]] = timeMap[instanceOp.getOperand(i)];
+      for (auto inIt : enumerate(in)) {
+        scopeValueMap[instanceBlockArgs[inIt.index()]] = inIt.value();
+        scopeTimeMap[instanceBlockArgs[inIt.index()]] =
+            timeMap[instanceOp.getOperand(inIt.index())];
       }
 
       // ... and the implicit none argument
       APInt apnonearg(1, 0);
       scopeValueMap[instanceBlockArgs[instanceBlockArgs.size() - 1]] =
           apnonearg;
-      std::vector<Any> nestedRes(nRealFuncOuts);
+      std::vector<Any> nestedResults(nRealFuncOuts);
       std::vector<double> nestedResTimes(nRealFuncOuts);
-      HandshakeExecuter(func, scopeValueMap, scopeTimeMap, nestedRes,
+      HandshakeExecuter(func, scopeValueMap, scopeTimeMap, nestedResults,
                         nestedResTimes, store, storeTimes, *module);
 
-      for (size_t i = 0; i < nestedRes.size(); i++) {
-        out[i] = nestedRes.at(i);
-        valueMap[instanceOp.getResults()[i]] = nestedRes.at(i);
-        timeMap[instanceOp.getResults()[i]] = nestedResTimes[i];
+      for (auto nestedRes : enumerate(nestedResults)) {
+        out[nestedRes.index()] = nestedRes.value();
+        valueMap[instanceOp.getResults()[nestedRes.index()]] =
+            nestedRes.value();
+        timeMap[instanceOp.getResults()[nestedRes.index()]] =
+            nestedResTimes[nestedRes.index()];
       }
       return;
     } else {
       fatalValueError("Function not found in module", funcSym);
     }
-  } else {
+  } else
     fatalValueError("Missing 'module' attribute for InstanceOp", instanceOp);
-  }
+
   llvm_unreachable("Fatal error reached before this point");
 }
 
@@ -638,8 +633,8 @@ HandshakeExecuter::HandshakeExecuter(
         llvm_unreachable("Memory op does not have unique ID!\n");
   });
 
-  for (unsigned i = 0; i < blockArgs.size(); i++)
-    scheduleUses(readyList, valueMap, blockArgs[i]);
+  for (auto blockArg : blockArgs)
+    scheduleUses(readyList, valueMap, blockArg);
 
 #define EXTRA_DEBUG
   while (true) {
@@ -689,9 +684,8 @@ HandshakeExecuter::HandshakeExecuter(
       continue;
     }
     // Consume the inputs.
-    for (mlir::Value in : op.getOperands()) {
+    for (mlir::Value in : op.getOperands())
       valueMap.erase(in);
-    }
 
     ExecuteStrategy strat =
         llvm::TypeSwitch<Operation *, ExecuteStrategy>(&op)
