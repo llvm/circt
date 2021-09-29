@@ -1453,7 +1453,7 @@ static bool hasCommonTailPatternPreConditions(IfOp op) {
 ///     seq { ... calyx.enable @A }             seq { ... }
 ///   }                                       }
 ///                                           calyx.enable @A
-///
+///                                         }
 struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
   using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
 
