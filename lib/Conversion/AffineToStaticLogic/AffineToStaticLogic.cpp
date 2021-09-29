@@ -60,21 +60,31 @@ void AffineToStaticLogic::runOnAffineFor(
   Problem::OperatorType seqOpr = problem.getOrInsertOperatorType("seq");
   problem.setLatency(seqOpr, 1);
 
-  forOp.getBody()->walk([&](Operation *op) {
+  Operation *unsupported;
+  WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     problem.insertOperation(op);
 
-    // Affine dialect ops (if, yield, etc.) are treated as combinational.
-    if (isa<AffineDialect>(op->getDialect()))
-      problem.setLinkedOperatorType(op, combOpr);
-
     // Some known combinational ops.
-    if (isa<AddIOp, AffineReadOpInterface, ConstantOp, memref::AllocaOp>(op))
+    if (isa<AddIOp, AffineIfOp, AffineYieldOp, ConstantOp, IndexCastOp,
+            memref::AllocaOp>(op)) {
       problem.setLinkedOperatorType(op, combOpr);
+      return WalkResult::advance();
+    }
 
     // Some known sequential ops.
-    if (isa<AffineWriteOpInterface>(op))
+    if (isa<AffineReadOpInterface, AffineWriteOpInterface>(op)) {
       problem.setLinkedOperatorType(op, seqOpr);
+      return WalkResult::advance();
+    }
+
+    unsupported = op;
+    return WalkResult::interrupt();
   });
+
+  if (result.wasInterrupted()) {
+    forOp.emitError("unsupported operation ") << *unsupported;
+    return signalPassFailure();
+  }
 
   // Insert memory dependences into the problem.
   forOp.getBody()->walk([&](Operation *op) {
