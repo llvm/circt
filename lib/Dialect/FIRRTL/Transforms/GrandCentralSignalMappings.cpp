@@ -11,11 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
-#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "gct"
@@ -72,6 +69,7 @@ struct ModuleSignalMappings {
 };
 } // namespace
 
+// Allow `SignalMapping` to be printed.
 template <typename T>
 static T &operator<<(T &os, const SignalMapping &mapping) {
   os << "SignalMapping { remote"
@@ -81,6 +79,11 @@ static T &operator<<(T &os, const SignalMapping &mapping) {
   return os;
 }
 
+/// Analyze the `module` of this `ModuleSignalMappings` and generate the
+/// corresponding auxiliary `FModuleOp` with the necessary cross-module
+/// references and `ForceOp`s to probe and drive remote signals. This is
+/// dictated by the presence of `SignalDriverAnnotation` on the module and
+/// individual operations inside it.
 void ModuleSignalMappings::run() {
   // Check whether this module has any `SignalDriverAnnotation`s. These indicate
   // whether the module contains any operations with such annotations and
@@ -127,6 +130,10 @@ void ModuleSignalMappings::run() {
   instantiateMappingsModule();
 }
 
+/// Mark a `value` inside the `module` as being the target of the
+/// `SignalDriverAnnotation` `anno`. This generates the necessary
+/// `SignalMapping` information and adds an entry to the `mappings` array, to be
+/// later consumed when the mappings module is constructed.
 void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   // We're emitting code for the "local" side of these annotations, which
   // sits in the sub-circuit and interacts with the main circuit on the
@@ -155,6 +162,8 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   mappings.push_back(std::move(mapping));
 }
 
+/// Create a separate mappings module that contains cross-module references and
+/// `ForceOp`s for each entry in the `mappings` array.
 void ModuleSignalMappings::emitMappingsModule() {
   LLVM_DEBUG(llvm::dbgs() << "- Generating `" << mappingsModuleName << "`\n");
 
@@ -204,6 +213,8 @@ void ModuleSignalMappings::emitMappingsModule() {
   }
 }
 
+/// Instantiate the generated mappings module inside the `module` we are working
+/// on, and generated the necessary connections to local signals.
 void ModuleSignalMappings::instantiateMappingsModule() {
   LLVM_DEBUG(llvm::dbgs() << "- Instantiating `" << mappingsModuleName
                           << "`\n");
