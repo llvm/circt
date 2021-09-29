@@ -4,6 +4,10 @@ firrtl.circuit "SubCircuit" {
   firrtl.extmodule @FooExtern(in %clockIn: !firrtl.clock, out %clockOut: !firrtl.clock)
   firrtl.extmodule @BarExtern(in %someInput: !firrtl.uint<42>, out %someOutput: !firrtl.uint<42>)
 
+  // Create a name collision for the signal mappings file to ensure it's
+  // properly handled.
+  firrtl.extmodule @Bar_signal_mappings()
+
   // CHECK-LABEL: firrtl.module @Foo_signal_mappings
   // CHECK-SAME:    out %clock_source: !firrtl.clock
   // CHECK-SAME:    in %clock_sink: !firrtl.clock
@@ -25,7 +29,7 @@ firrtl.circuit "SubCircuit" {
     // CHECK: firrtl.connect [[T2]], %clock_sink :
   }
 
-  // CHECK-LABEL: firrtl.module @Bar_signal_mappings
+  // CHECK-LABEL: firrtl.module @Bar_signal_mappings_0
   // CHECK-SAME:    out %data_source: !firrtl.uint<42>
   // CHECK-SAME:    in %data_sink: !firrtl.uint<42>
   // CHECK-SAME:  ) {
@@ -41,7 +45,7 @@ firrtl.circuit "SubCircuit" {
     %ext_someInput, %ext_someOutput = firrtl.instance @BarExtern {name = "ext"} : !firrtl.uint<42>, !firrtl.uint<42>
     firrtl.connect %ext_someInput, %data_source : !firrtl.uint<42>, !firrtl.uint<42>
     firrtl.connect %data_sink, %ext_someOutput : !firrtl.uint<42>, !firrtl.uint<42>
-    // CHECK: [[T1:%.+]], [[T2:%.+]] = firrtl.instance @Bar_signal_mappings
+    // CHECK: [[T1:%.+]], [[T2:%.+]] = firrtl.instance @Bar_signal_mappings_0
     // CHECK: firrtl.connect %data_source, [[T1]] :
     // CHECK: firrtl.connect [[T2]], %data_sink :
   }

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/CircuitNamespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/Support/Debug.h"
@@ -120,8 +121,9 @@ void ModuleSignalMappings::run() {
   });
 
   // Pick a name for the module that implements the signal mappings.
-  mappingsModuleName = module.getName();
-  mappingsModuleName.append("_signal_mappings");
+  CircuitNamespace circuitNamespace(module->getParentOfType<CircuitOp>());
+  mappingsModuleName =
+      circuitNamespace.newName(Twine(module.getName()) + "_signal_mappings");
 
   // Generate the mappings module.
   emitMappingsModule();
