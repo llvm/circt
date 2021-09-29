@@ -373,6 +373,9 @@ def _module_base(cls, extern_name: str, params={}):
                                                        inputs,
                                                        loc=loc)
 
+    def output_values(self):
+      return {outname: getattr(self, outname) for (outname, _) in mod.outputs()}
+
     @staticmethod
     def print(out=sys.stdout):
       mod._pycde_mod.print(out)
@@ -470,7 +473,7 @@ class BlockArgs:
   # Support attribute access to block arguments by name
   def __getattr__(self, name):
     if name not in self.mod.input_port_lookup:
-      raise AttributeError(f"unknown input port name {name}")
+      raise AttributeError(f"unknown input port name '{name}'")
     idx = self.mod.input_port_lookup[name]
     val = self.mod.circt_mod.entry_block.arguments[idx]
     return Value.get(val)

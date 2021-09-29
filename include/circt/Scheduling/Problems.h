@@ -207,24 +207,27 @@ public:
   void setStartTime(Operation *op, unsigned val) { startTime[op] = val; }
 
   //===--------------------------------------------------------------------===//
-  // Hooks to check/verify the different problem components
+  // Property-specific validators
   //===--------------------------------------------------------------------===//
 protected:
-  virtual LogicalResult checkOperation(Operation *op);
-  virtual LogicalResult checkDependence(Dependence dep);
-  virtual LogicalResult checkOperatorType(OperatorType opr);
-  virtual LogicalResult checkProblem();
+  /// \p op is linked to a registered operator type.
+  virtual LogicalResult checkLinkedOperatorType(Operation *op);
+  /// \p opr has a latency.
+  virtual LogicalResult checkLatency(OperatorType opr);
+  /// \p op has a start time.
+  virtual LogicalResult verifyStartTime(Operation *op);
+  /// \p dep's source operation is available before \p dep's destination
+  /// operation starts.
+  virtual LogicalResult verifyPrecedence(Dependence dep);
 
-  virtual LogicalResult verifyOperation(Operation *op);
-  virtual LogicalResult verifyDependence(Dependence dep);
-  virtual LogicalResult verifyOperatorType(OperatorType opr);
-  virtual LogicalResult verifyProblem();
-
+  //===--------------------------------------------------------------------===//
+  // Client API for problem validation
+  //===--------------------------------------------------------------------===//
 public:
   /// Return success if the constructed scheduling problem is valid.
-  LogicalResult check();
+  virtual LogicalResult check();
   /// Return success if the computed solution is valid.
-  LogicalResult verify();
+  virtual LogicalResult verify();
 };
 
 /// This class models a cyclic scheduling problem. Its solution solution can be
@@ -255,8 +258,14 @@ public:
   void setInitiationInterval(unsigned val) { initiationInterval = val; }
 
 protected:
-  virtual LogicalResult verifyDependence(Dependence dep) override;
-  virtual LogicalResult verifyProblem() override;
+  /// \p dep's source operation is available before \p dep's destination
+  /// operation starts (\p dep's distance iterations later).
+  virtual LogicalResult verifyPrecedence(Dependence dep) override;
+  /// This problem has a non-zero II.
+  virtual LogicalResult verifyInitiationInterval();
+
+public:
+  virtual LogicalResult verify() override;
 };
 
 /// This class models a resource-constrained scheduling problem. An optional,
@@ -283,8 +292,13 @@ public:
   void setLimit(OperatorType opr, unsigned val) { limit[opr] = val; }
 
 protected:
-  virtual LogicalResult checkOperatorType(OperatorType opr) override;
-  virtual LogicalResult verifyOperatorType(OperatorType opr) override;
+  /// If \p opr is limited, it has a non-zero latency.
+  virtual LogicalResult checkLatency(OperatorType opr) override;
+  /// \p opr is not oversubscribed in any time step.
+  virtual LogicalResult verifyUtilization(OperatorType opr);
+
+public:
+  virtual LogicalResult verify() override;
 };
 
 /// This class models the modulo scheduling problem as the composition of the
@@ -306,7 +320,11 @@ public:
         SharedPipelinedOperatorsProblem(containingOp) {}
 
 protected:
-  virtual LogicalResult verifyOperatorType(OperatorType opr) override;
+  /// \p opr is not oversubscribed in any congruence class modulo II.
+  virtual LogicalResult verifyUtilization(OperatorType opr) override;
+
+public:
+  virtual LogicalResult verify() override;
 };
 
 } // namespace scheduling

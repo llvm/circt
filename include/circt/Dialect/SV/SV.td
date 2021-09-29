@@ -50,6 +50,7 @@ def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
   let cppNamespace = "::circt::sv";
 }
 
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVTypes.td"
 include "circt/Dialect/SV/SVExpressions.td"
 include "circt/Dialect/SV/SVInOutOps.td"
