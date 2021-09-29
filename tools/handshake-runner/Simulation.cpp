@@ -95,11 +95,6 @@ Any readValueWithType(mlir::Type type, std::string in) {
     int64_t width = type.getIntOrFloatBitWidth();
     APInt aparg(width, x);
     return aparg;
-    // } else if (type.isF16()) {
-    //   half x;
-    //   arg >> x;
-    //   APFloat aparg(x);
-    //   return aparg;
   } else if (type.isF32()) {
     float x;
     arg >> x;
@@ -403,8 +398,6 @@ LogicalResult HandshakeExecuter::execute(mlir::memref::LoadOp op,
                           << "'. Memory has " << ref.size()
                           << " elements but requested element " << address;
 
-  //  LLVM_DEBUG(dbgs() << "Load " << ref[address] << " from " << ptr << "[" <<
-  //  address << "]\n");
   Any result = ref[address];
   out[0] = result;
 
@@ -428,8 +421,6 @@ LogicalResult HandshakeExecuter::execute(mlir::memref::StoreOp op,
     return op.emitError() << "Unknown memory identified by pointer '" << ptr
                           << "'";
   auto &ref = store[ptr];
-  //  LLVM_DEBUG(dbgs() << "Store " << in[0] << " to " << ptr << "[" << address
-  //  << "]\n");
   if (address >= ref.size())
     return op.emitError() << "Out-of-bounds access to memory '" << ptr
                           << "'. Memory has " << ref.size()

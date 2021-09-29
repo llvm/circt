@@ -41,10 +41,6 @@ static cl::opt<std::string>
                      cl::desc("The top-level function to execute"),
                      cl::init("main"), cl::cat(mainCategory));
 
-// static opt<bool> runStats("runStats", cl::Optional,
-//                           cl::desc("Print Execution Statistics"),
-//                           cl::init(false), cl::cat(mainCategory));
-
 int main(int argc, char **argv) {
   InitLLVM y(argc, argv);
   cl::ParseCommandLineOptions(
