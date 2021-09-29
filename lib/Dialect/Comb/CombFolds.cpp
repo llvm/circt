@@ -623,45 +623,20 @@ LogicalResult ExtractOp::canonicalize(ExtractOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// Variadic operations
+// Associative Variadic operations
 //===----------------------------------------------------------------------===//
 
-// Reduce all operands to a single value by applying the `calculate` function.
-// This will fail if any of the operands are not constant.
-template <class CalculationFn = function_ref<void(APInt &, APInt)>>
+// Reduce all operands to a single value (either integer constant or parameter
+// expression) if all the operands are constants.
 static Attribute constFoldAssociativeOp(ArrayRef<Attribute> operands,
-                                        hw::PEO paramOpcode,
-                                        const CalculationFn &calculate) {
+                                        hw::PEO paramOpcode) {
   assert(operands.size() > 1 && "caller should handle one-operand case");
   // We can only fold anything in the case where all operands are known to be
   // constants.  Check the least common one first for an early out.
   if (!operands[1] || !operands[0])
     return {};
 
-  // If all the operands are known constant integer values then we can fold into
-  // a hw.constant.
-  if (auto attr0 = operands[0].dyn_cast<IntegerAttr>()) {
-    if (auto attr1 = operands[1].dyn_cast<IntegerAttr>()) {
-      APInt accum = attr0.getValue();
-      calculate(accum, attr1.getValue());
-
-      bool allPresent = true;
-
-      // Handle the rest of the operands if present.
-      for (auto op : operands.drop_front(2)) {
-        auto typedAttr = op.dyn_cast_or_null<IntegerAttr>();
-        if (!typedAttr)
-          allPresent = false;
-        else
-          calculate(accum, typedAttr.getValue());
-      }
-      if (allPresent)
-        return IntegerAttr::get(operands[0].getType(), accum);
-    }
-  }
-
-  // Otherwise, it must be a parameter-compatible constant.  Fold into a
-  // hw.param.value constant.
+  // This will fold to a simple constant if all operands are constant.
   if (llvm::all_of(operands.drop_front(2), [&](Attribute in) { return !!in; }))
     return hw::ParamExprAttr::get(paramOpcode, operands);
 
@@ -788,8 +763,7 @@ OpFoldResult AndOp::fold(ArrayRef<Attribute> constants) {
       }
 
   // Constant fold
-  return constFoldAssociativeOp(constants, hw::PEO::And,
-                                [](APInt &a, const APInt &b) { a &= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::And);
 }
 
 LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
@@ -920,8 +894,7 @@ OpFoldResult OrOp::fold(ArrayRef<Attribute> constants) {
       }
 
   // Constant fold
-  return constFoldAssociativeOp(constants, hw::PEO::Or,
-                                [](APInt &a, const APInt &b) { a |= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Or);
 }
 
 /// Simplify concat ops in an or op when a constant operand is present in either
@@ -1106,8 +1079,7 @@ OpFoldResult XorOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // Constant fold
-  return constFoldAssociativeOp(constants, hw::PEO::Xor,
-                                [](APInt &a, const APInt &b) { a ^= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Xor);
 }
 
 // xor(icmp, a, b, 1) -> xor(icmp, a, b) if icmp has one user.
@@ -1230,8 +1202,7 @@ OpFoldResult AddOp::fold(ArrayRef<Attribute> constants) {
     return inputs()[0];
 
   // Constant fold constant operands.
-  return constFoldAssociativeOp(constants, hw::PEO::Add,
-                                [](APInt &a, const APInt &b) { a += b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Add);
 }
 
 LogicalResult AddOp::canonicalize(AddOp op, PatternRewriter &rewriter) {
@@ -1332,8 +1303,7 @@ OpFoldResult MulOp::fold(ArrayRef<Attribute> constants) {
   }
 
   // Constant fold
-  return constFoldAssociativeOp(constants, hw::PEO::Mul,
-                                [](APInt &a, const APInt &b) { a *= b; });
+  return constFoldAssociativeOp(constants, hw::PEO::Mul);
 }
 
 LogicalResult MulOp::canonicalize(MulOp op, PatternRewriter &rewriter) {
