@@ -42,6 +42,21 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
         results[destination] = SmallVector<MemoryDependence>();
 
       results[destination].emplace_back(source, result.value, depComps);
+
+      // Also consider intra-iteration dependences.
+      if (src == dst && source->isBeforeInBlock(destination)) {
+        SmallVector<DependenceComponent> intraDeps;
+        for (size_t i = 1; i <= depth; ++i) {
+          // TODO: for completeness, this should also find the for loop and
+          // initialize the Operation * in depComp, even though we won't use it.
+          DependenceComponent depComp;
+          depComp.lb = 0;
+          depComp.ub = 0;
+          intraDeps.emplace_back(depComp);
+        }
+        results[destination].emplace_back(
+            source, DependenceResult::HasDependence, intraDeps);
+      }
     }
   }
 }
