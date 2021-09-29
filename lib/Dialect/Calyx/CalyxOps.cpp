@@ -1416,8 +1416,8 @@ static EnableOp getLastEnableOp(SeqOp parent) {
   return nullptr;
 }
 
-/// Returns a mapping of {Enabled Group, EnableOp} for all EnableOps within the
-/// immediate ParOp's body.
+/// Returns a mapping of {enabled Group name, EnableOp} for all EnableOps within
+/// the immediate ParOp's body.
 static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
   llvm::StringMap<EnableOp> enables;
   Block *body = parent.getBody();
@@ -1440,26 +1440,26 @@ static LogicalResult eliminateCommonTail(IfOp ifOp, PatternRewriter &rewriter) {
   auto &elseControl = ifOp.getElseBody()->front();
   if (auto r1 = dyn_cast<ParOp>(thenControl);
       auto r2 = dyn_cast<ParOp>(elseControl)) {
-    ///   if %a with @G {                  if %a with @G {
-    ///     par {                            par { ... }
-    ///       ...                          } else {
-    ///       calyx.enable @A     ->         par { ... }
-    ///       calyx.enable @B              }
-    ///     }                              calyx.enable @A
-    ///   else {                           calyx.enable @B
-    ///     par {
-    ///       ...
-    ///       calyx.enable @A
-    ///       calyx.enable @B
-    ///     }
-    ///   }
+    //    if %a with @G {              par {
+    //      par {                        if %a with @G {
+    //        ...                          par { ... }
+    //        calyx.enable @A            } else {
+    //        calyx.enable @B    ->        par { ... }
+    //      }                            }
+    //    } else {                       calyx.enable @A
+    //      par {                        calyx.enable @B
+    //        ...                      }
+    //        calyx.enable @A
+    //        calyx.enable @B
+    //      }
+    //    }
     llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(r1),
                               B = getAllEnableOpsInImmediateBody(r2);
 
     // Compute the intersection between `A` and `B`.
     SmallVector<StringRef> groupNames;
     for (auto a = A.begin(); a != A.end(); ++a) {
-      StringRef groupName = a->getValue().groupName();
+      StringRef groupName = a->getKey();
       auto b = B.find(groupName);
       if (b == B.end())
         continue;
@@ -1486,12 +1486,14 @@ static LogicalResult eliminateCommonTail(IfOp ifOp, PatternRewriter &rewriter) {
     return success();
   } else if (auto r1 = dyn_cast<SeqOp>(thenControl);
              auto r2 = dyn_cast<SeqOp>(elseControl)) {
-    ///   if %a with @G {                       if %a with @G {
-    ///     seq { ... calyx.enable @A }           seq { ... }
-    ///   else {                          ->    } else {
-    ///     seq { ... calyx.enable @A }           seq { ... }
-    ///   }                                     }
-    ///                                         calyx.enable @A
+    //                                         seq {
+    //   if %a with @G {                         if %a with @G {
+    //     seq { ... calyx.enable @A }             seq { ... }
+    //   else {                          ->      } else {
+    //     seq { ... calyx.enable @A }             seq { ... }
+    //   }                                       }
+    //                                           calyx.enable @A
+    //                                         }
     EnableOp lastThenEnableOp = getLastEnableOp(r1),
              lastElseEnableOp = getLastEnableOp(r2);
 
