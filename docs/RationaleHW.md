@@ -263,7 +263,12 @@ the future.
 
 This set includes:
 
- - TODO: None yet. :-)
+ - Constant folding: parameter expressions with all integer constant operands
+   are folded to their corresponding result.
+ - Constant operand merging: any constant operands in associative operations are
+   merged into a single operand and moved to the right, e.g. `(add 4, x, 2)` 
+   into `(add x, 6)`.
+   
 
 ### Using parameters in the body of a module
 

@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/SmallString.h"
@@ -210,13 +211,151 @@ void ParamVerbatimAttr::print(DialectAsmPrinter &p) const {
 // ParamExprAttr
 //===----------------------------------------------------------------------===//
 
-ParamExprAttr ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operands) {
-  assert(!operands.empty() && "Cannot have expr with no operands");
+/// Given a binary function, if the two operands are known constant integers,
+/// use the specified fold function to compute the result.
+static Attribute foldBinaryOp(
+    ArrayRef<Attribute> operands,
+    llvm::function_ref<APInt(const APInt &, const APInt &)> calculate) {
+  assert(operands.size() == 2 && "binary operator always has two operands");
+  if (auto lhs = operands[0].dyn_cast<IntegerAttr>())
+    if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
+      return IntegerAttr::get(lhs.getType(),
+                              calculate(lhs.getValue(), rhs.getValue()));
+  return {};
+}
 
-  // TODO: Canonicalize parameter expressions.
+/// Given a fully associative variadic integer operation, constant fold any
+/// constant operands and move them to the right.  If the whole expression is
+/// constant, then return that, otherwise update the operands list.
+static Attribute simplifyAssocOp(
+    SmallVector<Attribute, 4> &operands,
+    llvm::function_ref<APInt(const APInt &, const APInt &)> calculate) {
+  auto type = operands[0].getType();
+  assert(isHWIntegerType(type));
+  if (operands.size() == 1)
+    return operands[0];
 
-  return Base::get(operands[0].getContext(), opcode, operands,
-                   operands[0].getType());
+  // Fast path the normal case: binary operator.
+  if (operands.size() == 2) {
+    // No change for (x, cst) or (x, y).
+    auto lhsCst = operands[0].dyn_cast<IntegerAttr>();
+    if (!lhsCst)
+      return {};
+
+    // (cst1, cst2) -> cst
+    if (auto rhsCst = operands[1].dyn_cast<IntegerAttr>())
+      return IntegerAttr::get(type,
+                              calculate(lhsCst.getValue(), rhsCst.getValue()));
+
+    // (cst, x) -> (x, cst)
+    std::swap(operands[0], operands[1]);
+    return {};
+  }
+
+  // More than two operands, scan for the first constant.
+  size_t i = 0, e = operands.size();
+  for (; i != e && !operands[i].isa<IntegerAttr>(); ++i)
+    ;
+
+  // No constants or constant at the end: no work to do.
+  if (i >= e - 1)
+    return {};
+
+  // Take the constant out of the list.
+  APInt cst = operands[i].cast<IntegerAttr>().getValue();
+  operands[i] = operands.back();
+  operands.pop_back();
+  --e;
+
+  // Scan for any more constants, merging them into this one.
+  while (i != e) {
+    if (auto cst2 = operands[i].dyn_cast<IntegerAttr>()) {
+      cst = calculate(cst, cst2.getValue());
+      operands[i] = operands.back();
+      operands.pop_back();
+      --e;
+    } else {
+      ++i;
+    }
+  }
+
+  // Add it back at the end.  If all operands are constants, then fold to
+  // a constant.
+  operands.push_back(IntegerAttr::get(type, cst));
+  return operands.size() == 1 ? operands[0] : Attribute();
+}
+
+static Attribute simplifyAdd(SmallVector<Attribute, 4> &operands) {
+  return simplifyAssocOp(operands, [](auto a, auto b) { return a + b; });
+}
+
+static Attribute simplifyMul(SmallVector<Attribute, 4> &operands) {
+  return simplifyAssocOp(operands, [](auto a, auto b) { return a * b; });
+}
+static Attribute simplifyAnd(SmallVector<Attribute, 4> &operands) {
+  return simplifyAssocOp(operands, [](auto a, auto b) { return a & b; });
+}
+
+static Attribute simplifyOr(SmallVector<Attribute, 4> &operands) {
+  return simplifyAssocOp(operands, [](auto a, auto b) { return a | b; });
+}
+
+static Attribute simplifyXor(SmallVector<Attribute, 4> &operands) {
+  return simplifyAssocOp(operands, [](auto a, auto b) { return a ^ b; });
+}
+
+static Attribute simplifyShl(SmallVector<Attribute, 4> &operands) {
+  assert(isHWIntegerType(operands[0].getType()));
+  return foldBinaryOp(operands, [](auto a, auto b) { return a.shl(b); });
+}
+
+static Attribute simplifyShrU(SmallVector<Attribute, 4> &operands) {
+  assert(isHWIntegerType(operands[0].getType()));
+  return foldBinaryOp(operands, [](auto a, auto b) { return a.lshr(b); });
+}
+
+/// Build a parameter expression.  This automatically canonicalizes and
+/// folds, so it may not necessarily return a ParamExprAttr.
+Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
+  assert(!operandsIn.empty() && "Cannot have expr with no operands");
+  // All operands must have the same type, which is the type of the result.
+  auto type = operandsIn.front().getType();
+  assert(llvm::all_of(operandsIn.drop_front(),
+                      [&](auto op) { return op.getType() == type; }));
+
+  SmallVector<Attribute, 4> operands(operandsIn.begin(), operandsIn.end());
+
+  // Verify and canonicalize parameter expressions.
+  Attribute result;
+  switch (opcode) {
+  case PEO::Add:
+    result = simplifyAdd(operands);
+    break;
+  case PEO::Mul:
+    result = simplifyMul(operands);
+    break;
+  case PEO::And:
+    result = simplifyAnd(operands);
+    break;
+  case PEO::Or:
+    result = simplifyOr(operands);
+    break;
+  case PEO::Xor:
+    result = simplifyXor(operands);
+    break;
+  case PEO::Shl:
+    result = simplifyShl(operands);
+    break;
+  case PEO::ShrU:
+    result = simplifyShrU(operands);
+    break;
+  }
+
+  // If we folded to an operand, return it.
+  if (result)
+    return result;
+
+  return Base::get(operands[0].getContext(), opcode, operands, type);
 }
 
 Attribute ParamExprAttr::parse(MLIRContext *context, DialectAsmParser &p,
