@@ -1377,7 +1377,7 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   if (ifOp.getThenBody()->empty())
     return ifOp.emitError() << "empty 'then' region.";
 
-  if (ifOp.elseRegionExists() && ifOp.getElseBody()->empty())
+  if (ifOp.elseBodyExists() && ifOp.getElseBody()->empty())
     return ifOp.emitError() << "empty 'else' region.";
 
   Optional<StringRef> optGroupName = ifOp.groupName();
@@ -1428,7 +1428,7 @@ static EnableOp getLastEnableOp(SeqOp parent) {
 static LogicalResult eliminateCommonTailEnable(IfOp ifOp,
                                                PatternRewriter &rewriter) {
   // Check if the branches exist.
-  if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
+  if (!ifOp.thenBodyExists() || !ifOp.elseBodyExists())
     return failure();
 
   auto &thenOpStructureOp = ifOp.getThenBody()->front();

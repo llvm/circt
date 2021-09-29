@@ -733,18 +733,22 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
       assert(unionLeader == dstLeader || unionLeader == srcLeader);
 
       // If dst got merged into src, append dst's drives to src's, or vice
-      // versa.
-      auto &unionDrives = resetDrives[unionLeader];
+      // versa. Also, remove dst's or src's entry in resetDrives, because they
+      // will never come up as a leader again.
       if (dstLeader != srcLeader) {
-        if (unionLeader == dstLeader)
-          unionDrives.append(std::move(resetDrives[srcLeader]));
-        else
-          unionDrives.append(std::move(resetDrives[dstLeader]));
+        auto &unionDrives = resetDrives[unionLeader]; // needed before finds
+        auto mergedDrivesIt =
+            resetDrives.find(unionLeader == dstLeader ? srcLeader : dstLeader);
+        if (mergedDrivesIt != resetDrives.end()) {
+          unionDrives.append(mergedDrivesIt->second);
+          resetDrives.erase(mergedDrivesIt);
+        }
       }
 
       // Keep note of this drive so we can point the user at the right location
       // in case something goes wrong.
-      unionDrives.push_back({{dstField, dstType}, {srcField, srcType}, loc});
+      resetDrives[unionLeader].push_back(
+          {{dstField, dstType}, {srcField, srcType}, loc});
     }
     return;
   }

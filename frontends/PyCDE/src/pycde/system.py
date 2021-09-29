@@ -2,6 +2,9 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import builtins
+
+from pycde.module import module
 from .pycde_types import types
 from .instance import Instance
 
@@ -31,7 +34,8 @@ class System:
   output SystemVerilog."""
 
   __slots__ = [
-      "mod", "passed", "_old_system_token", "_symbols", "_generate_queue"
+      "mod", "modules", "passed", "_module_symbols", "_old_system_token",
+      "_symbols", "_generate_queue"
   ]
 
   passes = [
@@ -42,6 +46,8 @@ class System:
   def __init__(self, modules):
     self.passed = False
     self.mod = ir.Module.create()
+    self.modules = list(modules)
+    self._module_symbols = {}
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
 
@@ -51,18 +57,20 @@ class System:
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
 
+  # TODO: Return a read-only proxy.
   @property
-  def symbols(self) -> typing.Set[str]:
+  def symbols(self) -> typing.Dict[str, ir.Operation]:
     """Get the set of top level symbols in the design. Read from a cache which
     will be invalidated whenever control is given to CIRCT."""
     if self._symbols is None:
-      self._symbols = set()
+      self._symbols = dict()
       for op in self.mod.operation.regions[0].blocks[0]:
         if "sym_name" in op.attributes:
-          self._symbols.add(mlir.ir.StringAttr(op.attributes["sym_name"]).value)
+          self._symbols[mlir.ir.StringAttr(
+              op.attributes["sym_name"]).value] = op
     return self._symbols
 
-  def create_symbol(self, basename: str) -> str:
+  def create_symbol(self, basename: str, module_cls=None) -> str:
     """Create a unique symbol and add it to the cache. If it is to be preserved,
     the caller must use it as the symbol on a top-level op."""
     ctr = 0
@@ -70,8 +78,15 @@ class System:
     while ret in self.symbols:
       ctr += 1
       ret = basename + "_" + str(ctr)
-    self.symbols.add(ret)
+    self.symbols[ret] = None
+    if module_cls is not None:
+      self._module_symbols[ret] = module_cls
     return ret
+
+  def _notify_symbol(self, symbol: str, op: ir.Operation):
+    assert symbol in self._symbols
+    assert self._symbols[symbol] is None
+    self._symbols[symbol] = op
 
   @staticmethod
   def current():
@@ -111,24 +126,21 @@ class System:
         m = self._generate_queue.pop()
         m.generate()
         i += 1
+    return len(self._generate_queue)
 
-  # Broken ATM
-  def get_instance(self, mod_name: str) -> Instance:
-    raise NotImplementedError()
-    assert self.passed
-    root_mod = self.get_module(mod_name)
-    return Instance(root_mod, None, None, self)
+  def get_module(self, symbol):
+    return self._module_symbols[symbol]
 
-  # Broken ATM
-  def walk_instances(self, root_mod, callback) -> None:
-    """Walk the instance hierachy, calling 'callback' on each instance."""
+  def get_instance(self, mod_cls: object) -> Instance:
     assert self.passed
-    inst = Instance(root_mod, None, None, self)
-    inst.walk_instances(callback)
+    return Instance(mod_cls, None, None, self)
 
   def run_passes(self):
     if self.passed:
       return
+    if len(self._generate_queue) > 0:
+      print("WARNING: running lowering passes on partially generated design!",
+            file=sys.stderr)
     pm = mlir.passmanager.PassManager.parse(",".join(self.passes))
     # Invalidate the symbol cache
     self._symbols = None
@@ -136,10 +148,18 @@ class System:
     types.declare_types(self.mod)
     self.passed = True
 
+    # Run through all the known modules and re-assign the circt_mod in
+    # _SpecializedModule.
+    for (symbol, mod) in self._module_symbols.items():
+      if symbol in self.symbols:
+        mod._pycde_mod.circt_mod = self.symbols[symbol]
+      else:
+        mod._pycde_mod.circt_mod = None
+
   def print_verilog(self, out_stream: typing.TextIO = sys.stdout):
     self.run_passes()
     circt.export_verilog(self.mod, out_stream)
 
-  def print_tcl(self, top_module: str, out_stream: typing.TextIO = sys.stdout):
+  def print_tcl(self, top_module: type, out_stream: typing.TextIO = sys.stdout):
     self.run_passes()
-    msft.export_tcl(self.get_module(top_module).operation, out_stream)
+    msft.export_tcl(top_module._pycde_mod.circt_mod, out_stream)

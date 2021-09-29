@@ -2126,6 +2126,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     switch (memportKindIdx) {
     default:
       assert(0 && "invalid idx");
+      break; // Silence warning
     case 0:
       memportKind = MemOp::PortKind::Read;
       break;
@@ -2876,7 +2877,9 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
 
-  addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
+  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+    addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
+  });
   return success();
 }
 
