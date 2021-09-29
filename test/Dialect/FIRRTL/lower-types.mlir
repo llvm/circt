@@ -1257,4 +1257,82 @@ firrtl.module @is1436_FOO() {
   firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
+  firrtl.module @VecMemFlatten(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.vector<uint<8>, 4>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.vector<uint<1>, 4>, in %wData: !firrtl.vector<uint<8>, 4>) {
+    %memory_r, %memory_w = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>
+    %0 = firrtl.subfield %memory_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.clock
+    firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
+    %1 = firrtl.subfield %memory_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.uint<1>
+    firrtl.connect %1, %rEn : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.subfield %memory_r(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.uint<4>
+    firrtl.connect %2, %rAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    %3 = firrtl.subfield %memory_r(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.vector<uint<8>, 4>
+    firrtl.connect %rData, %3 : !firrtl.vector<uint<8>, 4>, !firrtl.vector<uint<8>, 4>
+    %4 = firrtl.subfield %memory_w(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.clock
+    firrtl.connect %4, %clock : !firrtl.clock, !firrtl.clock
+    %5 = firrtl.subfield %memory_w(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.uint<1>
+    firrtl.connect %5, %wEn : !firrtl.uint<1>, !firrtl.uint<1>
+    %6 = firrtl.subfield %memory_w(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.uint<4>
+    firrtl.connect %6, %wAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    %7 = firrtl.subfield %memory_w(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.vector<uint<1>, 4>
+    firrtl.connect %7, %wMask : !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
+    %8 = firrtl.subfield %memory_w(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.vector<uint<8>, 4>
+    firrtl.connect %8, %wData : !firrtl.vector<uint<8>, 4>, !firrtl.vector<uint<8>, 4>
+  }
+  // FLATTEN-LABEL:  firrtl.module @VecMemFlatten
+  // FLATTEN-SAME:   out %rData_0: !firrtl.uint<8>, out %rData_1: !firrtl.uint<8>,
+  // FLATTEN-SAME:   out %rData_2: !firrtl.uint<8>, out %rData_3: !firrtl.uint<8>,
+  // FLATTEN-SAME:   in %wMask_0: !firrtl.uint<1>, in %wMask_1: !firrtl.uint<1>,
+  // FLATTEN-SAME:   in %wMask_2: !firrtl.uint<1>, in %wMask_3: !firrtl.uint<1>,
+  // FLATTEN-SAME:   in %wData_0: !firrtl.uint<8>, in %wData_1: !firrtl.uint<8>,
+  // FLATTEN-SAME:   in %wData_2: !firrtl.uint<8>, in %wData_3: !firrtl.uint<8>)
+
+
+  // FLATTEN:    %memory_r, %memory_w = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<32>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<4>>
+  // FLATTEN:    %[[v3:.+]] = firrtl.subfield %memory_r(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.uint<32>
+  // FLATTEN:    %[[v4:.+]] = firrtl.bits %[[v3]] 7 to 0 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[memory_r_data_0:.+]], %[[v4]] : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    %[[v5:.+]] = firrtl.bits %[[v3]] 15 to 8 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[memory_r_data_1:.+]], %[[v5]] : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    %[[v6:.+]] = firrtl.bits %[[v3]] 23 to 16 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[memory_r_data_2:.+]], %[[v6]] : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    %[[v7:.+]] = firrtl.bits %[[v3]] 31 to 24 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[memory_r_data_3:.+]], %[[v7]] : !firrtl.uint<8>, !firrtl.uint<8>
+
+  // FLATTEN:    %[[v11:.+]] = firrtl.subfield %memory_w(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<4>>) -> !firrtl.uint<32>
+  // FLATTEN:    %[[v12:.+]] = firrtl.wire  : !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[v12]], %[[memory_w_data_0:.+]] : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    %[[v13:.+]] = firrtl.cat %[[memory_w_data_1:.+]], %[[v12]] : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
+  // FLATTEN:    %[[v14:.+]] = firrtl.wire  : !firrtl.uint<16>
+  // FLATTEN:    firrtl.connect %[[v14]], %[[v13]] : !firrtl.uint<16>, !firrtl.uint<16>
+  // FLATTEN:    %[[v15:.+]] = firrtl.cat %[[memory_w_data_2:.+]], %[[v14]] : (!firrtl.uint<8>, !firrtl.uint<16>) -> !firrtl.uint<24>
+  // FLATTEN:    %[[v16:.+]] = firrtl.wire  : !firrtl.uint<24>
+  // FLATTEN:    firrtl.connect %[[v16]], %[[v15]] : !firrtl.uint<24>, !firrtl.uint<24>
+  // FLATTEN:    %[[v17:.+]] = firrtl.cat %[[memory_w_data_3:.+]], %[[v16]] : (!firrtl.uint<8>, !firrtl.uint<24>) -> !firrtl.uint<32>
+  // FLATTEN:    %[[v18:.+]] = firrtl.wire  : !firrtl.uint<32>
+  // FLATTEN:    firrtl.connect %[[v18]], %[[v17]] : !firrtl.uint<32>, !firrtl.uint<32>
+  // FLATTEN:    firrtl.connect %[[v11]], %[[v18]] : !firrtl.uint<32>, !firrtl.uint<32>
+  // FLATTEN:    %[[v19:.+]] = firrtl.subfield %memory_w(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<4>>) -> !firrtl.uint<4>
+  // FLATTEN:    %[[v20:.+]] = firrtl.wire  : !firrtl.uint<1>
+  // FLATTEN:    firrtl.connect %[[v20]], %[[memory_w_mask_0:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
+  // FLATTEN:    %[[v21:.+]] = firrtl.cat %[[memory_w_mask_1:.+]], %[[v20]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // FLATTEN:    %[[v22:.+]] = firrtl.wire  : !firrtl.uint<2>
+  // FLATTEN:    firrtl.connect %[[v22]], %[[v21]] : !firrtl.uint<2>, !firrtl.uint<2>
+  // FLATTEN:    %[[v23:.+]] = firrtl.cat %[[memory_w_mask_2:.+]], %[[v22]] : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+  // FLATTEN:    %[[v24:.+]] = firrtl.wire  : !firrtl.uint<3>
+  // FLATTEN:    firrtl.connect %[[v24]], %[[v23]] : !firrtl.uint<3>, !firrtl.uint<3>
+  // FLATTEN:    %[[v25:.+]] = firrtl.cat %[[memory_w_mask_3:.+]], %24 : (!firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<4>
+
+  // FLATTEN:    firrtl.connect %rData_0, %[[memory_r_data_0]] : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %rData_1, %[[memory_r_data_1]] : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %rData_2, %[[memory_r_data_2]] : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %rData_3, %[[memory_r_data_3]] : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[memory_w_mask_0]], %wMask_0 : !firrtl.uint<1>, !firrtl.uint<1>
+  // FLATTEN:    firrtl.connect %[[memory_w_mask_1]], %wMask_1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // FLATTEN:    firrtl.connect %[[memory_w_mask_2]], %wMask_2 : !firrtl.uint<1>, !firrtl.uint<1>
+  // FLATTEN:    firrtl.connect %[[memory_w_mask_3]], %wMask_3 : !firrtl.uint<1>, !firrtl.uint<1>
+  // FLATTEN:    firrtl.connect %[[memory_w_data_0]], %wData_0 : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[memory_w_data_1]], %wData_1 : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[memory_w_data_2]], %wData_2 : !firrtl.uint<8>, !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[memory_w_data_3]], %wData_3 : !firrtl.uint<8>, !firrtl.uint<8>
+
 } // CIRCUIT
