@@ -247,6 +247,10 @@ implications, including:
   at some point that would allow dialect-defined attributes.  For example, this
   would allow  moving `hw.param.verbatim` attribute down to the `sv` dialect.
 
+Note that there is no parameter expression equivalent for `comb.sub`:
+`(sub x, y)` is represented with `(add x, (mul y, -1))` which makes maintaining
+canonical form simpler and more consistent.
+
 ### Parameter Expression Canonicalization
 
 As mentioned above, it is important to canonicalize parameter expressions.  This
@@ -268,7 +272,7 @@ This set includes:
  - Constant operand merging: any constant operands in associative operations are
    merged into a single operand and moved to the right, e.g. `(add 4, x, 2)` 
    into `(add x, 6)`.
-   
+
 
 ### Using parameters in the body of a module
 

@@ -252,21 +252,15 @@ OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
 
 /// Performs constant folding `calculate` with element-wise behavior on the two
 /// attributes in `operands` and returns the result if possible.
-static Attribute constFoldBinaryOp(
-    ArrayRef<Attribute> operands, function_ref<APInt(APInt, APInt)> calculate,
-    function_ref<Attribute(Attribute, Attribute)> formParamExpr = {}) {
+static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
+                                   hw::PEO paramOpcode) {
   assert(operands.size() == 2 && "binary op takes two operands");
   if (!operands[0] || !operands[1])
     return {};
-  if (operands[0].getType() != operands[1].getType())
-    return {};
 
-  // If this is two constant operands, then fold them.
-  if (auto lhs = operands[0].dyn_cast<IntegerAttr>())
-    if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
-      return IntegerAttr::get(lhs.getType(),
-                              calculate(lhs.getValue(), rhs.getValue()));
-  return {};
+  // Fold constants with ParamExprAttr::get which handles simple constants as
+  // well as parameter expressions.
+  return hw::ParamExprAttr::get(paramOpcode, operands[0], operands[1]);
 }
 
 OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
@@ -279,8 +273,7 @@ OpFoldResult ShlOp::fold(ArrayRef<Attribute> operands) {
       return getIntAttr(APInt::getZero(width), getContext());
   }
 
-  return constFoldBinaryOp(
-      operands, [](const APInt &a, const APInt &b) { return a.shl(b); });
+  return constFoldBinaryOp(operands, hw::PEO::Shl);
 }
 
 LogicalResult ShlOp::canonicalize(ShlOp op, PatternRewriter &rewriter) {
@@ -317,8 +310,7 @@ OpFoldResult ShrUOp::fold(ArrayRef<Attribute> operands) {
     if (width <= shift)
       return getIntAttr(APInt::getZero(width), getContext());
   }
-  return constFoldBinaryOp(
-      operands, [](const APInt &a, const APInt &b) { return a.lshr(b); });
+  return constFoldBinaryOp(operands, hw::PEO::ShrU);
 }
 
 LogicalResult ShrUOp::canonicalize(ShrUOp op, PatternRewriter &rewriter) {
@@ -350,8 +342,7 @@ OpFoldResult ShrSOp::fold(ArrayRef<Attribute> operands) {
     if (rhs.getValue().getZExtValue() == 0)
       return getOperand(0);
   }
-  return constFoldBinaryOp(
-      operands, [](const APInt &a, const APInt &b) { return a.ashr(b); });
+  return constFoldBinaryOp(operands, hw::PEO::ShrS);
 }
 
 LogicalResult ShrSOp::canonicalize(ShrSOp op, PatternRewriter &rewriter) {
@@ -1168,19 +1159,30 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult SubOp::fold(ArrayRef<Attribute> constants) {
-  APInt value;
-  // sub(x - 0) -> x
-  if (matchPattern(rhs(), m_RConstant(value)) && value.isZero())
-    return lhs();
-
   // sub(x - x) -> 0
   if (rhs() == lhs())
     return getIntAttr(APInt::getZero(lhs().getType().getIntOrFloatBitWidth()),
                       getContext());
 
-  // Constant fold
-  return constFoldBinaryOp(
-      constants, [](const APInt &a, const APInt &b) { return a - b; });
+  if (constants[1]) {
+    // If both are constants, we can unconditionally fold.
+    if (constants[0]) {
+      // Constant fold (c1 - c2) => (c1 + -1*c2).
+      auto negOne =
+          getIntAttr(APInt::getAllOnes(lhs().getType().getIntOrFloatBitWidth()),
+                     getContext());
+      auto rhsNeg = hw::ParamExprAttr::get(hw::PEO::Mul, constants[1], negOne);
+      return hw::ParamExprAttr::get(hw::PEO::Add, constants[0], rhsNeg);
+    }
+
+    // sub(x - 0) -> x
+    if (auto rhsC = constants[1].dyn_cast<IntegerAttr>()) {
+      if (rhsC.getValue().isZero())
+        return lhs();
+    }
+  }
+
+  return {};
 }
 
 LogicalResult SubOp::canonicalize(SubOp op, PatternRewriter &rewriter) {
@@ -1361,9 +1363,7 @@ static OpFoldResult foldDiv(Op op, ArrayRef<Attribute> constants) {
       return {};
   }
 
-  return constFoldBinaryOp(constants, [](const APInt &a, const APInt &b) {
-    return isSigned ? a.sdiv(b) : a.udiv(b);
-  });
+  return constFoldBinaryOp(constants, isSigned ? hw::PEO::DivS : hw::PEO::DivU);
 }
 
 OpFoldResult DivUOp::fold(ArrayRef<Attribute> constants) {
@@ -1394,9 +1394,7 @@ static OpFoldResult foldMod(Op op, ArrayRef<Attribute> constants) {
                         op.getContext());
   }
 
-  return constFoldBinaryOp(constants, [](const APInt &a, const APInt &b) {
-    return isSigned ? a.srem(b) : a.urem(b);
-  });
+  return constFoldBinaryOp(constants, isSigned ? hw::PEO::ModS : hw::PEO::ModU);
 }
 
 OpFoldResult ModUOp::fold(ArrayRef<Attribute> constants) {
