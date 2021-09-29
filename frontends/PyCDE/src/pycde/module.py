@@ -318,9 +318,6 @@ def _module_base(cls, extern_name: str, params={}):
   """Wrap a class, making it a PyCDE module."""
 
   class mod(cls):
-    __qualname__ = cls.__qualname__
-    __name__ = cls.__name__
-    __module__ = cls.__module__
 
     def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
@@ -390,6 +387,9 @@ def _module_base(cls, extern_name: str, params={}):
       """Return the list of input ports."""
       return mod._pycde_mod.output_ports
 
+  mod.__qualname__ = cls.__qualname__
+  mod.__name__ = cls.__name__
+  mod.__module__ = cls.__module__
   mod._pycde_mod = _SpecializedModule(mod, params, extern_name)
   return mod
 

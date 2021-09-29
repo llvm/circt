@@ -151,6 +151,6 @@ class System:
     self.run_passes()
     circt.export_verilog(self.mod, out_stream)
 
-  def print_tcl(self, top_module: str, out_stream: typing.TextIO = sys.stdout):
+  def print_tcl(self, top_module: type, out_stream: typing.TextIO = sys.stdout):
     self.run_passes()
-    msft.export_tcl(self.get_module(top_module).operation, out_stream)
+    msft.export_tcl(top_module._pycde_mod.circt_mod, out_stream)
