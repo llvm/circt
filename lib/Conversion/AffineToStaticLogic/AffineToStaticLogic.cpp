@@ -149,7 +149,14 @@ void AffineToStaticLogic::runOnAffineFor(
   if (failed(problem.check()))
     return signalPassFailure();
 
+  // Set the anchor for scheduling. Insert dependences from all stores to the
+  // terminator to ensure the problem schedules them before the terminator.
   auto *anchor = forOp.getBody()->getTerminator();
+  forOp.getBody()->walk([&](AffineWriteOpInterface op) {
+    Problem::Dependence dep(op, anchor);
+    assert(succeeded(problem.insertDependence(dep)));
+  });
+
   if (failed(scheduleSimplex(problem, anchor)))
     return signalPassFailure();
 
