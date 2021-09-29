@@ -11,6 +11,7 @@
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
+#include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -93,6 +94,10 @@ void AffineToStaticLogic::runOnAffineFor(
       return;
 
     for (MemoryDependence memoryDep : dependences) {
+      // Don't insert a dependence into the problem if there is no dependence.
+      if (!hasDependence(memoryDep.dependenceType))
+        continue;
+
       // Insert a dependence into the problem.
       Problem::Dependence dep(memoryDep.source, op);
       assert(succeeded(problem.insertDependence(dep)));
@@ -114,7 +119,6 @@ void AffineToStaticLogic::runOnAffineFor(
     for (auto &inner : *op.getThenBlock()) {
       Problem::Dependence dep(op, &inner);
       assert(succeeded(problem.insertDependence(dep)));
-      problem.setDistance(dep, 1);
     }
 
     // Insert a dependence from the if to all ops in the else region.
@@ -122,7 +126,6 @@ void AffineToStaticLogic::runOnAffineFor(
       for (auto &inner : *op.getElseBlock()) {
         Problem::Dependence dep(op, &inner);
         assert(succeeded(problem.insertDependence(dep)));
-        problem.setDistance(dep, 1);
       }
     }
   });
@@ -136,8 +139,7 @@ void AffineToStaticLogic::runOnAffineFor(
       llvm::dbgs() << "\nopr = " << opr;
       llvm::dbgs() << "\nlatency = " << problem.getLatency(*opr);
       for (auto dep : problem.getDependences(op))
-        if (auto distance = problem.getDistance(dep);
-            distance.hasValue() && *distance > 0)
+        if (auto distance = problem.getDistance(dep); distance.hasValue())
           llvm::dbgs() << "\ndep = { distance = " << distance
                        << ", source = " << *dep.getSource() << '}';
       llvm::dbgs() << "\n\n";
