@@ -111,6 +111,7 @@ class System:
         m = self._generate_queue.pop()
         m.generate()
         i += 1
+    return len(self._generate_queue)
 
   # Broken ATM
   def get_instance(self, mod_name: str) -> Instance:
@@ -129,6 +130,9 @@ class System:
   def run_passes(self):
     if self.passed:
       return
+    if len(self._generate_queue) > 0:
+      print("WARNING: running lowering passes on partially generated design!",
+            file=sys.stderr)
     pm = mlir.passmanager.PassManager.parse(",".join(self.passes))
     # Invalidate the symbol cache
     self._symbols = None
