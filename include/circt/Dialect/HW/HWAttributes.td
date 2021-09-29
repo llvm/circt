@@ -160,9 +160,15 @@ def PEO_Xor : I32EnumAttrCase<"Xor", 4, "xor">;
 // Binary Expression Opcodes.
 def PEO_Shl  : I32EnumAttrCase<"Shl" , 5, "shl">;
 def PEO_ShrU : I32EnumAttrCase<"ShrU", 6, "shru">;
+def PEO_ShrS : I32EnumAttrCase<"ShrS", 7, "shrs">;
+def PEO_DivU : I32EnumAttrCase<"DivU", 8, "divu">;
+def PEO_DivS : I32EnumAttrCase<"DivS", 9, "divs">;
+def PEO_ModU : I32EnumAttrCase<"ModU",10, "modu">;
+def PEO_ModS : I32EnumAttrCase<"ModS",11, "mods">;
 def PEOAttr  : I32EnumAttr<"PEO", "Parameter Expression Opcode",
                            [PEO_Add, PEO_Mul, PEO_And, PEO_Or, PEO_Xor,
-                            PEO_Shl, PEO_ShrU]>;
+                            PEO_Shl, PEO_ShrU, PEO_ShrS,
+                            PEO_DivU, PEO_DivS, PEO_ModU, PEO_ModS]>;
 }
 
 def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {

@@ -140,59 +140,104 @@ printParamValue(Attribute value, raw_ostream &os,
   }
 
   // Handle nested expressions.
-  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
-    StringRef operatorStr;
-    VerilogPrecedence subprecedence = ForceEmitMultiUse;
-    SubExprSignResult resultSignedness = IsUnsigned;
-
-    switch (expr.getOpcode()) {
-    case PEO::Add:
-      operatorStr = " + ";
-      subprecedence = Addition;
-      break;
-    case PEO::Mul:
-      operatorStr = " * ";
-      subprecedence = Multiply;
-      break;
-    case PEO::And:
-      operatorStr = " & ";
-      subprecedence = And;
-      break;
-    case PEO::Or:
-      operatorStr = " | ";
-      subprecedence = Or;
-      break;
-    case PEO::Xor:
-      operatorStr = " ^ ";
-      subprecedence = Xor;
-      break;
-    case PEO::Shl:
-      operatorStr = " << ";
-      subprecedence = Shift;
-      break;
-    case PEO::ShrU:
-      operatorStr = " >> ";
-      subprecedence = Shift;
-      break;
-    }
-
-    if (subprecedence > parenthesizeIfLooserThan)
-      os << '(';
-    printParamValue(expr.getOperands()[0], os, subprecedence, emitError);
-    for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
-      os << operatorStr;
-      printParamValue(op, os, subprecedence, emitError);
-    }
-    if (subprecedence > parenthesizeIfLooserThan) {
-      os << ')';
-      subprecedence = Symbol;
-    }
-    return {subprecedence, resultSignedness};
+  auto expr = value.dyn_cast<ParamExprAttr>();
+  if (!expr) {
+    os << "<<UNKNOWN MLIRATTR: " << value << ">>";
+    emitError() << " = " << value;
+    return {LowestPrecedence, IsUnsigned};
   }
 
-  os << "<<UNKNOWN MLIRATTR: " << value << ">>";
-  emitError() << " = " << value;
-  return {LowestPrecedence, IsUnsigned};
+  StringRef operatorStr;
+  VerilogPrecedence subprecedence = ForceEmitMultiUse;
+  Optional<SubExprSignResult> operandSign;
+
+  switch (expr.getOpcode()) {
+  case PEO::Add:
+    operatorStr = " + ";
+    subprecedence = Addition;
+    break;
+  case PEO::Mul:
+    operatorStr = " * ";
+    subprecedence = Multiply;
+    break;
+  case PEO::And:
+    operatorStr = " & ";
+    subprecedence = And;
+    break;
+  case PEO::Or:
+    operatorStr = " | ";
+    subprecedence = Or;
+    break;
+  case PEO::Xor:
+    operatorStr = " ^ ";
+    subprecedence = Xor;
+    break;
+  case PEO::Shl:
+    operatorStr = " << ";
+    subprecedence = Shift;
+    break;
+  case PEO::ShrU:
+    // >> in verilog is always a logical shift even if operands are signed.
+    operatorStr = " >> ";
+    subprecedence = Shift;
+    break;
+  case PEO::ShrS:
+    // >>> in verilog is an arithmetic shift if both operands are signed.
+    operatorStr = " >>> ";
+    subprecedence = Shift;
+    operandSign = IsSigned;
+    break;
+  case PEO::DivU:
+    operatorStr = " / ";
+    subprecedence = Multiply;
+    operandSign = IsUnsigned;
+    break;
+  case PEO::DivS:
+    operatorStr = " / ";
+    subprecedence = Multiply;
+    operandSign = IsSigned;
+    break;
+  case PEO::ModU:
+    operatorStr = " % ";
+    subprecedence = Multiply;
+    operandSign = IsUnsigned;
+    break;
+  case PEO::ModS:
+    operatorStr = " % ";
+    subprecedence = Multiply;
+    operandSign = IsSigned;
+    break;
+  }
+
+  // Emit the specified operand with a $signed() or $unsigned() wrapper around
+  // it if context requires a specific signedness to compute the right value.
+  // This returns true if the operand is signed.
+  // TODO: This could try harder to omit redundant casts like the mainline
+  // expression emitter.
+  auto emitOperand = [&](Attribute operand) -> bool {
+    if (operandSign.hasValue())
+      os << (operandSign.getValue() == IsSigned ? "$signed(" : "$unsigned(");
+    auto signedness =
+        printParamValue(operand, os, subprecedence, emitError).signedness;
+    if (operandSign.hasValue()) {
+      os << ")";
+      signedness = operandSign.getValue();
+    }
+    return signedness == IsSigned;
+  };
+
+  if (subprecedence > parenthesizeIfLooserThan)
+    os << '(';
+  bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
+  for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
+    os << operatorStr;
+    allOperandsSigned &= emitOperand(op);
+  }
+  if (subprecedence > parenthesizeIfLooserThan) {
+    os << ')';
+    subprecedence = Symbol;
+  }
+  return {subprecedence, allOperandsSigned ? IsSigned : IsUnsigned};
 }
 
 /// Prints a parameter attribute expression in a Verilog compatible way.

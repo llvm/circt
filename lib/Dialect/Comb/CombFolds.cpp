@@ -252,15 +252,16 @@ OpFoldResult ParityOp::fold(ArrayRef<Attribute> constants) {
 
 /// Performs constant folding `calculate` with element-wise behavior on the two
 /// attributes in `operands` and returns the result if possible.
-template <class CalculationFn = function_ref<APInt(APInt, APInt)>>
-static Attribute constFoldBinaryOp(ArrayRef<Attribute> operands,
-                                   const CalculationFn &calculate) {
+static Attribute constFoldBinaryOp(
+    ArrayRef<Attribute> operands, function_ref<APInt(APInt, APInt)> calculate,
+    function_ref<Attribute(Attribute, Attribute)> formParamExpr = {}) {
   assert(operands.size() == 2 && "binary op takes two operands");
   if (!operands[0] || !operands[1])
     return {};
   if (operands[0].getType() != operands[1].getType())
     return {};
 
+  // If this is two constant operands, then fold them.
   if (auto lhs = operands[0].dyn_cast<IntegerAttr>())
     if (auto rhs = operands[1].dyn_cast<IntegerAttr>())
       return IntegerAttr::get(lhs.getType(),

@@ -314,6 +314,31 @@ static Attribute simplifyShrU(SmallVector<Attribute, 4> &operands) {
   return foldBinaryOp(operands, [](auto a, auto b) { return a.lshr(b); });
 }
 
+static Attribute simplifyShrS(SmallVector<Attribute, 4> &operands) {
+  assert(isHWIntegerType(operands[0].getType()));
+  return foldBinaryOp(operands, [](auto a, auto b) { return a.ashr(b); });
+}
+
+static Attribute simplifyDivU(SmallVector<Attribute, 4> &operands) {
+  assert(isHWIntegerType(operands[0].getType()));
+  return foldBinaryOp(operands, [](auto a, auto b) { return a.udiv(b); });
+}
+
+static Attribute simplifyDivS(SmallVector<Attribute, 4> &operands) {
+  assert(isHWIntegerType(operands[0].getType()));
+  return foldBinaryOp(operands, [](auto a, auto b) { return a.sdiv(b); });
+}
+
+static Attribute simplifyModU(SmallVector<Attribute, 4> &operands) {
+  assert(isHWIntegerType(operands[0].getType()));
+  return foldBinaryOp(operands, [](auto a, auto b) { return a.urem(b); });
+}
+
+static Attribute simplifyModS(SmallVector<Attribute, 4> &operands) {
+  assert(isHWIntegerType(operands[0].getType()));
+  return foldBinaryOp(operands, [](auto a, auto b) { return a.srem(b); });
+}
+
 /// Build a parameter expression.  This automatically canonicalizes and
 /// folds, so it may not necessarily return a ParamExprAttr.
 Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
@@ -348,6 +373,21 @@ Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
     break;
   case PEO::ShrU:
     result = simplifyShrU(operands);
+    break;
+  case PEO::ShrS:
+    result = simplifyShrS(operands);
+    break;
+  case PEO::DivU:
+    result = simplifyDivU(operands);
+    break;
+  case PEO::DivS:
+    result = simplifyDivS(operands);
+    break;
+  case PEO::ModU:
+    result = simplifyModU(operands);
+    break;
+  case PEO::ModS:
+    result = simplifyModS(operands);
     break;
   }
 
