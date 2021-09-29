@@ -188,6 +188,7 @@ class _SpecializedModule:
           loc=self.loc,
           ip=sys._get_ip())
     self.add_accessors()
+    sys._notify_symbol(symbol, self.circt_mod)
     return symbol
 
   @property

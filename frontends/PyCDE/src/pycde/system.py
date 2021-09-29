@@ -75,13 +75,18 @@ class System:
     the caller must use it as the symbol on a top-level op."""
     ctr = 0
     ret = basename
-    while ret in self.symbols.keys():
+    while ret in self.symbols:
       ctr += 1
       ret = basename + "_" + str(ctr)
     self.symbols[ret] = None
     if module_cls is not None:
       self._module_symbols[ret] = module_cls
     return ret
+
+  def _notify_symbol(self, symbol: str, op: ir.Operation):
+    assert symbol in self._symbols
+    assert self._symbols[symbol] is None
+    self._symbols[symbol] = op
 
   @staticmethod
   def current():
