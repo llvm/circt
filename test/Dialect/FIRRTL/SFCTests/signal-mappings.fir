@@ -32,7 +32,7 @@ circuit Sub :
 ; CHECK:   output [41:0]   data_source_u,
 ; CHECK:   output [9000:0] data_source_v,
 ; CHECK:   output          data_source_w_0, data_source_w_1);
-
+; CHECK:   `ifndef VERILATOR
 ; CHECK:   initial begin
 ; CHECK:     force Foo.clock = clock_sink;
 ; CHECK:     force Foo.dataIn_a_b_c = data_sink_u;
@@ -40,6 +40,7 @@ circuit Sub :
 ; CHECK:     force Foo.dataIn_e = data_sink_w_0;
 ; CHECK:     force Foo.dataIn_e = data_sink_w_1;
 ; CHECK:   end
+; CHECK:   `endif
 ; CHECK:   assign clock_source = Top.clock;
 ; CHECK:   assign data_source_u = Foo.dataOut_x_y_z;
 ; CHECK:   assign data_source_v = Foo.dataOut_w;
