@@ -1431,101 +1431,108 @@ static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
 /// in SeqOp and ParOp. This canonicalization is stringent about not entering
 /// nested control operations, as this may cause unintentional changes in
 /// behavior.
-static LogicalResult eliminateCommonTail(IfOp ifOp, PatternRewriter &rewriter) {
-  if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
-    return failure();
-  rewriter.setInsertionPointAfter(ifOp);
+struct CommonIfTailPattern : mlir::OpRewritePattern<calyx::IfOp> {
+  using mlir::OpRewritePattern<calyx::IfOp>::OpRewritePattern;
 
-  auto &thenControl = ifOp.getThenBody()->front();
-  auto &elseControl = ifOp.getElseBody()->front();
-  if (auto r1 = dyn_cast<ParOp>(thenControl);
-      auto r2 = dyn_cast<ParOp>(elseControl)) {
-    //    if %a with @G {              par {
-    //      par {                        if %a with @G {
-    //        ...                          par { ... }
-    //        calyx.enable @A            } else {
-    //        calyx.enable @B    ->        par { ... }
-    //      }                            }
-    //    } else {                       calyx.enable @A
-    //      par {                        calyx.enable @B
-    //        ...                      }
-    //        calyx.enable @A
-    //        calyx.enable @B
-    //      }
-    //    }
-    llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(r1),
-                              B = getAllEnableOpsInImmediateBody(r2);
+  LogicalResult matchAndRewrite(calyx::IfOp ifOp,
+                                PatternRewriter &rewriter) const override {
+    if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
+      return failure();
+    rewriter.setInsertionPointAfter(ifOp);
+    auto &thenControl = ifOp.getThenBody()->front();
+    auto &elseControl = ifOp.getElseBody()->front();
 
-    // Compute the intersection between `A` and `B`.
-    SmallVector<StringRef> groupNames;
-    for (auto a = A.begin(); a != A.end(); ++a) {
-      StringRef groupName = a->getKey();
-      auto b = B.find(groupName);
-      if (b == B.end())
-        continue;
-      // This is also an element in B.
-      groupNames.push_back(groupName);
-      // Since these are being pulled out, erase them.
-      rewriter.eraseOp(a->getValue());
-      rewriter.eraseOp(b->getValue());
+    // We only look for two cases: (1) both regions are ParOps, and
+    // (2) both regions are SeqOps. The case when these are different, e.g.
+    // ParOp and SeqOp, will only produce less optimal code, or even worse,
+    // change the behavior.
+    if (auto r1 = dyn_cast<ParOp>(thenControl);
+        auto r2 = dyn_cast<ParOp>(elseControl)) {
+      //    if %a with @G {              par {
+      //      par {                        if %a with @G {
+      //        ...                          par { ... }
+      //        calyx.enable @A            } else {
+      //        calyx.enable @B    ->        par { ... }
+      //      }                            }
+      //    } else {                       calyx.enable @A
+      //      par {                        calyx.enable @B
+      //        ...                      }
+      //        calyx.enable @A
+      //        calyx.enable @B
+      //      }
+      //    }
+      llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(r1),
+                                B = getAllEnableOpsInImmediateBody(r2);
+
+      // Compute the intersection between `A` and `B`.
+      SmallVector<StringRef> groupNames;
+      for (auto a = A.begin(); a != A.end(); ++a) {
+        StringRef groupName = a->getKey();
+        auto b = B.find(groupName);
+        if (b == B.end())
+          continue;
+        // This is also an element in B.
+        groupNames.push_back(groupName);
+        // Since these are being pulled out, erase them.
+        rewriter.eraseOp(a->getValue());
+        rewriter.eraseOp(b->getValue());
+      }
+      // Place the IfOp and EnableOp(s) inside a parallel region, in case this
+      // IfOp is nested in a SeqOp. This avoids unintentionally sequentializing
+      // the pulled out EnableOps.
+      ParOp parOp = rewriter.create<ParOp>(ifOp.getLoc());
+      rewriter.createBlock(&parOp.getBodyRegion());
+      Block *body = parOp.getBody();
+      ifOp->remove();
+      body->push_back(ifOp);
+
+      // Pull out the intersection between these two sets, and erase their
+      // counterparts in the Then and Else regions.
+      for (StringRef groupName : groupNames)
+        rewriter.create<EnableOp>(parOp.getLoc(), groupName);
+
+      return success();
+    } else if (auto r1 = dyn_cast<SeqOp>(thenControl);
+               auto r2 = dyn_cast<SeqOp>(elseControl)) {
+      //                                         seq {
+      //   if %a with @G {                         if %a with @G {
+      //     seq { ... calyx.enable @A }             seq { ... }
+      //   else {                          ->      } else {
+      //     seq { ... calyx.enable @A }             seq { ... }
+      //   }                                       }
+      //                                           calyx.enable @A
+      //                                         }
+      EnableOp lastThenEnableOp = getLastEnableOp(r1),
+               lastElseEnableOp = getLastEnableOp(r2);
+
+      if (lastThenEnableOp == nullptr || lastElseEnableOp == nullptr)
+        return failure();
+      if (lastThenEnableOp.groupName() != lastElseEnableOp.groupName())
+        return failure();
+
+      // Place the IfOp and pulled EnableOp inside a sequential region, in case
+      // this IfOp is nested in a ParOp. This avoids unintentionally
+      // parallelizing the pulled out EnableOps.
+      SeqOp seqOp = rewriter.create<SeqOp>(ifOp.getLoc());
+      rewriter.createBlock(&seqOp.getBodyRegion());
+      Block *body = seqOp.getBody();
+      ifOp->remove();
+      body->push_back(ifOp);
+      rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp.groupName());
+
+      // Erase the common EnableOp from the Then and Else regions.
+      rewriter.eraseOp(lastThenEnableOp);
+      rewriter.eraseOp(lastElseEnableOp);
+      return success();
     }
-    // Place the IfOp and EnableOp(s) inside a parallel region, in case this
-    // IfOp is nested in a SeqOp. This avoids unintentionally sequentializing
-    // the pulled out EnableOps.
-    ParOp parOp = rewriter.create<ParOp>(ifOp.getLoc());
-    rewriter.createBlock(&parOp.getBodyRegion());
-    Block *body = parOp.getBody();
-    ifOp->remove();
-    body->push_back(ifOp);
 
-    // Pull out the intersection between these two sets, and erase their
-    // counterparts in the Then and Else regions.
-    for (StringRef groupName : groupNames)
-      rewriter.create<EnableOp>(parOp.getLoc(), groupName);
-
-    return success();
-  } else if (auto r1 = dyn_cast<SeqOp>(thenControl);
-             auto r2 = dyn_cast<SeqOp>(elseControl)) {
-    //                                         seq {
-    //   if %a with @G {                         if %a with @G {
-    //     seq { ... calyx.enable @A }             seq { ... }
-    //   else {                          ->      } else {
-    //     seq { ... calyx.enable @A }             seq { ... }
-    //   }                                       }
-    //                                           calyx.enable @A
-    //                                         }
-    EnableOp lastThenEnableOp = getLastEnableOp(r1),
-             lastElseEnableOp = getLastEnableOp(r2);
-
-    if (lastThenEnableOp == nullptr || lastElseEnableOp == nullptr)
-      return failure();
-    if (lastThenEnableOp.groupName() != lastElseEnableOp.groupName())
-      return failure();
-
-    // Place the IfOp and pulled EnableOp inside a sequential region, in case
-    // this IfOp is nested in a ParOp. This avoids unintentionally parallelizing
-    // the pulled out EnableOps.
-    SeqOp seqOp = rewriter.create<SeqOp>(ifOp.getLoc());
-    rewriter.createBlock(&seqOp.getBodyRegion());
-    Block *body = seqOp.getBody();
-    ifOp->remove();
-    body->push_back(ifOp);
-    rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp.groupName());
-
-    // Erase the common EnableOp from the Then and Else regions.
-    rewriter.eraseOp(lastThenEnableOp);
-    rewriter.eraseOp(lastElseEnableOp);
-    return success();
+    return failure();
   }
+};
 
-  return failure();
-}
-
-LogicalResult IfOp::canonicalize(IfOp ifOp, PatternRewriter &rewriter) {
-  if (succeeded(eliminateCommonTail(ifOp, rewriter)))
-    return success();
-
-  return failure();
+void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                       MLIRContext *context) {
+  patterns.add<CommonIfTailPattern>(context);
 }
 
 //===----------------------------------------------------------------------===//
