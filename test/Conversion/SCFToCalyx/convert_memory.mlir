@@ -7,7 +7,6 @@
 // CHECK-DAG:        %c0_i32 = hw.constant 0 : i32
 // CHECK-DAG:        %c1_i32 = hw.constant 1 : i32
 // CHECK-DAG:        %true = hw.constant true
-// CHECK-DAG:        %std_slice_2.in, %std_slice_2.out = calyx.std_slice "std_slice_2" : i32, i6
 // CHECK-DAG:        %std_slice_1.in, %std_slice_1.out = calyx.std_slice "std_slice_1" : i32, i6
 // CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice "std_slice_0" : i32, i6
 // CHECK-DAG:        %std_add_0.left, %std_add_0.right, %std_add_0.out = calyx.std_add "std_add_0" : i32, i32, i32
