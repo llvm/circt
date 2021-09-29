@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/CircuitNamespace.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -68,54 +69,6 @@ struct VerbatimType {
 /// A sum type representing either a type encoded as a string (VerbatimType)
 /// or an actual mlir::Type.
 typedef std::variant<VerbatimType, Type> TypeSum;
-
-/// A namespace that is used to store existing names and generate names.  This
-/// exists to work around limitations of SymbolTables.
-class CircuitNamespace {
-  StringSet<> internal;
-
-public:
-  /// Construct a new namespace from a circuit op.  This namespace will be
-  /// composed of any operation in the first level of the circuit that contains
-  /// a symbol.
-  CircuitNamespace(CircuitOp circuit) {
-    for (Operation &op : *circuit.getBody())
-      if (auto symbol =
-              op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-        internal.insert(symbol.getValue());
-  }
-
-  /// Return a unique name, derived from the input `name`, and add the new name
-  /// to the internal namespace.  There are two possible outcomes for the
-  /// returned name:
-  ///
-  /// 1. The original name is returned.
-  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
-  std::string newName(StringRef name) {
-    // Special case the situation where there is no name collision to avoid
-    // messing with the SmallString allocation below.
-    if (internal.insert(name).second)
-      return name.str();
-    size_t i = 0;
-    llvm::SmallString<64> tryName;
-    do {
-      tryName = (name + "_" + Twine(i++)).str();
-    } while (!internal.insert(tryName).second);
-    return std::string(tryName);
-  }
-
-  /// Return a unique name, derived from the input `name`, and add the new name
-  /// to the internal namespace.  There are two possible outcomes for the
-  /// returned name:
-  ///
-  /// 1. The original name is returned.
-  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
-  std::string newName(const Twine &name) {
-    return newName((StringRef)name.str());
-  }
-};
 
 /// Stores the information content of an ExtractGrandCentralAnnotation.
 struct ExtractionInfo {
