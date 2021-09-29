@@ -375,7 +375,7 @@ public:
   }
 
   /// If v is an input to any memory registered within this component, returns
-  /// a pointer to said memory. If not, returns null.
+  /// the memory. If not, returns null.
   Optional<CalyxMemoryInterface> isInputPortOfMemory(Value v) {
     for (auto &memIf : memories) {
       auto &mem = memIf.getSecond();
@@ -1245,7 +1245,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     DenseMap<unsigned, unsigned> funcOpResultMapping;
 
     /// Maintain a mapping between an external memory argument (identified by a
-    /// memref) and eventual component input- and output port indicies that will
+    /// memref) and eventual component input- and output port indices that will
     /// map to the memory ports. The pair denotes the start index of the memory
     /// ports in the in- and output ports of the component. Ports are expected
     /// to be ordered in the same manner as they are added by
@@ -1284,7 +1284,7 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
           DictionaryAttr::get(rewriter.getContext(), {})});
     }
 
-    /// We've now recorded all necessary indicies. Merge in- and output ports
+    /// We've now recorded all necessary indices. Merge in- and output ports
     /// and add the required mandatory component ports.
     auto ports = inPorts;
     llvm::append_range(ports, outPorts);
