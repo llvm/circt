@@ -330,7 +330,7 @@ module {
 
 // -----
 
-// External memory store
+// External memory store.
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
@@ -363,7 +363,7 @@ module {
 
 // -----
 
-// External memory load
+// External memory load.
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
@@ -398,7 +398,7 @@ module {
 
 // -----
 
-// External memory hazard
+// External memory hazard.
 
 // CHECK:      module  {
 // CHECK-NEXT:   calyx.program "main"  {
