@@ -297,6 +297,11 @@ For a historical discussion of this issue and its development see:
 - [`llvm/circt#989`](https://github.com/llvm/circt/issues/989)
 - [`llvm/circt#992`](https://github.com/llvm/circt/pull/992)
 
+### `firrtl.bitcast`
+The bitcast operation represents a bitwise reinerpretation (cast) of a value. 
+This always synthesizes away in hardware, and is lowered to 
+[`hw.bitcast` ](https://github.com/prithayan/circt/blob/firrtlBitCastOp/docs/RationaleComb.md#bitcasts)
+
 ### `firrtl.mem`
 
 Unlike the SFC, the FIRRTL dialect represents each memory port as a distinct
