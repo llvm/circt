@@ -170,7 +170,7 @@ unsigned allocateMemRef(mlir::MemRefType type, std::vector<Any> &in,
   storeTimes[ptr] = 0.0;
   mlir::Type elementType = type.getElementType();
   int64_t width = elementType.getIntOrFloatBitWidth();
-  for (int i = 0; i < allocationSize; i++) {
+  for (int i = 0; i < allocationSize; ++i) {
     if (elementType.isa<mlir::IntegerType>()) {
       store[ptr][i] = APInt(width, 0);
     } else if (elementType.isa<mlir::FloatType>()) {
@@ -345,7 +345,7 @@ void HandshakeExecuter::execute(mlir::memref::LoadOp op, std::vector<Any> &in,
                                 std::vector<Any> &out) {
   ArrayRef<int64_t> shape = op.getMemRefType().getShape();
   unsigned address = 0;
-  for (unsigned i = 0; i < shape.size(); i++) {
+  for (unsigned i = 0; i < shape.size(); ++i) {
     address = address * shape[i] + any_cast<APInt>(in[i + 1]).getZExtValue();
   }
   unsigned ptr = any_cast<unsigned>(in[0]);
@@ -367,7 +367,7 @@ void HandshakeExecuter::execute(mlir::memref::StoreOp op, std::vector<Any> &in,
                                 std::vector<Any> &) {
   ArrayRef<int64_t> shape = op.getMemRefType().getShape();
   unsigned address = 0;
-  for (unsigned i = 0; i < shape.size(); i++) {
+  for (unsigned i = 0; i < shape.size(); ++i) {
     address = address * shape[i] + any_cast<APInt>(in[i + 2]).getZExtValue();
   }
   unsigned ptr = any_cast<unsigned>(in[1]);
@@ -437,7 +437,7 @@ void HandshakeExecuter::execute(mlir::CondBranchOp condBranchOp,
 
 void HandshakeExecuter::execute(mlir::ReturnOp op, std::vector<Any> &in,
                                 std::vector<Any> &) {
-  for (unsigned i = 0; i < results.size(); i++) {
+  for (unsigned i = 0; i < results.size(); ++i) {
     results[i] = in[i];
     resultTimes[i] = timeMap[op.getOperand(i)];
   }
@@ -445,7 +445,7 @@ void HandshakeExecuter::execute(mlir::ReturnOp op, std::vector<Any> &in,
 
 void HandshakeExecuter::execute(handshake::ReturnOp op, std::vector<Any> &in,
                                 std::vector<Any> &) {
-  for (unsigned i = 0; i < results.size(); i++) {
+  for (unsigned i = 0; i < results.size(); ++i) {
     results[i] = in[i];
     resultTimes[i] = timeMap[op.getOperand(i)];
   }
@@ -479,7 +479,7 @@ void HandshakeExecuter::execute(mlir::CallOpInterface callOp,
       valueMap[out.value()] = results[out.index()];
       timeMap[out.value()] = resultTimes[out.index()];
     }
-    instIter++;
+    ++instIter;
   } else
     fatalValueError("Callable was not a Function", *op);
 }
@@ -676,7 +676,7 @@ HandshakeExecuter::HandshakeExecuter(
       inValues[i] = valueMap[in];
       time = std::max(time, timeMap[in]);
       LLVM_DEBUG(debugArg("IN", in, inValues[i], timeMap[in]));
-      i++;
+      ++i;
     }
     if (reschedule) {
       LLVM_DEBUG(dbgs() << "Rescheduling data...\n");
@@ -717,7 +717,7 @@ HandshakeExecuter::HandshakeExecuter(
       timeMap[out.value()] = time + 1;
       scheduleUses(readyList, valueMap, out.value());
     }
-    instructionsExecuted++;
+    ++instructionsExecuted;
   }
 }
 
@@ -802,7 +802,7 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
     return 1;
   }
 
-  for (unsigned i = 0; i < realInputs; i++) {
+  for (unsigned i = 0; i < realInputs; ++i) {
     mlir::Type type = ftype.getInput(i);
     if (type.isa<mlir::MemRefType>()) {
       // We require this memref type to be fully specified.
@@ -837,20 +837,20 @@ bool simulate(StringRef toplevelFunction, ArrayRef<std::string> inputArgs,
                       storeTimes, module);
   }
   double time = 0.0;
-  for (unsigned i = 0; i < results.size(); i++) {
+  for (unsigned i = 0; i < results.size(); ++i) {
     mlir::Type t = ftype.getResult(i);
     outs() << printAnyValueWithType(t, results[i]) << " ";
     time = std::max(resultTimes[i], time);
   }
   // Go back through the arguments and output any memrefs.
-  for (unsigned i = 0; i < realInputs; i++) {
+  for (unsigned i = 0; i < realInputs; ++i) {
     mlir::Type type = ftype.getInput(i);
     if (type.isa<mlir::MemRefType>()) {
       // We require this memref type to be fully specified.
       auto memreftype = type.dyn_cast<mlir::MemRefType>();
       unsigned buffer = any_cast<unsigned>(valueMap[blockArgs[i]]);
       auto elementType = memreftype.getElementType();
-      for (int j = 0; j < memreftype.getNumElements(); j++) {
+      for (int j = 0; j < memreftype.getNumElements(); ++j) {
         if (j != 0)
           outs() << ",";
         outs() << printAnyValueWithType(elementType, store[buffer][j]);
