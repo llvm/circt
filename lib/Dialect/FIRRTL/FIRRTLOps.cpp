@@ -2469,8 +2469,8 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
 }
 
 static LogicalResult verifyBitCastOp(BitCastOp cast) {
-  // We must have a bundle and a struct, with matching pairwise fields
   StringRef errorMsg;
+  // Infer the bitwidth of the type, if it can be computed. Else return false.
   std::function<bool(FIRRTLType, size_t &)> getWidth =
       [&](FIRRTLType type, size_t &width) -> bool {
     return TypeSwitch<FIRRTLType, size_t>(type)
@@ -2503,6 +2503,7 @@ static LogicalResult verifyBitCastOp(BitCastOp cast) {
   size_t inTypeBits = 0, resTypeBits = 0;
   if (getWidth(cast.getOperand().getType().cast<FIRRTLType>(), inTypeBits) &&
       getWidth(cast.getType().cast<FIRRTLType>(), resTypeBits)) {
+    // Bitwidths must match for valid bitcast.
     if (inTypeBits == resTypeBits)
       return success();
     errorMsg = "bitwidth of input and result don't match";
