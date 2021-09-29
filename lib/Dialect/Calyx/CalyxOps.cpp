@@ -1431,10 +1431,10 @@ static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
 /// in SeqOp and ParOp. This canonicalization is stringent about not entering
 /// nested control operations, as this may cause unintentional changes in
 /// behavior.
-struct CommonIfTailPattern : mlir::OpRewritePattern<calyx::IfOp> {
-  using mlir::OpRewritePattern<calyx::IfOp>::OpRewritePattern;
+struct CommonIfTailPattern : mlir::OpRewritePattern<IfOp> {
+  using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(calyx::IfOp ifOp,
+  LogicalResult matchAndRewrite(IfOp ifOp,
                                 PatternRewriter &rewriter) const override {
     if (!ifOp.thenRegionExists() || !ifOp.elseRegionExists())
       return failure();
