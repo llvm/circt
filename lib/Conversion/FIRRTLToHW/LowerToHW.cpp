@@ -72,7 +72,7 @@ static Type lowerType(Type type) {
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
-  if (FVectorType vec = firType.dyn_cast<FVectorType>()){
+  if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
     auto elemTy = lowerType(vec.getElementType());
     if (!elemTy)
       return {};

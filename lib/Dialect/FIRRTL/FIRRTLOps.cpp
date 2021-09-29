@@ -2471,36 +2471,38 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
 static LogicalResult verifyBitCastOp(BitCastOp cast) {
   // We must have a bundle and a struct, with matching pairwise fields
   StringRef errorMsg;
-  std::function<bool(FIRRTLType, size_t&)> getWidth = [&](FIRRTLType type, size_t &width) -> bool {
+  std::function<bool(FIRRTLType, size_t &)> getWidth =
+      [&](FIRRTLType type, size_t &width) -> bool {
     return TypeSwitch<FIRRTLType, size_t>(type)
         .Case<BundleType>([&](auto bundle) {
           for (auto &elt : bundle.getElements())
             if (!getWidth(elt.type, width))
-            return false;
+              return false;
           return true;
         })
         .Case<FVectorType>([&](auto vector) {
           for (size_t i = 0, e = vector.getNumElements(); i != e; ++i)
             if (!getWidth(vector.getElementType(), width))
-            return false;
+              return false;
           return true;
         })
         .Case<IntType>([&](IntType iType) {
-            if (!iType.getWidth().hasValue()) {
-              errorMsg = "valid bitwidth is unknown";
-              return false;
-              }
-            width += iType.getWidth().getValue();
-            return true;
+          if (!iType.getWidth().hasValue()) {
+            errorMsg = "valid bitwidth is unknown";
+            return false;
+          }
+          width += iType.getWidth().getValue();
+          return true;
         })
-        .Default([&](auto t) { 
-           errorMsg = "bitcastOp only supports types with valid bit width:" ; 
-            return false; 
-            });
+        .Default([&](auto t) {
+          errorMsg = "bitcastOp only supports types with valid bit width:";
+          return false;
+        });
   };
 
-  size_t inTypeBits =0, resTypeBits=0  ;
-  if (getWidth(cast.getOperand().getType().cast<FIRRTLType>(), inTypeBits)  && getWidth(cast.getType().cast<FIRRTLType>(), resTypeBits)) {
+  size_t inTypeBits = 0, resTypeBits = 0;
+  if (getWidth(cast.getOperand().getType().cast<FIRRTLType>(), inTypeBits) &&
+      getWidth(cast.getType().cast<FIRRTLType>(), resTypeBits)) {
     if (inTypeBits == resTypeBits)
       return success();
     errorMsg = "bitwidth of input and result don't match";
