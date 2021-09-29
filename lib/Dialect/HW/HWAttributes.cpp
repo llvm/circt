@@ -304,10 +304,70 @@ static Attribute simplifyAssocOp(
   return operands.size() == 1 ? operands[0] : Attribute();
 }
 
+/// Analyze an operand to an add.  If it is a multiplication by a constant (e.g.
+/// `(a*b*42)` then split it into the non-constant and the constant portions
+/// (e.g. `a*b` and `42`).  Otherwise return the operand as the first value and
+/// null as the second (standin for "multiplication 1").
+static std::pair<Attribute, Attribute> decomposeAddend(Attribute operand) {
+  if (auto mul = dyn_castPE(PEO::Mul, operand))
+    if (auto cst = mul.getOperands().back().dyn_cast<IntegerAttr>()) {
+      auto nonCst = ParamExprAttr::get(PEO::Mul, mul.getOperands().drop_back());
+      return {nonCst, cst};
+    }
+  return {operand, Attribute()};
+}
+
+static Attribute getOneOfType(Type type) {
+  return IntegerAttr::get(type, APInt(type.getIntOrFloatBitWidth(), 1));
+}
+
 static Attribute simplifyAdd(SmallVector<Attribute, 4> &operands) {
-  return simplifyAssocOp(
-      PEO::Add, operands, [](auto a, auto b) { return a + b; },
-      /*identityCst*/ [](auto cst) { return cst.isZero(); });
+  if (auto result = simplifyAssocOp(
+          PEO::Add, operands, [](auto a, auto b) { return a + b; },
+          /*identityCst*/ [](auto cst) { return cst.isZero(); }))
+    return result;
+
+  // Canonicalize the add by splitting all addends into their variable and
+  // constant factors.
+  SmallVector<std::pair<Attribute, Attribute>> decomposedOperands;
+  llvm::SmallDenseSet<Attribute> nonConstantParts;
+  for (auto &op : operands) {
+    decomposedOperands.push_back(decomposeAddend(op));
+
+    // Keep track of non-constant parts we've already seen.  If we see multiple
+    // uses of the same value, then we can fold them together with a multiply.
+    // This handles things like `(a+b+a)` => `(a*2 + b)` and `(a*2 + b + a)` =>
+    // `(a*3 + b)`.
+    if (!nonConstantParts.insert(decomposedOperands.back().first).second) {
+      // The thing we multiply will be the common expression.
+      Attribute mulOperand = decomposedOperands.back().first;
+
+      // Find the index of the first occurrence.
+      size_t i = 0;
+      while (decomposedOperands[i].first != mulOperand)
+        ++i;
+      // Remove both occurrences from the operand list.
+      operands.erase(operands.begin() + (&op - &operands[0]));
+      operands.erase(operands.begin() + i);
+
+      auto type = mulOperand.getType();
+      auto c1 = decomposedOperands[i].second,
+           c2 = decomposedOperands.back().second;
+      // Fill in missing constant multiplicands with 1.
+      if (!c1)
+        c1 = getOneOfType(type);
+      if (!c2)
+        c2 = getOneOfType(type);
+      // Re-add the "a"*(c1+c2) expression to the operand list and
+      // re-canonicalize.
+      auto constant = ParamExprAttr::get(PEO::Add, c1, c2);
+      auto mulCst = ParamExprAttr::get(PEO::Mul, mulOperand, constant);
+      operands.push_back(mulCst);
+      return ParamExprAttr::get(PEO::Add, operands);
+    }
+  }
+
+  return {};
 }
 
 static Attribute simplifyMul(SmallVector<Attribute, 4> &operands) {

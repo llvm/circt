@@ -275,9 +275,11 @@ This set includes:
    merged into a single operand and moved to the right, e.g. `(add 4, x, 2)` 
    into `(add x, 6)`.
  - Fully associative operators flatten subexpressions, e.g.
-   `(add x, (add y, z)` into `(add x, y, z)`.
+   `(add x, (add y, z))` into `(add x, y, z)`.
  - We simplify affine expressions into a sum of products representation, pulling
    additions out of products, e.g. `(a+b)*c*d` into `(a*c*d + b*c*d)`
+ - Common operand factoring for adds, e.g. `(a+b+a)` into `(2*a + b)` and
+   `(a*4 + a)` into `(a*5)`
  - Shift left by constant is canonicalized into multiply to compose correctly
    with affine expression canonicalization, e.g. `(shl x, 1)` into
    `(mul x, 2)`.

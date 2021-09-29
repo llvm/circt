@@ -1096,7 +1096,7 @@ hw.module @orWithNegation(%arg0: i32) -> (o1: i32) {
 
 // CHECK-LABEL: hw.module @addSubParam
 hw.module @addSubParam<p1: i4>(%a: i4) -> (o1: i4, o2: i4, o3: i4) {
-  // CHECK-DAG: [[ADD:%.*]] = hw.param.value i4 = #hw.param.expr.add<#hw.param.decl.ref<"p1">, #hw.param.decl.ref<"p1">, 4>
+  // CHECK-DAG: [[ADD:%.*]] = hw.param.value i4 = #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, 2>, 4>
   %c1 = hw.constant 4 : i4
   %p = hw.param.value i4 = #hw.param.decl.ref<"p1">
   %b = comb.add %p, %c1, %p : i4

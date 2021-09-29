@@ -37,11 +37,11 @@ hw.module @UseParameters<p1: i42>() {
 
 // CHECK-LABEL: hw.module @addParam
 hw.module @addParam<p1: i4, p2: i4>()
-  -> (o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4) {
+  -> (o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4) {
   // CHECK-NEXT: %0 = hw.param.value i4 = 6
   %0 = hw.param.value i4 = #hw.param.expr.add<1, 2, 3>
   // CHECK-NEXT: %1 = hw.param.value i4 =
-  // CHECK-SAME:     #hw.param.expr.add<#hw.param.decl.ref<"p1">, #hw.param.decl.ref<"p1">, 4>
+  // CHECK-SAME:     #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, 2>, 4>
   %1 = hw.param.value i4 = #hw.param.expr.add<#hw.param.decl.ref<"p1">, 4, #hw.param.decl.ref<"p1">>
   // CHECK-NEXT: %2 = hw.param.value i4 =
   // CHECK-SAME:     #hw.param.expr.add<#hw.param.decl.ref<"p1">, 6>
@@ -51,7 +51,7 @@ hw.module @addParam<p1: i4, p2: i4>()
   %3 = hw.param.value i4 = #hw.param.expr.add<#hw.param.decl.ref<"p1">, 4, #hw.param.decl.ref<"p2">>
 
   // CHECK-NEXT: %4 = hw.param.value i4 =
-  // CHECK-SAME:     #hw.param.expr.add<#hw.param.decl.ref<"p1">, #hw.param.decl.ref<"p1">, 4>
+  // CHECK-SAME:     #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, 2>, 4>
   %4 = hw.param.value i4 = #hw.param.expr.add<#hw.param.expr.add<#hw.param.decl.ref<"p1">, 4>, #hw.param.decl.ref<"p1">>
  
   // CHECK-NEXT: %5 = hw.param.value i4 = #hw.param.decl.ref<"p1">
@@ -60,13 +60,19 @@ hw.module @addParam<p1: i4, p2: i4>()
   // CHECK-NEXT: %6 = hw.param.value i4 = 0
   %6 = hw.param.value i4 = #hw.param.expr.mul<8, #hw.param.decl.ref<"p1">, 8>
 
-  // CHECK-NEXT: %7 = hw.param.value i4 = #hw.param.expr.mul<#hw.param.decl.ref<"p1">, 4>
+  // CHECK-NEXT: %7 = hw.param.value i4 =
+  // CHECK-SAME: #hw.param.expr.mul<#hw.param.decl.ref<"p1">, 4>
   %7 = hw.param.value i4 = #hw.param.expr.shl<#hw.param.decl.ref<"p1">, 2>
 
-  // CHECK-NEXT: %8 = hw.param.value i4 = #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p2">, #hw.param.decl.ref<"p1">, 2>, #hw.param.expr.mul<#hw.param.decl.ref<"p2">, 6>>
+  // CHECK-NEXT: %8 = hw.param.value i4 = 
+  // CHECK-SAME: #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p2">, #hw.param.decl.ref<"p1">, 2>, #hw.param.expr.mul<#hw.param.decl.ref<"p2">, 6>>
   %8 = hw.param.value i4 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.decl.ref<"p1">, 3>, 2, #hw.param.decl.ref<"p2">>
 
-  hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8
-     : i4, i4, i4, i4, i4, i4, i4, i4, i4
+  // CHECK-NEXT: %9 = hw.param.value i4 =
+  // CHECK-SAME: #hw.param.expr.mul<#hw.param.decl.ref<"p1">, 5>
+  %9 = hw.param.value i4 = #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, 3>, #hw.param.decl.ref<"p1">, #hw.param.decl.ref<"p1">>
+  
+  hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9
+     : i4, i4, i4, i4, i4, i4, i4, i4, i4, i4
 }
 
