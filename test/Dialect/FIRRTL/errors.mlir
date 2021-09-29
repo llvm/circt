@@ -559,3 +559,23 @@ firrtl.circuit "SubfieldOpFieldError" {
     %w_a = firrtl.subfield %w(2) : (!firrtl.bundle<a : uint<2>, b : uint<2>>) -> !firrtl.uint<2>
   }
 }
+
+// -----
+
+firrtl.circuit "BitCast1" {
+  firrtl.module @BitCast1() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint>
+    // expected-error @+1 {{valid bitwidth is unknown}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint>) -> (!firrtl.uint<6>)
+  }
+}
+
+// -----
+
+firrtl.circuit "BitCast2" {
+  firrtl.module @BitCast2() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+    // expected-error @+1 {{bitwidth of input and result don't match}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<6>)
+  }
+}

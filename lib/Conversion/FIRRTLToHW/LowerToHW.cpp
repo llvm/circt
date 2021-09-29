@@ -1193,6 +1193,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
 
   LogicalResult visitExpr(HWStructCastOp op);
+  LogicalResult visitExpr(BitCastOp op);
   LogicalResult visitExpr(mlir::UnrealizedConversionCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
@@ -2408,6 +2409,15 @@ LogicalResult FIRRTLLowering::visitExpr(HWStructCastOp op) {
   // struct type into the lowered operand.
   op.replaceAllUsesWith(result);
   return success();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(BitCastOp op) {
+  auto operand = getLoweredValue(op.getOperand());
+  if (!operand)
+    return failure();
+  auto resultType = lowerType(op.getType());
+
+  return setLoweringTo<hw::BitcastOp>(op, resultType, operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {

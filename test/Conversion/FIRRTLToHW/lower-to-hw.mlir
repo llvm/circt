@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw %s | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw ../test/Conversion/FIRRTLToHW/lower-to-hw.mlir  %s | FileCheck %s
 
 firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", directory = "dir1",  filename = "./dir1/filename1" }, {class =
@@ -1040,4 +1040,18 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r0 = firrtl.regreset %clock, %arst, %constNode : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
   }
 
+  // CHECK-LABEL: hw.module @BitCast1
+  firrtl.module @BitCast1() {
+    %a = firrtl.wire : !firrtl.vector<uint<2>, 13>
+    %b = firrtl.bitcast %a : (!firrtl.vector<uint<2>, 13>) -> (!firrtl.uint<26>)
+    // CHECK: firrtl.bitcast %a : (!firrtl.vector<uint<2>, 13>) -> !firrtl.uint<26>
+  }
+
+  // CHECK-LABEL: hw.module @BitCast2
+  firrtl.module @BitCast2() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<3>)
+    // CHECK: %1 = hw.bitcast %0 : (!hw.struct<valid: i1, ready: i1, data: i1>) -> i3
+
+  }
 }
