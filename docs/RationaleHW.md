@@ -278,6 +278,12 @@ This set includes:
    `(add x, (add y, z))` into `(add x, y, z)`.
  - We simplify affine expressions into a sum of products representation, pulling
    additions out of products, e.g. `(a+b)*c*d` into `(a*c*d + b*c*d)`
+ - Operands of fully-associative expressions are put into a stable order, at
+   least for the case of affine expressions involving constant integers and
+   named parameters.  For example `p2+p1` turns into `p1+p2` reliably.  The
+   actual ordering moves subexpressions to the start of the list (more complex
+   ones first) followed by verbatims, followed by parameter references, followed
+   by constants, each group sorted w.r.t. each other.
  - Common operand factoring for adds, e.g. `(a+b+a)` into `(2*a + b)` and
    `(a*4 + a)` into `(a*5)`
  - Shift left by constant is canonicalized into multiply to compose correctly

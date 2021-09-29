@@ -35,8 +35,8 @@ hw.module @UseParameters<p1: i42>() {
   hw.output
 }
 
-// CHECK-LABEL: hw.module @addParam
-hw.module @addParam<p1: i4, p2: i4>()
+// CHECK-LABEL: hw.module @affineCanonicalization
+hw.module @affineCanonicalization<p1: i4, p2: i4>()
   -> (o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4) {
   // CHECK-NEXT: %0 = hw.param.value i4 = 6
   %0 = hw.param.value i4 = #hw.param.expr.add<1, 2, 3>
@@ -65,7 +65,8 @@ hw.module @addParam<p1: i4, p2: i4>()
   %7 = hw.param.value i4 = #hw.param.expr.shl<#hw.param.decl.ref<"p1">, 2>
 
   // CHECK-NEXT: %8 = hw.param.value i4 = 
-  // CHECK-SAME: #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p2">, #hw.param.decl.ref<"p1">, 2>, #hw.param.expr.mul<#hw.param.decl.ref<"p2">, 6>>
+  // CHECK-SAME: #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, #hw.param.decl.ref<"p2">, 2>,
+  // CHECK-SAME:                    #hw.param.expr.mul<#hw.param.decl.ref<"p2">, 6>>
   %8 = hw.param.value i4 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.decl.ref<"p1">, 3>, 2, #hw.param.decl.ref<"p2">>
 
   // CHECK-NEXT: %9 = hw.param.value i4 =
@@ -74,5 +75,62 @@ hw.module @addParam<p1: i4, p2: i4>()
   
   hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9
      : i4, i4, i4, i4, i4, i4, i4, i4, i4, i4
+}
+
+
+// CHECK-LABEL: hw.module @associativeOrdering
+hw.module @associativeOrdering<p1: i4, p2: i4>()
+  -> (o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4) {
+  // Declrefs before constants.
+  // CHECK-NEXT: %0 = hw.param.value i4 =
+  // CHECK-SAME:     #hw.param.expr.add<#hw.param.decl.ref<"p1">, 4>
+  %0 = hw.param.value i4 = #hw.param.expr.add<4, #hw.param.decl.ref<"p1">>
+
+  // Declrefs lexically sorted.
+  // CHECK-NEXT: %1 = hw.param.value i4 =
+  // CHECK-SAME:     #hw.param.expr.add<#hw.param.decl.ref<"p1">, #hw.param.decl.ref<"p2">>
+  %1 = hw.param.value i4 =
+    #hw.param.expr.add<#hw.param.decl.ref<"p2">, #hw.param.decl.ref<"p1">>
+
+  // Verbatims before declrefs.
+  // CHECK-NEXT: %2 = hw.param.value i4 =
+  // CHECK-SAME:     #hw.param.expr.add<#hw.param.verbatim<"X">, #hw.param.decl.ref<"p1">>
+  %2 = hw.param.value i4 = #hw.param.expr.add<#hw.param.decl.ref<"p1">, #hw.param.verbatim<"X">>
+
+  // Verbatims lexically sorted.
+  // CHECK-NEXT: %3 = hw.param.value i4 =
+  // CHECK-SAME:     #hw.param.expr.add<#hw.param.verbatim<"X">, #hw.param.verbatim<"Y">>
+  %3 = hw.param.value i4 =
+    #hw.param.expr.add<#hw.param.verbatim<"Y">, #hw.param.verbatim<"X">>
+
+  // Expressions before Verbatims.
+
+  // CHECK-NEXT: %4 = hw.param.value i4 =
+  // CHECK-SAME:     add<#hw.param.expr.mul<{{.*}}>, #hw.param.verbatim<"xxx">>
+  %4 = hw.param.value i4 = #hw.param.expr.add<#hw.param.verbatim<"xxx">, #hw.param.expr.mul<#hw.param.decl.ref<"p1">, 4>>
+ 
+  // Expressions sorted by opcode.
+  // CHECK-NEXT: %5 = {{.*add<#hw.param.expr.mul<.*>, #hw.param.expr.xor<.*>>}}
+  %5 = hw.param.value i4 =
+    #hw.param.expr.add<#hw.param.expr.xor<#hw.param.decl.ref<"p1">, 8>,
+                       #hw.param.expr.mul<#hw.param.decl.ref<"p1">, 8>>
+
+  // Expression sorted by arity.
+  // CHECK-NEXT: %6 = {{.*mul<.*verbatim<"XX">, .*mul<.*decl.ref<"p1">}}
+  %6 = hw.param.value i4 =
+    #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, 8>,
+                       #hw.param.expr.mul<#hw.param.verbatim<"XX">, #hw.param.verbatim<"YY">, 8>>
+
+  // Expressions sorted by contents.
+
+  // CHECK-NEXT: %7 =
+  // CHECK-SAME: #hw.param.expr.mul<{{.*}}verbatim<"XX">
+  // CHECK-SAME: #hw.param.expr.mul<{{.*}}decl.ref<"p1">
+  %7 = hw.param.value i4 =
+    #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, 8>,
+                       #hw.param.expr.mul<#hw.param.verbatim<"XX">, #hw.param.verbatim<"YY">>>
+
+  hw.output %0, %1, %2, %3, %4, %5, %6, %7
+     : i4, i4, i4, i4, i4, i4, i4, i4
 }
 

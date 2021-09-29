@@ -233,6 +233,78 @@ static ParamExprAttr dyn_castPE(PEO opcode, Attribute value) {
   return {};
 }
 
+/// This implements a < comparison for two operands to an associative operation
+/// that an ordering upon them.  This isn't practically decidable in general for
+/// expression trees - we make sure that affine expressions involving named
+/// parameters and constant integers are stable, since affine expressions are
+/// the most important thing we need for type canonicalization.
+///
+/// The ordering imposed is from left to right:
+///    expressions :: verbatims :: decl.refs :: constant.
+///
+/// This is applied last after expression canonicalization is performed.
+static bool paramExprOperandSortPredicate(Attribute lhs, Attribute rhs) {
+  // Simplify the code below - we never have to care about exactly equal values.
+  if (lhs == rhs)
+    return false;
+
+  // All expressions are "less than" a constant, since they appear on the right.
+  if (rhs.isa<IntegerAttr>()) {
+    // We don't bother to order constants w.r.t. each other since they will be
+    // folded - they can all compare equal.
+    return !lhs.isa<IntegerAttr>();
+  }
+  if (lhs.isa<IntegerAttr>())
+    return false;
+
+  // Next up are named parameters.
+  if (auto rhsParam = rhs.dyn_cast<ParamDeclRefAttr>()) {
+    // Parameters are sorted lexically w.r.t. each other.
+    if (auto lhsParam = lhs.dyn_cast<ParamDeclRefAttr>())
+      return lhsParam.getName().getValue() < rhsParam.getName().getValue();
+    // They otherwise appear on the right of other things.
+    return true;
+  }
+  if (lhs.isa<ParamDeclRefAttr>())
+    return false;
+
+  // Next up are verbatim parameters.
+  if (auto rhsParam = rhs.dyn_cast<ParamVerbatimAttr>()) {
+    // Verbatims are sorted lexically w.r.t. each other.
+    if (auto lhsParam = lhs.dyn_cast<ParamVerbatimAttr>())
+      return lhsParam.getValue().getValue() < rhsParam.getValue().getValue();
+    // They otherwise appear on the right of other things.
+    return true;
+  }
+  if (lhs.isa<ParamVerbatimAttr>())
+    return false;
+
+  // The only thing left are nested expressions.
+  auto lhsExpr = lhs.cast<ParamExprAttr>(), rhsExpr = rhs.cast<ParamExprAttr>();
+  // Sort by the string form of the opcode, e.g. add, .. mul,... then xor.
+  if (lhsExpr.getOpcode() != rhsExpr.getOpcode())
+    return stringifyPEO(lhsExpr.getOpcode()) <
+           stringifyPEO(rhsExpr.getOpcode());
+
+  // If they are the same opcode, then sort by arity: more complex to the left.
+  ArrayRef<Attribute> lhsOperands = lhsExpr.getOperands(),
+                      rhsOperands = rhsExpr.getOperands();
+  if (lhsOperands.size() != rhsOperands.size())
+    return lhsOperands.size() > rhsOperands.size();
+
+  // We know the two subexpressions are different (they'd otherwise be pointer
+  // equivalent) so just go compare all of the elements.
+  for (size_t i = 0, e = lhsOperands.size(); i != e; ++i) {
+    if (paramExprOperandSortPredicate(lhsOperands[i], rhsOperands[i]))
+      return true;
+    if (paramExprOperandSortPredicate(rhsOperands[i], lhsOperands[i]))
+      return false;
+  }
+
+  llvm_unreachable("expressions should never be equivalent");
+  return false;
+}
+
 /// Given a fully associative variadic integer operation, constant fold any
 /// constant operands and move them to the right.  If the whole expression is
 /// constant, then return that, otherwise update the operands list.
@@ -259,47 +331,33 @@ static Attribute simplifyAssocOp(
     }
   }
 
-  // Scan for any constants.
-  size_t i = 0, e = operands.size();
-  for (; i != e && !operands[i].isa<IntegerAttr>(); ++i)
-    ;
+  // Impose an ordering on the operands, pushing subexpressions to the left and
+  // constants to the right, with verbatims and parameters in the middle - but
+  // predictably ordered w.r.t. each other.
+  llvm::stable_sort(operands, paramExprOperandSortPredicate);
 
-  // No constants or constant at the end: no work to do.
-  if (i >= e - 1)
-    return {};
-
-  // Take the constant out of the list.
-  APInt cst = operands[i].cast<IntegerAttr>().getValue();
-  operands[i] = operands.back();
-  operands.pop_back();
-  --e;
-
-  // Scan for any more constants, merging them into this one.
-  while (i != e) {
-    if (auto cst2 = operands[i].dyn_cast<IntegerAttr>()) {
-      cst = calculateFn(cst, cst2.getValue());
-      operands[i] = operands.back();
-      operands.pop_back();
-      --e;
-    } else {
-      ++i;
+  // Merge any constants, they will appear at the back of the operand list now.
+  if (operands.back().isa<IntegerAttr>()) {
+    while (operands.size() >= 2 &&
+           operands[operands.size() - 2].isa<IntegerAttr>()) {
+      APInt c1 = operands.pop_back_val().cast<IntegerAttr>().getValue();
+      APInt c2 = operands.pop_back_val().cast<IntegerAttr>().getValue();
+      auto resultConstant = IntegerAttr::get(type, calculateFn(c1, c2));
+      operands.push_back(resultConstant);
     }
+
+    auto resultCst = operands.back().cast<IntegerAttr>();
+
+    // If the resulting constant is the destructive constant (e.g. `x*0`), then
+    // return it.
+    if (destructiveConstantFn && destructiveConstantFn(resultCst.getValue()))
+      return resultCst;
+
+    // Remove the constant back to our operand list if it is the identity
+    // constant for this operator (e.g. `x*1`) and there are other operands.
+    if (identityConstantFn(resultCst.getValue()) && operands.size() != 1)
+      operands.pop_back();
   }
-
-  // All operands were constants, then that is our answer.
-  auto resultConstant = IntegerAttr::get(type, cst);
-  if (operands.empty())
-    return resultConstant;
-
-  // If the resulting constant is the destructive constant (e.g. `x*0`), then
-  // return it.
-  if (destructiveConstantFn && destructiveConstantFn(cst))
-    return resultConstant;
-
-  // Add the constant back to our operand list unless it is the identity
-  // constant for this operator (e.g. `x*1`).
-  if (!identityConstantFn(cst))
-    operands.push_back(resultConstant);
 
   return operands.size() == 1 ? operands[0] : Attribute();
 }
@@ -307,7 +365,7 @@ static Attribute simplifyAssocOp(
 /// Analyze an operand to an add.  If it is a multiplication by a constant (e.g.
 /// `(a*b*42)` then split it into the non-constant and the constant portions
 /// (e.g. `a*b` and `42`).  Otherwise return the operand as the first value and
-/// null as the second (standin for "multiplication 1").
+/// null as the second (standin for "multiplication by 1").
 static std::pair<Attribute, Attribute> decomposeAddend(Attribute operand) {
   if (auto mul = dyn_castPE(PEO::Mul, operand))
     if (auto cst = mul.getOperands().back().dyn_cast<IntegerAttr>()) {
