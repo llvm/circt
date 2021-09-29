@@ -234,15 +234,12 @@ static ParamExprAttr dyn_castPE(PEO opcode, Attribute value) {
 }
 
 /// This implements a < comparison for two operands to an associative operation
-/// that an ordering upon them.  This isn't practically decidable in general for
-/// expression trees - we make sure that affine expressions involving named
-/// parameters and constant integers are stable, since affine expressions are
-/// the most important thing we need for type canonicalization.
+/// imposing an ordering upon them.
 ///
-/// The ordering imposed is from left to right:
-///    expressions :: verbatims :: decl.refs :: constant.
+/// The ordering provided puts more complex things to the start of the list,
+/// from left to right:
+///    expressions :: verbatims :: decl.refs :: constant
 ///
-/// This is applied last after expression canonicalization is performed.
 static bool paramExprOperandSortPredicate(Attribute lhs, Attribute rhs) {
   // Simplify the code below - we never have to care about exactly equal values.
   if (lhs == rhs)
