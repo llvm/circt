@@ -17,24 +17,17 @@ class Instance:
   to a module instantiation within another module."""
   import pycde.system as system
 
-  def __init__(self, module: ir.Operation, instOp: hw.InstanceOp,
-               parent: Instance, sys: system.System):
+  def __init__(self, module: type, instOp: hw.InstanceOp, parent: Instance,
+               sys: system.System):
     assert module is not None
     self.module = module
     self.instOp = instOp
     self.parent = parent
     if parent is None:
-      self.devicedb = msft.DeviceDB(module.operation)
+      self.devicedb = msft.DeviceDB(module._pycde_mod.circt_mod)
       self.devicedb.add_design_placements()
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
-
-  @property
-  def modname(self) -> str:
-    modname: str = ir.StringAttr(self.module.attributes["sym_name"]).value
-    if modname.startswith("pycde.") or modname.startswith("pycde_"):
-      return modname[6:]
-    return modname
 
   @property
   def path(self) -> list[Instance]:
@@ -59,7 +52,7 @@ class Instance:
     return msft.RootedInstancePathAttr.get(
         ir.FlatSymbolRefAttr.get(
             ir.StringAttr(
-                self.root_module.operation.attributes["sym_name"]).value),
+                self.root_module._pycde_mod.circt_mod.attributes["sym_name"]).value),
         [x.name_attr for x in self.path[:-1]])
 
   @property
@@ -82,21 +75,22 @@ class Instance:
     path_names = map(lambda i: i.name, self.path)
     return "<instance: [" + ", ".join(path_names) + "]>"
 
-  def walk_instances(self, callback):
-    if isinstance(self.module, hw.HWModuleExternOp):
+  def walk(self, callback):
+    """Descend the instance hierarchy, calling back on each instance."""
+    circt_mod = self.module._pycde_mod.circt_mod
+    if isinstance(circt_mod, hw.HWModuleExternOp):
       return
-    for op in self.module.entry_block:
+    for op in circt_mod.entry_block:
       if not isinstance(op, hw.InstanceOp):
         continue
 
       assert "moduleName" in op.attributes
       tgt_modname = ir.FlatSymbolRefAttr(op.attributes["moduleName"]).value
       tgt_mod = self.sys.get_module(tgt_modname)
-      if tgt_mod is None:
-        continue
+      assert tgt_mod is not None
       inst = Instance(tgt_mod, op, self, self.sys)
       callback(inst)
-      inst.walk_instances(callback)
+      inst.walk(callback)
 
   def attach_attribute(self, attr_key: str, attr: ir.Attribute):
     if isinstance(attr, msft.PhysLocationAttr):

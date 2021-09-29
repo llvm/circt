@@ -21,6 +21,7 @@ import mlir.ir
 
 import builtins
 import inspect
+import sys
 
 # A memoization table for module parameterization function calls.
 _MODULE_CACHE: typing.Dict[Tuple[builtins.function, mlir.ir.DictAttr],
@@ -157,12 +158,12 @@ class _SpecializedModule:
   # class.
   def create(self):
     """Create the module op. Should not be called outside of a 'System'
-    context."""
+    context. Returns the symbol of the module op."""
     if self.circt_mod is not None:
       return
     from .system import System
     sys = System.current()
-    symbol = sys.create_symbol(self.name)
+    symbol = sys.create_symbol(self.name, self.modcls)
 
     if self.extern_name is None:
       self.circt_mod = msft.MSFTModuleOp(symbol,
@@ -187,6 +188,8 @@ class _SpecializedModule:
           loc=self.loc,
           ip=sys._get_ip())
     self.add_accessors()
+    sys._notify_symbol(symbol, self.circt_mod)
+    return symbol
 
   @property
   def is_created(self):
@@ -209,6 +212,10 @@ class _SpecializedModule:
     for g in self.generators.values():
       g.generate(self)
       return
+
+  def print(self, out):
+    if self.circt_mod is not None:
+      self.circt_mod.print(out)
 
 
 # Set an input to no_connect to indicate not to connect it. Only valid for
@@ -266,9 +273,7 @@ class _parameterized_module:
   #   - In the case of a module function parameterizer, it is called when the
   #   user wants to apply specific parameters to the module. In this case, we
   #   should call the function, wrap the returned module class, and return it.
-  #   We _could_ also cache it, though that's not strictly necessary unless the
-  #   user is breaking the rules. TODO: cache it (requires all the parameters to
-  #   be hashable).
+  #   The result is cached in _MODULE_CACHE.
   #   - A simple (non-parameterized) module has been wrapped and the user wants
   #   to construct one. Just forward to the module class' constructor.
   def __call__(self, *args, **kwargs):
@@ -314,8 +319,6 @@ def _module_base(cls, extern_name: str, params={}):
   """Wrap a class, making it a PyCDE module."""
 
   class mod(cls):
-    __name__ = cls.__name__
-    _pycde_mod = _SpecializedModule(cls, params, extern_name)
 
     def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
@@ -374,6 +377,11 @@ def _module_base(cls, extern_name: str, params={}):
       return {outname: getattr(self, outname) for (outname, _) in mod.outputs()}
 
     @staticmethod
+    def print(out=sys.stdout):
+      mod._pycde_mod.print(out)
+      print()
+
+    @staticmethod
     def inputs() -> list[(str, mlir.ir.Type)]:
       """Return the list of input ports."""
       return mod._pycde_mod.input_ports
@@ -383,6 +391,10 @@ def _module_base(cls, extern_name: str, params={}):
       """Return the list of input ports."""
       return mod._pycde_mod.output_ports
 
+  mod.__qualname__ = cls.__qualname__
+  mod.__name__ = cls.__name__
+  mod.__module__ = cls.__module__
+  mod._pycde_mod = _SpecializedModule(mod, params, extern_name)
   return mod
 
 
