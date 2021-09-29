@@ -72,6 +72,12 @@ static Type lowerType(Type type) {
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
+  if (FVectorType vec = firType.dyn_cast<FVectorType>()){
+    auto elemTy = lowerType(vec.getElementType());
+    if (!elemTy)
+      return {};
+    return hw::ArrayType::get(elemTy, vec.getNumElements());
+  }
 
   auto width = firType.getBitWidthOrSentinel();
   if (width >= 0) // IntType, analog with known width, clock, etc.
