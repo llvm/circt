@@ -224,6 +224,15 @@ static Attribute foldBinaryOp(
   return {};
 }
 
+/// If the specified attribute is a ParamExprAttr with the specified opcode,
+/// return it.  Otherwise return null.
+static ParamExprAttr dyn_castPE(PEO opcode, Attribute value) {
+  if (auto expr = value.dyn_cast<ParamExprAttr>())
+    if (expr.getOpcode() == opcode)
+      return expr;
+  return {};
+}
+
 /// Given a fully associative variadic integer operation, constant fold any
 /// constant operands and move them to the right.  If the whole expression is
 /// constant, then return that, otherwise update the operands list.
@@ -240,15 +249,13 @@ static Attribute simplifyAssocOp(
   // Flatten any of the same operation into the operand list:
   // `(add x, (add y, z))` => `(add x, y, z)`.
   for (size_t i = 0, e = operands.size(); i != e; ++i) {
-    if (auto subexpr = operands[i].dyn_cast<ParamExprAttr>()) {
-      if (subexpr.getOpcode() == opcode) {
-        std::swap(operands[i], operands.back());
-        operands.pop_back();
-        --e;
-        --i;
-        operands.append(subexpr.getOperands().begin(),
-                        subexpr.getOperands().end());
-      }
+    if (auto subexpr = dyn_castPE(opcode, operands[i])) {
+      std::swap(operands[i], operands.back());
+      operands.pop_back();
+      --e;
+      --i;
+      operands.append(subexpr.getOperands().begin(),
+                      subexpr.getOperands().end());
     }
   }
 
@@ -304,10 +311,34 @@ static Attribute simplifyAdd(SmallVector<Attribute, 4> &operands) {
 }
 
 static Attribute simplifyMul(SmallVector<Attribute, 4> &operands) {
-  return simplifyAssocOp(
-      PEO::Mul, operands, [](auto a, auto b) { return a * b; },
-      /*identityCst*/ [](auto cst) { return cst.isOne(); },
-      /*destructiveCst*/ [](auto cst) { return cst.isZero(); });
+  if (auto result = simplifyAssocOp(
+          PEO::Mul, operands, [](auto a, auto b) { return a * b; },
+          /*identityCst*/ [](auto cst) { return cst.isOne(); },
+          /*destructiveCst*/ [](auto cst) { return cst.isZero(); }))
+    return result;
+
+  // We always build a sum-of-products representation, so if we see an addition
+  // as a subexpr, we need to pull it out: (a+b)*c*d ==> (a*c*d + b*c*d).
+  for (size_t i = 0, e = operands.size(); i != e; ++i) {
+    if (auto subexpr = dyn_castPE(PEO::Add, operands[i])) {
+      // Pull the `c*d` operands out - it is whatever operands remain after
+      // removing the `(a+b)` term.
+      SmallVector<Attribute> mulOperands(operands.begin(), operands.end());
+      mulOperands.erase(mulOperands.begin() + i);
+
+      // Build each add operand.
+      SmallVector<Attribute> addOperands;
+      for (auto addOperand : subexpr.getOperands()) {
+        mulOperands.push_back(addOperand);
+        addOperands.push_back(ParamExprAttr::get(PEO::Mul, mulOperands));
+        mulOperands.pop_back();
+      }
+      // Canonicalize and form the add expression.
+      return ParamExprAttr::get(PEO::Add, addOperands);
+    }
+  }
+
+  return {};
 }
 static Attribute simplifyAnd(SmallVector<Attribute, 4> &operands) {
   return simplifyAssocOp(

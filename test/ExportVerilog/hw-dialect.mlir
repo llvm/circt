@@ -876,7 +876,7 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
   %b = hw.instance "inst2" @parameters2<p1: i42 = #hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
  
   // CHECK:      parameters2 #(
-  // CHECK-NEXT:  .p1((xx + 42'd17) * yy)
+  // CHECK-NEXT:  .p1(yy * xx + yy * 42'd17)
   // CHECK-NEXT: ) inst3 (
   %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 

@@ -274,11 +274,16 @@ This set includes:
  - Constant operand merging: any constant operands in associative operations are
    merged into a single operand and moved to the right, e.g. `(add 4, x, 2)` 
    into `(add x, 6)`.
-  - Fully associative operators flatten subexpressions, e.g.
-    `(add x, (add y, z)` into `(add x, y, z)`.
-  - Shift left by constant is canonicalized into multiply to compose correctly
-    with affine expression canonicalization, e.g. `(shl x, 1)` into
-    `(mul x, 2)`.
+ - Fully associative operators flatten subexpressions, e.g.
+   `(add x, (add y, z)` into `(add x, y, z)`.
+ - We simplify affine expressions into a sum of products representation, pulling
+   additions out of products, e.g. `(a+b)*c*d` into `(a*c*d + b*c*d)`
+ - Shift left by constant is canonicalized into multiply to compose correctly
+   with affine expression canonicalization, e.g. `(shl x, 1)` into
+   `(mul x, 2)`.
+ - As mentioned above, `sub` is not supported as a ParamExprAttr - it is
+   represented as multiply by `-1`.  This allows it to trivially compose
+   with affine expression canonicalizations.
 
 ### Using parameters in the body of a module
 

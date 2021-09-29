@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
+// RUN: circt-opt %s -verify-diagnostics | circt-opt | FileCheck %s
 
 // CHECK-LABEL: hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
 hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
@@ -37,7 +37,7 @@ hw.module @UseParameters<p1: i42>() {
 
 // CHECK-LABEL: hw.module @addParam
 hw.module @addParam<p1: i4, p2: i4>()
-  -> (o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4) {
+  -> (o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4, o: i4) {
   // CHECK-NEXT: %0 = hw.param.value i4 = 6
   %0 = hw.param.value i4 = #hw.param.expr.add<1, 2, 3>
   // CHECK-NEXT: %1 = hw.param.value i4 =
@@ -63,6 +63,10 @@ hw.module @addParam<p1: i4, p2: i4>()
   // CHECK-NEXT: %7 = hw.param.value i4 = #hw.param.expr.mul<#hw.param.decl.ref<"p1">, 4>
   %7 = hw.param.value i4 = #hw.param.expr.shl<#hw.param.decl.ref<"p1">, 2>
 
-  hw.output %0, %1, %2, %3, %4, %5, %6, %7 : i4, i4, i4, i4, i4, i4, i4, i4
+  // CHECK-NEXT: %8 = hw.param.value i4 = #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p2">, #hw.param.decl.ref<"p1">, 2>, #hw.param.expr.mul<#hw.param.decl.ref<"p2">, 6>>
+  %8 = hw.param.value i4 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.decl.ref<"p1">, 3>, 2, #hw.param.decl.ref<"p2">>
+
+  hw.output %0, %1, %2, %3, %4, %5, %6, %7, %8
+     : i4, i4, i4, i4, i4, i4, i4, i4, i4
 }
 
