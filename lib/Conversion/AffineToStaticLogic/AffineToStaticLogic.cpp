@@ -115,19 +115,19 @@ void AffineToStaticLogic::runOnAffineFor(
 
   // Insert conditional dependences into the problem.
   forOp.getBody()->walk([&](AffineIfOp op) {
-    // Insert a dependence from the if to all ops in the then region.
-    for (auto &inner : *op.getThenBlock()) {
-      Problem::Dependence dep(op, &inner);
-      assert(succeeded(problem.insertDependence(dep)));
-    }
+    // No special handling required for control-only `if`s.
+    if (op.getNumResults() == 0)
+      return WalkResult::skip();
 
-    // Insert a dependence from the if to all ops in the else region.
-    if (op.hasElse()) {
-      for (auto &inner : *op.getElseBlock()) {
-        Problem::Dependence dep(op, &inner);
-        assert(succeeded(problem.insertDependence(dep)));
-      }
-    }
+    // Model the implicit value flow from the `yield` to the `if`'s result(s).
+    Problem::Dependence depThen(op.getThenBlock()->getTerminator(), op);
+    assert(succeeded(problem.insertDependence(depThen)));
+
+    // `op` is guaranteed to have an "else" region.
+    Problem::Dependence depElse(op.getElseBlock()->getTerminator(), op);
+    assert(succeeded(problem.insertDependence(depElse)));
+
+    return WalkResult::advance();
   });
 
   // Verify and solve the scheduling problem, and optionally debug it.
@@ -139,8 +139,8 @@ void AffineToStaticLogic::runOnAffineFor(
       llvm::dbgs() << "\nopr = " << opr;
       llvm::dbgs() << "\nlatency = " << problem.getLatency(*opr);
       for (auto dep : problem.getDependences(op))
-        if (auto distance = problem.getDistance(dep); distance.hasValue())
-          llvm::dbgs() << "\ndep = { distance = " << distance
+        if (dep.isAuxiliary())
+          llvm::dbgs() << "\ndep = { distance = " << problem.getDistance(dep)
                        << ", source = " << *dep.getSource() << '}';
       llvm::dbgs() << "\n\n";
     });
