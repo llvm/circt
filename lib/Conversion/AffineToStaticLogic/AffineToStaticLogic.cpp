@@ -123,9 +123,10 @@ void AffineToStaticLogic::runOnAffineFor(
     Problem::Dependence depThen(op.getThenBlock()->getTerminator(), op);
     assert(succeeded(problem.insertDependence(depThen)));
 
-    // `op` is guaranteed to have an "else" region.
-    Problem::Dependence depElse(op.getElseBlock()->getTerminator(), op);
-    assert(succeeded(problem.insertDependence(depElse)));
+    if (op.hasElse()) {
+      Problem::Dependence depElse(op.getElseBlock()->getTerminator(), op);
+      assert(succeeded(problem.insertDependence(depElse)));
+    }
 
     return WalkResult::advance();
   });
