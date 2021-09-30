@@ -98,6 +98,10 @@ class System:
     if isinstance(op, circt.dialects.msft.MSFTModuleOp):
       self._generate_queue.append(spec_mod)
 
+  def _get_symbol_module(self, symbol):
+    """Get the _SpecializedModule for a symbol."""
+    return self._symbol_modules[symbol]
+
   def _get_module_symbol(self, spec_mod):
     """Get the symbol for a module or its associated _SpecializedModule."""
     if not isinstance(spec_mod, _SpecializedModule):

@@ -86,7 +86,7 @@ class Instance:
 
       assert "moduleName" in op.attributes
       tgt_modname = ir.FlatSymbolRefAttr(op.attributes["moduleName"]).value
-      tgt_mod = self.sys._symbol_modules[tgt_modname].modcls
+      tgt_mod = self.sys._get_symbol_module(tgt_modname).modcls
       assert tgt_mod is not None
       inst = Instance(tgt_mod, op, self, self.sys)
       callback(inst)
