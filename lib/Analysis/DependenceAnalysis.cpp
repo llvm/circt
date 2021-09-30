@@ -44,7 +44,8 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       results[destination].emplace_back(source, result.value, depComps);
 
       // Also consider intra-iteration dependences.
-      if (src == dst && source->isBeforeInBlock(destination)) {
+      if (src == dst && source->getBlock() == destination->getBlock() &&
+          source->isBeforeInBlock(destination)) {
         SmallVector<DependenceComponent> intraDeps;
         for (size_t i = 1; i <= depth; ++i) {
           // TODO: for completeness, this should also find the for loop and
