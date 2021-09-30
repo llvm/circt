@@ -51,8 +51,8 @@ class Instance:
   def path_attr(self) -> msft.RootedInstancePathAttr:
     return msft.RootedInstancePathAttr.get(
         ir.FlatSymbolRefAttr.get(
-            ir.StringAttr(
-                self.root_module._pycde_mod.circt_mod.attributes["sym_name"]).value),
+            ir.StringAttr(self.root_module._pycde_mod.circt_mod.
+                          attributes["sym_name"]).value),
         [x.name_attr for x in self.path[:-1]])
 
   @property
