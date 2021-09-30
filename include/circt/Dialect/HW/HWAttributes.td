@@ -160,9 +160,15 @@ def PEO_Xor : I32EnumAttrCase<"Xor", 4, "xor">;
 // Binary Expression Opcodes.
 def PEO_Shl  : I32EnumAttrCase<"Shl" , 5, "shl">;
 def PEO_ShrU : I32EnumAttrCase<"ShrU", 6, "shru">;
+def PEO_ShrS : I32EnumAttrCase<"ShrS", 7, "shrs">;
+def PEO_DivU : I32EnumAttrCase<"DivU", 8, "divu">;
+def PEO_DivS : I32EnumAttrCase<"DivS", 9, "divs">;
+def PEO_ModU : I32EnumAttrCase<"ModU",10, "modu">;
+def PEO_ModS : I32EnumAttrCase<"ModS",11, "mods">;
 def PEOAttr  : I32EnumAttr<"PEO", "Parameter Expression Opcode",
                            [PEO_Add, PEO_Mul, PEO_And, PEO_Or, PEO_Xor,
-                            PEO_Shl, PEO_ShrU]>;
+                            PEO_Shl, PEO_ShrU, PEO_ShrS,
+                            PEO_DivU, PEO_DivS, PEO_ModU, PEO_ModS]>;
 }
 
 def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
@@ -175,17 +181,18 @@ def ParamExprAttr : AttrDef<HWDialect, "ParamExpr"> {
   // Force all clients to go through our building logic so we can canonicalize
   // during building.
   let skipDefaultBuilders = 1;
-  let builders = [
-    AttrBuilderWithInferredContext<(ins
-                                   "PEO":$opcode,
-                                   "::mlir::Attribute":$lhs,
-                                   "::mlir::Attribute":$rhs), [{
+ 
+  let extraClassDeclaration = [{
+    /// Build a parameter expression.  This automatically canonicalizes and
+    /// folds, so it may not necessarily return a ParamExprAttr.
+    static Attribute get(PEO opcode, mlir::ArrayRef<mlir::Attribute> operands);
+
+    /// Build a binary parameter expression for convenience.
+    static Attribute get(PEO opcode, mlir::Attribute lhs, mlir::Attribute rhs) {
       Attribute operands[] = { lhs, rhs };
       return get(opcode, operands);
-    }]>,
-    AttrBuilderWithInferredContext<(ins "PEO":$opcode,
-                            "::llvm::ArrayRef<::mlir::Attribute>":$operands)>,
-  ];
+    }
+  }];
 }
 
 

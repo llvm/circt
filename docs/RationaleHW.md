@@ -247,6 +247,10 @@ implications, including:
   at some point that would allow dialect-defined attributes.  For example, this
   would allow  moving `hw.param.verbatim` attribute down to the `sv` dialect.
 
+Note that there is no parameter expression equivalent for `comb.sub`:
+`(sub x, y)` is represented with `(add x, (mul y, -1))` which makes maintaining
+canonical form simpler and more consistent.
+
 ### Parameter Expression Canonicalization
 
 As mentioned above, it is important to canonicalize parameter expressions.  This
@@ -263,7 +267,31 @@ the future.
 
 This set includes:
 
- - TODO: None yet. :-)
+ - Constant folding: parameter expressions with all integer constant operands
+   are folded to their corresponding result.
+ - Constant identities are simplified, e.g. `p1 & 0` into `0` and `p1 * 1` into
+   `p1`.
+ - Constant operand merging: any constant operands in associative operations are
+   merged into a single operand and moved to the right, e.g. `(add 4, x, 2)` 
+   into `(add x, 6)`.
+ - Fully associative operators flatten subexpressions, e.g.
+   `(add x, (add y, z))` into `(add x, y, z)`.
+ - We simplify affine expressions into a sum of products representation, pulling
+   additions out of products, e.g. `(a+b)*c*d` into `(a*c*d + b*c*d)`
+ - Operands of fully-associative expressions are put into a stable order, at
+   least for the case of affine expressions involving constant integers and
+   named parameters.  For example `p2+p1` turns into `p1+p2` reliably.  The
+   actual ordering moves subexpressions to the start of the list (more complex
+   ones first) followed by verbatims, followed by parameter references, followed
+   by constants, each group sorted w.r.t. each other.
+ - Common operand factoring for adds, e.g. `(a+b+a)` into `(2*a + b)` and
+   `(a*4 + a)` into `(a*5)`
+ - Shift left by constant is canonicalized into multiply to compose correctly
+   with affine expression canonicalization, e.g. `(shl x, 1)` into
+   `(mul x, 2)`.
+ - As mentioned above, `sub` is not supported as a ParamExprAttr - it is
+   represented as multiply by `-1`.  This allows it to trivially compose
+   with affine expression canonicalizations.
 
 ### Using parameters in the body of a module
 

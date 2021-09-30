@@ -861,7 +861,8 @@ hw.module @UseParameterized(%a: i8) -> (ww: i8, xx: i8, yy: i8, zz: i8) {
 }
 
 // CHECK-LABEL: module UseParameterValue
-hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out1: i8, out2: i8, out3: i8) {
+hw.module @UseParameterValue<xx: i42>(%arg0: i8)
+  -> (out1: i8, out2: i8, out3: i8, out4: i42) {
   // CHECK-NEXT: #(parameter [41:0] xx) (
 
   // CHECK:      parameters2 #(
@@ -875,17 +876,20 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8) -> (out1: i8, out2: i8, out3: i
   %b = hw.instance "inst2" @parameters2<p1: i42 = #hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
  
   // CHECK:      parameters2 #(
-  // CHECK-NEXT:  .p1((xx + 42'd17) * yy)
+  // CHECK-NEXT:  .p1(xx * yy + yy * 42'd17)
   // CHECK-NEXT: ) inst3 (
   %c = hw.instance "inst3" @parameters2<p1: i42 = #hw.param.expr.mul<#hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, #hw.param.verbatim<"yy">>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
 
   // CHECK: localparam [41:0] _T = xx + 42'd17;
   // CHECK-NEXT: wire [7:0] _T_0 = _T[7:0];
   // CHECK-NEXT: assign out3 = _T_0 + _T_0;
-  %d = hw.param.value i42 = #hw.param.expr.add<#hw.param.verbatim<"xx">, 17>
+  %d = hw.param.value i42 = #hw.param.expr.add<#hw.param.decl.ref<"xx">, 17>
   %e = comb.extract %d from 0 : (i42) -> i8
   %f = comb.add %e, %e : i8
 
-  hw.output %a, %b, %f : i8, i8, i8
+  // CHECK-NEXT: assign out4 = $signed(42'd4) >>> $signed(xx);
+  %g = hw.param.value i42 = #hw.param.expr.shrs<4, #hw.param.decl.ref<"xx">>
+
+  hw.output %a, %b, %f, %g : i8, i8, i8, i42
 }
 

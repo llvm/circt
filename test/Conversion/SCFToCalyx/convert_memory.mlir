@@ -256,3 +256,74 @@ module {
     return %3 : i32
   }
 }
+
+// -----
+
+// Test index types as inputs.
+
+// CHECK:      module  {
+// CHECK-NEXT:   calyx.program "main"  {
+// CHECK-NEXT:     calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+// CHECK-DAG:        %true = hw.constant true
+// CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice "std_slice_0" : i32, i6
+// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory "mem_0"<[64] x 32> [6] : i6, i32, i1, i1, i32, i1
+// CHECK-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register "ret_arg0_reg" : i32, i1, i1, i1, i32, i1
+// CHECK-NEXT:       calyx.wires  {
+// CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
+// CHECK-NEXT:         calyx.group @ret_assign_0  {
+// CHECK-NEXT:           calyx.assign %std_slice_0.in = %in0 : i32
+// CHECK-NEXT:           calyx.assign %ret_arg0_reg.in = %mem_0.read_data : i32
+// CHECK-NEXT:           calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECK-NEXT:           calyx.assign %mem_0.addr0 = %std_slice_0.out : i6
+// CHECK-NEXT:           calyx.group_done %ret_arg0_reg.done : i1
+// CHECK-NEXT:         }
+// CHECK-NEXT:       }
+// CHECK-NEXT:       calyx.control  {
+// CHECK-NEXT:         calyx.seq  {
+// CHECK-NEXT:           calyx.enable @ret_assign_0
+// CHECK-NEXT:         }
+// CHECK-NEXT:       }
+// CHECK-NEXT:     }
+// CHECK-NEXT:   }
+// CHECK-NEXT: }
+module {
+  func @main(%i : index) -> i32 {
+    %0 = memref.alloc() : memref<64xi32>
+    %1 = memref.load %0[%i] : memref<64xi32>
+    return %1 : i32
+  }
+}
+
+// -----
+
+// Test index types as outputs.
+
+// CHECH:      module  {
+// CHECH-NEXT:   calyx.program "main"  {
+// CHECH-NEXT:     calyx.component @main(%in0: i8, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
+// CHECH-DAG:        %true = hw.constant true
+// CHECH-DAG:        %std_pad_0.in, %std_pad_0.out = calyx.std_pad "std_pad_0" : i8, i32
+// CHECH-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register "ret_arg0_reg" : i32, i1, i1, i1, i32, i1
+// CHECH-NEXT:       calyx.wires  {
+// CHECH-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
+// CHECH-NEXT:         calyx.group @ret_assign_0  {
+// CHECH-NEXT:           calyx.assign %ret_arg0_reg.in = %std_pad_0.out : i32
+// CHECH-NEXT:           calyx.assign %ret_arg0_reg.write_en = %true : i1
+// CHECH-NEXT:           calyx.assign %std_pad_0.in = %in0 : i8
+// CHECH-NEXT:           calyx.group_done %ret_arg0_reg.done : i1
+// CHECH-NEXT:         }
+// CHECH-NEXT:       }
+// CHECH-NEXT:       calyx.control  {
+// CHECH-NEXT:         calyx.seq  {
+// CHECH-NEXT:           calyx.enable @ret_assign_0
+// CHECH-NEXT:         }
+// CHECH-NEXT:       }
+// CHECH-NEXT:     }
+// CHECH-NEXT:   }
+// CHECH-NEXT: }
+module {
+  func @main(%i : i8) -> index {
+    %0 = index_cast %i : i8 to index
+    return %0 : index
+  }
+}
