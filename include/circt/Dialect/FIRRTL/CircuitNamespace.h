@@ -43,28 +43,25 @@ public:
   /// 1. The original name is returned.
   /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
   ///    `_0` and incrementing by one each time.
-  std::string newName(llvm::StringRef name) {
+  std::string newName(const Twine &name) {
     // Special case the situation where there is no name collision to avoid
     // messing with the SmallString allocation below.
-    if (internal.insert(name).second)
-      return name.str();
-    size_t i = 0;
     llvm::SmallString<64> tryName;
+    StringRef workingName = name.toStringRef(tryName);
+    if (internal.insert(workingName).second)
+      return workingName.str();
+
+    // Try different suffixes until we get a collision-free one.
+    size_t i = 0;
+    if (tryName.empty())
+      name.toVector(tryName); // toStringRef may leave tryName unfilled
+    tryName.push_back('_');
+    size_t baseLength = tryName.size();
     do {
-      tryName = (name + "_" + Twine(i++)).str();
+      tryName.resize(baseLength);
+      Twine(i++).toVector(tryName); // append integer to tryName
     } while (!internal.insert(tryName).second);
     return std::string(tryName);
-  }
-
-  /// Return a unique name, derived from the input `name`, and add the new name
-  /// to the internal namespace.  There are two possible outcomes for the
-  /// returned name:
-  ///
-  /// 1. The original name is returned.
-  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
-  std::string newName(const Twine &name) {
-    return newName((llvm::StringRef)name.str());
   }
 };
 
