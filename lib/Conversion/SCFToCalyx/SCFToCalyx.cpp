@@ -153,13 +153,6 @@ static Value getComponentOutput(calyx::ComponentOp compOp,
   return compOp.getArgument(resIdx);
 }
 
-/// Creates a SeqOp containing an inner body block.
-static calyx::SeqOp createSeqOp(PatternRewriter &rewriter, Location loc) {
-  auto seqOp = rewriter.create<calyx::SeqOp>(loc);
-  rewriter.createBlock(&seqOp.getRegion());
-  return seqOp;
-}
-
 /// If the provided type is an index type, converts it to i32, else, returns the
 /// unmodified type.
 static Type convIndexType(PatternRewriter &rewriter, Type type) {
@@ -1517,7 +1510,7 @@ class BuildControl : public FuncOpPartialLoweringPattern {
                            PatternRewriter &rewriter) const override {
     auto *entryBlock = &funcOp.getBlocks().front();
     rewriter.setInsertionPointToStart(getComponent()->getControlOp().getBody());
-    auto topLevelSeqOp = createSeqOp(rewriter, funcOp.getLoc());
+    auto topLevelSeqOp = rewriter.create<calyx::SeqOp>(funcOp.getLoc());
     DenseSet<Block *> path;
     return buildCFGControl(path, rewriter, topLevelSeqOp.getBody(), nullptr,
                            entryBlock);
@@ -1535,7 +1528,7 @@ private:
     auto loc = block->front().getLoc();
 
     if (compBlockScheduleables.size() > 1) {
-      auto seqOp = createSeqOp(rewriter, loc);
+      auto seqOp = rewriter.create<calyx::SeqOp>(loc);
       parentCtrlBlock = seqOp.getBody();
     }
 
@@ -1561,7 +1554,7 @@ private:
         auto *whileCtrlBlock = rewriter.createBlock(&whileCtrlOp.body(),
                                                     whileCtrlOp.body().begin());
         rewriter.setInsertionPointToEnd(whileCtrlBlock);
-        auto whileSeqOp = createSeqOp(rewriter, whileOp.getLoc());
+        auto whileSeqOp = rewriter.create<calyx::SeqOp>(whileOp.getLoc());
 
         /// Only schedule the after block. The 'before' block is
         /// implicitly scheduled when evaluating the while condition.
@@ -1592,7 +1585,7 @@ private:
     /// Schedule any registered block arguments to be executed before the body
     /// of the branch.
     rewriter.setInsertionPointToEnd(parentCtrlBlock);
-    auto preSeqOp = createSeqOp(rewriter, loc);
+    auto preSeqOp = rewriter.create<calyx::SeqOp>(loc);
     rewriter.setInsertionPointToEnd(preSeqOp.getBody());
     for (auto barg : getComponentState().getBlockArgGroups(from, to))
       rewriter.create<calyx::EnableOp>(loc, barg.sym_name());
@@ -1641,9 +1634,9 @@ private:
         auto *elseCtrlBlock =
             rewriter.createBlock(&ifOp.elseRegion(), ifOp.elseRegion().end());
         rewriter.setInsertionPointToEnd(thenCtrlBlock);
-        auto thenSeqOp = createSeqOp(rewriter, brOp.getLoc());
+        auto thenSeqOp = rewriter.create<calyx::SeqOp>(brOp.getLoc());
         rewriter.setInsertionPointToEnd(elseCtrlBlock);
-        auto elseSeqOp = createSeqOp(rewriter, brOp.getLoc());
+        auto elseSeqOp = rewriter.create<calyx::SeqOp>(brOp.getLoc());
         bool trueBrSchedSuccess =
             schedulePath(rewriter, path, brOp.getLoc(), block, successors[0],
                          thenSeqOp.getBody())
@@ -1966,7 +1959,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&...args) {
+                      PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1975,7 +1968,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&...args) {
+                        PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(

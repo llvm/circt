@@ -1513,10 +1513,10 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
     // parallelizing the pulled out EnableOps.
     rewriter.setInsertionPointAfter(ifOp);
     SeqOp seqOp = rewriter.create<SeqOp>(ifOp.getLoc());
-    rewriter.createBlock(&seqOp.getBodyRegion());
     Block *body = seqOp.getBody();
     ifOp->remove();
     body->push_back(ifOp);
+    rewriter.setInsertionPointToEnd(body);
     rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp.groupName());
 
     // Erase the common EnableOp from the Then and Else regions.
@@ -1570,13 +1570,13 @@ struct CommonTailPatternWithPar : mlir::OpRewritePattern<IfOp> {
     // the pulled out EnableOps.
     rewriter.setInsertionPointAfter(ifOp);
     ParOp parOp = rewriter.create<ParOp>(ifOp.getLoc());
-    rewriter.createBlock(&parOp.getBodyRegion());
     Block *body = parOp.getBody();
     ifOp->remove();
     body->push_back(ifOp);
 
     // Pull out the intersection between these two sets, and erase their
     // counterparts in the Then and Else regions.
+    rewriter.setInsertionPointToEnd(body);
     for (StringRef groupName : groupNames)
       rewriter.create<EnableOp>(parOp.getLoc(), groupName);
 
