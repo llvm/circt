@@ -12,11 +12,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/DependenceAnalysis.h"
+#include "mlir/Analysis/AffineAnalysis.h"
+#include "mlir/Analysis/AffineStructures.h"
+#include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Transforms/LoopUtils.h"
-#include <mlir/Analysis/AffineStructures.h>
-#include <mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h>
 
 using namespace mlir;
 using namespace circt::analysis;
@@ -30,7 +31,11 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
     for (auto *destination : memoryOps) {
       if (source == destination)
         continue;
+      // Initialize the dependence list for this destination.
+      if (results.count(destination) == 0)
+        results[destination] = SmallVector<MemoryDependence>();
 
+      // Look for for inter-iteration dependences on the same memory location.
       MemRefAccess src(source);
       MemRefAccess dst(destination);
       FlatAffineValueConstraints dependenceConstraints;
@@ -38,23 +43,41 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       DependenceResult result = checkMemrefAccessDependence(
           src, dst, depth, &dependenceConstraints, &depComps, true);
 
-      if (results.count(destination) == 0)
-        results[destination] = SmallVector<MemoryDependence>();
-
       results[destination].emplace_back(source, result.value, depComps);
 
-      // Also consider intra-iteration dependences.
-      if (src == dst && source->getBlock() == destination->getBlock() &&
-          source->isBeforeInBlock(destination)) {
+      // Also consider intra-iteration dependences on the same memory location.
+      if (src != dst)
+        continue;
+
+      // Look for the common loop body that src and dst share. If there is none,
+      // there is nothing more to do.
+      Block *commonBlock = source->getBlock();
+
+      while (!isa<AffineForOp>(commonBlock->getParentOp()) &&
+             commonBlock->getParentOp())
+        commonBlock = commonBlock->getParentOp()->getBlock();
+
+      if (!commonBlock)
+        continue;
+
+      // Find the src and dst ancestor in the common block, and check if the src
+      // ancestor is before the dst ancestor.
+      Operation *srcOrAncestor = commonBlock->findAncestorOpInBlock(*source);
+      Operation *dstOrAncestor =
+          commonBlock->findAncestorOpInBlock(*destination);
+
+      if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
         SmallVector<DependenceComponent> intraDeps;
         for (size_t i = 1; i <= depth; ++i) {
           // TODO: for completeness, this should also find the for loop and
-          // initialize the Operation * in depComp, even though we won't use it.
+          // initialize the Operation * in depComp, even though we won't use
+          // it.
           DependenceComponent depComp;
           depComp.lb = 0;
           depComp.ub = 0;
           intraDeps.emplace_back(depComp);
         }
+
         results[destination].emplace_back(
             source, DependenceResult::HasDependence, intraDeps);
       }
