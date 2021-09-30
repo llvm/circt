@@ -94,6 +94,22 @@ Operation *InstanceGraph::getReferencedModule(InstanceOp op) {
   return lookup(op.moduleName())->getModule();
 }
 
+void InstanceGraph::replaceInstance(InstanceOp inst, InstanceOp newInst) {
+  assert(inst.moduleName() == newInst.moduleName() &&
+         "Both instances must be targeting the same module");
+
+  // Find the instance record of this instance.
+  auto *node = lookup(inst.moduleName());
+  auto it = llvm::find_if(node->uses(), [&](InstanceRecord *record) {
+    return record->getInstance() == inst;
+  });
+  assert(it != node->uses_end() && "Instance of module not recorded in graph");
+
+  // We can just replace the instance op in the InstanceRecord without updating
+  // any instance lists.
+  (*it)->instance = newInst;
+}
+
 ArrayRef<InstancePath> InstancePathCache::getAbsolutePaths(Operation *op) {
   assert((isa<FModuleOp, FExtModuleOp>(op))); // extra parens makes parser smile
 
