@@ -764,9 +764,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {annotations = [{class =
     "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation", data = {baseAddress = 2147483648 : i64, dataBits = 8 : i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}}], depth = 1022 : i64, name = "_M_mask", portNames = ["read", "rw", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-    // CHECK: %_M_mask.ro_data_0, %_M_mask.rw_rdata_0 = hw.instance "_M_mask" @FIRRTLMem_1_1_1_40_1022_1_1_0_1_a(R0_addr: %c0_i10: i10, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i10: i10, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i40, RW0_wmask: %c0_i4: i4, W0_addr: %c0_i10: i10, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i40, W0_mask: %c0_i4: i4) -> (R0_data: i40, RW0_rdata: i40)
+    // CHECK: _M_mask.R0_data, %_M_mask.RW0_rdata = hw.instance "_M_mask" @FIRRTLMem_1_1_1_40_1022_1_1_0_1_a(R0_addr: %c0_i10: i10, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i10: i10, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i40, RW0_wmask: %c0_i4: i4, W0_addr: %c0_i10: i10, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i40, W0_mask: %c0_i4: i4) -> (R0_data: i40, RW0_rdata: i40)
     // CHECK-SAME: {firrtl.dutMemory = #hw.output_file<"seq_mems.json", excludeFromFileList>, firrtl.memConfigFile = #hw.output_file<"memory.conf", excludeFromFileList>, firrtl.seq_mem_verif_data = {baseAddress = 2147483648 : i64, dataBits = 8 : i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}}
-    // CHECK: hw.output %_M_mask.ro_data_0, %_M_mask.rw_rdata_0 : i40, i40
+    // CHECK: hw.output %_M_mask.R0_data, %_M_mask.RW0_rdata : i40, i40
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>) -> !firrtl.sint<40>
       firrtl.connect %result, %0 : !firrtl.sint<40>, !firrtl.sint<40>
