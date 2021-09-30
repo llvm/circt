@@ -68,7 +68,7 @@ def IfOp : CalyxContainer<"if", [
 
   let assemblyFormat = "$cond (`with` $groupName^)? $thenRegion (`else` $elseRegion^)? attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
   let extraClassDeclaration = [{
     /// Checks whether the `then` body exists.
     bool thenBodyExists() {
@@ -197,7 +197,7 @@ def WhileOp : CalyxContainer<"while", [
       }
     ```
   }];
-
+  let hasCanonicalizeMethod = true;
   let assemblyFormat = "$cond (`with` $groupName^)? $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
