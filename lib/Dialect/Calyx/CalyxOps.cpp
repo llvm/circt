@@ -1584,9 +1584,9 @@ struct CommonTailPatternWithPar : mlir::OpRewritePattern<IfOp> {
   }
 };
 
-/// Check for one of two cases:
+/// This pattern checks for one of two cases that will lead to IfOp deletion:
 /// (1) Then and Else bodies are both empty.
-/// (2) Then body is empty and Else region does not exist.
+/// (2) Then body is empty and Else body does not exist.
 struct EmptyIfBody : mlir::OpRewritePattern<IfOp> {
   using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(IfOp ifOp,
