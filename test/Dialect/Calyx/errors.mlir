@@ -179,27 +179,6 @@ calyx.program "main" {
 
 calyx.program "main" {
   calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
-    %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.assign %done = %c1_1 : i1 }
-    calyx.control {}
-  }
-  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
-    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.comb_group @Group1 { calyx.assign %c0.go = %c1_1 : i1 } }
-    calyx.control {
-      calyx.seq {
-        // expected-error @+1 {{empty 'then' region.}}
-        calyx.if %c0.out with @Group1 {}
-      }
-    }
-  }
-}
-
-// -----
-
-calyx.program "main" {
-  calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
     calyx.wires {
       calyx.assign %done = %r.done : i1
@@ -285,27 +264,6 @@ calyx.program "main" {
         calyx.if %c0.out with @Group1 {
           calyx.enable @Group2
         }
-      }
-    }
-  }
-}
-
-// -----
-
-calyx.program "main" {
-  calyx.component @A(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
-    %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.assign %done = %c1_1 : i1 }
-    calyx.control {}
-  }
-  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
-    %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance "c0" @A : i1, i1, i1, i1, i1
-    %c1_1 = hw.constant 1 : i1
-    calyx.wires { calyx.comb_group @Group1 { calyx.assign %c0.go = %c1_1 : i1 } }
-    calyx.control {
-      calyx.seq {
-        // expected-error @+1 {{empty body region.}}
-        calyx.while %c0.out with @Group1 {}
       }
     }
   }
@@ -480,6 +438,29 @@ calyx.program "main" {
     calyx.control {
       calyx.seq { calyx.enable @A }
       calyx.seq { calyx.enable @A }
+    }
+  }
+}
+
+// -----
+
+calyx.program "main" {
+  calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires {
+      calyx.group @A {
+        calyx.assign %r.in = %c1_1 : i1
+        calyx.assign %r.write_en = %c1_1 : i1
+        calyx.group_done %r.done : i1
+      }
+    }
+    calyx.control {
+      // expected-error @+1 {{'calyx.par' op cannot enable the same group: "A" more than once.}}
+      calyx.par {
+        calyx.enable @A
+        calyx.enable @A
+      }
     }
   }
 }

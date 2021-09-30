@@ -1094,14 +1094,20 @@ hw.module @orWithNegation(%arg0: i32) -> (o1: i32) {
   hw.output %1 : i32
 }
 
-// CHECK-LABEL: @addParam
-hw.module @addParam<p1: i4>(%a: i4) -> (o1: i4) {
-// CHECK-NEXT: %0 = hw.param.value i4 =
-// CHECK-SAME:     #hw.param.expr<add #hw.param.verbatim<"p1">, 4, #hw.param.verbatim<"p1">>
-// CHECK-NEXT: hw.output %0
+// CHECK-LABEL: hw.module @addSubParam
+hw.module @addSubParam<p1: i4>(%a: i4) -> (o1: i4, o2: i4, o3: i4) {
+  // CHECK-DAG: [[ADD:%.*]] = hw.param.value i4 = #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, 2>, 4>
   %c1 = hw.constant 4 : i4
-  %p = hw.param.value i4 = #hw.param.verbatim<"p1">
+  %p = hw.param.value i4 = #hw.param.decl.ref<"p1">
   %b = comb.add %p, %c1, %p : i4
-  hw.output %b : i4
+
+  // CHECK-DAG: [[SUB1:%.*]] = hw.param.value i4 = #hw.param.expr.add<#hw.param.decl.ref<"p1">, -4>
+  %c = comb.sub %p, %c1 : i4
+
+  // CHECK-DAG: [[SUB2:%.*]] = hw.param.value i4 = #hw.param.expr.add<#hw.param.expr.mul<#hw.param.decl.ref<"p1">, -1>, 4>
+  %d = comb.sub %c1, %p : i4
+
+  // CHECK: hw.output [[ADD]], [[SUB1]], [[SUB2]]
+  hw.output %b, %c, %d : i4, i4, i4
 }
 

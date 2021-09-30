@@ -172,9 +172,16 @@ LogicalResult
 InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
                                     ArrayRef<Value> operands,
                                     ConversionPatternRewriter &rewriter) const {
-  auto hwInst = rewriter.create<hw::InstanceOp>(
-      msftInst.getLoc(), msftInst.getReferencedModule(),
-      msftInst.instanceNameAttr(), operands);
+  Operation *referencedModule = msftInst.getReferencedModule();
+  if (!referencedModule)
+    return rewriter.notifyMatchFailure(msftInst,
+                                       "Could not find referenced module");
+  if (!hw::isAnyModule(referencedModule))
+    return rewriter.notifyMatchFailure(
+        msftInst, "Referenced module was not an HW module");
+  auto hwInst =
+      rewriter.create<hw::InstanceOp>(msftInst.getLoc(), referencedModule,
+                                      msftInst.instanceNameAttr(), operands);
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
 }

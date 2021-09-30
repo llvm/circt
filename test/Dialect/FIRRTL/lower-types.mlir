@@ -507,6 +507,28 @@ firrtl.circuit "TopLevel" {
   // CHECK: firrtl.wire
   // CHECK-SAME: annotations = [{a = "a"}]
 
+// Test that WireOp annotations which are sensitive to field IDs are annotated
+// with the lowered field IDs.
+  // CHECK-LABEL: firrtl.module @AnnotationsWithFieldIdWireOp
+  firrtl.module @AnnotationsWithFieldIdWireOp() {
+    %foo = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.uint<1>
+    %bar = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
+    %baz = firrtl.wire {annotations = [#firrtl<"subAnno<fieldID = 2, {class = \"sifive.enterprise.grandcentral.SignalDriverAnnotation\"}>">]} : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
+  }
+  // CHECK: %foo = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}
+  // CHECK: %bar_a_0 = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 2 : i64}
+  // CHECK: %bar_a_1 = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 3 : i64}
+  // CHECK: %bar_b = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 4 : i64}
+  // CHECK: %baz_a = firrtl.wire
+  // CHECK-NOT:  {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}
+  // CHECK: %baz_b_0 = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 1 : i64}
+  // CHECK: %baz_b_1 = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 2 : i64}
 
 // Test that Reg/RegResetOp Annotations are copied to lowered registers.
   // CHECK-LABEL: firrtl.module @AnnotationsRegOp

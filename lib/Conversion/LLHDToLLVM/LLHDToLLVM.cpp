@@ -2145,7 +2145,7 @@ struct ConstantTimeOpConversion : public ConvertToLLVMPattern {
 
     // Get sub-steps.
     uint64_t delta = timeAttr.getDelta();
-    uint64_t eps = timeAttr.getEps();
+    uint64_t eps = timeAttr.getEpsilon();
 
     // Create time constant.
     auto denseAttr =

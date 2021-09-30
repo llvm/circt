@@ -7,7 +7,7 @@ import circt.dialects.hw
 @pycde.module
 def Parameterized(param):
 
-  class Module:
+  class TestModule:
     x = pycde.Input(pycde.types.i1)
     y = pycde.Output(pycde.types.i1)
 
@@ -15,7 +15,7 @@ def Parameterized(param):
     def construct(mod):
       return {"y": mod.x}
 
-  return Module
+  return TestModule
 
 
 @pycde.module
@@ -44,13 +44,13 @@ class Test:
     UnParameterized(x=c1)
 
 
-# CHECK: hw.module @pycde.Module_1
-# CHECK-NOT: hw.module @pycde.Module_1
-# CHECK: hw.module @pycde.Module_2
-# CHECK-NOT: hw.module @pycde.Module_2
-# CHECK: hw.module @pycde.UnParameterized
-# CHECK-NOT: hw.module @pycde.UnParameterized
+# CHECK: hw.module @TestModule_param1
+# CHECK-NOT: hw.module @TestModule_param1
+# CHECK: hw.module @TestModule_param2
+# CHECK-NOT: hw.module @TestModule_param2
+# CHECK: hw.module @UnParameterized
+# CHECK-NOT: hw.module @UnParameterized
 t = pycde.System([Test])
 t.generate()
-t.generate(["construct"])
+t.run_passes()
 t.print()

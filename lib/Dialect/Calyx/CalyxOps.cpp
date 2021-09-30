@@ -416,6 +416,53 @@ static void printGroupPort(OpAsmPrinter &p, GroupPortType op) {
   p << source << " : " << source.getType();
 }
 
+// Collapse nested control of the same type for SeqOp and ParOp, e.g.
+// calyx.seq { calyx.seq { ... } } -> calyx.seq { ... }
+template <typename OpTy>
+static LogicalResult collapseControl(OpTy controlOp,
+                                     PatternRewriter &rewriter) {
+  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
+                "Should be a SeqOp or ParOp.");
+
+  if (isa<OpTy>(controlOp->getParentOp())) {
+    Block *controlBody = controlOp.getBody();
+    for (auto &op : make_early_inc_range(*controlBody))
+      op.moveBefore(controlOp);
+
+    rewriter.eraseOp(controlOp);
+    return success();
+  }
+
+  return failure();
+}
+
+/// A helper function to check whether the conditional and group (if it exists)
+/// needs to be erased to maintain a valid state of a Calyx program. If these
+/// have no more uses, they will be erased.
+template <typename OpTy>
+static void eraseControlWithGroupAndConditional(OpTy op,
+                                                PatternRewriter &rewriter) {
+  static_assert(std::is_same<OpTy, IfOp>() || std::is_same<OpTy, WhileOp>(),
+                "This is only applicable to WhileOp and IfOp.");
+
+  // Save information about the operation, and erase it.
+  Value cond = op.cond();
+  Optional<StringRef> groupName = op.groupName();
+  auto component = op->template getParentOfType<ComponentOp>();
+  rewriter.eraseOp(op);
+
+  // Clean up the attached conditional and combinational group (if it exists).
+  if (groupName.hasValue()) {
+    auto group = component.getWiresOp().template lookupSymbol<GroupInterface>(
+        *groupName);
+    if (SymbolTable::symbolKnownUseEmpty(group, component.getRegion()))
+      rewriter.eraseOp(group);
+  }
+  // Check the conditional after the Group, since it will be driven within.
+  if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
+    rewriter.eraseOp(cond.getDefiningOp());
+}
+
 //===----------------------------------------------------------------------===//
 // ProgramOp
 //===----------------------------------------------------------------------===//
@@ -778,6 +825,55 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyControlOp(ControlOp control) {
   return verifyControlBody(control);
+}
+
+//===----------------------------------------------------------------------===//
+// SeqOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SeqOp::canonicalize(SeqOp seqOp, PatternRewriter &rewriter) {
+  if (seqOp.getBody()->empty()) {
+    rewriter.eraseOp(seqOp);
+    return success();
+  }
+
+  if (succeeded(collapseControl(seqOp, rewriter)))
+    return success();
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// ParOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verifyParOp(ParOp parOp) {
+  llvm::SmallSet<StringRef, 8> groupNames;
+  Block *body = parOp.getBody();
+
+  // Add loose requirement that the body of a ParOp may not enable the same
+  // Group more than once, e.g. calyx.par { calyx.enable @G calyx.enable @G }
+  for (EnableOp op : body->getOps<EnableOp>()) {
+    StringRef groupName = op.groupName();
+    if (groupNames.count(groupName))
+      return parOp->emitOpError() << "cannot enable the same group: \""
+                                  << groupName << "\" more than once.";
+    groupNames.insert(groupName);
+  }
+
+  return success();
+}
+
+LogicalResult ParOp::canonicalize(ParOp parOp, PatternRewriter &rewriter) {
+  if (parOp.getBody()->empty()) {
+    rewriter.eraseOp(parOp);
+    return success();
+  }
+
+  if (succeeded(collapseControl(parOp, rewriter)))
+    return success();
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1315,10 +1411,7 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   auto component = ifOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  if (ifOp.getThenBody()->empty())
-    return ifOp.emitError() << "empty 'then' region.";
-
-  if (ifOp.elseRegionExists() && ifOp.getElseBody()->empty())
+  if (ifOp.elseBodyExists() && ifOp.getElseBody()->empty())
     return ifOp.emitError() << "empty 'else' region.";
 
   Optional<StringRef> optGroupName = ifOp.groupName();
@@ -1345,15 +1438,182 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   return success();
 }
 
+/// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
+/// EnableOp was found (e.g. a "calyx.par" operation is present), returns
+/// nullptr.
+static EnableOp getLastEnableOp(SeqOp parent) {
+  auto &lastOp = parent.getBody()->back();
+  if (auto enableOp = dyn_cast<EnableOp>(lastOp))
+    return enableOp;
+  else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
+    return getLastEnableOp(seqOp);
+  return nullptr;
+}
+
+/// Returns a mapping of {enabled Group name, EnableOp} for all EnableOps within
+/// the immediate ParOp's body.
+static llvm::StringMap<EnableOp> getAllEnableOpsInImmediateBody(ParOp parent) {
+  llvm::StringMap<EnableOp> enables;
+  Block *body = parent.getBody();
+  for (EnableOp op : body->getOps<EnableOp>())
+    enables.insert(std::pair(op.groupName(), op));
+
+  return enables;
+}
+
+/// Checks preconditions for the common tail pattern. This canonicalization is
+/// stringent about not entering nested control operations, as this may cause
+/// unintentional changes in behavior.
+/// We only look for two cases: (1) both regions are ParOps, and
+/// (2) both regions are SeqOps. The case when these are different, e.g. ParOp
+/// and SeqOp, will only produce less optimal code, or even worse, change the
+/// behavior.
+template <typename OpTy>
+static bool hasCommonTailPatternPreConditions(IfOp op) {
+  static_assert(std::is_same<SeqOp, OpTy>() || std::is_same<ParOp, OpTy>(),
+                "Should be a SeqOp or ParOp.");
+
+  if (!op.thenBodyExists() || !op.elseBodyExists())
+    return false;
+  if (op.getThenBody()->empty() || op.getElseBody()->empty())
+    return false;
+
+  Block *thenBody = op.getThenBody(), *elseBody = op.getElseBody();
+  return isa<OpTy>(thenBody->front()) && isa<OpTy>(elseBody->front());
+}
+
+///                                         seq {
+///   if %a with @G {                         if %a with @G {
+///     seq { ... calyx.enable @A }             seq { ... }
+///   else {                          ->      } else {
+///     seq { ... calyx.enable @A }             seq { ... }
+///   }                                       }
+///                                           calyx.enable @A
+///                                         }
+struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
+  using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(IfOp ifOp,
+                                PatternRewriter &rewriter) const override {
+    if (!hasCommonTailPatternPreConditions<SeqOp>(ifOp))
+      return failure();
+
+    auto thenControl = cast<SeqOp>(ifOp.getThenBody()->front()),
+         elseControl = cast<SeqOp>(ifOp.getElseBody()->front());
+    EnableOp lastThenEnableOp = getLastEnableOp(thenControl),
+             lastElseEnableOp = getLastEnableOp(elseControl);
+
+    if (lastThenEnableOp == nullptr || lastElseEnableOp == nullptr)
+      return failure();
+    if (lastThenEnableOp.groupName() != lastElseEnableOp.groupName())
+      return failure();
+
+    // Place the IfOp and pulled EnableOp inside a sequential region, in case
+    // this IfOp is nested in a ParOp. This avoids unintentionally
+    // parallelizing the pulled out EnableOps.
+    rewriter.setInsertionPointAfter(ifOp);
+    SeqOp seqOp = rewriter.create<SeqOp>(ifOp.getLoc());
+    rewriter.createBlock(&seqOp.getBodyRegion());
+    Block *body = seqOp.getBody();
+    ifOp->remove();
+    body->push_back(ifOp);
+    rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp.groupName());
+
+    // Erase the common EnableOp from the Then and Else regions.
+    rewriter.eraseOp(lastThenEnableOp);
+    rewriter.eraseOp(lastElseEnableOp);
+    return success();
+  }
+};
+
+///    if %a with @G {              par {
+///      par {                        if %a with @G {
+///        ...                          par { ... }
+///        calyx.enable @A            } else {
+///        calyx.enable @B    ->        par { ... }
+///      }                            }
+///    } else {                       calyx.enable @A
+///      par {                        calyx.enable @B
+///        ...                      }
+///        calyx.enable @A
+///        calyx.enable @B
+///      }
+///    }
+struct CommonTailPatternWithPar : mlir::OpRewritePattern<IfOp> {
+  using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(IfOp ifOp,
+                                PatternRewriter &rewriter) const override {
+    if (!hasCommonTailPatternPreConditions<ParOp>(ifOp))
+      return failure();
+    auto thenControl = cast<ParOp>(ifOp.getThenBody()->front()),
+         elseControl = cast<ParOp>(ifOp.getElseBody()->front());
+
+    llvm::StringMap<EnableOp> A = getAllEnableOpsInImmediateBody(thenControl),
+                              B = getAllEnableOpsInImmediateBody(elseControl);
+
+    // Compute the intersection between `A` and `B`.
+    SmallVector<StringRef> groupNames;
+    for (auto a = A.begin(); a != A.end(); ++a) {
+      StringRef groupName = a->getKey();
+      auto b = B.find(groupName);
+      if (b == B.end())
+        continue;
+      // This is also an element in B.
+      groupNames.push_back(groupName);
+      // Since these are being pulled out, erase them.
+      rewriter.eraseOp(a->getValue());
+      rewriter.eraseOp(b->getValue());
+    }
+    // Place the IfOp and EnableOp(s) inside a parallel region, in case this
+    // IfOp is nested in a SeqOp. This avoids unintentionally sequentializing
+    // the pulled out EnableOps.
+    rewriter.setInsertionPointAfter(ifOp);
+    ParOp parOp = rewriter.create<ParOp>(ifOp.getLoc());
+    rewriter.createBlock(&parOp.getBodyRegion());
+    Block *body = parOp.getBody();
+    ifOp->remove();
+    body->push_back(ifOp);
+
+    // Pull out the intersection between these two sets, and erase their
+    // counterparts in the Then and Else regions.
+    for (StringRef groupName : groupNames)
+      rewriter.create<EnableOp>(parOp.getLoc(), groupName);
+
+    return success();
+  }
+};
+
+/// This pattern checks for one of two cases that will lead to IfOp deletion:
+/// (1) Then and Else bodies are both empty.
+/// (2) Then body is empty and Else body does not exist.
+struct EmptyIfBody : mlir::OpRewritePattern<IfOp> {
+  using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(IfOp ifOp,
+                                PatternRewriter &rewriter) const override {
+    if (!ifOp.getThenBody()->empty())
+      return failure();
+    if (ifOp.elseBodyExists() && !ifOp.getElseBody()->empty())
+      return failure();
+
+    eraseControlWithGroupAndConditional(ifOp, rewriter);
+
+    return success();
+  }
+};
+
+void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                       MLIRContext *context) {
+  patterns.add<CommonTailPatternWithSeq, CommonTailPatternWithPar, EmptyIfBody>(
+      context);
+}
+
 //===----------------------------------------------------------------------===//
 // WhileOp
 //===----------------------------------------------------------------------===//
 static LogicalResult verifyWhileOp(WhileOp whileOp) {
   auto component = whileOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-
-  if (whileOp.body().front().empty())
-    return whileOp.emitError() << "empty body region.";
 
   Optional<StringRef> optGroupName = whileOp.groupName();
   if (!optGroupName.hasValue()) {
@@ -1377,6 +1637,16 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
            << "' but no driver was found.";
 
   return success();
+}
+
+LogicalResult WhileOp::canonicalize(WhileOp whileOp,
+                                    PatternRewriter &rewriter) {
+  if (whileOp.getBody()->empty()) {
+    eraseControlWithGroupAndConditional(whileOp, rewriter);
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

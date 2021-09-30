@@ -1,12 +1,12 @@
-add_circt_dialect_library(
-  CIRCTFIRRTLTransforms
+add_circt_dialect_library(CIRCTFIRRTLTransforms
   BlackBoxMemory.cpp
   BlackBoxReader.cpp
   CheckCombCycles.cpp
-  EmitMetadata.cpp
+  CreateSiFiveMetadata.cpp
   ExpandWhens.cpp
   GrandCentral.cpp
   GrandCentralTaps.cpp
+  GrandCentralSignalMappings.cpp
   IMConstProp.cpp
   InferResets.cpp
   InferWidths.cpp

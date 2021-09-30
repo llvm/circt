@@ -68,18 +68,29 @@ def IfOp : CalyxContainer<"if", [
 
   let assemblyFormat = "$cond (`with` $groupName^)? $thenRegion (`else` $elseRegion^)? attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
+  let hasCanonicalizer = true;
   let extraClassDeclaration = [{
-    /// Checks whether the `then` region exists.
-    bool thenRegionExists() { return !getOperation()->getRegion(0).empty(); }
-    /// Checks whether the `else` region exists.
-    bool elseRegionExists() { return !getOperation()->getRegion(1).empty(); }
+    /// Checks whether the `then` body exists.
+    bool thenBodyExists() {
+      Region* region = &getOperation()->getRegion(0);
+      if (region == nullptr)
+        return false;
+      return !region->empty();
+    }
+    /// Checks whether the `else` body exists.
+    bool elseBodyExists() {
+      Region* region = &getOperation()->getRegion(1);
+      if (region == nullptr)
+        return false;
+      return !region->empty();
+    }
     /// Gets the single basic block representing the `then` region.
     Block *getThenBody() {
       return &getOperation()->getRegion(0).front();
     }
     /// Gets the single basic block representing the `else` region.
     Block *getElseBody() {
-      assert(elseRegionExists() && "Else region does not exist.");
+      assert(elseBodyExists() && "Else region does not exist.");
       return &getOperation()->getRegion(1).front();
     }
   }];
@@ -101,6 +112,7 @@ def SeqOp : CalyxContainer<"seq", [
       }
     ```
   }];
+  let hasCanonicalizeMethod = true;
 }
 
 def ParOp : CalyxContainer<"par", [
@@ -121,6 +133,8 @@ def ParOp : CalyxContainer<"par", [
       }
     ```
   }];
+  let hasCanonicalizeMethod = true;
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def EnableOp : CalyxOp<"enable", [
@@ -183,7 +197,7 @@ def WhileOp : CalyxContainer<"while", [
       }
     ```
   }];
-
+  let hasCanonicalizeMethod = true;
   let assemblyFormat = "$cond (`with` $groupName^)? $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
