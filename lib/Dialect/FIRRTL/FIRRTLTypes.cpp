@@ -1009,3 +1009,32 @@ void FIRRTLDialect::registerTypes() {
            // CHIRRTL Types
            CMemoryType, CMemoryPortType>();
 }
+
+size_t firrtl::getBitWidth(FIRRTLType type) {
+  std::function<size_t(FIRRTLType)> getWidth = [&](FIRRTLType type) -> size_t {
+    return TypeSwitch<FIRRTLType, size_t>(type)
+        .Case<BundleType>([&](BundleType bundle) {
+          size_t width = 0;
+          for (auto &elt : bundle.getElements()) {
+            auto w = getBitWidth(elt.type);
+            if (w == 0)
+              return w;
+            width += w;
+          }
+          return width;
+        })
+        .Case<FVectorType>([&](auto vector) {
+          auto w = getBitWidth(vector.getElementType());
+          if (w == 0)
+            return w;
+          return w * vector.getNumElements();
+        })
+        .Case<IntType>([&](IntType iType) {
+          if (!iType.getWidth().hasValue())
+            return 0;
+          return iType.getWidth().getValue();
+        })
+        .Default([&](auto t) { return 0; });
+  };
+  return getWidth(type);
+}

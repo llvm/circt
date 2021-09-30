@@ -2423,6 +2423,8 @@ LogicalResult FIRRTLLowering::visitExpr(BitCastOp op) {
   if (!operand)
     return failure();
   auto resultType = lowerType(op.getType());
+  if (!resultType)
+    return failure();
 
   return setLoweringTo<hw::BitcastOp>(op, resultType, operand);
 }

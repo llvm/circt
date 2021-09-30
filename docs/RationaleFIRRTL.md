@@ -299,8 +299,13 @@ For a historical discussion of this issue and its development see:
 
 ### `firrtl.bitcast`
 The bitcast operation represents a bitwise reinerpretation (cast) of a value. 
-This always synthesizes away in hardware, and is lowered to 
-[`hw.bitcast` ](https://github.com/prithayan/circt/blob/firrtlBitCastOp/docs/RationaleComb.md#bitcasts)
+It can be used to cast a vector or bundle type to an int type or vice-versa.
+The bitwidth of input and result type must be known and non-zero. It cannot
+be used for clock types or reset types 
+(instead use `AsClockPrimOp`, `AsSIntPrimOp`, `AsUIntPrimOp`, `AsAsyncResetPrimOp`).
+For an aggregate type bitwidth of every field must be known and non-zero.
+This always synthesizes away in hardware, and follows the same endainness 
+policy as `hw.bitcast`.
 
 ### `firrtl.mem`
 

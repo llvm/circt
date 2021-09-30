@@ -618,8 +618,8 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
     potentially different type. This op is lowered to hw::BitCastOp.
   }];
 
-  let arguments = (ins AnyType:$input);
-  let results = (outs AnyType:$result);
+  let arguments = (ins FIRRTLType:$input);
+  let results = (outs FIRRTLType:$result);
   let verifier = "return ::verifyBitCastOp(*this);";
 
   let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";

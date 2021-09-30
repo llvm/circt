@@ -384,6 +384,9 @@ public:
   std::pair<unsigned, bool> rootChildFieldID(unsigned fieldID, unsigned index);
 };
 
+// Get the non-zero known bit width for this type, return 0 if unknown.
+size_t getBitWidth(FIRRTLType type);
+
 } // namespace firrtl
 } // namespace circt
 
