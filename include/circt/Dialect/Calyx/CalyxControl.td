@@ -115,9 +115,8 @@ def SeqOp : CalyxContainer<"seq", [
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins), [{
-      $_state.addRegion();
-      Region *regionBody = $_state.regions[0].get();
-      regionBody->push_back(new Block());
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
     }]>
   ];
   let hasCanonicalizeMethod = true;
@@ -145,9 +144,8 @@ def ParOp : CalyxContainer<"par", [
   let skipDefaultBuilders = true;
   let builders = [
     OpBuilder<(ins), [{
-      $_state.addRegion();
-      Region *regionBody = $_state.regions[0].get();
-      regionBody->push_back(new Block());
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
     }]>
   ];
   let hasCanonicalizeMethod = true;
