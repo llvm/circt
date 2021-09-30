@@ -11,7 +11,7 @@ from mlir.ir import *
 
 
 class InstanceBuilder(support.NamedValueOpView):
-      """Helper class to incrementally construct an instance of a module."""
+  """Helper class to incrementally construct an instance of a module."""
 
   def __init__(self,
                module,
