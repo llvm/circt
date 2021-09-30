@@ -456,8 +456,8 @@ calyx.program "main" {
     calyx.control {
       calyx.seq {
         calyx.enable @A
-        calyx.seq {}
-        calyx.par {}
+        calyx.seq { calyx.seq{} }
+        calyx.par { calyx.seq{} }
       }
     }
   }
