@@ -805,17 +805,16 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
 
   // Create a single-blocked region.
-  result.addRegion();
-  Region *regionBody = result.regions[0].get();
-  Block *block = new Block();
-  regionBody->push_back(block);
+  Region *region = result.addRegion();
+  Block *body = new Block();
+  region->push_back(body);
 
-  // Add all ports to the body block.
-  block->addArguments(portTypes);
+  // Add all ports to the body.
+  body->addArguments(portTypes);
 
   // Insert the WiresOp and ControlOp.
   IRRewriter::InsertionGuard guard(builder);
-  builder.setInsertionPointToStart(block);
+  builder.setInsertionPointToStart(body);
   builder.create<WiresOp>(result.location);
   builder.create<ControlOp>(result.location);
 }
