@@ -366,7 +366,7 @@ calyx.program "main" {
 
 // -----
 
-// Empty Then region and no Else region leads to removal of IfOp (as well as unused cells and groups).
+// Empty Then region and no Else region leads to removal of IfOp (as well as unused cells).
 calyx.program "main" {
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
@@ -374,11 +374,6 @@ calyx.program "main" {
     %eq.left, %eq.right, %eq.out = calyx.std_eq "eq" : i1, i1, i1
     %c1_1 = hw.constant 1 : i1
     calyx.wires {
-      // CHECK-NOT: calyx.comp_group @Cond
-      calyx.comb_group @Cond {
-        calyx.assign %eq.left =  %c1_1 : i1
-        calyx.assign %eq.right = %c1_1 : i1
-      }
       calyx.group @A {
         calyx.assign %r.in = %c1_1 : i1
         calyx.assign %r.write_en = %c1_1 : i1
@@ -393,7 +388,7 @@ calyx.program "main" {
     calyx.control {
       calyx.seq {
         calyx.enable @A
-        calyx.if %eq.out with @Cond {}
+        calyx.if %eq.out {}
       }
     }
   }
