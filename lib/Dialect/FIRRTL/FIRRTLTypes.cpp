@@ -1010,31 +1010,31 @@ void FIRRTLDialect::registerTypes() {
            CMemoryType, CMemoryPortType>();
 }
 
-size_t firrtl::getBitWidth(FIRRTLType type) {
-  std::function<size_t(FIRRTLType)> getWidth = [&](FIRRTLType type) -> size_t {
-    return TypeSwitch<FIRRTLType, size_t>(type)
+// Get the bit width for this type, return None  if unknown.
+llvm::Optional<int32_t> firrtl::getBitWidth(FIRRTLType type) {
+  std::function<llvm::Optional<int32_t>(FIRRTLType)> getWidth =
+      [&](FIRRTLType type) -> llvm::Optional<int32_t> {
+    return TypeSwitch<FIRRTLType, llvm::Optional<int32_t>>(type)
         .Case<BundleType>([&](BundleType bundle) {
-          size_t width = 0;
+          int32_t width = 0;
           for (auto &elt : bundle.getElements()) {
             auto w = getBitWidth(elt.type);
-            if (w == 0)
-              return w;
-            width += w;
+            if (!w.hasValue())
+              return llvm::Optional<int32_t>(None);
+            width += w.getValue();
           }
-          return width;
+          return llvm::Optional<int32_t>(width);
         })
         .Case<FVectorType>([&](auto vector) {
           auto w = getBitWidth(vector.getElementType());
-          if (w == 0)
-            return w;
-          return w * vector.getNumElements();
+          if (!w.hasValue())
+            return llvm::Optional<int32_t>(None);
+          return llvm::Optional<int32_t>(w.getValue() *
+                                         vector.getNumElements());
         })
-        .Case<IntType>([&](IntType iType) {
-          if (!iType.getWidth().hasValue())
-            return 0;
-          return iType.getWidth().getValue();
-        })
-        .Default([&](auto t) { return 0; });
+        .Case<IntType>([&](IntType iType) { return iType.getWidth(); })
+        .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+        .Default([&](auto t) { return llvm::Optional<int32_t>(None); });
   };
   return getWidth(type);
 }

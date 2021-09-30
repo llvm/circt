@@ -2471,16 +2471,21 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
 static LogicalResult verifyBitCastOp(BitCastOp cast) {
 
   auto inTypeBits = getBitWidth(cast.getOperand().getType().cast<FIRRTLType>());
-  auto resTypeBits = getBitWidth(cast.getType().cast<FIRRTLType>());
-  StringRef errorMsg =
-      "the input and result must have known non-zero bit widths";
-  if (inTypeBits > 0 && resTypeBits > 0) {
+  auto resTypeBits = getBitWidth(cast.getType());
+  if (inTypeBits.hasValue() && resTypeBits.hasValue()) {
     // Bitwidths must match for valid bitcast.
-    if (inTypeBits == resTypeBits)
+    if (inTypeBits.getValue() == resTypeBits.getValue())
       return success();
-    errorMsg = "bitwidth of input and result don't match";
+    return cast.emitError("the bitwidth of input (")
+           << inTypeBits.getValue() << ") and result ("
+           << resTypeBits.getValue() << ") don't match";
   }
-  return cast.emitError(errorMsg);
+  if (!inTypeBits.hasValue())
+    return cast.emitError(
+               "bitwidth cannot be determined for input operand type ")
+           << cast.getOperand().getType();
+  return cast.emitError("bitwidth cannot be determined for result type ")
+         << cast.getType();
 }
 
 //===----------------------------------------------------------------------===//
