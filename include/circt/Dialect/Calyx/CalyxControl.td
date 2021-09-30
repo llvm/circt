@@ -112,7 +112,15 @@ def SeqOp : CalyxContainer<"seq", [
       }
     ```
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
   let hasCanonicalizeMethod = true;
+
 }
 
 def ParOp : CalyxContainer<"par", [
@@ -133,6 +141,13 @@ def ParOp : CalyxContainer<"par", [
       }
     ```
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
   let hasCanonicalizeMethod = true;
   let verifier = "return ::verify$cppClass(*this);";
 }
