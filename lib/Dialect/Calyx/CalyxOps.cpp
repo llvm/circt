@@ -436,6 +436,33 @@ static LogicalResult collapseControl(OpTy controlOp,
   return failure();
 }
 
+/// A helper function to check whether the conditional and group (if it exists)
+/// needs to be erased to maintain a valid state of a Calyx program. If these
+/// have no more uses, they will be erased.
+template <typename OpTy>
+static void eraseControlWithGroupAndConditional(OpTy op,
+                                                PatternRewriter &rewriter) {
+  static_assert(std::is_same<OpTy, IfOp>() || std::is_same<OpTy, WhileOp>(),
+                "This is only applicable to WhileOp and IfOp.");
+
+  // Save information about the operation, and erase it.
+  Value cond = op.cond();
+  Optional<StringRef> groupName = op.groupName();
+  auto component = op->template getParentOfType<ComponentOp>();
+  rewriter.eraseOp(op);
+
+  // Clean up the attached conditional and combinational group (if it exists).
+  if (groupName.hasValue()) {
+    auto group = component.getWiresOp().template lookupSymbol<GroupInterface>(
+        *groupName);
+    if (SymbolTable::symbolKnownUseEmpty(group, component.getRegion()))
+      rewriter.eraseOp(group);
+  }
+  // Check the conditional after the Group, since it will be driven within.
+  if (!cond.isa<BlockArgument>() && cond.getDefiningOp()->use_empty())
+    rewriter.eraseOp(cond.getDefiningOp());
+}
+
 //===----------------------------------------------------------------------===//
 // ProgramOp
 //===----------------------------------------------------------------------===//
@@ -805,6 +832,11 @@ static LogicalResult verifyControlOp(ControlOp control) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult SeqOp::canonicalize(SeqOp seqOp, PatternRewriter &rewriter) {
+  if (seqOp.getBody()->empty()) {
+    rewriter.eraseOp(seqOp);
+    return success();
+  }
+
   if (succeeded(collapseControl(seqOp, rewriter)))
     return success();
 
@@ -833,6 +865,11 @@ static LogicalResult verifyParOp(ParOp parOp) {
 }
 
 LogicalResult ParOp::canonicalize(ParOp parOp, PatternRewriter &rewriter) {
+  if (parOp.getBody()->empty()) {
+    rewriter.eraseOp(parOp);
+    return success();
+  }
+
   if (succeeded(collapseControl(parOp, rewriter)))
     return success();
 
@@ -1374,9 +1411,6 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
   auto component = ifOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
 
-  if (ifOp.getThenBody()->empty())
-    return ifOp.emitError() << "empty 'then' region.";
-
   if (ifOp.elseBodyExists() && ifOp.getElseBody()->empty())
     return ifOp.emitError() << "empty 'else' region.";
 
@@ -1440,6 +1474,8 @@ static bool hasCommonTailPatternPreConditions(IfOp op) {
                 "Should be a SeqOp or ParOp.");
 
   if (!op.thenBodyExists() || !op.elseBodyExists())
+    return false;
+  if (op.getThenBody()->empty() || op.getElseBody()->empty())
     return false;
 
   Block *thenBody = op.getThenBody(), *elseBody = op.getElseBody();
@@ -1548,9 +1584,28 @@ struct CommonTailPatternWithPar : mlir::OpRewritePattern<IfOp> {
   }
 };
 
+/// This pattern checks for one of two cases that will lead to IfOp deletion:
+/// (1) Then and Else bodies are both empty.
+/// (2) Then body is empty and Else body does not exist.
+struct EmptyIfBody : mlir::OpRewritePattern<IfOp> {
+  using mlir::OpRewritePattern<IfOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(IfOp ifOp,
+                                PatternRewriter &rewriter) const override {
+    if (!ifOp.getThenBody()->empty())
+      return failure();
+    if (ifOp.elseBodyExists() && !ifOp.getElseBody()->empty())
+      return failure();
+
+    eraseControlWithGroupAndConditional(ifOp, rewriter);
+
+    return success();
+  }
+};
+
 void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                        MLIRContext *context) {
-  patterns.add<CommonTailPatternWithSeq, CommonTailPatternWithPar>(context);
+  patterns.add<CommonTailPatternWithSeq, CommonTailPatternWithPar, EmptyIfBody>(
+      context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1559,9 +1614,6 @@ void IfOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 static LogicalResult verifyWhileOp(WhileOp whileOp) {
   auto component = whileOp->getParentOfType<ComponentOp>();
   auto wiresOp = component.getWiresOp();
-
-  if (whileOp.body().front().empty())
-    return whileOp.emitError() << "empty body region.";
 
   Optional<StringRef> optGroupName = whileOp.groupName();
   if (!optGroupName.hasValue()) {
@@ -1585,6 +1637,16 @@ static LogicalResult verifyWhileOp(WhileOp whileOp) {
            << "' but no driver was found.";
 
   return success();
+}
+
+LogicalResult WhileOp::canonicalize(WhileOp whileOp,
+                                    PatternRewriter &rewriter) {
+  if (whileOp.getBody()->empty()) {
+    eraseControlWithGroupAndConditional(whileOp, rewriter);
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//

@@ -197,7 +197,7 @@ def WhileOp : CalyxContainer<"while", [
       }
     ```
   }];
-
+  let hasCanonicalizeMethod = true;
   let assemblyFormat = "$cond (`with` $groupName^)? $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }
