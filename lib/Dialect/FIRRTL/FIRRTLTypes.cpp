@@ -1018,6 +1018,8 @@ llvm::Optional<int32_t> firrtl::getBitWidth(FIRRTLType type) {
         .Case<BundleType>([&](BundleType bundle) {
           int32_t width = 0;
           for (auto &elt : bundle.getElements()) {
+            if (elt.isFlip)
+              return llvm::Optional<int32_t>(None);
             auto w = getBitWidth(elt.type);
             if (!w.hasValue())
               return llvm::Optional<int32_t>(None);

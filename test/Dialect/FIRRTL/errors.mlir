@@ -589,3 +589,13 @@ firrtl.circuit "BitCast3" {
   }
 
 }
+
+// -----
+
+firrtl.circuit "BitCast4" {
+  firrtl.module @BitCast4() {
+    %a = firrtl.wire : !firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>
+    // expected-error @+1 {{bitwidth cannot be determined for input operand type}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<6>)
+  }
+}
