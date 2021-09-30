@@ -12,6 +12,8 @@ from circt import msft
 import mlir.ir as ir
 
 
+# TODO: bug: holds an Operation* without releasing it. Use a level of
+# indirection.
 class Instance:
   """Represents a _specific_ instance, unique in a design. This is in contrast
   to a module instantiation within another module."""
@@ -24,7 +26,7 @@ class Instance:
     self.instOp = instOp
     self.parent = parent
     if parent is None:
-      self.devicedb = msft.DeviceDB(module._pycde_mod.circt_mod)
+      self.devicedb = msft.DeviceDB(sys._get_circt_mod(module))
       self.devicedb.add_design_placements()
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
@@ -50,9 +52,7 @@ class Instance:
   @property
   def path_attr(self) -> msft.RootedInstancePathAttr:
     return msft.RootedInstancePathAttr.get(
-        ir.FlatSymbolRefAttr.get(
-            ir.StringAttr(
-                self.root_module._pycde_mod.circt_mod.attributes["sym_name"]).value),
+        ir.FlatSymbolRefAttr.get(self.sys._get_module_symbol(self.root_module)),
         [x.name_attr for x in self.path[:-1]])
 
   @property
@@ -77,7 +77,7 @@ class Instance:
 
   def walk(self, callback):
     """Descend the instance hierarchy, calling back on each instance."""
-    circt_mod = self.module._pycde_mod.circt_mod
+    circt_mod = self.sys._get_circt_mod(self.module)
     if isinstance(circt_mod, hw.HWModuleExternOp):
       return
     for op in circt_mod.entry_block:
@@ -86,7 +86,7 @@ class Instance:
 
       assert "moduleName" in op.attributes
       tgt_modname = ir.FlatSymbolRefAttr(op.attributes["moduleName"]).value
-      tgt_mod = self.sys.get_module(tgt_modname)
+      tgt_mod = self.sys._symbol_modules[tgt_modname].modcls
       assert tgt_mod is not None
       inst = Instance(tgt_mod, op, self, self.sys)
       callback(inst)
