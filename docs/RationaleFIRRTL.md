@@ -298,11 +298,11 @@ For a historical discussion of this issue and its development see:
 - [`llvm/circt#992`](https://github.com/llvm/circt/pull/992)
 
 ### `firrtl.bitcast`
-The bitcast operation represents a bitwise reinerpretation (cast) of a value. 
+The bitcast operation represents a bitwise reinterpretation (cast) of a value. 
 It can be used to cast a vector or bundle type to an int type or vice-versa.
-The bitwidth of input and result type must be known.
-For an aggregate type bitwidth of every field must be known.
-This always synthesizes away in hardware, and follows the same endainness 
+The bit width of input and result types must be known.
+For an aggregate type, the bit width of every field must be known.
+This always synthesizes away in hardware, and follows the same endianness 
 policy as `hw.bitcast`.
 
 ### `firrtl.mem`

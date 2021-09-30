@@ -1010,7 +1010,7 @@ void FIRRTLDialect::registerTypes() {
            CMemoryType, CMemoryPortType>();
 }
 
-// Get the bit width for this type, return None  if unknown.
+// Get the bit width for this type, return None if unknown.
 llvm::Optional<int32_t> firrtl::getBitWidth(FIRRTLType type) {
   std::function<llvm::Optional<int32_t>(FIRRTLType)> getWidth =
       [&](FIRRTLType type) -> llvm::Optional<int32_t> {
