@@ -3067,7 +3067,8 @@ struct FIRCircuitParser : public FIRParser {
       : FIRParser(state, lexer), mlirModule(mlirModule) {}
 
   ParseResult
-  parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf);
+  parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf,
+               SmallVectorImpl<const llvm::MemoryBuffer *> &omirBuf);
 
 private:
   /// Add annotations from a string to the internal annotation map.  Report
@@ -3504,9 +3505,12 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 /// circuit ::= 'circuit' id ':' info? INDENT module* DEDENT EOF
 ///
 /// If non-null, annotationsBuf is a memory buffer containing JSON annotations.
+/// If non-null, omirBufs is a vector of memory buffers containing SiFive Object
+/// Model IR (which is JSON).
 ///
 ParseResult FIRCircuitParser::parseCircuit(
-    SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs) {
+    SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs,
+    SmallVectorImpl<const llvm::MemoryBuffer *> &omirBufs) {
   auto indent = getIndentation();
   if (!indent.hasValue())
     return emitError("'circuit' must be first token on its line"), failure();
@@ -3551,6 +3555,11 @@ ParseResult FIRCircuitParser::parseCircuit(
                                annotationsBuf->getBuffer(), rawAnno))
         return failure();
 
+    if (!omirBufs.empty())
+      mlir::emitWarning(translateLocation(info.getFIRLoc()))
+          << "OMIR is not supported with the 'raw' annotation processing right "
+             "now and will just be ignored";
+
     // Get annotations associated with this circuit. These are either:
     //   1. Annotations with no target (which we use "~" to identify)
     //   2. Annotations targeting the circuit, e.g., "~Foo"
@@ -3571,6 +3580,13 @@ ParseResult FIRCircuitParser::parseCircuit(
     for (auto annotationsBuf : annotationsBufs)
       if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
                             annotationsBuf->getBuffer(), nlaNumber))
+        return failure();
+
+    // Process OMIR files as annotations with a class of
+    // "freechips.rocketchip.objectmodel.OMNode"
+    for (auto *omirBuf : omirBufs)
+      if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
+                     omirBuf->getBuffer(), nlaNumber))
         return failure();
 
     // Get annotations associated with this circuit. These are either:
@@ -3669,9 +3685,15 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                                              FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
-  for (int i = 1, e = sourceMgr.getNumBuffers(); i < e; ++i)
+  unsigned fileID = 1;
+  for (unsigned e = options.numAnnotationFiles + 1; fileID < e; ++fileID)
     annotationsBufs.push_back(
-        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + i));
+        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
+
+  SmallVector<const llvm::MemoryBuffer *> omirBufs;
+  for (unsigned e = sourceMgr.getNumBuffers(); fileID < e; ++fileID)
+    omirBufs.push_back(
+        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
 
   context->loadDialect<FIRRTLDialect>();
 
@@ -3681,7 +3703,8 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  if (FIRCircuitParser(state, lexer, *module).parseCircuit(annotationsBufs))
+  if (FIRCircuitParser(state, lexer, *module)
+          .parseCircuit(annotationsBufs, omirBufs))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by
