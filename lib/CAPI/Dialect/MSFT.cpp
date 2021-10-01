@@ -3,10 +3,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
-#include "circt/Dialect/MSFT/PlacementDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/MSFT/PlacementDB.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
@@ -60,13 +60,15 @@ DEFINE_C_API_PTR_METHODS(CirctMSFTPlacementDB, circt::msft::PlacementDB)
 CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top) {
   return wrap(new PlacementDB(unwrap(top)));
 }
-void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self) { delete unwrap(self); }
+void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self) {
+  delete unwrap(self);
+}
 size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB self) {
   return unwrap(self)->addDesignPlacements();
 }
-MlirLogicalResult circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self,
-                                                   MlirAttribute cLoc,
-                                                   CirctMSFTPlacedInstance cInst) {
+MlirLogicalResult
+circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self, MlirAttribute cLoc,
+                                 CirctMSFTPlacedInstance cInst) {
   PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
   RootedInstancePathAttr path =
       unwrap(cInst.path).cast<RootedInstancePathAttr>();

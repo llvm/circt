@@ -66,10 +66,11 @@ typedef struct {
 CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top);
 void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
 size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
-MlirLogicalResult circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB,
-                                                   MlirAttribute loc,
-                                                   CirctMSFTPlacedInstance inst);
-bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB, MlirAttribute loc,
+MlirLogicalResult
+circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB, MlirAttribute loc,
+                                 CirctMSFTPlacedInstance inst);
+bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB,
+                                          MlirAttribute loc,
                                           CirctMSFTPlacedInstance *out);
 
 //===----------------------------------------------------------------------===//

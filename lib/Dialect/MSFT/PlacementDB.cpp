@@ -1,4 +1,5 @@
-//===- PlacementDB.cpp - Implement a device database -------------------------===//
+//===- PlacementDB.cpp - Implement a device database
+//-------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -37,7 +38,8 @@ LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
 
 /// Using the operation attributes, add the proper placements to the database.
 /// Return the number of placements which weren't added due to conflicts.
-size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
+size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
+                                  mlir::Operation *op) {
   size_t numFailed = 0;
   for (NamedAttribute attr : op->getAttrs()) {
     StringRef attrName = attr.first;
