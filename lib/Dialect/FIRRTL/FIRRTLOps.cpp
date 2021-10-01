@@ -2468,6 +2468,26 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
   return success();
 }
 
+static LogicalResult verifyBitCastOp(BitCastOp cast) {
+
+  auto inTypeBits = getBitWidth(cast.getOperand().getType().cast<FIRRTLType>());
+  auto resTypeBits = getBitWidth(cast.getType());
+  if (inTypeBits.hasValue() && resTypeBits.hasValue()) {
+    // Bitwidths must match for valid bitcast.
+    if (inTypeBits.getValue() == resTypeBits.getValue())
+      return success();
+    return cast.emitError("the bitwidth of input (")
+           << inTypeBits.getValue() << ") and result ("
+           << resTypeBits.getValue() << ") don't match";
+  }
+  if (!inTypeBits.hasValue())
+    return cast.emitError(
+               "bitwidth cannot be determined for input operand type ")
+           << cast.getOperand().getType();
+  return cast.emitError("bitwidth cannot be determined for result type ")
+         << cast.getType();
+}
+
 //===----------------------------------------------------------------------===//
 // Custom attr-dict Directive that Elides Annotations
 //===----------------------------------------------------------------------===//

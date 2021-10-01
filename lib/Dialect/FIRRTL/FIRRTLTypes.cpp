@@ -1009,3 +1009,39 @@ void FIRRTLDialect::registerTypes() {
            // CHIRRTL Types
            CMemoryType, CMemoryPortType>();
 }
+
+// Get the bit width for this type, return None  if unknown. Unlike
+// getBitWidthOrSentinel(), this can recursively compute the bitwidth of
+// aggregate types. For bundle and vectors, recursively get the width of each
+// field element and return the total bit width of the aggregate type. This
+// returns None, if any of the bundle fields is a flip type, or ground type with
+// unknown bit width.
+llvm::Optional<int32_t> firrtl::getBitWidth(FIRRTLType type) {
+  std::function<llvm::Optional<int32_t>(FIRRTLType)> getWidth =
+      [&](FIRRTLType type) -> llvm::Optional<int32_t> {
+    return TypeSwitch<FIRRTLType, llvm::Optional<int32_t>>(type)
+        .Case<BundleType>([&](BundleType bundle) {
+          int32_t width = 0;
+          for (auto &elt : bundle.getElements()) {
+            if (elt.isFlip)
+              return llvm::Optional<int32_t>(None);
+            auto w = getBitWidth(elt.type);
+            if (!w.hasValue())
+              return llvm::Optional<int32_t>(None);
+            width += w.getValue();
+          }
+          return llvm::Optional<int32_t>(width);
+        })
+        .Case<FVectorType>([&](auto vector) {
+          auto w = getBitWidth(vector.getElementType());
+          if (!w.hasValue())
+            return llvm::Optional<int32_t>(None);
+          return llvm::Optional<int32_t>(w.getValue() *
+                                         vector.getNumElements());
+        })
+        .Case<IntType>([&](IntType iType) { return iType.getWidth(); })
+        .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+        .Default([&](auto t) { return llvm::Optional<int32_t>(None); });
+  };
+  return getWidth(type);
+}

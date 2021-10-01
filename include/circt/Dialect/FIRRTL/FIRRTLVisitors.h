@@ -44,7 +44,7 @@ public:
             CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
-            TailPrimOp, VerbatimExprOp, HWStructCastOp,
+            TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp,
             mlir::UnrealizedConversionCastOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
         })
@@ -140,6 +140,7 @@ public:
   // Conversions.
   HANDLE(HWStructCastOp, Unhandled);
   HANDLE(mlir::UnrealizedConversionCastOp, Unhandled);
+  HANDLE(BitCastOp, Unhandled);
 #undef HANDLE
 };
 

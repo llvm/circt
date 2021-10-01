@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw %s | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw  %s | FileCheck %s
 
 firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", directory = "dir1",  filename = "./dir1/filename1" }, {class =
@@ -1040,4 +1040,38 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r0 = firrtl.regreset %clock, %arst, %constNode : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
   }
 
+  // CHECK-LABEL: hw.module @BitCast1
+  firrtl.module @BitCast1() {
+    %a = firrtl.wire : !firrtl.vector<uint<2>, 13>
+    %b = firrtl.bitcast %a : (!firrtl.vector<uint<2>, 13>) -> (!firrtl.uint<26>)
+    // CHECK: hw.bitcast %0 : (!hw.array<13xi2>) -> i26 
+  }
+
+  // CHECK-LABEL: hw.module @BitCast2
+  firrtl.module @BitCast2() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<3>)
+    // CHECK: hw.bitcast %0 : (!hw.struct<valid: i1, ready: i1, data: i1>) -> i3
+
+  }
+  // CHECK-LABEL: hw.module @BitCast3
+  firrtl.module @BitCast3() {
+    %a = firrtl.wire : !firrtl.uint<26>
+    %b = firrtl.bitcast %a : (!firrtl.uint<26>) -> (!firrtl.vector<uint<2>, 13>)
+    // CHECK: hw.bitcast %0 : (i26) -> !hw.array<13xi2>
+  }
+
+  // CHECK-LABEL: hw.module @BitCast4
+  firrtl.module @BitCast4() {
+    %a = firrtl.wire : !firrtl.uint<3>
+    %b = firrtl.bitcast %a : (!firrtl.uint<3>) -> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>)
+    // CHECK: hw.bitcast %0 : (i3) -> !hw.struct<valid: i1, ready: i1, data: i1>
+
+  }
+  // CHECK-LABEL: hw.module @BitCast5
+  firrtl.module @BitCast5() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>) -> (!firrtl.vector<uint<2>, 3>)
+    // CHECK: hw.bitcast %0 : (!hw.struct<valid: i2, ready: i1, data: i3>) -> !hw.array<3xi2>
+  }
 }
