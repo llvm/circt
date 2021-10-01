@@ -5,8 +5,7 @@ requires = [
     "cmake>=3.12",
     # MLIR build depends.
     "numpy",
-    # Version 2.7.0 excluded: https://github.com/pybind/pybind11/issues/3136
-    "pybind11>=2.6.0,!=2.7.0",
+    "pybind11>=2.7.1",
     "PyYAML",
 ]
 build-backend = "setuptools.build_meta"
