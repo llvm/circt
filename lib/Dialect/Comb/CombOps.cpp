@@ -170,6 +170,31 @@ static unsigned getTotalWidth(ValueRange inputs) {
   return resultWidth;
 }
 
+static ParseResult parseConcatOp(OpAsmParser &parser, OperationState &result) {
+  auto inputOperandsLoc = parser.getCurrentLocation();
+  SmallVector<OpAsmParser::OperandType> inputOperands;
+  SmallVector<Type> inputOperandTypes;
+  if (parser.parseOperandList(inputOperands) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonTypeList(inputOperandTypes) ||
+      parser.resolveOperands(inputOperands, inputOperandTypes, inputOperandsLoc,
+                             result.operands)) {
+    return failure();
+  }
+
+  unsigned resultWidth = getTotalWidth(result.operands);
+  auto resultType = IntegerType::get(result.getContext(), resultWidth);
+  result.addTypes(resultType);
+  return success();
+}
+
+static void printConcatOp(OpAsmPrinter &p, ConcatOp &op) {
+  p << " " << op.inputs();
+  p.printOptionalAttrDict(op->getAttrs());
+  p << " : ";
+  llvm::interleaveComma(op.inputs().getTypes(), p);
+}
+
 static LogicalResult verifyConcatOp(ConcatOp concatOp) {
   unsigned tyWidth = concatOp.getType().getWidth();
   unsigned operandsTotalWidth = getTotalWidth(concatOp.inputs());

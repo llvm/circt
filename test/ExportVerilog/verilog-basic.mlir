@@ -54,14 +54,14 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 
   // CHECK: assign w1 = {2'h0, _T_1 | {in4[2], 1'h0}};
   %6 = comb.extract %in4 from 2 : (i4) -> i2
-  %8 = comb.concat %7, %false : (i1, i1) -> i2
+  %8 = comb.concat %7, %false : i1, i1
   %9 = comb.or %6, %8 : i2
 
   // CHECK: assign w1 = _T;
   // CHECK: assign w1 = clock ? (clock ? 4'h1 : 4'h2) : 4'h3;
   // CHECK: assign w1 = clock ? 4'h1 : clock ? 4'h2 : 4'h3;
   %11 = comb.shrs %in4, %in4 : i4
-  %12 = comb.concat %false, %in4, %in4 : (i1, i4, i4) -> i9
+  %12 = comb.concat %false, %in4, %in4 : i1, i4, i4
   %13 = comb.mux %clock, %c1_i4, %c2_i4 : i4
   %14 = comb.mux %clock, %13, %c3_i4 : i4
   %15 = comb.mux %clock, %c2_i4, %c3_i4 : i4
@@ -69,7 +69,7 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
 
   // CHECK: assign w1 = {2'h0, _T_1 | _T_0};
   %17 = comb.or %6, %5 : i2
-  %18 = comb.concat %c0_i2, %in4 : (i2, i4) -> i6
+  %18 = comb.concat %c0_i2, %in4 : i2, i4
 
   // CHECK: assign w2 = {6'h0, in4, clock, clock, in4};
   // CHECK: assign w2 = {10'h0, {2'h0, in4} ^ {{..}}2{in4[3]}}, in4} ^ {6{clock}}};
@@ -78,9 +78,9 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   %21 = comb.xor %18, %19, %20 : i6
   %22 = comb.sext %in4 : (i4) -> i5
   %23 = comb.sub %c0_i5, %22 : i5
-  %25 = comb.concat %c0_i2, %5 : (i2, i2) -> i4
-  %26 = comb.concat %c0_i2, %9 : (i2, i2) -> i4
-  %27 = comb.concat %c0_i2, %17 : (i2, i2) -> i4
+  %25 = comb.concat %c0_i2, %5 : i2, i2
+  %26 = comb.concat %c0_i2, %9 : i2, i2
+  %27 = comb.concat %c0_i2, %17 : i2, i2
 
   %w1 = sv.wire : !hw.inout<i4>
   %w1_use = sv.read_inout %w1 : !hw.inout<i4>
@@ -94,9 +94,9 @@ hw.module @Expressions(%in4: i4, %clock: i1) ->
   sv.assign %w1, %16 : i4
   sv.assign %w1, %27 : i4
   sv.assign %w1, %10 : i4
-  
-  %29 = comb.concat %c0_i6, %in4, %clock, %clock, %in4 : (i6, i4, i1, i1, i4) -> i16
-  %30 = comb.concat %c0_i10, %21 : (i10, i6) -> i16
+
+  %29 = comb.concat %c0_i6, %in4, %clock, %clock, %in4 : i6, i4, i1, i1, i4
+  %30 = comb.concat %c0_i10, %21 : i10, i6
 
   %w2 = sv.wire : !hw.inout<i16>
   %w2_use = sv.read_inout %w2 : !hw.inout<i16>
@@ -159,49 +159,49 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (out1: i1, out: i10) {
   // CHECK: assign _out_output = {6'h0, (b ^ c) & {3'h0, _out1_output}};
   // CHECK: assign _out_output = {2'h0, _out_output[9:2]};
   // CHECK: assign _out1_output = _out_output < {6'h0, a};
-  %0 = comb.concat %false, %b : (i1, i4) -> i5
-  %1 = comb.concat %false, %c : (i1, i4) -> i5
+  %0 = comb.concat %false, %b : i1, i4
+  %1 = comb.concat %false, %c : i1, i4
   %2 = comb.add %0, %1 : i5
-  %3 = comb.concat %c0_i2, %a : (i2, i4) -> i6
-  %4 = comb.concat %false, %2 : (i1, i5) -> i6
+  %3 = comb.concat %c0_i2, %a : i2, i4
+  %4 = comb.concat %false, %2 : i1, i5
   %5 = comb.add %3, %4 : i6
-  %6 = comb.concat %c0_i4, %5 : (i4, i6) -> i10
+  %6 = comb.concat %c0_i4, %5 : i4, i6
   sv.assign %_out_output, %6 : i10
-  %7 = comb.concat %false, %a : (i1, i4) -> i5
+  %7 = comb.concat %false, %a : i1, i4
   %8 = comb.add %7, %0 : i5
-  %9 = comb.concat %false, %8 : (i1, i5) -> i6
-  %10 = comb.concat %c0_i2, %c : (i2, i4) -> i6
+  %9 = comb.concat %false, %8 : i1, i5
+  %10 = comb.concat %c0_i2, %c : i2, i4
   %11 = comb.sub %9, %10 : i6
-  %12 = comb.concat %c0_i4, %11 : (i4, i6) -> i10
+  %12 = comb.concat %c0_i4, %11 : i4, i6
   sv.assign %_out_output, %12 : i10
   %13 = comb.sub %3, %4 : i6
-  %14 = comb.concat %c0_i4, %13 : (i4, i6) -> i10
+  %14 = comb.concat %c0_i4, %13 : i4, i6
   sv.assign %_out_output, %14 : i10
-  %15 = comb.concat %c0_i4, %b : (i4, i4) -> i8
-  %16 = comb.concat %c0_i4, %c : (i4, i4) -> i8
+  %15 = comb.concat %c0_i4, %b : i4, i4
+  %16 = comb.concat %c0_i4, %c : i4, i4
   %17 = comb.mul %15, %16 : i8
-  %18 = comb.concat %c0_i5, %a : (i5, i4) -> i9
-  %19 = comb.concat %false, %17 : (i1, i8) -> i9
+  %18 = comb.concat %c0_i5, %a : i5, i4
+  %19 = comb.concat %false, %17 : i1, i8
   %20 = comb.add %18, %19 : i9
-  %21 = comb.concat %false, %20 : (i1, i9) -> i10
+  %21 = comb.concat %false, %20 : i1, i9
   sv.assign %_out_output, %21 : i10
-  %22 = comb.concat %c0_i4, %a : (i4, i4) -> i8
+  %22 = comb.concat %c0_i4, %a : i4, i4
   %23 = comb.mul %22, %15 : i8
-  %24 = comb.concat %false, %23 : (i1, i8) -> i9
-  %25 = comb.concat %c0_i5, %c : (i5, i4) -> i9
+  %24 = comb.concat %false, %23 : i1, i8
+  %25 = comb.concat %c0_i5, %c : i5, i4
   %26 = comb.add %24, %25 : i9
-  %27 = comb.concat %false, %26 : (i1, i9) -> i10
+  %27 = comb.concat %false, %26 : i1, i9
   sv.assign %_out_output, %27 : i10
-  %28 = comb.concat %c0_i4, %8 : (i4, i5) -> i9
+  %28 = comb.concat %c0_i4, %8 : i4, i5
   %29 = comb.mul %28, %25 : i9
-  %30 = comb.concat %false, %29 : (i1, i9) -> i10
+  %30 = comb.concat %false, %29 : i1, i9
   sv.assign %_out_output, %30 : i10
-  %31 = comb.concat %c0_i4, %2 : (i4, i5) -> i9
+  %31 = comb.concat %c0_i4, %2 : i4, i5
   %32 = comb.mul %18, %31 : i9
-  %33 = comb.concat %false, %32 : (i1, i9) -> i10
+  %33 = comb.concat %false, %32 : i1, i9
   sv.assign %_out_output, %33 : i10
-  %34 = comb.concat %c0_i5, %8 : (i5, i5) -> i10
-  %35 = comb.concat %c0_i5, %2 : (i5, i5) -> i10
+  %34 = comb.concat %c0_i5, %8 : i5, i5
+  %35 = comb.concat %c0_i5, %2 : i5, i5
   %36 = comb.mul %34, %35 : i10
   sv.assign %_out_output, %36 : i10
   %37 = comb.parity %2 : i5
@@ -212,15 +212,15 @@ hw.module @Precedence(%a: i4, %b: i4, %c: i4) -> (out1: i1, out: i10) {
   sv.assign %_out1_output, %40 : i1
   %41 = comb.xor %b, %c : i4
   %42 = sv.read_inout %_out1_output : !hw.inout<i1>
-  %43 = comb.concat %c0_i3, %42 : (i3, i1) -> i4
+  %43 = comb.concat %c0_i3, %42 : i3, i1
   %44 = comb.and %41, %43 : i4
-  %45 = comb.concat %c0_i6, %44 : (i6, i4) -> i10
+  %45 = comb.concat %c0_i6, %44 : i6, i4
   sv.assign %_out_output, %45 : i10
   %46 = sv.read_inout %_out_output : !hw.inout<i10>
   %47 = comb.extract %46 from 2 : (i10) -> i8
-  %48 = comb.concat %c0_i2, %47 : (i2, i8) -> i10
+  %48 = comb.concat %c0_i2, %47 : i2, i8
   sv.assign %_out_output, %48 : i10
-  %49 = comb.concat %c0_i6, %a : (i6, i4) -> i10
+  %49 = comb.concat %c0_i6, %a : i6, i4
   %50 = comb.icmp ult %46, %49 : i10
   sv.assign %_out1_output, %50 : i1
   hw.output %42, %46 : i1, i10
@@ -276,7 +276,7 @@ hw.module @MultiUseExpr(%a: i4) -> (b0: i1, b1: i1, b2: i1, b3: i1, b4: i2) {
   // CHECK: wire _T = ^a;
   %0 = comb.parity %a : i4
   // CHECK-NEXT: wire [4:0] _T_0 = {1'h0, a} << 5'h1;
-  %1 = comb.concat %false, %a : (i1, i4) -> i5
+  %1 = comb.concat %false, %a : i1, i4
   %2 = comb.shl %1, %c1_i5 : i5
 
   // CHECK-NEXT: wire [3:0] _T_1 = ~a;
@@ -365,7 +365,7 @@ hw.module @Print(%clock: i1, %reset: i1, %a: i4, %b: i4) {
   // CHECK:   if (`PRINTF_COND_ & reset)
   // CHECK:     $fwrite(32'h80000002, "Hi %x %x\n", _T, b);
   // CHECK: end // always @(posedge)
-  %0 = comb.concat %false, %a : (i1, i4) -> i5
+  %0 = comb.concat %false, %a : i1, i4
   %1 = comb.shl %0, %c1_i5 : i5
   sv.always posedge %clock  {
     %2 = sv.verbatim.expr "`PRINTF_COND_" : () -> i1
