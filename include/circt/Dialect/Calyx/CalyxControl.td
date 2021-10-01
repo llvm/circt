@@ -94,12 +94,16 @@ def IfOp : CalyxContainer<"if", [
     /// Gets the single basic block representing the `then` region.
     Block *getThenBody() {
       assert(thenBodyExists() && "Then region does not exist.");
-      return &getOperation()->getRegion(0).front();
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The Then body should have one Block.");
+      return &region->front();
     }
     /// Gets the single basic block representing the `else` region.
     Block *getElseBody() {
       assert(elseBodyExists() && "Else region does not exist.");
-      return &getOperation()->getRegion(1).front();
+      Region* region = &getOperation()->getRegion(1);
+      assert(region->hasOneBlock() && "The Else body should have one Block.");
+      return &region->front();
     }
   }];
   let skipDefaultBuilders = true;
