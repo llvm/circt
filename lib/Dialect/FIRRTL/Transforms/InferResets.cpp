@@ -482,7 +482,7 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
       domains;
 
   /// Cache of modules symbols
-  std::unique_ptr<SymbolTable> symtbl;
+  InstanceGraph *instanceGraph;
 };
 } // namespace
 
@@ -492,11 +492,11 @@ void InferResetsPass::runOnOperation() {
   resetDrives.clear();
   annotatedResets.clear();
   domains.clear();
-  symtbl.release();
+  markAnalysesPreserved<InstanceGraph>();
 }
 
 void InferResetsPass::runOnOperationInner() {
-  symtbl = std::make_unique<SymbolTable>(getOperation());
+  instanceGraph = &getAnalysis<InstanceGraph>();
 
   // Trace the uninferred reset networks throughout the design.
   traceResets(getOperation());
@@ -647,7 +647,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
 /// instance's port values with the target module's port values.
 void InferResetsPass::traceResets(InstanceOp inst) {
   // Lookup the referenced module. Nothing to do if its an extmodule.
-  auto module = dyn_cast<FModuleOp>(&*inst.getReferencedModule(*symtbl));
+  auto module = dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(inst));
   if (!module)
     return;
   LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.name() << "\n");
@@ -879,8 +879,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       if (auto blockArg = value.dyn_cast<BlockArgument>())
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
       if (auto instOp = value.getDefiningOp<InstanceOp>())
-        if (auto extmodule =
-                dyn_cast<FExtModuleOp>(&*instOp.getReferencedModule(*symtbl)))
+        if (auto extmodule = dyn_cast<FExtModuleOp>(
+                instanceGraph->getReferencedModule(instOp)))
           extmoduleWorklist.insert({extmodule, instOp});
     }
   }
@@ -1415,7 +1415,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // Lookup the reset domain of the instantiated module. If there is no reset
     // domain associated with that module, or the module is explicitly marked as
     // being in no domain, simply skip.
-    auto refModule = dyn_cast<FModuleOp>(&*instOp.getReferencedModule(*symtbl));
+    auto refModule =
+        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instOp));
     if (!refModule)
       return;
     auto domainIt = domains.find(refModule);

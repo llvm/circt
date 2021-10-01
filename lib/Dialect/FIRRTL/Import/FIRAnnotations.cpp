@@ -305,7 +305,7 @@ static Attribute convertJSONToAttribute(MLIRContext *context,
   }
 
   llvm_unreachable("Impossible unhandled JSON type");
-};
+}
 
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is

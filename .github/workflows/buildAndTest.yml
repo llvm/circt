@@ -15,7 +15,7 @@ jobs:
     name: Build LLVM
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20210811055218
+      image: ghcr.io/circt/images/circt-ci-build:20210929220136
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -88,7 +88,7 @@ jobs:
     needs: build-llvm
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/circt/images/circt-ci-build:20210811055218
+      image: ghcr.io/circt/images/circt-ci-build:20210929220136
     steps:
       - name: Configure Environment
         run: echo "$GITHUB_WORKSPACE/llvm/install/bin" >> $GITHUB_PATH
@@ -252,9 +252,10 @@ jobs:
       # Run yapf to check Python formatting.
       - name: python-format
         if: ${{ always() }}
+        shell: bash
         run: |
           files=$(git diff --name-only $DIFF_COMMIT | grep .py || echo -n)
-          if [ ! -z $files ]; then
+          if [[ ! -z $files ]]; then
             yapf --diff $files
           fi
 

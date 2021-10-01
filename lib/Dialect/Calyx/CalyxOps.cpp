@@ -805,17 +805,16 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
 
   // Create a single-blocked region.
-  result.addRegion();
-  Region *regionBody = result.regions[0].get();
-  Block *block = new Block();
-  regionBody->push_back(block);
+  Region *region = result.addRegion();
+  Block *body = new Block();
+  region->push_back(body);
 
-  // Add all ports to the body block.
-  block->addArguments(portTypes);
+  // Add all ports to the body.
+  body->addArguments(portTypes);
 
   // Insert the WiresOp and ControlOp.
   IRRewriter::InsertionGuard guard(builder);
-  builder.setInsertionPointToStart(block);
+  builder.setInsertionPointToStart(body);
   builder.create<WiresOp>(result.location);
   builder.create<ControlOp>(result.location);
 }
@@ -1513,10 +1512,10 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
     // parallelizing the pulled out EnableOps.
     rewriter.setInsertionPointAfter(ifOp);
     SeqOp seqOp = rewriter.create<SeqOp>(ifOp.getLoc());
-    rewriter.createBlock(&seqOp.getBodyRegion());
     Block *body = seqOp.getBody();
     ifOp->remove();
     body->push_back(ifOp);
+    rewriter.setInsertionPointToEnd(body);
     rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp.groupName());
 
     // Erase the common EnableOp from the Then and Else regions.
@@ -1570,13 +1569,13 @@ struct CommonTailPatternWithPar : mlir::OpRewritePattern<IfOp> {
     // the pulled out EnableOps.
     rewriter.setInsertionPointAfter(ifOp);
     ParOp parOp = rewriter.create<ParOp>(ifOp.getLoc());
-    rewriter.createBlock(&parOp.getBodyRegion());
     Block *body = parOp.getBody();
     ifOp->remove();
     body->push_back(ifOp);
 
     // Pull out the intersection between these two sets, and erase their
     // counterparts in the Then and Else regions.
+    rewriter.setInsertionPointToEnd(body);
     for (StringRef groupName : groupNames)
       rewriter.create<EnableOp>(parOp.getLoc(), groupName);
 
