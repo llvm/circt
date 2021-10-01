@@ -14,14 +14,15 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRPARSER_H
 #define CIRCT_DIALECT_FIRRTL_FIRPARSER_H
 
+#include "circt/Support/LLVM.h"
+
 namespace llvm {
 class SourceMgr;
 }
 
 namespace mlir {
-class MLIRContext;
-class OwningModuleRef;
-} // namespace mlir
+class LocationAttr;
+}
 
 namespace circt {
 namespace firrtl {
@@ -38,6 +39,25 @@ struct FIRParserOptions {
 mlir::OwningModuleRef importFIRFile(llvm::SourceMgr &sourceMgr,
                                     mlir::MLIRContext *context,
                                     FIRParserOptions options = {});
+
+// Decode a source locator string `spelling`, returning a pair indicating that
+// the the `spelling` was correct and an optional location attribute.  The
+// `skipParsing` option can be used to short-circuit parsing and just do
+// validation of the `spelling`.  This require both an Identifier and a
+// FileLineColLoc to use for caching purposes and context as the cache may be
+// updated with a new identifier.
+//
+// This utility exists because source locators can exist outside of normal
+// "parsing".  E.g., these can show up in annotations or in Object Model 2.0
+// JSON.
+//
+// TODO: This API is super wacky and should be streamlined to hide the
+// caching.
+std::pair<bool, llvm::Optional<mlir::LocationAttr>>
+maybeStringToLocation(llvm::StringRef spelling, bool skipParsing,
+                      mlir::Identifier &locatorFilenameCache,
+                      FileLineColLoc &fileLineColLocCache,
+                      MLIRContext *context);
 
 void registerFromFIRFileTranslation();
 

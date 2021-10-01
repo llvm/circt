@@ -43,6 +43,129 @@ using mlir::LocationAttr;
 namespace json = llvm::json;
 
 //===----------------------------------------------------------------------===//
+// Parser-related utilities
+//===----------------------------------------------------------------------===//
+
+std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
+    StringRef spelling, bool skipParsing, Identifier &locatorFilenameCache,
+    FileLineColLoc &fileLineColLocCache, MLIRContext *context) {
+  // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
+  if (!spelling.startswith("@[") || !spelling.endswith("]"))
+    return {false, None};
+
+  spelling = spelling.drop_front(2).drop_back(1);
+
+  // Decode the locator in "spelling", returning the filename and filling in
+  // lineNo and colNo on success.  On failure, this returns an empty filename.
+  auto decodeLocator = [&](StringRef input, unsigned &resultLineNo,
+                           unsigned &resultColNo) -> StringRef {
+    // Split at the last space.
+    auto spaceLoc = input.find_last_of(' ');
+    if (spaceLoc == StringRef::npos)
+      return {};
+
+    auto filename = input.take_front(spaceLoc);
+    auto lineAndColumn = input.drop_front(spaceLoc + 1);
+
+    // Decode the line/column.  If the colon is missing, then it will be empty
+    // here.
+    StringRef lineStr, colStr;
+    std::tie(lineStr, colStr) = lineAndColumn.split(':');
+
+    // Decode the line number and the column number if present.
+    if (lineStr.getAsInteger(10, resultLineNo))
+      return {};
+    if (!colStr.empty()) {
+      if (colStr.front() != '{') {
+        if (colStr.getAsInteger(10, resultColNo))
+          return {};
+      } else {
+        // compound locator, just parse the first part for now
+        if (colStr.drop_front().split(',').first.getAsInteger(10, resultColNo))
+          return {};
+      }
+    }
+    return filename;
+  };
+
+  // Decode the locator spelling, reporting an error if it is malformed.
+  unsigned lineNo = 0, columnNo = 0;
+  StringRef filename = decodeLocator(spelling, lineNo, columnNo);
+  if (filename.empty())
+    return {false, None};
+
+  // If info locators are ignored, don't actually apply them.  We still do all
+  // the verification above though.
+  if (skipParsing)
+    return {true, None};
+
+  /// Return an FileLineColLoc for the specified location, but use a bit of
+  /// caching to reduce thrasing the MLIRContext.
+  auto getFileLineColLoc = [&](StringRef filename, unsigned lineNo,
+                               unsigned columnNo) -> FileLineColLoc {
+    // Check our single-entry cache for this filename.
+    Identifier filenameId = locatorFilenameCache;
+    if (filenameId.str() != filename) {
+      // We missed!  Get the right identifier.
+      locatorFilenameCache = filenameId = Identifier::get(filename, context);
+
+      // If we miss in the filename cache, we also miss in the FileLineColLoc
+      // cache.
+      return fileLineColLocCache =
+                 FileLineColLoc::get(filenameId, lineNo, columnNo);
+    }
+
+    // If we hit the filename cache, check the FileLineColLoc cache.
+    auto result = fileLineColLocCache;
+    if (result && result.getLine() == lineNo && result.getColumn() == columnNo)
+      return result;
+
+    return fileLineColLocCache =
+               FileLineColLoc::get(filenameId, lineNo, columnNo);
+  };
+
+  // Compound locators will be combined with spaces, like:
+  //  @[Foo.scala 123:4 Bar.scala 309:14]
+  // and at this point will be parsed as a-long-string-with-two-spaces at
+  // 309:14.   We'd like to parse this into two things and represent it as an
+  // MLIR fused locator, but we want to be conservatively safe for filenames
+  // that have a space in it.  As such, we are careful to make sure we can
+  // decode the filename/loc of the result.  If so, we accumulate results,
+  // backward, in this vector.
+  SmallVector<Location> extraLocs;
+  auto spaceLoc = filename.find_last_of(' ');
+  while (spaceLoc != StringRef::npos) {
+    // Try decoding the thing before the space.  Validates that there is another
+    // space and that the file/line can be decoded in that substring.
+    unsigned nextLineNo = 0, nextColumnNo = 0;
+    auto nextFilename =
+        decodeLocator(filename.take_front(spaceLoc), nextLineNo, nextColumnNo);
+
+    // On failure we didn't have a joined locator.
+    if (nextFilename.empty())
+      break;
+
+    // On success, remember what we already parsed (Bar.Scala / 309:14), and
+    // move on to the next chunk.
+    auto loc =
+        getFileLineColLoc(filename.drop_front(spaceLoc + 1), lineNo, columnNo);
+    extraLocs.push_back(loc);
+    filename = nextFilename;
+    lineNo = nextLineNo;
+    columnNo = nextColumnNo;
+    spaceLoc = filename.find_last_of(' ');
+  }
+
+  LocationAttr result = getFileLineColLoc(filename, lineNo, columnNo);
+  if (!extraLocs.empty()) {
+    extraLocs.push_back(result);
+    std::reverse(extraLocs.begin(), extraLocs.end());
+    result = FusedLoc::get(context, extraLocs);
+  }
+  return {true, result};
+}
+
+//===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
 
@@ -388,131 +511,27 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
 
   auto loc = getToken().getLoc();
 
-  // See if we can parse this token into a File/Line/Column record.  If not,
-  // just ignore it with a warning.
-  auto unknownFormat = [&]() -> ParseResult {
-    mlir::emitWarning(translateLocation(loc),
-                      "ignoring unknown @ info record format");
-    return success();
-  };
-
   auto spelling = getTokenSpelling();
   consumeToken(FIRToken::fileinfo);
 
-  // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
-  if (!spelling.startswith("@[") || !spelling.endswith("]"))
-    return unknownFormat();
+  auto locationPair = maybeStringToLocation(
+      spelling, constants.options.ignoreInfoLocators, locatorFilenameCache,
+      fileLineColLocCache, getContext());
 
-  spelling = spelling.drop_front(2).drop_back(1);
+  // If parsing failed, then indicate that a weird info was found.
+  if (!locationPair.first) {
+    mlir::emitWarning(translateLocation(loc),
+                      "ignoring unknown @ info record format");
+    return success();
+  }
 
-  // Decode the locator in "spelling", returning the filename and filling in
-  // lineNo and colNo on success.  On failure, this returns an empty filename.
-  auto decodeLocator = [&](StringRef input, unsigned &resultLineNo,
-                           unsigned &resultColNo) -> StringRef {
-    // Split at the last space.
-    auto spaceLoc = input.find_last_of(' ');
-    if (spaceLoc == StringRef::npos)
-      return {};
-
-    auto filename = input.take_front(spaceLoc);
-    auto lineAndColumn = input.drop_front(spaceLoc + 1);
-
-    // Decode the line/column.  If the colon is missing, then it will be empty
-    // here.
-    StringRef lineStr, colStr;
-    std::tie(lineStr, colStr) = lineAndColumn.split(':');
-
-    // Decode the line number and the column number if present.
-    if (lineStr.getAsInteger(10, resultLineNo))
-      return {};
-    if (!colStr.empty()) {
-      if (colStr.front() != '{') {
-        if (colStr.getAsInteger(10, resultColNo))
-          return {};
-      } else {
-        // compound locator, just parse the first part for now
-        if (colStr.drop_front().split(',').first.getAsInteger(10, resultColNo))
-          return {};
-      }
-    }
-    return filename;
-  };
-
-  // Decode the locator spelling, reporting an error if it is malformed.
-  unsigned lineNo = 0, columnNo = 0;
-  StringRef filename = decodeLocator(spelling, lineNo, columnNo);
-  if (filename.empty())
-    return unknownFormat();
-
-  // If info locators are ignored, don't actually apply them.  We still do all
-  // the verification above though.
-  if (constants.options.ignoreInfoLocators)
+  // If the parsing succeeded, but we are supposed to drop locators, then just
+  // return.
+  if (locationPair.first && constants.options.ignoreInfoLocators)
     return success();
 
-  /// Return an FileLineColLoc for the specified location, but use a bit of
-  /// caching to reduce thrasing the MLIRContext.
-  auto getFileLineColLoc = [&](StringRef filename, unsigned lineNo,
-                               unsigned columnNo) -> FileLineColLoc {
-    // Check our single-entry cache for this filename.
-    Identifier filenameId = locatorFilenameCache;
-    if (filenameId.str() != filename) {
-      // We missed!  Get the right identifier.
-      locatorFilenameCache = filenameId =
-          Identifier::get(filename, getContext());
-
-      // If we miss in the filename cache, we also miss in the FileLineColLoc
-      // cache.
-      return fileLineColLocCache =
-                 FileLineColLoc::get(filenameId, lineNo, columnNo);
-    }
-
-    // If we hit the filename cache, check the FileLineColLoc cache.
-    auto result = fileLineColLocCache;
-    if (result && result.getLine() == lineNo && result.getColumn() == columnNo)
-      return result;
-
-    return fileLineColLocCache =
-               FileLineColLoc::get(filenameId, lineNo, columnNo);
-  };
-
-  // Compound locators will be combined with spaces, like:
-  //  @[Foo.scala 123:4 Bar.scala 309:14]
-  // and at this point will be parsed as a-long-string-with-two-spaces at
-  // 309:14.   We'd like to parse this into two things and represent it as an
-  // MLIR fused locator, but we want to be conservatively safe for filenames
-  // that have a space in it.  As such, we are careful to make sure we can
-  // decode the filename/loc of the result.  If so, we accumulate results,
-  // backward, in this vector.
-  SmallVector<Location> extraLocs;
-  auto spaceLoc = filename.find_last_of(' ');
-  while (spaceLoc != StringRef::npos) {
-    // Try decoding the thing before the space.  Validates that there is another
-    // space and that the file/line can be decoded in that substring.
-    unsigned nextLineNo = 0, nextColumnNo = 0;
-    auto nextFilename =
-        decodeLocator(filename.take_front(spaceLoc), nextLineNo, nextColumnNo);
-
-    // On failure we didn't have a joined locator.
-    if (nextFilename.empty())
-      break;
-
-    // On success, remember what we already parsed (Bar.Scala / 309:14), and
-    // move on to the next chunk.
-    auto loc =
-        getFileLineColLoc(filename.drop_front(spaceLoc + 1), lineNo, columnNo);
-    extraLocs.push_back(loc);
-    filename = nextFilename;
-    lineNo = nextLineNo;
-    columnNo = nextColumnNo;
-    spaceLoc = filename.find_last_of(' ');
-  }
-
-  result = getFileLineColLoc(filename, lineNo, columnNo);
-  if (!extraLocs.empty()) {
-    extraLocs.push_back(result);
-    std::reverse(extraLocs.begin(), extraLocs.end());
-    result = FusedLoc::get(getContext(), extraLocs);
-  }
+  // Otherwise, set the location attribute and return.
+  result = locationPair.second.getValue();
   return success();
 }
 
