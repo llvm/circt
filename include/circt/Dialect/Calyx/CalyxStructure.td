@@ -154,6 +154,13 @@ def WiresOp : CalyxContainer<"wires", [
       }
     ```
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
   let verifier = "return ::verify$cppClass(*this);";
 }
 
@@ -225,6 +232,22 @@ def GroupOp : CalyxOp<"group", [
 
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$sym_name $body attr-dict";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name), [{
+      $_state.addAttribute(
+        mlir::SymbolTable::getSymbolAttrName(),
+        StringAttr::get($_state.getContext(), sym_name)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>,
+    OpBuilder<(ins "StringAttr":$sym_name), [{
+      $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
 }
 
 def CombGroupOp : CalyxOp<"comb_group", [
@@ -249,9 +272,7 @@ def CombGroupOp : CalyxOp<"comb_group", [
       }
     ```
   }];
-
   let arguments = (ins SymbolNameAttr: $sym_name);
-
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
@@ -260,6 +281,22 @@ def CombGroupOp : CalyxOp<"comb_group", [
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$sym_name $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name), [{
+      $_state.addAttribute(
+        mlir::SymbolTable::getSymbolAttrName(),
+        StringAttr::get($_state.getContext(), sym_name)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>,
+    OpBuilder<(ins "StringAttr":$sym_name), [{
+      $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
 }
 
 def AssignOp : CalyxOp<"assign", [
