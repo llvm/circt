@@ -1010,7 +1010,12 @@ void FIRRTLDialect::registerTypes() {
            CMemoryType, CMemoryPortType>();
 }
 
-// Get the bit width for this type, return None  if unknown.
+// Get the bit width for this type, return None  if unknown. Unlike
+// getBitWidthOrSentinel(), this can recursively compute the bitwidth of
+// aggregate types. For bundle and vectors, recursively get the width of each
+// field element and return the total bit width of the aggregate type. This
+// returns None, if any of the bundle fields is a flip type, or ground type with
+// unknown bit width.
 llvm::Optional<int32_t> firrtl::getBitWidth(FIRRTLType type) {
   std::function<llvm::Optional<int32_t>(FIRRTLType)> getWidth =
       [&](FIRRTLType type) -> llvm::Optional<int32_t> {
