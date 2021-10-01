@@ -117,7 +117,7 @@ circuit test_mod : %[[{"a": "a"}]]
     d <= cat(cat(a, b), c)
 
 ; MLIRLOWER-LABEL: hw.module @Cat(%a: i2, %b: i2, %c: i2) -> (d: i6) {
-; MLIRLOWER-NEXT:    %0 = comb.concat %a, %b, %c : (i2, i2, i2) -> i6
+; MLIRLOWER-NEXT:    %0 = comb.concat %a, %b, %c : i2, i2, i2
 ; MLIRLOWER-NEXT:    hw.output %0 : i6
 ; MLIRLOWER-NEXT:  }
 
@@ -135,7 +135,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIRLOWER-LABEL: hw.module @ImplicitTrunc(%inp_1: i1, %inp_2: i5) -> (out1: i3, out2: i3) {
 ; MLIRLOWER-NEXT:    %c0_i5 = hw.constant 0 : i5
 ; MLIRLOWER-NEXT:    %0 = comb.sext %inp_2 : (i5) -> i6
-; MLIRLOWER-NEXT:    %1 = comb.concat %c0_i5, %inp_1 : (i5, i1) -> i6
+; MLIRLOWER-NEXT:    %1 = comb.concat %c0_i5, %inp_1 : i5, i1
 ; MLIRLOWER-NEXT:    %2 = comb.shl %0, %1 : i6
 ; MLIRLOWER-NEXT:    %3 = comb.extract %2 from 0 : (i6) -> i3
 ; MLIRLOWER-NEXT:    %4 = comb.extract %inp_2 from 0 : (i5) -> i3

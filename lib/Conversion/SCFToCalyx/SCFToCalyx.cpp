@@ -139,9 +139,7 @@ static TGroup createGroup(PatternRewriter &rewriter, calyx::ComponentOp compOp,
 
   IRRewriter::InsertionGuard guard(rewriter);
   rewriter.setInsertionPointToEnd(compOp.getWiresOp().getBody());
-  auto groupOp = rewriter.create<TGroup>(loc, uniqueName.str());
-  rewriter.createBlock(&groupOp.getBodyRegion());
-  return groupOp;
+  return rewriter.create<TGroup>(loc, uniqueName.str());
 }
 
 /// Get the index'th output port of compOp.
@@ -1286,8 +1284,6 @@ struct FuncOpConversion : public FuncOpPartialLoweringPattern {
     /// Create a calyx::ComponentOp corresponding to the to-be-lowered function.
     auto compOp = rewriter.create<calyx::ComponentOp>(
         funcOp.getLoc(), rewriter.getStringAttr(funcOp.sym_name()), ports);
-    rewriter.createBlock(&compOp.getWiresOp().getBodyRegion());
-    rewriter.createBlock(&compOp.getControlOp().getBodyRegion());
 
     /// Store the function-to-component mapping.
     funcMap[funcOp] = compOp;
@@ -1551,9 +1547,7 @@ private:
             StringAttr::get(getContext(), condGroup.sym_name()));
         auto whileCtrlOp =
             rewriter.create<calyx::WhileOp>(loc, cond, symbolAttr);
-        auto *whileCtrlBlock = rewriter.createBlock(&whileCtrlOp.body(),
-                                                    whileCtrlOp.body().begin());
-        rewriter.setInsertionPointToEnd(whileCtrlBlock);
+        rewriter.setInsertionPointToEnd(whileCtrlOp.getBody());
         auto whileSeqOp = rewriter.create<calyx::SeqOp>(whileOp.getLoc());
 
         /// Only schedule the after block. The 'before' block is
@@ -1627,16 +1621,14 @@ private:
             getComponentState().getEvaluatingGroup<calyx::CombGroupOp>(cond);
         auto symbolAttr = FlatSymbolRefAttr::get(
             StringAttr::get(getContext(), condGroup.sym_name()));
-        auto ifOp =
-            rewriter.create<calyx::IfOp>(brOp->getLoc(), cond, symbolAttr);
-        auto *thenCtrlBlock =
-            rewriter.createBlock(&ifOp.thenRegion(), ifOp.thenRegion().end());
-        auto *elseCtrlBlock =
-            rewriter.createBlock(&ifOp.elseRegion(), ifOp.elseRegion().end());
-        rewriter.setInsertionPointToEnd(thenCtrlBlock);
+
+        auto ifOp = rewriter.create<calyx::IfOp>(
+            brOp->getLoc(), cond, symbolAttr, /*initializeElseBody=*/true);
+        rewriter.setInsertionPointToStart(ifOp.getThenBody());
         auto thenSeqOp = rewriter.create<calyx::SeqOp>(brOp.getLoc());
-        rewriter.setInsertionPointToEnd(elseCtrlBlock);
+        rewriter.setInsertionPointToStart(ifOp.getElseBody());
         auto elseSeqOp = rewriter.create<calyx::SeqOp>(brOp.getLoc());
+
         bool trueBrSchedSuccess =
             schedulePath(rewriter, path, brOp.getLoc(), block, successors[0],
                          thenSeqOp.getBody())

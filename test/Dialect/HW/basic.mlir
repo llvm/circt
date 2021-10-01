@@ -12,14 +12,14 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   // CHECK-NEXT:    [[RES2:%[0-9]+]] = comb.sext %arg0 : (i3) -> i7
   %d = comb.sext %arg0 : (i3) -> i7
 
-  // CHECK-NEXT:    [[RES4:%[0-9]+]] = comb.concat %c42_i12 : (i12) -> i12
-  %conc1 = comb.concat %a : (i12) -> i12
+  // CHECK-NEXT:    [[RES4:%[0-9]+]] = comb.concat %c42_i12 : i12
+  %conc1 = comb.concat %a : i12
 
   // CHECK-NEXT:    [[RES7:%[0-9]+]] = comb.parity [[RES4]] : i12
   %parity1 = comb.parity %conc1 : i12
 
-  // CHECK-NEXT:    [[RES8:%[0-9]+]] = comb.concat [[RES4]], [[RES0]], [[RES1]], [[RES2]], [[RES2]] : (i12, i12, i12, i7, i7) -> i50
-  %result = comb.concat %conc1, %b, %c, %d, %d : (i12, i12, i12, i7, i7) -> i50
+  // CHECK-NEXT:    [[RES8:%[0-9]+]] = comb.concat [[RES4]], [[RES0]], [[RES1]], [[RES2]], [[RES2]] : i12, i12, i12, i7, i7
+  %result = comb.concat %conc1, %b, %c, %d, %d : i12, i12, i12, i7, i7
 
   // CHECK-NEXT: [[RES9:%[0-9]+]] = comb.extract [[RES8]] from 4 : (i50) -> i19
   %small1 = comb.extract %result from 4 : (i50) -> i19
