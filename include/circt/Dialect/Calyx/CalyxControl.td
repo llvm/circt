@@ -32,6 +32,13 @@ def ControlOp : CalyxContainer<"control", [
     ```
   }];
   let verifier = "return ::verify$cppClass(*this);";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
 }
 
 def IfOp : CalyxContainer<"if", [
@@ -94,6 +101,23 @@ def IfOp : CalyxContainer<"if", [
       return &getOperation()->getRegion(1).front();
     }
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins
+      "Value":$cond,
+      CArg<"FlatSymbolRefAttr", "nullptr">:$groupName,
+      CArg<"bool", "false">:$initializeElseBody), [{
+        $_state.addOperands(cond);
+        if (groupName)
+          $_state.addAttribute("groupName", groupName);
+
+        Region *thenRegion = $_state.addRegion();
+        Region *elseRegion = $_state.addRegion();
+        thenRegion->push_back(new Block());
+        if (initializeElseBody)
+          elseRegion->push_back(new Block());
+    }]>
+  ];
 }
 
 def SeqOp : CalyxContainer<"seq", [
@@ -215,4 +239,18 @@ def WhileOp : CalyxContainer<"while", [
   let hasCanonicalizeMethod = true;
   let assemblyFormat = "$cond (`with` $groupName^)? $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins
+      "Value":$cond,
+      CArg<"FlatSymbolRefAttr", "nullptr">:$groupName), [{
+        $_state.addOperands(cond);
+        if (groupName)
+          $_state.addAttribute("groupName", groupName);
+
+        Region *body = $_state.addRegion();
+        body->push_back(new Block());
+    }]>
+  ];
+
 }
