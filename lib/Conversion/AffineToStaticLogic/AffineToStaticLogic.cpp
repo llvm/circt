@@ -147,6 +147,27 @@ void AffineToStaticLogic::runOnAffineFor(
     assert(succeeded(problem.insertDependence(dep)));
   });
 
+  // Handle explicitly computed loop-carried values, i.e. excluding the
+  // induction variable. Insert inter-iteration dependences from the definers of
+  // "iter_args" to their users.
+  if (unsigned nIterArgs = anchor->getNumOperands(); nIterArgs > 0) {
+    auto iterArgs = forOp.getRegionIterArgs();
+    for (unsigned i = 0; i < nIterArgs; ++i) {
+      Operation *iterArgDefiner = anchor->getOperand(i).getDefiningOp();
+      // If it's not an operation, we don't need to model the dependence.
+      if (!iterArgDefiner)
+        continue;
+
+      for (Operation *iterArgUser : iterArgs[i].getUsers()) {
+        Problem::Dependence dep(iterArgDefiner, iterArgUser);
+        assert(succeeded(problem.insertDependence(dep)));
+
+        // Values always flow between subsequent iterations.
+        problem.setDistance(dep, 1);
+      }
+    }
+  }
+
   // Verify and solve the scheduling problem, and optionally debug it.
 #ifndef NDEBUG
   if (llvm::isCurrentDebugType(DEBUG_TYPE))
