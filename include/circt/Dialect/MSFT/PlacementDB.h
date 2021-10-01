@@ -1,5 +1,4 @@
-//===- PlacementDB.h - Device database -----------------------------*- C++
-//-*-===//
+//===- PlacementDB.h - Placement database -----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -12,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_MSFT_DEVICEDB_H
-#define CIRCT_DIALECT_MSFT_DEVICEDB_H
+#ifndef CIRCT_DIALECT_MSFT_PLACEMENTDB_H
+#define CIRCT_DIALECT_MSFT_PLACEMENTDB_H
 
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 
@@ -77,4 +76,4 @@ private:
 } // namespace msft
 } // namespace circt
 
-#endif // CIRCT_DIALECT_MSFT_DEVICEDB_H
+#endif // CIRCT_DIALECT_MSFT_PLACEMENTDB_H
