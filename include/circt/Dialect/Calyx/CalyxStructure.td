@@ -105,7 +105,11 @@ def ComponentOp : CalyxOp<"component", [
       unsigned getNumFuncResults() { return getType().getNumResults(); }
     public:
       /// Returns the body of a Calyx component.
-      Block *getBody() { return &getOperation()->getRegion(0).front(); }
+      Block *getBody() {
+        Region* region = &getOperation()->getRegion(0);
+        assert(region->hasOneBlock() && "The body should have one Block.");
+        return &region->front();
+      }
 
       /// Returns the region of a Calyx component.
       Region *getRegion() { return &getOperation()->getRegion(0); }
