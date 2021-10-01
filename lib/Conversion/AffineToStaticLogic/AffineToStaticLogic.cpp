@@ -60,6 +60,8 @@ void AffineToStaticLogic::runOnAffineFor(
   problem.setLatency(combOpr, 0);
   Problem::OperatorType seqOpr = problem.getOrInsertOperatorType("seq");
   problem.setLatency(seqOpr, 1);
+  Problem::OperatorType mcOpr = problem.getOrInsertOperatorType("multicycle");
+  problem.setLatency(mcOpr, 3);
 
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
@@ -75,6 +77,12 @@ void AffineToStaticLogic::runOnAffineFor(
     // Some known sequential ops.
     if (isa<AffineReadOpInterface, AffineWriteOpInterface>(op)) {
       problem.setLinkedOperatorType(op, seqOpr);
+      return WalkResult::advance();
+    }
+
+    // Some known multi-cycle ops.
+    if (isa<MulIOp>(op)) {
+      problem.setLinkedOperatorType(op, mcOpr);
       return WalkResult::advance();
     }
 
