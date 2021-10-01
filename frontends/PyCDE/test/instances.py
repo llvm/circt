@@ -41,11 +41,10 @@ t = pycde.System([Test])
 t.generate(["construct"])
 t.print()
 
-print(Test)
 Test.print()
+UnParameterized.print()
 
 t.run_passes()
-Test.print()
 
 # CHECK-LABEL: === Hierarchy
 print("=== Hierarchy")

@@ -554,7 +554,7 @@ struct AnnoRecord {
   llvm::function_ref<LogicalResult(AnnoPathValue, DictionaryAttr, ApplyState)>
       applier;
 };
-}; // namespace
+} // end anonymous namespace
 
 static const llvm::StringMap<AnnoRecord> annotationRecords{{
 

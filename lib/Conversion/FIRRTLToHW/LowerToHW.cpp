@@ -86,6 +86,45 @@ static Type lowerType(Type type) {
   return {};
 }
 
+/// This verifies that the target operation has been lowered to a legal
+/// operation.  This checks that the operation recursively has no FIRRTL
+/// operations or types.
+static LogicalResult verifyOpLegality(Operation *op) {
+  auto checkTypes = [](Operation *op) -> WalkResult {
+    // Check that this operation is not a FIRRTL op.
+    if (isa_and_nonnull<FIRRTLDialect>(op->getDialect()))
+      return op->emitError("Found unhandled FIRRTL operation '")
+             << op->getName() << "'";
+
+    // Helper to check a TypeRange for any FIRRTL types.
+    auto checkTypeRange = [&](TypeRange types) -> LogicalResult {
+      if (llvm::any_of(types, [](Type type) {
+            return isa<FIRRTLDialect>(type.getDialect());
+          }))
+        return op->emitOpError("found unhandled FIRRTL type");
+      return success();
+    };
+
+    // Check operand and result types.
+    if (failed(checkTypeRange(op->getOperandTypes())) ||
+        failed(checkTypeRange(op->getResultTypes())))
+      return WalkResult::interrupt();
+
+    // Check the block argument types.
+    for (auto &region : op->getRegions())
+      for (auto &block : region)
+        if (failed(checkTypeRange(block.getArgumentTypes())))
+          return WalkResult::interrupt();
+
+    // Continue to the next operation.
+    return WalkResult::advance();
+  };
+
+  if (checkTypes(op).wasInterrupted() || op->walk(checkTypes).wasInterrupted())
+    return failure();
+  return success();
+}
+
 /// Given two FIRRTL integer types, return the widest one.
 static IntType getWidestIntType(Type t1, Type t2) {
   auto t1c = t1.cast<IntType>(), t2c = t2.cast<IntType>();
@@ -489,19 +528,12 @@ void FIRRTLModuleLowering::runOnOperation() {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
         })
-        // These need to be let through.  Some metadata passes create
-        // VerbatimOps and GrandCentral can generate interfaces.  Moving them to
-        // the end of the module has the effect of keeping them in the same spot
-        // in the IR.
-        .Case<sv::InterfaceOp, sv::VerbatimOp>([&](Operation *op) {
-          op->moveBefore(topLevelModule, topLevelModule->end());
-        })
-        // Otherwise we don't know what this is.  We are just going to drop
-        // it, but emit an error so the client has some chance to know that
-        // this is going to happen.
-        .Default([](auto other) {
-          other->emitError("unexpected operation '")
-              << other->getName() << "' in a firrtl.circuit";
+        .Default([&](Operation *op) {
+          // We don't know what this op is.  If it has no illegal FIRRTL types,
+          // we can forward the operation.  Otherwise, we emit an error and drop
+          // the operation from the circuit.
+          if (succeeded(verifyOpLegality(op)))
+            op->moveBefore(topLevelModule, topLevelModule->end());
         });
   }
 

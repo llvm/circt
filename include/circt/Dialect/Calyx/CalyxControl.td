@@ -68,7 +68,7 @@ def IfOp : CalyxContainer<"if", [
 
   let assemblyFormat = "$cond (`with` $groupName^)? $thenRegion (`else` $elseRegion^)? attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
   let extraClassDeclaration = [{
     /// Checks whether the `then` body exists.
     bool thenBodyExists() {
@@ -112,7 +112,15 @@ def SeqOp : CalyxContainer<"seq", [
       }
     ```
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
   let hasCanonicalizeMethod = true;
+
 }
 
 def ParOp : CalyxContainer<"par", [
@@ -133,6 +141,13 @@ def ParOp : CalyxContainer<"par", [
       }
     ```
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
   let hasCanonicalizeMethod = true;
   let verifier = "return ::verify$cppClass(*this);";
 }
@@ -197,7 +212,7 @@ def WhileOp : CalyxContainer<"while", [
       }
     ```
   }];
-
+  let hasCanonicalizeMethod = true;
   let assemblyFormat = "$cond (`with` $groupName^)? $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
 }

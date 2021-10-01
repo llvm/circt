@@ -107,6 +107,9 @@ def ComponentOp : CalyxOp<"component", [
       /// Returns the body of a Calyx component.
       Block *getBody() { return &getOperation()->getRegion(0).front(); }
 
+      /// Returns the region of a Calyx component.
+      Region *getRegion() { return &getOperation()->getRegion(0); }
+
       /// Returns the port information for this component.
       SmallVector<PortInfo> getPortInfo();
 

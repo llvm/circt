@@ -77,10 +77,6 @@ def _create_module_name(name: str, params: mlir.ir.DictAttr):
   return ret.strip("_")
 
 
-# Two problems with this class:
-#   (1) It's not sensitive to the System.
-#   (2) It keeps references MLIR ops around.
-# Possible solution to both involves using System as storage.
 class _SpecializedModule:
   """SpecializedModule serves two purposes:
 
@@ -93,14 +89,13 @@ class _SpecializedModule:
   only created if said module is instantiated."""
 
   __slots__ = [
-      "circt_mod", "name", "generators", "modcls", "loc", "input_ports",
-      "input_port_lookup", "output_ports", "parameters", "extern_name"
+      "name", "generators", "modcls", "loc", "input_ports", "input_port_lookup",
+      "output_ports", "parameters", "extern_name"
   ]
 
   def __init__(self, cls: type, parameters: Union[dict, mlir.ir.DictAttr],
                extern_name: str):
     self.modcls = cls
-    self.circt_mod = None
     self.extern_name = extern_name
     self.loc = get_user_loc()
 
@@ -138,6 +133,7 @@ class _SpecializedModule:
         self.output_ports.append((attr.name, attr.type))
       elif isinstance(attr, _Generate):
         self.generators[attr_name] = attr
+    self.add_accessors()
 
   def add_accessors(self):
     """Add accessors for each input and output port to emulate generated OpView
@@ -159,41 +155,46 @@ class _SpecializedModule:
   def create(self):
     """Create the module op. Should not be called outside of a 'System'
     context. Returns the symbol of the module op."""
-    if self.circt_mod is not None:
-      return
+
+    # Callback from System.
+    def _create(symbol):
+      if self.extern_name is None:
+        return msft.MSFTModuleOp(symbol,
+                                 self.input_ports,
+                                 self.output_ports,
+                                 self.parameters,
+                                 loc=self.loc,
+                                 ip=sys._get_ip())
+      else:
+        paramdecl_list = [
+            hw.ParamDeclAttr.get_nodefault(i.name,
+                                           mlir.ir.TypeAttr.get(i.attr.type))
+            for i in self.parameters
+        ]
+        return hw.HWModuleExternOp(
+            symbol,
+            self.input_ports,
+            self.output_ports,
+            parameters=paramdecl_list,
+            attributes={
+                "verilogName": mlir.ir.StringAttr.get(self.extern_name)
+            },
+            loc=self.loc,
+            ip=sys._get_ip())
+
     from .system import System
     sys = System.current()
-    symbol = sys.create_symbol(self.name, self.modcls)
-
-    if self.extern_name is None:
-      self.circt_mod = msft.MSFTModuleOp(symbol,
-                                         self.input_ports,
-                                         self.output_ports,
-                                         self.parameters,
-                                         loc=self.loc,
-                                         ip=sys._get_ip())
-      sys._generate_queue.append(self)
-    else:
-      paramdecl_list = [
-          hw.ParamDeclAttr.get_nodefault(i.name,
-                                         mlir.ir.TypeAttr.get(i.attr.type))
-          for i in self.parameters
-      ]
-      self.circt_mod = hw.HWModuleExternOp(
-          symbol,
-          self.input_ports,
-          self.output_ports,
-          parameters=paramdecl_list,
-          attributes={"verilogName": mlir.ir.StringAttr.get(self.extern_name)},
-          loc=self.loc,
-          ip=sys._get_ip())
-    self.add_accessors()
-    sys._notify_symbol(symbol, self.circt_mod)
-    return symbol
+    sys._create_circt_mod(self, _create)
 
   @property
   def is_created(self):
     return self.circt_mod is not None
+
+  @property
+  def circt_mod(self):
+    from .system import System
+    sys = System.current()
+    return sys._get_circt_mod(self)
 
   def instantiate(self, instance_name: str, inputs: dict, loc):
     """Create a instance op."""
@@ -214,8 +215,9 @@ class _SpecializedModule:
       return
 
   def print(self, out):
-    if self.circt_mod is not None:
-      self.circt_mod.print(out)
+    print(f"<pycde.Module: {self.name} inputs: {self.input_ports} " +
+          f"outputs: {self.output_ports}>",
+          file=out)
 
 
 # Set an input to no_connect to indicate not to connect it. Only valid for
@@ -369,6 +371,7 @@ def _module_base(cls, extern_name: str, params={}):
       instance_name = cls.__name__
       if "instance_name" in dir(self):
         instance_name = self.instance_name
+      # TODO: This is a held Operation*. Add a level of indirection.
       self._instantiation = mod._pycde_mod.instantiate(instance_name,
                                                        inputs,
                                                        loc=loc)

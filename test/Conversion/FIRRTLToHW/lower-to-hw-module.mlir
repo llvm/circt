@@ -258,8 +258,6 @@ firrtl.circuit "Simple" {
   }
 
   // The following operations should be passed through without an error.
-  // CHECK: sv.verbatim "hello"
-  sv.verbatim "hello"
   // CHECK: sv.interface @SVInterface
   sv.interface @SVInterface { }
 }
