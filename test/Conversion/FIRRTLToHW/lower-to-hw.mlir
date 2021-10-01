@@ -145,10 +145,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = sv.wire : !hw.inout<i2>
     %_t_1 = firrtl.wire : !firrtl.uint<2>
 
-    // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<1>, 13>
+    // CHECK-NEXT: = sv.wire  : !hw.inout<array<13xi1>>
     %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 13>
 
-    // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<2>, 13>
+    // CHECK-NEXT: = sv.wire  : !hw.inout<array<13xi2>>
     %_t_3 = firrtl.wire : !firrtl.vector<uint<2>, 13>
 
     // CHECK-NEXT: = comb.extract [[CONCAT1]] from 3 : (i8) -> i5
