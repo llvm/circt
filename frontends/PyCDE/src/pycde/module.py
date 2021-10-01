@@ -90,7 +90,7 @@ class _SpecializedModule:
 
   __slots__ = [
       "name", "generators", "modcls", "loc", "input_ports", "input_port_lookup",
-      "output_ports", "parameters", "extern_name"
+      "output_ports", "output_port_lookup", "parameters", "extern_name"
   ]
 
   def __init__(self, cls: type, parameters: Union[dict, mlir.ir.DictAttr],
@@ -117,6 +117,7 @@ class _SpecializedModule:
     # them. Scan 'cls' for them.
     self.input_ports = []
     self.input_port_lookup: Dict[str, int] = {}  # Used by 'BlockArgs' below.
+    self.output_port_lookup: Dict[str, int] = {}  # Used by 'BlockArgs' below.
     self.output_ports = []
     self.generators = {}
     for attr_name in dir(cls):
@@ -131,6 +132,7 @@ class _SpecializedModule:
       elif isinstance(attr, Output):
         attr.name = attr_name
         self.output_ports.append((attr.name, attr.type))
+        self.output_port_lookup[attr_name] = len(self.output_ports) - 1
       elif isinstance(attr, _Generate):
         self.generators[attr_name] = attr
     self.add_accessors()
@@ -419,47 +421,28 @@ class _Generate:
 
     entry_block = specialized_mod.circt_mod.add_entry_block()
     with mlir.ir.InsertionPoint(entry_block), self.loc, BackedgeBuilder():
-      args = BlockArgs(specialized_mod)
+      args = _GeneratorPortAccess(specialized_mod)
       outputs = self.gen_func(args)
-      self._create_output_op(outputs, specialized_mod)
+      if outputs is not None:
+        raise ValueError("Generators must not return a value")
+      self._create_output_op(args, specialized_mod)
 
-  def _create_output_op(self, gen_ret, modcls):
-    """Create the hw.OutputOp from the generator returns."""
-    output_ports = modcls.output_ports
-
-    # If generator didn't return anything, this op mustn't have any outputs.
-    if gen_ret is None:
-      if len(output_ports) == 0:
-        msft.OutputOp([])
-        return
-      raise support.ConnectionError("Generator must return dict")
-
-    # Now create the output op depending on the object type returned
+  def _create_output_op(self, args: _GeneratorPortAccess, spec_mod):
+    """Create the hw.OutputOp from module I/O ports in 'args'."""
+    output_ports = spec_mod.output_ports
     outputs: list[Value] = list()
 
-    # Only acceptable return is a dict of port, value mappings.
-    if not isinstance(gen_ret, dict):
-      raise support.ConnectionError("Generator must return a dict of outputs")
-
-    # A dict of `OutputPortName` -> ValueLike or convertable objects must be
-    # converted to a list in port order.
     unconnected_ports = []
-    for (name, port_type) in output_ports:
-      if name not in gen_ret:
+    for (name, _) in output_ports:
+      if name not in args._output_values:
         unconnected_ports.append(name)
         outputs.append(None)
       else:
-        val = obj_to_value(gen_ret[name], port_type).value
-        outputs.append(val)
-        gen_ret.pop(name)
+        outputs.append(args._output_values[name])
     if len(unconnected_ports) > 0:
       raise support.UnconnectedSignalError(unconnected_ports)
-    if len(gen_ret) > 0:
-      raise support.ConnectionError(
-          "Could not map the following to output ports: " +
-          ",".join(gen_ret.keys()))
 
-    msft.OutputOp(outputs)
+    msft.OutputOp([o.value for o in outputs])
 
 
 def generator(func):
@@ -467,16 +450,48 @@ def generator(func):
   return _Generate(func)
 
 
-class BlockArgs:
+class _GeneratorPortAccess:
   """Get the input ports."""
 
+  __slots__ = ["_mod", "_output_values"]
+
   def __init__(self, mod: _SpecializedModule):
-    self.mod = mod
+    self._mod = mod
+    self._output_values: dict[str, Value] = {}
 
   # Support attribute access to block arguments by name
   def __getattr__(self, name):
-    if name not in self.mod.input_port_lookup:
-      raise AttributeError(f"unknown input port name '{name}'")
-    idx = self.mod.input_port_lookup[name]
-    val = self.mod.circt_mod.entry_block.arguments[idx]
-    return Value.get(val)
+    if name in self._mod.input_port_lookup:
+      idx = self._mod.input_port_lookup[name]
+      val = self._mod.circt_mod.entry_block.arguments[idx]
+      return Value.get(val)
+    if name in self._mod.output_port_lookup:
+      if name not in self._output_values:
+        raise ValueError("Must set output value before accessing it")
+      return self._output_values[name]
+
+    raise AttributeError(f"unknown port name '{name}'")
+
+  def __setattr__(self, name: str, value) -> None:
+    if name in _GeneratorPortAccess.__slots__:
+      super().__setattr__(name, value)
+      return
+
+    if name not in self._mod.output_port_lookup:
+      raise ValueError(f"Cannot find output port '{name}'")
+    if name in self._output_values:
+      raise ValueError(f"Cannot set output '{name}' twice")
+
+    output_port = self._mod.output_ports[self._mod.output_port_lookup[name]]
+    output_port_type = output_port[1]
+    if not isinstance(value, Value):
+      value = obj_to_value(value, output_port_type)
+    if value.type != output_port_type:
+      raise ValueError("Types do not match. Output port type: "
+                       f" '{output_port_type}'. Value type: '{value.type}'")
+    self._output_values[name] = value
+
+  def set_all_ports(self, port_values: dict[str, Value]):
+    """Set all of the output values in a portname -> value dict."""
+    for (name, value) in port_values.items():
+      self.__setattr__(name, value)
