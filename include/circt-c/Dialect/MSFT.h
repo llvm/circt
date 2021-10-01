@@ -31,24 +31,6 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        void *userData);
 
 //===----------------------------------------------------------------------===//
-// Generator registration.
-//===----------------------------------------------------------------------===//
-
-/// This callback constructs a replacement for the operation argument and
-/// returns it.
-typedef struct {
-  MlirOperation (*callback)(MlirOperation, void *userData);
-  void *userData;
-} mlirMSFTGeneratorCallback;
-
-/// Register a generator callback (function pointer, user data pointer).
-MLIR_CAPI_EXPORTED void mlirMSFTRegisterGenerator(MlirContext,
-                                                  const char *opName,
-                                                  const char *generatorName,
-                                                  mlirMSFTGeneratorCallback cb,
-                                                  MlirAttribute parameters);
-
-//===----------------------------------------------------------------------===//
 // DeviceDB.
 //===----------------------------------------------------------------------===//
 
