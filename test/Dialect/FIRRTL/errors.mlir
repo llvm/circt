@@ -582,16 +582,6 @@ firrtl.circuit "BitCast2" {
 
 // -----
 
-firrtl.circuit "BitCast3" {
-  firrtl.module @BitCast3() {
-    %a = firrtl.wire : !firrtl.clock
-    %b = firrtl.bitcast %a : (!firrtl.clock) -> (!firrtl.uint<1>)
-  }
-
-}
-
-// -----
-
 firrtl.circuit "BitCast4" {
   firrtl.module @BitCast4() {
     %a = firrtl.wire : !firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>

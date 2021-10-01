@@ -1068,4 +1068,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: hw.bitcast %0 : (i3) -> !hw.struct<valid: i1, ready: i1, data: i1>
 
   }
+  // CHECK-LABEL: hw.module @BitCast5
+  firrtl.module @BitCast5() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>) -> (!firrtl.vector<uint<2>, 3>)
+    // CHECK: hw.bitcast %0 : (!hw.struct<valid: i2, ready: i1, data: i3>) -> !hw.array<3xi2>
+  }
 }
