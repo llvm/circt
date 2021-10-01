@@ -406,7 +406,7 @@ private:
               os << " with " << groupName.getValue();
 
             emitCalyxBody([&]() { emitCalyxControl(op.getThenBody()); });
-            if (op.elseRegionExists())
+            if (op.elseBodyExists())
               emitCalyxSection("else",
                                [&]() { emitCalyxControl(op.getElseBody()); });
           })

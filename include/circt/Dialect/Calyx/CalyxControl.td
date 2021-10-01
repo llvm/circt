@@ -32,6 +32,13 @@ def ControlOp : CalyxContainer<"control", [
     ```
   }];
   let verifier = "return ::verify$cppClass(*this);";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
 }
 
 def IfOp : CalyxContainer<"if", [
@@ -68,22 +75,54 @@ def IfOp : CalyxContainer<"if", [
 
   let assemblyFormat = "$cond (`with` $groupName^)? $thenRegion (`else` $elseRegion^)? attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
-  let hasCanonicalizeMethod = true;
+  let hasCanonicalizer = true;
   let extraClassDeclaration = [{
-    /// Checks whether the `then` region exists.
-    bool thenRegionExists() { return !getOperation()->getRegion(0).empty(); }
-    /// Checks whether the `else` region exists.
-    bool elseRegionExists() { return !getOperation()->getRegion(1).empty(); }
+    /// Checks whether the `then` body exists.
+    bool thenBodyExists() {
+      Region* region = &getOperation()->getRegion(0);
+      if (region == nullptr)
+        return false;
+      return !region->empty();
+    }
+    /// Checks whether the `else` body exists.
+    bool elseBodyExists() {
+      Region* region = &getOperation()->getRegion(1);
+      if (region == nullptr)
+        return false;
+      return !region->empty();
+    }
     /// Gets the single basic block representing the `then` region.
     Block *getThenBody() {
-      return &getOperation()->getRegion(0).front();
+      assert(thenBodyExists() && "Then region does not exist.");
+      Region* region = &getOperation()->getRegion(0);
+      assert(region->hasOneBlock() && "The Then body should have one Block.");
+      return &region->front();
     }
     /// Gets the single basic block representing the `else` region.
     Block *getElseBody() {
-      assert(elseRegionExists() && "Else region does not exist.");
-      return &getOperation()->getRegion(1).front();
+      assert(elseBodyExists() && "Else region does not exist.");
+      Region* region = &getOperation()->getRegion(1);
+      assert(region->hasOneBlock() && "The Else body should have one Block.");
+      return &region->front();
     }
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins
+      "Value":$cond,
+      CArg<"FlatSymbolRefAttr", "nullptr">:$groupName,
+      CArg<"bool", "false">:$initializeElseBody), [{
+        $_state.addOperands(cond);
+        if (groupName)
+          $_state.addAttribute("groupName", groupName);
+
+        Region *thenRegion = $_state.addRegion();
+        Region *elseRegion = $_state.addRegion();
+        thenRegion->push_back(new Block());
+        if (initializeElseBody)
+          elseRegion->push_back(new Block());
+    }]>
+  ];
 }
 
 def SeqOp : CalyxContainer<"seq", [
@@ -102,7 +141,15 @@ def SeqOp : CalyxContainer<"seq", [
       }
     ```
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
   let hasCanonicalizeMethod = true;
+
 }
 
 def ParOp : CalyxContainer<"par", [
@@ -123,6 +170,13 @@ def ParOp : CalyxContainer<"par", [
       }
     ```
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
   let hasCanonicalizeMethod = true;
   let verifier = "return ::verify$cppClass(*this);";
 }
@@ -187,7 +241,21 @@ def WhileOp : CalyxContainer<"while", [
       }
     ```
   }];
-
+  let hasCanonicalizeMethod = true;
   let assemblyFormat = "$cond (`with` $groupName^)? $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins
+      "Value":$cond,
+      CArg<"FlatSymbolRefAttr", "nullptr">:$groupName), [{
+        $_state.addOperands(cond);
+        if (groupName)
+          $_state.addAttribute("groupName", groupName);
+
+        Region *body = $_state.addRegion();
+        body->push_back(new Block());
+    }]>
+  ];
+
 }

@@ -21,6 +21,7 @@ import mlir.ir
 
 import builtins
 import inspect
+import sys
 
 # A memoization table for module parameterization function calls.
 _MODULE_CACHE: typing.Dict[Tuple[builtins.function, mlir.ir.DictAttr],
@@ -76,10 +77,6 @@ def _create_module_name(name: str, params: mlir.ir.DictAttr):
   return ret.strip("_")
 
 
-# Two problems with this class:
-#   (1) It's not sensitive to the System.
-#   (2) It keeps references MLIR ops around.
-# Possible solution to both involves using System as storage.
 class _SpecializedModule:
   """SpecializedModule serves two purposes:
 
@@ -92,14 +89,13 @@ class _SpecializedModule:
   only created if said module is instantiated."""
 
   __slots__ = [
-      "circt_mod", "name", "generators", "modcls", "loc", "input_ports",
-      "input_port_lookup", "output_ports", "parameters", "extern_name"
+      "name", "generators", "modcls", "loc", "input_ports", "input_port_lookup",
+      "output_ports", "parameters", "extern_name"
   ]
 
   def __init__(self, cls: type, parameters: Union[dict, mlir.ir.DictAttr],
                extern_name: str):
     self.modcls = cls
-    self.circt_mod = None
     self.extern_name = extern_name
     self.loc = get_user_loc()
 
@@ -137,6 +133,7 @@ class _SpecializedModule:
         self.output_ports.append((attr.name, attr.type))
       elif isinstance(attr, _Generate):
         self.generators[attr_name] = attr
+    self.add_accessors()
 
   def add_accessors(self):
     """Add accessors for each input and output port to emulate generated OpView
@@ -157,40 +154,47 @@ class _SpecializedModule:
   # class.
   def create(self):
     """Create the module op. Should not be called outside of a 'System'
-    context."""
-    if self.circt_mod is not None:
-      return
+    context. Returns the symbol of the module op."""
+
+    # Callback from System.
+    def _create(symbol):
+      if self.extern_name is None:
+        return msft.MSFTModuleOp(symbol,
+                                 self.input_ports,
+                                 self.output_ports,
+                                 self.parameters,
+                                 loc=self.loc,
+                                 ip=sys._get_ip())
+      else:
+        paramdecl_list = [
+            hw.ParamDeclAttr.get_nodefault(i.name,
+                                           mlir.ir.TypeAttr.get(i.attr.type))
+            for i in self.parameters
+        ]
+        return hw.HWModuleExternOp(
+            symbol,
+            self.input_ports,
+            self.output_ports,
+            parameters=paramdecl_list,
+            attributes={
+                "verilogName": mlir.ir.StringAttr.get(self.extern_name)
+            },
+            loc=self.loc,
+            ip=sys._get_ip())
+
     from .system import System
     sys = System.current()
-    symbol = sys.create_symbol(self.name)
-
-    if self.extern_name is None:
-      self.circt_mod = msft.MSFTModuleOp(symbol,
-                                         self.input_ports,
-                                         self.output_ports,
-                                         self.parameters,
-                                         loc=self.loc,
-                                         ip=sys._get_ip())
-      sys._generate_queue.append(self)
-    else:
-      paramdecl_list = [
-          hw.ParamDeclAttr.get_nodefault(i.name,
-                                         mlir.ir.TypeAttr.get(i.attr.type))
-          for i in self.parameters
-      ]
-      self.circt_mod = hw.HWModuleExternOp(
-          symbol,
-          self.input_ports,
-          self.output_ports,
-          parameters=paramdecl_list,
-          attributes={"verilogName": mlir.ir.StringAttr.get(self.extern_name)},
-          loc=self.loc,
-          ip=sys._get_ip())
-    self.add_accessors()
+    sys._create_circt_mod(self, _create)
 
   @property
   def is_created(self):
     return self.circt_mod is not None
+
+  @property
+  def circt_mod(self):
+    from .system import System
+    sys = System.current()
+    return sys._get_circt_mod(self)
 
   def instantiate(self, instance_name: str, inputs: dict, loc):
     """Create a instance op."""
@@ -209,6 +213,11 @@ class _SpecializedModule:
     for g in self.generators.values():
       g.generate(self)
       return
+
+  def print(self, out):
+    print(f"<pycde.Module: {self.name} inputs: {self.input_ports} " +
+          f"outputs: {self.output_ports}>",
+          file=out)
 
 
 # Set an input to no_connect to indicate not to connect it. Only valid for
@@ -266,9 +275,7 @@ class _parameterized_module:
   #   - In the case of a module function parameterizer, it is called when the
   #   user wants to apply specific parameters to the module. In this case, we
   #   should call the function, wrap the returned module class, and return it.
-  #   We _could_ also cache it, though that's not strictly necessary unless the
-  #   user is breaking the rules. TODO: cache it (requires all the parameters to
-  #   be hashable).
+  #   The result is cached in _MODULE_CACHE.
   #   - A simple (non-parameterized) module has been wrapped and the user wants
   #   to construct one. Just forward to the module class' constructor.
   def __call__(self, *args, **kwargs):
@@ -314,8 +321,6 @@ def _module_base(cls, extern_name: str, params={}):
   """Wrap a class, making it a PyCDE module."""
 
   class mod(cls):
-    __name__ = cls.__name__
-    _pycde_mod = _SpecializedModule(cls, params, extern_name)
 
     def __init__(self, *args, **kwargs):
       """Scan the class and eventually instance for Input/Output members and
@@ -366,9 +371,18 @@ def _module_base(cls, extern_name: str, params={}):
       instance_name = cls.__name__
       if "instance_name" in dir(self):
         instance_name = self.instance_name
+      # TODO: This is a held Operation*. Add a level of indirection.
       self._instantiation = mod._pycde_mod.instantiate(instance_name,
                                                        inputs,
                                                        loc=loc)
+
+    def output_values(self):
+      return {outname: getattr(self, outname) for (outname, _) in mod.outputs()}
+
+    @staticmethod
+    def print(out=sys.stdout):
+      mod._pycde_mod.print(out)
+      print()
 
     @staticmethod
     def inputs() -> list[(str, mlir.ir.Type)]:
@@ -380,6 +394,10 @@ def _module_base(cls, extern_name: str, params={}):
       """Return the list of input ports."""
       return mod._pycde_mod.output_ports
 
+  mod.__qualname__ = cls.__qualname__
+  mod.__name__ = cls.__name__
+  mod.__module__ = cls.__module__
+  mod._pycde_mod = _SpecializedModule(mod, params, extern_name)
   return mod
 
 
@@ -458,7 +476,7 @@ class BlockArgs:
   # Support attribute access to block arguments by name
   def __getattr__(self, name):
     if name not in self.mod.input_port_lookup:
-      raise AttributeError(f"unknown input port name {name}")
+      raise AttributeError(f"unknown input port name '{name}'")
     idx = self.mod.input_port_lookup[name]
     val = self.mod.circt_mod.entry_block.arguments[idx]
     return Value.get(val)

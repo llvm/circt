@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw %s | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw  %s | FileCheck %s
 
 firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", directory = "dir1",  filename = "./dir1/filename1" }, {class =
@@ -13,7 +13,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // same clock.
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_0_1_aa,
-  // CHECK-SAME: @FIRRTLMem(%wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i4, %wo_mask_0: i1, %wo_data_0: i8, %wo_clock_1: i1, %wo_en_1: i1, %wo_addr_1: i4, %wo_mask_1: i1, %wo_data_1: i8)
+  // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W0_mask: i1, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8, %W1_mask: i1)
   // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
   // CHECK-SAME: readLatency = 1 : ui32, readUnderWrite = 0 : ui32,
@@ -24,7 +24,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // by a different clock.
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab,
-  // CHECK-SAME: @FIRRTLMem(%wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i4, %wo_mask_0: i1, %wo_data_0: i8, %wo_clock_1: i1, %wo_en_1: i1, %wo_addr_1: i4, %wo_mask_1: i1, %wo_data_1: i8)
+  // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W0_mask: i1, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8, %W1_mask: i1)
   // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
   // CHECK-SAME: readLatency = 1 : ui32, readUnderWrite = 0 : ui32,
@@ -32,28 +32,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_1_1,
-  // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i1) -> (ro_data_0: i32)
+  // CHECK-SAME: @FIRRTLMem(%R0_addr: i1, %R0_en: i1, %R0_clk: i1) -> (R0_data: i32)
   // CHECK-SAME: attributes {depth = 1 : i64, maskGran = 0 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 1 : ui32,
   // CHECK-SAME: width = 32 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_42_12_0_1_0_1,
-  // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i4) -> (ro_data_0: i42)
+  // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42)
   // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 0 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
   // CHECK-NEXT: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_0_1_a, 
-  // CHECK-SAME:  @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i10
-  // CHECK-SAME: %rw_clock_0: i1, %rw_en_0: i1, %rw_addr_0: i10
-  // CHECK-SAME: %rw_wmode_0: i1, %rw_wmask_0: i4, %rw_wdata_0: i40
-  // CHECK-SAME: %wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i10
-  // CHECK-SAME: %wo_mask_0: i4, %wo_data_0: i40
-  //CHECK-SAME: (ro_data_0: i40, rw_rdata_0: i40)
+  // CHECK-SAME:  @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: i1, %RW0_addr: i10, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i40, %RW0_wmask: i4, %W0_addr: i10, %W0_en: i1, %W0_clk: i1, %W0_data: i40, %W0_mask: i4) -> (R0_data: i40, RW0_rdata: i40)
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_0_1_a,
-  // CHECK-SAME: @FIRRTLMem(%ro_clock_0: i1, %ro_en_0: i1, %ro_addr_0: i4, %rw_clock_0: i1, %rw_en_0: i1, %rw_addr_0: i4, %rw_wmode_0: i1, %rw_wmask_0: i1, %rw_wdata_0: i42, %wo_clock_0: i1, %wo_en_0: i1, %wo_addr_0: i4, %wo_mask_0: i1, %wo_data_0: i42) -> (ro_data_0: i42, rw_rdata_0: i42)
+  // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %RW0_wmask: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42, %W0_mask: i1) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
@@ -99,14 +94,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %tmp1 = firrtl.invalidvalue : !firrtl.uint<4>
     firrtl.connect %out5, %tmp1 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK: [[ZEXT:%.+]] = comb.concat %false, %in1 : (i1, i4) -> i5
+    // CHECK: [[ZEXT:%.+]] = comb.concat %false, %in1 : i1, i4
     // CHECK: [[ADD:%.+]] = comb.add %c12_i5, [[ZEXT]] : i5
     %0 = firrtl.add %c12_ui4, %in1 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
     %1 = firrtl.asUInt %in1 : (!firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK: [[ZEXT1:%.+]] = comb.concat %false, [[ADD]] : (i1, i5) -> i6
-    // CHECK: [[ZEXT2:%.+]] = comb.concat %c0_i2, %in1 : (i2, i4) -> i6
+    // CHECK: [[ZEXT1:%.+]] = comb.concat %false, [[ADD]] : i1, i5
+    // CHECK: [[ZEXT2:%.+]] = comb.concat %c0_i2, %in1 : i2, i4
     // CHECK-NEXT: [[SUB:%.+]] = comb.sub [[ZEXT1]], [[ZEXT2]] : i6
     %2 = firrtl.sub %0, %1 : (!firrtl.uint<5>, !firrtl.uint<4>) -> !firrtl.uint<6>
 
@@ -115,10 +110,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: [[PADRES:%.+]] = comb.sext %in2 : (i2) -> i3
     %3 = firrtl.pad %in2s, 3 : (!firrtl.sint<2>) -> !firrtl.sint<3>
 
-    // CHECK: [[PADRES2:%.+]] = comb.concat %c0_i2, %in2 : (i2, i2) -> i4
+    // CHECK: [[PADRES2:%.+]] = comb.concat %c0_i2, %in2 : i2, i2
     %4 = firrtl.pad %in2, 4 : (!firrtl.uint<2>) -> !firrtl.uint<4>
 
-    // CHECK: [[IN2EXT:%.+]] = comb.concat %c0_i2, %in2 : (i2, i2) -> i4
+    // CHECK: [[IN2EXT:%.+]] = comb.concat %c0_i2, %in2 : i2, i2
     // CHECK: [[XOR:%.+]] = comb.xor [[IN2EXT]], [[PADRES2]] : i4
     %5 = firrtl.xor %in2, %4 : (!firrtl.uint<2>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
@@ -128,7 +123,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: comb.or [[XOR]]
     %or = firrtl.or %5, %4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
 
-    // CHECK: [[CONCAT1:%.+]] = comb.concat [[PADRES2]], [[XOR]] : (i4, i4) -> i8
+    // CHECK: [[CONCAT1:%.+]] = comb.concat [[PADRES2]], [[XOR]] : i4, i4
     %6 = firrtl.cat %4, %5 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
 
     // CHECK: comb.concat %in1, %in2
@@ -140,7 +135,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: sv.assign %out4, [[XOR]] : i4
     firrtl.connect %out4, %5 : !firrtl.uint<4>, !firrtl.uint<4>
 
-    // CHECK-NEXT: [[ZEXT:%.+]] = comb.concat %c0_i2, %in2 : (i2, i2) -> i4
+    // CHECK-NEXT: [[ZEXT:%.+]] = comb.concat %c0_i2, %in2 : i2, i2
     // CHECK-NEXT: sv.assign %out4, [[ZEXT]] : i4
     firrtl.connect %out4, %in2 : !firrtl.uint<4>, !firrtl.uint<2>
 
@@ -150,10 +145,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = sv.wire : !hw.inout<i2>
     %_t_1 = firrtl.wire : !firrtl.uint<2>
 
-    // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<1>, 13>
+    // CHECK-NEXT: = sv.wire  : !hw.inout<array<13xi1>>
     %_t_2 = firrtl.wire : !firrtl.vector<uint<1>, 13>
 
-    // CHECK-NEXT: = firrtl.wire : !firrtl.vector<uint<2>, 13>
+    // CHECK-NEXT: = sv.wire  : !hw.inout<array<13xi2>>
     %_t_3 = firrtl.wire : !firrtl.vector<uint<2>, 13>
 
     // CHECK-NEXT: = comb.extract [[CONCAT1]] from 3 : (i8) -> i5
@@ -173,7 +168,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.extract %in3 from 7 : (i8) -> i1
     %13 = firrtl.shr %in3, 8 : (!firrtl.sint<8>) -> !firrtl.sint<1>
 
-    // CHECK-NEXT: = comb.concat [[CONCAT1]], %c0_i3 : (i8, i3) -> i11
+    // CHECK-NEXT: = comb.concat [[CONCAT1]], %c0_i3 : i8, i3
     %14 = firrtl.shl %6, 3 : (!firrtl.uint<8>) -> !firrtl.uint<11>
 
     // CHECK-NEXT: = comb.parity [[CONCAT1]] : i8
@@ -185,8 +180,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: = comb.icmp ne {{.*}}, %c0_i8 : i8
     %17 = firrtl.orr %6 : (!firrtl.uint<8>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[ZEXTC1:%.+]] = comb.concat %c0_i6, [[CONCAT1]] : (i6, i8) -> i14
-    // CHECK-NEXT: [[ZEXT2:%.+]] = comb.concat %c0_i8, [[SUB]] : (i8, i6) -> i14
+    // CHECK-NEXT: [[ZEXTC1:%.+]] = comb.concat %c0_i6, [[CONCAT1]] : i6, i8
+    // CHECK-NEXT: [[ZEXT2:%.+]] = comb.concat %c0_i8, [[SUB]] : i8, i6
     // CHECK-NEXT: [[VAL18:%.+]] = comb.mul  [[ZEXTC1]], [[ZEXT2]] : i14
     %18 = firrtl.mul %6, %2 : (!firrtl.uint<8>, !firrtl.uint<6>) -> !firrtl.uint<14>
 
@@ -215,7 +210,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // Nodes with no names are just dropped.
     %22 = firrtl.node %in2 {name = ""} : !firrtl.uint<2>
 
-    // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : (i1, i2) -> i3
+    // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : i1, i2
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
     // Will be dropped, here because this triggered a crash
@@ -242,7 +237,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: [[DSHR:%.+]] = comb.extract [[SHIFT]] from 0 : (i14) -> i3
     %29 = firrtl.dshr %24, %18 : (!firrtl.uint<3>, !firrtl.uint<14>) -> !firrtl.uint<3>
 
-    // CHECK-NEXT: = comb.concat %c0_i5, {{.*}} : (i5, i3) -> i8
+    // CHECK-NEXT: = comb.concat %c0_i5, {{.*}} : i5, i3
     // CHECK-NEXT: [[SHIFT:%.+]] = comb.shrs %in3, {{.*}} : i8
     %a29 = firrtl.dshr %in3, %9 : (!firrtl.sint<8>, !firrtl.uint<3>) -> !firrtl.sint<8>
 
@@ -279,8 +274,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: [[VERB1:%.+]] = sv.verbatim.expr "MAGIC_CONSTANT" : () -> i42
     // CHECK: [[VERB2:%.+]] = sv.verbatim.expr "$bits({{[{][{]0[}][}]}})"([[VERB1]]) : (i42) -> i32
-    // CHECK: [[VERB1EXT:%.+]] = comb.concat {{%.+}}, [[VERB1]] : (i1, i42) -> i43
-    // CHECK: [[VERB2EXT:%.+]] = comb.concat {{%.+}}, [[VERB2]] : (i11, i32) -> i43
+    // CHECK: [[VERB1EXT:%.+]] = comb.concat {{%.+}}, [[VERB1]] : i1, i42
+    // CHECK: [[VERB2EXT:%.+]] = comb.concat {{%.+}}, [[VERB2]] : i11, i32
     // CHECK: = comb.add [[VERB1EXT]], [[VERB2EXT]] : i43
     %56 = firrtl.verbatim.expr "MAGIC_CONSTANT" : () -> !firrtl.uint<42>
     %57 = firrtl.verbatim.expr "$bits({{0}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32>
@@ -292,7 +287,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %49 = firrtl.and %in3, %3 : (!firrtl.sint<8>, !firrtl.sint<3>) -> !firrtl.uint<8>
 
     // Issue #355: https://github.com/llvm/circt/issues/355
-    // CHECK: [[IN1:%.+]] = comb.concat %c0_i6, %in1 : (i6, i4) -> i10
+    // CHECK: [[IN1:%.+]] = comb.concat %c0_i6, %in1 : i6, i4
     // CHECK: [[DIV:%.+]] = comb.divu [[IN1]], %c306_i10 : i10
     // CHECK: = comb.extract [[DIV]] from 0 : (i10) -> i4
     %c306_ui10 = firrtl.constant 306 : !firrtl.uint<10>
@@ -301,7 +296,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c1175_ui11 = firrtl.constant 1175 : !firrtl.uint<11>
     %51 = firrtl.neg %c1175_ui11 : (!firrtl.uint<11>) -> !firrtl.sint<12>
     // https://github.com/llvm/circt/issues/821
-    // CHECK: [[CONCAT:%.+]] = comb.concat %false, %in1 : (i1, i4) -> i5
+    // CHECK: [[CONCAT:%.+]] = comb.concat %false, %in1 : i1, i4
     // CHECK:  = comb.sub %c0_i5, [[CONCAT]] : i5
     %52 = firrtl.neg %in1 : (!firrtl.uint<4>) -> !firrtl.sint<5>
     %53 = firrtl.neg %in4 : (!firrtl.uint<0>) -> !firrtl.sint<1>
@@ -504,7 +499,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %tmp48 = sv.wire : !hw.inout<i27>
     %tmp48 = firrtl.wire : !firrtl.uint<27>
 
-    // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : (i38, i27) -> i65
+    // CHECK-NEXT: %0 = comb.concat %c0_i38, %inp_2 : i38, i27
     // CHECK-NEXT: %1 = comb.divu %0, %inpi : i65
     %0 = firrtl.div %inp_2, %inpi : (!firrtl.uint<27>, !firrtl.uint<65>) -> !firrtl.uint<27>
     // CHECK-NEXT: %2 = comb.extract %1 from 0 : (i65) -> i27
@@ -642,8 +637,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:     }
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    // CHECK-NEXT: %2 = comb.concat %false, %0 : (i1, i32) -> i33
-    // CHECK-NEXT: %3 = comb.concat %false, %1 : (i1, i32) -> i33
+    // CHECK-NEXT: %2 = comb.concat %false, %0 : i1, i32
+    // CHECK-NEXT: %3 = comb.concat %false, %1 : i1, i32
     // CHECK-NEXT: %4 = comb.add %2, %3 : i33
     // CHECK-NEXT: %5 = comb.extract %4 from 1 : (i33) -> i32
     // CHECK-NEXT: %6 = comb.mux %io_en, %io_d, %5 : i32
@@ -709,8 +704,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-  // CHECK: %_M.ro_data_0, %_M.rw_rdata_0 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0_1_a(ro_clock_0: %clock1: i1, ro_en_0: %true: i1, ro_addr_0: %c0_i4: i4, rw_clock_0: %clock1: i1, rw_en_0: %true: i1, rw_addr_0: %c0_i4_0: i4, rw_wmode_0: %true: i1, rw_wmask_0: %true: i1, rw_wdata_0: %0: i42, wo_clock_0: %clock2: i1, wo_en_0: %inpred: i1, wo_addr_0: %c0_i4_1: i4, wo_mask_0: %[[mask:.+]]: i1, wo_data_0: %[[data:.+]]: i42) -> (ro_data_0: i42, rw_rdata_0: i42)
-  // CHECK: hw.output %_M.ro_data_0, %_M.rw_rdata_0 : i42, i42
+  // CHECK: %_M.R0_data, %_M.RW0_rdata = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0_1_a(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i4_0: i4, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i42, RW0_wmask: %true: i1, W0_addr: %c0_i4_1: i4, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i42, W0_mask: %true: i1) -> (R0_data: i42, RW0_rdata: i42)
+  // CHECK: hw.output %_M.R0_data, %_M.RW0_rdata : i42, i42
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.sint<42>
       firrtl.connect %result, %0 : !firrtl.sint<42>, !firrtl.sint<42>
@@ -758,8 +753,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 1022 : i64, name = "_M_mask", portNames = ["read", "rw", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-    // CHECK: %_M_mask.ro_data_0, %_M_mask.rw_rdata_0 = hw.instance "_M_mask" @FIRRTLMem_1_1_1_40_1022_1_1_0_1_a(ro_clock_0: %clock1: i1, ro_en_0: %true: i1, ro_addr_0: %c0_i10: i10, rw_clock_0: %clock1: i1, rw_en_0: %true: i1, rw_addr_0: %c0_i10: i10, rw_wmode_0: %true: i1, rw_wmask_0: %c0_i4: i4, rw_wdata_0: %0: i40, wo_clock_0: %clock2: i1, wo_en_0: %inpred: i1, wo_addr_0: %c0_i10: i10, wo_mask_0: %c0_i4: i4, wo_data_0: %indata: i40) -> (ro_data_0: i40, rw_rdata_0: i40)
-    // CHECK: hw.output %_M_mask.ro_data_0, %_M_mask.rw_rdata_0 : i40, i40
+    // CHECK: %_M_mask.R0_data, %_M_mask.RW0_rdata = hw.instance "_M_mask" @FIRRTLMem_1_1_1_40_1022_1_1_0_1_a(R0_addr: %c0_i10: i10, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i10: i10, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i40, RW0_wmask: %c0_i4: i4, W0_addr: %c0_i10: i10, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i40, W0_mask: %c0_i4: i4) -> (R0_data: i40, RW0_rdata: i40)
+    // CHECK: hw.output %_M_mask.R0_data, %_M_mask.RW0_rdata : i40, i40
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>) -> !firrtl.sint<40>
       firrtl.connect %result, %0 : !firrtl.sint<40>, !firrtl.sint<40>
@@ -801,7 +796,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
-    // CHECK:  %_M.ro_data_0 = hw.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0_1(ro_clock_0: %clock1: i1, ro_en_0: %true: i1, ro_addr_0: %c0_i4: i4) -> (ro_data_0: i42)
+    // CHECK:  %_M.R0_data = hw.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0_1(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1) -> (R0_data: i42)
     %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     // Read port.
     %6 = firrtl.subfield %_M_read(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.uint<4>
@@ -892,8 +887,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module @MemDepth1
   firrtl.module @MemDepth1(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
                            in %addr: !firrtl.uint<1>, out %data: !firrtl.uint<32>) {
-    // CHECK: %mem0.ro_data_0 = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1_1(ro_clock_0: %clock: i1, ro_en_0: %en: i1, ro_addr_0: %addr: i1) -> (ro_data_0: i32)
-    // CHECK: hw.output %mem0.ro_data_0 : i32
+    // CHECK: %mem0.R0_data = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1_1(R0_addr: %addr: i1, R0_en: %en: i1, R0_clk: %clock: i1) -> (R0_data: i32)
+    // CHECK: hw.output %mem0.R0_data : i32
     %mem0_load0 = firrtl.mem Old {depth = 1 : i64, name = "mem0", portNames = ["load0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     %0 = firrtl.subfield %mem0_load0(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.clock
     firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
@@ -928,7 +923,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:       %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32
     // CHECK-NEXT:       %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32
     // CHECK-NEXT:       %3 = comb.extract %RANDOM_0 from 0 : (i32) -> i10
-    // CHECK-NEXT:       %4 = comb.concat %RANDOM, %3 : (i32, i10) -> i42
+    // CHECK-NEXT:       %4 = comb.concat %RANDOM, %3 : i32, i10
     // CHECK-NEXT:       sv.bpassign %count, %4 : i42
     // CHECK-NEXT:     }
     // CHECK-NEXT:    }
@@ -1045,4 +1040,38 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r0 = firrtl.regreset %clock, %arst, %constNode : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
   }
 
+  // CHECK-LABEL: hw.module @BitCast1
+  firrtl.module @BitCast1() {
+    %a = firrtl.wire : !firrtl.vector<uint<2>, 13>
+    %b = firrtl.bitcast %a : (!firrtl.vector<uint<2>, 13>) -> (!firrtl.uint<26>)
+    // CHECK: hw.bitcast %0 : (!hw.array<13xi2>) -> i26 
+  }
+
+  // CHECK-LABEL: hw.module @BitCast2
+  firrtl.module @BitCast2() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<3>)
+    // CHECK: hw.bitcast %0 : (!hw.struct<valid: i1, ready: i1, data: i1>) -> i3
+
+  }
+  // CHECK-LABEL: hw.module @BitCast3
+  firrtl.module @BitCast3() {
+    %a = firrtl.wire : !firrtl.uint<26>
+    %b = firrtl.bitcast %a : (!firrtl.uint<26>) -> (!firrtl.vector<uint<2>, 13>)
+    // CHECK: hw.bitcast %0 : (i26) -> !hw.array<13xi2>
+  }
+
+  // CHECK-LABEL: hw.module @BitCast4
+  firrtl.module @BitCast4() {
+    %a = firrtl.wire : !firrtl.uint<3>
+    %b = firrtl.bitcast %a : (!firrtl.uint<3>) -> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>)
+    // CHECK: hw.bitcast %0 : (i3) -> !hw.struct<valid: i1, ready: i1, data: i1>
+
+  }
+  // CHECK-LABEL: hw.module @BitCast5
+  firrtl.module @BitCast5() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>) -> (!firrtl.vector<uint<2>, 3>)
+    // CHECK: hw.bitcast %0 : (!hw.struct<valid: i2, ready: i1, data: i3>) -> !hw.array<3xi2>
+  }
 }

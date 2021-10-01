@@ -2,6 +2,9 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import builtins
+
+from .module import _SpecializedModule
 from .pycde_types import types
 from .instance import Instance
 
@@ -10,9 +13,8 @@ import mlir.ir as ir
 import mlir.passmanager
 
 import circt
+import circt.dialects.msft
 import circt.support
-from circt.dialects import hw
-from circt import msft
 
 from contextvars import ContextVar
 import sys
@@ -31,7 +33,8 @@ class System:
   output SystemVerilog."""
 
   __slots__ = [
-      "mod", "passed", "_old_system_token", "_symbols", "_generate_queue"
+      "mod", "modules", "passed", "_module_symbols", "_symbol_modules",
+      "_old_system_token", "_symbols", "_generate_queue"
   ]
 
   passes = [
@@ -42,6 +45,9 @@ class System:
   def __init__(self, modules):
     self.passed = False
     self.mod = ir.Module.create()
+    self.modules = list(modules)
+    self._module_symbols: dict[_SpecializedModule, str] = {}
+    self._symbol_modules: dict[str, _SpecializedModule] = {}
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
 
@@ -51,15 +57,17 @@ class System:
   def _get_ip(self):
     return ir.InsertionPoint(self.mod.body)
 
+  # TODO: Return a read-only proxy.
   @property
-  def symbols(self) -> typing.Set[str]:
+  def symbols(self) -> typing.Dict[str, ir.Operation]:
     """Get the set of top level symbols in the design. Read from a cache which
     will be invalidated whenever control is given to CIRCT."""
     if self._symbols is None:
-      self._symbols = set()
+      self._symbols = dict()
       for op in self.mod.operation.regions[0].blocks[0]:
         if "sym_name" in op.attributes:
-          self._symbols.add(mlir.ir.StringAttr(op.attributes["sym_name"]).value)
+          self._symbols[mlir.ir.StringAttr(
+              op.attributes["sym_name"]).value] = op
     return self._symbols
 
   def create_symbol(self, basename: str) -> str:
@@ -70,8 +78,43 @@ class System:
     while ret in self.symbols:
       ctr += 1
       ret = basename + "_" + str(ctr)
-    self.symbols.add(ret)
+    self.symbols[ret] = None
     return ret
+
+  def _create_circt_mod(self, spec_mod: _SpecializedModule, create_cb):
+    """Wrapper for a callback (which actually builds the CIRCT op) which
+    controls all the bookkeeping around CIRCT module ops."""
+    if spec_mod in self._module_symbols:
+      return
+    symbol = self.create_symbol(spec_mod.name)
+    # Bookkeeping.
+    self._module_symbols[spec_mod] = symbol
+    self._symbol_modules[symbol] = spec_mod
+    # Build the correct op.
+    op = create_cb(symbol)
+    # Install the op in the cache.
+    self._symbols[symbol] = op
+    # Add to the generation queue, if necessary.
+    if isinstance(op, circt.dialects.msft.MSFTModuleOp):
+      self._generate_queue.append(spec_mod)
+
+  def _get_symbol_module(self, symbol):
+    """Get the _SpecializedModule for a symbol."""
+    return self._symbol_modules[symbol]
+
+  def _get_module_symbol(self, spec_mod):
+    """Get the symbol for a module or its associated _SpecializedModule."""
+    if not isinstance(spec_mod, _SpecializedModule):
+      if not hasattr(spec_mod, "_pycde_mod"):
+        raise TypeError("Expected _SpecializedModule or pycde module")
+      spec_mod = spec_mod._pycde_mod
+    if spec_mod not in self._module_symbols:
+      return None
+    return self._module_symbols[spec_mod]
+
+  def _get_circt_mod(self, spec_mod):
+    """Get the CIRCT module op for a PyCDE module."""
+    return self.symbols[self._get_module_symbol(spec_mod)]
 
   @staticmethod
   def current():
@@ -111,24 +154,18 @@ class System:
         m = self._generate_queue.pop()
         m.generate()
         i += 1
+    return len(self._generate_queue)
 
-  # Broken ATM
-  def get_instance(self, mod_name: str) -> Instance:
-    raise NotImplementedError()
+  def get_instance(self, mod_cls: object) -> Instance:
     assert self.passed
-    root_mod = self.get_module(mod_name)
-    return Instance(root_mod, None, None, self)
-
-  # Broken ATM
-  def walk_instances(self, root_mod, callback) -> None:
-    """Walk the instance hierachy, calling 'callback' on each instance."""
-    assert self.passed
-    inst = Instance(root_mod, None, None, self)
-    inst.walk_instances(callback)
+    return Instance(mod_cls, None, None, self)
 
   def run_passes(self):
     if self.passed:
       return
+    if len(self._generate_queue) > 0:
+      print("WARNING: running lowering passes on partially generated design!",
+            file=sys.stderr)
     pm = mlir.passmanager.PassManager.parse(",".join(self.passes))
     # Invalidate the symbol cache
     self._symbols = None
@@ -140,6 +177,7 @@ class System:
     self.run_passes()
     circt.export_verilog(self.mod, out_stream)
 
-  def print_tcl(self, top_module: str, out_stream: typing.TextIO = sys.stdout):
+  def print_tcl(self, top_module: type, out_stream: typing.TextIO = sys.stdout):
     self.run_passes()
-    msft.export_tcl(self.get_module(top_module).operation, out_stream)
+    spec_mod_symbol = self._module_symbols[top_module._pycde_mod]
+    circt.msft.export_tcl(self._symbols[spec_mod_symbol], out_stream)
