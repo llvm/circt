@@ -12,6 +12,7 @@
 
 #include "FIRAnnotations.h"
 
+#include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -25,6 +26,9 @@ namespace json = llvm::json;
 
 using namespace circt;
 using namespace firrtl;
+
+static constexpr const char *omirAnnotationClass =
+    "freechips.rocketchip.objectmodel.OMIRAnnotation";
 
 /// Split a target into a base target (including a reference if one exists) and
 /// an optional array of subfield/subindex tokens.
@@ -427,6 +431,153 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
 
     annotationMap[a] = ArrayAttr::get(context, mutableAnnotationMap[a]);
   }
+
+  return true;
+}
+
+bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
+                                 llvm::StringMap<ArrayAttr> &annotationMap,
+                                 json::Path path, CircuitOp circuit) {
+  auto *context = circuit.getContext();
+
+  // The JSON value must be an array of objects.  Anything else is reported as
+  // invalid.
+  auto *array = value.getAsArray();
+  if (!array) {
+    path.report(
+        "Expected OMIR to be an array of nodes, but found something else.");
+    return false;
+  }
+
+  // Generate an arbitrary identifier to use for caching when using
+  // `maybeStringToLocation`.
+  Identifier locatorFilenameCache = Identifier::get(".", context);
+  FileLineColLoc fileLineColLocCache;
+
+  // Build a mutable map of Target to Annotation.
+  SmallVector<Attribute> omnodes;
+  for (size_t i = 0, e = (*array).size(); i != e; ++i) {
+    auto *object = (*array)[i].getAsObject();
+    auto p = path.index(i);
+    if (!object) {
+      p.report("Expected OMIR to be an array of objects, but found an array of "
+               "something else.");
+      return false;
+    }
+
+    // Manually built up OMNode.
+    NamedAttrList omnode;
+
+    // Validate that this looks like an OMNode.  This should have three fields:
+    //   - "info": String
+    //   - "id": String that starts with "OMID:"
+    //   - "fields": Array<Object>
+    // Fields is optional and is a dictionary encoded as an array of objects:
+    //   - "info": String
+    //   - "name": String
+    //   - "value": JSON
+    // The dictionary is keyed by the "name" member and the array of fields is
+    // guaranteed to not have collisions of the "name" key.
+    auto maybeInfo = object->getString("info");
+    if (!maybeInfo) {
+      p.report("OMNode missing mandatory member \"info\" with type \"string\"");
+      return false;
+    }
+    auto info =
+        maybeStringToLocation(maybeInfo.getValue(), false, locatorFilenameCache,
+                              fileLineColLocCache, context);
+    if (!info.first || !info.second.hasValue()) {
+      p.field("info").report(
+          "OMField member \"info\" has invalid format source locator "
+          "format");
+      return false;
+    }
+    auto maybeID = object->getString("id");
+    if (!maybeID || !maybeID.getValue().startswith("OMID:")) {
+      p.report("OMNode missing mandatory member \"id\" with type \"string\" "
+               "that starts with \"OMID:\"");
+      return false;
+    }
+    auto *maybeFields = object->get("fields");
+    if (maybeFields && !maybeFields->getAsArray()) {
+      p.report("OMNode has \"fields\" member with incorrect type (expected "
+               "\"array\")");
+      return false;
+    }
+    Attribute fields;
+    if (!maybeFields)
+      fields = DictionaryAttr::get(context, {});
+    else {
+      auto array = *maybeFields->getAsArray();
+      NamedAttrList fieldAttrs;
+      for (size_t i = 0, e = array.size(); i != e; ++i) {
+        auto *field = array[i].getAsObject();
+        auto pI = p.field("fields").index(i);
+        if (!field) {
+          pI.report("OMNode has field that is not an \"object\"");
+          return false;
+        }
+        auto maybeInfo = field->getString("info");
+        if (!maybeInfo) {
+          pI.report(
+              "OMField missing mandatory member \"info\" with type \"string\"");
+          return false;
+        }
+        auto info = maybeStringToLocation(maybeInfo.getValue(), false,
+                                          locatorFilenameCache,
+                                          fileLineColLocCache, context);
+        if (!info.first || !info.second.hasValue()) {
+          pI.field("info").report(
+              "OMField member \"info\" has invalid format source locator "
+              "format");
+          return false;
+        }
+        auto maybeName = field->getString("name");
+        if (!maybeName) {
+          pI.report(
+              "OMField missing mandatory member \"name\" with type \"string\"");
+          return false;
+        }
+        auto *maybeValue = field->get("value");
+        if (!maybeValue) {
+          pI.report("OMField missing mandatory member \"value\"");
+          return false;
+        }
+        NamedAttrList values;
+        values.append("info", info.second.getValue());
+        values.append("value", convertJSONToAttribute(context, *maybeValue,
+                                                      pI.field("value")));
+        fieldAttrs.append(maybeName.getValue(),
+                          DictionaryAttr::get(context, values));
+      }
+      fields = DictionaryAttr::get(context, fieldAttrs);
+    }
+
+    omnode.append("info", info.second.getValue());
+    omnode.append("id", convertJSONToAttribute(context, *object->get("id"),
+                                               p.field("id")));
+    omnode.append("fields", fields);
+    omnodes.push_back(DictionaryAttr::get(context, omnode));
+  }
+
+  NamedAttrList omirAnnoFields;
+  omirAnnoFields.append("class", StringAttr::get(context, omirAnnotationClass));
+  omirAnnoFields.append("nodes", ArrayAttr::get(context, omnodes));
+
+  DictionaryAttr omirAnno = DictionaryAttr::get(context, omirAnnoFields);
+
+  // If no circuit annotations exist, just insert the OMIRAnnotation.
+  auto &oldAnnotations = annotationMap["~"];
+  if (!oldAnnotations) {
+    oldAnnotations = ArrayAttr::get(context, {omirAnno});
+    return true;
+  }
+
+  // Rewrite the ArrayAttr for the circuit.
+  SmallVector<Attribute> newAnnotations(oldAnnotations.begin(),
+                                        oldAnnotations.end());
+  newAnnotations.push_back(omirAnno);
+  oldAnnotations = ArrayAttr::get(context, newAnnotations);
 
   return true;
 }
