@@ -25,22 +25,6 @@ using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
 
-static MlirOperation callPyFunc(MlirOperation op, void *userData) {
-  py::gil_scoped_acquire gil;
-  auto replacement = (*(py::function *)userData)(op);
-  return replacement.cast<MlirOperation>();
-}
-
-static void registerGenerator(MlirContext ctxt, std::string opName,
-                              std::string generatorName, py::function cb,
-                              MlirAttribute parameters) {
-  // Since we don't have an 'unregister' call, just allocate in forget about it.
-  py::function *cbPtr = new py::function(cb);
-  mlirMSFTRegisterGenerator(ctxt, opName.c_str(), generatorName.c_str(),
-                            mlirMSFTGeneratorCallback{&callPyFunc, cbPtr},
-                            parameters);
-}
-
 class DeviceDB {
 public:
   DeviceDB(MlirOperation top) { db = circtMSFTCreateDeviceDB(top); }
@@ -83,9 +67,6 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
     py::gil_scoped_release();
     mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
   });
-
-  m.def("register_generator", &::registerGenerator,
-        "Register a generator for a design module");
 
   mlir_attribute_subclass(m, "PhysLocationAttr",
                           circtMSFTAttributeIsAPhysLocationAttribute)

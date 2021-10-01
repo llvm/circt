@@ -34,24 +34,6 @@ MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
 }
 
 //===----------------------------------------------------------------------===//
-// Generator registration.
-//===----------------------------------------------------------------------===//
-
-void mlirMSFTRegisterGenerator(MlirContext cCtxt, const char *opName,
-                               const char *generatorName,
-                               mlirMSFTGeneratorCallback cb,
-                               MlirAttribute parameters) {
-  mlir::MLIRContext *ctxt = unwrap(cCtxt);
-  MSFTDialect *msft = ctxt->getLoadedDialect<MSFTDialect>();
-  msft->registerGenerator(
-      llvm::StringRef(opName), llvm::StringRef(generatorName),
-      [cb](mlir::Operation *op) {
-        return unwrap(cb.callback(wrap(op), cb.userData));
-      },
-      unwrap(parameters));
-}
-
-//===----------------------------------------------------------------------===//
 // DeviceDB.
 //===----------------------------------------------------------------------===//
 
