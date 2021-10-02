@@ -20,18 +20,28 @@ using namespace msft;
 // not an immediate goal.
 //===----------------------------------------------------------------------===//
 
-PlacementDB::PlacementDB(Operation *top) : ctxt(top->getContext()), top(top) {}
+PlacementDB::PlacementDB(Operation *top)
+    : ctxt(top->getContext()), top(top), seeded(false) {}
+PlacementDB::PlacementDB(Operation *top, const DeviceDB &seed)
+    : ctxt(top->getContext()), top(top), seeded(false) {
+
+  seed.foreach ([this](PhysLocationAttr loc) { (void)addPlacement(loc, {}); });
+  seeded = true;
+}
 
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
 LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
                                         PlacedInstance inst) {
-  PlacedInstance &cell = placements[loc.getX()][loc.getY()][loc.getNum()]
-                                   [loc.getPrimitiveType().getValue()];
-  if (cell.op != nullptr)
+
+  Optional<PlacedInstance *> leaf = getLeaf(loc);
+  if (!leaf)
+    return inst.op->emitOpError("Could not apply placement. Invalid location");
+  PlacedInstance *cell = *leaf;
+  if (cell->op != nullptr)
     return inst.op->emitOpError("Could not apply placement ")
-           << loc << ". Position already occupied by " << cell.op << ".";
-  cell = inst;
+           << loc << ". Position already occupied by " << cell->op << ".";
+  *cell = inst;
   return success();
 }
 
@@ -100,6 +110,23 @@ PlacementDB::getInstanceAt(PhysLocationAttr loc) {
   if (instF == innerMap.end())
     return {};
   return instF->getSecond();
+}
+
+Optional<PlacementDB::PlacedInstance *>
+PlacementDB::getLeaf(PhysLocationAttr loc) {
+  PrimitiveType primType = loc.getPrimitiveType().getValue();
+
+  DimNumMap &nums = placements[loc.getX()][loc.getY()];
+  if (!seeded)
+    return &nums[loc.getNum()][primType];
+
+  auto primitivesF = nums.find(loc.getNum());
+  if (primitivesF == nums.end())
+    return {};
+  auto primitives = primitivesF->second;
+  if (primitives.count(primType) == 0)
+    return {};
+  return &primitives[primType];
 }
 
 /// Walker for placements.
