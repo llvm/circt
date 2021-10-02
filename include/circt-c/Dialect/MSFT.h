@@ -31,6 +31,19 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        void *userData);
 
 //===----------------------------------------------------------------------===//
+// DeviceDB.
+//===----------------------------------------------------------------------===//
+
+typedef struct {
+  void *ptr;
+} CirctMSFTDeviceDB;
+
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB();
+void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
+MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB,
+                                                MlirAttribute locAndPrim);
+
+//===----------------------------------------------------------------------===//
 // PlacementDB.
 //===----------------------------------------------------------------------===//
 
@@ -67,13 +80,13 @@ MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
                                                     long y, long num);
 
 // Values represented in `MSFT.td`.
-typedef uint32_t CirctMSFTDevType;
+typedef uint32_t CirctMSFTPrimitiveType;
 
 bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
-MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTDevType,
+MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTPrimitiveType,
                                            uint64_t x, uint64_t y,
                                            uint64_t num);
-CirctMSFTDevType circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute);
+CirctMSFTPrimitiveType circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);

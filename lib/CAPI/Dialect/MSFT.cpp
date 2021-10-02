@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -31,6 +32,20 @@ MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
     return wrap(op->emitOpError("Export TCL can only be run on HWModules"));
   mlir::detail::CallbackOstream stream(callback, userData);
   return wrap(exportQuartusTcl(hwmod, stream));
+}
+
+//===----------------------------------------------------------------------===//
+// DeviceDB.
+//===----------------------------------------------------------------------===//
+
+DEFINE_C_API_PTR_METHODS(CirctMSFTDeviceDB, circt::msft::DeviceDB)
+
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB() { return wrap(new DeviceDB()); }
+void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self) { delete unwrap(self); }
+MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB self,
+                                                MlirAttribute cLoc) {
+  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  return wrap(unwrap(self)->addPrimitive(loc));
 }
 
 //===----------------------------------------------------------------------===//
@@ -96,27 +111,29 @@ bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute attr) {
   return unwrap(attr).isa<PhysLocationAttr>();
 }
 MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext cCtxt,
-                                           CirctMSFTDevType devType, uint64_t x,
-                                           uint64_t y, uint64_t num) {
+                                           CirctMSFTPrimitiveType devType,
+                                           uint64_t x, uint64_t y,
+                                           uint64_t num) {
   auto ctxt = unwrap(cCtxt);
   return wrap(PhysLocationAttr::get(
       ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num));
 }
 
-CirctMSFTDevType circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute attr) {
-  return (CirctMSFTDevType)unwrap(attr)
+CirctMSFTPrimitiveType
+circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute attr) {
+  return (CirctMSFTPrimitiveType)unwrap(attr)
       .cast<PhysLocationAttr>()
-      .getDevType()
+      .getPrimitiveType()
       .getValue();
 }
 uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute attr) {
-  return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getX();
+  return (CirctMSFTPrimitiveType)unwrap(attr).cast<PhysLocationAttr>().getX();
 }
 uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute attr) {
-  return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getY();
+  return (CirctMSFTPrimitiveType)unwrap(attr).cast<PhysLocationAttr>().getY();
 }
 uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute attr) {
-  return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getNum();
+  return (CirctMSFTPrimitiveType)unwrap(attr).cast<PhysLocationAttr>().getNum();
 }
 
 bool circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute cAttr) {

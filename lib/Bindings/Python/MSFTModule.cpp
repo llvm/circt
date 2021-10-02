@@ -25,9 +25,23 @@ using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
 
+class DeviceDB {
+public:
+  DeviceDB() { db = circtMSFTCreateDeviceDB(); }
+  ~DeviceDB() { circtMSFTDeleteDeviceDB(db); }
+  bool addPrimitive(MlirAttribute locAndPrim) {
+    return mlirLogicalResultIsSuccess(
+        circtMSFTDeviceDBAddPrimitive(db, locAndPrim));
+  }
+
+private:
+  CirctMSFTDeviceDB db;
+};
+
 class PlacementDB {
 public:
   PlacementDB(MlirOperation top) { db = circtMSFTCreatePlacementDB(top); }
+  ~PlacementDB() { circtMSFTDeletePlacementDB(db); }
   size_t addDesignPlacements() {
     return circtMSFTPlacementDBAddDesignPlacements(db);
   }
@@ -143,6 +157,11 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly("num_cases", [](MlirAttribute self) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);
       });
+
+  py::class_<DeviceDB>(m, "DeviceDB")
+      .def(py::init<>())
+      .def("add_primitive", &DeviceDB::addPrimitive,
+           "Inform the DB about a new placement.", py::arg("loc_and_prim"));
 
   py::class_<PlacementDB>(m, "PlacementDB")
       .def(py::init<MlirOperation>(), py::arg("top"))

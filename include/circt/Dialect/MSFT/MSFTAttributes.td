@@ -52,6 +52,6 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
   }];
   let mnemonic = "physloc";
   let parameters = (ins
-    "PrimitiveTypeAttr":$devType,
+    "PrimitiveTypeAttr":$primitiveType,
     "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
 }

@@ -27,7 +27,7 @@ PlacementDB::PlacementDB(Operation *top) : ctxt(top->getContext()), top(top) {}
 LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
                                         PlacedInstance inst) {
   PlacedInstance &cell = placements[loc.getX()][loc.getY()][loc.getNum()]
-                                   [loc.getDevType().getValue()];
+                                   [loc.getPrimitiveType().getValue()];
   if (cell.op != nullptr)
     return inst.op->emitOpError("Could not apply placement ")
            << loc << ". Position already occupied by " << cell.op << ".";
@@ -96,7 +96,7 @@ size_t PlacementDB::addDesignPlacements() {
 Optional<PlacementDB::PlacedInstance>
 PlacementDB::getInstanceAt(PhysLocationAttr loc) {
   auto innerMap = placements[loc.getX()][loc.getY()][loc.getNum()];
-  auto instF = innerMap.find(loc.getDevType().getValue());
+  auto instF = innerMap.find(loc.getPrimitiveType().getValue());
   if (instF == innerMap.end())
     return {};
   return instF->getSecond();

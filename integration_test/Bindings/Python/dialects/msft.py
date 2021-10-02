@@ -69,7 +69,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: msft.module @msft_mod {WIDTH = 8 : i32} ()
   m.operation.print()
 
-  db = msft.DeviceDB(top.operation)
+  db = msft.PlacementDB(top.operation)
 
   assert db.get_instance_at(physAttr) is None
   place_rc = db.add_placement(physAttr, path, "subpath", resolved_inst)
@@ -90,3 +90,6 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: proc top_config { parent } {
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|ext1|subpath
   msft.export_tcl(top.operation, sys.stdout)
+
+  devdb = msft.DeviceDB()
+  devdb.add_primitive(physAttr)

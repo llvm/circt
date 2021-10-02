@@ -56,7 +56,7 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
   // and DSPs happen to have the same one, probably because they never co-exist
   // at the same location.
   char numCharacter;
-  switch (pla.getDevType().getValue()) {
+  switch (pla.getPrimitiveType().getValue()) {
   case PrimitiveType::M20K:
     s.os << "M20K";
     numCharacter = 'N';

@@ -7,6 +7,7 @@
 ##===----------------------------------------------------------------------===//
 
 add_circt_dialect_library(CIRCTMSFT
+  DeviceDB.cpp
   MSFTAttributes.cpp
   MSFTDialect.cpp
   MSFTOps.cpp
