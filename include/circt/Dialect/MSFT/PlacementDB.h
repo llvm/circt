@@ -65,7 +65,7 @@ private:
   MLIRContext *ctxt;
   Operation *top;
 
-  using DimDevType = DenseMap<DeviceType, PlacedInstance>;
+  using DimDevType = DenseMap<PrimitiveType, PlacedInstance>;
   using DimNumMap = DenseMap<size_t, DimDevType>;
   using DimYMap = DenseMap<size_t, DimNumMap>;
   using DimXMap = DenseMap<size_t, DimYMap>;

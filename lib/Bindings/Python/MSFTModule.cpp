@@ -57,9 +57,9 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
 
   m.def("get_instance", circtMSFTGetInstance, py::arg("root"), py::arg("path"));
 
-  py::enum_<DeviceType>(m, "DeviceType")
-      .value("M20K", DeviceType::M20K)
-      .value("DSP", DeviceType::DSP)
+  py::enum_<PrimitiveType>(m, "PrimitiveType")
+      .value("M20K", PrimitiveType::M20K)
+      .value("DSP", PrimitiveType::DSP)
       .export_values();
 
   m.def("export_tcl", [](MlirOperation mod, py::object fileObject) {
@@ -72,7 +72,7 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
                           circtMSFTAttributeIsAPhysLocationAttribute)
       .def_classmethod(
           "get",
-          [](py::object cls, DeviceType devType, uint64_t x, uint64_t y,
+          [](py::object cls, PrimitiveType devType, uint64_t x, uint64_t y,
              uint64_t num, MlirContext ctxt) {
             return cls(circtMSFTPhysLocationAttrGet(ctxt, (uint64_t)devType, x,
                                                     y, num));
@@ -83,20 +83,21 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly(
           "devtype",
           [](MlirAttribute self) {
-            return (DeviceType)circtMSFTPhysLocationAttrGetDeviceType(self);
+            return (PrimitiveType)circtMSFTPhysLocationAttrGetPrimitiveType(
+                self);
           })
-      .def_property_readonly("x",
-                             [](MlirAttribute self) {
-                               return (DeviceType)circtMSFTPhysLocationAttrGetX(
-                                   self);
-                             })
-      .def_property_readonly("y",
-                             [](MlirAttribute self) {
-                               return (DeviceType)circtMSFTPhysLocationAttrGetY(
-                                   self);
-                             })
+      .def_property_readonly(
+          "x",
+          [](MlirAttribute self) {
+            return (PrimitiveType)circtMSFTPhysLocationAttrGetX(self);
+          })
+      .def_property_readonly(
+          "y",
+          [](MlirAttribute self) {
+            return (PrimitiveType)circtMSFTPhysLocationAttrGetY(self);
+          })
       .def_property_readonly("num", [](MlirAttribute self) {
-        return (DeviceType)circtMSFTPhysLocationAttrGetNum(self);
+        return (PrimitiveType)circtMSFTPhysLocationAttrGetNum(self);
       });
 
   mlir_attribute_subclass(m, "RootedInstancePathAttr",

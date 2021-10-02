@@ -57,11 +57,11 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
   // at the same location.
   char numCharacter;
   switch (pla.getDevType().getValue()) {
-  case DeviceType::M20K:
+  case PrimitiveType::M20K:
     s.os << "M20K";
     numCharacter = 'N';
     break;
-  case DeviceType::DSP:
+  case PrimitiveType::DSP:
     s.os << "MPDSP";
     numCharacter = 'N';
     break;

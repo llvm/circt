@@ -63,7 +63,7 @@ bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB,
 /// and y coordinates, and number.
 MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
                                                     const char *entityName,
-                                                    DeviceType type, long x,
+                                                    PrimitiveType type, long x,
                                                     long y, long num);
 
 // Values represented in `MSFT.td`.
@@ -73,7 +73,7 @@ bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
 MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTDevType,
                                            uint64_t x, uint64_t y,
                                            uint64_t num);
-CirctMSFTDevType circtMSFTPhysLocationAttrGetDeviceType(MlirAttribute);
+CirctMSFTDevType circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);

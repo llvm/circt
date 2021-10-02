@@ -101,18 +101,18 @@ Attribute PhysLocationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
       p.parseComma() || p.parseInteger(num) || p.parseGreater())
     return Attribute();
 
-  Optional<DeviceType> devType = symbolizeDeviceType(devTypeStr);
+  Optional<PrimitiveType> devType = symbolizePrimitiveType(devTypeStr);
   if (!devType) {
     p.emitError(loc, "Unknown device type '" + devTypeStr + "'");
     return Attribute();
   }
-  DeviceTypeAttr devTypeAttr = DeviceTypeAttr::get(ctxt, *devType);
+  PrimitiveTypeAttr devTypeAttr = PrimitiveTypeAttr::get(ctxt, *devType);
   auto phy = PhysLocationAttr::get(ctxt, devTypeAttr, x, y, num);
   return phy;
 }
 
 void PhysLocationAttr::print(DialectAsmPrinter &p) const {
-  p << "physloc<" << stringifyDeviceType(getDevType().getValue()) << ", "
+  p << "physloc<" << stringifyPrimitiveType(getDevType().getValue()) << ", "
     << getX() << ", " << getY() << ", " << getNum() << '>';
 }
 

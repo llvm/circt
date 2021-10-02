@@ -125,12 +125,12 @@ void PlacementDB::walkPlacements(
         // DevType loop.
         for (auto devF = devMap.begin(), devE = devMap.end(); devF != devE;
              ++devF) {
-          DeviceType devtype = devF->getFirst();
+          PrimitiveType devtype = devF->getFirst();
           PlacedInstance inst = devF->getSecond();
 
           // Marshall and run the callback.
           PhysLocationAttr loc = PhysLocationAttr::get(
-              ctxt, DeviceTypeAttr::get(ctxt, devtype), x, y, num);
+              ctxt, PrimitiveTypeAttr::get(ctxt, devtype), x, y, num);
           callback(loc, inst);
         }
       }

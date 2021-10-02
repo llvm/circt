@@ -11,7 +11,7 @@ M20K = msft.M20K
 
 
 def placement(subpath: Union[str, list[str]],
-              devtype: msft.DeviceType,
+              devtype: msft.PrimitiveType,
               x: int,
               y: int,
               num: int = 0):

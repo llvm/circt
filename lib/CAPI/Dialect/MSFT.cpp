@@ -82,11 +82,11 @@ bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB self,
 //===----------------------------------------------------------------------===//
 
 void mlirMSFTAddPhysLocationAttr(MlirOperation cOp, const char *entityName,
-                                 DeviceType type, long x, long y, long num) {
+                                 PrimitiveType type, long x, long y, long num) {
   mlir::Operation *op = unwrap(cOp);
   mlir::MLIRContext *ctxt = op->getContext();
-  PhysLocationAttr loc =
-      PhysLocationAttr::get(ctxt, DeviceTypeAttr::get(ctxt, type), x, y, num);
+  PhysLocationAttr loc = PhysLocationAttr::get(
+      ctxt, PrimitiveTypeAttr::get(ctxt, type), x, y, num);
   llvm::SmallString<64> entity("loc:");
   entity.append(entityName);
   op->setAttr(entity, loc);
@@ -100,10 +100,10 @@ MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext cCtxt,
                                            uint64_t y, uint64_t num) {
   auto ctxt = unwrap(cCtxt);
   return wrap(PhysLocationAttr::get(
-      ctxt, DeviceTypeAttr::get(ctxt, (DeviceType)devType), x, y, num));
+      ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num));
 }
 
-CirctMSFTDevType circtMSFTPhysLocationAttrGetDeviceType(MlirAttribute attr) {
+CirctMSFTDevType circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute attr) {
   return (CirctMSFTDevType)unwrap(attr)
       .cast<PhysLocationAttr>()
       .getDevType()
