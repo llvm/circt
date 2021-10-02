@@ -112,8 +112,8 @@ Attribute PhysLocationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
 }
 
 void PhysLocationAttr::print(DialectAsmPrinter &p) const {
-  p << "physloc<" << stringifyPrimitiveType(getDevType().getValue()) << ", "
-    << getX() << ", " << getY() << ", " << getNum() << '>';
+  p << "physloc<" << stringifyPrimitiveType(getPrimitiveType().getValue())
+    << ", " << getX() << ", " << getY() << ", " << getNum() << '>';
 }
 
 Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {

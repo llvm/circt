@@ -28,6 +28,7 @@ using namespace mlir::python::adaptors;
 class PlacementDB {
 public:
   PlacementDB(MlirOperation top) { db = circtMSFTCreatePlacementDB(top); }
+  ~PlacementDB() { circtMSFTDeletePlacementDB(db); }
   size_t addDesignPlacements() {
     return circtMSFTPlacementDBAddDesignPlacements(db);
   }
