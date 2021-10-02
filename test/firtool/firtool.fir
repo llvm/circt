@@ -4,6 +4,7 @@
 ; RUN: firtool %s --format=fir -mlir -lower-to-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 ; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
 ; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --mlir --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | FileCheck %s --check-prefix=OMIR
 
 circuit test_mod : %[[{"a": "a"}]]
 
@@ -14,6 +15,18 @@ circuit test_mod : %[[{"a": "a"}]]
 ; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
 ; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation
 ; ANNOTATIONS-SAME: info = "a CircuitName Annotation"
+
+; OMIR:       #loc0 = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
+; OMIR-NEXT:  #loc1 = loc("Foo.scala":32:32)
+; OMIR-LABEL: firrtl.circuit "test_mod"
+; OMIR-SAME:  {class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+; OMIR-SAME:   nodes = [
+; OMIR-SAME:     {fields = {
+; OMIR-SAME:        stringVal = {
+; OMIR-SAME:          info = #loc0,
+; OMIR-SAME:          value = "OMString:hello"}},
+; OMIR-SAME:      id = "OMID:0",
+; OMIR-SAME:      info = #loc1}]}
 
   module test_mod :
     input clock : Clock

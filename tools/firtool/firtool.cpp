@@ -204,6 +204,11 @@ static cl::list<std::string>
                              cl::desc("Optional input annotation file"),
                              cl::CommaSeparated, cl::value_desc("filename"));
 
+static cl::list<std::string>
+    inputOMIRFilenames("omir-file",
+                       cl::desc("Optional input object model 2.0 file"),
+                       cl::CommaSeparated, cl::value_desc("filename"));
+
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
@@ -228,12 +233,23 @@ static LogicalResult
 processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
               Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Add the annotation file if one was explicitly specified.
+  unsigned numAnnotationFiles = 0;
   for (auto inputAnnotationFilename : inputAnnotationFilenames) {
     std::string annotationFilenameDetermined;
     if (!sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
                                   annotationFilenameDetermined)) {
       llvm::errs() << "cannot open input annotation file '"
                    << inputAnnotationFilename
+                   << "': No such file or directory\n";
+      return failure();
+    }
+    ++numAnnotationFiles;
+  }
+
+  for (auto file : inputOMIRFilenames) {
+    std::string filename;
+    if (!sourceMgr.AddIncludeFile(file, llvm::SMLoc(), filename)) {
+      llvm::errs() << "cannot open input annotation file '" << file
                    << "': No such file or directory\n";
       return failure();
     }
@@ -246,6 +262,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
     options.rawAnnotations = newAnno;
+    options.numAnnotationFiles = numAnnotationFiles;
     module = importFIRFile(sourceMgr, &context, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
