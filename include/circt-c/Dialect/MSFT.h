@@ -31,12 +31,12 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        void *userData);
 
 //===----------------------------------------------------------------------===//
-// DeviceDB.
+// PlacementDB.
 //===----------------------------------------------------------------------===//
 
 typedef struct {
   void *ptr;
-} CirctMSFTDeviceDB;
+} CirctMSFTPlacementDB;
 
 typedef struct {
   MlirAttribute path; // RootedInstancePathAttr.
@@ -45,14 +45,15 @@ typedef struct {
   MlirOperation op;
 } CirctMSFTPlacedInstance;
 
-CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirOperation top);
-void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
-size_t circtMSFTDeviceDBAddDesignPlacements(CirctMSFTDeviceDB);
-MlirLogicalResult circtMSFTDeviceDBAddPlacement(CirctMSFTDeviceDB,
-                                                MlirAttribute loc,
-                                                CirctMSFTPlacedInstance inst);
-bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB, MlirAttribute loc,
-                                       CirctMSFTPlacedInstance *out);
+CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top);
+void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
+size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
+MlirLogicalResult
+circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB, MlirAttribute loc,
+                                 CirctMSFTPlacedInstance inst);
+bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB,
+                                          MlirAttribute loc,
+                                          CirctMSFTPlacedInstance *out);
 
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.

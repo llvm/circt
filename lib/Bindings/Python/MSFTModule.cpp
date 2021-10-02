@@ -25,28 +25,28 @@ using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
 
-class DeviceDB {
+class PlacementDB {
 public:
-  DeviceDB(MlirOperation top) { db = circtMSFTCreateDeviceDB(top); }
+  PlacementDB(MlirOperation top) { db = circtMSFTCreatePlacementDB(top); }
   size_t addDesignPlacements() {
-    return circtMSFTDeviceDBAddDesignPlacements(db);
+    return circtMSFTPlacementDBAddDesignPlacements(db);
   }
   bool addPlacement(MlirAttribute loc, MlirAttribute path, std::string subpath,
                     MlirOperation op) {
-    return mlirLogicalResultIsSuccess(circtMSFTDeviceDBAddPlacement(
+    return mlirLogicalResultIsSuccess(circtMSFTPlacementDBAddPlacement(
         db, loc,
         CirctMSFTPlacedInstance{path, subpath.c_str(), subpath.size(), op}));
   }
   py::object getInstanceAt(MlirAttribute loc) {
     CirctMSFTPlacedInstance inst;
-    if (!circtMSFTDeviceDBTryGetInstanceAt(db, loc, &inst))
+    if (!circtMSFTPlacementDBTryGetInstanceAt(db, loc, &inst))
       return py::none();
     std::string subpath(inst.subpath, inst.subpathLength);
     return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
   }
 
 private:
-  CirctMSFTDeviceDB db;
+  CirctMSFTPlacementDB db;
 };
 
 /// Populate the msft python module.
@@ -143,14 +143,14 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);
       });
 
-  py::class_<DeviceDB>(m, "DeviceDB")
+  py::class_<PlacementDB>(m, "PlacementDB")
       .def(py::init<MlirOperation>(), py::arg("top"))
-      .def("add_design_placements", &DeviceDB::addDesignPlacements,
+      .def("add_design_placements", &PlacementDB::addDesignPlacements,
            "Add the placements already present in the design.")
-      .def("add_placement", &DeviceDB::addPlacement,
+      .def("add_placement", &PlacementDB::addPlacement,
            "Inform the DB about a new placement.", py::arg("location"),
            py::arg("path"), py::arg("subpath"), py::arg("op"))
-      .def("get_instance_at", &DeviceDB::getInstanceAt,
+      .def("get_instance_at", &PlacementDB::getInstanceAt,
            "Get the instance at location. Returns None if nothing exists "
            "there. Otherwise, returns (path, subpath, op) of the instance "
            "there.");

@@ -3,10 +3,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
-#include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/MSFT/PlacementDB.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
@@ -34,36 +34,38 @@ MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
 }
 
 //===----------------------------------------------------------------------===//
-// DeviceDB.
+// PlacementDB.
 //===----------------------------------------------------------------------===//
 
-DEFINE_C_API_PTR_METHODS(CirctMSFTDeviceDB, circt::msft::DeviceDB)
+DEFINE_C_API_PTR_METHODS(CirctMSFTPlacementDB, circt::msft::PlacementDB)
 
-CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirOperation top) {
-  return wrap(new DeviceDB(unwrap(top)));
+CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top) {
+  return wrap(new PlacementDB(unwrap(top)));
 }
-void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self) { delete unwrap(self); }
-size_t circtMSFTDeviceDBAddDesignPlacements(CirctMSFTDeviceDB self) {
+void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self) {
+  delete unwrap(self);
+}
+size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB self) {
   return unwrap(self)->addDesignPlacements();
 }
-MlirLogicalResult circtMSFTDeviceDBAddPlacement(CirctMSFTDeviceDB self,
-                                                MlirAttribute cLoc,
-                                                CirctMSFTPlacedInstance cInst) {
+MlirLogicalResult
+circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self, MlirAttribute cLoc,
+                                 CirctMSFTPlacedInstance cInst) {
   PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
   RootedInstancePathAttr path =
       unwrap(cInst.path).cast<RootedInstancePathAttr>();
   StringAttr subpath = StringAttr::get(
       loc.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
   auto inst =
-      DeviceDB::PlacedInstance{path, subpath.getValue(), unwrap(cInst.op)};
+      PlacementDB::PlacedInstance{path, subpath.getValue(), unwrap(cInst.op)};
 
   return wrap(unwrap(self)->addPlacement(loc, inst));
 }
-bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB self,
-                                       MlirAttribute cLoc,
-                                       CirctMSFTPlacedInstance *out) {
+bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB self,
+                                          MlirAttribute cLoc,
+                                          CirctMSFTPlacedInstance *out) {
   auto loc = unwrap(cLoc).cast<PhysLocationAttr>();
-  Optional<DeviceDB::PlacedInstance> inst = unwrap(self)->getInstanceAt(loc);
+  Optional<PlacementDB::PlacedInstance> inst = unwrap(self)->getInstanceAt(loc);
   if (!inst)
     return false;
   if (out != nullptr) {

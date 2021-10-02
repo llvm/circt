@@ -11,9 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
+#include "circt/Dialect/MSFT/PlacementDB.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
@@ -47,7 +47,7 @@ void emitPath(TclOutputState &s, RootedInstancePathAttr path) {
 
 /// Emit tcl in the form of:
 /// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
-static void emit(TclOutputState &s, DeviceDB::PlacedInstance inst,
+static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
                  PhysLocationAttr pla) {
 
   s.indent() << "set_location_assignment ";
@@ -89,7 +89,7 @@ static void emit(TclOutputState &s, DeviceDB::PlacedInstance inst,
 LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
                                             llvm::raw_ostream &os) {
   TclOutputState state(os);
-  DeviceDB db(hwMod);
+  PlacementDB db(hwMod);
   size_t failures = db.addDesignPlacements();
   if (failures != 0)
     return hwMod->emitError("Could not place ") << failures << " instances";
@@ -97,7 +97,7 @@ LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
   os << "proc " << hwMod.getName() << "_config { parent } {\n";
 
   db.walkPlacements(
-      [&state](PhysLocationAttr loc, DeviceDB::PlacedInstance inst) {
+      [&state](PhysLocationAttr loc, PlacementDB::PlacedInstance inst) {
         emit(state, inst, loc);
       });
 

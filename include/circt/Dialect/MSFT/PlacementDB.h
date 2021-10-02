@@ -1,4 +1,4 @@
-//===- DeviceDB.h - Device database -----------------------------*- C++ -*-===//
+//===- PlacementDB.h - Placement database -----------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_MSFT_DEVICEDB_H
-#define CIRCT_DIALECT_MSFT_DEVICEDB_H
+#ifndef CIRCT_DIALECT_MSFT_PLACEMENTDB_H
+#define CIRCT_DIALECT_MSFT_PLACEMENTDB_H
 
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 
@@ -30,10 +30,10 @@ namespace msft {
 /// transforms. As a result, this class should only be used for analysis and
 /// then thrown away. It is permissible to persist it through transformations so
 /// long as it is maintained along with the transformations.
-class DeviceDB {
+class PlacementDB {
 public:
   /// Create a DB treating 'top' as the root module.
-  DeviceDB(Operation *top);
+  PlacementDB(Operation *top);
 
   // TODO: Add calls to model the device primitive locations.
 
@@ -76,4 +76,4 @@ private:
 } // namespace msft
 } // namespace circt
 
-#endif // CIRCT_DIALECT_MSFT_DEVICEDB_H
+#endif // CIRCT_DIALECT_MSFT_PLACEMENTDB_H
