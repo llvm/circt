@@ -25,9 +25,22 @@ DeviceDB::DeviceDB() {}
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
 LogicalResult DeviceDB::addPrimitive(PhysLocationAttr loc) {
-  DenseSet<PrimitiveType> primsAtLoc =
-      placements[loc.getX()][loc.getY()][loc.getNum()];
+  DenseSet<PrimitiveType> &primsAtLoc = getLeaf(loc);
   PrimitiveType prim = loc.getPrimitiveType().getValue();
+  if (primsAtLoc.contains(prim))
+    return failure();
   primsAtLoc.insert(prim);
   return success();
+}
+
+/// Assign an instance to a primitive. Return false if another instance is
+/// already placed at that location.
+/// Check to see if a primitive exists.
+bool DeviceDB::isValidLocation(PhysLocationAttr loc) {
+  DenseSet<PrimitiveType> primsAtLoc = getLeaf(loc);
+  return primsAtLoc.contains(loc.getPrimitiveType().getValue());
+}
+
+DeviceDB::DimPrimitiveType &DeviceDB::getLeaf(PhysLocationAttr loc) {
+  return placements[loc.getX()][loc.getY()][loc.getNum()];
 }

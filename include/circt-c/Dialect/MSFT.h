@@ -42,6 +42,8 @@ CirctMSFTDeviceDB circtMSFTCreateDeviceDB();
 void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
 MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB,
                                                 MlirAttribute locAndPrim);
+bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB,
+                                      MlirAttribute locAndPrim);
 
 //===----------------------------------------------------------------------===//
 // PlacementDB.

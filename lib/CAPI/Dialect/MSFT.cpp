@@ -47,6 +47,11 @@ MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB self,
   PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
   return wrap(unwrap(self)->addPrimitive(loc));
 }
+bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB self,
+                                      MlirAttribute cLoc) {
+  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  return unwrap(self)->isValidLocation(loc);
+}
 
 //===----------------------------------------------------------------------===//
 // PlacementDB.

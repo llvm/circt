@@ -33,6 +33,9 @@ public:
     return mlirLogicalResultIsSuccess(
         circtMSFTDeviceDBAddPrimitive(db, locAndPrim));
   }
+  bool isValidLocation(MlirAttribute loc) {
+    return circtMSFTDeviceDBIsValidLocation(db, loc);
+  }
 
 private:
   CirctMSFTDeviceDB db;
@@ -161,7 +164,10 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
   py::class_<DeviceDB>(m, "DeviceDB")
       .def(py::init<>())
       .def("add_primitive", &DeviceDB::addPrimitive,
-           "Inform the DB about a new placement.", py::arg("loc_and_prim"));
+           "Inform the DB about a new placement.", py::arg("loc_and_prim"))
+      .def("is_valid_location", &DeviceDB::isValidLocation,
+           "Query the DB as to whether or not a primitive exists.",
+           py::arg("loc"));
 
   py::class_<PlacementDB>(m, "PlacementDB")
       .def(py::init<MlirOperation>(), py::arg("top"))

@@ -30,12 +30,18 @@ public:
 
   /// Place a primitive at a location.
   LogicalResult addPrimitive(PhysLocationAttr);
+  /// Check to see if a primitive exists.
+  bool isValidLocation(PhysLocationAttr);
 
 private:
-  using DimDevType = DenseSet<PrimitiveType>;
-  using DimNumMap = DenseMap<size_t, DimDevType>;
+  using DimPrimitiveType = DenseSet<PrimitiveType>;
+  using DimNumMap = DenseMap<size_t, DimPrimitiveType>;
   using DimYMap = DenseMap<size_t, DimNumMap>;
   using DimXMap = DenseMap<size_t, DimYMap>;
+
+  /// Get the leaf node. Abstract this out to make it easier to change the
+  /// underlying data structure.
+  DimPrimitiveType &getLeaf(PhysLocationAttr);
 
   DimXMap placements;
 };
