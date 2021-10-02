@@ -31,6 +31,21 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        void *userData);
 
 //===----------------------------------------------------------------------===//
+// DeviceDB.
+//===----------------------------------------------------------------------===//
+
+typedef struct {
+  void *ptr;
+} CirctMSFTDeviceDB;
+
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB();
+void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
+MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB,
+                                                MlirAttribute locAndPrim);
+bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB,
+                                      MlirAttribute locAndPrim);
+
+//===----------------------------------------------------------------------===//
 // PlacementDB.
 //===----------------------------------------------------------------------===//
 

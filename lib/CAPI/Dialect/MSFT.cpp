@@ -3,6 +3,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt-c/Dialect/MSFT.h"
+#include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -31,6 +32,25 @@ MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
     return wrap(op->emitOpError("Export TCL can only be run on HWModules"));
   mlir::detail::CallbackOstream stream(callback, userData);
   return wrap(exportQuartusTcl(hwmod, stream));
+}
+
+//===----------------------------------------------------------------------===//
+// DeviceDB.
+//===----------------------------------------------------------------------===//
+
+DEFINE_C_API_PTR_METHODS(CirctMSFTDeviceDB, circt::msft::DeviceDB)
+
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB() { return wrap(new DeviceDB()); }
+void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self) { delete unwrap(self); }
+MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB self,
+                                                MlirAttribute cLoc) {
+  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  return wrap(unwrap(self)->addPrimitive(loc));
+}
+bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB self,
+                                      MlirAttribute cLoc) {
+  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  return unwrap(self)->isValidLocation(loc);
 }
 
 //===----------------------------------------------------------------------===//

@@ -90,3 +90,8 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: proc top_config { parent } {
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|ext1|subpath
   msft.export_tcl(top.operation, sys.stdout)
+
+  devdb = msft.DeviceDB()
+  assert not devdb.is_valid_location(physAttr)
+  devdb.add_primitive(physAttr)
+  assert devdb.is_valid_location(physAttr)
