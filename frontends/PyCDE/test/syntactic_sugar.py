@@ -10,8 +10,8 @@ class Taps:
   taps = Output(dim(8, 3))
 
   @generator
-  def build(mod):
-    return {"taps": [203, 100, 23]}
+  def build(ports):
+    ports.taps = [203, 100, 23]
 
 
 @externmodule
@@ -49,13 +49,13 @@ class ComplexPorts:
   c = Output(types.i32)
 
   @generator
-  def build(mod):
-    assert len(mod.data_in) == 3
-    return {
-        'a': mod.data_in[0].reg(mod.clk).reg(mod.clk),
-        'b': mod.data_in[mod.sel],
-        'c': mod.struct_data_in.foo[:-4]
-    }
+  def build(ports):
+    assert len(ports.data_in) == 3
+    ports.set_all_ports({
+        'a': ports.data_in[0].reg(ports.clk).reg(ports.clk),
+        'b': ports.data_in[ports.sel],
+        'c': ports.struct_data_in.foo[:-4]
+    })
 
 
 top = System([Top])

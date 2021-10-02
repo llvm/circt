@@ -14,9 +14,9 @@ class CompReg:
   output = Output(types.i8)
 
   @generator
-  def build(mod):
-    compreg = seq.CompRegOp.create(types.i8, clk=mod.clk, input=mod.input)
-    return {"output": compreg.data}
+  def build(ports):
+    compreg = seq.CompRegOp.create(types.i8, clk=ports.clk, input=ports.input)
+    ports.output = compreg.data
 
 
 mod = pycde.System([CompReg])
