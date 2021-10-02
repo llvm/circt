@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Represent the possible placements and actual placements of primitives on an
-// FPGA.
+// Represent the placements of primitives on an FPGA.
 //
 //===----------------------------------------------------------------------===//
 
