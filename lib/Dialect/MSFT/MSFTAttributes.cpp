@@ -22,8 +22,7 @@ using namespace msft;
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/MSFT/MSFTAttributes.cpp.inc"
 
-static Attribute parseRootedInstancePath(MLIRContext *ctxt,
-                                         DialectAsmParser &p) {
+static Attribute parseRootedInstancePath(DialectAsmParser &p) {
   FlatSymbolRefAttr root;
   if (p.parseAttribute(root) || p.parseLSquare())
     return Attribute();
@@ -38,7 +37,7 @@ static Attribute parseRootedInstancePath(MLIRContext *ctxt,
     if (p.parseRSquare())
       return Attribute();
   }
-  return RootedInstancePathAttr::get(ctxt, root, path);
+  return RootedInstancePathAttr::get(p.getContext(), root, path);
 }
 
 static void printRootedInstancePath(RootedInstancePathAttr me,
@@ -48,29 +47,29 @@ static void printRootedInstancePath(RootedInstancePathAttr me,
   p << ']';
 }
 
-Attribute SwitchInstanceAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
-                                    Type type) {
+Attribute SwitchInstanceAttr::parse(DialectAsmParser &p, Type type) {
   if (p.parseLess())
     return Attribute();
   if (!p.parseOptionalGreater())
-    return SwitchInstanceAttr::get(ctxt, {});
+    return SwitchInstanceAttr::get(p.getContext(), {});
 
   SmallVector<SwitchInstanceCaseAttr> instPairs;
   do {
-    auto path = parseRootedInstancePath(ctxt, p)
-                    .dyn_cast_or_null<RootedInstancePathAttr>();
+    auto path =
+        parseRootedInstancePath(p).dyn_cast_or_null<RootedInstancePathAttr>();
     if (!path)
       return Attribute();
 
     Attribute attr;
     if (p.parseEqual() || p.parseAttribute(attr))
       return Attribute();
-    instPairs.push_back(SwitchInstanceCaseAttr::get(ctxt, path, attr));
+    instPairs.push_back(
+        SwitchInstanceCaseAttr::get(p.getContext(), path, attr));
   } while (!p.parseOptionalComma());
   if (p.parseGreater())
     return Attribute();
 
-  return SwitchInstanceAttr::get(ctxt, instPairs);
+  return SwitchInstanceAttr::get(p.getContext(), instPairs);
 }
 
 void SwitchInstanceAttr::print(DialectAsmPrinter &p) const {
@@ -91,8 +90,7 @@ Attribute SwitchInstanceAttr::lookup(RootedInstancePathAttr id) {
   return Attribute();
 }
 
-Attribute PhysLocationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
-                                  Type type) {
+Attribute PhysLocationAttr::parse(DialectAsmParser &p, Type type) {
   llvm::SMLoc loc = p.getCurrentLocation();
   StringRef devTypeStr;
   uint64_t x, y, num;
@@ -106,8 +104,9 @@ Attribute PhysLocationAttr::parse(MLIRContext *ctxt, DialectAsmParser &p,
     p.emitError(loc, "Unknown device type '" + devTypeStr + "'");
     return Attribute();
   }
-  PrimitiveTypeAttr devTypeAttr = PrimitiveTypeAttr::get(ctxt, *devType);
-  auto phy = PhysLocationAttr::get(ctxt, devTypeAttr, x, y, num);
+  PrimitiveTypeAttr devTypeAttr =
+      PrimitiveTypeAttr::get(p.getContext(), *devType);
+  auto phy = PhysLocationAttr::get(p.getContext(), devTypeAttr, x, y, num);
   return phy;
 }
 
@@ -121,8 +120,7 @@ Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
   Attribute attr;
   if (p.parseKeyword(&attrName))
     return Attribute();
-  auto parseResult =
-      generatedAttributeParser(getContext(), p, attrName, type, attr);
+  auto parseResult = generatedAttributeParser(p, attrName, type, attr);
   if (parseResult.hasValue())
     return attr;
   p.emitError(p.getNameLoc(), "Unexpected msft attribute '" + attrName + "'");
