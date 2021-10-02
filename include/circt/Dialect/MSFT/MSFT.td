@@ -36,12 +36,6 @@ def MSFTDialect : Dialect {
   let extraClassDeclaration = [{
     /// Register all MSFT attributes.
     void registerAttributes();
-
-    void registerGenerator(StringRef opName, StringRef generatorName,
-                           GeneratorCallback cb, Attribute parameters);
-
-    /// Generator details don't need to be exposed.
-    llvm::ManagedStatic<detail::Generators> generators;
   }];
 }
 
