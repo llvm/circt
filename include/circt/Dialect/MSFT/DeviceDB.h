@@ -26,12 +26,16 @@ namespace msft {
 class DeviceDB {
 public:
   /// Create a DB treating 'top' as the root module.
-  DeviceDB();
+  DeviceDB(MLIRContext *);
 
   /// Place a primitive at a location.
   LogicalResult addPrimitive(PhysLocationAttr);
   /// Check to see if a primitive exists.
   bool isValidLocation(PhysLocationAttr);
+
+  /// Iterate over all the primitive locations, executing 'callback' on each
+  /// one.
+  void foreach (function_ref<void(PhysLocationAttr)> callback) const;
 
 private:
   using DimPrimitiveType = DenseSet<PrimitiveType>;
@@ -42,8 +46,10 @@ private:
   /// Get the leaf node. Abstract this out to make it easier to change the
   /// underlying data structure.
   DimPrimitiveType &getLeaf(PhysLocationAttr);
+  // TODO: Create read-only version of getLeaf.
 
   DimXMap placements;
+  MLIRContext *ctxt;
 };
 
 } // namespace msft
