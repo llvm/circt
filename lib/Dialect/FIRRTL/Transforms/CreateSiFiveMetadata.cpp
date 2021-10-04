@@ -222,12 +222,13 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
         metadataDir = dir.cast<StringAttr>().getValue().str();
     }
   }
+  // Use unknown loc to avoid printing the location in the metadata files.
   auto tbVerbatimOp =
-      builder.create<sv::VerbatimOp>(circuitOp.getLoc(), testBenchJsonBuffer);
+      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), testBenchJsonBuffer);
   auto dutVerbatimOp =
-      builder.create<sv::VerbatimOp>(circuitOp.getLoc(), dutJsonBuffer);
+      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), dutJsonBuffer);
   auto confVerbatimOp =
-      builder.create<sv::VerbatimOp>(circuitOp.getLoc(), seqMemConfStr);
+      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
   if (!metadataDir.empty()) {
     auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
         context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
