@@ -34,6 +34,41 @@ calyx.program "main" {
 // -----
 
 calyx.program "main" {
+  calyx.component @foo(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+  calyx.component @main(%in: i16, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c1_1 = hw.constant 1 : i1
+    // expected-error @+1 {{'calyx.instance' op with instance symbol: c is already a symbol for another instance.}}
+    calyx.instance @c @foo : i1, i1, i1, i1
+    calyx.instance @c @foo : i1, i1, i1, i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program "main" {
+  calyx.component @foo(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c1_1 = hw.constant 1 : i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+  calyx.component @main(%in: i16, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
+    %c1_1 = hw.constant 1 : i1
+    // expected-error @+1 {{instance symbol: foo is already a symbol for another component.}}
+    calyx.instance @foo @foo : i1, i1, i1, i1
+    calyx.wires { calyx.assign %done = %c1_1 : i1 }
+    calyx.control {}
+  }
+}
+
+// -----
+
+calyx.program "main" {
   // expected-error @+1 {{'calyx.component' op requires exactly one of each: 'calyx.wires', 'calyx.control'.}}
   calyx.component @main(%go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%done: i1 {done}) {
     calyx.control {}

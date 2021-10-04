@@ -58,6 +58,7 @@ def ProgramOp : CalyxContainer<"program", [
 
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
+    SymbolTable,
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
