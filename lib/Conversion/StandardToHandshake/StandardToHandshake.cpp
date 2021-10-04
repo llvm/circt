@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
+#include "circt/Conversion/StandardToHandshake.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"

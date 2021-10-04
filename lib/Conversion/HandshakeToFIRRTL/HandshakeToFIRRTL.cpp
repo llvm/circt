@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
+#include "circt/Conversion/HandshakeToFIRRTL.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
