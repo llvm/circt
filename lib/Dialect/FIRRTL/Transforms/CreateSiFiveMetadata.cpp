@@ -475,9 +475,8 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       dutModuleSet.insert(node->getModule());
     });
   }
-  auto memFail = emitMemoryMetadata();
   if (failed(emitRetimeModulesMetadata()) ||
-      failed(emitSitestBlackboxMetadata()) || failed(memFail))
+      failed(emitSitestBlackboxMetadata()) || failed(emitMemoryMetadata()))
     return signalPassFailure();
 
   // This pass does not modify the hierarchy.
