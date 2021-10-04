@@ -979,7 +979,8 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
                                   ArrayRef<StringRef> portNames) {
   assert(isa<CellInterface>(op) && "must implement the Cell interface");
 
-  auto instanceName = op->getAttrOfType<StringAttr>("instanceName").getValue();
+  auto instanceName =
+      op->getAttrOfType<FlatSymbolRefAttr>("instanceName").getValue();
   std::string prefix = instanceName.str() + ".";
   for (size_t i = 0, e = portNames.size(); i != e; ++i)
     setNameFn(op->getResult(i), prefix + portNames[i].str());
@@ -1171,11 +1172,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 /// Provide meaningful names to the result values of an InstanceOp.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  Operation* op = *this;
-  auto instanceName = op->getAttrOfType<FlatSymbolRefAttr>("instanceName").getValue();
-  std::string prefix = instanceName.str() + ".";
-  for (size_t i = 0, e = portNames().size(); i != e; ++i)
-    setNameFn(op->getResult(i), prefix + portNames()[i].str());
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
 }
 
 SmallVector<StringRef> InstanceOp::portNames() {
@@ -1343,9 +1340,10 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
-                     Twine instanceName, int64_t width, ArrayRef<int64_t> sizes,
+                     StringRef instanceName, int64_t width, ArrayRef<int64_t> sizes,
                      ArrayRef<int64_t> addrSizes) {
-  state.addAttribute("instanceName", builder.getStringAttr(instanceName));
+  state.addAttribute("instanceName", FlatSymbolRefAttr::get(
+                                         builder.getContext(), instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));

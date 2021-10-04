@@ -15,7 +15,7 @@ calyx.program "main" {
 
   // CHECK-LABEL: component B(in: 1, @go go: 1, @clk clk: 1, @reset reset: 1) -> (out: 1, @done done: 1) {
   calyx.component @B(%in: i1, %go: i1 {go}, %clk: i1 {clk}, %reset: i1 {reset}) -> (%out: i1, %done: i1 {done}) {
-    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i1, i1, i1, i1, i1, i1
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i1, i1, i1, i1, i1, i1
     %c1_1 = hw.constant 1 : i1
     calyx.wires {
       calyx.group @RegisterWrite {
@@ -53,11 +53,11 @@ calyx.program "main" {
     // CHECK-NEXT:    @generated s0 = std_slice(32, 8);
     %c0.in, %c0.go, %c0.clk, %c0.reset, %c0.out, %c0.done = calyx.instance @c0 @A : i32, i1, i1, i1, i32, i1
     %c1.in, %c1.go, %c1.clk, %c1.reset, %c1.out, %c1.done = calyx.instance @c1 @B {not_calyx_attr="foo", precious} : i1, i1, i1, i1, i1, i1
-    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i8, i1, i1, i1, i8, i1
-    %m0.addr0, %m0.write_data, %m0.write_en, %m0.clk, %m0.read_data, %m0.done = calyx.memory "m0"<[1] x 32> [1] {external = 32} : i1, i32, i1, i1, i32, i1
-    %m1.addr0, %m1.addr1, %m1.write_data, %m1.write_en, %m1.clk, %m1.read_data, %m1.done = calyx.memory "m1"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
-    %a0.left, %a0.right, %a0.out = calyx.std_add "a0" {generated} : i32, i32, i32
-    %s0.in, %s0.out = calyx.std_slice "s0" {generated} : i32, i8
+    %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i8, i1, i1, i1, i8, i1
+    %m0.addr0, %m0.write_data, %m0.write_en, %m0.clk, %m0.read_data, %m0.done = calyx.memory @m0 <[1] x 32> [1] {external = 32} : i1, i32, i1, i1, i32, i1
+    %m1.addr0, %m1.addr1, %m1.write_data, %m1.write_en, %m1.clk, %m1.read_data, %m1.done = calyx.memory @m1 <[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
+    %a0.left, %a0.right, %a0.out = calyx.std_add @a0 {generated} : i32, i32, i32
+    %s0.in, %s0.out = calyx.std_slice @s0 {generated} : i32, i8
     %c0 = hw.constant 0 : i1
     %c1 = hw.constant 1 : i1
     %c1_i32 = hw.constant 1 : i32

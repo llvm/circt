@@ -205,9 +205,9 @@ public:
     IRRewriter::InsertionGuard guard(rewriter);
     rewriter.setInsertionPoint(compOp.getBody(), compOp.getBody()->begin());
     auto name = TLibraryOp::getOperationName().split(".").second;
-    auto uniqueName = getUniqueName(name);
-    return rewriter.create<TLibraryOp>(loc, rewriter.getStringAttr(uniqueName),
-                                       resTypes);
+    return rewriter.create<TLibraryOp>(
+        loc, FlatSymbolRefAttr::get(rewriter.getContext(), getUniqueName(name)),
+        resTypes);
   }
 
   /// Register value v as being evaluated when scheduling group.
@@ -574,8 +574,8 @@ static calyx::RegisterOp createReg(ComponentLoweringState &compState,
                                    Twine prefix, size_t width) {
   IRRewriter::InsertionGuard guard(rewriter);
   rewriter.setInsertionPointToStart(compState.getComponentOp().getBody());
-  return rewriter.create<calyx::RegisterOp>(
-      loc, rewriter.getStringAttr(prefix + "_reg"), width);
+  return rewriter.create<calyx::RegisterOp>(loc, (prefix + "_reg").str(),
+                                            width);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1951,7 +1951,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&...args) {
+                      PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1960,7 +1960,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&...args) {
+                        PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(

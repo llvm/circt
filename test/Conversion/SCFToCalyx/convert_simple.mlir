@@ -4,10 +4,10 @@
 // CHECK-NEXT:   calyx.program "main" {
 // CHECK-LABEL:    calyx.component @main(%in0: i32, %in1: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
-// CHECK-DAG:        %std_sub_0.left, %std_sub_0.right, %std_sub_0.out = calyx.std_sub "std_sub_0" : i32, i32, i32
-// CHECK-DAG:        %std_lsh_0.left, %std_lsh_0.right, %std_lsh_0.out = calyx.std_lsh "std_lsh_0" : i32, i32, i32
-// CHECK-DAG:        %std_add_0.left, %std_add_0.right, %std_add_0.out = calyx.std_add "std_add_0" : i32, i32, i32
-// CHECK-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register "ret_arg0_reg" : i32, i1, i1, i1, i32, i1
+// CHECK-DAG:        %std_sub_0.left, %std_sub_0.right, %std_sub_0.out = calyx.std_sub @std_sub_0 : i32, i32, i32
+// CHECK-DAG:        %std_lsh_0.left, %std_lsh_0.right, %std_lsh_0.out = calyx.std_lsh @std_lsh_0 : i32, i32, i32
+// CHECK-DAG:        %std_add_0.left, %std_add_0.right, %std_add_0.out = calyx.std_add @std_add_0 : i32, i32, i32
+// CHECK-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
 // CHECK-NEXT:         calyx.group @ret_assign_0  {
@@ -47,8 +47,8 @@ module {
 // CHECK-NEXT:   calyx.program "main"  {
 // CHECK-LABEL:    calyx.component @main(%in0: i32, %in1: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %out1: i32, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
-// CHECK-DAG:        %ret_arg1_reg.in, %ret_arg1_reg.write_en, %ret_arg1_reg.clk, %ret_arg1_reg.reset, %ret_arg1_reg.out, %ret_arg1_reg.done = calyx.register "ret_arg1_reg" : i32, i1, i1, i1, i32, i1
-// CHECK-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register "ret_arg0_reg" : i32, i1, i1, i1, i32, i1
+// CHECK-DAG:        %ret_arg1_reg.in, %ret_arg1_reg.write_en, %ret_arg1_reg.clk, %ret_arg1_reg.reset, %ret_arg1_reg.out, %ret_arg1_reg.done = calyx.register @ret_arg1_reg : i32, i1, i1, i1, i32, i1
+// CHECK-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.assign %out1 = %ret_arg1_reg.out : i32
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
