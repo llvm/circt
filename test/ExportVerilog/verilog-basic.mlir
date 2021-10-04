@@ -1,4 +1,4 @@
-// RUN: circt-translate %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
 // CHECK-NEXT: input a, b);

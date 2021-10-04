@@ -20,7 +20,6 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
-#include "circt/Translation/TranslationPasses.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -3968,27 +3967,4 @@ struct ExportSplitVerilogPass
 std::unique_ptr<mlir::Pass>
 circt::translations::createExportSplitVerilogPass(StringRef directory) {
   return std::make_unique<ExportSplitVerilogPass>(directory);
-}
-
-//===----------------------------------------------------------------------===//
-// Registration
-//===----------------------------------------------------------------------===//
-
-void circt::registerToVerilogTranslation() {
-  // Register the circt emitter command line options.
-  registerLoweringCLOptions();
-  // Register the circt emitter translation.
-  mlir::TranslateFromMLIRRegistration toVerilog(
-      "export-verilog",
-      [](ModuleOp module, llvm::raw_ostream &os) {
-        // ExportVerilog requires that the SV dialect be loaded in order to
-        // create WireOps. It may not have been  loaded by the MLIR parser,
-        // which can happen if the input IR has no SV operations.
-        module->getContext()->loadDialect<sv::SVDialect>();
-        applyLoweringCLOptions(module);
-        return exportVerilog(module, os);
-      },
-      [](mlir::DialectRegistry &registry) {
-        registry.insert<CombDialect, HWDialect, SVDialect>();
-      });
 }

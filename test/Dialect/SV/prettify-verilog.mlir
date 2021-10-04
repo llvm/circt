@@ -1,5 +1,5 @@
 // RUN: circt-opt -prettify-verilog %s | FileCheck %s
-// RUN: circt-opt -prettify-verilog %s | circt-translate  --export-verilog | FileCheck %s --check-prefix=VERILOG
+// RUN: circt-opt -prettify-verilog %s | circt-opt --export-verilog | FileCheck %s --check-prefix=VERILOG
 
 // CHECK-LABEL: hw.module @unary_ops
 hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)

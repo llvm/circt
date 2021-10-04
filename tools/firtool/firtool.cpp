@@ -23,7 +23,6 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Translation/ExportVerilog.h"
-#include "circt/Translation/TranslationPasses.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"

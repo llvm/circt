@@ -1,6 +1,6 @@
-// RUN: circt-translate --lowering-options=emittedLineLength=40 --export-verilog %s | FileCheck %s --check-prefix=SHORT
-// RUN: circt-translate  --export-verilog %s | FileCheck %s --check-prefix=DEFAULT
-// RUN: circt-translate --lowering-options=emittedLineLength=180 --export-verilog %s | FileCheck %s --check-prefix=LONG
+// RUN: circt-opt --lowering-options=emittedLineLength=40 --export-verilog %s | FileCheck %s --check-prefix=SHORT
+// RUN: circt-opt --export-verilog %s | FileCheck %s --check-prefix=DEFAULT
+// RUN: circt-opt --lowering-options=emittedLineLength=180 --export-verilog %s | FileCheck %s --check-prefix=LONG
 
 hw.module @longvariadic(%a: i8) -> (b: i8) {
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,

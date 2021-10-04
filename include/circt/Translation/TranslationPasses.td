@@ -15,7 +15,7 @@
 
 include "mlir/Pass/PassBase.td"
 
-def ExportVerilogFilePass : Pass<"export-verilog-file", "mlir::ModuleOp"> {
+def ExportVerilogFilePass : Pass<"export-verilog", "mlir::ModuleOp"> {
   let summary = "Emit the IR to a (System)Verilog file";
   let description = [{
       This pass creates empty module bodies for external modules.  This is

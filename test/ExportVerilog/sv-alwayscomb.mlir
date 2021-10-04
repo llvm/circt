@@ -1,6 +1,6 @@
-// RUN: circt-translate --split-input-file --export-verilog %s | FileCheck %s --check-prefix=DEFAULT
-// RUN: circt-translate --lowering-options= --split-input-file --export-verilog %s | FileCheck %s --check-prefix=CLEAR
-// RUN: circt-translate --lowering-options=noAlwaysComb --split-input-file --export-verilog %s | FileCheck %s --check-prefix=NOALWAYSCOMB
+// RUN: circt-opt --split-input-file --export-verilog %s | FileCheck %s --check-prefix=DEFAULT
+// RUN: circt-opt --lowering-options= --split-input-file --export-verilog %s | FileCheck %s --check-prefix=CLEAR
+// RUN: circt-opt --lowering-options=noAlwaysComb --split-input-file --export-verilog %s | FileCheck %s --check-prefix=NOALWAYSCOMB
 
 hw.module @test() {
   sv.alwayscomb {

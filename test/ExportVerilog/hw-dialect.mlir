@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog-file -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)

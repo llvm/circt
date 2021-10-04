@@ -22,7 +22,7 @@
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Translation/TranslationPasses.h"
+#include "circt/Translation/ExportVerilog.h"
 
 namespace circt {
 
