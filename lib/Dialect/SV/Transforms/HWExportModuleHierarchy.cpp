@@ -77,13 +77,16 @@ static std::string extractHierarchyFromTop(hw::HWModuleOp op,
 void HWExportModuleHierarchyPass::runOnOperation() {
   mlir::ModuleOp mlirModule = getOperation();
   auto builder = OpBuilder::atBlockEnd(mlirModule.getBody());
-  SymbolTable symbolTable(mlirModule);
+  Optional<SymbolTable> symbolTable = None;
 
   bool anythingChanged = false;
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {
     if (auto attr = op->getAttr("firrtl.moduleHierarchyFile")) {
+      if (!symbolTable)
+        symbolTable = SymbolTable(mlirModule);
       auto verbatimOp = builder.create<sv::VerbatimOp>(
-          builder.getUnknownLoc(), extractHierarchyFromTop(op, symbolTable));
+          builder.getUnknownLoc(),
+          extractHierarchyFromTop(op, symbolTable.getValue()));
       verbatimOp->setAttr("output_file", attr);
       op->removeAttr("firrtl.moduleHierarchyFile");
       anythingChanged = true;

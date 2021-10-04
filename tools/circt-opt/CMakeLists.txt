@@ -13,6 +13,7 @@ target_link_libraries(circt-opt
   CIRCTCalyxToHW
   CIRCTCalyxTransforms
   CIRCTESI
+  CIRCTExportVerilog
   CIRCTFIRRTL
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
@@ -34,7 +35,7 @@ target_link_libraries(circt-opt
   CIRCTStaticLogicOps
   CIRCTSV
   CIRCTSVTransforms
-
+  
   MLIRIR
   MLIRLLVMIR
   MLIRMemRef

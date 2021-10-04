@@ -13,6 +13,7 @@
 
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -52,6 +53,9 @@ int main(int argc, char **argv) {
   // Register test passes
   circt::test::registerAnalysisTestPasses();
   circt::test::registerSchedulingTestPasses();
+
+  // Other command line options.
+  circt::registerLoweringCLOptions();
 
   return mlir::failed(
       mlir::MlirOptMain(argc, argv, "CIRCT modular optimizer driver", registry,

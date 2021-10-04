@@ -14,7 +14,7 @@
 class CalyxPrimitive<string mnemonic, list<OpTrait> traits = []> :
   CalyxCell<mnemonic, traits> {
     let assemblyFormat = "$instanceName attr-dict `:` type(results)";
-    let arguments = (ins StrAttr:$instanceName);
+    let arguments = (ins FlatSymbolRefAttr:$instanceName);
     let skipDefaultBuilders = 1;
 }
 
@@ -31,19 +31,19 @@ def RegisterOp : CalyxPrimitive<"register", [
     The "calyx.register" op defines a register.
     ```mlir
       // A 32-bit register.
-      %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register "r" : i32, i1, i1, i1, i32, i1
+      %r.in, %r.write_en, %r.clk, %r.reset, %r.out, %r.done = calyx.register @r : i32, i1, i1, i1, i32, i1
     ```
   }];
   let results = (outs AnyType:$in, I1:$write_en, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
   let builders = [
-    OpBuilder<(ins "StringAttr":$instanceName, "size_t":$width), [{
-      $_state.addAttribute("instanceName", instanceName);
+    OpBuilder<(ins "StringRef":$instanceName, "size_t":$width), [{
+      $_state.addAttribute("instanceName", FlatSymbolRefAttr::get($_builder.getContext(), instanceName));
       Type i1Type = $_builder.getI1Type();
       Type widthType = $_builder.getIntegerType(width);
       $_state.addTypes({widthType, i1Type, i1Type, i1Type, widthType, i1Type});
     }]>,
-    OpBuilder<(ins "StringAttr":$instanceName, "Type":$type), [{
-      $_state.addAttribute("instanceName", instanceName);
+    OpBuilder<(ins "StringRef":$instanceName, "Type":$type), [{
+      $_state.addAttribute("instanceName", FlatSymbolRefAttr::get($_builder.getContext(), instanceName));
       Type i1Type = $_builder.getI1Type();
       $_state.addTypes({type, i1Type, i1Type, i1Type, type, i1Type});
     }]>
@@ -75,16 +75,16 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
     ```mlir
       // A 1-dimensional, 32-bit memory with size dimension 1. Equivalent representation in the native compiler:
       // `m1 = std_mem_d1(32, 1, 1)`
-      %m1.addr0, %m1.write_data, %m1.write_en, %m1.clk, %m1.read_data, %m1.done = calyx.memory "m1"<[1] x 32> [1] : i1, i32, i1, i1, i32, i1
+      %m1.addr0, %m1.write_data, %m1.write_en, %m1.clk, %m1.read_data, %m1.done = calyx.memory @m1 <[1] x 32> [1] : i1, i32, i1, i1, i32, i1
 
       // A 2-dimensional, 8-bit memory with size dimensions 64 x 64. Equivalent representation in the native compiler:
       // `m2 = std_mem_d2(8, 64, 64, 6, 6)`
-      %m2.addr0, %m2.addr1, %m2.write_data, %m2.write_en, %m2.clk, %m2.read_data, %m2.done = calyx.memory "m2"<[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
+      %m2.addr0, %m2.addr1, %m2.write_data, %m2.write_en, %m2.clk, %m2.read_data, %m2.done = calyx.memory @m2 <[64, 64] x 8> [6, 6] : i6, i6, i8, i1, i1, i8, i1
     ```
   }];
 
   let arguments = (ins
-    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$instanceName,
     I64Attr:$width,
     ArrayAttr:$sizes,
     ArrayAttr:$addrSizes
@@ -95,14 +95,14 @@ def MemoryOp : CalyxPrimitive<"memory", []> {
   );
 
   let assemblyFormat = [{
-    $instanceName `<` $sizes `x` $width `>` $addrSizes attr-dict `:` type($results)
+    $instanceName ` ` `<` $sizes `x` $width `>` $addrSizes attr-dict `:` type($results)
   }];
 
   let verifier = "return ::verify$cppClass(*this);";
 
   let builders = [
     OpBuilder<(ins
-      "Twine":$instanceName,
+      "StringRef":$instanceName,
       "int64_t":$width,
       "ArrayRef<int64_t>":$sizes,
       "ArrayRef<int64_t>":$addrSizes
@@ -133,12 +133,21 @@ class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
     This operation represents an instance of a Calyx library primitive.
     A library primitive maps to some hardware-implemented component within the
     native Calyx compiler.
+
+    ```mlir
+      // A 32-bit adder.
+      %add.left, %add.right, %add.out = calyx.std_add @add : i32, i32, i32
+      // A 8-bit comparison operator (with a 1-bit output).
+      %gt.left, %gt.right, %gt.out = calyx.std_gt @gt : i8, i8, i1
+    ```
   }];
 
-  let arguments = (ins StrAttr:$instanceName);
+  let arguments = (ins FlatSymbolRefAttr:$instanceName);
   let builders = [
-    OpBuilder<(ins "StringAttr":$instanceName, "::mlir::TypeRange":$resultTypes), [{
-      $_state.addAttribute("instanceName", instanceName);
+    OpBuilder<(ins "StringRef":$instanceName, "::mlir::TypeRange":$resultTypes), [{
+      $_state.addAttribute("instanceName",
+        FlatSymbolRefAttr::get($_builder.getContext(), instanceName)
+      );
       $_state.addTypes(resultTypes);
     }]>
   ];

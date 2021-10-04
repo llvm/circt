@@ -1,5 +1,5 @@
-// RUN: circt-translate --export-verilog %s | FileCheck %s
-// RUN: circt-translate --lowering-options=disallowLocalVariables --export-verilog %s | FileCheck %s --check-prefix=DISALLOW
+// RUN: circt-opt --export-verilog %s | FileCheck %s
+// RUN: circt-opt --lowering-options=disallowLocalVariables --export-verilog %s | FileCheck %s --check-prefix=DISALLOW
 
 // This checks ExportVerilog's support for "disallowLocalVariables" which
 // prevents emitting 'automatic logic' and other local declarations.

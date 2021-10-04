@@ -43,8 +43,7 @@ Attribute HWDialect::parseAttribute(DialectAsmParser &p, Type type) const {
   Attribute attr;
   if (p.parseKeyword(&attrName))
     return Attribute();
-  auto parseResult =
-      generatedAttributeParser(getContext(), p, attrName, type, attr);
+  auto parseResult = generatedAttributeParser(p, attrName, type, attr);
   if (parseResult.hasValue())
     return attr;
 
@@ -117,8 +116,7 @@ bool OutputFileAttr::isDirectory() {
 
 /// Option         ::= 'excludeFromFileList' | 'includeReplicatedOp'
 /// OutputFileAttr ::= 'output_file<' directory ',' name (',' Option)* '>'
-Attribute OutputFileAttr::parse(MLIRContext *context, DialectAsmParser &p,
-                                Type type) {
+Attribute OutputFileAttr::parse(DialectAsmParser &p, Type type) {
   StringAttr filename;
   if (p.parseLess() || p.parseAttribute<StringAttr>(filename))
     return Attribute();
@@ -142,6 +140,8 @@ Attribute OutputFileAttr::parse(MLIRContext *context, DialectAsmParser &p,
   if (p.parseGreater())
     return Attribute();
 
+  auto *context = p.getContext();
+
   return OutputFileAttr::get(context, filename,
                              BoolAttr::get(context, excludeFromFileList),
                              BoolAttr::get(context, includeReplicatedOps));
@@ -160,8 +160,7 @@ void OutputFileAttr::print(DialectAsmPrinter &p) const {
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamDeclAttr::parse(MLIRContext *context, DialectAsmParser &p,
-                               Type type) {
+Attribute ParamDeclAttr::parse(DialectAsmParser &p, Type type) {
   llvm::errs() << "Should never parse raw\n";
   abort();
 }
@@ -177,13 +176,12 @@ void ParamDeclAttr::print(DialectAsmPrinter &p) const {
 // ParamDeclRefAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamDeclRefAttr::parse(MLIRContext *context, DialectAsmParser &p,
-                                  Type type) {
+Attribute ParamDeclRefAttr::parse(DialectAsmParser &p, Type type) {
   StringAttr name;
   if (p.parseLess() || p.parseAttribute(name) || p.parseGreater())
     return Attribute();
 
-  return ParamDeclRefAttr::get(context, name, type);
+  return ParamDeclRefAttr::get(p.getContext(), name, type);
 }
 
 void ParamDeclRefAttr::print(DialectAsmPrinter &p) const {
@@ -194,13 +192,12 @@ void ParamDeclRefAttr::print(DialectAsmPrinter &p) const {
 // ParamVerbatimAttr
 //===----------------------------------------------------------------------===//
 
-Attribute ParamVerbatimAttr::parse(MLIRContext *context, DialectAsmParser &p,
-                                   Type type) {
+Attribute ParamVerbatimAttr::parse(DialectAsmParser &p, Type type) {
   StringAttr text;
   if (p.parseLess() || p.parseAttribute(text) || p.parseGreater())
     return Attribute();
 
-  return ParamVerbatimAttr::get(context, text, type);
+  return ParamVerbatimAttr::get(p.getContext(), text, type);
 }
 
 void ParamVerbatimAttr::print(DialectAsmPrinter &p) const {
@@ -589,8 +586,7 @@ Attribute ParamExprAttr::get(PEO opcode, ArrayRef<Attribute> operandsIn) {
   return Base::get(operands[0].getContext(), opcode, operands, type);
 }
 
-Attribute ParamExprAttr::parse(MLIRContext *context, DialectAsmParser &p,
-                               Type type) {
+Attribute ParamExprAttr::parse(DialectAsmParser &p, Type type) {
   // We require an opcode suffix like `#hw.param.expr.add`, we don't allow
   // parsing a plain `#hw.param.expr` on its own.
   p.emitError(p.getNameLoc(), "#hw.param.expr should have opcode suffix");

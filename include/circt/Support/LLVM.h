@@ -159,7 +159,7 @@ struct MemRefAccess;
 struct OperationState;
 
 template <typename SourceOp>
-struct OpConversionPattern;
+class OpConversionPattern;
 template <typename T>
 class OperationPass;
 template <typename SourceOp>

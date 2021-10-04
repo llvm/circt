@@ -1,4 +1,4 @@
-// RUN: circt-translate %s --export-verilog | FileCheck %s
+// RUN: circt-opt %s --export-verilog | FileCheck %s
 
 // CHECK-LABEL: module B
 

@@ -12,11 +12,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/DependenceAnalysis.h"
+#include "mlir/Analysis/AffineStructures.h"
+#include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Transforms/LoopUtils.h"
-#include <mlir/Analysis/AffineStructures.h>
-#include <mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h>
 
 using namespace mlir;
 using namespace circt::analysis;
