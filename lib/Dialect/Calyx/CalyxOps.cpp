@@ -1171,7 +1171,11 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
 /// Provide meaningful names to the result values of an InstanceOp.
 void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  getCellAsmResultNames(setNameFn, *this, this->portNames());
+  Operation* op = *this;
+  auto instanceName = op->getAttrOfType<FlatSymbolRefAttr>("instanceName").getValue();
+  std::string prefix = instanceName.str() + ".";
+  for (size_t i = 0, e = portNames().size(); i != e; ++i)
+    setNameFn(op->getResult(i), prefix + portNames()[i].str());
 }
 
 SmallVector<StringRef> InstanceOp::portNames() {

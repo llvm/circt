@@ -187,7 +187,7 @@ def InstanceOp : CalyxCell<"instance", [
   }];
 
   let arguments = (ins
-    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$instanceName,
     FlatSymbolRefAttr:$componentName
   );
   let results = (outs Variadic<AnyType>:$results);
