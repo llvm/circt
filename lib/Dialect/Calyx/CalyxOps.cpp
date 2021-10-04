@@ -979,7 +979,8 @@ static void getCellAsmResultNames(OpAsmSetValueNameFn setNameFn, Operation *op,
                                   ArrayRef<StringRef> portNames) {
   assert(isa<CellInterface>(op) && "must implement the Cell interface");
 
-  auto instanceName = op->getAttrOfType<StringAttr>("instanceName").getValue();
+  auto instanceName =
+      op->getAttrOfType<FlatSymbolRefAttr>("instanceName").getValue();
   std::string prefix = instanceName.str() + ".";
   for (size_t i = 0, e = portNames.size(); i != e; ++i)
     setNameFn(op->getResult(i), prefix + portNames[i].str());
@@ -1127,8 +1128,23 @@ static LogicalResult verifyInstanceOpType(InstanceOp instance,
   StringRef entryPointName = program.entryPointName();
   if (instance.componentName() == entryPointName)
     return instance.emitOpError()
-           << "cannot reference the entry-point component: \"" << entryPointName
-           << "\".";
+           << "cannot reference the entry-point component: '" << entryPointName
+           << "'.";
+
+  // Verify there are no other instances with this name.
+  auto component = instance->getParentOfType<ComponentOp>();
+  StringAttr name =
+      StringAttr::get(instance.getContext(), instance.instanceName());
+  Optional<SymbolTable::UseRange> componentUseRange =
+      SymbolTable::getSymbolUses(name, component.getRegion());
+  if (componentUseRange.hasValue() &&
+      llvm::any_of(componentUseRange.getValue(),
+                   [&](SymbolTable::SymbolUse use) {
+                     return use.getUser() != instance;
+                   }))
+    return instance.emitOpError()
+           << "with instance symbol: '" << name.getValue()
+           << "' is already a symbol for another instance.";
 
   // Verify the instance result ports with those of its referenced component.
   SmallVector<PortInfo> componentPorts = referencedComponent.getPortInfo();
@@ -1153,17 +1169,25 @@ static LogicalResult verifyInstanceOpType(InstanceOp instance,
 }
 
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto *referencedComponent =
-      symbolTable.lookupNearestSymbolFrom(*this, componentNameAttr());
+  Operation *op = *this;
+  auto program = op->getParentOfType<ProgramOp>();
+  Operation *referencedComponent =
+      symbolTable.lookupNearestSymbolFrom(program, componentNameAttr());
   if (referencedComponent == nullptr)
-    return emitError() << "referencing component: " << componentName()
-                       << ", which does not exist.";
+    return emitError() << "referencing component: '" << componentName()
+                       << "', which does not exist.";
+
+  Operation *shadowedComponentName =
+      symbolTable.lookupNearestSymbolFrom(program, instanceNameAttr());
+  if (shadowedComponentName != nullptr)
+    return emitError() << "instance symbol: '" << instanceName()
+                       << "' is already a symbol for another component.";
 
   // Verify the referenced component is not instantiating itself.
-  auto parentComponent = (*this)->getParentOfType<ComponentOp>();
+  auto parentComponent = op->getParentOfType<ComponentOp>();
   if (parentComponent == referencedComponent)
-    return emitError() << "recursive instantiation of its parent component: "
-                       << componentName();
+    return emitError() << "recursive instantiation of its parent component: '"
+                       << componentName() << "'";
 
   assert(isa<ComponentOp>(referencedComponent) && "Should be a ComponentOp.");
   return verifyInstanceOpType(*this, cast<ComponentOp>(referencedComponent));
@@ -1339,9 +1363,10 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
-                     Twine instanceName, int64_t width, ArrayRef<int64_t> sizes,
-                     ArrayRef<int64_t> addrSizes) {
-  state.addAttribute("instanceName", builder.getStringAttr(instanceName));
+                     StringRef instanceName, int64_t width,
+                     ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
+  state.addAttribute("instanceName", FlatSymbolRefAttr::get(
+                                         builder.getContext(), instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
   state.addAttribute("sizes", builder.getI64ArrayAttr(sizes));
   state.addAttribute("addrSizes", builder.getI64ArrayAttr(addrSizes));

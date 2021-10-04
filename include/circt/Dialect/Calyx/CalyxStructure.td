@@ -58,6 +58,7 @@ def ProgramOp : CalyxContainer<"program", [
 
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
+    SymbolTable,
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
@@ -176,7 +177,7 @@ def InstanceOp : CalyxCell<"instance", [
     Represents an instance of a Calyx component, which may include state.
 
     ```mlir
-      %name.in, %name.out = calyx.instance "name" @MyComponent : i64, i16
+      %c.in, %c.out = calyx.instance @c of @MyComponent : i64, i16
     ```
   }];
 
@@ -187,13 +188,13 @@ def InstanceOp : CalyxCell<"instance", [
   }];
 
   let arguments = (ins
-    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$instanceName,
     FlatSymbolRefAttr:$componentName
   );
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $instanceName $componentName attr-dict (`:` type($results)^)?
+    $instanceName `of` $componentName attr-dict (`:` type($results)^)?
   }];
 }
 

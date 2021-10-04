@@ -72,7 +72,7 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         Operation* op = (*static_cast<ConcreteOp *>($_op));
-        return op->getAttrOfType<mlir::StringAttr>("instanceName").getValue();
+        return op->getAttrOfType<mlir::FlatSymbolRefAttr>("instanceName").getValue();
       }]
     >,
     InterfaceMethod<
