@@ -19,9 +19,7 @@ namespace circt {
 namespace translations {
 
 std::unique_ptr<mlir::Pass> createExportVerilogFilePass(llvm::raw_ostream &os);
-std::unique_ptr<mlir::Pass> createExportVerilogFilePass() {
-  return createExportVerilogFilePass(llvm::outs());
-}
+std::unique_ptr<mlir::Pass> createExportVerilogFilePass();
 
 std::unique_ptr<mlir::Pass>
 createExportSplitVerilogPass(llvm::StringRef directory = "./");

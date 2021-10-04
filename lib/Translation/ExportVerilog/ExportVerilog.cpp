@@ -3873,6 +3873,11 @@ circt::translations::createExportVerilogFilePass(llvm::raw_ostream &os) {
   return std::make_unique<ExportVerilogFilePass>(os);
 }
 
+std::unique_ptr<mlir::Pass>
+circt::translations::createExportVerilogFilePass() {
+  return createExportVerilogFilePass(llvm::outs());
+}
+
 //===----------------------------------------------------------------------===//
 // Split Emitter
 //===----------------------------------------------------------------------===//
