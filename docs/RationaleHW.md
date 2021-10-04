@@ -200,6 +200,15 @@ nicely named constants intended to improve readability.  This is part of the
 `sv` dialect (not the `hw` dialect) because it only makes sense as a concept
 when generating Verilog.
 
+** Compatibility with classic Verilog **
+
+Note that typed parameters are a SystemVerilog extension, many Verilog-only
+tools do not support them.  If you need compatibility with Verilog-only tools,
+please use `i32` integer, `f64`, and string parameters only.  
+
+**TODO:** CIRCT could do parameter legalization to convert parameters smaller or
+larger than 32-bits to 32-bits when generating Verilog-only output.
+
 ### Valid Parameter Expression Attributes
 
 The following attributes may be used as expressions involving parameters at

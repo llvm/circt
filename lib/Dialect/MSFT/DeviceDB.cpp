@@ -20,7 +20,7 @@ using namespace msft;
 // not an immediate goal.
 //===----------------------------------------------------------------------===//
 
-DeviceDB::DeviceDB() {}
+DeviceDB::DeviceDB(MLIRContext *ctxt) : ctxt(ctxt) {}
 
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
@@ -43,4 +43,13 @@ bool DeviceDB::isValidLocation(PhysLocationAttr loc) {
 
 DeviceDB::DimPrimitiveType &DeviceDB::getLeaf(PhysLocationAttr loc) {
   return placements[loc.getX()][loc.getY()][loc.getNum()];
+}
+
+void DeviceDB::foreach (function_ref<void(PhysLocationAttr)> callback) const {
+  for (auto x : placements)
+    for (auto y : x.second)
+      for (auto n : y.second)
+        for (auto p : n.second)
+          callback(PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, p),
+                                         x.first, y.first, n.first));
 }

@@ -3255,13 +3255,34 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   if (!module.parameters().empty()) {
     os << "\n  #(";
 
-    auto printParamType = [&](Type type, SmallString<8> &result) {
+    auto printParamType = [&](Type type, Attribute defaultValue,
+                              SmallString<8> &result) {
+      result.clear();
       llvm::raw_svector_ostream sstream(result);
-      // TODO: Don't print the type when there is a default value and an
-      // obvious match with the type (e.g. `parameter x = "string"` doesn't
-      // need an explicit type).  Plain-Verilog clients do not support
-      // type specifiers on parameters.
-      // TODO: Support some kind of 'int' type, maybe use index type?
+
+      // If there is a default value like "32" then just print without type at
+      // all.
+      if (defaultValue) {
+        if (auto intAttr = defaultValue.dyn_cast<IntegerAttr>())
+          if (intAttr.getValue().getBitWidth() == 32)
+            return;
+        if (auto fpAttr = defaultValue.dyn_cast<FloatAttr>())
+          if (fpAttr.getType().isF64())
+            return;
+        if (defaultValue.isa<StringAttr>())
+          return;
+      }
+
+      // Classic Verilog parser don't allow a type in the parameter declaration.
+      // For compatibility with them, we omit the type when it is implicit based
+      // on its initializer value, and print the type commented out when it is
+      // a 32-bit "integer" parameter.
+      if (auto intType = type_dyn_cast<IntegerType>(type))
+        if (intType.getWidth() == 32) {
+          sstream << "/*integer*/";
+          return;
+        }
+
       printPackedType(type, sstream, module,
                       /*implicitIntType=*/true,
                       // Print single-bit values as explicit `[0:0]` type.
@@ -3272,9 +3293,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     size_t maxTypeWidth = 0;
     SmallString<8> scratch;
     for (auto param : module.parameters()) {
+      auto paramAttr = param.cast<ParamDeclAttr>();
       // Measure the type length by printing it to a temporary string.
-      scratch.clear();
-      printParamType(param.cast<ParamDeclAttr>().getType().getValue(), scratch);
+      printParamType(paramAttr.getType().getValue(), paramAttr.getValue(),
+                     scratch);
       maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
     }
 
@@ -3285,17 +3307,17 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         module.parameters(), os,
         [&](Attribute param) {
           auto paramAttr = param.cast<ParamDeclAttr>();
+          auto defaultValue = paramAttr.getValue(); // may be null if absent.
           os << "parameter ";
-          scratch.clear();
-          printParamType(paramAttr.getType().getValue(), scratch);
+          printParamType(paramAttr.getType().getValue(), defaultValue, scratch);
           os << scratch;
           if (scratch.size() < maxTypeWidth)
             os.indent(maxTypeWidth - scratch.size());
 
           os << paramAttr.getName().getValue();
-          if (auto value = paramAttr.getValue()) {
+          if (defaultValue) {
             os << " = ";
-            printParamValue(value, os, [&]() {
+            printParamValue(defaultValue, os, [&]() {
               return module->emitError("parameter '")
                      << paramAttr.getName().getValue() << "' has invalid value";
             });

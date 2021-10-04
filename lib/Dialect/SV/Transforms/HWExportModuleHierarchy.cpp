@@ -79,14 +79,18 @@ void HWExportModuleHierarchyPass::runOnOperation() {
   auto builder = OpBuilder::atBlockEnd(mlirModule.getBody());
   SymbolTable symbolTable(mlirModule);
 
+  bool anythingChanged = false;
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {
     if (auto attr = op->getAttr("firrtl.moduleHierarchyFile")) {
       auto verbatimOp = builder.create<sv::VerbatimOp>(
           builder.getUnknownLoc(), extractHierarchyFromTop(op, symbolTable));
       verbatimOp->setAttr("output_file", attr);
       op->removeAttr("firrtl.moduleHierarchyFile");
+      anythingChanged = true;
     }
   }
+  if (!anythingChanged)
+    markAllAnalysesPreserved();
 }
 
 //===----------------------------------------------------------------------===//
