@@ -223,8 +223,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     }
   }
   // Use unknown loc to avoid printing the location in the metadata files.
-  auto tbVerbatimOp =
-      builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), testBenchJsonBuffer);
+  auto tbVerbatimOp = builder.create<sv::VerbatimOp>(builder.getUnknownLoc(),
+                                                     testBenchJsonBuffer);
   auto dutVerbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), dutJsonBuffer);
   auto confVerbatimOp =
