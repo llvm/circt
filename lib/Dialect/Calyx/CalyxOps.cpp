@@ -1340,8 +1340,8 @@ SmallVector<DictionaryAttr> MemoryOp::portAttributes() {
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &state,
-                     StringRef instanceName, int64_t width, ArrayRef<int64_t> sizes,
-                     ArrayRef<int64_t> addrSizes) {
+                     StringRef instanceName, int64_t width,
+                     ArrayRef<int64_t> sizes, ArrayRef<int64_t> addrSizes) {
   state.addAttribute("instanceName", FlatSymbolRefAttr::get(
                                          builder.getContext(), instanceName));
   state.addAttribute("width", builder.getI64IntegerAttr(width));
