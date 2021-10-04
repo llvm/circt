@@ -26,7 +26,7 @@ class Instance:
     self.instOp = instOp
     self.parent = parent
     if parent is None:
-      self.devicedb = msft.DeviceDB(sys._get_circt_mod(module))
+      self.devicedb = msft.PlacementDB(sys._get_circt_mod(module))
       self.devicedb.add_design_placements()
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
@@ -116,7 +116,7 @@ class Instance:
 
   def place(self,
             subpath: Union[str, list[str]],
-            devtype: msft.DeviceType,
+            devtype: msft.PrimitiveType,
             x: int,
             y: int,
             num: int = 0):

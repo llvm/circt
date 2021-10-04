@@ -36,6 +36,10 @@ bool fromJSON(llvm::json::Value &value, StringRef circuitTarget,
               llvm::StringMap<ArrayAttr> &annotationMap, llvm::json::Path path,
               CircuitOp circuit, size_t &nlaNumber);
 
+bool fromOMIRJSON(llvm::json::Value &value, StringRef circuitTarget,
+                  llvm::StringMap<ArrayAttr> &annotationMap,
+                  llvm::json::Path path, CircuitOp circuit);
+
 bool scatterCustomAnnotations(llvm::StringMap<ArrayAttr> &annotationMap,
                               CircuitOp circuit, unsigned &annotationID,
                               Location loc, size_t &nlaNumber);

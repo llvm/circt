@@ -20,119 +20,36 @@ using namespace msft;
 // not an immediate goal.
 //===----------------------------------------------------------------------===//
 
-DeviceDB::DeviceDB(Operation *top) : ctxt(top->getContext()), top(top) {}
+DeviceDB::DeviceDB(MLIRContext *ctxt) : ctxt(ctxt) {}
 
 /// Assign an instance to a primitive. Return false if another instance is
 /// already placed at that location.
-LogicalResult DeviceDB::addPlacement(PhysLocationAttr loc,
-                                     PlacedInstance inst) {
-  PlacedInstance &cell = placements[loc.getX()][loc.getY()][loc.getNum()]
-                                   [loc.getDevType().getValue()];
-  if (cell.op != nullptr)
-    return inst.op->emitOpError("Could not apply placement ")
-           << loc << ". Position already occupied by " << cell.op << ".";
-  cell = inst;
+LogicalResult DeviceDB::addPrimitive(PhysLocationAttr loc) {
+  DenseSet<PrimitiveType> &primsAtLoc = getLeaf(loc);
+  PrimitiveType prim = loc.getPrimitiveType().getValue();
+  if (primsAtLoc.contains(prim))
+    return failure();
+  primsAtLoc.insert(prim);
   return success();
 }
 
-/// Using the operation attributes, add the proper placements to the database.
-/// Return the number of placements which weren't added due to conflicts.
-size_t DeviceDB::addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *op) {
-  size_t numFailed = 0;
-  for (NamedAttribute attr : op->getAttrs()) {
-    StringRef attrName = attr.first;
-    llvm::TypeSwitch<Attribute>(attr.second)
-
-        // Handle switch instance.
-        .Case([&](SwitchInstanceAttr instSwitch) {
-          for (auto caseAttr : instSwitch.getCases()) {
-            RootedInstancePathAttr instPath = caseAttr.getInst();
-
-            // Filter out all paths which aren't related to this DB.
-            if (instPath.getRootModule() != rootMod)
-              continue;
-
-            // If we recognize the type, validate and add it.
-            if (auto loc = caseAttr.getAttr().dyn_cast<PhysLocationAttr>()) {
-              if (!attrName.startswith("loc:")) {
-                op->emitOpError(
-                    "PhysLoc attributes must have names starting with 'loc'");
-                ++numFailed;
-                continue;
-              }
-              LogicalResult added = addPlacement(
-                  loc, PlacedInstance{instPath, attrName.substr(4), op});
-              if (failed(added))
-                ++numFailed;
-            }
-          }
-        })
-
-        // Physloc outside of a switch instance is not valid.
-        .Case([op, &numFailed](PhysLocationAttr) {
-          ++numFailed;
-          op->emitOpError("PhysLoc attribute must be inside an "
-                          "instance switch attribute");
-        })
-
-        // Ignore attributes we don't understand.
-        .Default([](Attribute) {});
-  }
-  return numFailed;
+/// Assign an instance to a primitive. Return false if another instance is
+/// already placed at that location.
+/// Check to see if a primitive exists.
+bool DeviceDB::isValidLocation(PhysLocationAttr loc) {
+  DenseSet<PrimitiveType> primsAtLoc = getLeaf(loc);
+  return primsAtLoc.contains(loc.getPrimitiveType().getValue());
 }
 
-/// Walk the entire design adding placements.
-size_t DeviceDB::addDesignPlacements() {
-  size_t failed = 0;
-  FlatSymbolRefAttr rootModule = FlatSymbolRefAttr::get(top);
-  auto mlirModule = top->getParentOfType<mlir::ModuleOp>();
-  mlirModule.walk(
-      [&](Operation *op) { failed += addPlacements(rootModule, op); });
-  return failed;
+DeviceDB::DimPrimitiveType &DeviceDB::getLeaf(PhysLocationAttr loc) {
+  return placements[loc.getX()][loc.getY()][loc.getNum()];
 }
 
-/// Lookup the instance at a particular location.
-Optional<DeviceDB::PlacedInstance>
-DeviceDB::getInstanceAt(PhysLocationAttr loc) {
-  auto innerMap = placements[loc.getX()][loc.getY()][loc.getNum()];
-  auto instF = innerMap.find(loc.getDevType().getValue());
-  if (instF == innerMap.end())
-    return {};
-  return instF->getSecond();
-}
-
-/// Walker for placements.
-void DeviceDB::walkPlacements(
-    function_ref<void(PhysLocationAttr, PlacedInstance)> callback) {
-  // X loop.
-  for (auto colF = placements.begin(), colE = placements.end(); colF != colE;
-       ++colF) {
-    size_t x = colF->getFirst();
-    DimYMap yMap = colF->getSecond();
-
-    // Y loop.
-    for (auto rowF = yMap.begin(), rowE = yMap.end(); rowF != rowE; ++rowF) {
-      size_t y = rowF->getFirst();
-      DimNumMap numMap = rowF->getSecond();
-
-      // Num loop.
-      for (auto numF = numMap.begin(), numE = numMap.end(); numF != numE;
-           ++numF) {
-        size_t num = numF->getFirst();
-        DimDevType devMap = numF->getSecond();
-
-        // DevType loop.
-        for (auto devF = devMap.begin(), devE = devMap.end(); devF != devE;
-             ++devF) {
-          DeviceType devtype = devF->getFirst();
-          PlacedInstance inst = devF->getSecond();
-
-          // Marshall and run the callback.
-          PhysLocationAttr loc = PhysLocationAttr::get(
-              ctxt, DeviceTypeAttr::get(ctxt, devtype), x, y, num);
-          callback(loc, inst);
-        }
-      }
-    }
-  }
+void DeviceDB::foreach (function_ref<void(PhysLocationAttr)> callback) const {
+  for (auto x : placements)
+    for (auto y : x.second)
+      for (auto n : y.second)
+        for (auto p : n.second)
+          callback(PhysLocationAttr::get(ctxt, PrimitiveTypeAttr::get(ctxt, p),
+                                         x.first, y.first, n.first));
 }

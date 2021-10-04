@@ -72,6 +72,12 @@ static Type lowerType(Type type) {
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
+  if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
+    auto elemTy = lowerType(vec.getElementType());
+    if (!elemTy)
+      return {};
+    return hw::ArrayType::get(elemTy, vec.getNumElements());
+  }
 
   auto width = firType.getBitWidthOrSentinel();
   if (width >= 0) // IntType, analog with known width, clock, etc.
@@ -1225,6 +1231,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
 
   LogicalResult visitExpr(HWStructCastOp op);
+  LogicalResult visitExpr(BitCastOp op);
   LogicalResult visitExpr(mlir::UnrealizedConversionCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
@@ -2441,6 +2448,17 @@ LogicalResult FIRRTLLowering::visitExpr(HWStructCastOp op) {
   // struct type into the lowered operand.
   op.replaceAllUsesWith(result);
   return success();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(BitCastOp op) {
+  auto operand = getLoweredValue(op.getOperand());
+  if (!operand)
+    return failure();
+  auto resultType = lowerType(op.getType());
+  if (!resultType)
+    return failure();
+
+  return setLoweringTo<hw::BitcastOp>(op, resultType, operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {

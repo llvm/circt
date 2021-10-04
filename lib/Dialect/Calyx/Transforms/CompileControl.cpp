@@ -102,8 +102,6 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
   builder.setInsertionPointToEnd(wiresBody);
   auto seqGroup =
       builder.create<GroupOp>(wires->getLoc(), builder.getStringAttr("seq"));
-  Block *seqGroupBody = new Block();
-  seqGroup->getRegion(0).push_back(seqGroupBody);
 
   // Guarantees a unique SymbolName for the group.
   SymbolTable symTable(wires);
@@ -155,7 +153,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
     // Add guarded assignments to the fsm register `in` and `write_en` ports.
     fsmNextState =
         createConstant(builder, wires->getLoc(), fsmBitWidth, fsmIndex + 1);
-    builder.setInsertionPointToEnd(seqGroupBody);
+    builder.setInsertionPointToEnd(seqGroup.getBody());
     builder.create<AssignOp>(wires->getLoc(), fsmIn, fsmNextState,
                              groupDoneGuard);
     builder.create<AssignOp>(wires->getLoc(), fsmWriteEn, oneConstant,
@@ -171,7 +169,7 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
       wires->getLoc(), comb::ICmpPredicate::eq, fsmOut, fsmNextState);
 
   // Insert the respective GroupDoneOp.
-  builder.setInsertionPointToEnd(seqGroupBody);
+  builder.setInsertionPointToEnd(seqGroup.getBody());
   builder.create<GroupDoneOp>(seqGroup->getLoc(), oneConstant, isFinalState);
 
   // Add continuous wires to reset the `in` and `write_en` ports of the fsm

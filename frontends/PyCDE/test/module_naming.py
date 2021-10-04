@@ -12,8 +12,8 @@ def Parameterized(param):
     y = pycde.Output(pycde.types.i1)
 
     @pycde.generator
-    def construct(mod):
-      return {"y": mod.x}
+    def construct(ports):
+      ports.y = ports.x
 
   return TestModule
 
@@ -24,8 +24,8 @@ class UnParameterized:
   y = pycde.Output(pycde.types.i1)
 
   @pycde.generator
-  def construct(mod):
-    return {"y": mod.x}
+  def construct(ports):
+    ports.y = ports.x
 
 
 @pycde.module

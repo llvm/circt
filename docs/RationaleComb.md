@@ -179,7 +179,7 @@ In MLIR assembly, operands are always listed MSB to LSB (big endian style):
 %msb = comb.constant 0xEF : i8
 %mid = comb.constant 0x7 : i4
 %lsb = comb.constant 0xA018 : i16
-%result = comb.concat %msb, %mid, %lsb : (i8, i4, i16) -> i28
+%result = comb.concat %msb, %mid, %lsb : i8, i4, i16
 // %result is 0xEF7A018
 ```
 

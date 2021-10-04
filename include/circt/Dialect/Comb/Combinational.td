@@ -38,9 +38,6 @@ class VariadicOp<string mnemonic, list<OpTrait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
   let arguments = (ins Variadic<HWIntegerType>:$inputs);
   let results = (outs HWIntegerType:$result);
-
-  let assemblyFormat =
-    "$inputs attr-dict `:` functional-type($inputs, results)";
 }
 
 class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
@@ -218,6 +215,10 @@ def ConcatOp : VariadicOp<"concat"> {
   let description = [{
     See the HW-SV rationale document for details on operand ordering.
   }];
+
+  // Need a custom parser/printer to avoid redundant result type
+  let parser = "return ::parse$cppClass(parser, result);";
+  let printer = "::print$cppClass(p, *this);";
 
   let hasFolder = true;
   let hasCanonicalizeMethod = true;

@@ -51,7 +51,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %zero4 = hw.constant 0 : i4
   %27 = comb.icmp ne %a, %zero4 : i4
   %28 = comb.parity %a : i4
-  %29 = comb.concat %a, %a, %b : (i4, i4, i4) -> i12
+  %29 = comb.concat %a, %a, %b : i4, i4, i4
   %30 = comb.extract %a from 1 : (i4) -> i2
   %31 = comb.sext %a : (i4) -> i9
   %33 = comb.mux %cond, %a, %b : i4
@@ -71,7 +71,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %elem2d = hw.array_get %array2d[%a] : !hw.array<12 x array<10xi4>>
   %37 = hw.array_get %elem2d[%b] : !hw.array<10xi4>
 
-  %36 = comb.concat %a, %a, %a : (i4, i4, i4) -> i12
+  %36 = comb.concat %a, %a, %a : i4, i4, i4
 
   %39 = hw.struct_extract %structA["bar"] : !hw.struct<foo: i2, bar: i4>
   %40 = hw.struct_inject %structA["bar"], %a : !hw.struct<foo: i2, bar: i4>
@@ -716,7 +716,7 @@ hw.module @Chi() -> (Chi_output : i0) {
    // CHECK-NEXT:   .WIDTH4(-68'sd88888888888888888),
    // CHECK-NEXT:   .Wtricky(40'd4294967295)
    // CHECK-NEXT: ) bar ();
-   
+
    hw.instance "bar" @Bar1360<
      WIDTH0: i64 = 0, WIDTH1: i4 = 4, WIDTH2: i40 = 6812312123, WIDTH3: si4 = -1,
      WIDTH4: si68 = -88888888888888888, Wtricky: i40 = 4294967295
@@ -766,9 +766,9 @@ hw.module @ShiftAmountZext(%a: i8, %b1: i4, %b2: i4, %b3: i4)
  -> (o1: i8, o2: i8, o3: i8) {
 
   %c = hw.constant 0 : i4
-  %B1 = comb.concat %c, %b1 : (i4, i4) -> i8
-  %B2 = comb.concat %c, %b2 : (i4, i4) -> i8
-  %B3 = comb.concat %c, %b3 : (i4, i4) -> i8
+  %B1 = comb.concat %c, %b1 : i4, i4
+  %B2 = comb.concat %c, %b2 : i4, i4
+  %B3 = comb.concat %c, %b3 : i4, i4
 
   // CHECK: assign o1 = a << b1;
   %r1 = comb.shl %a, %B1 : i8
@@ -794,7 +794,7 @@ hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
   %c2856_i18 = hw.constant 2856 : i18
   %c0_i11 = hw.constant 0 : i11
   %0 = comb.extract %a from 0 : (i18) -> i7
-  %1 = comb.concat %c0_i11, %0 : (i11, i7) -> i18
+  %1 = comb.concat %c0_i11, %0 : i11, i7
   %2 = comb.shrs %a, %1 : i18
   %3 = comb.xor %2, %c2856_i18 : i18
   hw.output %3 : i18
@@ -874,7 +874,7 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
   // CHECK-NEXT:  .p1(xx + 42'd17)
   // CHECK-NEXT: ) inst2 (
   %b = hw.instance "inst2" @parameters2<p1: i42 = #hw.param.expr.add<#hw.param.verbatim<"xx">, 17>, p2: i1 = 0>(arg0: %arg0: i8) -> (out: i8)
- 
+
   // CHECK:      parameters2 #(
   // CHECK-NEXT:  .p1(xx * yy + yy * 42'd17)
   // CHECK-NEXT: ) inst3 (
@@ -893,3 +893,14 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
   hw.output %a, %b, %f, %g : i8, i8, i8, i42
 }
 
+// CHECK-LABEL: module VerilogCompatParameters
+hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
+                                   p4: i32 = 4, p5: none = "foo">()
+  -> () {
+  // CHECK-NEXT: #(parameter [41:0]      p1,
+  // CHECK-NEXT:   parameter /*integer*/ p2,
+  // CHECK-NEXT:   parameter             p3 = 1.500000e+00,
+  // CHECK-NEXT:   parameter             p4 = 4,
+  // CHECK-NEXT:   parameter             p5 = "foo")
+
+}

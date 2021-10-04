@@ -50,7 +50,7 @@ def PolynomialCompute(coefficients: Coefficients):
         taps.append(newPartialSum)
 
       # Final output
-      return {"y": taps[-1]}
+      mod.y = taps[-1]
 
   return PolynomialCompute
 
@@ -84,7 +84,7 @@ class PolynomialSystem:
   y = Output(types.i32)
 
   @generator
-  def construct(_):
+  def construct(ports):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example")
@@ -99,7 +99,7 @@ class PolynomialSystem:
     m = ExternWithParams(8, 3)()
     m.name = "pexternInst"
 
-    return {"y": poly.y}
+    ports.y = poly.y
 
 
 poly = pycde.System([PolynomialSystem])

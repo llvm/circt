@@ -139,7 +139,7 @@ func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
   %2 = comb.shrs %1, %arg1 : i32
 
   // CHECK: %[[CNT:.*]] = "llvm.intr.ctpop"(%arg0) : (i32) -> i32
-  // CHECK: llvm.trunc %[[CNT]] : i32 to i1 
+  // CHECK: llvm.trunc %[[CNT]] : i32 to i1
   %3 = comb.parity %arg0 : i32
 
   // CHECK: %[[AMT:.*]] = llvm.mlir.constant(5 : i32) : i32
@@ -163,7 +163,7 @@ func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
   // CHECK: %[[ZEXT3:.*]] = llvm.zext %arg0 : i32 to i96
   // CHECK: %[[SHIFT3:.*]] = llvm.shl %[[ZEXT3]], %[[A3]]  : i96
   // CHECK: llvm.or %[[OR2]], %[[SHIFT3]]  : i96
-  %6 = comb.concat %arg0, %arg1, %arg0 : (i32, i32, i32) -> i96
+  %6 = comb.concat %arg0, %arg1, %arg0 : i32, i32, i32
 
   // CHECK: llvm.select %arg2, %arg0, %arg1 : i1, i32
   %7 = comb.mux %arg2, %arg0, %arg1 : i32

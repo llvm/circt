@@ -20,7 +20,7 @@ class UnParameterized:
   @pycde.generator
   def construct(mod):
     Nothing()
-    return {"y": mod.x}
+    mod.y = mod.x
 
 
 @pycde.module

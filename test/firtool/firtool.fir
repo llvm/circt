@@ -4,6 +4,7 @@
 ; RUN: firtool %s --format=fir -mlir -lower-to-hw | circt-opt | FileCheck %s --check-prefix=MLIRLOWER
 ; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
 ; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --mlir --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
+; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | FileCheck %s --check-prefix=OMIR
 
 circuit test_mod : %[[{"a": "a"}]]
 
@@ -14,6 +15,18 @@ circuit test_mod : %[[{"a": "a"}]]
 ; ANNOTATIONS-SAME: info = "a NoTargetAnnotation"
 ; ANNOTATIONS-SAME: info = "a CircuitTarget Annotation
 ; ANNOTATIONS-SAME: info = "a CircuitName Annotation"
+
+; OMIR:       #loc0 = loc(fused["Foo.scala":64:64, "Bar.scala":128:128])
+; OMIR-NEXT:  #loc1 = loc("Foo.scala":32:32)
+; OMIR-LABEL: firrtl.circuit "test_mod"
+; OMIR-SAME:  {class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+; OMIR-SAME:   nodes = [
+; OMIR-SAME:     {fields = {
+; OMIR-SAME:        stringVal = {
+; OMIR-SAME:          info = #loc0,
+; OMIR-SAME:          value = "OMString:hello"}},
+; OMIR-SAME:      id = "OMID:0",
+; OMIR-SAME:      info = #loc1}]}
 
   module test_mod :
     input clock : Clock
@@ -117,7 +130,7 @@ circuit test_mod : %[[{"a": "a"}]]
     d <= cat(cat(a, b), c)
 
 ; MLIRLOWER-LABEL: hw.module @Cat(%a: i2, %b: i2, %c: i2) -> (d: i6) {
-; MLIRLOWER-NEXT:    %0 = comb.concat %a, %b, %c : (i2, i2, i2) -> i6
+; MLIRLOWER-NEXT:    %0 = comb.concat %a, %b, %c : i2, i2, i2
 ; MLIRLOWER-NEXT:    hw.output %0 : i6
 ; MLIRLOWER-NEXT:  }
 
@@ -135,7 +148,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; MLIRLOWER-LABEL: hw.module @ImplicitTrunc(%inp_1: i1, %inp_2: i5) -> (out1: i3, out2: i3) {
 ; MLIRLOWER-NEXT:    %c0_i5 = hw.constant 0 : i5
 ; MLIRLOWER-NEXT:    %0 = comb.sext %inp_2 : (i5) -> i6
-; MLIRLOWER-NEXT:    %1 = comb.concat %c0_i5, %inp_1 : (i5, i1) -> i6
+; MLIRLOWER-NEXT:    %1 = comb.concat %c0_i5, %inp_1 : i5, i1
 ; MLIRLOWER-NEXT:    %2 = comb.shl %0, %1 : i6
 ; MLIRLOWER-NEXT:    %3 = comb.extract %2 from 0 : (i6) -> i3
 ; MLIRLOWER-NEXT:    %4 = comb.extract %inp_2 from 0 : (i5) -> i3
