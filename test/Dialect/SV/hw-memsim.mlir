@@ -72,7 +72,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK:       %Memory0 = sv.reg  : !hw.inout<uarray<10xi16>>
 //CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory0[%ro_addr_0]
 //CHECK-NEXT:  %[[read1:.+]] = sv.read_inout %[[rslot]]
-//CHECK-NEXT:  %[[read:.+]] = comb.concat %[[read1]] : (i16) -> i16
+//CHECK-NEXT:  %[[read:.+]] = comb.concat %[[read1]] : i16
 //CHECK-NEXT:  %[[x:.+]] = sv.constantX
 //CHECK-NEXT:  %[[readres:.+]] = comb.mux %ro_en_0, %[[read]], %[[x]]
 //CHECK-NEXT:  %[[rw_wmask_0:.+]] = comb.extract %rw_wmask_0 from 0 : (i1) -> i1
@@ -84,7 +84,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]
 //CHECK-NEXT:  %[[rwslot:.+]] = sv.array_index_inout %Memory0[%rw_addr_0]
 //CHECK-NEXT:  %[[v11:.+]] = sv.read_inout %10 : !hw.inout<i16>
-//CHECK-NEXT:  %[[rwdata:.+]] = comb.concat %[[v11]] : (i16) -> i16
+//CHECK-NEXT:  %[[rwdata:.+]] = comb.concat %[[v11]] : i16
 //CHECK-NEXT:  %[[x2:.+]] = sv.constantX
 //CHECK-NEXT:  %[[rwdata2:.+]] = comb.mux %[[rwrcond]], %[[rwdata]], %[[x2]]
 //CHECK-NEXT:  sv.assign %[[rwtmp]], %[[rwdata2:.+]]
@@ -144,6 +144,124 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
 //CHECK-COUNT-2:  sv.alwaysff
 //CHECK-NOT:      sv.alwaysff
 
+
+  hw.module.generated @FIRRTLMem_1_1_0_32_16_1_1_0_1_a, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i4) -> (R0_data: i32) attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+  hw.module @memTestFoo(%clock: i1, %rAddr: i4, %rEn: i1, %wAddr: i4, %wEn: i1, %wMask: i4, %wData: i32) -> (rData: i32) attributes {firrtl.moduleHierarchyFile = #hw.output_file<"testharness_hier.json", excludeFromFileList>} {
+    %memory.R0_data = hw.instance "memory" @FIRRTLMem_1_1_0_32_16_1_1_0_1_a(R0_addr: %rAddr: i4, R0_en: %rEn: i1, R0_clk: %clock: i1, W0_addr: %wAddr: i4, W0_en: %wEn: i1, W0_clk: %clock: i1, W0_data: %wData: i32, W0_mask: %wMask: i4) -> (R0_data: i32)
+    hw.output %memory.R0_data : i32
+  }
+  // CHECK-LABEL: hw.module @FIRRTLMem_1_1_0_32_16_1_1_0_1_a
+  // CHECK-SAME: (%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i4) -> (R0_data: i32)
+  // CHECK-NEXT:   %[[Memory0:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
+  // CHECK-NEXT:   %[[Memory1:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
+  // CHECK-NEXT:   %[[Memory2:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
+  // CHECK-NEXT:   %[[Memory3:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
+  // CHECK-NEXT:   %[[v0:.+]] = sv.reg  : !hw.inout<i1>
+  // CHECK-NEXT:   sv.alwaysff(posedge %R0_clk)  {
+  // CHECK-NEXT:     sv.passign %[[v0]], %R0_en : i1
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   %[[v1:.+]] = sv.read_inout %[[v0]] : !hw.inout<i1>
+  // CHECK-NEXT:   %[[v2:.+]] = sv.reg  : !hw.inout<i4>
+  // CHECK-NEXT:   sv.alwaysff(posedge %R0_clk)  {
+  // CHECK-NEXT:     sv.passign %2, %R0_addr : i4
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   %[[v3:.+]] = sv.read_inout %[[v2]] : !hw.inout<i4>
+  // CHECK-NEXT:   %[[v4:.+]] = sv.array_index_inout %[[Memory0]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK-NEXT:   %[[v5:.+]] = sv.read_inout %[[v4]] : !hw.inout<i8>
+  // CHECK-NEXT:   %[[v6:.+]] = sv.array_index_inout %[[Memory1]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK-NEXT:   %[[v7:.+]] = sv.read_inout %[[v6]] : !hw.inout<i8>
+  // CHECK-NEXT:   %[[v8:.+]] = sv.array_index_inout %[[Memory2]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK-NEXT:   %[[v9:.+]] = sv.read_inout %[[v8]] : !hw.inout<i8>
+  // CHECK-NEXT:   %[[v10:.+]] = sv.array_index_inout %[[Memory3]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK-NEXT:   %[[v11:.+]] = sv.read_inout %[[v10]] : !hw.inout<i8>
+  // CHECK-NEXT:   %[[v12:.+]] = comb.concat %[[v5]], %[[v7]], %[[v9]], %[[v11]] : i8, i8, i8, i8
+  // CHECK-NEXT:   %[[x_i32:.+]] = sv.constantX : i32
+  // CHECK-NEXT:   %[[v13:.+]] = comb.mux %[[v1]], %[[v12]], %[[x_i32]] : i32
+  // CHECK-NEXT:   %[[v14:.+]] = comb.extract %W0_mask from 0 : (i4) -> i1
+  // CHECK-NEXT:   %[[v15:.+]] = comb.extract %W0_data from 0 : (i32) -> i8
+  // CHECK-NEXT:   %[[v16:.+]] = comb.extract %W0_mask from 1 : (i4) -> i1
+  // CHECK-NEXT:   %[[v17:.+]] = comb.extract %W0_data from 8 : (i32) -> i8
+  // CHECK-NEXT:   %[[v18:.+]] = comb.extract %W0_mask from 2 : (i4) -> i1
+  // CHECK-NEXT:   %[[v19:.+]] = comb.extract %W0_data from 16 : (i32) -> i8
+  // CHECK-NEXT:   %[[v20:.+]] = comb.extract %W0_mask from 3 : (i4) -> i1
+  // CHECK-NEXT:   %[[v21:.+]] = comb.extract %W0_data from 24 : (i32) -> i8
+  // CHECK-NEXT:   sv.alwaysff(posedge %W0_clk)  {
+  // CHECK-NEXT:     %[[v22:.+]] = comb.and %W0_en, %14 : i1
+  // CHECK-NEXT:     sv.if %[[v22]]  {
+  // CHECK-NEXT:       %[[v26:.+]] = sv.array_index_inout %[[Memory0]][%W0_addr] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK-NEXT:       sv.passign %[[v26]], %[[v15]] : i8
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:     %[[v23:.+]] = comb.and %W0_en, %[[v16]] : i1
+  // CHECK-NEXT:     sv.if %[[v23]]  {
+  // CHECK-NEXT:       %[[v26:.+]] = sv.array_index_inout %[[Memory1]][%W0_addr] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK-NEXT:       sv.passign %[[v26]], %[[v17]] : i8
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:     %[[v24:.+]] = comb.and %W0_en, %[[v18]] : i1
+  // CHECK-NEXT:     sv.if %[[v24]]  {
+  // CHECK-NEXT:       %[[v26:.+]] = sv.array_index_inout %[[Memory2]][%W0_addr] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK-NEXT:       sv.passign %[[v26]], %[[v19]] : i8
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:     %[[v25:.+]] = comb.and %W0_en, %[[v20]] : i1
+  // CHECK-NEXT:     sv.if %[[v25]]  {
+  // CHECK-NEXT:       %[[v26:.+]] = sv.array_index_inout %[[Memory3]][%W0_addr] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK-NEXT:       sv.passign %[[v26]], %[[v21]] : i8
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT:   hw.output %[[v13]] : i32
+  // CHECK-NEXT: }
+
+  hw.module.generated @FIRRTLMem_1_1_0_32_16_1_1_0_1_b, @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i2) -> (R0_data: i32) attributes {depth = 16 : i64, maskGran = 16 : ui32, numReadPorts = 1 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 1 : ui32, readLatency = 2 : ui32, readUnderWrite = 0 : ui32, width = 32 : ui32, writeClockIDs = [0 : i32], writeLatency = 3 : ui32, writeUnderWrite = 1 : i32}
+  hw.module @memTestBar(%clock: i1, %rAddr: i4, %rEn: i1, %wAddr: i4, %wEn: i1, %wMask: i2, %wData: i32) -> (rData: i32) attributes {firrtl.moduleHierarchyFile = #hw.output_file<"testharness_hier.json", excludeFromFileList>} {
+    %memory.R0_data = hw.instance "memory" @FIRRTLMem_1_1_0_32_16_1_1_0_1_b(R0_addr: %rAddr: i4, R0_en: %rEn: i1,
+    R0_clk: %clock: i1, W0_addr: %wAddr: i4, W0_en: %wEn: i1, W0_clk: %clock: i1, W0_data: %wData: i32, W0_mask: %wMask:  i2) -> (R0_data: i32)
+    hw.output %memory.R0_data : i32
+  }
+  // CHECK-LABEL:hw.module @FIRRTLMem_1_1_0_32_16_1_1_0_1_b
+  // CHECK-SAME: (%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i2) -> (R0_data: i32)
+  // CHECK:  %[[Memory0]] = sv.reg  : !hw.inout<uarray<16xi16>>
+  // CHECK:  %[[Memory1]] = sv.reg  : !hw.inout<uarray<16xi16>>
+  // CHECK:  %[[v8:.+]] = sv.array_index_inout %[[Memory0]][%[[v:.+]]] : !hw.inout<uarray<16xi16>>, i4
+  // CHECK:  %[[v9:.+]] = sv.read_inout
+  // CHECK:  %[[v10:.+]] = sv.array_index_inout %[[Memory1]][%[[v:.+]]] : !hw.inout<uarray<16xi16>>, i4
+  // CHECK:  %[[v11:.+]] = sv.read_inout
+  // CHECK:  %[[v12:.+]] = comb.concat %[[v9]], %[[v11]] : i16, i16
+  // CHECK:  %[[x_i32:.+]] = sv.constantX : i32
+  // CHECK:  %[[v13:.+]] = comb.mux
+  // CHECK:  sv.alwaysff(posedge %W0_clk)  {
+  // CHECK:    sv.passign %[[v22:.+]], %W0_data : i32
+  // CHECK:  }
+  // CHECK:  %[[v23:.+]] = sv.read_inout %[[v22]] : !hw.inout<i32>
+  // CHECK:  %[[v24:.+]] = sv.reg  : !hw.inout<i32>
+  // CHECK:  sv.alwaysff(posedge %W0_clk)  {
+  // CHECK:    sv.passign %[[v24:.+]], %[[v23:.+]] : i32
+  // CHECK:  }
+  // CHECK:  %[[v25:.+]] = sv.read_inout %[[v24]] : !hw.inout<i32>
+  // CHECK:  sv.alwaysff(posedge %W0_clk)  {
+  // CHECK:    sv.passign %[[v26:.+]], %W0_mask : i2
+  // CHECK:  }
+  // CHECK:  sv.alwaysff(posedge %W0_clk)  {
+  // CHECK:    sv.passign %[[v28:.+]], %[[v27:.+]] : i2
+  // CHECK:  }
+  // CHECK:  %[[v29:.+]] = sv.read_inout %[[v28]] : !hw.inout<i2>
+  // CHECK:  %[[v30:.+]] = comb.extract %[[v29]] from 0 : (i2) -> i1
+  // CHECK:  %[[v31:.+]] = comb.extract %[[v25]] from 0 : (i32) -> i16
+  // CHECK:  %[[v32:.+]] = comb.extract %[[v29]] from 1 : (i2) -> i1
+  // CHECK:  %[[v33:.+]] = comb.extract %[[v25]] from 16 : (i32) -> i16
+  // CHECK:  sv.alwaysff(posedge %W0_clk)  {
+  // CHECK:    %[[v34:.+]] = comb.and %[[v21]], %[[v30]] : i1
+  // CHECK:    sv.if %[[v34]]  {
+  // CHECK:      %[[v36:.+]] = sv.array_index_inout %[[Memory0]][%[[v17]]] : !hw.inout<uarray<16xi16>>, i4
+  // CHECK:      sv.passign %[[v36]], %[[v31]] : i16
+  // CHECK:    }
+  // CHECK:    %[[v35:.+]] = comb.and %[[v21]], %[[v32]] : i1
+  // CHECK:    sv.if %[[v35]]  {
+  // CHECK:      %[[v36:.+]] = sv.array_index_inout %[[Memory1]][%[[v17]]] : !hw.inout<uarray<16xi16>>, i4
+  // CHECK:      sv.passign %[[v36]], %[[v33]] : i16
+  // CHECK:    }
+  // CHECK:  }
+  // CHECK:  hw.output %[[v13]] : i32
+  // CHECK:}
+
 hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0_multi, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0:
 i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %rw_wmask_0: i4,  %wo_addr_0: i4, %wo_en_0: i1,
 %wo_clock_0: i1, %wo_data_0: i16, %wo_mask_0: i4) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64,
@@ -162,7 +280,7 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 4 :ui32, numWri
 // CHECK-NEXT:    %13 = sv.read_inout %12 : !hw.inout<i4>
 // CHECK-NEXT:    %14 = sv.array_index_inout %Memory3[%7] : !hw.inout<uarray<10xi4>>, i4
 // CHECK-NEXT:    %15 = sv.read_inout %14 : !hw.inout<i4>
-// CHECK-NEXT:    %16 = comb.concat %9, %11, %13, %15 : (i4, i4, i4, i4) -> i16
+// CHECK-NEXT:    %16 = comb.concat %9, %11, %13, %15 : i4, i4, i4, i4
 // CHECK:   sv.alwaysff(posedge %rw_clock_0)  {
 // CHECK:     sv.passign %42, %rw_wmask_0 : i4
 // CHECK:   }
@@ -193,7 +311,7 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 4 :ui32, numWri
 // CHECK:   %65 = sv.read_inout %64 : !hw.inout<i4>
 // CHECK:   %66 = sv.array_index_inout %Memory3[%23] : !hw.inout<uarray<10xi4>>, i4
 // CHECK:   %67 = sv.read_inout %66 : !hw.inout<i4>
-// CHECK:   %68 = comb.concat %61, %63, %65, %67 : (i4, i4, i4, i4) -> i16
+// CHECK:   %68 = comb.concat %61, %63, %65, %67 : i4, i4, i4, i4
 // CHECK:   %94 = comb.extract %93 from 0 : (i4) -> i1
 // CHECK:   %95 = comb.extract %87 from 0 : (i16) -> i4
 // CHECK:   %96 = comb.extract %93 from 1 : (i4) -> i1
