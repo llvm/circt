@@ -133,6 +133,13 @@ class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
     This operation represents an instance of a Calyx library primitive.
     A library primitive maps to some hardware-implemented component within the
     native Calyx compiler.
+
+    ```mlir
+      // A 32-bit adder.
+      %add.left, %add.right, %add.out = calyx.std_add @add : i32, i32, i32
+      // A 8-bit comparison operator (with a 1-bit output).
+      %gt.left, %gt.right, %gt.out = calyx.std_gt @gt : i8, i8, i1
+    ```
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$instanceName);
