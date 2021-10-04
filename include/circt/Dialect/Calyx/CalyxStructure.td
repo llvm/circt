@@ -31,7 +31,7 @@ def UndefinedOp : CalyxOp<"undef", [
 
 def ProgramOp : CalyxContainer<"program", [
     IsolatedFromAbove,
-    SymbolTable
+    SymbolTable /* contains ComponentOp names. */
   ]> {
   let summary = "Calyx Program";
   let description = [{
@@ -58,7 +58,7 @@ def ProgramOp : CalyxContainer<"program", [
 
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
-    SymbolTable,
+    SymbolTable, /* contains Cell names. */
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
@@ -144,7 +144,7 @@ def ComponentOp : CalyxOp<"component", [
 
 def WiresOp : CalyxContainer<"wires", [
     HasParent<"ComponentOp">,
-    SymbolTable
+    SymbolTable /* contains GroupInterface names. */
   ]> {
   let summary = "Calyx Wires";
   let description = [{
@@ -248,7 +248,7 @@ def GroupOp : CalyxOp<"group", [
       region->push_back(new Block());
     }]>,
     OpBuilder<(ins "StringAttr":$sym_name), [{
-      $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
       Region* region = $_state.addRegion();
       region->push_back(new Block());
     }]>
@@ -297,7 +297,7 @@ def CombGroupOp : CalyxOp<"comb_group", [
       region->push_back(new Block());
     }]>,
     OpBuilder<(ins "StringAttr":$sym_name), [{
-      $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
       Region* region = $_state.addRegion();
       region->push_back(new Block());
     }]>
