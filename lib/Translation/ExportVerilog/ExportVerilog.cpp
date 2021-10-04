@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Translation/TranslationPasses.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -3819,6 +3820,13 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
+#define GEN_PASS_CLASSES
+namespace circt {
+namespace translations {
+#include "circt/Translation/TranslationPasses.h.inc"
+}
+} // namespace circt
+
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   SharedEmitterState emitter(module);
   emitter.gatherFiles(false);
@@ -3839,6 +3847,31 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   // Finally, emit all the ops we collected.
   emitter.emitOps(list, os, /*parallelize=*/true);
   return failure(emitter.encounteredError);
+}
+
+namespace {
+
+struct ExportVerilogFilePass
+    : public translations::ExportVerilogFilePassBase<ExportVerilogFilePass> {
+  ExportVerilogFilePass(raw_ostream &os) : os(os) {}
+  void runOnOperation() override {
+    // Make sure LoweringOptions are applied to the module if it was overridden
+    // on the command line.
+    // TODO: This should be moved up to circt-opt and circt-translate.
+    applyLoweringCLOptions(getOperation());
+
+    if (failed(exportVerilog(getOperation(), os)))
+      signalPassFailure();
+  }
+
+private:
+  raw_ostream &os;
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::translations::createExportVerilogFilePass(llvm::raw_ostream &os) {
+  return std::make_unique<ExportVerilogFilePass>(os);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3912,6 +3945,29 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   output->keep();
 
   return failure(emitter.encounteredError);
+}
+
+namespace {
+
+struct ExportSplitVerilogPass
+    : public translations::ExportSplitVerilogPassBase<ExportSplitVerilogPass> {
+  ExportSplitVerilogPass(StringRef directory) {
+    directoryName = directory.str();
+  }
+  void runOnOperation() override {
+    // Make sure LoweringOptions are applied to the module if it was overridden
+    // on the command line.
+    // TODO: This should be moved up to circt-opt and circt-translate.
+    applyLoweringCLOptions(getOperation());
+    if (failed(exportSplitVerilog(getOperation(), directoryName)))
+      signalPassFailure();
+  }
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::translations::createExportSplitVerilogPass(StringRef directory) {
+  return std::make_unique<ExportSplitVerilogPass>(directory);
 }
 
 //===----------------------------------------------------------------------===//

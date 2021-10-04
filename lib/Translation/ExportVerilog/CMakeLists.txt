@@ -5,8 +5,10 @@ add_circt_translation_library(CIRCTExportVerilog
   
   ADDITIONAL_HEADER_DIRS
 
+  DEPENDS
+  CIRCTTranslationIncGen
+
   LINK_LIBS PUBLIC
-  CIRCTFIRRTL
   CIRCTComb
   CIRCTHW
   CIRCTSupport
