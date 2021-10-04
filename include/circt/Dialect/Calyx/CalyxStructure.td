@@ -176,7 +176,7 @@ def InstanceOp : CalyxCell<"instance", [
     Represents an instance of a Calyx component, which may include state.
 
     ```mlir
-      %name.in, %name.out = calyx.instance "name" @MyComponent : i64, i16
+      %c.in, %c.out = calyx.instance @c @MyComponent : i64, i16
     ```
   }];
 
