@@ -16,19 +16,12 @@
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
-namespace translations {
 
 std::unique_ptr<mlir::Pass> createExportVerilogFilePass(llvm::raw_ostream &os);
 std::unique_ptr<mlir::Pass> createExportVerilogFilePass();
 
 std::unique_ptr<mlir::Pass>
 createExportSplitVerilogPass(llvm::StringRef directory = "./");
-
-/// Generate the code for registering passes.
-#define GEN_PASS_REGISTRATION
-#include "circt/Translation/TranslationPasses.h.inc"
-
-} // namespace translations
 
 /// Export a module containing HW, and SV dialect code. Requires that the SV
 /// dialect is loaded in to the context.

@@ -6,7 +6,7 @@ add_circt_translation_library(CIRCTExportVerilog
   ADDITIONAL_HEADER_DIRS
 
   DEPENDS
-  CIRCTTranslationIncGen
+  CIRCTConversionPassIncGen
 
   LINK_COMPONENTS
   Core

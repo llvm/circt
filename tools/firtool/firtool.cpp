@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
@@ -22,7 +23,6 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
-#include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -415,11 +415,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     case OutputDisabled:
       return success();
     case OutputVerilog:
-      pm.addPass(translations::createExportVerilogFilePass(
-          outputFile.getValue()->os()));
+      pm.addPass(createExportVerilogFilePass(outputFile.getValue()->os()));
       break;
     case OutputSplitVerilog:
-      pm.addPass(translations::createExportSplitVerilogPass(outputFilename));
+      pm.addPass(createExportSplitVerilogPass(outputFilename));
       break;
     }
 

@@ -14,6 +14,7 @@
 #ifndef CIRCT_INITALLPASSES_H_
 #define CIRCT_INITALLPASSES_H_
 
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
@@ -22,7 +23,6 @@
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
-#include "circt/Translation/ExportVerilog.h"
 
 namespace circt {
 
@@ -38,7 +38,6 @@ inline void registerAllPasses() {
   msft::registerMSFTPasses();
   seq::registerSeqPasses();
   sv::registerPasses();
-  translations::registerPasses();
 }
 
 } // namespace circt
