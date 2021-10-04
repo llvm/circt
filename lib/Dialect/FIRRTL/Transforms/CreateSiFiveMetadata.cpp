@@ -25,11 +25,11 @@
 using namespace circt;
 using namespace firrtl;
 
-static const char SeqMemAnnoClass[] =
+static const char seqMemAnnoClass[] =
     "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation";
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 /// Attribute that indicates where some json files should be dumped.
-static const char metadataDirectoryAttrName[] =
+static const char metadataDirectoryAnnoClass[] =
     "sifive.enterprise.firrtl.MetadataDirAnnotation";
 
 namespace {
@@ -48,7 +48,7 @@ class CreateSiFiveMetadataPass
 };
 } // end anonymous namespace
 
-/// This function colects all the firrtl.mem ops and creates a verbatim op with
+/// This function collects all the firrtl.mem ops and creates a verbatim op with
 /// the relevant memory attributes.
 LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
 
@@ -119,9 +119,9 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     AnnotationSet anno = AnnotationSet(memOp);
     DictionaryAttr verifData = {};
     // Get the verification data attached with the memory op, if any.
-    if (auto v = anno.getAnnotation(SeqMemAnnoClass)) {
+    if (auto v = anno.getAnnotation(seqMemAnnoClass)) {
       verifData = v.get("data").cast<DictionaryAttr>();
-      AnnotationSet::removeAnnotations(memOp, SeqMemAnnoClass);
+      AnnotationSet::removeAnnotations(memOp, seqMemAnnoClass);
     }
 
     // Compute the mask granularity.
@@ -214,7 +214,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   auto *context = &getContext();
   auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
   AnnotationSet annos(circuitOp);
-  auto diranno = annos.getAnnotation(metadataDirectoryAttrName);
+  auto diranno = annos.getAnnotation(metadataDirectoryAnnoClass);
   std::string metadataDir = "metadata";
   if (diranno) {
     if (auto dir = diranno.get("dirname")) {
