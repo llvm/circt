@@ -127,9 +127,9 @@ static ParseResult parseFIRRTLType(FIRRTLType &result,
 ///
 /// bundle-elt ::= identifier ':' type
 /// ```
-static OptionalParseResult customTypeParser(MLIRContext *context,
-                                            DialectAsmParser &parser,
+static OptionalParseResult customTypeParser(DialectAsmParser &parser,
                                             StringRef name, Type &result) {
+  auto *context = parser.getContext();
   if (name.equals("clock"))
     return result = ClockType::get(context), success();
   if (name.equals("reset"))
@@ -225,16 +225,15 @@ static OptionalParseResult customTypeParser(MLIRContext *context,
 /// refer to a type defined in this dialect.
 static ParseResult parseType(Type &result, StringRef name,
                              DialectAsmParser &parser) {
-  auto *context = parser.getBuilder().getContext();
   OptionalParseResult parseResult;
 
   // Try the generated type parser.
-  parseResult = generatedTypeParser(context, parser, name, result);
+  parseResult = generatedTypeParser(parser, name, result);
   if (parseResult.hasValue())
     return parseResult.getValue();
 
   // Try the custom type parser.
-  parseResult = customTypeParser(context, parser, name, result);
+  parseResult = customTypeParser(parser, name, result);
   if (parseResult.hasValue())
     return parseResult.getValue();
 
@@ -979,7 +978,7 @@ void CMemoryType::print(mlir::DialectAsmPrinter &printer) const {
   printer << ", " << getNumElements() << ">";
 }
 
-Type CMemoryType::parse(MLIRContext *context, DialectAsmParser &parser) {
+Type CMemoryType::parse(DialectAsmParser &parser) {
   FIRRTLType elementType;
   unsigned numElements;
   if (parser.parseLess() || parseFIRRTLType(elementType, parser) ||

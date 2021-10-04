@@ -312,6 +312,54 @@ result value of the `firrtl.mem` operation.  Also, the `firrtl.mem` node does
 not allow zero port memories for simplicity.  Zero port memories are dropped
 by the .fir file parser.
 
+#### `firrtl.mem` Attributes
+A `firrtl.mem` has the following properties
+1. Data type
+2. Mask bitwidth
+3. Depth
+4. Name
+5. Number of read ports, write ports, read-write ports
+6. Read under write behavior
+7. Read latency
+8. Write latency
+
+##### Mask bitwidth
+Any aggregate memory data type is lowered to ground type by the
+`LowerTypes` pass. After lowering the data type, the data bitwidth must be 
+divisible by mask bitwidth. And we define the property granularity as: 
+`mask granularity = (Data bitwidth)/(Mask bitwidth)`. 
+
+Each mask bit can guard the write to `mask granularity` number of data bits. 
+For a single-bit mask, one-bit guards write to the data, hence 
+`mask granularity = data bitwidth`.
+
+#### Macro replacement
+Memories that satisfy the following conditions are candidates for macro replacement. 
+
+    1. read latency and write latency of one
+    2. only one readwrite port or write port
+    3. zero or one read port
+    4. undefined read-under-write behavior  
+
+A memory generator defines the external module definition corresponding to the
+ memory for macro replacement. Memory generators need metadata to generate the
+ memory definition. SFC uses some metadata files to communicate with the 
+ memory generators.
+   `<design-name>.conf` is a file, that contains the metadata for the
+   memories which are under the "design-under-test" module hierarchy.
+   Following is a sample content of the file:
+   ```
+      name SiFive_cc_dir_ext depth 512 width 248 ports mrw mask_gran 31
+      name SiFive_cc_banks_0_ext depth 2048 width 72 ports rw
+      name SiFive_PL2Cache_cc_banks_0_ext depth 2048 width 72 ports rw
+   ```
+   1. `name` followed by the memory name.
+   2. `depth` followed by the memory depth.
+   3. `width` followed by the data bitwidth.
+   4. `ports` followed by the `mrw` for read-write port, 
+   `mwrite` for a write port and `read` for a read port.
+   5. `mask_gran` followed by the mask granularity. 
+
 ### CHIRRTL Memories
 
 FIRRTL has two different representations of memories: Chisel `cmemory`

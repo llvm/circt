@@ -31,7 +31,7 @@ def UndefinedOp : CalyxOp<"undef", [
 
 def ProgramOp : CalyxContainer<"program", [
     IsolatedFromAbove,
-    SymbolTable
+    SymbolTable /* contains ComponentOp names. */
   ]> {
   let summary = "Calyx Program";
   let description = [{
@@ -58,6 +58,7 @@ def ProgramOp : CalyxContainer<"program", [
 
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
+    SymbolTable, /* contains Cell names. */
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
@@ -143,7 +144,7 @@ def ComponentOp : CalyxOp<"component", [
 
 def WiresOp : CalyxContainer<"wires", [
     HasParent<"ComponentOp">,
-    SymbolTable
+    SymbolTable /* contains GroupInterface names. */
   ]> {
   let summary = "Calyx Wires";
   let description = [{
@@ -176,7 +177,7 @@ def InstanceOp : CalyxCell<"instance", [
     Represents an instance of a Calyx component, which may include state.
 
     ```mlir
-      %name.in, %name.out = calyx.instance "name" @MyComponent : i64, i16
+      %c.in, %c.out = calyx.instance @c of @MyComponent : i64, i16
     ```
   }];
 
@@ -187,13 +188,13 @@ def InstanceOp : CalyxCell<"instance", [
   }];
 
   let arguments = (ins
-    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$instanceName,
     FlatSymbolRefAttr:$componentName
   );
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $instanceName $componentName attr-dict (`:` type($results)^)?
+    $instanceName `of` $componentName attr-dict (`:` type($results)^)?
   }];
 }
 
@@ -247,7 +248,7 @@ def GroupOp : CalyxOp<"group", [
       region->push_back(new Block());
     }]>,
     OpBuilder<(ins "StringAttr":$sym_name), [{
-      $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
       Region* region = $_state.addRegion();
       region->push_back(new Block());
     }]>
@@ -296,7 +297,7 @@ def CombGroupOp : CalyxOp<"comb_group", [
       region->push_back(new Block());
     }]>,
     OpBuilder<(ins "StringAttr":$sym_name), [{
-      $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
       Region* region = $_state.addRegion();
       region->push_back(new Block());
     }]>

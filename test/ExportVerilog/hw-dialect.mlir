@@ -1,4 +1,4 @@
-// RUN: circt-translate %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
@@ -893,3 +893,14 @@ hw.module @UseParameterValue<xx: i42>(%arg0: i8)
   hw.output %a, %b, %f, %g : i8, i8, i8, i42
 }
 
+// CHECK-LABEL: module VerilogCompatParameters
+hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
+                                   p4: i32 = 4, p5: none = "foo">()
+  -> () {
+  // CHECK-NEXT: #(parameter [41:0]      p1,
+  // CHECK-NEXT:   parameter /*integer*/ p2,
+  // CHECK-NEXT:   parameter             p3 = 1.500000e+00,
+  // CHECK-NEXT:   parameter             p4 = 4,
+  // CHECK-NEXT:   parameter             p5 = "foo")
+
+}

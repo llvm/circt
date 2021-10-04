@@ -14,6 +14,7 @@
 #ifndef CIRCT_DIALECT_MSFT_PLACEMENTDB_H
 #define CIRCT_DIALECT_MSFT_PLACEMENTDB_H
 
+#include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 
 #include "mlir/IR/Operation.h"
@@ -34,6 +35,7 @@ class PlacementDB {
 public:
   /// Create a DB treating 'top' as the root module.
   PlacementDB(Operation *top);
+  PlacementDB(Operation *top, const DeviceDB &seed);
 
   // TODO: Add calls to model the device primitive locations.
 
@@ -70,7 +72,12 @@ private:
   using DimYMap = DenseMap<size_t, DimNumMap>;
   using DimXMap = DenseMap<size_t, DimYMap>;
 
+  /// Get the leaf node. Abstract this out to make it easier to change the
+  /// underlying data structure.
+  Optional<PlacedInstance *> getLeaf(PhysLocationAttr);
+
   DimXMap placements;
+  bool seeded;
 };
 
 } // namespace msft

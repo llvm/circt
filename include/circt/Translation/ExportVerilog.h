@@ -13,19 +13,22 @@
 #ifndef CIRCT_TRANSLATION_EXPORTVERILOG_H
 #define CIRCT_TRANSLATION_EXPORTVERILOG_H
 
-#include <functional>
-
-namespace llvm {
-class raw_ostream;
-class StringRef;
-} // namespace llvm
-
-namespace mlir {
-struct LogicalResult;
-class ModuleOp;
-} // namespace mlir
+#include "mlir/Pass/Pass.h"
 
 namespace circt {
+namespace translations {
+
+std::unique_ptr<mlir::Pass> createExportVerilogFilePass(llvm::raw_ostream &os);
+std::unique_ptr<mlir::Pass> createExportVerilogFilePass();
+
+std::unique_ptr<mlir::Pass>
+createExportSplitVerilogPass(llvm::StringRef directory = "./");
+
+/// Generate the code for registering passes.
+#define GEN_PASS_REGISTRATION
+#include "circt/Translation/TranslationPasses.h.inc"
+
+} // namespace translations
 
 /// Export a module containing HW, and SV dialect code. Requires that the SV
 /// dialect is loaded in to the context.
@@ -37,9 +40,6 @@ mlir::LogicalResult exportVerilog(mlir::ModuleOp module, llvm::raw_ostream &os);
 /// Files are created in the directory indicated by \p dirname.
 mlir::LogicalResult exportSplitVerilog(mlir::ModuleOp module,
                                        llvm::StringRef dirname);
-
-/// Register a translation for exporting HW, Comb and SV to SystemVerilog.
-void registerToVerilogTranslation();
 
 } // namespace circt
 

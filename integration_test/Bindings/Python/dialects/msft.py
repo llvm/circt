@@ -95,3 +95,12 @@ with ir.Context() as ctx, ir.Location.unknown():
   assert not devdb.is_valid_location(physAttr)
   devdb.add_primitive(physAttr)
   assert devdb.is_valid_location(physAttr)
+
+  seeded_pdb = msft.PlacementDB(top.operation, devdb)
+  rc = seeded_pdb.add_placement(physAttr, path, "subpath", resolved_inst)
+  assert rc
+
+  bad_loc = msft.PhysLocationAttr.get(msft.M20K, x=7, y=99, num=1)
+  rc = seeded_pdb.add_placement(bad_loc, path, "subpath", resolved_inst)
+  assert not rc
+  # ERR: error: 'hw.instance' op Could not apply placement. Invalid location

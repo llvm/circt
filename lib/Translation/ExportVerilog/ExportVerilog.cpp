@@ -3255,13 +3255,34 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   if (!module.parameters().empty()) {
     os << "\n  #(";
 
-    auto printParamType = [&](Type type, SmallString<8> &result) {
+    auto printParamType = [&](Type type, Attribute defaultValue,
+                              SmallString<8> &result) {
+      result.clear();
       llvm::raw_svector_ostream sstream(result);
-      // TODO: Don't print the type when there is a default value and an
-      // obvious match with the type (e.g. `parameter x = "string"` doesn't
-      // need an explicit type).  Plain-Verilog clients do not support
-      // type specifiers on parameters.
-      // TODO: Support some kind of 'int' type, maybe use index type?
+
+      // If there is a default value like "32" then just print without type at
+      // all.
+      if (defaultValue) {
+        if (auto intAttr = defaultValue.dyn_cast<IntegerAttr>())
+          if (intAttr.getValue().getBitWidth() == 32)
+            return;
+        if (auto fpAttr = defaultValue.dyn_cast<FloatAttr>())
+          if (fpAttr.getType().isF64())
+            return;
+        if (defaultValue.isa<StringAttr>())
+          return;
+      }
+
+      // Classic Verilog parser don't allow a type in the parameter declaration.
+      // For compatibility with them, we omit the type when it is implicit based
+      // on its initializer value, and print the type commented out when it is
+      // a 32-bit "integer" parameter.
+      if (auto intType = type_dyn_cast<IntegerType>(type))
+        if (intType.getWidth() == 32) {
+          sstream << "/*integer*/";
+          return;
+        }
+
       printPackedType(type, sstream, module,
                       /*implicitIntType=*/true,
                       // Print single-bit values as explicit `[0:0]` type.
@@ -3272,9 +3293,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     size_t maxTypeWidth = 0;
     SmallString<8> scratch;
     for (auto param : module.parameters()) {
+      auto paramAttr = param.cast<ParamDeclAttr>();
       // Measure the type length by printing it to a temporary string.
-      scratch.clear();
-      printParamType(param.cast<ParamDeclAttr>().getType().getValue(), scratch);
+      printParamType(paramAttr.getType().getValue(), paramAttr.getValue(),
+                     scratch);
       maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
     }
 
@@ -3285,17 +3307,17 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         module.parameters(), os,
         [&](Attribute param) {
           auto paramAttr = param.cast<ParamDeclAttr>();
+          auto defaultValue = paramAttr.getValue(); // may be null if absent.
           os << "parameter ";
-          scratch.clear();
-          printParamType(paramAttr.getType().getValue(), scratch);
+          printParamType(paramAttr.getType().getValue(), defaultValue, scratch);
           os << scratch;
           if (scratch.size() < maxTypeWidth)
             os.indent(maxTypeWidth - scratch.size());
 
           os << paramAttr.getName().getValue();
-          if (auto value = paramAttr.getValue()) {
+          if (defaultValue) {
             os << " = ";
-            printParamValue(value, os, [&]() {
+            printParamValue(defaultValue, os, [&]() {
               return module->emitError("parameter '")
                      << paramAttr.getName().getValue() << "' has invalid value";
             });
@@ -3797,6 +3819,13 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
+#define GEN_PASS_CLASSES
+namespace circt {
+namespace translations {
+#include "circt/Translation/TranslationPasses.h.inc"
+}
+} // namespace circt
+
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   SharedEmitterState emitter(module);
   emitter.gatherFiles(false);
@@ -3817,6 +3846,36 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   // Finally, emit all the ops we collected.
   emitter.emitOps(list, os, /*parallelize=*/true);
   return failure(emitter.encounteredError);
+}
+
+namespace {
+
+struct ExportVerilogFilePass
+    : public translations::ExportVerilogFilePassBase<ExportVerilogFilePass> {
+  ExportVerilogFilePass(raw_ostream &os) : os(os) {}
+  void runOnOperation() override {
+    // Make sure LoweringOptions are applied to the module if it was overridden
+    // on the command line.
+    // TODO: This should be moved up to circt-opt and circt-translate.
+    applyLoweringCLOptions(getOperation());
+
+    if (failed(exportVerilog(getOperation(), os)))
+      signalPassFailure();
+  }
+
+private:
+  raw_ostream &os;
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::translations::createExportVerilogFilePass(llvm::raw_ostream &os) {
+  return std::make_unique<ExportVerilogFilePass>(os);
+}
+
+std::unique_ptr<mlir::Pass>
+circt::translations::createExportVerilogFilePass() {
+  return createExportVerilogFilePass(llvm::outs());
 }
 
 //===----------------------------------------------------------------------===//
@@ -3892,25 +3951,25 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   return failure(emitter.encounteredError);
 }
 
-//===----------------------------------------------------------------------===//
-// Registration
-//===----------------------------------------------------------------------===//
+namespace {
 
-void circt::registerToVerilogTranslation() {
-  // Register the circt emitter command line options.
-  registerLoweringCLOptions();
-  // Register the circt emitter translation.
-  mlir::TranslateFromMLIRRegistration toVerilog(
-      "export-verilog",
-      [](ModuleOp module, llvm::raw_ostream &os) {
-        // ExportVerilog requires that the SV dialect be loaded in order to
-        // create WireOps. It may not have been  loaded by the MLIR parser,
-        // which can happen if the input IR has no SV operations.
-        module->getContext()->loadDialect<sv::SVDialect>();
-        applyLoweringCLOptions(module);
-        return exportVerilog(module, os);
-      },
-      [](mlir::DialectRegistry &registry) {
-        registry.insert<CombDialect, HWDialect, SVDialect>();
-      });
+struct ExportSplitVerilogPass
+    : public translations::ExportSplitVerilogPassBase<ExportSplitVerilogPass> {
+  ExportSplitVerilogPass(StringRef directory) {
+    directoryName = directory.str();
+  }
+  void runOnOperation() override {
+    // Make sure LoweringOptions are applied to the module if it was overridden
+    // on the command line.
+    // TODO: This should be moved up to circt-opt and circt-translate.
+    applyLoweringCLOptions(getOperation());
+    if (failed(exportSplitVerilog(getOperation(), directoryName)))
+      signalPassFailure();
+  }
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::translations::createExportSplitVerilogPass(StringRef directory) {
+  return std::make_unique<ExportSplitVerilogPass>(directory);
 }

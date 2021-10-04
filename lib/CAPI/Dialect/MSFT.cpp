@@ -40,7 +40,9 @@ MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
 
 DEFINE_C_API_PTR_METHODS(CirctMSFTDeviceDB, circt::msft::DeviceDB)
 
-CirctMSFTDeviceDB circtMSFTCreateDeviceDB() { return wrap(new DeviceDB()); }
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirContext ctxt) {
+  return wrap(new DeviceDB(unwrap(ctxt)));
+}
 void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self) { delete unwrap(self); }
 MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB self,
                                                 MlirAttribute cLoc) {
@@ -59,8 +61,11 @@ bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB self,
 
 DEFINE_C_API_PTR_METHODS(CirctMSFTPlacementDB, circt::msft::PlacementDB)
 
-CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top) {
-  return wrap(new PlacementDB(unwrap(top)));
+CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
+                                                CirctMSFTDeviceDB seed) {
+  if (seed.ptr == nullptr)
+    return wrap(new PlacementDB(unwrap(top)));
+  return wrap(new PlacementDB(unwrap(top), *unwrap(seed)));
 }
 void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self) {
   delete unwrap(self);

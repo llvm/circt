@@ -38,7 +38,7 @@ typedef struct {
   void *ptr;
 } CirctMSFTDeviceDB;
 
-CirctMSFTDeviceDB circtMSFTCreateDeviceDB();
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirContext);
 void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
 MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB,
                                                 MlirAttribute locAndPrim);
@@ -60,7 +60,8 @@ typedef struct {
   MlirOperation op;
 } CirctMSFTPlacedInstance;
 
-CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top);
+CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
+                                                CirctMSFTDeviceDB seed);
 void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
 size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
 MlirLogicalResult
