@@ -8,6 +8,9 @@ add_circt_translation_library(CIRCTExportVerilog
   DEPENDS
   CIRCTTranslationIncGen
 
+  LINK_COMPONENTS
+  Core
+
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHW
