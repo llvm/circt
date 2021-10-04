@@ -23,6 +23,7 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Translation/ExportVerilog.h"
+#include "circt/Translation/TranslationPasses.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -396,18 +397,35 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
-    // Legalize unsupported operations within the modules.
-    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
-
-    // Legalize the module names.
-    pm.addPass(sv::createHWLegalizeNamesPass());
-
     // Tidy up the IR to improve verilog emission quality.
     if (!disableOptimization) {
       auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
 
+    // Legalize unsupported operations within the modules.
+    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+
+    // Legalize the module names.
+    pm.addPass(sv::createHWLegalizeNamesPass());
+
+    // Emit a single file or multiple files depending on the output format.
+    switch (outputFormat) {
+    case OutputMLIR:
+      break;
+    case OutputDisabled:
+      return success();
+    case OutputVerilog:
+      pm.addPass(translations::createExportVerilogFilePass(
+          outputFile.getValue()->os()));
+      break;
+    case OutputSplitVerilog:
+      pm.addPass(translations::createExportSplitVerilogPass(outputFilename));
+      break;
+    }
+
+    // Run module hierarchy emission after verilog emission, which ensures we
+    // pick up any changes that verilog emission made.
     if (exportModuleHierarchy)
       pm.addPass(sv::createHWExportModuleHierarchyPass());
   }
@@ -419,30 +437,16 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (failed(pm.run(module.get())))
     return failure();
 
-  // Note that we intentionally "leak" the Module into the MLIRContext instead
-  // of deallocating it.  There is no need to deallocate it right before
-  // process exit.
-  mlir::ModuleOp theModule = module.release();
-
-  // Emit a single file or multiple files depending on the output format.
-  switch (outputFormat) {
-  case OutputMLIR: {
+  if (outputFormat == OutputMLIR) {
     auto outputTimer = ts.nest("Print .mlir output");
-    theModule->print(outputFile.getValue()->os());
-    return success();
+    module->print(outputFile.getValue()->os());
   }
-  case OutputDisabled:
-    return success();
-  case OutputVerilog: {
-    auto outputTimer = ts.nest("ExportVerilog emission");
-    return exportVerilog(theModule, outputFile.getValue()->os());
-  }
-  case OutputSplitVerilog: {
-    auto outputTimer = ts.nest("Split ExportVerilog emission");
-    return exportSplitVerilog(theModule, outputFilename);
-  }
-  }
-  return failure();
+
+  // We intentionally "leak" the Module into the MLIRContext instead of
+  // deallocating it.  There is no need to deallocate it right before process
+  // exit.
+  (void)module.release();
+  return success();
 }
 
 /// Process a single split of the input. This allocates a source manager and
