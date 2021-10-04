@@ -177,7 +177,7 @@ def InstanceOp : CalyxCell<"instance", [
     Represents an instance of a Calyx component, which may include state.
 
     ```mlir
-      %c.in, %c.out = calyx.instance @c @MyComponent : i64, i16
+      %c.in, %c.out = calyx.instance @c of @MyComponent : i64, i16
     ```
   }];
 
@@ -194,7 +194,7 @@ def InstanceOp : CalyxCell<"instance", [
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $instanceName $componentName attr-dict (`:` type($results)^)?
+    $instanceName `of` $componentName attr-dict (`:` type($results)^)?
   }];
 }
 

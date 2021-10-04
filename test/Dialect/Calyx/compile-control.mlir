@@ -9,7 +9,7 @@ calyx.program "main" {
 
   calyx.component @main(%go : i1 {go}, %reset : i1 {reset}, %clk : i1 {clk}) -> (%done : i1 {done}) {
     // CHECK:  %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register @fsm : i2
-    %z.go, %z.reset, %z.clk, %z.flag, %z.done = calyx.instance @z @Z : i1, i1, i1, i1, i1
+    %z.go, %z.reset, %z.clk, %z.flag, %z.done = calyx.instance @z of @Z : i1, i1, i1, i1, i1
     calyx.wires {
       %undef = calyx.undef : i1
       // CHECK: %[[SIGNAL_ON:.+]] = hw.constant true
