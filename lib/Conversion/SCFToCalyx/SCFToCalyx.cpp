@@ -205,9 +205,7 @@ public:
     IRRewriter::InsertionGuard guard(rewriter);
     rewriter.setInsertionPoint(compOp.getBody(), compOp.getBody()->begin());
     auto name = TLibraryOp::getOperationName().split(".").second;
-    return rewriter.create<TLibraryOp>(
-        loc, FlatSymbolRefAttr::get(rewriter.getContext(), getUniqueName(name)),
-        resTypes);
+    return rewriter.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
   }
 
   /// Register value v as being evaluated when scheduling group.
@@ -1951,7 +1949,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&... args) {
+                      PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1960,7 +1958,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&... args) {
+                        PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(

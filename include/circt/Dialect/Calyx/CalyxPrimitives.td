@@ -137,8 +137,10 @@ class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
 
   let arguments = (ins FlatSymbolRefAttr:$instanceName);
   let builders = [
-    OpBuilder<(ins "FlatSymbolRefAttr":$instanceName, "::mlir::TypeRange":$resultTypes), [{
-      $_state.addAttribute("instanceName", instanceName);
+    OpBuilder<(ins "StringRef":$instanceName, "::mlir::TypeRange":$resultTypes), [{
+      $_state.addAttribute("instanceName",
+        FlatSymbolRefAttr::get($_builder.getContext(), instanceName)
+      );
       $_state.addTypes(resultTypes);
     }]>
   ];
