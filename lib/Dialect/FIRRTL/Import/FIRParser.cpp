@@ -2266,6 +2266,18 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
+template <typename Op>
+static ParseResult generatePrintfEncodedVerifOp(ImplicitLocOpBuilder &builder,
+                                                Value clock, Value condition,
+                                                StringRef message) {
+  APInt constOne(1, 1, false);
+  Value constTrue = builder.create<ConstantOp>(
+      UIntType::get(builder.getContext(), 1), constOne);
+  builder.create<Op>(clock, condition, constTrue, message, "",
+                     /*isConcurrent=*/true);
+  return success();
+}
+
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
@@ -2296,31 +2308,18 @@ ParseResult FIRStmtParser::parsePrintf() {
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
   StringRef formatStringRef(formatStrUnescaped);
-  // Generate concurrent verification statements
-  if (formatStringRef.startswith("cover:")) {
-    APInt constOne(1, 1, false);
-    Value constTrue =
-        builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped, "",
-                            /*isConcurrent=*/true);
-    return success();
-  }
-  if (formatStringRef.startswith("assert:")) {
-    APInt constOne(1, 1, false);
-    Value constTrue =
-        builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "", /*isConcurrent=*/true);
-    return success();
-  }
-  if (formatStringRef.startswith("assume:")) {
-    APInt constOne(1, 1, false);
-    Value constTrue =
-        builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "", /*isConcurrent=*/true);
-    return success();
-  }
+
+  // Check if this is a printf-encoded verification statement. These are
+  // introduced by "assert:" and friends.
+  if (formatStringRef.startswith("assert:"))
+    return generatePrintfEncodedVerifOp<AssertOp>(builder, clock, condition,
+                                                  formatStringRef);
+  if (formatStringRef.startswith("assume:"))
+    return generatePrintfEncodedVerifOp<AssumeOp>(builder, clock, condition,
+                                                  formatStringRef);
+  if (formatStringRef.startswith("cover:"))
+    return generatePrintfEncodedVerifOp<CoverOp>(builder, clock, condition,
+                                                 formatStringRef);
 
   builder.create<PrintFOp>(clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands,

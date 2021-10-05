@@ -204,7 +204,10 @@ when generating Verilog.
 
 Note that typed parameters are a SystemVerilog extension, many Verilog-only
 tools do not support them.  If you need compatibility with Verilog-only tools,
-please use `i32` integer, `f64`, and string parameters only.  
+please use `i32` integer, `f64`, and string parameters only.  All module
+parameter definitions
+[should have default values](https://github.com/llvm/circt/issues/1848#issuecomment-933558192) for maximum tool compatibility as well, even if
+they are always overridden.
 
 **TODO:** CIRCT could do parameter legalization to convert parameters smaller or
 larger than 32-bits to 32-bits when generating Verilog-only output.
