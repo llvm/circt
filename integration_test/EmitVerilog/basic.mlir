@@ -1,5 +1,5 @@
 // REQUIRES: verilator
-// RUN: circt-opt %s -export-verilog -verify-diagnostics > %t1.sv
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t2.mlir > %t1.sv
 // RUN: circt-rtl-sim.py %t1.sv --cycles 8 2>&1 | FileCheck %s
 
 module {
