@@ -471,6 +471,32 @@ Example:
 }
 ```
 
+### SeqMemInstanceMetadataAnnotation
+
+| Property   | Type   | Description                                  								|
+| ---------- | ------ | -------------                                								|
+| class      | string | `sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation` |
+| target     | string | Reference target                             								|
+
+This annotation attaches metadata to the firrtl.mem operation. The `data` is
+emitted onto the `seq_mems.json` and `tb_seq_mems.json` file. It is required
+for verificatin only and used by memory generator tools for simulation.
+
+Example:
+```json
+{
+    "class":"sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation",
+    "data":{
+      "baseAddress":2147483648,
+      "eccScheme":"none",
+      "eccBits":0,
+      "dataBits":8,
+      "eccIndices":[ ]
+    },
+    "target":"~CoreIPSubsystemVerifTestHarness|TLRAM>mem"
+}
+```
+
 ### ScalaClassAnnotation
 
 | Property   | Type   | Description                                     |
