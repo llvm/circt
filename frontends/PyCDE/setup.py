@@ -22,6 +22,8 @@ from setuptools import find_namespace_packages, setup, Extension
 from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
 
+_this_dir = os.path.abspath(os.path.dirname(__file__))
+
 
 # Build phase discovery is unreliable. Just tell it what phases to run.
 class CustomBuild(_build):
@@ -47,13 +49,9 @@ class CMakeBuild(build_py):
     if not cmake_build_dir:
       cmake_build_dir = os.path.join(target_dir, "..", "cmake_build")
     cmake_install_dir = os.path.join(target_dir, "..", "cmake_install")
-    this_dir = '/project/circt'
-    circt_dir = this_dir
+    circt_dir = os.path.abspath(
+        os.environ.get("CIRCT_DIRECTORY", os.path.join(_this_dir, "..", "..")))
     src_dir = os.path.abspath(os.path.join(circt_dir, "llvm", "llvm"))
-    print(this_dir)
-    print(os.listdir(this_dir))
-    print(circt_dir)
-    print(src_dir)
     cfg = "Release"
     cmake_args = [
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
