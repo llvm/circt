@@ -161,44 +161,38 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
   }
 
   if (name.equals("bundle")) {
-    if (parser.parseLess())
-      return failure();
-
     SmallVector<BundleType::BundleElement, 4> elements;
-    if (parser.parseOptionalGreater()) {
-      // Parse all of the bundle-elt's.
-      do {
-        std::string nameStr;
-        StringRef name;
-        FIRRTLType type;
 
-        // The 'name' can be an identifier or an integer.
-        auto parseIntOrStringName = [&]() -> ParseResult {
-          uint32_t fieldIntName;
-          auto intName = parser.parseOptionalInteger(fieldIntName);
-          if (intName.hasValue()) {
-            nameStr = llvm::utostr(fieldIntName);
-            name = nameStr;
-            return intName.getValue();
-          }
+    auto parseBundleElement = [&]() -> ParseResult {
+      std::string nameStr;
+      StringRef name;
+      FIRRTLType type;
 
-          // Otherwise must be an identifier.
-          return parser.parseKeyword(&name);
-          return success();
-        };
-
-        if (parseIntOrStringName())
+      // The 'name' can be an identifier or an integer.
+      uint32_t fieldIntName;
+      auto intName = parser.parseOptionalInteger(fieldIntName);
+      if (intName.hasValue()) {
+        if (failed(intName.getValue()))
           return failure();
-        bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
-        if (parser.parseColon() || parseFIRRTLType(type, parser))
+        nameStr = llvm::utostr(fieldIntName);
+        name = nameStr;
+      } else {
+        // Otherwise must be an identifier.
+        if (parser.parseKeyword(&name))
           return failure();
+      }
 
-        elements.push_back({StringAttr::get(context, name), isFlip, type});
-      } while (!parser.parseOptionalComma());
-
-      if (parser.parseGreater())
+      bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
+      if (parser.parseColon() || parseFIRRTLType(type, parser))
         return failure();
-    }
+
+      elements.push_back({StringAttr::get(context, name), isFlip, type});
+      return success();
+    };
+
+    if (parser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
+                                       parseBundleElement))
+      return failure();
 
     return result = BundleType::get(elements, context), success();
   }

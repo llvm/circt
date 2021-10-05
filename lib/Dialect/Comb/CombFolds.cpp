@@ -2049,10 +2049,7 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
 
     // Add this info to the concat we're generating.
     newConcatOperands.push_back(spanOperand);
-    // TODO (llvm merge): newConstant = newConstant.concat(spanConstant);
-    newConstant =
-        newConstant.zext(spanConstant.getBitWidth() + newConstant.getBitWidth())
-        << spanConstant.getBitWidth();
+    newConstant = newConstant.concat(spanConstant);
     newConstant.insertBits(spanConstant, 0);
 
     // Drop the unknown bits in prep for the next chunk.
