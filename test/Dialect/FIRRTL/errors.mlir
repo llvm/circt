@@ -418,6 +418,14 @@ firrtl.circuit "MemoryPortInvalidReturnType" {
 
 // -----
 
+firrtl.circuit "MemoryInvalidmask" {
+  firrtl.module @MemoryInvalidmask() {
+    // expected-error @+1 {{'firrtl.mem' op the mask width cannot be greater than data width}}
+    %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<9>>
+  }
+}
+// -----
+
 firrtl.circuit "MemoryNegativeReadLatency" {
   firrtl.module @MemoryNegativeReadLatency() {
     // expected-error @+1 {{'firrtl.mem' op attribute 'readLatency' failed to satisfy constraint}}
@@ -547,7 +555,37 @@ firrtl.circuit "MemoryPortsWithDifferentTypes" {
 firrtl.circuit "SubfieldOpFieldError" {
   firrtl.module @SubfieldOpFieldError() {
     %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b: uint<2>>
-    // expected-error @+1 {{subfield element index is greater than the number of fields}}
+    // expected-error @+1 {{}}
     %w_a = firrtl.subfield %w(2) : (!firrtl.bundle<a : uint<2>, b : uint<2>>) -> !firrtl.uint<2>
+  }
+}
+
+// -----
+
+firrtl.circuit "BitCast1" {
+  firrtl.module @BitCast1() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint>
+    // expected-error @+1 {{bitwidth cannot be determined for input operand type}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint>) -> (!firrtl.uint<6>)
+  }
+}
+
+// -----
+
+firrtl.circuit "BitCast2" {
+  firrtl.module @BitCast2() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+    // expected-error @+1 {{the bitwidth of input (3) and result (6) don't match}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<6>)
+  }
+}
+
+// -----
+
+firrtl.circuit "BitCast4" {
+  firrtl.module @BitCast4() {
+    %a = firrtl.wire : !firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>
+    // expected-error @+1 {{bitwidth cannot be determined for input operand type}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<6>)
   }
 }

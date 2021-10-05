@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/HWToLLHD/HWToLLHD.h"
+#include "circt/Conversion/HWToLLHD.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -192,8 +192,7 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
 
       // Otherwise, drive the destination block argument value.
       if (!delta) {
-        delta = rewriter.create<ConstantTimeOp>(
-            output.getLoc(), ArrayRef<unsigned int>({0, 1, 0}), "ns");
+        delta = rewriter.create<ConstantTimeOp>(output.getLoc(), 0, "ns", 1, 0);
       }
       rewriter.create<DrvOp>(output.getLoc(), dest, src, delta, Value());
     }
@@ -254,8 +253,7 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
       auto sig = rewriter.createOrFold<SigOp>(
           arg.getLoc(), SigType::get(argType), sigName, init);
       if (!delta) {
-        delta = rewriter.create<ConstantTimeOp>(
-            arg.getLoc(), ArrayRef<unsigned int>({0, 1, 0}), "ns");
+        delta = rewriter.create<ConstantTimeOp>(arg.getLoc(), 0, "ns", 1, 0);
       }
       rewriter.create<DrvOp>(arg.getLoc(), sig, arg, delta, Value());
       arguments.push_back(sig);

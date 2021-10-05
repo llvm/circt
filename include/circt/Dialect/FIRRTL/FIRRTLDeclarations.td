@@ -189,7 +189,7 @@ def MemOp : FIRRTLOp<"mem"> {
 
     /// Return the type of a port given the memory depth, type, and kind
     static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                     PortKind portKind);
+                                     PortKind portKind, size_t maskBits = 0);
 
     /// Return the name and kind of ports supported by this memory.
     SmallVector<NamedPort> getPorts();
@@ -202,6 +202,9 @@ def MemOp : FIRRTLOp<"mem"> {
 
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();
+
+    /// Return the number of mask bits.
+    size_t getMaskBits();
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo);
@@ -272,8 +275,9 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
+
     ```
-      %name = firrtl.reg %clockVal : t1
+    %name = firrtl.reg %clockVal : t1
     ```
     }];
 
@@ -305,7 +309,7 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal, ResetType:$resetSignal, PassiveType:$resetValue,
+    ins ClockType:$clockVal, AnyResetType:$resetSignal, PassiveType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 

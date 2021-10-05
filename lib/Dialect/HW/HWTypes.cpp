@@ -162,8 +162,7 @@ static ParseResult parseHWElementType(Type &result, DialectAsmParser &p) {
     llvm::StringRef mnemonic;
     if (p.parseKeyword(&mnemonic))
       llvm_unreachable("should have an array or inout keyword here");
-    auto parseResult =
-        generatedTypeParser(p.getBuilder().getContext(), p, mnemonic, result);
+    auto parseResult = generatedTypeParser(p, mnemonic, result);
     return parseResult.hasValue() ? success() : failure();
   }
 
@@ -195,22 +194,17 @@ llvm::hash_code hash_value(const FieldInfo &fi) {
 
 /// Parse a list of field names and types within <>. E.g.:
 /// <foo: i7, bar: i8>
-static ParseResult parseFields(MLIRContext *ctxt, DialectAsmParser &p,
+static ParseResult parseFields(DialectAsmParser &p,
                                SmallVectorImpl<FieldInfo> &parameters) {
-  StringRef name;
-  if (p.parseLess())
-    return failure();
-  while (mlir::succeeded(p.parseOptionalKeyword(&name))) {
-    Type type;
-    if (p.parseColon() || p.parseType(type))
-      return failure();
-    parameters.push_back(FieldInfo{name, type});
-    if (p.parseOptionalComma())
-      break;
-  }
-  if (p.parseGreater())
-    return failure();
-  return success();
+  return p.parseCommaSeparatedList(
+      mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
+        StringRef name;
+        Type type;
+        if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
+          return failure();
+        parameters.push_back(FieldInfo{name, type});
+        return success();
+      });
 }
 
 /// Print out a list of named fields surrounded by <>.
@@ -222,11 +216,11 @@ static void printFields(DialectAsmPrinter &p, ArrayRef<FieldInfo> fields) {
   p << ">";
 }
 
-Type StructType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type StructType::parse(DialectAsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  if (parseFields(ctxt, p, parameters))
+  if (parseFields(p, parameters))
     return Type();
-  return get(ctxt, parameters);
+  return get(p.getContext(), parameters);
 }
 
 void StructType::print(DialectAsmPrinter &p) const {
@@ -250,11 +244,11 @@ void StructType::getInnerTypes(SmallVectorImpl<Type> &types) {
 // Union Type
 //===----------------------------------------------------------------------===//
 
-Type UnionType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type UnionType::parse(DialectAsmParser &p) {
   llvm::SmallVector<FieldInfo, 4> parameters;
-  if (parseFields(ctxt, p, parameters))
+  if (parseFields(p, parameters))
     return Type();
-  return get(ctxt, parameters);
+  return get(p.getContext(), parameters);
 }
 
 void UnionType::print(DialectAsmPrinter &p) const {
@@ -273,7 +267,7 @@ Type UnionType::getFieldType(mlir::StringRef fieldName) {
 // ArrayType
 //===----------------------------------------------------------------------===//
 
-Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type ArrayType::parse(DialectAsmParser &p) {
   SmallVector<int64_t, 2> dims;
   Type inner;
   if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
@@ -289,7 +283,7 @@ Type ArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
                     dims[0])))
     return Type();
 
-  return get(ctxt, inner, dims[0]);
+  return get(p.getContext(), inner, dims[0]);
 }
 
 void ArrayType::print(DialectAsmPrinter &p) const {
@@ -309,7 +303,7 @@ LogicalResult ArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 // UnpackedArrayType
 //===----------------------------------------------------------------------===//
 
-Type UnpackedArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type UnpackedArrayType::parse(DialectAsmParser &p) {
   SmallVector<int64_t, 2> dims;
   Type inner;
   if (p.parseLess() || p.parseDimensionList(dims, /* allowDynamic */ false) ||
@@ -326,7 +320,7 @@ Type UnpackedArrayType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
                     dims[0])))
     return Type();
 
-  return get(ctxt, inner, dims[0]);
+  return get(p.getContext(), inner, dims[0]);
 }
 
 void UnpackedArrayType::print(DialectAsmPrinter &p) const {
@@ -347,7 +341,7 @@ UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
 // InOutType
 //===----------------------------------------------------------------------===//
 
-Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type InOutType::parse(DialectAsmParser &p) {
   Type inner;
   if (p.parseLess() || parseHWElementType(inner, p) || p.parseGreater())
     return Type();
@@ -356,7 +350,7 @@ Type InOutType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
   if (failed(verify(mlir::detail::getDefaultDiagnosticEmitFn(loc), inner)))
     return Type();
 
-  return get(ctxt, inner);
+  return get(p.getContext(), inner);
 }
 
 void InOutType::print(DialectAsmPrinter &p) const {
@@ -403,7 +397,7 @@ TypeAliasType TypeAliasType::get(SymbolRefAttr ref, Type innerType) {
   return get(ref.getContext(), ref, innerType, computeCanonicalType(innerType));
 }
 
-Type TypeAliasType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type TypeAliasType::parse(DialectAsmParser &p) {
   SymbolRefAttr ref;
   Type type;
   if (p.parseLess() || p.parseAttribute(ref) || p.parseComma() ||
@@ -448,7 +442,7 @@ Type HWDialect::parseType(DialectAsmParser &parser) const {
   if (parser.parseKeyword(&mnemonic))
     return Type();
   Type type;
-  auto parseResult = generatedTypeParser(getContext(), parser, mnemonic, type);
+  auto parseResult = generatedTypeParser(parser, mnemonic, type);
   if (parseResult.hasValue())
     return type;
   return Type();

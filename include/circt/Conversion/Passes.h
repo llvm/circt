@@ -13,15 +13,17 @@
 #ifndef CIRCT_CONVERSION_PASSES_H
 #define CIRCT_CONVERSION_PASSES_H
 
-#include "circt/Conversion/AffineToStaticLogic/AffineToStaticLogic.h"
-#include "circt/Conversion/CalyxToHW/CalyxToHW.h"
-#include "circt/Conversion/FIRRTLToHW/FIRRTLToHW.h"
-#include "circt/Conversion/HWToLLHD/HWToLLHD.h"
-#include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
-#include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
-#include "circt/Conversion/SCFToCalyx/SCFToCalyx.h"
-#include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
-#include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
+#include "circt/Conversion/AffineToStaticLogic.h"
+#include "circt/Conversion/CalyxToHW.h"
+#include "circt/Conversion/ExportVerilog.h"
+#include "circt/Conversion/FIRRTLToHW.h"
+#include "circt/Conversion/HWToLLHD.h"
+#include "circt/Conversion/HandshakeToFIRRTL.h"
+#include "circt/Conversion/LLHDToLLVM.h"
+#include "circt/Conversion/SCFToCalyx.h"
+#include "circt/Conversion/StandardToHandshake.h"
+#include "circt/Conversion/StandardToStaticLogic.h"
+
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 

@@ -1549,10 +1549,10 @@ struct foldResetMux : public mlir::RewritePattern {
 
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::RegresetWithZeroReset,
-                 patterns::RegresetWithInvalidReset,
-                 patterns::RegresetWithInvalidResetValue, foldResetMux,
-                 patterns::DropNameRegReset>(context);
+  results.insert<patterns::RegResetWithZeroReset,
+                 patterns::RegResetWithInvalidReset,
+                 patterns::RegResetWithInvalidResetValue,
+                 patterns::DropNameRegReset, foldResetMux>(context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {

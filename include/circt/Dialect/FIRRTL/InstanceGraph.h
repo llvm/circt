@@ -221,7 +221,7 @@ private:
 
 namespace llvm {
 template <>
-struct GraphTraits<circt::firrtl::InstanceGraphNode> {
+struct GraphTraits<circt::firrtl::InstanceGraphNode *> {
   using NodeType = circt::firrtl::InstanceGraphNode;
   using NodeRef = NodeType *;
 
@@ -244,7 +244,7 @@ struct GraphTraits<circt::firrtl::InstanceGraphNode> {
 
 template <>
 struct GraphTraits<circt::firrtl::InstanceGraph *>
-    : public GraphTraits<circt::firrtl::InstanceGraphNode> {
+    : public GraphTraits<circt::firrtl::InstanceGraphNode *> {
   using nodes_iterator = circt::firrtl::InstanceGraph::iterator;
 
   static NodeRef getEntryNode(circt::firrtl::InstanceGraph *instanceGraph) {

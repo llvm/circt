@@ -33,7 +33,7 @@ public:
                        // Struct operations
                        StructCreateOp, StructExtractOp, StructInjectOp,
                        // Cast operation
-                       BitcastOp>([&](auto expr) -> ResultType {
+                       BitcastOp, ParamValueOp>([&](auto expr) -> ResultType {
           return thisCast->visitTypeOp(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -43,11 +43,11 @@ public:
 
   /// This callback is invoked on any non-expression operations.
   ResultType visitInvalidTypeOp(Operation *op, ExtraArgs... args) {
-    op->emitOpError("unknown HW combinatorial node");
+    op->emitOpError("unknown HW combinational node");
     abort();
   }
 
-  /// This callback is invoked on any combinatorial operations that are not
+  /// This callback is invoked on any combinational operations that are not
   /// handled by the concrete visitor.
   ResultType visitUnhandledTypeOp(Operation *op, ExtraArgs... args) {
     return ResultType();
@@ -61,6 +61,7 @@ public:
 
   HANDLE(ConstantOp, Unhandled);
   HANDLE(BitcastOp, Unhandled);
+  HANDLE(ParamValueOp, Unhandled);
   HANDLE(StructCreateOp, Unhandled);
   HANDLE(StructExtractOp, Unhandled);
   HANDLE(StructInjectOp, Unhandled);
@@ -89,11 +90,11 @@ public:
 
   /// This callback is invoked on any non-expression operations.
   ResultType visitInvalidStmt(Operation *op, ExtraArgs... args) {
-    op->emitOpError("unknown HW combinatorial node");
+    op->emitOpError("unknown hw statement");
     abort();
   }
 
-  /// This callback is invoked on any combinatorial operations that are not
+  /// This callback is invoked on any combinational operations that are not
   /// handled by the concrete visitor.
   ResultType visitUnhandledTypeOp(Operation *op, ExtraArgs... args) {
     return ResultType();

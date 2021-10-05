@@ -86,8 +86,6 @@ static void constructProblem(Problem &prob, FuncOp func) {
 }
 
 static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
-  constructProblem(prob, func);
-
   // parse auxiliary dependences in the testcase (again), in order to set the
   // optional distance in the cyclic problem
   if (auto attr = func->getAttrOfType<ArrayAttr>("auxdeps")) {
@@ -105,8 +103,6 @@ static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
 
 static void constructSPOProblem(SharedPipelinedOperatorsProblem &prob,
                                 FuncOp func) {
-  constructProblem(prob, func);
-
   // parse operator type info (again) to extract optional operator limit
   if (auto attr = func->getAttrOfType<ArrayAttr>("operatortypes")) {
     for (auto &elem : parseArrayOfDicts(attr, "limit")) {
@@ -179,6 +175,7 @@ void TestCyclicProblemPass::runOnFunction() {
   auto func = getFunction();
 
   CyclicProblem prob(func);
+  constructProblem(prob, func);
   constructCyclicProblem(prob, func);
 
   if (failed(prob.check())) {
@@ -221,12 +218,56 @@ void TestSPOProblemPass::runOnFunction() {
   auto func = getFunction();
 
   SharedPipelinedOperatorsProblem prob(func);
+  constructProblem(prob, func);
   constructSPOProblem(prob, func);
 
   if (failed(prob.check())) {
     func->emitError("problem check failed");
     return signalPassFailure();
   }
+
+  // get schedule from the test case
+  for (auto *op : prob.getOperations())
+    if (auto startTimeAttr = op->getAttrOfType<IntegerAttr>("problemStartTime"))
+      prob.setStartTime(op, startTimeAttr.getInt());
+
+  if (failed(prob.verify())) {
+    func->emitError("problem verification failed");
+    return signalPassFailure();
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// ModuloProblem
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestModuloProblemPass
+    : public PassWrapper<TestModuloProblemPass, FunctionPass> {
+  void runOnFunction() override;
+  StringRef getArgument() const override { return "test-modulo-problem"; }
+  StringRef getDescription() const override {
+    return "Import a solution for the modulo problem encoded as attributes";
+  }
+};
+} // namespace
+
+void TestModuloProblemPass::runOnFunction() {
+  auto func = getFunction();
+
+  ModuloProblem prob(func);
+  constructProblem(prob, func);
+  constructCyclicProblem(prob, func);
+  constructSPOProblem(prob, func);
+
+  if (failed(prob.check())) {
+    func->emitError("problem check failed");
+    return signalPassFailure();
+  }
+
+  // get II from the test case
+  if (auto attr = func->getAttrOfType<IntegerAttr>("problemInitiationInterval"))
+    prob.setInitiationInterval(attr.getInt());
 
   // get schedule from the test case
   for (auto *op : prob.getOperations())
@@ -319,6 +360,7 @@ void TestSimplexSchedulerPass::runOnFunction() {
 
   if (problemToTest == "CyclicProblem") {
     CyclicProblem prob(func);
+    constructProblem(prob, func);
     constructCyclicProblem(prob, func);
     assert(succeeded(prob.check()));
 
@@ -376,6 +418,9 @@ void registerSchedulingTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestSPOProblemPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestModuloProblemPass>();
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestASAPSchedulerPass>();

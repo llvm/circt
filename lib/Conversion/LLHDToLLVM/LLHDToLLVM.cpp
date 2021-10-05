@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/LLHDToLLVM/LLHDToLLVM.h"
+#include "circt/Conversion/LLHDToLLVM.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -2145,7 +2145,7 @@ struct ConstantTimeOpConversion : public ConvertToLLVMPattern {
 
     // Get sub-steps.
     uint64_t delta = timeAttr.getDelta();
-    uint64_t eps = timeAttr.getEps();
+    uint64_t eps = timeAttr.getEpsilon();
 
     // Create time constant.
     auto denseAttr =

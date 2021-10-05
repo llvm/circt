@@ -16,6 +16,7 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/Attributes.h"
@@ -154,7 +155,8 @@ void BlackBoxReaderPass::runOnOperation() {
     }
 
     // Update the operation annotations to exclude the ones we have consumed.
-    anythingChanged |= AnnotationSet(filteredAnnos, context).applyToOperation(&op);
+    anythingChanged |=
+        AnnotationSet(filteredAnnos, context).applyToOperation(&op);
   }
 
   // If we have emitted any files, generate a file list operation that
@@ -182,13 +184,9 @@ void BlackBoxReaderPass::runOnOperation() {
         builder.create<VerbatimOp>(circuitOp->getLoc(), std::move(output));
 
     // Attach the output file information to the verbatim op.
-    auto trueAttr = BoolAttr::get(context, true);
-    op->setAttr("output_file",
-                OutputFileAttr::get(StringAttr::get(context, ""),
-                                    StringAttr::get(context, resourceFileName),
-                                    /*exclude_from_filelist=*/trueAttr,
-                                    /*exclude_replicated_ops=*/trueAttr,
-                                    context));
+    op->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                   context, resourceFileName,
+                                   /*excludeFromFileList=*/true));
   }
 
   // If nothing has changed we can preseve the analysis.
@@ -320,12 +318,9 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr) {
   // explicitly by compiler directives in other source files.
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
-  auto trueAttr = BoolAttr::get(context, true);
-  op->setAttr("output_file",
-              OutputFileAttr::get(
-                  StringAttr::get(context, targetDir), fileNameAttr,
-                  /*exclude_from_filelist=*/BoolAttr::get(context, exclude),
-                  /*exclude_replicated_ops=*/trueAttr, context));
+  op->setAttr("output_file", OutputFileAttr::getFromDirectoryAndFilename(
+                                 context, targetDir, fileName,
+                                 /*excludeFromFileList=*/exclude));
 
   // Record that this file has been generated.
   assert(!emittedFiles.count(fileNameAttr) &&

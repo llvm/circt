@@ -15,14 +15,6 @@
 
 #include "mlir/Pass/Pass.h"
 
-#include <memory>
-
-namespace mlir {
-class ModuleOp;
-template <typename T>
-class OperationPass;
-} // namespace mlir
-
 namespace circt {
 namespace sv {
 

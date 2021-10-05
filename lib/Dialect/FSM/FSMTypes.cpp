@@ -26,8 +26,7 @@ Type FSMDialect::parseType(DialectAsmParser &parser) const {
   if (parser.parseKeyword(&mnemonic))
     return Type();
   Type genType;
-  auto parseResult =
-      generatedTypeParser(getContext(), parser, mnemonic, genType);
+  auto parseResult = generatedTypeParser(parser, mnemonic, genType);
   if (parseResult.hasValue())
     return genType;
   parser.emitError(parser.getNameLoc(), "unknown FSM type: ") << mnemonic;

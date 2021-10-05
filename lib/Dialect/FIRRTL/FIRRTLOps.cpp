@@ -681,16 +681,20 @@ parseFunctionResultList2(OpAsmParser &parser,
   if (succeeded(parser.parseOptionalRParen()))
     return success();
 
-  // Parse individual function results.
-  do {
+  auto parseFunctionResult = [&]() -> ParseResult {
     resultTypes.emplace_back();
     resultAttrs.emplace_back();
     if (parser.parseType(resultTypes.back()) ||
-        parser.parseOptionalAttrDict(resultAttrs.back())) {
+        parser.parseOptionalAttrDict(resultAttrs.back()))
       return failure();
-    }
-  } while (succeeded(parser.parseOptionalComma()));
-  return parser.parseRParen();
+    return success();
+  };
+
+  // Parse individual function results.
+  if (parser.parseCommaSeparatedList(parseFunctionResult) ||
+      parser.parseRParen())
+    return failure();
+  return success();
 }
 
 static ParseResult
@@ -1254,7 +1258,8 @@ static LogicalResult verifyMemOp(MemOp mem) {
     // for this port.  This catches situations of extraneous port
     // fields beind included or the fields being named incorrectly.
     FIRRTLType expectedType =
-        mem.getTypeForPort(mem.depth(), dataType, portKind);
+        mem.getTypeForPort(mem.depth(), dataType, portKind,
+                           dataType.isGround() ? mem.getMaskBits() : 0);
     // Compute the original port type as portBundleType may have
     // stripped outer flip information.
     auto originalType = mem.getResult(i).getType();
@@ -1291,6 +1296,13 @@ static LogicalResult verifyMemOp(MemOp mem) {
     oldDataType = dataType;
   }
 
+  auto maskWidth = mem.getMaskBits();
+
+  auto dataWidth = mem.getDataType().getBitWidthOrSentinel();
+  if (dataWidth > 0 && maskWidth > (size_t)dataWidth)
+    return mem.emitOpError("the mask width cannot be greater than "
+                           "data width");
+
   if (mem.portAnnotations().size() != mem.getNumResults())
     return mem.emitOpError("the number of result annotations should be "
                            "equal to the number of results");
@@ -1299,9 +1311,15 @@ static LogicalResult verifyMemOp(MemOp mem) {
 }
 
 BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                 PortKind portKind) {
+                                 PortKind portKind, size_t maskBits) {
 
   auto *context = dataType.getContext();
+  FIRRTLType maskType;
+  // maskBits not specified (==0), then get the mask type from the dataType.
+  if (maskBits == 0)
+    maskType = dataType.getMaskType();
+  else
+    maskType = UIntType::get(context, maskBits);
 
   auto getId = [&](StringRef name) -> StringAttr {
     return StringAttr::get(context, name);
@@ -1323,14 +1341,14 @@ BundleType MemOp::getTypeForPort(uint64_t depth, FIRRTLType dataType,
 
   case PortKind::Write:
     portFields.push_back({getId("data"), false, dataType});
-    portFields.push_back({getId("mask"), false, dataType.getMaskType()});
+    portFields.push_back({getId("mask"), false, maskType});
     break;
 
   case PortKind::ReadWrite:
     portFields.push_back({getId("rdata"), true, dataType});
     portFields.push_back({getId("wmode"), false, UIntType::get(context, 1)});
     portFields.push_back({getId("wdata"), false, dataType});
-    portFields.push_back({getId("wmask"), false, dataType.getMaskType()});
+    portFields.push_back({getId("wmask"), false, maskType});
     break;
   }
 
@@ -1372,6 +1390,28 @@ MemOp::PortKind MemOp::getPortKind(StringRef portName) {
 MemOp::PortKind MemOp::getPortKind(size_t resultNo) {
   return getMemPortKindFromType(
       getResult(resultNo).getType().cast<FIRRTLType>());
+}
+
+/// Return the number of bits in the mask for the memory.
+size_t MemOp::getMaskBits() {
+
+  for (auto res : getResults()) {
+    auto firstPortType = res.getType().cast<FIRRTLType>();
+    if (getMemPortKindFromType(firstPortType) == PortKind::Read)
+      continue;
+
+    FIRRTLType mType;
+    for (auto t :
+         firstPortType.getPassiveType().cast<BundleType>().getElements()) {
+      if (t.name.getValue().contains("mask"))
+        mType = t.type;
+    }
+    if (mType.dyn_cast_or_null<UIntType>())
+      return mType.getBitWidthOrSentinel();
+  }
+  // Mask of zero bits means, either there are no write/readwrite ports or the
+  // mask is of aggregate type.
+  return 0;
 }
 
 /// Return the data-type field of the memory, the type of each element.
@@ -1721,6 +1761,48 @@ static LogicalResult verifySubfieldOp(SubfieldOp op) {
     return op.emitOpError("subfield element index is greater than the number "
                           "of fields in the bundle type");
   return success();
+}
+
+/// Return true if the specified operation has a constant value. This trivially
+/// checks for `firrtl.constant` and friends, but also looks through subaccesses
+/// and correctly handles wires driven with only constant values.
+bool firrtl::isConstant(Operation *op) {
+  // Worklist of ops that need to be examined that should all be constant in
+  // order for the input operation to be constant.
+  SmallVector<Operation *, 8> worklist({op});
+
+  // Mutable state indicating if this op is a constant.  Assume it is a constant
+  // and look for counterexamples.
+  bool constant = true;
+
+  // While we haven't found a counterexample and there are still ops in the
+  // worklist, pull ops off the worklist.  If it provides a counterexample, set
+  // the `constant` to false (and exit on the next loop iteration).  Otherwise,
+  // look through the op or spawn off more ops to look at.
+  while (constant && !(worklist.empty()))
+    TypeSwitch<Operation *>(worklist.pop_back_val())
+        .Case<NodeOp, AsSIntPrimOp, AsUIntPrimOp>([&](auto op) {
+          if (auto definingOp = op.input().getDefiningOp())
+            worklist.push_back(definingOp);
+          constant = false;
+        })
+        .Case<WireOp, SubindexOp, SubfieldOp>([&](auto op) {
+          for (auto &use : op.getResult().getUses())
+            worklist.push_back(use.getOwner());
+        })
+        .Case<ConstantOp, SpecialConstantOp>([](auto) {})
+        .Default([&](auto) { constant = false; });
+
+  return constant;
+}
+
+/// Return true if the specified value is a constant. This trivially checks for
+/// `firrtl.constant` and friends, but also looks through subaccesses and
+/// correctly handles wires driven with only constant values.
+bool firrtl::isConstant(Value value) {
+  if (auto *op = value.getDefiningOp())
+    return isConstant(op);
+  return false;
 }
 
 FIRRTLType SubfieldOp::inferReturnType(ValueRange operands,
@@ -2388,6 +2470,26 @@ static LogicalResult verifyHWStructCastOp(HWStructCastOp cast) {
   }
 
   return success();
+}
+
+static LogicalResult verifyBitCastOp(BitCastOp cast) {
+
+  auto inTypeBits = getBitWidth(cast.getOperand().getType().cast<FIRRTLType>());
+  auto resTypeBits = getBitWidth(cast.getType());
+  if (inTypeBits.hasValue() && resTypeBits.hasValue()) {
+    // Bitwidths must match for valid bitcast.
+    if (inTypeBits.getValue() == resTypeBits.getValue())
+      return success();
+    return cast.emitError("the bitwidth of input (")
+           << inTypeBits.getValue() << ") and result ("
+           << resTypeBits.getValue() << ") don't match";
+  }
+  if (!inTypeBits.hasValue())
+    return cast.emitError(
+               "bitwidth cannot be determined for input operand type ")
+           << cast.getOperand().getType();
+  return cast.emitError("bitwidth cannot be determined for result type ")
+         << cast.getType();
 }
 
 //===----------------------------------------------------------------------===//

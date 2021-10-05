@@ -34,6 +34,12 @@ bool isExpression(Operation *op);
 /// Return the number of ports in a module-like thing (modules, memories, etc)
 size_t getNumPorts(Operation *op);
 
+/// Return true if the specified operation has a constant value. This trivially
+/// checks for `firrtl.constant` and friends, but also looks through subaccesses
+/// and correctly handles wires driven with only constant values.
+bool isConstant(Operation *op);
+bool isConstant(Value value);
+
 /// Returns true if the value results from an expression with duplex flow.
 /// Duplex values have special treatment in bundle connect operations, and
 /// their flip orientation is not used to determine the direction of each

@@ -1,5 +1,5 @@
-// RUN: circt-translate --lowering-options= --export-verilog %s | FileCheck %s --check-prefix=CHECK-OFF
-// RUN: circt-translate --lowering-options=verifLabels --export-verilog %s | FileCheck %s --check-prefix=CHECK-ON
+// RUN: circt-opt --lowering-options= --export-verilog %s | FileCheck %s --check-prefix=CHECK-OFF
+// RUN: circt-opt --lowering-options=verifLabels --export-verilog %s | FileCheck %s --check-prefix=CHECK-ON
 
 hw.module @foo(%clock: i1, %cond: i1) {
   sv.initial {

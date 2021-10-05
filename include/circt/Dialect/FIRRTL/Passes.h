@@ -40,6 +40,8 @@ std::unique_ptr<mlir::Pass> createInlinerPass();
 
 std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
+std::unique_ptr<mlir::Pass> createCreateSiFiveMetadataPass();
+
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 
 std::unique_ptr<mlir::Pass> createInferWidthsPass();
@@ -57,6 +59,8 @@ createBlackBoxReaderPass(llvm::Optional<StringRef> inputPrefix = {},
 std::unique_ptr<mlir::Pass> createGrandCentralPass();
 
 std::unique_ptr<mlir::Pass> createGrandCentralTapsPass();
+
+std::unique_ptr<mlir::Pass> createGrandCentralSignalMappingsPass();
 
 std::unique_ptr<mlir::Pass> createCheckCombCyclesPass();
 

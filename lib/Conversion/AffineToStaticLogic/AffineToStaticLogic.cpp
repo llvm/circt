@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/AffineToStaticLogic/AffineToStaticLogic.h"
+#include "circt/Conversion/AffineToStaticLogic.h"
 #include "../PassDetail.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Scheduling/Algorithms.h"

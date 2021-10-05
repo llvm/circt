@@ -21,8 +21,8 @@
 using namespace circt;
 using namespace hw;
 
-/// Return true if the specified operation is a combinatorial logic op.
-bool hw::isCombinatorial(Operation *op) {
+/// Return true if the specified operation is a combinational logic op.
+bool hw::isCombinational(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
     bool visitInvalidTypeOp(Operation *op) { return false; }
     bool visitUnhandledTypeOp(Operation *op) { return true; }
@@ -40,7 +40,8 @@ enum class Delimiter {
 
 /// Check parameter specified by `value` to see if it is valid within the scope
 /// of the specified module `module`.  If not, emit an error at the location of
-/// `usingOp` and return failure, otherwise return success.
+/// `usingOp` and return failure, otherwise return success.  If `usingOp` is
+/// null, then no diagnostic is generated.
 ///
 /// If `disallowParamRefs` is true, then parameter references are not allowed.
 LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
@@ -52,13 +53,12 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
       value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
     return success();
 
-  // Check both arms of an expression.
-  if (auto binop = value.dyn_cast<ParamBinaryAttr>()) {
-    if (failed(checkParameterInContext(binop.getLhs(), module, usingOp,
-                                       disallowParamRefs)) ||
-        failed(checkParameterInContext(binop.getRhs(), module, usingOp,
-                                       disallowParamRefs)))
-      return failure();
+  // Check both subexpressions of an expression.
+  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
+    for (auto op : expr.getOperands())
+      if (failed(
+              checkParameterInContext(op, module, usingOp, disallowParamRefs)))
+        return failure();
     return success();
   }
 
@@ -70,8 +70,9 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
     // Don't allow references to parameters from the default values of a
     // parameter list.
     if (disallowParamRefs) {
-      usingOp->emitOpError("parameter ")
-          << nameAttr << " cannot be used as a default value for a parameter";
+      if (usingOp)
+        usingOp->emitOpError("parameter ")
+            << nameAttr << " cannot be used as a default value for a parameter";
       return failure();
     }
 
@@ -85,19 +86,31 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
       if (paramAttr.getType().getValue() == parameterRef.getType())
         return success();
 
-      auto diag = usingOp->emitOpError("parameter ")
-                  << nameAttr << " used with type " << parameterRef.getType()
-                  << "; should have type " << paramAttr.getType().getValue();
-      diag.attachNote(module->getLoc()) << "module declared here";
+      if (usingOp) {
+        auto diag = usingOp->emitOpError("parameter ")
+                    << nameAttr << " used with type " << parameterRef.getType()
+                    << "; should have type " << paramAttr.getType().getValue();
+        diag.attachNote(module->getLoc()) << "module declared here";
+      }
       return failure();
     }
 
-    auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
-    diag.attachNote(module->getLoc()) << "module declared here";
+    if (usingOp) {
+      auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
+      diag.attachNote(module->getLoc()) << "module declared here";
+    }
     return failure();
   }
 
-  return usingOp->emitOpError("invalid parameter value ") << value;
+  if (usingOp)
+    usingOp->emitOpError("invalid parameter value ") << value;
+  return failure();
+}
+
+/// Return true if the specified attribute tree is made up of nodes that are
+/// valid in a parameter expression.
+bool hw::isValidParameterExpression(Attribute attr, Operation *module) {
+  return succeeded(checkParameterInContext(attr, module, nullptr, false));
 }
 
 //===----------------------------------------------------------------------===//
@@ -176,6 +189,35 @@ void ConstantOp::getAsmResultNames(
 
 OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
   assert(constants.empty() && "constant has no operands");
+  return valueAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// ParamValueOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseParamValue(OpAsmParser &p, Attribute &value,
+                                   Type &resultType) {
+  if (p.parseType(resultType) || p.parseEqual() ||
+      p.parseAttribute(value, resultType))
+    return failure();
+  return success();
+}
+
+static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
+                            Type resultType) {
+  p << resultType << " = ";
+  p.printAttributeWithoutType(value);
+}
+
+static LogicalResult verifyParamValueOp(ParamValueOp op) {
+  // Check that the attribute expression is valid in this module.
+  return checkParameterInContext(op.value(),
+                                 op->getParentOfType<hw::HWModuleOp>(), op);
+}
+
+OpFoldResult ParamValueOp::fold(ArrayRef<Attribute> constants) {
+  assert(constants.empty() && "hw.param.value has no operands");
   return valueAttr();
 }
 
@@ -1174,7 +1216,7 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
   auto parseElement = [&]() -> ParseResult {
     Type ty;
     if (p.parseType(ty))
-      return p.emitError(p.getCurrentLocation(), "Expected type");
+      return failure();
     auto arrTy = type_dyn_cast<ArrayType>(ty);
     if (!arrTy)
       return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");

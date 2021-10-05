@@ -31,30 +31,27 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        void *userData);
 
 //===----------------------------------------------------------------------===//
-// Generator registration.
-//===----------------------------------------------------------------------===//
-
-/// This callback constructs a replacement for the operation argument and
-/// returns it.
-typedef struct {
-  MlirOperation (*callback)(MlirOperation, void *userData);
-  void *userData;
-} mlirMSFTGeneratorCallback;
-
-/// Register a generator callback (function pointer, user data pointer).
-MLIR_CAPI_EXPORTED void mlirMSFTRegisterGenerator(MlirContext,
-                                                  const char *opName,
-                                                  const char *generatorName,
-                                                  mlirMSFTGeneratorCallback cb,
-                                                  MlirAttribute parameters);
-
-//===----------------------------------------------------------------------===//
 // DeviceDB.
 //===----------------------------------------------------------------------===//
 
 typedef struct {
   void *ptr;
 } CirctMSFTDeviceDB;
+
+CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirContext);
+void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
+MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB,
+                                                MlirAttribute locAndPrim);
+bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB,
+                                      MlirAttribute locAndPrim);
+
+//===----------------------------------------------------------------------===//
+// PlacementDB.
+//===----------------------------------------------------------------------===//
+
+typedef struct {
+  void *ptr;
+} CirctMSFTPlacementDB;
 
 typedef struct {
   MlirAttribute path; // RootedInstancePathAttr.
@@ -63,14 +60,16 @@ typedef struct {
   MlirOperation op;
 } CirctMSFTPlacedInstance;
 
-CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirOperation top);
-void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
-size_t circtMSFTDeviceDBAddDesignPlacements(CirctMSFTDeviceDB);
-MlirLogicalResult circtMSFTDeviceDBAddPlacement(CirctMSFTDeviceDB,
-                                                MlirAttribute loc,
-                                                CirctMSFTPlacedInstance inst);
-bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB, MlirAttribute loc,
-                                       CirctMSFTPlacedInstance *out);
+CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
+                                                CirctMSFTDeviceDB seed);
+void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
+size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
+MlirLogicalResult
+circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB, MlirAttribute loc,
+                                 CirctMSFTPlacedInstance inst);
+bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB,
+                                          MlirAttribute loc,
+                                          CirctMSFTPlacedInstance *out);
 
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
@@ -80,17 +79,17 @@ bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB, MlirAttribute loc,
 /// and y coordinates, and number.
 MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
                                                     const char *entityName,
-                                                    DeviceType type, long x,
+                                                    PrimitiveType type, long x,
                                                     long y, long num);
 
 // Values represented in `MSFT.td`.
-typedef uint32_t CirctMSFTDevType;
+typedef uint32_t CirctMSFTPrimitiveType;
 
 bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
-MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTDevType,
+MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTPrimitiveType,
                                            uint64_t x, uint64_t y,
                                            uint64_t num);
-CirctMSFTDevType circtMSFTPhysLocationAttrGetDeviceType(MlirAttribute);
+CirctMSFTPrimitiveType circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
 uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);

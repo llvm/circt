@@ -10,7 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Translation/ExportVerilog.h"
+#include "circt/Conversion/ExportVerilog.h"
+#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -68,6 +69,24 @@ enum VerilogPrecedence {
   LowestPrecedence,  // Sentinel which is always the lowest precedence.
   ForceEmitMultiUse, // Sentinel saying to recursively emit a multi-used expr.
 };
+
+/// This enum keeps track of whether the emitted subexpression is signed or
+/// unsigned as seen from the Verilog language perspective.
+enum SubExprSignResult { IsSigned, IsUnsigned };
+
+/// This is information precomputed about each subexpression in the tree we
+/// are emitting as a unit.
+struct SubExprInfo {
+  /// The precedence of this expression.
+  VerilogPrecedence precedence;
+
+  /// The signedness of the expression.
+  SubExprSignResult signedness;
+
+  SubExprInfo(VerilogPrecedence precedence, SubExprSignResult signedness)
+      : precedence(precedence), signedness(signedness) {}
+};
+
 } // end anonymous namespace
 
 //===----------------------------------------------------------------------===//
@@ -75,9 +94,11 @@ enum VerilogPrecedence {
 //===----------------------------------------------------------------------===//
 
 /// Helper that prints a parameter constant value in a Verilog compatible way.
-static void printParamValue(Attribute value, raw_ostream &os,
-                            VerilogPrecedence parenthesizeIfLooserThan,
-                            function_ref<InFlightDiagnostic()> emitError) {
+/// This returns the precedence of the generated string.
+static SubExprInfo
+printParamValue(Attribute value, raw_ostream &os,
+                VerilogPrecedence parenthesizeIfLooserThan,
+                function_ref<InFlightDiagnostic()> emitError) {
   if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
     IntegerType intTy = intAttr.getType().cast<IntegerType>();
     APInt value = intAttr.getValue();
@@ -96,62 +117,137 @@ static void printParamValue(Attribute value, raw_ostream &os,
         os << intTy.getWidth() << "'d";
     }
     value.print(os, intTy.isSigned());
-    return;
+    return {Symbol, intTy.isSigned() ? IsSigned : IsUnsigned};
   }
   if (auto strAttr = value.dyn_cast<StringAttr>()) {
     os << '"';
     os.write_escaped(strAttr.getValue());
     os << '"';
-    return;
+    return {Symbol, IsUnsigned};
   }
   if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
     // TODO: relying on float printing to be precise is not a good idea.
     os << fpAttr.getValueAsDouble();
-    return;
+    return {Symbol, IsUnsigned};
   }
   if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
     os << verbatimParam.getValue().getValue();
-    return;
+    return {Symbol, IsUnsigned};
   }
   if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
     os << parameterRef.getName().getValue();
-    return;
+    // TODO: Should we support signed parameters?
+    return {Symbol, IsUnsigned};
   }
 
-  if (auto paramBinOp = value.dyn_cast<ParamBinaryAttr>()) {
-    StringRef operatorStr;
-    VerilogPrecedence subprecedence;
+  // Handle nested expressions.
+  auto expr = value.dyn_cast<ParamExprAttr>();
+  if (!expr) {
+    os << "<<UNKNOWN MLIRATTR: " << value << ">>";
+    emitError() << " = " << value;
+    return {LowestPrecedence, IsUnsigned};
+  }
 
-    // TODO: Support variadic versions of these.
-    switch (paramBinOp.getOpcode()) {
-    case PBO::Add:
-      operatorStr = " + ";
-      subprecedence = Addition;
-      break;
-    case PBO::Mul:
-      operatorStr = " * ";
-      subprecedence = Multiply;
-      break;
+  StringRef operatorStr;
+  VerilogPrecedence subprecedence = ForceEmitMultiUse;
+  Optional<SubExprSignResult> operandSign;
+
+  switch (expr.getOpcode()) {
+  case PEO::Add:
+    operatorStr = " + ";
+    subprecedence = Addition;
+    break;
+  case PEO::Mul:
+    operatorStr = " * ";
+    subprecedence = Multiply;
+    break;
+  case PEO::And:
+    operatorStr = " & ";
+    subprecedence = And;
+    break;
+  case PEO::Or:
+    operatorStr = " | ";
+    subprecedence = Or;
+    break;
+  case PEO::Xor:
+    operatorStr = " ^ ";
+    subprecedence = Xor;
+    break;
+  case PEO::Shl:
+    operatorStr = " << ";
+    subprecedence = Shift;
+    break;
+  case PEO::ShrU:
+    // >> in verilog is always a logical shift even if operands are signed.
+    operatorStr = " >> ";
+    subprecedence = Shift;
+    break;
+  case PEO::ShrS:
+    // >>> in verilog is an arithmetic shift if both operands are signed.
+    operatorStr = " >>> ";
+    subprecedence = Shift;
+    operandSign = IsSigned;
+    break;
+  case PEO::DivU:
+    operatorStr = " / ";
+    subprecedence = Multiply;
+    operandSign = IsUnsigned;
+    break;
+  case PEO::DivS:
+    operatorStr = " / ";
+    subprecedence = Multiply;
+    operandSign = IsSigned;
+    break;
+  case PEO::ModU:
+    operatorStr = " % ";
+    subprecedence = Multiply;
+    operandSign = IsUnsigned;
+    break;
+  case PEO::ModS:
+    operatorStr = " % ";
+    subprecedence = Multiply;
+    operandSign = IsSigned;
+    break;
+  }
+
+  // Emit the specified operand with a $signed() or $unsigned() wrapper around
+  // it if context requires a specific signedness to compute the right value.
+  // This returns true if the operand is signed.
+  // TODO: This could try harder to omit redundant casts like the mainline
+  // expression emitter.
+  auto emitOperand = [&](Attribute operand) -> bool {
+    if (operandSign.hasValue())
+      os << (operandSign.getValue() == IsSigned ? "$signed(" : "$unsigned(");
+    auto signedness =
+        printParamValue(operand, os, subprecedence, emitError).signedness;
+    if (operandSign.hasValue()) {
+      os << ")";
+      signedness = operandSign.getValue();
     }
+    return signedness == IsSigned;
+  };
 
-    if (subprecedence > parenthesizeIfLooserThan)
-      os << '(';
-    printParamValue(paramBinOp.getLhs(), os, subprecedence, emitError);
+  if (subprecedence > parenthesizeIfLooserThan)
+    os << '(';
+  bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
+  for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
     os << operatorStr;
-    printParamValue(paramBinOp.getRhs(), os, subprecedence, emitError);
-    if (subprecedence > parenthesizeIfLooserThan)
-      os << ')';
-    return;
+    allOperandsSigned &= emitOperand(op);
   }
-
-  os << "<<UNKNOWN MLIRATTR: " << value << ">>";
-  emitError() << " = " << value;
+  if (subprecedence > parenthesizeIfLooserThan) {
+    os << ')';
+    subprecedence = Symbol;
+  }
+  return {subprecedence, allOperandsSigned ? IsSigned : IsUnsigned};
 }
 
 /// Prints a parameter attribute expression in a Verilog compatible way.
-static void printParamValue(Attribute value, raw_ostream &os,
-                            function_ref<InFlightDiagnostic()> emitError) {
-  printParamValue(value, os, VerilogPrecedence::LowestPrecedence, emitError);
+/// This returns the precedence of the generated string.
+static SubExprInfo
+printParamValue(Attribute value, raw_ostream &os,
+                function_ref<InFlightDiagnostic()> emitError) {
+  return printParamValue(value, os, VerilogPrecedence::LowestPrecedence,
+                         emitError);
 }
 
 /// Return true for nullary operations that are better emitted multiple
@@ -204,12 +300,12 @@ static StringRef getSymOpName(Operation *symOp) {
 /// MemoryEffects should be checked if a client cares.
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
-  if (isa<ReadInOutOp>(op) || isa<ArrayIndexInOutOp>(op))
+  if (isa<ReadInOutOp, ArrayIndexInOutOp, ParamValueOp>(op))
     return true;
 
-  // All HW combinatorial logic ops and SV expression ops are Verilog
+  // All HW combinational logic ops and SV expression ops are Verilog
   // expressions.
-  return isCombinatorial(op) || isExpression(op);
+  return isCombinational(op) || isExpression(op);
 }
 
 /// Return the width of the specified type in bits or -1 if it isn't
@@ -441,7 +537,7 @@ static StringRef getVerilogDeclWord(Operation *op,
   }
   if (isa<WireOp>(op))
     return "wire";
-  if (isa<ConstantOp, LocalParamOp>(op))
+  if (isa<ConstantOp, LocalParamOp, ParamValueOp>(op))
     return "localparam";
 
   // Interfaces instances use the name of the declared interface.
@@ -848,27 +944,6 @@ void ModuleEmitter::verifyModuleName(Operation *op, StringAttr nameAttr) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-
-/// This enum keeps track of whether the emitted subexpression is signed or
-/// unsigned as seen from the Verilog language perspective.
-enum SubExprSignResult { IsSigned, IsUnsigned };
-
-/// This is information precomputed about each subexpression in the tree we
-/// are emitting as a unit.
-struct SubExprInfo {
-  /// The precedence of this expression.
-  VerilogPrecedence precedence;
-
-  /// The signedness of the expression.
-  SubExprSignResult signedness;
-
-  SubExprInfo(VerilogPrecedence precedence, SubExprSignResult signedness)
-      : precedence(precedence), signedness(signedness) {}
-};
-
-} // namespace
-
-namespace {
 /// This builds a recursively nested expression from an SSA use-def graph.  This
 /// uses a post-order walk, but it needs to obey precedence and signedness
 /// constraints that depend on the behavior of the child nodes.  To handle this,
@@ -991,6 +1066,7 @@ private:
   using TypeOpVisitor::visitTypeOp;
   SubExprInfo visitTypeOp(ConstantOp op);
   SubExprInfo visitTypeOp(BitcastOp op);
+  SubExprInfo visitTypeOp(ParamValueOp op);
   SubExprInfo visitTypeOp(ArraySliceOp op);
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
@@ -1453,6 +1529,12 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
   }
   os << valueStr;
   return {Unary, signPreference == RequireSigned ? IsSigned : IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
+  return printParamValue(op.value(), os, [&]() {
+    return op->emitOpError("invalid parameter use");
+  });
 }
 
 // 11.5.1 "Vector bit-select and part-select addressing" allows a '+:' syntax
@@ -3174,13 +3256,34 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   if (!module.parameters().empty()) {
     os << "\n  #(";
 
-    auto printParamType = [&](Type type, SmallString<8> &result) {
+    auto printParamType = [&](Type type, Attribute defaultValue,
+                              SmallString<8> &result) {
+      result.clear();
       llvm::raw_svector_ostream sstream(result);
-      // TODO: Don't print the type when there is a default value and an
-      // obvious match with the type (e.g. `parameter x = "string"` doesn't
-      // need an explicit type).  Plain-Verilog clients do not support
-      // type specifiers on parameters.
-      // TODO: Support some kind of 'int' type, maybe use index type?
+
+      // If there is a default value like "32" then just print without type at
+      // all.
+      if (defaultValue) {
+        if (auto intAttr = defaultValue.dyn_cast<IntegerAttr>())
+          if (intAttr.getValue().getBitWidth() == 32)
+            return;
+        if (auto fpAttr = defaultValue.dyn_cast<FloatAttr>())
+          if (fpAttr.getType().isF64())
+            return;
+        if (defaultValue.isa<StringAttr>())
+          return;
+      }
+
+      // Classic Verilog parser don't allow a type in the parameter declaration.
+      // For compatibility with them, we omit the type when it is implicit based
+      // on its initializer value, and print the type commented out when it is
+      // a 32-bit "integer" parameter.
+      if (auto intType = type_dyn_cast<IntegerType>(type))
+        if (intType.getWidth() == 32) {
+          sstream << "/*integer*/";
+          return;
+        }
+
       printPackedType(type, sstream, module,
                       /*implicitIntType=*/true,
                       // Print single-bit values as explicit `[0:0]` type.
@@ -3191,9 +3294,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     size_t maxTypeWidth = 0;
     SmallString<8> scratch;
     for (auto param : module.parameters()) {
+      auto paramAttr = param.cast<ParamDeclAttr>();
       // Measure the type length by printing it to a temporary string.
-      scratch.clear();
-      printParamType(param.cast<ParamDeclAttr>().getType().getValue(), scratch);
+      printParamType(paramAttr.getType().getValue(), paramAttr.getValue(),
+                     scratch);
       maxTypeWidth = std::max(scratch.size(), maxTypeWidth);
     }
 
@@ -3204,17 +3308,17 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
         module.parameters(), os,
         [&](Attribute param) {
           auto paramAttr = param.cast<ParamDeclAttr>();
+          auto defaultValue = paramAttr.getValue(); // may be null if absent.
           os << "parameter ";
-          scratch.clear();
-          printParamType(paramAttr.getType().getValue(), scratch);
+          printParamType(paramAttr.getType().getValue(), defaultValue, scratch);
           os << scratch;
           if (scratch.size() < maxTypeWidth)
             os.indent(maxTypeWidth - scratch.size());
 
           os << paramAttr.getName().getValue();
-          if (auto value = paramAttr.getValue()) {
+          if (defaultValue) {
             os << " = ";
-            printParamValue(value, os, [&]() {
+            printParamValue(defaultValue, os, [&]() {
               return module->emitError("parameter '")
                      << paramAttr.getName().getValue() << "' has invalid value";
             });
@@ -3503,18 +3607,11 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
     if (attr) {
       LLVM_DEBUG(llvm::dbgs() << "Found output_file attribute " << attr
                               << " on " << op << "\n";);
-
-      if (auto directory = attr.directory())
-        appendPossiblyAbsolutePath(outputPath, directory.getValue());
-
-      if (auto name = attr.name())
-        if (!name.getValue().empty()) {
-          appendPossiblyAbsolutePath(outputPath, name.getValue());
-          hasFileName = true;
-        }
-
-      emitReplicatedOps = !attr.exclude_replicated_ops().getValue();
-      addToFilelist = !attr.exclude_from_filelist().getValue();
+      if (!attr.isDirectory())
+        hasFileName = true;
+      appendPossiblyAbsolutePath(outputPath, attr.getFilename().getValue());
+      emitReplicatedOps = attr.getIncludeReplicatedOps().getValue();
+      addToFilelist = !attr.getExcludeFromFilelist().getValue();
     }
 
     auto separateFile = [&](Operation *op, Twine defaultFileName = "") {
@@ -3745,6 +3842,34 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   return failure(emitter.encounteredError);
 }
 
+namespace {
+
+struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
+  ExportVerilogPass(raw_ostream &os) : os(os) {}
+  void runOnOperation() override {
+    // Make sure LoweringOptions are applied to the module if it was overridden
+    // on the command line.
+    // TODO: This should be moved up to circt-opt and circt-translate.
+    applyLoweringCLOptions(getOperation());
+
+    if (failed(exportVerilog(getOperation(), os)))
+      signalPassFailure();
+  }
+
+private:
+  raw_ostream &os;
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::createExportVerilogPass(llvm::raw_ostream &os) {
+  return std::make_unique<ExportVerilogPass>(os);
+}
+
+std::unique_ptr<mlir::Pass> circt::createExportVerilogPass() {
+  return createExportVerilogPass(llvm::outs());
+}
+
 //===----------------------------------------------------------------------===//
 // Split Emitter
 //===----------------------------------------------------------------------===//
@@ -3818,25 +3943,25 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   return failure(emitter.encounteredError);
 }
 
-//===----------------------------------------------------------------------===//
-// Registration
-//===----------------------------------------------------------------------===//
+namespace {
 
-void circt::registerToVerilogTranslation() {
-  // Register the circt emitter command line options.
-  registerLoweringCLOptions();
-  // Register the circt emitter translation.
-  mlir::TranslateFromMLIRRegistration toVerilog(
-      "export-verilog",
-      [](ModuleOp module, llvm::raw_ostream &os) {
-        // ExportVerilog requires that the SV dialect be loaded in order to
-        // create WireOps. It may not have been  loaded by the MLIR parser,
-        // which can happen if the input IR has no SV operations.
-        module->getContext()->loadDialect<sv::SVDialect>();
-        applyLoweringCLOptions(module);
-        return exportVerilog(module, os);
-      },
-      [](mlir::DialectRegistry &registry) {
-        registry.insert<CombDialect, HWDialect, SVDialect>();
-      });
+struct ExportSplitVerilogPass
+    : public ExportSplitVerilogBase<ExportSplitVerilogPass> {
+  ExportSplitVerilogPass(StringRef directory) {
+    directoryName = directory.str();
+  }
+  void runOnOperation() override {
+    // Make sure LoweringOptions are applied to the module if it was overridden
+    // on the command line.
+    // TODO: This should be moved up to circt-opt and circt-translate.
+    applyLoweringCLOptions(getOperation());
+    if (failed(exportSplitVerilog(getOperation(), directoryName)))
+      signalPassFailure();
+  }
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::createExportSplitVerilogPass(StringRef directory) {
+  return std::make_unique<ExportSplitVerilogPass>(directory);
 }

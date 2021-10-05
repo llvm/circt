@@ -34,8 +34,9 @@ def GroupOpInterface : OpInterface<"GroupInterface"> {
       "Block*",
       "getBody",
       (ins), [{
-        Operation* op = $_op;
-        return &op->getRegion(0).front();
+        Region* region = &$_op->getRegion(0);
+        assert(region->hasOneBlock() && "The body should have one Block.");
+        return &region->front();
       }]>
   ];
   let verify = [{ return verifyGroupInterface(op); }];
@@ -71,7 +72,7 @@ def CellOpInterface : OpInterface<"CellInterface"> {
       /*methodBody=*/"",
       /*defaultImplementation=*/[{
         Operation* op = (*static_cast<ConcreteOp *>($_op));
-        return op->getAttrOfType<mlir::StringAttr>("instanceName").getValue();
+        return op->getAttrOfType<mlir::FlatSymbolRefAttr>("instanceName").getValue();
       }]
     >,
     InterfaceMethod<

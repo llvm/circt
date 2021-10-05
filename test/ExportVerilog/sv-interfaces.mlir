@@ -1,4 +1,4 @@
-// RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 module {
   // CHECK-LABEL: interface data_vr;

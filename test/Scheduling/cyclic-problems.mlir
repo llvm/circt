@@ -84,3 +84,18 @@ func @interleaved_cycles() attributes {
   // SIMPLEX-NEXT: simplexStartTime = 33
   return { problemStartTime = 33 }
 }
+
+// SIMPLEX-LABEL: self_arc
+// SIMPLEX-SAME: simplexInitiationInterval = 3
+func @self_arc() -> i32 attributes {
+  problemInitiationInterval = 3,
+  auxdeps = [ [1,1,1] ],
+  operatortypes = [ { name = "_3", latency = 3 } ]
+  } {
+  // SIMPLEX-NEXT: simplexStartTime = 0
+  %0 = constant { problemStartTime = 0 } 1 : i32
+  // SIMPLEX-NEXT: simplexStartTime = 1
+  %1 = muli %0, %0 { opr = "_3", problemStartTime = 1 } : i32
+  // SIMPLEX-NEXT: simplexStartTime = 4
+  return { problemStartTime = 4 } %1 : i32
+}

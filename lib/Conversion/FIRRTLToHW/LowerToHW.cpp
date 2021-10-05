@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
-#include "circt/Conversion/FIRRTLToHW/FIRRTLToHW.h"
+#include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -72,12 +72,57 @@ static Type lowerType(Type type) {
     }
     return hw::StructType::get(type.getContext(), hwfields);
   }
+  if (FVectorType vec = firType.dyn_cast<FVectorType>()) {
+    auto elemTy = lowerType(vec.getElementType());
+    if (!elemTy)
+      return {};
+    return hw::ArrayType::get(elemTy, vec.getNumElements());
+  }
 
   auto width = firType.getBitWidthOrSentinel();
   if (width >= 0) // IntType, analog with known width, clock, etc.
     return IntegerType::get(type.getContext(), width);
 
   return {};
+}
+
+/// This verifies that the target operation has been lowered to a legal
+/// operation.  This checks that the operation recursively has no FIRRTL
+/// operations or types.
+static LogicalResult verifyOpLegality(Operation *op) {
+  auto checkTypes = [](Operation *op) -> WalkResult {
+    // Check that this operation is not a FIRRTL op.
+    if (isa_and_nonnull<FIRRTLDialect>(op->getDialect()))
+      return op->emitError("Found unhandled FIRRTL operation '")
+             << op->getName() << "'";
+
+    // Helper to check a TypeRange for any FIRRTL types.
+    auto checkTypeRange = [&](TypeRange types) -> LogicalResult {
+      if (llvm::any_of(types, [](Type type) {
+            return isa<FIRRTLDialect>(type.getDialect());
+          }))
+        return op->emitOpError("found unhandled FIRRTL type");
+      return success();
+    };
+
+    // Check operand and result types.
+    if (failed(checkTypeRange(op->getOperandTypes())) ||
+        failed(checkTypeRange(op->getResultTypes())))
+      return WalkResult::interrupt();
+
+    // Check the block argument types.
+    for (auto &region : op->getRegions())
+      for (auto &block : region)
+        if (failed(checkTypeRange(block.getArgumentTypes())))
+          return WalkResult::interrupt();
+
+    // Continue to the next operation.
+    return WalkResult::advance();
+  };
+
+  if (checkTypes(op).wasInterrupted() || op->walk(checkTypes).wasInterrupted())
+    return failure();
+  return success();
 }
 
 /// Given two FIRRTL integer types, return the widest one.
@@ -154,9 +199,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
       for (auto i : top->getAttrs())
         old.push_back(i);
       old.emplace_back(Identifier::get(attrBase, ctx),
-                       hw::OutputFileAttr::get(dir, StringAttr::get(ctx, ""),
-                                               BoolAttr::get(ctx, false),
-                                               BoolAttr::get(ctx, true), ctx));
+                       hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
       top->setAttrs(old);
     }
   if (auto _file = anno.get("filename"))
@@ -165,9 +208,8 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
       for (auto i : top->getAttrs())
         old.push_back(i);
       old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
-                       hw::OutputFileAttr::get(StringAttr::get(ctx, ""), file,
-                                               BoolAttr::get(ctx, true),
-                                               BoolAttr::get(ctx, true), ctx));
+                       hw::OutputFileAttr::getFromFilename(
+                           ctx, file.getValue(), /*excludeFromFileList=*/true));
       top->setAttrs(old);
     }
 }
@@ -181,6 +223,7 @@ struct FirMemory {
   size_t depth;
   size_t readLatency;
   size_t writeLatency;
+  size_t maskBits;
   size_t readUnderWrite;
   hw::WUW writeUnderWrite;
   SmallVector<int32_t> writeClockIDs;
@@ -219,7 +262,7 @@ struct FirMemory {
            dataWidth == rhs.dataWidth && depth == rhs.depth &&
            readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
            readUnderWrite == rhs.readUnderWrite &&
-           writeUnderWrite == rhs.writeUnderWrite &&
+           writeUnderWrite == rhs.writeUnderWrite && maskBits == rhs.maskBits &&
            writeClockIDs.size() == rhs.writeClockIDs.size() &&
            llvm::all_of_zip(writeClockIDs, rhs.writeClockIDs,
                             [](auto a, auto b) { return a == b; });
@@ -279,10 +322,10 @@ static FirMemory analyzeMemOp(MemOp op) {
     width = 0;
   }
 
-  return {numReadPorts,      numWritePorts,    numReadWritePorts,
-          (size_t)width,     op.depth(),       op.readLatency(),
-          op.writeLatency(), (size_t)op.ruw(), hw::WUW::PortOrder,
-          writeClockIDs,     op.getLoc()};
+  return {numReadPorts,       numWritePorts,    numReadWritePorts,
+          (size_t)width,      op.depth(),       op.readLatency(),
+          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
+          hw::WUW::PortOrder, writeClockIDs,    op.getLoc()};
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
@@ -485,18 +528,12 @@ void FIRRTLModuleLowering::runOnOperation() {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
         })
-        // These need to be let through.  EmitMetadata produces VerbatimOps and
-        // GrandCentral can generate interfaces.  Moving them to the end of the
-        // module has the effect of keeping them in the same spot in the IR.
-        .Case<sv::InterfaceOp, sv::VerbatimOp>([&](Operation *op) {
-          op->moveBefore(topLevelModule, topLevelModule->end());
-        })
-        // Otherwise we don't know what this is.  We are just going to drop
-        // it, but emit an error so the client has some chance to know that
-        // this is going to happen.
-        .Default([](auto other) {
-          other->emitError("unexpected operation '")
-              << other->getName() << "' in a firrtl.circuit";
+        .Default([&](Operation *op) {
+          // We don't know what this op is.  If it has no illegal FIRRTL types,
+          // we can forward the operation.  Otherwise, we emit an error and drop
+          // the operation from the circuit.
+          if (succeeded(verifyOpLegality(op)))
+            op->moveBefore(topLevelModule, topLevelModule->end());
         });
   }
 
@@ -527,15 +564,12 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Add attributes specific to the new main module, since the notion of a
   // "main" module goes away after lowering to HW.
   auto *newMainModule = state.oldToNewModuleMap[circuit.getMainModule()];
-  newMainModule->setAttr(
-      moduleHierarchyFileAttrName,
-      hw::OutputFileAttr::get(
-          getMetadataDir(circuit),
-          StringAttr::get(circuit.getContext(), "testharness_hier.json"),
-          /*exclude_from_filelist=*/
-          BoolAttr::get(circuit.getContext(), true),
-          /*exclude_replicated_ops=*/
-          BoolAttr::get(circuit.getContext(), true), circuit.getContext()));
+  newMainModule->setAttr(moduleHierarchyFileAttrName,
+                         hw::OutputFileAttr::getFromDirectoryAndFilename(
+                             circuit.getContext(),
+                             getMetadataDir(circuit).getValue(),
+                             "testharness_hier.json",
+                             /*excludeFromFilelist=*/true));
 
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
@@ -554,10 +588,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
   // Insert memories at the bottom of the file.
   OpBuilder b(state.circuitOp);
   b.setInsertionPointAfter(state.circuitOp);
-  std::array<StringRef, 10> schemaFields = {
-      "depth",           "numReadPorts", "numWritePorts", "numReadWritePorts",
-      "readLatency",     "writeLatency", "width",         "readUnderWrite",
-      "writeUnderWrite", "writeClockIDs"};
+  std::array<StringRef, 11> schemaFields = {
+      "depth",          "numReadPorts",    "numWritePorts", "numReadWritePorts",
+      "readLatency",    "writeLatency",    "width",         "maskGran",
+      "readUnderWrite", "writeUnderWrite", "writeClockIDs"};
   auto schemaFieldsAttr = b.getStrArrayAttr(schemaFields);
   auto schema = b.create<hw::HWGeneratorSchemaOp>(
       mems.front().loc, "FIRRTLMem", "FIRRTL_Memory", schemaFieldsAttr);
@@ -571,45 +605,47 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
     size_t outputPin = 0;
 
     auto makePortCommon = [&](StringRef prefix, size_t idx, Type bAddrType) {
-      ports.push_back({b.getStringAttr(prefix + "_clock_" + Twine(idx)),
-                       hw::INPUT, b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(prefix + "_en_" + Twine(idx)), hw::INPUT,
-                       b1Type, inputPin++});
-      ports.push_back({b.getStringAttr(prefix + "_addr_" + Twine(idx)),
+      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_addr"),
                        hw::INPUT, bAddrType, inputPin++});
+      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_en"), hw::INPUT,
+                       b1Type, inputPin++});
+      ports.push_back({b.getStringAttr(prefix + Twine(idx) + "_clk"), hw::INPUT,
+                       b1Type, inputPin++});
     };
 
     Type bDataType =
         IntegerType::get(&getContext(), std::max((size_t)1, mem.dataWidth));
+    Type maskType = IntegerType::get(&getContext(), mem.maskBits);
 
     Type bAddrType = IntegerType::get(
         &getContext(), std::max(1U, llvm::Log2_64_Ceil(mem.depth)));
 
     for (size_t i = 0, e = mem.numReadPorts; i != e; ++i) {
-      makePortCommon("ro", i, bAddrType);
-      ports.push_back({b.getStringAttr("ro_data_" + Twine(i)), hw::OUTPUT,
+      makePortCommon("R", i, bAddrType);
+      ports.push_back({b.getStringAttr("R" + Twine(i) + "_data"), hw::OUTPUT,
                        bDataType, outputPin++});
     }
     for (size_t i = 0, e = mem.numReadWritePorts; i != e; ++i) {
-      makePortCommon("rw", i, bAddrType);
-      ports.push_back({b.getStringAttr("rw_wmode_" + Twine(i)), hw::INPUT,
+      makePortCommon("RW", i, bAddrType);
+      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmode"), hw::INPUT,
                        b1Type, inputPin++});
-      ports.push_back({b.getStringAttr("rw_wmask_" + Twine(i)), hw::INPUT,
-                       b1Type, inputPin++});
-      ports.push_back({b.getStringAttr("rw_wdata_" + Twine(i)), hw::INPUT,
+      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wdata"), hw::INPUT,
                        bDataType, inputPin++});
-      ports.push_back({b.getStringAttr("rw_rdata_" + Twine(i)), hw::OUTPUT,
+      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_rdata"), hw::OUTPUT,
                        bDataType, outputPin++});
+      ports.push_back({b.getStringAttr("RW" + Twine(i) + "_wmask"), hw::INPUT,
+                       maskType, inputPin++});
     }
 
     for (size_t i = 0, e = mem.numWritePorts; i != e; ++i) {
-      makePortCommon("wo", i, bAddrType);
-      ports.push_back({b.getStringAttr("wo_mask_" + Twine(i)), hw::INPUT,
-                       b1Type, inputPin++});
-      ports.push_back({b.getStringAttr("wo_data_" + Twine(i)), hw::INPUT,
+      makePortCommon("W", i, bAddrType);
+      ports.push_back({b.getStringAttr("W" + Twine(i) + "_data"), hw::INPUT,
                        bDataType, inputPin++});
+      ports.push_back({b.getStringAttr("W" + Twine(i) + "_mask"), hw::INPUT,
+                       maskType, inputPin++});
     }
 
+    auto maskGran = mem.maskBits > 0 ? mem.dataWidth / mem.maskBits : 0;
     NamedAttribute genAttrs[] = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
         b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
@@ -620,6 +656,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("readLatency", b.getUI32IntegerAttr(mem.readLatency)),
         b.getNamedAttr("writeLatency", b.getUI32IntegerAttr(mem.writeLatency)),
         b.getNamedAttr("width", b.getUI32IntegerAttr(mem.dataWidth)),
+        b.getNamedAttr("maskGran", b.getUI32IntegerAttr(maskGran)),
         b.getNamedAttr("readUnderWrite",
                        b.getUI32IntegerAttr(mem.readUnderWrite)),
         b.getNamedAttr("writeUnderWrite",
@@ -868,12 +905,11 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
     newModule->setAttr(
         moduleHierarchyFileAttrName,
-        hw::OutputFileAttr::get(
-            getMetadataDir(oldModule->getParentOfType<CircuitOp>()),
-            builder.getStringAttr("module_hier.json"),
-            /*exclude_from_filelist=*/builder.getBoolAttr(true),
-            /*exclude_replicated_ops=*/builder.getBoolAttr(true),
-            &getContext()));
+        hw::OutputFileAttr::getFromDirectoryAndFilename(
+            &getContext(),
+            getMetadataDir(oldModule->getParentOfType<CircuitOp>()).getValue(),
+            "module_hier.json",
+            /*excludeFromFileList=*/true));
   loweringState.processRemainingAnnotations(oldModule,
                                             AnnotationSet(oldModule));
   return newModule;
@@ -1195,6 +1231,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
 
   LogicalResult visitExpr(HWStructCastOp op);
+  LogicalResult visitExpr(BitCastOp op);
   LogicalResult visitExpr(mlir::UnrealizedConversionCastOp op);
   LogicalResult visitExpr(CvtPrimOp op);
   LogicalResult visitExpr(NotPrimOp op);
@@ -2078,6 +2115,11 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   };
 
   if (op.resetSignal().getType().isa<AsyncResetType>()) {
+    if (!firrtl::isConstant(op.resetValue()))
+      return op.emitError(
+                   "register with async reset requires constant reset value")
+                 .attachNote(op.resetValue().getLoc())
+             << "reset value defined here:";
     addToAlwaysFFBlock(sv::EventControl::AtPosEdge, clockVal,
                        ::ResetType::AsyncReset, sv::EventControl::AtPosEdge,
                        resetSignal, std::function<void()>(), resetFn);
@@ -2122,6 +2164,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     switch (memportKindIdx) {
     default:
       assert(0 && "invalid idx");
+      break; // Silence warning
     case 0:
       memportKind = MemOp::PortKind::Read;
       break;
@@ -2146,7 +2189,8 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
       auto portName = op.getPortName(i).getValue();
 
-      auto addInput = [&](StringRef portLabel, StringRef field, size_t width) {
+      auto addInput = [&](StringRef portLabel, StringRef portLabel2,
+                          StringRef field, size_t width) {
         auto portType =
             IntegerType::get(op.getContext(), std::max((size_t)1, width));
         auto accesses = getAllFieldAccesses(op.getResult(i), field);
@@ -2166,9 +2210,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
 
         operands.push_back(getReadInOutOp(wire));
         argNames.push_back(
-            builder.getStringAttr(portLabel + Twine(portNumber)));
+            builder.getStringAttr(portLabel + Twine(portNumber) + portLabel2));
       };
-      auto addOutput = [&](StringRef portLabel, StringRef field, size_t width) {
+      auto addOutput = [&](StringRef portLabel, StringRef portLabel2,
+                           StringRef field, size_t width) {
         auto portType =
             IntegerType::get(op.getContext(), std::max((size_t)1, width));
         resultTypes.push_back(portType);
@@ -2185,28 +2230,28 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
             a->eraseOperand(0);
         }
         resultNames.push_back(
-            builder.getStringAttr(portLabel + Twine(portNumber)));
+            builder.getStringAttr(portLabel + Twine(portNumber) + portLabel2));
       };
 
       if (memportKind == MemOp::PortKind::Read) {
-        addInput("ro_clock_", "clk", 1);
-        addInput("ro_en_", "en", 1);
-        addInput("ro_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        addOutput("ro_data_", "data", memSummary.dataWidth);
+        addInput("R", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
+        addInput("R", "_en", "en", 1);
+        addInput("R", "_clk", "clk", 1);
+        addOutput("R", "_data", "data", memSummary.dataWidth);
       } else if (memportKind == MemOp::PortKind::ReadWrite) {
-        addInput("rw_clock_", "clk", 1);
-        addInput("rw_en_", "en", 1);
-        addInput("rw_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        addInput("rw_wmode_", "wmode", 1);
-        addInput("rw_wmask_", "wmask", 1);
-        addInput("rw_wdata_", "wdata", memSummary.dataWidth);
-        addOutput("rw_rdata_", "rdata", memSummary.dataWidth);
+        addInput("RW", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
+        addInput("RW", "_en", "en", 1);
+        addInput("RW", "_clk", "clk", 1);
+        addInput("RW", "_wmode", "wmode", 1);
+        addInput("RW", "_wdata", "wdata", memSummary.dataWidth);
+        addOutput("RW", "_rdata", "rdata", memSummary.dataWidth);
+        addInput("RW", "_wmask", "wmask", memSummary.maskBits);
       } else {
-        addInput("wo_clock_", "clk", 1);
-        addInput("wo_en_", "en", 1);
-        addInput("wo_addr_", "addr", llvm::Log2_64_Ceil(memSummary.depth));
-        addInput("wo_mask_", "mask", 1);
-        addInput("wo_data_", "data", memSummary.dataWidth);
+        addInput("W", "_addr", "addr", llvm::Log2_64_Ceil(memSummary.depth));
+        addInput("W", "_en", "en", 1);
+        addInput("W", "_clk", "clk", 1);
+        addInput("W", "_data", "data", memSummary.dataWidth);
+        addInput("W", "_mask", "mask", memSummary.maskBits);
       }
 
       ++portNumber;
@@ -2403,6 +2448,17 @@ LogicalResult FIRRTLLowering::visitExpr(HWStructCastOp op) {
   // struct type into the lowered operand.
   op.replaceAllUsesWith(result);
   return success();
+}
+
+LogicalResult FIRRTLLowering::visitExpr(BitCastOp op) {
+  auto operand = getLoweredValue(op.getOperand());
+  if (!operand)
+    return failure();
+  auto resultType = lowerType(op.getType());
+  if (!resultType)
+    return failure();
+
+  return setLoweringTo<hw::BitcastOp>(op, resultType, operand);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(CvtPrimOp op) {
@@ -2861,7 +2917,9 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
   if (!destVal.getType().isa<hw::InOutType>())
     return op.emitError("destination isn't an inout type");
 
-  addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
+  addToIfDefBlock("VERILATOR", std::function<void()>(), [&]() {
+    addToInitialBlock([&]() { builder.create<sv::ForceOp>(destVal, srcVal); });
+  });
   return success();
 }
 

@@ -116,6 +116,9 @@ hw.module @parameters<p1: i42 = 17, wire: i1>(%p1: i8) {
   sv.ifdef "SOMEMACRO" {
     // CHECK: %local = sv.localparam : i1 {value = #hw.param.decl.ref<"wire_1">}
     %local = sv.localparam : i1 { value = #hw.param.decl.ref<"wire">: i1 }
+
+    // CHECK: = hw.param.value i1 = #hw.param.decl.ref<"wire_1">
+    %0 = hw.param.value i1 = #hw.param.decl.ref<"wire">
   }
 
   // "wire" param getting updated should update in this instance.
@@ -123,8 +126,8 @@ hw.module @parameters<p1: i42 = 17, wire: i1>(%p1: i8) {
   // CHECK: hw.instance "inst" @module_with_bool<bparam: i1 = #hw.param.decl.ref<"wire_1">>
   hw.instance "inst" @module_with_bool<bparam: i1 = #hw.param.decl.ref<"wire">>() -> ()
 
-  // CHECK: hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.binary<add #hw.param.verbatim<"wire">, true>>()
-  hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.binary<add #hw.param.verbatim<"wire">, true>>() -> ()
+  // CHECK: hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.expr.xor<#hw.param.verbatim<"wire">, true>>()
+  hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.expr.xor<#hw.param.verbatim<"wire">, true>>() -> ()
 }
 
 // CHECK-LABEL: hw.module @use_parameters

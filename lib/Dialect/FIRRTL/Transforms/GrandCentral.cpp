@@ -11,9 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/CircuitNamespace.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -67,54 +69,6 @@ struct VerbatimType {
 /// A sum type representing either a type encoded as a string (VerbatimType)
 /// or an actual mlir::Type.
 typedef std::variant<VerbatimType, Type> TypeSum;
-
-/// A namespace that is used to store existing names and generate names.  This
-/// exists to work around limitations of SymbolTables.
-class CircuitNamespace {
-  StringSet<> internal;
-
-public:
-  /// Construct a new namespace from a circuit op.  This namespace will be
-  /// composed of any operation in the first level of the circuit that contains
-  /// a symbol.
-  CircuitNamespace(CircuitOp circuit) {
-    for (Operation &op : *circuit.getBody())
-      if (auto symbol =
-              op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-        internal.insert(symbol.getValue());
-  }
-
-  /// Return a unique name, derived from the input `name`, and add the new name
-  /// to the internal namespace.  There are two possible outcomes for the
-  /// returned name:
-  ///
-  /// 1. The original name is returned.
-  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
-  std::string newName(StringRef name) {
-    // Special case the situation where there is no name collision to avoid
-    // messing with the SmallString allocation below.
-    if (internal.insert(name).second)
-      return name.str();
-    size_t i = 0;
-    llvm::SmallString<64> tryName;
-    do {
-      tryName = (name + "_" + Twine(i++)).str();
-    } while (!internal.insert(tryName).second);
-    return std::string(tryName);
-  }
-
-  /// Return a unique name, derived from the input `name`, and add the new name
-  /// to the internal namespace.  There are two possible outcomes for the
-  /// returned name:
-  ///
-  /// 1. The original name is returned.
-  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
-  std::string newName(const Twine &name) {
-    return newName((StringRef)name.str());
-  }
-};
 
 /// Stores the information content of an ExtractGrandCentralAnnotation.
 struct ExtractionInfo {
@@ -490,11 +444,10 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
   if (maybeExtractInfo)
     iface->setAttr("output_file",
-                   hw::OutputFileAttr::get(
-                       getOutputDirectory(),
-                       builder.getStringAttr(iFaceName + ".sv"),
-                       builder.getBoolAttr(true), builder.getBoolAttr(true),
-                       builder.getContext()));
+                   hw::OutputFileAttr::getFromDirectoryAndFilename(
+                       &getContext(), getOutputDirectory().getValue(),
+                       iFaceName + ".sv",
+                       /*excludFromFileList=*/true));
 
   builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBodyBlock());
 
@@ -773,14 +726,13 @@ void GrandCentralPass::runOnOperation() {
               auto mapping = builder.create<FModuleOp>(
                   circuitOp.getLoc(), builder.getStringAttr(mappingName),
                   ArrayRef<PortInfo>());
-              auto *ctx = builder.getContext();
               if (maybeExtractInfo)
                 mapping->setAttr(
                     "output_file",
-                    hw::OutputFileAttr::get(
-                        getOutputDirectory(),
-                        builder.getStringAttr(mapping.getName() + ".sv"),
-                        trueAttr, trueAttr, ctx));
+                    hw::OutputFileAttr::getFromDirectoryAndFilename(
+                        &getContext(), getOutputDirectory().getValue(),
+                        mapping.getName() + ".sv",
+                        /*excludeFromFilelist=*/true));
               companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.
@@ -801,15 +753,17 @@ void GrandCentralPass::runOnOperation() {
 
               instance.getValue()->setAttr("lowerToBind", trueAttr);
               instance.getValue()->setAttr(
-                  "output_file", hw::OutputFileAttr::get(
-                                     builder.getStringAttr(""),
-                                     maybeExtractInfo.getValue().bindFilename,
-                                     trueAttr, trueAttr, ctx));
+                  "output_file",
+                  hw::OutputFileAttr::getFromFilename(
+                      &getContext(),
+                      maybeExtractInfo.getValue().bindFilename.getValue(),
+                      /*excludeFromFileList=*/true));
               op->setAttr("output_file",
-                          hw::OutputFileAttr::get(
-                              maybeExtractInfo.getValue().directory,
-                              builder.getStringAttr(op.getName() + ".sv"),
-                              trueAttr, trueAttr, ctx));
+                          hw::OutputFileAttr::getFromDirectoryAndFilename(
+                              &getContext(),
+                              maybeExtractInfo.getValue().directory.getValue(),
+                              op.getName() + ".sv",
+                              /*excludeFromFileList=*/true));
               return true;
             }
 
@@ -983,10 +937,11 @@ void GrandCentralPass::runOnOperation() {
         getOperation().getLoc(),
         SymbolRefAttr::get(builder.getContext(),
                            instance.sym_name().getValue()));
-    bind->setAttr("output_file", hw::OutputFileAttr::get(
-                                     builder.getStringAttr(""),
-                                     maybeExtractInfo.getValue().bindFilename,
-                                     trueAttr, trueAttr, bind.getContext()));
+    bind->setAttr("output_file",
+                  hw::OutputFileAttr::getFromFilename(
+                      &getContext(),
+                      maybeExtractInfo.getValue().bindFilename.getValue(),
+                      /*excludeFromFileList=*/true));
   }
 
   // Signal pass failure if any errors were found while examining circuit

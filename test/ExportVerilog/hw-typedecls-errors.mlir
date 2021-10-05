@@ -1,4 +1,4 @@
-// RUN: circt-translate %s -export-verilog -verify-diagnostics
+// RUN: circt-opt %s -export-verilog -verify-diagnostics
 
 hw.type_scope @__hw_typedecls {
   hw.typedecl @foo : i1

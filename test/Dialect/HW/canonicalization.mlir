@@ -431,7 +431,7 @@ hw.module @xor_idempotent_two_arguments(%arg0: i11) -> (result: i11) {
 // CHECK-LABEL: hw.module @add_reduction1(%arg0: i11, %arg1: i11) -> (result: i11) {
 // CHECK-NEXT:    %false = hw.constant false
 // CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 0 : (i11) -> i10
-// CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %false : (i10, i1) -> i11
+// CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %false : i10, i1
 // CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @add_reduction1(%arg0: i11, %arg1: i11) -> (result: i11) {
@@ -452,7 +452,7 @@ hw.module @add_reduction2(%arg0: i11, %arg1: i11) -> (result: i11) {
 // CHECK-LABEL: hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (result: i11) {
 // CHECK-NEXT:    %c0_i3 = hw.constant 0 : i3
 // CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 0 : (i11) -> i8
-// CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %c0_i3 : (i8, i3) -> i11
+// CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %c0_i3 : i8, i3
 // CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (result: i11) {
@@ -467,7 +467,7 @@ hw.module @add_reduction3(%arg0: i11, %arg1: i11) -> (result: i11) {
 // CHECK-LABEL: hw.module @multiply_reduction(%arg0: i11, %arg1: i11) -> (result: i11) {
 // CHECK-NEXT:    %false = hw.constant false
 // CHECK-NEXT:    [[EXTRACT:%[0-9]+]] = comb.extract %arg1 from 0 : (i11) -> i10
-// CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %false : (i10, i1) -> i11
+// CHECK-NEXT:    [[CONCAT:%[0-9]+]] = comb.concat [[EXTRACT]], %false : i10, i1
 // CHECK-NEXT:    hw.output [[CONCAT]]
 
 hw.module @multiply_reduction(%arg0: i11, %arg1: i11) -> (result: i11) {
@@ -511,15 +511,15 @@ hw.module @concat_fold_0() -> (result: i8) {
   %c7_i4 = hw.constant 7 : i4
   %c4_i3 = hw.constant 4 : i3
   %false = hw.constant false
-  %0 = comb.concat %c7_i4, %c4_i3, %false : (i4, i3, i1) -> (i8)
+  %0 = comb.concat %c7_i4, %c4_i3, %false : i4, i3, i1
   hw.output %0 : i8
 }
 
 // CHECK-LABEL: hw.module @concat_fold_1
 // CHECK-NEXT:  %0 = comb.concat %arg0, %arg1, %arg2
 hw.module @concat_fold_1(%arg0: i4, %arg1: i3, %arg2: i1) -> (result: i8) {
-  %a = comb.concat %arg0, %arg1 : (i4, i3) -> (i7)
-  %b = comb.concat %a, %arg2 : (i7, i1) -> (i8)
+  %a = comb.concat %arg0, %arg1 : i4, i3
+  %b = comb.concat %a, %arg2 : i7, i1
   hw.output %b : i8
 }
 
@@ -527,18 +527,18 @@ hw.module @concat_fold_1(%arg0: i4, %arg1: i3, %arg2: i1) -> (result: i8) {
 hw.module @concat_fold_2(%arg0: i3, %arg1: i1) -> (result: i9) {
   // CHECK-NEXT:  %0 = comb.extract %arg0 from 2 : (i3) -> i1
   %b = comb.sext %arg0 : (i3) -> i8
-  // CHECK-NEXT:  = comb.concat %0, %0, %0, %0, %0, %arg0, %arg1 : (i1, i1, i1, i1, i1, i3, i1) -> i9
-  %c = comb.concat %b, %arg1 : (i8, i1) -> (i9)
+  // CHECK-NEXT:  = comb.concat %0, %0, %0, %0, %0, %arg0, %arg1 : i1, i1, i1, i1, i1, i3, i1
+  %c = comb.concat %b, %arg1 : i8, i1
   hw.output %c : i9
 }
 
 // CHECK-LABEL: hw.module @concat_fold_3
 // CHECK-NEXT:    %c60_i7 = hw.constant 60 : i7
-// CHECK-NEXT:    %0 = comb.concat %c60_i7, %arg0 : (i7, i1) -> i8
+// CHECK-NEXT:    %0 = comb.concat %c60_i7, %arg0 : i7, i1
 hw.module @concat_fold_3(%arg0: i1) -> (result: i8) {
   %c7_i4 = hw.constant 7 : i4
   %c4_i3 = hw.constant 4 : i3
-  %0 = comb.concat %c7_i4, %c4_i3, %arg0 : (i4, i3, i1) -> (i8)
+  %0 = comb.concat %c7_i4, %c4_i3, %arg0 : i4, i3, i1
   hw.output %0 : i8
 }
 
@@ -546,20 +546,20 @@ hw.module @concat_fold_3(%arg0: i1) -> (result: i8) {
 // CHECK-NEXT:   %0 = comb.sext %arg0 : (i3) -> i5
 hw.module @concat_fold_4(%arg0: i3) -> (result: i5) {
   %0 = comb.extract %arg0 from 2 : (i3) -> (i1)
-  %1 = comb.concat %0, %0, %arg0 : (i1, i1, i3) -> (i5)
+  %1 = comb.concat %0, %0, %arg0 : i1, i1, i3
   hw.output %1 : i5
 }
 
 
 // CHECK-LABEL: hw.module @concat_fold_5
-// CHECK-NEXT:   %0 = comb.concat %arg0, %arg1 : (i3, i3) -> i6
+// CHECK-NEXT:   %0 = comb.concat %arg0, %arg1 : i3, i3
 // CHECK-NEXT:   hw.output %0, %arg0
 hw.module @concat_fold_5(%arg0: i3, %arg1: i3) -> (result: i6, a: i3) {
   %0 = comb.extract %arg0 from 2 : (i3) -> (i1)
   %1 = comb.extract %arg0 from 0 : (i3) -> i2
-  %2 = comb.concat %0, %1, %arg1 : (i1, i2, i3) -> i6
+  %2 = comb.concat %0, %1, %arg1 : i1, i2, i3
 
-  %3 = comb.concat %0, %1 : (i1, i2) -> i3
+  %3 = comb.concat %0, %1 : i1, i2
   hw.output %2, %3 : i6, i3
 }
 
@@ -569,7 +569,7 @@ hw.module @concat_fold_5(%arg0: i3, %arg1: i3) -> (result: i6, a: i3) {
 hw.module @concat_fold6(%arg0: i5, %arg1: i3) -> (result: i4) {
   %0 = comb.extract %arg0 from 3 : (i5) -> i2
   %1 = comb.extract %arg0 from 1 : (i5) -> i2
-  %2 = comb.concat %0, %1 : (i2, i2) -> i4
+  %2 = comb.concat %0, %1 : i2, i2
   hw.output %2 : i4
 }
 
@@ -588,7 +588,7 @@ hw.module @mux_fold1(%arg0: i1, %arg1: i3) -> (result: i3) {
   hw.output %0 : i3
 }
 
-// CHECK-LABEL: hw.module @icmp_fold_constants() 
+// CHECK-LABEL: hw.module @icmp_fold_constants()
 // CHECK-NEXT:    %false = hw.constant false
 // CHECK-NEXT:    hw.output %false : i1
 hw.module @icmp_fold_constants() -> (result: i1) {
@@ -598,7 +598,7 @@ hw.module @icmp_fold_constants() -> (result: i1) {
   hw.output %0 : i1
 }
 
-// CHECK-LABEL: hw.module @icmp_fold_same_operands(%arg0: i2) 
+// CHECK-LABEL: hw.module @icmp_fold_same_operands(%arg0: i2)
 // CHECK-NEXT:    %false = hw.constant false
 // CHECK-NEXT:    hw.output %false : i1
 hw.module @icmp_fold_same_operands(%arg0: i2) -> (result: i1) {
@@ -722,7 +722,7 @@ hw.module @shl_fold4(%arg0: i12) -> (result: i12) {
 // CHECK-LABEL: hw.module @shl_shift_to_extract_and_concat(%arg0: i12) -> (result: i12) {
 // CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
 // CHECK-NEXT:   %0 = comb.extract %arg0 from 0 : (i12) -> i10
-// CHECK-NEXT:   %1 = comb.concat %0, %c0_i2 : (i10, i2) -> i12
+// CHECK-NEXT:   %1 = comb.concat %0, %c0_i2 : i10, i2
 // CHECK-NEXT:   hw.output %1
 hw.module @shl_shift_to_extract_and_concat(%arg0: i12) -> (result: i12) {
   %c2_i12 = hw.constant 2 : i12
@@ -770,7 +770,7 @@ hw.module @shru_fold4(%arg0: i12) -> (result: i12) {
 // CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat(%arg0: i12) -> (result: i12) {
 // CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
 // CHECK-NEXT:   %0 = comb.extract %arg0 from 2 : (i12) -> i10
-// CHECK-NEXT:   %1 = comb.concat %c0_i2, %0 : (i2, i10) -> i12
+// CHECK-NEXT:   %1 = comb.concat %c0_i2, %0 : i2, i10
 // CHECK-NEXT:   hw.output %1
 hw.module @shru_shift_to_extract_and_concat(%arg0: i12) -> (result: i12) {
   %c2_i12 = hw.constant 2 : i12
@@ -819,7 +819,7 @@ hw.module @shru_shift_to_extract_and_concat0(%arg0: i12) -> (result: i12) {
 // CHECK-LABEL: hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (result: i12) {
 // CHECK-NEXT:   %0 = comb.extract %arg0 from 11 : (i12) -> i1
 // CHECK-NEXT:   %1 = comb.extract %arg0 from 2 : (i12) -> i10
-// CHECK-NEXT:   %2 = comb.concat %0, %0, %1 : (i1, i1, i10) -> i12
+// CHECK-NEXT:   %2 = comb.concat %0, %0, %1 : i1, i1, i10
 // CHECK-NEXT:   hw.output %2
 hw.module @shru_shift_to_extract_and_concat1(%arg0: i12) -> (result: i12) {
   %c2_i12 = hw.constant 2 : i12
@@ -863,7 +863,7 @@ hw.module @mux_canonicalize3(%a: i1, %b: i1) -> (result: i1) {
   hw.output %0 : i1
 }
 
-// CHECK-LABEL: hw.module @icmp_fold_1bit_eq1(%arg: i1) 
+// CHECK-LABEL: hw.module @icmp_fold_1bit_eq1(%arg: i1)
 // CHECK-NEXT:   %true = hw.constant true
 // CHECK-NEXT:   %0 = comb.xor %arg, %true : i1
 // CHECK-NEXT:   %1 = comb.xor %arg, %true : i1
@@ -934,16 +934,16 @@ hw.module @sext_and_one_bit(%bit: i1) -> (a: i65, b: i8, c: i8) {
   %c-18446744073709551616_i65 = hw.constant -18446744073709551616 : i65
   %0 = comb.sext %bit : (i1) -> i65
   %1 = comb.and %0, %c-18446744073709551616_i65 : i65
-  // CHECK: [[A:%[0-9]+]] = comb.concat %bit, %c0_i64 : (i1, i64) -> i65
+  // CHECK: [[A:%[0-9]+]] = comb.concat %bit, %c0_i64 : i1, i64
 
   %c4_i8 = hw.constant 4 : i8
   %2 = comb.sext %bit : (i1) -> i8
   %3 = comb.and %2, %c4_i8 : i8
-  // CHECK: [[B:%[0-9]+]] = comb.concat %c0_i5, %bit, %c0_i2 : (i5, i1, i2) -> i8
+  // CHECK: [[B:%[0-9]+]] = comb.concat %c0_i5, %bit, %c0_i2 : i5, i1, i2
 
   %c1_i8 = hw.constant 1 : i8
   %4 = comb.and %2, %c1_i8 : i8
-  // CHECK: [[C:%[0-9]+]] = comb.concat %c0_i7, %bit : (i7, i1) -> i8
+  // CHECK: [[C:%[0-9]+]] = comb.concat %c0_i7, %bit : i7, i1
 
   // CHECK: hw.output [[A]], [[B]], [[C]] :
   hw.output %1, %3, %4 : i65, i8, i8
@@ -983,7 +983,7 @@ hw.module @wire3() {
   hw.output
 }
 
-// CHECK-LABEL: hw.module @wire4() 
+// CHECK-LABEL: hw.module @wire4()
 // CHECK-NEXT:   %true = hw.constant true
 // CHECK-NEXT:   %0 = sv.wire sym @symName : !hw.inout<i1>
 // CHECK-NEXT:   %1 = sv.read_inout %0 : !hw.inout<i1>
@@ -997,7 +997,7 @@ hw.module @wire4() -> (result: i1) {
   hw.output %1 : i1
 }
 
-// CHECK-LABEL: hw.module @wire4_1() 
+// CHECK-LABEL: hw.module @wire4_1()
 // CHECK-NEXT:   %true = hw.constant true
 // CHECK-NEXT:   hw.output %true : i1
 hw.module @wire4_1() -> (result: i1) {
@@ -1050,8 +1050,8 @@ hw.module @sext_extract3(%arg0: i4) -> (a: i3) {
 // CHECK-LABEL:  hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
 // CHECK-NEXT:    %false = hw.constant false
 // CHECK-NEXT:    %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %3: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
-// CHECK-NEXT:    %0 = comb.concat %false, %arg0 : (i1, i2) -> i3
-// CHECK-NEXT:    %1 = comb.concat %false, %arg0 : (i1, i2) -> i3
+// CHECK-NEXT:    %0 = comb.concat %false, %arg0 : i1, i2
+// CHECK-NEXT:    %1 = comb.concat %false, %arg0 : i1, i2
 // CHECK-NEXT:    %2 = comb.add %0, %1 : i3
 // CHECK-NEXT:    %3 = comb.icmp eq %2, %arg2 : i3
 // CHECK-NEXT:    hw.output %myext.out : i8
@@ -1061,8 +1061,8 @@ hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
     %.in.wire = sv.wire  : !hw.inout<i1>
     %0 = sv.read_inout %.in.wire : !hw.inout<i1>
     %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %0: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
-    %1 = comb.concat %false, %arg0 : (i1, i2) -> i3
-    %2 = comb.concat %false, %arg0 : (i1, i2) -> i3
+    %1 = comb.concat %false, %arg0 : i1, i2
+    %2 = comb.concat %false, %arg0 : i1, i2
     %3 = comb.add %1, %2 : i3
     %4 = comb.icmp eq %3, %arg2 : i3
     sv.assign %.in.wire, %4 : i1
@@ -1072,7 +1072,7 @@ hw.module @instance_ooo(%arg0: i2, %arg1: i2, %arg2: i3) -> (out0: i8) {
 // CHECK-LABEL: hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
 // CHECK-NEXT:   %c0_i2 = hw.constant 0 : i2
 // CHECK-NEXT:   hw.instance "xyz" @Simple(in1: %0: i4, in2: %u2: i2, in3: %s8: i8)
-// CHECK-NEXT:   %0 = comb.concat %c0_i2, %u2 : (i2, i2) -> i4
+// CHECK-NEXT:   %0 = comb.concat %c0_i2, %u2 : i2, i2
 // CHECK-NEXT:   %myext.out = hw.instance "myext" @MyParameterizedExtModule(in: %reset: i1) -> (out: i8)  {oldParameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
 // CHECK-NEXT:   hw.output
 hw.module.extern @MyParameterizedExtModule(%in: i1) -> (out: i8) attributes {verilogName = "name_thing"}
@@ -1086,7 +1086,7 @@ hw.module @TestInstance(%u2: i2, %s8: i8, %clock: i1, %reset: i1) {
   %.in3.wire = sv.wire  : !hw.inout<i8>
   %2 = sv.read_inout %.in3.wire : !hw.inout<i8>
   hw.instance "xyz" @Simple(in1: %0: i4, in2: %1: i2, in3: %2: i8) -> ()
-  %3 = comb.concat %c0_i2, %u2 : (i2, i2) -> i4
+  %3 = comb.concat %c0_i2, %u2 : i2, i2
   sv.assign %.in1.wire, %3 : i4
   sv.assign %.in2.wire, %u2 : i2
   sv.assign %.in3.wire, %s8 : i8
@@ -1165,7 +1165,7 @@ hw.module @unintializedWire(%clock1: i1, %clock2: i1, %inpred: i1, %indata: i42)
   %13 = sv.read_inout %.write.data.wire : !hw.inout<i42>
   %_M.ro_data_0, %_M.rw_rdata_0 = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0
      (ro_clock_0: %0: i1, ro_en_0: %1: i1, ro_addr_0: %2: i4) -> (ro_data_0: i42, rw_data_0: i42)
- 
+
   %14 = sv.read_inout %.read.addr.wire : !hw.inout<i4>
   %c0_i4 = hw.constant 0 : i4
   sv.assign %.read.addr.wire, %c0_i4 : i4

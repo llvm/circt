@@ -56,38 +56,3 @@ hw.module.generated @genmod1, @MEMORY() -> (FOOBAR: i1) attributes {write_latenc
 
 // CHECK-LABEL: hw.module.extern @AnonArg(i42)
 hw.module.extern @AnonArg(i42)
-
-// CHECK-LABEL: hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
-hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
-  hw.output %arg0 : i8
-}
-
-// CHECK-LABEL: hw.module @UseParameterized(
-hw.module @UseParameterized(%a: i8) -> (xx: i8, yy: i8, zz: i8) {
-  // CHECK: %inst1.out = hw.instance "inst1" @parameters<p1: i42 = 4, p2: i1 = false>(arg0:
-  %r0 = hw.instance "inst1" @parameters<p1: i42 = 4, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
-
-  // CHECK: %inst2.out = hw.instance "inst2" @parameters<p1: i42 = 11, p2: i1 = true>(arg0:
-  %r1 = hw.instance "inst2" @parameters<p1: i42 = 11, p2: i1 = 1>(arg0: %a: i8) -> (out: i8)
-
-  // CHECK: %inst3.out = hw.instance "inst3" @parameters<p1: i42 = 17, p2: i1 = false>(arg0:
-  %r2 = hw.instance "inst3" @parameters<p1: i42 = 17, p2: i1 = 0>(arg0: %a: i8) -> (out: i8)
-
-  hw.output %r0, %r1, %r2: i8, i8, i8
-}
-
-
-// CHECK-LABEL: hw.module.extern @NoArg<param: i42>()
-hw.module.extern @NoArg<param: i42>()
-
-// CHECK-LABEL: hw.module @UseParameters<p1: i42>() {
-hw.module @UseParameters<p1: i42>() {
-  // CHECK: hw.instance "verbatimparam" @NoArg<param: i42 =
-  // CHECK-SAME: #hw.param.verbatim<"\22FOO\22">>() -> () 
-  hw.instance "verbatimparam" @NoArg<param: i42 = #hw.param.verbatim<"\"FOO\"">>() -> ()
-
-  // CHECK: hw.instance "verbatimparam" @NoArg<param: i42 =
-  // CHECK-SAME: #hw.param.binary<add #hw.param.verbatim<"xxx">, 17>>() -> () 
-  hw.instance "verbatimparam" @NoArg<param: i42 = #hw.param.binary<add #hw.param.verbatim<"xxx">, 17>>() -> () 
-  hw.output
-}
