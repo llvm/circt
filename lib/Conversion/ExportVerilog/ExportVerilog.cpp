@@ -21,6 +21,7 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/Path.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -681,22 +682,6 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   }
 
   return sstr.str();
-}
-
-/// Append a path to an existing path, replacing it if the other path is
-/// absolute. This mimicks the behaviour of `foo/bar` and `/foo/bar` being used
-/// in a working directory `/home`, resulting in `/home/foo/bar` and `/foo/bar`,
-/// respectively.
-// TODO: This also exists in BlackBoxReader.cpp. Maybe we should move this to
-// some CIRCT-wide file system utility source file?
-static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
-                                       const Twine &suffix) {
-  if (llvm::sys::path::is_absolute(suffix)) {
-    base.clear();
-    suffix.toVector(base);
-  } else {
-    llvm::sys::path::append(base, suffix);
-  }
 }
 
 //===----------------------------------------------------------------------===//
