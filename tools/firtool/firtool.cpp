@@ -411,9 +411,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {
     case OutputMLIR:
-      break;
     case OutputDisabled:
-      return success();
+      llvm_unreachable("can't reach this");
     case OutputVerilog:
       pm.addPass(createExportVerilogFilePass(outputFile.getValue()->os()));
       break;
