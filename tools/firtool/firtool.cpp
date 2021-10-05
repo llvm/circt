@@ -419,7 +419,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     case OutputDisabled:
       llvm_unreachable("can't reach this");
     case OutputVerilog:
-      pm.addPass(createExportVerilogFilePass(outputFile.getValue()->os()));
+      pm.addPass(createExportVerilogPass(outputFile.getValue()->os()));
       break;
     case OutputSplitVerilog:
       pm.addPass(createExportSplitVerilogPass(outputFilename));

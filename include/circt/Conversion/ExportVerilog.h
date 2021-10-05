@@ -17,8 +17,8 @@
 
 namespace circt {
 
-std::unique_ptr<mlir::Pass> createExportVerilogFilePass(llvm::raw_ostream &os);
-std::unique_ptr<mlir::Pass> createExportVerilogFilePass();
+std::unique_ptr<mlir::Pass> createExportVerilogPass(llvm::raw_ostream &os);
+std::unique_ptr<mlir::Pass> createExportVerilogPass();
 
 std::unique_ptr<mlir::Pass>
 createExportSplitVerilogPass(llvm::StringRef directory = "./");

@@ -3844,9 +3844,8 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
 namespace {
 
-struct ExportVerilogFilePass
-    : public ExportVerilogFilePassBase<ExportVerilogFilePass> {
-  ExportVerilogFilePass(raw_ostream &os) : os(os) {}
+struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
+  ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
     // Make sure LoweringOptions are applied to the module if it was overridden
     // on the command line.
@@ -3863,12 +3862,12 @@ private:
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass>
-circt::createExportVerilogFilePass(llvm::raw_ostream &os) {
-  return std::make_unique<ExportVerilogFilePass>(os);
+circt::createExportVerilogPass(llvm::raw_ostream &os) {
+  return std::make_unique<ExportVerilogPass>(os);
 }
 
-std::unique_ptr<mlir::Pass> circt::createExportVerilogFilePass() {
-  return createExportVerilogFilePass(llvm::outs());
+std::unique_ptr<mlir::Pass> circt::createExportVerilogPass() {
+  return createExportVerilogPass(llvm::outs());
 }
 
 //===----------------------------------------------------------------------===//
@@ -3947,7 +3946,7 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
 namespace {
 
 struct ExportSplitVerilogPass
-    : public ExportSplitVerilogPassBase<ExportSplitVerilogPass> {
+    : public ExportSplitVerilogBase<ExportSplitVerilogPass> {
   ExportSplitVerilogPass(StringRef directory) {
     directoryName = directory.str();
   }
