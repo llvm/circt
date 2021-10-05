@@ -9,7 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/StandardToHandshake/StandardToHandshake.h"
+#include "circt/Conversion/StandardToHandshake.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
@@ -1756,19 +1756,6 @@ struct HandshakeCanonicalizePass
             nestedOp.emitError("does not have exactly one use");
             signalPassFailure();
           }
-    // ConversionTarget target(getContext());
-    // // "Legal" function ops should have no interface variable ABI
-    // attributes. target.addDynamicallyLegalDialect<HandshakeDialect,
-    // StandardOpsDialect>(
-    //         Optional<ConversionTarget::DynamicLegalityCallbackFn>(
-    //            [](Operation *op) { return op->hasOneUse(); }));
-
-    // RewritePatternSet patterns;
-    // patterns.insert<HandshakeCanonicalizePattern>("std.muli", 1,
-    // m.getContext()); applyPatternsAndFoldGreedily(
-
-    // if (failed(applyPartialConversion(m, target, patterns)))
-    //   signalPassFailure();
   }
 };
 } // namespace

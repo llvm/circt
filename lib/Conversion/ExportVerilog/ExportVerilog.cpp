@@ -10,7 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Translation/ExportVerilog.h"
+#include "circt/Conversion/ExportVerilog.h"
+#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -3819,13 +3820,6 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 // Unified Emitter
 //===----------------------------------------------------------------------===//
 
-#define GEN_PASS_CLASSES
-namespace circt {
-namespace translations {
-#include "circt/Translation/TranslationPasses.h.inc"
-}
-} // namespace circt
-
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   SharedEmitterState emitter(module);
   emitter.gatherFiles(false);
@@ -3850,9 +3844,8 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
 
 namespace {
 
-struct ExportVerilogFilePass
-    : public translations::ExportVerilogFilePassBase<ExportVerilogFilePass> {
-  ExportVerilogFilePass(raw_ostream &os) : os(os) {}
+struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
+  ExportVerilogPass(raw_ostream &os) : os(os) {}
   void runOnOperation() override {
     // Make sure LoweringOptions are applied to the module if it was overridden
     // on the command line.
@@ -3869,13 +3862,12 @@ private:
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass>
-circt::translations::createExportVerilogFilePass(llvm::raw_ostream &os) {
-  return std::make_unique<ExportVerilogFilePass>(os);
+circt::createExportVerilogPass(llvm::raw_ostream &os) {
+  return std::make_unique<ExportVerilogPass>(os);
 }
 
-std::unique_ptr<mlir::Pass>
-circt::translations::createExportVerilogFilePass() {
-  return createExportVerilogFilePass(llvm::outs());
+std::unique_ptr<mlir::Pass> circt::createExportVerilogPass() {
+  return createExportVerilogPass(llvm::outs());
 }
 
 //===----------------------------------------------------------------------===//
@@ -3954,7 +3946,7 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
 namespace {
 
 struct ExportSplitVerilogPass
-    : public translations::ExportSplitVerilogPassBase<ExportSplitVerilogPass> {
+    : public ExportSplitVerilogBase<ExportSplitVerilogPass> {
   ExportSplitVerilogPass(StringRef directory) {
     directoryName = directory.str();
   }
@@ -3970,6 +3962,6 @@ struct ExportSplitVerilogPass
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass>
-circt::translations::createExportSplitVerilogPass(StringRef directory) {
+circt::createExportSplitVerilogPass(StringRef directory) {
   return std::make_unique<ExportSplitVerilogPass>(directory);
 }

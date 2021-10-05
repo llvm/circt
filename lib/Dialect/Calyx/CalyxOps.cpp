@@ -1200,8 +1200,8 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 SmallVector<StringRef> InstanceOp::portNames() {
   SmallVector<StringRef> portNames;
-  for (auto &&port : getReferencedComponent().portNames())
-    portNames.push_back(port.cast<StringAttr>().getValue());
+  for (Attribute name : getReferencedComponent().portNames())
+    portNames.push_back(name.cast<StringAttr>().getValue());
   return portNames;
 }
 
@@ -1230,7 +1230,7 @@ static LogicalResult verifyGroupGoOp(GroupGoOp goOp) {
 /// Provide meaningful names to the result value of a GroupGoOp.
 void GroupGoOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   auto parent = (*this)->getParentOfType<GroupOp>();
-  auto name = parent.sym_name();
+  StringRef name = parent.sym_name();
   std::string resultName = name.str() + ".go";
   setNameFn(getResult(), resultName);
 }
@@ -1382,8 +1382,8 @@ void MemoryOp::build(OpBuilder &builder, OperationState &state,
 }
 
 static LogicalResult verifyMemoryOp(MemoryOp memoryOp) {
-  auto sizes = memoryOp.sizes().getValue();
-  auto addrSizes = memoryOp.addrSizes().getValue();
+  ArrayRef<Attribute> sizes = memoryOp.sizes().getValue();
+  ArrayRef<Attribute> addrSizes = memoryOp.addrSizes().getValue();
   size_t numDims = memoryOp.sizes().size();
   size_t numAddrs = memoryOp.addrSizes().size();
   if (numDims != numAddrs)
@@ -1433,7 +1433,7 @@ static LogicalResult verifyEnableOp(EnableOp enableOp) {
 
 static LogicalResult verifyIfOp(IfOp ifOp) {
   auto component = ifOp->getParentOfType<ComponentOp>();
-  auto wiresOp = component.getWiresOp();
+  WiresOp wiresOp = component.getWiresOp();
 
   if (ifOp.elseBodyExists() && ifOp.getElseBody()->empty())
     return ifOp.emitError() << "empty 'else' region.";
@@ -1464,14 +1464,15 @@ static LogicalResult verifyIfOp(IfOp ifOp) {
 
 /// Returns the last EnableOp within the child tree of 'parentSeqOp'. If no
 /// EnableOp was found (e.g. a "calyx.par" operation is present), returns
-/// nullptr.
-static EnableOp getLastEnableOp(SeqOp parent) {
+/// None.
+static Optional<EnableOp> getLastEnableOp(SeqOp parent) {
   auto &lastOp = parent.getBody()->back();
   if (auto enableOp = dyn_cast<EnableOp>(lastOp))
     return enableOp;
   else if (auto seqOp = dyn_cast<SeqOp>(lastOp))
     return getLastEnableOp(seqOp);
-  return nullptr;
+
+  return None;
 }
 
 /// Returns a mapping of {enabled Group name, EnableOp} for all EnableOps within
@@ -1524,12 +1525,12 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
 
     auto thenControl = cast<SeqOp>(ifOp.getThenBody()->front()),
          elseControl = cast<SeqOp>(ifOp.getElseBody()->front());
-    EnableOp lastThenEnableOp = getLastEnableOp(thenControl),
-             lastElseEnableOp = getLastEnableOp(elseControl);
+    Optional<EnableOp> lastThenEnableOp = getLastEnableOp(thenControl),
+                       lastElseEnableOp = getLastEnableOp(elseControl);
 
-    if (lastThenEnableOp == nullptr || lastElseEnableOp == nullptr)
+    if (!lastThenEnableOp.hasValue() || !lastElseEnableOp.hasValue())
       return failure();
-    if (lastThenEnableOp.groupName() != lastElseEnableOp.groupName())
+    if (lastThenEnableOp->groupName() != lastElseEnableOp->groupName())
       return failure();
 
     // Place the IfOp and pulled EnableOp inside a sequential region, in case
@@ -1541,11 +1542,11 @@ struct CommonTailPatternWithSeq : mlir::OpRewritePattern<IfOp> {
     ifOp->remove();
     body->push_back(ifOp);
     rewriter.setInsertionPointToEnd(body);
-    rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp.groupName());
+    rewriter.create<EnableOp>(seqOp.getLoc(), lastThenEnableOp->groupName());
 
     // Erase the common EnableOp from the Then and Else regions.
-    rewriter.eraseOp(lastThenEnableOp);
-    rewriter.eraseOp(lastElseEnableOp);
+    rewriter.eraseOp(*lastThenEnableOp);
+    rewriter.eraseOp(*lastElseEnableOp);
     return success();
   }
 };

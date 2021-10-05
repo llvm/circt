@@ -6,7 +6,7 @@ add_circt_translation_library(CIRCTExportVerilog
   ADDITIONAL_HEADER_DIRS
 
   DEPENDS
-  CIRCTTranslationIncGen
+  CIRCTConversionPassIncGen
 
   LINK_COMPONENTS
   Core
@@ -16,6 +16,7 @@ add_circt_translation_library(CIRCTExportVerilog
   CIRCTHW
   CIRCTSupport
   CIRCTSV
+  MLIRPass
   MLIRSideEffectInterfaces
   MLIRTranslation
   )

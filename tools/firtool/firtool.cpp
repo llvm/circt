@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
@@ -22,7 +23,6 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
-#include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -408,25 +408,23 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     // Legalize the module names.
     pm.addPass(sv::createHWLegalizeNamesPass());
 
-    // Emit a single file or multiple files depending on the output format.
-    switch (outputFormat) {
-    case OutputMLIR:
-      break;
-    case OutputDisabled:
-      return success();
-    case OutputVerilog:
-      pm.addPass(translations::createExportVerilogFilePass(
-          outputFile.getValue()->os()));
-      break;
-    case OutputSplitVerilog:
-      pm.addPass(translations::createExportSplitVerilogPass(outputFilename));
-      break;
-    }
-
     // Run module hierarchy emission after verilog emission, which ensures we
     // pick up any changes that verilog emission made.
     if (exportModuleHierarchy)
       pm.addPass(sv::createHWExportModuleHierarchyPass());
+
+    // Emit a single file or multiple files depending on the output format.
+    switch (outputFormat) {
+    case OutputMLIR:
+    case OutputDisabled:
+      llvm_unreachable("can't reach this");
+    case OutputVerilog:
+      pm.addPass(createExportVerilogPass(outputFile.getValue()->os()));
+      break;
+    case OutputSplitVerilog:
+      pm.addPass(createExportSplitVerilogPass(outputFilename));
+      break;
+    }
   }
 
   // Load the emitter options from the command line. Command line options if
