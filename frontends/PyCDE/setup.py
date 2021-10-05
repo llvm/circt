@@ -47,8 +47,8 @@ class CMakeBuild(build_py):
     if not cmake_build_dir:
       cmake_build_dir = os.path.join(target_dir, "..", "cmake_build")
     cmake_install_dir = os.path.join(target_dir, "..", "cmake_install")
-    this_dir = os.path.abspath(os.path.dirname(__file__))
-    circt_dir = os.path.abspath(os.path.join(this_dir, "..", ".."))
+    this_dir = '/project/circt'
+    circt_dir = this_dir
     src_dir = os.path.abspath(os.path.join(circt_dir, "llvm", "llvm"))
     print(this_dir)
     print(os.listdir(this_dir))
