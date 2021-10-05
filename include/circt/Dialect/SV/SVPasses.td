@@ -130,7 +130,7 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
   let dependentDialects = ["circt::sv::SVDialect"];
 
   let options = [
-    Option<"directoryName", "dir-name", "std::string", "",
+    Option<"directoryName", "dir-name", "std::string", "\"./\"",
             "Directory to emit into">
    ];
 }

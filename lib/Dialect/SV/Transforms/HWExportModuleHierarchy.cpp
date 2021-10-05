@@ -32,8 +32,9 @@ using namespace circt;
 
 struct HWExportModuleHierarchyPass
     : public sv::HWExportModuleHierarchyBase<HWExportModuleHierarchyPass> {
-  HWExportModuleHierarchyPass(StringRef directory) {
-    directoryName = directory.str();
+  HWExportModuleHierarchyPass(Optional<std::string> directory) {
+    if (directory.hasValue())
+      directoryName = directory.getValue();
   }
   void runOnOperation() override;
 };
@@ -126,6 +127,6 @@ void HWExportModuleHierarchyPass::runOnOperation() {
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::Pass>
-sv::createHWExportModuleHierarchyPass(StringRef directory) {
+sv::createHWExportModuleHierarchyPass(Optional<std::string> directory) {
   return std::make_unique<HWExportModuleHierarchyPass>(directory);
 }
