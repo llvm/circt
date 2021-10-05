@@ -13,8 +13,8 @@
 #ifndef CIRCT_DIALECT_SV_SVPASSES_H
 #define CIRCT_DIALECT_SV_SVPASSES_H
 
-#include "llvm/ADT/StringRef.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/StringRef.h"
 
 namespace circt {
 namespace sv {
