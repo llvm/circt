@@ -207,6 +207,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       createMemMetadata(memOp, dutJson, seqMemConfStr);
   });
   testBenchJson.array([&] {
+    // The tbConfStr is populated here, but unused, it will not be printed to
+    // file.
     for (auto memOp : tbMems)
       createMemMetadata(memOp, testBenchJson, tbConfStr);
   });
@@ -215,11 +217,11 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
   AnnotationSet annos(circuitOp);
   auto diranno = annos.getAnnotation(metadataDirectoryAnnoClass);
-  std::string metadataDir = "metadata";
+  StringRef metadataDir = "metadata";
   if (diranno) {
     if (auto dir = diranno.get("dirname")) {
       if (dir.isa<StringAttr>())
-        metadataDir = dir.cast<StringAttr>().getValue().str();
+        metadataDir = dir.cast<StringAttr>().getValue();
     }
   }
   // Use unknown loc to avoid printing the location in the metadata files.
@@ -236,9 +238,9 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
         context, metadataDir, "tb_seq_mems.json", /*excludeFromFilelist=*/true);
     tbVerbatimOp->setAttr("output_file", fileAttr);
-    std::string confFile;
+    StringRef confFile;
     if (dutMod)
-      confFile = dutMod.getName().str();
+      confFile = dutMod.getName();
     else
       confFile = "memory";
     fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
