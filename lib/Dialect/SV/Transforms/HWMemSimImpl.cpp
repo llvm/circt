@@ -99,8 +99,8 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   auto maskBits = mem.dataWidth / mem.maskGran;
   // Each mask bit controls mask-granularity number of data bits.
   // If maskBits >1, then create one register for each mask bit, and each
-  //  register is of bit-width mask-granularity. If one bit wide mask then
-  //  mask-granularity is eqaul to data width.
+  // register is of bit-width mask-granularity. If one bit wide mask then
+  // mask-granularity is eqaul to data width.
   auto dataType = b.getIntegerType(mem.maskGran);
   // If multi-bit mask then the dataType is different from the type of input and
   // output data ports.
@@ -233,7 +233,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
       // For each register, create the connections to write the corresponding
       // data into it.
       for (auto reg : llvm::enumerate(regsVector)) {
-        // Gaurd by corresponding mask bit.
+        // Guard by corresponding mask bit.
         auto wcond = b.createOrFold<comb::AndOp>(en, maskValues[reg.index()]);
         b.create<sv::IfOp>(wcond, [&]() {
           auto slot = b.create<sv::ArrayIndexInOutOp>(reg.value(), addr);
