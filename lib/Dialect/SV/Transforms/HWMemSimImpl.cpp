@@ -32,6 +32,7 @@ struct FirMemory {
   size_t numReadWritePorts;
   size_t dataWidth;
   size_t depth;
+  size_t maskGran;
   size_t readLatency;
   size_t writeLatency;
   size_t readUnderWrite;
@@ -59,6 +60,10 @@ static FirMemory analyzeMemOp(HWModuleGeneratedOp op) {
   mem.readLatency = op->getAttrOfType<IntegerAttr>("readLatency").getUInt();
   mem.writeLatency = op->getAttrOfType<IntegerAttr>("writeLatency").getUInt();
   mem.dataWidth = op->getAttrOfType<IntegerAttr>("width").getUInt();
+  if (op->hasAttrOfType<IntegerAttr>("maskGran"))
+    mem.maskGran = op->getAttrOfType<IntegerAttr>("maskGran").getUInt();
+  else
+    mem.maskGran = mem.dataWidth;
   mem.readUnderWrite =
       op->getAttrOfType<IntegerAttr>("readUnderWrite").getUInt();
   mem.writeUnderWrite =
@@ -90,10 +95,22 @@ static Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages,
 void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBody());
 
-  // Create a register for the memory.
-  auto dataType = b.getIntegerType(mem.dataWidth);
-  Value reg = b.create<sv::RegOp>(UnpackedArrayType::get(dataType, mem.depth),
-                                  b.getStringAttr("Memory"));
+  // Compute total number of mask bits.
+  auto maskBits = mem.dataWidth / mem.maskGran;
+  // Each mask bit controls mask-granularity number of data bits.
+  // If maskBits >1, then create one register for each mask bit, and each
+  // register is of bit-width mask-granularity. If one bit wide mask then
+  // mask-granularity is eqaul to data width.
+  auto dataType = b.getIntegerType(mem.maskGran);
+  // If multi-bit mask then the dataType is different from the type of input and
+  // output data ports.
+
+  // Create registers for the memory.
+  SmallVector<Value, 4> regsVector(maskBits);
+  for (size_t i = 0; i < maskBits; ++i)
+    regsVector[i] =
+        b.create<sv::RegOp>(UnpackedArrayType::get(dataType, mem.depth),
+                            b.getStringAttr("Memory" + std::to_string(i)));
 
   SmallVector<Value, 4> outputs;
 
@@ -107,9 +124,15 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     addr = addPipelineStages(b, mem.readLatency, clock, addr);
 
     // Read Logic
-    Value ren =
-        b.create<sv::ReadInOutOp>(b.create<sv::ArrayIndexInOutOp>(reg, addr));
-    Value x = b.create<sv::ConstantXOp>(dataType);
+    SmallVector<Value, 4> readValues;
+    // Read value from each register.
+    for (auto reg : regsVector)
+      readValues.push_back(b.create<sv::ReadInOutOp>(
+          b.create<sv::ArrayIndexInOutOp>(reg, addr)));
+    // Now concat each read value from the registers to construct a
+    // mem.dataWidth type value for output.
+    Value ren = b.create<comb::ConcatOp>(readValues);
+    Value x = b.create<sv::ConstantXOp>(ren.getType());
 
     Value rdata = b.create<comb::MuxOp>(en, ren, x);
     outputs.push_back(rdata);
@@ -121,18 +144,28 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     Value en = op.body().getArgument(inArg++);
     Value clock = op.body().getArgument(inArg++);
     Value wmode = op.body().getArgument(inArg++);
-    Value wdata = op.body().getArgument(inArg++);
-    Value wmask = op.body().getArgument(inArg++);
+    Value wdataIn = op.body().getArgument(inArg++);
+    Value wmaskBits = op.body().getArgument(inArg++);
 
     // Add pipeline stages
     addr = addPipelineStages(b, numStages, clock, addr);
     en = addPipelineStages(b, numStages, clock, en);
     wmode = addPipelineStages(b, numStages, clock, wmode);
-    wdata = addPipelineStages(b, numStages, clock, wdata);
-    wmask = addPipelineStages(b, numStages, clock, wmask);
+    wdataIn = addPipelineStages(b, numStages, clock, wdataIn);
+    wmaskBits = addPipelineStages(b, numStages, clock, wmaskBits);
+    SmallVector<Value, 4> maskValues(maskBits);
+    SmallVector<Value, 4> dataValues(maskBits);
+    // For multi-bit mask, extract corresponding write data bits of
+    // mask-granularity size each. Each of the extracted data bits will be
+    // written to a register, gaurded by the corresponding mask bit.
+    for (size_t i = 0; i < maskBits; ++i) {
+      maskValues[i] = b.create<comb::ExtractOp>(wmaskBits, i, 1);
+      dataValues[i] =
+          b.create<comb::ExtractOp>(wdataIn, i * mem.maskGran, mem.maskGran);
+    }
 
     // wire to store read result
-    auto rWire = b.create<sv::WireOp>(wdata.getType());
+    auto rWire = b.create<sv::WireOp>(wdataIn.getType());
     Value rdata = b.create<sv::ReadInOutOp>(rWire);
 
     // Read logic.
@@ -140,19 +173,34 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
         en, b.createOrFold<comb::ICmpOp>(
                 comb::ICmpPredicate::eq, wmode,
                 b.createOrFold<ConstantOp>(wmode.getType(), 0)));
-    Value slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
-    Value x = b.create<sv::ConstantXOp>(dataType);
-    b.create<sv::AssignOp>(
-        rWire,
-        b.create<comb::MuxOp>(rcond, b.create<sv::ReadInOutOp>(slot), x));
+    SmallVector<Value, 8> slotVector(maskBits);
+    SmallVector<Value, 8> readSlotVector(maskBits);
+    // Read each of the registers, and get the corresponding slots for writing
+    // the data value into.
+    for (auto reg : llvm::enumerate(regsVector)) {
+      auto r = b.create<sv::ArrayIndexInOutOp>(reg.value(), addr);
+      slotVector[reg.index()] = r;
+      readSlotVector[reg.index()] = b.create<sv::ReadInOutOp>(r);
+    }
+    // Concat all the values read from each of the registers to create a
+    // mem.dataWidth wide value, that can be written to the output port.
+    Value slot = b.create<comb::ConcatOp>(readSlotVector);
+    Value x = b.create<sv::ConstantXOp>(slot.getType());
+    b.create<sv::AssignOp>(rWire, b.create<comb::MuxOp>(rcond, slot, x));
 
-    // Write logic.
-    b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clock, [&]() {
-      auto wcond = b.createOrFold<comb::AndOp>(
-          en, b.createOrFold<comb::AndOp>(wmask, wmode));
-      b.create<sv::IfOp>(wcond,
-                         [&]() { b.create<sv::PAssignOp>(slot, wdata); });
-    });
+    // Write logic for each individual register gaurded by the corresponding
+    // mask bit.
+    for (auto wmask : llvm::enumerate(maskValues)) {
+      b.create<sv::AlwaysFFOp>(sv::EventControl::AtPosEdge, clock, [&]() {
+        auto wcond = b.createOrFold<comb::AndOp>(
+            en, b.createOrFold<comb::AndOp>(wmask.value(), wmode));
+        b.create<sv::IfOp>(wcond, [&]() {
+          b.create<sv::PAssignOp>(slotVector[wmask.index()],
+                                  dataValues[wmask.index()]);
+        });
+      });
+    }
+
     outputs.push_back(rdata);
   }
 
@@ -162,21 +210,36 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     Value addr = op.body().getArgument(inArg++);
     Value en = op.body().getArgument(inArg++);
     Value clock = op.body().getArgument(inArg++);
-    Value wdata = op.body().getArgument(inArg++);
-    Value wmask = op.body().getArgument(inArg++);
+    Value wdataIn = op.body().getArgument(inArg++);
+    Value wmaskBits = op.body().getArgument(inArg++);
     // Add pipeline stages
     addr = addPipelineStages(b, numStages, clock, addr);
     en = addPipelineStages(b, numStages, clock, en);
-    wdata = addPipelineStages(b, numStages, clock, wdata);
-    wmask = addPipelineStages(b, numStages, clock, wmask);
+    wdataIn = addPipelineStages(b, numStages, clock, wdataIn);
+    wmaskBits = addPipelineStages(b, numStages, clock, wmaskBits);
 
+    SmallVector<Value, 4> maskValues(maskBits);
+    SmallVector<Value, 4> dataValues(maskBits);
+    // For multi-bit mask, extract corresponding write data bits of
+    // mask-granularity size each. Each of the extracted data bits will be
+    // written to a register, gaurded by the corresponding mask bit.
+    for (size_t i = 0; i < maskBits; ++i) {
+      maskValues[i] = b.create<comb::ExtractOp>(wmaskBits, i, 1);
+      dataValues[i] =
+          b.create<comb::ExtractOp>(wdataIn, i * mem.maskGran, mem.maskGran);
+    }
     // Build write port logic.
     auto writeLogic = [&] {
-      auto wcond = b.createOrFold<comb::AndOp>(en, wmask);
-      b.create<sv::IfOp>(wcond, [&]() {
-        auto slot = b.create<sv::ArrayIndexInOutOp>(reg, addr);
-        b.create<sv::PAssignOp>(slot, wdata);
-      });
+      // For each register, create the connections to write the corresponding
+      // data into it.
+      for (auto reg : llvm::enumerate(regsVector)) {
+        // Guard by corresponding mask bit.
+        auto wcond = b.createOrFold<comb::AndOp>(en, maskValues[reg.index()]);
+        b.create<sv::IfOp>(wcond, [&]() {
+          auto slot = b.create<sv::ArrayIndexInOutOp>(reg.value(), addr);
+          b.create<sv::PAssignOp>(slot, dataValues[reg.index()]);
+        });
+      }
     };
 
     // Build a new always block with write port logic.
