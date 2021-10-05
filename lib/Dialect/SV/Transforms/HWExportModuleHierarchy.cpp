@@ -93,7 +93,8 @@ void HWExportModuleHierarchyPass::runOnOperation() {
       if (!directoryCreated) {
         auto error = llvm::sys::fs::create_directory(directoryName);
         if (error) {
-          llvm::errs() << error.message() << "\n";
+          op->emitError("Error creating directory in HWExportModuleHierarchy: ")
+              << error.message();
           signalPassFailure();
           return;
         }
@@ -105,7 +106,8 @@ void HWExportModuleHierarchyPass::runOnOperation() {
       std::unique_ptr<llvm::ToolOutputFile> outputFile(
           mlir::openOutputFile(outputPath, &errorMessage));
       if (!outputFile) {
-        llvm::errs() << errorMessage << "\n";
+        op->emitError("Error creating file in HWExportModuleHierarchy: ")
+            << errorMessage;
         signalPassFailure();
         return;
       }
