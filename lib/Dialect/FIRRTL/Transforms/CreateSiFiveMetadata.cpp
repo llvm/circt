@@ -218,12 +218,10 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   AnnotationSet annos(circuitOp);
   auto diranno = annos.getAnnotation(metadataDirectoryAnnoClass);
   StringRef metadataDir = "metadata";
-  if (diranno) {
-    if (auto dir = diranno.get("dirname")) {
-      if (dir.isa<StringAttr>())
-        metadataDir = dir.cast<StringAttr>().getValue();
-    }
-  }
+  if (diranno)
+    if (auto dir = diranno.getAs<StringAttr>("dirname"))
+      metadataDir = dir.getValue();
+
   // Use unknown loc to avoid printing the location in the metadata files.
   auto tbVerbatimOp = builder.create<sv::VerbatimOp>(builder.getUnknownLoc(),
                                                      testBenchJsonBuffer);
@@ -231,22 +229,19 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), dutJsonBuffer);
   auto confVerbatimOp =
       builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
-  if (!metadataDir.empty()) {
-    auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-        context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
-    dutVerbatimOp->setAttr("output_file", fileAttr);
-    fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-        context, metadataDir, "tb_seq_mems.json", /*excludeFromFilelist=*/true);
-    tbVerbatimOp->setAttr("output_file", fileAttr);
-    StringRef confFile;
-    if (dutMod)
-      confFile = dutMod.getName();
-    else
-      confFile = "memory";
-    fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-        context, metadataDir, confFile + ".conf", /*excludeFromFilelist=*/true);
-    confVerbatimOp->setAttr("output_file", fileAttr);
-  }
+  auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
+      context, metadataDir, "seq_mems.json", /*excludeFromFilelist=*/true);
+  dutVerbatimOp->setAttr("output_file", fileAttr);
+  fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
+      context, metadataDir, "tb_seq_mems.json", /*excludeFromFilelist=*/true);
+  tbVerbatimOp->setAttr("output_file", fileAttr);
+  StringRef confFile = "memory";
+  if (dutMod)
+    confFile = dutMod.getName();
+  fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
+      context, metadataDir, confFile + ".conf", /*excludeFromFilelist=*/true);
+  confVerbatimOp->setAttr("output_file", fileAttr);
+
   return success();
 }
 /// This will search for a target annotation and remove it from the operation.
