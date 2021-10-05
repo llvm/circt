@@ -13,10 +13,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetail.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/Path.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Support/FileUtilities.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/ToolOutputFile.h"
 
 using namespace circt;
 
@@ -26,6 +32,9 @@ using namespace circt;
 
 struct HWExportModuleHierarchyPass
     : public sv::HWExportModuleHierarchyBase<HWExportModuleHierarchyPass> {
+  HWExportModuleHierarchyPass(StringRef directory) {
+    directoryName = directory.str();
+  }
   void runOnOperation() override;
 };
 
@@ -52,10 +61,8 @@ static void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
 
 /// Return the JSON-serialized module hierarchy for the given module as the top
 /// of the hierarchy.
-static std::string extractHierarchyFromTop(hw::HWModuleOp op,
-                                           SymbolTable &symbolTable) {
-  std::string resultBuffer;
-  llvm::raw_string_ostream os(resultBuffer);
+static void extractHierarchyFromTop(hw::HWModuleOp op, SymbolTable &symbolTable,
+                                    llvm::raw_ostream &os) {
   llvm::json::OStream J(os);
 
   // As a special case for top-level module, set instance name to module name,
@@ -68,38 +75,55 @@ static std::string extractHierarchyFromTop(hw::HWModuleOp op,
         printHierarchy(op, symbolTable, J);
     });
   });
-
-  return resultBuffer;
 }
 
 /// Find the modules corresponding to the firrtl mainModule and DesignUnderTest,
 /// and if they exist, emit a verbatim op with the module hierarchy for each.
 void HWExportModuleHierarchyPass::runOnOperation() {
   mlir::ModuleOp mlirModule = getOperation();
-  auto builder = OpBuilder::atBlockEnd(mlirModule.getBody());
   Optional<SymbolTable> symbolTable = None;
+  bool directoryCreated = false;
 
-  bool anythingChanged = false;
   for (auto op : mlirModule.getOps<hw::HWModuleOp>()) {
-    if (auto attr = op->getAttr("firrtl.moduleHierarchyFile")) {
+    if (auto attr = op->getAttrOfType<hw::OutputFileAttr>(
+            "firrtl.moduleHierarchyFile")) {
       if (!symbolTable)
         symbolTable = SymbolTable(mlirModule);
-      auto verbatimOp = builder.create<sv::VerbatimOp>(
-          builder.getUnknownLoc(),
-          extractHierarchyFromTop(op, symbolTable.getValue()));
-      verbatimOp->setAttr("output_file", attr);
-      op->removeAttr("firrtl.moduleHierarchyFile");
-      anythingChanged = true;
+
+      if (!directoryCreated) {
+        auto error = llvm::sys::fs::create_directory(directoryName);
+        if (error) {
+          llvm::errs() << error.message() << "\n";
+          signalPassFailure();
+          return;
+        }
+        directoryCreated = true;
+      }
+      SmallString<128> outputPath(directoryName);
+      appendPossiblyAbsolutePath(outputPath, attr.getFilename().getValue());
+      std::string errorMessage;
+      std::unique_ptr<llvm::ToolOutputFile> outputFile(
+          mlir::openOutputFile(outputPath, &errorMessage));
+      if (!outputFile) {
+        llvm::errs() << errorMessage << "\n";
+        signalPassFailure();
+        return;
+      }
+
+      extractHierarchyFromTop(op, symbolTable.getValue(), outputFile->os());
+
+      outputFile->keep();
     }
   }
-  if (!anythingChanged)
-    markAllAnalysesPreserved();
+
+  markAllAnalysesPreserved();
 }
 
 //===----------------------------------------------------------------------===//
 // Pass Creation
 //===----------------------------------------------------------------------===//
 
-std::unique_ptr<mlir::Pass> sv::createHWExportModuleHierarchyPass() {
-  return std::make_unique<HWExportModuleHierarchyPass>();
+std::unique_ptr<mlir::Pass>
+sv::createHWExportModuleHierarchyPass(StringRef directory) {
+  return std::make_unique<HWExportModuleHierarchyPass>(directory);
 }

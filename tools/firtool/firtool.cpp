@@ -408,11 +408,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     // Legalize the module names.
     pm.addPass(sv::createHWLegalizeNamesPass());
 
-    // Run module hierarchy emission after verilog emission, which ensures we
-    // pick up any changes that verilog emission made.
-    if (exportModuleHierarchy)
-      pm.addPass(sv::createHWExportModuleHierarchyPass());
-
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {
     case OutputMLIR:
@@ -423,6 +418,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       break;
     case OutputSplitVerilog:
       pm.addPass(createExportSplitVerilogPass(outputFilename));
+      // Run module hierarchy emission after verilog emission, which ensures we
+      // pick up any changes that verilog emission made.
+      if (exportModuleHierarchy)
+        pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
       break;
     }
   }
