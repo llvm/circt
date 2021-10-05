@@ -22,8 +22,6 @@ from setuptools import find_namespace_packages, setup, Extension
 from setuptools.command.build_ext import build_ext
 from setuptools.command.build_py import build_py
 
-_thisdir = os.path.abspath(os.path.dirname(__file__))
-
 
 # Build phase discovery is unreliable. Just tell it what phases to run.
 class CustomBuild(_build):
@@ -49,7 +47,8 @@ class CMakeBuild(build_py):
     if not cmake_build_dir:
       cmake_build_dir = os.path.join(target_dir, "..", "cmake_build")
     cmake_install_dir = os.path.join(target_dir, "..", "cmake_install")
-    circt_dir = os.path.abspath(os.path.join(_thisdir, "..", ".."))
+    this_dir = os.path.abspath(os.path.dirname(__file__))
+    circt_dir = os.path.abspath(os.path.join(this_dir, "..", ".."))
     src_dir = os.path.abspath(os.path.join(circt_dir, "llvm", "llvm"))
     cfg = "Release"
     cmake_args = [
