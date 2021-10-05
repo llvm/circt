@@ -216,10 +216,10 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   auto *context = &getContext();
   auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
   AnnotationSet annos(circuitOp);
-  auto diranno = annos.getAnnotation(metadataDirectoryAnnoClass);
+  auto dirAnno = annos.getAnnotation(metadataDirectoryAnnoClass);
   StringRef metadataDir = "metadata";
-  if (diranno)
-    if (auto dir = diranno.getAs<StringAttr>("dirname"))
+  if (dirAnno)
+    if (auto dir = dirAnno.getAs<StringAttr>("dirname"))
       metadataDir = dir.getValue();
 
   // Use unknown loc to avoid printing the location in the metadata files.
