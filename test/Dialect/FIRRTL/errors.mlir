@@ -296,7 +296,7 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
 // -----
 
 firrtl.circuit "BadPort" {
-  // expected-error @+1 {{'firrtl.module' op all module ports must be firrtl types}}
+  // expected-error @+1 {{'firrtl.module' op port types should all be FIRRTL type attributes}}
   firrtl.module @BadPort(in %in1 : i1) {
   }
 }

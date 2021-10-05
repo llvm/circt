@@ -65,16 +65,6 @@ AnnotationSet AnnotationSet::forPort(FModuleLike module, size_t portNo) {
   return AnnotationSet(ArrayAttr::get(module->getContext(), {}));
 }
 
-/// Get an annotation set for the specified module port, as well as other
-/// argument attributes.
-AnnotationSet
-AnnotationSet::forPort(FModuleLike module, size_t portNo,
-                       SmallVectorImpl<NamedAttribute> &otherAttributes) {
-  for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo))
-    otherAttributes.push_back(a);
-  return forPort(module, portNo);
-}
-
 /// Get an annotation set for the specified value.
 AnnotationSet AnnotationSet::get(Value v) {
   if (auto op = v.getDefiningOp())
@@ -83,22 +73,6 @@ AnnotationSet AnnotationSet::get(Value v) {
   auto arg = v.dyn_cast<BlockArgument>();
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
   return forPort(module, arg.getArgNumber());
-}
-
-/// Return this annotation set as an argument attribute dictionary for a port.
-DictionaryAttr AnnotationSet::getArgumentAttrDict(
-    ArrayRef<NamedAttribute> otherPortAttrs) const {
-  auto *context = getContext();
-  if (empty())
-    return DictionaryAttr::get(context, otherPortAttrs);
-
-  SmallVector<NamedAttribute> allPortAttrs(otherPortAttrs.begin(),
-                                           otherPortAttrs.end());
-  // Annotations are stored as under the "firrtl.annotations" key.
-  allPortAttrs.push_back(
-      {Identifier::get(getDialectAnnotationAttrName(), context),
-       getArrayAttr()});
-  return DictionaryAttr::get(context, allPortAttrs);
 }
 
 /// Store the annotations in this set in an operation's `annotations` attribute,

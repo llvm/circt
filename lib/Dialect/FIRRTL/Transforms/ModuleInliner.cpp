@@ -61,7 +61,7 @@ static SmallVector<Value> mapPortsToWires(StringRef prefix, OpBuilder &b,
                                           FModuleOp target) {
   SmallVector<Value> wires;
   auto portInfo = target.getPorts();
-  for (unsigned i = 0, e = target.getNumArguments(); i < e; ++i) {
+  for (unsigned i = 0, e = target.getNumPorts(); i < e; ++i) {
     auto arg = target.getArgument(i);
     // Get the type of the wire.
     auto type = arg.getType().cast<FIRRTLType>();

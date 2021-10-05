@@ -89,7 +89,7 @@ inline bool operator!=(const ResetDomain &a, const ResetDomain &b) {
 static std::pair<StringAttr, FModuleOp> getResetNameAndModule(Value reset) {
   if (auto arg = reset.dyn_cast<BlockArgument>()) {
     auto module = cast<FModuleOp>(arg.getParentRegion()->getParentOp());
-    return {module.portNames()[arg.getArgNumber()].cast<StringAttr>(), module};
+    return {module.getPortNameAttr(arg.getArgNumber()), module};
   } else {
     auto op = reset.getDefiningOp();
     return {op->getAttrOfType<StringAttr>("name"),
@@ -655,7 +655,7 @@ void InferResetsPass::traceResets(InstanceOp inst) {
   // Establish a connection between the instance ports and module ports.
   auto dirs = module.getPortDirections();
   for (auto it : llvm::enumerate(inst.getResults())) {
-    auto dir = direction::get(dirs.getValue()[it.index()]);
+    auto dir = module.getPortDirection(it.index());
     Value dstPort = module.getArgument(it.index());
     Value srcPort = it.value();
     if (dir == Direction::Out)
@@ -921,14 +921,13 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     if (!module)
       continue;
 
-    SmallVector<Type> argTypes;
-    argTypes.reserve(module.getArguments().size());
+    SmallVector<Attribute> argTypes;
+    argTypes.reserve(module.getNumPorts());
     for (auto arg : module.getArguments())
-      argTypes.push_back(arg.getType());
+      argTypes.push_back(TypeAttr::get(arg.getType()));
 
-    auto type =
-        FunctionType::get(op->getContext(), argTypes, /*resultTypes*/ {});
-    module->setAttr(FModuleOp::getTypeAttrName(), TypeAttr::get(type));
+    module->setAttr(FModuleLike::getPortTypesAttrName(),
+                    ArrayAttr::get(op->getContext(), argTypes));
     LLVM_DEBUG(llvm::dbgs()
                << "- Updated type of module '" << module.getName() << "'\n");
   }
@@ -938,9 +937,12 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     auto module = cast<FExtModuleOp>(pair.first);
     auto instOp = cast<InstanceOp>(pair.second);
 
-    auto type = FunctionType::get(module->getContext(), instOp.getResultTypes(),
-                                  /*resultTypes*/ {});
-    module->setAttr(FExtModuleOp::getTypeAttrName(), TypeAttr::get(type));
+    SmallVector<Attribute> types;
+    for (auto type : instOp.getResultTypes())
+      types.push_back(TypeAttr::get(type));
+
+    module->setAttr(FModuleLike::getPortTypesAttrName(),
+                    ArrayAttr::get(module->getContext(), types));
     LLVM_DEBUG(llvm::dbgs()
                << "- Updated type of extmodule '" << module.getName() << "'\n");
   }
@@ -1127,7 +1129,7 @@ LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
     if (ignore)
       llvm::dbgs() << "no domain\n";
     else if (auto arg = reset.dyn_cast<BlockArgument>())
-      llvm::dbgs() << "port " << module.portNames()[arg.getArgNumber()] << "\n";
+      llvm::dbgs() << "port " << module.getPortName(arg.getArgNumber()) << "\n";
     else
       llvm::dbgs() << "wire "
                    << reset.getDefiningOp()->getAttrOfType<StringAttr>("name")
@@ -1298,7 +1300,7 @@ void InferResetsPass::determineImpl(FModuleOp module, ResetDomain &domain) {
   auto neededType = domain.reset.getType();
   LLVM_DEBUG(llvm::dbgs() << "- Looking for existing port " << neededName
                           << "\n");
-  auto portNames = module.portNames();
+  auto portNames = module.getPortNames();
   auto ports = llvm::zip(portNames, module.getArguments());
   auto portIt = llvm::find_if(
       ports, [&](auto port) { return std::get<0>(port) == neededName; });

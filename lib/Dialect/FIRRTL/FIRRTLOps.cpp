@@ -102,9 +102,8 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
 
   if (auto blockArg = val.dyn_cast<BlockArgument>()) {
     auto op = val.getParentBlock()->getParentOp();
-    auto direction = (Direction)cast<FModuleLike>(op)
-                         .getPortDirections()
-                         .getValue()[blockArg.getArgNumber()];
+    auto direction =
+        cast<FModuleLike>(op).getPortDirection(blockArg.getArgNumber());
     if (direction == Direction::Out)
       return swap();
     return accumulatedFlow;
@@ -153,10 +152,8 @@ DeclKind firrtl::getDeclarationKind(Value val) {
 }
 
 size_t firrtl::getNumPorts(Operation *op) {
-  if (auto extmod = dyn_cast<FExtModuleOp>(op))
-    return extmod.getType().getInputs().size();
-  if (auto mod = dyn_cast<FModuleOp>(op))
-    return mod.getBodyBlock()->getArguments().size();
+  if (auto module = dyn_cast<FModuleLike>(op))
+    return module.getNumPorts();
   return op->getNumResults();
 }
 
@@ -338,8 +335,8 @@ Block *CircuitOp::getBody() { return &getBodyRegion().front(); }
 SmallVector<PortInfo> FModuleOp::getPorts() {
   SmallVector<PortInfo> results;
 
-  auto portNamesAttr = portNames();
-  auto portDirections = getPortDirections().getValue();
+  auto portNamesAttr = getPortNames();
+  auto portDirections = getPortDirections();
   // FModuleOp has the ports as the BlockArgument's of the first block.
   auto moduleBlock = getBodyBlock();
   for (auto portArgAndIndex : llvm::enumerate(moduleBlock->getArguments())) {
@@ -359,14 +356,14 @@ SmallVector<PortInfo> FModuleOp::getPorts() {
 SmallVector<PortInfo> FExtModuleOp::getPorts() {
   SmallVector<PortInfo> results;
 
-  auto portNamesAttr = portNames();
-  auto portDirections = getPortDirections().getValue();
+  auto portNamesAttr = getPortNames();
+  auto portDirections = getPortDirections();
   // FExtModuleOp's don't have block arguments or locations for their ports.
-  auto argTypes = moduleType().getInputs();
+
   auto loc = getLoc();
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+  for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
     auto name = portNamesAttr[i].cast<StringAttr>();
-    auto type = argTypes[i].cast<FIRRTLType>();
+    auto type = getPortType(i).cast<FIRRTLType>();
     auto direction = direction::get(portDirections[i]);
     results.push_back(
         {name, type, direction, loc, AnnotationSet::forPort(*this, i)});
@@ -375,7 +372,7 @@ SmallVector<PortInfo> FExtModuleOp::getPorts() {
 }
 
 // Return the port with the specified name.
-BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
+BlockArgument FModuleOp::getArgument(size_t portNumber) {
   return getBodyBlock()->getArgument(portNumber);
 }
 
@@ -385,25 +382,32 @@ BlockArgument FModuleOp::getPortArgument(size_t portNumber) {
 void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   if (ports.empty())
     return;
-  unsigned oldNumArgs = getNumArguments();
+  unsigned oldNumArgs = getNumPorts();
   unsigned newNumArgs = oldNumArgs + ports.size();
+
+  auto *body = getBodyBlock();
 
   // Add direction markers and names for new ports.
   SmallVector<Direction> existingDirections = direction::unpackAttribute(*this);
-  ArrayRef<Attribute> existingNames = this->portNames().getValue();
+  ArrayRef<Attribute> existingNames = this->getPortNames();
+  ArrayRef<Attribute> existingTypes = this->getPortTypes();
   assert(existingDirections.size() == oldNumArgs);
   assert(existingNames.size() == oldNumArgs);
+  assert(existingTypes.size() == oldNumArgs);
 
   SmallVector<Direction> newDirections;
   SmallVector<Attribute> newNames;
+  SmallVector<Attribute> newTypes;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
+  newTypes.reserve(newNumArgs);
 
   unsigned oldIdx = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
     while (oldIdx < oldNumArgs && oldIdx < untilOldIdx) {
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
+      newTypes.push_back(existingTypes[oldIdx]);
       ++oldIdx;
     }
   };
@@ -411,6 +415,8 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     migrateOldPorts(port.first);
     newDirections.push_back(port.second.direction);
     newNames.push_back(port.second.name);
+    newTypes.push_back(TypeAttr::get(port.second.type));
+    body->insertArgument(port.first, port.second.type, port.second.loc);
   }
   migrateOldPorts(oldNumArgs);
 
@@ -418,24 +424,7 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   (*this)->setAttr(direction::attrKey,
                    direction::packAttribute(newDirections, getContext()));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
-
-  // Insert the common function-like stuff, including the block arguments, and
-  // argument attributes.
-  SmallVector<unsigned> argIndices;
-  SmallVector<Type> argTypes;
-  SmallVector<DictionaryAttr> argAttrs;
-  SmallVector<Optional<Location>> argLocs;
-  argIndices.reserve(ports.size());
-  argTypes.reserve(ports.size());
-  argAttrs.reserve(ports.size());
-  argLocs.reserve(ports.size());
-  for (auto &port : ports) {
-    argIndices.push_back(port.first);
-    argTypes.push_back(port.second.type);
-    argAttrs.push_back(port.second.annotations.getArgumentAttrDict());
-    argLocs.push_back(port.second.loc);
-  }
-  insertArguments(argIndices, argTypes, argAttrs, argLocs);
+  (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
 }
 
 /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
@@ -446,8 +435,9 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
 
   // Drop the direction markers for dead ports.
   SmallVector<Direction> directions = direction::unpackAttribute(*this);
-  ArrayRef<Attribute> portNames = this->portNames().getValue();
+  ArrayRef<Attribute> portNames = this->getPortNames();
   ArrayRef<Attribute> portAnno = this->portAnnotations().getValue();
+  ArrayRef<Attribute> portTypes = this->getPortTypes();
   assert(directions.size() == portNames.size());
 
   SmallVector<Direction> newDirections =
@@ -456,49 +446,44 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
       removeElementsAtIndices(portNames, portIndices);
   SmallVector<Attribute> newPortAnno =
       removeElementsAtIndices(portAnno, portIndices);
+  SmallVector<Attribute> newPortTypes =
+      removeElementsAtIndices(portTypes, portIndices);
   (*this)->setAttr(direction::attrKey,
                    direction::packAttribute(newDirections, getContext()));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newPortNames));
   (*this)->setAttr("portAnnotations",
                    ArrayAttr::get(getContext(), newPortAnno));
+  (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newPortTypes));
 
-  // Erase the common function-like stuff, including the block arguments, and
-  // argument attributes (incl port annotations).
-  eraseArguments(portIndices);
+  // Erase the block arguments.
+  getBodyBlock()->eraseArguments(portIndices);
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
                         StringAttr name, ArrayRef<PortInfo> ports,
                         ArrayAttr annotations) {
-  using namespace mlir::function_like_impl;
-
   // Add an attribute for the name.
   result.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), name);
 
-  SmallVector<Type, 4> argTypes;
-  for (auto elt : ports)
-    argTypes.push_back(elt.type);
-
-  // Record the argument and result types as an attribute.
-  auto type = builder.getFunctionType(argTypes, /*resultTypes*/ {});
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-
   // Record the names of the arguments if present.
-  SmallVector<Attribute, 4> portAnnotations;
-  SmallVector<Attribute, 4> portNames;
   SmallVector<Direction, 4> portDirections;
+  SmallVector<Attribute, 4> portNames;
+  SmallVector<Attribute, 4> portTypes;
+  SmallVector<Attribute, 4> portAnnotations;
   for (size_t i = 0, e = ports.size(); i != e; ++i) {
-    portNames.push_back(ports[i].name);
     portDirections.push_back(ports[i].direction);
+    portNames.push_back(ports[i].name);
+    portTypes.push_back(TypeAttr::get(ports[i].type));
     portAnnotations.push_back(ports[i].annotations.getArrayAttr());
   }
 
   // Both attributes are added, even if the module has no ports.
-  result.addAttribute("portAnnotations", builder.getArrayAttr(portAnnotations));
-  result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute(
       direction::attrKey,
       direction::packAttribute(portDirections, builder.getContext()));
+  result.addAttribute("portNames", builder.getArrayAttr(portNames));
+  result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
+  result.addAttribute("portAnnotations", builder.getArrayAttr(portAnnotations));
 
   if (!annotations)
     annotations = builder.getArrayAttr({});
@@ -530,65 +515,64 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
 }
 
-// TODO: This ia a clone of mlir::impl::printFunctionSignature, refactor it to
-// allow this customization.
-static void printFunctionSignature2(OpAsmPrinter &p, Operation *op,
-                                    ArrayRef<Type> argTypes, bool isVariadic,
-                                    ArrayRef<Type> resultTypes,
-                                    bool &needPortNamesAttr, APInt directions) {
+static void printModuleSignature(OpAsmPrinter &p, Operation *op,
+                                 APInt portDirections,
+                                 ArrayRef<Attribute> portNames,
+                                 ArrayRef<Attribute> portTypes,
+                                 ArrayRef<Attribute> portAnnotations,
+                                 bool &needPortNamesAttr) {
+  // If we are printing the ports as block arguments the op must have a first
+  // block.
   Region &body = op->getRegion(0);
   bool isExternal = body.empty();
-  SmallString<32> resultNameStr;
 
+  SmallString<32> resultNameStr;
   p << '(';
-  auto portNamesAttr = cast<FModuleLike>(op).portNames();
-  for (unsigned i = 0, e = argTypes.size(); i < e; ++i) {
+  for (unsigned i = 0, e = portTypes.size(); i < e; ++i) {
     if (i > 0)
       p << ", ";
 
-    p << (directions[i] ? "out " : "in ");
+    // Print the port direction.
+    p << (portDirections[i] ? "out " : "in ");
 
-    auto portName = portNamesAttr[i].cast<StringAttr>().getValue();
-    Value argumentValue;
+    // Print the port name.
+    auto portName = portNames[i].cast<StringAttr>().getValue();
     if (!isExternal) {
       // Get the printed format for the argument name.
       resultNameStr.clear();
       llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(body.front().getArgument(i), tmpStream);
+      p.printOperand(body.getArgument(i), tmpStream);
       // If the name wasn't printable in a way that agreed with portName, make
       // sure to print out an explicit portNames attribute.
       if (!portName.empty() && tmpStream.str().drop_front() != portName)
         needPortNamesAttr = true;
       p << tmpStream.str() << ": ";
     } else if (!portName.empty()) {
-      p << '%' << portName << ": ";
+      p << "%" << portName << ": ";
     }
 
-    p.printType(argTypes[i]);
+    // Print the port type.
+    auto portType = portTypes[i].cast<TypeAttr>().getValue();
+    p.printType(portType);
 
-    // Combine the port's annos in `portAnnotations` with its attributes in
-    // `arg_attrs` to print a uniform attribute dictionary of the form
-    // `{firrtl.annotations = [<annos>], <arg-attrs>}`.
-    auto argAttrs = ::mlir::function_like_impl::getArgAttrs(op, i);
-    auto annos = AnnotationSet::forPort(op, i);
-    p.printOptionalAttrDict(annos.getArgumentAttrDict(argAttrs).getValue());
-  }
-
-  if (isVariadic) {
-    if (!argTypes.empty())
-      p << ", ";
-    p << "...";
+    // Print the port specific annotations. The port annotations array will be
+    // empty if there are none.
+    if (!portAnnotations.empty() &&
+        !portAnnotations[i].cast<ArrayAttr>().empty()) {
+      p << " ";
+      p.printAttribute(portAnnotations[i]);
+    }
   }
 
   p << ')';
 }
 
-static ParseResult parseFunctionArgumentList2(
-    OpAsmParser &parser, bool allowAttributes, bool allowVariadic,
-    SmallVectorImpl<OpAsmParser::OperandType> &argNames,
-    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Direction> &argDirections,
-    SmallVectorImpl<Attribute> &argAnnotations,
-    SmallVectorImpl<NamedAttrList> &argAttrs, bool &isVariadic) {
+static ParseResult
+parseModuleSignature(OpAsmParser &parser,
+                     SmallVectorImpl<Direction> &portDirections,
+                     SmallVectorImpl<OpAsmParser::OperandType> &portNames,
+                     SmallVectorImpl<Attribute> &portTypes,
+                     SmallVectorImpl<Attribute> &portAnnotations) {
   if (parser.parseLParen())
     return failure();
 
@@ -598,60 +582,55 @@ static ParseResult parseFunctionArgumentList2(
   auto parseArgument = [&]() -> ParseResult {
     llvm::SMLoc loc = parser.getCurrentLocation();
 
-    // Parse argument name if present.
-    OpAsmParser::OperandType argument;
-    Type argumentType;
-    // TODO: is this safe?
-    SmallVector<StringRef, 2> directions({{"in"}, {"out"}});
-    StringRef direction;
-    if (succeeded(parser.parseOptionalKeyword(&direction, directions)) &&
-        succeeded(parser.parseOptionalRegionArgument(argument)) &&
-        !argument.name.empty()) {
-      // Reject this if the preceding argument was missing a name.
-      if (argNames.empty() && !argTypes.empty())
-        return parser.emitError(loc, "expected type instead of SSA identifier");
-      argNames.push_back(argument);
-      argDirections.push_back(direction::get(direction == "out"));
+    // Parse port direction.
+    if (succeeded(parser.parseOptionalKeyword("out")))
+      portDirections.push_back(Direction::Out);
+    else if (succeeded(parser.parseKeyword("in", "or 'out'")))
+      portDirections.push_back(Direction::In);
+    else
+      return failure();
 
-      if (parser.parseColonType(argumentType))
+    // Parse the port name and port type.
+    OpAsmParser::OperandType portName;
+    Type portType;
+    if (succeeded(parser.parseOptionalRegionArgument(portName)) &&
+        !portName.name.empty()) {
+      // Reject this if the preceding port was missing a name.
+      if (portNames.empty() && !portTypes.empty())
+        return parser.emitError(loc, "expected type instead of SSA identifier");
+      portNames.push_back(portName);
+      if (parser.parseColonType(portType))
         return failure();
-    } else if (allowVariadic && succeeded(parser.parseOptionalEllipsis())) {
-      isVariadic = true;
-      return success();
-    } else if (!argNames.empty()) {
+    } else if (!portNames.empty()) {
       // Reject this if the preceding argument had a name.
       return parser.emitError(loc, "expected SSA identifier");
-    } else if (parser.parseType(argumentType)) {
+    } else if (parser.parseType(portType)) {
       return failure();
     }
+    portTypes.push_back(TypeAttr::get(portType));
 
-    // Add the argument type.
-    argTypes.push_back(argumentType);
-
-    // Parse any argument attributes.
-    NamedAttrList attrs;
-    if (parser.parseOptionalAttrDict(attrs))
-      return failure();
-    if (!allowAttributes && !attrs.empty())
-      return parser.emitError(loc, "expected arguments without attributes");
-    Attribute annos = attrs.erase(getDialectAnnotationAttrName());
+    // Parse any port annotations. TODO: The API for parsing optional attributes
+    // is missing some functions and we shouldn't need to create a dummy
+    // attribute list. x-ref TODO in SVOps.cpp, parseOmitEmptyStringAttr.
+    ArrayAttr annos;
+    NamedAttrList dummy;
+    parser.parseOptionalAttribute(annos, /*type=*/{}, "dummy", dummy);
     if (!annos)
-      annos = ArrayAttr::get(parser.getBuilder().getContext(), {});
-    argAnnotations.push_back(annos);
-    argAttrs.push_back(attrs);
+      annos = parser.getBuilder().getArrayAttr({});
+    portAnnotations.push_back(annos);
+
     return success();
   };
 
-  // Parse the function arguments.
-  isVariadic = false;
+  // Parse all ports.
   if (failed(parser.parseOptionalRParen())) {
     do {
-      unsigned numTypedArguments = argTypes.size();
+      unsigned numTypedArguments = portTypes.size();
       if (parseArgument())
         return failure();
 
       llvm::SMLoc loc = parser.getCurrentLocation();
-      if (argTypes.size() == numTypedArguments &&
+      if (portTypes.size() == numTypedArguments &&
           succeeded(parser.parseOptionalComma()))
         return parser.emitError(
             loc, "variadic arguments must be in the end of the argument list");
@@ -662,96 +641,38 @@ static ParseResult parseFunctionArgumentList2(
   return success();
 }
 
-static ParseResult
-parseFunctionResultList2(OpAsmParser &parser,
-                         SmallVectorImpl<Type> &resultTypes,
-                         SmallVectorImpl<NamedAttrList> &resultAttrs) {
-  if (failed(parser.parseOptionalLParen())) {
-    // We already know that there is no `(`, so parse a type.
-    // Because there is no `(`, it cannot be a function type.
-    Type ty;
-    if (parser.parseType(ty))
-      return failure();
-    resultTypes.push_back(ty);
-    resultAttrs.emplace_back();
-    return success();
-  }
-
-  // Special case for an empty set of parens.
-  if (succeeded(parser.parseOptionalRParen()))
-    return success();
-
-  auto parseFunctionResult = [&]() -> ParseResult {
-    resultTypes.emplace_back();
-    resultAttrs.emplace_back();
-    if (parser.parseType(resultTypes.back()) ||
-        parser.parseOptionalAttrDict(resultAttrs.back()))
-      return failure();
-    return success();
-  };
-
-  // Parse individual function results.
-  if (parser.parseCommaSeparatedList(parseFunctionResult) ||
-      parser.parseRParen())
-    return failure();
-  return success();
-}
-
-static ParseResult
-parseFunctionSignature2(OpAsmParser &parser, bool allowVariadic,
-                        SmallVectorImpl<OpAsmParser::OperandType> &argNames,
-                        SmallVectorImpl<Type> &argTypes,
-                        SmallVectorImpl<Direction> &argDirections,
-                        SmallVectorImpl<Attribute> &argAnnotations,
-                        SmallVectorImpl<NamedAttrList> &argAttrs,
-                        bool &isVariadic, SmallVectorImpl<Type> &resultTypes,
-                        SmallVectorImpl<NamedAttrList> &resultAttrs) {
-  bool allowArgAttrs = true;
-  if (parseFunctionArgumentList2(parser, allowArgAttrs, allowVariadic, argNames,
-                                 argTypes, argDirections, argAnnotations,
-                                 argAttrs, isVariadic))
-    return failure();
-  if (succeeded(parser.parseOptionalArrow()))
-    return parseFunctionResultList2(parser, resultTypes, resultAttrs);
-  return success();
-}
-
-static void printModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
-  using namespace mlir::function_like_impl;
-
-  FunctionType fnType = op.moduleType();
-  auto argTypes = fnType.getInputs();
-  auto resultTypes = fnType.getResults();
-
-  // TODO: Should refactor mlir::function_like_impl::printFunctionLikeOp to
-  // allow these customizations.  Need to not print the terminator.
-
+static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   // Print the operation and the function name.
   p << " ";
   p.printSymbolName(op.moduleName());
 
+  // Print the ports.
   bool needPortNamesAttr = false;
-  printFunctionSignature2(p, op, argTypes, /*isVariadic*/ false, resultTypes,
-                          needPortNamesAttr, op.getPortDirections().getValue());
-  SmallVector<StringRef, 3> omittedAttrs({direction::attrKey});
+  printModuleSignature(p, op, op.getPortDirections(), op.getPortNames(),
+                       op.getPortTypes(), op.getPortAnnotations(),
+                       needPortNamesAttr);
+
+  SmallVector<StringRef, 3> omittedAttrs = {"sym_name", "portDirections",
+                                            "portTypes", "portAnnotations"};
+
+  // We can omit the portNames if they were able to be printed as properly as
+  // block arguments.
   if (!needPortNamesAttr)
     omittedAttrs.push_back("portNames");
+
+  // If there are no annotations we can omit the empty array.
   if (op->getAttrOfType<ArrayAttr>("annotations").empty())
     omittedAttrs.push_back("annotations");
 
-  // Port annotations are printed in as part of the signature already.
-  omittedAttrs.push_back("portAnnotations");
-
-  printFunctionAttributes(p, op, argTypes.size(), resultTypes.size(),
-                          omittedAttrs);
+  p.printOptionalAttrDictWithKeyword(op->getAttrs(), omittedAttrs);
 }
 
 static void printFExtModuleOp(OpAsmPrinter &p, FExtModuleOp op) {
-  printModuleLikeOp(p, op);
+  printFModuleLikeOp(p, op);
 }
 
 static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
-  printModuleLikeOp(p, op);
+  printFModuleLikeOp(p, op);
 
   // Print the body if this is not an external function. Since this block does
   // not have terminators, printing the terminator actually just prints the last
@@ -762,21 +683,10 @@ static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
                   /*printBlockTerminators=*/true);
 }
 
-static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
-                                  bool isExtModule = false) {
-  using namespace mlir::function_like_impl;
-
-  // TODO: Should refactor mlir::function_like_impl::parseFunctionLikeOp to
-  // allow these customizations for implicit argument names.  Need to not print
-  // the terminator.
-
-  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
-  SmallVector<NamedAttrList, 4> portNamesAttrs;
-  SmallVector<NamedAttrList, 4> resultAttrs;
-  SmallVector<Type, 4> argTypes;
-  SmallVector<Type, 4> resultTypes;
-  SmallVector<Direction, 4> argDirections;
-  SmallVector<Attribute, 4> argAnnotations;
+static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
+                                      OperationState &result,
+                                      bool isExtModule) {
+  auto *context = result.getContext();
   auto &builder = parser.getBuilder();
 
   // Parse the name as a symbol.
@@ -786,39 +696,28 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
     return failure();
 
   // Parse the function signature.
-  bool isVariadic = false;
-  if (parseFunctionSignature2(
-          parser, /*allowVariadic*/ false, entryArgs, argTypes, argDirections,
-          argAnnotations, portNamesAttrs, isVariadic, resultTypes, resultAttrs))
+  SmallVector<Direction, 4> portDirections;
+  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  SmallVector<Attribute, 4> portTypes;
+  SmallVector<Attribute, 4> portAnnotations;
+  if (parseModuleSignature(parser, portDirections, entryArgs, portTypes,
+                           portAnnotations))
     return failure();
 
-  // Record the argument and result types as an attribute.  This is necessary
-  // for external modules.
-  auto type = builder.getFunctionType(argTypes, resultTypes);
-  result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-
-  // If function attributes are present, parse them.
+  // If module attributes are present, parse them.
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  assert(portNamesAttrs.size() == argTypes.size());
-  assert(resultAttrs.size() == resultTypes.size());
+  assert(entryArgs.size() == portTypes.size());
 
-  auto *context = result.getContext();
+  // Record the argument and result types as an attribute.  This is necessary
+  // for external modules.
 
-  // Add the port directions attribute indiciating which port is.
+  // Add port directions.
   result.addAttribute(direction::attrKey,
-                      direction::packAttribute(argDirections, context));
+                      direction::packAttribute(portDirections, context));
 
-  // Add the port annotations attribute.
-  if (!result.attributes.get("portAnnotations")) {
-    auto emptyArray = ArrayAttr::get(context, {});
-    if (llvm::any_of(argAnnotations,
-                     [&](auto anno) { return anno != emptyArray; }))
-      result.addAttribute("portAnnotations",
-                          ArrayAttr::get(context, argAnnotations));
-  }
-
+  // Add port names.
   SmallVector<Attribute> portNames;
   if (!result.attributes.get("portNames")) {
     // Postprocess each of the arguments.  If there was no portNames
@@ -840,8 +739,20 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
     }
     result.addAttribute("portNames", builder.getArrayAttr(portNames));
   }
-  // Add the attributes to the function arguments.
-  addArgAndResultAttrs(builder, result, portNamesAttrs, resultAttrs);
+
+  // Add the port types.
+  if (!result.attributes.get("portTypes"))
+    result.addAttribute("portTypes", ArrayAttr::get(context, portTypes));
+
+  // Add the port annotations.
+  if (!result.attributes.get("portAnnotations")) {
+    // If there are no portAnnotations, don't add the attribute.
+    if (llvm::any_of(portAnnotations, [&](Attribute anno) {
+          return !anno.cast<ArrayAttr>().empty();
+        }))
+      result.addAttribute("portAnnotations",
+                          ArrayAttr::get(context, portAnnotations));
+  }
 
   // The annotations attribute is always present, but not printed when empty.
   if (!result.attributes.get("annotations"))
@@ -854,9 +765,17 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
 
   // Parse the optional function body.
   auto *body = result.addRegion();
+
   if (!isExtModule) {
-    if (parser.parseRegion(*body, entryArgs,
-                           entryArgs.empty() ? ArrayRef<Type>() : argTypes))
+    // Collect block argument types.
+    SmallVector<Type, 4> argTypes;
+    if (!entryArgs.empty())
+      llvm::transform(portTypes, std::back_inserter(argTypes),
+                      [](Attribute typeAttr) -> Type {
+                        return typeAttr.cast<TypeAttr>().getValue();
+                      });
+
+    if (parser.parseRegion(*body, entryArgs, argTypes))
       return failure();
     if (body->empty())
       body->push_back(new Block());
@@ -864,41 +783,16 @@ static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result,
   return success();
 }
 
+static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
+  return parseFModuleLikeOp(parser, result, /*isExtModule=*/false);
+}
+
 static ParseResult parseFExtModuleOp(OpAsmParser &parser,
                                      OperationState &result) {
-  return parseFModuleOp(parser, result, /*isExtModule:*/ true);
-}
-
-static LogicalResult verifyModuleSignature(Operation *op) {
-  auto inputs = cast<FModuleLike>(op).moduleType().getInputs();
-  for (auto argType : inputs) {
-    if (!argType.isa<FIRRTLType>())
-      return op->emitOpError("all module ports must be firrtl types");
-  }
-
-  // Arguments must not have a `firrtl.annotations` attribute. The module
-  // overall has a `portAnnotations` attribute that captures these.
-  for (unsigned i = 0, e = inputs.size(); i < e; ++i) {
-    auto dict = mlir::function_like_impl::getArgAttrDict(op, i);
-    if (dict && dict.get("firrtl.annotations"))
-      return op->emitOpError(
-          "port annotations must be in the module's `portAnnotations` attr, "
-          "not the `firrtl.annotations` arg attr");
-  }
-
-  return success();
-}
-
-static LogicalResult verifyFModuleOp(FModuleOp op) {
-  // Verify the module signature.
-  return verifyModuleSignature(op);
+  return parseFModuleLikeOp(parser, result, /*isExtModule=*/true);
 }
 
 static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
-  // Verify the module signature.
-  if (failed(verifyModuleSignature(op)))
-    return failure();
-
   auto paramDictOpt = op.parameters();
   if (!paramDictOpt)
     return success();
@@ -916,7 +810,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
   if (!llvm::all_of(paramDict, checkParmValue))
     return failure();
-  auto portNamesAttr = op.portNames();
+  auto portNamesAttr = op.getPortNamesAttr();
 
   auto numPorts = op.getPorts().size();
   if (numPorts != portNamesAttr.size())
@@ -925,7 +819,7 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
   // Directions are stored in an APInt which cannot have zero bitwidth.  If the
   // module has no ports, then the APInt should be size one.  Otherwise, their
   // sizes should match.
-  auto numDirections = op.getPortDirections().getValue().getBitWidth();
+  auto numDirections = op.getPortDirections().getBitWidth();
   if ((numPorts != numDirections) && (numPorts != 0 || numDirections != 1))
     return op.emitError()
            << "module ports size (" << numPorts
@@ -2706,7 +2600,7 @@ SmallVector<Direction> direction::unpackAttribute(Operation *module) {
 
   // The integer attribute will be a single bit in the case where the module has
   // no ports because APInt can't hold zero bits.
-  if (cast<FModuleLike>(module).moduleType().getInputs().empty())
+  if (!cast<FModuleLike>(module).getNumPorts())
     return result;
 
   result.reserve(value.getBitWidth());
