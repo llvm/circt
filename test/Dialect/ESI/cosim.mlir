@@ -1,7 +1,7 @@
 // REQUIRES: capnp
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 // RUN: circt-opt %s --lower-esi-ports --lower-esi-to-hw -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck --check-prefix=COSIM %s
-// Disable the SV test : circt-opt %s --lower-esi-ports --lower-esi-to-hw | circt-translate --export-verilog | FileCheck --check-prefix=SV %s
+// Disable the SV test : circt-opt %s --lower-esi-ports --lower-esi-to-hw | circt-opt --export-verilog | FileCheck --check-prefix=SV %s
 // RUN: circt-translate %s -export-esi-capnp -verify-diagnostics | FileCheck --check-prefix=CAPNP %s
 
 hw.module.extern @Sender() -> (x: !esi.channel<si14>)
