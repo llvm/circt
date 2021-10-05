@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/CalyxToHW/CalyxToHW.h"
+#include "circt/Conversion/CalyxToHW.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/HW/HWOps.h"

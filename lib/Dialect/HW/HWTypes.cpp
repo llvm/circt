@@ -196,20 +196,15 @@ llvm::hash_code hash_value(const FieldInfo &fi) {
 /// <foo: i7, bar: i8>
 static ParseResult parseFields(DialectAsmParser &p,
                                SmallVectorImpl<FieldInfo> &parameters) {
-  StringRef name;
-  if (p.parseLess())
-    return failure();
-  while (mlir::succeeded(p.parseOptionalKeyword(&name))) {
-    Type type;
-    if (p.parseColon() || p.parseType(type))
-      return failure();
-    parameters.push_back(FieldInfo{name, type});
-    if (p.parseOptionalComma())
-      break;
-  }
-  if (p.parseGreater())
-    return failure();
-  return success();
+  return p.parseCommaSeparatedList(
+      mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
+        StringRef name;
+        Type type;
+        if (p.parseKeyword(&name) || p.parseColon() || p.parseType(type))
+          return failure();
+        parameters.push_back(FieldInfo{name, type});
+        return success();
+      });
 }
 
 /// Print out a list of named fields surrounded by <>.

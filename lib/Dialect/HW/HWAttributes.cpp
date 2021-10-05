@@ -597,19 +597,12 @@ Attribute ParamExprAttr::parse(DialectAsmParser &p, Type type) {
 /// "#hw.param.expr.mul" form of the attribute.
 static Attribute parseParamExprWithOpcode(StringRef opcodeStr,
                                           DialectAsmParser &p, Type type) {
-  // FIXME(LLVM Merge): use parseCommaSeparatedList
   SmallVector<Attribute> operands;
-  operands.push_back({});
-  if (p.parseLess() || p.parseAttribute(operands.back(), type))
-    return {};
-
-  while (succeeded(p.parseOptionalComma())) {
-    operands.push_back({});
-    if (p.parseAttribute(operands.back(), type))
-      return {};
-  }
-
-  if (p.parseGreater())
+  if (p.parseCommaSeparatedList(
+          mlir::AsmParser::Delimiter::LessGreater, [&]() -> ParseResult {
+            operands.push_back({});
+            return p.parseAttribute(operands.back(), type);
+          }))
     return {};
 
   Optional<PEO> opcode = symbolizePEO(opcodeStr);
