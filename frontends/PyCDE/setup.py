@@ -51,6 +51,7 @@ class CMakeBuild(build_py):
     circt_dir = os.path.abspath(os.path.join(this_dir, "..", ".."))
     src_dir = os.path.abspath(os.path.join(circt_dir, "llvm", "llvm"))
     print(this_dir)
+    print(os.listdir(this_dir))
     print(circt_dir)
     print(src_dir)
     cfg = "Release"
