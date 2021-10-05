@@ -50,8 +50,7 @@ class CMakeBuild(build_py):
       cmake_build_dir = os.path.join(target_dir, "..", "cmake_build")
     cmake_install_dir = os.path.join(target_dir, "..", "cmake_install")
     circt_dir = os.path.abspath(os.path.join(_thisdir, "..", ".."))
-    src_dir = os.path.abspath(os.path.join(_thisdir, "..", "..", "llvm",
-                                           "llvm"))
+    src_dir = os.path.abspath(os.path.join(circt_dir, "llvm", "llvm"))
     cfg = "Release"
     cmake_args = [
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
