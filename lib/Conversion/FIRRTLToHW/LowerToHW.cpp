@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
-#include "circt/Conversion/FIRRTLToHW/FIRRTLToHW.h"
+#include "circt/Conversion/FIRRTLToHW.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -645,7 +645,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                        maskType, inputPin++});
     }
 
-    auto maskGran = mem.maskBits > 0 ? mem.dataWidth / mem.maskBits : 0;
+    // Mask granularity is the number of data bits that each mask bit can guard.
+    // By default it is equal to the data bitwidth.
+    auto maskGran =
+        mem.maskBits > 0 ? mem.dataWidth / mem.maskBits : mem.dataWidth;
     NamedAttribute genAttrs[] = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
         b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
