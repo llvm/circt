@@ -96,6 +96,8 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBody());
 
   // Compute total number of mask bits.
+  if (mem.maskGran == 0)
+    mem.maskGran = mem.dataWidth;
   auto maskBits = mem.dataWidth / mem.maskGran;
   // Each mask bit controls mask-granularity number of data bits.
   // If maskBits >1, then create one register for each mask bit, and each

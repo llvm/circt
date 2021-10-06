@@ -33,14 +33,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_1_1,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i1, %R0_en: i1, %R0_clk: i1) -> (R0_data: i32)
-  // CHECK-SAME: attributes {depth = 1 : i64, maskGran = 0 : ui32, numReadPorts = 1 : ui32,
+  // CHECK-SAME: attributes {depth = 1 : i64, maskGran = 32 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 1 : ui32,
   // CHECK-SAME: width = 32 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_42_12_0_1_0_1,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42)
-  // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 0 : ui32, numReadPorts = 1 : ui32,
+  // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [],
