@@ -54,39 +54,27 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
 
   // Lambda to get the number of read, write and read-write ports corresponding
   // to a MemOp.
-  auto getNumPorts = [&](MemOp op, size_t &numReadPorts, size_t &numWritePorts,
-                         size_t &numReadWritePorts) {
-    for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-      auto portKind = op.getPortKind(i);
-      if (portKind == MemOp::PortKind::Read)
-        ++numReadPorts;
-      else if (portKind == MemOp::PortKind::Write) {
-        ++numWritePorts;
-      } else
-        ++numReadWritePorts;
-    }
-  };
 
   CircuitOp circuitOp = getOperation();
   // The instance graph analysis will be required to print the hierarchy names
   // of the memory.
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
 
-  auto printAttr = [&](llvm::json::OStream &J, Attribute &verifValAttr,
+  auto printAttr = [&](llvm::json::OStream &jsonStream, Attribute &verifValAttr,
                        std::string &id) {
     if (auto intV = verifValAttr.dyn_cast<IntegerAttr>())
-      J.attribute(id, (int64_t)intV.getValue().getZExtValue());
+      jsonStream.attribute(id, (int64_t)intV.getValue().getZExtValue());
     else if (auto strV = verifValAttr.dyn_cast<StringAttr>())
-      J.attribute(id, strV.getValue().str());
+      jsonStream.attribute(id, strV.getValue().str());
     else if (auto arrV = verifValAttr.dyn_cast<ArrayAttr>()) {
       std::string indices;
-      J.attributeArray(id, [&] {
+      jsonStream.attributeArray(id, [&] {
         for (auto arrI : llvm::enumerate(arrV)) {
           auto i = arrI.value();
           if (auto intV = i.dyn_cast<IntegerAttr>())
-            J.value(std::to_string(intV.getValue().getZExtValue()));
+            jsonStream.value(std::to_string(intV.getValue().getZExtValue()));
           else if (auto strV = i.dyn_cast<StringAttr>())
-            J.value(strV.getValue().str());
+            jsonStream.value(strV.getValue().str());
         }
       });
     }
@@ -94,11 +82,11 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // This lambda, writes to the given Json stream all the relevant memory
   // attributes. Also adds the memory attrbutes to the string for creating the
   // memmory conf file.
-  auto createMemMetadata = [&](MemOp memOp, llvm::json::OStream &J,
+  auto createMemMetadata = [&](MemOp memOp, llvm::json::OStream &jsonStream,
                                std::string &seqMemConfStr) {
     size_t numReadPorts = 0, numWritePorts = 0, numReadWritePorts = 0;
     // Get the number of read,write ports.
-    getNumPorts(memOp, numReadPorts, numWritePorts, numReadWritePorts);
+    memOp.getNumPorts(numReadPorts, numWritePorts, numReadWritePorts);
     // Get the memory data width.
     auto width = memOp.getDataType().getBitWidthOrSentinel();
     // Metadata needs to be printed for memories which are candidates for macro
@@ -142,19 +130,19 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
                      std::to_string(width) + " ports " + portStr +
                      " mask_gran " + std::to_string(maskGran) + "\n";
     // This adds a Json array element entry corresponding to this memory.
-    J.object([&] {
-      J.attribute("module_name", memOp.name());
-      J.attribute("depth", (int64_t)memOp.depth());
-      J.attribute("width", (int64_t)width);
-      J.attribute("masked", "true");
-      J.attribute("read", numReadPorts ? "true" : "false");
-      J.attribute("write", numWritePorts ? "true" : "false");
-      J.attribute("readwrite", numReadWritePorts ? "true" : "false");
-      J.attribute("mask_granularity", (int64_t)maskGran);
-      J.attributeArray("extra_ports", [&] {});
+    jsonStream.object([&] {
+      jsonStream.attribute("module_name", memOp.name());
+      jsonStream.attribute("depth", (int64_t)memOp.depth());
+      jsonStream.attribute("width", (int64_t)width);
+      jsonStream.attribute("masked", "true");
+      jsonStream.attribute("read", numReadPorts ? "true" : "false");
+      jsonStream.attribute("write", numWritePorts ? "true" : "false");
+      jsonStream.attribute("readwrite", numReadWritePorts ? "true" : "false");
+      jsonStream.attribute("mask_granularity", (int64_t)maskGran);
+      jsonStream.attributeArray("extra_ports", [&] {});
       // Record all the hierarchy names.
       SmallVector<std::string> hierNames;
-      J.attributeArray("hierarchy", [&] {
+      jsonStream.attributeArray("hierarchy", [&] {
         for (auto p : paths) {
           const InstanceOp &x = p.front();
           std::string hierName =
@@ -163,21 +151,21 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
             hierName = hierName + "." + inst.name().str();
           }
           hierNames.push_back(hierName);
-          J.value(hierName);
+          jsonStream.value(hierName);
         }
       });
       // If verification annotation added to the memory op then print the data.
       if (verifData)
-        J.attributeObject("verification_only_data", [&] {
+        jsonStream.attributeObject("verification_only_data", [&] {
           for (auto name : hierNames) {
-            J.attributeObject(name, [&] {
+            jsonStream.attributeObject(name, [&] {
               for (auto data : verifData) {
                 // Id for the memory verification property.
                 std::string id = data.first.strref().str();
                 // Value for the property.
                 auto verifValAttr = data.second;
                 // Now print the value attribute based on its type.
-                printAttr(J, verifValAttr, id);
+                printAttr(jsonStream, verifValAttr, id);
               }
             });
           }
