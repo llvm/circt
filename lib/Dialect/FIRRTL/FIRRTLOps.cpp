@@ -338,7 +338,7 @@ SmallVector<PortInfo> FModuleOp::getPorts() {
   auto portNamesAttr = getPortNames();
   auto portDirections = getPortDirections();
   // FModuleOp has the ports as the BlockArgument's of the first block.
-  auto moduleBlock = getBodyBlock();
+  auto moduleBlock = getBody();
   for (auto portArgAndIndex : llvm::enumerate(moduleBlock->getArguments())) {
     BlockArgument portArg = portArgAndIndex.value();
     size_t portIdx = portArgAndIndex.index();
@@ -373,7 +373,7 @@ SmallVector<PortInfo> FExtModuleOp::getPorts() {
 
 // Return the port with the specified name.
 BlockArgument FModuleOp::getArgument(size_t portNumber) {
-  return getBodyBlock()->getArgument(portNumber);
+  return getBody()->getArgument(portNumber);
 }
 
 /// Inserts the given ports. The insertion indices are expected to be in order.
@@ -385,7 +385,7 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   unsigned oldNumArgs = getNumPorts();
   unsigned newNumArgs = oldNumArgs + ports.size();
 
-  auto *body = getBodyBlock();
+  auto *body = getBody();
 
   // Add direction markers and names for new ports.
   SmallVector<Direction> existingDirections = direction::unpackAttribute(*this);
@@ -456,7 +456,7 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newPortTypes));
 
   // Erase the block arguments.
-  getBodyBlock()->eraseArguments(portIndices);
+  getBody()->eraseArguments(portIndices);
 }
 
 static void buildModule(OpBuilder &builder, OperationState &result,
@@ -677,7 +677,7 @@ static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
   // Print the body if this is not an external function. Since this block does
   // not have terminators, printing the terminator actually just prints the last
   // operation.
-  Region &body = op.getBody();
+  Region &body = op.body();
   if (!body.empty())
     p.printRegion(body, /*printEntryBlockArgs=*/false,
                   /*printBlockTerminators=*/true);

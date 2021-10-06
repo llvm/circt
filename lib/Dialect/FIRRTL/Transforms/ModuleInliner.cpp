@@ -165,7 +165,7 @@ bool Inliner::shouldInline(Operation *op) {
 
 void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
                           BlockAndValueMapping &mapper, FModuleOp target) {
-  for (auto &op : *target.getBodyBlock()) {
+  for (auto &op : *target.getBody()) {
     // If its not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
@@ -193,7 +193,7 @@ void Inliner::flattenInto(StringRef prefix, OpBuilder &b,
 }
 
 void Inliner::flattenInstances(FModuleOp module) {
-  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+  for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
     // If its not an instance op, skip it.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance)
@@ -226,7 +226,7 @@ void Inliner::flattenInstances(FModuleOp module) {
 
 void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
                          BlockAndValueMapping &mapper, FModuleOp target) {
-  for (auto &op : *target.getBodyBlock()) {
+  for (auto &op : *target.getBody()) {
     // If its not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
@@ -267,7 +267,7 @@ void Inliner::inlineInto(StringRef prefix, OpBuilder &b,
 }
 
 void Inliner::inlineInstances(FModuleOp module) {
-  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+  for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
     // If its not an instance op, skip it.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance)

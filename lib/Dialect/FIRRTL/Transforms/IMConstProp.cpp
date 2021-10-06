@@ -284,15 +284,15 @@ void IMConstPropPass::runOnOperation() {
   // If the top level module is an external module, mark the input ports
   // overdefined.
   if (auto module = dyn_cast<FModuleOp>(circuit.getMainModule())) {
-    markBlockExecutable(module.getBodyBlock());
-    for (auto port : module.getBodyBlock()->getArguments())
+    markBlockExecutable(module.getBody());
+    for (auto port : module.getBody()->getArguments())
       markOverdefined(port);
   } else {
     // Otherwise, mark all module ports as being overdefined.
     for (auto &circuitBodyOp : circuit.getBody()->getOperations()) {
       if (auto module = dyn_cast<FModuleOp>(circuitBodyOp)) {
-        markBlockExecutable(module.getBodyBlock());
-        for (auto port : module.getBodyBlock()->getArguments())
+        markBlockExecutable(module.getBody());
+        for (auto port : module.getBody()->getArguments())
           markOverdefined(port);
       }
     }
@@ -453,7 +453,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
   // Otherwise this is a defined module.
   auto fModule = cast<FModuleOp>(module);
-  markBlockExecutable(fModule.getBodyBlock());
+  markBlockExecutable(fModule.getBody());
 
   // Ok, it is a normal internal module reference.  Populate
   // resultPortToInstanceResultMapping, and forward any already-computed values.
@@ -643,7 +643,7 @@ void IMConstPropPass::visitOperation(Operation *op) {
 }
 
 void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
-  auto *body = module.getBodyBlock();
+  auto *body = module.getBody();
   // If a module is unreachable, just ignore it.
   if (!executableBlocks.count(body))
     return;

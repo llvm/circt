@@ -186,7 +186,7 @@ void ModuleSignalMappings::emitMappingsModule() {
       StringAttr::get(module.getContext(), mappingsModuleName), ports);
 
   // Generate the connect and force statements inside the module.
-  builder.setInsertionPointToStart(mappingsModule.getBodyBlock());
+  builder.setInsertionPointToStart(mappingsModule.getBody());
   unsigned portIdx = 0;
   for (auto &mapping : mappings) {
     // TODO: Actually generate a proper XMR here. For now just do some textual
@@ -226,7 +226,7 @@ void ModuleSignalMappings::instantiateMappingsModule() {
 
   // Create the actual module.
   auto builder =
-      ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBodyBlock());
+      ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBody());
   auto inst = builder.create<InstanceOp>(resultTypes, mappingsModuleName,
                                          "signal_mappings");
 

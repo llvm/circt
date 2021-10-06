@@ -73,17 +73,14 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
   ];
 
   let extraClassDeclaration = [{
-    Region &getBody() { return getRegion(); }
-    Block *getBodyBlock() { return &body().front(); }
+    Block *getBody() { return &body().front(); }
 
-    using iterator = Region::BlockListType::iterator;
-    iterator begin() { return getBody().begin(); }
-    iterator end() { return getBody().end(); }
-
-    Block &front() { return getBody().front(); }
+    using iterator = Block::iterator;
+    iterator begin() { return getBody()->begin(); }
+    iterator end() { return getBody()->end(); }
 
     Block::BlockArgListType getArguments() {
-      return getBody().getArguments();
+      return getBody()->getArguments();
     }
 
     // Return the block argument for the port with the specified index.

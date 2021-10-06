@@ -283,8 +283,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         Value leafValue = leafMap.lookup(ground.getID());
         assert(leafValue && "leafValue not found");
 
-        auto builder = OpBuilder::atBlockEnd(
-            companionIDMap.lookup(id).mapping.getBodyBlock());
+        auto builder =
+            OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
         auto srcPaths =
             instancePaths->getAbsolutePaths(getEnclosingModule(leafValue));
@@ -446,7 +446,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
                        iFaceName + ".sv",
                        /*excludFromFileList=*/true));
 
-  builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBodyBlock());
+  builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBody());
 
   for (auto element : bundle.getElements()) {
     auto field = fromAttr(element);
@@ -733,7 +733,7 @@ void GrandCentralPass::runOnOperation() {
               companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.
-              builder.setInsertionPointToEnd(op.getBodyBlock());
+              builder.setInsertionPointToEnd(op.getBody());
               builder.create<InstanceOp>(circuitOp.getLoc(),
                                          SmallVector<Type>({}),
                                          mapping.getName(), mapping.getName());
@@ -911,7 +911,7 @@ void GrandCentralPass::runOnOperation() {
 
     // Instantiate the interface inside the parent.
     builder.setInsertionPointToEnd(
-        parentIDMap.lookup(bundle.getID()).second.getBodyBlock());
+        parentIDMap.lookup(bundle.getID()).second.getBody());
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
         bundle.getDefName().getValue() + "__");

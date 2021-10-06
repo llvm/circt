@@ -437,7 +437,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             PortInfo &oldArg) {
   Value newValue;
   if (auto mod = dyn_cast<FModuleOp>(module)) {
-    Block *body = mod.getBodyBlock();
+    Block *body = mod.getBody();
     // Append the new argument.
     newValue = body->insertArgument(insertPt, field.type);
   }
@@ -764,7 +764,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 }
 
 void TypeLoweringVisitor::visitDecl(FModuleOp module) {
-  auto *body = module.getBodyBlock();
+  auto *body = module.getBody();
 
   ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
   builder = &theBuilder;
