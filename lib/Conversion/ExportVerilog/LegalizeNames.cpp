@@ -118,9 +118,10 @@ private:
 /// Construct a GlobalNameResolver and do the initial scan to populate and
 /// unique the module/interfaces and port/parameter names.
 GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
-  // FIXME: Make this lazy.
+  // This symbol table is lazily constructed when global rewrites of module or
+  // interface member names are required.
   mlir::SymbolTableCollection symbolTable;
-  mlir::SymbolUserMap symbolUsers(symbolTable, topLevel);
+  Optional<mlir::SymbolUserMap> symbolUsers;
 
   // Register the names of external modules which we cannot rename. This has to
   // occur in a first pass separate from the modules and interfaces which we are
@@ -138,20 +139,24 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
     }
   }
 
-  // If the module's symbol itself conflicts, then rename it and all uses of
-  // it.
-  // TODO: This is super inefficient, we should just rename the symbol as part
-  // of the other existing walks.
+  // If the module's symbol itself conflicts, then rename it and all uses of it.
   auto legalizeSymbolName = [&](Operation *op,
                                 NameCollisionResolver &resolver) {
     StringAttr oldName = SymbolTable::getSymbolName(op);
     auto newName = resolver.getLegalName(oldName);
-    if (!newName.empty()) {
-      auto newNameAttr = StringAttr::get(topLevel.getContext(), newName);
-      symbolUsers.replaceAllUsesWith(op, newNameAttr);
-      SymbolTable::setSymbolName(op, newNameAttr);
-      anythingChanged = true;
-    }
+    if (newName.empty())
+      return;
+
+    // Lazily construct the symbol table if it hasn't been built yet.
+    if (!symbolUsers.hasValue())
+      symbolUsers.emplace(symbolTable, topLevel);
+
+    // TODO: This is super inefficient, we should just rename the symbol as part
+    // of the other existing walks.
+    auto newNameAttr = StringAttr::get(topLevel.getContext(), newName);
+    symbolUsers->replaceAllUsesWith(op, newNameAttr);
+    SymbolTable::setSymbolName(op, newNameAttr);
+    anythingChanged = true;
   };
 
   // Legalize module and interface names.
