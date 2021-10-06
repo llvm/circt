@@ -32,6 +32,9 @@ struct NameCollisionResolver {
   /// replacement name to use, or null if the original name was ok.
   StringRef getLegalName(StringAttr originalName);
 
+  /// Insert a string as an already-used name.
+  void insertUsedName(StringRef name) { usedNames.insert(name); }
+
 private:
   /// Set of used names, to ensure uniqueness.
   llvm::StringSet<> usedNames;
@@ -53,110 +56,133 @@ StringRef NameCollisionResolver::getLegalName(StringAttr originalName) {
 }
 
 //===----------------------------------------------------------------------===//
-// HWLegalizeNamesPass
+// GlobalNameResolver
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// This map keeps track of a mapping from <module,parametername> -> newName,
-/// it is populated when a parameter has to be renamed.
-typedef DenseMap<std::pair<Operation *, Attribute>, Attribute>
-    RenamedParameterMapTy;
-} // namespace
+/// This class keeps track of modules and interfaces that need to be renamed, as
+/// well as module ports and parameters that need to be renamed.  This can
+/// happen either due to conflicts between them or due to a conflict with a
+/// Verilog keyword.
+///
+/// Once constructed, this is immutable.
+struct GlobalNameResolver {
+  /// Construct a GlobalNameResolver and do the initial scan to populate and
+  /// unique the module/interfaces and port/parameter names.
+  GlobalNameResolver(mlir::ModuleOp topLevel);
 
-namespace {
-struct HWLegalizeNamesPass
-    : public sv::HWLegalizeNamesBase<HWLegalizeNamesPass> {
-  void runOnOperation() override;
+  bool anythingChanged = false;
 
-private:
-  bool anythingChanged;
-
-  bool legalizePortNames(hw::HWModuleOp module,
-                         RenamedParameterMapTy &renamedParameterInfo);
-  void runOnModule(hw::HWModuleOp module,
-                   DenseMap<Attribute, HWModuleOp> &modulesWithRenamedPorts,
-                   RenamedParameterMapTy &renamedParameterInfo);
-  void runOnInterface(sv::InterfaceOp intf, mlir::SymbolUserMap &symbolUsers);
-};
-} // end anonymous namespace
-
-void HWLegalizeNamesPass::runOnOperation() {
-  anythingChanged = false;
-  ModuleOp root = getOperation();
-  mlir::SymbolTableCollection symbolTable;
-  mlir::SymbolUserMap symbolUsers(symbolTable, root);
-
-  // Analyze the legal names for top-level operations in the MLIR module.
-  NameCollisionResolver nameResolver;
-
-  // Register the names of external modules which we cannot rename. This has to
-  // occur in a first pass separate from the modules and interfaces which we are
-  // actually allowed to rename, in order to ensure that we don't accidentally
-  // rename a module that later collides with an extern module.
-  for (auto &op : *root.getBody()) {
-    // Note that external modules *often* have name collisions, because they
-    // correspond to the same verilog module with different parameters.
-    if (auto extMod = dyn_cast<HWModuleExternOp>(op))
-      (void)nameResolver.getLegalName(extMod.getVerilogModuleNameAttr());
+  /// If the module with the specified name has had a port or parameter renamed,
+  /// return the module that defines the name.
+  HWModuleOp getModuleWithRenamedInterface(StringAttr name) {
+    auto it = modulesWithRenamedPortsOrParams.find(name);
+    return it != modulesWithRenamedPortsOrParams.end() ? it->second
+                                                       : HWModuleOp();
   }
 
-  auto symbolAttrName = SymbolTable::getSymbolAttrName();
+private:
+  /// Check to see if the port names of the specified module conflict with
+  /// keywords or themselves.  If so, rename them and return true, otherwise
+  /// return false.
+  bool legalizePortNames(hw::HWModuleOp module);
 
-  DenseMap<Attribute, HWModuleOp> modulesWithRenamedPorts;
+  Attribute remapRenamedParameters(Attribute value, HWModuleOp module);
+  void updateInstanceForChangedModule(InstanceOp inst, HWModuleOp module);
+  void updateInstanceParamDeclRefs(InstanceOp instance);
+  void rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
+                         bool moduleHasRenamedInterface);
+  void renameModuleBody(hw::HWModuleOp module);
+  void renameInterfaceBody(sv::InterfaceOp intf,
+                           mlir::SymbolUserMap &symbolUsers);
+
+  /// Set of globally visible names, to ensure uniqueness.
+  NameCollisionResolver globalNames;
+
+  /// If a module has a port or parameter renamed, then this keeps track of the
+  /// module it is associated with.
+  DenseMap<Attribute, HWModuleOp> modulesWithRenamedPortsOrParams;
+
+  /// This map keeps track of a mapping from <module,parametername> -> newName,
+  /// it is populated when a parameter has to be renamed.
+  typedef DenseMap<std::pair<Operation *, Attribute>, Attribute>
+      RenamedParameterMapTy;
 
   // This map keeps track of a mapping from <module,parametername> -> newName,
   // it is populated when a parameter has to be renamed.
   RenamedParameterMapTy renamedParameterInfo;
 
-  // Legalize module and interface names.
-  for (auto &op : *root.getBody()) {
-    if (!isa<HWModuleOp>(op) && !isa<InterfaceOp>(op))
-      continue;
+  GlobalNameResolver(const GlobalNameResolver &) = delete;
+  void operator=(const GlobalNameResolver &) = delete;
+};
+} // end anonymous namespace
 
-    // If the module's symbol itself conflicts, then rename it and all uses of
-    // it.
-    // TODO: This is super inefficient, we should just rename the symbol as part
-    // of the other existing walks.
-    StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
-    auto newName = nameResolver.getLegalName(oldName);
+/// Construct a GlobalNameResolver and do the initial scan to populate and
+/// unique the module/interfaces and port/parameter names.
+GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
+  // FIXME: Make this lazy.
+  mlir::SymbolTableCollection symbolTable;
+  mlir::SymbolUserMap symbolUsers(symbolTable, topLevel);
+
+  // Register the names of external modules which we cannot rename. This has to
+  // occur in a first pass separate from the modules and interfaces which we are
+  // actually allowed to rename, in order to ensure that we don't accidentally
+  // rename a module that later collides with an extern module.
+  for (auto &op : *topLevel.getBody()) {
+    // Note that external modules *often* have name collisions, because they
+    // correspond to the same verilog module with different parameters.
+    if (auto extMod = dyn_cast<HWModuleExternOp>(op)) {
+      auto name = extMod.getVerilogModuleName();
+      if (!sv::isNameValid(name))
+        extMod->emitOpError("with invalid name \"" + name + "\"");
+      globalNames.insertUsedName(name);
+    }
+  }
+
+  // If the module's symbol itself conflicts, then rename it and all uses of
+  // it.
+  // TODO: This is super inefficient, we should just rename the symbol as part
+  // of the other existing walks.
+  auto legalizeSymbolName = [&](Operation *op) {
+    StringAttr oldName = SymbolTable::getSymbolName(op);
+    auto newName = globalNames.getLegalName(oldName);
     if (!newName.empty()) {
-      auto newNameAttr = StringAttr::get(&getContext(), newName);
-      symbolUsers.replaceAllUsesWith(&op, newNameAttr);
-      SymbolTable::setSymbolName(&op, newNameAttr);
+      auto newNameAttr = StringAttr::get(topLevel.getContext(), newName);
+      symbolUsers.replaceAllUsesWith(op, newNameAttr);
+      SymbolTable::setSymbolName(op, newNameAttr);
       anythingChanged = true;
     }
+  };
 
+  // Legalize module and interface names.
+  for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
-      if (legalizePortNames(module, renamedParameterInfo))
-        modulesWithRenamedPorts[module.getNameAttr()] = module;
+      legalizeSymbolName(module);
+      if (legalizePortNames(module))
+        modulesWithRenamedPortsOrParams[module.getNameAttr()] = module;
+      continue;
+    }
+
+    if (auto interface = dyn_cast<InterfaceOp>(op)) {
+      legalizeSymbolName(interface);
+      continue;
     }
   }
 
-  // Rename individual operations.
-  for (auto &op : *root.getBody()) {
+  // Rename individual operations within the bodies.
+  for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
-      runOnModule(module, modulesWithRenamedPorts, renamedParameterInfo);
+      renameModuleBody(module);
     } else if (auto intf = dyn_cast<InterfaceOp>(op)) {
-      runOnInterface(intf, symbolUsers);
-    } else if (auto extMod = dyn_cast<HWModuleExternOp>(op)) {
-      auto name = extMod.getVerilogModuleName();
-      if (!sv::isNameValid(name)) {
-        extMod->emitOpError("with invalid name \"" + name + "\"");
-      }
+      renameInterfaceBody(intf, symbolUsers);
     }
   }
-
-  // If we did not change anything in the graph mark all analysis as
-  // preserved.
-  if (!anythingChanged)
-    markAllAnalysesPreserved();
 }
 
 /// Check to see if the port names of the specified module conflict with
 /// keywords or themselves.  If so, rename them and return true, otherwise
 /// return false.
-bool HWLegalizeNamesPass::legalizePortNames(
-    hw::HWModuleOp module, RenamedParameterMapTy &renamedParameterInfo) {
+bool GlobalNameResolver::legalizePortNames(hw::HWModuleOp module) {
   NameCollisionResolver nameResolver;
 
   bool changedArgNames = false, changedOutputNames = false;
@@ -212,9 +238,8 @@ bool HWLegalizeNamesPass::legalizePortNames(
 
 /// Scan a parameter expression tree, handling any renamed parameters that may
 /// occur.
-static Attribute
-remapRenamedParameters(Attribute value, HWModuleOp module,
-                       const RenamedParameterMapTy &renamedParameterInfo) {
+Attribute GlobalNameResolver::remapRenamedParameters(Attribute value,
+                                                     HWModuleOp module) {
   // Literals are always fine and never change.
   if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
       value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
@@ -225,8 +250,7 @@ remapRenamedParameters(Attribute value, HWModuleOp module,
     SmallVector<Attribute> newOperands;
     bool anyChanged = false;
     for (auto op : expr.getOperands()) {
-      newOperands.push_back(
-          remapRenamedParameters(op, module, renamedParameterInfo));
+      newOperands.push_back(remapRenamedParameters(op, module));
       anyChanged |= newOperands.back() != op;
     }
     // Don't rebuild an attribute if nothing changed.
@@ -252,7 +276,8 @@ remapRenamedParameters(Attribute value, HWModuleOp module,
 
 // If this instance is referring to a module with renamed ports or
 // parameter names, update them.
-static void updateInstanceForChangedModule(InstanceOp inst, HWModuleOp module) {
+void GlobalNameResolver::updateInstanceForChangedModule(InstanceOp inst,
+                                                        HWModuleOp module) {
   inst.argNamesAttr(module.argNames());
   inst.resultNamesAttr(module.resultNames());
 
@@ -274,9 +299,7 @@ static void updateInstanceForChangedModule(InstanceOp inst, HWModuleOp module) {
 
 /// Rename any parameter values being specified for an instance if they are
 /// referring to parameters that got renamed.
-static void
-updateInstanceParamDeclRefs(InstanceOp instance,
-                            RenamedParameterMapTy &renamedParameterInfo) {
+void GlobalNameResolver::updateInstanceParamDeclRefs(InstanceOp instance) {
   auto parameters = instance.parameters();
   if (parameters.empty())
     return;
@@ -288,8 +311,7 @@ updateInstanceParamDeclRefs(InstanceOp instance,
   bool anyRenamed = false;
   for (Attribute param : parameters) {
     auto paramAttr = param.cast<ParamDeclAttr>();
-    auto newValue = remapRenamedParameters(paramAttr.getValue(), curModule,
-                                           renamedParameterInfo);
+    auto newValue = remapRenamedParameters(paramAttr.getValue(), curModule);
     if (newValue == paramAttr.getValue()) {
       newParams.push_back(param);
       continue;
@@ -301,11 +323,9 @@ updateInstanceParamDeclRefs(InstanceOp instance,
   instance.parametersAttr(ArrayAttr::get(instance.getContext(), newParams));
 }
 
-static void
-rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
-                  DenseMap<Attribute, HWModuleOp> &modulesWithRenamedPorts,
-                  RenamedParameterMapTy &renamedParameterInfo,
-                  bool moduleHasRenamedInterface) {
+void GlobalNameResolver::rewriteModuleBody(Block &block,
+                                           NameCollisionResolver &nameResolver,
+                                           bool moduleHasRenamedInterface) {
 
   // Rename the instances, regs, and wires.
   for (auto &op : block) {
@@ -316,13 +336,12 @@ rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
 
       // If this instance is referring to a module with renamed ports or
       // parameter names, update them.
-      auto it =
-          modulesWithRenamedPorts.find(instanceOp.moduleNameAttr().getAttr());
-      if (it != modulesWithRenamedPorts.end())
-        updateInstanceForChangedModule(instanceOp, it->second);
+      if (HWModuleOp module = getModuleWithRenamedInterface(
+              instanceOp.moduleNameAttr().getAttr()))
+        updateInstanceForChangedModule(instanceOp, module);
 
       if (moduleHasRenamedInterface)
-        updateInstanceParamDeclRefs(instanceOp, renamedParameterInfo);
+        updateInstanceParamDeclRefs(instanceOp);
       continue;
     }
 
@@ -338,8 +357,8 @@ rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
       // If the initializer value in the local param was renamed then update it.
       if (moduleHasRenamedInterface) {
         auto curModule = op.getParentOfType<HWModuleOp>();
-        localParam.valueAttr(remapRenamedParameters(
-            localParam.value(), curModule, renamedParameterInfo));
+        localParam.valueAttr(
+            remapRenamedParameters(localParam.value(), curModule));
       }
       continue;
     }
@@ -348,8 +367,8 @@ rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
       // If the initializer value in the local param was renamed then update it.
       if (moduleHasRenamedInterface) {
         auto curModule = op.getParentOfType<HWModuleOp>();
-        paramValue.valueAttr(remapRenamedParameters(
-            paramValue.value(), curModule, renamedParameterInfo));
+        paramValue.valueAttr(
+            remapRenamedParameters(paramValue.value(), curModule));
       }
       continue;
     }
@@ -361,23 +380,19 @@ rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
       for (auto &region : op.getRegions()) {
         if (!region.empty())
           rewriteModuleBody(region.front(), nameResolver,
-                            modulesWithRenamedPorts, renamedParameterInfo,
                             moduleHasRenamedInterface);
       }
     }
   }
 }
 
-void HWLegalizeNamesPass::runOnModule(
-    hw::HWModuleOp module,
-    DenseMap<Attribute, HWModuleOp> &modulesWithRenamedPorts,
-    RenamedParameterMapTy &renamedParameterInfo) {
+void GlobalNameResolver::renameModuleBody(hw::HWModuleOp module) {
 
   // If this module had something about its interface, then a parameter may
   // have been changed.  In that case, we change parameter references to match.
   // This isn't common, so we use this to avoid work.
   bool moduleHasRenamedInterface =
-      modulesWithRenamedPorts.count(module.getNameAttr());
+      getModuleWithRenamedInterface(module.getNameAttr()) != HWModuleOp();
 
   // All the ports are pre-legalized, just add their names to the map so we
   // detect conflicts with them.
@@ -386,12 +401,11 @@ void HWLegalizeNamesPass::runOnModule(
     (void)nameResolver.getLegalName(port.name);
 
   rewriteModuleBody(*module.getBodyBlock(), nameResolver,
-                    modulesWithRenamedPorts, renamedParameterInfo,
                     moduleHasRenamedInterface);
 }
 
-void HWLegalizeNamesPass::runOnInterface(InterfaceOp interface,
-                                         mlir::SymbolUserMap &symbolUsers) {
+void GlobalNameResolver::renameInterfaceBody(InterfaceOp interface,
+                                             mlir::SymbolUserMap &symbolUsers) {
   NameCollisionResolver localNames;
   auto symbolAttrName = SymbolTable::getSymbolAttrName();
 
@@ -405,11 +419,31 @@ void HWLegalizeNamesPass::runOnInterface(InterfaceOp interface,
     if (newName.empty())
       continue;
 
-    auto newNameAttr = StringAttr::get(&getContext(), newName);
+    auto newNameAttr = StringAttr::get(interface.getContext(), newName);
     symbolUsers.replaceAllUsesWith(&op, newNameAttr);
     SymbolTable::setSymbolName(&op, newNameAttr);
     anythingChanged = true;
   }
+}
+
+//===----------------------------------------------------------------------===//
+// HWLegalizeNamesPass
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct HWLegalizeNamesPass
+    : public sv::HWLegalizeNamesBase<HWLegalizeNamesPass> {
+  void runOnOperation() override;
+};
+} // end anonymous namespace
+
+void HWLegalizeNamesPass::runOnOperation() {
+  GlobalNameResolver nameResolver(getOperation());
+
+  // If we did not change anything in the graph mark all analysis as
+  // preserved.
+  if (!nameResolver.anythingChanged)
+    markAllAnalysesPreserved();
 }
 
 std::unique_ptr<Pass> circt::sv::createHWLegalizeNamesPass() {
