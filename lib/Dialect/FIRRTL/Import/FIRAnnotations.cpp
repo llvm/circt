@@ -449,11 +449,6 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
     return false;
   }
 
-  // Generate an arbitrary identifier to use for caching when using
-  // `maybeStringToLocation`.
-  Identifier locatorFilenameCache = Identifier::get(".", context);
-  FileLineColLoc fileLineColLocCache;
-
   // Build a mutable map of Target to Annotation.
   SmallVector<Attribute> omnodes;
   for (size_t i = 0, e = (*array).size(); i != e; ++i) {
@@ -481,15 +476,6 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
     auto maybeInfo = object->getString("info");
     if (!maybeInfo) {
       p.report("OMNode missing mandatory member \"info\" with type \"string\"");
-      return false;
-    }
-    auto info =
-        maybeStringToLocation(maybeInfo.getValue(), false, locatorFilenameCache,
-                              fileLineColLocCache, context);
-    if (!info.first || !info.second.hasValue()) {
-      p.field("info").report(
-          "OMField member \"info\" has invalid format source locator "
-          "format");
       return false;
     }
     auto maybeID = object->getString("id");
@@ -523,15 +509,6 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
               "OMField missing mandatory member \"info\" with type \"string\"");
           return false;
         }
-        auto info = maybeStringToLocation(maybeInfo.getValue(), false,
-                                          locatorFilenameCache,
-                                          fileLineColLocCache, context);
-        if (!info.first || !info.second.hasValue()) {
-          pI.field("info").report(
-              "OMField member \"info\" has invalid format source locator "
-              "format");
-          return false;
-        }
         auto maybeName = field->getString("name");
         if (!maybeName) {
           pI.report(
@@ -544,7 +521,7 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
           return false;
         }
         NamedAttrList values;
-        values.append("info", info.second.getValue());
+        values.append("info", StringAttr::get(context, maybeInfo.getValue()));
         values.append("value", convertJSONToAttribute(context, *maybeValue,
                                                       pI.field("value")));
         fieldAttrs.append(maybeName.getValue(),
@@ -553,7 +530,7 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
       fields = DictionaryAttr::get(context, fieldAttrs);
     }
 
-    omnode.append("info", info.second.getValue());
+    omnode.append("info", StringAttr::get(context, maybeInfo.getValue()));
     omnode.append("id", convertJSONToAttribute(context, *object->get("id"),
                                                p.field("id")));
     omnode.append("fields", fields);
@@ -562,7 +539,7 @@ bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
 
   NamedAttrList omirAnnoFields;
   omirAnnoFields.append("class", StringAttr::get(context, omirAnnotationClass));
-  omirAnnoFields.append("nodes", ArrayAttr::get(context, omnodes));
+  omirAnnoFields.append("nodes", convertJSONToAttribute(context, value, path));
 
   DictionaryAttr omirAnno = DictionaryAttr::get(context, omirAnnoFields);
 
