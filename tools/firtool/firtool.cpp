@@ -396,17 +396,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    // Legalize unsupported operations within the modules.
+    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+
     // Tidy up the IR to improve verilog emission quality.
     if (!disableOptimization) {
       auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
-
-    // Legalize unsupported operations within the modules.
-    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
-
-    // Legalize the module names.
-    pm.addPass(sv::createHWLegalizeNamesPass());
 
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {

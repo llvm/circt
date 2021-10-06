@@ -1,6 +1,7 @@
 
 add_circt_translation_library(CIRCTExportVerilog
   ExportVerilog.cpp
+  LegalizeNames.cpp
   PrepareForEmission.cpp
 
   ADDITIONAL_HEADER_DIRS

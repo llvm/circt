@@ -1,4 +1,4 @@
-//===- HWLegalizeNames.cpp - HW Name Legalization Pass --------------------===//
+//===- LegalizeNames.cpp - Name Legalization for ExportVerilog ------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,12 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This transformation pass renames modules and variables to avoid conflicts
-// with keywords and other declarations.
+// This renames modules and variables to avoid conflicts with keywords and other
+// declarations.
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "ExportVerilogInternals.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
@@ -131,10 +131,11 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   for (auto &op : *topLevel.getBody()) {
     // Note that external modules *often* have name collisions, because they
     // correspond to the same verilog module with different parameters.
-    if (auto extMod = dyn_cast<HWModuleExternOp>(op)) {
-      auto name = extMod.getVerilogModuleName();
+    if (isa<HWModuleExternOp>(op) || isa<HWModuleGeneratedOp>(op)) {
+      auto name = hw::getVerilogModuleNameAttr(&op).getValue();
       if (!sv::isNameValid(name))
-        extMod->emitOpError("with invalid name \"" + name + "\"");
+        op.emitError("name \"")
+            << name << "\" is not allowed in Verilog output";
       globalNames.insertUsedName(name);
     }
   }
@@ -394,11 +395,14 @@ void GlobalNameResolver::renameModuleBody(hw::HWModuleOp module) {
   bool moduleHasRenamedInterface =
       getModuleWithRenamedInterface(module.getNameAttr()) != HWModuleOp();
 
-  // All the ports are pre-legalized, just add their names to the map so we
-  // detect conflicts with them.
+  // All the ports and parameters are pre-legalized, just add their names to the
+  // map so we detect conflicts with them.
   NameCollisionResolver nameResolver;
   for (const PortInfo &port : getAllModulePortInfos(module))
-    (void)nameResolver.getLegalName(port.name);
+    nameResolver.insertUsedName(port.name.getValue());
+  for (auto param : module.parameters())
+    nameResolver.insertUsedName(
+        param.cast<ParamDeclAttr>().getName().getValue());
 
   rewriteModuleBody(*module.getBodyBlock(), nameResolver,
                     moduleHasRenamedInterface);
@@ -427,25 +431,11 @@ void GlobalNameResolver::renameInterfaceBody(InterfaceOp interface,
 }
 
 //===----------------------------------------------------------------------===//
-// HWLegalizeNamesPass
+// Public interface
 //===----------------------------------------------------------------------===//
 
-namespace {
-struct HWLegalizeNamesPass
-    : public sv::HWLegalizeNamesBase<HWLegalizeNamesPass> {
-  void runOnOperation() override;
-};
-} // end anonymous namespace
-
-void HWLegalizeNamesPass::runOnOperation() {
-  GlobalNameResolver nameResolver(getOperation());
-
-  // If we did not change anything in the graph mark all analysis as
-  // preserved.
-  if (!nameResolver.anythingChanged)
-    markAllAnalysesPreserved();
-}
-
-std::unique_ptr<Pass> circt::sv::createHWLegalizeNamesPass() {
-  return std::make_unique<HWLegalizeNamesPass>();
+/// Rewrite module names and interfaces to not conflict with each other or with
+/// Verilog keywords.
+void ExportVerilog::legalizeGlobalNames(ModuleOp topLevel) {
+  GlobalNameResolver x(topLevel);
 }
