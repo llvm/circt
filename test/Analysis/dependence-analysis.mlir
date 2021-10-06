@@ -99,3 +99,21 @@ func @test6(%arg0: memref<?xi32>) {
   }
   return
 }
+
+// CHECK-LABEL: func @test7
+#set2 = affine_set<(d0) : (d0 - 2 >= 0)>
+#set3 = affine_set<(d0) : (d0 - 6 >= 0)>
+func @test7(%arg0: memref<?xi32>) {
+  affine.for %arg1 = 0 to 10 {
+    affine.if #set2(%arg1) {
+      %0 = affine.if #set3(%arg1) -> i32 {
+        // CHECK: affine.load %arg0[%arg1] {dependences = []}
+        %1 = affine.load %arg0[%arg1] : memref<?xi32>
+        affine.yield %1 : i32
+      }
+      // CHECK{LITERAL}: affine.store %0, %arg0[%arg1] {dependences = [[[0, 0]]]}
+      affine.store %0, %arg0[%arg1] : memref<?xi32>
+    }
+  }
+  return
+}

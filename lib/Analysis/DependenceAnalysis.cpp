@@ -48,25 +48,38 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       results[destination].emplace_back(source, result.value, depComps);
 
       // Also consider intra-iteration dependences on the same memory location.
+      // This currently does not consider aliasing.
       if (src != dst)
         continue;
 
-      // Look for the common loop body that src and dst share. If there is none,
+      // Look for the common parent that src and dst share. If there is none,
       // there is nothing more to do.
-      Block *commonBlock = source->getBlock();
+      SmallVector<Operation *> srcParents;
+      getEnclosingAffineForAndIfOps(*source, &srcParents);
+      SmallVector<Operation *> dstParents;
+      getEnclosingAffineForAndIfOps(*destination, &dstParents);
 
-      while (!isa<AffineForOp>(commonBlock->getParentOp()) &&
-             commonBlock->getParentOp())
-        commonBlock = commonBlock->getParentOp()->getBlock();
+      Operation *commonParent = nullptr;
+      for (auto *srcParent : llvm::reverse(srcParents)) {
+        if (commonParent != nullptr)
+          break;
+        for (auto *dstParent : llvm::reverse(dstParents)) {
+          if (srcParent == dstParent)
+            commonParent = srcParent;
+          if (commonParent != nullptr)
+            break;
+        }
+      }
 
-      if (!commonBlock)
+      if (commonParent == nullptr)
         continue;
 
       // Find the src and dst ancestor in the common block, and check if the src
       // ancestor is before the dst ancestor.
-      Operation *srcOrAncestor = commonBlock->findAncestorOpInBlock(*source);
+      Block &commonBlock = commonParent->getRegions()[0].front();
+      Operation *srcOrAncestor = commonBlock.findAncestorOpInBlock(*source);
       Operation *dstOrAncestor =
-          commonBlock->findAncestorOpInBlock(*destination);
+          commonBlock.findAncestorOpInBlock(*destination);
 
       if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
         // Collect surrounding loops to use in dependence components.
