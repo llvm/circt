@@ -681,16 +681,20 @@ parseFunctionResultList2(OpAsmParser &parser,
   if (succeeded(parser.parseOptionalRParen()))
     return success();
 
-  // Parse individual function results.
-  do {
+  auto parseFunctionResult = [&]() -> ParseResult {
     resultTypes.emplace_back();
     resultAttrs.emplace_back();
     if (parser.parseType(resultTypes.back()) ||
-        parser.parseOptionalAttrDict(resultAttrs.back())) {
+        parser.parseOptionalAttrDict(resultAttrs.back()))
       return failure();
-    }
-  } while (succeeded(parser.parseOptionalComma()));
-  return parser.parseRParen();
+    return success();
+  };
+
+  // Parse individual function results.
+  if (parser.parseCommaSeparatedList(parseFunctionResult) ||
+      parser.parseRParen())
+    return failure();
+  return success();
 }
 
 static ParseResult

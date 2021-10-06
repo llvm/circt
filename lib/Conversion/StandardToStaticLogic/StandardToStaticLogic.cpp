@@ -1,4 +1,4 @@
-//===- Ops.h - StaticLogic MLIR Operations ----------------------*- C++ -*-===//
+//===- StandardToStaticLogic.cpp ------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/StandardToStaticLogic/StandardToStaticLogic.h"
+#include "circt/Conversion/StandardToStaticLogic.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"

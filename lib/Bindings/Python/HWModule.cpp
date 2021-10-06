@@ -16,7 +16,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "PybindUtils.h"
-#include <mlir-c/Support.h>
+#include "mlir-c/Support.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>

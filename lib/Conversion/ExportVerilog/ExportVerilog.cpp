@@ -10,7 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Translation/ExportVerilog.h"
+#include "circt/Conversion/ExportVerilog.h"
+#include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
@@ -20,6 +21,7 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/Path.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -680,22 +682,6 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   }
 
   return sstr.str();
-}
-
-/// Append a path to an existing path, replacing it if the other path is
-/// absolute. This mimicks the behaviour of `foo/bar` and `/foo/bar` being used
-/// in a working directory `/home`, resulting in `/home/foo/bar` and `/foo/bar`,
-/// respectively.
-// TODO: This also exists in BlackBoxReader.cpp. Maybe we should move this to
-// some CIRCT-wide file system utility source file?
-static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
-                                       const Twine &suffix) {
-  if (llvm::sys::path::is_absolute(suffix)) {
-    base.clear();
-    suffix.toVector(base);
-  } else {
-    llvm::sys::path::append(base, suffix);
-  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -3841,6 +3827,34 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   return failure(emitter.encounteredError);
 }
 
+namespace {
+
+struct ExportVerilogPass : public ExportVerilogBase<ExportVerilogPass> {
+  ExportVerilogPass(raw_ostream &os) : os(os) {}
+  void runOnOperation() override {
+    // Make sure LoweringOptions are applied to the module if it was overridden
+    // on the command line.
+    // TODO: This should be moved up to circt-opt and circt-translate.
+    applyLoweringCLOptions(getOperation());
+
+    if (failed(exportVerilog(getOperation(), os)))
+      signalPassFailure();
+  }
+
+private:
+  raw_ostream &os;
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::createExportVerilogPass(llvm::raw_ostream &os) {
+  return std::make_unique<ExportVerilogPass>(os);
+}
+
+std::unique_ptr<mlir::Pass> circt::createExportVerilogPass() {
+  return createExportVerilogPass(llvm::outs());
+}
+
 //===----------------------------------------------------------------------===//
 // Split Emitter
 //===----------------------------------------------------------------------===//
@@ -3914,25 +3928,25 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   return failure(emitter.encounteredError);
 }
 
-//===----------------------------------------------------------------------===//
-// Registration
-//===----------------------------------------------------------------------===//
+namespace {
 
-void circt::registerToVerilogTranslation() {
-  // Register the circt emitter command line options.
-  registerLoweringCLOptions();
-  // Register the circt emitter translation.
-  mlir::TranslateFromMLIRRegistration toVerilog(
-      "export-verilog",
-      [](ModuleOp module, llvm::raw_ostream &os) {
-        // ExportVerilog requires that the SV dialect be loaded in order to
-        // create WireOps. It may not have been  loaded by the MLIR parser,
-        // which can happen if the input IR has no SV operations.
-        module->getContext()->loadDialect<sv::SVDialect>();
-        applyLoweringCLOptions(module);
-        return exportVerilog(module, os);
-      },
-      [](mlir::DialectRegistry &registry) {
-        registry.insert<CombDialect, HWDialect, SVDialect>();
-      });
+struct ExportSplitVerilogPass
+    : public ExportSplitVerilogBase<ExportSplitVerilogPass> {
+  ExportSplitVerilogPass(StringRef directory) {
+    directoryName = directory.str();
+  }
+  void runOnOperation() override {
+    // Make sure LoweringOptions are applied to the module if it was overridden
+    // on the command line.
+    // TODO: This should be moved up to circt-opt and circt-translate.
+    applyLoweringCLOptions(getOperation());
+    if (failed(exportSplitVerilog(getOperation(), directoryName)))
+      signalPassFailure();
+  }
+};
+} // end anonymous namespace
+
+std::unique_ptr<mlir::Pass>
+circt::createExportSplitVerilogPass(StringRef directory) {
+  return std::make_unique<ExportSplitVerilogPass>(directory);
 }

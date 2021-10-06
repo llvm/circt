@@ -1,6 +1,6 @@
-// RUN: circt-translate --split-input-file --export-verilog %s | FileCheck %s --check-prefix=DEFAULT
-// RUN: circt-translate --lowering-options= --split-input-file --export-verilog %s | FileCheck %s --check-prefix=CLEAR
-// RUN: circt-translate --lowering-options=alwaysFF --split-input-file --export-verilog %s | FileCheck %s --check-prefix=ALWAYSFF
+// RUN: circt-opt --split-input-file --export-verilog %s | FileCheck %s --check-prefix=DEFAULT
+// RUN: circt-opt --lowering-options= --split-input-file --export-verilog %s | FileCheck %s --check-prefix=CLEAR
+// RUN: circt-opt --lowering-options=alwaysFF --split-input-file --export-verilog %s | FileCheck %s --check-prefix=ALWAYSFF
 
 hw.module @test(%clock : i1, %cond : i1) {
   sv.alwaysff(posedge %clock) {

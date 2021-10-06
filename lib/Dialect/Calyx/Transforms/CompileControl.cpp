@@ -44,9 +44,7 @@ static RegisterOp createRegister(OpBuilder &builder, ComponentOp &component,
                                  size_t width, StringRef name) {
   IRRewriter::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(component.getBody());
-  auto *context = builder.getContext();
-  return builder.create<RegisterOp>(component->getLoc(),
-                                    StringAttr::get(context, name), width);
+  return builder.create<RegisterOp>(component->getLoc(), name, width);
 }
 
 class CompileControlVisitor {

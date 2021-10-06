@@ -19,6 +19,7 @@
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Path.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -33,20 +34,6 @@ using namespace firrtl;
 
 using hw::OutputFileAttr;
 using sv::VerbatimOp;
-
-/// Append a path to an existing path, replacing it if the other path is
-/// absolute. This mimicks the behaviour of `foo/bar` and `/foo/bar` being used
-/// in a working directory `/home`, resulting in `/home/foo/bar` and `/foo/bar`,
-/// respectively.
-static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
-                                       const Twine &suffix) {
-  if (llvm::sys::path::is_absolute(suffix)) {
-    base.clear();
-    suffix.toVector(base);
-  } else {
-    llvm::sys::path::append(base, suffix);
-  }
-}
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation

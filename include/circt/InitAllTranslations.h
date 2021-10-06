@@ -17,7 +17,6 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
-#include "circt/Translation/ExportVerilog.h"
 
 #ifndef CIRCT_INITALLTRANSLATIONS_H
 #define CIRCT_INITALLTRANSLATIONS_H
@@ -29,7 +28,6 @@ namespace circt {
 // automatically.
 inline void registerAllTranslations() {
   static bool initOnce = []() {
-    registerToVerilogTranslation();
     esi::registerESITranslations();
     calyx::registerToCalyxTranslation();
     firrtl::registerFromFIRFileTranslation();

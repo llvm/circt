@@ -276,3 +276,10 @@ hw.module @Use<xx: i41>() {
   // expected-error @+1 {{'hw.param.value' op parameter "xx" used with type 'i40'; should have type 'i41'}}
   %0 = hw.param.value i40 = #hw.param.decl.ref<"xx">
 }
+
+// -----
+
+// expected-error @+1 {{parameter #hw.param.decl<"xx": i41> has the same name as a previous parameter}}
+hw.module @Use<xx: i41, xx: i41>() {
+}
+

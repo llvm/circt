@@ -53,10 +53,10 @@ static Type parseNestedType(DialectAsmParser &parser) {
 
 /// Parse a signal type.
 /// Syntax: sig ::= !llhd.sig<type>
-Type SigType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type SigType::parse(DialectAsmParser &p) {
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc), ctxt,
-                    parseNestedType(p));
+  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
+                    p.getContext(), parseNestedType(p));
 }
 
 void SigType::print(DialectAsmPrinter &p) const {
@@ -69,10 +69,10 @@ void SigType::print(DialectAsmPrinter &p) const {
 
 /// Parse a pointer type.
 /// Syntax: ptr ::= !llhd.ptr<type>
-Type PtrType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type PtrType::parse(DialectAsmParser &p) {
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc), ctxt,
-                    parseNestedType(p));
+  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
+                    p.getContext(), parseNestedType(p));
 }
 
 void PtrType::print(DialectAsmPrinter &p) const {
@@ -85,7 +85,7 @@ void PtrType::print(DialectAsmPrinter &p) const {
 
 /// Parse a time attribute.
 /// Syntax: timeattr ::= #llhd.time<[time][timeUnit], [delta]d, [epsilon]e>
-Attribute TimeAttr::parse(MLIRContext *ctxt, DialectAsmParser &p, Type type) {
+Attribute TimeAttr::parse(DialectAsmParser &p, Type type) {
   llvm::StringRef timeUnit;
   unsigned time = 0;
   unsigned delta = 0;
@@ -106,8 +106,8 @@ Attribute TimeAttr::parse(MLIRContext *ctxt, DialectAsmParser &p, Type type) {
 
   // return a new instance of time attribute
   auto loc = p.getEncodedSourceLoc(p.getCurrentLocation());
-  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc), ctxt, time,
-                    timeUnit, delta, eps);
+  return getChecked(mlir::detail::getDefaultDiagnosticEmitFn(loc),
+                    p.getContext(), time, timeUnit, delta, eps);
 }
 
 void TimeAttr::print(DialectAsmPrinter &p) const {
@@ -141,7 +141,7 @@ Type LLHDDialect::parseType(DialectAsmParser &parser) const {
     return {};
 
   Type type;
-  if (generatedTypeParser(getContext(), parser, mnemonic, type).hasValue())
+  if (generatedTypeParser(parser, mnemonic, type).hasValue())
     return type;
 
   emitError(parser.getEncodedSourceLoc(parser.getCurrentLocation()),
@@ -166,8 +166,7 @@ Attribute LLHDDialect::parseAttribute(DialectAsmParser &parser,
     return {};
 
   Attribute value;
-  if (generatedAttributeParser(getContext(), parser, mnemonic, type, value)
-          .hasValue())
+  if (generatedAttributeParser(parser, mnemonic, type, value).hasValue())
     return value;
 
   emitError(parser.getEncodedSourceLoc(parser.getCurrentLocation()),

@@ -1,4 +1,4 @@
-// RUN: circt-translate %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 hw.type_scope @__hw_typedecls {
   // CHECK: typedef logic foo;

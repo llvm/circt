@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/SCFToCalyx/SCFToCalyx.h"
+#include "circt/Conversion/SCFToCalyx.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/Calyx/CalyxOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -205,9 +205,7 @@ public:
     IRRewriter::InsertionGuard guard(rewriter);
     rewriter.setInsertionPoint(compOp.getBody(), compOp.getBody()->begin());
     auto name = TLibraryOp::getOperationName().split(".").second;
-    auto uniqueName = getUniqueName(name);
-    return rewriter.create<TLibraryOp>(loc, rewriter.getStringAttr(uniqueName),
-                                       resTypes);
+    return rewriter.create<TLibraryOp>(loc, getUniqueName(name), resTypes);
   }
 
   /// Register value v as being evaluated when scheduling group.
@@ -574,8 +572,8 @@ static calyx::RegisterOp createReg(ComponentLoweringState &compState,
                                    Twine prefix, size_t width) {
   IRRewriter::InsertionGuard guard(rewriter);
   rewriter.setInsertionPointToStart(compState.getComponentOp().getBody());
-  return rewriter.create<calyx::RegisterOp>(
-      loc, rewriter.getStringAttr(prefix + "_reg"), width);
+  return rewriter.create<calyx::RegisterOp>(loc, (prefix + "_reg").str(),
+                                            width);
 }
 
 //===----------------------------------------------------------------------===//

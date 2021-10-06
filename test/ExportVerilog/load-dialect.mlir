@@ -1,4 +1,4 @@
-// RUN: circt-translate %s -export-verilog | FileCheck %s
+// RUN: circt-opt %s -export-verilog | FileCheck %s
 // https://github.com/llvm/circt/issues/854
 // This is testing that dependent dialects are explicitly loaded. ExportVerilog
 // must explicitly load any dialect that it creates operations for. For this

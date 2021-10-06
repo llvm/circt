@@ -1,5 +1,5 @@
 // REQUIRES: verilator
-// RUN: circt-translate %s -export-verilog -verify-diagnostics > %t1.sv
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t2.mlir > %t1.sv
 // RUN: verilator --lint-only --top-module A %t1.sv
 // RUN: verilator --lint-only --top-module AB %t1.sv
 // RUN: verilator --lint-only --top-module shl %t1.sv

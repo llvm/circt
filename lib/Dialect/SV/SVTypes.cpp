@@ -48,22 +48,22 @@ mlir::Type circt::sv::getInOutElementType(mlir::Type type) {
 // SV Interface type logic.
 //===----------------------------------------------------------------------===//
 
-Type InterfaceType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type InterfaceType::parse(DialectAsmParser &p) {
   FlatSymbolRefAttr iface;
   if (p.parseLess() || p.parseAttribute(iface) || p.parseGreater())
     return Type();
-  return get(ctxt, iface);
+  return get(p.getContext(), iface);
 }
 
 void InterfaceType::print(DialectAsmPrinter &p) const {
   p << "interface<" << getInterface() << ">";
 }
 
-Type ModportType::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type ModportType::parse(DialectAsmParser &p) {
   SymbolRefAttr modPort;
   if (p.parseLess() || p.parseAttribute(modPort) || p.parseGreater())
     return Type();
-  return get(ctxt, modPort);
+  return get(p.getContext(), modPort);
 }
 
 void ModportType::print(DialectAsmPrinter &p) const {
@@ -85,7 +85,7 @@ Type SVDialect::parseType(DialectAsmParser &parser) const {
   if (parser.parseKeyword(&mnemonic))
     return Type();
   Type type;
-  auto parseResult = generatedTypeParser(getContext(), parser, mnemonic, type);
+  auto parseResult = generatedTypeParser(parser, mnemonic, type);
   if (parseResult.hasValue())
     return type;
   parser.emitError(loc, "Failed to parse type sv.") << mnemonic << "\n";

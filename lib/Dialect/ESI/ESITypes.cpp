@@ -21,11 +21,11 @@
 using namespace circt;
 using namespace circt::esi;
 
-Type ChannelPort::parse(MLIRContext *ctxt, DialectAsmParser &p) {
+Type ChannelPort::parse(DialectAsmParser &p) {
   Type inner;
   if (p.parseLess() || p.parseType(inner) || p.parseGreater())
     return Type();
-  return get(ctxt, inner);
+  return get(p.getContext(), inner);
 }
 
 void ChannelPort::print(DialectAsmPrinter &p) const {
@@ -43,8 +43,7 @@ Type ESIDialect::parseType(DialectAsmParser &parser) const {
   if (parser.parseKeyword(&mnemonic))
     return Type();
   Type genType;
-  auto parseResult =
-      generatedTypeParser(getContext(), parser, mnemonic, genType);
+  auto parseResult = generatedTypeParser(parser, mnemonic, genType);
   if (parseResult.hasValue())
     return genType;
   parser.emitError(parser.getCurrentLocation(), "Could not parse esi.")

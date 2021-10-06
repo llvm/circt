@@ -2049,11 +2049,12 @@ static void combineEqualityICmpWithKnownBitsAndConstant(
 
     // Add this info to the concat we're generating.
     newConcatOperands.push_back(spanOperand);
-    // TODO (llvm merge): newConstant = newConstant.concat(spanConstant);
-    newConstant =
-        newConstant.zext(spanConstant.getBitWidth() + newConstant.getBitWidth())
-        << spanConstant.getBitWidth();
-    newConstant.insertBits(spanConstant, 0);
+    // FIXME(llvm merge, cc697fc292b0): concat doesn't work with zero bit values
+    // newConstant = newConstant.concat(spanConstant);
+    if (newConstant.getBitWidth() != 0)
+      newConstant = newConstant.concat(spanConstant);
+    else
+      newConstant = spanConstant;
 
     // Drop the unknown bits in prep for the next chunk.
     unsigned newWidth = bitsKnown.getBitWidth() - unknownBits;
