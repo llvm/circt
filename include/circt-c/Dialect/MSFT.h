@@ -34,19 +34,19 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        void *userData);
 
 //===----------------------------------------------------------------------===//
-// DeviceDB.
+// PrimitiveDB.
 //===----------------------------------------------------------------------===//
 
 typedef struct {
   void *ptr;
-} CirctMSFTDeviceDB;
+} CirctMSFTPrimitiveDB;
 
-CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirContext);
-void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
-MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB,
-                                                MlirAttribute locAndPrim);
-bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB,
-                                      MlirAttribute locAndPrim);
+CirctMSFTPrimitiveDB circtMSFTCreatePrimitiveDB(MlirContext);
+void circtMSFTDeletePrimitiveDB(CirctMSFTPrimitiveDB self);
+MlirLogicalResult circtMSFTPrimitiveDBAddPrimitive(CirctMSFTPrimitiveDB,
+                                                   MlirAttribute locAndPrim);
+bool circtMSFTPrimitiveDBIsValidLocation(CirctMSFTPrimitiveDB,
+                                         MlirAttribute locAndPrim);
 
 //===----------------------------------------------------------------------===//
 // PlacementDB.
@@ -64,7 +64,7 @@ typedef struct {
 } CirctMSFTPlacedInstance;
 
 CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
-                                                CirctMSFTDeviceDB seed);
+                                                CirctMSFTPrimitiveDB seed);
 void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
 size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
 MlirLogicalResult

@@ -25,26 +25,26 @@ using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
 
-class DeviceDB {
+class PrimitiveDB {
 public:
-  DeviceDB(MlirContext ctxt) { db = circtMSFTCreateDeviceDB(ctxt); }
-  ~DeviceDB() { circtMSFTDeleteDeviceDB(db); }
+  PrimitiveDB(MlirContext ctxt) { db = circtMSFTCreatePrimitiveDB(ctxt); }
+  ~PrimitiveDB() { circtMSFTDeletePrimitiveDB(db); }
   bool addPrimitive(MlirAttribute locAndPrim) {
     return mlirLogicalResultIsSuccess(
-        circtMSFTDeviceDBAddPrimitive(db, locAndPrim));
+        circtMSFTPrimitiveDBAddPrimitive(db, locAndPrim));
   }
   bool isValidLocation(MlirAttribute loc) {
-    return circtMSFTDeviceDBIsValidLocation(db, loc);
+    return circtMSFTPrimitiveDBIsValidLocation(db, loc);
   }
 
-  CirctMSFTDeviceDB db;
+  CirctMSFTPrimitiveDB db;
 };
 
 class PlacementDB {
 public:
-  PlacementDB(MlirOperation top, DeviceDB *seed) {
+  PlacementDB(MlirOperation top, PrimitiveDB *seed) {
     db = circtMSFTCreatePlacementDB(top, seed ? seed->db
-                                              : CirctMSFTDeviceDB{nullptr});
+                                              : CirctMSFTPrimitiveDB{nullptr});
   }
   ~PlacementDB() { circtMSFTDeletePlacementDB(db); }
   size_t addDesignPlacements() {
@@ -171,16 +171,16 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);
       });
 
-  py::class_<DeviceDB>(m, "DeviceDB")
+  py::class_<PrimitiveDB>(m, "PrimitiveDB")
       .def(py::init<MlirContext>(), py::arg("ctxt") = py::none())
-      .def("add_primitive", &DeviceDB::addPrimitive,
+      .def("add_primitive", &PrimitiveDB::addPrimitive,
            "Inform the DB about a new placement.", py::arg("loc_and_prim"))
-      .def("is_valid_location", &DeviceDB::isValidLocation,
+      .def("is_valid_location", &PrimitiveDB::isValidLocation,
            "Query the DB as to whether or not a primitive exists.",
            py::arg("loc"));
 
   py::class_<PlacementDB>(m, "PlacementDB")
-      .def(py::init<MlirOperation, DeviceDB *>(), py::arg("top"),
+      .def(py::init<MlirOperation, PrimitiveDB *>(), py::arg("top"),
            py::arg("seed") = nullptr)
       .def("add_design_placements", &PlacementDB::addDesignPlacements,
            "Add the placements already present in the design.")

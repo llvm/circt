@@ -7,7 +7,6 @@
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
-#include "circt/Dialect/MSFT/PlacementDB.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
@@ -35,22 +34,24 @@ MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
 }
 
 //===----------------------------------------------------------------------===//
-// DeviceDB.
+// PrimitiveDB.
 //===----------------------------------------------------------------------===//
 
-DEFINE_C_API_PTR_METHODS(CirctMSFTDeviceDB, circt::msft::DeviceDB)
+DEFINE_C_API_PTR_METHODS(CirctMSFTPrimitiveDB, circt::msft::PrimitiveDB)
 
-CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirContext ctxt) {
-  return wrap(new DeviceDB(unwrap(ctxt)));
+CirctMSFTPrimitiveDB circtMSFTCreatePrimitiveDB(MlirContext ctxt) {
+  return wrap(new PrimitiveDB(unwrap(ctxt)));
 }
-void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self) { delete unwrap(self); }
-MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB self,
-                                                MlirAttribute cLoc) {
+void circtMSFTDeletePrimitiveDB(CirctMSFTPrimitiveDB self) {
+  delete unwrap(self);
+}
+MlirLogicalResult circtMSFTPrimitiveDBAddPrimitive(CirctMSFTPrimitiveDB self,
+                                                   MlirAttribute cLoc) {
   PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
   return wrap(unwrap(self)->addPrimitive(loc));
 }
-bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB self,
-                                      MlirAttribute cLoc) {
+bool circtMSFTPrimitiveDBIsValidLocation(CirctMSFTPrimitiveDB self,
+                                         MlirAttribute cLoc) {
   PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
   return unwrap(self)->isValidLocation(loc);
 }
@@ -62,7 +63,7 @@ bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB self,
 DEFINE_C_API_PTR_METHODS(CirctMSFTPlacementDB, circt::msft::PlacementDB)
 
 CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
-                                                CirctMSFTDeviceDB seed) {
+                                                CirctMSFTPrimitiveDB seed) {
   if (seed.ptr == nullptr)
     return wrap(new PlacementDB(unwrap(top)));
   return wrap(new PlacementDB(unwrap(top), *unwrap(seed)));
