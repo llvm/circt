@@ -52,6 +52,78 @@ firrtl.circuit "" {
 
 // -----
 
+firrtl.circuit "foo" {
+// expected-error @+1 {{ports should all be FIRRTL types}}
+firrtl.module @foo(in %a: i1) {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{requires 1 port directions}}
+firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portDirections = 3 : i2} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{requires 1 port names}}
+firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portNames=[]} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{port names should all be string attributes}}
+firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portNames=[1 : i1]} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{op requires 1 port annotations}}
+firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portAnnotations=[[], []]} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{annotations must be dictionaries or subannotations}}
+firrtl.module @foo(in %a: !firrtl.uint<1> ["hello"]) {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{requires one region}}
+"firrtl.module"() ( { }, { })
+   {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+    portNames = ["in0"], portAnnotations = []} : () -> ()
+}
+
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{entry block must have 1 arguments to match module signature}}
+"firrtl.module"() ( {
+  ^entry:
+}) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+    portNames = ["in0"], portAnnotations = []} : () -> ()
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{block argument types should match signature types}}
+"firrtl.module"() ( {
+  ^entry(%a: i1):
+}) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+    portNames = ["in0"], portAnnotations = []} : () -> ()
+}
+
+// -----
+
 firrtl.circuit "Foo" {
 firrtl.module @Foo() {
   // expected-error @+1 {{invalid kind of type specified}}
@@ -291,14 +363,6 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
 
-}
-
-// -----
-
-firrtl.circuit "BadPort" {
-  // expected-error @+1 {{'firrtl.module' op port types should all be FIRRTL type attributes}}
-  firrtl.module @BadPort(in %in1 : i1) {
-  }
 }
 
 // -----

@@ -28,14 +28,9 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
     return module.emitOpError("requires valid port types");
   if (llvm::any_of(portTypes.getValue(), [](Attribute attr) {
         auto typeAttr = attr.dyn_cast<TypeAttr>();
-        if (!typeAttr)
-          return true;
-        if (!typeAttr.getValue().isa<FIRRTLType>())
-          return true;
-        return false;
+        return !typeAttr || !typeAttr.getValue().isa<FIRRTLType>();
       }))
-    return module.emitOpError(
-        "port types should all be FIRRTL type attributes");
+    return module.emitOpError("ports should all be FIRRTL types");
 
   auto numPorts = portTypes.size();
 
@@ -52,7 +47,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // Verify the port names.
   auto portNames = module.getPortNamesAttr();
   if (!portNames)
-    return module.emitOpError("requires valid port types");
+    return module.emitOpError("requires valid port names");
   if (portNames.size() != numPorts)
     return module.emitOpError("requires ") << numPorts << " port names";
   if (llvm::any_of(portNames.getValue(),
@@ -75,7 +70,8 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
     if (llvm::any_of(arrayAttr.getValue(), [](Attribute attr) {
           return !attr.isa<DictionaryAttr, SubAnnotationAttr>();
         }))
-      return module.emitOpError("requires valid port annotations");
+      return module.emitOpError(
+          "annotations must be dictionaries or subannotations");
   }
 
   // Verify the body.
@@ -98,7 +94,8 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
                   std::get<1>(pair).template cast<TypeAttr>().getValue();
               return blockType != portType;
             }))
-      return module.emitOpError("block arguments should all be FIRRTL types");
+      return module.emitOpError(
+          "block argument types should match signature types");
   }
 
   return success();

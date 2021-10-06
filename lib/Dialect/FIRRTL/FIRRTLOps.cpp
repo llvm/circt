@@ -714,8 +714,9 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   // for external modules.
 
   // Add port directions.
-  result.addAttribute(direction::attrKey,
-                      direction::packAttribute(portDirections, context));
+  if (!result.attributes.get("portDirections"))
+    result.addAttribute(direction::attrKey,
+                        direction::packAttribute(portDirections, context));
 
   // Add port names.
   SmallVector<Attribute> portNames;
