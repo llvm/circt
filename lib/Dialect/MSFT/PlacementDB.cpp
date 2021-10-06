@@ -112,6 +112,27 @@ PlacementDB::getInstanceAt(PhysLocationAttr loc) {
   return instF->getSecond();
 }
 
+PhysLocationAttr PlacementDB::getNearestFreeInColumn(PrimitiveType prim,
+                                                     uint64_t columnNum,
+                                                     uint64_t nearestToY) {
+  // Simplest possible algorithm.
+  PhysLocationAttr nearest = {};
+  walkColumnPlacements(columnNum, [&nearest, columnNum](PhysLocationAttr loc,
+                                                        PlacedInstance inst) {
+    if (inst.op)
+      return;
+    if (!nearest) {
+      nearest = loc;
+      return;
+    }
+    int64_t curDist = std::abs((int64_t)columnNum - (int64_t)nearest.getY());
+    int64_t replDist = std::abs((int64_t)columnNum - (int64_t)loc.getY());
+    if (replDist < curDist)
+      nearest = loc;
+  });
+  return nearest;
+}
+
 Optional<PlacementDB::PlacedInstance *>
 PlacementDB::getLeaf(PhysLocationAttr loc) {
   PrimitiveType primType = loc.getPrimitiveType().getValue();
@@ -119,11 +140,10 @@ PlacementDB::getLeaf(PhysLocationAttr loc) {
   DimNumMap &nums = placements[loc.getX()][loc.getY()];
   if (!seeded)
     return &nums[loc.getNum()][primType];
-
-  auto primitivesF = nums.find(loc.getNum());
-  if (primitivesF == nums.end())
+  if (!nums.count(loc.getNum()))
     return {};
-  auto primitives = primitivesF->second;
+
+  DimDevType &primitives = nums[loc.getNum()];
   if (primitives.count(primType) == 0)
     return {};
   return &primitives[primType];
@@ -136,30 +156,41 @@ void PlacementDB::walkPlacements(
   for (auto colF = placements.begin(), colE = placements.end(); colF != colE;
        ++colF) {
     size_t x = colF->getFirst();
-    DimYMap yMap = colF->getSecond();
+    walkColumnPlacements(x, callback);
+  }
+}
 
-    // Y loop.
-    for (auto rowF = yMap.begin(), rowE = yMap.end(); rowF != rowE; ++rowF) {
-      size_t y = rowF->getFirst();
-      DimNumMap numMap = rowF->getSecond();
+/// Walk the column placements in some sort of reasonable order.
+void PlacementDB::walkColumnPlacements(
+    uint64_t columnNum,
+    function_ref<void(PhysLocationAttr, PlacedInstance)> callback) {
 
-      // Num loop.
-      for (auto numF = numMap.begin(), numE = numMap.end(); numF != numE;
-           ++numF) {
-        size_t num = numF->getFirst();
-        DimDevType devMap = numF->getSecond();
+  auto colF = placements.find(columnNum);
+  if (colF == placements.end())
+    return;
+  DimYMap yMap = colF->getSecond();
 
-        // DevType loop.
-        for (auto devF = devMap.begin(), devE = devMap.end(); devF != devE;
-             ++devF) {
-          PrimitiveType devtype = devF->getFirst();
-          PlacedInstance inst = devF->getSecond();
+  // Y loop.
+  for (auto rowF = yMap.begin(), rowE = yMap.end(); rowF != rowE; ++rowF) {
+    size_t y = rowF->getFirst();
+    DimNumMap numMap = rowF->getSecond();
 
-          // Marshall and run the callback.
-          PhysLocationAttr loc = PhysLocationAttr::get(
-              ctxt, PrimitiveTypeAttr::get(ctxt, devtype), x, y, num);
-          callback(loc, inst);
-        }
+    // Num loop.
+    for (auto numF = numMap.begin(), numE = numMap.end(); numF != numE;
+         ++numF) {
+      size_t num = numF->getFirst();
+      DimDevType devMap = numF->getSecond();
+
+      // DevType loop.
+      for (auto devF = devMap.begin(), devE = devMap.end(); devF != devE;
+           ++devF) {
+        PrimitiveType devtype = devF->getFirst();
+        PlacedInstance inst = devF->getSecond();
+
+        // Marshall and run the callback.
+        PhysLocationAttr loc = PhysLocationAttr::get(
+            ctxt, PrimitiveTypeAttr::get(ctxt, devtype), columnNum, y, num);
+        callback(loc, inst);
       }
     }
   }
