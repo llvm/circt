@@ -154,8 +154,7 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   // Guess a name for the local value. This is only for readability's sake,
   // giving the pass a hint for picking the names of the generated module ports.
   if (auto blockArg = value.dyn_cast<BlockArgument>()) {
-    mapping.localName =
-        module.portNames()[blockArg.getArgNumber()].cast<StringAttr>();
+    mapping.localName = module.getPortNameAttr(blockArg.getArgNumber());
   } else if (auto op = value.getDefiningOp()) {
     mapping.localName = op->getAttrOfType<StringAttr>("name");
   }

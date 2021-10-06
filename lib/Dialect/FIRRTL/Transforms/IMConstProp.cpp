@@ -473,7 +473,7 @@ void IMConstPropPass::markInstanceOp(InstanceOp instance) {
 
     // Otherwise we have a result from the instance.  We need to forward results
     // from the body to this instance result's SSA value, so remember it.
-    BlockArgument modulePortVal = fModule.getPortArgument(resultNo);
+    BlockArgument modulePortVal = fModule.getArgument(resultNo);
 
     // Mark don't touch results as overdefined
     if (AnnotationSet::get(modulePortVal).hasDontTouch())
@@ -530,8 +530,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect) {
     if (!module)
       return;
 
-    BlockArgument modulePortVal =
-        module.getPortArgument(dest.getResultNumber());
+    BlockArgument modulePortVal = module.getArgument(dest.getResultNumber());
     return mergeLatticeValue(modulePortVal, srcValue);
   }
 

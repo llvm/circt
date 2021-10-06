@@ -302,10 +302,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
               cast<FModuleOp>(blockArg.getOwner()->getParentOp());
           builder.create<sv::VerbatimOp>(
               uloc, "assign " + path + " = " + srcRef +
-                        module.portNames()[blockArg.getArgNumber()]
-                            .cast<StringAttr>()
-                            .getValue() +
-                        ";");
+                        module.getPortName(blockArg.getArgNumber()) + ";");
         } else {
           auto leafModuleName = leafValue.getDefiningOp()
                                     ->getAttr("name")
@@ -853,9 +850,7 @@ void GrandCentralPass::runOnOperation() {
         FModuleOp module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
         llvm::dbgs() << "  - " << id.getValue() << ": "
                      << module.getName() + ">" +
-                            module.portNames()[blockArg.getArgNumber()]
-                                .cast<StringAttr>()
-                                .getValue()
+                            module.getPortName(blockArg.getArgNumber())
                      << "\n";
       } else
         llvm::dbgs() << "  - " << id.getValue() << ": "
