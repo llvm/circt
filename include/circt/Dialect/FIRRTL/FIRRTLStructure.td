@@ -80,7 +80,6 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
     iterator begin() { return getBody().begin(); }
     iterator end() { return getBody().end(); }
 
-    Block &back() { return getBody().back(); }
     Block &front() { return getBody().front(); }
 
     Block::BlockArgListType getArguments() {
