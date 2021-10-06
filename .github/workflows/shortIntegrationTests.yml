@@ -4,6 +4,10 @@ name: Short integration tests
 # push to main. Should catch 95% of integration test breakages. Useful for
 # identifying the particular offending commit and emailing the commit author.
 
+# Note: currently the integration tests don't take that long to run (<1 min).
+# If, in the future, they take significantly longer (>~1 hour), we should
+# reconsider this.
+
 on:
   workflow_dispatch:
   push:
