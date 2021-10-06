@@ -74,31 +74,37 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       if (commonParent == nullptr)
         continue;
 
-      // Find the src and dst ancestor in the common block, and check if the src
-      // ancestor is before the dst ancestor.
-      Block &commonBlock = commonParent->getRegions()[0].front();
-      Operation *srcOrAncestor = commonBlock.findAncestorOpInBlock(*source);
-      Operation *dstOrAncestor =
-          commonBlock.findAncestorOpInBlock(*destination);
+      // Find the src and dst ancestor in the common block, if any.
+      for (auto &commonRegion : commonParent->getRegions()) {
+        for (auto &commonBlock : commonRegion.getBlocks()) {
+          Operation *srcOrAncestor = commonBlock.findAncestorOpInBlock(*source);
+          Operation *dstOrAncestor =
+              commonBlock.findAncestorOpInBlock(*destination);
+          if (srcOrAncestor == nullptr || dstOrAncestor == nullptr)
+            continue;
 
-      if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
-        // Collect surrounding loops to use in dependence components.
-        SmallVector<AffineForOp> enclosingLoops;
-        getLoopIVs(*destination, &enclosingLoops);
-        assert(enclosingLoops.size() == depth && "expected 'depth' loops");
+          // Check if the src or its ancestor is before the dst or its ancestor.
+          if (srcOrAncestor->getBlock() == dstOrAncestor->getBlock() &&
+              srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
+            // Collect surrounding loops to use in dependence components.
+            SmallVector<AffineForOp> enclosingLoops;
+            getLoopIVs(*destination, &enclosingLoops);
+            assert(enclosingLoops.size() == depth && "expected 'depth' loops");
 
-        // Build dependence components for each loop depth.
-        SmallVector<DependenceComponent> intraDeps;
-        for (size_t i = 1; i <= depth; ++i) {
-          DependenceComponent depComp;
-          depComp.op = enclosingLoops[i - 1];
-          depComp.lb = 0;
-          depComp.ub = 0;
-          intraDeps.push_back(depComp);
+            // Build dependence components for each loop depth.
+            SmallVector<DependenceComponent> intraDeps;
+            for (size_t i = 1; i <= depth; ++i) {
+              DependenceComponent depComp;
+              depComp.op = enclosingLoops[i - 1];
+              depComp.lb = 0;
+              depComp.ub = 0;
+              intraDeps.push_back(depComp);
+            }
+
+            results[destination].emplace_back(
+                source, DependenceResult::HasDependence, intraDeps);
+          }
         }
-
-        results[destination].emplace_back(
-            source, DependenceResult::HasDependence, intraDeps);
       }
     }
   }
