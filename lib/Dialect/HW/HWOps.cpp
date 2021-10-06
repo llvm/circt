@@ -360,20 +360,19 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringRef HWModuleExternOp::getVerilogModuleName() {
-  if (auto vname = verilogName())
-    return vname.getValue();
-  return getName();
-}
-
-/// Return the name to use for the Verilog module that we're referencing
-/// here.  This is typically the symbol, but can be overridden with the
-/// verilogName attribute.
 StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
   if (auto vName = verilogNameAttr())
     return vName;
 
   return (*this)->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+}
+
+StringAttr HWModuleGeneratedOp::getVerilogModuleNameAttr() {
+  if (auto vName = verilogNameAttr()) {
+    return vName;
+  }
+  return (*this)->getAttrOfType<StringAttr>(
+      ::mlir::SymbolTable::getSymbolAttrName());
 }
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
