@@ -93,8 +93,6 @@ private:
   void rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
                          bool moduleHasRenamedInterface);
   void renameModuleBody(hw::HWModuleOp module);
-  void renameInterfaceBody(sv::InterfaceOp intf,
-                           mlir::SymbolUserMap &symbolUsers);
 
   /// Set of globally visible names, to ensure uniqueness.
   NameCollisionResolver globalNames;
@@ -144,9 +142,10 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   // it.
   // TODO: This is super inefficient, we should just rename the symbol as part
   // of the other existing walks.
-  auto legalizeSymbolName = [&](Operation *op) {
+  auto legalizeSymbolName = [&](Operation *op,
+                                NameCollisionResolver &resolver) {
     StringAttr oldName = SymbolTable::getSymbolName(op);
-    auto newName = globalNames.getLegalName(oldName);
+    auto newName = resolver.getLegalName(oldName);
     if (!newName.empty()) {
       auto newNameAttr = StringAttr::get(topLevel.getContext(), newName);
       symbolUsers.replaceAllUsesWith(op, newNameAttr);
@@ -158,14 +157,14 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   // Legalize module and interface names.
   for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
-      legalizeSymbolName(module);
+      legalizeSymbolName(module, globalNames);
       if (legalizePortNames(module))
         modulesWithRenamedPortsOrParams[module.getNameAttr()] = module;
       continue;
     }
 
     if (auto interface = dyn_cast<InterfaceOp>(op)) {
-      legalizeSymbolName(interface);
+      legalizeSymbolName(interface, globalNames);
       continue;
     }
   }
@@ -174,8 +173,17 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
       renameModuleBody(module);
-    } else if (auto intf = dyn_cast<InterfaceOp>(op)) {
-      renameInterfaceBody(intf, symbolUsers);
+      continue;
+    }
+
+    if (auto interface = dyn_cast<InterfaceOp>(op)) {
+      NameCollisionResolver localNames;
+
+      // Rename signals and modports.
+      for (auto &op : *interface.getBodyBlock()) {
+        if (isa<InterfaceSignalOp>(op) || isa<InterfaceModportOp>(op))
+          legalizeSymbolName(&op, localNames);
+      }
     }
   }
 }
@@ -405,28 +413,6 @@ void GlobalNameResolver::renameModuleBody(hw::HWModuleOp module) {
 
   rewriteModuleBody(*module.getBodyBlock(), nameResolver,
                     moduleHasRenamedInterface);
-}
-
-void GlobalNameResolver::renameInterfaceBody(InterfaceOp interface,
-                                             mlir::SymbolUserMap &symbolUsers) {
-  NameCollisionResolver localNames;
-  auto symbolAttrName = SymbolTable::getSymbolAttrName();
-
-  // Rename signals and modports.
-  for (auto &op : *interface.getBodyBlock()) {
-    if (!isa<InterfaceSignalOp>(op) && !isa<InterfaceModportOp>(op))
-      continue;
-
-    StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
-    auto newName = localNames.getLegalName(oldName);
-    if (newName.empty())
-      continue;
-
-    auto newNameAttr = StringAttr::get(interface.getContext(), newName);
-    symbolUsers.replaceAllUsesWith(&op, newNameAttr);
-    SymbolTable::setSymbolName(&op, newNameAttr);
-    anythingChanged = true;
-  }
 }
 
 //===----------------------------------------------------------------------===//
