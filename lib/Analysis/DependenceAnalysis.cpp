@@ -84,8 +84,7 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
             continue;
 
           // Check if the src or its ancestor is before the dst or its ancestor.
-          if (srcOrAncestor->getBlock() == dstOrAncestor->getBlock() &&
-              srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
+          if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
             // Collect surrounding loops to use in dependence components.
             SmallVector<AffineForOp> enclosingLoops;
             getLoopIVs(*destination, &enclosingLoops);
