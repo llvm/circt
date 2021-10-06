@@ -60,8 +60,18 @@ public:
   /// Lookup the instance at a particular location.
   Optional<PlacedInstance> getInstanceAt(PhysLocationAttr);
 
+  /// Find the nearest unoccupied primitive location to 'nearestToY' in
+  /// 'column'.
+  PhysLocationAttr getNearestFreeInColumn(PrimitiveType prim, uint64_t column,
+                                          uint64_t nearestToY);
+
   /// Walk the placement information in some sort of reasonable order.
   void walkPlacements(function_ref<void(PhysLocationAttr, PlacedInstance)>);
+
+  /// Walk the column placements in some sort of reasonable order.
+  void
+  walkColumnPlacements(uint64_t column,
+                       function_ref<void(PhysLocationAttr, PlacedInstance)>);
 
 private:
   MLIRContext *ctxt;

@@ -63,6 +63,14 @@ public:
     std::string subpath(inst.subpath, inst.subpathLength);
     return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
   }
+  py::object getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
+                                    uint64_t column, uint64_t nearestToY) {
+    MlirAttribute nearest = circtMSFTPlacementDBGetNearestFreeInColumn(
+        db, prim, column, nearestToY);
+    if (!nearest.ptr)
+      return py::none();
+    return py::cast(nearest);
+  }
 
 private:
   CirctMSFTPlacementDB db;
@@ -179,6 +187,9 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def("add_placement", &PlacementDB::addPlacement,
            "Inform the DB about a new placement.", py::arg("location"),
            py::arg("path"), py::arg("subpath"), py::arg("op"))
+      .def("get_nearest_free_in_column", &PlacementDB::getNearestFreeInColumn,
+           "Find the nearest free primitive location in column.",
+           py::arg("prim_type"), py::arg("column"), py::arg("nearest_to_y"))
       .def("get_instance_at", &PlacementDB::getInstanceAt,
            "Get the instance at location. Returns None if nothing exists "
            "there. Otherwise, returns (path, subpath, op) of the instance "

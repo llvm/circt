@@ -102,6 +102,14 @@ bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB self,
   return true;
 }
 
+MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
+    CirctMSFTPlacementDB cdb, CirctMSFTPrimitiveType prim, uint64_t column,
+    uint64_t nearestToY) {
+  auto db = unwrap(cdb);
+  return wrap(
+      db->getNearestFreeInColumn((PrimitiveType)prim, column, nearestToY));
+}
+
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
 //===----------------------------------------------------------------------===//
