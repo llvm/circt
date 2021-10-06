@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_SV_SVPASSES_H
 
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/StringRef.h"
 
 namespace circt {
 namespace sv {
@@ -26,7 +27,8 @@ std::unique_ptr<mlir::Pass> createHWLegalizeModulesPass();
 std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
 std::unique_ptr<mlir::Pass> createHWMemSimImplPass();
 std::unique_ptr<mlir::Pass> createSVExtractTestCodePass();
-std::unique_ptr<mlir::Pass> createHWExportModuleHierarchyPass();
+std::unique_ptr<mlir::Pass>
+createHWExportModuleHierarchyPass(llvm::Optional<std::string> directory = {});
 /// Generate the code for registering passes.
 #define GEN_PASS_REGISTRATION
 #include "circt/Dialect/SV/SVPasses.h.inc"
