@@ -346,12 +346,11 @@ void GlobalNameResolver::rewriteModuleBody(Block &block,
       continue;
     }
 
-    if (isa<RegOp>(op) || isa<WireOp>(op)) {
+    if (isa<RegOp>(op) || isa<WireOp>(op) || isa<LocalParamOp>(op)) {
       auto oldName = op.getAttrOfType<StringAttr>("name");
       auto newName = nameResolver.getLegalName(oldName);
       if (!newName.empty())
         op.setAttr("name", StringAttr::get(op.getContext(), newName));
-      continue;
     }
 
     if (auto localParam = dyn_cast<LocalParamOp>(op)) {
@@ -377,7 +376,7 @@ void GlobalNameResolver::rewriteModuleBody(Block &block,
     // If this operation has regions, then we recursively process them if they
     // can contain things that need to be renamed.  We don't walk the module
     // in the common case.
-    if (op.getNumRegions() && (isa<IfDefOp>(op) || moduleHasRenamedInterface)) {
+    if (op.getNumRegions()) {
       for (auto &region : op.getRegions()) {
         if (!region.empty())
           rewriteModuleBody(region.front(), nameResolver,
