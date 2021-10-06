@@ -27,8 +27,8 @@ jobs:
       # this is one point in the overall matrix.
       matrix:
         build-assert: [ON]
-        build-shared: [OFF]
-        build-type: [Debug]
+        build-shared: [ON]
+        build-type: [Release]
         compiler:
           - cc: clang
             cxx: clang++
