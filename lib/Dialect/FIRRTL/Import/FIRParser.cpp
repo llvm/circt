@@ -46,6 +46,13 @@ namespace json = llvm::json;
 // Parser-related utilities
 //===----------------------------------------------------------------------===//
 
+namespace circt {
+namespace firrtl {
+ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
+                                   WhenOp whenStmt);
+} // namespace firrtl
+} // namespace circt
+
 std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
     StringRef spelling, bool skipParsing, Identifier &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context) {
@@ -2266,18 +2273,6 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
-template <typename Op>
-static ParseResult generatePrintfEncodedVerifOp(ImplicitLocOpBuilder &builder,
-                                                Value clock, Value condition,
-                                                StringRef message) {
-  APInt constOne(1, 1, false);
-  Value constTrue = builder.create<ConstantOp>(
-      UIntType::get(builder.getContext(), 1), constOne);
-  builder.create<Op>(clock, condition, constTrue, message, "",
-                     /*isConcurrent=*/true);
-  return success();
-}
-
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
@@ -2307,20 +2302,6 @@ ParseResult FIRStmtParser::parsePrintf() {
   locationProcessor.setLoc(startTok.getLoc());
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
-  StringRef formatStringRef(formatStrUnescaped);
-
-  // Check if this is a printf-encoded verification statement. These are
-  // introduced by "assert:" and friends.
-  if (formatStringRef.startswith("assert:"))
-    return generatePrintfEncodedVerifOp<AssertOp>(builder, clock, condition,
-                                                  formatStringRef);
-  if (formatStringRef.startswith("assume:"))
-    return generatePrintfEncodedVerifOp<AssumeOp>(builder, clock, condition,
-                                                  formatStringRef);
-  if (formatStringRef.startswith("cover:"))
-    return generatePrintfEncodedVerifOp<CoverOp>(builder, clock, condition,
-                                                 formatStringRef);
-
   builder.create<PrintFOp>(clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands,
                            name);
@@ -2495,13 +2476,13 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
   // If the else is present, handle it otherwise we're done.
   if (getToken().isNot(FIRToken::kw_else))
-    return success();
+    return foldWhenEncodedVerifOp(builder, whenStmt);
 
   // If the 'else' is less indented than the when, then it must belong to some
   // containing 'when'.
   auto elseIndent = getIndentation();
   if (elseIndent.hasValue() && elseIndent.getValue() < whenIndent)
-    return success();
+    return foldWhenEncodedVerifOp(builder, whenStmt);
 
   consumeToken(FIRToken::kw_else);
 

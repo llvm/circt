@@ -399,23 +399,14 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     assert(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false, name = "assert_0"}
     assert(clock, pred, en, "X equals Y when Z is valid") : assert_0
-    ; CHECK: [[C:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.assert %clock, %pred, %c1_ui1, "assert:X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = true}
-    printf(clock, pred, "assert:X equals Y when Z is valid")
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false}
     assume(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.assume %clock, %pred, %en, "X equals Y when Z is valid" {eventControl = 0 : i32, isConcurrent = false, name = "assume_0"}
     assume(clock, pred, en, "X equals Y when Z is valid") : assume_0
-    ; CHECK: [[C2:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.assume %clock, %pred, [[C2]], "assume:X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = true}
-    printf(clock, pred, "assume:X equals Y when Z is valid")
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = false}
     cover(clock, pred, en, "X equals Y when Z is valid")
     ; CHECK: firrtl.cover %clock, %pred, %en, "X equals Y when Z is valid" {eventControl = 0 : i32, isConcurrent = false, name = "cover_0"}
     cover(clock, pred, en, "X equals Y when Z is valid") : cover_0
-    ; CHECK: [[C3:%.+]] = firrtl.constant 1 : !firrtl.uint<1>
-    ; CHECK-NEXT: firrtl.cover %clock, %pred, [[C3]], "cover:X equals Y when Z is valid"  {eventControl = 0 : i32, isConcurrent = true}
-    printf(clock, pred, "cover:X equals Y when Z is valid")
 
   ; CHECK-LABEL: firrtl.module @type_handling(
   module type_handling :
@@ -866,3 +857,97 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     b <= a
     ; CHECK: firrtl.connect %b, %a : !firrtl.bundle<a: reset, b: reset>, !firrtl.bundle<a: uint<1>, b: asyncreset>
+
+  ; CHECK-LABEL: @WhenEncodedVerification
+  module WhenEncodedVerification:
+    input clock: Clock
+    input cond: UInt<1>
+    input enable: UInt<1>
+    input value: UInt<42>
+
+    ; rocket-chip properties
+    when cond:
+      printf(clock, enable, "assert:foo 0")
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 0"
+
+    when cond:
+      printf(clock, enable, "assume:foo 1")
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 1"
+
+    when cond:
+      printf(clock, enable, "cover:foo 2")
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 2"
+
+    when cond:
+      printf(clock, enable, "assert:custom label 0:foo 3")
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 3"
+    ; CHECK-SAME: name = "custom label 0"
+
+    when cond:
+      printf(clock, enable, "assume:custom label 1:foo 4")
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 4"
+    ; CHECK-SAME: name = "custom label 1"
+
+    when cond:
+      printf(clock, enable, "cover:custom label 2:foo 5")
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 5"
+    ; CHECK-SAME: name = "custom label 2"
+
+    ; Optional `stop` with same clock and condition should be removed.
+    when cond:
+      printf(clock, enable, "assert:without_stop")
+      stop(clock, enable, 1)
+    ; CHECK: firrtl.assert %clock, {{%.+}}, %enable, "without_stop"
+    ; CHECK-NOT: firrtl.stop
+
+    ; AssertNotX -- usually `cond` only checks for not-in-reset, and `enable` is
+    ; just set to 1; the actual check `^value !== 'x` is implicit.
+    when cond:
+      printf(clock, enable, "assertNotX:%d:value must not be X!", value)
+    ; CHECK: [[TMP1:%.+]] = firrtl.xorr %value
+    ; CHECK: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} !== 1'bx"([[TMP1]])
+    ; CHECK: [[TMP3:%.+]] = firrtl.or %cond, [[TMP2]]
+    ; CHECK: firrtl.assert %clock, [[TMP3]], %enable, "value must not be X!"
+    ; CHECK-SAME: name = "notX"
+
+    ; Chisel built-in assertions
+    when cond:
+      printf(clock, enable, "Assertion failed")
+      stop(clock, enable, 1)
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed"
+    ; CHECK-SAME: name = "chisel3_builtin"
+
+    when cond:
+      printf(clock, enable, "Assertion failed: some message")
+      stop(clock, enable, 1)
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: some message"
+    ; CHECK-SAME: name = "chisel3_builtin"
+
+    ; Verification Library Assertions
+
+    when cond:
+      printf(clock, enable, "Assertion failed: [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"}],\"labelExts\":[\"label\",\"magic\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Hello Assert\"}")
+      stop(clock, enable, 1)
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"
+    ; CHECK-SAME: conditionalCompileToggles = ["unrOnly"]
+    ; CHECK-SAME: format = "sva"
+    ; CHECK-SAME: name = "verif_library_label_magic"
+    ; CHECK-SAME: predicateModifier = "noMod"
+
+    when cond:
+      printf(clock, enable, "Assumption failed: [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"}],\"labelExts\":[\"label\",\"voodoo\"],\"baseMsg\":\"Hello Assume\"}")
+      stop(clock, enable, 1)
+    ; CHECK: [[TMP:%.+]] = firrtl.not %cond
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"
+    ; CHECK-SAME: conditionalCompileToggles = ["unrOnly"]
+    ; CHECK-SAME: name = "verif_library_label_voodoo"
+    ; CHECK-SAME: predicateModifier = "noMod"
