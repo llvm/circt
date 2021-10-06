@@ -1155,6 +1155,22 @@ void MemOp::setAllPortAnnotations(ArrayRef<Attribute> annotations) {
                    ArrayAttr::get(getContext(), annotations));
 }
 
+// Get the number of read, write and read-write ports.
+  void MemOp::getNumPorts (size_t &numReadPorts, size_t &numWritePorts, size_t &numReadWritePorts) {
+    numReadPorts = 0;
+    numWritePorts = 0;
+    numReadWritePorts = 0;
+    for (size_t i = 0, e = getNumResults(); i != e; ++i) {
+      auto portKind = getPortKind(i);
+      if (portKind == MemOp::PortKind::Read)
+        ++numReadPorts;
+      else if (portKind == MemOp::PortKind::Write) {
+        ++numWritePorts;
+      } else
+        ++numReadWritePorts;
+    }
+  }
+
 /// Verify the correctness of a MemOp.
 static LogicalResult verifyMemOp(MemOp mem) {
 
