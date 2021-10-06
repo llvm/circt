@@ -1459,6 +1459,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
       // Update the uses over to the new instance and drop the old instance.
       instOp.replaceAllUsesWith(newInstOp.getResults().drop_front());
+      instanceGraph->replaceInstance(instOp, newInstOp);
       instOp->erase();
       instOp = newInstOp;
     } else if (domain.existingPort.hasValue()) {

@@ -128,6 +128,11 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
 
   let constructor = "circt::sv::createHWExportModuleHierarchyPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+
+  let options = [
+    Option<"directoryName", "dir-name", "std::string", "\"./\"",
+            "Directory to emit into">
+   ];
 }
 
 #endif // CIRCT_DIALECT_SV_SVPASSES

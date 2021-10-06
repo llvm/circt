@@ -9,9 +9,10 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-file(GLOB globbed *.cpp)
 add_circt_dialect_library(CIRCTSeq
-  ${globbed}
+  SeqDialect.cpp
+  SeqOps.cpp
+  SeqPasses.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Seq

@@ -1,6 +1,7 @@
-file(GLOB globbed *.cpp)
 add_circt_dialect_library(CIRCTSV
-  ${globbed}
+  SVDialect.cpp
+  SVOps.cpp
+  SVTypes.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/SV

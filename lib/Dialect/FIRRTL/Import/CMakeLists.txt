@@ -1,8 +1,8 @@
-file(GLOB globbed *.cpp)
-
 add_circt_translation_library(CIRCTImportFIRFile
-  ${globbed}
-  
+  FIRAnnotations.cpp
+  FIRLexer.cpp
+  FIRParser.cpp
+
   ADDITIONAL_HEADER_DIRS
 
   LINK_LIBS PUBLIC

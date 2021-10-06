@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 using namespace circt;
 using namespace hw;
@@ -702,11 +703,19 @@ static LogicalResult verifyModuleCommon(Operation *module) {
   if (resultNames.size() != moduleType.getNumResults())
     return module->emitOpError("incorrect number of result names");
 
+  SmallPtrSet<Attribute, 4> paramNames;
+
   // Check parameter default values are sensible.
   for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
     auto paramAttr = param.cast<ParamDeclAttr>();
 
-    // Default values are allowed to be missing.
+    // Check that we don't have any redundant parameter names.  These are
+    // resolved by string name: reuse of the same name would cause ambiguities.
+    if (!paramNames.insert(paramAttr.getName()).second)
+      return module->emitOpError("parameter ")
+             << paramAttr << " has the same name as a previous parameter";
+
+    // Default values are allowed to be missing, check them if present.
     auto value = paramAttr.getValue();
     if (!value)
       continue;
