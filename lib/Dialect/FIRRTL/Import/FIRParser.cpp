@@ -3492,7 +3492,7 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
       return failure();
   }
 
-  FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext);
+  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);

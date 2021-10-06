@@ -330,7 +330,7 @@ static FirMemory analyzeMemOp(MemOp op) {
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
   SmallVector<FirMemory> retval;
-  for (auto op : module.getBody().getOps<MemOp>())
+  for (auto op : module.getBody()->getOps<MemOp>())
     retval.push_back(analyzeMemOp(op));
   return retval;
 }
@@ -1125,7 +1125,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
   outputOp->setOperands(outputs);
 
   // Finally splice the body over, don't move the old terminator over though.
-  auto &oldBlockInstList = oldModule.getBodyBlock()->getOperations();
+  auto &oldBlockInstList = oldModule.getBody()->getOperations();
   auto &newBlockInstList = newModule.getBodyBlock()->getOperations();
   newBlockInstList.splice(Block::iterator(cursor), oldBlockInstList,
                           oldBlockInstList.begin(), oldBlockInstList.end());
@@ -1387,14 +1387,14 @@ void FIRRTLLowering::run() {
   // FIRRTL FModule is a single block because FIRRTL ops are a DAG.  Walk
   // through each operation, lowering each in turn if we can, introducing
   // casts if we cannot.
-  auto *body = theModule.getBodyBlock();
+  auto &body = theModule.getBody();
   randomizePrologEmitted = false;
 
   SmallVector<Operation *, 16> opsToRemove;
 
   // Iterate through each operation in the module body, attempting to lower
   // each of them.  We maintain 'builder' for each invocation.
-  for (auto &op : body->getOperations()) {
+  for (auto &op : body.front().getOperations()) {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
     auto done = succeeded(dispatchVisitor(&op));

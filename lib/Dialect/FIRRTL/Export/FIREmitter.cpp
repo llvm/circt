@@ -219,11 +219,11 @@ void Emitter::emitModule(FModuleOp op) {
   // Emit the ports.
   auto ports = op.getPorts();
   emitModulePorts(ports, op.getArguments());
-  if (!ports.empty() && !op.getBodyBlock()->empty())
+  if (!ports.empty() && !op.getBody()->empty())
     os << "\n";
 
   // Emit the module body.
-  emitStatementsInBlock(*op.getBodyBlock());
+  emitStatementsInBlock(*op.getBody());
 
   reduceIndent();
   valueNames.clear();

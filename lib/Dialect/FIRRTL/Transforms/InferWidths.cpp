@@ -1192,7 +1192,7 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
 
     // Go through operations in the module, creating type variables for results,
     // and generating constraints.
-    auto result = module.getBody().walk(
+    auto result = module.getBody()->walk(
         [&](Operation *op) { return WalkResult(mapOperation(op)); });
     if (result.wasInterrupted())
       return WalkResult::interrupt();

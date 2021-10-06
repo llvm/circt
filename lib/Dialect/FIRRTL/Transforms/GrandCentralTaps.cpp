@@ -481,7 +481,7 @@ void GrandCentralTapsPass::runOnOperation() {
                  << blackBox.extModule.getName() << " for " << path << ")\n");
       auto impl =
           builder.create<FModuleOp>(name, ports, blackBox.filteredModuleAnnos);
-      builder.setInsertionPointToEnd(impl.getBodyBlock());
+      builder.setInsertionPointToEnd(impl.getBody());
 
       // Connect the output ports to the appropriate tapped object.
       for (auto port : portWiring) {
