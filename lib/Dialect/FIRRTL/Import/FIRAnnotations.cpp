@@ -219,7 +219,7 @@ static llvm::Optional<std::string> canonicalizeTarget(StringRef target) {
 /// specialized to print a useful error message, specific to custom annotation
 /// process, on failure.
 template <typename A>
-static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
+static A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
                   Location loc, Twine className, Twine path = Twine()) {
   // Check that the key exists.
   auto value = dict.get(key);
