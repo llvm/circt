@@ -65,7 +65,7 @@ class PlacementDB:
                              x: int,
                              y: int,
                              num: typing.Union[int, None] = None) -> object:
-    return self.get_instance_at_loc(PhysLocation(prim_type, x, y, num))
+    return self.get_instance_at(PhysLocation(prim_type, x, y, num))
 
   def get_instance_at(self, loc: PhysLocation) -> object:
     inst = self._db.get_instance_at(loc._loc)

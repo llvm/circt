@@ -97,8 +97,8 @@ test_inst = t.get_instance(Test)
 test_inst.walk(instance_attrs.apply_attributes_visitor)
 
 assert test_inst.placedb.get_instance_at(loc[1]) is not None
-assert test_inst.placedb.get_instance_at(
-    PhysLocation(PrimitiveType.M20K, 0, 0, 0)) is None
+assert test_inst.placedb.get_instance_at_coords(PrimitiveType.M20K, 0, 0,
+                                                0) is None
 
 assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
