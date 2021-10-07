@@ -183,7 +183,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
 
   for (auto mod : circuitOp.getOps<FModuleOp>()) {
     bool isDut = dutModuleSet.contains(mod);
-    for (auto memOp : mod.getBody().getOps<MemOp>())
+    for (auto memOp : mod.getBody()->getOps<MemOp>())
       if (isDut)
         dutMems.push_back(memOp);
       else

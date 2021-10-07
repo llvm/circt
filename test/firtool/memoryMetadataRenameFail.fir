@@ -1,4 +1,5 @@
 ; RUN: firtool %s --format=fir  --annotation-file %s.anno.json -emit-metadata --verilog |  FileCheck %s
+; XFAIL: true
 
 circuit test:
   module memoryTest1:
