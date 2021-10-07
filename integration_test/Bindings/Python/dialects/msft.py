@@ -119,22 +119,22 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   print("=== Placements:")
   seeded_pdb.walk_placements(print_placement)
-  # CHECK: === Placements:
+  # CHECK-LABEL: === Placements:
   # CHECK: #msft.physloc<M20K, 2, 6, 1>, #msft<"@top[\22inst1\22,\22ext1\22]">
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
   print("=== Placements (col 2):")
   seeded_pdb.walk_placements(print_placement, column_num=2)
-  # CHECK: === Placements (col 2):
+  # CHECK-LABEL: === Placements (col 2):
   # CHECK: #msft.physloc<M20K, 2, 6, 1>, #msft<"@top[\22inst1\22,\22ext1\22]">
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
-  print("=== Placements (col 2):")
+  print("=== Placements (col 6):")
   seeded_pdb.walk_placements(print_placement, column_num=6)
-  # CHECK: === Placements (col 2):
+  # CHECK-LABEL: === Placements (col 6):
 
   print("=== Errors:", file=sys.stderr)
-  # ERR: === Errors:
+  # ERR-LABEL: === Errors:
   bad_loc = msft.PhysLocationAttr.get(msft.M20K, x=7, y=99, num=1)
   rc = seeded_pdb.add_placement(bad_loc, path, "foo_subpath", resolved_inst)
   assert not rc
