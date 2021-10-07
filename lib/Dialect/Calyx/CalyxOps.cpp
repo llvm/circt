@@ -51,7 +51,7 @@ SmallVector<Direction> direction::genInOutDirections(size_t nIns,
 IntegerAttr direction::packAttribute(MLIRContext *context,
                                      ArrayRef<Direction> directions) {
   // Pack the array of directions into an APInt.  Input is zero, output is one.
-  auto size = directions.size();
+  size_t size = directions.size();
   APInt portDirections(size, 0);
   for (size_t i = 0; i != size; ++i)
     if (directions[i] == Direction::Output)
@@ -64,8 +64,8 @@ IntegerAttr direction::packAttribute(MLIRContext *context,
 SmallVector<Direction> direction::unpackAttribute(IntegerAttr directions) {
   assert(directions.getType().isSignlessInteger() &&
          "Direction attributes must be signless integers");
-  auto value = directions.getValue();
-  auto size = value.getBitWidth();
+  APInt value = directions.getValue();
+  unsigned size = value.getBitWidth();
   SmallVector<Direction> result;
   result.reserve(size);
   for (size_t i = 0; i != size; ++i)
