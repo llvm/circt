@@ -82,7 +82,8 @@ LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
 
   Optional<PlacedInstance *> leaf = getLeaf(loc);
   if (!leaf)
-    return inst.op->emitOpError("Could not apply placement. Invalid location");
+    return inst.op->emitOpError("Could not apply placement. Invalid location: ")
+           << loc;
   PlacedInstance *cell = *leaf;
   if (cell->op != nullptr)
     return inst.op->emitOpError("Could not apply placement ")

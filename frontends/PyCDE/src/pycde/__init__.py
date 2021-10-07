@@ -4,6 +4,7 @@
 
 from .appid import *
 from .module import *
+from .devicedb import *
 from .system import *
 from .pycde_types import *
 from .value import *

@@ -113,18 +113,16 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
             return (PrimitiveType)circtMSFTPhysLocationAttrGetPrimitiveType(
                 self);
           })
-      .def_property_readonly(
-          "x",
-          [](MlirAttribute self) {
-            return (PrimitiveType)circtMSFTPhysLocationAttrGetX(self);
-          })
-      .def_property_readonly(
-          "y",
-          [](MlirAttribute self) {
-            return (PrimitiveType)circtMSFTPhysLocationAttrGetY(self);
-          })
+      .def_property_readonly("x",
+                             [](MlirAttribute self) {
+                               return circtMSFTPhysLocationAttrGetX(self);
+                             })
+      .def_property_readonly("y",
+                             [](MlirAttribute self) {
+                               return circtMSFTPhysLocationAttrGetY(self);
+                             })
       .def_property_readonly("num", [](MlirAttribute self) {
-        return (PrimitiveType)circtMSFTPhysLocationAttrGetNum(self);
+        return circtMSFTPhysLocationAttrGetNum(self);
       });
 
   mlir_attribute_subclass(m, "RootedInstancePathAttr",
