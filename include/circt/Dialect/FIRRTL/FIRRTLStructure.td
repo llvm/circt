@@ -59,9 +59,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
     the module.
   }];
   let arguments =
-            (ins StrArrayAttr:$portNames,
-                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-                 DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
+            (ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
 
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
@@ -112,11 +110,10 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
   }];
-  let arguments = (ins StrArrayAttr:$portNames,
+  let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
                    OptionalAttr<DictionaryAttr>:$parameters,
-                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-                   DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations
+                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);

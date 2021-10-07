@@ -423,7 +423,7 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   SmallVector<Direction> directions =
       direction::unpackAttribute(this->getPortDirectionsAttr());
   ArrayRef<Attribute> portNames = this->getPortNames();
-  ArrayRef<Attribute> portAnno = this->portAnnotations().getValue();
+  ArrayRef<Attribute> portAnno = this->getPortAnnotations();
   ArrayRef<Attribute> portTypes = this->getPortTypes();
   assert(directions.size() == portNames.size());
 
