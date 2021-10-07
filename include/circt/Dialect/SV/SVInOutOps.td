@@ -90,6 +90,27 @@ def RegOp : SVOp<"reg", [Symbol,
   }];
 }
 
+def XMROp : SVOp<"xmr", []> {
+  let summary = "Encode a reference to a non-local net.";
+  let description = [{
+    This represents a non-local hierarchical name to a net, sometimes called a
+    cross-module reference.  A hierarchical name may be absolute, when prefixed
+    with '$root', in which case it is resolved from the set of top-level modules
+    (any non-instantiated modules).  Non-absolute paths are resolved by
+    attempting resolution of the path locally, then recursively up the instance
+    graph. See SV Spec 23.6, pp721.
+
+    It is impossible to completely resolve a hierarchical name without making a
+    closed-world assumption in the compiler.  We therefore don't try to link
+    hierarchical names to what they resolve to at compile time.  A frontend
+    generating this op should ensure that any instance or object in the intended
+    path has public visibility so paths are not invalidated.
+  }];
+  let arguments = (ins UnitAttr:$isRooted, StringArrayAttr:$path, StrAttr:$terminal);
+  let results = (outs InOutType:$result);
+  let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` type($result)"; 
+}
+
 def ReadInOutOp
  : SVOp<"read_inout",
         [NoSideEffect, InOutElementConstraint<"result", "input">]> {

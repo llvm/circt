@@ -1246,6 +1246,41 @@ static LogicalResult verifyBindInterfaceOp(BindInterfaceOp op) {
 }
 
 //===----------------------------------------------------------------------===//
+// XMROp
+//===----------------------------------------------------------------------===//
+
+ParseResult parseXMRPath(::mlir::OpAsmParser &parser, ArrayAttr &pathAttr,
+                         StringAttr &terminalAttr) {
+  SmallVector<Attribute> strings;
+  ParseResult ret = parser.parseCommaSeparatedList([&]() {
+    StringAttr result;
+    StringRef keyword;
+    if (succeeded(parser.parseOptionalKeyword(&keyword))) {
+      strings.push_back(parser.getBuilder().getStringAttr(keyword));
+      return success();
+    }
+    if (succeeded(parser.parseAttribute(
+            result, parser.getBuilder().getType<NoneType>()))) {
+      strings.push_back(result);
+      return success();
+    }
+    return failure();
+  });
+  if (succeeded(ret)) {
+    pathAttr = parser.getBuilder().getArrayAttr(
+        ArrayRef(strings.begin(), strings.end() - 1));
+    terminalAttr = (*strings.rbegin()).cast<StringAttr>();
+  }
+  return ret;
+}
+
+void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
+                  StringAttr terminalAttr) {
+  llvm::interleaveComma(pathAttr, p);
+  p << ", " << terminalAttr;
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

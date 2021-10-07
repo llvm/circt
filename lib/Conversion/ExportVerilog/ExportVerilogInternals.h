@@ -133,6 +133,11 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
   if (isa<sv::GetModportOp>(op) || isa<sv::ReadInterfaceSignalOp>(op))
     return true;
 
+  // XMRs can't be spilled if they are on the lhs.  Conservatively never spill
+  // them.
+  if (isa<sv::XMROp>(op))
+    return true;
+
   return false;
 }
 
