@@ -26,8 +26,8 @@ class Instance:
     self.instOp = instOp
     self.parent = parent
     if parent is None:
-      self.devicedb = msft.PlacementDB(sys._get_circt_mod(module))
-      self.devicedb.add_design_placements()
+      self.primitivedb = msft.PlacementDB(sys._get_circt_mod(module))
+      self.primitivedb.add_design_placements()
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
 
@@ -95,7 +95,7 @@ class Instance:
   def attach_attribute(self, attr_key: str, attr: ir.Attribute):
     if isinstance(attr, msft.PhysLocationAttr):
       assert attr_key.startswith("loc:")
-      db = self.root_instance.devicedb
+      db = self.root_instance.primitivedb
       rc = db.add_placement(attr, self.path_attr, attr_key[4:],
                             self.instOp.operation)
       if not rc:
@@ -129,4 +129,4 @@ class Instance:
     if isinstance(loc, tuple) and len(loc) == 2:
       loc = loc[1]
     assert isinstance(loc, msft.PhysLocationAttr)
-    return self.root_instance.devicedb.get_instance_at(loc)
+    return self.root_instance.primitivedb.get_instance_at(loc)

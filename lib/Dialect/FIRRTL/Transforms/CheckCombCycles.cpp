@@ -512,7 +512,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
         for (auto &port : module.getPorts()) {
           nodeSet.clear();
           outputVec.clear();
-          auto arg = module.getPortArgument(index++);
+          auto arg = module.getArgument(index++);
           if (port.isOutput()) {
             combPaths.push_back(outputVec);
             continue;
@@ -528,7 +528,7 @@ class CheckCombCyclesPass : public CheckCombCyclesBase<CheckCombCyclesPass> {
       } else if (auto extModule = dyn_cast<FExtModuleOp>(node->getModule())) {
         // TODO: Handle FExtModuleOp with `ExtModulePathAnnotation`s.
         auto &combPaths = map[extModule];
-        combPaths.resize(extModule.getNumArguments());
+        combPaths.resize(extModule.getNumPorts());
       }
     }
 

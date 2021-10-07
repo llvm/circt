@@ -1,4 +1,4 @@
-// RUN: circt-opt -hw-legalize-names %s | FileCheck %s
+// RUN: circt-opt -export-verilog  %s | FileCheck %s
 
 hw.module @B(%a: i1) -> () {
 }
@@ -50,7 +50,7 @@ hw.module @reg(%inout: i1) -> (output: i1) {
 }
 
 // CHECK-LABEL: hw.module @inout_inst
-// CHECK-NEXT: hw.instance "foo" @inout_3
+// CHECK: hw.instance "foo" @inout_3
 hw.module @inout_inst(%a: i1) {
   %0 = hw.instance "foo" @inout (inout: %a: i1) -> (output: i1)
 }
@@ -114,7 +114,7 @@ hw.module @parameters<p1: i42 = 17, wire: i1>(%p1: i8) {
 
   // CHECK: sv.ifdef "SOMEMACRO"
   sv.ifdef "SOMEMACRO" {
-    // CHECK: %local = sv.localparam : i1 {value = #hw.param.decl.ref<"wire_1">}
+    // CHECK: %local_0 = sv.localparam : i1 {value = #hw.param.decl.ref<"wire_1">}
     %local = sv.localparam : i1 { value = #hw.param.decl.ref<"wire">: i1 }
 
     // CHECK: = hw.param.value i1 = #hw.param.decl.ref<"wire_1">

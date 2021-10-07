@@ -91,14 +91,22 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|ext1|subpath
   msft.export_tcl(top.operation, sys.stdout)
 
-  devdb = msft.DeviceDB()
+  devdb = msft.PrimitiveDB()
   assert not devdb.is_valid_location(physAttr)
   devdb.add_primitive(physAttr)
+  devdb.add_primitive(msft.PhysLocationAttr.get(msft.M20K, x=2, y=50, num=1))
   assert devdb.is_valid_location(physAttr)
 
   seeded_pdb = msft.PlacementDB(top.operation, devdb)
+
+  print(seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4))
+  # CHECK: #msft.physloc<M20K, 2, 6, 1>
+
   rc = seeded_pdb.add_placement(physAttr, path, "subpath", resolved_inst)
   assert rc
+
+  print(seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4))
+  # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
   bad_loc = msft.PhysLocationAttr.get(msft.M20K, x=7, y=99, num=1)
   rc = seeded_pdb.add_placement(bad_loc, path, "subpath", resolved_inst)

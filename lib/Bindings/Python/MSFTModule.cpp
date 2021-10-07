@@ -25,26 +25,26 @@ using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
 
-class DeviceDB {
+class PrimitiveDB {
 public:
-  DeviceDB(MlirContext ctxt) { db = circtMSFTCreateDeviceDB(ctxt); }
-  ~DeviceDB() { circtMSFTDeleteDeviceDB(db); }
+  PrimitiveDB(MlirContext ctxt) { db = circtMSFTCreatePrimitiveDB(ctxt); }
+  ~PrimitiveDB() { circtMSFTDeletePrimitiveDB(db); }
   bool addPrimitive(MlirAttribute locAndPrim) {
     return mlirLogicalResultIsSuccess(
-        circtMSFTDeviceDBAddPrimitive(db, locAndPrim));
+        circtMSFTPrimitiveDBAddPrimitive(db, locAndPrim));
   }
   bool isValidLocation(MlirAttribute loc) {
-    return circtMSFTDeviceDBIsValidLocation(db, loc);
+    return circtMSFTPrimitiveDBIsValidLocation(db, loc);
   }
 
-  CirctMSFTDeviceDB db;
+  CirctMSFTPrimitiveDB db;
 };
 
 class PlacementDB {
 public:
-  PlacementDB(MlirOperation top, DeviceDB *seed) {
+  PlacementDB(MlirOperation top, PrimitiveDB *seed) {
     db = circtMSFTCreatePlacementDB(top, seed ? seed->db
-                                              : CirctMSFTDeviceDB{nullptr});
+                                              : CirctMSFTPrimitiveDB{nullptr});
   }
   ~PlacementDB() { circtMSFTDeletePlacementDB(db); }
   size_t addDesignPlacements() {
@@ -62,6 +62,14 @@ public:
       return py::none();
     std::string subpath(inst.subpath, inst.subpathLength);
     return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
+  }
+  py::object getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
+                                    uint64_t column, uint64_t nearestToY) {
+    MlirAttribute nearest = circtMSFTPlacementDBGetNearestFreeInColumn(
+        db, prim, column, nearestToY);
+    if (!nearest.ptr)
+      return py::none();
+    return py::cast(nearest);
   }
 
 private:
@@ -163,22 +171,25 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);
       });
 
-  py::class_<DeviceDB>(m, "DeviceDB")
+  py::class_<PrimitiveDB>(m, "PrimitiveDB")
       .def(py::init<MlirContext>(), py::arg("ctxt") = py::none())
-      .def("add_primitive", &DeviceDB::addPrimitive,
+      .def("add_primitive", &PrimitiveDB::addPrimitive,
            "Inform the DB about a new placement.", py::arg("loc_and_prim"))
-      .def("is_valid_location", &DeviceDB::isValidLocation,
+      .def("is_valid_location", &PrimitiveDB::isValidLocation,
            "Query the DB as to whether or not a primitive exists.",
            py::arg("loc"));
 
   py::class_<PlacementDB>(m, "PlacementDB")
-      .def(py::init<MlirOperation, DeviceDB *>(), py::arg("top"),
+      .def(py::init<MlirOperation, PrimitiveDB *>(), py::arg("top"),
            py::arg("seed") = nullptr)
       .def("add_design_placements", &PlacementDB::addDesignPlacements,
            "Add the placements already present in the design.")
       .def("add_placement", &PlacementDB::addPlacement,
            "Inform the DB about a new placement.", py::arg("location"),
            py::arg("path"), py::arg("subpath"), py::arg("op"))
+      .def("get_nearest_free_in_column", &PlacementDB::getNearestFreeInColumn,
+           "Find the nearest free primitive location in column.",
+           py::arg("prim_type"), py::arg("column"), py::arg("nearest_to_y"))
       .def("get_instance_at", &PlacementDB::getInstanceAt,
            "Get the instance at location. Returns None if nothing exists "
            "there. Otherwise, returns (path, subpath, op) of the instance "

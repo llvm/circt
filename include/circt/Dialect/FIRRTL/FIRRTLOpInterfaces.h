@@ -15,6 +15,7 @@
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/SymbolTable.h"
 
 namespace circt {
 namespace firrtl {
@@ -77,6 +78,10 @@ struct PortInfo {
   /// contains either bi-directional signals or analog types.
   bool isInOut() { return !isOutput() && !isInput(); }
 };
+
+/// Verification hook for verifying module like operations.
+LogicalResult verifyModuleLikeOpInterface(FModuleLike module);
+
 } // namespace firrtl
 } // namespace circt
 

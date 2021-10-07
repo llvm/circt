@@ -3482,17 +3482,17 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
-  auto argIt = moduleOp.args_begin();
   auto portList = moduleOp.getPorts();
-  for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    PortInfo &port = std::get<0>(portAndLoc);
-    if (moduleContext.addSymbolEntry(port.getName(), *argIt,
-                                     std::get<1>(portAndLoc)))
+  auto portArgs = moduleOp.getArguments();
+  for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
+    PortInfo &port = std::get<0>(tuple);
+    llvm::SMLoc loc = std::get<1>(tuple);
+    BlockArgument portArg = std::get<2>(tuple);
+    if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
-    ++argIt;
   }
 
-  FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext);
+  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
