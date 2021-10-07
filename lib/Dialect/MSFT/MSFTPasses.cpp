@@ -58,9 +58,9 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
   if (!hw::isAnyModule(referencedModule))
     return rewriter.notifyMatchFailure(
         msftInst, "Referenced module was not an HW module");
-  auto hwInst =
-      rewriter.create<hw::InstanceOp>(msftInst.getLoc(), referencedModule,
-                                      msftInst.instanceNameAttr(), operands);
+  auto hwInst = rewriter.create<hw::InstanceOp>(
+      msftInst.getLoc(), referencedModule, msftInst.instanceNameAttr(),
+      operands, /*parameters=*/ArrayAttr{}, msftInst.sym_nameAttr());
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
 }
