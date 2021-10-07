@@ -111,9 +111,9 @@ poly.generate(iters=1)
 print("Printing...")
 poly.print()
 # CHECK-LABEL: msft.module @PolynomialSystem {} () -> (y: i32) {
-# CHECK:         %example.y = msft.instance "example" @PolyComputeForCoeff_62_42_6(%c23_i32) : (i32) -> i32
-# CHECK:         %example2.y = msft.instance "example2" @PolyComputeForCoeff_62_42_6(%example.y) : (i32) -> i32
-# CHECK:         %example2.y_0 = msft.instance "example2" @PolyComputeForCoeff_1_2_3_4_5(%example.y) : (i32) -> i32
+# CHECK:         %example.y = msft.instance @example @PolyComputeForCoeff_62_42_6(%c23_i32) : (i32) -> i32
+# CHECK:         %example2.y = msft.instance @example2 @PolyComputeForCoeff_62_42_6(%example.y) : (i32) -> i32
+# CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff_1_2_3_4_5(%example.y) : (i32) -> i32
 # CHECK:         %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %{{.+}}: i32) -> (y: i32)
 # CHECK:         hw.instance "M" @parameterized_extern<a: i64 = 8, b: i64 = 3>() -> ()
 # CHECK:         msft.output %example.y : i32
@@ -131,9 +131,9 @@ poly.run_passes()
 poly.print()
 # CHECK-LABEL: === Post-generate IR...
 # CHECK: hw.module @PolynomialSystem
-# CHECK: %example.y = hw.instance "example" @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
-# CHECK: %example2.y = hw.instance "example2" @PolyComputeForCoeff_62_42_6(x: %example.y: i32) -> (y: i32)
-# CHECK: %example2_0.y = hw.instance "example2_0" @PolyComputeForCoeff_1_2_3_4_5(x: %example.y: i32) -> (y: i32)
+# CHECK: %example.y = hw.instance "example" sym @example @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
+# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6(x: %example.y: i32) -> (y: i32)
+# CHECK: %example2_1.y = hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %example.y: i32) -> (y: i32)
 # CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
 # CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (y: i32)
 # CHECK: hw.constant 62
