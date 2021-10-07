@@ -291,6 +291,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   void visitExpr(SubaccessOp op);
   void visitExpr(MuxPrimOp op);
   void visitExpr(mlir::UnrealizedConversionCastOp op);
+  void visitExpr(BitCastOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(PartialConnectOp op);
   void visitStmt(WhenOp op);
@@ -896,6 +897,58 @@ void TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
     return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input);
   };
   lowerProducer(op, clone);
+}
+
+// Expand BitCastOp of aggregates
+void TypeLoweringVisitor::visitExpr(BitCastOp op) {
+  Value srcLoweredVal = op.input();
+  // If the input is of aggregate type, then cat all the leaf fields to form a
+  // UInt type result. That is, first bitcast the aggregate type to a UInt.
+  // Attempt to get the bundle types.
+  SmallVector<FlatBundleFieldEntry> fields;
+  if (peelType(op.input().getType(), fields)) {
+    size_t uptoBits = 0;
+    // Loop over the leaf aggregates and concat each of them to get a UInt.
+    // Bitcast the fields to handle nested aggregate types.
+    for (auto field : llvm::enumerate(fields)) {
+      Value src = getSubWhatever(op.input(), field.index());
+      auto fieldType = src.getType().cast<FIRRTLType>();
+      auto fieldBitwidth = getBitWidth(fieldType).getValue();
+      // The src could be an aggregate type, bitcast it to a UInt type.
+      src = builder->create<BitCastOp>(UIntType::get(context, fieldBitwidth),
+                                       src);
+      // Take the first field, or else Cat the previous fields with this field.
+      if (uptoBits == 0)
+        srcLoweredVal = src;
+      else
+        srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+      // Record the total bits already accumulated.
+      uptoBits += fieldBitwidth;
+    }
+  } else
+    srcLoweredVal = builder->createOrFold<AsUIntPrimOp>(srcLoweredVal);
+  // Now the input has been cast to srcLoweredVal, which is of UInt type.
+  // If the result is an aggregate type, then use lowerProducer.
+  if (op.getResult().getType().isa<BundleType, FVectorType>()) {
+    // uptoBits is used to keep track of the bits that have been extracted.
+    size_t uptoBits = 0;
+    auto clone = [&](FlatBundleFieldEntry field, StringRef name,
+                     ArrayAttr attrs) -> Operation * {
+      // All the fields must have valid bitwidth, a requirement for BitCastOp.
+      auto fieldBits = getBitWidth(field.type).getValue();
+      // Assign the field to the corresponding bits from the input.
+      // Bitcast the field, incase its an aggregate type.
+      auto extractBits = builder->create<BitsPrimOp>(
+          srcLoweredVal, uptoBits + fieldBits - 1, uptoBits);
+      uptoBits += fieldBits;
+      return extractBits;
+    };
+    lowerProducer(op, clone);
+  } else {
+    // If ground type, then replace the result.
+    op.getResult().replaceAllUsesWith(srcLoweredVal);
+    opsToRemove.push_back(op);
+  }
 }
 
 void TypeLoweringVisitor::visitDecl(InstanceOp op) {
