@@ -61,14 +61,14 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
 
       Operation *commonParent = nullptr;
       for (auto *srcParent : llvm::reverse(srcParents)) {
-        if (commonParent != nullptr)
-          break;
         for (auto *dstParent : llvm::reverse(dstParents)) {
           if (srcParent == dstParent)
             commonParent = srcParent;
           if (commonParent != nullptr)
             break;
         }
+        if (commonParent != nullptr)
+          break;
       }
 
       if (commonParent == nullptr)
@@ -101,9 +101,9 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
 
           // Build dependence components for each loop depth.
           SmallVector<DependenceComponent> intraDeps;
-          for (size_t i = 1; i <= depth; ++i) {
+          for (size_t i = 0; i < depth; ++i) {
             DependenceComponent depComp;
-            depComp.op = enclosingLoops[i - 1];
+            depComp.op = enclosingLoops[i];
             depComp.lb = 0;
             depComp.ub = 0;
             intraDeps.push_back(depComp);
