@@ -11,13 +11,14 @@ class MSFTOp<string mnemonic, list<OpTrait> traits = []> :
     Op<MSFTDialect, mnemonic, traits>;
 
 def InstanceOp : MSFTOp<"instance", [
+        Symbol,
         ParentOneOf<["::circt::hw::HWModuleOp", "MSFTModuleOp"]>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>
     ]> {
   let summary = "Instantiate a module";
 
-  let arguments = (ins StrAttr:$instanceName,
+  let arguments = (ins SymbolNameAttr:$sym_name,
                        FlatSymbolRefAttr:$moduleName,
                        Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>);
@@ -30,11 +31,20 @@ def InstanceOp : MSFTOp<"instance", [
     /// Lookup the module or extmodule for the symbol.  This returns null on
     /// invalid IR.
     Operation *getReferencedModule();
+
+    /// Instance name is the same as the symbol name. This may change in the
+    /// future.
+    StringRef instanceName() {
+      return sym_name();
+    }
+    StringAttr instanceNameAttr() {
+      return sym_nameAttr();
+    }
   }];
 
   /// sym keyword for optional symbol simplifies parsing
   let assemblyFormat = [{
-    $instanceName $moduleName `(` $inputs `)` attr-dict
+    $sym_name $moduleName `(` $inputs `)` attr-dict
       `:` functional-type($inputs, results)
   }];
 }
