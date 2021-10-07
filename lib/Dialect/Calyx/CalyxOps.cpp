@@ -48,28 +48,27 @@ SmallVector<Direction> direction::genInOutDirections(size_t nIns,
   return dirs;
 }
 
-IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
-                                     MLIRContext *ctx) {
+IntegerAttr direction::packAttribute(MLIRContext *context,
+                                     ArrayRef<Direction> directions) {
   // Pack the array of directions into an APInt.  Input is zero, output is one.
-  size_t numDirections = directions.size();
-  APInt portDirections(numDirections, 0);
-  for (size_t i = 0, e = numDirections; i != e; ++i)
+  auto size = directions.size();
+  APInt portDirections(size, 0);
+  for (size_t i = 0; i != size; ++i)
     if (directions[i] == Direction::Output)
       portDirections.setBit(i);
-
-  return IntegerAttr::get(IntegerType::get(ctx, numDirections), portDirections);
+  return IntegerAttr::get(IntegerType::get(context, size), portDirections);
 }
 
 /// Turn a packed representation of port attributes into a vector that can be
 /// worked with.
-SmallVector<Direction> direction::unpackAttribute(Operation *component) {
-  APInt value =
-      component->getAttr(direction::attrKey).cast<IntegerAttr>().getValue();
-
+SmallVector<Direction> direction::unpackAttribute(IntegerAttr directions) {
+  assert(directions.getType().isSignlessInteger() &&
+         "Direction attributes must be signless integers");
+  auto value = directions.getValue();
+  auto size = value.getBitWidth();
   SmallVector<Direction> result;
-  auto bitWidth = value.getBitWidth();
-  result.reserve(bitWidth);
-  for (size_t i = 0, e = bitWidth; i != e; ++i)
+  result.reserve(size);
+  for (size_t i = 0; i != size; ++i)
     result.push_back(direction::get(value[i]));
   return result;
 }
@@ -649,9 +648,8 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   result.addAttribute("portNames", ArrayAttr::get(context, portNames));
   result.addAttribute(
       direction::attrKey,
-      direction::packAttribute(
-          direction::genInOutDirections(inPorts.size(), outPorts.size()),
-          context));
+      direction::packAttribute(context, direction::genInOutDirections(
+                                            inPorts.size(), outPorts.size())));
 
   ports.append(inPorts);
   ports.append(outPorts);
@@ -797,10 +795,10 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   // Record the port names and number of input ports of the component.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute(direction::attrKey,
-                      direction::packAttribute(direction::genInOutDirections(
+                      direction::packAttribute(builder.getContext(),
+                                               direction::genInOutDirections(
                                                    portIOTypes.first.size(),
-                                                   portIOTypes.second.size()),
-                                               builder.getContext()));
+                                                   portIOTypes.second.size())));
   // Record the attributes of the ports.
   result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
 

@@ -41,7 +41,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // TODO: bitwidth is 1 when there are no ports, since APInt previously did not
   // support 0 bit widths.
   auto bitWidth = portDirections.getValue().getBitWidth();
-  if (bitWidth != (numPorts ? numPorts : 1))
+  if (bitWidth != numPorts)
     return module.emitOpError("requires ") << numPorts << " port directions";
 
   // Verify the port names.
