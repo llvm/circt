@@ -3219,7 +3219,9 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
     return failure();
   }
 
-  // TODO: Scatter OMIR trackers.
+  if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
+                                translateLocation(loc), nlaNumber))
+    return failure();
 
   // Merge the attributes we just parsed into the global set we're accumulating.
   llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;

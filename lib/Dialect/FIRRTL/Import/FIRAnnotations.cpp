@@ -925,17 +925,9 @@ scatterOMIR(Attribute original, unsigned &annotationID,
           auto canonTarget = canonicalizeTarget(value);
           if (!canonTarget)
             return None;
-          auto nlaTargets = expandNonLocal(*canonTarget);
 
-          auto leafTarget =
-              splitAndAppendTarget(tracker, std::get<0>(nlaTargets.back()), ctx)
-                  .first;
-
-          if (nlaTargets.size() > 1) {
-            buildNLA(circuit, ++nlaNumber, nlaTargets);
-            tracker.append("circt.nonlocal",
-                           FlatSymbolRefAttr::get(ctx, *canonTarget));
-          }
+          auto leafTarget = addNLATargets(ctx, *canonTarget, circuit, nlaNumber,
+                                          tracker, newAnnotations);
 
           newAnnotations[leafTarget].push_back(
               DictionaryAttr::get(ctx, tracker));
@@ -1684,6 +1676,16 @@ bool circt::firrtl::scatterCustomAnnotations(
             DictionaryAttr::get(context, fields));
       }
 
+      continue;
+    }
+
+    // Scatter trackers out from OMIR JSON.
+    if (clazz == omirAnnotationClass) {
+      auto newAnno = scatterOMIRAnnotation(dict, annotationID, newAnnotations,
+                                           circuit, nlaNumber, loc);
+      if (!newAnno)
+        return false;
+      newAnnotations["~"].push_back(newAnno.getValue());
       continue;
     }
 
