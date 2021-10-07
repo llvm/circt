@@ -108,7 +108,9 @@ with ir.Context() as ctx, ir.Location.unknown():
   assert rc
 
   print(seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4))
+
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
+
 
   def print_placement(loc, placement):
     if placement:
