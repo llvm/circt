@@ -79,13 +79,13 @@ circuit test:
     m.wMask <= wMask
     m.wData <= wData
 
-    inst m2 of memoryP
-    m2.clock <= clock
-    m2.rAddr <= rAddr
-    m2.rEn <= rEn
-    rData <= m2.rData
-    m2.wMask <= wMask
-    m2.wData <= wData
+    inst signed of memoryP
+    signed.clock <= clock
+    signed.rAddr <= rAddr
+    signed.rEn <= rEn
+    rData <= signed.rData
+    signed.wMask <= wMask
+    signed.wData <= wData
 
 
   module memoryP:
@@ -106,7 +106,7 @@ circuit test:
     m.wData <= wData
 
 ; CHECK-LABEL: module test
-; CHECK: memoryP [[m2:.+]] (
+; CHECK: memoryP [[signed:.+]] (
 
 ; CHECK-LABEL: module memoryP
 ; CHECK: memoryTest2 [[m:.+]] (
@@ -121,10 +121,8 @@ circuit test:
 ; CHECK:       [{"module_name":"memory","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME:  "read":"true","write":"true","readwrite":"false",
 ; CHECK_SAME:  "mask_granularity":8,"extra_ports":[],
-; CHECK-SAME:  "hierarchy":["test.[[m2]].[[m]]"],
+; CHECK-SAME:  "hierarchy":["test.[[signed]].[[m]]"],
 ; CHECK-SAME:  "verification_only_data":{
-; CHECK-SAME:  "test.[[m2]].[[m]]":{"baseAddress":1073741824,
+; CHECK-SAME:  "test.[[signed]].[[m]]":{"baseAddress":1073741824,
  ; CHECK-SAME: "dataBits":8,"eccBits":0,"eccIndices":[],"eccScheme":"none"}}}]
 
-; CHECK: FILE "metadata/memoryP.conf"
-; CHECK: name memory depth 16 width 8 ports mwrite,read mask_gran 8
