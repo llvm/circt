@@ -18,5 +18,5 @@ module {
 
 hw.module @M() {
   // expected-error @+1 {{Cannot find module definition 'Bar'}}
-  msft.instance "instance" @Bar () : () -> ()
+  msft.instance @instance @Bar () : () -> ()
 }

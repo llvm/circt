@@ -4,6 +4,8 @@
 
 import builtins
 
+from pycde.devicedb import PrimitiveDB
+
 from .module import _SpecializedModule
 from .pycde_types import types
 from .instance import Instance
@@ -34,15 +36,15 @@ class System:
 
   __slots__ = [
       "mod", "modules", "passed", "_module_symbols", "_symbol_modules",
-      "_old_system_token", "_symbols", "_generate_queue"
+      "_old_system_token", "_symbols", "_generate_queue", "_primdb"
   ]
 
   passes = [
-      "lower-msft-to-hw", "lower-seq-to-sv", "hw-legalize-names",
-      "hw.module(prettify-verilog)", "hw.module(hw-cleanup)"
+      "lower-msft-to-hw", "lower-seq-to-sv", "hw.module(prettify-verilog)",
+      "hw.module(hw-cleanup)"
   ]
 
-  def __init__(self, modules):
+  def __init__(self, modules, primdb: PrimitiveDB = None):
     self.passed = False
     self.mod = ir.Module.create()
     self.modules = list(modules)
@@ -50,6 +52,8 @@ class System:
     self._symbol_modules: dict[str, _SpecializedModule] = {}
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
+
+    self._primdb = primdb
 
     with self:
       [m._pycde_mod.create() for m in modules]
@@ -158,7 +162,12 @@ class System:
 
   def get_instance(self, mod_cls: object) -> Instance:
     assert self.passed
-    return Instance(mod_cls, None, None, self)
+    return Instance(mod_cls, None, None, self, self._primdb)
+
+  class DevNull:
+
+    def write(self, *_):
+      pass
 
   def run_passes(self):
     if self.passed:
@@ -171,6 +180,7 @@ class System:
     self._symbols = None
     pm.run(self.mod)
     types.declare_types(self.mod)
+    circt.export_verilog(self.mod, System.DevNull())
     self.passed = True
 
   def print_verilog(self, out_stream: typing.TextIO = sys.stdout):

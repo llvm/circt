@@ -77,6 +77,6 @@ class AppIDIndex(dict):
       attrs = idx.lookup(inst.appid)
       attrs._used = True
       for (akey, attr) in attrs.items():
-        inst.attach_attribute(akey, attr)
+        inst._attach_attribute(akey, attr)
 
     return lambda i, idx=self: _visit(idx, i)

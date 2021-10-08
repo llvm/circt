@@ -435,11 +435,11 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
   return true;
 }
 
+/// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
+/// this to an OMIRAnnotation, and add it to a mutable `annotationMap` argument.
 bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
                                  llvm::StringMap<ArrayAttr> &annotationMap,
-                                 json::Path path, CircuitOp circuit) {
-  auto *context = circuit.getContext();
-
+                                 json::Path path, MLIRContext *context) {
   // The JSON value must be an array of objects.  Anything else is reported as
   // invalid.
   auto *array = value.getAsArray();

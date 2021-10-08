@@ -34,6 +34,47 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        void *userData);
 
 //===----------------------------------------------------------------------===//
+// MSFT Attributes.
+//===----------------------------------------------------------------------===//
+
+/// Add a physical location attribute with the given entity name, device type, x
+/// and y coordinates, and number.
+MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
+                                                    const char *entityName,
+                                                    PrimitiveType type, long x,
+                                                    long y, long num);
+
+bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
+MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTPrimitiveType,
+                                           uint64_t x, uint64_t y,
+                                           uint64_t num);
+CirctMSFTPrimitiveType circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute);
+uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
+uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
+uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
+
+bool circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute);
+MlirAttribute circtMSFTRootedInstancePathAttrGet(MlirContext,
+                                                 MlirAttribute rootSym,
+                                                 MlirAttribute *pathStringAttrs,
+                                                 size_t num);
+
+typedef struct {
+  MlirAttribute instance;
+  MlirAttribute attr;
+} CirctMSFTSwitchInstanceCase;
+
+bool circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute);
+MlirAttribute circtMSFTSwitchInstanceAttrGet(
+    MlirContext, CirctMSFTSwitchInstanceCase *listOfCases, size_t numCases);
+size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute);
+void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute,
+                                         CirctMSFTSwitchInstanceCase *dstArray,
+                                         size_t space);
+
+MlirOperation circtMSFTGetInstance(MlirOperation root, MlirAttribute path);
+
+//===----------------------------------------------------------------------===//
 // PrimitiveDB.
 //===----------------------------------------------------------------------===//
 
@@ -77,46 +118,13 @@ MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
     CirctMSFTPlacementDB, CirctMSFTPrimitiveType prim, uint64_t column,
     uint64_t nearestToY);
 
-//===----------------------------------------------------------------------===//
-// MSFT Attributes.
-//===----------------------------------------------------------------------===//
-
-/// Add a physical location attribute with the given entity name, device type, x
-/// and y coordinates, and number.
-MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
-                                                    const char *entityName,
-                                                    PrimitiveType type, long x,
-                                                    long y, long num);
-
-bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
-MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTPrimitiveType,
-                                           uint64_t x, uint64_t y,
-                                           uint64_t num);
-CirctMSFTPrimitiveType circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute);
-uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
-uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
-uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
-
-bool circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute);
-MlirAttribute circtMSFTRootedInstancePathAttrGet(MlirContext,
-                                                 MlirAttribute rootSym,
-                                                 MlirAttribute *pathStringAttrs,
-                                                 size_t num);
-
-typedef struct {
-  MlirAttribute instance;
-  MlirAttribute attr;
-} CirctMSFTSwitchInstanceCase;
-
-bool circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute);
-MlirAttribute circtMSFTSwitchInstanceAttrGet(
-    MlirContext, CirctMSFTSwitchInstanceCase *listOfCases, size_t numCases);
-size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute);
-void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute,
-                                         CirctMSFTSwitchInstanceCase *dstArray,
-                                         size_t space);
-
-MlirOperation circtMSFTGetInstance(MlirOperation root, MlirAttribute path);
+typedef void (*CirctMSFTPlacementCallback)(MlirAttribute loc,
+                                           CirctMSFTPlacedInstance,
+                                           void *userData);
+/// Walk all the placements. Set 'colNo' to -1 to walk all of the columns.
+void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB, int64_t colNo,
+                                        CirctMSFTPlacementCallback,
+                                        void *userData);
 
 #ifdef __cplusplus
 }

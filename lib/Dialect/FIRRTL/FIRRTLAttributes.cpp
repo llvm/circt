@@ -12,6 +12,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <iterator>
 
 using namespace circt;
 using namespace firrtl;
@@ -71,6 +72,38 @@ Attribute SubAnnotationAttr::parse(DialectAsmParser &p, Type type) {
 void SubAnnotationAttr::print(DialectAsmPrinter &p) const {
   p << getMnemonic() << "<fieldID = " << getFieldID() << ", "
     << getAnnotations() << ">";
+}
+
+//===----------------------------------------------------------------------===//
+// Utilities related to Direction
+//===----------------------------------------------------------------------===//
+
+IntegerAttr direction::packAttribute(MLIRContext *context,
+                                     ArrayRef<Direction> directions) {
+  // Pack the array of directions into an APInt.  Input is zero, output is one.
+  auto size = directions.size();
+  APInt portDirections(size, 0);
+  for (size_t i = 0; i != size; ++i)
+    if (directions[i] == Direction::Out)
+      portDirections.setBit(i);
+  return IntegerAttr::get(IntegerType::get(context, size), portDirections);
+}
+
+SmallVector<Direction> direction::unpackAttribute(IntegerAttr directions) {
+  assert(directions.getType().isSignlessInteger() &&
+         "Direction attributes must be signless integers");
+  auto value = directions.getValue();
+  auto size = value.getBitWidth();
+  SmallVector<Direction> result;
+  result.reserve(size);
+  for (size_t i = 0; i != size; ++i)
+    result.push_back(direction::get(value[i]));
+  return result;
+}
+
+llvm::raw_ostream &circt::firrtl::operator<<(llvm::raw_ostream &os,
+                                             const Direction &dir) {
+  return os << (dir == Direction::In ? "in" : "out");
 }
 
 void FIRRTLDialect::registerAttributes() {

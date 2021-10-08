@@ -71,6 +71,21 @@ public:
       return py::none();
     return py::cast(nearest);
   }
+  void walkPlacements(py::function pycb, int64_t colNo = -1) {
+    circtMSFTPlacementDBWalkPlacements(
+        db, colNo,
+        [](MlirAttribute loc, CirctMSFTPlacedInstance p, void *userData) {
+          std::string subpath(p.subpath, p.subpathLength);
+          py::gil_scoped_acquire gil;
+          py::function pycb = *((py::function *)(userData));
+          if (!p.op.ptr) {
+            pycb(loc, py::none());
+          } else {
+            pycb(loc, std::make_tuple(p.path, subpath, p.op));
+          }
+        },
+        &pycb);
+  }
 
 private:
   CirctMSFTPlacementDB db;
@@ -113,18 +128,16 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
             return (PrimitiveType)circtMSFTPhysLocationAttrGetPrimitiveType(
                 self);
           })
-      .def_property_readonly(
-          "x",
-          [](MlirAttribute self) {
-            return (PrimitiveType)circtMSFTPhysLocationAttrGetX(self);
-          })
-      .def_property_readonly(
-          "y",
-          [](MlirAttribute self) {
-            return (PrimitiveType)circtMSFTPhysLocationAttrGetY(self);
-          })
+      .def_property_readonly("x",
+                             [](MlirAttribute self) {
+                               return circtMSFTPhysLocationAttrGetX(self);
+                             })
+      .def_property_readonly("y",
+                             [](MlirAttribute self) {
+                               return circtMSFTPhysLocationAttrGetY(self);
+                             })
       .def_property_readonly("num", [](MlirAttribute self) {
-        return (PrimitiveType)circtMSFTPhysLocationAttrGetNum(self);
+        return circtMSFTPhysLocationAttrGetNum(self);
       });
 
   mlir_attribute_subclass(m, "RootedInstancePathAttr",
@@ -193,5 +206,8 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def("get_instance_at", &PlacementDB::getInstanceAt,
            "Get the instance at location. Returns None if nothing exists "
            "there. Otherwise, returns (path, subpath, op) of the instance "
-           "there.");
+           "there.")
+      .def("walk_placements", &PlacementDB::walkPlacements,
+           "Walk the placements.", py::arg("callback"),
+           py::arg("column_num") = -1);
 }
