@@ -992,13 +992,13 @@ OpFoldResult BitCastOp::fold(ArrayRef<Attribute> operands) {
   // BitCast is redundant if input and result types are same.
   if (op.getType() == op.input().getType())
     return op.input();
-  
+
   // Two consecutive BitCasts are redundant if first bitcast type is same as the
   // final result type.
   if (BitCastOp in = dyn_cast_or_null<BitCastOp>(op.input().getDefiningOp()))
-    if (op.getType() == in.input().getType()) 
+    if (op.getType() == in.input().getType())
       return in.input();
-    
+
   return {};
 }
 
