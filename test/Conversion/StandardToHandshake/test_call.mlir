@@ -1,4 +1,4 @@
-// RUN: circt-opt -create-dataflow %s | FileCheck %s
+// RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 func @bar(%0 : i32) -> i32 {
 // CHECK-LABEL:   handshake.func @bar(
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,
