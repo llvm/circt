@@ -132,8 +132,8 @@ poly.print()
 # CHECK-LABEL: === Post-generate IR...
 # CHECK: hw.module @PolynomialSystem
 # CHECK: %example.y = hw.instance "example" sym @example @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
-# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6(x: %example.y: i32) -> (y: i32)
-# CHECK: %example2_1.y = hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %example.y: i32) -> (y: i32)
+# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6(x: %0: i32) -> (y: i32)
+# CHECK: %example2_1.y = hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %1: i32) -> (y: i32)
 # CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
 # CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (y: i32)
 # CHECK: hw.constant 62

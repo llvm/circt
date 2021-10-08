@@ -40,8 +40,8 @@ class System:
   ]
 
   passes = [
-      "lower-msft-to-hw", "lower-seq-to-sv", "hw-legalize-names",
-      "hw.module(prettify-verilog)", "hw.module(hw-cleanup)"
+      "lower-msft-to-hw", "lower-seq-to-sv", "hw.module(prettify-verilog)",
+      "hw.module(hw-cleanup)"
   ]
 
   def __init__(self, modules, primdb: PrimitiveDB = None):
@@ -164,6 +164,11 @@ class System:
     assert self.passed
     return Instance(mod_cls, None, None, self, self._primdb)
 
+  class DevNull:
+
+    def write(self, *_):
+      pass
+
   def run_passes(self):
     if self.passed:
       return
@@ -175,6 +180,7 @@ class System:
     self._symbols = None
     pm.run(self.mod)
     types.declare_types(self.mod)
+    circt.export_verilog(self.mod, System.DevNull())
     self.passed = True
 
   def print_verilog(self, out_stream: typing.TextIO = sys.stdout):
