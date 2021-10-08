@@ -75,22 +75,15 @@ class CMakeBuild(build_py):
       os.remove(cmake_cache_file)
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
     subprocess.check_call(
-        ["cmake", "--build", ".", "--target", "install-PyCDE"] + build_args,
+        ["cmake", "--build", ".", "--target", "check-pycde"] + build_args,
         cwd=cmake_build_dir)
-    subprocess.check_call(
-        ["cmake", "--build", ".", "--target", "install-CIRCTPythonModules"] +
-        build_args,
-        cwd=cmake_build_dir)
-    subprocess.check_call(
-        ["cmake", "--build", ".", "--target", "install-CIRCTMLIRPythonModules"
-        ] + build_args,
-        cwd=cmake_build_dir)
-    shutil.copytree(os.path.join(cmake_install_dir, "python_packages",
-                                 "circt_core"),
+    cmake_python_package = os.path.join(
+      cmake_build_dir, "tools", "circt", "python_packages")
+    shutil.copytree(os.path.join(cmake_python_package, "circt_core"),
                     target_dir,
                     symlinks=False,
                     dirs_exist_ok=True)
-    shutil.copytree(os.path.join(cmake_install_dir, "python_packages", "pycde"),
+    shutil.copytree(os.path.join(cmake_python_package, "pycde"),
                     target_dir,
                     symlinks=False,
                     dirs_exist_ok=True)
