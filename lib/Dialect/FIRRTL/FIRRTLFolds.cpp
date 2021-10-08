@@ -989,6 +989,7 @@ LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
 
 OpFoldResult BitCastOp::fold(ArrayRef<Attribute> operands) {
   auto op = (*this);
+    return {};
   // BitCast is redundant if input and result types are same.
   if (op.getType() == op.input().getType())
     return op.input();
