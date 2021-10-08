@@ -62,12 +62,12 @@ t.run_passes()
 print("=== Hierarchy")
 # CHECK-NEXT: <instance: [UnParameterized]>
 # CHECK-NEXT: <instance: [UnParameterized, Nothing]>
-# CHECK-NEXT: <instance: [UnParameterized_0]>
-# CHECK-NEXT: <instance: [UnParameterized_0, Nothing]>
+# CHECK-NEXT: <instance: [UnParameterized_1]>
+# CHECK-NEXT: <instance: [UnParameterized_1, Nothing]>
 mod = t.get_instance(Test).walk(lambda inst: print(inst))
 
 locs = pycde.AppIDIndex()
-locs.lookup(pycde.AppID("UnParameterized_0"))["loc"] = \
+locs.lookup(pycde.AppID("UnParameterized_1"))["loc"] = \
   (["memory", "bank"], PrimitiveType.M20K, 39, 25, 0)
 
 
@@ -97,8 +97,8 @@ test_inst = t.get_instance(Test)
 test_inst.walk(instance_attrs.apply_attributes_visitor)
 
 assert test_inst.placedb.get_instance_at(loc[1]) is not None
-assert test_inst.placedb.get_instance_at_coords(PrimitiveType.M20K, 0, 0,
-                                                0) is None
+assert test_inst.placedb.get_instance_at(
+    PhysLocation(PrimitiveType.M20K, 0, 0, 0)) is None
 
 assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
@@ -114,6 +114,6 @@ print("=== Tcl")
 # CHECK-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|UnParameterized|Nothing|dsp_inst
 # CHECK-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing|memory|bank
 # CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
-# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_0|Nothing|dsp_inst
-# CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_0|memory|bank
+# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
+# CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
 t.print_tcl(Test)
