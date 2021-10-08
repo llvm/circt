@@ -311,6 +311,35 @@ static Attribute convertJSONToAttribute(MLIRContext *context,
   llvm_unreachable("Impossible unhandled JSON type");
 }
 
+static std::string addNLATargets(
+    MLIRContext *context, StringRef targetStrRef, CircuitOp circuit,
+    size_t &nlaNumber, NamedAttrList &metadata,
+    llvm::StringMap<llvm::SmallVector<Attribute>> &mutableAnnotationMap) {
+
+  auto nlaTargets = expandNonLocal(targetStrRef);
+
+  FlatSymbolRefAttr nlaSym;
+  if (nlaTargets.size() > 1) {
+    nlaSym = buildNLA(circuit, ++nlaNumber, nlaTargets);
+    metadata.append("circt.nonlocal", nlaSym);
+  }
+
+  for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
+    NamedAttrList pathmetadata;
+    pathmetadata.append("circt.nonlocal", nlaSym);
+    pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
+    mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
+        DictionaryAttr::get(context, pathmetadata));
+  }
+
+  // Annotations on the element instance.
+  auto leafTarget =
+      splitAndAppendTarget(metadata, std::get<0>(nlaTargets.back()), context)
+          .first;
+
+  return leafTarget.str();
+}
+
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
 /// checked, at runtime, to be an array of objects.  Returns true if successful,
@@ -391,13 +420,7 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
 
     // Build up the Attribute to represent the Annotation and store it in the
     // global Target -> Attribute mapping.
-    auto NLATargets = expandNonLocal(targetStrRef);
-
     NamedAttrList metadata;
-    // Annotations on the element instance.
-    auto leafTarget =
-        splitAndAppendTarget(metadata, std::get<0>(NLATargets.back()), context)
-            .first;
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(context, field.second, p)) {
         metadata.append(field.first, value);
@@ -405,21 +428,12 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
       }
       return false;
     }
-    FlatSymbolRefAttr nlaSym;
-    if (NLATargets.size() > 1) {
-      nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
-      metadata.append("circt.nonlocal", nlaSym);
-    }
+
+    auto leafTarget = addNLATargets(context, targetStrRef, circuit, nlaNumber,
+                                    metadata, mutableAnnotationMap);
+
     mutableAnnotationMap[leafTarget].push_back(
         DictionaryAttr::get(context, metadata));
-
-    for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
-      NamedAttrList pathmetadata;
-      pathmetadata.append("circt.nonlocal", nlaSym);
-      pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
-      mutableAnnotationMap[std::get<0>(NLATargets[i])].push_back(
-          DictionaryAttr::get(context, pathmetadata));
-    }
   }
 
   // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
