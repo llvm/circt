@@ -94,163 +94,6 @@ struct SubExprInfo {
 // Helper routines
 //===----------------------------------------------------------------------===//
 
-/// Helper that prints a parameter constant value in a Verilog compatible way.
-/// This returns the precedence of the generated string.
-static SubExprInfo
-printParamValue(Attribute value, raw_ostream &os,
-                VerilogPrecedence parenthesizeIfLooserThan,
-                function_ref<InFlightDiagnostic()> emitError) {
-  if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
-    IntegerType intTy = intAttr.getType().cast<IntegerType>();
-    APInt value = intAttr.getValue();
-
-    // We omit the width specifier if the value is <= 32-bits in size, which
-    // makes this more compatible with unknown width extmodules.
-    if (intTy.getWidth() > 32) {
-      // Sign comes out before any width specifier.
-      if (intTy.isSigned() && value.isNegative()) {
-        os << '-';
-        value = -value;
-      }
-      if (intTy.isSigned())
-        os << intTy.getWidth() << "'sd";
-      else
-        os << intTy.getWidth() << "'d";
-    }
-    value.print(os, intTy.isSigned());
-    return {Symbol, intTy.isSigned() ? IsSigned : IsUnsigned};
-  }
-  if (auto strAttr = value.dyn_cast<StringAttr>()) {
-    os << '"';
-    os.write_escaped(strAttr.getValue());
-    os << '"';
-    return {Symbol, IsUnsigned};
-  }
-  if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
-    // TODO: relying on float printing to be precise is not a good idea.
-    os << fpAttr.getValueAsDouble();
-    return {Symbol, IsUnsigned};
-  }
-  if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
-    os << verbatimParam.getValue().getValue();
-    return {Symbol, IsUnsigned};
-  }
-  if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
-    os << parameterRef.getName().getValue();
-    // TODO: Should we support signed parameters?
-    return {Symbol, IsUnsigned};
-  }
-
-  // Handle nested expressions.
-  auto expr = value.dyn_cast<ParamExprAttr>();
-  if (!expr) {
-    os << "<<UNKNOWN MLIRATTR: " << value << ">>";
-    emitError() << " = " << value;
-    return {LowestPrecedence, IsUnsigned};
-  }
-
-  StringRef operatorStr;
-  VerilogPrecedence subprecedence = ForceEmitMultiUse;
-  Optional<SubExprSignResult> operandSign;
-
-  switch (expr.getOpcode()) {
-  case PEO::Add:
-    operatorStr = " + ";
-    subprecedence = Addition;
-    break;
-  case PEO::Mul:
-    operatorStr = " * ";
-    subprecedence = Multiply;
-    break;
-  case PEO::And:
-    operatorStr = " & ";
-    subprecedence = And;
-    break;
-  case PEO::Or:
-    operatorStr = " | ";
-    subprecedence = Or;
-    break;
-  case PEO::Xor:
-    operatorStr = " ^ ";
-    subprecedence = Xor;
-    break;
-  case PEO::Shl:
-    operatorStr = " << ";
-    subprecedence = Shift;
-    break;
-  case PEO::ShrU:
-    // >> in verilog is always a logical shift even if operands are signed.
-    operatorStr = " >> ";
-    subprecedence = Shift;
-    break;
-  case PEO::ShrS:
-    // >>> in verilog is an arithmetic shift if both operands are signed.
-    operatorStr = " >>> ";
-    subprecedence = Shift;
-    operandSign = IsSigned;
-    break;
-  case PEO::DivU:
-    operatorStr = " / ";
-    subprecedence = Multiply;
-    operandSign = IsUnsigned;
-    break;
-  case PEO::DivS:
-    operatorStr = " / ";
-    subprecedence = Multiply;
-    operandSign = IsSigned;
-    break;
-  case PEO::ModU:
-    operatorStr = " % ";
-    subprecedence = Multiply;
-    operandSign = IsUnsigned;
-    break;
-  case PEO::ModS:
-    operatorStr = " % ";
-    subprecedence = Multiply;
-    operandSign = IsSigned;
-    break;
-  }
-
-  // Emit the specified operand with a $signed() or $unsigned() wrapper around
-  // it if context requires a specific signedness to compute the right value.
-  // This returns true if the operand is signed.
-  // TODO: This could try harder to omit redundant casts like the mainline
-  // expression emitter.
-  auto emitOperand = [&](Attribute operand) -> bool {
-    if (operandSign.hasValue())
-      os << (operandSign.getValue() == IsSigned ? "$signed(" : "$unsigned(");
-    auto signedness =
-        printParamValue(operand, os, subprecedence, emitError).signedness;
-    if (operandSign.hasValue()) {
-      os << ")";
-      signedness = operandSign.getValue();
-    }
-    return signedness == IsSigned;
-  };
-
-  if (subprecedence > parenthesizeIfLooserThan)
-    os << '(';
-  bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
-  for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
-    os << operatorStr;
-    allOperandsSigned &= emitOperand(op);
-  }
-  if (subprecedence > parenthesizeIfLooserThan) {
-    os << ')';
-    subprecedence = Symbol;
-  }
-  return {subprecedence, allOperandsSigned ? IsSigned : IsUnsigned};
-}
-
-/// Prints a parameter attribute expression in a Verilog compatible way.
-/// This returns the precedence of the generated string.
-static SubExprInfo
-printParamValue(Attribute value, raw_ostream &os,
-                function_ref<InFlightDiagnostic()> emitError) {
-  return printParamValue(value, os, VerilogPrecedence::LowestPrecedence,
-                         emitError);
-}
-
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
 /// a temporary wire.
@@ -703,7 +546,7 @@ StringRef ModuleNameManager::addName(ValueOrOp valueOrOp, StringRef name) {
 }
 
 //===----------------------------------------------------------------------===//
-// VerilogEmitter
+// VerilogEmitterState
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -906,7 +749,16 @@ public:
   void emitBind(BindOp op);
   void emitBindInterface(BindInterfaceOp op);
 
+  /// Prints a parameter attribute expression in a Verilog compatible way to the
+  /// specified stream.  This returns the precedence of the generated string.
+  SubExprInfo printParamValue(Attribute value, raw_ostream &os,
+                              function_ref<InFlightDiagnostic()> emitError);
+
 public:
+  SubExprInfo printParamValue(Attribute value, raw_ostream &os,
+                              VerilogPrecedence parenthesizeIfLooserThan,
+                              function_ref<InFlightDiagnostic()> emitError);
+
   /// This set keeps track of all of the expression nodes that need to be
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
@@ -920,6 +772,163 @@ public:
 };
 
 } // end anonymous namespace
+
+/// Prints a parameter attribute expression in a Verilog compatible way to the
+/// specified stream.  This returns the precedence of the generated string.
+SubExprInfo
+ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
+                               function_ref<InFlightDiagnostic()> emitError) {
+  return printParamValue(value, os, VerilogPrecedence::LowestPrecedence,
+                         emitError);
+}
+
+/// Helper that prints a parameter constant value in a Verilog compatible way.
+/// This returns the precedence of the generated string.
+SubExprInfo
+ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
+                               VerilogPrecedence parenthesizeIfLooserThan,
+                               function_ref<InFlightDiagnostic()> emitError) {
+  if (auto intAttr = value.dyn_cast<IntegerAttr>()) {
+    IntegerType intTy = intAttr.getType().cast<IntegerType>();
+    APInt value = intAttr.getValue();
+
+    // We omit the width specifier if the value is <= 32-bits in size, which
+    // makes this more compatible with unknown width extmodules.
+    if (intTy.getWidth() > 32) {
+      // Sign comes out before any width specifier.
+      if (intTy.isSigned() && value.isNegative()) {
+        os << '-';
+        value = -value;
+      }
+      if (intTy.isSigned())
+        os << intTy.getWidth() << "'sd";
+      else
+        os << intTy.getWidth() << "'d";
+    }
+    value.print(os, intTy.isSigned());
+    return {Symbol, intTy.isSigned() ? IsSigned : IsUnsigned};
+  }
+  if (auto strAttr = value.dyn_cast<StringAttr>()) {
+    os << '"';
+    os.write_escaped(strAttr.getValue());
+    os << '"';
+    return {Symbol, IsUnsigned};
+  }
+  if (auto fpAttr = value.dyn_cast<FloatAttr>()) {
+    // TODO: relying on float printing to be precise is not a good idea.
+    os << fpAttr.getValueAsDouble();
+    return {Symbol, IsUnsigned};
+  }
+  if (auto verbatimParam = value.dyn_cast<ParamVerbatimAttr>()) {
+    os << verbatimParam.getValue().getValue();
+    return {Symbol, IsUnsigned};
+  }
+  if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
+    os << parameterRef.getName().getValue();
+    // TODO: Should we support signed parameters?
+    return {Symbol, IsUnsigned};
+  }
+
+  // Handle nested expressions.
+  auto expr = value.dyn_cast<ParamExprAttr>();
+  if (!expr) {
+    os << "<<UNKNOWN MLIRATTR: " << value << ">>";
+    emitError() << " = " << value;
+    return {LowestPrecedence, IsUnsigned};
+  }
+
+  StringRef operatorStr;
+  VerilogPrecedence subprecedence = ForceEmitMultiUse;
+  Optional<SubExprSignResult> operandSign;
+
+  switch (expr.getOpcode()) {
+  case PEO::Add:
+    operatorStr = " + ";
+    subprecedence = Addition;
+    break;
+  case PEO::Mul:
+    operatorStr = " * ";
+    subprecedence = Multiply;
+    break;
+  case PEO::And:
+    operatorStr = " & ";
+    subprecedence = And;
+    break;
+  case PEO::Or:
+    operatorStr = " | ";
+    subprecedence = Or;
+    break;
+  case PEO::Xor:
+    operatorStr = " ^ ";
+    subprecedence = Xor;
+    break;
+  case PEO::Shl:
+    operatorStr = " << ";
+    subprecedence = Shift;
+    break;
+  case PEO::ShrU:
+    // >> in verilog is always a logical shift even if operands are signed.
+    operatorStr = " >> ";
+    subprecedence = Shift;
+    break;
+  case PEO::ShrS:
+    // >>> in verilog is an arithmetic shift if both operands are signed.
+    operatorStr = " >>> ";
+    subprecedence = Shift;
+    operandSign = IsSigned;
+    break;
+  case PEO::DivU:
+    operatorStr = " / ";
+    subprecedence = Multiply;
+    operandSign = IsUnsigned;
+    break;
+  case PEO::DivS:
+    operatorStr = " / ";
+    subprecedence = Multiply;
+    operandSign = IsSigned;
+    break;
+  case PEO::ModU:
+    operatorStr = " % ";
+    subprecedence = Multiply;
+    operandSign = IsUnsigned;
+    break;
+  case PEO::ModS:
+    operatorStr = " % ";
+    subprecedence = Multiply;
+    operandSign = IsSigned;
+    break;
+  }
+
+  // Emit the specified operand with a $signed() or $unsigned() wrapper around
+  // it if context requires a specific signedness to compute the right value.
+  // This returns true if the operand is signed.
+  // TODO: This could try harder to omit redundant casts like the mainline
+  // expression emitter.
+  auto emitOperand = [&](Attribute operand) -> bool {
+    if (operandSign.hasValue())
+      os << (operandSign.getValue() == IsSigned ? "$signed(" : "$unsigned(");
+    auto signedness =
+        printParamValue(operand, os, subprecedence, emitError).signedness;
+    if (operandSign.hasValue()) {
+      os << ')';
+      signedness = operandSign.getValue();
+    }
+    return signedness == IsSigned;
+  };
+
+  if (subprecedence > parenthesizeIfLooserThan)
+    os << '(';
+  bool allOperandsSigned = emitOperand(expr.getOperands()[0]);
+  for (auto op : ArrayRef(expr.getOperands()).drop_front()) {
+    os << operatorStr;
+    allOperandsSigned &= emitOperand(op);
+  }
+  if (subprecedence > parenthesizeIfLooserThan) {
+    os << ')';
+    subprecedence = Symbol;
+  }
+  return {subprecedence, allOperandsSigned ? IsSigned : IsUnsigned};
+}
 
 //===----------------------------------------------------------------------===//
 // Expression Emission
@@ -1514,7 +1523,7 @@ SubExprInfo ExprEmitter::visitTypeOp(ConstantOp op) {
 }
 
 SubExprInfo ExprEmitter::visitTypeOp(ParamValueOp op) {
-  return printParamValue(op.value(), os, [&]() {
+  return emitter.printParamValue(op.value(), os, [&]() {
     return op->emitOpError("invalid parameter use");
   });
 }
@@ -2680,7 +2689,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       }
       os.indent(state.currentIndent + INDENT_AMOUNT)
           << prefix << '.' << param.getName().getValue() << '(';
-      printParamValue(param.getValue(), os, [&]() {
+      emitter.printParamValue(param.getValue(), os, [&]() {
         return op->emitOpError("invalid instance parameter '")
                << param.getName().getValue() << "' value";
       });
@@ -3019,7 +3028,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
-      printParamValue(localparam.value(), os, [&]() {
+      emitter.printParamValue(localparam.value(), os, [&]() {
         return op->emitOpError("invalid localparam value");
       });
     }
