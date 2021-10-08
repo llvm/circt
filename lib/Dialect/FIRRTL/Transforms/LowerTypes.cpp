@@ -915,8 +915,8 @@ void TypeLoweringVisitor::visitExpr(BitCastOp op) {
       auto fieldType = src.getType().cast<FIRRTLType>();
       auto fieldBitwidth = getBitWidth(fieldType).getValue();
       // The src could be an aggregate type, bitcast it to a UInt type.
-      src = builder->create<BitCastOp>(UIntType::get(context, fieldBitwidth),
-                                       src);
+      src = builder->createOrFold<BitCastOp>(
+          UIntType::get(context, fieldBitwidth), src);
       // Take the first field, or else Cat the previous fields with this field.
       if (uptoBits == 0)
         srcLoweredVal = src;
