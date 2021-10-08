@@ -987,6 +987,22 @@ LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
+LogicalResult BitCastOp::canonicalize(BitCastOp op, PatternRewriter &rewriter) {
+  // BitCast is redundant if input and result types are same.
+  if (op.getType() == op.input().getType()) {
+    rewriter.replaceOp(op, op.input());
+    return success();
+  }
+  // Two consecutive BitCasts are redundant if first bitcast type is same as the
+  // final result type.
+  if (BitCastOp in = dyn_cast_or_null<BitCastOp>(op.input().getDefiningOp()))
+    if (op.getType() == in.input().getType()) {
+      rewriter.replaceOp(op, in.input());
+      return success();
+    }
+  return failure();
+}
+
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   auto inputType = input().getType().cast<FIRRTLType>();
   // If we are extracting the entire input, then return it.

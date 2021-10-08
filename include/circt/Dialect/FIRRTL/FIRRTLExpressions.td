@@ -621,6 +621,7 @@ def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
   let arguments = (ins FIRRTLType:$input);
   let results = (outs FIRRTLType:$result);
   let verifier = "return ::verifyBitCastOp(*this);";
+  let hasCanonicalizeMethod = true;
 
   let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
 }
