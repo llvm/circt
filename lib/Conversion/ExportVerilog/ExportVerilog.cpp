@@ -21,6 +21,7 @@
 #include "circt/Dialect/SV/SVVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/Path.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -683,22 +684,6 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
   return sstr.str();
 }
 
-/// Append a path to an existing path, replacing it if the other path is
-/// absolute. This mimicks the behaviour of `foo/bar` and `/foo/bar` being used
-/// in a working directory `/home`, resulting in `/home/foo/bar` and `/foo/bar`,
-/// respectively.
-// TODO: This also exists in BlackBoxReader.cpp. Maybe we should move this to
-// some CIRCT-wide file system utility source file?
-static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
-                                       const Twine &suffix) {
-  if (llvm::sys::path::is_absolute(suffix)) {
-    base.clear();
-    suffix.toVector(base);
-  } else {
-    llvm::sys::path::append(base, suffix);
-  }
-}
-
 //===----------------------------------------------------------------------===//
 // ModuleNameManager Implementation
 //===----------------------------------------------------------------------===//
@@ -915,8 +900,6 @@ public:
   void emitBindInterface(BindInterfaceOp op);
 
 public:
-  void verifyModuleName(Operation *, StringAttr nameAttr);
-
   /// This set keeps track of all of the expression nodes that need to be
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
@@ -930,14 +913,6 @@ public:
 };
 
 } // end anonymous namespace
-
-/// Check if the given module name \p nameAttr is a valid SV name (does not
-/// contain any illegal characters). If invalid, calls \c emitOpError.
-void ModuleEmitter::verifyModuleName(Operation *op, StringAttr nameAttr) {
-  if (!isNameValid(nameAttr.getValue()))
-    emitOpError(op, "name \"" + nameAttr.getValue() +
-                        "\" is not allowed in Verilog output");
-}
 
 //===----------------------------------------------------------------------===//
 // Expression Emission
@@ -2210,7 +2185,6 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
                         "point to an interface");
 
   auto verilogName = getVerilogModuleNameAttr(interfaceOp);
-  emitter.verifyModuleName(op, verilogName);
   indent() << prefix << verilogName.getValue() << " " << op.name() << "();";
 
   emitLocationInfoAndNewLine(ops);
@@ -2674,7 +2648,6 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   auto *moduleOp = op.getReferencedModule(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
   auto verilogName = getVerilogModuleNameAttr(moduleOp);
-  emitter.verifyModuleName(op, verilogName);
   indent() << prefix << verilogName.getValue();
 
   // If this is a parameterized module, then emit the parameters.
@@ -3099,13 +3072,11 @@ void ModuleEmitter::emitStatement(Operation *op) {
 
 void ModuleEmitter::emitHWExternModule(HWModuleExternOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
-  verifyModuleName(module, verilogName);
   os << "// external module " << verilogName.getValue() << "\n\n";
 }
 
 void ModuleEmitter::emitHWGeneratedModule(HWModuleGeneratedOp module) {
   auto verilogName = module.getVerilogModuleNameAttr();
-  verifyModuleName(module, verilogName);
   os << "// external generated module " << verilogName.getValue() << "\n\n";
 }
 
@@ -3120,11 +3091,9 @@ void ModuleEmitter::emitBind(BindOp op) {
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
   auto parentVerilogName = getVerilogModuleNameAttr(parentMod);
-  verifyModuleName(op, parentVerilogName);
 
   Operation *childMod = inst.getReferencedModule(&state.symbolCache);
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
-  verifyModuleName(op, childVerilogName);
 
   indent() << "bind " << parentVerilogName.getValue() << " "
            << childVerilogName.getValue() << ' ' << inst.getName().getValue()
@@ -3248,9 +3217,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
 
-  auto moduleNameAttr = module.getNameAttr();
-  verifyModuleName(module, moduleNameAttr);
-  os << "module " << moduleNameAttr.getValue();
+  os << "module " << module.getName();
 
   // If we have any parameters, print them on their own line.
   if (!module.parameters().empty()) {
@@ -3821,6 +3788,10 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 //===----------------------------------------------------------------------===//
 
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
+  // Rename module names and interfaces to not conflict with each other or with
+  // Verilog keywords.  TODO: better integrate this.
+  legalizeGlobalNames(module);
+
   SharedEmitterState emitter(module);
   emitter.gatherFiles(false);
 
@@ -3913,6 +3884,10 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
 }
 
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
+  // Rename module names and interfaces to not conflict with each other or with
+  // Verilog keywords.  TODO: better integrate this.
+  legalizeGlobalNames(module);
+
   SharedEmitterState emitter(module);
   emitter.gatherFiles(true);
 

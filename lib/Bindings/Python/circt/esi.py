@@ -19,7 +19,7 @@ class System(CppSystem):
   mod = None
   passes = [
       "lower-esi-ports", "lower-esi-to-physical", "lower-esi-to-hw",
-      "hw-legalize-names", "hw.module(hw-cleanup)"
+      "hw.module(hw-cleanup)"
   ]
   passed = False
 

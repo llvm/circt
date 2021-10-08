@@ -4,9 +4,9 @@
 // CHECK-LABEL: hw.module @top
 // HWLOW-LABEL: hw.module @top
 hw.module @top () {
-  msft.instance "foo" @Foo() : () -> (i32)
-  // CHECK: %foo.x = msft.instance "foo" @Foo() : () -> i32
-  // HWLOW: %foo.x = hw.instance "foo" @Foo() -> (x: i32)
+  msft.instance @foo @Foo() : () -> (i32)
+  // CHECK: %foo.x = msft.instance @foo @Foo() : () -> i32
+  // HWLOW: %foo.x = hw.instance "foo" sym @foo @Foo() -> (x: i32)
 }
 
 // CHECK-LABEL: msft.module @B {WIDTH = 1 : i64} (%a: i4) -> (nameOfPortInSV: i4) {

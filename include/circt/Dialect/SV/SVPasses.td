@@ -65,17 +65,6 @@ def HWStubExternalModules : Pass<"hw-stub-external-modules",
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
-def HWLegalizeNames : Pass<"hw-legalize-names", "ModuleOp"> {
-  let summary = "Legalize module/variable names in hw.modules and their bodies";
-  let description = [{
-    This pass modifies the names of modules and names such that they do not
-    cause conflicts with SV keywords. This is a good thing to run before
-    Verilog emission.
-  }];
-
-  let constructor = "circt::sv::createHWLegalizeNamesPass()";
-}
-
 def HWGeneratorCalloutPass : Pass<"hw-generator-callout", "ModuleOp"> {
   let summary = "Lower Generator Schema to external module";
   let description = [{
@@ -128,6 +117,11 @@ def HWExportModuleHierarchy : Pass<"hw-export-module-hierarchy",
 
   let constructor = "circt::sv::createHWExportModuleHierarchyPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+
+  let options = [
+    Option<"directoryName", "dir-name", "std::string", "\"./\"",
+            "Directory to emit into">
+   ];
 }
 
 #endif // CIRCT_DIALECT_SV_SVPASSES

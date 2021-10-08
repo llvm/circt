@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 from typing import Union
+
+from pycde.devicedb import PhysLocation, PrimitiveDB, PlacementDB
 from .appid import AppID
 
 import circt.dialects.hw as hw
@@ -19,15 +21,18 @@ class Instance:
   to a module instantiation within another module."""
   import pycde.system as system
 
-  def __init__(self, module: type, instOp: hw.InstanceOp, parent: Instance,
-               sys: system.System):
+  def __init__(self,
+               module: type,
+               instOp: hw.InstanceOp,
+               parent: Instance,
+               sys: system.System,
+               primdb: PrimitiveDB = None):
     assert module is not None
     self.module = module
     self.instOp = instOp
     self.parent = parent
     if parent is None:
-      self.devicedb = msft.PlacementDB(sys._get_circt_mod(module))
-      self.devicedb.add_design_placements()
+      self.placedb = PlacementDB(sys._get_circt_mod(module), primdb)
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
 
@@ -92,10 +97,11 @@ class Instance:
       callback(inst)
       inst.walk(callback)
 
-  def attach_attribute(self, attr_key: str, attr: ir.Attribute):
-    if isinstance(attr, msft.PhysLocationAttr):
+  def _attach_attribute(self, attr_key: str, attr: ir.Attribute):
+    if isinstance(attr, PhysLocation):
       assert attr_key.startswith("loc:")
-      db = self.root_instance.devicedb
+      db = self.root_instance.placedb._db
+      attr = attr._loc
       rc = db.add_placement(attr, self.path_attr, attr_key[4:],
                             self.instOp.operation)
       if not rc:
@@ -123,10 +129,4 @@ class Instance:
     loc = msft.PhysLocationAttr.get(devtype, x, y, num)
     if isinstance(subpath, list):
       subpath = "|".join(subpath)
-    self.attach_attribute(f"loc:{subpath}", loc)
-
-  def get_instance_at(self, loc):
-    if isinstance(loc, tuple) and len(loc) == 2:
-      loc = loc[1]
-    assert isinstance(loc, msft.PhysLocationAttr)
-    return self.root_instance.devicedb.get_instance_at(loc)
+    self._attach_attribute(f"loc:{subpath}", loc)

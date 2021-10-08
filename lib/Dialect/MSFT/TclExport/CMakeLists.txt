@@ -6,11 +6,9 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-file(GLOB globbed *.cpp)
-
 add_circt_translation_library(CIRCTMSFTExportTcl
-  ${globbed}
-  
+  ExportQuartusTcl.cpp
+
   ADDITIONAL_HEADER_DIRS
 
   LINK_LIBS PUBLIC

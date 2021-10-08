@@ -842,34 +842,22 @@ firrtl.circuit "TopLevel" {
 
 
 // Test that annotations on aggregate ports are copied.
-  firrtl.extmodule @Sub1(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{a}]})
+  firrtl.extmodule @Sub1(in %a: !firrtl.vector<uint<1>, 2> [{a}])
   // CHECK-LABEL: firrtl.extmodule @Sub1
-  // CHECK-COUNT-2: firrtl.annotations = [{b}]
-  // CHECK-NOT: firrtl.annotations = [{a}]
-  firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b}]}) {
+  // CHECK-COUNT-2: [{b}]
+  // CHECK-NOT: [{a}]
+  firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> [{b}]) {
     %sub_a = firrtl.instance @Sub1  {name = "sub", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
     firrtl.connect %sub_a, %a : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
 
 // Test that annotations on subfield/subindices of ports are only applied to
-// matching fieldIDs.  Any other arg attributes should be copied.
+// matching fieldIDs.
     // The annotation should be copied to just a.a.  The firrtl.hello arg
     // attribute should be copied to each new port.
-    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.hello}) attributes {portAnnotations = [[#firrtl.subAnno<fieldID = 1, {a}>]]} {}
+    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> [#firrtl.subAnno<fieldID = 1, {a}>]) {}
     // CHECK-LABEL: firrtl.module @PortBundle
-    // CHECK-COUNT-1: firrtl.annotations = [{a}]
-    // CHECK-COUNT-2: firrtl.hello
-    // CHECK-NOT: firrtl.annotations
-    // CHECK-NOT: firrtl.hello
-
-    // The annotation should be copied to just a[0].  The firrtl.world arg
-    // attribute should be copied to each port.
-    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.world}) attributes {portAnnotations = [[#firrtl.subAnno<fieldID = 1, {b}>]]}
-    // CHECK-LABEL: firrtl.extmodule @PortVector
-    // CHECK-COUNT-1: firrtl.annotations = [{b}]
-    // CHECK-COUNT-2: firrtl.world
-    // CHECK-NOT: firrtl.annotations
-    // CHECK-NOT: firrtl.world
+    // CHECK-COUNT-1: [{a}]
 
 // Test that a truncating connect emitted during lower types correctly adds an
 // AsPassive cast on a FlipType originating from an instance.

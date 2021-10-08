@@ -270,11 +270,9 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   /// type lowering on all operations.
   void lowerModule(Operation *op);
 
-  bool
-  lowerArg(Operation *module, size_t argIndex,
-           SmallVectorImpl<std::pair<PortInfo, SmallVector<NamedAttribute>>>
-               &newArgs,
-           SmallVectorImpl<Value> &lowering);
+  bool lowerArg(Operation *module, size_t argIndex,
+                SmallVectorImpl<PortInfo> &newArgs,
+                SmallVectorImpl<Value> &lowering);
   std::pair<Value, PortInfo> addArg(Operation *module, unsigned insertPt,
                                     FIRRTLType srcType,
                                     FlatBundleFieldEntry field,
@@ -439,7 +437,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             PortInfo &oldArg) {
   Value newValue;
   if (auto mod = dyn_cast<FModuleOp>(module)) {
-    Block *body = mod.getBodyBlock();
+    Block *body = mod.getBody();
     // Append the new argument.
     newValue = body->insertArgument(insertPt, field.type);
   }
@@ -461,22 +459,21 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 }
 
 // Lower arguments with bundle type by flattening them.
-bool TypeLoweringVisitor::lowerArg(
-    Operation *module, size_t argIndex,
-    SmallVectorImpl<std::pair<PortInfo, SmallVector<NamedAttribute>>> &newArgs,
-    SmallVectorImpl<Value> &lowering) {
+bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
+                                   SmallVectorImpl<PortInfo> &newArgs,
+                                   SmallVectorImpl<Value> &lowering) {
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
-  auto srcType = newArgs[argIndex].first.type.cast<FIRRTLType>();
+  auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
   if (!peelType(srcType, fieldTypes))
     return false;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
     auto newValue = addArg(module, 1 + argIndex + field.index(), srcType,
-                           field.value(), newArgs[argIndex].first);
+                           field.value(), newArgs[argIndex]);
     newArgs.insert(newArgs.begin() + 1 + argIndex + field.index(),
-                   std::make_pair(newValue.second, newArgs[argIndex].second));
+                   newValue.second);
     // Lower any other arguments by copying them to keep the relative order.
     lowering.push_back(newValue.first);
   }
@@ -712,14 +709,8 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
-  // First get all the info for existing ports
-  SmallVector<std::pair<PortInfo, SmallVector<NamedAttribute>>> newArgs;
-  for (auto port : llvm::enumerate(extModule.getPorts())) {
-    SmallVector<NamedAttribute> argAttrs;
-    AnnotationSet::forPort(extModule, port.index(), argAttrs);
-    newArgs.push_back(std::make_pair(port.value(), argAttrs));
-  }
 
+  auto newArgs = extModule.getPorts();
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
     if (lowerArg(extModule, argIndex, newArgs, lowering))
@@ -738,47 +729,42 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   for (auto attr : extModule->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != "portNames" && attr.first != direction::attrKey &&
-        attr.first != "portAnnotations" &&
-        attr.first != mlir::function_like_impl::getArgDictAttrName())
+    if (attr.first != "portDirections" && attr.first != "portNames" &&
+        attr.first != "portTypes" && attr.first != "portAnnotations")
       newModuleAttrs.push_back(attr);
 
-  SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
-  SmallVector<Attribute, 8> newArgAttrs;
+  SmallVector<Attribute> newArgNames;
+  SmallVector<Attribute, 8> newPortTypes;
   SmallVector<Attribute, 8> newArgAnnotations;
-  SmallVector<Type, 8> inputTypes;
 
   for (auto &port : newArgs) {
-    newArgNames.push_back(port.first.name);
-    newArgDirections.push_back(port.first.direction);
-    newArgAttrs.push_back(builder.getDictionaryAttr(port.second));
-    newArgAnnotations.push_back(port.first.annotations.getArrayAttr());
-    inputTypes.push_back(port.first.type);
+    newArgDirections.push_back(port.direction);
+    newArgNames.push_back(port.name);
+    newPortTypes.push_back(TypeAttr::get(port.type));
+    newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
+
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get("portDirections", context),
+                     direction::packAttribute(context, newArgDirections)));
+
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder.getArrayAttr(newArgNames)));
-  newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get(direction::attrKey, context),
-                     direction::packAttribute(newArgDirections, context)));
+
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portTypes", context),
+                                          builder.getArrayAttr(newPortTypes)));
+
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get("portAnnotations", context),
                      builder.getArrayAttr(newArgAnnotations)));
 
-  // Attach new argument attributes.
-  newModuleAttrs.push_back(NamedAttribute(
-      builder.getIdentifier(mlir::function_like_impl::getArgDictAttrName()),
-      builder.getArrayAttr(newArgAttrs)));
-
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
-
-  // Keep the module's type up-to-date.
-  extModule.setType(builder.getFunctionType(inputTypes, {}));
 }
 
 void TypeLoweringVisitor::visitDecl(FModuleOp module) {
-  auto *body = module.getBodyBlock();
+  auto *body = module.getBody();
 
   ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
   builder = &theBuilder;
@@ -788,18 +774,11 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
-  // First get all the info for existing ports
-  SmallVector<std::pair<PortInfo, SmallVector<NamedAttribute>>> newArgs;
-  for (auto port : llvm::enumerate(module.getPorts())) {
-    SmallVector<NamedAttribute> argAttrs;
-    AnnotationSet::forPort(module, port.index(), argAttrs);
-    newArgs.push_back(std::make_pair(port.value(), argAttrs));
-  }
-
+  auto newArgs = module.getPorts();
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowerings;
     if (lowerArg(module, argIndex, newArgs, lowerings)) {
-      auto arg = module.getPortArgument(argIndex);
+      auto arg = module.getArgument(argIndex);
       processUsers(arg, lowerings);
       argsToRemove.push_back(argIndex);
     }
@@ -817,41 +796,37 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto attr : module->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != "portNames" && attr.first != direction::attrKey &&
-        attr.first != "portAnnotations" &&
-        attr.first != mlir::function_like_impl::getArgDictAttrName())
+    if (attr.first != "portNames" && attr.first != "portDirections" &&
+        attr.first != "portTypes" && attr.first != "portAnnotations")
       newModuleAttrs.push_back(attr);
 
-  SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
-  SmallVector<Attribute, 8> newArgAttrs;
+  SmallVector<Attribute> newArgNames;
+  SmallVector<Attribute> newArgTypes;
   SmallVector<Attribute, 8> newArgAnnotations;
+
   for (auto &port : newArgs) {
-    newArgNames.push_back(port.first.name);
-    newArgDirections.push_back(port.first.direction);
-    newArgAttrs.push_back(builder->getDictionaryAttr(port.second));
-    newArgAnnotations.push_back(port.first.annotations.getArrayAttr());
+    newArgDirections.push_back(port.direction);
+    newArgNames.push_back(port.name);
+    newArgTypes.push_back(TypeAttr::get(port.type));
+    newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
+
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get("portDirections", context),
+                     direction::packAttribute(context, newArgDirections)));
+
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder->getArrayAttr(newArgNames)));
-  newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get(direction::attrKey, context),
-                     direction::packAttribute(newArgDirections, context)));
+
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portTypes", context),
+                                          builder->getArrayAttr(newArgTypes)));
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get("portAnnotations", context),
                      builder->getArrayAttr(newArgAnnotations)));
 
-  // Attach new argument attributes.
-  newModuleAttrs.push_back(NamedAttribute(
-      builder->getIdentifier(mlir::function_like_impl::getArgDictAttrName()),
-      builder->getArrayAttr(newArgAttrs)));
-
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
-
-  // Keep the module's type up-to-date.
-  auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
-  module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.

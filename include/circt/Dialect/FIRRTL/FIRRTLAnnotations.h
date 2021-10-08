@@ -65,12 +65,6 @@ public:
   /// Get an annotation set for the specified module port.
   static AnnotationSet forPort(FModuleLike module, size_t portNo);
 
-  /// Get an annotation set for the specified module port, as well as other
-  /// argument attributes.
-  static AnnotationSet
-  forPort(FModuleLike module, size_t portNo,
-          SmallVectorImpl<NamedAttribute> &otherAttributes);
-
   /// Get an annotation set for the specified value.
   static AnnotationSet get(Value v);
 
@@ -79,10 +73,6 @@ public:
 
   /// Return this annotation set as an ArrayAttr.
   ArrayAttr getArrayAttr() const { return annotations; }
-
-  /// Return this annotation set as an argument attribute dictionary for a port.
-  DictionaryAttr
-  getArgumentAttrDict(ArrayRef<NamedAttribute> otherPortAttrs = {}) const;
 
   /// Store the annotations in this set in an operation's `annotations`
   /// attribute, overwriting any existing annotations. Removes the `annotations`

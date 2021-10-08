@@ -51,7 +51,7 @@ def InstanceOp : FIRRTLOp<"instance", [
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {
-      return getReferencedModule().portName(resultNo);
+      return getReferencedModule().getPortNameAttr(resultNo);
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();

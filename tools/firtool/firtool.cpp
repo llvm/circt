@@ -396,22 +396,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    // Legalize unsupported operations within the modules.
+    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+
     // Tidy up the IR to improve verilog emission quality.
     if (!disableOptimization) {
       auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
-
-    // Legalize unsupported operations within the modules.
-    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
-
-    // Legalize the module names.
-    pm.addPass(sv::createHWLegalizeNamesPass());
-
-    // Run module hierarchy emission after verilog emission, which ensures we
-    // pick up any changes that verilog emission made.
-    if (exportModuleHierarchy)
-      pm.addPass(sv::createHWExportModuleHierarchyPass());
 
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {
@@ -423,6 +415,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       break;
     case OutputSplitVerilog:
       pm.addPass(createExportSplitVerilogPass(outputFilename));
+      // Run module hierarchy emission after verilog emission, which ensures we
+      // pick up any changes that verilog emission made.
+      if (exportModuleHierarchy)
+        pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
       break;
     }
   }

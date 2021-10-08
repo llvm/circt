@@ -2266,6 +2266,18 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
+template <typename Op>
+static ParseResult generatePrintfEncodedVerifOp(ImplicitLocOpBuilder &builder,
+                                                Value clock, Value condition,
+                                                StringRef message) {
+  APInt constOne(1, 1, false);
+  Value constTrue = builder.create<ConstantOp>(
+      UIntType::get(builder.getContext(), 1), constOne);
+  builder.create<Op>(clock, condition, constTrue, message, "",
+                     /*isConcurrent=*/true);
+  return success();
+}
+
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
@@ -2296,31 +2308,18 @@ ParseResult FIRStmtParser::parsePrintf() {
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
   StringRef formatStringRef(formatStrUnescaped);
-  // Generate concurrent verification statements
-  if (formatStringRef.startswith("cover:")) {
-    APInt constOne(1, 1, false);
-    Value constTrue =
-        builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped, "",
-                            /*isConcurrent=*/true);
-    return success();
-  }
-  if (formatStringRef.startswith("assert:")) {
-    APInt constOne(1, 1, false);
-    Value constTrue =
-        builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "", /*isConcurrent=*/true);
-    return success();
-  }
-  if (formatStringRef.startswith("assume:")) {
-    APInt constOne(1, 1, false);
-    Value constTrue =
-        builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "", /*isConcurrent=*/true);
-    return success();
-  }
+
+  // Check if this is a printf-encoded verification statement. These are
+  // introduced by "assert:" and friends.
+  if (formatStringRef.startswith("assert:"))
+    return generatePrintfEncodedVerifOp<AssertOp>(builder, clock, condition,
+                                                  formatStringRef);
+  if (formatStringRef.startswith("assume:"))
+    return generatePrintfEncodedVerifOp<AssumeOp>(builder, clock, condition,
+                                                  formatStringRef);
+  if (formatStringRef.startswith("cover:"))
+    return generatePrintfEncodedVerifOp<CoverOp>(builder, clock, condition,
+                                                 formatStringRef);
 
   builder.create<PrintFOp>(clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands,
@@ -3210,7 +3209,7 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
   if (!fromOMIRJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
-                    circuit)) {
+                    circuit.getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported OMIR format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3483,17 +3482,17 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
-  auto argIt = moduleOp.args_begin();
   auto portList = moduleOp.getPorts();
-  for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    PortInfo &port = std::get<0>(portAndLoc);
-    if (moduleContext.addSymbolEntry(port.getName(), *argIt,
-                                     std::get<1>(portAndLoc)))
+  auto portArgs = moduleOp.getArguments();
+  for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
+    PortInfo &port = std::get<0>(tuple);
+    llvm::SMLoc loc = std::get<1>(tuple);
+    BlockArgument portArg = std::get<2>(tuple);
+    if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
-    ++argIt;
   }
 
-  FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext);
+  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);

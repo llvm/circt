@@ -20,6 +20,7 @@ from circt.support import BackedgeBuilder, attribute_to_var
 import mlir.ir
 
 import builtins
+from contextvars import ContextVar
 import inspect
 import sys
 
@@ -373,6 +374,7 @@ def _module_base(cls, extern_name: str, params={}):
       instance_name = cls.__name__
       if "instance_name" in dir(self):
         instance_name = self.instance_name
+      instance_name = _BlockContext.current().uniquify_symbol(instance_name)
       # TODO: This is a held Operation*. Add a level of indirection.
       self._instantiation = mod._pycde_mod.instantiate(instance_name,
                                                        inputs,
@@ -403,6 +405,42 @@ def _module_base(cls, extern_name: str, params={}):
   return mod
 
 
+_current_block_context = ContextVar("current_block_context")
+
+
+class _BlockContext:
+  """Bookkeeping for a scope."""
+
+  def __init__(self):
+    self.symbols: set[str] = set()
+
+  @staticmethod
+  def current() -> _BlockContext:
+    """Get the top-most context in the stack created by `with _BlockContext()`."""
+    bb = _current_block_context.get(None)
+    assert bb is not None
+    return bb
+
+  def __enter__(self):
+    self._old_system_token = _current_block_context.set(self)
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    if exc_value is not None:
+      return
+    _current_block_context.reset(self._old_system_token)
+
+  def uniquify_symbol(self, sym: str) -> str:
+    """Create a unique symbol and add it to the cache. If it is to be preserved,
+    the caller must use it as the symbol on a top-level op."""
+    ctr = 0
+    ret = sym
+    while ret in self.symbols:
+      ctr += 1
+      ret = sym + "_" + str(ctr)
+    self.symbols.add(ret)
+    return ret
+
+
 class _Generate:
   """Represents a generator. Stores the generate function and wraps it with the
   necessary logic to build a module."""
@@ -419,8 +457,9 @@ class _Generate:
   def generate(self, specialized_mod: _SpecializedModule):
     """Build an HWModuleOp and run the generator as the body builder."""
 
+    bc = _BlockContext()
     entry_block = specialized_mod.circt_mod.add_entry_block()
-    with mlir.ir.InsertionPoint(entry_block), self.loc, BackedgeBuilder():
+    with mlir.ir.InsertionPoint(entry_block), self.loc, BackedgeBuilder(), bc:
       args = _GeneratorPortAccess(specialized_mod)
       outputs = self.gen_func(args)
       if outputs is not None:

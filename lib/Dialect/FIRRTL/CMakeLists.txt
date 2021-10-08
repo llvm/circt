@@ -1,6 +1,12 @@
-file(GLOB globbed *.cpp)
 add_circt_dialect_library(CIRCTFIRRTL
-  ${globbed}
+  FIRRTLAnnotations.cpp
+  FIRRTLAttributes.cpp
+  FIRRTLDialect.cpp
+  FIRRTLFolds.cpp
+  FIRRTLOpInterfaces.cpp
+  FIRRTLOps.cpp
+  FIRRTLTypes.cpp
+  InstanceGraph.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/FIRRTL

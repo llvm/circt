@@ -154,8 +154,7 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
   // Guess a name for the local value. This is only for readability's sake,
   // giving the pass a hint for picking the names of the generated module ports.
   if (auto blockArg = value.dyn_cast<BlockArgument>()) {
-    mapping.localName =
-        module.portNames()[blockArg.getArgNumber()].cast<StringAttr>();
+    mapping.localName = module.getPortNameAttr(blockArg.getArgNumber());
   } else if (auto op = value.getDefiningOp()) {
     mapping.localName = op->getAttrOfType<StringAttr>("name");
   }
@@ -187,7 +186,7 @@ void ModuleSignalMappings::emitMappingsModule() {
       StringAttr::get(module.getContext(), mappingsModuleName), ports);
 
   // Generate the connect and force statements inside the module.
-  builder.setInsertionPointToStart(mappingsModule.getBodyBlock());
+  builder.setInsertionPointToStart(mappingsModule.getBody());
   unsigned portIdx = 0;
   for (auto &mapping : mappings) {
     // TODO: Actually generate a proper XMR here. For now just do some textual
@@ -227,7 +226,7 @@ void ModuleSignalMappings::instantiateMappingsModule() {
 
   // Create the actual module.
   auto builder =
-      ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBodyBlock());
+      ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBody());
   auto inst = builder.create<InstanceOp>(resultTypes, mappingsModuleName,
                                          "signal_mappings");
 

@@ -61,8 +61,8 @@ firrtl.circuit "SubCircuit" {
   // CHECK:       }
   // CHECK-LABEL: firrtl.module @Baz
   firrtl.module @Baz(
-    out %data_source: !firrtl.uint<42> {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = 2 : i64, peer = "~Main|MainA>dataOut", side = "local", targetId = 0 : i64}]},
-    in %data_sink: !firrtl.uint<42> {firrtl.annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "sink", id = 2 : i64, peer = "~Main|MainA>dataIn", side = "local", targetId = 1 : i64}]}
+    out %data_source: !firrtl.uint<42> [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "source", id = 2 : i64, peer = "~Main|MainA>dataOut", side = "local", targetId = 0 : i64}],
+    in %data_sink: !firrtl.uint<42> [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", dir = "sink", id = 2 : i64, peer = "~Main|MainA>dataIn", side = "local", targetId = 1 : i64}]
   ) attributes {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", id = 2 : i64}]} {
     // CHECK: [[T1:%.+]], [[T2:%.+]] = firrtl.instance @Baz_signal_mappings
     // CHECK: firrtl.connect %data_source, [[T1]] :

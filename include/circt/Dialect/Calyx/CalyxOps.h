@@ -68,7 +68,7 @@ Direction get(bool isOutput);
 
 /// Return a \p IntegerAttr containing the packed representation of an array
 /// of directions.
-IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
+IntegerAttr packAttribute(MLIRContext *context, ArrayRef<Direction> directions);
 
 /// Convenience function for generating a vector of directions.
 SmallVector<Direction> genInOutDirections(size_t nIns, size_t nOuts);

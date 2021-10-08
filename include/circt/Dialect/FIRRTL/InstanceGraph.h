@@ -41,6 +41,8 @@ public:
   InstanceGraphNode *getTarget() const { return target; }
 
 private:
+  friend class InstanceGraph;
+
   /// The InstanceOp that this is tracking.
   InstanceOp instance;
 
@@ -168,6 +170,18 @@ public:
   using iterator = NodeIterator;
   iterator begin() { return nodes.begin(); }
   iterator end() { return nodes.end(); }
+
+  //===-------------------------------------------------------------------------
+  // Methods to keep an InstanceGraph up to date.
+  //
+  // These methods are not thread safe.  Make sure that modifications are
+  // properly synchronized or performed in a serial context.  When the
+  // InstanceGraph is used as an analysis, this is only safe when the pass is
+  // on a CircuitOp.
+
+  // Replaces an instance of a module with another instance. The target module
+  // of both InstanceOps must be the same.
+  void replaceInstance(InstanceOp inst, InstanceOp newInst);
 
 private:
   /// Get the node corresponding to the module.  If the node has does not exist

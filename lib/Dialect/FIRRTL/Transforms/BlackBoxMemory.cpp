@@ -211,7 +211,7 @@ static FModuleOp createWrapperModule(MemOp op,
   moduleOp->moveAfter(extModuleOp);
 
   // Create the module
-  builder.setInsertionPointToStart(moduleOp.getBodyBlock());
+  builder.setInsertionPointToStart(moduleOp.getBody());
   auto instanceOp = createInstance(builder, op.getLoc(), extModuleOp.getName(),
                                    op.nameAttr(), extPorts);
 

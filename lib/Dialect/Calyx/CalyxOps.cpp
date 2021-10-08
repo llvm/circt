@@ -50,8 +50,8 @@ SmallVector<Direction> direction::genInOutDirections(size_t nIns,
   return dirs;
 }
 
-IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
-                                     MLIRContext *ctx) {
+IntegerAttr direction::packAttribute(MLIRContext *context,
+                                     ArrayRef<Direction> directions) {
   // Pack the array of directions into an APInt.  Input is zero, output is one.
   size_t numDirections = directions.size();
   APInt portDirections(numDirections, 0);
@@ -787,8 +787,7 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("portDirections",
                       direction::packAttribute(direction::genInOutDirections(
                                                    portIOTypes.first.size(),
-                                                   portIOTypes.second.size()),
-                                               builder.getContext()));
+                                                   portIOTypes.second.size())));
   // Record the attributes of the ports.
   result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
 

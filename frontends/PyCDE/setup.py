@@ -49,9 +49,9 @@ class CMakeBuild(build_py):
     if not cmake_build_dir:
       cmake_build_dir = os.path.join(target_dir, "..", "cmake_build")
     cmake_install_dir = os.path.join(target_dir, "..", "cmake_install")
-    circt_dir = os.path.abspath(os.path.join(_thisdir, "..", ".."))
-    src_dir = os.path.abspath(os.path.join(_thisdir, "..", "..", "llvm",
-                                           "llvm"))
+    circt_dir = os.path.abspath(
+        os.environ.get("CIRCT_DIRECTORY", os.path.join(_thisdir, "..", "..")))
+    src_dir = os.path.abspath(os.path.join(circt_dir, "llvm", "llvm"))
     cfg = "Release"
     cmake_args = [
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
@@ -74,15 +74,16 @@ class CMakeBuild(build_py):
     if os.path.exists(cmake_cache_file):
       os.remove(cmake_cache_file)
     subprocess.check_call(["cmake", src_dir] + cmake_args, cwd=cmake_build_dir)
-    subprocess.check_call(["cmake", "--build", ".", "--target", "install"] +
+    subprocess.check_call(["cmake", "--build", ".", "--target", "check-pycde"] +
                           build_args,
                           cwd=cmake_build_dir)
-    shutil.copytree(os.path.join(cmake_install_dir, "python_packages",
-                                 "circt_core"),
+    cmake_python_package = os.path.join(cmake_build_dir, "tools", "circt",
+                                        "python_packages")
+    shutil.copytree(os.path.join(cmake_python_package, "circt_core"),
                     target_dir,
                     symlinks=False,
                     dirs_exist_ok=True)
-    shutil.copytree(os.path.join(cmake_install_dir, "python_packages", "pycde"),
+    shutil.copytree(os.path.join(cmake_python_package, "pycde"),
                     target_dir,
                     symlinks=False,
                     dirs_exist_ok=True)
