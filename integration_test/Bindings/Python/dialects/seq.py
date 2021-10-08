@@ -70,7 +70,7 @@ with Context() as ctx, Location.unknown():
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")
 
-  pm = PassManager.parse("lower-seq-to-sv,hw-legalize-names")
+  pm = PassManager.parse("lower-seq-to-sv")
   pm.run(m)
   # CHECK: always @(posedge clk)
   # CHECK: my_reg <= {{.+}}

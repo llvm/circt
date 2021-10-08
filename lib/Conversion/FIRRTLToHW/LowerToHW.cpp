@@ -475,9 +475,9 @@ private:
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(llvm::Optional<bool> enableAnnotationWarning) {
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
-  if (enableAnnotationWarning.hasValue() && enableAnnotationWarning.getValue())
+  if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
   return pass;
 }

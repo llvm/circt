@@ -334,19 +334,10 @@ Block *CircuitOp::getBody() { return &getBodyRegion().front(); }
 /// extmodule.
 SmallVector<PortInfo> FModuleOp::getPorts() {
   SmallVector<PortInfo> results;
-
-  auto portNamesAttr = getPortNames();
-  auto portDirections = getPortDirections();
-  // FModuleOp has the ports as the BlockArgument's of the first block.
-  auto moduleBlock = getBody();
-  for (auto portArgAndIndex : llvm::enumerate(moduleBlock->getArguments())) {
-    BlockArgument portArg = portArgAndIndex.value();
-    size_t portIdx = portArgAndIndex.index();
-    auto name = portNamesAttr[portIdx].cast<StringAttr>();
-    auto direction = direction::get(portDirections[portIdx]);
-    results.push_back({name, portArg.getType().cast<FIRRTLType>(), direction,
-                       portArg.getLoc(),
-                       AnnotationSet::forPort(*this, portIdx)});
+  for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
+    results.push_back({getPortNameAttr(i), getPortType(i), getPortDirection(i),
+                       getArgument(i).getLoc(),
+                       AnnotationSet::forPort(*this, i)});
   }
   return results;
 }
@@ -354,19 +345,13 @@ SmallVector<PortInfo> FModuleOp::getPorts() {
 /// This function can extract information about ports from a module and an
 /// extmodule.
 SmallVector<PortInfo> FExtModuleOp::getPorts() {
-  SmallVector<PortInfo> results;
-
-  auto portNamesAttr = getPortNames();
-  auto portDirections = getPortDirections();
   // FExtModuleOp's don't have block arguments or locations for their ports.
-
   auto loc = getLoc();
+
+  SmallVector<PortInfo> results;
   for (unsigned i = 0, e = getNumPorts(); i < e; ++i) {
-    auto name = portNamesAttr[i].cast<StringAttr>();
-    auto type = getPortType(i).cast<FIRRTLType>();
-    auto direction = direction::get(portDirections[i]);
-    results.push_back(
-        {name, type, direction, loc, AnnotationSet::forPort(*this, i)});
+    results.push_back({getPortNameAttr(i), getPortType(i), getPortDirection(i),
+                       loc, AnnotationSet::forPort(*this, i)});
   }
   return results;
 }
@@ -388,7 +373,8 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   auto *body = getBody();
 
   // Add direction markers and names for new ports.
-  SmallVector<Direction> existingDirections = direction::unpackAttribute(*this);
+  SmallVector<Direction> existingDirections =
+      direction::unpackAttribute(this->getPortDirectionsAttr());
   ArrayRef<Attribute> existingNames = this->getPortNames();
   ArrayRef<Attribute> existingTypes = this->getPortTypes();
   assert(existingDirections.size() == oldNumArgs);
@@ -421,8 +407,8 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   migrateOldPorts(oldNumArgs);
 
   // Apply these changed markers.
-  (*this)->setAttr(direction::attrKey,
-                   direction::packAttribute(newDirections, getContext()));
+  (*this)->setAttr("portDirections",
+                   direction::packAttribute(getContext(), newDirections));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
   (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
 }
@@ -434,7 +420,8 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
     return;
 
   // Drop the direction markers for dead ports.
-  SmallVector<Direction> directions = direction::unpackAttribute(*this);
+  SmallVector<Direction> directions =
+      direction::unpackAttribute(this->getPortDirectionsAttr());
   ArrayRef<Attribute> portNames = this->getPortNames();
   ArrayRef<Attribute> portAnno = this->portAnnotations().getValue();
   ArrayRef<Attribute> portTypes = this->getPortTypes();
@@ -448,8 +435,8 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
       removeElementsAtIndices(portAnno, portIndices);
   SmallVector<Attribute> newPortTypes =
       removeElementsAtIndices(portTypes, portIndices);
-  (*this)->setAttr(direction::attrKey,
-                   direction::packAttribute(newDirections, getContext()));
+  (*this)->setAttr("portDirections",
+                   direction::packAttribute(getContext(), newDirections));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newPortNames));
   (*this)->setAttr("portAnnotations",
                    ArrayAttr::get(getContext(), newPortAnno));
@@ -479,8 +466,8 @@ static void buildModule(OpBuilder &builder, OperationState &result,
 
   // Both attributes are added, even if the module has no ports.
   result.addAttribute(
-      direction::attrKey,
-      direction::packAttribute(portDirections, builder.getContext()));
+      "portDirections",
+      direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("portTypes", builder.getArrayAttr(portTypes));
   result.addAttribute("portAnnotations", builder.getArrayAttr(portAnnotations));
@@ -516,7 +503,7 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
 }
 
 static void printModuleSignature(OpAsmPrinter &p, Operation *op,
-                                 APInt portDirections,
+                                 ArrayRef<Direction> portDirections,
                                  ArrayRef<Attribute> portNames,
                                  ArrayRef<Attribute> portTypes,
                                  ArrayRef<Attribute> portAnnotations,
@@ -533,7 +520,7 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
       p << ", ";
 
     // Print the port direction.
-    p << (portDirections[i] ? "out " : "in ");
+    p << portDirections[i] << " ";
 
     // Print the port name.
     auto portName = portNames[i].cast<StringAttr>().getValue();
@@ -648,7 +635,8 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
 
   // Print the ports.
   bool needPortNamesAttr = false;
-  printModuleSignature(p, op, op.getPortDirections(), op.getPortNames(),
+  auto portDirections = direction::unpackAttribute(op.getPortDirectionsAttr());
+  printModuleSignature(p, op, portDirections, op.getPortNames(),
                        op.getPortTypes(), op.getPortAnnotations(),
                        needPortNamesAttr);
 
@@ -715,8 +703,8 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
 
   // Add port directions.
   if (!result.attributes.get("portDirections"))
-    result.addAttribute(direction::attrKey,
-                        direction::packAttribute(portDirections, context));
+    result.addAttribute("portDirections",
+                        direction::packAttribute(context, portDirections));
 
   // Add port names.
   SmallVector<Attribute> portNames;
@@ -811,21 +799,6 @@ static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
 
   if (!llvm::all_of(paramDict, checkParmValue))
     return failure();
-  auto portNamesAttr = op.getPortNamesAttr();
-
-  auto numPorts = op.getPorts().size();
-  if (numPorts != portNamesAttr.size())
-    return op.emitError("module ports does not match number of arguments");
-
-  // Directions are stored in an APInt which cannot have zero bitwidth.  If the
-  // module has no ports, then the APInt should be size one.  Otherwise, their
-  // sizes should match.
-  auto numDirections = op.getPortDirections().getBitWidth();
-  if ((numPorts != numDirections) && (numPorts != 0 || numDirections != 1))
-    return op.emitError()
-           << "module ports size (" << numPorts
-           << ") does not match number of bits in port direction ("
-           << numDirections << ")";
 
   return success();
 }
@@ -2565,49 +2538,6 @@ static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
 static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
   // "ruw" is always elided.
   printElidePortAnnotations(p, op, attr, {"ruw"});
-}
-
-//===----------------------------------------------------------------------===//
-// Utilities related to Direction
-//===----------------------------------------------------------------------===//
-
-IntegerAttr direction::packAttribute(ArrayRef<Direction> directions,
-                                     MLIRContext *ctx) {
-
-  // If the module contaions no ports (parameter a is empty), then use an APInt
-  // of size 1 with value 0 to store the ports.  This works around an issue
-  // where APInt cannot be zero-sized.  This aligns with port name storage which
-  // will use a zero-element array.
-  auto size = directions.size();
-  if (size == 0)
-    size = 1;
-
-  // Pack the array of directions into an APInt.  Input is zero, output is one.
-  APInt portDirections(size, 0);
-  for (size_t i = 0, e = directions.size(); i != e; ++i)
-    if (directions[i] == Direction::Out)
-      portDirections.setBit(i);
-
-  return IntegerAttr::get(IntegerType::get(ctx, size), portDirections);
-}
-
-/// Turn a packed representation of port attributes into a vector that can be
-/// worked with.
-SmallVector<Direction> direction::unpackAttribute(Operation *module) {
-  const APInt &value =
-      module->getAttr(direction::attrKey).cast<IntegerAttr>().getValue();
-
-  SmallVector<Direction> result;
-
-  // The integer attribute will be a single bit in the case where the module has
-  // no ports because APInt can't hold zero bits.
-  if (!cast<FModuleLike>(module).getNumPorts())
-    return result;
-
-  result.reserve(value.getBitWidth());
-  for (size_t i = 0, e = value.getBitWidth(); i != e; ++i)
-    result.push_back(direction::get(value[i]));
-  return result;
 }
 
 //===----------------------------------------------------------------------===//
