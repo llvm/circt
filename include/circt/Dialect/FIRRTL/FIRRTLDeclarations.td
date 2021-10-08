@@ -225,6 +225,9 @@ def MemOp : FIRRTLOp<"mem"> {
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    /// Get the number of read ports, write ports and read write ports.
+    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts, size_t &numReadWritePorts);
   }];
 }
 
