@@ -784,10 +784,10 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 
   // Record the port names and number of input ports of the component.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute("portDirections",
-                      direction::packAttribute(direction::genInOutDirections(
-                                                   portIOTypes.first.size(),
-                                                   portIOTypes.second.size())));
+  result.addAttribute(
+      "portDirections",
+      direction::packAttribute(direction::genInOutDirections(
+          portIOTypes.first.size(), portIOTypes.second.size())));
   // Record the attributes of the ports.
   result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
 
