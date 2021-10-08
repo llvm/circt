@@ -18,6 +18,7 @@
 using namespace circt;
 using namespace sv;
 using namespace hw;
+using namespace ExportVerilog;
 
 //===----------------------------------------------------------------------===//
 // NameCollisionResolver
@@ -58,17 +59,21 @@ StringRef NameCollisionResolver::getLegalName(StringAttr originalName) {
 // GlobalNameResolver
 //===----------------------------------------------------------------------===//
 
-namespace {
+namespace circt {
+namespace ExportVerilog {
 /// This class keeps track of modules and interfaces that need to be renamed, as
 /// well as module ports and parameters that need to be renamed.  This can
 /// happen either due to conflicts between them or due to a conflict with a
 /// Verilog keyword.
 ///
 /// Once constructed, this is immutable.
-struct GlobalNameResolver {
+class GlobalNameResolver {
+public:
   /// Construct a GlobalNameResolver and do the initial scan to populate and
   /// unique the module/interfaces and port/parameter names.
   GlobalNameResolver(mlir::ModuleOp topLevel);
+
+  GlobalNameTable takeGlobalNameTable() { return std::move(globalNameTable); }
 
   bool anythingChanged = false;
 
@@ -94,25 +99,20 @@ private:
   void renameModuleBody(hw::HWModuleOp module);
 
   /// Set of globally visible names, to ensure uniqueness.
-  NameCollisionResolver globalNames;
+  NameCollisionResolver globalNameResolver;
 
   /// If a module has a port or parameter renamed, then this keeps track of the
   /// module it is associated with.
   DenseMap<Attribute, HWModuleOp> modulesWithRenamedPortsOrParams;
 
-  /// This map keeps track of a mapping from <module,parametername> -> newName,
-  /// it is populated when a parameter has to be renamed.
-  typedef DenseMap<std::pair<Operation *, Attribute>, Attribute>
-      RenamedParameterMapTy;
-
-  // This map keeps track of a mapping from <module,parametername> -> newName,
-  // it is populated when a parameter has to be renamed.
-  RenamedParameterMapTy renamedParameterInfo;
+  /// This keeps track of globally visible names like module parameters.
+  GlobalNameTable globalNameTable;
 
   GlobalNameResolver(const GlobalNameResolver &) = delete;
   void operator=(const GlobalNameResolver &) = delete;
 };
-} // end anonymous namespace
+} // namespace ExportVerilog
+} // namespace circt
 
 /// Construct a GlobalNameResolver and do the initial scan to populate and
 /// unique the module/interfaces and port/parameter names.
@@ -134,7 +134,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
       if (!sv::isNameValid(name))
         op.emitError("name \"")
             << name << "\" is not allowed in Verilog output";
-      globalNames.insertUsedName(name);
+      globalNameResolver.insertUsedName(name);
     }
   }
 
@@ -161,14 +161,14 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   // Legalize module and interface names.
   for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
-      legalizeSymbolName(module, globalNames);
+      legalizeSymbolName(module, globalNameResolver);
       if (legalizePortNames(module))
         modulesWithRenamedPortsOrParams[module.getNameAttr()] = module;
       continue;
     }
 
     if (auto interface = dyn_cast<InterfaceOp>(op)) {
-      legalizeSymbolName(interface, globalNames);
+      legalizeSymbolName(interface, globalNameResolver);
       continue;
     }
   }
@@ -233,8 +233,7 @@ bool GlobalNameResolver::legalizePortNames(hw::HWModuleOp module) {
       auto newNameAttr = StringAttr::get(paramAttr.getContext(), newName);
       parameters.push_back(ParamDeclAttr::getWithName(paramAttr, newNameAttr));
       changedParameters = true;
-      renamedParameterInfo[std::make_pair(module, paramAttr.getName())] =
-          newNameAttr;
+      globalNameTable.addRenamedParam(module, paramAttr.getName(), newNameAttr);
     }
   }
   if (changedParameters)
@@ -278,13 +277,12 @@ Attribute GlobalNameResolver::remapRenamedParameters(Attribute value,
 
   // If this parameter is un-renamed, then leave it alone.
   auto nameAttr = parameterRef.getName();
-  auto it = renamedParameterInfo.find(std::make_pair(module, nameAttr));
-  if (it == renamedParameterInfo.end())
+  auto newName = globalNameTable.getParameterVerilogName(module, nameAttr);
+  if (newName == nameAttr)
     return value;
 
   // Okay, it was renamed, return the new name with the right type.
-  return ParamDeclRefAttr::get(value.getContext(),
-                               it->second.cast<StringAttr>(), value.getType());
+  return ParamDeclRefAttr::get(newName, value.getType());
 }
 
 // If this instance is referring to a module with renamed ports or
@@ -425,6 +423,8 @@ void GlobalNameResolver::renameModuleBody(hw::HWModuleOp module) {
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
-void ExportVerilog::legalizeGlobalNames(ModuleOp topLevel) {
-  GlobalNameResolver x(topLevel);
+GlobalNameTable ExportVerilog::legalizeGlobalNames(ModuleOp topLevel) {
+  GlobalNameResolver resolver(topLevel);
+
+  return resolver.takeGlobalNameTable();
 }

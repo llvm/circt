@@ -136,6 +136,13 @@ def ParamDeclRefAttr : AttrDef<HWDialect, "ParamDeclRef"> {
   let parameters = (ins "::mlir::StringAttr":$name,
                         AttributeSelfTypeParameter<"">:$type);
   let mnemonic = "param.decl.ref";
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "::mlir::StringAttr":$name,
+                                        "::mlir::Type":$type), [{
+      return get(name.getContext(), name, type);
+    }]>
+  ];
 }
 
 def ParamVerbatimAttr : AttrDef<HWDialect, "ParamVerbatim"> {

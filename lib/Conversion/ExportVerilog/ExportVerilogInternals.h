@@ -16,7 +16,42 @@ namespace circt {
 struct LoweringOptions;
 
 namespace ExportVerilog {
+class GlobalNameResolver;
 
+/// This class keeps track of global names at the module/interface level.
+/// It is built in a global pass over the entire design and then frozen to allow
+/// concurrent accesses.
+/// TODO: right now this just handles module parameter names.
+struct GlobalNameTable {
+
+  /// Return the string to use for the specified parameter name in the specified
+  /// module.  Parameters may be renamed for a variety of reasons (e.g.
+  /// conflicting with ports or verilog keywords), and this returns the
+  /// legalized name to use.
+  StringAttr getParameterVerilogName(Operation *module,
+                                     StringAttr paramName) const {
+    auto it = renamedParams.find(std::make_pair(module, paramName));
+    return it != renamedParams.end() ? it->second : paramName;
+  }
+
+private:
+  friend class GlobalNameResolver;
+  GlobalNameTable() {}
+  GlobalNameTable(const GlobalNameTable &) = delete;
+  void operator=(const GlobalNameTable &) = delete;
+  GlobalNameTable(GlobalNameTable &&) = default;
+
+  void addRenamedParam(Operation *module, StringAttr oldName,
+                       StringAttr newName) {
+    renamedParams[{module, oldName}] = newName;
+  }
+
+  /// This contains entries for any parameters that got renamed.  The key is a
+  /// moduleop/paramName tuple, the value is the name to use.
+  DenseMap<std::pair<Operation *, Attribute>, StringAttr> renamedParams;
+};
+
+/// This class keeps track of names for values within a module.
 struct ModuleNameManager {
   ModuleNameManager() : encounteredError(false) {}
 
@@ -154,7 +189,7 @@ void prepareHWModule(Block &block, ModuleNameManager &names,
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.
-void legalizeGlobalNames(ModuleOp topLevel);
+GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);
 } // namespace ExportVerilog
 
 } // namespace circt
