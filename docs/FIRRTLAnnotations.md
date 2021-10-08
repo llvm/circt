@@ -900,3 +900,8 @@ modules' bind file. This attribute has type OutputFileAttr.
 
 Used by SVExtractTestCode.  Specifies the output file for extracted
 modules' bind file. This attribute has type OutputFileAttr.
+
+### firrtl.extract.[cover|assume|assert].extra
+
+Used by SVExtractTestCode.  Indicates a module whose instances should be
+extracted from the circuit in the indicated extraction type.

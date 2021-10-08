@@ -41,9 +41,11 @@ static const char assumeAnnoClass[] =
 static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
+static const char verifBBClass[] =
+    "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
 
-/// Attribute that indicates that the module hierarchy starting at the annotated
-/// module should be dumped to a file.
+/// Attribute that indicates that the module hierarchy starting at the
+/// annotated module should be dumped to a file.
 static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
 
 /// Attribute that indicates where some json files should be dumped.
@@ -872,8 +874,6 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (auto defName = oldModule.defname())
     verilogName = defName.getValue();
 
-  loweringState.processRemainingAnnotations(oldModule,
-                                            AnnotationSet(oldModule));
   // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
@@ -881,8 +881,14 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // no known default values in the extmodule.  This ensures that the
   // hw.instance will print all the parameters when generating verilog.
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
-  return builder.create<hw::HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                              ports, verilogName, parameters);
+  auto newModule = builder.create<hw::HWModuleExternOp>(
+      oldModule.getLoc(), nameAttr, ports, verilogName, parameters);
+  // Transform module annotations
+  AnnotationSet annos(oldModule);
+  if (annos.removeAnnotation(verifBBClass))
+    newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+  loweringState.processRemainingAnnotations(oldModule, annos);
+  return newModule;
 }
 
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
@@ -903,9 +909,12 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
   if (auto outputFile = oldModule->getAttr("output_file"))
     newModule->setAttr("output_file", outputFile);
+
+  // Transform module annotations
+  AnnotationSet annos(oldModule);
   // Mark the design under test as a module of interest for exporting module
   // hierarchy information.
-  if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
+  if (annos.removeAnnotation(dutAnnoClass))
     newModule->setAttr(
         moduleHierarchyFileAttrName,
         hw::OutputFileAttr::getFromDirectoryAndFilename(
@@ -913,8 +922,9 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
             getMetadataDir(oldModule->getParentOfType<CircuitOp>()).getValue(),
             "module_hier.json",
             /*excludeFromFileList=*/true));
-  loweringState.processRemainingAnnotations(oldModule,
-                                            AnnotationSet(oldModule));
+  if (annos.removeAnnotation(verifBBClass))
+    newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+  loweringState.processRemainingAnnotations(oldModule, annos);
   return newModule;
 }
 
