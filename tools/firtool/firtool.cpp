@@ -109,7 +109,7 @@ static cl::opt<bool> disableAnnotationsUnknown(
 static cl::opt<bool>
     emitMetadata("emit-metadata",
                  cl::desc("emit metadata for metadata annotations"),
-                 cl::init(true));
+                 cl::init(false));
 
 static cl::opt<bool> imconstprop(
     "imconstprop",
