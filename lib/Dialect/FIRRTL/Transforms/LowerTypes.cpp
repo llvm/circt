@@ -729,7 +729,7 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   for (auto attr : extModule->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != direction::attrKey && attr.first != "portNames" &&
+    if (attr.first != "portDirections" && attr.first != "portNames" &&
         attr.first != "portTypes" && attr.first != "portAnnotations")
       newModuleAttrs.push_back(attr);
 
@@ -746,8 +746,8 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get(direction::attrKey, context),
-                     direction::packAttribute(newArgDirections, context)));
+      NamedAttribute(Identifier::get("portDirections", context),
+                     direction::packAttribute(context, newArgDirections)));
 
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder.getArrayAttr(newArgNames)));
@@ -796,7 +796,7 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto attr : module->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != "portNames" && attr.first != direction::attrKey &&
+    if (attr.first != "portNames" && attr.first != "portDirections" &&
         attr.first != "portTypes" && attr.first != "portAnnotations")
       newModuleAttrs.push_back(attr);
 
@@ -813,8 +813,8 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   }
 
   newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get(direction::attrKey, context),
-                     direction::packAttribute(newArgDirections, context)));
+      NamedAttribute(Identifier::get("portDirections", context),
+                     direction::packAttribute(context, newArgDirections)));
 
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder->getArrayAttr(newArgNames)));

@@ -147,7 +147,9 @@ def HWModuleExternOp : HWOp<"module.extern",
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
-    StringRef getVerilogModuleName();
+    StringRef getVerilogModuleName() {
+      return getVerilogModuleNameAttr().getValue();
+    }
 
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
@@ -213,9 +215,7 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
   let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor,
                        StrArrayAttr:$requiredAttrs);
   let results = (outs);
-  let assemblyFormat = [{
-      $sym_name `,` $descriptor `,` $requiredAttrs attr-dict
-    }];
+  let assemblyFormat = "$sym_name `,` $descriptor `,` $requiredAttrs attr-dict";
 }
 
 def HWModuleGeneratedOp : HWOp<"module.generated",
@@ -264,18 +264,14 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
-    StringRef getVerilogModuleName();
+    StringRef getVerilogModuleName() {
+      return getVerilogModuleNameAttr().getValue();
+    }
 
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
-    StringAttr getVerilogModuleNameAttr() {
-      if (auto vName = verilogNameAttr()){
-        return vName;
-      }
-      return (*this)->getAttrOfType<StringAttr>(
-          ::mlir::SymbolTable::getSymbolAttrName());
-    }
+    StringAttr getVerilogModuleNameAttr();
 
     /// Lookup the generator kind for the symbol.  This returns null on
     /// invalid IR.

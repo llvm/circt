@@ -151,6 +151,10 @@ bool isVerilogExpression(Operation *op);
 /// otherwise rewriting operations we don't want to emit.
 void prepareHWModule(Block &block, ModuleNameManager &names,
                      const LoweringOptions &options);
+
+/// Rewrite module names and interfaces to not conflict with each other or with
+/// Verilog keywords.
+void legalizeGlobalNames(ModuleOp topLevel);
 } // namespace ExportVerilog
 
 } // namespace circt

@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF -o %t.mlir | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
@@ -806,12 +806,9 @@ hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
 // CHECK-NEXT: input  [7:0] arg0,
 hw.module @parameters<p1: i42 = 17, p2: i1>(%arg0: i8) -> (out: i8) {
   // Local values should not conflict with output or parameter names.
-
-  // expected-error @+1 {{'sv.wire' op name 'p1' changed during emission}}
-  %p1 = sv.wire : !hw.inout<i4>
   // CHECK: wire [3:0] p1_0;
+  %p1 = sv.wire : !hw.inout<i4>
 
-  // expected-error @+1 {{'sv.wire' op name 'out' changed during emission}}
   %out = sv.wire : !hw.inout<i4>
   // CHECK: wire [3:0] out_1;
   hw.output %arg0 : i8
@@ -903,4 +900,12 @@ hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
   // CHECK-NEXT:   parameter             p4 = 4,
   // CHECK-NEXT:   parameter             p5 = "foo")
 
+}
+
+// CHECK: module namechange(
+// CHECK: input  [3:0] casex_0,
+// CHECK: output [3:0] if_1); 
+hw.module @namechange(%casex: i4) -> (if: i4) {
+  // CHECK: assign if_1 = casex_0;
+  hw.output %casex : i4
 }

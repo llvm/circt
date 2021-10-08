@@ -1,4 +1,4 @@
-//===- HWLegalizeNames.cpp - HW Name Legalization Pass --------------------===//
+//===- LegalizeNames.cpp - Name Legalization for ExportVerilog ------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,15 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This transformation pass renames modules and variables to avoid conflicts
-// with keywords and other declarations.
+// This renames modules and variables to avoid conflicts with keywords and other
+// declarations.
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetail.h"
+#include "ExportVerilogInternals.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/SV/SVPasses.h"
 
 using namespace circt;
 using namespace sv;
@@ -93,8 +92,6 @@ private:
   void rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
                          bool moduleHasRenamedInterface);
   void renameModuleBody(hw::HWModuleOp module);
-  void renameInterfaceBody(sv::InterfaceOp intf,
-                           mlir::SymbolUserMap &symbolUsers);
 
   /// Set of globally visible names, to ensure uniqueness.
   NameCollisionResolver globalNames;
@@ -120,9 +117,10 @@ private:
 /// Construct a GlobalNameResolver and do the initial scan to populate and
 /// unique the module/interfaces and port/parameter names.
 GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
-  // FIXME: Make this lazy.
+  // This symbol table is lazily constructed when global rewrites of module or
+  // interface member names are required.
   mlir::SymbolTableCollection symbolTable;
-  mlir::SymbolUserMap symbolUsers(symbolTable, topLevel);
+  Optional<mlir::SymbolUserMap> symbolUsers;
 
   // Register the names of external modules which we cannot rename. This has to
   // occur in a first pass separate from the modules and interfaces which we are
@@ -131,40 +129,46 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   for (auto &op : *topLevel.getBody()) {
     // Note that external modules *often* have name collisions, because they
     // correspond to the same verilog module with different parameters.
-    if (auto extMod = dyn_cast<HWModuleExternOp>(op)) {
-      auto name = extMod.getVerilogModuleName();
+    if (isa<HWModuleExternOp>(op) || isa<HWModuleGeneratedOp>(op)) {
+      auto name = hw::getVerilogModuleNameAttr(&op).getValue();
       if (!sv::isNameValid(name))
-        extMod->emitOpError("with invalid name \"" + name + "\"");
+        op.emitError("name \"")
+            << name << "\" is not allowed in Verilog output";
       globalNames.insertUsedName(name);
     }
   }
 
-  // If the module's symbol itself conflicts, then rename it and all uses of
-  // it.
-  // TODO: This is super inefficient, we should just rename the symbol as part
-  // of the other existing walks.
-  auto legalizeSymbolName = [&](Operation *op) {
+  // If the module's symbol itself conflicts, then rename it and all uses of it.
+  auto legalizeSymbolName = [&](Operation *op,
+                                NameCollisionResolver &resolver) {
     StringAttr oldName = SymbolTable::getSymbolName(op);
-    auto newName = globalNames.getLegalName(oldName);
-    if (!newName.empty()) {
-      auto newNameAttr = StringAttr::get(topLevel.getContext(), newName);
-      symbolUsers.replaceAllUsesWith(op, newNameAttr);
-      SymbolTable::setSymbolName(op, newNameAttr);
-      anythingChanged = true;
-    }
+    auto newName = resolver.getLegalName(oldName);
+    if (newName.empty())
+      return;
+
+    // Lazily construct the symbol table if it hasn't been built yet.
+    if (!symbolUsers.hasValue())
+      symbolUsers.emplace(symbolTable, topLevel);
+
+    // TODO: This is super inefficient, we should just rename the symbol as part
+    // of the other existing walks.
+    auto newNameAttr = StringAttr::get(topLevel.getContext(), newName);
+    symbolUsers->replaceAllUsesWith(op, newNameAttr);
+    SymbolTable::setSymbolName(op, newNameAttr);
+    anythingChanged = true;
   };
 
   // Legalize module and interface names.
   for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
-      legalizeSymbolName(module);
+      legalizeSymbolName(module, globalNames);
       if (legalizePortNames(module))
         modulesWithRenamedPortsOrParams[module.getNameAttr()] = module;
       continue;
     }
 
     if (auto interface = dyn_cast<InterfaceOp>(op)) {
-      legalizeSymbolName(interface);
+      legalizeSymbolName(interface, globalNames);
       continue;
     }
   }
@@ -173,8 +177,17 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
       renameModuleBody(module);
-    } else if (auto intf = dyn_cast<InterfaceOp>(op)) {
-      renameInterfaceBody(intf, symbolUsers);
+      continue;
+    }
+
+    if (auto interface = dyn_cast<InterfaceOp>(op)) {
+      NameCollisionResolver localNames;
+
+      // Rename signals and modports.
+      for (auto &op : *interface.getBodyBlock()) {
+        if (isa<InterfaceSignalOp>(op) || isa<InterfaceModportOp>(op))
+          legalizeSymbolName(&op, localNames);
+      }
     }
   }
 }
@@ -345,12 +358,11 @@ void GlobalNameResolver::rewriteModuleBody(Block &block,
       continue;
     }
 
-    if (isa<RegOp>(op) || isa<WireOp>(op)) {
+    if (isa<RegOp>(op) || isa<WireOp>(op) || isa<LocalParamOp>(op)) {
       auto oldName = op.getAttrOfType<StringAttr>("name");
       auto newName = nameResolver.getLegalName(oldName);
       if (!newName.empty())
         op.setAttr("name", StringAttr::get(op.getContext(), newName));
-      continue;
     }
 
     if (auto localParam = dyn_cast<LocalParamOp>(op)) {
@@ -376,7 +388,7 @@ void GlobalNameResolver::rewriteModuleBody(Block &block,
     // If this operation has regions, then we recursively process them if they
     // can contain things that need to be renamed.  We don't walk the module
     // in the common case.
-    if (op.getNumRegions() && (isa<IfDefOp>(op) || moduleHasRenamedInterface)) {
+    if (op.getNumRegions()) {
       for (auto &region : op.getRegions()) {
         if (!region.empty())
           rewriteModuleBody(region.front(), nameResolver,
@@ -394,58 +406,25 @@ void GlobalNameResolver::renameModuleBody(hw::HWModuleOp module) {
   bool moduleHasRenamedInterface =
       getModuleWithRenamedInterface(module.getNameAttr()) != HWModuleOp();
 
-  // All the ports are pre-legalized, just add their names to the map so we
-  // detect conflicts with them.
+  // All the ports and parameters are pre-legalized, just add their names to the
+  // map so we detect conflicts with them.
   NameCollisionResolver nameResolver;
   for (const PortInfo &port : getAllModulePortInfos(module))
-    (void)nameResolver.getLegalName(port.name);
+    nameResolver.insertUsedName(port.name.getValue());
+  for (auto param : module.parameters())
+    nameResolver.insertUsedName(
+        param.cast<ParamDeclAttr>().getName().getValue());
 
   rewriteModuleBody(*module.getBodyBlock(), nameResolver,
                     moduleHasRenamedInterface);
 }
 
-void GlobalNameResolver::renameInterfaceBody(InterfaceOp interface,
-                                             mlir::SymbolUserMap &symbolUsers) {
-  NameCollisionResolver localNames;
-  auto symbolAttrName = SymbolTable::getSymbolAttrName();
-
-  // Rename signals and modports.
-  for (auto &op : *interface.getBodyBlock()) {
-    if (!isa<InterfaceSignalOp>(op) && !isa<InterfaceModportOp>(op))
-      continue;
-
-    StringAttr oldName = op.getAttrOfType<StringAttr>(symbolAttrName);
-    auto newName = localNames.getLegalName(oldName);
-    if (newName.empty())
-      continue;
-
-    auto newNameAttr = StringAttr::get(interface.getContext(), newName);
-    symbolUsers.replaceAllUsesWith(&op, newNameAttr);
-    SymbolTable::setSymbolName(&op, newNameAttr);
-    anythingChanged = true;
-  }
-}
-
 //===----------------------------------------------------------------------===//
-// HWLegalizeNamesPass
+// Public interface
 //===----------------------------------------------------------------------===//
 
-namespace {
-struct HWLegalizeNamesPass
-    : public sv::HWLegalizeNamesBase<HWLegalizeNamesPass> {
-  void runOnOperation() override;
-};
-} // end anonymous namespace
-
-void HWLegalizeNamesPass::runOnOperation() {
-  GlobalNameResolver nameResolver(getOperation());
-
-  // If we did not change anything in the graph mark all analysis as
-  // preserved.
-  if (!nameResolver.anythingChanged)
-    markAllAnalysesPreserved();
-}
-
-std::unique_ptr<Pass> circt::sv::createHWLegalizeNamesPass() {
-  return std::make_unique<HWLegalizeNamesPass>();
+/// Rewrite module names and interfaces to not conflict with each other or with
+/// Verilog keywords.
+void ExportVerilog::legalizeGlobalNames(ModuleOp topLevel) {
+  GlobalNameResolver x(topLevel);
 }

@@ -111,6 +111,22 @@ MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
       db->getNearestFreeInColumn((PrimitiveType)prim, column, nearestToY));
 }
 
+void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb, int64_t colNo,
+                                        CirctMSFTPlacementCallback ccb,
+                                        void *userData) {
+  PlacementDB *db = unwrap(cdb);
+  auto cb = [ccb, userData](PhysLocationAttr loc,
+                            PlacementDB::PlacedInstance p) {
+    CirctMSFTPlacedInstance cPlacement = {wrap(p.path), p.subpath.data(),
+                                          p.subpath.size(), wrap(p.op)};
+    ccb(wrap(loc), cPlacement, userData);
+  };
+  if (colNo >= 0)
+    db->walkColumnPlacements(colNo, cb);
+  else
+    db->walkPlacements(cb);
+}
+
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
 //===----------------------------------------------------------------------===//

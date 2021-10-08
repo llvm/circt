@@ -39,16 +39,16 @@ func @test3(%arg0: memref<?xi32>) {
     %3 = affine.load %2[0] : memref<1xi32>
     // CHECK{LITERAL}: %4 = affine.load %1[0] {dependences = [[[1, 9]]]}
     %4 = affine.load %1[0] : memref<1xi32>
-    // CHECK{LITERAL}: affine.store %4, %2[0] {dependences = [[[1, 9]]]}
+    // CHECK{LITERAL}: affine.store %4, %2[0] {dependences = [[[1, 9]], [[0, 0]]]}
     affine.store %4, %2[0] : memref<1xi32>
     // CHECK{LITERAL}: %5 = affine.load %0[0] {dependences = [[[1, 9]]]}
     %5 = affine.load %0[0] : memref<1xi32>
-    // CHECK{LITERAL}: affine.store %5, %1[0] {dependences = [[[1, 9]]]}
+    // CHECK{LITERAL}: affine.store %5, %1[0] {dependences = [[[1, 9]], [[0, 0]]]}
     affine.store %5, %1[0] : memref<1xi32>
     // CHECK: affine.load %arg0[%arg1] {dependences = []}
     %6 = affine.load %arg0[%arg1] : memref<?xi32>
     %7 = addi %3, %6 : i32
-    // CHECK{LITERAL}: affine.store %7, %0[0] {dependences = [[[1, 9]]]}
+    // CHECK{LITERAL}: affine.store %7, %0[0] {dependences = [[[1, 9]], [[0, 0]]]}
     affine.store %7, %0[0] : memref<1xi32>
   }
   return
@@ -78,6 +78,62 @@ func @test5(%arg0: memref<?xi32>) {
     %2 = addi %0, %1 : i32
     // CHECK: affine.store %2, %arg0[%arg1] {dependences = []}
     affine.store %2, %arg0[%arg1] : memref<?xi32>
+  }
+  return
+}
+
+// CHECK-LABEL: func @test6
+#set1 = affine_set<(d0) : (d0 - 5 >= 0)>
+func @test6(%arg0: memref<?xi32>) {
+  affine.for %arg1 = 0 to 10 {
+    %0 = affine.if #set1(%arg1) -> i32 {
+      // CHECK: affine.load %arg0[%arg1] {dependences = []}
+      %1 = affine.load %arg0[%arg1] : memref<?xi32>
+      affine.yield %1 : i32
+    } else {
+      %c1_i32 = constant 1 : i32
+      affine.yield %c1_i32 : i32
+    }
+    // CHECK{LITERAL}: affine.store %0, %arg0[%arg1] {dependences = [[[0, 0]]]}
+    affine.store %0, %arg0[%arg1] : memref<?xi32>
+  }
+  return
+}
+
+// CHECK-LABEL: func @test7
+#set2 = affine_set<(d0) : (d0 - 2 >= 0)>
+#set3 = affine_set<(d0) : (d0 - 6 >= 0)>
+func @test7(%arg0: memref<?xi32>) {
+  affine.for %arg1 = 0 to 10 {
+    affine.if #set2(%arg1) {
+      %0 = affine.if #set3(%arg1) -> i32 {
+        // CHECK: affine.load %arg0[%arg1] {dependences = []}
+        %1 = affine.load %arg0[%arg1] : memref<?xi32>
+        affine.yield %1 : i32
+      }
+      // CHECK{LITERAL}: affine.store %0, %arg0[%arg1] {dependences = [[[0, 0]]]}
+      affine.store %0, %arg0[%arg1] : memref<?xi32>
+    }
+  }
+  return
+}
+
+// CHECK-LABEL: func @test8
+func @test8(%arg0: memref<?xi32>) {
+  affine.for %arg1 = 0 to 10 {
+    affine.if #set2(%arg1) {
+      %0 = affine.if #set3(%arg1) -> i32 {
+        // CHECK: affine.load %arg0[%arg1] {dependences = []}
+        %1 = affine.load %arg0[%arg1] : memref<?xi32>
+        affine.yield %1 : i32
+      } else {
+        // CHECK: affine.load %arg0[%arg1] {dependences = []}
+        %1 = affine.load %arg0[%arg1] : memref<?xi32>
+        affine.yield %1 : i32
+      }
+      // CHECK{LITERAL}: affine.store %0, %arg0[%arg1] {dependences = [[[0, 0]], [[0, 0]]]}
+      affine.store %0, %arg0[%arg1] : memref<?xi32>
+    }
   }
   return
 }

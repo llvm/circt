@@ -51,6 +51,8 @@ with ir.Context() as ctx, ir.Location.unknown():
       ir.Attribute.parse("@top"),
       [ir.StringAttr.get("inst1"),
        ir.StringAttr.get("ext1")])
+  print(path)
+  # CHECK-NEXT: #msft<"@top[\22inst1\22,\22ext1\22]">
   # CHECK-NEXT: #msft.switch.inst<@top["inst1","ext1"]=#msft.physloc<M20K, 2, 6, 1>>
   instSwitch = msft.SwitchInstanceAttr.get([(path, physAttr)])
   print(instSwitch)
@@ -58,7 +60,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   resolved_inst = msft.get_instance(top.operation,
                                     ir.Attribute.parse("@inst1::@ext1"))
   assert (resolved_inst == ext_inst.operation)
-  resolved_inst.attributes["loc:subpath"] = instSwitch
+  resolved_inst.attributes["loc:foo_subpath"] = instSwitch
 
   not_found_inst = msft.get_instance(top.operation,
                                      ir.Attribute.parse("@inst_none::@ext1"))
@@ -72,12 +74,12 @@ with ir.Context() as ctx, ir.Location.unknown():
   db = msft.PlacementDB(top.operation)
 
   assert db.get_instance_at(physAttr) is None
-  place_rc = db.add_placement(physAttr, path, "subpath", resolved_inst)
+  place_rc = db.add_placement(physAttr, path, "foo_subpath", resolved_inst)
   assert place_rc
   located_inst = db.get_instance_at(physAttr)
   assert located_inst is not None
   assert located_inst[0] == path
-  assert located_inst[1] == "subpath"
+  assert located_inst[1] == "foo_subpath"
   assert located_inst[2] == resolved_inst
 
   num_failed = db.add_design_placements()
@@ -88,7 +90,7 @@ with ir.Context() as ctx, ir.Location.unknown():
   print("=== tcl ===")
 
   # CHECK: proc top_config { parent } {
-  # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|ext1|subpath
+  # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|ext1|foo_subpath
   msft.export_tcl(top.operation, sys.stdout)
 
   devdb = msft.PrimitiveDB()
@@ -102,13 +104,40 @@ with ir.Context() as ctx, ir.Location.unknown():
   print(seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4))
   # CHECK: #msft.physloc<M20K, 2, 6, 1>
 
-  rc = seeded_pdb.add_placement(physAttr, path, "subpath", resolved_inst)
+  rc = seeded_pdb.add_placement(physAttr, path, "foo_subpath", resolved_inst)
   assert rc
 
   print(seeded_pdb.get_nearest_free_in_column(msft.M20K, 2, 4))
+
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
+
+  def print_placement(loc, placement):
+    if placement:
+      path = msft.RootedInstancePathAttr(placement[0])
+      print(f"{loc}, {path}")
+    else:
+      print(f"{loc}")
+
+  print("=== Placements:")
+  seeded_pdb.walk_placements(print_placement)
+  # CHECK-LABEL: === Placements:
+  # CHECK: #msft.physloc<M20K, 2, 6, 1>, #msft<"@top[\22inst1\22,\22ext1\22]">
+  # CHECK: #msft.physloc<M20K, 2, 50, 1>
+
+  print("=== Placements (col 2):")
+  seeded_pdb.walk_placements(print_placement, column_num=2)
+  # CHECK-LABEL: === Placements (col 2):
+  # CHECK: #msft.physloc<M20K, 2, 6, 1>, #msft<"@top[\22inst1\22,\22ext1\22]">
+  # CHECK: #msft.physloc<M20K, 2, 50, 1>
+
+  print("=== Placements (col 6):")
+  seeded_pdb.walk_placements(print_placement, column_num=6)
+  # CHECK-LABEL: === Placements (col 6):
+
+  print("=== Errors:", file=sys.stderr)
+  # ERR-LABEL: === Errors:
   bad_loc = msft.PhysLocationAttr.get(msft.M20K, x=7, y=99, num=1)
-  rc = seeded_pdb.add_placement(bad_loc, path, "subpath", resolved_inst)
+  rc = seeded_pdb.add_placement(bad_loc, path, "foo_subpath", resolved_inst)
   assert not rc
   # ERR: error: 'hw.instance' op Could not apply placement. Invalid location

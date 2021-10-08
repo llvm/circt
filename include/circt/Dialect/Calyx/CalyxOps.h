@@ -72,11 +72,11 @@ Direction get(bool isOutput);
 
 /// Return a \p IntegerAttr containing the packed representation of an array
 /// of directions.
-IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
+IntegerAttr packAttribute(MLIRContext *context, ArrayRef<Direction> directions);
 
 /// Turn a packed representation of port attributes into a vector that can be
 /// worked with.
-SmallVector<Direction> unpackAttribute(Operation *component);
+SmallVector<Direction> unpackAttribute(IntegerAttr directions);
 
 /// Convenience function for generating a vector of directions.
 SmallVector<Direction> genInOutDirections(size_t nIns, size_t nOuts);
