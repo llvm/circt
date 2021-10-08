@@ -713,14 +713,21 @@ namespace {
 class VerilogEmitterState {
 public:
   explicit VerilogEmitterState(const LoweringOptions &options,
-                               const SymbolCache &symbolCache, raw_ostream &os)
-      : options(options), symbolCache(symbolCache), os(os) {}
+                               const SymbolCache &symbolCache,
+                               const GlobalNameTable &globalNames,
+                               raw_ostream &os)
+      : options(options), symbolCache(symbolCache), globalNames(globalNames),
+        os(os) {}
 
   /// The emitter options which control verilog emission.
   const LoweringOptions options;
 
   /// This is a cache of various information about the IR, in frozen state.
   const SymbolCache &symbolCache;
+
+  /// This tracks global names where the Verilog name needs to be different than
+  /// the IR name.
+  const GlobalNameTable &globalNames;
 
   /// The stream to emit to.
   raw_ostream &os;
@@ -3524,8 +3531,11 @@ struct SharedEmitterState {
   /// operations that have a sv.bind in them.
   SmallPtrSet<Operation *, 8> modulesContainingBinds;
 
-  explicit SharedEmitterState(ModuleOp rootOp)
-      : rootOp(rootOp), options(rootOp) {}
+  /// Information about renamed global symbols, parameters, etc.
+  const GlobalNameTable globalNames;
+
+  explicit SharedEmitterState(ModuleOp rootOp, GlobalNameTable globalNames)
+      : rootOp(rootOp), options(rootOp), globalNames(std::move(globalNames)) {}
   void gatherFiles(bool separateModules);
 
   using EmissionList = std::vector<StringOrOpToEmit>;
@@ -3733,7 +3743,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
   // If we aren't parallelizing output, directly output each operation to the
   // specified stream.
   if (!parallelize) {
-    VerilogEmitterState state(options, symbolCache, os);
+    VerilogEmitterState state(options, symbolCache, globalNames, os);
     for (auto &entry : thingsToEmit) {
       if (auto *op = entry.getOperation())
         emitOperation(state, op);
@@ -3762,7 +3772,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
     SmallString<256> buffer;
     llvm::raw_svector_ostream tmpStream(buffer);
-    VerilogEmitterState state(options, symbolCache, tmpStream);
+    VerilogEmitterState state(options, symbolCache, globalNames, tmpStream);
     emitOperation(state, op);
     stringOrOp.setString(buffer);
   });
@@ -3778,7 +3788,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
     }
 
     // If this wasn't emitted to a string (e.g. it is a bind) do so now.
-    VerilogEmitterState state(options, symbolCache, os);
+    VerilogEmitterState state(options, symbolCache, globalNames, os);
     emitOperation(state, op);
   }
 }
@@ -3789,10 +3799,10 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
 LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
   // Rename module names and interfaces to not conflict with each other or with
-  // Verilog keywords.  TODO: better integrate this.
-  legalizeGlobalNames(module);
+  // Verilog keywords.
+  GlobalNameTable globalNames = legalizeGlobalNames(module);
 
-  SharedEmitterState emitter(module);
+  SharedEmitterState emitter(module, std::move(globalNames));
   emitter.gatherFiles(false);
 
   SharedEmitterState::EmissionList list;
@@ -3885,10 +3895,10 @@ static void createSplitOutputFile(Identifier fileName, FileInfo &file,
 
 LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
   // Rename module names and interfaces to not conflict with each other or with
-  // Verilog keywords.  TODO: better integrate this.
-  legalizeGlobalNames(module);
+  // Verilog keywords.
+  GlobalNameTable globalNames = legalizeGlobalNames(module);
 
-  SharedEmitterState emitter(module);
+  SharedEmitterState emitter(module, std::move(globalNames));
   emitter.gatherFiles(true);
 
   // Emit each file in parallel if context enables it.

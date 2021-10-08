@@ -23,6 +23,7 @@ class GlobalNameResolver;
 /// concurrent accesses.
 /// TODO: right now this just handles module parameter names.
 struct GlobalNameTable {
+  GlobalNameTable(GlobalNameTable &&) = default;
 
   /// Return the string to use for the specified parameter name in the specified
   /// module.  Parameters may be renamed for a variety of reasons (e.g.
@@ -39,7 +40,6 @@ private:
   GlobalNameTable() {}
   GlobalNameTable(const GlobalNameTable &) = delete;
   void operator=(const GlobalNameTable &) = delete;
-  GlobalNameTable(GlobalNameTable &&) = default;
 
   void addRenamedParam(Operation *module, StringAttr oldName,
                        StringAttr newName) {
