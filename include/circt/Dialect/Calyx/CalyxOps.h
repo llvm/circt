@@ -62,10 +62,6 @@ public:
 /// module port direction attributes.
 enum Direction { Input = 0, Output };
 namespace direction {
-
-/// The key in a components's attribute dictionary used to find the direction.
-constexpr const char *attrKey = "portDirections";
-
 /// Return an output direction if \p isOutput is true, otherwise return an
 /// input direction.
 Direction get(bool isOutput);
@@ -73,10 +69,6 @@ Direction get(bool isOutput);
 /// Return a \p IntegerAttr containing the packed representation of an array
 /// of directions.
 IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
-
-/// Turn a packed representation of port attributes into a vector that can be
-/// worked with.
-SmallVector<Direction> unpackAttribute(Operation *component);
 
 /// Convenience function for generating a vector of directions.
 SmallVector<Direction> genInOutDirections(size_t nIns, size_t nOuts);
