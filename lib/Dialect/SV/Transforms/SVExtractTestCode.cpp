@@ -312,13 +312,25 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover.bindfile");
 
   auto isAssert = [](Operation *op) -> bool {
+    if (auto inst = dyn_cast<hw::InstanceOp>(op))
+      if (auto mod = inst.getReferencedModule())
+        if (mod->getAttr("firrtl.extract.assert.extra"))
+          return true;
     return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
            isa<AssertConcurrentOp>(op);
   };
   auto isAssume = [](Operation *op) -> bool {
+    if (auto inst = dyn_cast<hw::InstanceOp>(op))
+      if (auto mod = inst.getReferencedModule())
+        if (mod->getAttr("firrtl.extract.assume.extra"))
+          return true;
     return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
   };
   auto isCover = [](Operation *op) -> bool {
+    if (auto inst = dyn_cast<hw::InstanceOp>(op))
+      if (auto mod = inst.getReferencedModule())
+        if (mod->getAttr("firrtl.extract.cover.extra"))
+          return true;
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
 
@@ -331,6 +343,14 @@ void SVExtractTestCodeImplPass::runOnOperation() {
       doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile);
     }
   }
+  // We have to wait until all the instances are processed to clean up the
+  // annotations.
+  for (auto &op : topLevelModule->getOperations())
+    if (isa<hw::HWModuleOp, hw::HWModuleExternOp>(op)) {
+      op.removeAttr("firrtl.extract.assert.extra");
+      op.removeAttr("firrtl.extract.cover.extra");
+      op.removeAttr("firrtl.extract.assume.extra");
+    }
 }
 
 std::unique_ptr<Pass> circt::sv::createSVExtractTestCodePass() {

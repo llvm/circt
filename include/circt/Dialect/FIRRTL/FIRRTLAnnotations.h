@@ -180,6 +180,7 @@ public:
   /// removed, false otherwise.
   bool removeAnnotation(Annotation anno);
   bool removeAnnotation(Attribute anno);
+  bool removeAnnotation(StringRef className);
 
   /// Remove all annotations from this annotation set for which `predicate`
   /// returns true. The predicate is guaranteed to be called on every

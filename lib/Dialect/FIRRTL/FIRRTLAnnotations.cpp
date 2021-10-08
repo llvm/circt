@@ -272,6 +272,13 @@ bool AnnotationSet::removeAnnotation(Attribute anno) {
       [&](Annotation other) { return other.getDict() == anno; });
 }
 
+/// Remove an annotation from this annotation set. Returns true if any were
+/// removed, false otherwise.
+bool AnnotationSet::removeAnnotation(StringRef className) {
+  return removeAnnotations(
+      [&](Annotation other) { return other.getClass() == className; });
+}
+
 /// Remove all annotations from this annotation set for which `predicate`
 /// returns true.
 bool AnnotationSet::removeAnnotations(
