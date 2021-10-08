@@ -144,6 +144,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
       SmallVector<std::string> hierNames;
       jsonStream.attributeArray("hierarchy", [&] {
         for (auto p : paths) {
+          if (p.empty())
+            continue;
           const InstanceOp &x = p.front();
           std::string hierName =
               x->getParentOfType<FModuleOp>().getName().str();
