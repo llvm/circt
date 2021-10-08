@@ -50,7 +50,7 @@ SmallVector<Direction> direction::genInOutDirections(size_t nIns,
   return dirs;
 }
 
-IntegerAttr direction::packAttribute(MLIRContext *context,
+IntegerAttr direction::packAttribute(MLIRContext *ctx,
                                      ArrayRef<Direction> directions) {
   // Pack the array of directions into an APInt.  Input is zero, output is one.
   size_t numDirections = directions.size();
@@ -637,9 +637,8 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   result.addAttribute("portNames", ArrayAttr::get(context, portNames));
   result.addAttribute(
       "portDirections",
-      direction::packAttribute(
-          direction::genInOutDirections(inPorts.size(), outPorts.size()),
-          context));
+      direction::packAttribute(context, direction::genInOutDirections(
+                                            inPorts.size(), outPorts.size())));
 
   ports.append(inPorts);
   ports.append(outPorts);
@@ -784,10 +783,11 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
 
   // Record the port names and number of input ports of the component.
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
-  result.addAttribute(
-      "portDirections",
-      direction::packAttribute(direction::genInOutDirections(
-          portIOTypes.first.size(), portIOTypes.second.size())));
+  result.addAttribute("portDirections",
+                      direction::packAttribute(builder.getContext(),
+                                               direction::genInOutDirections(
+                                                   portIOTypes.first.size(),
+                                                   portIOTypes.second.size())));
   // Record the attributes of the ports.
   result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
 
