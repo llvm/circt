@@ -186,44 +186,6 @@ void llhd::ConstantTimeOp::build(OpBuilder &builder, OperationState &result,
 }
 
 //===----------------------------------------------------------------------===//
-// EqOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::EqOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.eq(x, 1) -> x
-  if (matchPattern(rhs(), m_One()) && lhs().getType().isSignlessInteger(1))
-    return lhs();
-
-  /// llhs.eq(x,x) -> 1
-  if (lhs() == rhs())
-    return BoolAttr::get(getContext(), true);
-
-  if (!operands[0] || !operands[1])
-    return {};
-
-  return BoolAttr::get(getContext(), operands[0] == operands[1]);
-}
-
-//===----------------------------------------------------------------------===//
-// NeqOp
-//===----------------------------------------------------------------------===//
-
-OpFoldResult llhd::NeqOp::fold(ArrayRef<Attribute> operands) {
-  /// llhd.neq(x, 0) -> x
-  if (matchPattern(rhs(), m_Zero()) && lhs().getType().isSignlessInteger(1))
-    return lhs();
-
-  /// llhs.neq(x,x) -> 0
-  if (lhs() == rhs())
-    return BoolAttr::get(getContext(), false);
-
-  if (!operands[0] || !operands[1])
-    return {};
-
-  return BoolAttr::get(getContext(), operands[0] != operands[1]);
-}
-
-//===----------------------------------------------------------------------===//
 // ShlOp
 //===----------------------------------------------------------------------===//
 

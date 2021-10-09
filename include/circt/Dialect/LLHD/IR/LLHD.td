@@ -108,7 +108,6 @@ class SameTypeArbitraryWidth<string desc, string lhs, string rhs>
 //===----------------------------------------------------------------------===//
 
 include "ValueOps.td"
-include "ArithmeticOps.td"
 include "BitwiseOps.td"
 include "SignalOps.td"
 include "ExtractOps.td"

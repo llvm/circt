@@ -2066,53 +2066,6 @@ struct CombParityOpConversion : public ConvertToLLVMPattern {
 
 } // namespace
 
-namespace {
-/// Convert an EqOp to LLVM dialect.
-struct EqOpConversion : public ConvertToLLVMPattern {
-  explicit EqOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::EqOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    EqOpAdaptor transformed(operands);
-
-    if (transformed.rhs().getType().isa<IntegerType>()) {
-      rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(
-          op, LLVM::ICmpPredicate::eq, transformed.lhs(), transformed.rhs());
-
-      return success();
-    }
-    return failure();
-  }
-};
-} // namespace
-
-namespace {
-/// Convert a NeqOp to LLVM dialect.
-struct NeqOpConversion : public ConvertToLLVMPattern {
-  explicit NeqOpConversion(MLIRContext *ctx, LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(llhd::NeqOp::getOperationName(), ctx,
-                             typeConverter) {}
-
-  LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-                  ConversionPatternRewriter &rewriter) const override {
-    NeqOpAdaptor transformed(operands);
-
-    if (transformed.rhs().getType().isa<IntegerType>()) {
-      rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(
-          op, LLVM::ICmpPredicate::ne, transformed.lhs(), transformed.rhs());
-
-      return success();
-    }
-
-    return failure();
-  }
-};
-} // namespace
-
 //===----------------------------------------------------------------------===//
 // Value creation conversions
 //===----------------------------------------------------------------------===//
@@ -2829,7 +2782,6 @@ void circt::populateLLHDToLLVMConversionPatterns(LLVMTypeConverter &converter,
       converter);
 
   // Arithmetic conversion patterns.
-  patterns.add<EqOpConversion, NeqOpConversion>(ctx, converter);
   patterns.add<CombAddOpConversion, CombSubOpConversion, CombMulOpConversion,
                CombDivUOpConversion, CombDivSOpConversion, CombModUOpConversion,
                CombModSOpConversion, CombICmpOpConversion, CombSExtOpConversion,
