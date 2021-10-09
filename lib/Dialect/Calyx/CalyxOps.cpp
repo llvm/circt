@@ -40,26 +40,14 @@ Direction direction::get(bool isOutput) {
   return static_cast<Direction>(isOutput);
 }
 
-SmallVector<Direction> direction::genInOutDirections(size_t nIns,
-                                                     size_t nOuts) {
-  SmallVector<Direction> dirs;
-  std::generate_n(std::back_inserter(dirs), nIns,
-                  [] { return Direction::Input; });
-  std::generate_n(std::back_inserter(dirs), nOuts,
-                  [] { return Direction::Output; });
-  return dirs;
-}
-
-IntegerAttr direction::packAttribute(MLIRContext *ctx,
-                                     ArrayRef<Direction> directions) {
-  // Pack the array of directions into an APInt.  Input is zero, output is one.
-  size_t numDirections = directions.size();
-  APInt portDirections(numDirections, 0);
-  for (size_t i = 0, e = numDirections; i != e; ++i) {
-    if (directions[i] == Direction::Input)
-      continue;
+IntegerAttr direction::packAttribute(MLIRContext *ctx, size_t nIns,
+                                     size_t nOuts) {
+  // Pack the array of directions into an APInt.  Input direction is zero,
+  // output direction is one.
+  size_t numDirections = nIns + nOuts;
+  APInt portDirections(/*width=*/numDirections, /*value=*/0);
+  for (size_t i = nIns, e = numDirections; i != e; ++i)
     portDirections.setBit(i);
-  }
 
   return IntegerAttr::get(IntegerType::get(ctx, numDirections), portDirections);
 }
@@ -637,8 +625,7 @@ parseComponentSignature(OpAsmParser &parser, OperationState &result,
   result.addAttribute("portNames", ArrayAttr::get(context, portNames));
   result.addAttribute(
       "portDirections",
-      direction::packAttribute(context, direction::genInOutDirections(
-                                            inPorts.size(), outPorts.size())));
+      direction::packAttribute(context, inPorts.size(), outPorts.size()));
 
   ports.append(inPorts);
   ports.append(outPorts);
@@ -785,9 +772,8 @@ void ComponentOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("portDirections",
                       direction::packAttribute(builder.getContext(),
-                                               direction::genInOutDirections(
-                                                   portIOTypes.first.size(),
-                                                   portIOTypes.second.size())));
+                                               portIOTypes.first.size(),
+                                               portIOTypes.second.size()));
   // Record the attributes of the ports.
   result.addAttribute("portAttributes", builder.getArrayAttr(portAttributes));
 
