@@ -759,6 +759,9 @@ public:
                               VerilogPrecedence parenthesizeIfLooserThan,
                               function_ref<InFlightDiagnostic()> emitError);
 
+  /// This is the current module being emitted for a HWModuleOp.
+  HWModuleOp currentModuleOp;
+
   /// This set keeps track of all of the expression nodes that need to be
   /// emitted as standalone wire declarations.  This can happen because they are
   /// multiply-used or because the user requires a name to reference.
@@ -824,7 +827,10 @@ ModuleEmitter::printParamValue(Attribute value, raw_ostream &os,
     return {Symbol, IsUnsigned};
   }
   if (auto parameterRef = value.dyn_cast<ParamDeclRefAttr>()) {
-    os << parameterRef.getName().getValue();
+    // Get the name of this parameter (in case it got renamed).
+    os << state.globalNames.getParameterVerilogName(currentModuleOp,
+                                                    parameterRef.getName());
+
     // TODO: Should we support signed parameters?
     return {Symbol, IsUnsigned};
   }
@@ -2687,8 +2693,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       } else {
         os << ",\n";
       }
-      os.indent(state.currentIndent + INDENT_AMOUNT)
-          << prefix << '.' << param.getName().getValue() << '(';
+      os.indent(state.currentIndent + INDENT_AMOUNT) << prefix << '.';
+      os << state.globalNames.getParameterVerilogName(moduleOp,
+                                                      param.getName());
+      os << '(';
       emitter.printParamValue(param.getValue(), os, [&]() {
         return op->emitOpError("invalid instance parameter '")
                << param.getName().getValue() << "' value";
@@ -3190,7 +3198,7 @@ void ModuleEmitter::emitBind(BindOp op) {
 
 void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
   auto instance = bind.getReferencedInstance(&state.symbolCache);
-  auto instantiator = instance->getParentOfType<hw::HWModuleOp>().getName();
+  auto instantiator = instance->getParentOfType<HWModuleOp>().getName();
   auto *interface = bind->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
   os << "bind " << instantiator << " "
@@ -3199,6 +3207,8 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
 }
 
 void ModuleEmitter::emitHWModule(HWModuleOp module) {
+  currentModuleOp = module;
+
   ModuleNameManager names;
 
   // Add all the ports to the name table so wires etc don't reuse the name.
@@ -3220,8 +3230,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Add all parameters to the name table.
   for (auto param : module.parameters()) {
     // Add the name to the name table so any conflicting wires are renamed.
-    names.addLegalName(
-        nullptr, param.cast<ParamDeclAttr>().getName().getValue(), module);
+    StringRef verilogName = state.globalNames.getParameterVerilogName(
+        module, param.cast<ParamDeclAttr>().getName());
+    names.addLegalName(nullptr, verilogName, module);
   }
 
   // Rewrite the module body into compliance with our emission expectations, and
@@ -3298,7 +3309,9 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           if (scratch.size() < maxTypeWidth)
             os.indent(maxTypeWidth - scratch.size());
 
-          os << paramAttr.getName().getValue();
+          os << state.globalNames.getParameterVerilogName(module,
+                                                          paramAttr.getName());
+
           if (defaultValue) {
             os << " = ";
             printParamValue(defaultValue, os, [&]() {
@@ -3428,6 +3441,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
       .emitStatementBlock(*module.getBodyBlock());
   os << outputBuffer;
   os << "endmodule\n\n";
+
+  currentModuleOp = HWModuleOp();
 }
 
 //===----------------------------------------------------------------------===//

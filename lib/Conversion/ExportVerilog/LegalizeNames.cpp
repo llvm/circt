@@ -80,9 +80,8 @@ public:
   /// If the module with the specified name has had a port or parameter renamed,
   /// return the module that defines the name.
   HWModuleOp getModuleWithRenamedInterface(StringAttr name) {
-    auto it = modulesWithRenamedPortsOrParams.find(name);
-    return it != modulesWithRenamedPortsOrParams.end() ? it->second
-                                                       : HWModuleOp();
+    auto it = modulesWithRenamedPorts.find(name);
+    return it != modulesWithRenamedPorts.end() ? it->second : HWModuleOp();
   }
 
 private:
@@ -91,19 +90,15 @@ private:
   /// return false.
   bool legalizePortNames(hw::HWModuleOp module);
 
-  Attribute remapRenamedParameters(Attribute value, HWModuleOp module);
-  void updateInstanceForChangedModule(InstanceOp inst, HWModuleOp module);
-  void updateInstanceParamDeclRefs(InstanceOp instance);
-  void rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver,
-                         bool moduleHasRenamedInterface);
+  void rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver);
   void renameModuleBody(hw::HWModuleOp module);
 
   /// Set of globally visible names, to ensure uniqueness.
   NameCollisionResolver globalNameResolver;
 
-  /// If a module has a port or parameter renamed, then this keeps track of the
-  /// module it is associated with.
-  DenseMap<Attribute, HWModuleOp> modulesWithRenamedPortsOrParams;
+  /// If a module has a port renamed, then this keeps track of the module it is
+  /// associated with so we can update instances.
+  DenseMap<Attribute, HWModuleOp> modulesWithRenamedPorts;
 
   /// This keeps track of globally visible names like module parameters.
   GlobalNameTable globalNameTable;
@@ -163,7 +158,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
       legalizeSymbolName(module, globalNameResolver);
       if (legalizePortNames(module))
-        modulesWithRenamedPortsOrParams[module.getNameAttr()] = module;
+        modulesWithRenamedPorts[module.getNameAttr()] = module;
       continue;
     }
 
@@ -222,25 +217,14 @@ bool GlobalNameResolver::legalizePortNames(hw::HWModuleOp module) {
     setModuleResultNames(module, outputNames);
 
   // Legalize the parameters.
-  SmallVector<Attribute> parameters;
-  bool changedParameters = false;
   for (auto param : module.parameters()) {
     auto paramAttr = param.cast<ParamDeclAttr>();
     auto newName = nameResolver.getLegalName(paramAttr.getName());
-    if (newName.empty())
-      parameters.push_back(param);
-    else {
-      auto newNameAttr = StringAttr::get(paramAttr.getContext(), newName);
-      parameters.push_back(ParamDeclAttr::getWithName(paramAttr, newNameAttr));
-      changedParameters = true;
-      globalNameTable.addRenamedParam(module, paramAttr.getName(), newNameAttr);
-    }
+    if (!newName.empty())
+      globalNameTable.addRenamedParam(module, paramAttr.getName(), newName);
   }
-  if (changedParameters)
-    module->setAttr("parameters",
-                    ArrayAttr::get(module.getContext(), parameters));
 
-  if (changedArgNames | changedOutputNames | changedParameters) {
+  if (changedArgNames | changedOutputNames) {
     anythingChanged = true;
     return true;
   }
@@ -248,95 +232,8 @@ bool GlobalNameResolver::legalizePortNames(hw::HWModuleOp module) {
   return false;
 }
 
-/// Scan a parameter expression tree, handling any renamed parameters that may
-/// occur.
-Attribute GlobalNameResolver::remapRenamedParameters(Attribute value,
-                                                     HWModuleOp module) {
-  // Literals are always fine and never change.
-  if (value.isa<IntegerAttr>() || value.isa<FloatAttr>() ||
-      value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
-    return value;
-
-  // Remap leaves of expressions if needed.
-  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
-    SmallVector<Attribute> newOperands;
-    bool anyChanged = false;
-    for (auto op : expr.getOperands()) {
-      newOperands.push_back(remapRenamedParameters(op, module));
-      anyChanged |= newOperands.back() != op;
-    }
-    // Don't rebuild an attribute if nothing changed.
-    if (!anyChanged)
-      return value;
-    return ParamExprAttr::get(expr.getOpcode(), newOperands);
-  }
-
-  // Otherwise this must be a parameter reference.
-  auto parameterRef = value.dyn_cast<ParamDeclRefAttr>();
-  assert(parameterRef && "Unknown kind of parameter expression");
-
-  // If this parameter is un-renamed, then leave it alone.
-  auto nameAttr = parameterRef.getName();
-  auto newName = globalNameTable.getParameterVerilogName(module, nameAttr);
-  if (newName == nameAttr)
-    return value;
-
-  // Okay, it was renamed, return the new name with the right type.
-  return ParamDeclRefAttr::get(newName, value.getType());
-}
-
-// If this instance is referring to a module with renamed ports or
-// parameter names, update them.
-void GlobalNameResolver::updateInstanceForChangedModule(InstanceOp inst,
-                                                        HWModuleOp module) {
-  inst.argNamesAttr(module.argNames());
-  inst.resultNamesAttr(module.resultNames());
-
-  // If any module parameters changed names, take the new name.
-  SmallVector<Attribute> newAttrs;
-  auto instParameters = inst.parameters();
-  auto modParameters = module.parameters();
-  for (size_t i = 0, e = instParameters.size(); i != e; ++i) {
-    auto instParam = instParameters[i].cast<ParamDeclAttr>();
-    auto modParam = modParameters[i].cast<ParamDeclAttr>();
-    if (instParam.getName() == modParam.getName())
-      newAttrs.push_back(instParam);
-    else
-      newAttrs.push_back(
-          ParamDeclAttr::getWithName(instParam, modParam.getName()));
-  }
-  inst.parametersAttr(ArrayAttr::get(inst.getContext(), newAttrs));
-}
-
-/// Rename any parameter values being specified for an instance if they are
-/// referring to parameters that got renamed.
-void GlobalNameResolver::updateInstanceParamDeclRefs(InstanceOp instance) {
-  auto parameters = instance.parameters();
-  if (parameters.empty())
-    return;
-
-  auto curModule = instance->getParentOfType<HWModuleOp>();
-
-  SmallVector<Attribute> newParams;
-  newParams.reserve(parameters.size());
-  bool anyRenamed = false;
-  for (Attribute param : parameters) {
-    auto paramAttr = param.cast<ParamDeclAttr>();
-    auto newValue = remapRenamedParameters(paramAttr.getValue(), curModule);
-    if (newValue == paramAttr.getValue()) {
-      newParams.push_back(param);
-      continue;
-    }
-    anyRenamed = true;
-    newParams.push_back(ParamDeclAttr::get(paramAttr.getName(), newValue));
-  }
-
-  instance.parametersAttr(ArrayAttr::get(instance.getContext(), newParams));
-}
-
-void GlobalNameResolver::rewriteModuleBody(Block &block,
-                                           NameCollisionResolver &nameResolver,
-                                           bool moduleHasRenamedInterface) {
+void GlobalNameResolver::rewriteModuleBody(
+    Block &block, NameCollisionResolver &nameResolver) {
 
   // Rename the instances, regs, and wires.
   for (auto &op : block) {
@@ -348,11 +245,10 @@ void GlobalNameResolver::rewriteModuleBody(Block &block,
       // If this instance is referring to a module with renamed ports or
       // parameter names, update them.
       if (HWModuleOp module = getModuleWithRenamedInterface(
-              instanceOp.moduleNameAttr().getAttr()))
-        updateInstanceForChangedModule(instanceOp, module);
-
-      if (moduleHasRenamedInterface)
-        updateInstanceParamDeclRefs(instanceOp);
+              instanceOp.moduleNameAttr().getAttr())) {
+        instanceOp.argNamesAttr(module.argNames());
+        instanceOp.resultNamesAttr(module.resultNames());
+      }
       continue;
     }
 
@@ -363,47 +259,19 @@ void GlobalNameResolver::rewriteModuleBody(Block &block,
         op.setAttr("name", StringAttr::get(op.getContext(), newName));
     }
 
-    if (auto localParam = dyn_cast<LocalParamOp>(op)) {
-      // If the initializer value in the local param was renamed then update it.
-      if (moduleHasRenamedInterface) {
-        auto curModule = op.getParentOfType<HWModuleOp>();
-        localParam.valueAttr(
-            remapRenamedParameters(localParam.value(), curModule));
-      }
-      continue;
-    }
-
-    if (auto paramValue = dyn_cast<ParamValueOp>(op)) {
-      // If the initializer value in the local param was renamed then update it.
-      if (moduleHasRenamedInterface) {
-        auto curModule = op.getParentOfType<HWModuleOp>();
-        paramValue.valueAttr(
-            remapRenamedParameters(paramValue.value(), curModule));
-      }
-      continue;
-    }
-
     // If this operation has regions, then we recursively process them if they
     // can contain things that need to be renamed.  We don't walk the module
     // in the common case.
     if (op.getNumRegions()) {
       for (auto &region : op.getRegions()) {
         if (!region.empty())
-          rewriteModuleBody(region.front(), nameResolver,
-                            moduleHasRenamedInterface);
+          rewriteModuleBody(region.front(), nameResolver);
       }
     }
   }
 }
 
 void GlobalNameResolver::renameModuleBody(hw::HWModuleOp module) {
-
-  // If this module had something about its interface, then a parameter may
-  // have been changed.  In that case, we change parameter references to match.
-  // This isn't common, so we use this to avoid work.
-  bool moduleHasRenamedInterface =
-      getModuleWithRenamedInterface(module.getNameAttr()) != HWModuleOp();
-
   // All the ports and parameters are pre-legalized, just add their names to the
   // map so we detect conflicts with them.
   NameCollisionResolver nameResolver;
@@ -413,8 +281,7 @@ void GlobalNameResolver::renameModuleBody(hw::HWModuleOp module) {
     nameResolver.insertUsedName(
         param.cast<ParamDeclAttr>().getName().getValue());
 
-  rewriteModuleBody(*module.getBodyBlock(), nameResolver,
-                    moduleHasRenamedInterface);
+  rewriteModuleBody(*module.getBodyBlock(), nameResolver);
 }
 
 //===----------------------------------------------------------------------===//

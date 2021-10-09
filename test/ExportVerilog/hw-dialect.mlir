@@ -909,3 +909,54 @@ hw.module @namechange(%casex: i4) -> (if: i4) {
   // CHECK: assign if_1 = casex_0;
   hw.output %casex : i4
 }
+
+
+hw.module.extern @module_with_bool<bparam: i1>() -> ()
+
+// CHECK-LABEL: module parametersNameConflict
+// CHECK-NEXT:    #(parameter [41:0] p1_0 = 42'd17,
+// CHECK-NEXT:      parameter [0:0]  wire_1) (
+// CHECK-NEXT:    input [7:0] p1);
+hw.module @parametersNameConflict<p1: i42 = 17, wire: i1>(%p1: i8) {
+  %myWire = sv.wire : !hw.inout<i1>
+
+  // CHECK: `ifdef SOMEMACRO
+  sv.ifdef "SOMEMACRO" {
+    // CHECK: localparam local_0 = wire_1;
+    %local = sv.localparam : i1 { value = #hw.param.decl.ref<"wire">: i1 }
+
+    // CHECK: assign myWire = wire_1;
+    %0 = hw.param.value i1 = #hw.param.decl.ref<"wire">
+    sv.assign %myWire, %0: i1
+  }
+
+  // "wire" param getting updated should update in this instance.
+  
+  // CHECK: module_with_bool #(
+  // CHECK:  .bparam(wire_1)
+  // CHECK: ) inst ();
+  hw.instance "inst" @module_with_bool<bparam: i1 = #hw.param.decl.ref<"wire">>() -> ()
+
+  // CHECK: module_with_bool #(
+  // CHECK:  .bparam(wire ^ 1)
+  // CHECK: ) inst2 ();
+  hw.instance "inst2" @module_with_bool<bparam: i1 = #hw.param.expr.xor<#hw.param.verbatim<"wire">, true>>() -> ()
+}
+
+// CHECK-LABEL: module use_parameters(
+hw.module @use_parameters(%xxx: i8) {
+  // CHECK: parametersNameConflict #(
+  // CHECK:  .p1_0(42'd27),
+  // CHECK:  .wire_1(0)
+  // CHECK: ) inst (
+  // CHECK:  .p1 (xxx)
+  // CHECK: );
+  hw.instance "inst" @parametersNameConflict<p1: i42 = 27, wire: i1 = 0>(p1: %xxx: i8) -> ()
+
+  // CHECK: `ifdef SOMEMACRO
+  sv.ifdef "SOMEMACRO" {
+    // CHECK: reg [3:0] xxx_0;
+    %0 = sv.reg  { name = "xxx" } : !hw.inout<i4>
+  }
+}
+

@@ -29,10 +29,10 @@ struct GlobalNameTable {
   /// module.  Parameters may be renamed for a variety of reasons (e.g.
   /// conflicting with ports or verilog keywords), and this returns the
   /// legalized name to use.
-  StringAttr getParameterVerilogName(Operation *module,
-                                     StringAttr paramName) const {
+  StringRef getParameterVerilogName(Operation *module,
+                                    StringAttr paramName) const {
     auto it = renamedParams.find(std::make_pair(module, paramName));
-    return it != renamedParams.end() ? it->second : paramName;
+    return (it != renamedParams.end() ? it->second : paramName).getValue();
   }
 
 private:
@@ -42,8 +42,9 @@ private:
   void operator=(const GlobalNameTable &) = delete;
 
   void addRenamedParam(Operation *module, StringAttr oldName,
-                       StringAttr newName) {
-    renamedParams[{module, oldName}] = newName;
+                       StringRef newName) {
+    renamedParams[{module, oldName}] =
+        StringAttr::get(oldName.getContext(), newName);
   }
 
   /// This contains entries for any parameters that got renamed.  The key is a
