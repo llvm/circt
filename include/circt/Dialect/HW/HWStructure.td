@@ -379,12 +379,12 @@ def InstanceOp : HWOp<"instance", [Symbol,
 
     /// Change the names of all the input ports.
     void setArgumentNames(ArrayAttr names) {
-      getOperation()->setAttr("argNames", names);
+      argNamesAttr(names);
     }
 
     /// Change the names of all the result ports.
     void setResultNames(ArrayAttr names) {
-      getOperation()->setAttr("resultNames", names);
+      resultNamesAttr(names);
     }
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
@@ -393,12 +393,12 @@ def InstanceOp : HWOp<"instance", [Symbol,
 
     /// Get the instances's name.
     StringAttr getName() {
-      return (*this)->getAttrOfType<StringAttr>("instanceName");
+      return instanceNameAttr();
     }
 
     /// Set the instance's name.
     void setName(StringAttr name) {
-      (*this)->setAttr("instanceName", name);
+      instanceNameAttr(name);
     }
 
     LogicalResult verifyCustom();
