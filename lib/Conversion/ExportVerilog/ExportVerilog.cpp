@@ -1798,9 +1798,12 @@ void NameCollector::collectNames(Block &block) {
   // Loop over all of the results of all of the ops.  Anything that defines a
   // value needs to be noticed.
   for (auto &op : block) {
-    // Instances and interface instances are handled in prepareHWModule.
-    if (isa<InstanceOp, InterfaceInstanceOp>(op))
+    // Instances have a instance name to recognize but we don't need to look
+    // at the result values.
+    if (auto instance = dyn_cast<InstanceOp>(op)) {
+      names.addName(&op, instance.instanceName());
       continue;
+    }
 
     bool isExpr = isVerilogExpression(&op);
     for (auto result : op.getResults()) {
@@ -1813,25 +1816,25 @@ void NameCollector::collectNames(Block &block) {
 
         // Remember that this expression should be emitted out of line.
         moduleEmitter.outOfLineExpressions.insert(&op);
-      }
 
-      // Otherwise, it must be an expression or a declaration like a
-      // RegOp/WireOp.
-      if (!names.hasName(result))
+        // Since this will be used out-of-line, we'll need a name for it.  If
+        // this expression has a random "name" attribute, keep track of it in
+        // case we end up spilling this.
+        // FIXME: This is highly unprincipled and should be removed.
+        //   https://github.com/llvm/circt/issues/1752
         names.addName(result, op.getAttrOfType<StringAttr>("name"));
 
-      // Don't measure or emit wires that are emitted inline (i.e. the wire
-      // definition is emitted on the line of the expression instead of a
-      // block at the top of the module).
-      if (isExpr) {
+        // Don't measure or emit wires that are emitted inline (i.e. the wire
+        // definition is emitted on the line of the expression instead of a
+        // block at the top of the module).
         // Procedural blocks always emit out of line variable declarations,
         // because Verilog requires that they all be at the top of a block.
         if (!isBlockProcedural)
           continue;
       }
 
-      // Measure this name and the length of its type, and ensure it is emitted
-      // later.
+      // Measure this name and the length of its type, and ensure it is
+      // emitted later.
       valuesToEmit.push_back(ValuesToEmitRecord{result, {}});
       auto &typeString = valuesToEmit.back().typeString;
 
@@ -1845,6 +1848,18 @@ void NameCollector::collectNames(Block &block) {
                         &op);
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
+    }
+
+    // Notice and renamify named declarations.
+    if (isa<WireOp, RegOp, LocalParamOp, InterfaceInstanceOp>(op))
+      names.addName(op.getResult(0), op.getAttrOfType<StringAttr>("name"));
+
+    // Notice and renamify the labels on verification statements.
+    if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
+            CoverConcurrentOp>(op)) {
+      auto labelAttr = op.getAttrOfType<StringAttr>("label");
+      if (!labelAttr.getValue().empty())
+        names.addName(&op, labelAttr);
     }
 
     // Recursively process any regions under the op iff this is a procedural
@@ -2329,11 +2344,10 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
 /// `enforceVerifLabels` option is set, a temporary name for the operation is
 /// picked and uniquified through `addName`.
 void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
-  if (names.hasName(op)) {
+  if (!op->getAttrOfType<StringAttr>("label").getValue().empty()) {
     os << names.getName(op) << ": ";
   } else if (state.options.enforceVerifLabels) {
-    auto name = names.addName(op, opName);
-    os << name << ": ";
+    os << names.addName(op, opName) << ": ";
   }
 }
 
@@ -3236,7 +3250,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
 
   // Rewrite the module body into compliance with our emission expectations, and
   // collect/rename symbols within the body that conflict.
-  prepareHWModule(*module.getBodyBlock(), names, state.options);
+  prepareHWModule(*module.getBodyBlock(), state.options);
   if (names.hadError())
     state.encounteredError = true;
 

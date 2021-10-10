@@ -44,7 +44,7 @@ module {
 
   // CHECK-LABEL: module Top
   hw.module @Top (%clk: i1) {
-    // CHECK: data_vr [[IFACE:.+]]();
+    // CHECK: data_vr   [[IFACE:.+]]();
     %iface = sv.interface.instance : !sv.interface<@data_vr>
     // CHECK: MACRO-Interface:data_vr
     sv.verbatim "//MACRO-Interface:{{0}}" {symbols = [@data_vr]}

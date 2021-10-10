@@ -177,8 +177,7 @@ bool isVerilogExpression(Operation *op);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void prepareHWModule(Block &block, ModuleNameManager &names,
-                     const LoweringOptions &options);
+void prepareHWModule(Block &block, const LoweringOptions &options);
 
 /// Rewrite module names and interfaces to not conflict with each other or with
 /// Verilog keywords.

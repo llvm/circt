@@ -345,7 +345,7 @@ static bool hoistNonSideEffectExpr(Operation *op) {
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
+void ExportVerilog::prepareHWModule(Block &block,
                                     const LoweringOptions &options) {
   // True if these operations are in a procedural region.
   bool isProceduralRegion = block.getParentOp()->hasTrait<ProceduralRegion>();
@@ -357,7 +357,7 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
     // If the operations has regions, prepare each of the region bodies.
     for (auto &region : op.getRegions()) {
       if (!region.empty())
-        prepareHWModule(region.front(), names, options);
+        prepareHWModule(region.front(), options);
     }
 
     // Lower variadic fully-associative operations with more than two operands
@@ -398,22 +398,13 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
     // (e.g. letting a temporary take the name of an unvisited wire). Adding
     // them now ensures any temporary generated will not use one of the names
     // previously declared.
-    TypeSwitch<Operation *>(&op)
-        .Case<InstanceOp>([&](auto op) {
-          // Anchor return values to wires early
-          lowerInstanceResults(op);
-          // Anchor ports of bound instances
-          if (op->hasAttr("doNotPrint"))
-            lowerBoundInstance(op);
-          names.addName(op, op.instanceName());
-        })
-        .Case<WireOp, RegOp, LocalParamOp, InterfaceInstanceOp>(
-            [&](auto op) { names.addName(op.getResult(), op.name()); })
-        .Case<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
-              AssumeConcurrentOp, CoverConcurrentOp>([&](auto op) {
-          if (!op.label().empty())
-            names.addName(op, op.label());
-        });
+    if (auto instance = dyn_cast<InstanceOp>(op)) {
+      // Anchor return values to wires early
+      lowerInstanceResults(instance);
+      // Anchor ports of bound instances
+      if (instance->hasAttr("doNotPrint"))
+        lowerBoundInstance(instance);
+    }
 
     // Force any expression used in the event control of an always process to be
     // a trivial wire, if the corresponding option is set.
