@@ -21,9 +21,18 @@ class GlobalNameResolver;
 /// This class keeps track of global names at the module/interface level.
 /// It is built in a global pass over the entire design and then frozen to allow
 /// concurrent accesses.
-/// TODO: right now this just handles module parameter names.
 struct GlobalNameTable {
   GlobalNameTable(GlobalNameTable &&) = default;
+
+  /// Return the string to use for the specified parameter name in the specified
+  /// module.  Parameters may be renamed for a variety of reasons (e.g.
+  /// conflicting with ports or verilog keywords), and this returns the
+  /// legalized name to use.
+  StringRef getPortVerilogName(Operation *module,
+                               const hw::PortInfo &port) const {
+    auto it = renamedPorts.find(std::make_pair(module, port.getId()));
+    return (it != renamedPorts.end() ? it->second : port.name).getValue();
+  }
 
   /// Return the string to use for the specified parameter name in the specified
   /// module.  Parameters may be renamed for a variety of reasons (e.g.
@@ -41,11 +50,22 @@ private:
   GlobalNameTable(const GlobalNameTable &) = delete;
   void operator=(const GlobalNameTable &) = delete;
 
+  void addRenamedPort(Operation *module, const hw::PortInfo &port,
+                      StringRef newName) {
+    renamedPorts[{module, port.getId()}] =
+        StringAttr::get(module->getContext(), newName);
+  }
+
   void addRenamedParam(Operation *module, StringAttr oldName,
                        StringRef newName) {
     renamedParams[{module, oldName}] =
         StringAttr::get(oldName.getContext(), newName);
   }
+
+  /// This contains entries for any ports that got renamed.  The key is a
+  /// moduleop/portIdx tuple, the value is the name to use.  The portIdx is the
+  /// index of the port in the list returned by getAllModulePortInfos.
+  DenseMap<std::pair<Operation *, size_t>, StringAttr> renamedPorts;
 
   /// This contains entries for any parameters that got renamed.  The key is a
   /// moduleop/paramName tuple, the value is the name to use.
@@ -91,12 +111,6 @@ struct ModuleNameManager {
       return nameTable.count(op->getResult(0));
     return nameTable.count(ValueOrOp(op));
   }
-
-  void addOutputNames(StringRef name, Operation *module) {
-    outputNames.push_back(addLegalName(nullptr, name, module));
-  }
-
-  StringRef getOutputName(size_t portNum) { return outputNames[portNum]; }
 
   bool hadError() { return encounteredError; }
 
@@ -147,11 +161,6 @@ private:
   /// nameTable keeps track of mappings from Value's and operations (for
   /// instances) to their string table entry.
   llvm::DenseMap<ValueOrOp, StringRef> nameTable;
-
-  /// outputNames tracks the uniquified names for output ports, which don't
-  /// have
-  /// a Value or Op representation.
-  SmallVector<StringRef> outputNames;
 
   llvm::StringSet<> usedNames;
 

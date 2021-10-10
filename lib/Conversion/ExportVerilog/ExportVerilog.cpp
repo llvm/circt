@@ -2225,6 +2225,8 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
   size_t operandIndex = 0;
   for (PortInfo port : parent.getPorts().outputs) {
     auto operand = op.getOperand(operandIndex);
+    // Outputs that are set by the output port of an instance are handled
+    // directly when the instance is emitted.
     if (operand.hasOneUse() &&
         dyn_cast_or_null<InstanceOp>(operand.getDefiningOp())) {
       ++operandIndex;
@@ -2236,7 +2238,8 @@ LogicalResult StmtEmitter::visitStmt(OutputOp op) {
     indent();
     if (isZeroBitType(port.type))
       os << "// Zero width: ";
-    os << "assign " << names.getOutputName(port.argNum) << " = ";
+    os << "assign " << state.globalNames.getPortVerilogName(parent, port)
+       << " = ";
     emitExpression(operand, ops);
     os << ';';
     emitLocationInfoAndNewLine(ops);
@@ -2773,7 +2776,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       os << "//";
     }
 
-    os << '.' << elt.getName();
+    os << '.' << state.globalNames.getPortVerilogName(moduleOp, elt);
     os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
@@ -2787,10 +2790,12 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     } else if (portVal.hasOneUse() &&
                (output = dyn_cast_or_null<OutputOp>(
                     portVal.getUses().begin()->getOwner()))) {
-      auto module = output->getParentOfType<HWModuleOp>();
-      auto name = getModuleResultNameAttr(
-          module, portVal.getUses().begin()->getOperandNumber());
-      os << name.getValue().str();
+      // If this is directly using the output port of the containing module,
+      // just specify that directly so we avoid a temporary wire.
+      size_t outputPortNo = portVal.getUses().begin()->getOperandNumber();
+      auto containingModule = emitter.currentModuleOp;
+      os << state.globalNames.getPortVerilogName(
+          containingModule, containingModule.getOutputPort(outputPortNo));
     } else {
       portVal = getWireForValue(portVal);
       emitExpression(portVal, ops);
@@ -3214,17 +3219,11 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Add all the ports to the name table so wires etc don't reuse the name.
   SmallVector<PortInfo> portInfo = module.getAllPorts();
   for (auto &port : portInfo) {
-    StringRef name = port.getName();
-    if (name.empty()) {
-      emitOpError(module,
-                  "Found port without a name. Port names are required for "
-                  "Verilog synthesis.\n");
-      name = "<<NO-NAME-FOUND>>";
-    }
-    if (port.isOutput())
-      names.addOutputNames(name, module);
-    else
-      names.addLegalName(module.getArgument(port.argNum), name, module);
+    StringRef name = state.globalNames.getPortVerilogName(module, port);
+    Value value;
+    if (!port.isOutput())
+      value = module.getArgument(port.argNum);
+    names.addLegalName(value, name, module);
   }
 
   // Add all parameters to the name table.
@@ -3386,15 +3385,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     if (portTypeStrings[portIdx].size() < maxTypeWidth)
       os.indent(maxTypeWidth - portTypeStrings[portIdx].size());
 
-    auto getPortName = [&](size_t portIdx) -> StringRef {
-      if (portInfo[portIdx].isOutput())
-        return names.getOutputName(portInfo[portIdx].argNum);
-      else
-        return names.getName(module.getArgument(portInfo[portIdx].argNum));
-    };
-
     // Emit the name.
-    os << getPortName(portIdx);
+    os << state.globalNames.getPortVerilogName(module, portInfo[portIdx]);
     printUnpackedTypePostfix(portType, os);
     ++portIdx;
 
@@ -3406,7 +3398,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
            stripUnpackedTypes(portType) ==
                stripUnpackedTypes(portInfo[portIdx].type)) {
       // Don't exceed our preferred line length.
-      StringRef name = getPortName(portIdx);
+      StringRef name =
+          state.globalNames.getPortVerilogName(module, portInfo[portIdx]);
       if (os.tell() + 2 + name.size() - startOfLinePos >
           // We use "-2" here because we need a trailing comma or ); for the
           // decl.

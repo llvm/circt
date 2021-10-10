@@ -77,28 +77,17 @@ public:
 
   bool anythingChanged = false;
 
-  /// If the module with the specified name has had a port or parameter renamed,
-  /// return the module that defines the name.
-  HWModuleOp getModuleWithRenamedInterface(StringAttr name) {
-    auto it = modulesWithRenamedPorts.find(name);
-    return it != modulesWithRenamedPorts.end() ? it->second : HWModuleOp();
-  }
-
 private:
   /// Check to see if the port names of the specified module conflict with
-  /// keywords or themselves.  If so, rename them and return true, otherwise
-  /// return false.
-  bool legalizePortNames(hw::HWModuleOp module);
+  /// keywords or themselves.  If so, add the replacement names to
+  /// globalNameTable.
+  void legalizePortAndParamNames(hw::HWModuleOp module);
 
   void rewriteModuleBody(Block &block, NameCollisionResolver &nameResolver);
   void renameModuleBody(hw::HWModuleOp module);
 
   /// Set of globally visible names, to ensure uniqueness.
   NameCollisionResolver globalNameResolver;
-
-  /// If a module has a port renamed, then this keeps track of the module it is
-  /// associated with so we can update instances.
-  DenseMap<Attribute, HWModuleOp> modulesWithRenamedPorts;
 
   /// This keeps track of globally visible names like module parameters.
   GlobalNameTable globalNameTable;
@@ -157,8 +146,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
       legalizeSymbolName(module, globalNameResolver);
-      if (legalizePortNames(module))
-        modulesWithRenamedPorts[module.getNameAttr()] = module;
+      legalizePortAndParamNames(module);
       continue;
     }
 
@@ -188,48 +176,27 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
 }
 
 /// Check to see if the port names of the specified module conflict with
-/// keywords or themselves.  If so, rename them and return true, otherwise
-/// return false.
-bool GlobalNameResolver::legalizePortNames(hw::HWModuleOp module) {
+/// keywords or themselves.  If so, add the replacement names to
+/// globalNameTable.
+void GlobalNameResolver::legalizePortAndParamNames(hw::HWModuleOp module) {
   NameCollisionResolver nameResolver;
 
-  bool changedArgNames = false, changedOutputNames = false;
-  SmallVector<Attribute> argNames, outputNames;
-
-  // Legalize the ports.
+  // Legalize the port names.
+  size_t portIdx = 0;
   for (const PortInfo &port : getAllModulePortInfos(module)) {
     auto newName = nameResolver.getLegalName(port.name);
-
-    auto &namesVector = port.isOutput() ? outputNames : argNames;
-    auto &changedBool = port.isOutput() ? changedOutputNames : changedArgNames;
-
-    if (newName.empty()) {
-      namesVector.push_back(port.name);
-    } else {
-      changedBool = true;
-      namesVector.push_back(StringAttr::get(module.getContext(), newName));
-    }
+    if (!newName.empty())
+      globalNameTable.addRenamedPort(module, port, newName);
+    ++portIdx;
   }
 
-  if (changedArgNames)
-    setModuleArgumentNames(module, argNames);
-  if (changedOutputNames)
-    setModuleResultNames(module, outputNames);
-
-  // Legalize the parameters.
+  // Legalize the parameter names.
   for (auto param : module.parameters()) {
     auto paramAttr = param.cast<ParamDeclAttr>();
     auto newName = nameResolver.getLegalName(paramAttr.getName());
     if (!newName.empty())
       globalNameTable.addRenamedParam(module, paramAttr.getName(), newName);
   }
-
-  if (changedArgNames | changedOutputNames) {
-    anythingChanged = true;
-    return true;
-  }
-
-  return false;
 }
 
 void GlobalNameResolver::rewriteModuleBody(
@@ -242,13 +209,6 @@ void GlobalNameResolver::rewriteModuleBody(
       if (!newName.empty())
         instanceOp.setName(StringAttr::get(instanceOp.getContext(), newName));
 
-      // If this instance is referring to a module with renamed ports or
-      // parameter names, update them.
-      if (HWModuleOp module = getModuleWithRenamedInterface(
-              instanceOp.moduleNameAttr().getAttr())) {
-        instanceOp.argNamesAttr(module.argNames());
-        instanceOp.resultNamesAttr(module.resultNames());
-      }
       continue;
     }
 
@@ -275,11 +235,16 @@ void GlobalNameResolver::renameModuleBody(hw::HWModuleOp module) {
   // All the ports and parameters are pre-legalized, just add their names to the
   // map so we detect conflicts with them.
   NameCollisionResolver nameResolver;
-  for (const PortInfo &port : getAllModulePortInfos(module))
-    nameResolver.insertUsedName(port.name.getValue());
-  for (auto param : module.parameters())
+  for (const PortInfo &port : getAllModulePortInfos(module)) {
     nameResolver.insertUsedName(
-        param.cast<ParamDeclAttr>().getName().getValue());
+        globalNameTable.getPortVerilogName(module, port));
+  }
+
+  for (auto param : module.parameters()) {
+    StringAttr paramName = param.cast<ParamDeclAttr>().getName();
+    nameResolver.insertUsedName(
+        globalNameTable.getParameterVerilogName(module, paramName));
+  }
 
   rewriteModuleBody(*module.getBodyBlock(), nameResolver);
 }
