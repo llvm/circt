@@ -89,13 +89,6 @@ struct ModuleNameManager {
     return addName(ValueOrOp(op), name);
   }
 
-  StringRef addLegalName(Value value, StringRef name, Operation *errOp) {
-    return addLegalName(ValueOrOp(value), name, errOp);
-  }
-  StringRef addLegalName(Operation *op, StringRef name, Operation *errOp) {
-    return addLegalName(ValueOrOp(op), name, errOp);
-  }
-
   StringRef getName(Value value) { return getName(ValueOrOp(value)); }
   StringRef getName(Operation *op) {
     // If RegOp or WireOp, then result has the name.
@@ -105,6 +98,7 @@ struct ModuleNameManager {
   }
 
   bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
+
   bool hasName(Operation *op) {
     // If RegOp or WireOp, then result has the name.
     if (isa<sv::WireOp, sv::RegOp>(op))
@@ -137,17 +131,6 @@ private:
 
   StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
     return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
-  }
-
-  /// Add the specified name to the name table, emitting an error message if the
-  /// name empty or is changed by uniqing.
-  StringRef addLegalName(ValueOrOp valueOrOp, StringRef name, Operation *op) {
-    auto updatedName = addName(valueOrOp, name);
-    if (name.empty())
-      emitOpError(op, "should have non-empty name");
-    else if (updatedName != name)
-      emitOpError(op, "name '") << name << "' changed during emission";
-    return updatedName;
   }
 
   InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {

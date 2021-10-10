@@ -412,7 +412,7 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
         .Case<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
               AssumeConcurrentOp, CoverConcurrentOp>([&](auto op) {
           if (!op.label().empty())
-            names.addLegalName(op, op.label(), op);
+            names.addName(op, op.label());
         });
 
     // Force any expression used in the event control of an always process to be

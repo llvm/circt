@@ -134,6 +134,15 @@ hw.module @nameless_reg(%a: i1) -> () {
   %661 = sv.reg : !hw.inout<i4>
 }
 
+// CHECK-LABEL: module verif_renames(
+hw.module @verif_renames(%cond: i1) {
+  // CHECK: initial
+  sv.initial {
+    // CHECK:   assert_0: assert(cond);
+    sv.assert "assert" %cond : i1
+  }
+}
+
 // CHECK-LABEL: module verbatim_renames(
 hw.module @verbatim_renames(%a: i1) {
   // CHECK: wire wire_0;

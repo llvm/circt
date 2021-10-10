@@ -3223,7 +3223,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     Value value;
     if (!port.isOutput())
       value = module.getArgument(port.argNum);
-    names.addLegalName(value, name, module);
+    names.addName(value, name);
   }
 
   // Add all parameters to the name table.
@@ -3231,7 +3231,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     // Add the name to the name table so any conflicting wires are renamed.
     StringRef verilogName = state.globalNames.getParameterVerilogName(
         module, param.cast<ParamDeclAttr>().getName());
-    names.addLegalName(nullptr, verilogName, module);
+    names.addName(nullptr, verilogName);
   }
 
   // Rewrite the module body into compliance with our emission expectations, and
