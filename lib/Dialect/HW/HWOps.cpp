@@ -478,6 +478,32 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
   return results;
 }
 
+/// Return the PortInfo for the specified input or inout port.
+PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
+  auto argTypes = getModuleType(op).getInputs();
+  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+
+  bool isInOut = false;
+  auto type = argTypes[idx];
+
+  if (auto inout = type.dyn_cast<InOutType>()) {
+    isInOut = true;
+    type = inout.getElementType();
+  }
+
+  auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
+  return {argNames[idx].cast<StringAttr>(), direction, type, idx};
+}
+
+/// Return the PortInfo for the specified output port.
+PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
+  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
+  auto resultTypes = getModuleType(op).getResults();
+  assert(idx < resultNames.size() && "invalid result number");
+  return {resultNames[idx].cast<StringAttr>(), PortDirection::OUTPUT,
+          resultTypes[idx], idx};
+}
+
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
     if (argAttr.first == name)

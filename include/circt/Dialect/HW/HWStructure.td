@@ -60,6 +60,16 @@ def HWModuleOp : HWOp<"module",
       return getAllModulePortInfos(*this);
     }
 
+    /// Return the PortInfo for the specified input or inout port.
+    PortInfo getInOrInoutPort(size_t i) {
+      return getModuleInOrInoutPort(*this, i);
+    }
+
+    /// Return the PortInfo for the specified output port.
+    PortInfo getOutputPort(size_t i) {
+      return getModuleOutputPort(*this, i);
+    }
+
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }
@@ -142,6 +152,16 @@ def HWModuleExternOp : HWOp<"module.extern",
     /// Return all the module ports merged into one list.
     SmallVector<PortInfo> getAllPorts() {
       return getAllModulePortInfos(*this);
+    }
+
+    /// Return the PortInfo for the specified input or inout port.
+    PortInfo getInOrInoutPort(size_t i) {
+      return getModuleInOrInoutPort(*this, i);
+    }
+
+    /// Return the PortInfo for the specified output port.
+    PortInfo getOutputPort(size_t i) {
+      return getModuleOutputPort(*this, i);
     }
 
     /// Return the name to use for the Verilog module that we're referencing
