@@ -95,3 +95,59 @@ hw.module @issue525(%struct: i2, %else: i2) -> (casex: i2) {
   %2 = comb.add %struct, %else : i2
   hw.output %2 : i2
 }
+
+hw.module @B(%a: i1) -> () {
+}
+
+// CHECK-LABEL: module TestDupInstanceName(
+hw.module @TestDupInstanceName(%a: i1) {
+  // CHECK: B name (
+  hw.instance "name" @B(a: %a: i1) -> ()
+  // CHECK: B name_0 (
+  hw.instance "name" @B(a: %a: i1) -> ()
+}
+
+// CHECK-LABEL: module TestEmptyInstanceName(
+hw.module @TestEmptyInstanceName(%a: i1) {
+  // CHECK: B _T (
+  hw.instance "" @B(a: %a: i1) -> ()
+  // CHECK: B _T_0 (
+  hw.instance "" @B(a: %a: i1) -> ()
+}
+
+// CHECK-LABEL: module TestInstanceNameValueConflict(
+hw.module @TestInstanceNameValueConflict(%a: i1) {
+  // CHECK:  wire name;
+  %name = sv.wire : !hw.inout<i1>
+  // CHECK:  wire output_0;
+  %output = sv.wire : !hw.inout<i1>
+  // CHECK:  reg  input_1;
+  %input = sv.reg : !hw.inout<i1>
+  // CHECK: B name_2 (
+  hw.instance "name" @B(a: %a: i1) -> ()
+}
+
+// https://github.com/llvm/circt/issues/855
+// CHECK-LABEL: module nameless_reg(
+hw.module @nameless_reg(%a: i1) -> () {
+  // CHECK: reg [3:0] _T;
+  %661 = sv.reg : !hw.inout<i4>
+}
+
+// CHECK-LABEL: module verbatim_renames(
+hw.module @verbatim_renames(%a: i1) {
+  // CHECK: wire wire_0;
+
+  // CHECK: // VERB Module : reg_1 inout_0
+  sv.verbatim "// VERB Module : {{0}} {{1}}" {symbols = [@reg, @inout]}
+
+  // Make sure symbol references to wires and instances get renamed correctly.
+  %wire = sv.wire sym @wire1 : !hw.inout<i1>
+
+  // CHECK: inout_0 module_1 (
+  %0 = hw.instance "module" sym @struct @inout (inout: %a: i1) -> (output: i1)
+
+  // CHECK: // VERB Instance : module_1 wire_0
+  sv.verbatim "// VERB Instance : {{0}} {{1}}" {symbols = [@struct, @wire1]}
+
+}

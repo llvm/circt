@@ -405,10 +405,10 @@ void ExportVerilog::prepareHWModule(Block &block, ModuleNameManager &names,
           // Anchor ports of bound instances
           if (op->hasAttr("doNotPrint"))
             lowerBoundInstance(op);
-          names.addLegalName(op, op.instanceName(), op);
+          names.addName(op, op.instanceName());
         })
         .Case<WireOp, RegOp, LocalParamOp, InterfaceInstanceOp>(
-            [&](auto op) { names.addLegalName(op.getResult(), op.name(), op); })
+            [&](auto op) { names.addName(op.getResult(), op.name()); })
         .Case<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
               AssumeConcurrentOp, CoverConcurrentOp>([&](auto op) {
           if (!op.label().empty())
