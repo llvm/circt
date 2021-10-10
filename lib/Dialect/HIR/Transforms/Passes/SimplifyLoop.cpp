@@ -13,6 +13,19 @@
 using namespace circt;
 using namespace hir;
 
+static mlir::FlatSymbolRefAttr createUniqueFuncName(MLIRContext *context,
+                                                    StringRef name,
+                                                    ArrayRef<uint64_t> params) {
+  std::string newName(name);
+  newName += "_";
+  for (uint64_t i = 0; i < params.size(); i++) {
+    if (i > 0)
+      newName += "x";
+    newName += std::to_string(params[i]);
+  }
+  return FlatSymbolRefAttr::get(context, newName);
+}
+
 class SimplifyLoopPass : public hir::SimplifyLoopBase<SimplifyLoopPass> {
 public:
   void runOnOperation() override;
@@ -81,20 +94,27 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
         {zeroDelayAttr, zeroDelayAttr, zeroDelayAttr, zeroDelayAttr},
         {builder.getI1Type(), ivTy}, {zeroDelayAttr, zeroDelayAttr});
 
+    auto forOpEntryName = createUniqueFuncName(context, "HIR_ForOp_entry",
+                                               ivTy.getIntOrFloatBitWidth());
     auto forOpEntry = builder.create<hir::CallOp>(
         builder.getUnknownLoc(),
         SmallVector<Type>(
             {builder.getI1Type(), forOp.getInductionVar().getType()}),
-        FlatSymbolRefAttr::get(context, "HIR_ForOp_entry"),
-        TypeAttr::get(funcTy),
+        forOpEntryName, TypeAttr::get(funcTy),
         SmallVector<Value>({isFirstIter, forOp.lb(), forOp.ub(), forOp.step()}),
         whileOp.getIterTimeVar(), builder.getI64IntegerAttr(0));
-    forOpEntry->setAttr(
-        "WIDTH", builder.getI64IntegerAttr(ivTy.getIntOrFloatBitWidth()));
-    forOpEntry->setAttr(
-        "names", builder.getStrArrayAttr(
+    auto width = builder.getI64IntegerAttr(ivTy.getIntOrFloatBitWidth());
+    auto params =
+        builder.getDictionaryAttr({builder.getNamedAttr("WIDTH", width)});
+    helper::setNames(forOpEntry,
                      {forOp.getInductionVarName().str() + "_loop_condition",
-                      forOp.getInductionVarName()}));
+                      forOp.getInductionVarName()});
+    forOpEntry->setAttr("params", params);
+    helper::declareExternalFuncForCall(
+        forOpEntry, {"isFirstIter", "LowerBound", "UpperBound", "Step"},
+        {forOp.getInductionVarName().str() + "_loop_condition",
+         forOp.getInductionVarName()});
+
     auto condition = forOpEntry.getResult(0);
     auto iv = forOpEntry.getResult(1);
     BlockAndValueMapping operandMap;

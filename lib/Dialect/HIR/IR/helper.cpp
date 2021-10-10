@@ -26,6 +26,8 @@ llvm::Optional<uint64_t> getBitWidth(Type type) {
     return intTy.getWidth();
   if (auto floatTy = type.dyn_cast<mlir::FloatType>())
     return floatTy.getWidth();
+  if (auto busTy = type.dyn_cast<hir::BusType>())
+    return getBitWidth(busTy.getElementType());
   if (auto tupleTy = type.dyn_cast<TupleType>()) {
     int width = 1;
     for (Type ty : tupleTy.getTypes()) {
@@ -38,23 +40,15 @@ llvm::Optional<uint64_t> getBitWidth(Type type) {
   }
   if (auto tensorTy = type.dyn_cast<mlir::TensorType>()) {
     int size = 1;
-    for (auto szDim : tensorTy.getShape()) {
+    for (auto szDim : tensorTy.getShape())
       size *= szDim;
-    }
+
     auto widthElementTy = getBitWidth(tensorTy.getElementType());
-    if (widthElementTy)
-      return size * widthElementTy.getValue();
+    if (!widthElementTy)
+      return llvm::None;
+    return size * widthElementTy.getValue();
   }
-  if (auto busTy = type.dyn_cast<hir::BusType>()) {
-    int width = 0;
-    for (Type ty : busTy.getElementTypes()) {
-      auto elementWidth = helper::getBitWidth(ty);
-      if (!elementWidth)
-        return llvm::None;
-      width += elementWidth.getValue();
-    }
-    return width;
-  }
+
   return llvm::None;
 }
 
@@ -260,4 +254,33 @@ llvm::Optional<StringRef> getOptionalName(Operation *operation,
   return name;
 }
 
+Operation *declareExternalFuncForCall(hir::CallOp callOp,
+                                      SmallVector<StringRef> inputNames,
+                                      SmallVector<StringRef> resultNames) {
+  if (callOp.getCalleeDecl())
+    return NULL;
+  OpBuilder builder(callOp);
+  auto moduleOp = callOp->getParentOfType<ModuleOp>();
+  builder.setInsertionPointToStart(&moduleOp.body().front());
+
+  auto declOp = builder.create<hir::FuncExternOp>(
+      builder.getUnknownLoc(), callOp.calleeAttr().getAttr(),
+      TypeAttr::get(callOp.getFuncType()));
+
+  declOp.getFuncBody().push_back(new Block);
+  OpBuilder declOpBuilder(declOp);
+  FuncExternOp::ensureTerminator(declOp.getFuncBody(), declOpBuilder,
+                                 builder.getUnknownLoc());
+  // declOp.getFuncBody().front();
+  assert(inputNames.size() == callOp.getFuncType().getInputTypes().size());
+  inputNames.push_back("t");
+  declOp->setAttr("argNames", builder.getStrArrayAttr(inputNames));
+
+  if (resultNames.size() > 0) {
+    assert(resultNames.size() == callOp.getFuncType().getResultTypes().size());
+    declOp->setAttr("resultNames", builder.getStrArrayAttr(resultNames));
+  }
+
+  return declOp;
+}
 } // namespace helper

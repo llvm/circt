@@ -22,12 +22,16 @@ private:
                                      FuncToHWModulePortMap);
   LogicalResult visitRegion(mlir::Region &);
   LogicalResult visitOperation(Operation *);
-  LogicalResult visitOp(hir::FuncOp);
-  LogicalResult visitOp(hir::FuncExternOp);
-  LogicalResult visitOp(mlir::ConstantOp);
+
   LogicalResult visitOp(hir::BusOp);
+  LogicalResult visitOp(mlir::ConstantOp);
   LogicalResult visitOp(hir::CommentOp);
   LogicalResult visitOp(hir::CallOp);
+  LogicalResult visitOp(hir::FuncOp);
+  LogicalResult visitOp(hir::FuncExternOp);
+  LogicalResult visitOp(hir::IsFirstIterOp);
+  LogicalResult visitOp(hir::RecvOp);
+  LogicalResult visitOp(hir::SendOp);
   LogicalResult visitOp(hir::TimeOp);
   LogicalResult visitOp(hir::WhileOp);
 
@@ -213,8 +217,19 @@ LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
 
   mapHIRToHWValue[op.getIterTimeVar()] = iterTimeVar;
   mapHIRToHWValue[op.res()] = tLast;
+  return visitRegion(op.body());
+}
+
+LogicalResult HIRToHWPass::visitOp(hir::IsFirstIterOp op) {
+  auto isFirstIter =
+      mapHIRToHWValue[op->getParentOfType<hir::WhileOp>().tstart()];
+  assert(isFirstIter);
+  mapHIRToHWValue[op.res()] = isFirstIter;
   return success();
 }
+
+LogicalResult HIRToHWPass::visitOp(hir::RecvOp) { return success(); }
+LogicalResult HIRToHWPass::visitOp(hir::SendOp) { return success(); }
 
 LogicalResult HIRToHWPass::visitOp(hir::FuncExternOp op) {
   builder = new OpBuilder(op);
@@ -288,6 +303,12 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
   if (auto op = dyn_cast<hir::TimeOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::WhileOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::IsFirstIterOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::SendOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::RecvOp>(operation))
     return visitOp(op);
 
   // operation->emitRemark() << "Unsupported operation for hir-to-hw pass.";

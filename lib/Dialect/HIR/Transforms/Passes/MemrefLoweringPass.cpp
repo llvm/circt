@@ -103,35 +103,6 @@ private:
 //------------------------------------------------------------------------------
 // Helper functions.
 //------------------------------------------------------------------------------
-Operation *declareExternalFuncForCall(hir::CallOp callOp,
-                                      SmallVector<StringRef> inputNames,
-                                      SmallVector<StringRef> resultNames = {}) {
-  if (callOp.getCalleeDecl())
-    return NULL;
-  OpBuilder builder(callOp);
-  auto moduleOp = callOp->getParentOfType<ModuleOp>();
-  builder.setInsertionPointToStart(&moduleOp.body().front());
-
-  auto declOp = builder.create<hir::FuncExternOp>(
-      builder.getUnknownLoc(), callOp.calleeAttr().getAttr(),
-      TypeAttr::get(callOp.getFuncType()));
-
-  declOp.getFuncBody().push_back(new Block);
-  OpBuilder declOpBuilder(declOp);
-  FuncExternOp::ensureTerminator(declOp.getFuncBody(), declOpBuilder,
-                                 builder.getUnknownLoc());
-  // declOp.getFuncBody().front();
-  assert(inputNames.size() == callOp.getFuncType().getInputTypes().size());
-  inputNames.push_back("t");
-  declOp->setAttr("argNames", builder.getStrArrayAttr(inputNames));
-
-  if (resultNames.size() > 0) {
-    assert(resultNames.size() == callOp.getFuncType().getResultTypes().size());
-    declOp->setAttr("resultNames", builder.getStrArrayAttr(resultNames));
-  }
-
-  return declOp;
-}
 
 Type getTensorElementType(Value tensor) {
   auto ty = tensor.getType().dyn_cast<mlir::TensorType>();
@@ -139,9 +110,9 @@ Type getTensorElementType(Value tensor) {
   return ty.getElementType();
 }
 
-mlir::FlatSymbolRefAttr createUniqueFuncName(MLIRContext *context,
-                                             StringRef name,
-                                             ArrayRef<uint64_t> params) {
+static mlir::FlatSymbolRefAttr createUniqueFuncName(MLIRContext *context,
+                                                    StringRef name,
+                                                    ArrayRef<uint64_t> params) {
   std::string newName(name);
   newName += "_";
   for (uint64_t i = 0; i < params.size(); i++) {
@@ -167,13 +138,9 @@ Value createAddrTuple(OpBuilder &builder, Location loc,
 }
 
 mlir::TensorType buildBusTensor(MLIRContext *context, ArrayRef<int64_t> shape,
-                                SmallVector<Type> busElementTypes) {
-  SmallVector<BusDirection> busDirections;
-  // Only same direction is allowed inside a tensor<bus>.
-  busDirections.append(busElementTypes.size(), BusDirection::SAME);
-
-  return mlir::RankedTensorType::get(
-      shape, hir::BusType::get(context, busElementTypes, busDirections));
+                                Type busType) {
+  return mlir::RankedTensorType::get(shape,
+                                     hir::BusType::get(context, busType));
 }
 
 MemrefPortInterface MemrefLoweringPass::defineBusesForMemrefPort(
@@ -182,8 +149,8 @@ MemrefPortInterface MemrefLoweringPass::defineBusesForMemrefPort(
   MemrefPortInterface portInterface;
 
   auto *context = memrefTy.getContext();
-  Type enableTy = buildBusTensor(context, memrefTy.filterShape(BANK),
-                                 {IntegerType::get(context, 1)});
+  Type enableTy =
+      buildBusTensor(context, memrefTy.filterShape(BANK), builder.getI1Type());
 
   SmallVector<Type> addrTupleElementTypes;
   uint64_t addrWidth = 0;
@@ -195,9 +162,9 @@ MemrefPortInterface MemrefLoweringPass::defineBusesForMemrefPort(
 
   Type addrTupleTy =
       buildBusTensor(context, memrefTy.filterShape(BANK),
-                     {TupleType::get(context, addrTupleElementTypes)});
+                     TupleType::get(context, addrTupleElementTypes));
   Type dataTy = buildBusTensor(context, memrefTy.filterShape(BANK),
-                               {memrefTy.getElementType()});
+                               memrefTy.getElementType());
 
   if (memrefTy.getNumElementsPerBank() > 1) {
     portInterface.addrEnableBusTensor =
@@ -314,7 +281,7 @@ MemrefLoweringPass::createBusInstantiationsAndCallOp(hir::AllocaOp op) {
       builder.getUnknownLoc(), SmallVector<Type>(), memModuleName,
       TypeAttr::get(funcTy), inputBuses, tstartRegion, IntegerAttr());
 
-  declareExternalFuncForCall(callOp, inputBusNames);
+  helper::declareExternalFuncForCall(callOp, inputBusNames);
 
   auto params = builder.getDictionaryAttr(
       {builder.getNamedAttr("ELEMENT_WIDTH",
@@ -357,7 +324,7 @@ void initUnconnectedEnBusTensor(OpBuilder &builder, Value busTensor) {
       TypeAttr::get(funcTy), SmallVector<Value>({busTensor}), tstartRegion,
       IntegerAttr());
   callOp->setAttr("params", params);
-  declareExternalFuncForCall(callOp, {"en_bus_tensor"});
+  helper::declareExternalFuncForCall(callOp, {"en_bus_tensor"});
 }
 
 void MemrefLoweringPass::initUnConnectedPorts(hir::FuncOp op) {
@@ -384,8 +351,9 @@ size_t insertBusTypesAndAttrsForMemrefPort(
     SmallVectorImpl<DictionaryAttr> &inputAttrs, hir::MemrefType memrefTy,
     DictionaryAttr port, MemrefPortInterface &portInterface) {
   auto *context = memrefTy.getContext();
+  Builder builder(context);
   Type enableTy = buildBusTensor(context, memrefTy.filterShape(BANK),
-                                 {IntegerType::get(context, 1)});
+                                 IntegerType::get(context, 1));
 
   SmallVector<Type> addrTupleElementTypes;
 
@@ -396,9 +364,9 @@ size_t insertBusTypesAndAttrsForMemrefPort(
 
   Type addrTupleTy =
       buildBusTensor(context, memrefTy.filterShape(BANK),
-                     {TupleType::get(context, addrTupleElementTypes)});
+                     TupleType::get(context, addrTupleElementTypes));
   Type dataTy = buildBusTensor(context, memrefTy.filterShape(BANK),
-                               {memrefTy.getElementType()});
+                               memrefTy.getElementType());
 
   DictionaryAttr sendAttr = helper::getDictionaryAttr(
       context, "hir.bus.ports",
@@ -576,7 +544,8 @@ void createValidCombineCallOp(OpBuilder &builder, Value destBusTensor,
                            tensorTy.getNumElements()),
       TypeAttr::get(funcTy), SmallVector<Value>({bus, busTensor}), tstartRegion,
       IntegerAttr());
-  declareExternalFuncForCall(callOp, {"combined_en_bus", "en_bus_tensor"});
+  helper::declareExternalFuncForCall(callOp,
+                                     {"combined_en_bus", "en_bus_tensor"});
 
   auto params = builder.getDictionaryAttr({builder.getNamedAttr(
       "TENSOR_SIZE", builder.getI64IntegerAttr(tensorTy.getNumElements()))});
@@ -613,7 +582,7 @@ void createBusBroadcastCallOp(OpBuilder &builder, Value sourceBusTensor,
       SmallVector<Value>({destBusTensor, destBusValidTensor, sourceBus}),
       tstartRegion, IntegerAttr());
 
-  declareExternalFuncForCall(
+  helper::declareExternalFuncForCall(
       callOp, {"dest_bus_tensor", "dest_bus_valid_tensor", "source_bus"});
 
   auto params = builder.getDictionaryAttr(
@@ -650,7 +619,8 @@ void createBusMuxCallOp(OpBuilder &builder, Value destBusTensor,
       TypeAttr::get(funcTy),
       SmallVector<Value>({bus, busValidTensor, busTensor}), tstartRegion,
       IntegerAttr());
-  declareExternalFuncForCall(callOp, {"out", "bus_valid_tensor", "bus_tensor"});
+  helper::declareExternalFuncForCall(callOp,
+                                     {"out", "bus_valid_tensor", "bus_tensor"});
 
   callOp->setAttr("TENSOR_SIZE", builder.getI64IntegerAttr(tensorSize));
   callOp->setAttr("ELEMENT_WIDTH",
@@ -697,7 +667,7 @@ Value MemrefLoweringPass::getEnableSendBusTensor(OpBuilder &builder,
       SmallVector<Value>(
           {originalEnableBusTensor, forkedEnableBusTensor, newEnableBusTensor}),
       tstart, offsetAttr);
-  declareExternalFuncForCall(
+  helper::declareExternalFuncForCall(
       combineEnBus,
       {"original_en_bus_tensor", "forked_en_bus_tensor", "new_en_bus_tensor"});
 
@@ -748,9 +718,9 @@ Value MemrefLoweringPass::getDataSendBusTensor(
                           forkedDataBusTensor, newDataBusTensor}),
       tstart, offsetAttr);
 
-  declareExternalFuncForCall(combineDataBus,
-                             {"original_data_bus_tensor", "en_bus_tensor",
-                              "forked_data_bus_tensor", "new_data_bus_tensor"});
+  helper::declareExternalFuncForCall(
+      combineDataBus, {"original_data_bus_tensor", "en_bus_tensor",
+                       "forked_data_bus_tensor", "new_data_bus_tensor"});
 
   auto params =
       builder.getDictionaryAttr({builder.getNamedAttr("WIDTH", width),
@@ -791,7 +761,7 @@ Value MemrefLoweringPass::getEnableSendBus(OpBuilder &builder,
           {enableBusTensor, forkedEnableBus, newEnableBusTensor}),
       tstart, offsetAttr);
 
-  declareExternalFuncForCall(
+  helper::declareExternalFuncForCall(
       combineEnBus, {"original_en_bus_tensor", "forked_en_bus", "new_en_bus"});
 
   auto params = builder.getDictionaryAttr(
@@ -838,9 +808,9 @@ Value MemrefLoweringPass::getDataSendBus(OpBuilder &builder,
           {dataBusTensor, enableBus, forkedDataBus, newDataBusTensor}),
       tstart, offsetAttr);
 
-  declareExternalFuncForCall(combineData,
-                             {"original_data_bus_tensor", "en_bus_tensor",
-                              "forked_data_bus", "new_data_bus_tensor"});
+  helper::declareExternalFuncForCall(
+      combineData, {"original_data_bus_tensor", "en_bus_tensor",
+                    "forked_data_bus", "new_data_bus_tensor"});
 
   auto params = builder.getDictionaryAttr(
       {builder.getNamedAttr("BANK", builder.getI64IntegerAttr(bank)),
@@ -865,8 +835,6 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
                                          memrefTy.filterShape(BANK))
                      .getValue();
 
-  builder.create<hir::CommentOp>(op.getLoc(),
-                                 builder.getStringAttr("LoadOp start"));
   if (!op.port().hasValue())
     return op.emitError() << "MemrefLoweringPass requires port number";
   auto &portInterface =
@@ -883,9 +851,6 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
     auto addrEnableBus = getEnableSendBus(
         builder, portInterface.addrEnableBusTensor, bank,
         memrefTy.getNumBanks(), op.tstart(), op.offsetAttr(), "addr_en");
-    builder.create<hir::CommentOp>(
-        builder.getUnknownLoc(),
-        builder.getStringAttr("Send 1 to the addrEnableBus."));
 
     builder
         .create<hir::SendOp>(builder.getUnknownLoc(), c1, addrEnableBus,
@@ -897,16 +862,9 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
         builder, portInterface.addrDataBusTensor, addrEnableBus, bank,
         memrefTy.getNumBanks(), op.tstart(), op.offsetAttr(), "addr_data");
 
-    builder.create<hir::CommentOp>(
-        builder.getUnknownLoc(),
-        builder.getStringAttr("Create a tuple of the addresses corresponding "
-                              "to the ADDR dims."));
     Value addrTuple =
         createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
 
-    builder.create<hir::CommentOp>(
-        builder.getUnknownLoc(),
-        builder.getStringAttr("Send the address tuple to the addrBus."));
     // Send the address tuple to the addrBus.
     builder.create<hir::SendOp>(op.getLoc(), addrTuple, addrDataBus,
                                 builder.getI64IntegerAttr(0), op.tstart(),
@@ -923,18 +881,12 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
   auto rdEnableBus = getEnableSendBus(builder, portInterface.rdEnableBusTensor,
                                       bank, memrefTy.getNumBanks(), op.tstart(),
                                       op.offsetAttr(), "rd_en");
-  builder.create<hir::CommentOp>(
-      builder.getUnknownLoc(),
-      builder.getStringAttr("Send 1 to the rdEnableBus."));
   builder
       .create<hir::SendOp>(builder.getUnknownLoc(), c1, rdEnableBus,
                            builder.getI64IntegerAttr(0), op.tstart(),
                            op.offsetAttr())
       ->setAttr("default", builder.getI64IntegerAttr(0));
 
-  builder.create<hir::CommentOp>(
-      builder.getUnknownLoc(),
-      builder.getStringAttr("Extract the rdDataBus for this use of memref."));
   auto rdDataBus = builder.create<hir::TensorExtractOp>(
       builder.getUnknownLoc(),
       getTensorElementType(portInterface.rdDataBusTensor),
@@ -949,8 +901,6 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
   if (op->hasAttrOfType<ArrayAttr>("names"))
     receiveOp->setAttr("names", op->getAttr("names"));
   op.replaceAllUsesWith(receiveOp);
-  builder.create<hir::CommentOp>(op.getLoc(),
-                                 builder.getStringAttr("LoadOp end"));
   opsToErase.push_back(op);
   return success();
 }
@@ -963,8 +913,6 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
                                           memrefTy.filterShape(BANK))
                       .getValue();
 
-  builder.create<hir::CommentOp>(op.getLoc(),
-                                 builder.getStringAttr("StoreOp start"));
   if (!op.port().hasValue())
     return op.emitError() << "MemrefLoweringPass requires port number";
   auto &portInterface =
@@ -982,10 +930,6 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
         builder, portInterface.addrEnableBusTensor, bank,
         memrefTy.getNumBanks(), op.tstart(), op.offsetAttr(), "addr_en");
 
-    builder.create<hir::CommentOp>(
-        builder.getUnknownLoc(),
-        builder.getStringAttr("Send 1 to the addrEnableBus."));
-
     builder
         .create<hir::SendOp>(builder.getUnknownLoc(), c1, addrEnableBus,
                              builder.getI64IntegerAttr(0), op.tstart(),
@@ -996,17 +940,9 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
         builder, portInterface.addrDataBusTensor, addrEnableBus, bank,
         memrefTy.getNumBanks(), op.tstart(), op.offsetAttr(), "addr_data");
 
-    builder.create<hir::CommentOp>(
-        builder.getUnknownLoc(),
-        builder.getStringAttr("Create a tuple of the addresses corresponding "
-                              "to the ADDR dims."));
-
     Value addrTuple =
         createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
 
-    builder.create<hir::CommentOp>(
-        builder.getUnknownLoc(),
-        builder.getStringAttr("Send the address tuple to the addrBus."));
     builder.create<hir::SendOp>(op.getLoc(), addrTuple, addrDataBus,
                                 builder.getI64IntegerAttr(0), op.tstart(),
                                 op.offsetAttr());
@@ -1014,29 +950,19 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
   auto wrEnableBus = getEnableSendBus(builder, portInterface.wrEnableBusTensor,
                                       bank, memrefTy.getNumBanks(), op.tstart(),
                                       op.offsetAttr(), "wr_en");
-  builder.create<hir::CommentOp>(
-      builder.getUnknownLoc(),
-      builder.getStringAttr("Send 1 to the wrEnableBus."));
   builder
       .create<hir::SendOp>(builder.getUnknownLoc(), c1, wrEnableBus,
                            builder.getI64IntegerAttr(0), op.tstart(),
                            op.offsetAttr())
       ->setAttr("default", builder.getI64IntegerAttr(0));
-  builder.create<hir::CommentOp>(builder.getUnknownLoc(),
-                                 builder.getStringAttr("Create wrDataBus."));
   auto wrDataBus = getDataSendBus(
       builder, portInterface.wrDataBusTensor, portInterface.wrEnableBusTensor,
       bank, memrefTy.getNumBanks(), op.tstart(), op.offsetAttr(), "wr_data");
 
-  builder.create<hir::CommentOp>(
-      builder.getUnknownLoc(),
-      builder.getStringAttr("Send data to wrDataBus."));
   builder.create<hir::SendOp>(builder.getUnknownLoc(), op.value(), wrDataBus,
                               builder.getI64IntegerAttr(0), op.tstart(),
                               op.offsetAttr());
 
-  builder.create<hir::CommentOp>(op.getLoc(),
-                                 builder.getStringAttr("StoreOp end"));
   opsToErase.push_back(op);
   return success();
 }
@@ -1144,12 +1070,8 @@ LogicalResult MemrefLoweringPass::visitOp(hir::AllocaOp op) {
   // Add comment.
   OpBuilder builder(op);
   builder.setInsertionPoint(op);
-  builder.create<hir::CommentOp>(op.getLoc(),
-                                 builder.getStringAttr("AllocaOp start"));
   if (failed(createBusInstantiationsAndCallOp(op)))
     return failure();
-  builder.create<hir::CommentOp>(op.getLoc(),
-                                 builder.getStringAttr("AllocaOp end"));
   opsToErase.push_back(op);
   return success();
 }

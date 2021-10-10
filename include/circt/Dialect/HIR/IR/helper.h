@@ -1,15 +1,16 @@
+#ifndef HIR_HELPER_H
+#define HIR_HELPER_H
+
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/PatternMatch.h"
 
-// returns the bitwidth of the type.
 namespace helper {
 llvm::Optional<uint64_t> getBitWidth(mlir::Type);
 unsigned clog2(int);
 
-/// A primitive type is integer, float or a tuple/tensor of a primitive type.
 bool isBuiltinSizedType(mlir::Type);
 bool isBusType(mlir::Type);
 llvm::Optional<int64_t> getConstantIntValue(mlir::Value var);
@@ -52,4 +53,9 @@ void setNames(mlir::Operation *, mlir::ArrayRef<mlir::StringRef>);
 mlir::SmallVector<mlir::Type> getTypes(mlir::ArrayRef<mlir::Value>);
 llvm::Optional<mlir::StringRef> getOptionalName(mlir::Operation *operation,
                                                 uint64_t resultNum);
+
+circt::Operation *declareExternalFuncForCall(
+    circt::hir::CallOp callOp, circt::SmallVector<circt::StringRef> inputNames,
+    circt::SmallVector<circt::StringRef> resultNames = {});
 } // namespace helper
+#endif

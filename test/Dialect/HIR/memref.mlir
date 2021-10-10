@@ -45,7 +45,7 @@ hir.func @test2 at %t(){
 
 #bram_wr = {wr_latency=1}
 #bram_rd = {rd_latency=1}
-hir.func @test3 at %t() -> (i8){
+hir.func @test3 at %t() -> (%res: i8){
   %0 = constant 0:index
   %1 = constant 1:index
   %c1_i1 = constant 1:i1

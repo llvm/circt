@@ -62,8 +62,7 @@ IntegerType convertToIntegerType(Type ty) {
 }
 
 Type convertBusType(hir::BusType busTy) {
-  assert(busTy.getElementTypes().size() == 1);
-  return convertToIntegerType(busTy.getElementTypes()[0]);
+  return convertToIntegerType(busTy.getElementType());
 }
 
 Type convertToArrayType(mlir::Type elementTy, ArrayRef<int64_t> shape) {

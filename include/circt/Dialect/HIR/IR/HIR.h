@@ -15,7 +15,7 @@
 namespace circt {
 namespace hir {
 enum PortKind { rd = 0, wr = 1, rw = 2 };
-enum BusDirection { SAME = 0, FLIP = 1 };
+enum BusDirection { ORIGINAL = 0, FLIPPED = 1 };
 
 enum DimKind { ADDR = 0, BANK = 1 };
 namespace Details {
@@ -106,87 +106,19 @@ struct FuncTypeStorage : public TypeStorage {
   ArrayRef<DictionaryAttr> resultAttrs;
 };
 
-struct ArrayTypeStorage : public TypeStorage {
-  ArrayTypeStorage(ArrayRef<int64_t> dims, Type elementType, Attribute attr)
-      : dims(dims), elementType(elementType), attr(attr) {}
-
-  using KeyTy = std::tuple<ArrayRef<int64_t>, Type, Attribute>;
-
-  /// Define the comparison function for the key type.
-  bool operator==(const KeyTy &key) const {
-    return key == KeyTy(dims, elementType, attr);
-  }
-
-  /// Define a hash function for the key type.
-  static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
-  }
-
-  /// Define a construction function for the key type.
-  static KeyTy getKey(ArrayRef<int64_t> dims, Type elementType,
-                      Attribute attr) {
-    return KeyTy(dims, elementType, attr);
-  }
-
-  /// Define a construction method for creating a new instance of this storage.
-  static ArrayTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                     const KeyTy &key) {
-    ArrayRef<int64_t> dims = allocator.copyInto(std::get<0>(key));
-    Type elementType = std::get<1>(key);
-    Attribute attr = std::get<2>(key);
-    return new (allocator.allocate<ArrayTypeStorage>())
-        ArrayTypeStorage(dims, elementType, attr);
-  }
-
-  ArrayRef<int64_t> dims;
-  Type elementType;
-  Attribute attr;
-};
-
-struct GroupTypeStorage : public TypeStorage {
-  GroupTypeStorage(ArrayRef<Type> elementTypes, ArrayRef<Attribute> attrs)
-      : elementTypes(elementTypes), attrs(attrs) {}
-
-  using KeyTy = std::tuple<ArrayRef<Type>, ArrayRef<Attribute>>;
-
-  /// Define the comparison function for the key type.
-  bool operator==(const KeyTy &key) const {
-    return key == KeyTy(elementTypes, attrs);
-  }
-
-  /// Define a hash function for the key type.
-  static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
-  }
-
-  /// Define a construction function for the key type.
-  static KeyTy getKey(ArrayRef<Type> elementTypes, ArrayRef<Attribute> attrs) {
-    return KeyTy(elementTypes, attrs);
-  }
-
-  /// Define a construction method for creating a new instance of this storage.
-  static GroupTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                     const KeyTy &key) {
-    ArrayRef<Type> elementTypes = allocator.copyInto(std::get<0>(key));
-    ArrayRef<Attribute> attrs = allocator.copyInto(std::get<1>(key));
-    return new (allocator.allocate<GroupTypeStorage>())
-        GroupTypeStorage(elementTypes, attrs);
-  }
-
-  ArrayRef<Type> elementTypes;
-  ArrayRef<Attribute> attrs;
-};
-
 /// Storage class for BusType.
 struct BusTypeStorage : public TypeStorage {
-  BusTypeStorage(ArrayRef<Type> elementTypes, ArrayRef<BusDirection> directions)
-      : elementTypes(elementTypes), directions(directions) {}
+  BusTypeStorage(ArrayRef<StringAttr> memberNames, ArrayRef<Type> memberTypes,
+                 ArrayRef<BusDirection> memberDirections)
+      : memberNames(memberNames), memberTypes(memberTypes),
+        memberDirections(memberDirections) {}
 
-  using KeyTy = std::tuple<ArrayRef<Type>, ArrayRef<BusDirection>>;
+  using KeyTy =
+      std::tuple<ArrayRef<StringAttr>, ArrayRef<Type>, ArrayRef<BusDirection>>;
 
   /// Define the comparison function for the key type.
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(elementTypes, directions);
+    return key == KeyTy(memberNames, memberTypes, memberDirections);
   }
 
   /// Define a hash function for the key type.
@@ -195,22 +127,25 @@ struct BusTypeStorage : public TypeStorage {
   }
 
   /// Define a construction function for the key type.
-  static KeyTy getKey(ArrayRef<Type> elementTypes,
-                      ArrayRef<BusDirection> directions) {
-    return KeyTy(elementTypes, directions);
+  static KeyTy getKey(ArrayRef<StringAttr> memberNames,
+                      ArrayRef<Type> memberTypes,
+                      ArrayRef<BusDirection> memberDirections) {
+    return KeyTy(memberNames, memberTypes, memberDirections);
   }
 
   /// Define a construction method for creating a new instance of this storage.
   static BusTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
                                    const KeyTy &key) {
-    auto elementTypes = allocator.copyInto(std::get<0>(key));
-    auto directions = allocator.copyInto(std::get<1>(key));
+    auto memberNames = allocator.copyInto(std::get<0>(key));
+    auto memberTypes = allocator.copyInto(std::get<1>(key));
+    auto memberDirections = allocator.copyInto(std::get<2>(key));
     return new (allocator.allocate<BusTypeStorage>())
-        BusTypeStorage(elementTypes, directions);
+        BusTypeStorage(memberNames, memberTypes, memberDirections);
   }
 
-  ArrayRef<Type> elementTypes;
-  ArrayRef<BusDirection> directions;
+  ArrayRef<StringAttr> memberNames;
+  ArrayRef<Type> memberTypes;
+  ArrayRef<BusDirection> memberDirections;
 };
 } // namespace Details.
 
@@ -316,53 +251,39 @@ public:
   ArrayRef<DictionaryAttr> getResultAttrs() { return getImpl()->resultAttrs; }
 };
 
-/// This class defines array type.
-class ArrayType
-    : public Type::TypeBase<ArrayType, Type, Details::ArrayTypeStorage> {
-public:
-  using Base::Base;
-
-  static StringRef getKeyword() { return "array"; }
-
-  static ArrayType get(MLIRContext *context, ArrayRef<int64_t> dims,
-                       Type elementType, Attribute attr) {
-    return Base::get(context, dims, elementType, attr);
-  }
-
-  ArrayRef<int64_t> dims;
-  Type getElementType() { return getImpl()->elementType; }
-  ArrayRef<int64_t> getDimensions() { return getImpl()->dims; }
-  Attribute getAttribute() { return getImpl()->attr; }
-};
-
-/// This class defines group type.
-class GroupType
-    : public Type::TypeBase<GroupType, Type, Details::GroupTypeStorage> {
-public:
-  using Base::Base;
-
-  static StringRef getKeyword() { return "group"; }
-  static GroupType get(MLIRContext *context, ArrayRef<Type> elementTypes,
-                       ArrayRef<Attribute> attrs) {
-    return Base::get(context, elementTypes, attrs);
-  }
-  ArrayRef<Type> getElementTypes() { return getImpl()->elementTypes; }
-  ArrayRef<Attribute> getAttributes() { return getImpl()->attrs; }
-};
-
-/// This class defines bus type.
+/// This class defines a bus type.
 class BusType : public Type::TypeBase<BusType, Type, Details::BusTypeStorage> {
 public:
   using Base::Base;
 
   static StringRef getKeyword() { return "bus"; }
-  static BusType get(MLIRContext *context, ArrayRef<Type> elementTypes,
-                     ArrayRef<BusDirection> directions) {
-    return Base::get(context, elementTypes, directions);
+  static BusType get(MLIRContext *context, Type type) {
+
+    return Base::get(context, StringAttr::get(context, "bus"), type,
+                     hir::BusDirection::ORIGINAL);
   }
-  ArrayRef<Type> getElementTypes() { return getImpl()->elementTypes; }
-  ArrayRef<BusDirection> getElementDirections() {
-    return getImpl()->directions;
+
+  Type getElementType() { return getImpl()->memberTypes[0]; }
+};
+
+/// This class defines bus struct type.
+class BusStructType
+    : public Type::TypeBase<BusStructType, Type, Details::BusTypeStorage> {
+public:
+  using Base::Base;
+
+  static StringRef getKeyword() { return "bus_struct"; }
+  static BusStructType get(MLIRContext *context,
+                           ArrayRef<StringAttr> memberNames,
+                           ArrayRef<Type> memberTypes,
+                           ArrayRef<BusDirection> memberDirections) {
+    return Base::get(context, memberNames, memberTypes, memberDirections);
+  }
+
+  ArrayRef<StringAttr> getMemberNames() { return getImpl()->memberNames; }
+  ArrayRef<Type> getMemberTypes() { return getImpl()->memberTypes; }
+  ArrayRef<BusDirection> getMemberDirections() {
+    return getImpl()->memberDirections;
   }
 };
 
