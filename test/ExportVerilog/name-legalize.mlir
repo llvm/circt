@@ -158,5 +158,24 @@ hw.module @verbatim_renames(%a: i1) {
 
   // CHECK: // VERB Instance : module_1 wire_0
   sv.verbatim "// VERB Instance : {{0}} {{1}}" {symbols = [@struct, @wire1]}
+}
 
+
+
+// CHECK-LABEL: interface output_2;
+sv.interface @output {
+  // CHECK-NEXT: logic input_0;
+  sv.interface.signal @input : i1
+  // CHECK-NEXT: logic wire_1;
+  sv.interface.signal @wire : i1
+  // CHECK-NEXT: modport always_2(input input_0, output wire_1);
+  sv.interface.modport @always ("input" @input, "output" @wire)
+}
+
+// Renaming the above interface declarations needs to rename their use in the
+// following types.
+// CHECK-LABEL: module InterfaceAsInstance();
+hw.module @InterfaceAsInstance () {
+  // CHECK: output_2 ();
+  %0 = sv.interface.instance : !sv.interface<@output>
 }

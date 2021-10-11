@@ -44,6 +44,13 @@ struct GlobalNameTable {
     return (it != renamedParams.end() ? it->second : paramName).getValue();
   }
 
+  StringRef getInterfaceVerilogName(Operation *op) const {
+    auto it = renamedInterfaceOp.find(op);
+    auto attr = it != renamedInterfaceOp.end() ? it->second
+                                               : SymbolTable::getSymbolName(op);
+    return attr.getValue();
+  }
+
 private:
   friend class GlobalNameResolver;
   GlobalNameTable() {}
@@ -62,6 +69,11 @@ private:
         StringAttr::get(oldName.getContext(), newName);
   }
 
+  void addRenamedInterfaceOp(Operation *interfaceOp, StringRef newName) {
+    renamedInterfaceOp[interfaceOp] =
+        StringAttr::get(interfaceOp->getContext(), newName);
+  }
+
   /// This contains entries for any ports that got renamed.  The key is a
   /// moduleop/portIdx tuple, the value is the name to use.  The portIdx is the
   /// index of the port in the list returned by getAllModulePortInfos.
@@ -70,6 +82,11 @@ private:
   /// This contains entries for any parameters that got renamed.  The key is a
   /// moduleop/paramName tuple, the value is the name to use.
   DenseMap<std::pair<Operation *, Attribute>, StringAttr> renamedParams;
+
+  /// This contains entries for interface operations (sv.interface,
+  /// sv.interface.signal, and sv.interface.modport) that need to be renamed
+  /// due to conflicts.
+  DenseMap<Operation *, StringAttr> renamedInterfaceOp;
 };
 
 //===----------------------------------------------------------------------===//

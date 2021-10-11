@@ -56,7 +56,8 @@ private:
   /// Check to see if the port names of the specified module conflict with
   /// keywords or themselves.  If so, add the replacement names to
   /// globalNameTable.
-  void legalizePortAndParamNames(hw::HWModuleOp module);
+  void legalizeModuleNames(HWModuleOp module);
+  void legalizeInterfaceNames(InterfaceOp interface);
 
   /// Set of globally visible names, to ensure uniqueness.
   NameCollisionResolver globalNameResolver;
@@ -118,21 +119,14 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
   for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
       legalizeSymbolName(module, globalNameResolver);
-      legalizePortAndParamNames(module);
+      legalizeModuleNames(module);
       continue;
     }
 
     // Legalize the name of the interface itself, as well as any signals and
     // modports within it.
     if (auto interface = dyn_cast<InterfaceOp>(op)) {
-      legalizeSymbolName(interface, globalNameResolver);
-
-      NameCollisionResolver localNames;
-      // Rename signals and modports.
-      for (auto &op : *interface.getBodyBlock()) {
-        if (isa<InterfaceSignalOp>(op) || isa<InterfaceModportOp>(op))
-          legalizeSymbolName(&op, localNames);
-      }
+      legalizeInterfaceNames(interface);
       continue;
     }
   }
@@ -141,7 +135,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
 /// Check to see if the port names of the specified module conflict with
 /// keywords or themselves.  If so, add the replacement names to
 /// globalNameTable.
-void GlobalNameResolver::legalizePortAndParamNames(hw::HWModuleOp module) {
+void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
   NameCollisionResolver nameResolver;
 
   // Legalize the port names.
@@ -159,6 +153,23 @@ void GlobalNameResolver::legalizePortAndParamNames(hw::HWModuleOp module) {
     auto newName = nameResolver.getLegalName(paramAttr.getName());
     if (newName != paramAttr.getName().getValue())
       globalNameTable.addRenamedParam(module, paramAttr.getName(), newName);
+  }
+}
+
+void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {
+  auto newName = globalNameResolver.getLegalName(interface.getName());
+  if (newName != interface.getName())
+    globalNameTable.addRenamedInterfaceOp(interface, newName);
+
+  NameCollisionResolver localNames;
+  // Rename signals and modports.
+  for (auto &op : *interface.getBodyBlock()) {
+    if (isa<InterfaceSignalOp, InterfaceModportOp>(op)) {
+      auto name = SymbolTable::getSymbolName(&op).getValue();
+      auto newName = localNames.getLegalName(name);
+      if (newName != name)
+        globalNameTable.addRenamedInterfaceOp(&op, newName);
+    }
   }
 }
 

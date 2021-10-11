@@ -1541,12 +1541,17 @@ SubExprInfo ExprEmitter::visitComb(ExtractOp op) {
 }
 
 SubExprInfo ExprEmitter::visitSV(GetModportOp op) {
-  os << names.getName(op.iface()) + "." + op.field();
+  auto decl = op.getReferencedDecl(state.symbolCache);
+  os << names.getName(op.iface()) << '.'
+     << state.globalNames.getInterfaceVerilogName(decl);
   return {Selection, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
-  os << names.getName(op.iface()) + "." + op.signalName();
+  auto decl = op.getReferencedDecl(state.symbolCache);
+
+  os << names.getName(op.iface()) << '.'
+     << state.globalNames.getInterfaceVerilogName(decl);
   return {Selection, IsUnsigned};
 }
 
@@ -2295,8 +2300,8 @@ LogicalResult StmtEmitter::visitSV(InterfaceInstanceOp op) {
   assert(interfaceOp && "InterfaceInstanceOp has invalid symbol that does not "
                         "point to an interface");
 
-  auto verilogName = getVerilogModuleNameAttr(interfaceOp);
-  indent() << prefix << verilogName.getValue() << " " << op.name() << "();";
+  auto verilogName = state.globalNames.getInterfaceVerilogName(interfaceOp);
+  indent() << prefix << verilogName << " " << op.name() << "();";
 
   emitLocationInfoAndNewLine(ops);
 
@@ -2912,7 +2917,8 @@ LogicalResult StmtEmitter::visitSV(BindOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
-  os << "interface " << op.sym_name() << ";\n";
+  os << "interface " << state.globalNames.getInterfaceVerilogName(op) << ";\n";
+  // FIXME: Don't emit the body of this as general statements, they aren't!
   emitStatementBlock(*op.getBodyBlock());
   os << "endinterface\n\n";
   return success();
@@ -2921,18 +2927,21 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   indent();
   printPackedType(stripUnpackedTypes(op.type()), os, op, false);
-  os << ' ' << op.sym_name();
+  os << ' ' << state.globalNames.getInterfaceVerilogName(op);
   printUnpackedTypePostfix(op.type(), os);
   os << ";\n";
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(InterfaceModportOp op) {
-  indent() << "modport " << op.sym_name() << '(';
+  indent() << "modport " << state.globalNames.getInterfaceVerilogName(op)
+           << '(';
 
   llvm::interleaveComma(op.ports(), os, [&](const Attribute &portAttr) {
     auto port = portAttr.cast<ModportStructAttr>();
-    os << port.direction().getValue() << ' ' << port.signal().getValue();
+    os << port.direction().getValue() << ' ';
+    auto signalDecl = state.symbolCache.getDefinition(port.signal());
+    os << state.globalNames.getInterfaceVerilogName(signalDecl);
   });
 
   os << ");\n";

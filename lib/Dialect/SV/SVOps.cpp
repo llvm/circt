@@ -898,6 +898,13 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
         value, fieldAttr);
 }
 
+/// Lookup the op for the modport declaration.  This returns null on invalid
+/// IR.
+InterfaceModportOp
+GetModportOp::getReferencedDecl(const hw::SymbolCache &cache) {
+  return dyn_cast_or_null<InterfaceModportOp>(cache.getDefinition(fieldAttr()));
+}
+
 void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
                                   Value iface, StringRef signalName) {
   auto ifaceTy = iface.getType().dyn_cast<InterfaceType>();
@@ -908,6 +915,14 @@ void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
   assert(ifaceDefOp &&
          "ReadInterfaceSignalOp could not resolve an InterfaceOp.");
   build(builder, state, ifaceDefOp.getSignalType(signalName), iface, fieldAttr);
+}
+
+/// Lookup the op for the signal declaration.  This returns null on invalid
+/// IR.
+InterfaceSignalOp
+ReadInterfaceSignalOp::getReferencedDecl(const hw::SymbolCache &cache) {
+  return dyn_cast_or_null<InterfaceSignalOp>(
+      cache.getDefinition(signalNameAttr()));
 }
 
 ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
