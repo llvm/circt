@@ -321,24 +321,33 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   auto coverBindFile =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover.bindfile");
 
-  auto isAssert = [](Operation *op) -> bool {
+  hw::SymbolCache symCache;
+  for (auto &op : topLevelModule->getOperations())
+    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+      if (auto name = symOp.getNameAttr())
+        symCache.addDefinition(name, symOp);
+  symCache.freeze();
+
+  // Symbols not in the cache will only be fore instances added by an extract
+  // phase and are not instances that could possibly have extract flags on them.
+  auto isAssert = [&symCache](Operation *op) -> bool {
     if (auto inst = dyn_cast<hw::InstanceOp>(op))
-      if (auto mod = inst.getReferencedModule())
+      if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
         if (mod->getAttr("firrtl.extract.assert.extra"))
           return true;
     return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
            isa<AssertConcurrentOp>(op);
   };
-  auto isAssume = [](Operation *op) -> bool {
+  auto isAssume = [&symCache](Operation *op) -> bool {
     if (auto inst = dyn_cast<hw::InstanceOp>(op))
-      if (auto mod = inst.getReferencedModule())
+      if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
         if (mod->getAttr("firrtl.extract.assume.extra"))
           return true;
     return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
   };
-  auto isCover = [](Operation *op) -> bool {
+  auto isCover = [&symCache](Operation *op) -> bool {
     if (auto inst = dyn_cast<hw::InstanceOp>(op))
-      if (auto mod = inst.getReferencedModule())
+      if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
         if (mod->getAttr("firrtl.extract.cover.extra"))
           return true;
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
@@ -346,8 +355,8 @@ void SVExtractTestCodeImplPass::runOnOperation() {
 
   for (auto &op : topLevelModule->getOperations()) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
-      // Extract two sets of ops to different modules
-
+      // Extract two sets of ops to different modules.
+      // This will add modules, but not affect modules in the symbol table.
       doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile);
       doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile);
       doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile);
