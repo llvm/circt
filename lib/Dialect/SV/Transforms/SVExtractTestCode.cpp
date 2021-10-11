@@ -260,12 +260,22 @@ struct SVExtractTestCodeImplPass
 private:
   void doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
                 StringRef suffix, Attribute path, Attribute bindFile) {
+    bool hasError = false;
     // Find Operations of interest.
     SmallPtrSet<Operation *, 8> roots;
-    module->walk([&fn, &roots](Operation *op) {
-      if (fn(op))
+    module->walk([&fn, &roots, &hasError](Operation *op) {
+      if (fn(op)) {
         roots.insert(op);
+        if (op->getNumResults()) {
+          op->emitError("Extracting op with result");
+          hasError = true;
+        }
+      }
     });
+    if (hasError) {
+      signalPassFailure();
+      return;
+    }
     // No Ops?  No problem.
     if (roots.empty())
       return;
