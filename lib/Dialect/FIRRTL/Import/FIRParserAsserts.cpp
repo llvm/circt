@@ -151,6 +151,43 @@ enum class VerifFlavor {
   AssertNotX      // begins with "assertNotX:"
 };
 
+/// A modifier for an assertion predicate.
+enum class PredicateModifier { NoMod, TrueOrIsX };
+
+/// Parse a conditional compile toggle (e.g. "unrOnly") into the corresponding
+/// preprocessor guard macro name (e.g. "USE_UNR_ONLY_CONSTRAINTS"), or report
+/// an error.
+static Optional<StringRef>
+parseConditionalCompileToggle(const ExtractionSummaryCursor<StringRef> &ex) {
+  if (ex.value == "formalOnly")
+    return {"USE_FORMAL_ONLY_CONSTRAINTS"};
+  else if (ex.value == "unrOnly")
+    return {"USE_UNR_ONLY_CONSTRAINTS"};
+  ex.emitError() << "must be `formalOnly` or `unrOnly`";
+  return llvm::None;
+}
+
+/// Parse a string into a `PredicateModifier`.
+static Optional<PredicateModifier>
+parsePredicateModifier(const ExtractionSummaryCursor<StringRef> &ex) {
+  if (ex.value == "noMod")
+    return PredicateModifier::NoMod;
+  else if (ex.value == "trueOrIsX")
+    return PredicateModifier::TrueOrIsX;
+  ex.emitError() << "must be `noMod` or `trueOrIsX`";
+  return llvm::None;
+}
+
+/// Check that an assertion "format" is one of the admissible values, or report
+/// an error.
+static Optional<StringRef>
+parseAssertionFormat(const ExtractionSummaryCursor<StringRef> &ex) {
+  if (ex.value == "sva" || ex.value == "ifElseFatal")
+    return ex.value;
+  ex.emitError() << "must be `sva` or `ifElseFatal`";
+  return llvm::None;
+}
+
 namespace circt {
 namespace firrtl {
 
@@ -347,36 +384,52 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
       return failure();
     }
 
-    // Extract the common fields from the JSON.
-    StringRef predMod;
+    // Extract and apply any predicate modifier.
+    PredicateModifier predMod;
     if (makeExtractionSummaryCursor(printOp.getLoc(), exObj)
             .withObjectField("predicateModifier", [&](const auto &ex) {
               return ex.withStringField("type", [&](const auto &ex) {
-                // TODO: Check that the string is one of the allowed values, and
-                // possibly convert to an enum.
-                predMod = ex.value;
-                return success();
+                if (auto pm = parsePredicateModifier(ex)) {
+                  predMod = *pm;
+                  return success();
+                }
+                return failure();
               });
             }))
       return failure();
-    // TODO: We should probably apply the predicate modifier here immediately.
 
-    SmallVector<Attribute> condCompToggles;
+    Value predicate = whenStmt.condition();
+    switch (predMod) {
+    case PredicateModifier::NoMod:
+      // Leave the predicate unmodified.
+      break;
+    case PredicateModifier::TrueOrIsX:
+      // Construct a `predicate | (^predicate === 1'bx)`.
+      Value orX = builder.create<XorRPrimOp>(predicate);
+      orX = builder.create<VerbatimExprOp>(UIntType::get(context, 1),
+                                           "{{0}} === 1'bx", orX);
+      predicate = builder.create<OrPrimOp>(predicate, orX);
+      break;
+    }
+
+    // Extract the preprocessor macro names that should guard this assertion.
+    SmallVector<Attribute> guards;
     if (makeExtractionSummaryCursor(printOp.getLoc(), exObj)
             .withArrayField("conditionalCompileToggles", [&](const auto &ex) {
               return ex.withObject([&](const auto &ex) {
                 return ex.withStringField("type", [&](const auto &ex) {
-                  // TODO: Check that the string is one of the allowed values,
-                  // and possibly convert to an enum. Report errors as:
-                  //     ex.emitError() << "must be one of `blahrg`";
-                  //     return failure();
-                  condCompToggles.push_back(StringAttr::get(context, ex.value));
-                  return success();
+                  if (auto guard = parseConditionalCompileToggle(ex)) {
+                    guards.push_back(
+                        StringAttr::get(builder.getContext(), *guard));
+                    return success();
+                  }
+                  return failure();
                 });
               });
             }))
       return failure();
 
+    // Extract label additions and the message.
     SmallString<32> label("verif_library");
     if (makeExtractionSummaryCursor(printOp.getLoc(), exObj)
             .withArrayField("labelExts", [&](const auto &ex) {
@@ -402,10 +455,11 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
       if (makeExtractionSummaryCursor(printOp.getLoc(), exObj)
               .withObjectField("format", [&](const auto &ex) {
                 return ex.withStringField("type", [&](const auto &ex) {
-                  // TODO: Check that the string is one of the allowed values,
-                  // and possibly convert to an enum.
-                  format = ex.value;
-                  return success();
+                  if (auto f = parseAssertionFormat(ex)) {
+                    format = *f;
+                    return success();
+                  }
+                  return failure();
                 });
               }))
         return failure();
@@ -413,7 +467,8 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
 
     // Build the verification op itself.
     Operation *op;
-    auto predicate = builder.create<NotPrimOp>(whenStmt.condition());
+    predicate = builder.create<NotPrimOp>(
+        predicate); // assertion triggers when predicate fails
     if (flavor == VerifFlavor::VerifLibAssert)
       op = builder.create<AssertOp>(printOp.clock(), predicate, printOp.cond(),
                                     message, label, true);
@@ -423,9 +478,7 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     printOp.erase();
 
     // Attach additional attributes extracted from the JSON object.
-    op->setAttr("predicateModifier", StringAttr::get(context, predMod));
-    op->setAttr("conditionalCompileToggles",
-                ArrayAttr::get(context, condCompToggles));
+    op->setAttr("guards", ArrayAttr::get(context, guards));
     if (format)
       op->setAttr("format", StringAttr::get(context, *format));
 
