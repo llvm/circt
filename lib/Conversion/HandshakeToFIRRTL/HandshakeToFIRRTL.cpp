@@ -495,6 +495,12 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   auto topModuleOp = rewriter.create<FModuleOp>(
       funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
 
+  // rewriter.mergeBlocks will not rewrite SSA arguments instantly, and as such
+  // will leave dangling SSA values in the IR. replaceAllUsesWith performs SSA
+  // rewriting directly.
+  for (auto &oldArg : enumerate(funcOp.getArguments()))
+    oldArg.value().replaceAllUsesWith(topModuleOp.getArgument(oldArg.index()));
+
   auto replacementArgs =
       topModuleOp.getArguments().take_front(funcOp.getNumArguments());
   rewriter.mergeBlocks(&funcOp.getBody().front(), topModuleOp.getBody(),
