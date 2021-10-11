@@ -72,83 +72,37 @@ private:
   DenseMap<std::pair<Operation *, Attribute>, StringAttr> renamedParams;
 };
 
-/// This class keeps track of names for values within a module.
-struct ModuleNameManager {
-  ModuleNameManager() : encounteredError(false) {}
+//===----------------------------------------------------------------------===//
+// NameCollisionResolver
+//===----------------------------------------------------------------------===//
 
-  StringRef addName(Value value, StringRef name) {
-    return addName(ValueOrOp(value), name);
-  }
-  StringRef addName(Operation *op, StringRef name) {
-    return addName(ValueOrOp(op), name);
-  }
-  StringRef addName(Value value, StringAttr name) {
-    return addName(ValueOrOp(value), name);
-  }
-  StringRef addName(Operation *op, StringAttr name) {
-    return addName(ValueOrOp(op), name);
+struct NameCollisionResolver {
+  NameCollisionResolver() = default;
+
+  /// Given a name that may have collisions or invalid symbols, return a
+  /// replacement name to use, or the original name if it was ok.
+  StringRef getLegalName(StringRef originalName);
+  StringRef getLegalName(StringAttr originalName) {
+    return getLegalName(originalName.getValue());
   }
 
-  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
-  StringRef getName(Operation *op) {
-    // If RegOp or WireOp, then result has the name.
-    if (isa<sv::WireOp, sv::RegOp>(op))
-      return getName(op->getResult(0));
-    return getName(ValueOrOp(op));
-  }
-
-  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
-
-  bool hasName(Operation *op) {
-    // If RegOp or WireOp, then result has the name.
-    if (isa<sv::WireOp, sv::RegOp>(op))
-      return nameTable.count(op->getResult(0));
-    return nameTable.count(ValueOrOp(op));
-  }
-
-  bool hadError() { return encounteredError; }
+  /// Insert a string as an already-used name.
+  void insertUsedName(StringRef name) { usedNames.insert(name); }
 
 private:
-  using ValueOrOp = PointerUnion<Value, Operation *>;
-
-  /// Retrieve a name from the name table.  The name must already have been
-  /// added.
-  StringRef getName(ValueOrOp valueOrOp) {
-    auto entry = nameTable.find(valueOrOp);
-    assert(entry != nameTable.end() &&
-           "value expected a name but doesn't have one");
-    return entry->getSecond();
-  }
-
-  /// Add the specified name to the name table, auto-uniquing the name if
-  /// required.  If the name is empty, then this creates a unique temp name.
-  ///
-  /// "valueOrOp" is typically the Value for an intermediate wire etc, but it
-  /// can also be an op for an instance, since we want the instances op uniqued
-  /// and tracked.  It can also be null for things like outputs which are not
-  /// tracked in the nameTable.
-  StringRef addName(ValueOrOp valueOrOp, StringRef name);
-
-  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
-    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
-  }
-
-  InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {
-    encounteredError = true;
-    return op->emitOpError(message);
-  }
-
-  // Track whether a name error ocurred
-  bool encounteredError;
-
-  /// nameTable keeps track of mappings from Value's and operations (for
-  /// instances) to their string table entry.
-  llvm::DenseMap<ValueOrOp, StringRef> nameTable;
-
+  /// Set of used names, to ensure uniqueness.
   llvm::StringSet<> usedNames;
 
+  /// Numeric suffix used as uniquification agent when resolving conflicts.
   size_t nextGeneratedNameID = 0;
+
+  NameCollisionResolver(const NameCollisionResolver &) = delete;
+  void operator=(const NameCollisionResolver &) = delete;
 };
+
+//===----------------------------------------------------------------------===//
+// Other utilities
+//===----------------------------------------------------------------------===//
 
 /// Return true for operations that must always be inlined into a containing
 /// expression for correctness.

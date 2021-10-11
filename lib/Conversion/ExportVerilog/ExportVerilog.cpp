@@ -531,6 +531,74 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
 // ModuleNameManager Implementation
 //===----------------------------------------------------------------------===//
 
+namespace {
+/// This class keeps track of names for values within a module.
+struct ModuleNameManager {
+  ModuleNameManager() {}
+
+  StringRef addName(Value value, StringRef name) {
+    return addName(ValueOrOp(value), name);
+  }
+  StringRef addName(Operation *op, StringRef name) {
+    return addName(ValueOrOp(op), name);
+  }
+  StringRef addName(Value value, StringAttr name) {
+    return addName(ValueOrOp(value), name);
+  }
+  StringRef addName(Operation *op, StringAttr name) {
+    return addName(ValueOrOp(op), name);
+  }
+
+  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
+  StringRef getName(Operation *op) {
+    // If RegOp or WireOp, then result has the name.
+    if (isa<sv::WireOp, sv::RegOp>(op))
+      return getName(op->getResult(0));
+    return getName(ValueOrOp(op));
+  }
+
+  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
+
+  bool hasName(Operation *op) {
+    // If RegOp or WireOp, then result has the name.
+    if (isa<sv::WireOp, sv::RegOp>(op))
+      return nameTable.count(op->getResult(0));
+    return nameTable.count(ValueOrOp(op));
+  }
+
+private:
+  using ValueOrOp = PointerUnion<Value, Operation *>;
+
+  /// Retrieve a name from the name table.  The name must already have been
+  /// added.
+  StringRef getName(ValueOrOp valueOrOp) {
+    auto entry = nameTable.find(valueOrOp);
+    assert(entry != nameTable.end() &&
+           "value expected a name but doesn't have one");
+    return entry->getSecond();
+  }
+
+  /// Add the specified name to the name table, auto-uniquing the name if
+  /// required.  If the name is empty, then this creates a unique temp name.
+  ///
+  /// "valueOrOp" is typically the Value for an intermediate wire etc, but it
+  /// can also be an op for an instance, since we want the instances op uniqued
+  /// and tracked.  It can also be null for things like outputs which are not
+  /// tracked in the nameTable.
+  StringRef addName(ValueOrOp valueOrOp, StringRef name);
+
+  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
+    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
+  }
+
+  /// nameTable keeps track of mappings from Value's and operations (for
+  /// instances) to their string table entry.
+  llvm::DenseMap<ValueOrOp, StringRef> nameTable;
+
+  NameCollisionResolver nameResolver;
+};
+} // end anonymous namespace
+
 /// Add the specified name to the name table, auto-uniquing the name if
 /// required.  If the name is empty, then this creates a unique temp name.
 ///
@@ -539,7 +607,7 @@ getLocationInfoAsString(const SmallPtrSet<Operation *, 8> &ops) {
 /// and tracked.  It can also be null for things like outputs which are not
 /// tracked in the nameTable.
 StringRef ModuleNameManager::addName(ValueOrOp valueOrOp, StringRef name) {
-  auto updatedName = legalizeName(name, usedNames, nextGeneratedNameID);
+  auto updatedName = nameResolver.getLegalName(name);
   if (valueOrOp)
     nameTable[valueOrOp] = updatedName;
   return updatedName;
@@ -644,14 +712,15 @@ private:
 void EmitterBase::emitTextWithSubstitutions(
     StringRef string, Operation *op, std::function<void(Value)> operandEmitter,
     ArrayAttr symAttrs, ModuleNameManager &names) {
+
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
-
   SmallVector<Operation *, 8> symOps;
   for (auto sym : symAttrs)
     if (auto symOp =
             state.symbolCache.getDefinition(sym.cast<FlatSymbolRefAttr>()))
       symOps.push_back(symOp);
+
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
   // returning true.  This returns false if no substitution is found.
@@ -687,12 +756,11 @@ void EmitterBase::emitTextWithSubstitutions(
       }
       next += 2;
 
-      Value emitOp;
-
       // Emit any text before the substitution.
       os << string.take_front(start - 2);
-      // operantNo can either refer to Operands or symOps. Assumption is symOps
-      // are sequentially referenced after the operands.
+
+      // operandNo can either refer to Operands or symOps.  symOps are
+      // numbered after the operands.
       if (operandNo < op->getNumOperands())
         // Emit the operand.
         operandEmitter(op->getOperand(operandNo));
@@ -701,17 +769,19 @@ void EmitterBase::emitTextWithSubstitutions(
         Operation *symOp = symOps[symOpNum];
         // Get the verilog name of the operation, add the name if not already
         // done.
-        if (!names.hasName(symOp)) {
+        if (names.hasName(symOp)) {
+          os << names.getName(symOp);
+        } else {
           StringRef symOpName = getSymOpName(symOp);
-          std::string opStr;
-          llvm::raw_string_ostream tName(opStr);
-          tName << *symOp;
-          if (symOpName.empty())
-            op->emitError("Cannot get name for symbol:" + tName.str());
-
-          names.addName(symOp, symOpName);
+          if (!symOpName.empty()) {
+            os << symOpName;
+          } else {
+            std::string opStr;
+            llvm::raw_string_ostream tName(opStr);
+            tName << *symOp;
+            op->emitError("cannot get name for symbol: " + tName.str());
+          }
         }
-        os << names.getName(symOp);
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
@@ -3255,8 +3325,6 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   // Rewrite the module body into compliance with our emission expectations, and
   // collect/rename symbols within the body that conflict.
   prepareHWModule(*module.getBodyBlock(), state.options);
-  if (names.hadError())
-    state.encounteredError = true;
 
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);

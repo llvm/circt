@@ -24,35 +24,10 @@ using namespace ExportVerilog;
 // NameCollisionResolver
 //===----------------------------------------------------------------------===//
 
-namespace {
-struct NameCollisionResolver {
-  NameCollisionResolver() = default;
-
-  /// Given a name that may have collisions or invalid symbols, return a
-  /// replacement name to use, or null if the original name was ok.
-  StringRef getLegalName(StringAttr originalName);
-
-  /// Insert a string as an already-used name.
-  void insertUsedName(StringRef name) { usedNames.insert(name); }
-
-private:
-  /// Set of used names, to ensure uniqueness.
-  llvm::StringSet<> usedNames;
-
-  /// Numeric suffix used as uniquification agent when resolving conflicts.
-  size_t nextGeneratedNameID = 0;
-
-  NameCollisionResolver(const NameCollisionResolver &) = delete;
-  void operator=(const NameCollisionResolver &) = delete;
-};
-} // end anonymous namespace
-
 /// Given a name that may have collisions or invalid symbols, return a
 /// replacement name to use, or null if the original name was ok.
-StringRef NameCollisionResolver::getLegalName(StringAttr originalName) {
-  StringRef result =
-      legalizeName(originalName.getValue(), usedNames, nextGeneratedNameID);
-  return result != originalName.getValue() ? result : StringRef();
+StringRef NameCollisionResolver::getLegalName(StringRef originalName) {
+  return legalizeName(originalName, usedNames, nextGeneratedNameID);
 }
 
 //===----------------------------------------------------------------------===//
@@ -124,7 +99,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
                                 NameCollisionResolver &resolver) {
     StringAttr oldName = SymbolTable::getSymbolName(op);
     auto newName = resolver.getLegalName(oldName);
-    if (newName.empty())
+    if (newName == oldName.getValue())
       return;
 
     // Lazily construct the symbol table if it hasn't been built yet.
@@ -173,7 +148,7 @@ void GlobalNameResolver::legalizePortAndParamNames(hw::HWModuleOp module) {
   size_t portIdx = 0;
   for (const PortInfo &port : getAllModulePortInfos(module)) {
     auto newName = nameResolver.getLegalName(port.name);
-    if (!newName.empty())
+    if (newName != port.name.getValue())
       globalNameTable.addRenamedPort(module, port, newName);
     ++portIdx;
   }
@@ -182,7 +157,7 @@ void GlobalNameResolver::legalizePortAndParamNames(hw::HWModuleOp module) {
   for (auto param : module.parameters()) {
     auto paramAttr = param.cast<ParamDeclAttr>();
     auto newName = nameResolver.getLegalName(paramAttr.getName());
-    if (!newName.empty())
+    if (newName != paramAttr.getName().getValue())
       globalNameTable.addRenamedParam(module, paramAttr.getName(), newName);
   }
 }
