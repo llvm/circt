@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
@@ -130,6 +131,61 @@ public:
   }
 };
 
+// This is a summary of a FIRRTL::MemOp. It defines the relevant properties of the FIRRTL memory, and can be constructed by parsing its attributes.
+struct FirMemory {
+  size_t numReadPorts;
+  size_t numWritePorts;
+  size_t numReadWritePorts;
+  size_t dataWidth;
+  size_t depth;
+  size_t readLatency;
+  size_t writeLatency;
+  size_t maskBits;
+  size_t readUnderWrite;
+  hw::WUW writeUnderWrite;
+  SmallVector<int32_t> writeClockIDs;
+
+  // Location is carried along but not considered part of the identity of this.
+  Location loc;
+
+  bool operator<(const FirMemory &rhs) const {
+#define cmp3way(name)                                                          \
+  if (name < rhs.name)                                                         \
+    return true;                                                               \
+  if (name > rhs.name)                                                         \
+    return false;
+    cmp3way(numReadPorts);
+    cmp3way(numWritePorts);
+    cmp3way(numReadWritePorts);
+    cmp3way(dataWidth);
+    cmp3way(depth);
+    cmp3way(readLatency);
+    cmp3way(writeLatency);
+    cmp3way(readUnderWrite);
+    cmp3way(writeUnderWrite);
+    for (auto tuple : llvm::zip(writeClockIDs, rhs.writeClockIDs)) {
+      if (std::get<0>(tuple) < std::get<1>(tuple))
+        return true;
+      if (std::get<0>(tuple) > std::get<1>(tuple))
+        return false;
+    }
+    return false;
+#undef cmp3way
+  }
+  bool operator==(const FirMemory &rhs) const {
+    return numReadPorts == rhs.numReadPorts &&
+           numWritePorts == rhs.numWritePorts &&
+           numReadWritePorts == rhs.numReadWritePorts &&
+           dataWidth == rhs.dataWidth && depth == rhs.depth &&
+           readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
+           readUnderWrite == rhs.readUnderWrite &&
+           writeUnderWrite == rhs.writeUnderWrite && maskBits == rhs.maskBits &&
+           writeClockIDs.size() == rhs.writeClockIDs.size() &&
+           llvm::all_of_zip(writeClockIDs, rhs.writeClockIDs,
+                            [](auto a, auto b) { return a == b; });
+  }
+  std::string getFirMemoryName() const;
+};
 } // namespace firrtl
 } // namespace circt
 
