@@ -1799,9 +1799,13 @@ void NameCollector::collectNames(Block &block) {
   // value needs to be noticed.
   for (auto &op : block) {
     // Instances have a instance name to recognize but we don't need to look
-    // at the result values.
+    // at the result values and don't need to schedule them as valuesToEmit.
     if (auto instance = dyn_cast<InstanceOp>(op)) {
       names.addName(&op, instance.instanceName());
+      continue;
+    }
+    if (auto interface = dyn_cast<InterfaceInstanceOp>(op)) {
+      names.addName(interface.getResult(), interface.name());
       continue;
     }
 
@@ -1851,7 +1855,7 @@ void NameCollector::collectNames(Block &block) {
     }
 
     // Notice and renamify named declarations.
-    if (isa<WireOp, RegOp, LocalParamOp, InterfaceInstanceOp>(op))
+    if (isa<WireOp, RegOp, LocalParamOp>(op))
       names.addName(op.getResult(0), op.getAttrOfType<StringAttr>("name"));
 
     // Notice and renamify the labels on verification statements.
