@@ -56,3 +56,15 @@ def SymRefArrayAttr: ArrayAttrBase<
     ""> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
+
+def StringArrayAttr: ArrayAttrBase<
+    And<[
+      // Guarantee this is an ArrayAttr first
+      CPred<"$_self.isa<::mlir::ArrayAttr>()">,
+      // Guarantee all elements are StringAttr
+      CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
+            "[&](::mlir::Attribute attr) { return attr.isa<"
+            "::mlir::StringAttr>();})">]>,
+    ""> {
+  let constBuilderCall = "$_builder.getArrayAttr($0)";
+}

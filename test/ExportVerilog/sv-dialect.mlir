@@ -936,6 +936,16 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   }
 }
 
+//CHECK-LABEL: module XMR_src
+//CHECK: assign $root.a.b.c = a;
+//CHECK-NEXT: assign aa = d.e.f;
+hw.module @XMR_src(%a : i23) -> (aa: i3) {
+  %xmr1 = sv.xmr isRooted a,b,c : !hw.inout<i23>
+  %xmr2 = sv.xmr "d",e,f : !hw.inout<i3>
+  %r = sv.read_inout %xmr2 : !hw.inout<i3>
+  sv.assign %xmr1, %a : i23
+  hw.output %r : i3
+}
 
 // CHECK-LABEL: module extInst
 hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()

@@ -144,7 +144,7 @@ static StringRef getSymOpName(Operation *symOp) {
 /// MemoryEffects should be checked if a client cares.
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
-  if (isa<ReadInOutOp, ArrayIndexInOutOp, ParamValueOp>(op))
+  if (isa<ReadInOutOp, ArrayIndexInOutOp, ParamValueOp, XMROp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -1113,6 +1113,7 @@ private:
 
   SubExprInfo visitSV(GetModportOp op);
   SubExprInfo visitSV(ReadInterfaceSignalOp op);
+  SubExprInfo visitSV(XMROp op);
   SubExprInfo visitVerbatimExprOp(Operation *op, ArrayAttr symbols);
   SubExprInfo visitSV(VerbatimExprOp op) {
     return visitVerbatimExprOp(op, op.symbols());
@@ -1218,8 +1219,8 @@ private:
   /// location information tracking.
   SmallPtrSet<Operation *, 8> &emittedExprs;
 
-  /// If any subexpressions would result in too large of a line, report it back
-  /// to the caller in this vector.
+  /// If any subexpressions would result in too large of a line, report it
+  /// back to the caller in this vector.
   SmallVectorImpl<Operation *> &tooLargeSubExpressions;
   SmallVectorImpl<char> &outBuffer;
   llvm::raw_svector_ostream os;
@@ -1552,6 +1553,15 @@ SubExprInfo ExprEmitter::visitSV(ReadInterfaceSignalOp op) {
 
   os << names.getName(op.iface()) << '.'
      << state.globalNames.getInterfaceVerilogName(decl);
+  return {Selection, IsUnsigned};
+}
+
+SubExprInfo ExprEmitter::visitSV(XMROp op) {
+  if (op.isRooted())
+    os << "$root.";
+  for (auto s : op.path())
+    os << s.cast<StringAttr>().getValue() << '.';
+  os << op.terminal();
   return {Selection, IsUnsigned};
 }
 
