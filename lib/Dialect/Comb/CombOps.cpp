@@ -170,31 +170,6 @@ static unsigned getTotalWidth(ValueRange inputs) {
   return resultWidth;
 }
 
-static ParseResult parseConcatOp(OpAsmParser &parser, OperationState &result) {
-  auto inputOperandsLoc = parser.getCurrentLocation();
-  SmallVector<OpAsmParser::OperandType> inputOperands;
-  SmallVector<Type> inputOperandTypes;
-  if (parser.parseOperandList(inputOperands) ||
-      parser.parseOptionalAttrDict(result.attributes) ||
-      parser.parseColonTypeList(inputOperandTypes) ||
-      parser.resolveOperands(inputOperands, inputOperandTypes, inputOperandsLoc,
-                             result.operands)) {
-    return failure();
-  }
-
-  unsigned resultWidth = getTotalWidth(result.operands);
-  auto resultType = IntegerType::get(result.getContext(), resultWidth);
-  result.addTypes(resultType);
-  return success();
-}
-
-static void printConcatOp(OpAsmPrinter &p, ConcatOp &op) {
-  p << " " << op.inputs();
-  p.printOptionalAttrDict(op->getAttrs());
-  p << " : ";
-  llvm::interleaveComma(op.inputs().getTypes(), p);
-}
-
 static LogicalResult verifyConcatOp(ConcatOp concatOp) {
   unsigned tyWidth = concatOp.getType().getWidth();
   unsigned operandsTotalWidth = getTotalWidth(concatOp.inputs());
@@ -207,17 +182,23 @@ static LogicalResult verifyConcatOp(ConcatOp concatOp) {
   return success();
 }
 
-void ConcatOp::build(OpBuilder &builder, OperationState &result,
-                     ValueRange inputs) {
-  build(builder, result, builder.getIntegerType(getTotalWidth(inputs)), inputs);
-}
-
 void ConcatOp::build(OpBuilder &builder, OperationState &result, Value hd,
                      ValueRange tl) {
   result.addOperands(ValueRange{hd});
   result.addOperands(tl);
   unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
   result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
+}
+
+LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
+                                         Optional<Location> loc,
+                                         ValueRange operands,
+                                         DictionaryAttr attrs,
+                                         mlir::RegionRange regions,
+                                         SmallVectorImpl<Type> &results) {
+  unsigned resultWidth = getTotalWidth(operands);
+  results.push_back(IntegerType::get(context, resultWidth));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

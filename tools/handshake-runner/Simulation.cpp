@@ -48,7 +48,7 @@ static void fatalValueError(StringRef reason, T &value) {
   // T &Value)
   value.print(os);
   os << "')\n";
-  llvm::report_fatal_error(err);
+  llvm::report_fatal_error(err.c_str());
 }
 
 void debugArg(const std::string &head, mlir::Value op, const APInt &value,

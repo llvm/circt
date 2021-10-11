@@ -210,27 +210,34 @@ def SExtOp : CombOp<"sext", [NoSideEffect]> {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-def ConcatOp : VariadicOp<"concat"> {
+def ConcatOp : VariadicOp<"concat", [InferTypeOpInterface]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
     See the HW-SV rationale document for details on operand ordering.
   }];
 
-  // Need a custom parser/printer to avoid redundant result type
-  let parser = "return ::parse$cppClass(parser, result);";
-  let printer = "::print$cppClass(p, *this);";
-
   let hasFolder = true;
   let hasCanonicalizeMethod = true;
   let verifier = "return ::verifyConcatOp(*this);";
 
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+
   let builders = [
-    OpBuilder<(ins "ValueRange":$inputs)>,
     OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, ValueRange{lhs, rhs});
     }]>,
     OpBuilder<(ins "Value":$hd, "ValueRange":$tl)>,
   ];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
 }
 
 // Select one of two values based on a condition.
