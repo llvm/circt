@@ -120,11 +120,8 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
 static StringRef getSymOpName(Operation *symOp) {
   // Typeswitch of operation types which can define a symbol.
   return TypeSwitch<Operation *, StringRef>(symOp)
-      .Case<HWModuleOp>([&](HWModuleOp op) { return op.getName(); })
-      .Case<HWModuleExternOp>(
-          [&](HWModuleExternOp op) { return op.getVerilogModuleName(); })
-      .Case<HWGeneratorSchemaOp>(
-          [&](HWGeneratorSchemaOp op) { return op.sym_name(); })
+      .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(
+          [](Operation *op) { return getVerilogModuleName(op); })
       .Case<InstanceOp>([&](InstanceOp op) { return op.getName().getValue(); })
       .Case<WireOp>([&](WireOp op) { return op.name(); })
       .Case<RegOp>([&](RegOp op) { return op.name(); })
@@ -2775,8 +2772,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto *moduleOp = op.getReferencedModule(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
-  auto verilogName = getVerilogModuleNameAttr(moduleOp);
-  indent() << prefix << verilogName.getValue();
+  indent() << prefix << getVerilogModuleName(moduleOp);
 
   // If this is a parameterized module, then emit the parameters.
   if (!op.parameters().empty()) {
@@ -3348,7 +3344,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   SmallPtrSet<Operation *, 8> moduleOpSet;
   moduleOpSet.insert(module);
 
-  os << "module " << module.getName();
+  os << "module " << getVerilogModuleName(module);
 
   // If we have any parameters, print them on their own line.
   if (!module.parameters().empty()) {
@@ -3743,7 +3739,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
 
           // Emit into a separate file named after the module.
           if (attr || separateModules)
-            separateFile(mod, mod.getName() + ".sv");
+            separateFile(mod, getVerilogModuleName(mod) + ".sv");
           else
             rootFile.ops.push_back(info);
         })

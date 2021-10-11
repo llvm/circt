@@ -815,11 +815,11 @@ hw.module @verbatim_M1(%clock : i1, %cond : i1, %val : i8) {
   %c42_2 = hw.constant 42 : i8
   %xor = comb.xor %val, %c42_2 : i8
   hw.instance "aa1" sym @verbatim_b1 @verbatim_inout_2() ->()
-  // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A reg=reg1, verbatim_M2, verbatim_inout_2, verbatim_schema~aa1,reg2 = reg2 )
-  sv.verbatim  "MACRO({{0}}, {{1}} reg={{2}}, {{3}}, {{4}}, {{5}}~{{6}},reg2 = {{7}} )" 
+  // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A reg=reg1, verbatim_M2, verbatim_inout_2, aa1,reg2 = reg2 )
+  sv.verbatim  "MACRO({{0}}, {{1}} reg={{2}}, {{3}}, {{4}}, {{5}},reg2 = {{6}} )" 
           (%add, %xor)  : i8,i8
           {symbols = [@verbatim_reg1, @verbatim_M2, 
-          @verbatim_inout_2, @verbatim_schema, @verbatim_b1, @verbatim_reg2]}
+          @verbatim_inout_2, @verbatim_b1, @verbatim_reg2]}
   // CHECK: Wire : wire25
   sv.verbatim " Wire : {{0}}" {symbols = [@verbatim_wireSym1]}
 }

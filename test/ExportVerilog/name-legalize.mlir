@@ -160,8 +160,6 @@ hw.module @verbatim_renames(%a: i1) {
   sv.verbatim "// VERB Instance : {{0}} {{1}}" {symbols = [@struct, @wire1]}
 }
 
-
-
 // CHECK-LABEL: interface output_2;
 sv.interface @output {
   // CHECK-NEXT: logic input_0;

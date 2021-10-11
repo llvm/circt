@@ -50,8 +50,6 @@ public:
 
   GlobalNameTable takeGlobalNameTable() { return std::move(globalNameTable); }
 
-  bool anythingChanged = false;
-
 private:
   /// Check to see if the port names of the specified module conflict with
   /// keywords or themselves.  If so, add the replacement names to
@@ -74,11 +72,6 @@ private:
 /// Construct a GlobalNameResolver and do the initial scan to populate and
 /// unique the module/interfaces and port/parameter names.
 GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
-  // This symbol table is lazily constructed when global rewrites of module or
-  // interface member names are required.
-  mlir::SymbolTableCollection symbolTable;
-  Optional<mlir::SymbolUserMap> symbolUsers;
-
   // Register the names of external modules which we cannot rename. This has to
   // occur in a first pass separate from the modules and interfaces which we are
   // actually allowed to rename, in order to ensure that we don't accidentally
@@ -87,7 +80,7 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
     // Note that external modules *often* have name collisions, because they
     // correspond to the same verilog module with different parameters.
     if (isa<HWModuleExternOp>(op) || isa<HWModuleGeneratedOp>(op)) {
-      auto name = hw::getVerilogModuleNameAttr(&op).getValue();
+      auto name = getVerilogModuleNameAttr(&op).getValue();
       if (!sv::isNameValid(name))
         op.emitError("name \"")
             << name << "\" is not allowed in Verilog output";
@@ -95,30 +88,9 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
     }
   }
 
-  // If the module's symbol itself conflicts, then rename it and all uses of it.
-  auto legalizeSymbolName = [&](Operation *op,
-                                NameCollisionResolver &resolver) {
-    StringAttr oldName = SymbolTable::getSymbolName(op);
-    auto newName = resolver.getLegalName(oldName);
-    if (newName == oldName.getValue())
-      return;
-
-    // Lazily construct the symbol table if it hasn't been built yet.
-    if (!symbolUsers.hasValue())
-      symbolUsers.emplace(symbolTable, topLevel);
-
-    // TODO: This is super inefficient, we should just rename the symbol as part
-    // of the other existing walks.
-    auto newNameAttr = StringAttr::get(topLevel.getContext(), newName);
-    symbolUsers->replaceAllUsesWith(op, newNameAttr);
-    SymbolTable::setSymbolName(op, newNameAttr);
-    anythingChanged = true;
-  };
-
   // Legalize module and interface names.
   for (auto &op : *topLevel.getBody()) {
     if (auto module = dyn_cast<HWModuleOp>(op)) {
-      legalizeSymbolName(module, globalNameResolver);
       legalizeModuleNames(module);
       continue;
     }
@@ -136,6 +108,14 @@ GlobalNameResolver::GlobalNameResolver(mlir::ModuleOp topLevel) {
 /// keywords or themselves.  If so, add the replacement names to
 /// globalNameTable.
 void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
+  // If the module's symbol itself conflicts, then set a "verilogName" attribute
+  // on the module to reflect the name we need to use.
+  StringRef oldName = module.getName();
+  auto newName = globalNameResolver.getLegalName(oldName);
+  if (newName != oldName)
+    module->setAttr("verilogName",
+                    StringAttr::get(module.getContext(), newName));
+
   NameCollisionResolver nameResolver;
 
   // Legalize the port names.

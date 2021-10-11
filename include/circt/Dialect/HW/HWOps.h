@@ -103,6 +103,9 @@ FunctionType getModuleType(Operation *module);
 /// Returns the verilog module name attribute or symbol name of any module-like
 /// operations.
 StringAttr getVerilogModuleNameAttr(Operation *module);
+inline StringRef getVerilogModuleName(Operation *module) {
+  return getVerilogModuleNameAttr(module).getValue();
+}
 
 /// Return the port name for the specified argument or result.  These can only
 /// return a null StringAttr when the IR is invalid.

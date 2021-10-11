@@ -42,17 +42,16 @@ struct HWExportModuleHierarchyPass
 /// Recursively print the module hierarchy as serialized as JSON.
 static void printHierarchy(hw::InstanceOp &inst, SymbolTable &symbolTable,
                            llvm::json::OStream &J) {
+  auto moduleOp = symbolTable.lookup(inst.moduleNameAttr().getValue());
+
   J.object([&] {
     J.attribute("instance_name", inst.instanceName());
-    J.attribute("module_name", inst.moduleName());
+    J.attribute("module_name", hw::getVerilogModuleName(moduleOp));
     J.attributeArray("instances", [&] {
-      auto moduleOp =
-          symbolTable.lookup<hw::HWModuleOp>(inst.moduleNameAttr().getValue());
-
       // Only recurse on module ops, not extern or generated ops, whose internal
       // are opaque.
-      if (moduleOp) {
-        for (auto op : moduleOp.getOps<hw::InstanceOp>()) {
+      if (auto module = dyn_cast<hw::HWModuleOp>(moduleOp)) {
+        for (auto op : module.getOps<hw::InstanceOp>()) {
           printHierarchy(op, symbolTable, J);
         }
       }
@@ -70,7 +69,7 @@ static void extractHierarchyFromTop(hw::HWModuleOp op, SymbolTable &symbolTable,
   // since the top-level module is not instantiated.
   J.object([&] {
     J.attribute("instance_name", op.getName());
-    J.attribute("module_name", op.getName());
+    J.attribute("module_name", hw::getVerilogModuleName(op));
     J.attributeArray("instances", [&] {
       for (auto op : op.getOps<hw::InstanceOp>())
         printHierarchy(op, symbolTable, J);
