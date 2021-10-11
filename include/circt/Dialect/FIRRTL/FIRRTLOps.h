@@ -131,7 +131,8 @@ public:
   }
 };
 
-// This is a summary of a FIRRTL::MemOp. It defines the relevant properties of the FIRRTL memory, and can be constructed by parsing its attributes.
+// This is a summary of a FIRRTL::MemOp. It defines the relevant properties of
+// the FIRRTL memory, and can be constructed by parsing its attributes.
 struct FirMemory {
   size_t numReadPorts;
   size_t numWritePorts;
