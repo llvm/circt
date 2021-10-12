@@ -1,4 +1,4 @@
-; RUN: firtool %s --format=fir  --annotation-file %s.anno.json -emit-metadata --verilog |  FileCheck %s
+; RUN: firtool %s --format=fir  --annotation-file %s.anno.json --repl-seq-mem --verilog |  FileCheck %s
 
 circuit test:
   module memoryTest1:

@@ -109,7 +109,13 @@ static cl::opt<bool> disableAnnotationsUnknown(
 static cl::opt<bool>
     emitMetadata("emit-metadata",
                  cl::desc("emit metadata for metadata annotations"),
-                 cl::init(false));
+                 cl::init(true));
+
+static cl::opt<bool> replSeqMem(
+    "repl-seq-mem",
+    cl::desc(
+        "replace the seq mem for macro replacement and emit relevant metadata"),
+    cl::init(false));
 
 static cl::opt<bool> imconstprop(
     "imconstprop",
@@ -375,13 +381,13 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createCreateSiFiveMetadataPass());
+        firrtl::createCreateSiFiveMetadataPass(replSeqMem));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
     pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
-    pm.addPass(sv::createHWMemSimImplPass());
+    pm.addPass(sv::createHWMemSimImplPass(replSeqMem));
 
     if (extractTestCode)
       pm.addPass(sv::createSVExtractTestCodePass());

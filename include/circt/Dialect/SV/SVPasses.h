@@ -24,7 +24,7 @@ std::unique_ptr<mlir::Pass> createHWCleanupPass();
 std::unique_ptr<mlir::Pass> createHWStubExternalModulesPass();
 std::unique_ptr<mlir::Pass> createHWLegalizeModulesPass();
 std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
-std::unique_ptr<mlir::Pass> createHWMemSimImplPass();
+std::unique_ptr<mlir::Pass> createHWMemSimImplPass(bool replSeqMem = false);
 std::unique_ptr<mlir::Pass> createSVExtractTestCodePass();
 std::unique_ptr<mlir::Pass>
 createHWExportModuleHierarchyPass(llvm::Optional<std::string> directory = {});
