@@ -883,11 +883,8 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
   auto newModule = builder.create<hw::HWModuleExternOp>(
       oldModule.getLoc(), nameAttr, ports, verilogName, parameters);
-  // Transform module annotations
-  AnnotationSet annos(oldModule);
-  if (annos.removeAnnotation(verifBBClass))
-    newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
-  loweringState.processRemainingAnnotations(oldModule, annos);
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
   return newModule;
 }
 
