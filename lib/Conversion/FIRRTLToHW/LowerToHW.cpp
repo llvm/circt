@@ -219,7 +219,7 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
   SmallVector<FirMemory> retval;
   for (auto op : module.getBody()->getOps<MemOp>())
-    retval.push_back(op.analyzeMemOp());
+    retval.push_back(op.getSummary());
   return retval;
 }
 
@@ -2047,7 +2047,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         "--pass-pipeline='firrtl.circuit(firrtl-lower-types)' "
         "to run this.");
 
-  FirMemory memSummary = op.analyzeMemOp();
+  FirMemory memSummary = op.getSummary();
 
   // Process each port in turn.
   SmallVector<Type, 8> resultTypes;

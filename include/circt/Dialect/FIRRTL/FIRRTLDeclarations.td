@@ -232,7 +232,7 @@ def MemOp : FIRRTLOp<"mem"> {
     void getNumPorts(size_t &numReadPorts, size_t &numWritePorts, size_t &numReadWritePorts);
 
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
-    FirMemory analyzeMemOp();
+    FirMemory getSummary();
   }];
 }
 

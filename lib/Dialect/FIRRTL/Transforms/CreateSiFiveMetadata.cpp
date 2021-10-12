@@ -84,7 +84,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // memmory conf file.
   auto createMemMetadata = [&](MemOp memOp, llvm::json::OStream &jsonStream,
                                std::string &seqMemConfStr) {
-    auto memSummary = memOp.analyzeMemOp();
+    auto memSummary = memOp.getSummary();
     // Get the memory data width.
     auto width = memOp.getDataType().getBitWidthOrSentinel();
     // Metadata needs to be printed for memories which are candidates for macro

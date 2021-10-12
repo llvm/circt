@@ -1345,7 +1345,7 @@ Value MemOp::getPortNamed(StringAttr name) {
 }
 
 // Extract all the relevant attributes from the MemOp and return the FirMemory.
-FirMemory MemOp::analyzeMemOp() {
+FirMemory MemOp::getSummary() {
   auto op = *this;
   size_t numReadPorts = 0;
   size_t numWritePorts = 0;
