@@ -144,19 +144,35 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       sv.fwrite "Bye %x\n"(%tmp) : i8
 
       // CHECK-NEXT:     assert(cond);
-      sv.assert %cond : i1
+      sv.assert %cond, immediate
+      // CHECK-NEXT:     assert #0 (cond);
+      sv.assert %cond, observed
+      // CHECK-NEXT:     assert final (cond);
+      sv.assert %cond, final
       // CHECK-NEXT:     assert_0: assert(cond);
-      sv.assert "assert_0" %cond : i1
+      sv.assert %cond, immediate label "assert_0"
+      // CHECK-NEXT:     assert(cond) else $error("expected %d", val);
+      sv.assert %cond, immediate message "expected %d"(%val) : i8
 
       // CHECK-NEXT:     assume(cond);
-      sv.assume %cond : i1
+      sv.assume %cond, immediate
+      // CHECK-NEXT:     assume #0 (cond);
+      sv.assume %cond, observed
+      // CHECK-NEXT:     assume final (cond);
+      sv.assume %cond, final
       // CHECK-NEXT:     assume_0: assume(cond);
-      sv.assume "assume_0" %cond : i1
+      sv.assume %cond, immediate label "assume_0"
+      // CHECK-NEXT:     assume(cond) else $error("expected %d", val);
+      sv.assume %cond, immediate message "expected %d"(%val) : i8
 
       // CHECK-NEXT:     cover(cond);
-      sv.cover %cond : i1
+      sv.cover %cond, immediate
+      // CHECK-NEXT:     cover #0 (cond);
+      sv.cover %cond, observed
+      // CHECK-NEXT:     cover final (cond);
+      sv.cover %cond, final
       // CHECK-NEXT:     cover_0: cover(cond);
-      sv.cover "cover_0" %cond : i1
+      sv.cover %cond, immediate label "cover_0"
 
       // CHECK-NEXT:   $fatal
       sv.fatal
@@ -183,19 +199,23 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NEXT:  end // initial
 
   // CHECK-NEXT: assert property (@(posedge clock) cond);
-  sv.assert.concurrent posedge %clock %cond : i1
+  sv.assert.concurrent posedge %clock, %cond
   // CHECK-NEXT: assert_1: assert property (@(posedge clock) cond);
-  sv.assert.concurrent "assert_1" posedge %clock %cond : i1
+  sv.assert.concurrent posedge %clock, %cond label "assert_1"
+  // CHECK-NEXT: assert property (@(posedge clock) cond) else $error("expected %d", val);
+  sv.assert.concurrent posedge %clock, %cond message "expected %d"(%val) : i8
 
   // CHECK-NEXT: assume property (@(posedge clock) cond);
-  sv.assume.concurrent posedge %clock %cond : i1
+  sv.assume.concurrent posedge %clock, %cond
   // CHECK-NEXT: assume_1: assume property (@(posedge clock) cond);
-  sv.assume.concurrent "assume_1" posedge %clock %cond : i1
+  sv.assume.concurrent posedge %clock, %cond label "assume_1"
+  // CHECK-NEXT: assume property (@(posedge clock) cond) else $error("expected %d", val);
+  sv.assume.concurrent posedge %clock, %cond message "expected %d"(%val) : i8
 
   // CHECK-NEXT: cover property (@(posedge clock) cond);
-  sv.cover.concurrent posedge %clock %cond : i1
+  sv.cover.concurrent posedge %clock, %cond
   // CHECK-NEXT: cover_1: cover property (@(posedge clock) cond);
-  sv.cover.concurrent "cover_1" posedge %clock %cond : i1
+  sv.cover.concurrent posedge %clock, %cond label "cover_1"
 
   // CHECK-NEXT: initial
   // CHECK-NOT: begin
@@ -373,7 +393,7 @@ hw.module @issue595(%arr: !hw.array<128xi1>) {
 
   sv.initial {
     // CHECK: assert(_T_0);
-    sv.assert %0 : i1
+    sv.assert %0, immediate
   }
 
   // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
@@ -396,7 +416,7 @@ hw.module @issue595_variant1(%arr: !hw.array<128xi1>) {
 
   sv.initial {
     // CHECK: assert(_T_0);
-    sv.assert %0 : i1
+    sv.assert %0, immediate
   }
 
   // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];
@@ -418,7 +438,7 @@ hw.module @issue595_variant2_checkRedunctionAnd(%arr: !hw.array<128xi1>) {
 
   sv.initial {
     // CHECK: assert(_T_0);
-    sv.assert %0 : i1
+    sv.assert %0, immediate
   }
 
   // CHECK: wire [63:0] _T_1 = arr[7'h0+:64];

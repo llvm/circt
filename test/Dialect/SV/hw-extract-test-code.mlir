@@ -36,9 +36,9 @@ module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFrom
       sv.ifdef.procedural "SYNTHESIS"  {
       } else  {
         sv.if %2937  {
-          sv.assert  %clock : i1
-          sv.assume %clock : i1
-          sv.cover %clock : i1
+          sv.assert %clock, immediate
+          sv.assume %clock, immediate
+          sv.cover %clock, immediate
         }
       }
     }

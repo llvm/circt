@@ -1943,8 +1943,7 @@ void NameCollector::collectNames(Block &block) {
     // Notice and renamify the labels on verification statements.
     if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp>(op)) {
-      auto labelAttr = op.getAttrOfType<StringAttr>("label");
-      if (!labelAttr.getValue().empty())
+      if (auto labelAttr = op.getAttrOfType<StringAttr>("label"))
         names.addName(&op, labelAttr);
     }
 
@@ -2081,14 +2080,15 @@ private:
   LogicalResult visitSV(VerbatimOp op);
 
   void emitAssertionLabel(Operation *op, StringRef opName);
-  LogicalResult emitImmediateAssertion(Operation *op, StringRef opName,
-                                       Value expression);
+  void emitAssertionMessage(StringAttr message, ValueRange args,
+                            SmallPtrSet<Operation *, 8> &ops);
+  template <typename Op>
+  LogicalResult emitImmediateAssertion(Op op, StringRef opName);
   LogicalResult visitSV(AssertOp op);
   LogicalResult visitSV(AssumeOp op);
   LogicalResult visitSV(CoverOp op);
-  LogicalResult emitConcurrentAssertion(Operation *op, StringRef opName,
-                                        EventControl event, Value clock,
-                                        Value property);
+  template <typename Op>
+  LogicalResult emitConcurrentAssertion(Op op, StringRef opName);
   LogicalResult visitSV(AssertConcurrentOp op);
   LogicalResult visitSV(AssumeConcurrentOp op);
   LogicalResult visitSV(CoverConcurrentOp op);
@@ -2430,70 +2430,94 @@ LogicalResult StmtEmitter::visitSV(FinishOp op) {
 /// `enforceVerifLabels` option is set, a temporary name for the operation is
 /// picked and uniquified through `addName`.
 void StmtEmitter::emitAssertionLabel(Operation *op, StringRef opName) {
-  if (!op->getAttrOfType<StringAttr>("label").getValue().empty()) {
+  if (op->getAttrOfType<StringAttr>("label")) {
     os << names.getName(op) << ": ";
   } else if (state.options.enforceVerifLabels) {
     os << names.addName(op, opName) << ": ";
   }
 }
 
-LogicalResult StmtEmitter::emitImmediateAssertion(Operation *op,
-                                                  StringRef opName,
-                                                  Value expression) {
+/// Emit the optional ` else $error(...)` portion of an immediate or concurrent
+/// verification operation.
+void StmtEmitter::emitAssertionMessage(StringAttr message, ValueRange args,
+                                       SmallPtrSet<Operation *, 8> &ops) {
+  if (!message)
+    return;
+  os << " else $error(\"";
+  os.write_escaped(message.getValue());
+  os << "\"";
+  for (auto arg : args) {
+    os << ", ";
+    emitExpression(arg, ops);
+  }
+  os << ")";
+}
+
+template <typename Op>
+LogicalResult StmtEmitter::emitImmediateAssertion(Op op, StringRef opName) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent();
   emitAssertionLabel(op, opName);
-  os << opName << "(";
-  emitExpression(expression, ops);
-  os << ");";
+  os << opName;
+  switch (op.defer()) {
+  case DeferAssert::Immediate:
+    break;
+  case DeferAssert::Observed:
+    os << " #0 ";
+    break;
+  case DeferAssert::Final:
+    os << " final ";
+    break;
+  }
+  os << "(";
+  emitExpression(op.expression(), ops);
+  os << ")";
+  emitAssertionMessage(op.messageAttr(), op.operands(), ops);
+  os << ";";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(AssertOp op) {
-  return emitImmediateAssertion(op, "assert", op.expression());
+  return emitImmediateAssertion(op, "assert");
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeOp op) {
-  return emitImmediateAssertion(op, "assume", op.expression());
+  return emitImmediateAssertion(op, "assume");
 }
 
 LogicalResult StmtEmitter::visitSV(CoverOp op) {
-  return emitImmediateAssertion(op, "cover", op.expression());
+  return emitImmediateAssertion(op, "cover");
 }
 
-LogicalResult StmtEmitter::emitConcurrentAssertion(Operation *op,
-                                                   StringRef opName,
-                                                   EventControl event,
-                                                   Value clock,
-                                                   Value property) {
+template <typename Op>
+LogicalResult StmtEmitter::emitConcurrentAssertion(Op op, StringRef opName) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
   indent();
   emitAssertionLabel(op, opName);
-  os << opName << " property (@(" << stringifyEventControl(event) << " ";
-  emitExpression(clock, ops);
+  os << opName << " property (@(" << stringifyEventControl(op.event()) << " ";
+  emitExpression(op.clock(), ops);
   os << ") ";
-  emitExpression(property, ops);
-  os << ");";
+  emitExpression(op.property(), ops);
+  os << ")";
+  emitAssertionMessage(op.messageAttr(), op.operands(), ops);
+  os << ";";
   emitLocationInfoAndNewLine(ops);
   return success();
 }
 
 LogicalResult StmtEmitter::visitSV(AssertConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assert", op.event(), op.clock(),
-                                 op.property());
+  return emitConcurrentAssertion(op, "assert");
 }
 
 LogicalResult StmtEmitter::visitSV(AssumeConcurrentOp op) {
-  return emitConcurrentAssertion(op, "assume", op.event(), op.clock(),
-                                 op.property());
+  return emitConcurrentAssertion(op, "assume");
 }
 
 LogicalResult StmtEmitter::visitSV(CoverConcurrentOp op) {
-  return emitConcurrentAssertion(op, "cover", op.event(), op.clock(),
-                                 op.property());
+  return emitConcurrentAssertion(op, "cover");
 }
 
 LogicalResult StmtEmitter::emitIfDef(Operation *op, StringRef cond) {
