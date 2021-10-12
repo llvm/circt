@@ -1265,7 +1265,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   template <typename SignedOp, typename UnsignedOp>
   LogicalResult lowerDivLikeOp(Operation *op);
   template <typename AOpTy, typename BOpTy, typename COpTy>
-  LogicalResult lowerVerificationStatement(AOpTy op, StringRef annoClass);
+  LogicalResult lowerVerificationStatement(AOpTy op, StringRef annoClass,
+                                           bool attachMessage);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -3025,31 +3026,37 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 ///     end
 /// The above can also be reduced into a concurrent verification statement
 /// sv.assert.concurrent posedge %clock (condition && enable)
-template <typename AOpTy, typename BOpTy, typename COpTy>
-LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
-                                                         StringRef annoClass) {
+template <typename FIRRTLOp, typename ImmediateOp, typename ConcurrentOp>
+LogicalResult FIRRTLLowering::lowerVerificationStatement(FIRRTLOp op,
+                                                         StringRef annoClass,
+                                                         bool attachMessage) {
   auto clock = getLoweredValue(op.clock());
   auto enable = getLoweredValue(op.enable());
   auto predicate = getLoweredValue(op.predicate());
   if (!clock || !enable || !predicate)
     return failure();
   StringAttr label;
-  if (op.nameAttr() && !op.nameAttr().getValue().empty())
+  if (op.nameAttr() && !op.name().empty())
     label = op.nameAttr();
+  StringAttr message;
+  SmallVector<Value> messageOps;
+  if (attachMessage && op.messageAttr() && !op.message().empty()) {
+    message = op.messageAttr();
+    for (auto operand : op.operands())
+      messageOps.push_back(getLoweredValue(operand));
+  }
   Operation *svOp;
 
-  if (!op.isConcurrent())
+  if (!op.isConcurrent()) {
+    auto deferImmediate = circt::sv::DeferAssertAttr::get(
+        builder.getContext(), circt::sv::DeferAssert::Immediate);
     addToAlwaysBlock(clock, [&]() {
       addIfProceduralBlock(enable, [&]() {
-        // Create BOpTy inside the always/if.
-        svOp = builder.create<BOpTy>(
-            predicate,
-            circt::sv::DeferAssertAttr::get(builder.getContext(),
-                                            circt::sv::DeferAssert::Immediate),
-            label);
+        svOp = builder.create<ImmediateOp>(predicate, deferImmediate, label,
+                                           message, messageOps);
       });
     });
-  else {
+  } else {
     predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
     sv::EventControl event;
     switch (op.eventControl()) {
@@ -3063,9 +3070,9 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
       event = circt::sv::EventControl::AtNegEdge;
       break;
     }
-    svOp = builder.create<COpTy>(
+    svOp = builder.create<ConcurrentOp>(
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
-        predicate, label, StringAttr{}, ValueRange{});
+        predicate, label, message, messageOps);
   }
   return success();
 }
@@ -3073,21 +3080,22 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
 // Lower an assert to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
   return lowerVerificationStatement<AssertOp, sv::AssertOp,
-                                    sv::AssertConcurrentOp>(op,
-                                                            assertAnnoClass);
+                                    sv::AssertConcurrentOp>(op, assertAnnoClass,
+                                                            true);
 }
 
 // Lower an assume to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
   return lowerVerificationStatement<AssumeOp, sv::AssumeOp,
-                                    sv::AssumeConcurrentOp>(op,
-                                                            assumeAnnoClass);
+                                    sv::AssumeConcurrentOp>(op, assumeAnnoClass,
+                                                            true);
 }
 
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
   return lowerVerificationStatement<CoverOp, sv::CoverOp,
-                                    sv::CoverConcurrentOp>(op, coverAnnoClass);
+                                    sv::CoverConcurrentOp>(op, coverAnnoClass,
+                                                           false);
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {

@@ -109,40 +109,36 @@ def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
 def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
 
-def AssertOp : FIRRTLOp<"assert"> {
+class VerifOp<string mnemonic, list<OpTrait> traits = []> :
+    FIRRTLOp<mnemonic, traits> {
+  let arguments = (ins
+    ClockType:$clock,
+    UInt1Type:$predicate,
+    UInt1Type:$enable,
+    StrAttr:$message,
+    Variadic<AnyType>:$operands,
+    StrAttr:$name,
+    DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
+    DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl
+  );
+
+  let assemblyFormat = [{
+    $clock `,` $predicate `,` $enable `,`
+    $message (`(` $operands^ `)` `:` type($operands))?
+    custom<VerifAttrs>(attr-dict)
+  }];
+}
+
+def AssertOp : VerifOp<"assert"> {
   let summary = "Assert Verification Statement";
-
-  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message, StrAttr:$name, DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
-    DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl);
-  let results = (outs);
-
-  let assemblyFormat =
-    "$clock `,` $predicate `,` $enable `,` $message custom<VerifAttrs>(attr-dict)";
 }
 
-def AssumeOp : FIRRTLOp<"assume"> {
+def AssumeOp : VerifOp<"assume"> {
   let summary = "Assume Verification Statement";
-
-  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message, StrAttr:$name, DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
-    DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl);
-  let results = (outs);
-
-  let assemblyFormat =
-    "$clock `,` $predicate `,` $enable `,` $message custom<VerifAttrs>(attr-dict)";
 }
 
-def CoverOp : FIRRTLOp<"cover"> {
+def CoverOp : VerifOp<"cover"> {
   let summary = "Cover Verification Statement";
-
-  let arguments = (ins ClockType:$clock, UInt1Type:$predicate, UInt1Type:$enable,
-    StrAttr:$message, StrAttr:$name, DefaultValuedAttr<BoolAttr,"false">:$isConcurrent,
-    DefaultValuedAttr<EventControlAttr,"EventControl::AtPosEdge">:$eventControl);
-  let results = (outs);
-
-  let assemblyFormat =
-    "$clock `,` $predicate `,` $enable `,` $message custom<VerifAttrs>(attr-dict)";
 }
 
 def WhenOp : FIRRTLOp<"when", [SingleBlock, NoTerminator, NoRegionArguments,
