@@ -495,11 +495,29 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   auto topModuleOp = rewriter.create<FModuleOp>(
       funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
 
-  auto replacementArgs =
-      topModuleOp.getArguments().take_front(funcOp.getNumArguments());
-  rewriter.mergeBlocks(&funcOp.getBody().front(), topModuleOp.getBody(),
-                       replacementArgs);
+  rewriter.inlineRegionBefore(funcOp.body(), topModuleOp.body(),
+                              topModuleOp.body().end());
 
+  // In the following section, we manually merge the two regions and manually
+  // replace arguments. This is an alternative to using rewriter.mergeBlocks; we
+  // do this to ensure that argument SSA values are replaced instantly, instead
+  // of late, as would be the case for mergeBlocks.
+
+  // Merge the second block (inlined from funcOp) of the top-module into the
+  // entry block.
+  auto &blockIterator = topModuleOp.body().getBlocks();
+  Block *entryBlock = &blockIterator.front();
+  Block *secondBlock = &*std::next(blockIterator.begin());
+
+  // Replace uses of each argument of the second block with the corresponding
+  // argument of the entry block.
+  for (auto &oldArg : enumerate(secondBlock->getArguments()))
+    oldArg.value().replaceAllUsesWith(entryBlock->getArgument(oldArg.index()));
+
+  // Move all operations of the second block to the entry block.
+  entryBlock->getOperations().splice(entryBlock->end(),
+                                     secondBlock->getOperations());
+  rewriter.eraseBlock(secondBlock);
   return topModuleOp;
 }
 
