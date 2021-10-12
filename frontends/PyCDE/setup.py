@@ -66,7 +66,9 @@ class CMakeBuild(build_py):
         "-DLLVM_EXTERNAL_PROJECTS=circt",
         "-DLLVM_EXTERNAL_CIRCT_SOURCE_DIR={}".format(circt_dir),
     ]
-    build_args = []
+    if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
+      cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
+    build_args = ["--parallel"]
     os.makedirs(cmake_build_dir, exist_ok=True)
     if os.path.exists(cmake_install_dir):
       shutil.rmtree(cmake_install_dir)
