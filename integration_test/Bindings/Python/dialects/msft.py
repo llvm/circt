@@ -136,6 +136,9 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK-LABEL: === Placements (col 6):
 
   print("=== Errors:", file=sys.stderr)
+  # TODO: Python's sys.stderr doesn't seem to be shared with C++ errors.
+  # See https://github.com/llvm/circt/issues/1983 for more info.
+  sys.stderr.flush()
   # ERR-LABEL: === Errors:
   bad_loc = msft.PhysLocationAttr.get(msft.M20K, x=7, y=99, num=1)
   rc = seeded_pdb.add_placement(bad_loc, path, "foo_subpath", resolved_inst)
