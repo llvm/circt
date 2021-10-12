@@ -319,8 +319,8 @@ firrtl.module @InvalidValueShouldNotConnect(
 
 // Should properly adjust the type of external modules.
 // CHECK-LABEL: firrtl.extmodule @ShouldAdjustExtModule1
-// CHECK-SAME: in %reset: !firrtl.uint<1>
-firrtl.extmodule @ShouldAdjustExtModule1(in %reset: !firrtl.reset)
+// CHECK-SAME: in reset: !firrtl.uint<1>
+firrtl.extmodule @ShouldAdjustExtModule1(in reset: !firrtl.reset)
 // CHECK-LABEL: firrtl.module @ShouldAdjustExtModule2
 // CHECK: %x_reset = firrtl.instance @ShouldAdjustExtModule1 {name = "x"} : !firrtl.uint<1>
 firrtl.module @ShouldAdjustExtModule2() {

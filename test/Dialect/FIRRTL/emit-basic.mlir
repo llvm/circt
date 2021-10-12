@@ -257,7 +257,7 @@ firrtl.circuit "Foo" {
     %shrPrimOp = firrtl.node %shrPrimOp_tmp : !firrtl.uint
   }
 
-  firrtl.extmodule @MyParameterizedExtModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) attributes {defname = "name_thing", parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+  firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing", parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
   // CHECK-LABEL: extmodule MyParameterizedExtModule :
   // CHECK-NEXT:    input in : UInt
   // CHECK-NEXT:    output out : UInt<8>

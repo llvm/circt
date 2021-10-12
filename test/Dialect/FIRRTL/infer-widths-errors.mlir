@@ -18,7 +18,7 @@ firrtl.circuit "Foo" {
 // -----
 firrtl.circuit "Foo" {
   // expected-note @+1 {{Module `Bar` defined here:}}
-  firrtl.extmodule @Bar(in %in: !firrtl.uint, out %out: !firrtl.uint)
+  firrtl.extmodule @Bar(in in: !firrtl.uint, out out: !firrtl.uint)
   firrtl.module @Foo(in %in: !firrtl.uint<42>, out %out: !firrtl.uint) {
     // expected-error @+2 {{extern module `Bar` has ports of uninferred width}}
     // expected-note @+1 {{Only non-extern FIRRTL modules may contain unspecified widths to be inferred automatically.}}
