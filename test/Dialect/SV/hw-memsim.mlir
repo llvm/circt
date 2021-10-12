@@ -156,15 +156,15 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   // CHECK-NEXT:   %[[Memory1:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
   // CHECK-NEXT:   %[[Memory2:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
   // CHECK-NEXT:   %[[Memory3:.+]] = sv.reg  : !hw.inout<uarray<16xi8>>
-  // CHECK:        %[[v4:.+]] = sv.array_index_inout %[[Memory0]][%[[v3:.+]]] : !hw.inout<uarray<16xi8>>, i4
-  // CHECK-NEXT:   %[[v5:.+]] = sv.read_inout %[[v4]] : !hw.inout<i8>
-  // CHECK-NEXT:   %[[v6:.+]] = sv.array_index_inout %[[Memory1]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
-  // CHECK-NEXT:   %[[v7:.+]] = sv.read_inout %[[v6]] : !hw.inout<i8>
-  // CHECK-NEXT:   %[[v8:.+]] = sv.array_index_inout %[[Memory2]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
-  // CHECK-NEXT:   %[[v9:.+]] = sv.read_inout %[[v8]] : !hw.inout<i8>
-  // CHECK-NEXT:   %[[v10:.+]] = sv.array_index_inout %[[Memory3]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
-  // CHECK-NEXT:   %[[v11:.+]] = sv.read_inout %[[v10]] : !hw.inout<i8>
-  // CHECK-NEXT:   %[[v12:.+]] = comb.concat %[[v5]], %[[v7]], %[[v9]], %[[v11]] : i8, i8, i8, i8
+  // CHECK:        %[[v10:.+]] = sv.array_index_inout %[[Memory3]][%[[v3:.+]]] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK:        %[[v11:.+]] = sv.read_inout %[[v10]] : !hw.inout<i8>
+  // CHECK:        %[[v8:.+]] = sv.array_index_inout %[[Memory2]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK:        %[[v9:.+]] = sv.read_inout %[[v8]] : !hw.inout<i8>
+  // CHECK:        %[[v6:.+]] = sv.array_index_inout %[[Memory1]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK:        %[[v7:.+]] = sv.read_inout %[[v6]] : !hw.inout<i8>
+  // CHECK:        %[[v4:.+]] = sv.array_index_inout %[[Memory0]][%[[v3]]] : !hw.inout<uarray<16xi8>>, i4
+  // CHECK:        %[[v5:.+]] = sv.read_inout %[[v4]] : !hw.inout<i8>
+  // CHECK-NEXT:   %[[v12:.+]] = comb.concat %[[v11]], %[[v9]], %[[v7]], %[[v5]] : i8, i8, i8, i8
   // CHECK-NEXT:   %[[x_i32:.+]] = sv.constantX : i32
   // CHECK-NEXT:   %[[v13:.+]] = comb.mux %[[v1:.+]], %[[v12]], %[[x_i32]] : i32
   // CHECK-NEXT:   %[[v14:.+]] = comb.extract %W0_mask from 0 : (i4) -> i1
@@ -191,11 +191,11 @@ hw.module.generated @FIRRTLMemTwoAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i
   // CHECK-SAME: (%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i32, %W0_mask: i2) -> (R0_data: i32)
   // CHECK:  %[[Memory0:.+]] = sv.reg  : !hw.inout<uarray<16xi16>>
   // CHECK:  %[[Memory1:.+]] = sv.reg  : !hw.inout<uarray<16xi16>>
-  // CHECK:  %[[v8:.+]] = sv.array_index_inout %[[Memory0]][%[[v:.+]]] : !hw.inout<uarray<16xi16>>, i4
-  // CHECK:  %[[v9:.+]] = sv.read_inout
-  // CHECK:  %[[v10:.+]] = sv.array_index_inout %[[Memory1]][%[[v:.+]]] : !hw.inout<uarray<16xi16>>, i4
+  // CHECK:  %[[v10:.+]] = sv.array_index_inout %[[Memory1]][%[[v7:.+]]] : !hw.inout<uarray<16xi16>>, i4
   // CHECK:  %[[v11:.+]] = sv.read_inout
-  // CHECK:  %[[v12:.+]] = comb.concat %[[v9]], %[[v11]] : i16, i16
+  // CHECK:  %[[v8:.+]] = sv.array_index_inout %[[Memory0]][%[[v7]]] : !hw.inout<uarray<16xi16>>, i4
+  // CHECK:  %[[v9:.+]] = sv.read_inout
+  // CHECK:  %[[v12:.+]] = comb.concat %[[v11]], %[[v9]] : i16, i16
   // CHECK:  %[[x_i32:.+]] = sv.constantX : i32
   // CHECK:  %[[v13:.+]] = comb.mux
   // CHECK:  sv.alwaysff(posedge %W0_clk)  {
@@ -243,13 +243,13 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 // CHECK-SAME: %rw_en_0: i1, %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,
 // CHECK-SAME: %rw_wmask_0: i2, %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1,
 // CHECK-SAME: %wo_data_0: i16, %wo_mask_0: i2
-// CHECK:  %[[Memory0:.+]] = sv.reg  : !hw.inout<uarray<10xi8>>
-// CHECK:  %[[Memory1:.+]] = sv.reg  : !hw.inout<uarray<10xi8>>
+// CHECK:    %[[Memory0:.+]] = sv.reg  : !hw.inout<uarray<10xi8>>
+// CHECK:    %[[Memory1:.+]] = sv.reg  : !hw.inout<uarray<10xi8>>
+// CHECK:    %[[v10:.+]] = sv.array_index_inout %[[Memory1]][%[[v7:.+]]] : !hw.inout<uarray<10xi8>>, i4
+// CHECK:    %[[v11:.+]] = sv.read_inout %[[v10]] : !hw.inout<i8>
 // CHECK:    %[[v8:.+]] = sv.array_index_inout %[[Memory0]][%[[v7]]] : !hw.inout<uarray<10xi8>>, i4
 // CHECK:    %[[v9:.+]] = sv.read_inout %[[v8]] : !hw.inout<i8>
-// CHECK:    %[[v10:.+]] = sv.array_index_inout %[[Memory1]][%[[v7]]] : !hw.inout<uarray<10xi8>>, i4
-// CHECK:    %[[v11:.+]] = sv.read_inout %[[v10]] : !hw.inout<i8>
-// CHECK:    %[[v12:.+]] = comb.concat %[[v9]], %[[v11]] : i8, i8
+// CHECK:    %[[v12:.+]] = comb.concat %[[v11]], %[[v9]] : i8, i8
 // CHECK:    sv.alwaysff(posedge %rw_clock_0)  {
 // CHECK:      sv.passign %[[v38:.+]], %rw_wmask_0 : i2
 // CHECK:    %[[v44:.+]] = comb.extract %[[v43:.+]] from 0 : (i2) -> i1
@@ -259,7 +259,7 @@ numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32,maskGran = 8 :ui32, numWri
 // CHECK:    %[[v52:.+]] = sv.array_index_inout %[[Memory0]][%[[v19:.+]]] : !hw.inout<uarray<10xi8>>, i4
 // CHECK:    %[[v54:.+]] = sv.array_index_inout %[[Memory1]][%[[v19:.+]]] : !hw.inout<uarray<10xi8>>, i4
 // CHECK:    %[[v55:.+]] = sv.read_inout %[[v54]] : !hw.inout<i8>
-// CHECK:    %[[v56:.+]] = comb.concat %[[v53:.+]], %[[v55]] : i8, i8
+// CHECK:    %[[v56:.+]] = comb.concat %[[v55]], %[[v53:.+]] : i8, i8
 // CHECK:    sv.alwaysff(posedge %wo_clock_0)  {
 // CHECK:      sv.passign %[[v70:.+]], %wo_data_0 : i16
 // CHECK:    }
