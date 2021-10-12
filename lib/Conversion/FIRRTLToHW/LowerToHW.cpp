@@ -3034,17 +3034,19 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
   if (!clock || !enable || !predicate)
     return failure();
   StringAttr label;
-  if (op.nameAttr())
+  if (op.nameAttr() && !op.nameAttr().getValue().empty())
     label = op.nameAttr();
-  else
-    label = builder.getStringAttr("");
   Operation *svOp;
 
   if (!op.isConcurrent())
     addToAlwaysBlock(clock, [&]() {
       addIfProceduralBlock(enable, [&]() {
         // Create BOpTy inside the always/if.
-        svOp = builder.create<BOpTy>(predicate, label);
+        svOp = builder.create<BOpTy>(
+            predicate,
+            circt::sv::DeferAssertAttr::get(builder.getContext(),
+                                            circt::sv::DeferAssert::Immediate),
+            label);
       });
     });
   else {
@@ -3063,7 +3065,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
     }
     svOp = builder.create<COpTy>(
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
-        predicate, label);
+        predicate, label, StringAttr{}, ValueRange{});
   }
   return success();
 }

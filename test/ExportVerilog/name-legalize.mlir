@@ -139,7 +139,7 @@ hw.module @verif_renames(%cond: i1) {
   // CHECK: initial
   sv.initial {
     // CHECK:   assert_0: assert(cond);
-    sv.assert "assert" %cond : i1
+    sv.assert %cond, immediate label "assert"
   }
 }
 
