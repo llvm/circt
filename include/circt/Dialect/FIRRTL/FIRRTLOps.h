@@ -149,41 +149,18 @@ struct FirMemory {
   // Location is carried along but not considered part of the identity of this.
   Location loc;
 
+  std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
+             size_t, hw::WUW, SmallVector<int32_t>>
+  getTuple() const {
+    return std::tie(numReadPorts, numWritePorts, numReadWritePorts, dataWidth,
+                    depth, readLatency, writeLatency, maskBits, readUnderWrite,
+                    writeUnderWrite, writeClockIDs);
+  }
   bool operator<(const FirMemory &rhs) const {
-#define cmp3way(name)                                                          \
-  if (name < rhs.name)                                                         \
-    return true;                                                               \
-  if (name > rhs.name)                                                         \
-    return false;
-    cmp3way(numReadPorts);
-    cmp3way(numWritePorts);
-    cmp3way(numReadWritePorts);
-    cmp3way(dataWidth);
-    cmp3way(depth);
-    cmp3way(readLatency);
-    cmp3way(writeLatency);
-    cmp3way(readUnderWrite);
-    cmp3way(writeUnderWrite);
-    for (auto tuple : llvm::zip(writeClockIDs, rhs.writeClockIDs)) {
-      if (std::get<0>(tuple) < std::get<1>(tuple))
-        return true;
-      if (std::get<0>(tuple) > std::get<1>(tuple))
-        return false;
-    }
-    return false;
-#undef cmp3way
+    return getTuple() < rhs.getTuple();
   }
   bool operator==(const FirMemory &rhs) const {
-    return numReadPorts == rhs.numReadPorts &&
-           numWritePorts == rhs.numWritePorts &&
-           numReadWritePorts == rhs.numReadWritePorts &&
-           dataWidth == rhs.dataWidth && depth == rhs.depth &&
-           readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
-           readUnderWrite == rhs.readUnderWrite &&
-           writeUnderWrite == rhs.writeUnderWrite && maskBits == rhs.maskBits &&
-           writeClockIDs.size() == rhs.writeClockIDs.size() &&
-           llvm::all_of_zip(writeClockIDs, rhs.writeClockIDs,
-                            [](auto a, auto b) { return a == b; });
+    return getTuple() == rhs.getTuple();
   }
   std::string getFirMemoryName() const;
 };
