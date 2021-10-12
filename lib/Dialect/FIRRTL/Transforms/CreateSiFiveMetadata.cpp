@@ -84,9 +84,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // memmory conf file.
   auto createMemMetadata = [&](MemOp memOp, llvm::json::OStream &jsonStream,
                                std::string &seqMemConfStr) {
-    size_t numReadPorts = 0, numWritePorts = 0, numReadWritePorts = 0;
-    // Get the number of read,write ports.
-    memOp.getNumPorts(numReadPorts, numWritePorts, numReadWritePorts);
+    auto memSummary = memOp.getSummary();
     // Get the memory data width.
     auto width = memOp.getDataType().getBitWidthOrSentinel();
     // Metadata needs to be printed for memories which are candidates for macro
@@ -96,8 +94,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     // 3. zero or one read port.
     // 4. undefined read-under-write behavior.
     if (!((memOp.readLatency() == 1 && memOp.writeLatency() == 1) &&
-          (numWritePorts + numReadWritePorts == 1) && (numReadPorts <= 1) &&
-          width > 0))
+          (memSummary.numWritePorts + memSummary.numReadWritePorts == 1) &&
+          (memSummary.numReadPorts <= 1) && width > 0))
       return;
     // Get the absolute path for the parent memory, to create the hierarchy
     // names.
@@ -116,28 +114,31 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     auto maskGran = width / memOp.getMaskBits();
     // Now create the config string for the memory.
     std::string portStr;
-    if (numWritePorts)
+    if (memSummary.numWritePorts)
       portStr += "mwrite";
-    if (numReadPorts) {
+    if (memSummary.numReadPorts) {
       if (!portStr.empty())
         portStr += ",";
       portStr += "read";
     }
-    if (numReadWritePorts)
+    if (memSummary.numReadWritePorts)
       portStr = "mrw";
-    seqMemConfStr += "name " + memOp.name().str() + " depth " +
+    auto memExtName = memSummary.getFirMemoryName();
+    seqMemConfStr += "name " + memExtName + " depth " +
                      std::to_string(memOp.depth()) + " width " +
                      std::to_string(width) + " ports " + portStr +
                      " mask_gran " + std::to_string(maskGran) + "\n";
     // This adds a Json array element entry corresponding to this memory.
     jsonStream.object([&] {
-      jsonStream.attribute("module_name", memOp.name());
+      jsonStream.attribute("module_name", memExtName);
       jsonStream.attribute("depth", (int64_t)memOp.depth());
       jsonStream.attribute("width", (int64_t)width);
       jsonStream.attribute("masked", "true");
-      jsonStream.attribute("read", numReadPorts ? "true" : "false");
-      jsonStream.attribute("write", numWritePorts ? "true" : "false");
-      jsonStream.attribute("readwrite", numReadWritePorts ? "true" : "false");
+      jsonStream.attribute("read", memSummary.numReadPorts ? "true" : "false");
+      jsonStream.attribute("write",
+                           memSummary.numWritePorts ? "true" : "false");
+      jsonStream.attribute("readwrite",
+                           memSummary.numReadWritePorts ? "true" : "false");
       jsonStream.attribute("mask_granularity", (int64_t)maskGran);
       jsonStream.attributeArray("extra_ports", [&] {});
       // Record all the hierarchy names.

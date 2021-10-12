@@ -25,6 +25,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/FormatVariadic.h"
 
 using mlir::RegionRange;
 using namespace circt;
@@ -1341,6 +1342,68 @@ Value MemOp::getPortNamed(StringAttr name) {
     }
   }
   return Value();
+}
+
+// Extract all the relevant attributes from the MemOp and return the FirMemory.
+FirMemory MemOp::getSummary() {
+  auto op = *this;
+  size_t numReadPorts = 0;
+  size_t numWritePorts = 0;
+  size_t numReadWritePorts = 0;
+  llvm::SmallDenseMap<Value, unsigned> clockToLeader;
+  SmallVector<int32_t> writeClockIDs;
+
+  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
+    auto portKind = op.getPortKind(i);
+    if (portKind == MemOp::PortKind::Read)
+      ++numReadPorts;
+    else if (portKind == MemOp::PortKind::Write) {
+      for (auto *a : op.getResult(i).getUsers()) {
+        auto subfield = dyn_cast<SubfieldOp>(a);
+        if (!subfield || subfield.fieldIndex() != 2)
+          continue;
+        auto clockPort = a->getResult(0);
+        for (auto *b : clockPort.getUsers()) {
+          auto connect = dyn_cast<ConnectOp>(b);
+          if (!connect || connect.dest() != clockPort)
+            continue;
+          auto result = clockToLeader.insert({connect.src(), numWritePorts});
+          if (result.second) {
+            writeClockIDs.push_back(numWritePorts);
+          } else {
+            writeClockIDs.push_back(result.first->second);
+          }
+        }
+        break;
+      }
+      ++numWritePorts;
+    } else
+      ++numReadWritePorts;
+  }
+
+  auto width = op.getDataType().getBitWidthOrSentinel();
+  if (width <= 0) {
+    op.emitError("'firrtl.mem' should have simple type and known width");
+    width = 0;
+  }
+
+  return {numReadPorts,       numWritePorts,    numReadWritePorts,
+          (size_t)width,      op.depth(),       op.readLatency(),
+          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
+          hw::WUW::PortOrder, writeClockIDs,    op.getLoc()};
+}
+
+// Construct name of the module which will be used for the memory definition.
+std::string FirMemory::getFirMemoryName() const {
+  const FirMemory &mem = *this;
+  SmallString<8> clocks;
+  for (auto a : mem.writeClockIDs)
+    clocks.append(Twine((char)(a + 'a')).str());
+  return llvm::formatv(
+      "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}{9}", mem.numReadPorts,
+      mem.numWritePorts, mem.numReadWritePorts, mem.dataWidth, mem.depth,
+      mem.readLatency, mem.writeLatency, mem.readUnderWrite,
+      (unsigned)mem.writeUnderWrite, clocks.empty() ? "" : "_" + clocks);
 }
 
 /// Infer the return types of this operation.

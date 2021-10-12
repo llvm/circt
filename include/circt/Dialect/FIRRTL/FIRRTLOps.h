@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/FieldRef.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionSupport.h"
@@ -130,6 +131,39 @@ public:
   }
 };
 
+// This is a summary of a FIRRTL::MemOp. It defines the relevant properties of
+// the FIRRTL memory, and can be constructed by parsing its attributes.
+struct FirMemory {
+  size_t numReadPorts;
+  size_t numWritePorts;
+  size_t numReadWritePorts;
+  size_t dataWidth;
+  size_t depth;
+  size_t readLatency;
+  size_t writeLatency;
+  size_t maskBits;
+  size_t readUnderWrite;
+  hw::WUW writeUnderWrite;
+  SmallVector<int32_t> writeClockIDs;
+
+  // Location is carried along but not considered part of the identity of this.
+  Location loc;
+
+  std::tuple<size_t, size_t, size_t, size_t, size_t, size_t, size_t, size_t,
+             size_t, hw::WUW, SmallVector<int32_t>>
+  getTuple() const {
+    return std::tie(numReadPorts, numWritePorts, numReadWritePorts, dataWidth,
+                    depth, readLatency, writeLatency, maskBits, readUnderWrite,
+                    writeUnderWrite, writeClockIDs);
+  }
+  bool operator<(const FirMemory &rhs) const {
+    return getTuple() < rhs.getTuple();
+  }
+  bool operator==(const FirMemory &rhs) const {
+    return getTuple() == rhs.getTuple();
+  }
+  std::string getFirMemoryName() const;
+};
 } // namespace firrtl
 } // namespace circt
 
