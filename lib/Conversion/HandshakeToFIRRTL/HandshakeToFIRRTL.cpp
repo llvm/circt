@@ -2108,16 +2108,9 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
 
-  llvm::SmallVector<Type> resultTypes;
-
-  // Bundle all ports of the instance into a new flattened bundle type.
-  SmallVector<PortInfo, 8> portInfo = subModuleOp.getPorts();
-  for (auto &port : portInfo)
-    resultTypes.push_back(port.type);
-
   // Create a instance operation.
-  auto instanceOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp->getLoc(), resultTypes, subModuleOp.getName());
+  auto instanceOp =
+      rewriter.create<firrtl::InstanceOp>(oldOp->getLoc(), subModuleOp, "");
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.

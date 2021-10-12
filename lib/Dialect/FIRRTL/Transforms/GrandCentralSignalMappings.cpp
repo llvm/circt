@@ -60,8 +60,8 @@ struct ModuleSignalMappings {
   ModuleSignalMappings(FModuleOp module) : module(module) {}
   void run();
   void addTarget(Value value, Annotation anno);
-  void emitMappingsModule();
-  void instantiateMappingsModule();
+  FModuleOp emitMappingsModule();
+  void instantiateMappingsModule(FModuleOp mappingsModule);
 
   FModuleOp module;
   bool allAnalysesPreserved = false;
@@ -126,10 +126,10 @@ void ModuleSignalMappings::run() {
       circuitNamespace.newName(Twine(module.getName()) + "_signal_mappings");
 
   // Generate the mappings module.
-  emitMappingsModule();
+  auto mappingsModule = emitMappingsModule();
 
   // Instantiate the mappings module.
-  instantiateMappingsModule();
+  instantiateMappingsModule(mappingsModule);
 }
 
 /// Mark a `value` inside the `module` as being the target of the
@@ -165,7 +165,7 @@ void ModuleSignalMappings::addTarget(Value value, Annotation anno) {
 
 /// Create a separate mappings module that contains cross-module references and
 /// `ForceOp`s for each entry in the `mappings` array.
-void ModuleSignalMappings::emitMappingsModule() {
+FModuleOp ModuleSignalMappings::emitMappingsModule() {
   LLVM_DEBUG(llvm::dbgs() << "- Generating `" << mappingsModuleName << "`\n");
 
   // Determine what ports this module will have, given the signal mappings we
@@ -212,23 +212,18 @@ void ModuleSignalMappings::emitMappingsModule() {
       builder.create<ConnectOp>(mappingsModule.getArgument(portIdx++), xmr);
     }
   }
+  return mappingsModule;
 }
 
 /// Instantiate the generated mappings module inside the `module` we are working
 /// on, and generated the necessary connections to local signals.
-void ModuleSignalMappings::instantiateMappingsModule() {
+void ModuleSignalMappings::instantiateMappingsModule(FModuleOp mappingsModule) {
   LLVM_DEBUG(llvm::dbgs() << "- Instantiating `" << mappingsModuleName
                           << "`\n");
-  // Determine the port types.
-  SmallVector<Type> resultTypes;
-  for (auto &mapping : mappings)
-    resultTypes.push_back(mapping.type);
-
   // Create the actual module.
   auto builder =
       ImplicitLocOpBuilder::atBlockEnd(module.getLoc(), module.getBody());
-  auto inst = builder.create<InstanceOp>(resultTypes, mappingsModuleName,
-                                         "signal_mappings");
+  auto inst = builder.create<InstanceOp>(mappingsModule, "signal_mappings");
 
   // Generate the connections to and from the instance.
   unsigned portIdx = 0;

@@ -844,6 +844,32 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
+void InstanceOp::build(OpBuilder &builder, OperationState &result,
+                       FModuleLike module, StringRef name,
+                       ArrayRef<Attribute> annotations,
+                       ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
+
+  // Gather the result types.
+  SmallVector<Type> resultTypes;
+  resultTypes.reserve(module.getNumPorts());
+  for (auto &port : module.getPorts())
+    resultTypes.push_back(port.type);
+
+  // Create the port annotations.
+  ArrayAttr portAnnotationsAttr;
+  if (portAnnotations.empty()) {
+    portAnnotationsAttr = builder.getArrayAttr(SmallVector<Attribute, 16>(
+        resultTypes.size(), builder.getArrayAttr({})));
+  } else {
+    portAnnotationsAttr = builder.getArrayAttr(portAnnotations);
+  }
+
+  return build(builder, result, resultTypes,
+               SymbolRefAttr::get(builder.getContext(), module.moduleName()),
+               builder.getStringAttr(name), builder.getArrayAttr(annotations),
+               portAnnotationsAttr, builder.getBoolAttr(lowerToBind));
+}
+
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
   assert(portIdx < getNumResults() &&
          "index should be smaller than result number");
