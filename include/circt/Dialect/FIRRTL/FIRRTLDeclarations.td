@@ -35,12 +35,7 @@ def InstanceOp : FIRRTLOp<"instance", [
                    CArg<"StringRef", "{}">:$name,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"bool","false">:$lowerToBind)>,
-
-    /// Constructor that creates a version of the specified instance, but that
-    /// erases some number of results from it.
-    OpBuilder<(ins "InstanceOp":$existingInstance,
-                   "::mlir::ArrayRef<unsigned>":$resultsToErase)>
+                   CArg<"bool","false">:$lowerToBind)>
   ];
 
   let extraClassDeclaration = [{

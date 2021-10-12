@@ -844,21 +844,6 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   }
 }
 
-/// Create a copy of the specified instance operation with some result removed.
-void InstanceOp::build(OpBuilder &builder, OperationState &result,
-                       InstanceOp existingInstance,
-                       ArrayRef<unsigned> resultsToErase) {
-
-  // Drop the direction markers for dead ports.
-  auto resultTypes = SmallVector<Type>(existingInstance.getResultTypes());
-
-  SmallVector<Type> newResultTypes =
-      removeElementsAtIndices<Type>(resultTypes, resultsToErase);
-
-  build(builder, result, newResultTypes, existingInstance->getOperands(),
-        existingInstance->getAttrs());
-}
-
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
   assert(portIdx < getNumResults() &&
          "index should be smaller than result number");
