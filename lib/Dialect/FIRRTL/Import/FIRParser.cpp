@@ -2582,15 +2582,15 @@ ParseResult FIRStmtParser::parseInstance() {
   // Look up the module that is being referenced.
   auto circuit =
       builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedModule = circuit.lookupSymbol(moduleName);
+  auto referencedModule =
+      dyn_cast_or_null<FModuleLike>(circuit.lookupSymbol(moduleName));
   if (!referencedModule) {
     emitError(startTok.getLoc(),
               "use of undefined module name '" + moduleName + "' in instance");
     return failure();
   }
 
-  SmallVector<PortInfo> modulePorts =
-      cast<FModuleLike>(referencedModule).getPorts();
+  SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
@@ -2604,7 +2604,7 @@ ParseResult FIRStmtParser::parseInstance() {
 
   InstanceOp result;
   if (getConstants().options.rawAnnotations) {
-    result = builder.create<InstanceOp>(resultTypes, moduleName, id);
+    result = builder.create<InstanceOp>(referencedModule, id);
   } else {
     // Combine annotations that are ReferenceTargets and InstanceTargets.  By
     // example, this will lookup all annotations with either of the following
@@ -2616,7 +2616,7 @@ ParseResult FIRStmtParser::parseInstance() {
          getModuleTarget() + "/" + id + ":" + moduleName},
         startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
-    result = builder.create<InstanceOp>(resultTypes, moduleName, id,
+    result = builder.create<InstanceOp>(referencedModule, id,
                                         annotations.first.getValue(),
                                         annotations.second.getValue());
   }

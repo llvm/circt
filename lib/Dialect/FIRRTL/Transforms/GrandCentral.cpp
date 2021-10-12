@@ -734,9 +734,8 @@ void GrandCentralPass::runOnOperation() {
 
               // Instantiate the mapping module inside the companion.
               builder.setInsertionPointToEnd(op.getBody());
-              builder.create<InstanceOp>(circuitOp.getLoc(),
-                                         SmallVector<Type>({}),
-                                         mapping.getName(), mapping.getName());
+              builder.create<InstanceOp>(circuitOp.getLoc(), mapping,
+                                         mapping.getName());
 
               // Assert that the companion is instantiated once and only once.
               auto instance = exactlyOneInstance(op, "companion");
