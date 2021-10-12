@@ -55,7 +55,7 @@ class CMakeBuild(build_py):
     cfg = "Release"
     cmake_args = [
         "-DCMAKE_INSTALL_PREFIX={}".format(os.path.abspath(cmake_install_dir)),
-        "-DPython3_EXECUTABLE={}".format(sys.executable),
+        "-DPython3_EXECUTABLE={}".format(sys.executable.replace("\\", "/")),
         "-DCMAKE_BUILD_TYPE={}".format(cfg),  # not used on MSVC, but no harm
         "-DLLVM_ENABLE_ASSERTIONS=ON",
         "-DLLVM_ENABLE_PROJECTS=mlir",
@@ -68,7 +68,12 @@ class CMakeBuild(build_py):
     ]
     if "CIRCT_EXTRA_CMAKE_ARGS" in os.environ:
       cmake_args += os.environ["CIRCT_EXTRA_CMAKE_ARGS"].split(" ")
-    build_args = ["--parallel"]
+    build_args = []
+    build_parallelism = os.getenv("CMAKE_PARALLELISM")
+    if build_parallelism:
+      build_args.append(f"--parallel {build_parallelism}")
+    else:
+      build_args.append("--parallel")
     os.makedirs(cmake_build_dir, exist_ok=True)
     if os.path.exists(cmake_install_dir):
       shutil.rmtree(cmake_install_dir)
