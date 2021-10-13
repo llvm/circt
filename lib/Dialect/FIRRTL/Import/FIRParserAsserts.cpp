@@ -320,22 +320,22 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     // Scala impl of ExtractTestCode.
     if (flavor == VerifFlavor::Assert || flavor == VerifFlavor::AssertNotX)
       builder.create<AssertOp>(printOp.clock(), predicate, printOp.cond(),
-                               message, label, true);
+                               message, printOp.operands(), label, true);
     else if (flavor == VerifFlavor::Assume)
       builder.create<AssumeOp>(printOp.clock(), predicate, printOp.cond(),
-                               message, label, true);
+                               message, printOp.operands(), label, true);
     else // VerifFlavor::Cover
       builder.create<CoverOp>(printOp.clock(), predicate, printOp.cond(),
-                              message, label, true);
+                              message, printOp.operands(), label, true);
     printOp.erase();
     break;
   }
 
     // Handle the case of builtin Chisel assertions.
   case VerifFlavor::ChiselAssert: {
-    builder.create<AssertOp>(printOp.clock(),
-                             builder.create<NotPrimOp>(whenStmt.condition()),
-                             printOp.cond(), fmt, "chisel3_builtin", true);
+    builder.create<AssertOp>(
+        printOp.clock(), builder.create<NotPrimOp>(whenStmt.condition()),
+        printOp.cond(), fmt, printOp.operands(), "chisel3_builtin", true);
     printOp.erase();
     break;
   }
@@ -471,10 +471,10 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
         predicate); // assertion triggers when predicate fails
     if (flavor == VerifFlavor::VerifLibAssert)
       op = builder.create<AssertOp>(printOp.clock(), predicate, printOp.cond(),
-                                    message, label, true);
+                                    message, printOp.operands(), label, true);
     else // VerifFlavor::VerifLibAssume
       op = builder.create<AssumeOp>(printOp.clock(), predicate, printOp.cond(),
-                                    message, label, true);
+                                    message, printOp.operands(), label, true);
     printOp.erase();
 
     // Attach additional attributes extracted from the JSON object.

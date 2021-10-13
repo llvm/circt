@@ -385,73 +385,85 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.stop %clock2, %reset, 0
   }
 
-// circuit Verification:
-//   module Verification:
-//     input clock: Clock
-//     input aCond: UInt<8>
-//     input aEn: UInt<8>
-//     input bCond: UInt<1>
-//     input bEn: UInt<1>
-//     input cCond: UInt<1>
-//     input cEn: UInt<1>
-//     assert(clock, bCond, bEn, "assert0")
-//     assert(clock, bCond, bEn, "assert0") : assert_0
-//     assume(clock, aCond, aEn, "assume0")
-//     assume(clock, aCond, aEn, "assume0") : assume_0
-//     cover(clock,  cCond, cEn, "cover0)"
-//     cover(clock,  cCond, cEn, "cover0)" : cover_0
+  // circuit Verification:
+  //   module Verification:
+  //     input clock: Clock
+  //     input aCond: UInt<8>
+  //     input aEn: UInt<8>
+  //     input bCond: UInt<1>
+  //     input bEn: UInt<1>
+  //     input cCond: UInt<1>
+  //     input cEn: UInt<1>
+  //     assert(clock, bCond, bEn, "assert0")
+  //     assert(clock, bCond, bEn, "assert0") : assert_0
+  //     assume(clock, aCond, aEn, "assume0")
+  //     assume(clock, aCond, aEn, "assume0") : assume_0
+  //     cover(clock,  cCond, cEn, "cover0)"
+  //     cover(clock,  cCond, cEn, "cover0)" : cover_0
 
   // CHECK-LABEL: hw.module @Verification
   firrtl.module @Verification(in %clock: !firrtl.clock, in %aCond: !firrtl.uint<1>,
-   in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
-   in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>) {
+    in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
+    in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>, in %value: !firrtl.uint<42>) {
 
-    // CHECK-NEXT: %0 = comb.and %aEn, %aCond : i1
-    // CHECK-NEXT: sv.assert.concurrent posedge %clock, %0
-    // CHECK-NEXT: %1 = comb.and %aEn, %aCond : i1
-    // CHECK-NEXT: sv.assert.concurrent posedge %clock, %1 label "assert_0"
-    // CHECK-NEXT: %2 = comb.and %bEn, %bCond : i1
-    // CHECK-NEXT: sv.assume.concurrent posedge %clock, %2
-    // CHECK-NEXT: %3 = comb.and %bEn, %bCond : i1
-    // CHECK-NEXT: sv.assume.concurrent posedge %clock, %3 label "assume_0"
-    // CHECK-NEXT: %4 = comb.and %cEn, %cCond : i1
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, %4
-    // CHECK-NEXT: %5 = comb.and %cEn, %cCond : i1
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, %5 label "cover_0"
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %aEn, %aCond : i1
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP]] message "assert0"
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %aEn, %aCond : i1
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP]] label "assert_0" message "assert0"
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %aEn, %aCond : i1
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP]] message "assert0"(%value) : i42
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %bEn, %bCond : i1
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP]] message "assume0"
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %bEn, %bCond : i1
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP]] label "assume_0" message "assume0"
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %bEn, %bCond : i1
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP]] message "assume0"(%value) : i42
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond : i1
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]]
+    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond : i1
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]] label "cover_0"
     // CHECK: sv.cover.concurrent negedge %clock, {{%.+}} label "cover_1"
     // CHECK: sv.cover.concurrent edge %clock, {{%.+}} label "cover_2"
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true}
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true, name = "assert_0"}
+    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.uint<42> {isConcurrent = true}
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true}
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true, name = "assume_0"}
+    firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.uint<42> {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42> {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
     firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
 
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
-    // CHECK-NEXT:     sv.assert %aCond, immediate
-    // CHECK-NOT:                        label
-    // CHECK-NEXT:     sv.assert %aCond, immediate label "assert_0"
+    // CHECK-NEXT:     sv.assert %aCond, immediate message "assert0"
+    // CHECK-NEXT:     sv.assert %aCond, immediate label "assert_0" message "assert0"
+    // CHECK-NEXT:     sv.assert %aCond, immediate message "assert0"(%value) : i42
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %bEn {
-    // CHECK-NEXT:     sv.assume %bCond, immediate
-    // CHECK-NOT:                        label
-    // CHECK-NEXT:     sv.assume %bCond, immediate label "assume_0"
+    // CHECK-NEXT:     sv.assume %bCond, immediate message "assume0"
+    // CHECK-NEXT:     sv.assume %bCond, immediate label "assume_0" message "assume0"
+    // CHECK-NEXT:     sv.assume %bCond, immediate message "assume0"(%value) : i42
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %cEn {
     // CHECK-NEXT:     sv.cover %cCond, immediate
     // CHECK-NOT:                       label
     // CHECK-NEXT:     sv.cover %cCond, immediate label "cover_0"
+    // CHECK-NEXT:     sv.cover %cCond, immediate
+    // CHECK-NOT:                       label
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
     firrtl.assert %clock, %aCond, %aEn, "assert0" {name = "assert_0"}
+    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.uint<42>
     firrtl.assume %clock, %bCond, %bEn, "assume0"
     firrtl.assume %clock, %bCond, %bEn, "assume0" {name = "assume_0"}
+    firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.uint<42>
     firrtl.cover %clock, %cCond, %cEn, "cover0"
     firrtl.cover %clock, %cCond, %cEn, "cover0" {name = "cover_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42>
     // CHECK-NEXT: hw.output
   }
 
