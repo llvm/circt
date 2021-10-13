@@ -261,8 +261,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 namespace {
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 
-  TypeLoweringVisitor(MLIRContext *context, bool flattenAggregateMemData)
-      : context(context), flattenAggregateMemData(flattenAggregateMemData) {}
+  TypeLoweringVisitor(MLIRContext *context, bool f)
+      : context(context), flattenAggregateMemData(f) {}
   using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
@@ -1194,8 +1194,8 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
+  LowerTypesPass(bool f) { flattenAggregateMemData = f; }
   void runOnOperation() override;
-  bool replSeqMem;
 };
 } // end anonymous namespace
 
@@ -1204,7 +1204,6 @@ void LowerTypesPass::runOnOperation() {
   std::deque<Operation *> ops;
   llvm::for_each(getOperation().getBody()->getOperations(),
                  [&](Operation &op) { ops.push_back(&op); });
-  flattenAggregateMemData = flattenAggregateMemData | replSeqMem;
 
   mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
     TypeLoweringVisitor(&getContext(), flattenAggregateMemData)
@@ -1215,7 +1214,5 @@ void LowerTypesPass::runOnOperation() {
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
 circt::firrtl::createLowerFIRRTLTypesPass(bool replSeqMem) {
-  auto p = std::make_unique<LowerTypesPass>();
-  p->replSeqMem = replSeqMem;
-  return p;
+  return std::make_unique<LowerTypesPass>(replSeqMem);
 }

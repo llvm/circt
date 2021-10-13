@@ -48,9 +48,6 @@ struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
 public:
   HWMemSimImplPass(bool e) { replSeqMem = e; }
 
-public:
-  HWMemSimImplPass(bool e) { replSeqMem = e; }
-
 private:
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
