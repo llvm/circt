@@ -911,9 +911,11 @@ void TypeLoweringVisitor::visitExpr(BitCastOp op) {
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
     for (auto field : llvm::enumerate(fields)) {
+      auto fieldBitwidth = getBitWidth(field.value().type).getValue();
+      // Ignore zero width fields, like empty bundles.
+      if (fieldBitwidth == 0)
+        continue;
       Value src = getSubWhatever(op.input(), field.index());
-      auto fieldType = src.getType().cast<FIRRTLType>();
-      auto fieldBitwidth = getBitWidth(fieldType).getValue();
       // The src could be an aggregate type, bitcast it to a UInt type.
       src = builder->createOrFold<BitCastOp>(
           UIntType::get(context, fieldBitwidth), src);
@@ -936,12 +938,17 @@ void TypeLoweringVisitor::visitExpr(BitCastOp op) {
                      ArrayAttr attrs) -> Operation * {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
       auto fieldBits = getBitWidth(field.type).getValue();
+      size_t hi = 0;
+      if (fieldBits == 0)
+        hi = uptoBits;
+      else
+        hi = uptoBits + fieldBits - 1;
       // Assign the field to the corresponding bits from the input.
       // Bitcast the field, incase its an aggregate type.
-      auto extractBits = builder->create<BitsPrimOp>(
-          srcLoweredVal, uptoBits + fieldBits - 1, uptoBits);
+      auto extractBits =
+          builder->create<BitsPrimOp>(srcLoweredVal, hi, uptoBits);
       uptoBits += fieldBits;
-      return extractBits;
+      return builder->create<BitCastOp>(field.type, extractBits);
     };
     lowerProducer(op, clone);
   } else {
