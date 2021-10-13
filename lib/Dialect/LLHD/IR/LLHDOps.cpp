@@ -142,6 +142,14 @@ unsigned circt::llhd::getLLHDTypeWidth(Type type) {
   return type.getIntOrFloatBitWidth();
 }
 
+Type circt::llhd::getLLHDElementType(Type type) {
+  if (auto sig = type.dyn_cast<llhd::SigType>())
+    type = sig.getUnderlyingType();
+  if (auto array = type.dyn_cast<hw::ArrayType>())
+    return array.getElementType();
+  return type;
+}
+
 //===---------------------------------------------------------------------===//
 // LLHD Trait Helper Functions
 //===---------------------------------------------------------------------===//
@@ -221,126 +229,154 @@ OpFoldResult llhd::ShrOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
-// ExtractElementOp
+// SigExtractOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult llhd::ExtractElementOp::fold(ArrayRef<Attribute> operands) {
-  uint64_t index = indexAttr().getInt();
+OpFoldResult llhd::SigExtractOp::fold(ArrayRef<Attribute> operands) {
 
-  // llhd.extract_element(llhd.shr(hidden, base, constant amt), index)
-  IntegerAttr intAttr;
-  if (matchPattern(target(),
-                   m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
-                                     m_Constant<IntegerAttr>(&intAttr)))) {
-    uint64_t amt = intAttr.getValue().getZExtValue();
-    auto shrOp = cast<llhd::ShrOp>(target().getDefiningOp());
+  if (!operands[1])
+    return nullptr;
 
-    // with amt + index < baseWidth
-    //   => llhd.extract_element(base, amt + index)
-    if (amt + index < shrOp.getBaseWidth()) {
-      targetMutable().assign(shrOp.base());
-      (*this)->setAttr("index",
-                       IntegerAttr::get(indexAttr().getType(), amt + index));
-      return result();
-    }
-
-    // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
-    //   => llhd.extract_element(hidden, amt + index - baseWidth)
-    if (amt + index < shrOp.getBaseWidth() + shrOp.getHiddenWidth()) {
-      targetMutable().assign(shrOp.hidden());
-      (*this)->setAttr("index",
-                       IntegerAttr::get(indexAttr().getType(),
-                                        amt + index - shrOp.getBaseWidth()));
-      return result();
-    }
-  }
-
-  // llhd.extract_element(llhd.array(a_0, ..., a_n), i) => a_i
-  if (auto arrayOp = target().getDefiningOp<hw::ArrayCreateOp>()) {
-    uint64_t index = indexAttr().getValue().getZExtValue();
-    // It is checked during the extract_element verification that the index is
-    // within bounds
-    return arrayOp.inputs()[index];
-  }
-
-  // llhd.extract_element(llhd.tuple(a_0, ..., a_n), i) => a_i
-  if (auto structOp = target().getDefiningOp<hw::StructCreateOp>()) {
-    uint64_t index = indexAttr().getValue().getZExtValue();
-    return structOp.input()[index];
-  }
+  // llhd.sig.extract(input, 0) with inputWidth == resultWidth => input
+  if (resultWidth() == inputWidth() &&
+      operands[1].cast<IntegerAttr>().getValue().isZero())
+    return input();
 
   return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
-// ExtractSliceOp
+// SigArraySliceOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult llhd::ExtractSliceOp::fold(ArrayRef<Attribute> operands) {
-  uint64_t extractStart = startAttr().getInt();
+OpFoldResult llhd::SigArraySliceOp::fold(ArrayRef<Attribute> operands) {
 
-  // llhd.extract_slice(target, 0) with sliceWidth==targetWidth => target
-  if (extractStart == 0 && getSliceSize() == getTargetSize())
-    return target();
-
-  // llhd.extract_slice(llhd.shr(hidden, base, constant amt), start)
-  //   with amt + start + sliceWidth <= baseWidth
-  //   => llhd.extract_slice(base, amt + start)
-  if (auto shrOp = target().getDefiningOp<llhd::ShrOp>()) {
-    IntegerAttr intAttr;
-    if (matchPattern(shrOp.amount(), m_Constant<IntegerAttr>(&intAttr))) {
-      uint64_t amt = intAttr.getValue().getZExtValue();
-
-      if (amt + extractStart + getSliceSize() <= shrOp.getBaseWidth()) {
-        targetMutable().assign(shrOp.base());
-        (*this)->setAttr("start", IntegerAttr::get(startAttr().getType(),
-                                                   amt + extractStart));
-        return result();
-      }
-    }
-  }
-
-  // llhd.extract_slice(llhd.extract_slice(target, a), b)
-  //   => llhd.extract_slice(target, a+b)
-  if (auto extOp = target().getDefiningOp<llhd::ExtractSliceOp>()) {
-    targetMutable().assign(extOp.target());
-    auto newStart = extractStart + extOp.startAttr().getInt();
-    (*this)->setAttr("start",
-                     IntegerAttr::get(startAttr().getType(), newStart));
-    return result();
-  }
-
-  // llhd.extract_slice(llhd.insert_slice(target, slice, a), b)
-  if (auto insertOp = target().getDefiningOp<llhd::InsertSliceOp>()) {
-    uint64_t insertStart = insertOp.startAttr().getInt();
-    // with b >= a && b + resultWidth <= a + sliceWidth
-    //   => llhd.extract_slice(slice, b-a)
-    if (extractStart >= insertStart &&
-        extractStart + getSliceSize() <=
-            insertStart + insertOp.getSliceSize()) {
-      targetMutable().assign(insertOp.slice());
-      (*this)->setAttr("start", IntegerAttr::get(startAttr().getType(),
-                                                 extractStart - insertStart));
-      return result();
-    }
-    // with b + resultWidth <= a or b >= a + insertedSliceWidth
-    //   => llhd.extract_slice(target, b)
-    if (extractStart + getSliceSize() <= insertStart ||
-        extractStart >= insertStart + insertOp.getSliceSize()) {
-      targetMutable().assign(insertOp.target());
-      return result();
-    }
-  }
-
-  if (!operands[0])
+  if (!operands[1])
     return nullptr;
 
-  if (auto intAttr = operands[0].dyn_cast<IntegerAttr>())
-    return IntegerAttr::get(result().getType(),
-                            intAttr.getValue().extractBitsAsZExtValue(
-                                getSliceSize(), extractStart));
+  // llhd.sig.array_slice(input, 0) with inputWidth == resultWidth => input
+  if (resultWidth() == inputWidth() &&
+      operands[1].cast<IntegerAttr>().getValue().isZero())
+    return input();
 
   return nullptr;
+}
+
+LogicalResult llhd::SigArraySliceOp::canonicalize(llhd::SigArraySliceOp op,
+                                                  PatternRewriter &rewriter) {
+  IntegerAttr amountAttr, indexAttr;
+
+  if (!matchPattern(op.lowIndex(), m_Constant(&indexAttr)))
+    return failure();
+
+  // llhd.sig.array_slice(llhd.shr(hidden, base, constant amt), constant index)
+  //   with amt + index + sliceWidth <= baseWidth
+  //   => llhd.sig.array_slice(base, amt + index)
+  if (matchPattern(op.input(),
+                   m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
+                                     m_Constant(&amountAttr)))) {
+    uint64_t amount = amountAttr.getValue().getZExtValue();
+    uint64_t index = indexAttr.getValue().getZExtValue();
+    auto shrOp = op.input().getDefiningOp<llhd::ShrOp>();
+    unsigned baseWidth = shrOp.getBaseWidth();
+
+    if (amount + index + op.resultWidth() <= baseWidth) {
+      op.inputMutable().assign(shrOp.base());
+      Value newIndex = rewriter.create<hw::ConstantOp>(
+          op->getLoc(), amountAttr.getValue() + indexAttr.getValue());
+      op.lowIndexMutable().assign(newIndex);
+
+      return success();
+    }
+  }
+
+  // llhd.sig.array_slice(llhd.sig.array_slice(target, a), b)
+  //   => llhd.sig.array_slice(target, a+b)
+  IntegerAttr a;
+  if (matchPattern(op.input(), m_Op<llhd::SigArraySliceOp>(matchers::m_Any(),
+                                                           m_Constant(&a)))) {
+    auto sliceOp = op.input().getDefiningOp<llhd::SigArraySliceOp>();
+    op.inputMutable().assign(sliceOp.input());
+    Value newIndex = rewriter.create<hw::ConstantOp>(
+        op->getLoc(), a.getValue() + indexAttr.getValue());
+    op.lowIndexMutable().assign(newIndex);
+
+    return success();
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// SigArrayGetOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::SigArrayGetOp::canonicalize(llhd::SigArrayGetOp op,
+                                                PatternRewriter &rewriter) {
+
+  // llhd.sig.array_get(llhd.shr(hidden, base, constant amt), constant index)
+  IntegerAttr indexAttr, amountAttr;
+  if (matchPattern(op.index(), m_Constant(&indexAttr)) &&
+      matchPattern(op.input(),
+                   m_Op<llhd::ShrOp>(matchers::m_Any(), matchers::m_Any(),
+                                     m_Constant(&amountAttr)))) {
+    APInt index = indexAttr.getValue();
+    APInt amount = amountAttr.getValue();
+    auto shrOp = op.input().getDefiningOp<llhd::ShrOp>();
+    unsigned baseWidth = shrOp.getBaseWidth();
+    unsigned hiddenWidth = shrOp.getHiddenWidth();
+
+    // with amt + index < baseWidth
+    //   => llhd.sig.array_get(base, amt + index)
+    if (amount.getZExtValue() + index.getZExtValue() < baseWidth) {
+      op.inputMutable().assign(shrOp.base());
+      Value newIndex =
+          rewriter.create<hw::ConstantOp>(op->getLoc(), amount + index);
+      op.indexMutable().assign(newIndex);
+
+      return success();
+    }
+
+    // with amt + index >= baseWidth && amt + index < baseWidth + hiddenWidth
+    //   => llhd.sig.array_get(hidden, amt + index - baseWidth)
+    if (amount.getZExtValue() + index.getZExtValue() <
+        baseWidth + hiddenWidth) {
+      op.inputMutable().assign(shrOp.hidden());
+      Value newIndex = rewriter.create<hw::ConstantOp>(
+          op->getLoc(), amount + index - baseWidth);
+      op.indexMutable().assign(newIndex);
+
+      return success();
+    }
+  }
+
+  return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// SigStructExtractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
+    MLIRContext *context, Optional<Location> loc, ValueRange operands,
+    DictionaryAttr attrs, mlir::RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  Type type =
+      operands[0]
+          .getType()
+          .cast<llhd::SigType>()
+          .getUnderlyingType()
+          .cast<hw::StructType>()
+          .getFieldType(
+              attrs.getNamed("field")->second.cast<StringAttr>().getValue());
+  if (!type) {
+    context->getDiagEngine().emit(loc.getValueOr(UnknownLoc()),
+                                  DiagnosticSeverity::Error)
+        << "invalid field name specified";
+    return failure();
+  }
+  results.push_back(llhd::SigType::get(type));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

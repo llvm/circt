@@ -1,7 +1,6 @@
 add_circt_dialect_library(CIRCTLLHD
   LLHDDialect.cpp
   LLHDOps.cpp
-  LLHDCanonicalization.cpp
   LLHDTypes.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -10,7 +9,6 @@ add_circt_dialect_library(CIRCTLLHD
   DEPENDS
   CIRCTLLHDEnumsIncGen
   CIRCTLLHDAttributesIncGen
-  CIRCTLLHDCanonicalizationIncGen
   MLIRLLHDIncGen
   
   LINK_LIBS PUBLIC

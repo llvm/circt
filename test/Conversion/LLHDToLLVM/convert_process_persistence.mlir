@@ -206,7 +206,7 @@ llhd.proc @convert_persistent_ptr () -> () {
 // CHECK:           %[[VAL_10:.*]] = llvm.icmp "eq" %[[VAL_8]], %[[VAL_9]] : i32
 // CHECK:           llvm.cond_br %[[VAL_10]], ^bb2, ^bb4
 // CHECK:         ^bb2:
-// CHECK:           %[[VAL_11:.*]] = llvm.mlir.constant(0 : index) : i64
+// CHECK:           %[[VAL_11:.*]] = llvm.mlir.constant(0 : i5) : i5
 // CHECK:           %[[VAL_12:.*]] = llvm.mlir.constant(0 : i32) : i32
 // CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(1 : i32) : i32
 // CHECK:           %[[VAL_14:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_12]], %[[VAL_12]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32, i32) -> !llvm.ptr<ptr<i8>>
@@ -219,7 +219,8 @@ llhd.proc @convert_persistent_ptr () -> () {
 // CHECK:           %[[VAL_21:.*]] = llvm.load %[[VAL_20]] : !llvm.ptr<i64>
 // CHECK:           %[[VAL_22:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_12]], %[[VAL_19]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32, i32) -> !llvm.ptr<i64>
 // CHECK:           %[[VAL_23:.*]] = llvm.load %[[VAL_22]] : !llvm.ptr<i64>
-// CHECK:           %[[VAL_24:.*]] = llvm.add %[[VAL_17]], %[[VAL_11]] : i64
+// CHECK:           %[[ZEXT:.*]] = llvm.zext %[[VAL_11]] : i5 to i64
+// CHECK:           %[[VAL_24:.*]] = llvm.add %[[VAL_17]], %[[ZEXT]] : i64
 // CHECK:           %[[VAL_25:.*]] = llvm.ptrtoint %[[VAL_15]] : !llvm.ptr<i8> to i64
 // CHECK:           %[[VAL_26:.*]] = llvm.mlir.constant(8 : i64) : i64
 // CHECK:           %[[VAL_27:.*]] = llvm.udiv %[[VAL_24]], %[[VAL_26]] : i64
@@ -252,7 +253,8 @@ llhd.proc @convert_persistent_ptr () -> () {
 // CHECK:           llvm.return
 // CHECK:         }
 llhd.proc @convert_persistent_subsig () -> (%out : !llhd.sig<i32>) {
-  %0 = llhd.extract_slice %out, 0 : !llhd.sig<i32> -> !llhd.sig<i10>
+  %zero = hw.constant 0 : i5
+  %0 = llhd.sig.extract %out from %zero : (!llhd.sig<i32>) -> !llhd.sig<i10>
   br ^resume
 ^resume:
   call @dummy_subsig(%0) : (!llhd.sig<i10>) -> ()

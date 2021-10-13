@@ -17,6 +17,7 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
@@ -111,7 +112,6 @@ include "ValueOps.td"
 include "BitwiseOps.td"
 include "SignalOps.td"
 include "ExtractOps.td"
-include "InsertOps.td"
 include "StructureOps.td"
 include "MemoryOps.td"
 
