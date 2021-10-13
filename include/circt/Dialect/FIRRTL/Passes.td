@@ -43,6 +43,11 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
     pass.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
+  let options = [
+    Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
+           "Concat all elements of the aggregate data into a single element.">
+
+  ];
 }
 
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {

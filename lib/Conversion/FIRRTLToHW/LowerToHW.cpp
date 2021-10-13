@@ -2045,7 +2045,11 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         "--pass-pipeline='firrtl.circuit(firrtl-lower-types)' "
         "to run this.");
 
+<<<<<<< HEAD
   FirMemory memSummary = op.getSummary();
+=======
+  FirMemory memSummary = op.analyzeMemOp();
+>>>>>>> Flatten aggregate memory
 
   // Process each port in turn.
   SmallVector<Type, 8> resultTypes;

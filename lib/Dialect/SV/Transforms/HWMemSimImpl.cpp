@@ -44,6 +44,7 @@ struct FirMemory {
 namespace {
 struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
+  bool replSeqMem;
 
 public:
   HWMemSimImplPass(bool e) { replSeqMem = e; }
