@@ -1286,26 +1286,6 @@ firrtl.module @is1436_FOO() {
    //CHECK: firrtl.connect %[[d2_ready]], %[[v16]] : !firrtl.uint<1>, !firrtl.uint<1>
    //CHECK: firrtl.connect %[[d2_data]], %[[v17]] : !firrtl.uint<1>, !firrtl.uint<1>
 
-    %c2 = firrtl.bitcast %a1 : (!firrtl.uint<4>) -> (!firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>)
-    %d2 = firrtl.wire : !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
-    firrtl.connect %d2 , %c2: !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data:
-    uint<1>>, !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
-   //CHECK: %[[v10:.+]] = firrtl.bits %[[v9]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v11:.+]] = firrtl.bits %[[v9]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v12:.+]] = firrtl.bits %a1 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
-   //CHECK: %[[v13:.+]] = firrtl.bits %[[v12]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v14:.+]] = firrtl.bits %[[v13]] 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-   //CHECK: %[[v15:.+]] = firrtl.bits %[[v12]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-   //CHECK: %[[v16:.+]] = firrtl.bits %a1 2 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-   //CHECK: %[[v17:.+]] = firrtl.bits %a1 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
-   //CHECK: %[[d2_valid_re_a:.+]] = firrtl.wire  : !firrtl.uint<1>
-   //CHECK: %[[d2_valid_aa:.+]] = firrtl.wire  : !firrtl.uint<1>
-   //CHECK: %[[d2_ready:.+]] = firrtl.wire  : !firrtl.uint<1>
-   //CHECK: %[[d2_data:.+]] = firrtl.wire  : !firrtl.uint<1>
-   //CHECK: firrtl.connect %[[d2_valid_re_a]], %[[v14]] : !firrtl.uint<1>, !firrtl.uint<1>
-   //CHECK: firrtl.connect %[[d2_valid_aa]], %[[v15]] : !firrtl.uint<1>, !firrtl.uint<1>
-   //CHECK: firrtl.connect %[[d2_ready]], %[[v16]] : !firrtl.uint<1>, !firrtl.uint<1>
-   //CHECK: firrtl.connect %[[d2_data]], %[[v17]] : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
   firrtl.module @VecMemFlatten(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.vector<uint<8>, 4>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.vector<uint<1>, 4>, in %wData: !firrtl.vector<uint<8>, 4>) {
