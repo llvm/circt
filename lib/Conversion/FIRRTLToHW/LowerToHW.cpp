@@ -1252,7 +1252,7 @@ private:
 
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
-  llvm::SmallDenseMap<Value, sv::AlwaysOp> alwaysBlocks;
+  llvm::SmallDenseMap<std::pair<Value, Region *>, sv::AlwaysOp> alwaysBlocks;
 
   using AlwaysFFKeyType = std::tuple<Block *, sv::EventControl, Value,
                                      ::ResetType, sv::EventControl, Value>;
@@ -1632,12 +1632,7 @@ Value FIRRTLLowering::getReadInOutOp(Value v) {
 
 void FIRRTLLowering::addToAlwaysBlock(Value clock,
                                       std::function<void(void)> fn) {
-  // This isn't uniquing the parent region in.  This can be added as a key to
-  // the alwaysBlocks set if needed.
-  assert(isa<hw::HWModuleOp>(builder.getBlock()->getParentOp()) &&
-         "only support inserting into the top level of a module so far");
-
-  auto &op = alwaysBlocks[clock];
+  auto &op = alwaysBlocks[{clock, builder.getBlock()->getParent()}];
   if (op) {
     runWithInsertionPointAtEndOfBlock(fn, op.body());
     // Move the earlier always block(s) down to where the last would have been
