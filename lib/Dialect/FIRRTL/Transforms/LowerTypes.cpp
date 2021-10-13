@@ -670,7 +670,6 @@ static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
   };
   if (flatten(type))
     return true;
-  results.clear();
   return false;
 }
 
@@ -776,7 +775,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       // go both directions, depending on the port direction.
       if (name == "data" || name == "mask" || name == "wdata" ||
           name == "wmask" || name == "rdata") {
-        if (!flatMemType.empty()) {
+        if (flattenAggregateMemData) {
           // If memory was flattened instead of one memory per aggregate field.
           Value newField =
               getSubWhatever(newMemories[0].getResult(index), fieldIndex);
