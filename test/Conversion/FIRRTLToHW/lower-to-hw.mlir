@@ -406,53 +406,78 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
     in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>, in %value: !firrtl.uint<42>) {
 
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and %aEn, %aCond : i1
-    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP]] message "assert0"
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and %aEn, %aCond : i1
-    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP]] label "assert_0" message "assert0"
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and %aEn, %aCond : i1
-    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP]] message "assert0"(%value) : i42
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and %bEn, %bCond : i1
-    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP]] message "assume0"
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and %bEn, %bCond : i1
-    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP]] label "assume_0" message "assume0"
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and %bEn, %bCond : i1
-    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP]] message "assume0"(%value) : i42
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond : i1
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]]
-    // CHECK-NEXT: [[TMP:%.+]] = comb.and %cEn, %cCond : i1
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP]] label "cover_0"
-    // CHECK: sv.cover.concurrent negedge %clock, {{%.+}} label "cover_1"
-    // CHECK: sv.cover.concurrent edge %clock, {{%.+}} label "cover_2"
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true}
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true, name = "assert_0"}
     firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.uint<42> {isConcurrent = true}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %aCond
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP4:%.+]] = comb.or [[TMP3]], %aCond
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP4]] label "assert__assert_0" message "assert0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP5:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP6:%.+]] = comb.or [[TMP5]], %aCond
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP6]] message "assert0"(%value) : i42
+    // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
+    // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP4]] label "assume__assert_0"
+    // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP6]]
+    // CHECK-NEXT: }
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true}
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true, name = "assume_0"}
     firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.uint<42> {isConcurrent = true}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] label "assume__assume_0" message "assume0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"(%value) : i42
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
     firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42> {isConcurrent = true}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cCond
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cCond
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP2]] label "cover__cover_0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cCond
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP2]]
     firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
     firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
+    // CHECK: sv.cover.concurrent negedge %clock, {{%.+}} label "cover__cover_1"
+    // CHECK: sv.cover.concurrent edge %clock, {{%.+}} label "cover__cover_2"
 
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
     // CHECK-NEXT:     sv.assert %aCond, immediate message "assert0"
-    // CHECK-NEXT:     sv.assert %aCond, immediate label "assert_0" message "assert0"
+    // CHECK-NEXT:     sv.assert %aCond, immediate label "assert__assert_0" message "assert0"
     // CHECK-NEXT:     sv.assert %aCond, immediate message "assert0"(%value) : i42
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %bEn {
     // CHECK-NEXT:     sv.assume %bCond, immediate message "assume0"
-    // CHECK-NEXT:     sv.assume %bCond, immediate label "assume_0" message "assume0"
+    // CHECK-NEXT:     sv.assume %bCond, immediate label "assume__assume_0" message "assume0"
     // CHECK-NEXT:     sv.assume %bCond, immediate message "assume0"(%value) : i42
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %cEn {
     // CHECK-NEXT:     sv.cover %cCond, immediate
-    // CHECK-NOT:                       label
-    // CHECK-NEXT:     sv.cover %cCond, immediate label "cover_0"
+    // CHECK-NOT:        label
+    // CHECK-NEXT:     sv.cover %cCond, immediate label "cover__cover_0"
     // CHECK-NEXT:     sv.cover %cCond, immediate
-    // CHECK-NOT:                       label
+    // CHECK-NOT:        label
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
@@ -465,6 +490,77 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.cover %clock, %cCond, %cEn, "cover0" {name = "cover_0"}
     firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42>
     // CHECK-NEXT: hw.output
+  }
+
+  // CHECK-LABEL: hw.module @VerificationGuards
+  firrtl.module @VerificationGuards(
+    in %clock: !firrtl.clock,
+    in %cond: !firrtl.uint<1>,
+    in %enable: !firrtl.uint<1>
+  ) {
+    firrtl.assert %clock, %cond, %enable, "assert0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    // CHECK-NEXT: sv.ifdef "HELLO" {
+    // CHECK-NEXT:   sv.ifdef "WORLD" {
+    // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
+    // CHECK-NEXT:     sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
+    // CHECK-NEXT:     sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
+    // CHECK-NEXT:       sv.assume.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.assume %clock, %cond, %enable, "assume0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    firrtl.cover %clock, %cond, %enable, "cover0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    // CHECK-NEXT: sv.ifdef "HELLO" {
+    // CHECK-NEXT:   sv.ifdef "WORLD" {
+    // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
+    // CHECK-NEXT:     sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"
+    // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
+    // CHECK-NEXT:     sv.cover.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NOT:      label
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+  }
+
+  // CHECK-LABEL: hw.module @VerificationAssertFormat
+  firrtl.module @VerificationAssertFormat(
+    in %clock: !firrtl.clock,
+    in %cond: !firrtl.uint<1>,
+    in %enable: !firrtl.uint<1>,
+    in %value: !firrtl.uint<42>
+  ) {
+    firrtl.assert %clock, %cond, %enable, "assert0" {isConcurrent = true, format = "sva"}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cond
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
+    // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
+    // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT: }
+    firrtl.assert %clock, %cond, %enable, "assert1"(%value) : !firrtl.uint<42> {isConcurrent = true, format = "ifElseFatal"}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cond, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.and %enable, [[TMP1]]
+    // CHECK-NEXT: sv.always posedge %clock {
+    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
+    // CHECK-NEXT:   } else {
+    // CHECK-NEXT:     sv.if [[TMP2]] {
+    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.verbatim.expr "`ASSERT_VERBOSE_COND_"
+    // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
+    // CHECK-NEXT:         sv.error "assert1"(%value) : i42
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.verbatim.expr "`STOP_COND_"
+    // CHECK-NEXT:       sv.if [[STOP_COND]] {
+    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
   }
 
   firrtl.module @bar(in %io_cpu_flush: !firrtl.uint<1>) {
