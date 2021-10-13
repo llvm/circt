@@ -45,12 +45,17 @@ class CreateSiFiveMetadataPass
   DenseSet<Operation *> dutModuleSet;
   // The design under test module.
   FModuleOp dutMod;
+
+public:
+  CreateSiFiveMetadataPass(bool e) { replSeqMem = e; }
 };
 } // end anonymous namespace
 
 /// This function collects all the firrtl.mem ops and creates a verbatim op with
 /// the relevant memory attributes.
 LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
+  if (!replSeqMem)
+    return success();
 
   // Lambda to get the number of read, write and read-write ports corresponding
   // to a MemOp.
@@ -477,6 +482,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   markAnalysesPreserved<InstanceGraph>();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createCreateSiFiveMetadataPass() {
-  return std::make_unique<CreateSiFiveMetadataPass>();
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createCreateSiFiveMetadataPass(bool replSeqMem) {
+  return std::make_unique<CreateSiFiveMetadataPass>(replSeqMem);
 }
