@@ -75,7 +75,7 @@ namespace scheduling {
 class Problem {
 public:
   /// Initialize a scheduling problem corresponding to \p containingOp.
-  Problem(Operation *containingOp) : containingOp(containingOp) {}
+  explicit Problem(Operation *containingOp) : containingOp(containingOp) {}
   virtual ~Problem() = default;
 
   friend detail::DependenceIterator;
@@ -240,7 +240,7 @@ private:
   ProblemProperty<unsigned> initiationInterval;
 
 public:
-  using Problem::Problem;
+  explicit CyclicProblem(Operation *containingOp) : Problem(containingOp) {}
 
   /// The distance determines whether a dependence has to be satisfied in the
   /// same iteration (distance=0 or not set), or distance-many iterations later.
@@ -284,7 +284,8 @@ private:
   OperatorTypeProperty<unsigned> limit;
 
 public:
-  using Problem::Problem;
+  explicit SharedPipelinedOperatorsProblem(Operation *containingOp)
+      : Problem(containingOp) {}
 
   /// The limit is the maximum number of operations using \p opr that are
   /// allowed to start in the same time step.
@@ -315,7 +316,7 @@ public:
 class ModuloProblem : public virtual CyclicProblem,
                       public virtual SharedPipelinedOperatorsProblem {
 public:
-  ModuloProblem(Operation *containingOp)
+  explicit ModuloProblem(Operation *containingOp)
       : Problem(containingOp), CyclicProblem(containingOp),
         SharedPipelinedOperatorsProblem(containingOp) {}
 
