@@ -23,6 +23,7 @@ circuit test_mod : %[[{"a": "a"}]]
 ; OMIR-SAME:   nodes = [
 ; OMIR-SAME:     {fields = {
 ; OMIR-SAME:        stringVal = {
+; OMIR-SAME:          index = 0 : i64,
 ; OMIR-SAME:          info = #loc0,
 ; OMIR-SAME:          value = "OMString:hello"}},
 ; OMIR-SAME:      id = "OMID:0",

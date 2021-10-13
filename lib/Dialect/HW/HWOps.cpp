@@ -360,20 +360,19 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringRef HWModuleExternOp::getVerilogModuleName() {
-  if (auto vname = verilogName())
-    return vname.getValue();
-  return getName();
-}
-
-/// Return the name to use for the Verilog module that we're referencing
-/// here.  This is typically the symbol, but can be overridden with the
-/// verilogName attribute.
 StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
   if (auto vName = verilogNameAttr())
     return vName;
 
   return (*this)->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+}
+
+StringAttr HWModuleGeneratedOp::getVerilogModuleNameAttr() {
+  if (auto vName = verilogNameAttr()) {
+    return vName;
+  }
+  return (*this)->getAttrOfType<StringAttr>(
+      ::mlir::SymbolTable::getSymbolAttrName());
 }
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
@@ -477,6 +476,32 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
                        resultTypes[i], i});
   }
   return results;
+}
+
+/// Return the PortInfo for the specified input or inout port.
+PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
+  auto argTypes = getModuleType(op).getInputs();
+  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+
+  bool isInOut = false;
+  auto type = argTypes[idx];
+
+  if (auto inout = type.dyn_cast<InOutType>()) {
+    isInOut = true;
+    type = inout.getElementType();
+  }
+
+  auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
+  return {argNames[idx].cast<StringAttr>(), direction, type, idx};
+}
+
+/// Return the PortInfo for the specified output port.
+PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
+  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
+  auto resultTypes = getModuleType(op).getResults();
+  assert(idx < resultNames.size() && "invalid result number");
+  return {resultNames[idx].cast<StringAttr>(), PortDirection::OUTPUT,
+          resultTypes[idx], idx};
 }
 
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {

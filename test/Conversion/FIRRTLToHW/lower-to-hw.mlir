@@ -33,14 +33,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   //
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_1_1,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i1, %R0_en: i1, %R0_clk: i1) -> (R0_data: i32)
-  // CHECK-SAME: attributes {depth = 1 : i64, maskGran = 0 : ui32, numReadPorts = 1 : ui32,
+  // CHECK-SAME: attributes {depth = 1 : i64, maskGran = 32 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 1 : ui32,
   // CHECK-SAME: width = 32 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_42_12_0_1_0_1,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42)
-  // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 0 : ui32, numReadPorts = 1 : ui32,
+  // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [],
@@ -407,19 +407,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
    in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>) {
 
     // CHECK-NEXT: %0 = comb.and %aEn, %aCond : i1
-    // CHECK-NEXT: sv.assert.concurrent  posedge %clock %0 : i1
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, %0
     // CHECK-NEXT: %1 = comb.and %aEn, %aCond : i1
-    // CHECK-NEXT: sv.assert.concurrent "assert_0" posedge %clock %1  : i1
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, %1 label "assert_0"
     // CHECK-NEXT: %2 = comb.and %bEn, %bCond : i1
-    // CHECK-NEXT: sv.assume.concurrent  posedge %clock %2 : i1
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, %2
     // CHECK-NEXT: %3 = comb.and %bEn, %bCond : i1
-    // CHECK-NEXT: sv.assume.concurrent "assume_0" posedge %clock %3 : i1
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, %3 label "assume_0"
     // CHECK-NEXT: %4 = comb.and %cEn, %cCond : i1
-    // CHECK-NEXT: sv.cover.concurrent  posedge %clock %4 : i1
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, %4
     // CHECK-NEXT: %5 = comb.and %cEn, %cCond : i1
-    // CHECK-NEXT: sv.cover.concurrent "cover_0" posedge %clock %5 : i1
-    // CHECK: sv.cover.concurrent "cover_1" negedge %clock
-    // CHECK: sv.cover.concurrent "cover_2" edge %clock
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, %5 label "cover_0"
+    // CHECK: sv.cover.concurrent negedge %clock, {{%.+}} label "cover_1"
+    // CHECK: sv.cover.concurrent edge %clock, {{%.+}} label "cover_2"
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true}
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true, name = "assert_0"}
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true}
@@ -431,16 +431,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
-    // CHECK-NEXT:     sv.assert %aCond : i1
-    // CHECK-NEXT:     sv.assert "assert_0" %aCond : i1
+    // CHECK-NEXT:     sv.assert %aCond, immediate
+    // CHECK-NOT:                        label
+    // CHECK-NEXT:     sv.assert %aCond, immediate label "assert_0"
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %bEn {
-    // CHECK-NEXT:     sv.assume %bCond : i1
-    // CHECK-NEXT:     sv.assume "assume_0" %bCond : i1
+    // CHECK-NEXT:     sv.assume %bCond, immediate
+    // CHECK-NOT:                        label
+    // CHECK-NEXT:     sv.assume %bCond, immediate label "assume_0"
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %cEn {
-    // CHECK-NEXT:     sv.cover  %cCond : i1
-    // CHECK-NEXT:     sv.cover "cover_0" %cCond : i1
+    // CHECK-NEXT:     sv.cover %cCond, immediate
+    // CHECK-NOT:                       label
+    // CHECK-NEXT:     sv.cover %cCond, immediate label "cover_0"
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
@@ -1074,4 +1077,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<2>, ready: uint<1>, data: uint<3>>) -> (!firrtl.vector<uint<2>, 3>)
     // CHECK: hw.bitcast %0 : (!hw.struct<valid: i2, ready: i1, data: i3>) -> !hw.array<3xi2>
   }
+
+  firrtl.extmodule @chkcoverAnno(in %clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
 }

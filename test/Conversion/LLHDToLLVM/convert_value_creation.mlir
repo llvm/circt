@@ -43,10 +43,10 @@ func @convert_array(%ci1 : i1, %ci32 : i32) {
 // CHECK-SAME:                             %[[VAL_0:.*]]: i1,
 // CHECK-SAME:                             %[[VAL_1:.*]]: i2,
 // CHECK-SAME:                             %[[VAL_2:.*]]: i3) {
-// CHECK:           %[[VAL_3:.*]] = llvm.mlir.undef : !llvm.struct<(i1, i2, i3)>
-// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_3]][0 : i32] : !llvm.struct<(i1, i2, i3)>
-// CHECK:           %[[VAL_5:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_4]][1 : i32] : !llvm.struct<(i1, i2, i3)>
-// CHECK:           %[[VAL_6:.*]] = llvm.insertvalue %[[VAL_2]], %[[VAL_5]][2 : i32] : !llvm.struct<(i1, i2, i3)>
+// CHECK:           %[[VAL_3:.*]] = llvm.mlir.undef : !llvm.struct<(i3, i2, i1)>
+// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_2]], %[[VAL_3]][0 : i32] : !llvm.struct<(i3, i2, i1)>
+// CHECK:           %[[VAL_5:.*]] = llvm.insertvalue %[[VAL_1]], %[[VAL_4]][1 : i32] : !llvm.struct<(i3, i2, i1)>
+// CHECK:           %[[VAL_6:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_5]][2 : i32] : !llvm.struct<(i3, i2, i1)>
 // CHECK:           llvm.return
 // CHECK:         }
 func @convert_tuple(%ci1 : i1, %ci2 : i2, %ci3 : i3) {

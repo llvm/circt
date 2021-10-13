@@ -1,5 +1,5 @@
 // RUN: handshake-runner %s 2,3,4,5 | FileCheck %s
-// BROKEN: circt-opt -create-dataflow %s | handshake-runner - 2,3,4,5 | FileCheck %s
+// BROKEN: circt-opt -lower-std-to-handshake %s | handshake-runner - 2,3,4,5 | FileCheck %s
 // CHECK: 5 5,3,4,5
 
 module {

@@ -1192,7 +1192,7 @@ LogicalResult InferenceMapping::map(CircuitOp op) {
 
     // Go through operations in the module, creating type variables for results,
     // and generating constraints.
-    auto result = module.getBody().walk(
+    auto result = module.getBody()->walk(
         [&](Operation *op) { return WalkResult(mapOperation(op)); });
     if (result.wasInterrupted())
       return WalkResult::interrupt();
@@ -1795,20 +1795,19 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   if (auto module = dyn_cast<FModuleOp>(op)) {
     // Update the block argument types.
     bool argsChanged = false;
-    std::vector<Type> argTypes;
-    argTypes.reserve(module.getArguments().size());
+    SmallVector<Attribute> argTypes;
+    argTypes.reserve(module.getNumPorts());
     for (auto arg : module.getArguments()) {
       argsChanged |= updateValue(arg);
-      argTypes.push_back(arg.getType());
+      argTypes.push_back(TypeAttr::get(arg.getType()));
       if (anyFailed)
         return false;
     }
 
     // Update the module function type if needed.
     if (argsChanged) {
-      auto type =
-          FunctionType::get(op->getContext(), argTypes, /*resultTypes*/ {});
-      module->setAttr(FModuleOp::getTypeAttrName(), TypeAttr::get(type));
+      module->setAttr(FModuleLike::getPortTypesAttrName(),
+                      ArrayAttr::get(module.getContext(), argTypes));
       anyChanged = true;
     }
   }

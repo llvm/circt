@@ -3,8 +3,8 @@
 import pycde
 import circt.dialects.hw
 
-from circt import msft
-import pycde.attributes as attrs
+from pycde.attributes import placement
+from pycde.devicedb import PhysLocation, PrimitiveType
 
 
 @pycde.externmodule
@@ -35,9 +35,21 @@ class Test:
     UnParameterized(x=c1)
 
 
+# Set up the primitive locations. Errors out if location is placed but doesn't
+# exist.
+primdb = pycde.PrimitiveDB()
+primdb.add_coords("M20K", 39, 25)
+primdb.add_coords(PrimitiveType.M20K, 15, 25)
+primdb.add_coords("DSP", 0, 10)
+primdb.add_coords(PrimitiveType.DSP, 1, 12)
+primdb.add(PhysLocation(PrimitiveType.DSP, 39, 25))
+
+print(PhysLocation(PrimitiveType.DSP, 39, 25))
+# CHECK: PhysLocation<PrimitiveType.DSP, x:39, y:25, num:0>
+
 # CHECK: msft.module @UnParameterized
 # CHECK-NOT: msft.module @UnParameterized
-t = pycde.System([Test])
+t = pycde.System([Test], primdb)
 t.generate(["construct"])
 t.print()
 
@@ -50,19 +62,19 @@ t.run_passes()
 print("=== Hierarchy")
 # CHECK-NEXT: <instance: [UnParameterized]>
 # CHECK-NEXT: <instance: [UnParameterized, Nothing]>
-# CHECK-NEXT: <instance: [UnParameterized_0]>
-# CHECK-NEXT: <instance: [UnParameterized_0, Nothing]>
+# CHECK-NEXT: <instance: [UnParameterized_1]>
+# CHECK-NEXT: <instance: [UnParameterized_1, Nothing]>
 mod = t.get_instance(Test).walk(lambda inst: print(inst))
 
 locs = pycde.AppIDIndex()
-locs.lookup(pycde.AppID("UnParameterized_0"))["loc"] = \
-  (["memory", "bank"], msft.M20K, 39, 25, 0)
+locs.lookup(pycde.AppID("UnParameterized_1"))["loc"] = \
+  (["memory", "bank"], PrimitiveType.M20K, 39, 25, 0)
 
 
 def place_inst(inst):
   global x, y
   if inst.module == Nothing:
-    inst.place("dsp_inst", msft.DSP, x, y)
+    inst.place("dsp_inst", PrimitiveType.DSP, x, y)
     x += 1
     y += 2
   else:
@@ -76,17 +88,17 @@ y = 10
 t.get_instance(Test).walk(place_inst)
 
 instance_attrs = pycde.AppIDIndex()
-loc = attrs.placement(["memory", "bank"], msft.M20K, 15, 25, 0)
+loc = placement(["memory", "bank"], PrimitiveType.M20K, 15, 25, 0)
 instance_attrs.lookup(pycde.AppID("UnParameterized")).add_attribute(loc)
-loc = attrs.placement(["memory", "bank"], msft.DSP, 39, 25, 0)
+loc = placement(["memory", "bank"], PrimitiveType.DSP, 39, 25, 0)
 instance_attrs.lookup(pycde.AppID("UnParameterized",
                                   "Nothing")).add_attribute(loc)
 test_inst = t.get_instance(Test)
 test_inst.walk(instance_attrs.apply_attributes_visitor)
 
-assert test_inst.get_instance_at(loc) is not None
-assert test_inst.get_instance_at(msft.PhysLocationAttr.get(msft.M20K, 0, 0,
-                                                           0)) is None
+assert test_inst.placedb.get_instance_at(loc[1]) is not None
+assert test_inst.placedb.get_instance_at(
+    PhysLocation(PrimitiveType.M20K, 0, 0, 0)) is None
 
 assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
@@ -102,6 +114,6 @@ print("=== Tcl")
 # CHECK-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|UnParameterized|Nothing|dsp_inst
 # CHECK-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing|memory|bank
 # CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
-# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_0|Nothing|dsp_inst
-# CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_0|memory|bank
+# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
+# CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
 t.print_tcl(Test)

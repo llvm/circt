@@ -226,9 +226,9 @@ func @convert_dyn_extract_slice_sig (%c : i32, %sI32 : !llhd.sig<i32>, %sArr : !
 
 // CHECK-LABEL:   llvm.func @convert_extract_element(
 // CHECK-SAME:                                       %[[VAL_0:.*]]: !llvm.array<4 x i5>,
-// CHECK-SAME:                                       %[[VAL_1:.*]]: !llvm.struct<(i1, i2, i3)>) {
+// CHECK-SAME:                                       %[[VAL_1:.*]]: !llvm.struct<(i3, i2, i1)>) {
 // CHECK:           %[[VAL_2:.*]] = llvm.extractvalue %[[VAL_0]][1 : index] : !llvm.array<4 x i5>
-// CHECK:           %[[VAL_3:.*]] = llvm.extractvalue %[[VAL_1]][2 : index] : !llvm.struct<(i1, i2, i3)>
+// CHECK:           %[[VAL_3:.*]] = llvm.extractvalue %[[VAL_1]][0 : index] : !llvm.struct<(i3, i2, i1)>
 // CHECK:           llvm.return
 // CHECK:         }
 func @convert_extract_element(%arr : !hw.array<4xi5>, %tup : !hw.struct<foo: i1, bar: i2, baz: i3>) {
@@ -281,8 +281,8 @@ func @convert_extract_element(%arr : !hw.array<4xi5>, %tup : !hw.struct<foo: i1,
 // CHECK:           %[[VAL_38:.*]] = llvm.load %[[VAL_37]] : !llvm.ptr<i64>
 // CHECK:           %[[VAL_39:.*]] = llvm.mlir.constant(1 : index) : i32
 // CHECK:           %[[VAL_40:.*]] = llvm.mlir.constant(0 : i32) : i32
-// CHECK:           %[[VAL_41:.*]] = llvm.bitcast %[[VAL_30]] : !llvm.ptr<i8> to !llvm.ptr<struct<(i1, i2, i3)>>
-// CHECK:           %[[VAL_42:.*]] = llvm.getelementptr %[[VAL_41]]{{\[}}%[[VAL_40]], %[[VAL_39]]] : (!llvm.ptr<struct<(i1, i2, i3)>>, i32, i32) -> !llvm.ptr<i2>
+// CHECK:           %[[VAL_41:.*]] = llvm.bitcast %[[VAL_30]] : !llvm.ptr<i8> to !llvm.ptr<struct<(i3, i2, i1)>>
+// CHECK:           %[[VAL_42:.*]] = llvm.getelementptr %[[VAL_41]]{{\[}}%[[VAL_40]], %[[VAL_39]]] : (!llvm.ptr<struct<(i3, i2, i1)>>, i32, i32) -> !llvm.ptr<i2>
 // CHECK:           %[[VAL_43:.*]] = llvm.bitcast %[[VAL_42]] : !llvm.ptr<i2> to !llvm.ptr<i8>
 // CHECK:           %[[VAL_44:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
 // CHECK:           %[[VAL_45:.*]] = llvm.insertvalue %[[VAL_43]], %[[VAL_44]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>

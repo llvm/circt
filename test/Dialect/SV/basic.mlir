@@ -193,3 +193,13 @@ hw.module @AB(%a: i1, %b: i2) {
   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
 }
+
+//CHECK-LABEL: hw.module @XMR_src
+hw.module @XMR_src(%a : i23) {
+  //CHECK-NEXT:   sv.xmr isRooted "a", "b", "c" : !hw.inout<i23>
+  %xmr1 = sv.xmr isRooted a,b,c : !hw.inout<i23>
+  //CHECK-NEXT:   sv.xmr "a", "b", "c" : !hw.inout<i3>
+  %xmr2 = sv.xmr "a",b,c : !hw.inout<i3>
+  %r = sv.read_inout %xmr1 : !hw.inout<i23>
+  sv.assign %xmr1, %a : i23
+}

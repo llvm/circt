@@ -260,12 +260,22 @@ struct SVExtractTestCodeImplPass
 private:
   void doModule(hw::HWModuleOp module, std::function<bool(Operation *)> fn,
                 StringRef suffix, Attribute path, Attribute bindFile) {
+    bool hasError = false;
     // Find Operations of interest.
     SmallPtrSet<Operation *, 8> roots;
-    module->walk([&fn, &roots](Operation *op) {
-      if (fn(op))
+    module->walk([&fn, &roots, &hasError](Operation *op) {
+      if (fn(op)) {
         roots.insert(op);
+        if (op->getNumResults()) {
+          op->emitError("Extracting op with result");
+          hasError = true;
+        }
+      }
     });
+    if (hasError) {
+      signalPassFailure();
+      return;
+    }
     // No Ops?  No problem.
     if (roots.empty())
       return;
@@ -311,26 +321,55 @@ void SVExtractTestCodeImplPass::runOnOperation() {
   auto coverBindFile =
       top->getAttrOfType<hw::OutputFileAttr>("firrtl.extract.cover.bindfile");
 
-  auto isAssert = [](Operation *op) -> bool {
+  hw::SymbolCache symCache;
+  for (auto &op : topLevelModule->getOperations())
+    if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
+      if (auto name = symOp.getNameAttr())
+        symCache.addDefinition(name, symOp);
+  symCache.freeze();
+
+  // Symbols not in the cache will only be fore instances added by an extract
+  // phase and are not instances that could possibly have extract flags on them.
+  auto isAssert = [&symCache](Operation *op) -> bool {
+    if (auto inst = dyn_cast<hw::InstanceOp>(op))
+      if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
+        if (mod->getAttr("firrtl.extract.assert.extra"))
+          return true;
     return isa<AssertOp>(op) || isa<FinishOp>(op) || isa<FWriteOp>(op) ||
            isa<AssertConcurrentOp>(op);
   };
-  auto isAssume = [](Operation *op) -> bool {
+  auto isAssume = [&symCache](Operation *op) -> bool {
+    if (auto inst = dyn_cast<hw::InstanceOp>(op))
+      if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
+        if (mod->getAttr("firrtl.extract.assume.extra"))
+          return true;
     return isa<AssumeOp>(op) || isa<AssumeConcurrentOp>(op);
   };
-  auto isCover = [](Operation *op) -> bool {
+  auto isCover = [&symCache](Operation *op) -> bool {
+    if (auto inst = dyn_cast<hw::InstanceOp>(op))
+      if (auto mod = symCache.getDefinition(inst.moduleNameAttr()))
+        if (mod->getAttr("firrtl.extract.cover.extra"))
+          return true;
     return isa<CoverOp>(op) || isa<CoverConcurrentOp>(op);
   };
 
   for (auto &op : topLevelModule->getOperations()) {
     if (auto rtlmod = dyn_cast<hw::HWModuleOp>(op)) {
-      // Extract two sets of ops to different modules
-
+      // Extract two sets of ops to different modules.
+      // This will add modules, but not affect modules in the symbol table.
       doModule(rtlmod, isAssert, "_assert", assertDir, assertBindFile);
       doModule(rtlmod, isAssume, "_assume", assumeDir, assumeBindFile);
       doModule(rtlmod, isCover, "_cover", coverDir, coverBindFile);
     }
   }
+  // We have to wait until all the instances are processed to clean up the
+  // annotations.
+  for (auto &op : topLevelModule->getOperations())
+    if (isa<hw::HWModuleOp, hw::HWModuleExternOp>(op)) {
+      op.removeAttr("firrtl.extract.assert.extra");
+      op.removeAttr("firrtl.extract.cover.extra");
+      op.removeAttr("firrtl.extract.assume.extra");
+    }
 }
 
 std::unique_ptr<Pass> circt::sv::createSVExtractTestCodePass() {

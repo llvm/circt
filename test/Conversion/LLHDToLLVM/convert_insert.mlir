@@ -31,9 +31,9 @@ func @convert_insert_slice(%int : i32, %iSlice : i10, %arr : !hw.array<4xi5>, %a
 // CHECK-LABEL:   llvm.func @convert_insert_element(
 // CHECK-SAME:                                      %[[VAL_0:.*]]: i5,
 // CHECK-SAME:                                      %[[VAL_1:.*]]: !llvm.array<4 x i5>,
-// CHECK-SAME:                                      %[[VAL_2:.*]]: !llvm.struct<(i4, i5, i6)>) {
+// CHECK-SAME:                                      %[[VAL_2:.*]]: !llvm.struct<(i6, i5, i4)>) {
 // CHECK:           %[[VAL_3:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_1]][0 : index] : !llvm.array<4 x i5>
-// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_2]][1 : index] : !llvm.struct<(i4, i5, i6)>
+// CHECK:           %[[VAL_4:.*]] = llvm.insertvalue %[[VAL_0]], %[[VAL_2]][1 : index] : !llvm.struct<(i6, i5, i4)>
 // CHECK:           llvm.return
 // CHECK:         }
 func @convert_insert_element(%int : i5, %arr : !hw.array<4xi5>, %tup : !hw.struct<foo: i4, bar: i5, baz: i6>) {

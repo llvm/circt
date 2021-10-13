@@ -38,11 +38,17 @@ struct PortInfo {
   StringAttr name;
   PortDirection direction;
   Type type;
-  size_t argNum = ~0U; // Either the argument index or the result index
-                       // depending on the direction.
+
+  /// This is the argument index or the result index depending on the direction.
+  /// "0" for an output means the first output, "0" for a in/inout means the
+  /// first argument.
+  size_t argNum = ~0U;
 
   StringRef getName() const { return name.getValue(); }
   bool isOutput() const { return direction == OUTPUT; }
+
+  /// Return a unique numeric identifier for this port.
+  ssize_t getId() const { return isOutput() ? argNum : (-1 - argNum); };
 };
 
 /// This holds a decoded list of input/inout and output ports for a module or
@@ -69,6 +75,8 @@ struct ModulePortInfo {
   SmallVector<PortInfo> outputs;
 };
 
+/// TODO: Move all these functions to a hw::ModuleLike interface.
+
 /// Return an encapsulated set of information about input and output ports of
 /// the specified module or instance.
 ModulePortInfo getModulePortInfo(Operation *op);
@@ -77,6 +85,12 @@ ModulePortInfo getModulePortInfo(Operation *op);
 /// the specified module or instance.  The input ports always come before the
 /// output ports in the list.
 SmallVector<PortInfo> getAllModulePortInfos(Operation *op);
+
+/// Return the PortInfo for the specified input or inout port.
+PortInfo getModuleInOrInoutPort(Operation *op, size_t idx);
+
+/// Return the PortInfo for the specified output port.
+PortInfo getModuleOutputPort(Operation *op, size_t idx);
 
 // Helpers for working with modules.
 
@@ -89,6 +103,9 @@ FunctionType getModuleType(Operation *module);
 /// Returns the verilog module name attribute or symbol name of any module-like
 /// operations.
 StringAttr getVerilogModuleNameAttr(Operation *module);
+inline StringRef getVerilogModuleName(Operation *module) {
+  return getVerilogModuleNameAttr(module).getValue();
+}
 
 /// Return the port name for the specified argument or result.  These can only
 /// return a null StringAttr when the IR is invalid.

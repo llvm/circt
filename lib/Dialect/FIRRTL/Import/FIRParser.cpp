@@ -46,6 +46,13 @@ namespace json = llvm::json;
 // Parser-related utilities
 //===----------------------------------------------------------------------===//
 
+namespace circt {
+namespace firrtl {
+ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
+                                   WhenOp whenStmt);
+} // namespace firrtl
+} // namespace circt
+
 std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
     StringRef spelling, bool skipParsing, Identifier &locatorFilenameCache,
     FileLineColLoc &fileLineColLocCache, MLIRContext *context) {
@@ -2266,18 +2273,6 @@ ParseResult FIRStmtParser::parseMemPort(MemDirAttr direction) {
   return moduleContext.addSymbolEntry(id, memoryData, startLoc, true);
 }
 
-template <typename Op>
-static ParseResult generatePrintfEncodedVerifOp(ImplicitLocOpBuilder &builder,
-                                                Value clock, Value condition,
-                                                StringRef message) {
-  APInt constOne(1, 1, false);
-  Value constTrue = builder.create<ConstantOp>(
-      UIntType::get(builder.getContext(), 1), constOne);
-  builder.create<Op>(clock, condition, constTrue, message, "",
-                     /*isConcurrent=*/true);
-  return success();
-}
-
 /// printf ::= 'printf(' exp exp StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parsePrintf() {
   auto startTok = consumeToken(FIRToken::lp_printf);
@@ -2307,20 +2302,6 @@ ParseResult FIRStmtParser::parsePrintf() {
   locationProcessor.setLoc(startTok.getLoc());
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
-  StringRef formatStringRef(formatStrUnescaped);
-
-  // Check if this is a printf-encoded verification statement. These are
-  // introduced by "assert:" and friends.
-  if (formatStringRef.startswith("assert:"))
-    return generatePrintfEncodedVerifOp<AssertOp>(builder, clock, condition,
-                                                  formatStringRef);
-  if (formatStringRef.startswith("assume:"))
-    return generatePrintfEncodedVerifOp<AssumeOp>(builder, clock, condition,
-                                                  formatStringRef);
-  if (formatStringRef.startswith("cover:"))
-    return generatePrintfEncodedVerifOp<CoverOp>(builder, clock, condition,
-                                                 formatStringRef);
-
   builder.create<PrintFOp>(clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands,
                            name);
@@ -2495,13 +2476,13 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
   // If the else is present, handle it otherwise we're done.
   if (getToken().isNot(FIRToken::kw_else))
-    return success();
+    return foldWhenEncodedVerifOp(builder, whenStmt);
 
   // If the 'else' is less indented than the when, then it must belong to some
   // containing 'when'.
   auto elseIndent = getIndentation();
   if (elseIndent.hasValue() && elseIndent.getValue() < whenIndent)
-    return success();
+    return foldWhenEncodedVerifOp(builder, whenStmt);
 
   consumeToken(FIRToken::kw_else);
 
@@ -2601,15 +2582,15 @@ ParseResult FIRStmtParser::parseInstance() {
   // Look up the module that is being referenced.
   auto circuit =
       builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedModule = circuit.lookupSymbol(moduleName);
+  auto referencedModule =
+      dyn_cast_or_null<FModuleLike>(circuit.lookupSymbol(moduleName));
   if (!referencedModule) {
     emitError(startTok.getLoc(),
               "use of undefined module name '" + moduleName + "' in instance");
     return failure();
   }
 
-  SmallVector<PortInfo> modulePorts =
-      cast<FModuleLike>(referencedModule).getPorts();
+  SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
@@ -2623,7 +2604,7 @@ ParseResult FIRStmtParser::parseInstance() {
 
   InstanceOp result;
   if (getConstants().options.rawAnnotations) {
-    result = builder.create<InstanceOp>(resultTypes, moduleName, id);
+    result = builder.create<InstanceOp>(referencedModule, id);
   } else {
     // Combine annotations that are ReferenceTargets and InstanceTargets.  By
     // example, this will lookup all annotations with either of the following
@@ -2635,7 +2616,7 @@ ParseResult FIRStmtParser::parseInstance() {
          getModuleTarget() + "/" + id + ":" + moduleName},
         startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
-    result = builder.create<InstanceOp>(resultTypes, moduleName, id,
+    result = builder.create<InstanceOp>(referencedModule, id,
                                         annotations.first.getValue(),
                                         annotations.second.getValue());
   }
@@ -3209,7 +3190,7 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
   json::Path::Root root;
   llvm::StringMap<ArrayAttr> thisAnnotationMap;
   if (!fromOMIRJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
-                    circuit)) {
+                    circuit.getContext())) {
     auto diag = emitError(loc, "Invalid/unsupported OMIR format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
@@ -3219,7 +3200,9 @@ ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
     return failure();
   }
 
-  // TODO: Scatter OMIR trackers.
+  if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
+                                translateLocation(loc), nlaNumber))
+    return failure();
 
   // Merge the attributes we just parsed into the global set we're accumulating.
   llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
@@ -3482,17 +3465,17 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
-  auto argIt = moduleOp.args_begin();
   auto portList = moduleOp.getPorts();
-  for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    PortInfo &port = std::get<0>(portAndLoc);
-    if (moduleContext.addSymbolEntry(port.getName(), *argIt,
-                                     std::get<1>(portAndLoc)))
+  auto portArgs = moduleOp.getArguments();
+  for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
+    PortInfo &port = std::get<0>(tuple);
+    llvm::SMLoc loc = std::get<1>(tuple);
+    BlockArgument portArg = std::get<2>(tuple);
+    if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
-    ++argIt;
   }
 
-  FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext);
+  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);

@@ -357,8 +357,8 @@ void GrandCentralTapsPass::runOnOperation() {
 
     // Go through the module ports and collect the annotated ones.
     AnnotatedExtModule result{extModule, {}, {}, {}};
-    result.filteredPortAnnos.reserve(extModule.getNumArguments());
-    for (unsigned argNum = 0, e = extModule.getNumArguments(); argNum < e;
+    result.filteredPortAnnos.reserve(extModule.getNumPorts());
+    for (unsigned argNum = 0, e = extModule.getNumPorts(); argNum < e;
          ++argNum) {
       // Go through all annotations on this port and add the data tap key and
       // mem tap ones to the list.
@@ -481,7 +481,7 @@ void GrandCentralTapsPass::runOnOperation() {
                  << blackBox.extModule.getName() << " for " << path << ")\n");
       auto impl =
           builder.create<FModuleOp>(name, ports, blackBox.filteredModuleAnnos);
-      builder.setInsertionPointToEnd(impl.getBodyBlock());
+      builder.setInsertionPointToEnd(impl.getBody());
 
       // Connect the output ports to the appropriate tapped object.
       for (auto port : portWiring) {
@@ -596,7 +596,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   LLVM_DEBUG(llvm::dbgs() << "- Processing port " << portAnno.portNum
                           << " anno " << portAnno.anno.getDict() << "\n");
   auto key = getKey(portAnno.anno);
-  auto portName = blackBox.extModule.portNames()[portAnno.portNum];
+  auto portName = blackBox.extModule.getPortNameAttr(portAnno.portNum);
   PortWiring wiring = {portAnno.portNum, {}, {}, {}};
 
   // Lookup the sibling annotation no the target. This may not exist, e.g. in
@@ -611,8 +611,7 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
     // Handle ports.
     if (auto port = tappedPorts.lookup(key)) {
       wiring.prefices = instancePaths.getAbsolutePaths(port.first);
-      wiring.suffix =
-          cast<FModuleLike>(port.first).portName(port.second).getValue();
+      wiring.suffix = cast<FModuleLike>(port.first).getPortName(port.second);
       portWiring.push_back(std::move(wiring));
       return;
     }

@@ -73,7 +73,7 @@ module {
       // CHECK: $fwrite(32'h80000002, "valid: %d\n", iface.valid);
       sv.fwrite "valid: %d\n" (%validValue) : i1
       // CHECK: assert(iface.valid);
-      sv.assert %validValue : i1
+      sv.assert %validValue, immediate
 
       sv.if %clk {
         %structDataSignal = sv.interface.signal.read %structIface(@struct_vr::@data) : !hw.struct<foo: i7, bar: !hw.array<5 x i16>>

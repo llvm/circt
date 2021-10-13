@@ -227,7 +227,7 @@ firrtl.circuit "testDontTouch"  {
 // -----
 
 firrtl.circuit "OutPortTop" {
-    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}) {
+    firrtl.module @OutPortChild1(out %out: !firrtl.uint<1> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
       %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
       firrtl.connect %out, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
@@ -537,7 +537,7 @@ firrtl.circuit "dntOutput" {
     %m = firrtl.mux(%c, %int_b, %const) : (!firrtl.uint<1>, !firrtl.uint<3>, !firrtl.uint<3>) -> !firrtl.uint<3>
     firrtl.connect %b, %m : !firrtl.uint<3>, !firrtl.uint<3>
   }
-  firrtl.module @foo(out %b: !firrtl.uint<3> {firrtl.annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}) {
+  firrtl.module @foo(out %b: !firrtl.uint<3> [{class = "firrtl.transforms.DontTouchAnnotation"}]) {
     %const = firrtl.constant 1 : !firrtl.uint<3>
     firrtl.connect %b, %const : !firrtl.uint<3>, !firrtl.uint<3>
   }

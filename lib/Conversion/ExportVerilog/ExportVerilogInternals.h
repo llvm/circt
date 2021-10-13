@@ -16,111 +16,110 @@ namespace circt {
 struct LoweringOptions;
 
 namespace ExportVerilog {
+class GlobalNameResolver;
 
-struct ModuleNameManager {
-  ModuleNameManager() : encounteredError(false) {}
+/// This class keeps track of global names at the module/interface level.
+/// It is built in a global pass over the entire design and then frozen to allow
+/// concurrent accesses.
+struct GlobalNameTable {
+  GlobalNameTable(GlobalNameTable &&) = default;
 
-  StringRef addName(Value value, StringRef name) {
-    return addName(ValueOrOp(value), name);
-  }
-  StringRef addName(Operation *op, StringRef name) {
-    return addName(ValueOrOp(op), name);
-  }
-  StringRef addName(Value value, StringAttr name) {
-    return addName(ValueOrOp(value), name);
-  }
-  StringRef addName(Operation *op, StringAttr name) {
-    return addName(ValueOrOp(op), name);
-  }
-
-  StringRef addLegalName(Value value, StringRef name, Operation *errOp) {
-    return addLegalName(ValueOrOp(value), name, errOp);
-  }
-  StringRef addLegalName(Operation *op, StringRef name, Operation *errOp) {
-    return addLegalName(ValueOrOp(op), name, errOp);
+  /// Return the string to use for the specified parameter name in the specified
+  /// module.  Parameters may be renamed for a variety of reasons (e.g.
+  /// conflicting with ports or verilog keywords), and this returns the
+  /// legalized name to use.
+  StringRef getPortVerilogName(Operation *module,
+                               const hw::PortInfo &port) const {
+    auto it = renamedPorts.find(std::make_pair(module, port.getId()));
+    return (it != renamedPorts.end() ? it->second : port.name).getValue();
   }
 
-  StringRef getName(Value value) { return getName(ValueOrOp(value)); }
-  StringRef getName(Operation *op) {
-    // If RegOp or WireOp, then result has the name.
-    if (isa<sv::WireOp, sv::RegOp>(op))
-      return getName(op->getResult(0));
-    return getName(ValueOrOp(op));
+  /// Return the string to use for the specified parameter name in the specified
+  /// module.  Parameters may be renamed for a variety of reasons (e.g.
+  /// conflicting with ports or verilog keywords), and this returns the
+  /// legalized name to use.
+  StringRef getParameterVerilogName(Operation *module,
+                                    StringAttr paramName) const {
+    auto it = renamedParams.find(std::make_pair(module, paramName));
+    return (it != renamedParams.end() ? it->second : paramName).getValue();
   }
 
-  bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
-  bool hasName(Operation *op) {
-    // If RegOp or WireOp, then result has the name.
-    if (isa<sv::WireOp, sv::RegOp>(op))
-      return nameTable.count(op->getResult(0));
-    return nameTable.count(ValueOrOp(op));
+  StringRef getInterfaceVerilogName(Operation *op) const {
+    auto it = renamedInterfaceOp.find(op);
+    auto attr = it != renamedInterfaceOp.end() ? it->second
+                                               : SymbolTable::getSymbolName(op);
+    return attr.getValue();
   }
-
-  void addOutputNames(StringRef name, Operation *module) {
-    outputNames.push_back(addLegalName(nullptr, name, module));
-  }
-
-  StringRef getOutputName(size_t portNum) { return outputNames[portNum]; }
-
-  bool hadError() { return encounteredError; }
 
 private:
-  using ValueOrOp = PointerUnion<Value, Operation *>;
+  friend class GlobalNameResolver;
+  GlobalNameTable() {}
+  GlobalNameTable(const GlobalNameTable &) = delete;
+  void operator=(const GlobalNameTable &) = delete;
 
-  /// Retrieve a name from the name table.  The name must already have been
-  /// added.
-  StringRef getName(ValueOrOp valueOrOp) {
-    auto entry = nameTable.find(valueOrOp);
-    assert(entry != nameTable.end() &&
-           "value expected a name but doesn't have one");
-    return entry->getSecond();
+  void addRenamedPort(Operation *module, const hw::PortInfo &port,
+                      StringRef newName) {
+    renamedPorts[{module, port.getId()}] =
+        StringAttr::get(module->getContext(), newName);
   }
 
-  /// Add the specified name to the name table, auto-uniquing the name if
-  /// required.  If the name is empty, then this creates a unique temp name.
-  ///
-  /// "valueOrOp" is typically the Value for an intermediate wire etc, but it
-  /// can also be an op for an instance, since we want the instances op uniqued
-  /// and tracked.  It can also be null for things like outputs which are not
-  /// tracked in the nameTable.
-  StringRef addName(ValueOrOp valueOrOp, StringRef name);
-
-  StringRef addName(ValueOrOp valueOrOp, StringAttr nameAttr) {
-    return addName(valueOrOp, nameAttr ? nameAttr.getValue() : "");
+  void addRenamedParam(Operation *module, StringAttr oldName,
+                       StringRef newName) {
+    renamedParams[{module, oldName}] =
+        StringAttr::get(oldName.getContext(), newName);
   }
 
-  /// Add the specified name to the name table, emitting an error message if the
-  /// name empty or is changed by uniqing.
-  StringRef addLegalName(ValueOrOp valueOrOp, StringRef name, Operation *op) {
-    auto updatedName = addName(valueOrOp, name);
-    if (name.empty())
-      emitOpError(op, "should have non-empty name");
-    else if (updatedName != name)
-      emitOpError(op, "name '") << name << "' changed during emission";
-    return updatedName;
+  void addRenamedInterfaceOp(Operation *interfaceOp, StringRef newName) {
+    renamedInterfaceOp[interfaceOp] =
+        StringAttr::get(interfaceOp->getContext(), newName);
   }
 
-  InFlightDiagnostic emitOpError(Operation *op, const Twine &message) {
-    encounteredError = true;
-    return op->emitOpError(message);
+  /// This contains entries for any ports that got renamed.  The key is a
+  /// moduleop/portIdx tuple, the value is the name to use.  The portIdx is the
+  /// index of the port in the list returned by getAllModulePortInfos.
+  DenseMap<std::pair<Operation *, size_t>, StringAttr> renamedPorts;
+
+  /// This contains entries for any parameters that got renamed.  The key is a
+  /// moduleop/paramName tuple, the value is the name to use.
+  DenseMap<std::pair<Operation *, Attribute>, StringAttr> renamedParams;
+
+  /// This contains entries for interface operations (sv.interface,
+  /// sv.interface.signal, and sv.interface.modport) that need to be renamed
+  /// due to conflicts.
+  DenseMap<Operation *, StringAttr> renamedInterfaceOp;
+};
+
+//===----------------------------------------------------------------------===//
+// NameCollisionResolver
+//===----------------------------------------------------------------------===//
+
+struct NameCollisionResolver {
+  NameCollisionResolver() = default;
+
+  /// Given a name that may have collisions or invalid symbols, return a
+  /// replacement name to use, or the original name if it was ok.
+  StringRef getLegalName(StringRef originalName);
+  StringRef getLegalName(StringAttr originalName) {
+    return getLegalName(originalName.getValue());
   }
 
-  // Track whether a name error ocurred
-  bool encounteredError;
+  /// Insert a string as an already-used name.
+  void insertUsedName(StringRef name) { usedNames.insert(name); }
 
-  /// nameTable keeps track of mappings from Value's and operations (for
-  /// instances) to their string table entry.
-  llvm::DenseMap<ValueOrOp, StringRef> nameTable;
-
-  /// outputNames tracks the uniquified names for output ports, which don't
-  /// have
-  /// a Value or Op representation.
-  SmallVector<StringRef> outputNames;
-
+private:
+  /// Set of used names, to ensure uniqueness.
   llvm::StringSet<> usedNames;
 
+  /// Numeric suffix used as uniquification agent when resolving conflicts.
   size_t nextGeneratedNameID = 0;
+
+  NameCollisionResolver(const NameCollisionResolver &) = delete;
+  void operator=(const NameCollisionResolver &) = delete;
 };
+
+//===----------------------------------------------------------------------===//
+// Other utilities
+//===----------------------------------------------------------------------===//
 
 /// Return true for operations that must always be inlined into a containing
 /// expression for correctness.
@@ -131,6 +130,11 @@ static inline bool isExpressionAlwaysInline(Operation *op) {
 
   // An SV interface modport is a symbolic name that is always inlined.
   if (isa<sv::GetModportOp>(op) || isa<sv::ReadInterfaceSignalOp>(op))
+    return true;
+
+  // XMRs can't be spilled if they are on the lhs.  Conservatively never spill
+  // them.
+  if (isa<sv::XMROp>(op))
     return true;
 
   return false;
@@ -149,8 +153,11 @@ bool isVerilogExpression(Operation *op);
 
 /// For each module we emit, do a prepass over the structure, pre-lowering and
 /// otherwise rewriting operations we don't want to emit.
-void prepareHWModule(Block &block, ModuleNameManager &names,
-                     const LoweringOptions &options);
+void prepareHWModule(Block &block, const LoweringOptions &options);
+
+/// Rewrite module names and interfaces to not conflict with each other or with
+/// Verilog keywords.
+GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);
 } // namespace ExportVerilog
 
 } // namespace circt

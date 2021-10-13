@@ -1,6 +1,8 @@
-file(GLOB globbed *.cpp)
 add_circt_dialect_library(CIRCTComb
-  ${globbed}
+  CombFolds.cpp
+  CombOps.cpp
+  CombAnalysis.cpp
+  CombDialect.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/Comb

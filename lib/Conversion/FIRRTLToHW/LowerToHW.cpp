@@ -41,9 +41,11 @@ static const char assumeAnnoClass[] =
 static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
+static const char verifBBClass[] =
+    "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
 
-/// Attribute that indicates that the module hierarchy starting at the annotated
-/// module should be dumped to a file.
+/// Attribute that indicates that the module hierarchy starting at the
+/// annotated module should be dumped to a file.
 static const char moduleHierarchyFileAttrName[] = "firrtl.moduleHierarchyFile";
 
 /// Attribute that indicates where some json files should be dumped.
@@ -214,124 +216,10 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
     }
 }
 
-namespace {
-struct FirMemory {
-  size_t numReadPorts;
-  size_t numWritePorts;
-  size_t numReadWritePorts;
-  size_t dataWidth;
-  size_t depth;
-  size_t readLatency;
-  size_t writeLatency;
-  size_t maskBits;
-  size_t readUnderWrite;
-  hw::WUW writeUnderWrite;
-  SmallVector<int32_t> writeClockIDs;
-
-  // Location is carried along but not considered part of the identity of this.
-  Location loc;
-
-  bool operator<(const FirMemory &rhs) const {
-#define cmp3way(name)                                                          \
-  if (name < rhs.name)                                                         \
-    return true;                                                               \
-  if (name > rhs.name)                                                         \
-    return false;
-    cmp3way(numReadPorts);
-    cmp3way(numWritePorts);
-    cmp3way(numReadWritePorts);
-    cmp3way(dataWidth);
-    cmp3way(depth);
-    cmp3way(readLatency);
-    cmp3way(writeLatency);
-    cmp3way(readUnderWrite);
-    cmp3way(writeUnderWrite);
-    for (auto tuple : llvm::zip(writeClockIDs, rhs.writeClockIDs)) {
-      if (std::get<0>(tuple) < std::get<1>(tuple))
-        return true;
-      if (std::get<0>(tuple) > std::get<1>(tuple))
-        return false;
-    }
-    return false;
-#undef cmp3way
-  }
-  bool operator==(const FirMemory &rhs) const {
-    return numReadPorts == rhs.numReadPorts &&
-           numWritePorts == rhs.numWritePorts &&
-           numReadWritePorts == rhs.numReadWritePorts &&
-           dataWidth == rhs.dataWidth && depth == rhs.depth &&
-           readLatency == rhs.readLatency && writeLatency == rhs.writeLatency &&
-           readUnderWrite == rhs.readUnderWrite &&
-           writeUnderWrite == rhs.writeUnderWrite && maskBits == rhs.maskBits &&
-           writeClockIDs.size() == rhs.writeClockIDs.size() &&
-           llvm::all_of_zip(writeClockIDs, rhs.writeClockIDs,
-                            [](auto a, auto b) { return a == b; });
-  }
-};
-} // namespace
-
-static std::string getFirMemoryName(const FirMemory &mem) {
-  SmallString<8> clocks;
-  for (auto a : mem.writeClockIDs)
-    clocks.append(Twine((char)(a + 'a')).str());
-  return llvm::formatv(
-      "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}{9}", mem.numReadPorts,
-      mem.numWritePorts, mem.numReadWritePorts, mem.dataWidth, mem.depth,
-      mem.readLatency, mem.writeLatency, mem.readUnderWrite,
-      (unsigned)mem.writeUnderWrite, clocks.empty() ? "" : "_" + clocks);
-}
-
-static FirMemory analyzeMemOp(MemOp op) {
-  size_t numReadPorts = 0;
-  size_t numWritePorts = 0;
-  size_t numReadWritePorts = 0;
-  llvm::SmallDenseMap<Value, unsigned> clockToLeader;
-  SmallVector<int32_t> writeClockIDs;
-
-  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto portKind = op.getPortKind(i);
-    if (portKind == MemOp::PortKind::Read)
-      ++numReadPorts;
-    else if (portKind == MemOp::PortKind::Write) {
-      for (auto *a : op.getResult(i).getUsers()) {
-        auto subfield = dyn_cast<SubfieldOp>(a);
-        if (!subfield || subfield.fieldIndex() != 2)
-          continue;
-        auto clockPort = a->getResult(0);
-        for (auto *b : clockPort.getUsers()) {
-          auto connect = dyn_cast<ConnectOp>(b);
-          if (!connect || connect.dest() != clockPort)
-            continue;
-          auto result = clockToLeader.insert({connect.src(), numWritePorts});
-          if (result.second) {
-            writeClockIDs.push_back(numWritePorts);
-          } else {
-            writeClockIDs.push_back(result.first->second);
-          }
-        }
-        break;
-      }
-      ++numWritePorts;
-    } else
-      ++numReadWritePorts;
-  }
-
-  auto width = op.getDataType().getBitWidthOrSentinel();
-  if (width <= 0) {
-    op.emitError("'firrtl.mem' should have simple type and known width");
-    width = 0;
-  }
-
-  return {numReadPorts,       numWritePorts,    numReadWritePorts,
-          (size_t)width,      op.depth(),       op.readLatency(),
-          op.writeLatency(),  op.getMaskBits(), (size_t)op.ruw(),
-          hw::WUW::PortOrder, writeClockIDs,    op.getLoc()};
-}
-
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
   SmallVector<FirMemory> retval;
-  for (auto op : module.getBody().getOps<MemOp>())
-    retval.push_back(analyzeMemOp(op));
+  for (auto op : module.getBody()->getOps<MemOp>())
+    retval.push_back(op.getSummary());
   return retval;
 }
 
@@ -475,9 +363,9 @@ private:
 
 /// This is the pass constructor.
 std::unique_ptr<mlir::Pass>
-circt::createLowerFIRRTLToHWPass(llvm::Optional<bool> enableAnnotationWarning) {
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
-  if (enableAnnotationWarning.hasValue() && enableAnnotationWarning.getValue())
+  if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
   return pass;
 }
@@ -645,7 +533,10 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
                        maskType, inputPin++});
     }
 
-    auto maskGran = mem.maskBits > 0 ? mem.dataWidth / mem.maskBits : 0;
+    // Mask granularity is the number of data bits that each mask bit can guard.
+    // By default it is equal to the data bitwidth.
+    auto maskGran =
+        mem.maskBits > 0 ? mem.dataWidth / mem.maskBits : mem.dataWidth;
     NamedAttribute genAttrs[] = {
         b.getNamedAttr("depth", b.getI64IntegerAttr(mem.depth)),
         b.getNamedAttr("numReadPorts", b.getUI32IntegerAttr(mem.numReadPorts)),
@@ -664,7 +555,7 @@ void FIRRTLModuleLowering::lowerMemoryDecls(ArrayRef<FirMemory> mems,
         b.getNamedAttr("writeClockIDs", b.getI32ArrayAttr(mem.writeClockIDs))};
 
     // Make the global module for the memory
-    auto memoryName = b.getStringAttr(getFirMemoryName(mem));
+    auto memoryName = b.getStringAttr(mem.getFirMemoryName());
     b.create<hw::HWModuleGeneratedOp>(mem.loc, memorySchema, memoryName, ports,
                                       StringRef(), ArrayAttr(), genAttrs);
   }
@@ -869,8 +760,6 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   if (auto defName = oldModule.defname())
     verilogName = defName.getValue();
 
-  loweringState.processRemainingAnnotations(oldModule,
-                                            AnnotationSet(oldModule));
   // Build the new hw.module op.
   auto builder = OpBuilder::atBlockEnd(topLevelModule);
   auto nameAttr = builder.getStringAttr(oldModule.getName());
@@ -878,8 +767,11 @@ FIRRTLModuleLowering::lowerExtModule(FExtModuleOp oldModule,
   // no known default values in the extmodule.  This ensures that the
   // hw.instance will print all the parameters when generating verilog.
   auto parameters = getHWParameters(oldModule, /*ignoreValues=*/true);
-  return builder.create<hw::HWModuleExternOp>(oldModule.getLoc(), nameAttr,
-                                              ports, verilogName, parameters);
+  auto newModule = builder.create<hw::HWModuleExternOp>(
+      oldModule.getLoc(), nameAttr, ports, verilogName, parameters);
+  loweringState.processRemainingAnnotations(oldModule,
+                                            AnnotationSet(oldModule));
+  return newModule;
 }
 
 /// Run on each firrtl.module, transforming it from an firrtl.module into an
@@ -900,9 +792,12 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
       builder.create<hw::HWModuleOp>(oldModule.getLoc(), nameAttr, ports);
   if (auto outputFile = oldModule->getAttr("output_file"))
     newModule->setAttr("output_file", outputFile);
+
+  // Transform module annotations
+  AnnotationSet annos(oldModule);
   // Mark the design under test as a module of interest for exporting module
   // hierarchy information.
-  if (AnnotationSet::removeAnnotations(oldModule, dutAnnoClass))
+  if (annos.removeAnnotation(dutAnnoClass))
     newModule->setAttr(
         moduleHierarchyFileAttrName,
         hw::OutputFileAttr::getFromDirectoryAndFilename(
@@ -910,8 +805,9 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
             getMetadataDir(oldModule->getParentOfType<CircuitOp>()).getValue(),
             "module_hier.json",
             /*excludeFromFileList=*/true));
-  loweringState.processRemainingAnnotations(oldModule,
-                                            AnnotationSet(oldModule));
+  if (annos.removeAnnotation(verifBBClass))
+    newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+  loweringState.processRemainingAnnotations(oldModule, annos);
   return newModule;
 }
 
@@ -1122,7 +1018,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
   outputOp->setOperands(outputs);
 
   // Finally splice the body over, don't move the old terminator over though.
-  auto &oldBlockInstList = oldModule.getBodyBlock()->getOperations();
+  auto &oldBlockInstList = oldModule.getBody()->getOperations();
   auto &newBlockInstList = newModule.getBodyBlock()->getOperations();
   newBlockInstList.splice(Block::iterator(cursor), oldBlockInstList,
                           oldBlockInstList.begin(), oldBlockInstList.end());
@@ -1384,14 +1280,14 @@ void FIRRTLLowering::run() {
   // FIRRTL FModule is a single block because FIRRTL ops are a DAG.  Walk
   // through each operation, lowering each in turn if we can, introducing
   // casts if we cannot.
-  auto *body = theModule.getBodyBlock();
+  auto &body = theModule.getBody();
   randomizePrologEmitted = false;
 
   SmallVector<Operation *, 16> opsToRemove;
 
   // Iterate through each operation in the module body, attempting to lower
   // each of them.  We maintain 'builder' for each invocation.
-  for (auto &op : body->getOperations()) {
+  for (auto &op : body.front().getOperations()) {
     builder.setInsertionPoint(&op);
     builder.setLoc(op.getLoc());
     auto done = succeeded(dispatchVisitor(&op));
@@ -2148,7 +2044,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
         "--pass-pipeline='firrtl.circuit(firrtl-lower-types)' "
         "to run this.");
 
-  FirMemory memSummary = analyzeMemOp(op);
+  FirMemory memSummary = op.getSummary();
 
   // Process each port in turn.
   SmallVector<Type, 8> resultTypes;
@@ -2259,7 +2155,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   }
 
   auto memModuleAttr =
-      SymbolRefAttr::get(op.getContext(), getFirMemoryName(memSummary));
+      SymbolRefAttr::get(op.getContext(), memSummary.getFirMemoryName());
 
   // Create the instance to replace the memop.
   auto inst = builder.create<hw::InstanceOp>(
@@ -3021,17 +2917,19 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
   if (!clock || !enable || !predicate)
     return failure();
   StringAttr label;
-  if (op.nameAttr())
+  if (op.nameAttr() && !op.nameAttr().getValue().empty())
     label = op.nameAttr();
-  else
-    label = builder.getStringAttr("");
   Operation *svOp;
 
   if (!op.isConcurrent())
     addToAlwaysBlock(clock, [&]() {
       addIfProceduralBlock(enable, [&]() {
         // Create BOpTy inside the always/if.
-        svOp = builder.create<BOpTy>(predicate, label);
+        svOp = builder.create<BOpTy>(
+            predicate,
+            circt::sv::DeferAssertAttr::get(builder.getContext(),
+                                            circt::sv::DeferAssert::Immediate),
+            label);
       });
     });
   else {
@@ -3050,7 +2948,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(AOpTy op,
     }
     svOp = builder.create<COpTy>(
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
-        predicate, label);
+        predicate, label, StringAttr{}, ValueRange{});
   }
   return success();
 }

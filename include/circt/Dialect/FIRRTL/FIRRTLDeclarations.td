@@ -37,10 +37,12 @@ def InstanceOp : FIRRTLOp<"instance", [
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind)>,
 
-    /// Constructor that creates a version of the specified instance, but that
-    /// erases some number of results from it.
-    OpBuilder<(ins "InstanceOp":$existingInstance,
-                   "::mlir::ArrayRef<unsigned>":$resultsToErase)>
+    /// Constructor when you have the target module in hand.
+    OpBuilder<(ins "FModuleLike":$module,
+                   "mlir::StringRef":$name,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"bool","false">:$lowerToBind)>
   ];
 
   let extraClassDeclaration = [{
@@ -51,7 +53,7 @@ def InstanceOp : FIRRTLOp<"instance", [
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {
-      return getReferencedModule().portName(resultNo);
+      return getReferencedModule().getPortNameAttr(resultNo);
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
@@ -225,6 +227,12 @@ def MemOp : FIRRTLOp<"mem"> {
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    /// Get the number of read ports, write ports and read write ports.
+    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts, size_t &numReadWritePorts);
+
+    // Extract the relevant attributes from the MemOp and return a FirMemory object.
+    FirMemory getSummary();
   }];
 }
 

@@ -67,7 +67,7 @@ struct AnnoTarget {
       return FIRRTLType();
     if (portNum != ~0UL) {
       if (auto mod = dyn_cast<FModuleLike>(op))
-        return mod.portType(portNum).getSubTypeByFieldID(fieldIdx);
+        return mod.getPortType(portNum).getSubTypeByFieldID(fieldIdx);
       if (isa<MemOp, InstanceOp>(op))
         return op->getResult(portNum)
             .getType()

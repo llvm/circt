@@ -51,7 +51,7 @@ struct LowerCHIRRTLPass : public LowerCHIRRTLBase<LowerCHIRRTLPass>,
     auto &value = constCache[c];
     if (!value) {
       auto module = getOperation();
-      auto builder = OpBuilder::atBlockBegin(module.getBodyBlock());
+      auto builder = OpBuilder::atBlockBegin(module.getBody());
       auto u1Type = UIntType::get(builder.getContext(), /*width*/ 1);
       value = builder.create<ConstantOp>(module.getLoc(), u1Type, APInt(1, c));
     }
@@ -147,7 +147,7 @@ void LowerCHIRRTLPass::emitInvalid(ImplicitLocOpBuilder &builder, Value value) {
   auto type = value.getType();
   auto &invalid = invalidCache[type];
   if (!invalid) {
-    auto builder = OpBuilder::atBlockBegin(getOperation().getBodyBlock());
+    auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
     invalid = builder.create<InvalidValueOp>(getOperation().getLoc(), type);
   }
   builder.create<ConnectOp>(value, invalid);
@@ -671,8 +671,7 @@ void LowerCHIRRTLPass::runOnOperation() {
   // Walk the entire body of the module and dispatch the visitor on each
   // function.  This will replace all CHIRRTL memories and ports, and update all
   // uses.
-  getOperation().getBodyBlock()->walk(
-      [&](Operation *op) { dispatchVisitor(op); });
+  getOperation().getBody()->walk([&](Operation *op) { dispatchVisitor(op); });
 
   // If there are no operations to delete, then we didn't find any CHIRRTL
   // memories.

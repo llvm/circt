@@ -22,7 +22,6 @@ namespace sv {
 std::unique_ptr<mlir::Pass> createPrettifyVerilogPass();
 std::unique_ptr<mlir::Pass> createHWCleanupPass();
 std::unique_ptr<mlir::Pass> createHWStubExternalModulesPass();
-std::unique_ptr<mlir::Pass> createHWLegalizeNamesPass();
 std::unique_ptr<mlir::Pass> createHWLegalizeModulesPass();
 std::unique_ptr<mlir::Pass> createHWGeneratorCalloutPass();
 std::unique_ptr<mlir::Pass> createHWMemSimImplPass();

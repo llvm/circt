@@ -254,6 +254,12 @@ def GetModportOp: SVOp<"modport.get", [NoSideEffect]> {
   let builders = [
     OpBuilder<(ins "Value":$value, "::llvm::StringRef":$field)>
   ];
+
+  let extraClassDeclaration = [{
+    /// Lookup the op for the modport declaration.  This returns null on invalid
+    /// IR.
+    InterfaceModportOp getReferencedDecl(const hw::SymbolCache &cache);
+  }];
 }
 
 def AssignInterfaceSignalOp : SVOp<"interface.signal.assign", []> {
@@ -311,6 +317,13 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [NoSideEffect]> {
   let builders = [
     OpBuilder<(ins "::mlir::Value":$iface, "::llvm::StringRef":$signalName)>
   ];
+
+
+  let extraClassDeclaration = [{
+    /// Lookup the op for the signal declaration.  This returns null on invalid
+    /// IR.
+    InterfaceSignalOp getReferencedDecl(const hw::SymbolCache &cache);
+  }];
 
   let verifier = "return ::verifySignalExists(iface(), signalNameAttr());";
 }

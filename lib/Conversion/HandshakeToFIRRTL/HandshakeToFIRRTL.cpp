@@ -37,7 +37,7 @@ static void legalizeFModule(FModuleOp moduleOp) {
   SmallVector<Operation *, 8> connectOps;
   moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
   for (auto op : connectOps)
-    op->moveBefore(&moduleOp.getBodyBlock()->back());
+    op->moveBefore(&moduleOp.getBody()->back());
 }
 
 /// Get the corresponding FIRRTL type given the built-in data type. Current
@@ -494,28 +494,30 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   // Create a FIRRTL module, and inline the funcOp into it.
   auto topModuleOp = rewriter.create<FModuleOp>(
       funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
-  rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
-                              topModuleOp.end());
+
+  rewriter.inlineRegionBefore(funcOp.body(), topModuleOp.body(),
+                              topModuleOp.body().end());
+
+  // In the following section, we manually merge the two regions and manually
+  // replace arguments. This is an alternative to using rewriter.mergeBlocks; we
+  // do this to ensure that argument SSA values are replaced instantly, instead
+  // of late, as would be the case for mergeBlocks.
 
   // Merge the second block (inlined from funcOp) of the top-module into the
   // entry block.
-  auto blockIterator = topModuleOp.getBody().begin();
-  Block *entryBlock = &*blockIterator;
-  Block *secondBlock = &*(++blockIterator);
+  auto &blockIterator = topModuleOp.body().getBlocks();
+  Block *entryBlock = &blockIterator.front();
+  Block *secondBlock = &*std::next(blockIterator.begin());
 
   // Replace uses of each argument of the second block with the corresponding
   // argument of the entry block.
-  argIndex = 0;
-  for (auto &oldArg : secondBlock->getArguments()) {
-    oldArg.replaceAllUsesWith(entryBlock->getArgument(argIndex));
-    ++argIndex;
-  }
+  for (auto &oldArg : enumerate(secondBlock->getArguments()))
+    oldArg.value().replaceAllUsesWith(entryBlock->getArgument(oldArg.index()));
 
   // Move all operations of the second block to the entry block.
   entryBlock->getOperations().splice(entryBlock->end(),
                                      secondBlock->getOperations());
   rewriter.eraseBlock(secondBlock);
-
   return topModuleOp;
 }
 
@@ -2124,16 +2126,9 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
 
-  llvm::SmallVector<Type> resultTypes;
-
-  // Bundle all ports of the instance into a new flattened bundle type.
-  SmallVector<PortInfo, 8> portInfo = subModuleOp.getPorts();
-  for (auto &port : portInfo)
-    resultTypes.push_back(port.type);
-
   // Create a instance operation.
-  auto instanceOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp->getLoc(), resultTypes, subModuleOp.getName());
+  auto instanceOp =
+      rewriter.create<firrtl::InstanceOp>(oldOp->getLoc(), subModuleOp, "");
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
@@ -2142,7 +2137,7 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();
 
-    auto topArgs = topModuleOp.getBody().front().getArguments();
+    auto topArgs = topModuleOp.getBody()->getArguments();
     auto firstClock = std::find_if(topArgs.begin(), topArgs.end(),
                                    [](BlockArgument &arg) -> bool {
                                      return arg.getType().isa<ClockType>();
@@ -2224,7 +2219,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
     auto topModuleOp = createTopModuleOp(funcOp, /*numClocks=*/1, rewriter);
 
     // Traverse and convert each operation in funcOp.
-    for (Operation &op : topModuleOp.getBody().front()) {
+    for (Operation &op : *topModuleOp.getBody()) {
       if (isa<handshake::ReturnOp>(op))
         convertReturnOp(&op, topModuleOp, funcOp, rewriter);
 
@@ -2239,8 +2234,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           subModuleOp = createSubModuleOp(topModuleOp, &op, hasClock, rewriter);
 
           Location insertLoc = subModuleOp.getLoc();
-          auto &bodyBlock = subModuleOp.getBody().front();
-          rewriter.setInsertionPoint(&bodyBlock, bodyBlock.end());
+          auto *bodyBlock = subModuleOp.getBody();
+          rewriter.setInsertionPoint(bodyBlock, bodyBlock->end());
 
           ValueVectorList portList =
               extractSubfields(subModuleOp, insertLoc, rewriter);

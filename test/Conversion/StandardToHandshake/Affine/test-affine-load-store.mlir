@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -create-dataflow -split-input-file | FileCheck %s
+// RUN: circt-opt %s -lower-std-to-handshake -split-input-file | FileCheck %s
 
 // -----
 

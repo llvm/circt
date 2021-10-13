@@ -14,6 +14,7 @@
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Analysis/AffineStructures.h"
+#include "mlir/Analysis/Utils.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -35,6 +36,10 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       if (results.count(destination) == 0)
         results[destination] = SmallVector<MemoryDependence>();
 
+      // Initialize the dependence list for this destination.
+      if (results.count(destination) == 0)
+        results[destination] = SmallVector<MemoryDependence>();
+
       // Look for for inter-iteration dependences on the same memory location.
       MemRefAccess src(source);
       MemRefAccess dst(destination);
@@ -46,40 +51,70 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       results[destination].emplace_back(source, result.value, depComps);
 
       // Also consider intra-iteration dependences on the same memory location.
+      // This currently does not consider aliasing.
       if (src != dst)
         continue;
 
-      // Look for the common loop body that src and dst share. If there is none,
+      // Look for the common parent that src and dst share. If there is none,
       // there is nothing more to do.
-      Block *commonBlock = source->getBlock();
+      SmallVector<Operation *> srcParents;
+      getEnclosingAffineForAndIfOps(*source, &srcParents);
+      SmallVector<Operation *> dstParents;
+      getEnclosingAffineForAndIfOps(*destination, &dstParents);
 
-      while (!isa<AffineForOp>(commonBlock->getParentOp()) &&
-             commonBlock->getParentOp())
-        commonBlock = commonBlock->getParentOp()->getBlock();
+      Operation *commonParent = nullptr;
+      for (auto *srcParent : llvm::reverse(srcParents)) {
+        for (auto *dstParent : llvm::reverse(dstParents)) {
+          if (srcParent == dstParent)
+            commonParent = srcParent;
+          if (commonParent != nullptr)
+            break;
+        }
+        if (commonParent != nullptr)
+          break;
+      }
 
-      if (!commonBlock)
+      if (commonParent == nullptr)
         continue;
 
-      // Find the src and dst ancestor in the common block, and check if the src
-      // ancestor is before the dst ancestor.
-      Operation *srcOrAncestor = commonBlock->findAncestorOpInBlock(*source);
-      Operation *dstOrAncestor =
-          commonBlock->findAncestorOpInBlock(*destination);
+      // Check the common parent's regions.
+      for (auto &commonRegion : commonParent->getRegions()) {
+        if (commonRegion.empty())
+          continue;
 
-      if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
-        SmallVector<DependenceComponent> intraDeps;
-        for (size_t i = 1; i <= depth; ++i) {
-          // TODO: for completeness, this should also find the for loop and
-          // initialize the Operation * in depComp, even though we won't use
-          // it.
-          DependenceComponent depComp;
-          depComp.lb = 0;
-          depComp.ub = 0;
-          intraDeps.emplace_back(depComp);
+        // Only support structured constructs with single-block regions for now.
+        assert(commonRegion.hasOneBlock() &&
+               "only single-block regions are supported");
+
+        Block &commonBlock = commonRegion.front();
+
+        // Find the src and dst ancestor in the common block, if any.
+        Operation *srcOrAncestor = commonBlock.findAncestorOpInBlock(*source);
+        Operation *dstOrAncestor =
+            commonBlock.findAncestorOpInBlock(*destination);
+        if (srcOrAncestor == nullptr || dstOrAncestor == nullptr)
+          continue;
+
+        // Check if the src or its ancestor is before the dst or its ancestor.
+        if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
+          // Collect surrounding loops to use in dependence components.
+          SmallVector<AffineForOp> enclosingLoops;
+          getLoopIVs(*destination, &enclosingLoops);
+          assert(enclosingLoops.size() == depth && "expected 'depth' loops");
+
+          // Build dependence components for each loop depth.
+          SmallVector<DependenceComponent> intraDeps;
+          for (size_t i = 0; i < depth; ++i) {
+            DependenceComponent depComp;
+            depComp.op = enclosingLoops[i];
+            depComp.lb = 0;
+            depComp.ub = 0;
+            intraDeps.push_back(depComp);
+          }
+
+          results[destination].emplace_back(
+              source, DependenceResult::HasDependence, intraDeps);
         }
-
-        results[destination].emplace_back(
-            source, DependenceResult::HasDependence, intraDeps);
       }
     }
   }

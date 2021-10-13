@@ -58,31 +58,21 @@ public:
   }
 };
 
-/// The port direction attribute follows the implementation style of FIRRTL
-/// module port direction attributes.
-enum Direction { Input = 0, Output };
+/// The direction of a Component or Cell port. this is similar to the
+/// implementation found in the FIRRTL dialect.
+enum Direction { Input = 0, Output = 1 };
 namespace direction {
-
-/// The key in a components's attribute dictionary used to find the direction.
-constexpr const char *attrKey = "portDirections";
-
-/// Return an output direction if \p isOutput is true, otherwise return an
+/// Returns an output direction if `isOutput` is true, otherwise returns an
 /// input direction.
 Direction get(bool isOutput);
 
-/// Return a \p IntegerAttr containing the packed representation of an array
-/// of directions.
-IntegerAttr packAttribute(ArrayRef<Direction> a, MLIRContext *b);
+/// Returns an IntegerAttr containing the packed representation of the
+/// direction counts. Direction::Input is zero, and Direction::Output is one.
+IntegerAttr packAttribute(MLIRContext *context, size_t nIns, size_t nOuts);
 
-/// Turn a packed representation of port attributes into a vector that can be
-/// worked with.
-SmallVector<Direction> unpackAttribute(Operation *component);
-
-/// Convenience function for generating a vector of directions.
-SmallVector<Direction> genInOutDirections(size_t nIns, size_t nOuts);
 } // namespace direction
 
-/// This holds information about the port to either a component or cell.
+/// This holds information about the port for either a Component or Cell.
 struct PortInfo {
   StringAttr name;
   Type type;

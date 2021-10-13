@@ -24,52 +24,14 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(MSFT, msft);
 
 MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses();
 
+// Values represented in `MSFT.td`.
+typedef uint32_t CirctMSFTPrimitiveType;
+
 /// Emits tcl for the specified module using the provided callback and user
 /// data
 MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
                                                        MlirStringCallback,
                                                        void *userData);
-
-//===----------------------------------------------------------------------===//
-// DeviceDB.
-//===----------------------------------------------------------------------===//
-
-typedef struct {
-  void *ptr;
-} CirctMSFTDeviceDB;
-
-CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirContext);
-void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self);
-MlirLogicalResult circtMSFTDeviceDBAddPrimitive(CirctMSFTDeviceDB,
-                                                MlirAttribute locAndPrim);
-bool circtMSFTDeviceDBIsValidLocation(CirctMSFTDeviceDB,
-                                      MlirAttribute locAndPrim);
-
-//===----------------------------------------------------------------------===//
-// PlacementDB.
-//===----------------------------------------------------------------------===//
-
-typedef struct {
-  void *ptr;
-} CirctMSFTPlacementDB;
-
-typedef struct {
-  MlirAttribute path; // RootedInstancePathAttr.
-  const char *subpath;
-  size_t subpathLength;
-  MlirOperation op;
-} CirctMSFTPlacedInstance;
-
-CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
-                                                CirctMSFTDeviceDB seed);
-void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
-size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
-MlirLogicalResult
-circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB, MlirAttribute loc,
-                                 CirctMSFTPlacedInstance inst);
-bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB,
-                                          MlirAttribute loc,
-                                          CirctMSFTPlacedInstance *out);
 
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
@@ -81,9 +43,6 @@ MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
                                                     const char *entityName,
                                                     PrimitiveType type, long x,
                                                     long y, long num);
-
-// Values represented in `MSFT.td`.
-typedef uint32_t CirctMSFTPrimitiveType;
 
 bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
 MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTPrimitiveType,
@@ -114,6 +73,58 @@ void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute,
                                          size_t space);
 
 MlirOperation circtMSFTGetInstance(MlirOperation root, MlirAttribute path);
+
+//===----------------------------------------------------------------------===//
+// PrimitiveDB.
+//===----------------------------------------------------------------------===//
+
+typedef struct {
+  void *ptr;
+} CirctMSFTPrimitiveDB;
+
+CirctMSFTPrimitiveDB circtMSFTCreatePrimitiveDB(MlirContext);
+void circtMSFTDeletePrimitiveDB(CirctMSFTPrimitiveDB self);
+MlirLogicalResult circtMSFTPrimitiveDBAddPrimitive(CirctMSFTPrimitiveDB,
+                                                   MlirAttribute locAndPrim);
+bool circtMSFTPrimitiveDBIsValidLocation(CirctMSFTPrimitiveDB,
+                                         MlirAttribute locAndPrim);
+
+//===----------------------------------------------------------------------===//
+// PlacementDB.
+//===----------------------------------------------------------------------===//
+
+typedef struct {
+  void *ptr;
+} CirctMSFTPlacementDB;
+
+typedef struct {
+  MlirAttribute path; // RootedInstancePathAttr.
+  const char *subpath;
+  size_t subpathLength;
+  MlirOperation op;
+} CirctMSFTPlacedInstance;
+
+CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
+                                                CirctMSFTPrimitiveDB seed);
+void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
+size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
+MlirLogicalResult
+circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB, MlirAttribute loc,
+                                 CirctMSFTPlacedInstance inst);
+bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB,
+                                          MlirAttribute loc,
+                                          CirctMSFTPlacedInstance *out);
+MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
+    CirctMSFTPlacementDB, CirctMSFTPrimitiveType prim, uint64_t column,
+    uint64_t nearestToY);
+
+typedef void (*CirctMSFTPlacementCallback)(MlirAttribute loc,
+                                           CirctMSFTPlacedInstance,
+                                           void *userData);
+/// Walk all the placements. Set 'colNo' to -1 to walk all of the columns.
+void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB, int64_t colNo,
+                                        CirctMSFTPlacementCallback,
+                                        void *userData);
 
 #ifdef __cplusplus
 }

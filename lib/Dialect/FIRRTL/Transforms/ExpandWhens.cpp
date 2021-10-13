@@ -510,7 +510,7 @@ bool ModuleVisitor::run(FModuleOp module) {
   }
 
   // Process the body of the module.
-  for (auto &op : llvm::make_early_inc_range(*module.getBodyBlock())) {
+  for (auto &op : llvm::make_early_inc_range(*module.getBody())) {
     dispatchVisitor(&op);
   }
   return anythingChanged;

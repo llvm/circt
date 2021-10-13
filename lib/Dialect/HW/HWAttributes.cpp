@@ -181,7 +181,7 @@ Attribute ParamDeclRefAttr::parse(DialectAsmParser &p, Type type) {
   if (p.parseLess() || p.parseAttribute(name) || p.parseGreater())
     return Attribute();
 
-  return ParamDeclRefAttr::get(p.getContext(), name, type);
+  return ParamDeclRefAttr::get(name, type);
 }
 
 void ParamDeclRefAttr::print(DialectAsmPrinter &p) const {

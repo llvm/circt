@@ -6,22 +6,22 @@ hw.module @foo(%clock: i1, %cond: i1) {
     // CHECK-OFF: assert(
     // CHECK-OFF: assume(
     // CHECK-OFF: cover(
-    // CHECK-ON:  assert_1: assert(
-    // CHECK-ON:  assume_3: assume(
-    // CHECK-ON:  cover_5: cover(
-    sv.assert %cond : i1
-    sv.assume %cond : i1
-    sv.cover %cond : i1
+    // CHECK-ON:  assert_0: assert(
+    // CHECK-ON:  assume_1: assume(
+    // CHECK-ON:  cover_2: cover(
+    sv.assert %cond, immediate
+    sv.assume %cond, immediate
+    sv.cover %cond, immediate
   }
   // CHECK-OFF: assert property
   // CHECK-OFF: assume property
   // CHECK-OFF: cover property
-  // CHECK-ON:  assert_7: assert property
-  // CHECK-ON:  assume_9: assume property
-  // CHECK-ON:  cover_11: cover property
-  sv.assert.concurrent posedge %clock %cond : i1
-  sv.assume.concurrent posedge %clock %cond : i1
-  sv.cover.concurrent posedge %clock %cond : i1
+  // CHECK-ON:  assert_3: assert property
+  // CHECK-ON:  assume_4: assume property
+  // CHECK-ON:  cover_5: cover property
+  sv.assert.concurrent posedge %clock, %cond
+  sv.assume.concurrent posedge %clock, %cond
+  sv.cover.concurrent posedge %clock, %cond
 
   // Explicitly labeled ops should keep their label.
   sv.initial {
@@ -31,9 +31,9 @@ hw.module @foo(%clock: i1, %cond: i1) {
     // CHECK-ON:  imm_assume: assume(
     // CHECK-OFF: imm_cover: cover(
     // CHECK-ON:  imm_cover: cover(
-    sv.assert "imm_assert" %cond : i1
-    sv.assume "imm_assume" %cond : i1
-    sv.cover "imm_cover" %cond : i1
+    sv.assert %cond, immediate label "imm_assert"
+    sv.assume %cond, immediate label "imm_assume"
+    sv.cover %cond, immediate label "imm_cover"
   }
   // CHECK-OFF: con_assert: assert property
   // CHECK-ON:  con_assert: assert property
@@ -41,22 +41,22 @@ hw.module @foo(%clock: i1, %cond: i1) {
   // CHECK-ON:  con_assume: assume property
   // CHECK-OFF: con_cover: cover property
   // CHECK-ON:  con_cover: cover property
-  sv.assert.concurrent "con_assert" posedge %clock %cond : i1
-  sv.assume.concurrent "con_assume" posedge %clock %cond : i1
-  sv.cover.concurrent "con_cover" posedge %clock %cond : i1
+  sv.assert.concurrent posedge %clock, %cond label "con_assert"
+  sv.assume.concurrent posedge %clock, %cond label "con_assume"
+  sv.cover.concurrent posedge %clock, %cond label "con_cover"
 
   // Explicitly labeled ops that conflict with implicit labels should force the
   // implicit labels to change, even if they appear earlier in the output.
   sv.initial {
     // CHECK-OFF: assert_0: assert(
-    // CHECK-ON:  assert_0: assert(
+    // CHECK-ON:  assert_0_6: assert(
     // CHECK-OFF: assume_2: assume(
     // CHECK-ON:  assume_2: assume(
     // CHECK-OFF: cover_4: cover(
     // CHECK-ON:  cover_4: cover(
-    sv.assert "assert_0" %cond : i1
-    sv.assume "assume_2" %cond : i1
-    sv.cover "cover_4" %cond : i1
+    sv.assert %cond, immediate label "assert_0"
+    sv.assume %cond, immediate label "assume_2"
+    sv.cover %cond, immediate label "cover_4"
   }
   // CHECK-OFF: assert_6: assert property
   // CHECK-ON:  assert_6: assert property
@@ -64,7 +64,7 @@ hw.module @foo(%clock: i1, %cond: i1) {
   // CHECK-ON:  assume_8: assume property
   // CHECK-OFF: cover_10: cover property
   // CHECK-ON:  cover_10: cover property
-  sv.assert.concurrent "assert_6" posedge %clock %cond : i1
-  sv.assume.concurrent "assume_8" posedge %clock %cond : i1
-  sv.cover.concurrent "cover_10" posedge %clock %cond : i1
+  sv.assert.concurrent posedge %clock, %cond label "assert_6"
+  sv.assume.concurrent posedge %clock, %cond label "assume_8"
+  sv.cover.concurrent posedge %clock, %cond label "cover_10"
 }

@@ -141,19 +141,19 @@ hw.module @Wire() {
 // -----
 hw.module @Assert(%arg0: i1) {
   // expected-error @+1 {{sv.assert should be in a procedural region}}
-  sv.assert %arg0: i1
+  sv.assert %arg0, immediate
 }
 
 // -----
 hw.module @Assume(%arg0: i1) {
   // expected-error @+1 {{sv.assume should be in a procedural region}}
-  sv.assume %arg0: i1
+  sv.assume %arg0, immediate
 }
 
 // -----
 hw.module @Cover(%arg0: i1) {
   // expected-error @+1 {{sv.cover should be in a procedural region}}
-  sv.cover %arg0: i1
+  sv.cover %arg0, immediate
 }
 
 // -----

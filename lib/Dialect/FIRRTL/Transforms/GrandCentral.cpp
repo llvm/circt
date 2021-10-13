@@ -283,8 +283,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         Value leafValue = leafMap.lookup(ground.getID());
         assert(leafValue && "leafValue not found");
 
-        auto builder = OpBuilder::atBlockEnd(
-            companionIDMap.lookup(id).mapping.getBodyBlock());
+        auto builder =
+            OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
         auto srcPaths =
             instancePaths->getAbsolutePaths(getEnclosingModule(leafValue));
@@ -302,10 +302,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
               cast<FModuleOp>(blockArg.getOwner()->getParentOp());
           builder.create<sv::VerbatimOp>(
               uloc, "assign " + path + " = " + srcRef +
-                        module.portNames()[blockArg.getArgNumber()]
-                            .cast<StringAttr>()
-                            .getValue() +
-                        ";");
+                        module.getPortName(blockArg.getArgNumber()) + ";");
         } else {
           auto leafModuleName = leafValue.getDefiningOp()
                                     ->getAttr("name")
@@ -449,7 +446,7 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
                        iFaceName + ".sv",
                        /*excludFromFileList=*/true));
 
-  builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBodyBlock());
+  builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBody());
 
   for (auto element : bundle.getElements()) {
     auto field = fromAttr(element);
@@ -736,10 +733,9 @@ void GrandCentralPass::runOnOperation() {
               companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.
-              builder.setInsertionPointToEnd(op.getBodyBlock());
-              builder.create<InstanceOp>(circuitOp.getLoc(),
-                                         SmallVector<Type>({}),
-                                         mapping.getName(), mapping.getName());
+              builder.setInsertionPointToEnd(op.getBody());
+              builder.create<InstanceOp>(circuitOp.getLoc(), mapping,
+                                         mapping.getName());
 
               // Assert that the companion is instantiated once and only once.
               auto instance = exactlyOneInstance(op, "companion");
@@ -853,9 +849,7 @@ void GrandCentralPass::runOnOperation() {
         FModuleOp module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
         llvm::dbgs() << "  - " << id.getValue() << ": "
                      << module.getName() + ">" +
-                            module.portNames()[blockArg.getArgNumber()]
-                                .cast<StringAttr>()
-                                .getValue()
+                            module.getPortName(blockArg.getArgNumber())
                      << "\n";
       } else
         llvm::dbgs() << "  - " << id.getValue() << ": "
@@ -916,7 +910,7 @@ void GrandCentralPass::runOnOperation() {
 
     // Instantiate the interface inside the parent.
     builder.setInsertionPointToEnd(
-        parentIDMap.lookup(bundle.getID()).second.getBodyBlock());
+        parentIDMap.lookup(bundle.getID()).second.getBody());
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
         bundle.getDefName().getValue() + "__");

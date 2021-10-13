@@ -758,7 +758,7 @@ private:
     auto expectedVal = create<hw::ConstantOp>(loc, val.getType(), expected);
     create<sv::AssertOp>(
         loc, create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal),
-        "");
+        sv::DeferAssertAttr::get(loc.getContext(), sv::DeferAssert::Immediate));
   }
   Location loc;
 };

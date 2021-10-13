@@ -109,7 +109,7 @@ static cl::opt<bool> disableAnnotationsUnknown(
 static cl::opt<bool>
     emitMetadata("emit-metadata",
                  cl::desc("emit metadata for metadata annotations"),
-                 cl::init(true));
+                 cl::init(false));
 
 static cl::opt<bool> imconstprop(
     "imconstprop",
@@ -301,9 +301,6 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown,
                                                  disableAnnotationsClassless));
-  if (emitMetadata)
-    pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createCreateSiFiveMetadataPass());
 
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
@@ -376,6 +373,10 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
 
+  if (emitMetadata)
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createCreateSiFiveMetadataPass());
+
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
@@ -396,17 +397,14 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   // Add passes specific to Verilog emission if we're going there.
   if (outputFormat == OutputVerilog || outputFormat == OutputSplitVerilog) {
+    // Legalize unsupported operations within the modules.
+    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
+
     // Tidy up the IR to improve verilog emission quality.
     if (!disableOptimization) {
       auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
-
-    // Legalize unsupported operations within the modules.
-    pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
-
-    // Legalize the module names.
-    pm.addPass(sv::createHWLegalizeNamesPass());
 
     // Emit a single file or multiple files depending on the output format.
     switch (outputFormat) {

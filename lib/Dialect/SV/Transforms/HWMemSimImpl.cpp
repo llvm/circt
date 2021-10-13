@@ -96,6 +96,8 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   ImplicitLocOpBuilder b(UnknownLoc::get(&getContext()), op.getBody());
 
   // Compute total number of mask bits.
+  if (mem.maskGran == 0)
+    mem.maskGran = mem.dataWidth;
   auto maskBits = mem.dataWidth / mem.maskGran;
   // Each mask bit controls mask-granularity number of data bits.
   // If maskBits >1, then create one register for each mask bit, and each
@@ -126,7 +128,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     // Read Logic
     SmallVector<Value, 4> readValues;
     // Read value from each register.
-    for (auto reg : regsVector)
+    for (auto reg : llvm::reverse(regsVector))
       readValues.push_back(b.create<sv::ReadInOutOp>(
           b.create<sv::ArrayIndexInOutOp>(reg, addr)));
     // Now concat each read value from the registers to construct a
@@ -180,7 +182,7 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
     for (auto reg : llvm::enumerate(regsVector)) {
       auto r = b.create<sv::ArrayIndexInOutOp>(reg.value(), addr);
       slotVector[reg.index()] = r;
-      readSlotVector[reg.index()] = b.create<sv::ReadInOutOp>(r);
+      readSlotVector[maskBits - reg.index() - 1] = b.create<sv::ReadInOutOp>(r);
     }
     // Concat all the values read from each of the registers to create a
     // mem.dataWidth wide value, that can be written to the output port.

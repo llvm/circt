@@ -77,20 +77,6 @@ struct MemOpInfo : public llvm::DenseMapInfo<MemOp> {
 };
 } // end anonymous namespace
 
-/// Create an instance of a Module using the module name and the port list.
-static InstanceOp createInstance(OpBuilder builder, Location loc,
-                                 StringRef moduleName, StringAttr instanceName,
-                                 ArrayRef<PortInfo> modulePorts) {
-  // Make a bundle of the inputs and outputs of the specified module.
-  SmallVector<Type, 4> resultTypes;
-  resultTypes.reserve(modulePorts.size());
-  for (auto port : modulePorts)
-    resultTypes.push_back(port.type);
-
-  return builder.create<InstanceOp>(loc, resultTypes, moduleName,
-                                    instanceName.getValue());
-}
-
 /// Get the pohwist for an external module representing a blackbox memory. This
 /// external module must be compatible with the modules which are generated for
 /// `vlsi_mem_gen`, which can be found in the rocketchip project.
@@ -211,9 +197,9 @@ static FModuleOp createWrapperModule(MemOp op,
   moduleOp->moveAfter(extModuleOp);
 
   // Create the module
-  builder.setInsertionPointToStart(moduleOp.getBodyBlock());
-  auto instanceOp = createInstance(builder, op.getLoc(), extModuleOp.getName(),
-                                   op.nameAttr(), extPorts);
+  builder.setInsertionPointToStart(moduleOp.getBody());
+  auto instanceOp =
+      builder.create<InstanceOp>(op.getLoc(), extModuleOp, op.name());
 
   // Connect the ports between the memory module and the instance of the black
   // box memory module. The outer module has a single bundle representing each
@@ -308,9 +294,8 @@ replaceMemWithWrapperModule(DenseMap<MemOp, FModuleOp, MemOpInfo> &knownMems,
   }
 
   // Create an instance of the wrapping module
-  auto instanceOp =
-      createInstance(OpBuilder(memOp), memOp.getLoc(), moduleOp.getName(),
-                     memOp.nameAttr(), modPorts);
+  auto instanceOp = OpBuilder(memOp).create<InstanceOp>(memOp.getLoc(),
+                                                        moduleOp, memOp.name());
 
   // Replace the memory operation with the module instance
   memOp.replaceAllUsesWith(instanceOp.getResults());
@@ -376,8 +361,7 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
 
   // Create an instance of the black box module
   auto instanceOp =
-      createInstance(builder, memOp.getLoc(), extModuleOp.getName(),
-                     memOp.nameAttr(), extPortList);
+      builder.create<InstanceOp>(memOp.getLoc(), extModuleOp, memOp.name());
 
   // Create a wire for every memory port
   SmallVector<Value, 2> results;

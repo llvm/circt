@@ -152,24 +152,24 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
-def HandshakeAnalysis : Pass<"analyze-dataflow", "mlir::ModuleOp"> {
+def HandshakeAnalysis : Pass<"handshake-analyze", "mlir::ModuleOp"> {
   let summary = "Print resource (operation) statistics";
   let constructor = "circt::createHandshakeAnalysisPass()";
 }
 
-def HandshakeDataflow : Pass<"create-dataflow", "mlir::ModuleOp"> {
-  let summary = "Convert standard MLIR into dataflow IR";
+def HandshakeDataflow : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
+  let summary = "Lower Standard MLIR into Handshake IR";
   let constructor = "circt::createHandshakeDataflowPass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
 }
 
-def HandshakeCanonicalize : Pass<"canonicalize-dataflow", "handshake::FuncOp"> {
-  let summary = "Canonicalize handshake IR";
+def HandshakeCanonicalize : Pass<"handshake-canonicalize", "handshake::FuncOp"> {
+  let summary = "Canonicalize Handshake IR";
   let constructor = "circt::createHandshakeCanonicalizePass()";
 }
 
-def HandshakeRemoveBlock : Pass<"remove-block-structure", "handshake::FuncOp"> {
-  let summary = "Remove block structure in handshake IR";
+def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::FuncOp"> {
+  let summary = "Remove block structure in Handshake IR";
   let constructor = "circt::createHandshakeRemoveBlockPass()";
 }
 

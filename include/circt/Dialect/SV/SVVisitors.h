@@ -31,7 +31,7 @@ public:
             ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, VerbatimExprSEOp,
             ConstantXOp, ConstantZOp,
             // Declarations.
-            RegOp, WireOp, LocalParamOp,
+            RegOp, WireOp, LocalParamOp, XMROp,
             // Control flow.
             IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
             AlwaysFFOp, InitialOp, CaseZOp,
@@ -75,6 +75,7 @@ public:
   HANDLE(RegOp, Unhandled);
   HANDLE(WireOp, Unhandled);
   HANDLE(LocalParamOp, Unhandled);
+  HANDLE(XMROp, Unhandled);
 
   // Expressions
   HANDLE(ReadInOutOp, Unhandled);
