@@ -174,10 +174,49 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
       // CHECK-NEXT:     cover_0: cover(cond);
       sv.cover %cond, immediate label "cover_0"
 
-      // CHECK-NEXT:   $fatal
-      sv.fatal
-      // CHECK-NEXT:   $finish
-      sv.finish
+      // Simulator Control Tasks
+      // CHECK-NEXT: $stop;
+      // CHECK-NEXT: $stop(0);
+      sv.stop 1
+      sv.stop 0
+      // CHECK-NEXT: $finish;
+      // CHECK-NEXT: $finish(0);
+      sv.finish 1
+      sv.finish 0
+      // CHECK-NEXT: $exit;
+      sv.exit
+
+      // Severity Message Tasks
+      // CHECK-NEXT: $fatal;
+      // CHECK-NEXT: $fatal(1, "foo");
+      // CHECK-NEXT: $fatal(1, "foo", val);
+      // CHECK-NEXT: $fatal(0);
+      // CHECK-NEXT: $fatal(0, "foo");
+      // CHECK-NEXT: $fatal(0, "foo", val);
+      sv.fatal 1
+      sv.fatal 1, "foo"
+      sv.fatal 1, "foo"(%val) : i8
+      sv.fatal 0
+      sv.fatal 0, "foo"
+      sv.fatal 0, "foo"(%val) : i8
+      // CHECK-NEXT: $error;
+      // CHECK-NEXT: $error("foo");
+      // CHECK-NEXT: $error("foo", val);
+      sv.error
+      sv.error "foo"
+      sv.error "foo"(%val) : i8
+      // CHECK-NEXT: $warning;
+      // CHECK-NEXT: $warning("foo");
+      // CHECK-NEXT: $warning("foo", val);
+      sv.warning
+      sv.warning "foo"
+      sv.warning "foo"(%val) : i8
+      // CHECK-NEXT: $info;
+      // CHECK-NEXT: $info("foo");
+      // CHECK-NEXT: $info("foo", val);
+      sv.info
+      sv.info "foo"
+      sv.info "foo"(%val) : i8
 
       // CHECK-NEXT: Emit some stuff in verilog
       // CHECK-NEXT: Great power and responsibility!
@@ -221,7 +260,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   // CHECK-NOT: begin
   sv.initial {
     // CHECK-NEXT: $fatal
-    sv.fatal
+    sv.fatal 1
   }
 
   // CHECK-NEXT: initial begin
@@ -505,7 +544,7 @@ hw.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
     // CHECK:   if (arg1)
     // CHECK:     $fatal;
     sv.if %arg1  {
-      sv.fatal
+      sv.fatal 1
     }
 
     // CHECK:   if (_T)
@@ -515,13 +554,13 @@ hw.module @issue720(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
     %610 = comb.and %arg1, %arg2 : i1
     %611 = comb.and %arg3, %610 : i1
     sv.if %610  {
-      sv.fatal
+      sv.fatal 1
     }
 
     // CHECK:   if (arg3 & _T)
     // CHECK:     $fatal;
     sv.if %611  {
-      sv.fatal
+      sv.fatal 1
     }
   } // CHECK: end // always @(posedge)
 
@@ -539,7 +578,7 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
     // CHECK:    if (arg1)
     // CHECK:      $fatal;
     sv.if %arg1  {
-      sv.fatal
+      sv.fatal 1
     }
 
     // CHECK:    `ifdef FUN_AND_GAMES
@@ -550,13 +589,13 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
       // CHECK:        $fatal;
       %610 = comb.and %arg1, %arg2 : i1
       sv.if %610  {
-        sv.fatal
+        sv.fatal 1
       }
       // CHECK:      if (arg3 & _T)
       // CHECK:        $fatal;
       %611 = comb.and %arg3, %610 : i1
      sv.if %611  {
-        sv.fatal
+        sv.fatal 1
       }
       // CHECK:    `endif
       // CHECK:  end // always @(posedge)

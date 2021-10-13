@@ -78,7 +78,7 @@ hw.module @array_create_get_default(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i8,
     // CHECK:   sv.if %1  {
     %cond = comb.icmp eq %2, %arg2 : i8
     sv.if %cond {
-      sv.fatal
+      sv.fatal 1
     }
   }
 }

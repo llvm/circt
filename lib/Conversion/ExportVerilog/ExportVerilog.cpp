@@ -2075,9 +2075,22 @@ private:
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(CaseZOp op);
   LogicalResult visitSV(FWriteOp op);
-  LogicalResult visitSV(FatalOp op);
-  LogicalResult visitSV(FinishOp op);
   LogicalResult visitSV(VerbatimOp op);
+
+  LogicalResult emitSimulationControlTask(Operation *op, StringRef taskName,
+                                          Optional<unsigned> verbosity);
+  LogicalResult visitSV(StopOp op);
+  LogicalResult visitSV(FinishOp op);
+  LogicalResult visitSV(ExitOp op);
+
+  LogicalResult emitSeverityMessageTask(Operation *op, StringRef taskName,
+                                        Optional<unsigned> verbosity,
+                                        StringAttr message,
+                                        ValueRange operands);
+  LogicalResult visitSV(FatalOp op);
+  LogicalResult visitSV(ErrorOp op);
+  LogicalResult visitSV(WarningOp op);
+  LogicalResult visitSV(InfoOp op);
 
   void emitAssertionLabel(Operation *op, StringRef opName);
   void emitAssertionMessage(StringAttr message, ValueRange args,
@@ -2367,14 +2380,6 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(FatalOp op) {
-  SmallPtrSet<Operation *, 8> ops;
-  ops.insert(op);
-  indent() << "$fatal;";
-  emitLocationInfoAndNewLine(ops);
-  return success();
-}
-
 LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
@@ -2416,12 +2421,93 @@ LogicalResult StmtEmitter::visitSV(VerbatimOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(FinishOp op) {
+/// Emit one of the simulation control tasks `$stop`, `$finish`, or `$exit`.
+LogicalResult
+StmtEmitter::emitSimulationControlTask(Operation *op, StringRef taskName,
+                                       Optional<unsigned> verbosity) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
-  indent() << "$finish;";
+  indent() << taskName;
+  if (verbosity && *verbosity != 1)
+    os << "(" << *verbosity << ")";
+  os << ";";
   emitLocationInfoAndNewLine(ops);
   return success();
+}
+
+LogicalResult StmtEmitter::visitSV(StopOp op) {
+  return emitSimulationControlTask(op, "$stop", op.verbosity());
+}
+
+LogicalResult StmtEmitter::visitSV(FinishOp op) {
+  return emitSimulationControlTask(op, "$finish", op.verbosity());
+}
+
+LogicalResult StmtEmitter::visitSV(ExitOp op) {
+  return emitSimulationControlTask(op, "$exit", {});
+}
+
+/// Emit one of the severity message tasks `$fatal`, `$error`, `$warning`, or
+/// `$info`.
+LogicalResult StmtEmitter::emitSeverityMessageTask(Operation *op,
+                                                   StringRef taskName,
+                                                   Optional<unsigned> verbosity,
+                                                   StringAttr message,
+                                                   ValueRange operands) {
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  indent() << taskName;
+
+  // In case we have a message to print, or the operation has an optional
+  // verbosity and that verbosity is present, print the parenthesized parameter
+  // list.
+  if ((verbosity && *verbosity != 1) || message) {
+    os << "(";
+
+    // If the operation takes a verbosity, print it if it is set, or print the
+    // default "1".
+    if (verbosity)
+      os << *verbosity;
+
+    // Print the message and interpolation operands if present.
+    if (message) {
+      if (verbosity)
+        os << ", ";
+      os << "\"";
+      os.write_escaped(message.getValue());
+      os << "\"";
+      for (auto operand : operands) {
+        os << ", ";
+        emitExpression(operand, ops);
+      }
+    }
+
+    os << ")";
+  }
+
+  os << ";";
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(FatalOp op) {
+  return emitSeverityMessageTask(op, "$fatal", op.verbosity(), op.messageAttr(),
+                                 op.operands());
+}
+
+LogicalResult StmtEmitter::visitSV(ErrorOp op) {
+  return emitSeverityMessageTask(op, "$error", {}, op.messageAttr(),
+                                 op.operands());
+}
+
+LogicalResult StmtEmitter::visitSV(WarningOp op) {
+  return emitSeverityMessageTask(op, "$warning", {}, op.messageAttr(),
+                                 op.operands());
+}
+
+LogicalResult StmtEmitter::visitSV(InfoOp op) {
+  return emitSeverityMessageTask(op, "$info", {}, op.messageAttr(),
+                                 op.operands());
 }
 
 /// Emit the `<label>:` portion of an immediate or concurrent verification

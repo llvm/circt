@@ -173,6 +173,48 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   %reg24       = sv.reg sym @regSym1 : !hw.inout<i23>
   %wire25      = sv.wire sym @wireSym1 : !hw.inout<i23>
 
+  // Simulation Control Tasks
+  // CHECK-NEXT: sv.initial {
+  // CHECK-NEXT: sv.stop 1
+  // CHECK-NEXT: sv.finish 1
+  // CHECK-NEXT: sv.exit
+  // CHECK-NEXT: }
+  sv.initial {
+    sv.stop 1
+    sv.finish 1
+    sv.exit
+  }
+
+  // Severity Message Tasks
+  // CHECK-NEXT: sv.initial {
+  // CHECK-NEXT: sv.fatal 1
+  // CHECK-NEXT: sv.fatal 1, "hello"
+  // CHECK-NEXT: sv.fatal 1, "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.error
+  // CHECK-NEXT: sv.error "hello"
+  // CHECK-NEXT: sv.error "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.warning
+  // CHECK-NEXT: sv.warning "hello"
+  // CHECK-NEXT: sv.warning "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.info
+  // CHECK-NEXT: sv.info "hello"
+  // CHECK-NEXT: sv.info "hello %d"(%arg0) : i1
+  // CHECK-NEXT: }
+  sv.initial {
+    sv.fatal 1
+    sv.fatal 1, "hello"
+    sv.fatal 1, "hello %d"(%arg0) : i1
+    sv.error
+    sv.error "hello"
+    sv.error "hello %d"(%arg0) : i1
+    sv.warning
+    sv.warning "hello"
+    sv.warning "hello %d"(%arg0) : i1
+    sv.info
+    sv.info "hello"
+    sv.info "hello %d"(%arg0) : i1
+  }
+
   // CHECK-NEXT: hw.output
   hw.output
 }
