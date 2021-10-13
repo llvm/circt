@@ -14,4 +14,5 @@ build-backend = "setuptools.build_meta"
 # Enable version inference from Git.
 [tool.setuptools_scm]
 root = "../.."
+relative_to = "__file__"
 tag_regex = "^pycde-(\\d+\\.\\d+\\.\\d+)?$"
