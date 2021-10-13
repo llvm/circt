@@ -309,6 +309,8 @@ private:
   Value getSubWhatever(Value val, size_t index);
 
   MLIRContext *context;
+  /// Create a single memory from an aggregate type (instead of one per field)
+  /// if this flag is enabled.
   bool flattenAggregateMemData;
 
   /// The builder is set and maintained in the main loop.
@@ -647,6 +649,7 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
 
 // Convert an aggregate type into a flat list of fields.
 // This is used to flatten the aggregate memory datatype.
+// Recursively populate the results with each ground type field.
 static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
   std::function<bool(FIRRTLType)> flatten = [&](FIRRTLType type) -> bool {
     return TypeSwitch<FIRRTLType, bool>(type)
@@ -741,8 +744,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     SmallVector<Type, 8> ports;
     SmallVector<Attribute, 8> portNames;
 
-    auto flatType =
-        IntType::get(context, op.getDataType().isSignedInteger(), memFlatWidth);
+    // Create a new memoty data type of unsigned and computed width.
+    auto flatType = UIntType::get(context, memFlatWidth);
     auto opPorts = op.getPorts();
     for (size_t portIdx = 0, e = opPorts.size(); portIdx < e; ++portIdx) {
       auto port = opPorts[portIdx];
@@ -810,7 +813,11 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
               realOldField = catMasks;
             }
             // Now set the mask or write data.
-            builder->createOrFold<ConnectOp>(newField, realOldField);
+            // Ensure that the types match.
+            builder->createOrFold<ConnectOp>(
+                newField,
+                builder->createOrFold<BitCastOp>(
+                    newField.getType().cast<FIRRTLType>(), realOldField));
           }
         } else {
           for (auto field : fields) {
@@ -1071,21 +1078,23 @@ void TypeLoweringVisitor::visitExpr(BitCastOp op) {
                      ArrayAttr attrs) -> Operation * {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
       auto fieldBits = getBitWidth(field.type).getValue();
-      size_t hi = 0;
+      // If empty field, then it doesnot have any use, so replace it with an
+      // invalid op, which should be trivially removed.
       if (fieldBits == 0)
-        hi = uptoBits;
-      else
-        hi = uptoBits + fieldBits - 1;
+        return builder->create<InvalidValueOp>(field.type);
+
       // Assign the field to the corresponding bits from the input.
       // Bitcast the field, incase its an aggregate type.
-      auto extractBits =
-          builder->create<BitsPrimOp>(srcLoweredVal, hi, uptoBits);
+      auto extractBits = builder->create<BitsPrimOp>(
+          srcLoweredVal, uptoBits + fieldBits - 1, uptoBits);
       uptoBits += fieldBits;
       return builder->create<BitCastOp>(field.type, extractBits);
     };
     lowerProducer(op, clone);
   } else {
     // If ground type, then replace the result.
+    if (op.getType().dyn_cast<SIntType>())
+      srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
     op.getResult().replaceAllUsesWith(srcLoweredVal);
     opsToRemove.push_back(op);
   }
