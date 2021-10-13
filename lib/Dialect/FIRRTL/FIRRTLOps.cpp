@@ -1400,9 +1400,9 @@ std::string FirMemory::getFirMemoryName() const {
   for (auto a : mem.writeClockIDs)
     clocks.append(Twine((char)(a + 'a')).str());
   return llvm::formatv(
-      "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}{9}", mem.numReadPorts,
+      "FIRRTLMem_{0}_{1}_{2}_{3}_{4}_{5}_{6}_{7}_{8}_{9}{10}", mem.numReadPorts,
       mem.numWritePorts, mem.numReadWritePorts, mem.dataWidth, mem.depth,
-      mem.readLatency, mem.writeLatency, mem.readUnderWrite,
+      mem.readLatency, mem.writeLatency, mem.maskBits, mem.readUnderWrite,
       (unsigned)mem.writeUnderWrite, clocks.empty() ? "" : "_" + clocks);
 }
 
