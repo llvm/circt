@@ -112,13 +112,13 @@ circuit test:
 ; CHECK: memoryTest2 [[m:.+]] (
 
 ; CHECK:      FILE "metadata/tb_seq_mems.json"
-; CHECK:      [{"module_name":"FIRRTLMem_1_1_0_8_16_1_1_0_1_a","depth":16,"width":8,"masked":"true",
+; CHECK:      [{"module_name":"FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME: "read":"true","write":"true","readwrite":"false",
 ; CHECK_SAME: "mask_granularity":8,"extra_ports":[],
 ; CHECK-SAME: "hierarchy":["test.[[m]]"]}]
 
 ; CHECK:       FILE "metadata/seq_mems.json"
-; CHECK:       [{"module_name":"FIRRTLMem_1_1_0_8_16_1_1_0_1_a","depth":16,"width":8,"masked":"true",
+; CHECK:       [{"module_name":"FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME:  "read":"true","write":"true","readwrite":"false",
 ; CHECK_SAME:  "mask_granularity":8,"extra_ports":[],
 ; CHECK-SAME:  "hierarchy":["test.[[m2]].[[m]]"],
@@ -127,4 +127,4 @@ circuit test:
  ; CHECK-SAME: "dataBits":8,"eccBits":0,"eccIndices":[],"eccScheme":"none"}}}]
 
 ; CHECK: FILE "metadata/memoryP.conf"
-; CHECK: name FIRRTLMem_1_1_0_8_16_1_1_0_1_a depth 16 width 8 ports mwrite,read mask_gran 8
+; CHECK: name FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a depth 16 width 8 ports mwrite,read mask_gran 8
