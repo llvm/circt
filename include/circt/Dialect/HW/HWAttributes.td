@@ -92,7 +92,7 @@ def FileListAttr : AttrDef<HWDialect, "FileList"> {
 
     When ExportVerilog runs, some of the files produced are lists of other files
     which are produced.  Each filelist exported contains entities' output file
-    with `OutputFileListAttr` marked.
+    with `FileListAttr` marked.
 
     
     Examples:
