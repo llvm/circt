@@ -3631,6 +3631,9 @@ struct SharedEmitterState {
   /// the map.
   llvm::MapVector<Identifier, FileInfo> files;
 
+  /// The various file lists and their contents to emit
+  llvm::StringMap<SmallVector<Identifier>> fileLists;
+
   /// A list of operations replicated in each output file (e.g., `sv.verbatim`
   /// or `sv.ifdef` without dedicated output file).
   SmallVector<Operation *, 0> replicatedOps;
@@ -3709,6 +3712,14 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
       addToFilelist = !attr.getExcludeFromFilelist().getValue();
     }
 
+    // Collect extra file lists to output the file to.
+    SmallVector<StringAttr> opFileList;
+    if (auto fl = op.getAttrOfType<hw::FileListAttr>("output_filelist"))
+      opFileList.push_back(fl.getFilename());
+    if (auto fla = op.getAttrOfType<ArrayAttr>("output_filelist"))
+      for (auto fl : fla)
+        opFileList.push_back(fl.cast<hw::FileListAttr>().getFilename());
+
     auto separateFile = [&](Operation *op, Twine defaultFileName = "") {
       // If we're emitting to a separate file and the output_file attribute
       // didn't specify a filename, take the default one if present or emit an
@@ -3723,10 +3734,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         }
       }
 
-      auto &file = files[Identifier::get(outputPath, op->getContext())];
+      auto destFile = Identifier::get(outputPath, op->getContext());
+      auto &file = files[destFile];
       file.ops.push_back(info);
       file.emitReplicatedOps = emitReplicatedOps;
       file.addToFilelist = addToFilelist;
+      for (auto fl : opFileList)
+        fileLists[fl.getValue()].push_back(destFile);
     };
 
     // Separate the operation into dedicated output file, or emit into the
@@ -3936,6 +3950,15 @@ LogicalResult circt::exportVerilog(ModuleOp module, llvm::raw_ostream &os) {
     emitter.collectOpsForFile(it.second, list);
   }
 
+  // Emit the filelists.
+  for (auto &it : emitter.fileLists) {
+    std::string contents("\n// ----- 8< ----- FILE \"" + it.first().str() +
+                         "\" ----- 8< -----\n\n");
+    for (auto &name : it.second)
+      contents += name.str() + "\n";
+    list.emplace_back(contents);
+  }
+
   // Finally, emit all the ops we collected.
   emitter.emitOps(list, os, /*parallelize=*/true);
   return failure(emitter.encounteredError);
@@ -3973,32 +3996,40 @@ std::unique_ptr<mlir::Pass> circt::createExportVerilogPass() {
 // Split Emitter
 //===----------------------------------------------------------------------===//
 
-static void createSplitOutputFile(Identifier fileName, FileInfo &file,
-                                  StringRef dirname,
-                                  SharedEmitterState &emitter) {
+static std::unique_ptr<llvm::ToolOutputFile>
+createOutputFile(StringRef fileName, StringRef dirname,
+                 SharedEmitterState &emitter) {
   // Determine the output path from the output directory and filename.
   SmallString<128> outputFilename(dirname);
-  appendPossiblyAbsolutePath(outputFilename, fileName.strref());
+  appendPossiblyAbsolutePath(outputFilename, fileName);
   auto outputDir = llvm::sys::path::parent_path(outputFilename);
 
   // Create the output directory if needed.
   std::error_code error = llvm::sys::fs::create_directories(outputDir);
   if (error) {
-    mlir::emitError(file.ops[0].op->getLoc(),
+    mlir::emitError(emitter.rootOp.getLoc(),
                     "cannot create output directory \"" + outputDir +
                         "\": " + error.message());
     emitter.encounteredError = true;
-    return;
+    return {};
   }
 
   // Open the output file.
   std::string errorMessage;
   auto output = mlir::openOutputFile(outputFilename, &errorMessage);
   if (!output) {
-    llvm::errs() << errorMessage << "\n";
+    mlir::emitError(emitter.rootOp.getLoc(), errorMessage);
     emitter.encounteredError = true;
-    return;
   }
+  return output;
+}
+
+static void createSplitOutputFile(Identifier fileName, FileInfo &file,
+                                  StringRef dirname,
+                                  SharedEmitterState &emitter) {
+  auto output = createOutputFile(fileName, dirname, emitter);
+  if (!output)
+    return;
 
   SharedEmitterState::EmissionList list;
   emitter.collectOpsForFile(file, list);
@@ -4042,6 +4073,16 @@ LogicalResult circt::exportSplitVerilog(ModuleOp module, StringRef dirname) {
       output->os() << it.first << "\n";
   }
   output->keep();
+
+  // Emit the filelists.
+  for (auto &it : emitter.fileLists) {
+    auto output = createOutputFile(it.first(), dirname, emitter);
+    if (!output)
+      continue;
+    for (auto &name : it.second)
+      output->os() << name.str() << "\n";
+    output->keep();
+  }
 
   return failure(emitter.encounteredError);
 }

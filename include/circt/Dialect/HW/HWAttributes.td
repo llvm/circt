@@ -81,6 +81,44 @@ def OutputFileAttr : AttrDef<HWDialect, "OutputFile"> {
   }];
 }
 
+// An attribute to indicate which filelist an operation's file should be
+// included in. 
+def FileListAttr : AttrDef<HWDialect, "FileList"> {
+  let summary = "Ouput filelist attribute";
+  let description = [{
+    This attribute represents an output filelist for something which will be
+    printed. The `filename` string is the file which the filename of the 
+    operation to be output to. 
+
+    When ExportVerilog runs, some of the files produced are lists of other files
+    which are produced.  Each filelist exported contains entities' output file
+    with `OutputFileListAttr` marked.
+
+    
+    Examples:
+    ```mlir
+      #hw.ouput_filelist<"/home/tester/t.F">
+      #hw.ouput_filelist<"t.f">
+    ```
+  }];
+  let mnemonic = "output_filelist";
+  let parameters = (ins "::mlir::StringAttr":$filename);
+  let builders = [
+    AttrBuilderWithInferredContext<(ins
+                                   "::mlir::StringAttr":$filename), [{
+      return get(filename.getContext(), filename);
+    }]>,
+  ];
+
+  let extraClassDeclaration = [{
+    /// Get an OutputFileAttr from a string filename, canonicalizing the
+    /// filename.
+    static FileListAttr getFromFilename(::mlir::MLIRContext *context,
+                                          const ::mlir::Twine &filename);
+  }];
+
+}
+
 /// An attribute describing a module parameter, or instance parameter
 /// specification.
 def ParamDeclAttr : AttrDef<HWDialect, "ParamDecl"> {
