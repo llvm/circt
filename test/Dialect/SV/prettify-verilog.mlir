@@ -27,7 +27,7 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
     // CHECK: [[XOR3:%.+]] = comb.xor %arg3, [[TRUE2]]
     // CHECK: sv.if [[XOR3]]
     sv.if %c {
-      sv.fatal
+      sv.fatal 1
     }
   }
 
@@ -124,17 +124,17 @@ hw.module @sink_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
       // CHECK: [[OR:%.*]] = comb.or %a2, %a3 : i1
       // CHECK: sv.if [[OR]]
       sv.if %0  {
-        sv.fatal
+        sv.fatal 1
       }
       // CHECK: sv.if [[XOR]]
       sv.if %2  {
-        sv.fatal
+        sv.fatal 1
       }
     }
 
     // CHECK: sv.if [[XOR]]
     sv.if %2  {
-      sv.fatal
+      sv.fatal 1
     }
   }
   hw.output
@@ -152,12 +152,12 @@ hw.module @dont_sink_se_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1
     // CHECK: [[SINK:%.*]] = sv.verbatim.expr "SINK_ME"
     // CHECK: sv.if [[SINK]]
     sv.if %0  {
-      sv.fatal
+      sv.fatal 1
     }
 
     // CHECK: sv.if [[DONT_TOUCH]]
     sv.if %1  {
-      sv.fatal
+      sv.fatal 1
     }
   }
   hw.output
