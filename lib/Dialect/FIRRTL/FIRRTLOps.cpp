@@ -539,7 +539,7 @@ ParseResult parseIdentifier(OpAsmParser &parser, StringAttr &result) {
   return parser.parseAttribute(result, parser.getBuilder().getType<NoneType>());
 }
 
-/// Print a module signature in the following form:
+/// Print a list of module ports in the following form:
 ///   in x: !firrtl.uint<1> [{class = "DontTouch}], out "_port": !firrtl.uint<2>
 ///
 /// When there is no block specified, the port names print as MLIR identifiers,
@@ -551,11 +551,11 @@ ParseResult parseIdentifier(OpAsmParser &parser, StringAttr &result) {
 /// values.  If there is a reason the printed SSA values can't match the true
 /// port name, then this function will return true.  When this happens, the
 /// caller should print the port names as a part of the `attr-dict`.
-static bool printModuleSignature(OpAsmPrinter &p, Block *block,
-                                 ArrayRef<Direction> portDirections,
-                                 ArrayRef<Attribute> portNames,
-                                 ArrayRef<Attribute> portTypes,
-                                 ArrayRef<Attribute> portAnnotations) {
+static bool printModulePorts(OpAsmPrinter &p, Block *block,
+                             ArrayRef<Direction> portDirections,
+                             ArrayRef<Attribute> portNames,
+                             ArrayRef<Attribute> portTypes,
+                             ArrayRef<Attribute> portAnnotations) {
   // When printing port names as SSA values, we can fail to print them
   // identically.
   bool printedNamesDontMatch = false;
@@ -606,15 +606,15 @@ static bool printModuleSignature(OpAsmPrinter &p, Block *block,
   return printedNamesDontMatch;
 }
 
-/// Parse a module signature.  If port names are SSA identifiers, then this will
-/// populate `entryArgs`.
+/// Parse a list of module ports.  If port names are SSA identifiers, then this
+/// will populate `entryArgs`.
 static ParseResult
-parseModuleSignature(OpAsmParser &parser, bool hasSSAIdentifiers,
-                     SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
-                     SmallVectorImpl<Direction> &portDirections,
-                     SmallVectorImpl<Attribute> &portNames,
-                     SmallVectorImpl<Attribute> &portTypes,
-                     SmallVectorImpl<Attribute> &portAnnotations) {
+parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
+                 SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
+                 SmallVectorImpl<Direction> &portDirections,
+                 SmallVectorImpl<Attribute> &portNames,
+                 SmallVectorImpl<Attribute> &portTypes,
+                 SmallVectorImpl<Attribute> &portAnnotations) {
   auto *context = parser.getContext();
 
   auto parseArgument = [&]() -> ParseResult {
@@ -684,8 +684,8 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   auto portDirections = direction::unpackAttribute(op.getPortDirectionsAttr());
 
   auto needPortNamesAttr =
-      printModuleSignature(p, body, portDirections, op.getPortNames(),
-                           op.getPortTypes(), op.getPortAnnotations());
+      printModulePorts(p, body, portDirections, op.getPortNames(),
+                       op.getPortTypes(), op.getPortAnnotations());
 
   SmallVector<StringRef, 4> omittedAttrs = {"sym_name", "portDirections",
                                             "portTypes", "portAnnotations"};
@@ -730,14 +730,14 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
                              result.attributes))
     return failure();
 
-  // Parse the function signature.
+  // Parse the module ports.
   SmallVector<OpAsmParser::OperandType> entryArgs;
   SmallVector<Direction, 4> portDirections;
   SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portAnnotations;
-  if (parseModuleSignature(parser, hasSSAIdentifiers, entryArgs, portDirections,
-                           portNames, portTypes, portAnnotations))
+  if (parseModulePorts(parser, hasSSAIdentifiers, entryArgs, portDirections,
+                       portNames, portTypes, portAnnotations))
     return failure();
 
   // If module attributes are present, parse them.
