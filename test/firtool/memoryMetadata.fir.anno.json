@@ -2,13 +2,5 @@
 	{
 		"class":"sifive.enterprise.firrtl.MarkDUTAnnotation",
 		"target": "test.dutModule"
-	}, 
-  {
-    "class":"sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation",
-    "filename":"/home/prithayan/work/sifive/fork-circt/circt/build/metadata/testharness_hier.json"
-  },
-  {
-    "class":"sifive.enterprise.firrtl.ModuleHierarchyAnnotation",
-    "filename":"/home/prithayan/work/sifive/fork-circt/circt/build/metadata/module_hier.json"
-  }
+	}
 ]

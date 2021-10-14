@@ -1,5 +1,10 @@
 ; RUN: firtool %s --format=fir  --annotation-file %s.anno.json --repl-seq-mem --verilog |  FileCheck %s
 
+; CHECK-LABEL: external module FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a
+
+; CHECK-LABEL: external module FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a
+
+
 circuit test:
   module tbMemModule1:
     input clock: Clock
@@ -18,18 +23,18 @@ circuit test:
       write-latency => 1
       read-under-write => undefined
 
-    ; All of these are unified together
     tbMemoryKind1.r.clk <= clock
     tbMemoryKind1.r.en <= rEn
     tbMemoryKind1.r.addr <= rAddr
     rData <= tbMemoryKind1.r.data
-
     tbMemoryKind1.w.clk <= clock
     tbMemoryKind1.w.en <= rEn
     tbMemoryKind1.w.addr <= rAddr
-    ; These two are split
     tbMemoryKind1.w.mask <= wMask
     tbMemoryKind1.w.data <= wData
+
+; CHECK-LABEL: module tbMemModule1
+; CHECK:  FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a tbMemoryKind1
 
   module dutModule2:
     input clock: Clock
@@ -48,18 +53,18 @@ circuit test:
       write-latency => 1
       read-under-write => undefined
 
-    ; All of these are unified together
     dutMemory.r.clk <= clock
     dutMemory.r.en <= rEn
     dutMemory.r.addr <= rAddr
     rData <= dutMemory.r.data
-
     dutMemory.w.clk <= clock
     dutMemory.w.en <= rEn
     dutMemory.w.addr <= rAddr
-    ; These two are split
     dutMemory.w.mask <= wMask
     dutMemory.w.data <= wData
+
+; CHECK-LABEL: module dutModule2
+; CHECK:  FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a
 
   module hier1: 
     input clock: Clock
@@ -78,18 +83,18 @@ circuit test:
       write-latency => 1
       read-under-write => undefined
 
-    ; All of these are unified together
     tbMemoryKind1.r.clk <= clock
     tbMemoryKind1.r.en <= rEn
     tbMemoryKind1.r.addr <= rAddr
     rData <= tbMemoryKind1.r.data
-
     tbMemoryKind1.w.clk <= clock
     tbMemoryKind1.w.en <= rEn
     tbMemoryKind1.w.addr <= rAddr
-    ; These two are split
     tbMemoryKind1.w.mask <= wMask
     tbMemoryKind1.w.data <= wData
+
+; CHECK=LABEL: module hier1
+; CHECK:  FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a tbMemoryKind1
 
 
   module hier2: 
@@ -142,6 +147,10 @@ circuit test:
     m2.wMask <= wMask
     m2.wData <= wData
 
+; CHECK-LABEL: module test
+; CHECK: hier1 [[h1:.+]] (
+; CHECK: hier2 [[h2:.+]] (
+; CHECK: dutModule [[m2:.+]] (
 
   module dutModule:
     input clock: Clock
@@ -160,23 +169,7 @@ circuit test:
     m.wMask <= wMask
     m.wData <= wData
 
-; CHECK-LABEL: external module FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a
 
-; CHECK-LABEL: external module FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a
-
-; CHECK-LABEL: module tbMemModule1
-; CHECK:  FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a tbMemoryKind1
-
-; CHECK-LABEL: module dutModule2
-; CHECK:  FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a
-
-; CHECK=LABEL: module hier1
-; CHECK:  FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a tbMemoryKind1
-
-; CHECK-LABEL: module test
-; CHECK: hier1 [[h1:.+]] (
-; CHECK: hier2 [[h2:.+]] (
-; CHECK: dutModule [[m2:.+]] (
 
 ; CHECK-LABEL: module dutModule
 ; CHECK: dutModule2 [[m:.+]] (
