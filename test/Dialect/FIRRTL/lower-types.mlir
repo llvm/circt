@@ -483,8 +483,8 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %out, %in: !firrtl.vector<bundle<a : uint<1>, b flip: uint<1>>, 2>, !firrtl.vector<bundle<a : uint<1>, b flip: uint<1>>, 2>
   }
 
-  // CHECK-LABEL: firrtl.extmodule @ExternalModule(in %source_valid: !firrtl.uint<1>, out %source_ready: !firrtl.uint<1>, in %source_data: !firrtl.uint<64>)
-  firrtl.extmodule @ExternalModule(in %source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>> )
+  // CHECK-LABEL: firrtl.extmodule @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
+  firrtl.extmodule @ExternalModule(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>> )
   firrtl.module @Test() {
     // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule  {name = ""} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<64>
     %inst_source = firrtl.instance @ExternalModule {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
@@ -922,7 +922,7 @@ firrtl.circuit "TopLevel" {
 
 
 // Test that annotations on aggregate ports are copied.
-  firrtl.extmodule @Sub1(in %a: !firrtl.vector<uint<1>, 2> [{a}])
+  firrtl.extmodule @Sub1(in a: !firrtl.vector<uint<1>, 2> [{a}])
   // CHECK-LABEL: firrtl.extmodule @Sub1
   // CHECK-COUNT-2: [{b}]
   // CHECK-NOT: [{a}]
@@ -944,7 +944,7 @@ firrtl.circuit "TopLevel" {
 //
 // See: https://github.com/llvm/circt/issues/1276
 
-  firrtl.extmodule @Bar2(in %a: !firrtl.uint<2>)
+  firrtl.extmodule @Bar2(in a: !firrtl.uint<2>)
 // CHECK-LABEL: firrtl.module @TruncatingConnectWithFlip
   firrtl.module @TruncatingConnectWithFlip() {
     // CHECK: %[[a_b:.+]] = firrtl.wire
@@ -1230,7 +1230,7 @@ firrtl.module @bofa(out %auto: !firrtl.bundle<io_out: bundle<foo: bundle<bar: an
 }
 
 // Issue 1436
-firrtl.extmodule @is1436_BAR(out %io: !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>)
+firrtl.extmodule @is1436_BAR(out io: !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>)
 // CHECK-LABEL: firrtl.module @is1436_FOO
 firrtl.module @is1436_FOO() {
   %thing_io = firrtl.instance @is1436_BAR  {name = "thing"} : !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>

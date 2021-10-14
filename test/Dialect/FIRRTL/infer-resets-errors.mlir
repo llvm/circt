@@ -106,7 +106,7 @@ firrtl.circuit "top" {
 // -----
 // Should not allow ResetType as an ExtModule output
 firrtl.circuit "top" {
-  firrtl.extmodule @ext(out %out: !firrtl.bundle<foo: reset>)
+  firrtl.extmodule @ext(out out: !firrtl.bundle<foo: reset>)
   firrtl.module @top(out %out: !firrtl.reset) {
     // expected-error @+1 {{reset network never driven with concrete type}}
     %e_out = firrtl.instance @ext  {name = "e"} : !firrtl.bundle<foo: reset>

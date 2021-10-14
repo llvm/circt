@@ -148,16 +148,16 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "foo.bar.wire"
   // CHECK-NEXT: firrtl.connect %_0, [[V0]]
   firrtl.extmodule @DataTap(
-    out %_9: !firrtl.uint<1>,
-    out %_8: !firrtl.sint<8>,
-    out %_7: !firrtl.uint<1>,
-    out %_6: !firrtl.uint<1>,
-    out %_5: !firrtl.uint<1>,
-    out %_4: !firrtl.uint<1>,
-    out %_3: !firrtl.uint<1>,
-    out %_2: !firrtl.uint<1>,
-    out %_1: !firrtl.clock,
-    out %_0: !firrtl.uint<1>
+    out _9: !firrtl.uint<1>,
+    out _8: !firrtl.sint<8>,
+    out _7: !firrtl.uint<1>,
+    out _6: !firrtl.uint<1>,
+    out _5: !firrtl.uint<1>,
+    out _4: !firrtl.uint<1>,
+    out _3: !firrtl.uint<1>,
+    out _2: !firrtl.uint<1>,
+    out _1: !firrtl.clock,
+    out _0: !firrtl.uint<1>
   ) attributes {
     annotations = [
       { class = "sifive.enterprise.grandcentral.DataTapsAnnotation" },
@@ -188,8 +188,8 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-NEXT: [[V1:%.+]] = firrtl.verbatim.expr "foo.bar.mem.Memory[1]"
   // CHECK-NEXT: firrtl.connect %mem_1, [[V1:%.+]]
   firrtl.extmodule @MemTap(
-    out %mem_0: !firrtl.uint<1>,
-    out %mem_1: !firrtl.uint<1>
+    out mem_0: !firrtl.uint<1>,
+    out mem_1: !firrtl.uint<1>
   ) attributes {
     annotations = [
       {class = "firrtl.transforms.NoDedupAnnotation"}
@@ -212,7 +212,7 @@ firrtl.circuit "TestHarness" attributes {
   }
 
   firrtl.extmodule @ExtmoduleWithTappedPort(
-    out %out: !firrtl.uint<1>) attributes {portAnnotations = [[{
+    out out: !firrtl.uint<1>) attributes {portAnnotations = [[{
       class = "sifive.enterprise.grandcentral.ReferenceDataTapKey",
       id = 0 : i64,
       portID = 8 : i64,

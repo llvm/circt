@@ -89,16 +89,16 @@ firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnota
   firrtl.module @moduleAnno(in %io_cpu_flush: !firrtl.uint<1>) attributes
     {portAnnotations = [[{class="a"}]]} {  }
   // expected-warning @+1 {{unprocessed annotation:'b'}}
-  firrtl.extmodule @extModPorts(in %io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="b"}]]}
+  firrtl.extmodule @extModPorts(in io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="b"}]]}
   // expected-warning @+1 {{unprocessed annotation:'c'}}
-  firrtl.extmodule @extMod(in %io_cpu_flush: !firrtl.uint<1>)
+  firrtl.extmodule @extMod(in io_cpu_flush: !firrtl.uint<1>)
     attributes { annotations = [{class = "c"}] }
   // expected-warning @+1 {{unprocessed annotation:'d'}}
   firrtl.module @foo(in %io_cpu_flush: !firrtl.uint<1>)
     attributes { annotations = [{class = "d"}] } {}
   firrtl.module @foo2(in %io_cpu_flush: !firrtl.uint<1>)
     attributes { annotations = [{class = "b"}] } {}
-  firrtl.extmodule @extModPorts2(in %io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="c"}]]}
+  firrtl.extmodule @extModPorts2(in io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="c"}]]}
 }
 
 // -----

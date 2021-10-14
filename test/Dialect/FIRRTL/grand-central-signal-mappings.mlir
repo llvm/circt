@@ -1,8 +1,8 @@
 // RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl.module(firrtl-grand-central-signal-mappings))' %s | FileCheck %s
 
 firrtl.circuit "SubCircuit" {
-  firrtl.extmodule @FooExtern(in %clockIn: !firrtl.clock, out %clockOut: !firrtl.clock)
-  firrtl.extmodule @BarExtern(in %someInput: !firrtl.uint<42>, out %someOutput: !firrtl.uint<42>)
+  firrtl.extmodule @FooExtern(in clockIn: !firrtl.clock, out clockOut: !firrtl.clock)
+  firrtl.extmodule @BarExtern(in someInput: !firrtl.uint<42>, out someOutput: !firrtl.uint<42>)
 
   // Create a name collision for the signal mappings file to ensure it's
   // properly handled.

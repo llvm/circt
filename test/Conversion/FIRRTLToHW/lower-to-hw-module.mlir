@@ -13,7 +13,7 @@ firrtl.circuit "Simple" {
    // CHECK-SAME: <DEFAULT: i64, DEPTH: f64, FORMAT: none, WIDTH: i8>
    // CHECK-SAME: (%in: i1) -> (out: i8)
    // CHECK: attributes {verilogName = "name_thing"}
-   firrtl.extmodule @MyParameterizedExtModule(in %in: !firrtl.uint<1>, out %out: !firrtl.uint<8>)
+   firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint<1>, out out: !firrtl.uint<8>)
       attributes {defname = "name_thing",
                   parameters = {DEFAULT = 0 : i64,
                                 DEPTH = 3.242000e+01 : f64,
@@ -194,11 +194,11 @@ firrtl.circuit "Simple" {
     // CHECK: [[OUTAC:%.+]] = hw.constant 0 : i4
     // CHECK-NEXT: hw.output [[OUTAC]] : i4
   }
-  firrtl.extmodule @SameNamePorts(in %inA: !firrtl.uint<4>,
-                                in %inA: !firrtl.uint<1>,
-                                in %inA: !firrtl.analog<1>,
-                                out %outa: !firrtl.uint<4>,
-                                out %outa: !firrtl.uint<1>)
+  firrtl.extmodule @SameNamePorts(in inA: !firrtl.uint<4>,
+                                in inA: !firrtl.uint<1>,
+                                in inA: !firrtl.analog<1>,
+                                out outa: !firrtl.uint<4>,
+                                out outa: !firrtl.uint<1>)
   // CHECK-LABEL: hw.module @ZeroWidthInstance
   firrtl.module @ZeroWidthInstance(in %iA: !firrtl.uint<4>,
                                    in %iB: !firrtl.uint<0>,
@@ -251,7 +251,7 @@ firrtl.circuit "Simple" {
   // CHECK:  %.led_0.wire = sv.wire
   // CHECK-NEXT: sv.read_inout %.led_0.wire
   // CHECK-NEXT:  hw.instance "fpga" @bar740(led_0: %.led_0.wire: !hw.inout<i1>) -> ()
-  firrtl.extmodule @bar740(in %led_0: !firrtl.analog<1>)
+  firrtl.extmodule @bar740(in led_0: !firrtl.analog<1>)
   firrtl.module @foo740(in %led_0: !firrtl.analog<1>) {
     %result = firrtl.instance @bar740 {name = "fpga", portNames = ["led_0"]} : !firrtl.analog<1>
     firrtl.attach %result, %led_0 : !firrtl.analog<1>, !firrtl.analog<1>

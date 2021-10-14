@@ -284,7 +284,7 @@ firrtl.circuit "InputPortTop"   {
 // -----
 
 firrtl.circuit "InstanceOut"   {
-  firrtl.extmodule @Ext(in %a: !firrtl.uint<1>)
+  firrtl.extmodule @Ext(in a: !firrtl.uint<1>)
 
   // CHECK-LABEL: firrtl.module @InstanceOut
   firrtl.module @InstanceOut(in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
@@ -398,7 +398,7 @@ firrtl.circuit "Oscillators"   {
     %2 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.connect %a, %2 : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  firrtl.extmodule @Ext(in %a: !firrtl.uint<1>)
+  firrtl.extmodule @Ext(in a: !firrtl.uint<1>)
   // CHECK: firrtl.module @Qux
   firrtl.module @Qux(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
     %ext_a = firrtl.instance @Ext  {name = "ext"} : !firrtl.uint<1>

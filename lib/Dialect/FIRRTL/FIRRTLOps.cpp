@@ -503,17 +503,66 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
 }
 
-static void printModuleSignature(OpAsmPrinter &p, Operation *op,
-                                 ArrayRef<Direction> portDirections,
-                                 ArrayRef<Attribute> portNames,
-                                 ArrayRef<Attribute> portTypes,
-                                 ArrayRef<Attribute> portAnnotations,
-                                 bool &needPortNamesAttr) {
+/// TODO: This is taken from MLIR `isBareIdentifier` and is also replicated in
+/// HWOps.cpp.
+/// Return true if this string parses as a valid MLIR keyword, false
+/// otherwise.
+static bool isValidKeyword(StringRef name) {
+  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
+    return false;
+  for (auto c : name.drop_front()) {
+    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
+      return false;
+  }
+
+  return true;
+}
+
+/// TODO: this is taken from HW and should be upstreamed to MLIR.
+/// Print a name as a MLIR keyword or quoted if necessary.
+static void printIdentifier(StringAttr name, llvm::raw_ostream &os) {
+  // Print this as a bareword if it can be parsed as an MLIR keyword,
+  // otherwise print it as a quoted string.
+  if (isValidKeyword(name.getValue()))
+    os << name.getValue();
+  else
+    os << name;
+}
+
+/// Parse a name as a keyword or a quote surrounded string.
+ParseResult parseIdentifier(OpAsmParser &parser, StringAttr &result) {
+  StringRef keyword;
+  if (succeeded(parser.parseOptionalKeyword(&keyword))) {
+    result = parser.getBuilder().getStringAttr(keyword);
+    return success();
+  }
+
+  return parser.parseAttribute(result, parser.getBuilder().getType<NoneType>());
+}
+
+/// Print a list of module ports in the following form:
+///   in x: !firrtl.uint<1> [{class = "DontTouch}], out "_port": !firrtl.uint<2>
+///
+/// When there is no block specified, the port names print as MLIR identifiers,
+/// wrapping in quotes if not legal to print as-is. When there is no block
+/// specified, this function always return false, indicating that there was no
+/// issue printing port names.
+///
+/// If there is a block specified, then port names will be printed as SSA
+/// values.  If there is a reason the printed SSA values can't match the true
+/// port name, then this function will return true.  When this happens, the
+/// caller should print the port names as a part of the `attr-dict`.
+static bool printModulePorts(OpAsmPrinter &p, Block *block,
+                             ArrayRef<Direction> portDirections,
+                             ArrayRef<Attribute> portNames,
+                             ArrayRef<Attribute> portTypes,
+                             ArrayRef<Attribute> portAnnotations) {
+  // When printing port names as SSA values, we can fail to print them
+  // identically.
+  bool printedNamesDontMatch = false;
+
   // If we are printing the ports as block arguments the op must have a first
   // block.
-  Region &body = op->getRegion(0);
-  bool isExternal = body.empty();
-
   SmallString<32> resultNameStr;
   p << '(';
   for (unsigned i = 0, e = portTypes.size(); i < e; ++i) {
@@ -523,23 +572,25 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
     // Print the port direction.
     p << portDirections[i] << " ";
 
-    // Print the port name.
-    auto portName = portNames[i].cast<StringAttr>().getValue();
-    if (!isExternal) {
+    // Print the port name.  If there is a valid block, we print it as a block
+    // argument.
+    if (block) {
       // Get the printed format for the argument name.
       resultNameStr.clear();
       llvm::raw_svector_ostream tmpStream(resultNameStr);
-      p.printOperand(body.getArgument(i), tmpStream);
+      p.printOperand(block->getArgument(i), tmpStream);
       // If the name wasn't printable in a way that agreed with portName, make
       // sure to print out an explicit portNames attribute.
+      auto portName = portNames[i].cast<StringAttr>().getValue();
       if (!portName.empty() && tmpStream.str().drop_front() != portName)
-        needPortNamesAttr = true;
-      p << tmpStream.str() << ": ";
-    } else if (!portName.empty()) {
-      p << "%" << portName << ": ";
+        printedNamesDontMatch = true;
+      p << tmpStream.str();
+    } else {
+      printIdentifier(portNames[i].cast<StringAttr>(), p.getStream());
     }
 
     // Print the port type.
+    p << ": ";
     auto portType = portTypes[i].cast<TypeAttr>().getValue();
     p.printType(portType);
 
@@ -553,23 +604,21 @@ static void printModuleSignature(OpAsmPrinter &p, Operation *op,
   }
 
   p << ')';
+  return printedNamesDontMatch;
 }
 
+/// Parse a list of module ports.  If port names are SSA identifiers, then this
+/// will populate `entryArgs`.
 static ParseResult
-parseModuleSignature(OpAsmParser &parser,
-                     SmallVectorImpl<Direction> &portDirections,
-                     SmallVectorImpl<OpAsmParser::OperandType> &portNames,
-                     SmallVectorImpl<Attribute> &portTypes,
-                     SmallVectorImpl<Attribute> &portAnnotations) {
-  if (parser.parseLParen())
-    return failure();
+parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
+                 SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
+                 SmallVectorImpl<Direction> &portDirections,
+                 SmallVectorImpl<Attribute> &portNames,
+                 SmallVectorImpl<Attribute> &portTypes,
+                 SmallVectorImpl<Attribute> &portAnnotations) {
+  auto *context = parser.getContext();
 
-  // The argument list either has to consistently have ssa-id's followed by
-  // types, or just be a type list.  It isn't ok to sometimes have SSA ID's and
-  // sometimes not.
   auto parseArgument = [&]() -> ParseResult {
-    llvm::SMLoc loc = parser.getCurrentLocation();
-
     // Parse port direction.
     if (succeeded(parser.parseOptionalKeyword("out")))
       portDirections.push_back(Direction::Out);
@@ -578,23 +627,30 @@ parseModuleSignature(OpAsmParser &parser,
     else
       return failure();
 
-    // Parse the port name and port type.
-    OpAsmParser::OperandType portName;
-    Type portType;
-    if (succeeded(parser.parseOptionalRegionArgument(portName)) &&
-        !portName.name.empty()) {
-      // Reject this if the preceding port was missing a name.
-      if (portNames.empty() && !portTypes.empty())
-        return parser.emitError(loc, "expected type instead of SSA identifier");
-      portNames.push_back(portName);
-      if (parser.parseColonType(portType))
+    // Parse the port name.
+    if (hasSSAIdentifiers) {
+      OpAsmParser::OperandType arg;
+      if (parser.parseRegionArgument(arg))
         return failure();
-    } else if (!portNames.empty()) {
-      // Reject this if the preceding argument had a name.
-      return parser.emitError(loc, "expected SSA identifier");
-    } else if (parser.parseType(portType)) {
-      return failure();
+      entryArgs.push_back(arg);
+      // The name of an argument is of the form "%42" or "%id", and since
+      // parsing succeeded, we know it always has one character.
+      assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
+      if (isdigit(arg.name[1]))
+        portNames.push_back(StringAttr::get(context, ""));
+      else
+        portNames.push_back(StringAttr::get(context, arg.name.drop_front()));
+    } else {
+      StringAttr portName;
+      if (parseIdentifier(parser, portName))
+        return failure();
+      portNames.push_back(portName);
     }
+
+    // Parse the port type.
+    Type portType;
+    if (parser.parseColonType(portType))
+      return failure();
     portTypes.push_back(TypeAttr::get(portType));
 
     // Parse any port annotations. TODO: The API for parsing optional attributes
@@ -611,22 +667,8 @@ parseModuleSignature(OpAsmParser &parser,
   };
 
   // Parse all ports.
-  if (failed(parser.parseOptionalRParen())) {
-    do {
-      unsigned numTypedArguments = portTypes.size();
-      if (parseArgument())
-        return failure();
-
-      llvm::SMLoc loc = parser.getCurrentLocation();
-      if (portTypes.size() == numTypedArguments &&
-          succeeded(parser.parseOptionalComma()))
-        return parser.emitError(
-            loc, "variadic arguments must be in the end of the argument list");
-    } while (succeeded(parser.parseOptionalComma()));
-    parser.parseRParen();
-  }
-
-  return success();
+  return parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren,
+                                        parseArgument);
 }
 
 static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
@@ -634,14 +676,19 @@ static void printFModuleLikeOp(OpAsmPrinter &p, FModuleLike op) {
   p << " ";
   p.printSymbolName(op.moduleName());
 
-  // Print the ports.
-  bool needPortNamesAttr = false;
-  auto portDirections = direction::unpackAttribute(op.getPortDirectionsAttr());
-  printModuleSignature(p, op, portDirections, op.getPortNames(),
-                       op.getPortTypes(), op.getPortAnnotations(),
-                       needPortNamesAttr);
+  // Both modules and external modules have a body, but it is always empty for
+  // external modules.
+  Block *body = nullptr;
+  if (!op->getRegion(0).empty())
+    body = &op->getRegion(0).front();
 
-  SmallVector<StringRef, 3> omittedAttrs = {"sym_name", "portDirections",
+  auto portDirections = direction::unpackAttribute(op.getPortDirectionsAttr());
+
+  auto needPortNamesAttr =
+      printModulePorts(p, body, portDirections, op.getPortNames(),
+                       op.getPortTypes(), op.getPortAnnotations());
+
+  SmallVector<StringRef, 4> omittedAttrs = {"sym_name", "portDirections",
                                             "portTypes", "portAnnotations"};
 
   // We can omit the portNames if they were able to be printed as properly as
@@ -674,7 +721,7 @@ static void printFModuleOp(OpAsmPrinter &p, FModuleOp op) {
 
 static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
                                       OperationState &result,
-                                      bool isExtModule) {
+                                      bool hasSSAIdentifiers) {
   auto *context = result.getContext();
   auto &builder = parser.getBuilder();
 
@@ -684,20 +731,21 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
                              result.attributes))
     return failure();
 
-  // Parse the function signature.
+  // Parse the module ports.
+  SmallVector<OpAsmParser::OperandType> entryArgs;
   SmallVector<Direction, 4> portDirections;
-  SmallVector<OpAsmParser::OperandType, 4> entryArgs;
+  SmallVector<Attribute, 4> portNames;
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portAnnotations;
-  if (parseModuleSignature(parser, portDirections, entryArgs, portTypes,
-                           portAnnotations))
+  if (parseModulePorts(parser, hasSSAIdentifiers, entryArgs, portDirections,
+                       portNames, portTypes, portAnnotations))
     return failure();
 
   // If module attributes are present, parse them.
   if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
     return failure();
 
-  assert(entryArgs.size() == portTypes.size());
+  assert(portNames.size() == portTypes.size());
 
   // Record the argument and result types as an attribute.  This is necessary
   // for external modules.
@@ -708,25 +756,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
                         direction::packAttribute(context, portDirections));
 
   // Add port names.
-  SmallVector<Attribute> portNames;
   if (!result.attributes.get("portNames")) {
-    // Postprocess each of the arguments.  If there was no portNames
-    // attribute, and if the argument name was non-numeric, then add the
-    // portNames attribute with the textual name from the IR.  The name in the
-    // text file is a load-bearing part of the IR, but we don't want the
-    // verbosity in dumps of including it explicitly in the attribute
-    // dictionary.
-    for (size_t i = 0, e = entryArgs.size(); i != e; ++i) {
-      auto &arg = entryArgs[i];
-
-      // The name of an argument is of the form "%42" or "%id", and since
-      // parsing succeeded, we know it always has one character.
-      assert(arg.name.size() > 1 && arg.name[0] == '%' && "Unknown MLIR name");
-      if (isdigit(arg.name[1]))
-        portNames.push_back(StringAttr::get(context, ""));
-      else
-        portNames.push_back(StringAttr::get(context, arg.name.drop_front()));
-    }
     result.addAttribute("portNames", builder.getArrayAttr(portNames));
   }
 
@@ -756,7 +786,7 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
   // Parse the optional function body.
   auto *body = result.addRegion();
 
-  if (!isExtModule) {
+  if (hasSSAIdentifiers) {
     // Collect block argument types.
     SmallVector<Type, 4> argTypes;
     if (!entryArgs.empty())
@@ -774,12 +804,12 @@ static ParseResult parseFModuleLikeOp(OpAsmParser &parser,
 }
 
 static ParseResult parseFModuleOp(OpAsmParser &parser, OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*isExtModule=*/false);
+  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/true);
 }
 
 static ParseResult parseFExtModuleOp(OpAsmParser &parser,
                                      OperationState &result) {
-  return parseFModuleLikeOp(parser, result, /*isExtModule=*/true);
+  return parseFModuleLikeOp(parser, result, /*hasSSAIdentifiers=*/false);
 }
 
 static LogicalResult verifyFExtModuleOp(FExtModuleOp op) {
