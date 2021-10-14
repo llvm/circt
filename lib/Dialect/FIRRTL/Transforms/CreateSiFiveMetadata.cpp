@@ -65,148 +65,111 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   // of the memory.
   auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
 
-  auto printAttr = [&](llvm::json::OStream &jsonStream, Attribute &verifValAttr,
-                       std::string &id) {
-    if (auto intV = verifValAttr.dyn_cast<IntegerAttr>())
-      jsonStream.attribute(id, (int64_t)intV.getValue().getZExtValue());
-    else if (auto strV = verifValAttr.dyn_cast<StringAttr>())
-      jsonStream.attribute(id, strV.getValue().str());
-    else if (auto arrV = verifValAttr.dyn_cast<ArrayAttr>()) {
-      std::string indices;
-      jsonStream.attributeArray(id, [&] {
-        for (auto arrI : llvm::enumerate(arrV)) {
-          auto i = arrI.value();
-          if (auto intV = i.dyn_cast<IntegerAttr>())
-            jsonStream.value(std::to_string(intV.getValue().getZExtValue()));
-          else if (auto strV = i.dyn_cast<StringAttr>())
-            jsonStream.value(strV.getValue().str());
-        }
-      });
-    }
-  };
   // This lambda, writes to the given Json stream all the relevant memory
   // attributes. Also adds the memory attrbutes to the string for creating the
   // memmory conf file.
-  auto createMemMetadata = [&](MemOp memOp, llvm::json::OStream &jsonStream,
-                               std::string &seqMemConfStr) {
-    auto memSummary = memOp.getSummary();
-    // Get the memory data width.
-    auto width = memOp.getDataType().getBitWidthOrSentinel();
-    // Metadata needs to be printed for memories which are candidates for macro
-    // replacement. The requirements for macro replacement::
-    // 1. read latency and write latency of one.
-    // 2. only one readwrite port or write port.
-    // 3. zero or one read port.
-    // 4. undefined read-under-write behavior.
-    if (!((memOp.readLatency() == 1 && memOp.writeLatency() == 1) &&
-          (memSummary.numWritePorts + memSummary.numReadWritePorts == 1) &&
-          (memSummary.numReadPorts <= 1) && width > 0))
-      return;
-    // Get the absolute path for the parent memory, to create the hierarchy
-    // names.
-    auto paths =
-        instancePathCache.getAbsolutePaths(memOp->getParentOfType<FModuleOp>());
+  auto createMemMetadata =
+      [&](const std::pair<FirMemory, SmallVector<MemOp>> &memPair,
+          llvm::json::OStream &jsonStream, std::string &seqMemConfStr) {
+        auto memSummary = memPair.first;
+        // Get the memory data width.
+        auto width = memSummary.dataWidth;
+        // Metadata needs to be printed for memories which are candidates for
+        // macro replacement. The requirements for macro replacement::
+        // 1. read latency and write latency of one.
+        // 2. only one readwrite port or write port.
+        // 3. zero or one read port.
+        // 4. undefined read-under-write behavior.
+        if (!((memSummary.readLatency == 1 && memSummary.writeLatency == 1) &&
+              (memSummary.numWritePorts + memSummary.numReadWritePorts == 1) &&
+              (memSummary.numReadPorts <= 1) && width > 0))
+          return;
 
-    AnnotationSet anno = AnnotationSet(memOp);
-    DictionaryAttr verifData = {};
-    // Get the verification data attached with the memory op, if any.
-    if (auto v = anno.getAnnotation(seqMemAnnoClass)) {
-      verifData = v.get("data").cast<DictionaryAttr>();
-      AnnotationSet::removeAnnotations(memOp, seqMemAnnoClass);
-    }
-
-    // Compute the mask granularity.
-    auto maskGran = width / memOp.getMaskBits();
-    // Now create the config string for the memory.
-    std::string portStr;
-    if (memSummary.numWritePorts)
-      portStr += "mwrite";
-    if (memSummary.numReadPorts) {
-      if (!portStr.empty())
-        portStr += ",";
-      portStr += "read";
-    }
-    if (memSummary.numReadWritePorts)
-      portStr = "mrw";
-    auto memExtName = memSummary.getFirMemoryName();
-    seqMemConfStr += "name " + memExtName + " depth " +
-                     std::to_string(memOp.depth()) + " width " +
-                     std::to_string(width) + " ports " + portStr +
-                     " mask_gran " + std::to_string(maskGran) + "\n";
-    // This adds a Json array element entry corresponding to this memory.
-    jsonStream.object([&] {
-      jsonStream.attribute("module_name", memExtName);
-      jsonStream.attribute("depth", (int64_t)memOp.depth());
-      jsonStream.attribute("width", (int64_t)width);
-      jsonStream.attribute("masked", "true");
-      jsonStream.attribute("read", memSummary.numReadPorts ? "true" : "false");
-      jsonStream.attribute("write",
-                           memSummary.numWritePorts ? "true" : "false");
-      jsonStream.attribute("readwrite",
-                           memSummary.numReadWritePorts ? "true" : "false");
-      jsonStream.attribute("mask_granularity", (int64_t)maskGran);
-      jsonStream.attributeArray("extra_ports", [&] {});
-      // Record all the hierarchy names.
-      SmallVector<std::string> hierNames;
-      jsonStream.attributeArray("hierarchy", [&] {
-        for (auto p : paths) {
-          if (p.empty())
-            continue;
-          const InstanceOp &x = p.front();
-          std::string hierName =
-              x->getParentOfType<FModuleOp>().getName().str();
-          for (InstanceOp inst : p) {
-            hierName = hierName + "." + inst.name().str();
-          }
-          hierNames.push_back(hierName);
-          jsonStream.value(hierName);
+        // Compute the mask granularity.
+        auto maskGran = width / memSummary.maskBits;
+        // Now create the config string for the memory.
+        std::string portStr;
+        if (memSummary.numWritePorts)
+          portStr += "mwrite";
+        if (memSummary.numReadPorts) {
+          if (!portStr.empty())
+            portStr += ",";
+          portStr += "read";
         }
-      });
-      // If verification annotation added to the memory op then print the data.
-      if (verifData)
-        jsonStream.attributeObject("verification_only_data", [&] {
-          for (auto name : hierNames) {
-            jsonStream.attributeObject(name, [&] {
-              for (auto data : verifData) {
-                // Id for the memory verification property.
-                std::string id = data.first.strref().str();
-                // Value for the property.
-                auto verifValAttr = data.second;
-                // Now print the value attribute based on its type.
-                printAttr(jsonStream, verifValAttr, id);
+        if (memSummary.numReadWritePorts)
+          portStr = "mrw";
+        auto memExtName = memSummary.getFirMemoryName();
+        seqMemConfStr += "name " + memExtName + " depth " +
+                         std::to_string(memSummary.depth) + " width " +
+                         std::to_string(width) + " ports " + portStr +
+                         " mask_gran " + std::to_string(maskGran) + "\n";
+        // This adds a Json array element entry corresponding to this memory.
+        jsonStream.object([&] {
+          jsonStream.attribute("module_name", memExtName);
+          jsonStream.attribute("depth", (int64_t)memSummary.depth);
+          jsonStream.attribute("width", (int64_t)width);
+          jsonStream.attribute("masked", "true");
+          jsonStream.attribute("read",
+                               memSummary.numReadPorts ? "true" : "false");
+          jsonStream.attribute("write",
+                               memSummary.numWritePorts ? "true" : "false");
+          jsonStream.attribute("readwrite",
+                               memSummary.numReadWritePorts ? "true" : "false");
+          jsonStream.attribute("mask_granularity", (int64_t)maskGran);
+          jsonStream.attributeArray("extra_ports", [&] {});
+          // Record all the hierarchy names.
+          SmallVector<std::string> hierNames;
+          jsonStream.attributeArray("hierarchy", [&] {
+            for (auto memOp : memPair.second) {
+              // Get the absolute path for the parent memory, to create the
+              // hierarchy names.
+              auto paths = instancePathCache.getAbsolutePaths(
+                  memOp->getParentOfType<FModuleOp>());
+              for (auto p : paths) {
+                if (p.empty())
+                  continue;
+                const InstanceOp &x = p.front();
+                std::string hierName =
+                    x->getParentOfType<FModuleOp>().getName().str();
+                for (InstanceOp inst : p) {
+                  hierName = hierName + "." + inst.name().str();
+                }
+                hierNames.push_back(hierName);
+                jsonStream.value(hierName);
               }
-            });
-          }
+            }
+          });
         });
-    });
-  };
+      };
   std::string testBenchJsonBuffer;
   llvm::raw_string_ostream testBenchOs(testBenchJsonBuffer);
   llvm::json::OStream testBenchJson(testBenchOs);
   std::string dutJsonBuffer;
   llvm::raw_string_ostream dutOs(dutJsonBuffer);
   llvm::json::OStream dutJson(dutOs);
-  SmallVector<MemOp> dutMems;
-  SmallVector<MemOp> tbMems;
+  std::map<FirMemory, SmallVector<MemOp>> dutMems;
+  std::map<FirMemory, SmallVector<MemOp>> tbMems;
 
   for (auto mod : circuitOp.getOps<FModuleOp>()) {
     bool isDut = dutModuleSet.contains(mod);
-    for (auto memOp : mod.getBody()->getOps<MemOp>())
+    for (auto memOp : mod.getBody()->getOps<MemOp>()) {
+      auto firMem = memOp.getSummary();
       if (isDut)
-        dutMems.push_back(memOp);
+        dutMems[firMem].push_back(memOp);
       else
-        tbMems.push_back(memOp);
+        tbMems[firMem].push_back(memOp);
+    }
   }
   std::string seqMemConfStr, tbConfStr;
   dutJson.array([&] {
-    for (auto memOp : dutMems)
-      createMemMetadata(memOp, dutJson, seqMemConfStr);
+    for (auto &dutM : dutMems)
+      createMemMetadata(dutM, dutJson, seqMemConfStr);
   });
   testBenchJson.array([&] {
     // The tbConfStr is populated here, but unused, it will not be printed to
     // file.
-    for (auto memOp : tbMems)
-      createMemMetadata(memOp, testBenchJson, tbConfStr);
+    for (auto &tbM : tbMems)
+      createMemMetadata(tbM, testBenchJson, tbConfStr);
   });
 
   auto *context = &getContext();

@@ -1,17 +1,14 @@
 [
 	{
 		"class":"sifive.enterprise.firrtl.MarkDUTAnnotation",
-		"target": "test.memoryP"
-	},
-	{
-		"class":"sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation",
-		"data":{
-			"baseAddress":1073741824,
-			"eccScheme":"none",
-			"eccBits":0,
-			"dataBits":8,
-			"eccIndices":[]
-		}, 
-    "target":"~test|memoryTest2>memory"
+		"target": "test.dutModule"
+	}, 
+  {
+    "class":"sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation",
+    "filename":"/home/prithayan/work/sifive/fork-circt/circt/build/metadata/testharness_hier.json"
+  },
+  {
+    "class":"sifive.enterprise.firrtl.ModuleHierarchyAnnotation",
+    "filename":"/home/prithayan/work/sifive/fork-circt/circt/build/metadata/module_hier.json"
   }
 ]
