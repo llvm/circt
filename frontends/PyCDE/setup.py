@@ -102,6 +102,11 @@ class NoopBuildExtension(build_ext):
     pass
 
 
+# Custom hook for setuptools_scm to elide local version for compatibility.
+def local_version(version):
+  return ""
+
+
 setup(name="pycde",
       version="0.0.1",
       author="John Demme",
