@@ -198,7 +198,6 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-error @+1 {{'firrtl.extmodule' op attribute 'defname' with value "Bar" conflicts with the name of another module in the circuit}}
   firrtl.extmodule @Foo() attributes { defname = "Bar" }
   // expected-note @+1 {{previous module declared here}}
@@ -211,46 +210,38 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{previous extmodule definition occurred here}}
   firrtl.extmodule @Foo(in a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has 0 ports which is different from a previously defined extmodule with the same 'defname' which has 1 ports}}
   firrtl.extmodule @Bar() attributes { defname = "Foo" }
-
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{previous extmodule definition occurred here}}
   firrtl.extmodule @Foo(in a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "b" which does not match the name of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have name "a"}}
   firrtl.extmodule @Foo_(in b : !firrtl.uint<1>) attributes { defname = "Foo" }
-
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   firrtl.extmodule @Foo(in a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
   // expected-note @+1 {{previous extmodule definition occurred here}}
   firrtl.extmodule @Bar(in a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.uint<2>' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint<1>'}}
   firrtl.extmodule @Baz(in a : !firrtl.uint<2>) attributes { defname = "Foo" }
-
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{previous extmodule definition occurred here}}
   firrtl.extmodule @Foo(in a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.sint<1>' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint<1>'}}
   firrtl.extmodule @Foo_(in a : !firrtl.sint<1>) attributes { defname = "Foo" }
-
 }
 
 // -----
@@ -267,68 +258,80 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-error @+1 {{has unknown extmodule parameter value 'width' = @Foo}}
   firrtl.extmodule @Foo(in a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = @Foo } }
-
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   firrtl.extmodule @Foo()
   // expected-error @+1 {{'firrtl.instance' op should be embedded in a 'firrtl.module'}}
-  firrtl.instance @Foo {name = ""}
-
+  firrtl.instance "" @Foo()
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{containing module declared here}}
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
-    firrtl.instance @Foo {name = ""}
+    firrtl.instance "" @Foo()
   }
-
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.uint<1>', but got '!firrtl.uint<2>'}}
-    %a = firrtl.instance @Callee {name = ""} : !firrtl.uint<2>
+    %a = firrtl.instance "" @Callee(in arg0: !firrtl.uint<2>)
   }
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1> ) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op has a wrong number of results; expected 1 but got 0}}
-    firrtl.instance @Callee {name = ""}
+    firrtl.instance "" @Callee()
   }
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>, in %arg1: !firrtl.bundle<valid: uint<1>>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg1" must be '!firrtl.bundle<valid: uint<1>>', but got '!firrtl.bundle<valid: uint<2>>'}}
-    %a:2 = firrtl.instance @Callee {name = ""}
-    : !firrtl.uint<1>, !firrtl.bundle<valid: uint<2>>
+    %a:2 = firrtl.instance "" @Callee(in arg0: !firrtl.uint<1>, in arg1: !firrtl.bundle<valid: uint<2>>)
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(in %arg0: !firrtl.uint<1>, in %arg1: !firrtl.bundle<valid: uint<1>>) { }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op name for port 1 must be "arg1", but got "xxx"}}
+    %a:2 = firrtl.instance "" @Callee(in arg0: !firrtl.uint<1>, in xxx: !firrtl.bundle<valid: uint<1>>)
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(in %arg0: !firrtl.uint<1>, in %arg1: !firrtl.bundle<valid: uint<1>>) { }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op direction for "arg1" must be "in", but got "out"}}
+    %a:2 = firrtl.instance "" @Callee(in arg0: !firrtl.uint<1>, out arg1: !firrtl.bundle<valid: uint<1>>)
   }
 }
 

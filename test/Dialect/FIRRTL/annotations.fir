@@ -81,7 +81,7 @@ circuit Foo: %[[
     ; CHECK: firrtl.module @Bar
     ; CHECK-SAME annotations = [{c = "c"}]
     ; CHECK: firrtl.module @Foo
-    ; CHECK: firrtl.instance @Bar
+    ; CHECK: firrtl.instance bar
     ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]
 
 ; // -----
@@ -102,7 +102,7 @@ circuit Foo: %[[{"one":null,"target":"~Foo|Foo>bar.a"},
     ; CHECK: firrtl.nla @nla_1 [@Foo, @Bar] ["bar", "b"]
     ; CHECK: firrtl.module @Bar
     ; CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {circt.nonlocal = @nla_1, three}>]
-    ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance @Bar
+    ; CHECK: %bar_a, %bar_b, %bar_c = firrtl.instance bar
     ; CHECK-SAME: [{one}],
     ; CHECK-SAME: [#firrtl.subAnno<fieldID = 1, {two}>],
     ; CHECK-SAME: [{four}]
@@ -356,7 +356,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     cmem _T_5 : UInt<1>[9] [256]
     ; CHECK: firrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance @Bar  {annotations = [{a = "a"}], name = "_T_7"}
+    ; CHECK: firrtl.instance _T_7 {annotations = [{a = "a"}]}
     inst _T_7 of Bar
     ; CHECK: firrtl.mem Undefined  {annotations = [{a = "a"}]
     mem _T_8 :
@@ -408,7 +408,7 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
     ; CHECK: firrtl.memoryport Infer %_T_5 {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     infer mport _T_6 = _T_5[reset], clock
-    ; CHECK: firrtl.instance @Bar  {annotations =
+    ; CHECK: firrtl.instance _T_7 {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     inst _T_7 of Bar
     ; CHECK: firrtl.mem Undefined  {annotations =
@@ -898,10 +898,10 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo/bar:Bar/baz:Baz"}, {"b":"b","target"
 ; CHECK: firrtl.module @Baz
 ; CHECK-SAME: annotations = [{a = "a", circt.nonlocal = @nla_1}, {b = "b", circt.nonlocal = @nla_2}]
 ; CHECK: firrtl.module @Bar()
-; CHECK: firrtl.instance @Baz
+; CHECK: firrtl.instance baz
 ; CHECK-SAME: [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]
 ; CHECK: firrtl.module @Foo()
-; CHECK: firrtl.instance @Bar
+; CHECK: firrtl.instance bar
 ; CHECK-SAME: [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}, {circt.nonlocal = @nla_2, class = "circt.nonlocal"}]
 
 ; // -----

@@ -103,7 +103,7 @@ SmallVector<Direction> direction::unpackAttribute(IntegerAttr directions) {
 
 llvm::raw_ostream &circt::firrtl::operator<<(llvm::raw_ostream &os,
                                              const Direction &dir) {
-  return os << (dir == Direction::In ? "in" : "out");
+  return os << direction::toString(dir);
 }
 
 void FIRRTLDialect::registerAttributes() {

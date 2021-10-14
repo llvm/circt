@@ -95,7 +95,7 @@
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg5: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, index, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_arg3, %inst_clock, %inst_reset = firrtl.instance @handshake_control_merge_out_ui64_2ins_2outs_ctrl {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.clock, !firrtl.uint<1>
+  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_arg3, %inst_clock, %inst_reset = firrtl.instance "" @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
   %0:2 = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
   handshake.return %0#0, %0#1, %arg2 : none, index, none
 }

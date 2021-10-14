@@ -39,7 +39,7 @@
 
 // CHECK-LABEL: firrtl.module @main
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: none, ...) -> (i8, index, none) {
-  // CHECK: {{.+}} = firrtl.instance @handshake_store_in_ui8_ui64_out_ui8_ui64
+  // CHECK: {{.+}} = firrtl.instance "" @handshake_store_in_ui8_ui64_out_ui8_ui64
   %0:2 = "handshake.store"(%arg0, %arg1, %arg2) : (i8, index, none) -> (i8, index)
 
   handshake.return %0#0, %0#1, %arg2 : i8, index, none

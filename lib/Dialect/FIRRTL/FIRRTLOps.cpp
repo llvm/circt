@@ -125,8 +125,7 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       .Case<InstanceOp>([&](auto inst) {
         for (auto arg : llvm::enumerate(inst.getResults()))
           if (arg.value() == val) {
-            if (inst.getReferencedModule().getPortDirection(arg.index()) ==
-                Direction::Out)
+            if (inst.getPortDirection(arg.index()) == Direction::Out)
               return accumulatedFlow;
             else
               return swap();
@@ -854,14 +853,20 @@ FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        TypeRange resultTypes, StringRef moduleName,
-                       StringRef name, ArrayRef<Attribute> annotations,
+                       StringRef name, ArrayRef<Direction> portDirections,
+                       ArrayRef<Attribute> portNames,
+                       ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
+  result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
   result.addAttribute("name", builder.getStringAttr(name));
+  result.addAttribute(
+      "portDirections",
+      direction::packAttribute(builder.getContext(), portDirections));
+  result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
-  result.addTypes(resultTypes);
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
@@ -883,8 +888,9 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   // Gather the result types.
   SmallVector<Type> resultTypes;
   resultTypes.reserve(module.getNumPorts());
-  for (auto &port : module.getPorts())
-    resultTypes.push_back(port.type);
+  llvm::transform(
+      module.getPortTypes(), std::back_inserter(resultTypes),
+      [](Attribute typeAttr) { return typeAttr.cast<TypeAttr>().getValue(); });
 
   // Create the port annotations.
   ArrayAttr portAnnotationsAttr;
@@ -897,7 +903,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 
   return build(builder, result, resultTypes,
                SymbolRefAttr::get(builder.getContext(), module.moduleName()),
-               builder.getStringAttr(name), builder.getArrayAttr(annotations),
+               builder.getStringAttr(name), module.getPortDirectionsAttr(),
+               module.getPortNamesAttr(), builder.getArrayAttr(annotations),
                portAnnotationsAttr, builder.getBoolAttr(lowerToBind));
 }
 
@@ -919,8 +926,7 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto referencedModule =
       symbolTable.lookupNearestSymbolFrom<FModuleLike>(*this, moduleNameAttr());
   if (!referencedModule) {
-    emitOpError("invalid symbol reference");
-    return failure();
+    return emitOpError("invalid symbol reference");
   }
 
   // Check that this instance doesn't recursively instantiate its wrapping
@@ -928,35 +934,95 @@ LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (referencedModule == module) {
     auto diag = emitOpError()
                 << "is a recursive instantiation of its containing module";
-    diag.attachNote(module.getLoc()) << "containing module declared here";
-    return failure();
+    return diag.attachNote(module.getLoc())
+           << "containing module declared here";
   }
 
-  SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
-
-  // Check that result types are consistent with the referenced module's ports.
-  size_t numResults = getNumResults();
-  if (numResults != modulePorts.size()) {
-    auto diag = emitOpError()
-                << "has a wrong number of results; expected "
-                << modulePorts.size() << " but got " << numResults;
+  // Small helper add a note to the original declaration.
+  auto emitNote = [&](InFlightDiagnostic &&diag) -> InFlightDiagnostic && {
     diag.attachNote(referencedModule->getLoc())
         << "original module declared here";
-    return failure();
+    return std::move(diag);
+  };
+
+  // Check that all the attribute arrays are the right length up front.  This
+  // lets us safely use the port name in error messages below.
+  size_t numResults = getNumResults();
+  size_t numExpected = referencedModule.getNumPorts();
+  if (numResults != numExpected) {
+    return emitNote(emitOpError() << "has a wrong number of results; expected "
+                                  << numExpected << " but got " << numResults);
+  }
+  if (portDirections().getBitWidth() != numExpected)
+    return emitNote(emitOpError("the number of port directions should be "
+                                "equal to the number of results"));
+  if (portNames().size() != numExpected)
+    return emitNote(emitOpError("the number of port names should be "
+                                "equal to the number of results"));
+  if (portAnnotations().size() != numExpected)
+    return emitNote(emitOpError("the number of result annotations should be "
+                                "equal to the number of results"));
+
+  // Check that the port names match the referenced module.
+  if (portNamesAttr() != referencedModule.getPortNamesAttr()) {
+    // We know there is an error, try to figure out whats wrong.
+    auto instanceNames = portNames();
+    auto moduleNames = referencedModule.getPortNamesAttr();
+    // First compare the sizes:
+    if (instanceNames.size() != moduleNames.size()) {
+      return emitNote(emitOpError()
+                      << "has a wrong number of directions; expected "
+                      << moduleNames.size() << " but got "
+                      << instanceNames.size());
+    }
+    // Next check the values:
+    for (size_t i = 0; i != numResults; ++i) {
+      if (instanceNames[i] != moduleNames[i]) {
+        return emitNote(emitOpError()
+                        << "name for port " << i << " must be "
+                        << moduleNames[i] << ", but got " << instanceNames[i]);
+      }
+    }
+    llvm_unreachable("should have found something wrong");
   }
 
+  // Check that the types match.
   for (size_t i = 0; i != numResults; i++) {
     auto resultType = getResult(i).getType();
-    auto expectedType = modulePorts[i].type;
+    auto expectedType = referencedModule.getPortType(i);
     if (resultType != expectedType) {
-      auto diag = emitOpError()
-                  << "result type for " << modulePorts[i].name << " must be "
-                  << expectedType << ", but got " << resultType;
-
-      diag.attachNote(referencedModule->getLoc())
-          << "original module declared here";
-      return failure();
+      return emitNote(emitOpError()
+                      << "result type for " << getPortName(i) << " must be "
+                      << expectedType << ", but got " << resultType);
     }
+  }
+
+  // Check that the port directions are consistent with the referenced module's.
+  if (portDirectionsAttr() != referencedModule.getPortDirectionsAttr()) {
+    // We know there is an error, try to figure out whats wrong.
+    auto instanceDirectionAttr = portDirectionsAttr();
+    auto moduleDirectionAttr = referencedModule.getPortDirectionsAttr();
+    // First compare the sizes:
+    auto expectedWidth = moduleDirectionAttr.getValue().getBitWidth();
+    auto actualWidth = instanceDirectionAttr.getValue().getBitWidth();
+    if (expectedWidth != actualWidth) {
+      return emitNote(emitOpError()
+                      << "has a wrong number of directions; expected "
+                      << expectedWidth << " but got " << actualWidth);
+    }
+    // Next check the values.
+    auto instanceDirs = direction::unpackAttribute(instanceDirectionAttr);
+    auto moduleDirs = direction::unpackAttribute(moduleDirectionAttr);
+    for (size_t i = 0; i != numResults; ++i) {
+      if (instanceDirs[i] != moduleDirs[i]) {
+        return emitNote(emitOpError()
+                        << "direction for " << getPortName(i) << " must be \""
+                        << direction::toString(moduleDirs[i])
+                        << "\", but got \""
+                        << direction::toString(instanceDirs[i]) << "\"");
+      }
+    }
+    llvm_unreachable("should have found something wrong");
   }
 
   return success();
@@ -972,9 +1038,87 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
     return failure();
   }
 
-  if (instance.portAnnotations().size() != instance.getNumResults())
-    return instance.emitOpError("the number of result annotations should be "
-                                "equal to the number of results");
+  return success();
+}
+
+static void printInstanceOp(OpAsmPrinter &p, InstanceOp &op) {
+  // Print the instance name.
+  p << " ";
+  printIdentifier(op.nameAttr(), p.getStream());
+  p << " ";
+
+  // Print the attr-dict.
+  SmallVector<StringRef, 4> omittedAttrs = {
+      "moduleName", "name",      "portDirections",
+      "portNames",  "portTypes", "portAnnotations"};
+  if (!op.lowerToBind())
+    omittedAttrs.push_back("lowerToBind");
+  if (op.annotations().empty())
+    omittedAttrs.push_back("annotations");
+  p.printOptionalAttrDict(op->getAttrs(), omittedAttrs);
+
+  // Print the module name.
+  p << " ";
+  p.printSymbolName(op.moduleName());
+
+  // Collect all the result types as TypeAttrs for printing.
+  SmallVector<Attribute> portTypes;
+  portTypes.reserve(op->getNumResults());
+  llvm::transform(op->getResultTypes(), std::back_inserter(portTypes),
+                  &TypeAttr::get);
+  auto portDirections = direction::unpackAttribute(op.portDirectionsAttr());
+  printModulePorts(p, /*block=*/nullptr, portDirections,
+                   op.portNames().getValue(), portTypes,
+                   op.portAnnotations().getValue());
+}
+
+static ParseResult parseInstanceOp(OpAsmParser &parser,
+                                   OperationState &result) {
+  auto *context = parser.getContext();
+  auto &resultAttrs = result.attributes;
+
+  StringAttr name;
+  FlatSymbolRefAttr moduleName;
+  SmallVector<OpAsmParser::OperandType> entryArgs;
+  SmallVector<Direction, 4> portDirections;
+  SmallVector<Attribute, 4> portNames;
+  SmallVector<Attribute, 4> portTypes;
+  SmallVector<Attribute, 4> portAnnotations;
+
+  if (parseIdentifier(parser, name) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
+      parseModulePorts(parser, /*hasSSAIdentifiers=*/false, entryArgs,
+                       portDirections, portNames, portTypes, portAnnotations))
+    return failure();
+
+  // Add the attributes. We let attributes defined in the attr-dict override
+  // attributes parsed out of the module signature.
+  if (!resultAttrs.get("moduleName"))
+    result.addAttribute("moduleName", moduleName);
+  if (!resultAttrs.get("name"))
+    result.addAttribute("name", name);
+  if (!resultAttrs.get("portDirections"))
+    result.addAttribute("portDirections",
+                        direction::packAttribute(context, portDirections));
+  if (!resultAttrs.get("portNames"))
+    result.addAttribute("portNames", ArrayAttr::get(context, portNames));
+  if (!resultAttrs.get("portAnnotations"))
+    result.addAttribute("portAnnotations",
+                        ArrayAttr::get(context, portAnnotations));
+
+  // Annotations and LowerToBind are omitted in the printed format if they are
+  // empty and false, respectively.
+  if (!resultAttrs.get("annotations"))
+    resultAttrs.append("annotations", parser.getBuilder().getArrayAttr({}));
+  if (!resultAttrs.get("lowerToBind"))
+    resultAttrs.append("lowerToBind", parser.getBuilder().getBoolAttr(false));
+
+  // Add result types.
+  result.types.reserve(portTypes.size());
+  llvm::transform(
+      portTypes, std::back_inserter(result.types),
+      [](Attribute typeAttr) { return typeAttr.cast<TypeAttr>().getValue(); });
 
   return success();
 }
@@ -2578,33 +2722,6 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
     elides.push_back("name");
 
   printElideAnnotations(p, op, attr, elides);
-}
-
-//===----------------------------------------------------------------------===//
-// InstanceOp Custom attr-dict Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseInstanceOp(OpAsmParser &parser,
-                                   NamedAttrList &resultAttrs) {
-  auto result = parseElidePortAnnotations(parser, resultAttrs);
-
-  if (!resultAttrs.get("lowerToBind")) {
-    resultAttrs.append("lowerToBind", parser.getBuilder().getBoolAttr(false));
-  }
-
-  return result;
-}
-
-/// Always elide "moduleName", elide "lowerToBind" if false, and elide
-/// "annotations" if it exists or if it is empty.
-static void printInstanceOp(OpAsmPrinter &p, Operation *op,
-                            DictionaryAttr attr) {
-  SmallVector<StringRef, 2> elides = {"moduleName"};
-  if (auto lowerToBind = op->getAttrOfType<BoolAttr>("lowerToBind"))
-    if (!lowerToBind.getValue())
-      elides.push_back("lowerToBind");
-
-  printElidePortAnnotations(p, op, attr, elides);
 }
 
 //===----------------------------------------------------------------------===//

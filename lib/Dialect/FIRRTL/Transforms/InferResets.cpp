@@ -1441,6 +1441,20 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
       resultTypes.append(instOp.getResultTypes().begin(),
                          instOp.getResultTypes().end());
 
+      // Determine new port directions.
+      SmallVector<Direction> newPortDirections;
+      newPortDirections.reserve(instOp.getNumResults() + 1);
+      newPortDirections.push_back(Direction::In);
+      auto oldPortDirections =
+          direction::unpackAttribute(instOp.portDirectionsAttr());
+      newPortDirections.append(oldPortDirections);
+
+      // Determine new port names.
+      SmallVector<Attribute> newPortNames;
+      newPortNames.reserve(instOp.getNumResults() + 1);
+      newPortNames.push_back(domain.newPortName);
+      newPortNames.append(instOp.portNames().begin(), instOp.portNames().end());
+
       // Create a new list of port annotations.
       SmallVector<Attribute> newPortAnnos;
       if (auto oldPortAnnos = instOp.portAnnotations()) {
@@ -1455,8 +1469,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
       // Create a new instance op with the reset inserted.
       auto newInstOp = builder.create<InstanceOp>(
-          resultTypes, instOp.moduleName(), instOp.name(),
-          instOp.annotations().getValue(), newPortAnnos);
+          resultTypes, instOp.moduleName(), instOp.name(), newPortDirections,
+          newPortNames, instOp.annotations().getValue(), newPortAnnos);
       instReset = newInstOp.getResult(0);
 
       // Update the uses over to the new instance and drop the old instance.
