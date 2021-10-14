@@ -55,6 +55,12 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       if (src != dst)
         continue;
 
+      // Collect surrounding loops to use in dependence components.
+      SmallVector<AffineForOp> enclosingLoops;
+      getLoopIVs(*destination, &enclosingLoops);
+      if (enclosingLoops.size() != depth)
+        continue;
+
       // Look for the common parent that src and dst share. If there is none,
       // there is nothing more to do.
       SmallVector<Operation *> srcParents;
@@ -97,11 +103,6 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
 
         // Check if the src or its ancestor is before the dst or its ancestor.
         if (srcOrAncestor->isBeforeInBlock(dstOrAncestor)) {
-          // Collect surrounding loops to use in dependence components.
-          SmallVector<AffineForOp> enclosingLoops;
-          getLoopIVs(*destination, &enclosingLoops);
-          assert(enclosingLoops.size() == depth && "expected 'depth' loops");
-
           // Build dependence components for each loop depth.
           SmallVector<DependenceComponent> intraDeps;
           for (size_t i = 0; i < depth; ++i) {
