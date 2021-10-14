@@ -360,7 +360,8 @@ LogicalResult CreateSiFiveMetadataPass::emitSitestBlackboxMetadata() {
   std::array<StringRef, 3> classBlackList = {
       "freechips.rocketchip.util.BlackBoxedROM", "chisel3.shim.CloneModule",
       "sifive.enterprise.grandcentral.MemTap"};
-  std::array<StringRef, 5> blackListedAnnos = {
+  std::array<StringRef, 6> blackListedAnnos = {
+      "firrtl.transforms.BlackBox",
       "firrtl.transforms.BlackBoxInlineAnno",
       "firrtl.transforms.BlackBoxResourceAnno",
       "sifive.enterprise.grandcentral.DataTapsAnnotation",
