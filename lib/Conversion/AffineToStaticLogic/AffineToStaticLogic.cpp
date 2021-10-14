@@ -8,7 +8,7 @@
 
 #include "circt/Conversion/AffineToStaticLogic.h"
 #include "../PassDetail.h"
-#include "circt/Analysis/DependenceAnalysis.h"
+#include "circt/Analysis/SchedulingAnalysis.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Analysis/AffineAnalysis.h"
@@ -33,26 +33,26 @@ struct AffineToStaticLogic
 
 private:
   void runOnAffineFor(AffineForOp forOp,
-                      MemoryDependenceAnalysis memoryAnalysis);
+                      CyclicSchedulingAnalysis schedulingAnalysis);
 };
 
 } // namespace
 
 void AffineToStaticLogic::runOnFunction() {
-  MemoryDependenceAnalysis memoryAnalysis =
-      getAnalysis<MemoryDependenceAnalysis>();
+  CyclicSchedulingAnalysis schedulingAnalysis =
+      getAnalysis<CyclicSchedulingAnalysis>();
   getFunction().walk(
-      [&](AffineForOp forOp) { runOnAffineFor(forOp, memoryAnalysis); });
+      [&](AffineForOp forOp) { runOnAffineFor(forOp, schedulingAnalysis); });
 }
 
 void AffineToStaticLogic::runOnAffineFor(
-    AffineForOp forOp, MemoryDependenceAnalysis memoryAnalysis) {
+    AffineForOp forOp, CyclicSchedulingAnalysis schedulingAnalysis) {
   // Only consider innermost AffineForOps.
   if (isa<AffineForOp>(forOp.getBody()->front()))
     return;
 
   // Create a cyclic scheduling problem.
-  CyclicProblem problem(forOp);
+  CyclicProblem problem = schedulingAnalysis.getProblem(forOp);
 
   // Load the Calyx operator library into the problem. This is a very minimal
   // set of combinational and memory operators for now.
@@ -65,8 +65,6 @@ void AffineToStaticLogic::runOnAffineFor(
 
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
-    problem.insertOperation(op);
-
     // Some known combinational ops.
     if (isa<AddIOp, AffineIfOp, AffineYieldOp, ConstantOp, IndexCastOp,
             memref::AllocaOp>(op)) {
@@ -95,79 +93,6 @@ void AffineToStaticLogic::runOnAffineFor(
     return signalPassFailure();
   }
 
-  // Insert memory dependences into the problem.
-  forOp.getBody()->walk([&](Operation *op) {
-    ArrayRef<MemoryDependence> dependences = memoryAnalysis.getDependences(op);
-    if (dependences.empty())
-      return;
-
-    for (MemoryDependence memoryDep : dependences) {
-      // Don't insert a dependence into the problem if there is no dependence.
-      if (!hasDependence(memoryDep.dependenceType))
-        continue;
-
-      // Insert a dependence into the problem.
-      Problem::Dependence dep(memoryDep.source, op);
-      assert(succeeded(problem.insertDependence(dep)));
-
-      // Find the greatest distance lower bound from any loop and use that for
-      // this dependence.
-      unsigned distance = 0;
-      for (DependenceComponent comp : memoryDep.dependenceComponents)
-        if (comp.lb.getValue() > distance)
-          distance = comp.lb.getValue();
-
-      problem.setDistance(dep, distance);
-    }
-  });
-
-  // Insert conditional dependences into the problem.
-  forOp.getBody()->walk([&](AffineIfOp op) {
-    // No special handling required for control-only `if`s.
-    if (op.getNumResults() == 0)
-      return WalkResult::skip();
-
-    // Model the implicit value flow from the `yield` to the `if`'s result(s).
-    Problem::Dependence depThen(op.getThenBlock()->getTerminator(), op);
-    assert(succeeded(problem.insertDependence(depThen)));
-
-    if (op.hasElse()) {
-      Problem::Dependence depElse(op.getElseBlock()->getTerminator(), op);
-      assert(succeeded(problem.insertDependence(depElse)));
-    }
-
-    return WalkResult::advance();
-  });
-
-  // Set the anchor for scheduling. Insert dependences from all stores to the
-  // terminator to ensure the problem schedules them before the terminator.
-  auto *anchor = forOp.getBody()->getTerminator();
-  forOp.getBody()->walk([&](AffineWriteOpInterface op) {
-    Problem::Dependence dep(op, anchor);
-    assert(succeeded(problem.insertDependence(dep)));
-  });
-
-  // Handle explicitly computed loop-carried values, i.e. excluding the
-  // induction variable. Insert inter-iteration dependences from the definers of
-  // "iter_args" to their users.
-  if (unsigned nIterArgs = anchor->getNumOperands(); nIterArgs > 0) {
-    auto iterArgs = forOp.getRegionIterArgs();
-    for (unsigned i = 0; i < nIterArgs; ++i) {
-      Operation *iterArgDefiner = anchor->getOperand(i).getDefiningOp();
-      // If it's not an operation, we don't need to model the dependence.
-      if (!iterArgDefiner)
-        continue;
-
-      for (Operation *iterArgUser : iterArgs[i].getUsers()) {
-        Problem::Dependence dep(iterArgDefiner, iterArgUser);
-        assert(succeeded(problem.insertDependence(dep)));
-
-        // Values always flow between subsequent iterations.
-        problem.setDistance(dep, 1);
-      }
-    }
-  }
-
   // Verify and solve the scheduling problem, and optionally debug it.
 #ifndef NDEBUG
   if (llvm::isCurrentDebugType(DEBUG_TYPE))
@@ -187,6 +112,7 @@ void AffineToStaticLogic::runOnAffineFor(
   if (failed(problem.check()))
     return signalPassFailure();
 
+  auto *anchor = forOp.getBody()->getTerminator();
   if (failed(scheduleSimplex(problem, anchor)))
     return signalPassFailure();
 

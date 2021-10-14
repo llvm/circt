@@ -7,5 +7,5 @@ add_circt_library(CIRCTAffineToStaticLogic
   LINK_LIBS PUBLIC
   MLIRPass
   CIRCTScheduling
-  CIRCTDependenceAnalysis
+  CIRCTSchedulingAnalysis
   )
