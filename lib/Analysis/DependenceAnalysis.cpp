@@ -121,7 +121,9 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
 /// checks for memory access dependences. Results are captured in a
 /// MemoryDependenceResult, which can by queried by Operation.
 circt::analysis::MemoryDependenceAnalysis::MemoryDependenceAnalysis(
-    mlir::FuncOp funcOp) {
+    Operation *op) {
+  auto funcOp = cast<FuncOp>(op);
+
   // Collect affine loops grouped by nesting depth.
   std::vector<SmallVector<AffineForOp, 2>> depthToLoops;
   mlir::gatherLoops(funcOp, depthToLoops);
