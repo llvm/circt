@@ -246,7 +246,7 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       "Search path for black box sources specified via the "
       "`BlackBoxResourceAnno` annotation.">
   ];
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }
 
 def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
