@@ -247,6 +247,7 @@ struct FIRRTLModuleLowering;
 /// This is state shared across the parallel module lowering logic.
 struct CircuitLoweringState {
   std::atomic<bool> used_PRINTF_COND{false};
+  std::atomic<bool> used_ASSERT_VERBOSE_COND{false};
   std::atomic<bool> used_STOP_COND{false};
 
   std::atomic<bool> used_RANDOMIZE_REG_INIT{false},
@@ -597,7 +598,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
   // even the header comment.
   if (!state.used_RANDOMIZE_GARBAGE_ASSIGN && !state.used_RANDOMIZE_REG_INIT &&
       !state.used_RANDOMIZE_MEM_INIT && !state.used_PRINTF_COND &&
-      !state.used_STOP_COND)
+      !state.used_ASSERT_VERBOSE_COND && !state.used_STOP_COND)
     return;
 
   emitString("// Standard header to adapt well known macros to our needs.");
@@ -627,6 +628,14 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
         "\n// Users can define 'PRINTF_COND' to add an extra gate to prints.");
     emitGuardedDefine("PRINTF_COND", "PRINTF_COND_ (`PRINTF_COND)",
                       "PRINTF_COND_ 1");
+  }
+
+  if (state.used_ASSERT_VERBOSE_COND) {
+    emitString("\n// Users can define 'ASSERT_VERBOSE_COND' to add an extra "
+               "gate to assert error printing.");
+    emitGuardedDefine("ASSERT_VERBOSE_COND",
+                      "ASSERT_VERBOSE_COND_ (`ASSERT_VERBOSE_COND)",
+                      "ASSERT_VERBOSE_COND_ 1");
   }
 
   if (state.used_STOP_COND) {
@@ -1149,7 +1158,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult lowerDivLikeOp(Operation *op);
   template <typename AOpTy, typename BOpTy, typename COpTy>
   LogicalResult lowerVerificationStatement(AOpTy op, StringRef annoClass,
-                                           bool attachMessage);
+                                           StringRef labelPrefix);
 
   LogicalResult visitExpr(CatPrimOp op);
 
@@ -2905,37 +2914,82 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 /// The above can also be reduced into a concurrent verification statement
 /// sv.assert.concurrent posedge %clock (condition && enable)
 template <typename FIRRTLOp, typename ImmediateOp, typename ConcurrentOp>
-LogicalResult FIRRTLLowering::lowerVerificationStatement(FIRRTLOp op,
-                                                         StringRef annoClass,
-                                                         bool attachMessage) {
+LogicalResult
+FIRRTLLowering::lowerVerificationStatement(FIRRTLOp op, StringRef annoClass,
+                                           StringRef labelPrefix) {
+  auto isAssert = std::is_same<FIRRTLOp, AssertOp>::value;
+  auto isCover = std::is_same<FIRRTLOp, CoverOp>::value;
+
   auto clock = getLoweredValue(op.clock());
   auto enable = getLoweredValue(op.enable());
   auto predicate = getLoweredValue(op.predicate());
   if (!clock || !enable || !predicate)
     return failure();
+
   StringAttr label;
   if (op.nameAttr() && !op.name().empty())
     label = op.nameAttr();
+  StringAttr prefixedLabel;
+  if (label)
+    prefixedLabel =
+        StringAttr::get(op.getContext(), labelPrefix + label.getValue());
+
   StringAttr message;
   SmallVector<Value> messageOps;
-  if (attachMessage && op.messageAttr() && !op.message().empty()) {
+  if (!isCover && op.messageAttr() && !op.message().empty()) {
     message = op.messageAttr();
     for (auto operand : op.operands())
       messageOps.push_back(getLoweredValue(operand));
   }
-  Operation *svOp;
 
-  if (!op.isConcurrent()) {
-    auto deferImmediate = circt::sv::DeferAssertAttr::get(
-        builder.getContext(), circt::sv::DeferAssert::Immediate);
-    addToAlwaysBlock(clock, [&]() {
-      addIfProceduralBlock(enable, [&]() {
-        svOp = builder.create<ImmediateOp>(predicate, deferImmediate, label,
-                                           message, messageOps);
+  auto emit = [&]() {
+    // Handle the purely procedural flavor of the operation.
+    if (!op.isConcurrent()) {
+      auto deferImmediate = circt::sv::DeferAssertAttr::get(
+          builder.getContext(), circt::sv::DeferAssert::Immediate);
+      addToAlwaysBlock(clock, [&]() {
+        addIfProceduralBlock(enable, [&]() {
+          builder.create<ImmediateOp>(predicate, deferImmediate, prefixedLabel,
+                                      message, messageOps);
+        });
       });
-    });
-  } else {
-    predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
+      return;
+    }
+
+    auto boolType = IntegerType::get(op.getContext(), 1);
+    auto allOnes = builder.create<hw::ConstantOp>(APInt::getAllOnesValue(1));
+
+    // Handle the `ifElseFatal` format, which does not emit an SVA but rather a
+    // process that uses $error and $fatal to perform the checks.
+    // TODO: This should *not* be part of the op, but rather a lowering option
+    // that the user of this pass can choose.
+    auto format = op->template getAttrOfType<StringAttr>("format");
+    if (format && format.getValue() == "ifElseFatal") {
+      predicate = builder.createOrFold<comb::XorOp>(predicate, allOnes);
+      predicate = builder.createOrFold<comb::AndOp>(enable, predicate);
+      addToAlwaysBlock(clock, [&]() {
+        addToIfDefProceduralBlock("SYNTHESIS", {}, [&]() {
+          addIfProceduralBlock(predicate, [&]() {
+            circuitState.used_ASSERT_VERBOSE_COND = true;
+            circuitState.used_STOP_COND = true;
+            addIfProceduralBlock(
+                builder.create<sv::VerbatimExprOp>(boolType,
+                                                   "`ASSERT_VERBOSE_COND_"),
+                [&]() { builder.create<sv::ErrorOp>(message, messageOps); });
+            addIfProceduralBlock(
+                builder.create<sv::VerbatimExprOp>(boolType, "`STOP_COND_"),
+                [&]() { builder.create<sv::FatalOp>(); });
+          });
+        });
+      });
+      return;
+    }
+
+    // Formulate the `enable -> predicate` as `!enable | predicate`.
+    auto notEnable = builder.createOrFold<comb::XorOp>(enable, allOnes);
+    predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate);
+
+    // Handle the regular SVA case.
     sv::EventControl event;
     switch (op.eventControl()) {
     case EventControl::AtPosEdge:
@@ -2948,10 +3002,50 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(FIRRTLOp op,
       event = circt::sv::EventControl::AtNegEdge;
       break;
     }
-    svOp = builder.create<ConcurrentOp>(
+    builder.create<ConcurrentOp>(
         circt::sv::EventControlAttr::get(builder.getContext(), event), clock,
-        predicate, label, message, messageOps);
-  }
+        predicate, prefixedLabel, message, messageOps);
+
+    // Assertions gain a companion `assume` behind a
+    // `USE_PROPERTY_AS_CONSTRAINT` guard.
+    if (isAssert) {
+      StringAttr assumeLabel;
+      if (label)
+        assumeLabel =
+            StringAttr::get(op.getContext(), "assume__" + label.getValue());
+      addToIfDefBlock("USE_PROPERTY_AS_CONSTRAINT", [&]() {
+        builder.create<sv::AssumeConcurrentOp>(
+            circt::sv::EventControlAttr::get(builder.getContext(), event),
+            clock, predicate, assumeLabel);
+      });
+    }
+  };
+
+  // Wrap the verification statement up in the optional preprocessor guards.
+  // This is a bit awkward since we want to translate an array of guards into a
+  // recursive call to `addToIfDefBlock`.
+  ArrayRef<Attribute> guards{};
+  if (auto guardsAttr = op->template getAttrOfType<ArrayAttr>("guards"))
+    guards = guardsAttr.getValue();
+  bool anyFailed = false;
+  std::function<void()> emitWrapped = [&]() {
+    if (guards.empty()) {
+      emit();
+      return;
+    }
+    auto guard = guards[0].dyn_cast<StringAttr>();
+    if (!guard) {
+      op.emitOpError("elements in `guards` array must be `StringAttr`");
+      anyFailed = true;
+      return;
+    }
+    guards = guards.drop_front();
+    addToIfDefBlock(guard.getValue(), emitWrapped);
+  };
+  emitWrapped();
+  if (anyFailed)
+    return failure();
+
   return success();
 }
 
@@ -2959,21 +3053,21 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(FIRRTLOp op,
 LogicalResult FIRRTLLowering::visitStmt(AssertOp op) {
   return lowerVerificationStatement<AssertOp, sv::AssertOp,
                                     sv::AssertConcurrentOp>(op, assertAnnoClass,
-                                                            true);
+                                                            "assert__");
 }
 
 // Lower an assume to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(AssumeOp op) {
   return lowerVerificationStatement<AssumeOp, sv::AssumeOp,
                                     sv::AssumeConcurrentOp>(op, assumeAnnoClass,
-                                                            true);
+                                                            "assume__");
 }
 
 // Lower a cover to SystemVerilog.
 LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
   return lowerVerificationStatement<CoverOp, sv::CoverOp,
                                     sv::CoverConcurrentOp>(op, coverAnnoClass,
-                                                           false);
+                                                           "cover__");
 }
 
 LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
