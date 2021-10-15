@@ -25,7 +25,7 @@ MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(MSFT, msft);
 MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses();
 
 // Values represented in `MSFT.td`.
-typedef uint32_t CirctMSFTPrimitiveType;
+typedef int32_t CirctMSFTPrimitiveType;
 
 /// Emits tcl for the specified module using the provided callback and user
 /// data
@@ -41,8 +41,8 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
 /// and y coordinates, and number.
 MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
                                                     const char *entityName,
-                                                    PrimitiveType type, long x,
-                                                    long y, long num);
+                                                    CirctMSFTPrimitiveType type,
+                                                    long x, long y, long num);
 
 bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
 MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTPrimitiveType,
@@ -121,9 +121,12 @@ MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
 typedef void (*CirctMSFTPlacementCallback)(MlirAttribute loc,
                                            CirctMSFTPlacedInstance,
                                            void *userData);
-/// Walk all the placements. Set 'colNo' to -1 to walk all of the columns.
-void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB, int64_t colNo,
+/// Walk all the placements within 'bounds' ([xmin, xmax, ymin, ymax], inclusive
+/// on all sides), with -1 meaning unbounded.
+void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB,
                                         CirctMSFTPlacementCallback,
+                                        int64_t bounds[4],
+                                        CirctMSFTPrimitiveType primTypeFilter,
                                         void *userData);
 
 #ifdef __cplusplus

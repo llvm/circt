@@ -126,13 +126,18 @@ with ir.Context() as ctx, ir.Location.unknown():
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
   print("=== Placements (col 2):")
-  seeded_pdb.walk_placements(print_placement, column_num=2)
+  seeded_pdb.walk_placements(print_placement, bounds=(2, 2, None, None))
   # CHECK-LABEL: === Placements (col 2):
   # CHECK: #msft.physloc<M20K, 2, 6, 1>, #msft<"@top[\22inst1\22,\22ext1\22]">
   # CHECK: #msft.physloc<M20K, 2, 50, 1>
 
+  print("=== Placements (col 2, row > 10):")
+  seeded_pdb.walk_placements(print_placement, bounds=(2, 2, 10, None))
+  # CHECK-LABEL: === Placements (col 2, row > 10):
+  # CHECK: #msft.physloc<M20K, 2, 50, 1>
+
   print("=== Placements (col 6):")
-  seeded_pdb.walk_placements(print_placement, column_num=6)
+  seeded_pdb.walk_placements(print_placement, bounds=(6, 6, None, None))
   # CHECK-LABEL: === Placements (col 6):
 
   print("=== Errors:", file=sys.stderr)

@@ -111,8 +111,10 @@ MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
       db->getNearestFreeInColumn((PrimitiveType)prim, column, nearestToY));
 }
 
-void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb, int64_t colNo,
+void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb,
                                         CirctMSFTPlacementCallback ccb,
+                                        int64_t bounds[4],
+                                        CirctMSFTPrimitiveType cPrimTypeFilter,
                                         void *userData) {
   PlacementDB *db = unwrap(cdb);
   auto cb = [ccb, userData](PhysLocationAttr loc,
@@ -121,10 +123,12 @@ void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb, int64_t colNo,
                                           p.subpath.size(), wrap(p.op)};
     ccb(wrap(loc), cPlacement, userData);
   };
-  if (colNo >= 0)
-    db->walkColumnPlacements(colNo, cb);
-  else
-    db->walkPlacements(cb);
+  Optional<PrimitiveType> primTypeFilter;
+  if (cPrimTypeFilter >= 0)
+    primTypeFilter = static_cast<PrimitiveType>(cPrimTypeFilter);
+  db->walkPlacements(
+      cb, std::make_tuple(bounds[0], bounds[1], bounds[2], bounds[3]),
+      primTypeFilter);
 }
 
 //===----------------------------------------------------------------------===//
