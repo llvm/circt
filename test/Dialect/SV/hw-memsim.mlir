@@ -69,8 +69,8 @@ hw.module @WriteOrderedDifferentClock(%clock: i1, %clock2: i1, %w0_addr: i4, %w0
 hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %ro_en_0: i1, %ro_clock_0: i1,%rw_addr_0: i4, %rw_en_0: i1,  %rw_clock_0: i1, %rw_wmode_0: i1, %rw_wdata_0: i16,  %rw_wmask_0: i1,  %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1, %wo_data_0: i16, %wo_mask_0: i1) -> (ro_data_0: i16, rw_rdata_0: i16) attributes {depth = 10 : i64, numReadPorts = 1 : ui32, numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : ui32, width = 16 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 0 : i32}
 
 //CHECK-LABEL: @FIRRTLMem_1_1_1_16_10_0_1_0_0
-//CHECK:       %Memory0 = sv.reg  : !hw.inout<uarray<10xi16>>
-//CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %Memory0[%ro_addr_0]
+//CHECK:       %[[Memory0:.+]] = sv.reg  : !hw.inout<uarray<10xi16>>
+//CHECK-NEXT:  %[[rslot:.+]] = sv.array_index_inout %[[Memory0]][%ro_addr_0]
 //CHECK-NEXT:  %[[read1:.+]] = sv.read_inout %[[rslot]]
 //CHECK-NEXT:  %[[read:.+]] = comb.concat %[[read1]] : i16
 //CHECK-NEXT:  %[[x:.+]] = sv.constantX
@@ -82,7 +82,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  %false = hw.constant false
 //CHECK-NEXT:  %[[rwrcondpre:.+]] = comb.icmp eq %rw_wmode_0, %false
 //CHECK-NEXT:  %[[rwrcond:.+]] = comb.and %rw_en_0, %[[rwrcondpre]]
-//CHECK-NEXT:  %[[rwslot:.+]] = sv.array_index_inout %Memory0[%rw_addr_0]
+//CHECK-NEXT:  %[[rwslot:.+]] = sv.array_index_inout %[[Memory0]][%rw_addr_0]
 //CHECK-NEXT:  %[[v11:.+]] = sv.read_inout %10 : !hw.inout<i16>
 //CHECK-NEXT:  %[[rwdata:.+]] = comb.concat %[[v11]] : i16
 //CHECK-NEXT:  %[[x2:.+]] = sv.constantX
@@ -100,7 +100,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_0_1_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:  sv.alwaysff(posedge %wo_clock_0)  {
 //CHECK-NEXT:    %[[wcond:.+]] = comb.and %wo_en_0, %[[v14]]
 //CHECK-NEXT:    sv.if %[[wcond]]  {
-//CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %Memory0[%wo_addr_0]
+//CHECK-NEXT:      %[[wslot:.+]] = sv.array_index_inout %[[Memory0]][%wo_addr_0]
 //CHECK-NEXT:      sv.passign %[[wslot]], %[[v15]]
 //CHECK-NEXT:    }
 //CHECK-NEXT:  }
@@ -110,7 +110,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 
 //CHECK-LABEL: @FIRRTLMem_1_1_1_16_10_2_4_0_0
 //COM: This produces a lot of output, we check one field's pipeline
-//CHECK:         %Memory0 = sv.reg  : !hw.inout<uarray<10xi16>>
+//CHECK:         %[[Memory0:.+]] = sv.reg  : !hw.inout<uarray<10xi16>>
 //CHECK:         sv.alwaysff(posedge %ro_clock_0)  {
 //CHECK-NEXT:      sv.passign %0, %ro_en_0 : i1
 //CHECK-NEXT:    }
@@ -130,7 +130,7 @@ hw.module.generated @FIRRTLMem_1_1_1_16_10_2_4_0_0, @FIRRTLMem(%ro_addr_0: i4, %
 //CHECK-NEXT:      sv.passign %6, %5 : i4
 //CHECK-NEXT:    }
 //CHECK-NEXT:    %7 = sv.read_inout %6 : !hw.inout<i4>
-//CHECK-NEXT:    %8 = sv.array_index_inout %Memory0[%7] : !hw.inout<uarray<10xi16>>, i4
+//CHECK-NEXT:    %8 = sv.array_index_inout %[[Memory0]][%7] : !hw.inout<uarray<10xi16>>, i4
 
 hw.module.generated @FIRRTLMemOneAlways, @FIRRTLMem( %wo_addr_0: i4, %wo_en_0: i1, %wo_clock_0: i1,%wo_data_0: i8, %wo_mask_0: i1, %wo_addr_1: i4,  %wo_en_1: i1, %wo_clock_1: i1, %wo_data_1: i8, %wo_mask_1: i1) attributes {depth = 16 : i64, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32, readLatency = 1 : ui32, readUnderWrite = 0 : ui32, width = 8 : ui32, writeClockIDs = [0 : i32, 0 : i32], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
 

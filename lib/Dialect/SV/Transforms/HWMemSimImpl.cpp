@@ -113,9 +113,9 @@ void HWMemSimImplPass::generateMemory(HWModuleOp op, FirMemory mem) {
   // Create registers for the memory.
   SmallVector<Value, 4> regsVector(maskBits);
   for (size_t i = 0; i < maskBits; ++i)
-    regsVector[i] =
-        b.create<sv::RegOp>(UnpackedArrayType::get(dataType, mem.depth),
-                            b.getStringAttr("Memory" + std::to_string(i)));
+    regsVector[i] = b.create<sv::RegOp>(
+        UnpackedArrayType::get(dataType, mem.depth),
+        b.getStringAttr("Memory" + (i == 0 ? "" : std::to_string(i))));
 
   SmallVector<Value, 4> outputs;
 
