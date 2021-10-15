@@ -96,7 +96,8 @@ void TestSchedulingAnalysisPass::runOnFunction() {
     forOp.getBody()->walk([&](Operation *op) {
       for (auto dep : problem.getDependences(op)) {
         assert(!dep.isInvalid());
-        op->setAttr("dependence", UnitAttr::get(context));
+        if (dep.isAuxiliary())
+          op->setAttr("dependence", UnitAttr::get(context));
       }
     });
   });
