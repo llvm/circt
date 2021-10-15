@@ -76,7 +76,7 @@ firrtl.circuit "unprocessedAnnotations" {
     "write"], readLatency = 0 : i32, writeLatency = 1 : i32, annotations = [{class =
     "firrtl.transforms.RemainingAnnotation5"}]} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
     // expected-warning @+1 {{unprocessed annotation:'firrtl.transforms.RemainingAnnotation6'}}
-    %5 = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"], annotations = [{class = "firrtl.transforms.RemainingAnnotation6"}] } : !firrtl.uint<1>
+    %5 = firrtl.instance fetch {annotations = [{class = "firrtl.transforms.RemainingAnnotation6"}]} @bar(in io_cpu_flush: !firrtl.uint<1>)
     %6 = firrtl.node %1 {annotations = [{class = "firrtl.transforms.RemainingAnnotation3"}]} : !firrtl.uint<1>
   }
 }
@@ -89,16 +89,16 @@ firrtl.circuit "moduleAnno" attributes {annotations = [{class = "circuitOpAnnota
   firrtl.module @moduleAnno(in %io_cpu_flush: !firrtl.uint<1>) attributes
     {portAnnotations = [[{class="a"}]]} {  }
   // expected-warning @+1 {{unprocessed annotation:'b'}}
-  firrtl.extmodule @extModPorts(in %io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="b"}]]}
+  firrtl.extmodule @extModPorts(in io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="b"}]]}
   // expected-warning @+1 {{unprocessed annotation:'c'}}
-  firrtl.extmodule @extMod(in %io_cpu_flush: !firrtl.uint<1>)
+  firrtl.extmodule @extMod(in io_cpu_flush: !firrtl.uint<1>)
     attributes { annotations = [{class = "c"}] }
   // expected-warning @+1 {{unprocessed annotation:'d'}}
   firrtl.module @foo(in %io_cpu_flush: !firrtl.uint<1>)
     attributes { annotations = [{class = "d"}] } {}
   firrtl.module @foo2(in %io_cpu_flush: !firrtl.uint<1>)
     attributes { annotations = [{class = "b"}] } {}
-  firrtl.extmodule @extModPorts2(in %io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="c"}]]}
+  firrtl.extmodule @extModPorts2(in io_cpu_flush: !firrtl.uint<1>) attributes {portAnnotations = [[{class="c"}]]}
 }
 
 // -----

@@ -43,6 +43,11 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
     pass.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
+  let options = [
+    Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
+           "Concat all elements of the aggregate data into a single element.">
+
+  ];
 }
 
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
@@ -96,6 +101,8 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
     This pass handles the emission of several different kinds of metadata.
   }];
   let constructor = "circt::firrtl::createCreateSiFiveMetadataPass()";
+  let options = [Option<"replSeqMem", "repl-seq-mem", "bool", "false",
+      "Lower the seq mem for macro replacement and emit relevant metadata">];
 }
 
 def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
@@ -239,7 +246,7 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       "Search path for black box sources specified via the "
       "`BlackBoxResourceAnno` annotation.">
   ];
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }
 
 def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {

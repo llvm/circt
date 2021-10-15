@@ -97,7 +97,7 @@ firrtl.circuit "Foo" {
     // CHECK: inst someInst of Simple
     // CHECK: someInst.someIn <= ui1
     // CHECK: someOut <= someInst.someOut
-    %someInst_someIn, %someInst_someOut = firrtl.instance @Simple {name = "someInst"} : !firrtl.uint<1>, !firrtl.uint<1>
+    %someInst_someIn, %someInst_someOut = firrtl.instance someInst @Simple(in someIn: !firrtl.uint<1>, out someOut: !firrtl.uint<1>)
     firrtl.connect %someInst_someIn, %ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %someOut, %someInst_someOut : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: someOut is invalid
@@ -257,7 +257,7 @@ firrtl.circuit "Foo" {
     %shrPrimOp = firrtl.node %shrPrimOp_tmp : !firrtl.uint
   }
 
-  firrtl.extmodule @MyParameterizedExtModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>) attributes {defname = "name_thing", parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
+  firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing", parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
   // CHECK-LABEL: extmodule MyParameterizedExtModule :
   // CHECK-NEXT:    input in : UInt
   // CHECK-NEXT:    output out : UInt<8>

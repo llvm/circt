@@ -348,7 +348,7 @@ hw.module @Stop(%clock: i1, %reset: i1) {
       %0 = sv.verbatim.expr "`STOP_COND_" : () -> i1
       %1 = comb.and %0, %reset : i1
       sv.if %1  {
-        sv.fatal
+        sv.fatal 1
       }
     }
   }

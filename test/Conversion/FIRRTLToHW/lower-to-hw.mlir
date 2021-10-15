@@ -12,7 +12,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // This memory has two write ports where both write ports are driven by the
   // same clock.
   //
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_0_1_aa,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa,
   // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W0_mask: i1, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8, %W1_mask: i1)
   // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
@@ -23,7 +23,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // This memory is the same as the above memory, but each write port is driven
   // by a different clock.
   //
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_ab,
   // CHECK-SAME: @FIRRTLMem(%W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i8, %W0_mask: i1, %W1_addr: i4, %W1_en: i1, %W1_clk: i1, %W1_data: i8, %W1_mask: i1)
   // CHECK-SAME: attributes {depth = 16 : i64, maskGran = 8 : ui32, numReadPorts = 0 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 2 : ui32,
@@ -31,23 +31,23 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: width = 8 : ui32, writeClockIDs = [0 : i32, 1 : i32],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
   //
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_1_1,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_32_1_0_1_0_1_1,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i1, %R0_en: i1, %R0_clk: i1) -> (R0_data: i32)
   // CHECK-SAME: attributes {depth = 1 : i64, maskGran = 32 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 1 : ui32,
   // CHECK-SAME: width = 32 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_42_12_0_1_0_1,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_0_0_42_12_0_1_0_0_1,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1) -> (R0_data: i42)
   // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32,
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK-NEXT: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_0_1_a, 
+  // CHECK-NEXT: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_a, 
   // CHECK-SAME:  @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: i1, %RW0_addr: i10, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i40, %RW0_wmask: i4, %W0_addr: i10, %W0_en: i1, %W0_clk: i1, %W0_data: i40, %W0_mask: i4) -> (R0_data: i40, RW0_rdata: i40)
-  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_0_1_a,
+  // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_a,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %RW0_wmask: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42, %W0_mask: i1) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK-SAME: attributes {depth = 12 : i64, maskGran = 42 : ui32, numReadPorts = 1 : ui32,
   // CHECK-SAME: numReadWritePorts = 1 : ui32, numWritePorts = 1 : ui32,
@@ -385,74 +385,182 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.stop %clock2, %reset, 0
   }
 
-// circuit Verification:
-//   module Verification:
-//     input clock: Clock
-//     input aCond: UInt<8>
-//     input aEn: UInt<8>
-//     input bCond: UInt<1>
-//     input bEn: UInt<1>
-//     input cCond: UInt<1>
-//     input cEn: UInt<1>
-//     assert(clock, bCond, bEn, "assert0")
-//     assert(clock, bCond, bEn, "assert0") : assert_0
-//     assume(clock, aCond, aEn, "assume0")
-//     assume(clock, aCond, aEn, "assume0") : assume_0
-//     cover(clock,  cCond, cEn, "cover0)"
-//     cover(clock,  cCond, cEn, "cover0)" : cover_0
+  // circuit Verification:
+  //   module Verification:
+  //     input clock: Clock
+  //     input aCond: UInt<8>
+  //     input aEn: UInt<8>
+  //     input bCond: UInt<1>
+  //     input bEn: UInt<1>
+  //     input cCond: UInt<1>
+  //     input cEn: UInt<1>
+  //     assert(clock, bCond, bEn, "assert0")
+  //     assert(clock, bCond, bEn, "assert0") : assert_0
+  //     assume(clock, aCond, aEn, "assume0")
+  //     assume(clock, aCond, aEn, "assume0") : assume_0
+  //     cover(clock,  cCond, cEn, "cover0)"
+  //     cover(clock,  cCond, cEn, "cover0)" : cover_0
 
   // CHECK-LABEL: hw.module @Verification
   firrtl.module @Verification(in %clock: !firrtl.clock, in %aCond: !firrtl.uint<1>,
-   in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
-   in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>) {
+    in %aEn: !firrtl.uint<1>, in %bCond: !firrtl.uint<1>, in %bEn: !firrtl.uint<1>,
+    in %cCond: !firrtl.uint<1>, in %cEn: !firrtl.uint<1>, in %value: !firrtl.uint<42>) {
 
-    // CHECK-NEXT: %0 = comb.and %aEn, %aCond : i1
-    // CHECK-NEXT: sv.assert.concurrent posedge %clock, %0
-    // CHECK-NEXT: %1 = comb.and %aEn, %aCond : i1
-    // CHECK-NEXT: sv.assert.concurrent posedge %clock, %1 label "assert_0"
-    // CHECK-NEXT: %2 = comb.and %bEn, %bCond : i1
-    // CHECK-NEXT: sv.assume.concurrent posedge %clock, %2
-    // CHECK-NEXT: %3 = comb.and %bEn, %bCond : i1
-    // CHECK-NEXT: sv.assume.concurrent posedge %clock, %3 label "assume_0"
-    // CHECK-NEXT: %4 = comb.and %cEn, %cCond : i1
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, %4
-    // CHECK-NEXT: %5 = comb.and %cEn, %cCond : i1
-    // CHECK-NEXT: sv.cover.concurrent posedge %clock, %5 label "cover_0"
-    // CHECK: sv.cover.concurrent negedge %clock, {{%.+}} label "cover_1"
-    // CHECK: sv.cover.concurrent edge %clock, {{%.+}} label "cover_2"
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true}
     firrtl.assert %clock, %aCond, %aEn, "assert0" {isConcurrent = true, name = "assert_0"}
+    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.uint<42> {isConcurrent = true}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %aCond
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP3:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP4:%.+]] = comb.or [[TMP3]], %aCond
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP4]] label "assert__assert_0" message "assert0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP5:%.+]] = comb.xor %aEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP6:%.+]] = comb.or [[TMP5]], %aCond
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP6]] message "assert0"(%value) : i42
+    // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
+    // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP4]] label "assume__assert_0"
+    // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP6]]
+    // CHECK-NEXT: }
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true}
     firrtl.assume %clock, %bCond, %bEn, "assume0" {isConcurrent = true, name = "assume_0"}
+    firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.uint<42> {isConcurrent = true}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] label "assume__assume_0" message "assume0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %bEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %bCond
+    // CHECK-NEXT: sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"(%value) : i42
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true}
     firrtl.cover %clock, %cCond, %cEn, "cover0" {isConcurrent = true, name = "cover_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42> {isConcurrent = true}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cCond
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cCond
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP2]] label "cover__cover_0"
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cEn, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cCond
+    // CHECK-NEXT: sv.cover.concurrent posedge %clock, [[TMP2]]
     firrtl.cover %clock, %cCond, %cEn, "cover1" {eventControl = 1 : i32, isConcurrent = true, name = "cover_1"}
     firrtl.cover %clock, %cCond, %cEn, "cover2" {eventControl = 2 : i32, isConcurrent = true, name = "cover_2"}
+    // CHECK: sv.cover.concurrent negedge %clock, {{%.+}} label "cover__cover_1"
+    // CHECK: sv.cover.concurrent edge %clock, {{%.+}} label "cover__cover_2"
 
     // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.if %aEn {
-    // CHECK-NEXT:     sv.assert %aCond, immediate
-    // CHECK-NOT:                        label
-    // CHECK-NEXT:     sv.assert %aCond, immediate label "assert_0"
+    // CHECK-NEXT:     sv.assert %aCond, immediate message "assert0"
+    // CHECK-NEXT:     sv.assert %aCond, immediate label "assert__assert_0" message "assert0"
+    // CHECK-NEXT:     sv.assert %aCond, immediate message "assert0"(%value) : i42
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %bEn {
-    // CHECK-NEXT:     sv.assume %bCond, immediate
-    // CHECK-NOT:                        label
-    // CHECK-NEXT:     sv.assume %bCond, immediate label "assume_0"
+    // CHECK-NEXT:     sv.assume %bCond, immediate message "assume0"
+    // CHECK-NEXT:     sv.assume %bCond, immediate label "assume__assume_0" message "assume0"
+    // CHECK-NEXT:     sv.assume %bCond, immediate message "assume0"(%value) : i42
     // CHECK-NEXT:   }
     // CHECK-NEXT:   sv.if %cEn {
     // CHECK-NEXT:     sv.cover %cCond, immediate
-    // CHECK-NOT:                       label
-    // CHECK-NEXT:     sv.cover %cCond, immediate label "cover_0"
+    // CHECK-NOT:        label
+    // CHECK-NEXT:     sv.cover %cCond, immediate label "cover__cover_0"
+    // CHECK-NEXT:     sv.cover %cCond, immediate
+    // CHECK-NOT:        label
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     firrtl.assert %clock, %aCond, %aEn, "assert0"
     firrtl.assert %clock, %aCond, %aEn, "assert0" {name = "assert_0"}
+    firrtl.assert %clock, %aCond, %aEn, "assert0"(%value) : !firrtl.uint<42>
     firrtl.assume %clock, %bCond, %bEn, "assume0"
     firrtl.assume %clock, %bCond, %bEn, "assume0" {name = "assume_0"}
+    firrtl.assume %clock, %bCond, %bEn, "assume0"(%value) : !firrtl.uint<42>
     firrtl.cover %clock, %cCond, %cEn, "cover0"
     firrtl.cover %clock, %cCond, %cEn, "cover0" {name = "cover_0"}
+    firrtl.cover %clock, %cCond, %cEn, "cover0"(%value) : !firrtl.uint<42>
     // CHECK-NEXT: hw.output
+  }
+
+  // CHECK-LABEL: hw.module @VerificationGuards
+  firrtl.module @VerificationGuards(
+    in %clock: !firrtl.clock,
+    in %cond: !firrtl.uint<1>,
+    in %enable: !firrtl.uint<1>
+  ) {
+    firrtl.assert %clock, %cond, %enable, "assert0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    // CHECK-NEXT: sv.ifdef "HELLO" {
+    // CHECK-NEXT:   sv.ifdef "WORLD" {
+    // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
+    // CHECK-NEXT:     sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
+    // CHECK-NEXT:     sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
+    // CHECK-NEXT:       sv.assume.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    firrtl.assume %clock, %cond, %enable, "assume0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    firrtl.cover %clock, %cond, %enable, "cover0" {isConcurrent = true, guards = ["HELLO", "WORLD"]}
+    // CHECK-NEXT: sv.ifdef "HELLO" {
+    // CHECK-NEXT:   sv.ifdef "WORLD" {
+    // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
+    // CHECK-NEXT:     sv.assume.concurrent posedge %clock, [[TMP2]] message "assume0"
+    // CHECK-NEXT:     [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT:     [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT:     [[TMP2:%.+]] = comb.or [[TMP1]], %cond
+    // CHECK-NEXT:     sv.cover.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NOT:      label
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+  }
+
+  // CHECK-LABEL: hw.module @VerificationAssertFormat
+  firrtl.module @VerificationAssertFormat(
+    in %clock: !firrtl.clock,
+    in %cond: !firrtl.uint<1>,
+    in %enable: !firrtl.uint<1>,
+    in %value: !firrtl.uint<42>
+  ) {
+    firrtl.assert %clock, %cond, %enable, "assert0" {isConcurrent = true, format = "sva"}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %enable, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.or [[TMP1]], %cond
+    // CHECK-NEXT: sv.assert.concurrent posedge %clock, [[TMP2]] message "assert0"
+    // CHECK-NEXT: sv.ifdef "USE_PROPERTY_AS_CONSTRAINT" {
+    // CHECK-NEXT:   sv.assume.concurrent posedge %clock, [[TMP2]]
+    // CHECK-NEXT: }
+    firrtl.assert %clock, %cond, %enable, "assert1"(%value) : !firrtl.uint<42> {isConcurrent = true, format = "ifElseFatal"}
+    // CHECK-NEXT: [[TRUE:%.+]] = hw.constant true
+    // CHECK-NEXT: [[TMP1:%.+]] = comb.xor %cond, [[TRUE]]
+    // CHECK-NEXT: [[TMP2:%.+]] = comb.and %enable, [[TMP1]]
+    // CHECK-NEXT: sv.always posedge %clock {
+    // CHECK-NEXT:   sv.ifdef.procedural "SYNTHESIS" {
+    // CHECK-NEXT:   } else {
+    // CHECK-NEXT:     sv.if [[TMP2]] {
+    // CHECK-NEXT:       [[ASSERT_VERBOSE_COND:%.+]] = sv.verbatim.expr "`ASSERT_VERBOSE_COND_"
+    // CHECK-NEXT:       sv.if [[ASSERT_VERBOSE_COND]] {
+    // CHECK-NEXT:         sv.error "assert1"(%value) : i42
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:       [[STOP_COND:%.+]] = sv.verbatim.expr "`STOP_COND_"
+    // CHECK-NEXT:       sv.if [[STOP_COND]] {
+    // CHECK-NEXT:         sv.fatal
+    // CHECK-NEXT:       }
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
   }
 
   firrtl.module @bar(in %io_cpu_flush: !firrtl.uint<1>) {
@@ -464,7 +572,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:  [[IO:%[0-9]+]] = sv.read_inout %io_cpu_flush.wire
     %io_cpu_flush.wire = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK-NEXT: hw.instance "fetch" @bar(io_cpu_flush: [[IO]]: i1)
-    %i = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"]} : !firrtl.uint<1>
+    %i = firrtl.instance fetch @bar(in io_cpu_flush: !firrtl.uint<1>)
     firrtl.connect %i, %io_cpu_flush.wire : !firrtl.uint<1>, !firrtl.uint<1>
 
     %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
@@ -480,11 +588,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT: hw.module @bindTest()
   firrtl.module @bindTest() {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
-    %baz = firrtl.instance @bar {lowerToBind = true, name = "baz"} : !firrtl.uint<1>
+    %baz = firrtl.instance baz {lowerToBind = true} @bar(in io_cpu_flush: !firrtl.uint<1>)
     // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
-    %qux = firrtl.instance @bar { lowerToBind = true, name = "qux",
-      output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
-    } : !firrtl.uint<1>
+    %qux = firrtl.instance qux {lowerToBind = true, output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
   }
 
 
@@ -707,7 +813,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %c0_ui3 = firrtl.constant 0 : !firrtl.uint<3>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read", "rw", "write"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: sint<42>, wmode: uint<1>, wdata: sint<42>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>
-  // CHECK: %_M.R0_data, %_M.RW0_rdata = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_0_1_a(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i4_0: i4, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i42, RW0_wmask: %true: i1, W0_addr: %c0_i4_1: i4, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i42, W0_mask: %true: i1) -> (R0_data: i42, RW0_rdata: i42)
+  // CHECK: %_M.R0_data, %_M.RW0_rdata = hw.instance "_M" @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_a(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i4_0: i4, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i42, RW0_wmask: %true: i1, W0_addr: %c0_i4_1: i4, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i42, W0_mask: %true: i1) -> (R0_data: i42, RW0_rdata: i42)
   // CHECK: hw.output %_M.R0_data, %_M.RW0_rdata : i42, i42
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.sint<42>
@@ -756,7 +862,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %c1_ui5 = firrtl.constant 1 : !firrtl.uint<5>
     %_M_read, %_M_rw, %_M_write = firrtl.mem Undefined {depth = 1022 : i64, name = "_M_mask", portNames = ["read", "rw", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, rdata flip: sint<40>, wmode: uint<1>, wdata: sint<40>, wmask: uint<4>>, !firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data: sint<40>, mask: uint<4>>
-    // CHECK: %_M_mask.R0_data, %_M_mask.RW0_rdata = hw.instance "_M_mask" @FIRRTLMem_1_1_1_40_1022_1_1_0_1_a(R0_addr: %c0_i10: i10, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i10: i10, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i40, RW0_wmask: %c0_i4: i4, W0_addr: %c0_i10: i10, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i40, W0_mask: %c0_i4: i4) -> (R0_data: i40, RW0_rdata: i40)
+    // CHECK: %_M_mask.R0_data, %_M_mask.RW0_rdata = hw.instance "_M_mask" @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_a(R0_addr: %c0_i10: i10, R0_en: %true: i1, R0_clk: %clock1: i1, RW0_addr: %c0_i10: i10, RW0_en: %true: i1, RW0_clk: %clock1: i1, RW0_wmode: %true: i1, RW0_wdata: %0: i40, RW0_wmask: %c0_i4: i4, W0_addr: %c0_i10: i10, W0_en: %inpred: i1, W0_clk: %clock2: i1, W0_data: %indata: i40, W0_mask: %c0_i4: i4) -> (R0_data: i40, RW0_rdata: i40)
     // CHECK: hw.output %_M_mask.R0_data, %_M_mask.RW0_rdata : i40, i40
 
       %0 = firrtl.subfield %_M_read(3) : (!firrtl.bundle<addr: uint<10>, en: uint<1>, clk: clock, data flip: sint<40>>) -> !firrtl.sint<40>
@@ -799,7 +905,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
 
-    // CHECK:  %_M.R0_data = hw.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0_1(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1) -> (R0_data: i42)
+    // CHECK:  %_M.R0_data = hw.instance "_M" @FIRRTLMem_1_0_0_42_12_0_1_0_0_1(R0_addr: %c0_i4: i4, R0_en: %true: i1, R0_clk: %clock1: i1) -> (R0_data: i42)
     %_M_read = firrtl.mem Undefined {depth = 12 : i64, name = "_M", portNames = ["read"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>
     // Read port.
     %6 = firrtl.subfield %_M_read(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>) -> !firrtl.uint<4>
@@ -890,7 +996,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module @MemDepth1
   firrtl.module @MemDepth1(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>,
                            in %addr: !firrtl.uint<1>, out %data: !firrtl.uint<32>) {
-    // CHECK: %mem0.R0_data = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_1_1(R0_addr: %addr: i1, R0_en: %en: i1, R0_clk: %clock: i1) -> (R0_data: i32)
+    // CHECK: %mem0.R0_data = hw.instance "mem0" @FIRRTLMem_1_0_0_32_1_0_1_0_1_1(R0_addr: %addr: i1, R0_en: %en: i1, R0_clk: %clock: i1) -> (R0_data: i32)
     // CHECK: hw.output %mem0.R0_data : i32
     %mem0_load0 = firrtl.mem Old {depth = 1 : i64, name = "mem0", portNames = ["load0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>
     %0 = firrtl.subfield %mem0_load0(2) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<32>>) -> !firrtl.clock
@@ -981,7 +1087,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // This memory has both write ports driven by the same clock.  It should be
     // lowered to an "aa" memory.
     //
-    // CHECK: hw.instance "aa" @FIRRTLMem_0_2_0_8_16_1_1_0_1_aa
+    // CHECK: hw.instance "aa" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_aa
     %memory_aa_w0, %memory_aa_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "aa", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_aa_w0 = firrtl.subfield %memory_aa_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_aa_w1 = firrtl.subfield %memory_aa_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
@@ -991,7 +1097,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // This memory has different clocks for each write port.  It should be
     // lowered to an "ab" memory.
     //
-    // CHECK: hw.instance "ab" @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab
+    // CHECK: hw.instance "ab" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_ab
     %memory_ab_w0, %memory_ab_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_ab_w0 = firrtl.subfield %memory_ab_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_ab_w1 = firrtl.subfield %memory_ab_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
@@ -1004,7 +1110,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // lowered to an "ab" memory even though it is trivially convertible to an
     // "aa" memory.
     //
-    // CHECK: hw.instance "ab_node" @FIRRTLMem_0_2_0_8_16_1_1_0_1_ab
+    // CHECK: hw.instance "ab_node" @FIRRTLMem_0_2_0_8_16_1_1_1_0_1_ab
     %memory_ab_node_w0, %memory_ab_node_w1 = firrtl.mem Undefined {depth = 16 : i64, name = "ab_node", portNames = ["w0", "w1"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
     %clk_ab_node_w0 = firrtl.subfield %memory_ab_node_w0(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
     %clk_ab_node_w1 = firrtl.subfield %memory_ab_node_w1(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>) -> !firrtl.clock
@@ -1078,5 +1184,5 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: hw.bitcast %0 : (!hw.struct<valid: i2, ready: i1, data: i3>) -> !hw.array<3xi2>
   }
 
-  firrtl.extmodule @chkcoverAnno(in %clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+  firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
 }

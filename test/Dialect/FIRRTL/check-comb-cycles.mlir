@@ -10,7 +10,7 @@ module  {
     }
     firrtl.module @hasnoloops(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, out %b: !firrtl.uint<1>) {
       %x = firrtl.wire  : !firrtl.uint<1>
-      %inner_in1, %inner_in2, %inner_out1, %inner_out2 = firrtl.instance @thru  {name = "inner"} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+      %inner_in1, %inner_in2, %inner_out1, %inner_out2 = firrtl.instance inner @thru(in in1: !firrtl.uint<1>, in in2: !firrtl.uint<1>, out out1: !firrtl.uint<1>, out out2: !firrtl.uint<1>)
       firrtl.connect %inner_in1, %a : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %x, %inner_out1 : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %inner_in2, %x : !firrtl.uint<1>, !firrtl.uint<1>
@@ -123,7 +123,7 @@ module  {
       %z = firrtl.wire  : !firrtl.uint<1>
       firrtl.connect %c, %b : !firrtl.uint<1>, !firrtl.uint<1>
       // expected-note @+1 {{this operation is part of the combinational cycle}}
-      %inner_in, %inner_out = firrtl.instance @thru  {name = "inner"} : !firrtl.uint<1>, !firrtl.uint<1>
+      %inner_in, %inner_out = firrtl.instance inner @thru(in in: !firrtl.uint<1>, out out: !firrtl.uint<1>)
       firrtl.connect %inner_in, %y : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %z, %inner_out : !firrtl.uint<1>, !firrtl.uint<1>
       firrtl.connect %y, %z : !firrtl.uint<1>, !firrtl.uint<1>

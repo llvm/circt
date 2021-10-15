@@ -92,6 +92,11 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
 
   let constructor = "circt::sv::createHWMemSimImplPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
+
+  let options = [
+    Option<"replSeqMem", "repl-seq-mem", "bool",
+                "false", "Prepare seq mems for macro replacement">
+   ];
 }
 
 def SVExtractTestCode : Pass<"sv-extract-test-code", "ModuleOp"> {

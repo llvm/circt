@@ -51,10 +51,10 @@ firrtl.circuit "NonGroundType" attributes {
         {a},
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
          id = 1 : i64}]} : !firrtl.vector<uint<2>, 1>
-    firrtl.instance @View_companion { name = "View_companion" }
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @NonGroundType() {
-    firrtl.instance @DUT {name = "dut"}
+    firrtl.instance dut @DUT()
   }
 }
 
@@ -98,16 +98,14 @@ firrtl.circuit "Foo" attributes {
        name = "View",
        type = "parent"}]} {
     // expected-error @+1 {{'firrtl.instance' op is marked as an interface element, but this should be impossible due to how the Chisel Grand Central API works}}
-    %bar_a = firrtl.instance @Bar {
-      portAnnotations = [[
+    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.uint<1> [
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-         id = 1 : i64}]],
-      name = "bar"} : !firrtl.uint<1>
+         id = 1 : i64}])
     firrtl.connect %bar_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.instance @View_companion { name = "View_companion" }
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @Foo() {
-    %dut_a = firrtl.instance @DUT {name = "dut"} : !firrtl.uint<1>
+    %dut_a = firrtl.instance dut @DUT(in a: !firrtl.uint<1>)
   }
 }
 
@@ -149,10 +147,10 @@ firrtl.circuit "Foo" attributes {
       portNames = ["r"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
-    firrtl.instance @View_companion { name = "View_companion" }
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @Foo() {
-    %dut_a = firrtl.instance @DUT {name = "dut"} : !firrtl.uint<1>
+    %dut_a = firrtl.instance dut @DUT(in a: !firrtl.uint<1>)
   }
 }
 
@@ -184,9 +182,9 @@ firrtl.circuit "Foo" attributes {
        id = 0 : i64,
        name = "View",
        type = "parent"}]} {
-    firrtl.instance @View_companion {name = "View_companion"}
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @Foo() {
-    firrtl.instance @DUT {name = "dut"}
+    firrtl.instance dut @DUT()
   }
 }

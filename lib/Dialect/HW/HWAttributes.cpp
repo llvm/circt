@@ -157,6 +157,31 @@ void OutputFileAttr::print(DialectAsmPrinter &p) const {
 }
 
 //===----------------------------------------------------------------------===//
+// FileListAttr
+//===----------------------------------------------------------------------===//
+
+/// Option         ::= 'includeReplicatedOp'
+/// OutputFileAttr ::= 'output_file<' name (',' Option)* '>'
+Attribute FileListAttr::parse(DialectAsmParser &p, Type type) {
+  StringAttr filename;
+  if (p.parseLess() || p.parseAttribute<StringAttr>(filename) ||
+      p.parseGreater())
+    return Attribute();
+  auto *context = p.getContext();
+  return FileListAttr::get(context, filename);
+}
+
+void FileListAttr::print(DialectAsmPrinter &p) const {
+  p << "output_filelist<" << getFilename() << ">";
+}
+
+FileListAttr FileListAttr::getFromFilename(MLIRContext *context,
+                                           const Twine &filename) {
+  auto canonicalized = canonicalizeFilename("", filename);
+  return FileListAttr::get(StringAttr::get(context, canonicalized));
+}
+
+//===----------------------------------------------------------------------===//
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
 

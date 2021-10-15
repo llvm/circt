@@ -28,7 +28,7 @@ std::unique_ptr<mlir::Pass>
 createLowerFIRRTLAnnotationsPass(bool ignoreUnhandledAnnotations = false,
                                  bool ignoreClasslessAnnotations = false);
 
-std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass();
+std::unique_ptr<mlir::Pass> createLowerFIRRTLTypesPass(bool replSeqMem = false);
 
 std::unique_ptr<mlir::Pass> createLowerBundleVectorTypesPass();
 
@@ -40,7 +40,8 @@ std::unique_ptr<mlir::Pass> createInlinerPass();
 
 std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
-std::unique_ptr<mlir::Pass> createCreateSiFiveMetadataPass();
+std::unique_ptr<mlir::Pass>
+createCreateSiFiveMetadataPass(bool replSeqMem = false);
 
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 

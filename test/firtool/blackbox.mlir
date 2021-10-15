@@ -27,9 +27,9 @@ firrtl.circuit "test_mod" attributes {annotations = [
   // VERILOG-TOP-NEXT:    ExtPath gib
   // VERILOG-TOP-NEXT:  endmodule
   firrtl.module @test_mod() {
-    firrtl.instance @ExtInline {name = "foo", portNames = []}
-    firrtl.instance @ExtResource {name = "bar", portNames = []}
-    firrtl.instance @ExtPath {name = "gib", portNames = []}
+    firrtl.instance foo @ExtInline()
+    firrtl.instance bar @ExtResource()
+    firrtl.instance gib @ExtPath()
   }
 
   // VERILOG-FOO-LABEL: module ExtInline(); endmodule

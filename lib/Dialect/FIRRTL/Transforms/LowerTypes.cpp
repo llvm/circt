@@ -261,7 +261,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 namespace {
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 
-  TypeLoweringVisitor(MLIRContext *context) : context(context) {}
+  TypeLoweringVisitor(MLIRContext *context, bool f)
+      : context(context), flattenAggregateMemData(f) {}
   using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
@@ -308,6 +309,9 @@ private:
   Value getSubWhatever(Value val, size_t index);
 
   MLIRContext *context;
+  /// Create a single memory from an aggregate type (instead of one per field)
+  /// if this flag is enabled.
+  bool flattenAggregateMemData;
 
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
@@ -643,6 +647,35 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
   lowerBlock(&op.getElseBlock());
 }
 
+// Convert an aggregate type into a flat list of fields.
+// This is used to flatten the aggregate memory datatype.
+// Recursively populate the results with each ground type field.
+static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
+  std::function<bool(FIRRTLType)> flatten = [&](FIRRTLType type) -> bool {
+    return TypeSwitch<FIRRTLType, bool>(type)
+        .Case<BundleType>([&](auto bundle) {
+          for (auto &elt : bundle.getElements())
+            if (!flatten(elt.type))
+              return false;
+          return true;
+        })
+        .Case<FVectorType>([&](auto vector) {
+          for (size_t i = 0, e = vector.getNumElements(); i != e; ++i)
+            if (!flatten(vector.getElementType()))
+              return false;
+          return true;
+        })
+        .Case<IntType>([&](auto iType) {
+          results.push_back({iType});
+          return iType.getWidth().hasValue();
+        })
+        .Default([&](auto) { return false; });
+  };
+  if (flatten(type))
+    return true;
+  return false;
+}
+
 /// Lower memory operations. A new memory is created for every leaf
 /// element in a memory's data type.
 void TypeLoweringVisitor::visitDecl(MemOp op) {
@@ -652,7 +685,6 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     return;
 
   SmallVector<MemOp> newMemories;
-  SmallVector<Value> wireToOldResult;
   SmallVector<WireOp> oldPorts;
 
   // Wires for old ports
@@ -664,11 +696,76 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     oldPorts.push_back(wire);
     result.replaceAllUsesWith(wire.getResult());
   }
+  // The vector of leaf elements type after flattening the data.
+  SmallVector<IntType> flatMemType;
+  // MaskGranularity : how many bits each mask bit controls.
+  size_t maskGran = 1;
+  // Total mask bitwidth after flattening.
+  uint32_t totalmaskWidths = 0;
+  // How many mask bits each field type requires.
+  SmallVector<unsigned> maskWidths;
 
-  // Memory for each field
-  for (auto field : fields)
-    newMemories.push_back(cloneMemWithNewType(builder, op, field));
+  auto hasSubAnno = [&]() -> bool {
+    for (size_t portIdx = 0, e = op.getNumResults(); portIdx < e; ++portIdx)
+      for (auto attr : op.getPortAnnotation(portIdx)) {
+        if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
+          return true;
+      }
+    return false;
+  };
+  // If subannotations present on aggregate fields, we cannot flatten the
+  // memory. It must be split into one memory per aggregate field.
+  if (flattenAggregateMemData)
+    if (hasSubAnno() || !flattenType(op.getDataType(), flatMemType))
+      flattenAggregateMemData = false;
 
+  if (flattenAggregateMemData) {
+    SmallVector<Operation *, 8> flatData;
+    SmallVector<int32_t> memWidths;
+    // Get the width of individual aggregate leaf elements.
+    for (auto f : flatMemType)
+      memWidths.push_back(f.getWidth().getValue());
+
+    maskGran = memWidths[0];
+    size_t memFlatWidth = 0;
+    // Compute the GCD of all data bitwidths.
+    for (auto w : memWidths) {
+      memFlatWidth += w;
+      maskGran = llvm::GreatestCommonDivisor64(maskGran, w);
+    }
+    for (auto w : memWidths) {
+      // How many mask bits required for each flattened field.
+      auto mWidth = w / maskGran;
+      maskWidths.push_back(mWidth);
+      totalmaskWidths += mWidth;
+    }
+    // Now create a new memory of type flattened data.
+    // ----------------------------------------------
+    SmallVector<Type, 8> ports;
+    SmallVector<Attribute, 8> portNames;
+
+    // Create a new memoty data type of unsigned and computed width.
+    auto flatType = UIntType::get(context, memFlatWidth);
+    auto opPorts = op.getPorts();
+    for (size_t portIdx = 0, e = opPorts.size(); portIdx < e; ++portIdx) {
+      auto port = opPorts[portIdx];
+      ports.push_back(MemOp::getTypeForPort(op.depth(), flatType, port.second,
+                                            totalmaskWidths));
+      portNames.push_back(port.first);
+    }
+
+    auto flatMem = builder->create<MemOp>(
+        ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
+        portNames, op.name(), op.annotations().getValue(),
+        op.portAnnotations().getValue());
+    // Done creating the memory.
+    // ----------------------------------------------
+    newMemories.push_back(flatMem);
+  } else {
+    // Memory for each field
+    for (auto field : fields)
+      newMemories.push_back(cloneMemWithNewType(builder, op, field));
+  }
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
     auto result = oldPorts[index];
@@ -681,13 +778,56 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       // go both directions, depending on the port direction.
       if (name == "data" || name == "mask" || name == "wdata" ||
           name == "wmask" || name == "rdata") {
-        for (auto field : fields) {
-          auto realOldField = getSubWhatever(oldField, field.index);
-          auto newField = getSubWhatever(
-              newMemories[field.index].getResult(index), fieldIndex);
-          if (rType.getElement(fieldIndex).isFlip)
-            std::swap(realOldField, newField);
-          builder->create<ConnectOp>(newField, realOldField);
+        if (flattenAggregateMemData) {
+          // If memory was flattened instead of one memory per aggregate field.
+          Value newField =
+              getSubWhatever(newMemories[0].getResult(index), fieldIndex);
+          Value realOldField = oldField;
+          if (rType.getElement(fieldIndex).isFlip) {
+            // Cast the memory read data from flat type to aggregate.
+            newField = builder->createOrFold<BitCastOp>(
+                oldField.getType().cast<FIRRTLType>(), newField);
+            // Write the aggregate read data.
+            builder->createOrFold<ConnectOp>(realOldField, newField);
+          } else {
+            // Cast the input aggregate write data to flat type.
+            realOldField = builder->create<BitCastOp>(
+                newField.getType().cast<FIRRTLType>(), oldField);
+            // Mask bits require special handling, since some of the mask bits
+            // need to be repeated, direct bitcasting wouldn't work. Depending
+            // on the mask granularity, some mask bits will be repeated.
+            if ((name == "mask" || name == "wmask") &&
+                (maskWidths.size() < totalmaskWidths)) {
+              Value catMasks;
+              for (auto m : llvm::enumerate(maskWidths)) {
+                // Get the mask bit.
+                auto mBit = builder->createOrFold<BitsPrimOp>(
+                    realOldField, m.index(), m.index());
+                // Check how many times the mask bit needs to be prepend.
+                for (size_t repeat = 0; repeat < m.value(); repeat++)
+                  if (m.index() == 0 && repeat == 0)
+                    catMasks = mBit;
+                  else
+                    catMasks = builder->createOrFold<CatPrimOp>(mBit, catMasks);
+              }
+              realOldField = catMasks;
+            }
+            // Now set the mask or write data.
+            // Ensure that the types match.
+            builder->createOrFold<ConnectOp>(
+                newField,
+                builder->createOrFold<BitCastOp>(
+                    newField.getType().cast<FIRRTLType>(), realOldField));
+          }
+        } else {
+          for (auto field : fields) {
+            auto realOldField = getSubWhatever(oldField, field.index);
+            auto newField = getSubWhatever(
+                newMemories[field.index].getResult(index), fieldIndex);
+            if (rType.getElement(fieldIndex).isFlip)
+              std::swap(realOldField, newField);
+            builder->create<ConnectOp>(newField, realOldField);
+          }
         }
       } else {
         for (auto mem : newMemories) {
@@ -911,9 +1051,11 @@ void TypeLoweringVisitor::visitExpr(BitCastOp op) {
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
     for (auto field : llvm::enumerate(fields)) {
+      auto fieldBitwidth = getBitWidth(field.value().type).getValue();
+      // Ignore zero width fields, like empty bundles.
+      if (fieldBitwidth == 0)
+        continue;
       Value src = getSubWhatever(op.input(), field.index());
-      auto fieldType = src.getType().cast<FIRRTLType>();
-      auto fieldBitwidth = getBitWidth(fieldType).getValue();
       // The src could be an aggregate type, bitcast it to a UInt type.
       src = builder->createOrFold<BitCastOp>(
           UIntType::get(context, fieldBitwidth), src);
@@ -936,27 +1078,35 @@ void TypeLoweringVisitor::visitExpr(BitCastOp op) {
                      ArrayAttr attrs) -> Operation * {
       // All the fields must have valid bitwidth, a requirement for BitCastOp.
       auto fieldBits = getBitWidth(field.type).getValue();
+      // If empty field, then it doesnot have any use, so replace it with an
+      // invalid op, which should be trivially removed.
+      if (fieldBits == 0)
+        return builder->create<InvalidValueOp>(field.type);
+
       // Assign the field to the corresponding bits from the input.
       // Bitcast the field, incase its an aggregate type.
       auto extractBits = builder->create<BitsPrimOp>(
           srcLoweredVal, uptoBits + fieldBits - 1, uptoBits);
       uptoBits += fieldBits;
-      return extractBits;
+      return builder->create<BitCastOp>(field.type, extractBits);
     };
     lowerProducer(op, clone);
   } else {
     // If ground type, then replace the result.
+    if (op.getType().dyn_cast<SIntType>())
+      srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
     op.getResult().replaceAllUsesWith(srcLoweredVal);
     opsToRemove.push_back(op);
   }
 }
 
 void TypeLoweringVisitor::visitDecl(InstanceOp op) {
+  bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
-  SmallVector<StringAttr, 8> resultNames;
-  bool skip = true;
   auto oldPortAnno = op.portAnnotations();
+  SmallVector<Direction> newDirs;
+  SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
 
   endFields.push_back(0);
@@ -966,12 +1116,18 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     if (!peelType(srcType, fieldTypes)) {
+      newDirs.push_back(op.getPortDirection(i));
+      newNames.push_back(op.getPortName(i));
       resultTypes.push_back(srcType);
       newPortAnno.push_back(oldPortAnno[i]);
     } else {
       skip = false;
+      auto oldName = op.getPortNameStr(i);
+      auto oldDir = op.getPortDirection(i);
       // Store the flat type for the new bundle type.
       for (auto field : fieldTypes) {
+        newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
+        newNames.push_back(builder->getStringAttr(oldName + field.suffix));
         resultTypes.push_back(field.type);
         newPortAnno.push_back(filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
@@ -986,7 +1142,9 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
+      resultTypes, op.moduleNameAttr(), op.nameAttr(),
+      direction::packAttribute(context, newDirs),
+      builder->getArrayAttr(newNames), op.annotations(),
       builder->getArrayAttr(newPortAnno), op.lowerToBindAttr());
 
   SmallVector<Value> lowered;
@@ -1053,6 +1211,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
+  LowerTypesPass(bool f) { flattenAggregateMemData = f; }
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -1064,11 +1223,13 @@ void LowerTypesPass::runOnOperation() {
                  [&](Operation &op) { ops.push_back(&op); });
 
   mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
-    TypeLoweringVisitor(&getContext()).lowerModule(ops[index]);
+    TypeLoweringVisitor(&getContext(), flattenAggregateMemData)
+        .lowerModule(ops[index]);
   });
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass() {
-  return std::make_unique<LowerTypesPass>();
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createLowerFIRRTLTypesPass(bool replSeqMem) {
+  return std::make_unique<LowerTypesPass>(replSeqMem);
 }

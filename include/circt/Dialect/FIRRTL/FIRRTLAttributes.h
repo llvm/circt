@@ -35,6 +35,10 @@ namespace direction {
 /// input direction.
 inline Direction get(bool isOutput) { return (Direction)isOutput; }
 
+inline StringRef toString(Direction direction) {
+  return direction == Direction::In ? "in" : "out";
+}
+
 /// Return a \p IntegerAttr containing the packed representation of an array
 /// of directions.
 IntegerAttr packAttribute(MLIRContext *context, ArrayRef<Direction> directions);

@@ -19,7 +19,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK: }
 
-  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>)
+  ; CHECK-LABEL: firrtl.extmodule @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
   ; CHECK: attributes {defname = "myextmodule"}
   ; CHECK-NOT: {
   extmodule MyExtModule :
@@ -27,7 +27,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     output ,,, out ,,: ,, UInt,<,8,>  ; Commas are whitespace
     defname = myextmodule
 
-  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(in %in: !firrtl.uint, out %out: !firrtl.uint<8>)
+  ; CHECK-LABEL: firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
   ; CHECK: attributes {defname = "name_thing",
   ; CHECK: parameters = {DEFAULT = 0 : i64,
   ; CHECK:               DEPTH = 3.242000e+01 : f64,
@@ -308,23 +308,19 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
-    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : !firrtl.uint<80>
+    ; CHECK: %xyz_in = firrtl.instance xyz @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit
     ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.uint<80>, !firrtl.uint<8>
     xyz.in <= i8
 
-    ; CHECK: %myext_in, %myext_out = firrtl.instance @MyExtModule
-    ; CHECK: {name = "myext"} :
-    ; CHECK: !firrtl.uint, !firrtl.uint<8>
+    ; CHECK: %myext_in, %myext_out = firrtl.instance myext @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
     inst myext of MyExtModule
     myext.in <= i8
     printf(clock, reset, "Something interesting! %x", myext.out)
 
     ; CHECK: firrtl.when %reset  {
     when reset :
-      ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance @MyExtModule
-      ; CHECK: {name = "reset_myext"} :
-      ; CHECK: !firrtl.uint, !firrtl.uint<8>
+      ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance reset_myext @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
       inst reset_myext of MyExtModule
       reset_myext.in <= i8
     ; CHECK: }
@@ -438,7 +434,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity2(
   module expr_stmt_ambiguity2 :
-    ; CHECK: firrtl.instance @circuit
+    ; CHECK: firrtl.instance write @circuit
     inst write of circuit
     ; CHECK: firrtl.connect %write_in
     write.in <= UInt(1)
@@ -732,7 +728,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire2 is invalid
 
     ; https://github.com/llvm/circt/issues/563
-    ; CHECK: %U0_in0, %U0_in1, %U0_out0, %U0_out1 = firrtl.instance @mod_0_563
+    ; CHECK: %U0_in0, %U0_in1, %U0_out0, %U0_out1 = firrtl.instance U0 @mod_0_563
     inst U0 of mod_0_563
 
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue
@@ -867,36 +863,36 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; rocket-chip properties
     when cond:
-      printf(clock, enable, "assert:foo 0")
+      printf(clock, enable, "assert:foo 0", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 0"
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 0"(%value) : !firrtl.uint<42>
 
     when cond:
-      printf(clock, enable, "assume:foo 1")
+      printf(clock, enable, "assume:foo 1", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 1"
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 1"(%value) : !firrtl.uint<42>
 
     when cond:
-      printf(clock, enable, "cover:foo 2")
+      printf(clock, enable, "cover:foo 2", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 2"
+    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 2"(%value) : !firrtl.uint<42>
 
     when cond:
-      printf(clock, enable, "assert:custom label 0:foo 3")
+      printf(clock, enable, "assert:custom label 0:foo 3", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 3"
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "foo 3"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: name = "custom label 0"
 
     when cond:
-      printf(clock, enable, "assume:custom label 1:foo 4")
+      printf(clock, enable, "assume:custom label 1:foo 4", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 4"
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "foo 4"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: name = "custom label 1"
 
     when cond:
-      printf(clock, enable, "cover:custom label 2:foo 5")
+      printf(clock, enable, "cover:custom label 2:foo 5", value)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 5"
+    ; CHECK-NEXT: firrtl.cover %clock, [[TMP]], %enable, "foo 5"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: name = "custom label 2"
 
     ; Optional `stop` with same clock and condition should be removed.
@@ -918,40 +914,40 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; Chisel built-in assertions
     when cond:
-      printf(clock, enable, "Assertion failed")
+      printf(clock, enable, "Assertion failed", value)
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed"
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: name = "chisel3_builtin"
 
     when cond:
-      printf(clock, enable, "Assertion failed: some message")
+      printf(clock, enable, "Assertion failed: some message", value)
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: some message"
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: some message"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: name = "chisel3_builtin"
 
     ; Verification Library Assertions
 
     ; Predicate modifier `noMod`
     when cond:
-      printf(clock, enable, "Assertion failed: [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"magic\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Hello Assert\"}")
+      printf(clock, enable, "Assertion failed: [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"magic\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Hello Assert\"}", value)
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: format = "sva"
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_magic"
 
     ; Predicate modifier `trueOrIsX`
     when cond:
-      printf(clock, enable, "Assertion failed: [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"magic\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Hello Assert\"}")
+      printf(clock, enable, "Assertion failed: [verif-library-assert]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"magic\"],\"format\":{\"type\":\"sva\"},\"baseMsg\":\"Hello Assert\"}", value)
       stop(clock, enable, 1)
     ; CHECK: [[TMP1:%.+]] = firrtl.xorr %cond
     ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
     ; CHECK-NEXT: [[TMP3:%.+]] = firrtl.or %cond, [[TMP2]]
     ; CHECK-NEXT: [[TMP:%.+]] = firrtl.not [[TMP3]]
-    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Hello Assert"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: format = "sva"
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_magic"
@@ -960,21 +956,21 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
     ; Predicate modifier `noMod`
     when cond:
-      printf(clock, enable, "Assumption failed: [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"voodoo\"],\"baseMsg\":\"Hello Assume\"}")
+      printf(clock, enable, "Assumption failed: [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"noMod\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"voodoo\"],\"baseMsg\":\"Hello Assume\"}", value)
       stop(clock, enable, 1)
     ; CHECK: [[TMP:%.+]] = firrtl.not %cond
-    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_voodoo"
 
     ; Predicate modifier `trueOrIsX`
     when cond:
-      printf(clock, enable, "Assumption failed: [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"voodoo\"],\"baseMsg\":\"Hello Assume\"}")
+      printf(clock, enable, "Assumption failed: [verif-library-assume]<extraction-summary>{\"predicateModifier\":{\"type\":\"trueOrIsX\"},\"conditionalCompileToggles\":[{\"type\":\"unrOnly\"},{\"type\":\"formalOnly\"}],\"labelExts\":[\"label\",\"voodoo\"],\"baseMsg\":\"Hello Assume\"}", value)
       stop(clock, enable, 1)
     ; CHECK: [[TMP1:%.+]] = firrtl.xorr %cond
     ; CHECK-NEXT: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} === 1'bx"([[TMP1]])
     ; CHECK-NEXT: [[TMP3:%.+]] = firrtl.or %cond, [[TMP2]]
     ; CHECK-NEXT: [[TMP:%.+]] = firrtl.not [[TMP3]]
-    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"
+    ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_voodoo"

@@ -21,7 +21,7 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
     // CHECK: if (INLINE_OK)
     // DISALLOW: if ([[COND]])
     sv.if %0  {
-      sv.fatal
+      sv.fatal 1
     }
 
     // This should go through a reg when in "disallow" mode.
@@ -30,7 +30,7 @@ hw.module @side_effect_expr(%clock: i1) -> (a: i1, a2: i1) {
     // DISALLOW: if ([[SE_REG]])
     %1 = sv.verbatim.expr.se "SIDE_EFFECT" : () -> i1
     sv.if %1  {
-      sv.fatal
+      sv.fatal 1
     }
   }
 
@@ -66,7 +66,7 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
       // DISALLOW: $fwrite(32'h80000002, "Hi %x\n", [[MUL]]);
       %2 = comb.mul %0, %z : i8
       sv.fwrite "Hi %x\0A"(%2) : i8
-      sv.fatal
+      sv.fatal 1
     }
   }
 
@@ -87,7 +87,7 @@ hw.module @hoist_expressions(%clock: i1, %x: i8, %y: i8, %z: i8) {
     // CHECK: if (x + myWire == z)
     // DISALLOW: if ([[COND]])
     sv.if %4  {
-      sv.fatal
+      sv.fatal 1
     }
  }
 

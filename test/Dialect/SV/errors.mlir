@@ -77,13 +77,13 @@ hw.module @IfOp(%arg0: i1) {
 // -----
 hw.module @Fatal() {
   // expected-error @+1 {{sv.fatal should be in a procedural region}}
-  sv.fatal
+  sv.fatal 1
 }
 
 // -----
-hw.module @Fatal() {
+hw.module @Finish() {
   // expected-error @+1 {{sv.finish should be in a procedural region}}
-  sv.finish
+  sv.finish 1
 }
 
 // -----

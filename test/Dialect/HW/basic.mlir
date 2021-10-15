@@ -146,3 +146,5 @@ hw.module @signed_arrays(%arg0: si8) -> (out: !hw.array<2xsi8>) {
 hw.module @argRenames(%arg1: i32) attributes {argNames = [""]} {
 }
 
+hw.module @fileListTest(%arg1: i32) attributes {output_filelist = #hw.output_filelist<"foo.f">} {
+}

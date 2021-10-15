@@ -45,6 +45,9 @@ namespace {
 struct HWMemSimImplPass : public sv::HWMemSimImplBase<HWMemSimImplPass> {
   void runOnOperation() override;
 
+public:
+  HWMemSimImplPass(bool e) { replSeqMem = e; }
+
 private:
   void generateMemory(HWModuleOp op, FirMemory mem);
 };
@@ -293,9 +296,22 @@ void HWMemSimImplPass::runOnOperation() {
 
       OpBuilder builder(oldModule);
       auto nameAttr = builder.getStringAttr(oldModule.getName());
-      auto newModule = builder.create<HWModuleOp>(oldModule.getLoc(), nameAttr,
-                                                  oldModule.getPorts());
-      generateMemory(newModule, mem);
+
+      // The requirements for macro replacement:
+      // 1. read latency and write latency of one.
+      // 2. only one readwrite port or write port.
+      // 3. zero or one read port.
+      // 4. undefined read-under-write behavior.
+      if (replSeqMem && ((mem.readLatency == 1 && mem.writeLatency == 1) &&
+                         (mem.numWritePorts + mem.numReadWritePorts == 1) &&
+                         (mem.numReadPorts <= 1) && mem.dataWidth > 0)) {
+        builder.create<HWModuleExternOp>(oldModule.getLoc(), nameAttr,
+                                         oldModule.getPorts());
+      } else {
+        auto newModule = builder.create<HWModuleOp>(
+            oldModule.getLoc(), nameAttr, oldModule.getPorts());
+        generateMemory(newModule, mem);
+      }
       oldModule.erase();
       anythingChanged = true;
     }
@@ -305,6 +321,6 @@ void HWMemSimImplPass::runOnOperation() {
     markAllAnalysesPreserved();
 }
 
-std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass() {
-  return std::make_unique<HWMemSimImplPass>();
+std::unique_ptr<Pass> circt::sv::createHWMemSimImplPass(bool replSeqMem) {
+  return std::make_unique<HWMemSimImplPass>(replSeqMem);
 }

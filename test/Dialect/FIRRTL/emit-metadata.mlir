@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-metadata)' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-metadata{repl-seq-mem=true})' %s | FileCheck %s
 
 firrtl.circuit "empty" {
   firrtl.module @empty() {
@@ -77,9 +77,9 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
 
   firrtl.module @BasicBlackboxes() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    firrtl.instance @DUTBlackbox_0 { name = "test" }
-    firrtl.instance @DUTBlackbox_1 { name = "test" }
-    firrtl.instance @DUTBlackbox_2 { name = "test" }
+    firrtl.instance test @DUTBlackbox_0()
+    firrtl.instance test @DUTBlackbox_1()
+    firrtl.instance test @DUTBlackbox_2()
   }
 
   // These should all be ignored.
@@ -89,6 +89,7 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
   firrtl.extmodule @ignored3() attributes {annotations = [{class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}], defname = "ignored3"}
   firrtl.extmodule @ignored4() attributes {annotations = [{class = "sifive.enterprise.grandcentral.MemTapAnnotation", id = 4 : i64}], defname = "ignored4"}
   firrtl.extmodule @ignored5() attributes {annotations = [{class = "sifive.enterprise.grandcentral.transforms.SignalMappingAnnotation"}], defname = "ignored5"}
+  firrtl.extmodule @ignored6() attributes {annotations = [{class = "firrtl.transforms.BlackBox"}], defname = "ignored6"}
 
   // Gracefully handle missing defnames.
   firrtl.extmodule @NoDefName()
@@ -107,21 +108,22 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
 firrtl.circuit "top" 
 {
     firrtl.module @top()  {
-      firrtl.instance @dut {name = "dut"}
-      firrtl.instance @Mem1 {name = "mem1"}
+      firrtl.instance dut @dut()
+      firrtl.instance mem1 @Mem1()
     }
     firrtl.module @Mem1() {
       %head_MPORT_2 = firrtl.mem Undefined  {depth = 20 : i64, name = "head", portNames = ["MPORT_2", "MPORT_6"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>
     }
-    firrtl.module @dut()attributes {annotations = [
+    firrtl.module @dut() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-      firrtl.instance @Mem {name = "mem1"}
+      firrtl.instance mem1 @Mem()
     }
     firrtl.module @Mem() {
       %memory_rw, %memory_rw_r = firrtl.mem Undefined  {annotations = [{class = "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation", data = {baseAddress = 2147483648 : i64, dataBits = 8 : i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}}], depth = 16 : i64, name = "memory", portNames = ["rw", "rw_r", "rw_w"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
       %head_MPORT_2, %head_MPORT_6 = firrtl.mem Undefined  {depth = 20 : i64, name = "dumm", portNames = ["MPORT_2", "MPORT_6"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>
     }
-    // CHECK: sv.verbatim "[{\22module_name\22:\22FIRRTLMem_0_1_0_5_20_1_1_0_1\22,\22depth\22:20,\22width\22:5,\22masked\22:\22true\22,\22read\22:\22false\22,\22write\22:\22true\22,\22readwrite\22:\22false\22,\22mask_granularity\22:5,\22extra_ports\22:[],\22hierarchy\22:[\22top.mem1\22]}]" {output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>, symbols = []}
-    // CHECK: sv.verbatim "[{\22module_name\22:\22FIRRTLMem_1_0_1_8_16_1_1_0_1\22,\22depth\22:16,\22width\22:8,\22masked\22:\22true\22,\22read\22:\22true\22,\22write\22:\22false\22,\22readwrite\22:\22true\22,\22mask_granularity\22:8,\22extra_ports\22:[],\22hierarchy\22:[\22top.dut.mem1\22],\22verification_only_data\22:{\22top.dut.mem1\22:{\22baseAddress\22:2147483648,\22dataBits\22:8,\22eccBits\22:0,\22eccIndices\22:[],\22eccScheme\22:\22none\22}}}]" {output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>, symbols = []}
-    // CHECK: sv.verbatim "name FIRRTLMem_1_0_1_8_16_1_1_0_1 depth 16 width 8 ports mrw mask_gran 8\0A" {output_file = #hw.output_file<"metadata/dut.conf", excludeFromFileList>, symbols = []}
+    // CHECK: sv.verbatim "[{\22module_name\22:\22FIRRTLMem_0_1_0_5_20_1_1_1_0_1\22,\22depth\22:20,\22width\22:5,\22masked\22:\22true\22,\22read\22:\22false\22,\22write\22:\22true\22,\22readwrite\22:\22false\22,\22mask_granularity\22:5,\22extra_ports\22:[],\22hierarchy\22:[\22top.mem1\22]}]" {output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>, symbols = []}
+    // CHECK: sv.verbatim "[{\22module_name\22:\22FIRRTLMem_1_0_1_8_16_1_1_1_0_1\22,\22depth\22:16,\22width\22:8,\22masked\22:\22true\22,\22read\22:\22true\22,\22write\22:\22false\22,\22readwrite\22:\22true\22,\22mask_granularity\22:8,\22extra_ports\22:[],\22hierarchy\22:[\22top.dut.mem1\22]
+    // CHECK-SAME: output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>, symbols = []
+    // CHECK: sv.verbatim "name FIRRTLMem_1_0_1_8_16_1_1_1_0_1 depth 16 width 8 ports mrw mask_gran 8\0A" {output_file = #hw.output_file<"metadata/dut.conf", excludeFromFileList>, symbols = []}
 }

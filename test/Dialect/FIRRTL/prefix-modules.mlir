@@ -38,7 +38,7 @@ firrtl.circuit "Top" {
       prefix = "T_",
       inclusive = false
     }]} {
-    firrtl.instance @Zebra { name = "test" }
+    firrtl.instance test @Zebra()
   }
 
   // CHECK: firrtl.module @T_Zebra
@@ -76,7 +76,7 @@ firrtl.circuit "Top" {
       inclusive = true
     }]} {
 
-    firrtl.instance @ExternalModule {name = "ext"}
+    firrtl.instance ext @ExternalModule()
   }
 }
 
@@ -89,7 +89,7 @@ firrtl.circuit "Top0" {
       prefix = "T_",
       inclusive = false
     }]} {
-    firrtl.instance @Zebra { name = "test" }
+    firrtl.instance test @Zebra()
   }
 
   firrtl.module @Top1()
@@ -98,7 +98,7 @@ firrtl.circuit "Top0" {
       prefix = "T_",
       inclusive = false
     }]} {
-    firrtl.instance @Zebra { name = "test" }
+    firrtl.instance test @Zebra()
   }
 
   // CHECK: firrtl.module @T_Zebra
@@ -119,11 +119,11 @@ firrtl.circuit "Top" {
       inclusive = true
     }]} {
 
-    // CHECK: firrtl.instance @T_Aardvark
-    firrtl.instance @Aardvark { name = "test" }
+    // CHECK: firrtl.instance test @T_Aardvark()
+    firrtl.instance test @Aardvark()
 
-    // CHECK: firrtl.instance @T_Z_Zebra
-    firrtl.instance @Zebra { name = "test" }
+    // CHECK: firrtl.instance test @T_Z_Zebra()
+    firrtl.instance test @Zebra()
   }
 
   // CHECK: firrtl.module @T_Aardvark
@@ -134,8 +134,8 @@ firrtl.circuit "Top" {
       inclusive = false
     }]} {
 
-    // CHECK: firrtl.instance @T_A_Z_Zebra
-    firrtl.instance @Zebra { name = "test" }
+    // CHECK: firrtl.instance test @T_A_Z_Zebra()
+    firrtl.instance test @Zebra()
   }
 
   // CHECK: firrtl.module @T_Z_Zebra
