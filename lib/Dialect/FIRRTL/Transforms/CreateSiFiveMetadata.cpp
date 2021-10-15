@@ -25,8 +25,6 @@
 using namespace circt;
 using namespace firrtl;
 
-static const char seqMemAnnoClass[] =
-    "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation";
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
 /// Attribute that indicates where some json files should be dumped.
 static const char metadataDirectoryAnnoClass[] =
@@ -157,7 +155,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     bool isDut = dutModuleSet.contains(mod);
     for (auto memOp : mod.getBody()->getOps<MemOp>()) {
       auto firMem = memOp.getSummary();
-      StringRef name = firMem.getFirMemoryName();
+      auto name = firMem.getFirMemoryName();
       if (isDut)
         dutMems[name].push_back(memOp);
       else
