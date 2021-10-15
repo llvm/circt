@@ -55,7 +55,8 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       if (src != dst)
         continue;
 
-      // Collect surrounding loops to use in dependence components.
+      // Collect surrounding loops to use in dependence components. Only proceed
+      // if we are in the innermost loop.
       SmallVector<AffineForOp> enclosingLoops;
       getLoopIVs(*destination, &enclosingLoops);
       if (enclosingLoops.size() != depth)
