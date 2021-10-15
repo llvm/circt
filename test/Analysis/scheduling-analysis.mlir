@@ -139,9 +139,11 @@ func @test9(%arg0: memref<4x4xi32>, %arg1: memref<4x4xi32>, %arg2: memref<4x4xi3
       affine.for %arg5 = 0 to 4 {
         %0 = affine.load %arg0[%arg3, %arg5] : memref<4x4xi32>
         %1 = affine.load %arg1[%arg5, %arg4] : memref<4x4xi32>
+	// CHECK: affine.load %arg2[%arg3, %arg4] {dependence}
         %2 = affine.load %arg2[%arg3, %arg4] : memref<4x4xi32>
         %3 = muli %0, %1 : i32
         %4 = addi %2, %3 : i32
+	// CHECK: affine.store %4, %arg2[%arg3, %arg4] {dependence}
         affine.store %4, %arg2[%arg3, %arg4] : memref<4x4xi32>
       }
     }
