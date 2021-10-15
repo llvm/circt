@@ -61,7 +61,7 @@ using MemoryDependenceResult =
 /// TODO(mikeurbach): consider upstreaming this to MLIR's AffineAnalysis.
 struct MemoryDependenceAnalysis {
   // Construct the analysis from a FuncOp.
-  MemoryDependenceAnalysis(mlir::FuncOp funcOp);
+  MemoryDependenceAnalysis(Operation *funcOp);
 
   // Returns the dependences, if any, that the given Operation depends on.
   ArrayRef<MemoryDependence> getDependences(Operation *);

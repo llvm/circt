@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Analysis/DependenceAnalysis.h"
+#include "circt/Analysis/SchedulingAnalysis.h"
+#include "circt/Scheduling/Problems.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Pass/Pass.h"
@@ -68,6 +70,40 @@ void TestDependenceAnalysisPass::runOnFunction() {
 }
 
 //===----------------------------------------------------------------------===//
+// DependenceAnalysis passes.
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestSchedulingAnalysisPass
+    : public PassWrapper<TestSchedulingAnalysisPass, FunctionPass> {
+  void runOnFunction() override;
+  StringRef getArgument() const override { return "test-scheduling-analysis"; }
+  StringRef getDescription() const override {
+    return "Perform scheduling analysis and emit results as attributes";
+  }
+};
+} // namespace
+
+void TestSchedulingAnalysisPass::runOnFunction() {
+  MLIRContext *context = &getContext();
+
+  CyclicSchedulingAnalysis analysis = getAnalysis<CyclicSchedulingAnalysis>();
+
+  getFunction().walk([&](AffineForOp forOp) {
+    if (isa<AffineForOp>(forOp.getBody()->front()))
+      return;
+    CyclicProblem problem = analysis.getProblem(forOp);
+    forOp.getBody()->walk([&](Operation *op) {
+      for (auto dep : problem.getDependences(op)) {
+        assert(!dep.isInvalid());
+        if (dep.isAuxiliary())
+          op->setAttr("dependence", UnitAttr::get(context));
+      }
+    });
+  });
+}
+
+//===----------------------------------------------------------------------===//
 // Pass registration
 //===----------------------------------------------------------------------===//
 
@@ -76,6 +112,9 @@ namespace test {
 void registerAnalysisTestPasses() {
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestDependenceAnalysisPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestSchedulingAnalysisPass>();
   });
 }
 } // namespace test
