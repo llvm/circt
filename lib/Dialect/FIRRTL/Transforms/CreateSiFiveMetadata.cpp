@@ -45,7 +45,12 @@ class CreateSiFiveMetadataPass
   FModuleOp dutMod;
 
 public:
-  CreateSiFiveMetadataPass(bool e) { replSeqMem = e; }
+  CreateSiFiveMetadataPass(bool _replSeqMem, std::string _replSeqMemCircuit,
+                           std::string _replSeqMemFile) {
+    replSeqMem = _replSeqMem;
+    replSeqMemCircuit = _replSeqMemCircuit;
+    replSeqMemFile = _replSeqMemFile;
+  }
 };
 } // end anonymous namespace
 
@@ -204,8 +209,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
     StringRef confFile = "memory";
     if (dutMod)
       confFile = dutMod.getName();
-    auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-        context, metadataDir, confFile + ".conf", /*excludeFromFilelist=*/true);
+    auto fileAttr = hw::OutputFileAttr::getFromFilename(
+        context, replSeqMemFile, /*excludeFromFilelist=*/true);
     confVerbatimOp->setAttr("output_file", fileAttr);
   }
 
@@ -449,6 +454,9 @@ void CreateSiFiveMetadataPass::runOnOperation() {
 }
 
 std::unique_ptr<mlir::Pass>
-circt::firrtl::createCreateSiFiveMetadataPass(bool replSeqMem) {
-  return std::make_unique<CreateSiFiveMetadataPass>(replSeqMem);
+circt::firrtl::createCreateSiFiveMetadataPass(bool replSeqMem,
+                                              std::string replSeqMemCircuit,
+                                              std::string replSeqMemFile) {
+  return std::make_unique<CreateSiFiveMetadataPass>(
+      replSeqMem, replSeqMemCircuit, replSeqMemFile);
 }

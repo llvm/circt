@@ -102,7 +102,12 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
   }];
   let constructor = "circt::firrtl::createCreateSiFiveMetadataPass()";
   let options = [Option<"replSeqMem", "repl-seq-mem", "bool", "false",
-      "Lower the seq mem for macro replacement and emit relevant metadata">];
+      "Lower the seq mem for macro replacement and emit relevant metadata">,
+    Option<"replSeqMemCircuit", "repl-seq-mem-circuit", "std::string", "",
+      "Circuit root for seq mem metadata">,
+    Option<"replSeqMemFile", "repl-seq-mem-file", "std::string", "",
+      "File to which emit seq meme metadata">
+  ];
 }
 
 def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
