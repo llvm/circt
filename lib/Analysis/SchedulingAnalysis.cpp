@@ -63,13 +63,11 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
       Problem::Dependence dep(memoryDep.source, op);
       assert(succeeded(problem.insertDependence(dep)));
 
-      // Find the greatest distance lower bound from any loop and use that for
-      // this dependence.
-      unsigned distance = std::numeric_limits<unsigned>().max();
-      for (DependenceComponent comp : memoryDep.dependenceComponents)
-        if (comp.lb.getValue() < distance)
-          distance = comp.lb.getValue();
-
+      // Use the lower bound of the innermost loop for this dependence. This
+      // assumes outer loops execute sequentially, i.e. one iteration of the
+      // inner loop completes before the next iteration is initiated. With
+      // proper analysis and lowerings, this can be relaxed.
+      unsigned distance = memoryDep.dependenceComponents.back().lb.getValue();
       if (distance > 0)
         problem.setDistance(dep, distance);
     }
