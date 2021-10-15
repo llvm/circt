@@ -40,10 +40,10 @@ firrtl.circuit "InterfaceGroundType" attributes {
       {a},
       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
        id = 2 : i64}]} : !firrtl.uint<4>
-    firrtl.instance @View_companion { name = "View_companion" }
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InterfaceGroundType() {
-    firrtl.instance @DUT {name = "dut" }
+    firrtl.instance dut @DUT()
   }
 }
 
@@ -55,7 +55,7 @@ firrtl.circuit "InterfaceGroundType" attributes {
 
 // CHECK: firrtl.module @View_companion
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
-// CHECK-NEXT: firrtl.instance @View_mapping {name = "View_mapping"}
+// CHECK-NEXT: firrtl.instance View_mapping @View_mapping
 
 // All Grand Central annotations are removed from the wires.
 // CHECK: firrtl.module @DUT
@@ -124,10 +124,10 @@ firrtl.circuit "InterfaceVectorType" attributes {
         {a},
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
          id = 2 : i64}]} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.instance @View_companion {name = "View_companion"}
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InterfaceVectorType() {
-    %dut_clock, %dut_reset = firrtl.instance @DUT {name = "dut"} : !firrtl.clock, !firrtl.uint<1>
+    %dut_clock, %dut_reset = firrtl.instance dut @DUT(in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
   }
 }
 
@@ -139,7 +139,7 @@ firrtl.circuit "InterfaceVectorType" attributes {
 
 // CHECK: firrtl.module @View_companion
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/View_companion.sv"
-// CHECK-NEXT: firrtl.instance @View_mapping {name = "View_mapping"}
+// CHECK-NEXT: firrtl.instance View_mapping @View_mapping
 
 // All Grand Central annotations are removed from the registers.
 // CHECK: firrtl.module @DUT
@@ -201,10 +201,10 @@ firrtl.circuit "InterfaceBundleType" attributes {
         {a},
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
          id = 1 : i64}]} : !firrtl.uint<2>
-    firrtl.instance @View_companion {name = "View_companion"}
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InterfaceBundleType() {
-    firrtl.instance @DUT {name = "dut"}
+    firrtl.instance dut @DUT()
   }
 }
 
@@ -271,10 +271,10 @@ firrtl.circuit "InterfaceVecOfBundleType" attributes {
         {a},
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
          id = 1 : i64}]} : !firrtl.uint<2>
-    firrtl.instance @View_companion {name = "View_companion"}
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InterfaceVecOfBundleType() {
-    firrtl.instance @DUT {name = "dut"}
+    firrtl.instance dut @DUT()
   }
 }
 
@@ -324,10 +324,10 @@ firrtl.circuit "InterfaceNode" attributes {
          defName = "Foo",
          name = "foo",
          id = 1 : i64}]} : !firrtl.uint<2>
-    firrtl.instance @View_companion {name = "View_companion"}
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InterfaceNode() {
-    firrtl.instance @DUT {name = "dut"}
+    firrtl.instance dut @DUT()
   }
 }
 
@@ -381,10 +381,10 @@ firrtl.circuit "InterfacePort" attributes {
       {a},
       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
        id = 1 : i64}]] } {
-    firrtl.instance @View_companion {name = "View_companion"}
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @InterfacePort() {
-    %dut_a = firrtl.instance @DUT {name = "dut"} : !firrtl.uint<4>
+    %dut_a = firrtl.instance dut @DUT(in a : !firrtl.uint<4>)
   }
 }
 
@@ -439,10 +439,10 @@ firrtl.circuit "UnsupportedTypes" attributes {
        name = "view",
        type = "parent"}
     ]} {
-    firrtl.instance @View_companion {name = "View_companion"}
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @UnsupportedTypes() {
-    firrtl.instance @DUT {name = "dut"}
+    firrtl.instance dut @DUT()
   }
 }
 
@@ -503,10 +503,10 @@ firrtl.circuit "BindInterfaceTest"  attributes {
     }
       {
     firrtl.connect %b, %a : !firrtl.uint<8>, !firrtl.uint<8>
-    firrtl.instance @View_companion {name = "View_companion"}
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @BindInterfaceTest() {
-    %dut_a, %dut_b = firrtl.instance @DUT {name = "dut"} : !firrtl.uint<8>, !firrtl.uint<8>
+    %dut_a, %dut_b = firrtl.instance dut @DUT(in a: !firrtl.uint<8>, out b: !firrtl.uint<8>)
   }
 }
 
@@ -587,10 +587,10 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
        id = 1 : i64},
        {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
        id = 3 : i64}]} : !firrtl.uint<2>
-    firrtl.instance @View_companion { name = "View_companion" }
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @MultipleGroundTypeInterfaces() {
-    firrtl.instance @DUT {name = "dut" }
+    firrtl.instance dut @DUT()
   }
 }
 

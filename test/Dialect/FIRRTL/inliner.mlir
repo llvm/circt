@@ -12,8 +12,8 @@ firrtl.circuit "main_extmodule" {
 // Test that unused modules are deleted.
 firrtl.circuit "delete_dead_modules" {
 firrtl.module @delete_dead_modules () {
-  firrtl.instance @used {name = "used"}
-  firrtl.instance @used_ext {name = "used"}
+  firrtl.instance used @used()
+  firrtl.instance used @used_ext()
 }
 firrtl.module @unused () { }
 firrtl.module @used () { }
@@ -22,8 +22,8 @@ firrtl.extmodule @used_ext ()
 }
 // CHECK-LABEL: firrtl.circuit "delete_dead_modules" {
 // CHECK-NEXT:   firrtl.module @delete_dead_modules() {
-// CHECK-NEXT:     firrtl.instance @used  {name = "used"}
-// CHECK-NEXT:     firrtl.instance @used_ext  {name = "used"}
+// CHECK-NEXT:     firrtl.instance used @used()
+// CHECK-NEXT:     firrtl.instance used @used_ext
 // CHECK-NEXT:   }
 // CHECK-NEXT:   firrtl.module @used() {
 // CHECK-NEXT:   }
@@ -34,12 +34,12 @@ firrtl.extmodule @used_ext ()
 // Test basic inlining
 firrtl.circuit "inlining" {
 firrtl.module @inlining() {
-  firrtl.instance @test1 {name = "test1"}
+  firrtl.instance test1 @test1()
 }
 firrtl.module @test1()
   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
-  firrtl.instance @test2 {name = "test2"}
+  firrtl.instance test2 @test2()
 }
 firrtl.module @test2()
   attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
@@ -58,11 +58,11 @@ firrtl.module @test2()
 firrtl.circuit "flattening" {
 firrtl.module @flattening()
   attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
-  firrtl.instance @test1 {name = "test1"}
+  firrtl.instance test1 @test1()
 }
 firrtl.module @test1() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
-  firrtl.instance @test2 {name = "test2"}
+  firrtl.instance test2 @test2()
 }
 firrtl.module @test2() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
@@ -79,21 +79,21 @@ firrtl.module @test2() {
 // Test that inlining and flattening compose well.
 firrtl.circuit "compose" {
 firrtl.module @compose() {
-  firrtl.instance @test1 {name = "test1"}
-  firrtl.instance @test2 {name = "test2"}
-  firrtl.instance @test3 {name = "test3"}
+  firrtl.instance test1 @test1()
+  firrtl.instance test2 @test2()
+  firrtl.instance test3 @test3()
 }
 firrtl.module @test1() attributes {annotations =
         [{class = "firrtl.transforms.FlattenAnnotation"},
          {class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
-  firrtl.instance @test2 {name = "test2"}
-  firrtl.instance @test3 {name = "test3"}
+  firrtl.instance test2 @test2()
+  firrtl.instance test3 @test3()
 }
 firrtl.module @test2() attributes {annotations =
         [{class = "firrtl.passes.InlineAnnotation"}]} {
   %test_wire = firrtl.wire : !firrtl.uint<2>
-  firrtl.instance @test3 {name = "test3"}
+  firrtl.instance test3 @test3()
 }
 firrtl.module @test3() {
   %test_wire = firrtl.wire : !firrtl.uint<2>
@@ -106,8 +106,8 @@ firrtl.module @test3() {
 // CHECK-NEXT:     %test1_test2_test3_test_wire = firrtl.wire  : !firrtl.uint<2>
 // CHECK-NEXT:     %test1_test3_test_wire = firrtl.wire  : !firrtl.uint<2>
 // CHECK-NEXT:     %test2_test_wire = firrtl.wire  : !firrtl.uint<2>
-// CHECK-NEXT:     firrtl.instance @test3  {name = "test2_test3"}
-// CHECK-NEXT:     firrtl.instance @test3  {name = "test3"}
+// CHECK-NEXT:     firrtl.instance test2_test3 @test3()
+// CHECK-NEXT:     firrtl.instance test3 @test3()
 // CHECK-NEXT:   }
 // CHECK-NEXT:   firrtl.module @test3() {
 // CHECK-NEXT:     %test_wire = firrtl.wire  : !firrtl.uint<2>
@@ -127,19 +127,17 @@ firrtl.module @InlineMe0(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
   firrtl.connect %out1, %1 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 firrtl.module @InlineMe1(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
-                   out %out0: !firrtl.uint<4>,
-                   out %out1: !firrtl.uint<4>)
+                   out %out0: !firrtl.uint<4>, out %out1: !firrtl.uint<4>)
         attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-  %a_in0, %a_in1, %a_out0, %a_out1 = firrtl.instance @InlineMe0 {name = "a"} : !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>
+  %a_in0, %a_in1, %a_out0, %a_out1 = firrtl.instance a @InlineMe0(in in0: !firrtl.uint<4>, in in1: !firrtl.uint<4>, out out0: !firrtl.uint<4>, out out1: !firrtl.uint<4>)
   firrtl.connect %a_in0, %in0 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %a_in1, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out0, %a_out0 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out1, %a_out1 : !firrtl.uint<4>, !firrtl.uint<4>
 }
 firrtl.module @TestConnections(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
-                   out %out0: !firrtl.uint<4>,
-                   out %out1: !firrtl.uint<4>) {
-  %b_in0, %b_in1, %b_out0, %b_out1 = firrtl.instance @InlineMe1 {name = "b"} : !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>
+                   out %out0: !firrtl.uint<4>, out %out1: !firrtl.uint<4>) {
+  %b_in0, %b_in1, %b_out0, %b_out1 = firrtl.instance b @InlineMe1(in in0: !firrtl.uint<4>, in in1: !firrtl.uint<4>, out out0: !firrtl.uint<4>, out out1: !firrtl.uint<4>)
   firrtl.connect %b_in0, %in0 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %b_in1, %in1 : !firrtl.uint<4>, !firrtl.uint<4>
   firrtl.connect %out0, %b_out0 : !firrtl.uint<4>, !firrtl.uint<4>
@@ -179,7 +177,7 @@ firrtl.module @InlineMe0(in %in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>,
 }
 firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>,
                                    out %out0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>) {
-  %i_in0, %i_out0 = firrtl.instance @InlineMe0 {name = "i"} : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
+  %i_in0, %i_out0 = firrtl.instance i @InlineMe0(in in0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>, out out0: !firrtl.bundle<a: uint<4>, b flip: uint<4>>)
   firrtl.connect %i_in0, %in0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
   firrtl.connect %out0, %i_out0 : !firrtl.bundle<a: uint<4>, b flip: uint<4>>, !firrtl.bundle<a: uint<4>, b flip: uint<4>>
 // CHECK: %i_in0 = firrtl.wire  : !firrtl.bundle<a: uint<4>, b flip: uint<4>>
@@ -193,7 +191,7 @@ firrtl.module @TestBulkConnections(in %in0: !firrtl.bundle<a: uint<4>, b flip: u
 // Test that all operations with names are renamed.
 firrtl.circuit "renaming" {
 firrtl.module @renaming() {
-  %0, %1, %2 = firrtl.instance @declarations {name = "myinst"} : !firrtl.clock, !firrtl.uint<8>, !firrtl.asyncreset
+  %0, %1, %2 = firrtl.instance myinst @declarations(in clock : !firrtl.clock, in u8 : !firrtl.uint<8>, in reset : !firrtl.asyncreset)
 }
 firrtl.module @declarations(in %clock : !firrtl.clock, in %u8 : !firrtl.uint<8>, in %reset : !firrtl.asyncreset) attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
   %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>

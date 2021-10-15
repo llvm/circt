@@ -98,7 +98,7 @@
 // CHECK-LABEL: firrtl.module @main
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: index, ...) -> (i8, none, none) {
   // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_arg3, %inst_arg4, %inst_arg5, %inst_clock, %inst_reset
-  // CHECK: = firrtl.instance @handshake_memory_out_ui8_id0
+  // CHECK: = firrtl.instance "" @handshake_memory_out_ui8_id0
   %0:3 = "handshake.memory"(%arg0, %arg1, %arg2) {id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32, type = memref<10xi8>} : (i8, index, index) -> (i8, none, none)
 
   handshake.return %0#0, %0#1, %0#2: i8, none, none

@@ -77,9 +77,9 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
 
   firrtl.module @BasicBlackboxes() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-    firrtl.instance @DUTBlackbox_0 { name = "test" }
-    firrtl.instance @DUTBlackbox_1 { name = "test" }
-    firrtl.instance @DUTBlackbox_2 { name = "test" }
+    firrtl.instance test @DUTBlackbox_0()
+    firrtl.instance test @DUTBlackbox_1()
+    firrtl.instance test @DUTBlackbox_2()
   }
 
   // These should all be ignored.
@@ -108,15 +108,15 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
 firrtl.circuit "top" 
 {
     firrtl.module @top()  {
-      firrtl.instance @dut {name = "dut"}
-      firrtl.instance @Mem1 {name = "mem1"}
+      firrtl.instance dut @dut()
+      firrtl.instance mem1 @Mem1()
     }
     firrtl.module @Mem1() {
       %head_MPORT_2 = firrtl.mem Undefined  {depth = 20 : i64, name = "head", portNames = ["MPORT_2", "MPORT_6"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<5>, mask: uint<1>>
     }
-    firrtl.module @dut()attributes {annotations = [
+    firrtl.module @dut() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {
-      firrtl.instance @Mem {name = "mem1"}
+      firrtl.instance mem1 @Mem()
     }
     firrtl.module @Mem() {
       %memory_rw, %memory_rw_r = firrtl.mem Undefined  {annotations = [{class = "sifive.enterprise.firrtl.SeqMemInstanceMetadataAnnotation", data = {baseAddress = 2147483648 : i64, dataBits = 8 : i64, eccBits = 0 : i64, eccIndices = [], eccScheme = "none"}}], depth = 16 : i64, name = "memory", portNames = ["rw", "rw_r", "rw_w"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<1>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>

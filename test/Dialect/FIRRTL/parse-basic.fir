@@ -308,23 +308,19 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     reg _t_2622 : UInt<4>, clock with :
       reset => (UInt<1>("h0"), _t_2622)
 
-    ; CHECK: %xyz_in = firrtl.instance @circuit {name = "xyz"} : !firrtl.uint<80>
+    ; CHECK: %xyz_in = firrtl.instance xyz @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit
     ; CHECK: firrtl.connect %xyz_in, %i8 : !firrtl.uint<80>, !firrtl.uint<8>
     xyz.in <= i8
 
-    ; CHECK: %myext_in, %myext_out = firrtl.instance @MyExtModule
-    ; CHECK: {name = "myext"} :
-    ; CHECK: !firrtl.uint, !firrtl.uint<8>
+    ; CHECK: %myext_in, %myext_out = firrtl.instance myext @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
     inst myext of MyExtModule
     myext.in <= i8
     printf(clock, reset, "Something interesting! %x", myext.out)
 
     ; CHECK: firrtl.when %reset  {
     when reset :
-      ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance @MyExtModule
-      ; CHECK: {name = "reset_myext"} :
-      ; CHECK: !firrtl.uint, !firrtl.uint<8>
+      ; CHECK: %reset_myext_in, %reset_myext_out = firrtl.instance reset_myext @MyExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>)
       inst reset_myext of MyExtModule
       reset_myext.in <= i8
     ; CHECK: }
@@ -438,7 +434,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
 
   ; CHECK-LABEL: firrtl.module @expr_stmt_ambiguity2(
   module expr_stmt_ambiguity2 :
-    ; CHECK: firrtl.instance @circuit
+    ; CHECK: firrtl.instance write @circuit
     inst write of circuit
     ; CHECK: firrtl.connect %write_in
     write.in <= UInt(1)
@@ -732,7 +728,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     wire2 is invalid
 
     ; https://github.com/llvm/circt/issues/563
-    ; CHECK: %U0_in0, %U0_in1, %U0_out0, %U0_out1 = firrtl.instance @mod_0_563
+    ; CHECK: %U0_in0, %U0_in1, %U0_out0, %U0_out1 = firrtl.instance U0 @mod_0_563
     inst U0 of mod_0_563
 
     ; CHECK: [[INV:%.+]] = firrtl.invalidvalue

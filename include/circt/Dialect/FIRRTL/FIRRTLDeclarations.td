@@ -16,23 +16,31 @@ def InstanceOp : FIRRTLOp<"instance", [
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
     and outputs.  The inputs have flip type, the outputs do not.
+
+    Examples:
+    ```mlir
+    %0 = firrtl.instance foo @Foo(in io: !firrtl.uint)
+    ```
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
+                       APIntAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        BoolAttr:$lowerToBind);
+
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat =
-    "$moduleName custom<InstanceOp>(attr-dict) (`:` type($results)^ )?";
-
   let verifier = "return ::verifyInstanceOp(*this);";
+  let printer = "printInstanceOp(p, *this);";
+  let parser = "return parseInstanceOp(parser, result);";
 
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
-                   CArg<"StringRef", "{}">:$name,
+                   "::mlir::StringRef":$name,
+                   "::mlir::ArrayRef<Direction>":$portDirections,
+                   "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind)>,
@@ -51,9 +59,14 @@ def InstanceOp : FIRRTLOp<"instance", [
     FModuleLike getReferencedModule();
     FModuleLike getReferencedModule(SymbolTable& symtbl);
 
+    /// Return the port direction for the specified result number.
+    Direction getPortDirection(size_t resultNo) {
+      return direction::get(portDirections()[resultNo]);
+    }
+
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {
-      return getReferencedModule().getPortNameAttr(resultNo);
+      return portNames()[resultNo].cast<StringAttr>();
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();

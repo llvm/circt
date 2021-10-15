@@ -30,7 +30,7 @@
 // CHECK-SAME:  in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @simple_addi(%arg0: index, %arg1: index, %arg2: none, ...) -> (index, none) {
 
-  // CHECK:%inst_arg0, %inst_arg1, %inst_arg2 = firrtl.instance @std_addi_in_ui64_ui64_out_ui64  {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2 = firrtl.instance "" @std_addi_in_ui64_ui64_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   // CHECK: firrtl.connect %inst_arg0, %arg0 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
   // CHECK: firrtl.connect %inst_arg1, %arg1 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
   %0 = addi %arg0, %arg1 : index

@@ -458,9 +458,8 @@ void Emitter::emitStatement(InstanceOp op) {
   SmallString<16> portName(op.name());
   portName.push_back('.');
   unsigned baseLen = portName.size();
-  auto modulePorts = op.getReferencedModule().getPorts();
   for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
-    portName.append(modulePorts[i].name.getValue());
+    portName.append(op.getPortNameStr(i));
     addValueName(op.getResult(i), portName);
     portName.resize(baseLen);
   }

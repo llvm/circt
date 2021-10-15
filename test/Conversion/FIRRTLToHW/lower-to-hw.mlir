@@ -572,7 +572,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT:  [[IO:%[0-9]+]] = sv.read_inout %io_cpu_flush.wire
     %io_cpu_flush.wire = firrtl.wire {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
     // CHECK-NEXT: hw.instance "fetch" @bar(io_cpu_flush: [[IO]]: i1)
-    %i = firrtl.instance @bar {name = "fetch", portNames=["io_cpu_flush"]} : !firrtl.uint<1>
+    %i = firrtl.instance fetch @bar(in io_cpu_flush: !firrtl.uint<1>)
     firrtl.connect %i, %io_cpu_flush.wire : !firrtl.uint<1>, !firrtl.uint<1>
 
     %hits_1_7 = firrtl.node %io_cpu_flush.wire {name = "hits_1_7", annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<1>
@@ -588,11 +588,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-NEXT: hw.module @bindTest()
   firrtl.module @bindTest() {
     // CHECK: hw.instance "baz" sym @[[bazSymbol]] @bar
-    %baz = firrtl.instance @bar {lowerToBind = true, name = "baz"} : !firrtl.uint<1>
+    %baz = firrtl.instance baz {lowerToBind = true} @bar(in io_cpu_flush: !firrtl.uint<1>)
     // CHECK: hw.instance "qux" sym @[[quxSymbol]] @bar
-    %qux = firrtl.instance @bar { lowerToBind = true, name = "qux",
-      output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
-    } : !firrtl.uint<1>
+    %qux = firrtl.instance qux {lowerToBind = true, output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>} @bar(in io_cpu_flush: !firrtl.uint<1>)
   }
 
 

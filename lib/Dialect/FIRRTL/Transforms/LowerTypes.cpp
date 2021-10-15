@@ -1101,11 +1101,12 @@ void TypeLoweringVisitor::visitExpr(BitCastOp op) {
 }
 
 void TypeLoweringVisitor::visitDecl(InstanceOp op) {
+  bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
-  SmallVector<StringAttr, 8> resultNames;
-  bool skip = true;
   auto oldPortAnno = op.portAnnotations();
+  SmallVector<Direction> newDirs;
+  SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
 
   endFields.push_back(0);
@@ -1115,12 +1116,18 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     if (!peelType(srcType, fieldTypes)) {
+      newDirs.push_back(op.getPortDirection(i));
+      newNames.push_back(op.getPortName(i));
       resultTypes.push_back(srcType);
       newPortAnno.push_back(oldPortAnno[i]);
     } else {
       skip = false;
+      auto oldName = op.getPortNameStr(i);
+      auto oldDir = op.getPortDirection(i);
       // Store the flat type for the new bundle type.
       for (auto field : fieldTypes) {
+        newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
+        newNames.push_back(builder->getStringAttr(oldName + field.suffix));
         resultTypes.push_back(field.type);
         newPortAnno.push_back(filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
@@ -1135,7 +1142,9 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
+      resultTypes, op.moduleNameAttr(), op.nameAttr(),
+      direction::packAttribute(context, newDirs),
+      builder->getArrayAttr(newNames), op.annotations(),
       builder->getArrayAttr(newPortAnno), op.lowerToBindAttr());
 
   SmallVector<Value> lowered;

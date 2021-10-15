@@ -143,10 +143,10 @@ firrtl.module @VerbatimExpr() {
 }
 
 // CHECK-LABL: @LowerToBind
-// CHECK: firrtl.instance @InstanceLowerToBind {lowerToBind = true, name = "foo"}
+// CHECK: firrtl.instance foo {lowerToBind = true} @InstanceLowerToBind()
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
-  firrtl.instance @InstanceLowerToBind {lowerToBind = true, name = "foo"}
+  firrtl.instance foo {lowerToBind = true} @InstanceLowerToBind()
 }
 
 firrtl.nla @NLA1 [] []
