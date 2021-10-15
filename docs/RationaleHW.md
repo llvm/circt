@@ -54,8 +54,6 @@ several major contributions:
 The combination of these capabilities provides a useful suite of functionality
 for compiler tools that want to generate high quality SystemVerilog.
 
-_MW: Where is sequential logic handled (registers, memories)? Is that all lumped into `sv`, or...?_
-
 ## Introduction to the `hw` Dialect
 
 The `hw` dialect defines a set of common functionality, such as `hw.module` and 
@@ -66,13 +64,6 @@ design language directly, and doesn't contain combinational or sequential
 operations and does not have "connect" semantics.  Instead, it is designed to be
 a flexible and extensible substrate that may be extended with higher level
 dialects mixed into it (like `sv`, `comb`, and `seq` in the future, etc).
-
-_MW: Above is the first mention of `seq` dialect_
-
-_MW:  My impression is that the `hw` dialect is modeling the concept of components
-that can be plugged together with "wires", without dealing with any of the functionality
-within the components. Or is connection not part of `hw`? If it is I think it's worth calling out
-specifically here._
 
 ## `hw` Type System
 
@@ -85,9 +76,6 @@ CLEANUP: InOut types is defined in the `hw` dialect, but logically lives at the
 constructs that work with the inout type.  These aren't necessary
 for combinational logic, but are nonetheless pretty useful when generating
 Verilog.
-
-_MW: I don't know what you mean by "this allows...". This allows the `hw` dialect to have those
-things? Or the `sv` dialect? I guess I don't know what you mean by the previous sentence at all._
 
 ## `hw.module` and `hw.instance`
 
@@ -175,14 +163,6 @@ FIRRTL dialect `InstanceGraph` type, etc.
 
 ## Parameterized Modules
 
-_MW: General question about parameters in modules... we seem to be ignoring
-the concept of a `localparam`, which is more of a #define than an actual parameter.
-Yet, this concept is still very useful from the "perceived readability of the generated code".
-Can we clarify the rationale here -- is this a "we'll get to localparam/`define later" or
-"these things aren't useful because ____"?
-NB: I kept reading and then there was a quick mention of localparam at the end. Might be worth
-calling out up front._
-
 The `hw` dialect supports parametric "compile-time" polymorphism for modules.
 This allows for metaprogramming along the instance tree, guaranteed
 "instantiation time" optimizations and code generation, further enables
@@ -257,7 +237,7 @@ module:
   `sv.verbatim.expr`.
 
 Because parameter expressions are MLIR attributes, they are immortal values
-that are uniquified based on their structure.  This has several important
+that are uniqued based on their structure.  This has several important
 implications, including:
 
 - A parameter reference (`#hw.param.decl.ref`) to a parameter `x` doesn't know
@@ -265,7 +245,7 @@ implications, including:
   valid within the body of a module, and that the types line up between the
   parameter reference and the declaration (after all, two different modules can
   have two different parameters named `x` with different types).
-- We want to depend on MLIR canonicalizing and uniquifying the pointer address of
+- We want to depend on MLIR canonicalizing and uniquing the pointer address of
   attributes in a predictable way to ensure that further derived uniqued objects
   (e.g. a parameterized integer type) is also uniqued correctly.  For example,
   we do not want the types `hw.int<x+1>` and `hw.int<1+x>` to turn into
@@ -363,10 +343,6 @@ Using `sv.localparam` is helpful when you're looking to produce specifically
 pretty Verilog for human consumption.  The optimizer won't fold aggressively
 around these names.
 
-_MW: It seems that the idea is that `localparam` is strictly for sv and not
-what is being addressed here. Can we mention that at the start of this section?
-And give a rationale why?_ 
-
 ### Parameterized Types
 
 TODO: Not done yet.
@@ -398,9 +374,6 @@ values as a special case.  Instead they are just a matter for frontends and
 the Verilog exporter to care about.
 
 **Why model parameters with attributes instead of SSA values?**
-
-_MW: Can you define `SSA` acronym? This can be common to compiler folks but not
-for HW folks who might be reading this_
 
 It seems unfortunate to replicate some parts of the `comb` dialect (e.g.
 `comb.add`) as attributes rather than just reusing the existing attributes.
@@ -482,7 +455,6 @@ or something higher level.
 Separate from a "good" representation of parametric modules, the SV dialect
 could grow direct support for representing the SystemVerilog functionality
 in this space, including even things like "generate" blocks.
-
 
 **EDA Tool-specific Subdialects**
 
