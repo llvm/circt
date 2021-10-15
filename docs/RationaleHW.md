@@ -39,7 +39,7 @@ several major contributions:
 
  1) The `hw` dialect provides unifying structure and
     abstractions that are useful for a wide range of hardware modeling problems.
-    Is allows other dialects to "mix in" with it to provide higher level
+    It allows other dialects to "mix in" with it to provide higher level
     functionality. `hw` is roughly akin to the "std" dialect in MLIR (but better
     curated).
  2) The `comb` dialect provides a common set of operations for combinational
@@ -47,7 +47,7 @@ several major contributions:
  3) The `sv` dialect provides direct access to a wide variety
     of SystemVerilog constructs, including behavioral constructs, syntactic
     sugar constructs, and even idioms like `ifdef` blocks.
- 4) By providing a high quality implementation and a number of useful compiler
+ 4) The `circt` project provides a high quality implementation and a number of useful compiler
     passes for analyzing and transforming these dialects, and a SystemVerilog
     emitter that generates pretty output.
 
@@ -79,7 +79,7 @@ Verilog.
 
 ## `hw.module` and `hw.instance`
 
-The basic structure of a hardware designed is made up an "instance tree" of
+The basic structure of a hardware design is made up an "instance tree" of
 "modules" and "instances" that refer to them.  There are loose analogies to
 software programs which have corresponding "functions" and "calls" (but there
 are also major differences, see "[Instance paths](#instance-paths)" below).
@@ -138,8 +138,8 @@ notable differences: for example:
    is useful.  That said, the [Verilog exporter](VerilogGeneration.md) does not
    support arbitrary user-defined types.
  - The `comb` dialect in particular does not use signed integer types, its
-   operators do not support zero-width integer types.  Modules, on the other
-   hand, do support both of these.  Zero width ports are omitted (printed as
+   operators do not support zero-width integer types.  Modules in the `hw` dialect,
+   on the other hand, do support both of these.  Zero width ports are omitted (printed as
    comments) when generating verilog.
 
 ### Instance paths
@@ -244,7 +244,7 @@ implications, including:
   what module it is in.  The verifier checks that parameter expressions are
   valid within the body of a module, and that the types line up between the
   parameter reference and the declaration (after all, two different modules can
-  have two   different parameters named `x` with different types).
+  have two different parameters named `x` with different types).
 - We want to depend on MLIR canonicalizing and uniquing the pointer address of
   attributes in a predictable way to ensure that further derived uniqued objects
   (e.g. a parameterized integer type) is also uniqued correctly.  For example,
