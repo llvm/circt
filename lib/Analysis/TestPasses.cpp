@@ -90,6 +90,8 @@ void TestSchedulingAnalysisPass::runOnFunction() {
   CyclicSchedulingAnalysis analysis = getAnalysis<CyclicSchedulingAnalysis>();
 
   getFunction().walk([&](AffineForOp forOp) {
+    if (isa<AffineForOp>(forOp.getBody()->front()))
+      return;
     CyclicProblem problem = analysis.getProblem(forOp);
     forOp.getBody()->walk([&](Operation *op) {
       for (auto dep : problem.getDependences(op)) {

@@ -13,8 +13,11 @@
 #include "circt/Analysis/SchedulingAnalysis.h"
 #include "circt/Analysis/DependenceAnalysis.h"
 #include "circt/Scheduling/Problems.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/AnalysisManager.h"
+#include "mlir/Transforms/LoopUtils.h"
+#include <limits>
 
 using namespace mlir;
 
@@ -29,15 +32,16 @@ circt::analysis::CyclicSchedulingAnalysis::CyclicSchedulingAnalysis(
   MemoryDependenceAnalysis &memoryAnalysis =
       am.getAnalysis<MemoryDependenceAnalysis>();
 
-  funcOp.walk([&](AffineForOp forOp) { analyzeForOp(forOp, memoryAnalysis); });
+  // Only consider innermost loops of perfectly nested AffineForOps.
+  for (auto root : funcOp.getOps<AffineForOp>()) {
+    SmallVector<AffineForOp> nestedLoops;
+    getPerfectlyNestedLoops(nestedLoops, root);
+    analyzeForOp(nestedLoops.back(), memoryAnalysis);
+  }
 }
 
 void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
     AffineForOp forOp, MemoryDependenceAnalysis memoryAnalysis) {
-  // Only consider innermost AffineForOps.
-  if (isa<AffineForOp>(forOp.getBody()->front()))
-    return;
-
   // Create a cyclic scheduling problem.
   CyclicProblem problem(forOp);
 
@@ -61,12 +65,13 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
 
       // Find the greatest distance lower bound from any loop and use that for
       // this dependence.
-      unsigned distance = 0;
+      unsigned distance = std::numeric_limits<unsigned>().max();
       for (DependenceComponent comp : memoryDep.dependenceComponents)
-        if (comp.lb.getValue() > distance)
+        if (comp.lb.getValue() < distance)
           distance = comp.lb.getValue();
 
-      problem.setDistance(dep, distance);
+      if (distance > 0)
+        problem.setDistance(dep, distance);
     }
   });
 
