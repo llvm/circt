@@ -716,7 +716,8 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
   // If subannotations present on aggregate fields, we cannot flatten the
   // memory. It must be split into one memory per aggregate field.
   if (flattenAggregateMemData)
-    if (hasSubAnno() || !flattenType(op.getDataType(), flatMemType))
+    if (hasSubAnno() || !flattenType(op.getDataType(), flatMemType) ||
+        AnnotationSet(op).hasDontTouch())
       flattenAggregateMemData = false;
 
   if (flattenAggregateMemData) {

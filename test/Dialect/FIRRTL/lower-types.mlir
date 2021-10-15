@@ -298,6 +298,17 @@ firrtl.circuit "TopLevel" {
     // FLATTEN:  firrtl.connect %[[memory_w_data_a]], %wData_a : !firrtl.uint<8>, !firrtl.uint<8>
 
   }
+  firrtl.module @Mem2_flatten_DontTouch(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out
+  %rData: !firrtl.bundle<a: uint<8>, b: uint<16>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask:
+  !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<16>>) {
+    %memory_r, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency
+    = 0 : i32, writeLatency = 1 : i32, annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a:
+    uint<8>, b: uint<16>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>
+
+    // FLATTEN: firrtl.mem Undefined {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]
+    // FLATTEN: firrtl.mem Undefined {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]
+
+  }
 // Test that a memory with a readwrite port is split into 1r1w
 //
 // circuit Foo:
