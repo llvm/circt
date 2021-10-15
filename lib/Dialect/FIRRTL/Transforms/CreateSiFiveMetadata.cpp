@@ -163,7 +163,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
         tbMems[name].push_back(memOp);
     }
   }
-  std::string seqMemConfStr, tbConfStr;
+  std::string seqMemConfStr;
   dutJson.array([&] {
     for (auto &dutM : dutMems)
       createMemMetadata(dutM.second, dutJson, seqMemConfStr);
