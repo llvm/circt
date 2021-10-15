@@ -71,9 +71,24 @@ public:
       return py::none();
     return py::cast(nearest);
   }
-  void walkPlacements(py::function pycb, int64_t colNo = -1) {
+  void walkPlacements(
+      py::function pycb,
+      std::tuple<py::object, py::object, py::object, py::object> bounds,
+      py::object prim) {
+
+    auto handleNone = [](py::object o) {
+      return o.is_none() ? -1 : o.cast<int64_t>();
+    };
+    int64_t cBounds[4] = {
+        handleNone(std::get<0>(bounds)), handleNone(std::get<1>(bounds)),
+        handleNone(std::get<2>(bounds)), handleNone(std::get<3>(bounds))};
+    CirctMSFTPrimitiveType cPrim;
+    if (prim.is_none())
+      cPrim = -1;
+    else
+      cPrim = prim.cast<CirctMSFTPrimitiveType>();
     circtMSFTPlacementDBWalkPlacements(
-        db, colNo,
+        db,
         [](MlirAttribute loc, CirctMSFTPlacedInstance p, void *userData) {
           std::string subpath(p.subpath, p.subpathLength);
           py::gil_scoped_acquire gil;
@@ -84,7 +99,7 @@ public:
             pycb(loc, std::make_tuple(p.path, subpath, p.op));
           }
         },
-        &pycb);
+        cBounds, cPrim, &pycb);
   }
 
 private:
@@ -208,6 +223,10 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
            "there. Otherwise, returns (path, subpath, op) of the instance "
            "there.")
       .def("walk_placements", &PlacementDB::walkPlacements,
-           "Walk the placements.", py::arg("callback"),
-           py::arg("column_num") = -1);
+           "Walk the placements, with possible bounds. Bounds are (xmin, xmax, "
+           "ymin, ymax) with 'None' being unbounded.",
+           py::arg("callback"),
+           py::arg("bounds") =
+               std::make_tuple(py::none(), py::none(), py::none(), py::none()),
+           py::arg("prim_type") = py::none());
 }
