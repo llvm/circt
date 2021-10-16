@@ -818,7 +818,9 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
                               structDims, /*implicitIntType=*/false,
                               /*singleBitDefaultType=*/true, emitter);
-          os << ' ' << element.name << "; ";
+          os << ' ' << element.name;
+          emitter.printUnpackedTypePostfix(element.type, os);
+          os << "; ";
         }
         os << '}';
         emitDims(dims, os);
@@ -2045,8 +2047,8 @@ LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
   indent() << "typedef ";
   emitter.printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(),
                           false);
-  emitter.printUnpackedTypePostfix(op.type(), os);
   os << ' ' << op.getPreferredName();
+  emitter.printUnpackedTypePostfix(op.type(), os);
   os << ";\n";
   return success();
 }
