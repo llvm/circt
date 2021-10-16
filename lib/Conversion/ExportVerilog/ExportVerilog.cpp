@@ -94,6 +94,10 @@ struct SubExprInfo {
 // Helper routines
 //===----------------------------------------------------------------------===//
 
+static Attribute getInt32Attr(MLIRContext *ctx, uint32_t value) {
+  return Builder(ctx).getI32IntegerAttr(value);
+}
+
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
 /// a temporary wire.
@@ -168,40 +172,37 @@ static int getBitWidthOrSentinel(Type type) {
 }
 
 /// Push this type's dimension into a vector.
-static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
+static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
                         Location loc) {
-  if (auto inout = type.dyn_cast<hw::InOutType>())
+  if (auto integer = hw::type_dyn_cast<IntegerType>(type)) {
+    if (integer.getWidth() != 1)
+      dims.push_back(getInt32Attr(type.getContext(), integer.getWidth()));
+    return;
+  }
+
+  if (auto array = hw::type_dyn_cast<ArrayType>(type)) {
+    dims.push_back(getInt32Attr(type.getContext(), array.getSize()));
+    getTypeDims(dims, array.getElementType(), loc);
+
+    return;
+  }
+
+  if (auto inout = hw::type_dyn_cast<InOutType>(type))
     return getTypeDims(dims, inout.getElementType(), loc);
-  if (auto uarray = type.dyn_cast<hw::UnpackedArrayType>())
+  if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
-  if (type.isa<InterfaceType>())
-    return;
-  if (hw::type_isa<StructType>(type))
+  if (hw::type_isa<InterfaceType>(type) || hw::type_isa<StructType>(type))
     return;
 
-  int width;
-  if (auto arrayType = hw::type_dyn_cast<hw::ArrayType>(type)) {
-    width = arrayType.getSize();
-  } else {
-    width = getBitWidthOrSentinel(type);
-  }
-  if (width == -1)
-    mlir::emitError(loc, "value has an unsupported verilog type ") << type;
-
-  if (width != 1) // Width 1 is implicit.
-    dims.push_back(width);
-
-  if (auto arrayType = type.dyn_cast<hw::ArrayType>()) {
-    getTypeDims(dims, arrayType.getElementType(), loc);
-  }
+  mlir::emitError(loc, "value has an unsupported verilog type ") << type;
 }
 
 /// True iff 'a' and 'b' have the same wire dims.
 static bool haveMatchingDims(Type a, Type b, Location loc) {
-  SmallVector<int64_t, 4> aDims;
+  SmallVector<Attribute, 4> aDims;
   getTypeDims(aDims, a, loc);
 
-  SmallVector<int64_t, 4> bDims;
+  SmallVector<Attribute, 4> bDims;
   getTypeDims(bDims, b, loc);
 
   return aDims == bDims;
@@ -762,26 +763,36 @@ public:
 // Methods for formatting types.
 
 /// Emit a list of dimensions.
-static void emitDims(ArrayRef<int64_t> dims, raw_ostream &os) {
-  for (int64_t width : dims)
-    switch (width) {
-    case -1: // -1 is an invalid type.
+static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
+                     ModuleEmitter &emitter) {
+  for (Attribute width : dims) {
+    if (!width) {
       os << "<<invalid type>>";
-      return;
-    case 0:
-      os << "/*Zero Width*/";
-      break;
-    default:
-      os << '[' << (width - 1) << ":0]";
-      break;
+      continue;
     }
+    if (auto intAttr = width.dyn_cast<IntegerAttr>()) {
+      if (intAttr.getValue().isZero())
+        os << "/*Zero Width*/";
+      else
+        os << '[' << (intAttr.getValue().getZExtValue() - 1) << ":0]";
+      continue;
+    }
+
+    // Otherwise it must be a parameterized dimension.  Shove the "-1" into the
+    // attribute so it gets printed in canonical form.
+    auto negOne = getInt32Attr(loc.getContext(), -1);
+    width = ParamExprAttr::get(PEO::Add, width, negOne);
+    emitter.printParamValue(width, os, [loc]() {
+      return mlir::emitError(loc, "invalid parameter in type");
+    });
+  }
 }
 
 /// Emit a type's packed dimensions.
 void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
-  SmallVector<int64_t, 4> dims;
+  SmallVector<Attribute, 4> dims;
   getTypeDims(dims, type, loc);
-  emitDims(dims, os);
+  emitDims(dims, os, loc, *this);
 }
 
 /// Output the basic type that consists of packed and primitive types.  This is
@@ -791,7 +802,7 @@ void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
 ///
 /// Returns true when anything was printed out.
 static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
-                                SmallVectorImpl<int64_t> &dims,
+                                SmallVectorImpl<Attribute> &dims,
                                 bool implicitIntType, bool singleBitDefaultType,
                                 ModuleEmitter &emitter) {
   return TypeSwitch<Type, bool>(type)
@@ -799,11 +810,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         if (!implicitIntType)
           os << "logic";
         if (integerType.getWidth() != 1 || !singleBitDefaultType)
-          dims.push_back(integerType.getWidth());
+          dims.push_back(
+              getInt32Attr(type.getContext(), integerType.getWidth()));
         if (!dims.empty() && !implicitIntType)
           os << ' ';
 
-        emitDims(dims, os);
+        emitDims(dims, os, loc, emitter);
         return !dims.empty() || !implicitIntType;
       })
       .Case<InOutType>([&](InOutType inoutType) {
@@ -814,7 +826,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
       .Case<StructType>([&](StructType structType) {
         os << "struct packed {";
         for (auto &element : structType.getElements()) {
-          SmallVector<int64_t, 8> structDims;
+          SmallVector<Attribute, 8> structDims;
           printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
                               structDims, /*implicitIntType=*/false,
                               /*singleBitDefaultType=*/true, emitter);
@@ -823,11 +835,12 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           os << "; ";
         }
         os << '}';
-        emitDims(dims, os);
+        emitDims(dims, os, loc, emitter);
         return true;
       })
       .Case<ArrayType>([&](ArrayType arrayType) {
-        dims.push_back(arrayType.getSize());
+        dims.push_back(
+            getInt32Attr(arrayType.getContext(), arrayType.getSize()));
         return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
                                    emitter);
@@ -845,7 +858,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
           return false; // This already emitted an error!?
 
         os << typedecl.getValue().getPreferredName();
-        emitDims(dims, os);
+        emitDims(dims, os, typedecl->getLoc(), emitter);
         return true;
       })
       .Default([&](Type type) {
@@ -866,7 +879,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
 bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
                                     bool implicitIntType,
                                     bool singleBitDefaultType) {
-  SmallVector<int64_t, 8> packedDimensions;
+  SmallVector<Attribute, 8> packedDimensions;
   return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType,
                              singleBitDefaultType, *this);
 }
