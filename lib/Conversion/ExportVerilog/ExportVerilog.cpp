@@ -179,11 +179,14 @@ static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
       dims.push_back(getInt32Attr(type.getContext(), integer.getWidth()));
     return;
   }
-
   if (auto array = hw::type_dyn_cast<ArrayType>(type)) {
     dims.push_back(getInt32Attr(type.getContext(), array.getSize()));
     getTypeDims(dims, array.getElementType(), loc);
 
+    return;
+  }
+  if (auto intType = hw::type_dyn_cast<IntType>(type)) {
+    dims.push_back(intType.getWidth());
     return;
   }
 
@@ -782,9 +785,11 @@ static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
     // attribute so it gets printed in canonical form.
     auto negOne = getInt32Attr(loc.getContext(), -1);
     width = ParamExprAttr::get(PEO::Add, width, negOne);
+    os << '[';
     emitter.printParamValue(width, os, [loc]() {
       return mlir::emitError(loc, "invalid parameter in type");
     });
+    os << ":0]";
   }
 }
 
@@ -818,6 +823,20 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         emitDims(dims, os, loc, emitter);
         return !dims.empty() || !implicitIntType;
       })
+      .Case<IntType>([&](IntType intType) {
+        if (!implicitIntType)
+          os << "logic ";
+        dims.push_back(intType.getWidth());
+        emitDims(dims, os, loc, emitter);
+        return true;
+      })
+      .Case<ArrayType>([&](ArrayType arrayType) {
+        dims.push_back(
+            getInt32Attr(arrayType.getContext(), arrayType.getSize()));
+        return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
+                                   implicitIntType, singleBitDefaultType,
+                                   emitter);
+      })
       .Case<InOutType>([&](InOutType inoutType) {
         return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
                                    implicitIntType, singleBitDefaultType,
@@ -838,13 +857,7 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         emitDims(dims, os, loc, emitter);
         return true;
       })
-      .Case<ArrayType>([&](ArrayType arrayType) {
-        dims.push_back(
-            getInt32Attr(arrayType.getContext(), arrayType.getSize()));
-        return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
-                                   implicitIntType, singleBitDefaultType,
-                                   emitter);
-      })
+
       .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         os << "<<unexpected unpacked array>>";

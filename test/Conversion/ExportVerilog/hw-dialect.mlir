@@ -901,3 +901,19 @@ hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
   // CHECK-NEXT:   parameter             p5 = "foo")
 
 }
+
+
+// CHECK-LABEL: module parameterizedTypes
+// CHECK: #(parameter param = 1,
+// CHECK:   parameter wire_0 = 2) (
+hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
+// CHECK: input [16:0]{{ *}}a,
+  (%a: !hw.int<17>,
+// CHECK: input [param + 4294967295:0] b);
+   %b: !hw.int<#hw.param.decl.ref<"param">>) {
+
+  // Check that the parameter name renamification propagates.
+// CHECK: wire [wire_0 + 4294967295:0] paramWire;
+  %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"wire">>>
+
+}
