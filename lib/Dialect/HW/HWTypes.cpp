@@ -60,7 +60,7 @@ bool circt::hw::isHWIntegerType(mlir::Type type) {
 /// hardware but not marker types like InOutType.
 bool circt::hw::isHWValueType(Type type) {
   // Signless and signed integer types are both valid.
-  if (type.isa<IntegerType>())
+  if (type.isa<IntegerType>() || type.isa<IntType>())
     return true;
 
   if (auto array = type.dyn_cast<ArrayType>())
@@ -158,7 +158,7 @@ static ParseResult parseHWElementType(Type &result, DialectAsmParser &p) {
 
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
       typeString.startswith("uarray<") || typeString.startswith("struct<") ||
-      typeString.startswith("typealias<")) {
+      typeString.startswith("typealias<") || typeString.startswith("int<")) {
     llvm::StringRef mnemonic;
     if (p.parseKeyword(&mnemonic))
       llvm_unreachable("should have an array or inout keyword here");

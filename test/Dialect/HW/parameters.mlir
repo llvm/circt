@@ -141,4 +141,7 @@ hw.module @parameterizedTypes<param: i32>
 // CHECK-SAME: %b: !hw.int<#hw.param.decl.ref<"param">>
    %b: !hw.int<#hw.param.decl.ref<"param">>) {
 
+  // CHECK: %paramWire = sv.wire : !hw.inout<int<#hw.param.decl.ref<"param">>>
+  %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"param">>>
+
 }
