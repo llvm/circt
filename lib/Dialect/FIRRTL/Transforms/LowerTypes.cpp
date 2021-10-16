@@ -788,7 +788,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
             newField = builder->createOrFold<BitCastOp>(
                 oldField.getType().cast<FIRRTLType>(), newField);
             // Write the aggregate read data.
-            builder->createOrFold<ConnectOp>(realOldField, newField);
+            builder->create<ConnectOp>(realOldField, newField);
           } else {
             // Cast the input aggregate write data to flat type.
             realOldField = builder->create<BitCastOp>(
@@ -814,7 +814,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
             }
             // Now set the mask or write data.
             // Ensure that the types match.
-            builder->createOrFold<ConnectOp>(
+            builder->create<ConnectOp>(
                 newField,
                 builder->createOrFold<BitCastOp>(
                     newField.getType().cast<FIRRTLType>(), realOldField));
