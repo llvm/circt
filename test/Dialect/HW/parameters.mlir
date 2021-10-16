@@ -134,3 +134,11 @@ hw.module @associativeOrdering<p1: i4, p2: i4>()
      : i4, i4, i4, i4, i4, i4, i4, i4
 }
 
+// CHECK-LABEL: hw.module @parameterizedTypes<param: i32>(
+hw.module @parameterizedTypes<param: i32>
+// CHECK-SAME: %a: i17,
+  (%a: !hw.int<17>,
+// CHECK-SAME: %b: !hw.int<#hw.param.decl.ref<"param">>
+   %b: !hw.int<#hw.param.decl.ref<"param">>) {
+
+}

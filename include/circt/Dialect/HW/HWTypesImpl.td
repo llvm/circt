@@ -17,6 +17,28 @@ class HWType<string name> : TypeDef<HWDialect, name> { }
 // Type declarations
 //===----------------------------------------------------------------------===//
 
+// A parameterized integer type. Declares the hw::IntType in C++.
+def IntTypeImpl : HWType<"Int"> {
+  let summary = "parameterized-width integer";
+  let description = [{
+    Parameterized integer types are equivalent to the MLIR standard integer
+    type: it is signless, and may be any width integer.  This type represents
+    the case when the width is a parameter in the HW dialect sense.
+  }];
+
+  let mnemonic = "int";
+  let parameters = (ins "::mlir::Attribute":$width);
+  //let genVerifyDecl = 1;
+
+  let skipDefaultBuilders = 1;
+
+  let extraClassDeclaration = [{
+    /// Get an integer type for the specified width.  Note that this may return
+    /// a builtin integer type if the width is a known-constant value.
+    static Type get(::mlir::Attribute width);
+  }];
+}
+
 // A simple fixed size array. Declares the hw::ArrayType in C++.
 def ArrayTypeImpl : HWType<"Array"> {
   let summary = "fixed-sized array";

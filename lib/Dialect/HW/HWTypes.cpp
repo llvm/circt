@@ -176,6 +176,40 @@ static void printHWElementType(Type element, DialectAsmPrinter &p) {
 }
 
 //===----------------------------------------------------------------------===//
+// Int Type
+//===----------------------------------------------------------------------===//
+
+Type IntType::get(Attribute width) {
+  // The width expression must always be a 32-bit wide integer type itself.
+  auto widthWidth = width.getType().dyn_cast<IntegerType>();
+  assert(widthWidth && widthWidth.getWidth() == 32 &&
+         "!hw.int width must be 32-bits");
+  (void)widthWidth;
+
+  if (auto cstWidth = width.dyn_cast<IntegerAttr>())
+    return IntegerType::get(width.getContext(),
+                            cstWidth.getValue().getZExtValue());
+
+  return Base::get(width.getContext(), width);
+}
+
+Type IntType::parse(DialectAsmParser &p) {
+  // The bitwidth of the parameter size is always 32 bits.
+  auto int32Type = p.getBuilder().getIntegerType(32);
+
+  Attribute width;
+  if (p.parseLess() || p.parseAttribute(width, int32Type) || p.parseGreater())
+    return Type();
+  return get(width);
+}
+
+void IntType::print(DialectAsmPrinter &p) const {
+  p << "int<";
+  p.printAttributeWithoutType(getWidth());
+  p << '>';
+}
+
+//===----------------------------------------------------------------------===//
 // Struct Type
 //===----------------------------------------------------------------------===//
 
@@ -311,7 +345,7 @@ Type UnpackedArrayType::parse(DialectAsmParser &p) {
     return Type();
 
   if (dims.size() != 1) {
-    p.emitError(p.getNameLoc(), "sv.uarray only supports one dimension");
+    p.emitError(p.getNameLoc(), "uarray only supports one dimension");
     return Type();
   }
 
@@ -333,7 +367,7 @@ LogicalResult
 UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
                           Type innerType, size_t size) {
   if (!isHWValueType(innerType))
-    return emitError() << "invalid element for sv.uarray type";
+    return emitError() << "invalid element for uarray type";
   return success();
 }
 

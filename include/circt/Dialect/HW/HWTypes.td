@@ -53,4 +53,9 @@ def UnionType : DialectType<HWDialect,
     CPred<"hw::type_isa<hw::UnionType>($_self)">, "a UnionType",
     "TypeAliasOr<UnionType>">;
 
+//===----------------------------------------------------------------------===//
+// Type Definitions
+//===----------------------------------------------------------------------===//
+
+
 #endif // CIRCT_DIALECT_HW_HWTYPES
