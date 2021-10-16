@@ -1,5 +1,5 @@
 // RUN: circt-opt %s -export-verilog -verify-diagnostics
-
+// XFAIL: *
 hw.type_scope @__hw_typedecls {
   hw.typedecl @foo : i1
 }

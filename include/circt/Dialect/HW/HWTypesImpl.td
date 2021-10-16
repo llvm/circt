@@ -170,7 +170,7 @@ def TypeAliasType : HWType<"TypeAlias"> {
   ];
 
   let extraClassDeclaration = [{
-    Optional<TypedeclOp> getDecl(Operation *op);
+    Optional<TypedeclOp> getTypeDecl(Operation *op);
   }];
 }
 

@@ -445,9 +445,11 @@ void TypeAliasType::print(DialectAsmPrinter &p) const {
   p << getMnemonic() << "<" << getRef() << ", " << getInnerType() << ">";
 }
 
-Optional<TypedeclOp> TypeAliasType::getDecl(Operation *op) {
+Optional<TypedeclOp> TypeAliasType::getTypeDecl(Operation *op) {
   SymbolRefAttr ref = getRef();
-  auto moduleOp = op->getParentOfType<ModuleOp>();
+  auto moduleOp = ::dyn_cast<ModuleOp>(op);
+  if (!moduleOp)
+    moduleOp = op->getParentOfType<ModuleOp>();
 
   auto typeScope = moduleOp.lookupSymbol<TypeScopeOp>(ref.getRootReference());
   if (!typeScope) {
