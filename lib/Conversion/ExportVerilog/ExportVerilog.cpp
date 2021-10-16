@@ -879,6 +879,11 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
         printUnpackedTypePostfix(arrayType.getElementType(), os);
         os << "[0:" << (arrayType.getSize() - 1) << "]";
+      })
+      .Case<InterfaceType>([&](auto) {
+        // Interface instantiations have parentheses like a module with no
+        // ports.
+        os << "()";
       });
 }
 
@@ -3292,13 +3297,8 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     // Emit the name.
     os << names.getName(record.value);
 
-    // Interface instantiations have parentheses like a module with no ports.
-    if (type.isa<InterfaceType>()) {
-      os << "()";
-    } else {
-      // Print out any array subscripts.
-      emitter.printUnpackedTypePostfix(type, os);
-    }
+    // Print out any array subscripts or other post-name stuff.
+    emitter.printUnpackedTypePostfix(type, os);
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
