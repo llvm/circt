@@ -5,7 +5,11 @@ hw.type_scope @__hw_typedecls {
   hw.typedecl @foo : i1
   // CHECK: typedef struct packed {logic a; logic b; } bar;
   hw.typedecl @bar : !hw.struct<a: i1, b: i1>
-  // CHECK: typedef logic [7:0][0:15] baz;
+
+  // CHECK: typedef struct packed {logic a; logic [7:0] b[0:15]; } barArray;
+  hw.typedecl @barArray : !hw.struct<a: i1, b: !hw.uarray<16xi8>>
+
+  // CHECK: typedef logic [7:0] baz[0:15];
   hw.typedecl @baz : !hw.uarray<16xi8>
   // CHECK: typedef logic [15:0][7:0] arr;
   hw.typedecl @arr : !hw.array<16xi8>

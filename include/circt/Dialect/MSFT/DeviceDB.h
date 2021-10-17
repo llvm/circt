@@ -94,13 +94,13 @@ public:
   PhysLocationAttr getNearestFreeInColumn(PrimitiveType prim, uint64_t column,
                                           uint64_t nearestToY);
 
-  /// Walk the placement information in some sort of reasonable order.
-  void walkPlacements(function_ref<void(PhysLocationAttr, PlacedInstance)>);
-
-  /// Walk the column placements in some sort of reasonable order.
-  void
-  walkColumnPlacements(uint64_t column,
-                       function_ref<void(PhysLocationAttr, PlacedInstance)>);
+  /// Walk the placement information in some sort of reasonable order. Bounds
+  /// restricts the walk to a rectangle of [xmin, xmax, ymin, ymax] (inclusive),
+  /// with -1 meaning unbounded.
+  void walkPlacements(function_ref<void(PhysLocationAttr, PlacedInstance)>,
+                      std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
+                          std::make_tuple(-1, -1, -1, -1),
+                      Optional<PrimitiveType> primType = {});
 
 private:
   MLIRContext *ctxt;

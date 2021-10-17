@@ -140,6 +140,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
             for (InstanceOp inst : p) {
               hierName = hierName + "." + inst.name().str();
             }
+            hierName = hierName + "." + memOp.name().str();
             hierNames.push_back(hierName);
             jsonStream.value(hierName);
           }
@@ -153,8 +154,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   std::string dutJsonBuffer;
   llvm::raw_string_ostream dutOs(dutJsonBuffer);
   llvm::json::OStream dutJson(dutOs);
-  DenseMap<StringRef, SmallVector<MemOp>> dutMems;
-  DenseMap<StringRef, SmallVector<MemOp>> tbMems;
+  llvm::StringMap<SmallVector<MemOp>> dutMems;
+  llvm::StringMap<SmallVector<MemOp>> tbMems;
 
   for (auto mod : circuitOp.getOps<FModuleOp>()) {
     bool isDut = dutModuleSet.contains(mod);
@@ -167,16 +168,16 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
         tbMems[name].push_back(memOp);
     }
   }
-  std::string seqMemConfStr, tbConfStr;
+  std::string seqMemConfStr;
   dutJson.array([&] {
     for (auto &dutM : dutMems)
-      createMemMetadata(dutM.getSecond(), dutJson, seqMemConfStr);
+      createMemMetadata(dutM.second, dutJson, seqMemConfStr);
   });
   testBenchJson.array([&] {
     // The tbConfStr is populated here, but unused, it will not be printed to
     // file.
     for (auto &tbM : tbMems)
-      createMemMetadata(tbM.getSecond(), testBenchJson, tbConfStr);
+      createMemMetadata(tbM.second, testBenchJson, seqMemConfStr);
   });
 
   auto *context = &getContext();

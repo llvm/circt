@@ -60,7 +60,7 @@ bool circt::hw::isHWIntegerType(mlir::Type type) {
 /// hardware but not marker types like InOutType.
 bool circt::hw::isHWValueType(Type type) {
   // Signless and signed integer types are both valid.
-  if (type.isa<IntegerType>())
+  if (type.isa<IntegerType>() || type.isa<IntType>())
     return true;
 
   if (auto array = type.dyn_cast<ArrayType>())
@@ -158,7 +158,7 @@ static ParseResult parseHWElementType(Type &result, DialectAsmParser &p) {
 
   if (typeString.startswith("array<") || typeString.startswith("inout<") ||
       typeString.startswith("uarray<") || typeString.startswith("struct<") ||
-      typeString.startswith("typealias<")) {
+      typeString.startswith("typealias<") || typeString.startswith("int<")) {
     llvm::StringRef mnemonic;
     if (p.parseKeyword(&mnemonic))
       llvm_unreachable("should have an array or inout keyword here");
@@ -173,6 +173,40 @@ static void printHWElementType(Type element, DialectAsmPrinter &p) {
   if (succeeded(generatedTypePrinter(element, p)))
     return;
   p.printType(element);
+}
+
+//===----------------------------------------------------------------------===//
+// Int Type
+//===----------------------------------------------------------------------===//
+
+Type IntType::get(Attribute width) {
+  // The width expression must always be a 32-bit wide integer type itself.
+  auto widthWidth = width.getType().dyn_cast<IntegerType>();
+  assert(widthWidth && widthWidth.getWidth() == 32 &&
+         "!hw.int width must be 32-bits");
+  (void)widthWidth;
+
+  if (auto cstWidth = width.dyn_cast<IntegerAttr>())
+    return IntegerType::get(width.getContext(),
+                            cstWidth.getValue().getZExtValue());
+
+  return Base::get(width.getContext(), width);
+}
+
+Type IntType::parse(DialectAsmParser &p) {
+  // The bitwidth of the parameter size is always 32 bits.
+  auto int32Type = p.getBuilder().getIntegerType(32);
+
+  Attribute width;
+  if (p.parseLess() || p.parseAttribute(width, int32Type) || p.parseGreater())
+    return Type();
+  return get(width);
+}
+
+void IntType::print(DialectAsmPrinter &p) const {
+  p << "int<";
+  p.printAttributeWithoutType(getWidth());
+  p << '>';
 }
 
 //===----------------------------------------------------------------------===//
@@ -311,7 +345,7 @@ Type UnpackedArrayType::parse(DialectAsmParser &p) {
     return Type();
 
   if (dims.size() != 1) {
-    p.emitError(p.getNameLoc(), "sv.uarray only supports one dimension");
+    p.emitError(p.getNameLoc(), "uarray only supports one dimension");
     return Type();
   }
 
@@ -333,7 +367,7 @@ LogicalResult
 UnpackedArrayType::verify(function_ref<InFlightDiagnostic()> emitError,
                           Type innerType, size_t size) {
   if (!isHWValueType(innerType))
-    return emitError() << "invalid element for sv.uarray type";
+    return emitError() << "invalid element for uarray type";
   return success();
 }
 
@@ -411,9 +445,11 @@ void TypeAliasType::print(DialectAsmPrinter &p) const {
   p << getMnemonic() << "<" << getRef() << ", " << getInnerType() << ">";
 }
 
-Optional<TypedeclOp> TypeAliasType::getDecl(Operation *op) {
+Optional<TypedeclOp> TypeAliasType::getTypeDecl(Operation *op) {
   SymbolRefAttr ref = getRef();
-  auto moduleOp = op->getParentOfType<ModuleOp>();
+  auto moduleOp = ::dyn_cast<ModuleOp>(op);
+  if (!moduleOp)
+    moduleOp = op->getParentOfType<ModuleOp>();
 
   auto typeScope = moduleOp.lookupSymbol<TypeScopeOp>(ref.getRootReference());
   if (!typeScope) {
