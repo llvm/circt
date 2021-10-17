@@ -95,8 +95,8 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   // CHECK-NEXT: hw.bitcast [[STR]] : (!hw.struct<foo: i19, bar: i7>)
   %structBits = hw.bitcast %s0 : (!hw.struct<foo: i19, bar: i7>) -> i26
 
-  // CHECK-NEXT: = constant 13 : i10
-  %idx = constant 13 : i10
+  // CHECK-NEXT: = arith.constant 13 : i10
+  %idx = arith.constant 13 : i10
   // CHECK-NEXT: = hw.array_slice %arg2 at %c13_i10 : (!hw.array<1000xi8>) -> !hw.array<24xi8>
   %subArray = hw.array_slice %arg2 at %idx : (!hw.array<1000xi8>) -> !hw.array<24xi8>
   // CHECK-NEXT: [[ARR1:%.+]] = hw.array_create [[RES9]], [[RES10]] : i19

@@ -1,19 +1,19 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
 
 hw.module @Sender() -> (x: !esi.channel<i1>) {
-  %0 = constant 0 : i1
+  %0 = arith.constant 0 : i1
   // Don't transmit any data.
   %ch, %rcvrRdy = esi.wrap.vr %0, %0 : i1
   hw.output %ch : !esi.channel<i1>
 }
 hw.module @Reciever(%a: !esi.channel<i1>) {
-  %rdy = constant 1 : i1
+  %rdy = arith.constant 1 : i1
   // Recieve bits.
   %data, %valid = esi.unwrap.vr %a, %rdy : i1
 }
 !FooStruct = type !hw.struct<a: si4, b: !hw.array<3 x ui4>>
 hw.module @StructRcvr(%a: !esi.channel<!FooStruct>) {
-  %rdy = constant 1 : i1
+  %rdy = arith.constant 1 : i1
   // Recieve bits.
   %data, %valid = esi.unwrap.vr %a, %rdy : !FooStruct
 }

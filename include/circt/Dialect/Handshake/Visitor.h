@@ -96,14 +96,16 @@ public:
   ResultType dispatchStdExprVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<IndexCastOp, ZeroExtendIOp, TruncateIOp,
+        .template Case<arith::IndexCastOp, arith::ExtUIOp, arith::TruncIOp,
                        // Integer binary expressions.
-                       CmpIOp, AddIOp, SubIOp, MulIOp, SignedDivIOp,
-                       SignedRemIOp, UnsignedDivIOp, UnsignedRemIOp, XOrOp,
-                       AndOp, OrOp, ShiftLeftOp, SignedShiftRightOp,
-                       UnsignedShiftRightOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitStdExpr(opNode, args...);
-        })
+                       arith::CmpIOp, arith::AddIOp, arith::SubIOp,
+                       arith::MulIOp, arith::DivSIOp, arith::RemSIOp,
+                       arith::DivUIOp, arith::RemUIOp, arith::XOrIOp,
+                       arith::AndIOp, arith::OrIOp, arith::ShLIOp,
+                       arith::ShRSIOp, arith::ShRUIOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitStdExpr(opNode, args...);
+            })
         .Default([&](auto opNode) -> ResultType {
           return thisCast->visitInvalidOp(op, args...);
         });
@@ -126,25 +128,25 @@ public:
     return static_cast<ConcreteType *>(this)->visitUnhandledOp(op, args...);   \
   }
 
-  HANDLE(IndexCastOp);
-  HANDLE(ZeroExtendIOp);
-  HANDLE(TruncateIOp);
+  HANDLE(arith::IndexCastOp);
+  HANDLE(arith::ExtUIOp);
+  HANDLE(arith::TruncIOp);
 
   // Integer binary expressions.
-  HANDLE(CmpIOp);
-  HANDLE(AddIOp);
-  HANDLE(SubIOp);
-  HANDLE(MulIOp);
-  HANDLE(SignedDivIOp);
-  HANDLE(SignedRemIOp);
-  HANDLE(UnsignedDivIOp);
-  HANDLE(UnsignedRemIOp);
-  HANDLE(XOrOp);
-  HANDLE(AndOp);
-  HANDLE(OrOp);
-  HANDLE(ShiftLeftOp);
-  HANDLE(SignedShiftRightOp);
-  HANDLE(UnsignedShiftRightOp);
+  HANDLE(arith::CmpIOp);
+  HANDLE(arith::AddIOp);
+  HANDLE(arith::SubIOp);
+  HANDLE(arith::MulIOp);
+  HANDLE(arith::DivSIOp);
+  HANDLE(arith::RemSIOp);
+  HANDLE(arith::DivUIOp);
+  HANDLE(arith::RemUIOp);
+  HANDLE(arith::XOrIOp);
+  HANDLE(arith::AndIOp);
+  HANDLE(arith::OrIOp);
+  HANDLE(arith::ShLIOp);
+  HANDLE(arith::ShRSIOp);
+  HANDLE(arith::ShRUIOp);
 #undef HANDLE
 };
 

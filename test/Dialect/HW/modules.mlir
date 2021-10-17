@@ -42,11 +42,11 @@ hw.module @AnyType1(%a: vector< 3 x i8 >) { }
 
 // CHECK-LABEL: hw.module @AnyTypeInstance()
 hw.module @AnyTypeInstance() {
-  %vec = constant dense <0> : vector<3xi8>
+  %vec = arith.constant dense <0> : vector<3xi8>
   hw.instance "anyType1" @AnyType1(a: %vec: vector<3xi8>) -> ()
 }
 
-// CHECK:       %cst = constant dense<0> : vector<3xi8>
+// CHECK:       %cst = arith.constant dense<0> : vector<3xi8>
 // CHECK-NEXT:  hw.instance "anyType1" @AnyType1(a: %cst: vector<3xi8>) -> ()
 
 hw.generator.schema @MEMORY, "Simple-Memory", ["ports", "write_latency", "read_latency"]

@@ -32,9 +32,9 @@
 // CHECK-NEXT: }
 module {
   func @main(%a0 : i32, %a1 : i32) -> i32 {
-    %0 = addi %a0, %a1 : i32
-    %1 = shift_left %0, %a0 : i32
-    %2 = subi %1, %0 : i32
+    %0 = arith.addi %a0, %a1 : i32
+    %1 = arith.shli %0, %a0 : i32
+    %2 = arith.subi %1, %0 : i32
     return %2 : i32
   }
 }

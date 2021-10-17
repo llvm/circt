@@ -16,7 +16,7 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
   %b = comb.add %unary, %arg2 : i8
 
 
-  // Multi-use xor gets duplicated, and we need to make sure there is a local
+  // Multi-use arith.xori gets duplicated, and we need to make sure there is a local
   // constant as well.
   %true = hw.constant true
   %c = comb.xor %arg3, %true : i1

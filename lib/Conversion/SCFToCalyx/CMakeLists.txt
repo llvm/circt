@@ -11,6 +11,7 @@ add_circt_conversion_library(CIRCTSCFToCalyx
   CIRCTCalyx
   MLIRIR
   MLIRPass
+  MLIRArithmetic
   MLIRStandard
   MLIRSupport
   MLIRTransforms

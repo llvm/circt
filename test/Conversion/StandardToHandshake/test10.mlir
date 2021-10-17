@@ -38,7 +38,7 @@
 // CHECK:           %[[VAL_23]]:9 = "handshake.fork"(%[[VAL_40]]#1) {control = false} : (index) -> (index, index, index, index, index, index, index, index, index)
 // CHECK:           %[[VAL_42:.*]] = "handshake.mux"(%[[VAL_23]]#0, %[[VAL_43:.*]], %[[VAL_19]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_44:.*]]:2 = "handshake.fork"(%[[VAL_42]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_45:.*]] = cmpi slt, %[[VAL_44]]#1, %[[VAL_25]]#1 : index
+// CHECK:           %[[VAL_45:.*]] = arith.cmpi slt, %[[VAL_44]]#1, %[[VAL_25]]#1 : index
 // CHECK:           %[[VAL_46:.*]]:10 = "handshake.fork"(%[[VAL_45]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1, i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_47:.*]], %[[VAL_48:.*]] = "handshake.conditional_branch"(%[[VAL_46]]#9, %[[VAL_25]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_48]]) : (index) -> ()
@@ -80,11 +80,11 @@
 // CHECK:           %[[VAL_85:.*]]:3 = "handshake.fork"(%[[VAL_84]]#0) {control = true} : (none) -> (none, none, none)
 // CHECK:           "handshake.sink"(%[[VAL_84]]#1) : (index) -> ()
 // CHECK:           %[[VAL_86:.*]] = "handshake.constant"(%[[VAL_85]]#1) {value = 7 : index} : (none) -> index
-// CHECK:           %[[VAL_87:.*]] = addi %[[VAL_68]]#1, %[[VAL_86]] : index
+// CHECK:           %[[VAL_87:.*]] = arith.addi %[[VAL_68]]#1, %[[VAL_86]] : index
 // CHECK:           %[[VAL_88:.*]] = "handshake.constant"(%[[VAL_85]]#0) {value = 11 : index} : (none) -> index
-// CHECK:           %[[VAL_89:.*]] = addi %[[VAL_70]]#1, %[[VAL_88]] : index
+// CHECK:           %[[VAL_89:.*]] = arith.addi %[[VAL_70]]#1, %[[VAL_88]] : index
 // CHECK:           memref.dma_start %[[VAL_72]]#1{{\[}}%[[VAL_87]]], %[[VAL_74]]#1{{\[}}%[[VAL_89]]], %[[VAL_76]]#1, %[[VAL_78]]#1{{\[}}%[[VAL_80]]#1] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
-// CHECK:           %[[VAL_90:.*]] = addi %[[VAL_68]]#0, %[[VAL_82]]#1 : index
+// CHECK:           %[[VAL_90:.*]] = arith.addi %[[VAL_68]]#0, %[[VAL_82]]#1 : index
 // CHECK:           %[[VAL_27]] = "handshake.branch"(%[[VAL_70]]#0) {control = false} : (index) -> index
 // CHECK:           %[[VAL_29]] = "handshake.branch"(%[[VAL_72]]#0) {control = false} : (memref<100xf32>) -> memref<100xf32>
 // CHECK:           %[[VAL_31]] = "handshake.branch"(%[[VAL_74]]#0) {control = false} : (memref<100xf32, 2>) -> memref<100xf32, 2>
@@ -104,22 +104,22 @@
     %0 = memref.alloc() : memref<100xf32>
     %1 = memref.alloc() : memref<100xf32, 2>
     %2 = memref.alloc() : memref<1xi32>
-    %c0 = constant 0 : index
-    %c64 = constant 64 : index
-    %c0_0 = constant 0 : index
-    %c10 = constant 10 : index
-    %c1 = constant 1 : index
+    %c0 = arith.constant 0 : index
+    %c64 = arith.constant 64 : index
+    %c0_0 = arith.constant 0 : index
+    %c10 = arith.constant 10 : index
+    %c1 = arith.constant 1 : index
     br ^bb1(%c0_0 : index)
   ^bb1(%3: index):      // 2 preds: ^bb0, ^bb2
-    %4 = cmpi slt, %3, %c10 : index
+    %4 = arith.cmpi slt, %3, %c10 : index
     cond_br %4, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
-    %c7 = constant 7 : index
-    %5 = addi %3, %c7 : index
-    %c11 = constant 11 : index
-    %6 = addi %arg0, %c11 : index
+    %c7 = arith.constant 7 : index
+    %5 = arith.addi %3, %c7 : index
+    %c11 = arith.constant 11 : index
+    %6 = arith.addi %arg0, %c11 : index
     memref.dma_start %0[%5], %1[%6], %c64, %2[%c0] : memref<100xf32>, memref<100xf32, 2>, memref<1xi32>
-    %7 = addi %3, %c1 : index
+    %7 = arith.addi %3, %c1 : index
     br ^bb1(%7 : index)
   ^bb3: // pred: ^bb1
     return

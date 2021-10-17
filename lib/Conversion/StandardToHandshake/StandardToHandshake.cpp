@@ -650,10 +650,10 @@ LogicalResult connectConstantsToControl(handshake::FuncOp f,
     assert(cntrlMg != nullptr);
     std::vector<Operation *> cstOps;
     for (Operation &op : block) {
-      if (auto constantOp = dyn_cast<mlir::ConstantOp>(op)) {
+      if (auto constantOp = dyn_cast<arith::ConstantOp>(op)) {
         rewriter.setInsertionPointAfter(&op);
         Operation *newOp = rewriter.create<handshake::ConstantOp>(
-            op.getLoc(), constantOp.getValue(), cntrlMg->getResult(0));
+            op.getLoc(), constantOp.value(), cntrlMg->getResult(0));
 
         op.getResult(0).replaceAllUsesWith(newOp->getResult(0));
         cstOps.push_back(&op);
@@ -801,7 +801,7 @@ void checkMergePredecessors(MergeLikeOpInterface mergeOp) {
 void checkDataflowConversion(handshake::FuncOp f) {
   for (Operation &op : f.getOps()) {
     if (isa<mlir::CondBranchOp, mlir::BranchOp, memref::LoadOp,
-            mlir::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
+            arith::ConstantOp, mlir::AffineReadOpInterface, mlir::AffineForOp>(
             op))
       continue;
 
@@ -1286,6 +1286,7 @@ public:
     loweredFuncs.clear();
     addLegalDialect<HandshakeDialect>();
     addLegalDialect<StandardOpsDialect>();
+    addLegalDialect<arith::ArithmeticDialect>();
     /// The root function operation to be replaced is marked dynamically legal
     /// based on the lowering status of the given function, see
     /// PartialLowerFuncOp.
@@ -1350,7 +1351,7 @@ private:
 ///
 template <typename TConv, typename TFuncOp, typename... TArgs>
 LogicalResult lowerToHandshake(TFuncOp op, MLIRContext *context,
-                               TArgs &...args) {
+                               TArgs &... args) {
   RewritePatternSet patterns(context);
   auto target = LowerFuncOpTarget<TFuncOp>(*context);
   LogicalResult partialLoweringSuccessfull = success();
@@ -1403,7 +1404,7 @@ LogicalResult rewriteAffineFor(handshake::FuncOp f,
                                       forOp.getUpperBoundOperands());
     if (!lowerBound || !upperBound)
       return failure();
-    auto step = rewriter.create<mlir::ConstantIndexOp>(loc, forOp.getStep());
+    auto step = rewriter.create<arith::ConstantIndexOp>(loc, forOp.getStep());
 
     // Build blocks for a common for loop. initBlock and initPosition are the
     // block that contains the current forOp, and the position of the forOp.
@@ -1439,7 +1440,7 @@ LogicalResult rewriteAffineFor(handshake::FuncOp f,
     // First, we fill the content of the lastBodyBlock with how the loop
     // iterator steps.
     rewriter.setInsertionPointToEnd(lastBodyBlock);
-    auto stepped = rewriter.create<mlir::AddIOp>(loc, iv, step).getResult();
+    auto stepped = rewriter.create<arith::AddIOp>(loc, iv, step).getResult();
 
     // Next, we get the loop carried values, which are terminator operands.
     SmallVector<Value, 8> loopCarried;
@@ -1449,8 +1450,8 @@ LogicalResult rewriteAffineFor(handshake::FuncOp f,
 
     // Then we fill in the condition block.
     rewriter.setInsertionPointToEnd(conditionBlock);
-    auto comparison = rewriter.create<mlir::CmpIOp>(loc, CmpIPredicate::slt, iv,
-                                                    upperBound.getValue()[0]);
+    auto comparison = rewriter.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::slt, iv, upperBound.getValue()[0]);
 
     rewriter.create<mlir::CondBranchOp>(loc, comparison, firstBodyBlock,
                                         ArrayRef<Value>(), endBlock,

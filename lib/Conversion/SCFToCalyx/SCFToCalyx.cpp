@@ -28,6 +28,7 @@
 
 using namespace llvm;
 using namespace mlir;
+using namespace mlir::arith;
 
 namespace circt {
 
@@ -656,16 +657,15 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
     funcOp.walk([&](Operation *_op) {
       opBuiltSuccessfully &=
           TypeSwitch<mlir::Operation *, bool>(_op)
-              .template Case<ConstantOp, ReturnOp, BranchOpInterface,
+              .template Case<arith::ConstantOp, ReturnOp, BranchOpInterface,
                              /// SCF
                              scf::YieldOp,
                              /// memref
                              memref::AllocOp, memref::AllocaOp, memref::LoadOp,
                              memref::StoreOp,
                              /// standard arithmetic
-                             AddIOp, SubIOp, CmpIOp, ShiftLeftOp,
-                             UnsignedShiftRightOp, SignedShiftRightOp, AndOp,
-                             XOrOp, OrOp, ZeroExtendIOp, TruncateIOp,
+                             AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
+                             AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
                              IndexCastOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp>(
@@ -690,19 +690,19 @@ private:
   LogicalResult buildOp(PatternRewriter &rewriter, scf::YieldOp yieldOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter,
                         BranchOpInterface brOp) const;
-  LogicalResult buildOp(PatternRewriter &rewriter, ConstantOp constOp) const;
+  LogicalResult buildOp(PatternRewriter &rewriter,
+                        arith::ConstantOp constOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
-  LogicalResult buildOp(PatternRewriter &rewriter,
-                        UnsignedShiftRightOp op) const;
-  LogicalResult buildOp(PatternRewriter &rewriter, SignedShiftRightOp op) const;
-  LogicalResult buildOp(PatternRewriter &rewriter, ShiftLeftOp op) const;
-  LogicalResult buildOp(PatternRewriter &rewriter, AndOp op) const;
-  LogicalResult buildOp(PatternRewriter &rewriter, OrOp op) const;
-  LogicalResult buildOp(PatternRewriter &rewriter, XOrOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, AndIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, OrIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, XOrIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, CmpIOp op) const;
-  LogicalResult buildOp(PatternRewriter &rewriter, TruncateIOp op) const;
-  LogicalResult buildOp(PatternRewriter &rewriter, ZeroExtendIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, TruncIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, ExtUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ReturnOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, IndexCastOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, memref::AllocOp op) const;
@@ -953,7 +953,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 }
 
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     ConstantOp constOp) const {
+                                     arith::ConstantOp constOp) const {
   /// Move constant operations to the compOp body as hw::ConstantOp's.
   APInt value;
   matchConstantOp(constOp, value);
@@ -972,26 +972,27 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   return buildLibraryOp<calyx::CombGroupOp, calyx::SubLibOp>(rewriter, op);
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     UnsignedShiftRightOp op) const {
+                                     ShRUIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::RshLibOp>(rewriter, op);
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     SignedShiftRightOp op) const {
+                                     ShRSIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::SrshLibOp>(rewriter, op);
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     ShiftLeftOp op) const {
+                                     ShLIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::LshLibOp>(rewriter, op);
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     AndOp op) const {
+                                     AndIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::AndLibOp>(rewriter, op);
 }
-LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter, OrOp op) const {
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     OrIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::OrLibOp>(rewriter, op);
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     XOrOp op) const {
+                                     XOrIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::XorLibOp>(rewriter, op);
 }
 
@@ -1022,12 +1023,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   llvm_unreachable("unsupported comparison predicate");
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     TruncateIOp op) const {
+                                     TruncIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::SliceLibOp>(
       rewriter, op, {op.getOperand().getType()}, {op.getType()});
 }
 LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
-                                     ZeroExtendIOp op) const {
+                                     ExtUIOp op) const {
   return buildLibraryOp<calyx::CombGroupOp, calyx::PadLibOp>(
       rewriter, op, {op.getOperand().getType()}, {op.getType()});
 }
@@ -1117,11 +1118,11 @@ class ConvertIndexTypes : public FuncOpPartialLoweringPattern {
           continue;
 
         res.setType(convIndexType(rewriter, resType));
-        if (auto constOp = dyn_cast<ConstantOp>(op)) {
+        if (auto constOp = dyn_cast<arith::ConstantOp>(op)) {
           APInt value;
           matchConstantOp(constOp, value);
           rewriter.setInsertionPoint(constOp);
-          rewriter.replaceOpWithNewOp<ConstantOp>(
+          rewriter.replaceOpWithNewOp<arith::ConstantOp>(
               constOp, rewriter.getI32IntegerAttr(value.getSExtValue()));
         }
       }
@@ -1712,8 +1713,8 @@ private:
       ///   been rewritten to their register outputs, see comment in
       ///   LateSSAReplacement)
       if (src.isa<BlockArgument>() ||
-          isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp, ConstantOp,
-              scf::WhileOp>(srcDefOp))
+          isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
+              arith::ConstantOp, scf::WhileOp>(srcDefOp))
         continue;
 
       auto srcCombGroup = state.getEvaluatingGroup<calyx::CombGroupOp>(src);
@@ -1923,10 +1924,10 @@ public:
 
     // Only accept std operations which we've added lowerings for
     target.addIllegalDialect<StandardOpsDialect>();
-    target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShiftLeftOp, UnsignedShiftRightOp,
-                      SignedShiftRightOp, AndOp, XOrOp, OrOp, ZeroExtendIOp,
-                      TruncateIOp, CondBranchOp, BranchOp, ReturnOp, ConstantOp,
-                      IndexCastOp>();
+    target.addIllegalDialect<ArithmeticDialect>();
+    target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
+                      XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,
+                      ReturnOp, arith::ConstantOp, IndexCastOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
@@ -1949,7 +1950,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&...args) {
+                      PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1958,7 +1959,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&...args) {
+                        PatternArgs &&... args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(

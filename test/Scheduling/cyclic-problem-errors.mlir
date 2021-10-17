@@ -14,8 +14,8 @@ func @backedge_violated(%a1 : i32, %a2 : i32) -> i32 attributes {
   problemInitiationInterval = 2,
   auxdeps = [ [2,0,1] ]
   } {
-  %0 = addi %a1, %a2 { problemStartTime = 0 } : i32
-  %1 = addi %0, %0 { problemStartTime = 1 } : i32
-  %2 = addi %1, %1 { problemStartTime = 2 } : i32
+  %0 = arith.addi %a1, %a2 { problemStartTime = 0 } : i32
+  %1 = arith.addi %0, %0 { problemStartTime = 1 } : i32
+  %2 = arith.addi %1, %1 { problemStartTime = 2 } : i32
   return { problemStartTime = 3 } %2 : i32
 }

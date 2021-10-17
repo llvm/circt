@@ -12,6 +12,7 @@ add_circt_dialect_library(CIRCTStaticLogicOps
   ${PROJECT_BINARY_DIR}/include
 
   LINK_LIBS PUBLIC
+  MLIRArithmetic
   MLIRStandard
   MLIRIR
 
