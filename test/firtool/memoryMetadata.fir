@@ -1,4 +1,4 @@
-; RUN: firtool %s --format=fir  --annotation-file %s.anno.json --repl-seq-mem --verilog |  FileCheck %s
+; RUN: firtool %s --format=fir  --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="metadata/dutModule.conf" --verilog |  FileCheck %s
 
 ; CHECK-LABEL: external module FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a
 

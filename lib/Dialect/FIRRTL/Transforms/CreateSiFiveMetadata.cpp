@@ -206,9 +206,13 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   if (!seqMemConfStr.empty()) {
     auto confVerbatimOp =
         builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
-    StringRef confFile = "memory";
-    if (dutMod)
-      confFile = dutMod.getName();
+    if (replSeqMemFile.empty()) {
+      circuitOp->emitError("metadata emission failed, the option "
+                           "`-repl-seq-mem-file=<filename>` is mandatory for "
+                           "specifying a valid seq mem metadata file");
+      return failure();
+    }
+
     auto fileAttr = hw::OutputFileAttr::getFromFilename(
         context, replSeqMemFile, /*excludeFromFilelist=*/true);
     confVerbatimOp->setAttr("output_file", fileAttr);
