@@ -45,11 +45,11 @@ class CreateSiFiveMetadataPass
   FModuleOp dutMod;
 
 public:
-  CreateSiFiveMetadataPass(bool _replSeqMem, std::string _replSeqMemCircuit,
-                           std::string _replSeqMemFile) {
+  CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
+                           StringRef _replSeqMemFile) {
     replSeqMem = _replSeqMem;
-    replSeqMemCircuit = _replSeqMemCircuit;
-    replSeqMemFile = _replSeqMemFile;
+    replSeqMemCircuit = _replSeqMemCircuit.str();
+    replSeqMemFile = _replSeqMemFile.str();
   }
 };
 } // end anonymous namespace
@@ -458,10 +458,11 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   markAnalysesPreserved<InstanceGraph>();
 }
 
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createCreateSiFiveMetadataPass(bool replSeqMem,
-                                              std::string replSeqMemCircuit,
-                                              std::string replSeqMemFile) {
+std::unique_ptr<mlir::Pass> circt::firrtl::createCreateSiFiveMetadataPass(
+    bool replSeqMem, llvm::Optional<StringRef> replSeqMemCircuit,
+    llvm::Optional<StringRef> replSeqMemFile) {
   return std::make_unique<CreateSiFiveMetadataPass>(
-      replSeqMem, replSeqMemCircuit, replSeqMemFile);
+      replSeqMem,
+      replSeqMemCircuit.hasValue() ? replSeqMemCircuit.getValue() : "",
+      replSeqMemFile.hasValue() ? replSeqMemFile.getValue() : "");
 }

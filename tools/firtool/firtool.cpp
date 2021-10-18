@@ -389,7 +389,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
-        replSeqMem, replSeqMemCircuit, replSeqMemFile));
+        replSeqMem, StringRef(replSeqMemCircuit), StringRef(replSeqMemFile)));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
