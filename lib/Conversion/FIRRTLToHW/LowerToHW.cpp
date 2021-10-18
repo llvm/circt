@@ -275,6 +275,36 @@ struct CircuitLoweringState {
     binds.push_back(op);
   }
 
+  // Update the symName reference in every verbatimOp to the lowered
+  // updatedOpSym.
+  void updateVerbatimOp(StringRef symName, SymbolRefAttr updatedOpSym) {
+    // Check if symName exists in any of the verbatim ops.
+    auto verbOps = nlaToVerbatimMap.find(symName);
+    if (verbOps == nlaToVerbatimMap.end())
+      return;
+
+    for (auto opIndexPair : verbOps->second) {
+      Operation *vOp = opIndexPair.first;
+      size_t index = opIndexPair.second;
+      if (auto verbatimOp = dyn_cast_or_null<sv::VerbatimOp>(vOp)) {
+        SmallVector<Attribute, 8> symbols;
+        // Replace the symbol at index with the updatedOpSym.
+        for (auto vSyms : llvm::enumerate(verbatimOp.symbols()))
+          if (vSyms.index() == index)
+            symbols.push_back(updatedOpSym);
+          else
+            symbols.push_back(vSyms.value());
+        auto builder = Builder(verbatimOp);
+        // The verbatim op will be updated, obtain lock.
+        {
+          std::lock_guard<std::mutex> lock(verbatimOpMtx);
+          // Fix the symbols with the updated symbol.
+          verbatimOp->setAttr("symbols", builder.getArrayAttr(symbols));
+        }
+      }
+    }
+  }
+
 private:
   friend struct FIRRTLModuleLowering;
   CircuitLoweringState(const CircuitLoweringState &) = delete;
@@ -294,6 +324,14 @@ private:
 
   // Control access to binds.
   std::mutex bindsMutex;
+
+  // A map of NonLocalAnchor symbols to the verbatim ops that use the NLA
+  // symbol.
+  llvm::StringMap<SmallVector<std::pair<Operation *, size_t>, 8>>
+      nlaToVerbatimMap;
+
+  // Lock for updating the verbatim ops with the lowered symbols.
+  std::mutex verbatimOpMtx;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -416,6 +454,20 @@ void FIRRTLModuleLowering::runOnOperation() {
         .Case<FExtModuleOp>([&](auto extModule) {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
+        })
+        .Case<sv::VerbatimOp>([&](sv::VerbatimOp ver) {
+          // Ensure the verbatim op is lowered.
+          ver->moveBefore(topLevelModule, topLevelModule->end());
+          // Create a map of all the symbols used in the verbatim op and its
+          // corresponding index. Such that whenever the corresponding op
+          // containing the reference to the symbol is lowered, we can update
+          // the verbatimop.
+          for (auto s : llvm::enumerate(ver.symbols())) {
+            auto symName =
+                s.value().dyn_cast<FlatSymbolRefAttr>().getAttr().getValue();
+            state.nlaToVerbatimMap[symName].push_back(
+                std::make_pair(ver, s.index()));
+          }
         })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
@@ -2173,6 +2225,15 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
+
+  AnnotationSet memAnnos(op);
+  auto nlaAnno = memAnnos.getAnnotation("circt.nonlocal");
+
+  if (nlaAnno)
+    if (auto nla = nlaAnno.get("circt.nonlocal"))
+      if (auto sym = nla.dyn_cast_or_null<FlatSymbolRefAttr>()) {
+        circuitState.updateVerbatimOp(sym.getAttr().getValue(), memModuleAttr);
+      }
   return success();
 }
 

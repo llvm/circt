@@ -45,7 +45,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME: readLatency = 0 : ui32, readUnderWrite = 0 : ui32,
   // CHECK-SAME: width = 42 : ui32, writeClockIDs = [],
   // CHECK-SAME: writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-  // CHECK-NEXT: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_a, 
+  // CHECK: hw.module.generated @FIRRTLMem_1_1_1_40_1022_1_1_4_0_1_a, 
   // CHECK-SAME:  @FIRRTLMem(%R0_addr: i10, %R0_en: i1, %R0_clk: i1, %RW0_addr: i10, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i40, %RW0_wmask: i4, %W0_addr: i10, %W0_en: i1, %W0_clk: i1, %W0_data: i40, %W0_mask: i4) -> (R0_data: i40, RW0_rdata: i40)
   // CHECK-NEXT:  hw.module.generated @FIRRTLMem_1_1_1_42_12_0_1_1_0_1_a,
   // CHECK-SAME: @FIRRTLMem(%R0_addr: i4, %R0_en: i1, %R0_clk: i1, %RW0_addr: i4, %RW0_en: i1, %RW0_clk: i1, %RW0_wmode: i1, %RW0_wdata: i42, %RW0_wmask: i1, %W0_addr: i4, %W0_en: i1, %W0_clk: i1, %W0_data: i42, %W0_mask: i1) -> (R0_data: i42, RW0_rdata: i42)
@@ -1185,4 +1185,40 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+
+  // CHECK-LABEL: hw.module @tbMemModule1() {
+  firrtl.module @tbMemModule1() {
+    %tbMemoryKind1_r, %tbMemoryKind1_w = firrtl.mem Undefined  {annotations = [{circt.nonlocal = @nla2, class = "circt.nonlocal"}], depth = 16 : i64, name = "tbMemoryKind1", portNames = ["r", "w"], readLatency = 4 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    // CHECK: hw.instance "tbMemoryKind1" @[[nla2_mem:.+]](R0_addr
+  }
+  // CHECK-LABEL: hw.module @dutModule2() {
+  firrtl.module @dutModule2() {
+    %dutMemory_r, %dutMemory_w = firrtl.mem Undefined  {annotations = [{circt.nonlocal = @nla1, class = "circt.nonlocal"}], depth = 32 : i64, name = "dutMemory", portNames = ["r", "w"], readLatency = 4 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    // CHECK: hw.instance "dutMemory" @[[nla1_mem:.+]](R0_addr
+  }
+  // CHECK-LABEL: hw.module @hier1() {
+  firrtl.module @hier1() {
+    %tbMemoryKind1_r, %tbMemoryKind1_w = firrtl.mem Undefined  {annotations = [{circt.nonlocal = @nla3, class ="circt.nonlocal"}], depth = 16 : i64, name = "tbMemoryKind1", portNames = ["r", "w"], readLatency = 4 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    // CHECK: hw.instance "tbMemoryKind1" @[[nla3_mem:.+]](R0_addr
+  }
+  firrtl.module @hier2() {
+    firrtl.instance m  @tbMemModule1()
+  }
+  firrtl.module @verbatimNLAtest() {
+    firrtl.instance h1  @hier1()
+    firrtl.instance h2  @hier2()
+    firrtl.instance m2  @dutModule()
+  }
+  firrtl.module @dutModule() {
+    firrtl.instance m  @dutModule2()
+  }
+  firrtl.nla @nla1 [@dutModule2] ["dutMemory"]
+  firrtl.nla @nla2 [@tbMemModule1] ["tbMemoryKind1"]
+  firrtl.nla @nla3 [@hier1] ["tbMemoryKind1"]
+  sv.verbatim "[name : {{0}}]" {output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>, symbols = [@nla1]}
+  // CHECK: output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>
+  // CHECK-SAME: symbols = [@[[nla1_mem]]
+  sv.verbatim "name {{0}} name {{1}} depth {{2}} " {output_file = #hw.output_file<"metadata/dutModule.conf", excludeFromFileList>, symbols = [@nla1, @nla2, @nla1, @nla3]}
+  // CHECK: output_file = #hw.output_file<"metadata/dutModule.conf", excludeFromFileList>, symbols = [@[[nla1_mem]], @[[nla2_mem]], @[[nla1_mem]], @[[nla3_mem]]
 }
+
