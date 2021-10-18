@@ -80,8 +80,8 @@ static LogicalResult verifyNotComplexSource(Op op) {
   return success();
 }
 
-/// Convenience function for getting the SSA name of @p v under the scope of
-/// operation @p scopeOp
+/// Convenience function for getting the SSA name of `v` under the scope of
+/// operation `scopeOp`.
 static std::string valueName(Operation *scopeOp, Value v) {
   std::string s;
   llvm::raw_string_ostream os(s);
@@ -173,13 +173,13 @@ static bool portIsUsedInGroup(Value port, GroupInterface group, bool isDriven) {
   });
 }
 
-/// Checks whether @p port is driven from within @p groupOp.
+/// Checks whether `port` is driven from within `groupOp`.
 static LogicalResult portDrivenByGroup(Value port, GroupInterface groupOp) {
-  // Check if the port is driven by an assignOp from within @p groupOp.
+  // Check if the port is driven by an assignOp from within `groupOp`.
   if (portIsUsedInGroup(port, groupOp, /*isDriven=*/true))
     return success();
 
-  // If @p port is an output of a cell then we conservatively enforce that at
+  // If `port` is an output of a cell then we conservatively enforce that at
   // least one input port of the cell must be driven by the group.
   if (auto cell = dyn_cast<CellInterface>(port.getDefiningOp());
       cell && cell.direction(port) == calyx::Direction::Output)
@@ -730,7 +730,7 @@ static LogicalResult verifyComponentOp(ComponentOp op) {
   return success();
 }
 
-/// Returns a new vector containing the concatenation of vectors @p a and @p b.
+/// Returns a new vector containing the concatenation of vectors `a` and `b`.
 template <typename T>
 static SmallVector<T> concat(const SmallVectorImpl<T> &a,
                              const SmallVectorImpl<T> &b) {
