@@ -28,6 +28,7 @@ namespace json = llvm::json;
 
 using namespace circt;
 using namespace firrtl;
+using mlir::UnitAttr;
 
 /// Split a target into a base target (including a reference if one exists) and
 /// an optional array of subfield/subindex tokens.
@@ -891,6 +892,7 @@ scatterOMIR(Attribute original, unsigned &annotationID,
     NamedAttrList fields;
     fields.append("id",
                   IntegerAttr::get(IntegerType::get(ctx, 64), annotationID++));
+    fields.append("omir.tracker", UnitAttr::get(ctx));
     fields.append("type", StringAttr::get(ctx, tpe));
     return DictionaryAttr::getWithSorted(ctx, fields);
   };
@@ -916,9 +918,9 @@ scatterOMIR(Attribute original, unsigned &annotationID,
             tpe == "OMMemberInstanceTarget" || tpe == "OMInstanceTarget" ||
             tpe == "OMDontTouchedReferenceTarget") {
           NamedAttrList tracker;
+          tracker.append("class", StringAttr::get(ctx, omirTrackerAnnoClass));
           tracker.append(
               "id", IntegerAttr::get(IntegerType::get(ctx, 64), annotationID));
-          tracker.append("type", StringAttr::get(ctx, tpe));
 
           auto canonTarget = canonicalizeTarget(value);
           if (!canonTarget)

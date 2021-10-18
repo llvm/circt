@@ -111,6 +111,10 @@ static cl::opt<bool>
                  cl::desc("emit metadata for metadata annotations"),
                  cl::init(true));
 
+static cl::opt<bool> emitOMIR("emit-omir",
+                              cl::desc("emit OMIR annotations to a JSON file"),
+                              cl::init(true));
+
 static cl::opt<bool> replSeqMem(
     "repl-seq-mem",
     cl::desc(
@@ -390,6 +394,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (emitMetadata)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
         replSeqMem, replSeqMemCircuit, replSeqMemFile));
+
+  if (emitOMIR)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createEmitOMIRPass());
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
