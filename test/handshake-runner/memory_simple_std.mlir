@@ -4,7 +4,7 @@
 
 module {
   func @main(%0 : memref<4xi32>) -> i32{
-    %c0 = constant 0 : index
+    %c0 = arith.constant 0 : index
     %1 = memref.load %0[%c0] : memref<4xi32>
     return %1 : i32
     }

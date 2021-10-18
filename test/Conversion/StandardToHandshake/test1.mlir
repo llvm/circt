@@ -20,7 +20,7 @@ func @simple_loop() {
 // CHECK:           %[[VAL_10]]:2 = "handshake.fork"(%[[VAL_13]]#1) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_15:.*]] = "handshake.mux"(%[[VAL_10]]#0, %[[VAL_16:.*]], %[[VAL_7]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_17:.*]]:2 = "handshake.fork"(%[[VAL_15]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_18:.*]] = cmpi slt, %[[VAL_17]]#1, %[[VAL_12]]#1 : index
+// CHECK:           %[[VAL_18:.*]] = arith.cmpi slt, %[[VAL_17]]#1, %[[VAL_12]]#1 : index
 // CHECK:           %[[VAL_19:.*]]:3 = "handshake.fork"(%[[VAL_18]]) {control = false} : (i1) -> (i1, i1, i1)
 // CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]] = "handshake.conditional_branch"(%[[VAL_19]]#2, %[[VAL_12]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_21]]) : (index) -> ()
@@ -33,7 +33,7 @@ func @simple_loop() {
 // CHECK:           %[[VAL_29:.*]]:2 = "handshake.fork"(%[[VAL_28]]#0) {control = true} : (none) -> (none, none)
 // CHECK:           "handshake.sink"(%[[VAL_28]]#1) : (index) -> ()
 // CHECK:           %[[VAL_30:.*]] = "handshake.constant"(%[[VAL_29]]#0) {value = 1 : index} : (none) -> index
-// CHECK:           %[[VAL_31:.*]] = addi %[[VAL_26]], %[[VAL_30]] : index
+// CHECK:           %[[VAL_31:.*]] = arith.addi %[[VAL_26]], %[[VAL_30]] : index
 // CHECK:           %[[VAL_11]] = "handshake.branch"(%[[VAL_27]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_14]] = "handshake.branch"(%[[VAL_29]]#1) {control = true} : (none) -> none
 // CHECK:           %[[VAL_16]] = "handshake.branch"(%[[VAL_31]]) {control = false} : (index) -> index
@@ -46,15 +46,15 @@ func @simple_loop() {
 ^bb0:
   br ^bb1
 ^bb1:	// pred: ^bb0
-  %c1 = constant 1 : index
-  %c42 = constant 42 : index
+  %c1 = arith.constant 1 : index
+  %c42 = arith.constant 42 : index
   br ^bb2(%c1 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb3
-  %1 = cmpi slt, %0, %c42 : index
+  %1 = arith.cmpi slt, %0, %c42 : index
   cond_br %1, ^bb3, ^bb4
 ^bb3:	// pred: ^bb2
-  %c1_0 = constant 1 : index
-  %2 = addi %0, %c1_0 : index
+  %c1_0 = arith.constant 1 : index
+  %2 = arith.addi %0, %c1_0 : index
   br ^bb2(%2 : index)
 ^bb4:	// pred: ^bb2
   return

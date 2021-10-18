@@ -204,28 +204,38 @@ public:
 
 private:
   /// Operation execution visitors
-  LogicalResult execute(mlir::ConstantIndexOp, std::vector<Any> & /*inputs*/,
+  LogicalResult execute(mlir::arith::ConstantIndexOp,
+                        std::vector<Any> & /*inputs*/,
                         std::vector<Any> & /*outputs*/);
-  LogicalResult execute(mlir::ConstantIntOp, std::vector<Any> &,
+  LogicalResult execute(mlir::arith::ConstantIntOp, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(mlir::AddIOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::AddFOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::CmpIOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::CmpFOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::SubIOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::SubFOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::MulIOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::MulFOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::SignedDivIOp, std::vector<Any> &,
+  LogicalResult execute(mlir::arith::AddIOp, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(mlir::UnsignedDivIOp, std::vector<Any> &,
+  LogicalResult execute(mlir::arith::AddFOp, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(mlir::DivFOp, std::vector<Any> &, std::vector<Any> &);
-  LogicalResult execute(mlir::IndexCastOp, std::vector<Any> &,
+  LogicalResult execute(mlir::arith::CmpIOp, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(mlir::SignExtendIOp, std::vector<Any> &,
+  LogicalResult execute(mlir::arith::CmpFOp, std::vector<Any> &,
                         std::vector<Any> &);
-  LogicalResult execute(mlir::ZeroExtendIOp, std::vector<Any> &,
+  LogicalResult execute(mlir::arith::SubIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::SubFOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::MulIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::MulFOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::DivSIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::DivUIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::DivFOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::IndexCastOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::ExtSIOp, std::vector<Any> &,
+                        std::vector<Any> &);
+  LogicalResult execute(mlir::arith::ExtUIOp, std::vector<Any> &,
                         std::vector<Any> &);
   LogicalResult execute(memref::LoadOp, std::vector<Any> &, std::vector<Any> &);
   LogicalResult execute(memref::StoreOp, std::vector<Any> &,
@@ -261,7 +271,7 @@ private:
   mlir::Block::iterator instIter;
 };
 
-LogicalResult HandshakeExecuter::execute(mlir::ConstantIndexOp op,
+LogicalResult HandshakeExecuter::execute(mlir::arith::ConstantIndexOp op,
                                          std::vector<Any> &,
                                          std::vector<Any> &out) {
   auto attr = op->getAttrOfType<mlir::IntegerAttr>("value");
@@ -269,7 +279,7 @@ LogicalResult HandshakeExecuter::execute(mlir::ConstantIndexOp op,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::ConstantIntOp op,
+LogicalResult HandshakeExecuter::execute(mlir::arith::ConstantIntOp op,
                                          std::vector<Any> &,
                                          std::vector<Any> &out) {
   auto attr = op->getAttrOfType<mlir::IntegerAttr>("value");
@@ -277,61 +287,69 @@ LogicalResult HandshakeExecuter::execute(mlir::ConstantIntOp op,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::AddIOp, std::vector<Any> &in,
+LogicalResult HandshakeExecuter::execute(mlir::arith::AddIOp,
+                                         std::vector<Any> &in,
                                          std::vector<Any> &out) {
   out[0] = any_cast<APInt>(in[0]) + any_cast<APInt>(in[1]);
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::AddFOp, std::vector<Any> &in,
+LogicalResult HandshakeExecuter::execute(mlir::arith::AddFOp,
+                                         std::vector<Any> &in,
                                          std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) + any_cast<APFloat>(in[1]);
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::CmpIOp op, std::vector<Any> &in,
+LogicalResult HandshakeExecuter::execute(mlir::arith::CmpIOp op,
+                                         std::vector<Any> &in,
                                          std::vector<Any> &out) {
   APInt in0 = any_cast<APInt>(in[0]);
   APInt in1 = any_cast<APInt>(in[1]);
-  APInt out0(1, mlir::applyCmpPredicate(op.getPredicate(), in0, in1));
+  APInt out0(1, mlir::arith::applyCmpPredicate(op.getPredicate(), in0, in1));
   out[0] = out0;
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::CmpFOp op, std::vector<Any> &in,
+LogicalResult HandshakeExecuter::execute(mlir::arith::CmpFOp op,
+                                         std::vector<Any> &in,
                                          std::vector<Any> &out) {
   APFloat in0 = any_cast<APFloat>(in[0]);
   APFloat in1 = any_cast<APFloat>(in[1]);
-  APInt out0(1, mlir::applyCmpPredicate(op.getPredicate(), in0, in1));
+  APInt out0(1, mlir::arith::applyCmpPredicate(op.getPredicate(), in0, in1));
   out[0] = out0;
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::SubIOp, std::vector<Any> &in,
+LogicalResult HandshakeExecuter::execute(mlir::arith::SubIOp,
+                                         std::vector<Any> &in,
                                          std::vector<Any> &out) {
   out[0] = any_cast<APInt>(in[0]) - any_cast<APInt>(in[1]);
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::SubFOp, std::vector<Any> &in,
+LogicalResult HandshakeExecuter::execute(mlir::arith::SubFOp,
+                                         std::vector<Any> &in,
                                          std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) + any_cast<APFloat>(in[1]);
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::MulIOp, std::vector<Any> &in,
+LogicalResult HandshakeExecuter::execute(mlir::arith::MulIOp,
+                                         std::vector<Any> &in,
                                          std::vector<Any> &out) {
   out[0] = any_cast<APInt>(in[0]) * any_cast<APInt>(in[1]);
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::MulFOp, std::vector<Any> &in,
+LogicalResult HandshakeExecuter::execute(mlir::arith::MulFOp,
+                                         std::vector<Any> &in,
                                          std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) * any_cast<APFloat>(in[1]);
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::SignedDivIOp op,
+LogicalResult HandshakeExecuter::execute(mlir::arith::DivSIOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
   if (!any_cast<APInt>(in[1]).getZExtValue())
@@ -341,7 +359,7 @@ LogicalResult HandshakeExecuter::execute(mlir::SignedDivIOp op,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::UnsignedDivIOp op,
+LogicalResult HandshakeExecuter::execute(mlir::arith::DivUIOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
   if (!any_cast<APInt>(in[1]).getZExtValue())
@@ -350,20 +368,21 @@ LogicalResult HandshakeExecuter::execute(mlir::UnsignedDivIOp op,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::DivFOp, std::vector<Any> &in,
+LogicalResult HandshakeExecuter::execute(mlir::arith::DivFOp,
+                                         std::vector<Any> &in,
                                          std::vector<Any> &out) {
   out[0] = any_cast<APFloat>(in[0]) / any_cast<APFloat>(in[1]);
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::IndexCastOp,
+LogicalResult HandshakeExecuter::execute(mlir::arith::IndexCastOp,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
   out[0] = in[0];
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::SignExtendIOp op,
+LogicalResult HandshakeExecuter::execute(mlir::arith::ExtSIOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
   int64_t width = op.getType().getIntOrFloatBitWidth();
@@ -371,7 +390,7 @@ LogicalResult HandshakeExecuter::execute(mlir::SignExtendIOp op,
   return success();
 }
 
-LogicalResult HandshakeExecuter::execute(mlir::ZeroExtendIOp op,
+LogicalResult HandshakeExecuter::execute(mlir::arith::ExtUIOp op,
                                          std::vector<Any> &in,
                                          std::vector<Any> &out) {
   int64_t width = op.getType().getIntOrFloatBitWidth();
@@ -639,11 +658,13 @@ HandshakeExecuter::HandshakeExecuter(
     unsigned strat = ExecuteStrategy::Default;
     auto res =
         llvm::TypeSwitch<Operation *, LogicalResult>(&op)
-            .Case<mlir::ConstantIndexOp, mlir::ConstantIntOp, mlir::AddIOp,
-                  mlir::AddFOp, mlir::CmpIOp, mlir::CmpFOp, mlir::SubIOp,
-                  mlir::SubFOp, mlir::MulIOp, mlir::MulFOp, mlir::SignedDivIOp,
-                  mlir::UnsignedDivIOp, mlir::DivFOp, mlir::IndexCastOp,
-                  mlir::SignExtendIOp, mlir::ZeroExtendIOp, memref::AllocOp,
+            .Case<mlir::arith::ConstantIndexOp, mlir::arith::ConstantIntOp,
+                  mlir::arith::AddIOp, mlir::arith::AddFOp, mlir::arith::CmpIOp,
+                  mlir::arith::CmpFOp, mlir::arith::SubIOp, mlir::arith::SubFOp,
+                  mlir::arith::MulIOp, mlir::arith::MulFOp,
+                  mlir::arith::DivSIOp, mlir::arith::DivUIOp,
+                  mlir::arith::DivFOp, mlir::arith::IndexCastOp,
+                  mlir::arith::ExtSIOp, mlir::arith::ExtUIOp, memref::AllocOp,
                   memref::LoadOp, memref::StoreOp>([&](auto op) {
               strat = ExecuteStrategy::Default;
               return execute(op, inValues, outValues);
@@ -764,11 +785,13 @@ HandshakeExecuter::HandshakeExecuter(
     ExecuteStrategy strat = ExecuteStrategy::Default;
     LogicalResult res =
         llvm::TypeSwitch<Operation *, LogicalResult>(&op)
-            .Case<mlir::ConstantIndexOp, mlir::ConstantIntOp, mlir::AddIOp,
-                  mlir::AddFOp, mlir::CmpIOp, mlir::CmpFOp, mlir::SubIOp,
-                  mlir::SubFOp, mlir::MulIOp, mlir::MulFOp, mlir::SignedDivIOp,
-                  mlir::UnsignedDivIOp, mlir::DivFOp, mlir::IndexCastOp,
-                  mlir::SignExtendIOp, mlir::ZeroExtendIOp,
+            .Case<mlir::arith::ConstantIndexOp, mlir::arith::ConstantIntOp,
+                  mlir::arith::AddIOp, mlir::arith::AddFOp, mlir::arith::CmpIOp,
+                  mlir::arith::CmpFOp, mlir::arith::SubIOp, mlir::arith::SubFOp,
+                  mlir::arith::MulIOp, mlir::arith::MulFOp,
+                  mlir::arith::DivSIOp, mlir::arith::DivUIOp,
+                  mlir::arith::DivFOp, mlir::arith::IndexCastOp,
+                  mlir::arith::ExtSIOp, mlir::arith::ExtUIOp,
                   handshake::InstanceOp>([&](auto op) {
               strat = ExecuteStrategy::Default;
               return execute(op, inValues, outValues);

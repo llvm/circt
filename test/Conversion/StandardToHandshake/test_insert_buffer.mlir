@@ -43,7 +43,7 @@ module {
     // CHECK-NEXT:  %17 = "handshake.buffer"(%15#0) {control = false, sequential = true, slots = 2 : i32} : (index) -> index
     %13:2 = "handshake.fork"(%12) {control = false} : (index) -> (index, index)
     // ALL: "handshake.buffer"
-    %14 = cmpi slt, %13#1, %9#1 : index
+    %14 = arith.cmpi slt, %13#1, %9#1 : index
     // ALL: "handshake.buffer"
     %15:3 = "handshake.fork"(%14) {control = false} : (i1) -> (i1, i1, i1)
     // ALL: "handshake.buffer"
@@ -69,7 +69,7 @@ module {
     // ALL: "handshake.buffer"
     %20 = "handshake.constant"(%19#0) {value = 1 : index} : (none) -> index
     // ALL: "handshake.buffer"
-    %21 = addi %16, %20 : index
+    %21 = arith.addi %16, %20 : index
     // ALL: "handshake.buffer"
     // CHECK:       %26 = "handshake.branch"(%21) {control = false} : (index) -> index
     // CHECK-NEXT:  %27 = "handshake.buffer"(%26) {control = false, sequential = true, slots = 2 : i32} : (index) -> index

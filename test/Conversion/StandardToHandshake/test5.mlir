@@ -13,7 +13,7 @@ func @dfs_block_order() -> (i32) {
 // CHECK:           %[[VAL_7:.*]] = "handshake.merge"(%[[VAL_8:.*]]) : (i32) -> i32
 // CHECK:           %[[VAL_9:.*]]:2 = "handshake.control_merge"(%[[VAL_10:.*]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_9]]#1) : (index) -> ()
-// CHECK:           %[[VAL_11:.*]] = addi %[[VAL_5]], %[[VAL_7]] : i32
+// CHECK:           %[[VAL_11:.*]] = arith.addi %[[VAL_5]], %[[VAL_7]] : i32
 // CHECK:           %[[VAL_12:.*]] = "handshake.merge"(%[[VAL_4]]) : (i32) -> i32
 // CHECK:           %[[VAL_13:.*]]:2 = "handshake.control_merge"(%[[VAL_3]]) {control = true} : (none) -> (none, index)
 // CHECK:           %[[VAL_14:.*]]:2 = "handshake.fork"(%[[VAL_13]]#0) {control = true} : (none) -> (none, none)
@@ -26,12 +26,12 @@ func @dfs_block_order() -> (i32) {
 // CHECK:         }
 // CHECK:       }
 
-  %0 = constant 42 : i32
+  %0 = arith.constant 42 : i32
   br ^bb2
 ^bb1:
-  %2 = addi %0, %1 : i32
+  %2 = arith.addi %0, %1 : i32
   return %2 : i32
 ^bb2:
-  %1 = constant 55 : i32
+  %1 = arith.constant 55 : i32
   br ^bb1
 }

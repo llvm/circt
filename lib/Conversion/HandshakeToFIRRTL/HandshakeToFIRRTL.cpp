@@ -230,7 +230,7 @@ static std::string getSubModuleName(Operation *oldOp) {
     subModuleName += "_id" + std::to_string(memOp.id());
 
   // Add compare kind.
-  if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
+  if (auto comOp = dyn_cast<mlir::arith::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
 
   // Add buffer information.
@@ -632,27 +632,27 @@ public:
 
   bool visitInvalidOp(Operation *op) { return false; }
 
-  bool visitStdExpr(CmpIOp op);
-  bool visitStdExpr(ZeroExtendIOp op);
-  bool visitStdExpr(TruncateIOp op);
-  bool visitStdExpr(IndexCastOp op);
+  bool visitStdExpr(arith::CmpIOp op);
+  bool visitStdExpr(arith::ExtUIOp op);
+  bool visitStdExpr(arith::TruncIOp op);
+  bool visitStdExpr(arith::IndexCastOp op);
 
 #define HANDLE(OPTYPE, FIRRTLTYPE)                                             \
   bool visitStdExpr(OPTYPE op) { return buildBinaryLogic<FIRRTLTYPE>(), true; }
 
-  HANDLE(AddIOp, AddPrimOp);
-  HANDLE(SubIOp, SubPrimOp);
-  HANDLE(MulIOp, MulPrimOp);
-  HANDLE(SignedDivIOp, DivPrimOp);
-  HANDLE(SignedRemIOp, RemPrimOp);
-  HANDLE(UnsignedDivIOp, DivPrimOp);
-  HANDLE(UnsignedRemIOp, RemPrimOp);
-  HANDLE(XOrOp, XorPrimOp);
-  HANDLE(AndOp, AndPrimOp);
-  HANDLE(OrOp, OrPrimOp);
-  HANDLE(ShiftLeftOp, DShlPrimOp);
-  HANDLE(SignedShiftRightOp, DShrPrimOp);
-  HANDLE(UnsignedShiftRightOp, DShrPrimOp);
+  HANDLE(arith::AddIOp, AddPrimOp);
+  HANDLE(arith::SubIOp, SubPrimOp);
+  HANDLE(arith::MulIOp, MulPrimOp);
+  HANDLE(arith::DivSIOp, DivPrimOp);
+  HANDLE(arith::RemSIOp, RemPrimOp);
+  HANDLE(arith::DivUIOp, DivPrimOp);
+  HANDLE(arith::RemUIOp, RemPrimOp);
+  HANDLE(arith::XOrIOp, XorPrimOp);
+  HANDLE(arith::AndIOp, AndPrimOp);
+  HANDLE(arith::OrIOp, OrPrimOp);
+  HANDLE(arith::ShLIOp, DShlPrimOp);
+  HANDLE(arith::ShRSIOp, DShrPrimOp);
+  HANDLE(arith::ShRUIOp, DShrPrimOp);
 #undef HANDLE
 
   bool buildZeroExtendOp(unsigned dstWidth);
@@ -665,23 +665,23 @@ private:
 };
 } // namespace
 
-bool StdExprBuilder::visitStdExpr(CmpIOp op) {
+bool StdExprBuilder::visitStdExpr(arith::CmpIOp op) {
   switch (op.getPredicate()) {
-  case CmpIPredicate::eq:
+  case arith::CmpIPredicate::eq:
     return buildBinaryLogic<EQPrimOp>(), true;
-  case CmpIPredicate::ne:
+  case arith::CmpIPredicate::ne:
     return buildBinaryLogic<NEQPrimOp>(), true;
-  case CmpIPredicate::slt:
-  case CmpIPredicate::ult:
+  case arith::CmpIPredicate::slt:
+  case arith::CmpIPredicate::ult:
     return buildBinaryLogic<LTPrimOp>(), true;
-  case CmpIPredicate::sle:
-  case CmpIPredicate::ule:
+  case arith::CmpIPredicate::sle:
+  case arith::CmpIPredicate::ule:
     return buildBinaryLogic<LEQPrimOp>(), true;
-  case CmpIPredicate::sgt:
-  case CmpIPredicate::ugt:
+  case arith::CmpIPredicate::sgt:
+  case arith::CmpIPredicate::ugt:
     return buildBinaryLogic<GTPrimOp>(), true;
-  case CmpIPredicate::sge:
-  case CmpIPredicate::uge:
+  case arith::CmpIPredicate::sge:
+  case arith::CmpIPredicate::uge:
     return buildBinaryLogic<GEQPrimOp>(), true;
   }
   llvm_unreachable("invalid CmpIOp");
@@ -737,17 +737,17 @@ bool StdExprBuilder::buildTruncateOp(unsigned int dstWidth) {
   return true;
 }
 
-bool StdExprBuilder::visitStdExpr(ZeroExtendIOp op) {
+bool StdExprBuilder::visitStdExpr(arith::ExtUIOp op) {
   return buildZeroExtendOp(getFIRRTLType(getOperandDataType(op.getOperand()))
                                .getBitWidthOrSentinel());
 }
 
-bool StdExprBuilder::visitStdExpr(TruncateIOp op) {
+bool StdExprBuilder::visitStdExpr(arith::TruncIOp op) {
   return buildTruncateOp(getFIRRTLType(getOperandDataType(op.getOperand()))
                              .getBitWidthOrSentinel());
 }
 
-bool StdExprBuilder::visitStdExpr(IndexCastOp op) {
+bool StdExprBuilder::visitStdExpr(arith::IndexCastOp op) {
   FIRRTLType sourceType = getFIRRTLType(getOperandDataType(op.getOperand()));
   FIRRTLType targetType = getFIRRTLType(getOperandDataType(op.getResult()));
   unsigned targetBits = targetType.getBitWidthOrSentinel();

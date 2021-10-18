@@ -20,7 +20,7 @@ func @imperfectly_nested_loops() {
 // CHECK:           %[[VAL_10]]:2 = "handshake.fork"(%[[VAL_13]]#1) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_15:.*]] = "handshake.mux"(%[[VAL_10]]#0, %[[VAL_16:.*]], %[[VAL_7]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_17:.*]]:2 = "handshake.fork"(%[[VAL_15]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_18:.*]] = cmpi slt, %[[VAL_17]]#1, %[[VAL_12]]#1 : index
+// CHECK:           %[[VAL_18:.*]] = arith.cmpi slt, %[[VAL_17]]#1, %[[VAL_12]]#1 : index
 // CHECK:           %[[VAL_19:.*]]:3 = "handshake.fork"(%[[VAL_18]]) {control = false} : (i1) -> (i1, i1, i1)
 // CHECK:           %[[VAL_20:.*]], %[[VAL_21:.*]] = "handshake.conditional_branch"(%[[VAL_19]]#2, %[[VAL_12]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_21]]) : (index) -> ()
@@ -54,7 +54,7 @@ func @imperfectly_nested_loops() {
 // CHECK:           %[[VAL_44]]:4 = "handshake.fork"(%[[VAL_51]]#1) {control = false} : (index) -> (index, index, index, index)
 // CHECK:           %[[VAL_53:.*]] = "handshake.mux"(%[[VAL_44]]#0, %[[VAL_54:.*]], %[[VAL_41]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_55:.*]]:2 = "handshake.fork"(%[[VAL_53]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_56:.*]] = cmpi slt, %[[VAL_55]]#1, %[[VAL_46]]#1 : index
+// CHECK:           %[[VAL_56:.*]] = arith.cmpi slt, %[[VAL_55]]#1, %[[VAL_46]]#1 : index
 // CHECK:           %[[VAL_57:.*]]:5 = "handshake.fork"(%[[VAL_56]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_58:.*]], %[[VAL_59:.*]] = "handshake.conditional_branch"(%[[VAL_57]]#4, %[[VAL_46]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_59]]) : (index) -> ()
@@ -71,7 +71,7 @@ func @imperfectly_nested_loops() {
 // CHECK:           %[[VAL_73:.*]]:2 = "handshake.fork"(%[[VAL_72]]#0) {control = true} : (none) -> (none, none)
 // CHECK:           "handshake.sink"(%[[VAL_72]]#1) : (index) -> ()
 // CHECK:           %[[VAL_74:.*]] = "handshake.constant"(%[[VAL_73]]#0) {value = 2 : index} : (none) -> index
-// CHECK:           %[[VAL_75:.*]] = addi %[[VAL_68]], %[[VAL_74]] : index
+// CHECK:           %[[VAL_75:.*]] = arith.addi %[[VAL_68]], %[[VAL_74]] : index
 // CHECK:           %[[VAL_45]] = "handshake.branch"(%[[VAL_69]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_48]] = "handshake.branch"(%[[VAL_70]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_50]] = "handshake.branch"(%[[VAL_71]]) {control = false} : (index) -> index
@@ -83,7 +83,7 @@ func @imperfectly_nested_loops() {
 // CHECK:           %[[VAL_79:.*]]:2 = "handshake.fork"(%[[VAL_78]]#0) {control = true} : (none) -> (none, none)
 // CHECK:           "handshake.sink"(%[[VAL_78]]#1) : (index) -> ()
 // CHECK:           %[[VAL_80:.*]] = "handshake.constant"(%[[VAL_79]]#0) {value = 1 : index} : (none) -> index
-// CHECK:           %[[VAL_81:.*]] = addi %[[VAL_76]], %[[VAL_80]] : index
+// CHECK:           %[[VAL_81:.*]] = arith.addi %[[VAL_76]], %[[VAL_80]] : index
 // CHECK:           %[[VAL_11]] = "handshake.branch"(%[[VAL_77]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_14]] = "handshake.branch"(%[[VAL_79]]#1) {control = true} : (none) -> none
 // CHECK:           %[[VAL_16]] = "handshake.branch"(%[[VAL_81]]) {control = false} : (index) -> index
@@ -97,28 +97,28 @@ func @imperfectly_nested_loops() {
 ^bb0:
   br ^bb1
 ^bb1:	// pred: ^bb0
-  %c0 = constant 0 : index
-  %c42 = constant 42 : index
+  %c0 = arith.constant 0 : index
+  %c42 = arith.constant 42 : index
   br ^bb2(%c0 : index)
 ^bb2(%0: index):	// 2 preds: ^bb1, ^bb7
-  %1 = cmpi slt, %0, %c42 : index
+  %1 = arith.cmpi slt, %0, %c42 : index
   cond_br %1, ^bb3, ^bb8
 ^bb3:	// pred: ^bb2
   br ^bb4
 ^bb4:	// pred: ^bb3
-  %c7 = constant 7 : index
-  %c56 = constant 56 : index
+  %c7 = arith.constant 7 : index
+  %c56 = arith.constant 56 : index
   br ^bb5(%c7 : index)
 ^bb5(%2: index):	// 2 preds: ^bb4, ^bb6
-  %3 = cmpi slt, %2, %c56 : index
+  %3 = arith.cmpi slt, %2, %c56 : index
   cond_br %3, ^bb6, ^bb7
 ^bb6:	// pred: ^bb5
-  %c2 = constant 2 : index
-  %4 = addi %2, %c2 : index
+  %c2 = arith.constant 2 : index
+  %4 = arith.addi %2, %c2 : index
   br ^bb5(%4 : index)
 ^bb7:	// pred: ^bb5
-  %c1 = constant 1 : index
-  %5 = addi %0, %c1 : index
+  %c1 = arith.constant 1 : index
+  %5 = arith.addi %0, %c1 : index
   br ^bb2(%5 : index)
 ^bb8:	// pred: ^bb2
   return
