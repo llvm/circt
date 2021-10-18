@@ -459,10 +459,7 @@ void CreateSiFiveMetadataPass::runOnOperation() {
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createCreateSiFiveMetadataPass(
-    bool replSeqMem, StringRef replSeqMemCircuit,
-    StringRef replSeqMemFile) {
+    bool replSeqMem, StringRef replSeqMemCircuit, StringRef replSeqMemFile) {
   return std::make_unique<CreateSiFiveMetadataPass>(
-      replSeqMem,
-      replSeqMemCircuit,
-      replSeqMemFile);
+      replSeqMem, replSeqMemCircuit, replSeqMemFile);
 }
