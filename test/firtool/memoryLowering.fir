@@ -1,4 +1,4 @@
-; RUN: firtool %s --format=fir  --annotation-file %s.anno.json -emit-metadata -repl-seq-mem --verilog |  FileCheck %s
+; RUN: firtool %s --format=fir  --annotation-file %s.anno.json -emit-metadata -repl-seq-mem -repl-seq-mem-file="metadata/test.conf" --verilog |  FileCheck %s
 
 circuit test:
   module test:

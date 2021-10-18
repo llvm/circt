@@ -116,6 +116,13 @@ static cl::opt<bool> replSeqMem(
     cl::desc(
         "replace the seq mem for macro replacement and emit relevant metadata"),
     cl::init(false));
+static cl::opt<std::string>
+    replSeqMemCircuit("repl-seq-mem-circuit",
+                      cl::desc("circuit root for seq mem metadata"),
+                      cl::init(""));
+static cl::opt<std::string>
+    replSeqMemFile("repl-seq-mem-file",
+                   cl::desc("file name for seq mem metadata"), cl::init(""));
 
 static cl::opt<bool> imconstprop(
     "imconstprop",
@@ -381,8 +388,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         createSimpleCanonicalizerPass());
 
   if (emitMetadata)
-    pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createCreateSiFiveMetadataPass(replSeqMem));
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
+        replSeqMem, replSeqMemCircuit, replSeqMemFile));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||

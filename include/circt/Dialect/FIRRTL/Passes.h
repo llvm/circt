@@ -41,7 +41,9 @@ std::unique_ptr<mlir::Pass> createInlinerPass();
 std::unique_ptr<mlir::Pass> createBlackBoxMemoryPass();
 
 std::unique_ptr<mlir::Pass>
-createCreateSiFiveMetadataPass(bool replSeqMem = false);
+createCreateSiFiveMetadataPass(bool replSeqMem = false,
+                               StringRef replSeqMemCircuit = "",
+                               StringRef replSeqMemFile = "");
 
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 

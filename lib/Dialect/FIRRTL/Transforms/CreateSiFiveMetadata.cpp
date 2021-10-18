@@ -45,7 +45,12 @@ class CreateSiFiveMetadataPass
   FModuleOp dutMod;
 
 public:
-  CreateSiFiveMetadataPass(bool e) { replSeqMem = e; }
+  CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
+                           StringRef _replSeqMemFile) {
+    replSeqMem = _replSeqMem;
+    replSeqMemCircuit = _replSeqMemCircuit.str();
+    replSeqMemFile = _replSeqMemFile.str();
+  }
 };
 } // end anonymous namespace
 
@@ -202,11 +207,15 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   if (!seqMemConfStr.empty()) {
     auto confVerbatimOp =
         builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
-    StringRef confFile = "memory";
-    if (dutMod)
-      confFile = dutMod.getName();
-    auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-        context, metadataDir, confFile + ".conf", /*excludeFromFilelist=*/true);
+    if (replSeqMemFile.empty()) {
+      circuitOp->emitError("metadata emission failed, the option "
+                           "`-repl-seq-mem-file=<filename>` is mandatory for "
+                           "specifying a valid seq mem metadata file");
+      return failure();
+    }
+
+    auto fileAttr = hw::OutputFileAttr::getFromFilename(
+        context, replSeqMemFile, /*excludeFromFilelist=*/true);
     confVerbatimOp->setAttr("output_file", fileAttr);
   }
 
@@ -449,7 +458,8 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   markAnalysesPreserved<InstanceGraph>();
 }
 
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createCreateSiFiveMetadataPass(bool replSeqMem) {
-  return std::make_unique<CreateSiFiveMetadataPass>(replSeqMem);
+std::unique_ptr<mlir::Pass> circt::firrtl::createCreateSiFiveMetadataPass(
+    bool replSeqMem, StringRef replSeqMemCircuit, StringRef replSeqMemFile) {
+  return std::make_unique<CreateSiFiveMetadataPass>(
+      replSeqMem, replSeqMemCircuit, replSeqMemFile);
 }

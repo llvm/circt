@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-metadata{repl-seq-mem=true})' %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='firrtl.circuit(firrtl-emit-metadata{repl-seq-mem=true repl-seq-mem-file="metadata/dut.conf"})' %s | FileCheck %s
 
 firrtl.circuit "empty" {
   firrtl.module @empty() {
@@ -125,5 +125,6 @@ firrtl.circuit "top"
     // CHECK: sv.verbatim "[{\22module_name\22:\22FIRRTLMem_0_1_0_5_20_1_1_1_0_1\22,\22depth\22:20,\22width\22:5,\22masked\22:\22true\22,\22read\22:\22false\22,\22write\22:\22true\22,\22readwrite\22:\22false\22,\22mask_granularity\22:5,\22extra_ports\22:[],\22hierarchy\22:[\22top.mem1.head\22]}]" {output_file = #hw.output_file<"metadata/tb_seq_mems.json", excludeFromFileList>, symbols = []}
     // CHECK: sv.verbatim "[{\22module_name\22:\22FIRRTLMem_1_0_1_8_16_1_1_1_0_1\22,\22depth\22:16,\22width\22:8,\22masked\22:\22true\22,\22read\22:\22true\22,\22write\22:\22false\22,\22readwrite\22:\22true\22,\22mask_granularity\22:8,\22extra_ports\22:[],\22hierarchy\22:[\22top.dut.mem1.memory\22]
     // CHECK-SAME: output_file = #hw.output_file<"metadata/seq_mems.json", excludeFromFileList>, symbols = []
-    // CHECK: sv.verbatim "name FIRRTLMem_1_0_1_8_16_1_1_1_0_1 depth 16 width 8 ports mrw mask_gran 8\0Aname FIRRTLMem_0_1_0_5_20_1_1_1_0_1 depth 20 width 5 ports mwrite mask_gran 5\0A" {output_file = #hw.output_file<"metadata/dut.conf", excludeFromFileList>, symbols = []}
+    // CHECK: sv.verbatim "name FIRRTLMem_1_0_1_8_16_1_1_1_0_1 depth 16 width 8 ports mrw mask_gran 8\0Aname FIRRTLMem_0_1_0_5_20_1_1_1_0_1 depth 20 width 5 ports mwrite mask_gran 5\0A"
+    // CHECK-SAME: {output_file = #hw.output_file<"\22metadata/dut.conf\22", excludeFromFileList>, symbols = []}
 }
