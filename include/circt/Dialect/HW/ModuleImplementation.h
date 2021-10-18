@@ -23,13 +23,6 @@ namespace circt {
 namespace hw {
 
 namespace module_like_impl {
-
-/// Parse a portname as a keyword or a quote surrounded string.
-StringAttr parsePortName(OpAsmParser &parser);
-
-/// Print a port name as a MLIR keyword or quoted if necessary.
-void printPortName(StringAttr name, llvm::raw_ostream &os);
-
 /// Get the portname from an SSA value string, if said value name is not a
 /// number.
 StringAttr getPortNameAttr(MLIRContext *context, StringRef name);

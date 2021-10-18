@@ -521,12 +521,11 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
 
   return parser.parseCommaSeparatedList(
       OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
-        StringAttr name;
+        std::string name;
         Type type;
         Attribute value;
 
-        if (!(name = module_like_impl::parsePortName(parser)) ||
-            parser.parseColonType(type))
+        if (parser.parseKeywordOrString(&name) || parser.parseColonType(type))
           return failure();
 
         // Parse the default value if present.
@@ -536,7 +535,8 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
         }
 
         auto &builder = parser.getBuilder();
-        parameters.push_back(ParamDeclAttr::get(builder.getContext(), name,
+        parameters.push_back(ParamDeclAttr::get(builder.getContext(),
+                                                builder.getStringAttr(name),
                                                 TypeAttr::get(type), value));
         return success();
       });
@@ -985,6 +985,7 @@ LogicalResult InstanceOp::verifyCustom() {
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    OperationState &result) {
+  auto *context = result.getContext();
   StringAttr instanceNameAttr;
   StringAttr sym_nameAttr;
   FlatSymbolRefAttr moduleNameAttr;
@@ -1006,9 +1007,10 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   }
 
   auto parseInputPort = [&]() -> ParseResult {
-    argNames.push_back(module_like_impl::parsePortName(parser));
-    if (!argNames.back())
+    std::string portName;
+    if (parser.parseKeywordOrString(&portName))
       return failure();
+    argNames.push_back(StringAttr::get(context, portName));
     inputsOperands.push_back({});
     inputsTypes.push_back({});
     return failure(parser.parseColon() ||
@@ -1017,9 +1019,10 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   };
 
   auto parseResultPort = [&]() -> ParseResult {
-    resultNames.push_back(module_like_impl::parsePortName(parser));
-    if (!resultNames.back())
+    std::string portName;
+    if (parser.parseKeywordOrString(&portName))
       return failure();
+    resultNames.push_back(StringAttr::get(parser.getContext(), portName));
     allResultTypes.push_back({});
     return parser.parseColonType(allResultTypes.back());
   };
@@ -1061,7 +1064,7 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
       return;
     }
 
-    module_like_impl::printPortName(portList[nextPort++].name, p.getStream());
+    p.printKeywordOrString(portList[nextPort++].name.getValue());
     p << ": ";
   };
 
