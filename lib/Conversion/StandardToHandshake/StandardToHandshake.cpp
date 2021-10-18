@@ -1351,7 +1351,7 @@ private:
 ///
 template <typename TConv, typename TFuncOp, typename... TArgs>
 LogicalResult lowerToHandshake(TFuncOp op, MLIRContext *context,
-                               TArgs &... args) {
+                               TArgs &...args) {
   RewritePatternSet patterns(context);
   auto target = LowerFuncOpTarget<TFuncOp>(*context);
   LogicalResult partialLoweringSuccessfull = success();
