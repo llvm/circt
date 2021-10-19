@@ -275,32 +275,31 @@ struct CircuitLoweringState {
     binds.push_back(op);
   }
 
-  // Update the symName reference in every verbatimOp to the lowered
-  // updatedOpSym.
-  void updateVerbatimOp(StringRef symName, SymbolRefAttr updatedOpSym) {
-    // Check if symName exists in any of the verbatim ops.
-    auto verbOps = nlaToVerbatimMap.find(symName);
-    if (verbOps == nlaToVerbatimMap.end())
+  void updateNLAsyms(StringRef nlaSym, StringRef oldSymName,
+                     StringRef oldModuleName,
+                     FlatSymbolRefAttr updatedOpSymRef) {
+    auto nlaOp = nlaMap.find(nlaSym);
+    if (nlaOp == nlaMap.end())
       return;
 
-    // The verbatim op will be updated, obtain lock.
-    std::lock_guard<std::mutex> lock(verbatimOpMtx);
-    for (auto opIndexPair : verbOps->second) {
-      Operation *vOp = opIndexPair.first;
-      size_t index = opIndexPair.second;
-      if (auto verbatimOp = dyn_cast_or_null<sv::VerbatimOp>(vOp)) {
-        SmallVector<Attribute, 8> symbols;
-        // Replace the symbol at index with the updatedOpSym.
-        for (auto vSyms : llvm::enumerate(verbatimOp.symbols()))
-          if (vSyms.index() == index)
-            symbols.push_back(updatedOpSym);
-          else
-            symbols.push_back(vSyms.value());
-        auto builder = Builder(verbatimOp);
-        // Fix the symbols with the updated symbol.
-        verbatimOp->setAttr("symbols", builder.getArrayAttr(symbols));
-      }
-    }
+    auto nla = cast<NonLocalAnchor>(nlaOp->second.first);
+    auto &newSymArray = nlaOp->second.second;
+    auto namePath = nla.namepath();
+    std::lock_guard<std::mutex> lock(nlaOpMtx);
+    for (auto sym : llvm::enumerate(nla.modpath()))
+      // Check if the module name matches.
+      if (oldModuleName.equals(
+              sym.value().cast<FlatSymbolRefAttr>().getValue()))
+        // Check if there is a corresponding name and it matches with the
+        // operation name that is lowered.
+        if (namePath.size() > sym.index() &&
+            oldSymName.equals(
+                namePath[sym.index()].cast<StringAttr>().getValue())) {
+          // Now add the lowered symbol at the corresponding location in the
+          // newSymArray.
+          newSymArray[sym.index()] = updatedOpSymRef;
+          break;
+        }
   }
 
 private:
@@ -323,13 +322,13 @@ private:
   // Control access to binds.
   std::mutex bindsMutex;
 
-  // A map of NonLocalAnchor symbols to the verbatim ops that use the NLA
-  // symbol.
-  llvm::StringMap<SmallVector<std::pair<Operation *, size_t>, 8>>
-      nlaToVerbatimMap;
+  // A record of NonLocalAnchor operation to the lowered symbols generated
+  // corresponding to the NLA instance path.
+  llvm::StringMap<std::pair<Operation *, SmallVector<FlatSymbolRefAttr, 8>>>
+      nlaMap;
 
   // Lock for updating the verbatim ops with the lowered symbols.
-  std::mutex verbatimOpMtx;
+  std::mutex nlaOpMtx;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -440,6 +439,7 @@ void FIRRTLModuleLowering::runOnOperation() {
                                          coverAnnoClass);
 
   state.processRemainingAnnotations(circuit, circuitAnno);
+  llvm::SmallVector<Operation *, 8> verbatimOps;
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across.
   for (auto &op : make_early_inc_range(circuitBody->getOperations())) {
@@ -453,19 +453,18 @@ void FIRRTLModuleLowering::runOnOperation() {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
         })
+        .Case<NonLocalAnchor>([&](NonLocalAnchor nla) {
+          SmallVector<FlatSymbolRefAttr, 2> updatedOps(nla.modpath().size());
+          // The updatedOps should be populated with all the lowered symbols
+          // corresponding to the nla instance path. During lowering, every
+          // operation should update this record.
+          state.nlaMap[nla.sym_name()] = std::make_pair(nla, updatedOps);
+          // Drop the NLA.
+        })
         .Case<sv::VerbatimOp>([&](sv::VerbatimOp ver) {
           // Ensure the verbatim op is lowered.
           ver->moveBefore(topLevelModule, topLevelModule->end());
-          // Create a map of all the symbols used in the verbatim op and its
-          // corresponding index. Such that whenever the corresponding op
-          // containing the reference to the symbol is lowered, we can update
-          // the verbatimop.
-          for (auto s : llvm::enumerate(ver.symbols())) {
-            auto symName =
-                s.value().dyn_cast<FlatSymbolRefAttr>().getAttr().getValue();
-            state.nlaToVerbatimMap[symName].push_back(
-                std::make_pair(ver, s.index()));
-          }
+          verbatimOps.push_back(ver);
         })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
@@ -498,6 +497,25 @@ void FIRRTLModuleLowering::runOnOperation() {
   // Move binds from inside modules to outside modules.
   for (auto bind : state.binds) {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
+  }
+  // Now update all the NLA used in the verbatim ops, with the corresponding
+  // lowered symbols.
+  for (auto vOp : verbatimOps) {
+    auto verbatimOp = cast<sv::VerbatimOp>(vOp);
+    SmallVector<Attribute, 8> symbols;
+    for (auto &s : verbatimOp.symbols()) {
+      auto symName = s.dyn_cast<FlatSymbolRefAttr>().getAttr().getValue();
+      auto nlaOp = state.nlaMap.find(symName);
+      if (nlaOp != state.nlaMap.end()) {
+        auto loweredSym = nlaOp->second.second.back();
+        if (!loweredSym)
+          nlaOp->second.first->emitError("lowering for NonLocalAnchor failed");
+        symbols.push_back(loweredSym);
+      } else
+        symbols.push_back(s);
+    }
+    auto builder = Builder(verbatimOp);
+    verbatimOp->setAttr("symbols", builder.getArrayAttr(symbols));
   }
 
   // Add attributes specific to the new main module, since the notion of a
@@ -2230,7 +2248,9 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
   if (nlaAnno)
     if (auto nla = nlaAnno.get("circt.nonlocal"))
       if (auto sym = nla.dyn_cast_or_null<FlatSymbolRefAttr>()) {
-        circuitState.updateVerbatimOp(sym.getAttr().getValue(), memModuleAttr);
+
+        circuitState.updateNLAsyms(sym.getAttr().getValue(), op.name(),
+                                   theModule.getName(), memModuleAttr);
       }
   return success();
 }
