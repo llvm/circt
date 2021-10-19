@@ -44,7 +44,7 @@ def GroupOpInterface : OpInterface<"GroupInterface"> {
       "drivesPort",
       (ins "Value":$port)>,
     InterfaceMethod<
-      "Determines whether the all the given ports are driven by this group.",
+      "Determines whether all the given ports are driven by this group.",
       "LogicalResult",
       "drivesAllPorts",
       (ins "ValueRange":$ports)>,
