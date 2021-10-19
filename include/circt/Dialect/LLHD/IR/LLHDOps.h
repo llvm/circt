@@ -20,12 +20,14 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace circt {
 namespace llhd {
 
 unsigned getLLHDTypeWidth(Type type);
+Type getLLHDElementType(Type type);
 
 } // namespace llhd
 } // namespace circt

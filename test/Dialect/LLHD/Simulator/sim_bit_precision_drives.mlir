@@ -16,11 +16,14 @@ llhd.entity @root () -> () {
   %c0 = hw.constant 0xffff : i16
   %c1 = hw.constant 0 : i8
   %c2 = hw.constant 0 : i1
+  %2 = hw.constant 0 : i5
+  %3 = hw.constant 1 : i5
+  %4 = hw.constant 4 : i5
   %t = llhd.constant_time #llhd.time<1ns, 0d, 0e>
-  %e0 = llhd.extract_slice %s0, 0 : !llhd.sig<i32> -> !llhd.sig<i16>
-  %e1 = llhd.extract_slice %s1, 4 : !llhd.sig<i32> -> !llhd.sig<i8>
-  %e2 = llhd.extract_slice %s2, 0 : !llhd.sig<i32> -> !llhd.sig<i1>
-  %e3 = llhd.extract_slice %s2, 1 : !llhd.sig<i32> -> !llhd.sig<i1>
+  %e0 = llhd.sig.extract %s0 from %2 : (!llhd.sig<i32>) -> !llhd.sig<i16>
+  %e1 = llhd.sig.extract %s1 from %4 : (!llhd.sig<i32>) -> !llhd.sig<i8>
+  %e2 = llhd.sig.extract %s2 from %2 : (!llhd.sig<i32>) -> !llhd.sig<i1>
+  %e3 = llhd.sig.extract %s2 from %3 : (!llhd.sig<i32>) -> !llhd.sig<i1>
   llhd.drv %e0, %c0 after %t : !llhd.sig<i16>
   llhd.drv %e1, %c1 after %t : !llhd.sig<i8>
   llhd.drv %e2, %c2 after %t : !llhd.sig<i1>
