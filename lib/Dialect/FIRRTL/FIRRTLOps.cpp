@@ -502,43 +502,6 @@ void FExtModuleOp::build(OpBuilder &builder, OperationState &result,
     result.addAttribute("defname", builder.getStringAttr(defnameAttr));
 }
 
-/// TODO: This is taken from MLIR `isBareIdentifier` and is also replicated in
-/// HWOps.cpp.
-/// Return true if this string parses as a valid MLIR keyword, false
-/// otherwise.
-static bool isValidKeyword(StringRef name) {
-  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
-    return false;
-  for (auto c : name.drop_front()) {
-    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
-      return false;
-  }
-
-  return true;
-}
-
-/// TODO: this is taken from HW and should be upstreamed to MLIR.
-/// Print a name as a MLIR keyword or quoted if necessary.
-static void printIdentifier(StringAttr name, llvm::raw_ostream &os) {
-  // Print this as a bareword if it can be parsed as an MLIR keyword,
-  // otherwise print it as a quoted string.
-  if (isValidKeyword(name.getValue()))
-    os << name.getValue();
-  else
-    os << name;
-}
-
-/// Parse a name as a keyword or a quote surrounded string.
-ParseResult parseIdentifier(OpAsmParser &parser, StringAttr &result) {
-  StringRef keyword;
-  if (succeeded(parser.parseOptionalKeyword(&keyword))) {
-    result = parser.getBuilder().getStringAttr(keyword);
-    return success();
-  }
-
-  return parser.parseAttribute(result, parser.getBuilder().getType<NoneType>());
-}
-
 /// Print a list of module ports in the following form:
 ///   in x: !firrtl.uint<1> [{class = "DontTouch}], out "_port": !firrtl.uint<2>
 ///
@@ -585,7 +548,7 @@ static bool printModulePorts(OpAsmPrinter &p, Block *block,
         printedNamesDontMatch = true;
       p << tmpStream.str();
     } else {
-      printIdentifier(portNames[i].cast<StringAttr>(), p.getStream());
+      p.printKeywordOrString(portNames[i].cast<StringAttr>().getValue());
     }
 
     // Print the port type.
@@ -640,10 +603,10 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       else
         portNames.push_back(StringAttr::get(context, arg.name.drop_front()));
     } else {
-      StringAttr portName;
-      if (parseIdentifier(parser, portName))
+      std::string portName;
+      if (parser.parseKeywordOrString(&portName))
         return failure();
-      portNames.push_back(portName);
+      portNames.push_back(StringAttr::get(context, portName));
     }
 
     // Parse the port type.
@@ -1043,7 +1006,7 @@ static LogicalResult verifyInstanceOp(InstanceOp instance) {
 static void printInstanceOp(OpAsmPrinter &p, InstanceOp &op) {
   // Print the instance name.
   p << " ";
-  printIdentifier(op.nameAttr(), p.getStream());
+  p.printKeywordOrString(op.name());
   p << " ";
 
   // Print the attr-dict.
@@ -1076,7 +1039,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   auto *context = parser.getContext();
   auto &resultAttrs = result.attributes;
 
-  StringAttr name;
+  std::string name;
   FlatSymbolRefAttr moduleName;
   SmallVector<OpAsmParser::OperandType> entryArgs;
   SmallVector<Direction, 4> portDirections;
@@ -1084,7 +1047,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portAnnotations;
 
-  if (parseIdentifier(parser, name) ||
+  if (parser.parseKeywordOrString(&name) ||
       parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false, entryArgs,
@@ -1096,7 +1059,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   if (!resultAttrs.get("moduleName"))
     result.addAttribute("moduleName", moduleName);
   if (!resultAttrs.get("name"))
-    result.addAttribute("name", name);
+    result.addAttribute("name", StringAttr::get(context, name));
   if (!resultAttrs.get("portDirections"))
     result.addAttribute("portDirections",
                         direction::packAttribute(context, portDirections));
