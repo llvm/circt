@@ -722,7 +722,150 @@ circuit GCTInterface : %[
     "name": "view",
     "companion": "~GCTInterface|view_companion",
     "parent": "~GCTInterface|GCTInterface",
-    "view": "{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"ViewName\",\"elements\":[{\"name\":\"register\",\"description\":\"the register in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"Register\",\"elements\":[{\"name\":\"_2\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedVectorType\",\"elements\":[{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":0}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}},{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_2\"},{\"class\":\"firrtl.annotations.TargetToken$Index\",\"value\":1}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}]}},{\"name\":\"_0_inst\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedBundleType\",\"defName\":\"_0_def\",\"elements\":[{\"name\":\"_1\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_1\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}},{\"name\":\"_0\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"r\",\"component\":[{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"},{\"class\":\"firrtl.annotations.TargetToken$Field\",\"value\":\"_0\"}]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}}]}},{\"name\":\"port\",\"description\":\"the port 'a' in GCTInterface\",\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.AugmentedGroundType\",\"ref\":{\"circuit\":\"GCTInterface\",\"module\":\"GCTInterface\",\"path\":[],\"ref\":\"a\",\"component\":[]},\"tpe\":{\"class\":\"sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$\"}}}]}"
+    "view": {
+      "class": "sifive.enterprise.grandcentral.AugmentedBundleType",
+      "defName": "ViewName",
+      "elements": [
+        {
+          "name": "register",
+          "description": "the register in GCTInterface",
+          "tpe": {
+            "class": "sifive.enterprise.grandcentral.AugmentedBundleType",
+            "defName": "Register",
+            "elements": [
+              {
+                "name": "_2",
+                "tpe": {
+                  "class": "sifive.enterprise.grandcentral.AugmentedVectorType",
+                  "elements": [
+                    {
+                      "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
+                      "ref": {
+                        "circuit": "GCTInterface",
+                        "module": "GCTInterface",
+                        "path": [],
+                        "ref": "r",
+                        "component": [
+                          {
+                            "class": "firrtl.annotations.TargetToken$Field",
+                            "value": "_2"
+                          },
+                          {
+                            "class": "firrtl.annotations.TargetToken$Index",
+                            "value": 0
+                          }
+                        ]
+                      },
+                      "tpe": {
+                        "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
+                      }
+                    },
+                    {
+                      "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
+                      "ref": {
+                        "circuit": "GCTInterface",
+                        "module": "GCTInterface",
+                        "path": [],
+                        "ref": "r",
+                        "component": [
+                          {
+                            "class": "firrtl.annotations.TargetToken$Field",
+                            "value": "_2"
+                          },
+                          {
+                            "class": "firrtl.annotations.TargetToken$Index",
+                            "value": 1
+                          }
+                        ]
+                      },
+                      "tpe": {
+                        "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "_0_inst",
+                "tpe": {
+                  "class": "sifive.enterprise.grandcentral.AugmentedBundleType",
+                  "defName": "_0_def",
+                  "elements": [
+                    {
+                      "name": "_1",
+                      "tpe": {
+                        "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
+                        "ref": {
+                          "circuit": "GCTInterface",
+                          "module": "GCTInterface",
+                          "path": [],
+                          "ref": "r",
+                          "component": [
+                            {
+                              "class": "firrtl.annotations.TargetToken$Field",
+                              "value": "_0"
+                            },
+                            {
+                              "class": "firrtl.annotations.TargetToken$Field",
+                              "value": "_1"
+                            }
+                          ]
+                        },
+                        "tpe": {
+                          "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
+                        }
+                      }
+                    },
+                    {
+                      "name": "_0",
+                      "tpe": {
+                        "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
+                        "ref": {
+                          "circuit": "GCTInterface",
+                          "module": "GCTInterface",
+                          "path": [],
+                          "ref": "r",
+                          "component": [
+                            {
+                              "class": "firrtl.annotations.TargetToken$Field",
+                              "value": "_0"
+                            },
+                            {
+                              "class": "firrtl.annotations.TargetToken$Field",
+                              "value": "_0"
+                            }
+                          ]
+                        },
+                        "tpe": {
+                          "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "port",
+          "description": "the port 'a' in GCTInterface",
+          "tpe": {
+            "class": "sifive.enterprise.grandcentral.AugmentedGroundType",
+            "ref": {
+              "circuit": "GCTInterface",
+              "module": "GCTInterface",
+              "path": [],
+              "ref": "a",
+              "component": []
+            },
+            "tpe": {
+              "class": "sifive.enterprise.grandcentral.GrandCentralView$UnknownGroundType$"
+            }
+          }
+        }
+      ]
+    }
   },
   {
     "unrelatedAnnotation": null
