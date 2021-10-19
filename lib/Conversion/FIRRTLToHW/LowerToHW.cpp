@@ -283,6 +283,8 @@ struct CircuitLoweringState {
     if (verbOps == nlaToVerbatimMap.end())
       return;
 
+    // The verbatim op will be updated, obtain lock.
+    std::lock_guard<std::mutex> lock(verbatimOpMtx);
     for (auto opIndexPair : verbOps->second) {
       Operation *vOp = opIndexPair.first;
       size_t index = opIndexPair.second;
@@ -295,12 +297,8 @@ struct CircuitLoweringState {
           else
             symbols.push_back(vSyms.value());
         auto builder = Builder(verbatimOp);
-        // The verbatim op will be updated, obtain lock.
-        {
-          std::lock_guard<std::mutex> lock(verbatimOpMtx);
-          // Fix the symbols with the updated symbol.
-          verbatimOp->setAttr("symbols", builder.getArrayAttr(symbols));
-        }
+        // Fix the symbols with the updated symbol.
+        verbatimOp->setAttr("symbols", builder.getArrayAttr(symbols));
       }
     }
   }
