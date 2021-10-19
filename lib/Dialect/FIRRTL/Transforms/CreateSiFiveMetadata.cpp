@@ -33,9 +33,10 @@ static const char metadataDirectoryAnnoClass[] =
 namespace {
 class CreateSiFiveMetadataPass
     : public CreateSiFiveMetadataBase<CreateSiFiveMetadataPass> {
+  LogicalResult emitMemoryMetadata();
+  LogicalResult emitFileListMetadata();
   LogicalResult emitRetimeModulesMetadata();
   LogicalResult emitSitestBlackboxMetadata();
-  LogicalResult emitMemoryMetadata();
   void getDependentDialects(mlir::DialectRegistry &registry) const override;
   void runOnOperation() override;
 
@@ -266,6 +267,55 @@ static LogicalResult removeAnnotationWithFilename(Operation *op,
   return failure(error);
 }
 
+/// This looks for every module annotated with FileListAnnotation and prints the
+/// module name in the file indicated by the FileListInfoFileAnnotation.
+LogicalResult CreateSiFiveMetadataPass::emitFileListMetadata() {
+  auto *filelistAnnoClass = "sifive.enterprise.firrtl.FileListAnnotation";
+  auto *filelistInfoAnnoClass =
+      "sifive.enterprise.firrtl.FileListInfoFileAnnotation";
+
+  auto *context = &getContext();
+  auto circuitOp = getOperation();
+
+  // Get the filelist filename.
+  StringRef filename;
+  if (failed(removeAnnotationWithFilename(circuitOp, filelistInfoAnnoClass,
+                                          filename)))
+    return failure();
+
+  // Early break if the filename is empty.
+  if (filename.empty()) {
+    // If the filename is empty, we still remove any instance of the module
+    // annotation.
+    for (auto module : circuitOp.getBody()->getOps<FModuleLike>())
+      AnnotationSet::removeAnnotations(module, filelistAnnoClass);
+    return success();
+  }
+
+  // Print each annotated module's name on its own line.
+  unsigned index = 0;
+  SmallVector<Attribute> symbols;
+  SmallString<256> buffer;
+  llvm::raw_svector_ostream os(buffer);
+  for (auto module : circuitOp.getBody()->getOps<FModuleLike>()) {
+    if (!AnnotationSet::removeAnnotations(module, filelistAnnoClass))
+      continue;
+    // We use symbol substitution to make sure we output the correct thing
+    // when the module goes through renaming.
+    os << "{{" << index++ << "}}\n";
+    symbols.push_back(SymbolRefAttr::get(context, module.moduleName()));
+  }
+
+  // Put the filelist information in a verbatim operation.
+  auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
+  auto verbatimOp = builder.create<sv::VerbatimOp>(
+      circuitOp.getLoc(), buffer, ValueRange(), builder.getArrayAttr(symbols));
+  auto fileAttr = hw::OutputFileAttr::getFromFilename(
+      context, filename, /*excludeFromFilelist=*/true);
+  verbatimOp->setAttr("output_file", fileAttr);
+  return success();
+}
+
 /// This function collects the name of each module annotated and prints them
 /// all as a JSON array.
 LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
@@ -297,7 +347,6 @@ LogicalResult CreateSiFiveMetadataPass::emitRetimeModulesMetadata() {
   // The output is a json array with each element a module name.
   unsigned index = 0;
   SmallVector<Attribute> symbols;
-  SmallString<3> placeholder;
   j.array([&] {
     for (auto module : circuitOp.getBody()->getOps<FModuleLike>()) {
       // The annotation has no supplemental information, just remove it.
@@ -450,7 +499,8 @@ void CreateSiFiveMetadataPass::runOnOperation() {
       dutModuleSet.insert(node->getModule());
     });
   }
-  if (failed(emitRetimeModulesMetadata()) ||
+
+  if (failed(emitFileListMetadata()) || failed(emitRetimeModulesMetadata()) ||
       failed(emitSitestBlackboxMetadata()) || failed(emitMemoryMetadata()))
     return signalPassFailure();
 

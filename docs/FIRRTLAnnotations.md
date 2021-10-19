@@ -322,6 +322,43 @@ Example:
 }
 ```
 
+### FileListAnnotation
+
+| Property   | Type   | Description                                   |
+| ---------- | ------ | -------------                                 |
+| class      | string | `sifive.enterprise.firrtl.FileListAnnotation` |
+| target     | string | Reference target                              |
+
+This annotation indicates that the target module should be added to the file
+list specified by `FileListInfoFileAnnotation`.
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.FileListAnnotation",
+  "target": "~Foo|Bar/d:Baz"
+}
+```
+
+### FileListInfoFileAnnotation
+
+| Property   | Type   | Description                                           |
+| ---------- | ------ | -------------                                         |
+| class      | string | `sifive.enterprise.firrtl.FileListInfoFileAnnotation` |
+| filename   | string | The filename with full path where it will be written  |
+
+This annotation indicates that a list of all modules annotation with
+`FileListAnnotation` should be created at `filename`. Each module name is
+separated by a newline.
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.FileListInfoFileAnnotation",
+  "filename":"filelist.txt"
+}
+```
+
 ### [FlattenAnnotation](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/FlattenAnnotation.html)
 
 | Property   | Type   | Description                           |

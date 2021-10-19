@@ -10,6 +10,41 @@ firrtl.circuit "empty" {
 // CHECK-NEXT:  }
 
 //===----------------------------------------------------------------------===//
+// FileList
+//===----------------------------------------------------------------------===//
+
+// Should remove the annotation when there is no file list
+firrtl.circuit "filelist_empty" {
+  firrtl.module @filelist_empty() attributes { annotations = [{
+      class = "sifive.enterprise.firrtl.FileListAnnotation"
+  }]} { }
+}
+// CHECK-LABEL: firrtl.circuit "filelist_empty"
+// CHECK-NOT: sifive.enterprise.firrtl.FileListAnnotation
+
+
+// Should put each annotated module on its own line.
+firrtl.circuit "filelist0" attributes { annotations = [{
+    class = "sifive.enterprise.firrtl.FileListInfoFileAnnotation",
+    filename = "filelist.txt"
+}]} {
+
+  firrtl.module @filelist0() attributes { annotations = [{
+      class = "sifive.enterprise.firrtl.FileListAnnotation"
+  }]} { }
+
+  firrtl.module @filelist1() { }
+
+  firrtl.module @filelist2() attributes { annotations = [{
+      class = "sifive.enterprise.firrtl.FileListAnnotation"
+  }]} { }
+}
+// CHECK-LABEL:      firrtl.circuit "filelist0"
+// CHECK-NOT:        class = "sifive.enterprise.firrtl.FileListInfoFileAnnotation"
+// CHECK-NOT:        class = "sifive.enterprise.firrtl.FileListAnnotation"
+// CHECK{LITERAL}:   sv.verbatim "{{0}}\0A{{1}}\0A" {output_file = #hw.output_file<"filelist.txt", excludeFromFileList>, symbols = [@filelist0, @filelist2]}
+
+//===----------------------------------------------------------------------===//
 // RetimeModules
 //===----------------------------------------------------------------------===//
 
@@ -103,6 +138,10 @@ firrtl.circuit "BasicBlackboxes" attributes { annotations = [{
   firrtl.extmodule @DUTBlackbox_2() attributes {defname = "DUTBlackbox1"}
   // CHECK: sv.verbatim "[\22DUTBlackbox1\22,\22DUTBlackbox2\22]" {output_file = #hw.output_file<"dut_blackboxes.json", excludeFromFileList>, symbols = []}
 }
+
+//===----------------------------------------------------------------------===//
+// SeqMem
+//===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: firrtl.circuit "top"
 firrtl.circuit "top" 
