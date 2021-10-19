@@ -652,14 +652,13 @@ parseModulePorts(OpAsmParser &parser, bool hasSSAIdentifiers,
       return failure();
     portTypes.push_back(TypeAttr::get(portType));
 
-    // Parse any port annotations. TODO: The API for parsing optional attributes
-    // is missing some functions and we shouldn't need to create a dummy
-    // attribute list. x-ref TODO in SVOps.cpp, parseOmitEmptyStringAttr.
+    // Parse the port annotations.
     ArrayAttr annos;
-    NamedAttrList dummy;
-    parser.parseOptionalAttribute(annos, /*type=*/{}, "dummy", dummy);
-    if (!annos)
+    auto parseResult = parser.parseOptionalAttribute(annos);
+    if (!parseResult.hasValue())
       annos = parser.getBuilder().getArrayAttr({});
+    else if (failed(*parseResult))
+      return failure();
     portAnnotations.push_back(annos);
 
     return success();
