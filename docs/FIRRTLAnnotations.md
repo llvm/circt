@@ -470,6 +470,26 @@ Example:
 }
 ```
 
+### ModuleHierarchyAnnotation
+
+| Property   | Type   | Description                                          |
+| ---------- | ------ | -------------                                        |
+| class      | string | `sifive.enterprise.firrtl.ModuleHierarchyAnnotation` |
+| filename   | string | The full output file path.                           |
+
+This annotation indicates that a module hierarchy JSON file should be emitted
+for the module hierarchy rooted at the design under test (DUT), as indicated by
+the `MarkDUTAnnotation`. See the SV attribute, `firrtl.moduleHierarchyFile`, for
+information about the JSON file format.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.ModuleHierarchyAnnotation",
+  "filename": "./dir/hier.json"
+}
+```
+
 ### NestedPrefixModulesAnnotation
 
 | Property   | Type   | Description                                              |
@@ -656,6 +676,26 @@ Example:
 {
   "class": "sifive.enterprise.firrtl.TestBenchDirAnnotation",
   "dirname": "output/testbench"
+}
+```
+
+### TestHarnessHierarchyAnnotation
+
+| Property   | Type   | Description                                               |
+| ---------- | ------ | -------------                                             |
+| class      | string | `sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation` |
+| filename   | string | The full output file path.                                |
+
+This annotation indicates that a module hierarchy JSON file should be emitted
+for the module hierarchy rooted at the circuit root module, which is assumed to
+be the test harness. See the SV attribute, `firrtl.moduleHierarchyFile`, for
+information about the JSON file format.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation",
+  "filename": "./dir/hier.json"
 }
 ```
 
@@ -1007,6 +1047,15 @@ section describes well-defined attributes used by HW/SV passes.
 
 Used by HWExportModuleHierarchy.  Signifies a root from which to dump the module
 hierarchy as a json file. This attribute has type OutputFileAttr.
+
+The exported JSON file encodes a recursive tree of module instances as JSON
+objects, with each object containing the following members:
+
+- `instance_name` - A string describing the name of the instance. Note that the
+  root module will have its `instance_name` set to the module's name.
+- `module_name` - A string describing the name of the module.
+- `instances` - An array of objects, where each object is a direct instance
+  within the current module.
 
 ### firrtl.extract.assert
 
