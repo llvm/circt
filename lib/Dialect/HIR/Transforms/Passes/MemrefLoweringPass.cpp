@@ -4,7 +4,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../PassDetails.h"
+#include "MemrefLoweringUtils.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -347,9 +347,10 @@ SmallVector<Value> filterMemrefArgs(Block::BlockArgListType args) {
 }
 
 size_t insertBusTypesAndAttrsForMemrefPort(
-    size_t i, Block &bb, SmallVectorImpl<std::string> &inputNames,
+    size_t loc, size_t port, Block &bb,
+    SmallVectorImpl<std::string> &inputNames,
     SmallVectorImpl<DictionaryAttr> &inputAttrs, hir::MemrefType memrefTy,
-    DictionaryAttr port, MemrefPortInterface &portInterface) {
+    DictionaryAttr portDict, MemrefPortInterface &portInterface) {
   auto *context = memrefTy.getContext();
   Builder builder(context);
   Type enableTy = buildBusTensor(context, memrefTy.filterShape(BANK),
@@ -375,38 +376,37 @@ size_t insertBusTypesAndAttrsForMemrefPort(
       context, "hir.bus.ports",
       ArrayAttr::get(context, StringAttr::get(context, "recv")));
 
-  std::string memName;
+  std::string memName =
+      inputNames[loc] + std::string("_p") + std::to_string(port);
   if (memrefTy.getNumElementsPerBank() > 1) {
-    portInterface.addrEnableBusTensor = bb.insertArgument(i, enableTy);
-    inputAttrs.insert(inputAttrs.begin() + i, sendAttr);
-    memName = inputNames[i];
-    inputNames.insert(inputNames.begin() + i++,
+    portInterface.addrEnableBusTensor = bb.insertArgument(loc, enableTy);
+    inputAttrs.insert(inputAttrs.begin() + loc, sendAttr);
+    inputNames.insert(inputNames.begin() + loc++,
                       memName + std::string("_addr_en"));
-    portInterface.addrDataBusTensor = bb.insertArgument(i, addrTupleTy);
-    inputAttrs.insert(inputAttrs.begin() + i, sendAttr);
-    memName = inputNames[i];
-    inputNames.insert(inputNames.begin() + i++, memName + "_addr_data");
+    portInterface.addrDataBusTensor = bb.insertArgument(loc, addrTupleTy);
+    inputAttrs.insert(inputAttrs.begin() + loc, sendAttr);
+    inputNames.insert(inputNames.begin() + loc++, memName + "_addr_data");
   }
 
-  if (auto rdLatency = helper::getRdLatency(port)) {
-    portInterface.rdEnableBusTensor = bb.insertArgument(i, enableTy);
-    inputAttrs.insert(inputAttrs.begin() + i, sendAttr);
-    inputNames.insert(inputNames.begin() + i++, memName + "_rd_en");
-    portInterface.rdDataBusTensor = bb.insertArgument(i, dataTy);
-    inputAttrs.insert(inputAttrs.begin() + i, recvAttr);
-    inputNames.insert(inputNames.begin() + i++, memName + "_rd_data");
+  if (auto rdLatency = helper::getRdLatency(portDict)) {
+    portInterface.rdEnableBusTensor = bb.insertArgument(loc, enableTy);
+    inputAttrs.insert(inputAttrs.begin() + loc, sendAttr);
+    inputNames.insert(inputNames.begin() + loc++, memName + "_rd_en");
+    portInterface.rdDataBusTensor = bb.insertArgument(loc, dataTy);
+    inputAttrs.insert(inputAttrs.begin() + loc, recvAttr);
+    inputNames.insert(inputNames.begin() + loc++, memName + "_rd_data");
     portInterface.rdLatency = rdLatency.getValue();
   }
 
-  if (helper::isWrite(port)) {
-    portInterface.wrEnableBusTensor = bb.insertArgument(i, enableTy);
-    inputAttrs.insert(inputAttrs.begin() + i, sendAttr);
-    inputNames.insert(inputNames.begin() + i++, memName + "_wr_en");
-    portInterface.wrDataBusTensor = bb.insertArgument(i, dataTy);
-    inputAttrs.insert(inputAttrs.begin() + i, sendAttr);
-    inputNames.insert(inputNames.begin() + i++, memName + "_wr_data");
+  if (helper::isWrite(portDict)) {
+    portInterface.wrEnableBusTensor = bb.insertArgument(loc, enableTy);
+    inputAttrs.insert(inputAttrs.begin() + loc, sendAttr);
+    inputNames.insert(inputNames.begin() + loc++, memName + "_wr_en");
+    portInterface.wrDataBusTensor = bb.insertArgument(loc, dataTy);
+    inputAttrs.insert(inputAttrs.begin() + loc, sendAttr);
+    inputNames.insert(inputNames.begin() + loc++, memName + "_wr_data");
   }
-  return i;
+  return loc;
 }
 
 void addBusAttrsPerPort(size_t i, SmallVectorImpl<DictionaryAttr> &attrs,
@@ -459,12 +459,12 @@ void MemrefLoweringPass::insertBusArguments(hir::FuncLike op) {
           helper::extractMemrefPortsFromDict(funcTy.getInputAttrs()[i]);
       SmallVector<MemrefPortInterface> memrefPortInterfaces;
       size_t insertBefore = i;
-      for (auto port : ports.getValue()) {
-        auto portDict = port.dyn_cast<DictionaryAttr>();
+      for (size_t port = 0; port < ports.getValue().size(); port++) {
+        auto portDict = ports.getValue()[port].dyn_cast<DictionaryAttr>();
         assert(portDict);
         MemrefPortInterface portInterface;
         insertBefore = insertBusTypesAndAttrsForMemrefPort(
-            insertBefore, bb, inputNames, inputAttrs, memrefTy, portDict,
+            insertBefore, port, bb, inputNames, inputAttrs, memrefTy, portDict,
             portInterface);
         memrefPortInterfaces.push_back(portInterface);
       }
@@ -828,48 +828,24 @@ Value MemrefLoweringPass::getDataSendBus(OpBuilder &builder,
 //------------------------------------------------------------------------------
 
 LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
-  mlir::OpBuilder builder(op.getContext());
-  builder.setInsertionPoint(op);
-  auto memrefTy = op.mem().getType().dyn_cast<hir::MemrefType>();
-  int64_t bank = helper::calcLinearIndex(op.filterIndices(BANK),
-                                         memrefTy.filterShape(BANK))
-                     .getValue();
-
-  if (!op.port().hasValue())
-    return op.emitError() << "MemrefLoweringPass requires port number";
   auto &portInterface =
       mapMemrefToPortInterfaces.get(op.mem(), op.port().getValue());
 
-  Value c1 = builder
-                 .create<mlir::ConstantOp>(
-                     builder.getUnknownLoc(), builder.getI1Type(),
-                     builder.getIntegerAttr(builder.getIntegerType(1), 1))
-                 .getResult();
+  mlir::OpBuilder builder(op.getContext());
+  builder.setInsertionPoint(op);
 
-  if (portInterface.addrEnableBusTensor) {
-    assert(portInterface.addrDataBusTensor);
-    auto addrEnableBus = getEnableSendBus(
-        builder, portInterface.addrEnableBusTensor, bank,
-        memrefTy.getNumBanks(), op.tstart(), op.offsetAttr(), "addr_en");
-
-    builder
-        .create<hir::SendOp>(builder.getUnknownLoc(), c1, addrEnableBus,
-                             builder.getI64IntegerAttr(0), op.tstart(),
-                             op.offsetAttr())
-        ->setAttr("default", builder.getI64IntegerAttr(0));
-
-    auto addrDataBus = getDataSendBus(
-        builder, portInterface.addrDataBusTensor, addrEnableBus, bank,
-        memrefTy.getNumBanks(), op.tstart(), op.offsetAttr(), "addr_data");
-
-    Value addrTuple =
-        createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
-
-    // Send the address tuple to the addrBus.
-    builder.create<hir::SendOp>(op.getLoc(), addrTuple, addrDataBus,
-                                builder.getI64IntegerAttr(0), op.tstart(),
-                                op.offsetAttr());
-  }
+  Value addrTuple =
+      createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
+  auto nextAddrEnableBusTensor = builder.create<hir::BusOp>(
+      builder.getUnknownLoc(), portInterface.addrEnableBusTensor.getType());
+  insertEnableSendLogic(builder, portInterface.addrEnableBusTensor,
+                        nextAddrEnableBusTensor, op.tstart(), op.offsetAttr(),
+                        op.filterIndices(BANK));
+  auto nextAddrDataBusTensor = builder.create<hir::BusOp>(
+      builder.getUnknownLoc(), portInterface.addrDataBusTensor.getType());
+  insertDataSendLogic(builder, addrTuple, nextAddrEnableBusTensor,
+                      portInterface.addrDataBusTensor, nextAddrDataBusTensor,
+                      op.tstart(), op.offsetAttr(), op.filterIndices(BANK));
 
   assert(portInterface.rdLatency >= 0);
   IntegerAttr recvOffset =
@@ -878,21 +854,11 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
           : builder.getI64IntegerAttr(op.offset().getValueOr(0) +
                                       portInterface.rdLatency);
 
-  auto rdEnableBus = getEnableSendBus(builder, portInterface.rdEnableBusTensor,
-                                      bank, memrefTy.getNumBanks(), op.tstart(),
-                                      op.offsetAttr(), "rd_en");
-  builder
-      .create<hir::SendOp>(builder.getUnknownLoc(), c1, rdEnableBus,
-                           builder.getI64IntegerAttr(0), op.tstart(),
-                           op.offsetAttr())
-      ->setAttr("default", builder.getI64IntegerAttr(0));
-
   auto rdDataBus = builder.create<hir::TensorExtractOp>(
       builder.getUnknownLoc(),
       getTensorElementType(portInterface.rdDataBusTensor),
       portInterface.rdDataBusTensor, op.filterIndices(BANK),
       builder.getStrArrayAttr({"send"}));
-  helper::setNames(rdDataBus, {"rd_data_bus"});
 
   Operation *receiveOp = builder.create<hir::RecvOp>(
       op.getLoc(), op.res().getType(), rdDataBus, builder.getI64IntegerAttr(0),
@@ -904,6 +870,85 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
   opsToErase.push_back(op);
   return success();
 }
+
+// LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
+//  mlir::OpBuilder builder(op.getContext());
+//  builder.setInsertionPoint(op);
+//  auto memrefTy = op.mem().getType().dyn_cast<hir::MemrefType>();
+//  int64_t bank = helper::calcLinearIndex(op.filterIndices(BANK),
+//                                         memrefTy.filterShape(BANK))
+//                     .getValue();
+//
+//  if (!op.port().hasValue())
+//    return op.emitError() << "MemrefLoweringPass requires port number";
+//  auto &portInterface =
+//      mapMemrefToPortInterfaces.get(op.mem(), op.port().getValue());
+//
+//  Value c1 = builder
+//                 .create<mlir::ConstantOp>(
+//                     builder.getUnknownLoc(), builder.getI1Type(),
+//                     builder.getIntegerAttr(builder.getIntegerType(1), 1))
+//                 .getResult();
+//
+//  if (portInterface.addrEnableBusTensor) {
+//    assert(portInterface.addrDataBusTensor);
+//    auto addrEnableBus = getEnableSendBus(
+//        builder, portInterface.addrEnableBusTensor, bank,
+//        memrefTy.getNumBanks(), op.tstart(), op.offsetAttr(), "addr_en");
+//
+//    builder
+//        .create<hir::SendOp>(builder.getUnknownLoc(), c1, addrEnableBus,
+//                             builder.getI64IntegerAttr(0), op.tstart(),
+//                             op.offsetAttr())
+//        ->setAttr("default", builder.getI64IntegerAttr(0));
+//
+//    auto addrDataBus = getDataSendBus(
+//        builder, portInterface.addrDataBusTensor, addrEnableBus, bank,
+//        memrefTy.getNumBanks(), op.tstart(), op.offsetAttr(), "addr_data");
+//
+//    Value addrTuple =
+//        createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
+//
+//    // Send the address tuple to the addrBus.
+//    builder.create<hir::SendOp>(op.getLoc(), addrTuple, addrDataBus,
+//                                builder.getI64IntegerAttr(0), op.tstart(),
+//                                op.offsetAttr());
+//  }
+//
+//  assert(portInterface.rdLatency >= 0);
+//  IntegerAttr recvOffset =
+//      (portInterface.rdLatency == 0)
+//          ? op.offsetAttr()
+//          : builder.getI64IntegerAttr(op.offset().getValueOr(0) +
+//                                      portInterface.rdLatency);
+//
+//  auto rdEnableBus = getEnableSendBus(builder,
+//  portInterface.rdEnableBusTensor,
+//                                      bank, memrefTy.getNumBanks(),
+//                                      op.tstart(), op.offsetAttr(), "rd_en");
+//  builder
+//      .create<hir::SendOp>(builder.getUnknownLoc(), c1, rdEnableBus,
+//                           builder.getI64IntegerAttr(0), op.tstart(),
+//                           op.offsetAttr())
+//      ->setAttr("default", builder.getI64IntegerAttr(0));
+//
+//  auto rdDataBus = builder.create<hir::TensorExtractOp>(
+//      builder.getUnknownLoc(),
+//      getTensorElementType(portInterface.rdDataBusTensor),
+//      portInterface.rdDataBusTensor, op.filterIndices(BANK),
+//      builder.getStrArrayAttr({"send"}));
+//  helper::setNames(rdDataBus, {"rd_data_bus"});
+//
+//  Operation *receiveOp = builder.create<hir::RecvOp>(
+//      op.getLoc(), op.res().getType(), rdDataBus,
+//      builder.getI64IntegerAttr(0), op.tstart(), recvOffset);
+//
+//  if (op->hasAttrOfType<ArrayAttr>("names"))
+//    receiveOp->setAttr("names", op->getAttr("names"));
+//  op.replaceAllUsesWith(receiveOp);
+//  opsToErase.push_back(op);
+//  return success();
+//}
 
 LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
   mlir::OpBuilder builder(op.getContext());

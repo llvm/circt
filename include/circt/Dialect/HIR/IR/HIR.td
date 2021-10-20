@@ -704,7 +704,7 @@ def TensorExtractOp :HIR_Op<"tensor.extract",[NoSideEffect]>{
   let description = [{
     This op extracts a single bus from a tensor of busses.
       Examples:
-      ```mlir %1 = hir.bus.extract %x[%0] : tensor<4x!hir.bus<...>>```
+      ```mlir %1 = hir.tensor.extract %x[%0] : tensor<4x!hir.bus<...>>```
   }];
 
   let arguments = (ins AnyType: $tensor, Variadic<Index>: $indices, ArrayAttr: $ports);
@@ -757,6 +757,72 @@ def UnpackTupleOp:HIR_Op<"unpack_tuple",[NoSideEffect]>{
 
   let assemblyFormat = [{ `(` $tuple`)` custom<WithSSANames>(attr-dict) `:` 
     type($tuple) `->` `(` type($res) `)`}];
+}
+
+def BusSelectOp: HIR_Op<"bus.select",[NoSideEffect]>{
+  let summary = "Create a new bus from two buses.";
+  let description = [{
+    This op creates a new bus from two buses. At any instant, the value is
+    chosen from the input buses based on a third select bus.
+      Examples:
+      ```mlir %merged_bus 
+        = hir.bus.select %select_bus, %input1, %input2 : !hir.bus<i32>```
+  }];
+
+  let arguments = (ins AnyType: $select_bus, AnyType:$true_bus,
+  AnyType:$false_bus);
+  let results = (outs AnyType: $res);
+
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
+}
+
+def TensorInsertOp: HIR_Op<"tensor.insert",[NoSideEffect]>{
+  let summary = "Create a new tensor by replacing an element from the input tensor.";
+  let description = [{
+    This op creates a new tensor from an old tensor by replacing one element of
+    the old tensor with a new element.
+      Examples:
+      ```mlir %new_tensor 
+        = hir.tensor.insert %element into %tensor[%c0,%c1] : type(%res)```
+  }];
+
+  let arguments = (ins AnyType: $element, AnyType:$input_tensor,
+  Variadic<Index>: $indices);
+  let results = (outs AnyType: $res);
+
+  let parser = [{return parse$cppClass(parser,result);}];
+  let printer = [{return print$cppClass(p,*this);}];
+}
+
+def BusAssignOp: HIR_Op<"bus.assign",[NoSideEffect,SameOperandsAndResultType]>{
+  let summary = "Assign one bus/tensor-of-buses to another.";
+  let description = [{
+    This op assigns one bus to another.
+      Examples:
+      ```mlir %merged_bus 
+        = hir.bus.assign %dest, %src: !hir.bus<i32>```
+  }];
+
+  let arguments = (ins AnyType: $dest, AnyType:$src);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ $dest `,` $src custom<WithSSANames>(attr-dict) `:` type($res) }];
+}
+
+def BusOrOp: HIR_Op<"bus.or",[NoSideEffect,SameOperandsAndResultType]>{
+  let summary = "or of two buses.";
+  let description = [{
+    This op creates a new bus which is the or of the two input buses.
+      Examples:
+      ```mlir %merged_bus 
+        = hir.bus.or %left, %right: !hir.bus<i1>```
+  }];
+
+  let arguments = (ins AnyType: $left, AnyType:$right);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ $left `,` $right custom<WithSSANames>(attr-dict) `:` type($res) }];
 }
 
 #endif // HIR_OPS

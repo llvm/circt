@@ -904,6 +904,102 @@ static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
                                  "sym_name", "argNames", "resultNames"});
 }
 
+/// BusSelectOp parser and printer.
+/// Syntax: hir.bus.select %select_bus, %true_bus, %false_bus
+/// custom<WithSSANames>(attr-dict): type($res)
+static ParseResult parseBusSelectOp(OpAsmParser &parser,
+                                    OperationState &result) {
+  OpAsmParser::OperandType selectBus;
+  OpAsmParser::OperandType trueBus;
+  OpAsmParser::OperandType falseBus;
+  Type resTy;
+  auto builder = parser.getBuilder();
+  if (parser.parseOperand(selectBus) || parser.parseComma() ||
+      parser.parseOperand(trueBus) || parser.parseComma() ||
+      parser.parseOperand(falseBus))
+    return failure();
+  if (parseWithSSANames(parser, result.attributes))
+    return failure();
+  if (parser.parseColonType(resTy))
+    return failure();
+
+  // Build the type of the select bus based on the type of the result.
+  Type i1Ty = hir::BusType::get(builder.getContext(), builder.getI1Type());
+  Type selectBusTy;
+  if (auto tensorTy = resTy.dyn_cast<mlir::TensorType>())
+    selectBusTy = mlir::RankedTensorType::get(tensorTy.getShape(), i1Ty);
+  else
+    selectBusTy = i1Ty;
+
+  if (parser.resolveOperand(selectBus, selectBusTy, result.operands))
+    return failure();
+  if (parser.resolveOperand(trueBus, resTy, result.operands))
+    return failure();
+  if (parser.resolveOperand(falseBus, resTy, result.operands))
+    return failure();
+
+  result.addTypes(resTy);
+  return success();
+}
+
+static void printBusSelectOp(OpAsmPrinter &printer, hir::BusSelectOp op) {
+  printer << " " << op.select_bus() << ", " << op.true_bus() << ", "
+          << op.false_bus();
+
+  printWithSSANames(printer, op, op->getAttrDictionary());
+  printer << " : ";
+  printer << op.res().getType();
+}
+
+/// TensorInsertOp parser and printer.
+/// Syntax: hir.tensor.insert %element into %tensor[%c0, %c1]
+/// custom<WithSSANames>(attr-dict): type($res)
+static ParseResult parseTensorInsertOp(OpAsmParser &parser,
+                                       OperationState &result) {
+  OpAsmParser::OperandType element;
+  OpAsmParser::OperandType inputTensor;
+  SmallVector<OpAsmParser::OperandType> indices;
+  Type resTy;
+  auto builder = parser.getBuilder();
+  if (parser.parseOperand(element) || parser.parseKeyword("into") ||
+      parser.parseOperand(inputTensor))
+    return failure();
+
+  if (parser.parseOperandList(indices, -1,
+                              mlir::OpAsmParser::Delimiter::Square))
+    return failure();
+
+  if (parseWithSSANames(parser, result.attributes))
+    return failure();
+  auto typeLoc = parser.getCurrentLocation();
+  if (parser.parseColonType(resTy))
+    return failure();
+  auto tensorTy = resTy.dyn_cast<mlir::TensorType>();
+  if (!tensorTy)
+    return parser.emitError(typeLoc) << "Expected tensor type.";
+
+  if (parser.resolveOperand(element, tensorTy.getElementType(),
+                            result.operands))
+    return failure();
+  if (parser.resolveOperand(inputTensor, tensorTy, result.operands))
+    return failure();
+  if (parser.resolveOperands(indices, builder.getIndexType(), result.operands))
+    return failure();
+
+  result.addTypes(resTy);
+  return success();
+}
+
+static void printTensorInsertOp(OpAsmPrinter &printer, hir::TensorInsertOp op) {
+  printer << " " << op.element() << " into " << op.input_tensor();
+  printer << "[";
+  printer.printOperands(op.indices());
+  printer << "]";
+  printWithSSANames(printer, op, op->getAttrDictionary());
+  printer << " : ";
+  printer << op.res().getType();
+}
+
 LogicalResult hir::FuncExternOp::verifyType() { return success(); }
 
 LogicalResult hir::FuncOp::verifyType() {

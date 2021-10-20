@@ -1,13 +1,14 @@
 add_circt_dialect_library(CIRCTHIRTransforms
   #pass/BitwidthReductionPass.cpp
-  Passes/SimplifyLoop.cpp
   Passes/IndexLoweringPass.cpp
-  Passes/RegisterAllocationPass.cpp
-  Passes/SeqScheduler.cpp
-  Passes/MemrefLoweringPass.cpp
   Passes/LoopUnrollPass.cpp
-  Passes/ScheduleVerifier.cpp
+  Passes/MemrefLoweringPass.cpp
+  Passes/MemrefLoweringUtils.cpp
   Passes/PassPipelines.cpp
+  Passes/RegisterAllocationPass.cpp
+  Passes/ScheduleVerifier.cpp
+  Passes/SeqScheduler.cpp
+  Passes/SimplifyLoop.cpp
   PassRegistration.cpp
 
   DEPENDS

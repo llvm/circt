@@ -2,7 +2,7 @@
 #rd = {rd_latency=1}
 #wr = {wr_latency=1}
 
-hir.func @test at %t(
+hir.func @test1 at %t(
 %a :!hir.memref<16x16x(bank 2)x(bank 2)xf32> ports [#rd,#wr],
 %b : i32
 ){
@@ -13,7 +13,7 @@ hir.func @test at %t(
   %c1_f32 = constant 1.0:f32
 
   %v = hir.load %a[port 0][%c1_i4,%c1_i4,%0,%1]  at %t: !hir.memref<16x16x(bank 2)x(bank 2)xf32> delay 1
-  hir.store %v to %a[port 1][%c1_i4,%c1_i4,%0,%0] at %t + 1: !hir.memref<16x16x(bank 2)x(bank 2)xf32> delay 1
+  //hir.store %v to %a[port 1][%c1_i4,%c1_i4,%0,%0] at %t + 1: !hir.memref<16x16x(bank 2)x(bank 2)xf32> delay 1
 
   hir.return
 }{inline}
