@@ -322,6 +322,15 @@ void CircuitLoweringState::processRemainingAnnotations(
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
             "sifive.enterprise.firrtl.ScalaClassAnnotation", dutAnnoClass,
+            metadataDirectoryAttrName,
+            "sifive.enterprise.firrtl.ElaborationArtefactsDirectory",
+            "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+            "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory",
+            // This annotation is used to mark which external modules are
+            // imported blackboxes from the BlackBoxReader pass.
+            "firrtl.transforms.BlackBox",
+            // This annotation is used by several GrandCentral passes.
+            "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
             // The following will be handled while lowering the verification
             // ops.
             assertAnnoClass, assumeAnnoClass, coverAnnoClass))
