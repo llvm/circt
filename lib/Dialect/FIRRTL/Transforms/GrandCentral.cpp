@@ -121,6 +121,22 @@ private:
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
 
+  /// An optional prefix applied to all interfaces in the design.  This is set
+  /// based on a PrefixInterfacesAnnotation.
+  StringRef interfacePrefix;
+
+  /// Return a string containing the name of an interface.  Apply correct
+  /// prefixing from the interfacePrefix and module-level prefix parameter.
+  std::string getInterfaceName(StringAttr prefix,
+                               AugmentedBundleTypeAttr bundleType) {
+
+    if (prefix)
+      return (prefix.getValue() + interfacePrefix +
+              bundleType.getDefName().getValue())
+          .str();
+    return (interfacePrefix + bundleType.getDefName().getValue()).str();
+  }
+
   /// Recursively examine an AugmentedType to populate the "mappings" file
   /// (generate XMRs) for this interface.  This does not build new interfaces.
   bool traverseField(Attribute field, IntegerAttr id, Twine path);
@@ -128,13 +144,15 @@ private:
   /// Recursively examine an AugmentedType to both build new interfaces and
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
   /// the type of the field exmained.
-  Optional<TypeSum> computeField(Attribute field, IntegerAttr id, Twine path);
+  Optional<TypeSum> computeField(Attribute field, IntegerAttr id,
+                                 StringAttr prefix, Twine path);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
   /// and populate a "mappings" file (generate XMRs).  Return none if the
   /// interface is invalid.
   Optional<sv::InterfaceOp> traverseBundle(AugmentedBundleTypeAttr bundle,
-                                           IntegerAttr id, Twine path);
+                                           IntegerAttr id, StringAttr prefix,
+                                           Twine path);
 
   /// Return the module associated with this value.
   FModuleLike getEnclosingModule(Value value);
@@ -350,7 +368,9 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
 }
 
 Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
-                                                 IntegerAttr id, Twine path) {
+                                                 IntegerAttr id,
+                                                 StringAttr prefix,
+                                                 Twine path) {
 
   auto unsupported = [&](StringRef name, StringRef kind) {
     return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
@@ -378,7 +398,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             bool notFailed = true;
             auto elements = vector.getElements();
             auto firstElement = fromAttr(elements[0]);
-            auto elementType = computeField(firstElement.getValue(), id,
+            auto elementType = computeField(firstElement.getValue(), id, prefix,
                                             path + "[" + Twine(0) + "]");
             if (!elementType)
               return None;
@@ -400,9 +420,9 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
-            auto iface = traverseBundle(bundle, id, path);
+            auto iface = traverseBundle(bundle, id, prefix, path);
             assert(iface && iface.getValue());
-            return VerbatimType({(bundle.getDefName().getValue()).str(), true});
+            return VerbatimType({getInterfaceName(prefix, bundle), true});
           })
       .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
         return unsupported(field.getName().getValue(), "string");
@@ -432,12 +452,12 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
 /// drive the interface. Returns false on any failure and true on success.
 Optional<sv::InterfaceOp>
 GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
-                                 Twine path) {
+                                 StringAttr prefix, Twine path) {
   auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
   sv::InterfaceOp iface;
   builder.setInsertionPointToEnd(getOperation().getBody());
   auto loc = getOperation().getLoc();
-  auto iFaceName = getNamespace().newName(bundle.getDefName().getValue());
+  auto iFaceName = getNamespace().newName(getInterfaceName(prefix, bundle));
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
   if (maybeExtractInfo)
     iface->setAttr("output_file",
@@ -454,8 +474,8 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
       return None;
 
     auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
-    auto elementType =
-        computeField(field.getValue(), id, path + "." + name.getValue());
+    auto elementType = computeField(field.getValue(), id, prefix,
+                                    path + "." + name.getValue());
     if (!elementType)
       return None;
 
@@ -535,6 +555,28 @@ void GrandCentralPass::runOnOperation() {
       maybeExtractInfo = {directory, filename};
       // Intentional fallthrough.  Extraction info may be needed later.
     }
+    if (anno.isClass(
+            "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation")) {
+      if (!interfacePrefix.empty()) {
+        emitCircuitError("more than one 'PrefixInterfacesAnnotation' was "
+                         "found, but zero or one may be provided");
+        removalError = true;
+        return false;
+      }
+
+      auto prefix = anno.getMember<StringAttr>("prefix");
+      if (!prefix) {
+        emitCircuitError()
+            << "contained an invalid 'PrefixInterfacesAnnotation' that does "
+               "not contain a 'prefix' field: "
+            << anno.getDict();
+        removalError = true;
+        return false;
+      }
+
+      interfacePrefix = prefix.getValue();
+      return true;
+    }
     return false;
   });
 
@@ -555,6 +597,8 @@ void GrandCentralPass::runOnOperation() {
                    << "\n";
     else
       llvm::dbgs() << "  <none>\n";
+    llvm::dbgs() << "Prefix Info (from PrefixInterfacesAnnotation):\n"
+                 << "  prefix: " << interfacePrefix << "\n";
   });
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
@@ -901,7 +945,7 @@ void GrandCentralPass::runOnOperation() {
     // Error out if this returns None (indicating that the annotation annotation
     // is malformed in some way).  A good error message is generated inside
     // `traverseBundle` or the functions it calls.
-    auto iface = traverseBundle(bundle, bundle.getID(),
+    auto iface = traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
                                 companionIDMap.lookup(bundle.getID()).name);
     if (!iface) {
       removalError = true;
@@ -913,7 +957,7 @@ void GrandCentralPass::runOnOperation() {
         parentIDMap.lookup(bundle.getID()).second.getBody());
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
-        bundle.getDefName().getValue() + "__");
+        getInterfaceName(bundle.getPrefix(), bundle) + "__");
     auto instance = builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), iface.getValue().getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
