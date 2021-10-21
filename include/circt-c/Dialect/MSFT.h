@@ -111,7 +111,7 @@ MLIR_CAPI_EXPORTED CirctMSFTPlacementDB
 circtMSFTCreatePlacementDB(MlirOperation top, CirctMSFTPrimitiveDB seed);
 MLIR_CAPI_EXPORTED void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
 MLIR_CAPI_EXPORTED
-    size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
+size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
 MLIR_CAPI_EXPORTED MlirLogicalResult circtMSFTPlacementDBAddPlacement(
     CirctMSFTPlacementDB, MlirAttribute loc, CirctMSFTPlacedInstance inst);
 MLIR_CAPI_EXPORTED bool
