@@ -1070,7 +1070,7 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
 
   p << ' ';
   p.printAttributeWithoutType(op.instanceNameAttr());
-  if (auto attr = op.sym_nameAttr()) {
+  if (auto attr = op.inner_symAttr()) {
     p << " sym ";
     p.printSymbolName(attr.getValue());
   }

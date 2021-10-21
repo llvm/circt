@@ -157,10 +157,18 @@ public:
   /// Mark the cache as frozen, which allows it to be shared across threads.
   void freeze() { isFrozen = true; }
 
-  Operation *getDefinition(FlatSymbolRefAttr symbol) const {
+  Operation *getDefinition(StringRef symbol) const {
     assert(isFrozen && "cannot read from this cache until it is frozen");
-    auto it = symbolCache.find(symbol.getValue());
+    auto it = symbolCache.find(symbol);
     return it != symbolCache.end() ? it->second : nullptr;
+  }
+
+  Operation *getDefinition(StringAttr symbol) const {
+    return getDefinition(symbol.getValue());
+  }
+
+  Operation *getDefinition(FlatSymbolRefAttr symbol) const {
+    return getDefinition(symbol.getValue());
   }
 
 private:

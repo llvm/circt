@@ -15,7 +15,7 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
-#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWAttributes.h" 
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVVisitors.h"
@@ -605,11 +605,14 @@ void EmitterBase::emitTextWithSubstitutions(
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
   SmallVector<Operation *, 8> symOps;
-  for (auto sym : symAttrs)
-    if (auto symOp =
-            state.symbolCache.getDefinition(sym.cast<FlatSymbolRefAttr>()))
-      symOps.push_back(symOp);
-
+  for (auto sym : symAttrs) {
+    if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
+      if (auto symOp = state.symbolCache.getDefinition(fsym))
+        symOps.push_back(symOp);
+    if (auto isym = sym.dyn_cast<InnerRefAttr>())
+      if (auto symOp = state.symbolCache.getDefinition(isym.getName()))
+        symOps.push_back(symOp);
+  }
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
   // returning true.  This returns false if no substitution is found.
@@ -3869,9 +3872,8 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
     for (Operation &op : *moduleOp.getBodyBlock()) {
       // Populate the symbolCache with all operations that can define a symbol.
-      if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-        if (auto name = symOp.getNameAttr())
-          symbolCache.addDefinition(name, symOp);
+      if (auto name = op.getAttrOfType<StringAttr>(hw::InnerName::getInnerNameAttrName()))
+        symbolCache.addDefinition(name, &op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     }

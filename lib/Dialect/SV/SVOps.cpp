@@ -14,6 +14,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -119,10 +120,11 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   }
 
   if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs(), {SymbolTable::getSymbolAttrName()});
+    p.printOptionalAttrDict(op->getAttrs(), {SymbolTable::getSymbolAttrName(), hw::InnerName::getInnerNameAttrName()});
   else
     p.printOptionalAttrDict(op->getAttrs(),
-                            {"name", SymbolTable::getSymbolAttrName()});
+                            {"name", SymbolTable::getSymbolAttrName(),
+                            hw::InnerName::getInnerNameAttrName()});
 }
 
 //===----------------------------------------------------------------------===//
@@ -203,7 +205,7 @@ void RegOp::build(OpBuilder &builder, OperationState &odsState,
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (sym_name)
-    odsState.addAttribute(SymbolTable::getSymbolAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -219,7 +221,7 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
   // If the reg has a symbol, then we can't delete it.
-  if (op.sym_nameAttr())
+  if (op.inner_symAttr())
     return failure();
   // Check that all operations on the wire are sv.assigns. All other wire
   // operations will have been handled by other canonicalization.
@@ -1002,7 +1004,7 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // If this wire is only written to, delete the wire and all writers.
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   // If the wire has a symbol, then we can't delete it.
-  if (wire.sym_nameAttr())
+  if (wire.inner_symAttr())
     return failure();
 
   // Wires have inout type, so they'll have assigns and read_inout operations
@@ -1154,12 +1156,12 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 
 /// Instances must be at the top level of the hw.module (or within a `ifdef)
 // and are typically at the end of it, so we scan backwards to find them.
-static hw::InstanceOp findInstanceSymbolInBlock(FlatSymbolRefAttr name,
+static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name,
                                                 Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
     if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
-      if (instance.sym_name() &&
-          instance.sym_name().getValue() == name.getValue())
+      if (instance.inner_sym() &&
+          instance.inner_sym().getValue() == name.getValue())
         return instance;
     }
 
@@ -1176,8 +1178,9 @@ static hw::InstanceOp findInstanceSymbolInBlock(FlatSymbolRefAttr name,
 
 hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
+  //FIXME
   if (cache)
-    if (auto *result = cache->getDefinition(boundInstanceAttr()))
+    if (auto *result = cache->getDefinition(instance().getName()))
       return dyn_cast<hw::InstanceOp>(result);
 
   // Otherwise, resolve the instance by looking up the hw.module...
@@ -1186,12 +1189,12 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
     return {};
 
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      topLevelModuleOp.lookupSymbol(instanceModule()));
+      topLevelModuleOp.lookupSymbol(instance().getModule()));
   if (!hwModule)
     return {};
 
   // ... then look up the instance within it.
-  return findInstanceSymbolInBlock(boundInstanceAttr(),
+  return findInstanceSymbolInBlock(instance().getName(),
                                    hwModule.getBodyBlock());
 }
 

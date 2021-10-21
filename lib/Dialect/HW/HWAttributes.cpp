@@ -182,6 +182,45 @@ FileListAttr FileListAttr::getFromFilename(MLIRContext *context,
 }
 
 //===----------------------------------------------------------------------===//
+// InnerDefAttr
+//===----------------------------------------------------------------------===//
+
+Attribute InnerDefAttr::parse(DialectAsmParser &p, Type type) {
+  StringAttr name;
+  if (p.parseLess() || p.parseAttribute<StringAttr>(name) ||
+      p.parseGreater())
+    return Attribute();
+  auto *context = p.getContext();
+  return InnerDefAttr::get(context, name);
+}
+
+void InnerDefAttr::print(DialectAsmPrinter &p) const {
+  p << '<' << getInner_sym() << '>';
+}
+
+//===----------------------------------------------------------------------===//
+// InnerRefAttr
+//===----------------------------------------------------------------------===//
+
+Attribute InnerRefAttr::parse(DialectAsmParser &p, Type type) {
+  SymbolRefAttr attr;
+  if (p.parseLess() || p.parseAttribute<SymbolRefAttr>(attr) || p.parseGreater())
+    return Attribute();
+  if(attr.getNestedReferences().size() != 1)
+    return Attribute();
+  auto *context = p.getContext();
+  return InnerRefAttr::get(context, attr.getRootReference(), attr.getLeafReference());
+}
+
+void InnerRefAttr::print(DialectAsmPrinter &p) const {
+  p << "innerNameRef<";
+  p.printSymbolName(getModule().getValue());
+  p << "::" ;
+  p.printSymbolName(getName().getValue());
+  p << ">";
+}
+
+//===----------------------------------------------------------------------===//
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
 

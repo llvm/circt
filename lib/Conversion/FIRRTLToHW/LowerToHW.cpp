@@ -2257,9 +2257,8 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   StringAttr symbol;
   if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
     symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
-    auto instanceSymbol = SymbolRefAttr::get(symbol);
-    auto moduleSymbol = SymbolRefAttr::get(theModule.getNameAttr());
-    auto bindOp = builder.create<sv::BindOp>(instanceSymbol, moduleSymbol);
+    auto bindOp =
+        builder.create<sv::BindOp>(theModule.getNameAttr(), symbol);
     // If the lowered op already had output file information, then use that.
     // Otherwise, generate some default bind information.
     if (auto outputFile = oldInstance->getAttr("output_file"))
