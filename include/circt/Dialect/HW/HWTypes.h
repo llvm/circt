@@ -21,6 +21,7 @@
 
 namespace circt {
 namespace hw {
+class SymbolCache;
 class ParamDeclAttr;
 class TypedeclOp;
 namespace detail {

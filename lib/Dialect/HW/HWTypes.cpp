@@ -445,30 +445,16 @@ void TypeAliasType::print(DialectAsmPrinter &p) const {
   p << getMnemonic() << "<" << getRef() << ", " << getInnerType() << ">";
 }
 
-Optional<TypedeclOp> TypeAliasType::getTypeDecl(Operation *op) {
+/// Return the Typedecl referenced by this TypeAlias, given the module to look
+/// in.  This returns null when the IR is malformed.
+TypedeclOp TypeAliasType::getTypeDecl(const SymbolCache &cache) {
   SymbolRefAttr ref = getRef();
-  auto moduleOp = ::dyn_cast<ModuleOp>(op);
-  if (!moduleOp)
-    moduleOp = op->getParentOfType<ModuleOp>();
+  auto typeScope = ::dyn_cast_or_null<TypeScopeOp>(
+      cache.getDefinition(ref.getRootReference()));
+  if (!typeScope)
+    return {};
 
-  auto typeScope = moduleOp.lookupSymbol<TypeScopeOp>(ref.getRootReference());
-  if (!typeScope) {
-    op->emitError("unable to resolve scope for type reference");
-    return llvm::None;
-  }
-
-  auto typedecl = typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
-  if (!typedecl) {
-    op->emitError("unable to resolve declaration for type reference");
-    return llvm::None;
-  }
-
-  if (typedecl.type() != getInnerType()) {
-    op->emitError("declared type did not match aliased type");
-    return llvm::None;
-  }
-
-  return typedecl;
+  return typeScope.lookupSymbol<TypedeclOp>(ref.getLeafReference());
 }
 
 /// Parses a type registered to this dialect. Parse out the mnemonic then invoke

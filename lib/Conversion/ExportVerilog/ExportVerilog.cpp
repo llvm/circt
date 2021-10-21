@@ -866,11 +866,17 @@ static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
         return true;
       })
       .Case<TypeAliasType>([&](TypeAliasType typeRef) {
-        auto typedecl = typeRef.getTypeDecl(emitter.state.designOp);
-        if (!typedecl.hasValue())
-          return false; // This already emitted an error!?
+        auto typedecl = typeRef.getTypeDecl(emitter.state.symbolCache);
+        if (!typedecl) {
+          mlir::emitError(loc, "unresolvable type reference");
+          return false;
+        }
+        if (typedecl.type() != typeRef.getInnerType()) {
+          mlir::emitError(loc, "declared type did not match aliased type");
+          return false;
+        }
 
-        os << typedecl.getValue().getPreferredName();
+        os << typedecl.getPreferredName();
         emitDims(dims, os, typedecl->getLoc(), emitter);
         return true;
       })
@@ -3969,7 +3975,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefOp, TypeScopeOp>([&](Operation *op) {
+        .Case<VerbatimOp, IfDefOp>([&](Operation *op) {
           // Emit into a separate file using the specified file name or
           // replicate the operation in each outputfile.
           if (!attr) {
@@ -3979,6 +3985,14 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         })
         .Case<HWGeneratorSchemaOp>([&](auto schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
+        })
+        .Case<TypeScopeOp>([&](TypeScopeOp op) {
+          symbolCache.addDefinition(op.getNameAttr(), op);
+          // TODO: How do we want to handle typedefs in a split output?
+          if (!attr) {
+            replicatedOps.push_back(op);
+          } else
+            separateFile(op, "");
         })
         .Case<BindOp, BindInterfaceOp>([&](auto op) {
           if (!attr) {
