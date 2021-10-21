@@ -517,6 +517,106 @@ Example:
 }
 ```
 
+### OMIRFileAnnotation
+
+| Property   | Type   | Description                                           |
+| ---------- | ------ | -------------                                         |
+| class      | string | `freechips.rocketchip.objectmodel.OMIRFileAnnotation` |
+| filename   | string | Output file to emit OMIR to                           |
+
+This annotation defines the output file to write the JSON-serialized OMIR to after compilation.
+
+Example:
+```json
+{
+  "class": "freechips.rocketchip.objectmodel.OMIRFileAnnotation",
+  "filename": "path/to/omir.json"
+}
+```
+
+### OMIRAnnotation
+
+| Property   | Type   | Description                                       |
+| ---------- | ------ | -------------                                     |
+| class      | string | `freechips.rocketchip.objectmodel.OMIRAnnotation` |
+| nodes      | array  | A list of OMIR nodes                              |
+
+This annotation specifies a piece of Object Model 2.0 IR. The `nodes` field
+is an array of individual OMIR nodes (Scala class `OMNode`), which have the
+following form:
+```json
+{
+  "info": "@[FileA line:col FileB line:col ...]",
+  "id": "OMID:42",
+  "fields": [/*...*/]
+}
+```
+The `fields` entry is an array of individual OMIR fields (Scala class `OMField`), which have the following form:
+```json
+{
+  "info": "@[FileA line:col FileB line:col ...]",
+  "name": "foo",
+  "value": /*...*/
+}
+```
+The `value` field can be a JSON array or dictionary (corresponding to the `OMArray` and `OMMap` Scala classes, respectively), or any of the string-encoded OMIR classes:
+
+- `OMMap:<fields>`
+- `OMArray:<elements>`
+- `OMReference:<id>`
+- `OMBigInt:<value>`
+- `OMInt:<value>`
+- `OMLong:<value>`
+- `OMString:<value>`
+- `OMBoolean:<value>`
+- `OMDouble:<value>`
+- `OMBigDecimal:<value>`
+- `OMFrozenTarget:<omir>`
+- `OMDeleted`
+- `OMConstant:<literal>`
+- `OMReferenceTarget:<target>`
+- `OMMemberReferenceTarget:<target>`
+- `OMMemberInstanceTarget:<target>`
+- `OMInstanceTarget:<target>`
+- `OMDontTouchedReferenceTarget:<target>`
+
+Example:
+```json
+{
+  "class": "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  "nodes": [
+    {
+      "info": "",
+      "id": "OMID:0",
+      "fields": [
+        {"info": "", "name": "a", "value": "OMReference:0"},
+        {"info": "", "name": "b", "value": "OMBigInt:42"},
+        {"info": "", "name": "c", "value": "OMLong:ff"},
+        {"info": "", "name": "d", "value": "OMString:hello"},
+        {"info": "", "name": "f", "value": "OMBigDecimal:10.5"},
+        {"info": "", "name": "g", "value": "OMDeleted:"},
+        {"info": "", "name": "h", "value": "OMConstant:UInt<2>(\"h1\")"},
+        {"info": "", "name": "i", "value": 42},
+        {"info": "", "name": "j", "value": true},
+        {"info": "", "name": "k", "value": 3.14}
+      ]
+    },
+    {
+      "info": "",
+      "id": "OMID:1",
+      "fields": [
+        {"info": "", "name": "a", "value": "OMReferenceTarget:~Foo|Foo"},
+        {"info": "", "name": "b", "value": "OMInstanceTarget:~Foo|Foo"},
+        {"info": "", "name": "c", "value": "OMMemberReferenceTarget:~Foo|Foo"},
+        {"info": "", "name": "d", "value": "OMMemberInstanceTarget:~Foo|Foo"},
+        {"info": "", "name": "e", "value": "OMDontTouchedReferenceTarget:~Foo|Foo"},
+        {"info": "", "name": "f", "value": "OMReferenceTarget:~Foo|Bar"}
+      ]
+    }
+  ]
+}
+```
+
 ### RetimeModuleAnnotation
 
 | Property   | Type   | Description                                              |

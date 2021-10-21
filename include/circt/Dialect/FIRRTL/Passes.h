@@ -45,6 +45,8 @@ createCreateSiFiveMetadataPass(bool replSeqMem = false,
                                StringRef replSeqMemCircuit = "",
                                StringRef replSeqMemFile = "");
 
+std::unique_ptr<mlir::Pass> createEmitOMIRPass(StringRef outputFilename = "");
+
 std::unique_ptr<mlir::Pass> createExpandWhensPass();
 
 std::unique_ptr<mlir::Pass> createInferWidthsPass();
