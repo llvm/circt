@@ -865,9 +865,27 @@ Creates a SystemVerilog interface for each bundle type.
 | parent      | string   | Module target of the module the interface will be referencing            |
 | view        | object   | AugmentedBundleType representing the interface                           |
 
-Grand Central Interfaces are used to emit SystemVerilog interfaces with stable
-names. `SerializedViewAnnotation` implies `DontTouchAnnotation` on any
-`AugmentedGroundType.ref` target.
+These annotations (which are equivalent) are used to represent a SystemVerilog
+interface, a location in which it should be instantiated, and XMRs to drive the
+interface.  Any XMR sources receive `DontTouchAnnotation` to prevent these from
+being inadvertently deleted.  Note: this currently differs from the SFC
+implementation where constant propagation is not supposed to be blocked by an
+XMR.  Instead the source should be promoted to a literal value and driven on the
+interface.
+
+Either `ViewAnnotation` or `GrandCentralView$SerializedViewAnnotation` are the
+same in CIRCT.  The latter, has its "view" value serialized (again) to JSON and
+string-escaped.  When CIRCT sees any JSON string it tries to recursively
+deserialize it.  If this fails, this is deemed to be a string.  If this
+succeeds, then the JSON is unpacked.
+
+The reason for this double serialization is due to a quirk of the JSON library
+that the SFC uses.  This JSON library uses a type class pattern for users to
+tell it how to deserialize custom types.  Because the `ViewAnnotation`lives in a
+SiFive library, there is no mechanism to provide a type class implementation to
+the function that does annotation deserialization inside the SFC.  Doubly
+serializing enables the deserialization to be delayed until SFC Grand Central
+passes run and a type class implementation is available.
 
 Example:
 ```json
