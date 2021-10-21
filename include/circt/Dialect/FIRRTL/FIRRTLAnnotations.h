@@ -159,6 +159,13 @@ public:
 
   /// firrtl.transforms.DontTouchAnnotation
   bool hasDontTouch() const;
+  bool setDontTouch(bool dontTouch);
+  bool addDontTouch();
+  bool removeDontTouch();
+  static bool hasDontTouch(Operation *op);
+  static bool setDontTouch(Operation *op, bool dontTouch);
+  static bool addDontTouch(Operation *op);
+  static bool removeDontTouch(Operation *op);
 
   bool operator==(const AnnotationSet &other) const {
     return annotations == other.annotations;

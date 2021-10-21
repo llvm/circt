@@ -215,6 +215,53 @@ bool AnnotationSet::hasDontTouch() const {
   return hasAnnotation(dontTouchAnnoClass);
 }
 
+bool AnnotationSet::setDontTouch(bool dontTouch) {
+  if (dontTouch)
+    return addDontTouch();
+  else
+    return removeDontTouch();
+}
+
+bool AnnotationSet::addDontTouch() {
+  if (hasDontTouch())
+    return false;
+  addAnnotations(DictionaryAttr::get(
+      getContext(), {{Identifier::get("class", getContext()),
+                      StringAttr::get(getContext(), dontTouchAnnoClass)}}));
+  return true;
+}
+
+bool AnnotationSet::removeDontTouch() {
+  return removeAnnotation(dontTouchAnnoClass);
+}
+
+bool AnnotationSet::hasDontTouch(Operation *op) {
+  return AnnotationSet(op).hasDontTouch();
+}
+
+bool AnnotationSet::setDontTouch(Operation *op, bool dontTouch) {
+  if (dontTouch)
+    return addDontTouch(op);
+  else
+    return removeDontTouch(op);
+}
+
+bool AnnotationSet::addDontTouch(Operation *op) {
+  AnnotationSet annos(op);
+  auto changed = annos.addDontTouch();
+  if (changed)
+    annos.applyToOperation(op);
+  return changed;
+}
+
+bool AnnotationSet::removeDontTouch(Operation *op) {
+  AnnotationSet annos(op);
+  auto changed = annos.removeDontTouch();
+  if (changed)
+    annos.applyToOperation(op);
+  return changed;
+}
+
 /// Add more annotations to this AttributeSet.
 void AnnotationSet::addAnnotations(ArrayRef<Annotation> newAnnotations) {
   if (newAnnotations.empty())
