@@ -1,0 +1,7 @@
+set(SOURCES hlt_verilator_CMakeLists.txt hlt_std_CMakeLists.txt)
+foreach(file IN ITEMS ${SOURCES})
+  set(file_out ${CIRCT_BINARY_DIR}/tools/hlt/Simulator/${file})
+  configure_file(${file}.in ${file_out} @ONLY)
+  list(APPEND OUTPUTS ${file_out})
+endforeach()
+add_custom_target(hlt-sim SOURCES ${OUTPUTS})

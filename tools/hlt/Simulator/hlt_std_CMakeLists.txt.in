@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.13)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+project(HLTSimulator)
+
+if(NOT (DEFINED HLT_TESTNAME))
+  message(FATAL_ERROR ": HLT_TESTNAME must be defined")
+endif()
+
+set(HLT_LIBNAME hlt_${HLT_TESTNAME})
+
+# Build .ll implementation using clang
+set(LL_IMPL_TARGET ${HLT_TESTNAME}_ll_impl)
+add_custom_command(
+  OUTPUT ${HLT_TESTNAME}_impl.o
+  COMMAND clang -c -o ${HLT_TESTNAME}_impl.o ${CMAKE_CURRENT_SOURCE_DIR}/${HLT_TESTNAME}.ll 
+)
+
+# Define the simulator library
+add_library(${HLT_LIBNAME} SHARED ${HLT_TESTNAME}.cpp ${HLT_TESTNAME}_impl.o)
+target_include_directories(${HLT_LIBNAME} PUBLIC "@CIRCT_MAIN_INCLUDE_DIR@")
+
+find_package(Threads REQUIRED)
+target_link_libraries(${HLT_LIBNAME} PUBLIC Threads::Threads)

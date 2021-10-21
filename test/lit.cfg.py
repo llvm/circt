@@ -34,6 +34,11 @@ config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 
+config.substitutions.append(('%llvm_shlibdir', config.llvm_lib_dir))
+config.substitutions.append(('%llvm_obj_root', config.llvm_obj_root))
+config.substitutions.append(('%circt_src_root', config.circt_src_root))
+config.substitutions.append(('%circt_obj_root', config.circt_obj_root))
+
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
 llvm_config.use_default_substitutions()

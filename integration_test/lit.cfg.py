@@ -39,6 +39,8 @@ config.substitutions.append(('%PYTHON%', config.python_executable))
 config.substitutions.append(
     ('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
+config.substitutions.append(('%circt_obj_root', config.circt_obj_root))
+config.substitutions.append(('%llvm_shlibdir', config.llvm_lib_dir))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 

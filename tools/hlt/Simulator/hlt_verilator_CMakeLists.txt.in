@@ -1,0 +1,29 @@
+cmake_minimum_required(VERSION 3.13)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+project(HLTSimulator)
+
+find_package(verilator HINTS $ENV{VERILATOR_ROOT} ${VERILATOR_ROOT})
+if (NOT verilator_FOUND)
+  message(FATAL_ERROR "Verilator was not found. Either install it, or set the VERILATOR_ROOT environment variable")
+endif()
+
+if(NOT (DEFINED HLT_TESTNAME))
+  message(FATAL_ERROR ": HLT_TESTNAME must be defined")
+endif()
+
+set(HLT_LIBNAME hlt_${HLT_TESTNAME})
+
+add_library(${HLT_LIBNAME} SHARED "${HLT_TESTNAME}.cpp")
+target_include_directories(${HLT_LIBNAME} PUBLIC "@CIRCT_MAIN_INCLUDE_DIR@")
+
+# Add the Verilated circuit to the target
+verilate(${HLT_LIBNAME}
+  TRACE
+  VERILATOR_ARGS --trace-underscore # Generated FIRRTL names of internal modules are purely underscore'd  
+  SOURCES ${HLT_TESTNAME}.sv)
+
+find_package(Threads REQUIRED)
+target_link_libraries(${HLT_LIBNAME} PUBLIC Threads::Threads)

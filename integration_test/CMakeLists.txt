@@ -8,6 +8,7 @@ set(CIRCT_INTEGRATION_TEST_DEPENDS
   circt-translate
   circt-rtl-sim
   esi-cosim-runner
+  hlt-sim
   firtool)
 
 # If Python bindings are available to build then enable the tests.
