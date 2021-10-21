@@ -148,3 +148,42 @@ firrtl.circuit "Top" {
     }]} {
   }
 }
+
+
+// Updates should be made to a Grand Central interface to add a "prefix" field
+// and the annotations associated with the parent and companion should have
+// their "name" field prefixed.
+// CHECK-LABEL: firrtl.circuit "GCTInterfacePrefix"
+// CHECK-SAME:    name = "MyView", prefix = "FOO_"
+firrtl.circuit "GCTInterfacePrefix"
+  attributes {annotations = [{
+    class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    defName = "MyInterface",
+    elements = [],
+    id = 0 : i64,
+    name = "MyView"}]}  {
+  // CHECK:      firrtl.module @FOO_MyView_companion
+  // CHECK-SAME:   name = "FOO_MyView"
+  firrtl.module @MyView_companion()
+    attributes {annotations = [{
+      class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      id = 0 : i64,
+      name = "MyView",
+      type = "companion"}]} {}
+  // CHECK:      firrtl.module @FOO_DUT
+  // CHECK-SAME:   name = "FOO_MyView"
+  firrtl.module @DUT()
+    attributes {annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "MyView",
+       type = "parent"},
+      {class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+       prefix = "FOO_",
+       inclusive = true}]} {
+    firrtl.instance MyView_companion  @MyView_companion()
+  }
+  firrtl.module @GCTInterfacePrefix() {
+    firrtl.instance dut @DUT()
+  }
+}
