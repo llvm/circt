@@ -601,3 +601,49 @@ firrtl.circuit "MultipleGroundTypeInterfaces" attributes {
 // CHECK: sv.interface {
 // CHECK-SAME: output_file = #hw.output_file<"gct-dir/Bar.sv"
 // CHECK-SAME: @Bar
+
+// -----
+
+firrtl.circuit "PrefixInterfacesAnnotation"
+  attributes {annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+        defName = "Bar",
+        elements = [],
+        name = "bar"}],
+     id = 0 : i64,
+     name = "MyView"},
+    {class = "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation",
+     prefix = "PREFIX_"}]}  {
+  firrtl.module @MyView_companion()
+    attributes {annotations = [{
+      class = "sifive.enterprise.grandcentral.ViewAnnotation",
+      id = 0 : i64,
+      name = "MyView",
+      type = "companion"}]} {}
+  firrtl.module @DUT()
+    attributes {annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "MyView",
+       type = "parent"}]} {
+    firrtl.instance MyView_companion  @MyView_companion()
+  }
+  firrtl.module @PrefixInterfacesAnnotation() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "PrefixInterfacesAnnotation"
+// The PrefixInterfacesAnnotation was removed from the circuit.
+// CHECK-NOT:     sifive.enterprise.grandcentral.PrefixInterfacesAnnotation
+
+// Interface "Foo" is prefixed.
+// CHECK:       sv.interface @PREFIX_Foo {
+// Interface "Bar" is prefixed, but not its name.
+// CHECK-NEXT:    PREFIX_Bar bar()
+
+// Interface "Bar" is prefixed.
+// CHECK:       sv.interface @PREFIX_Bar
