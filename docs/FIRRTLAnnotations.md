@@ -57,7 +57,7 @@ Annotations have then been used for all manner of extensions including:
 
 A circuit is described, stored, and optimized in a folded representation. For
 example, there may be multiple instances of a module which will eventually
-become multiple physical copies of that module on the die. 
+become multiple physical copies of that module on the die.
 
 Targets are a mechanism to identify specific hardware in specific instances of
 modules in a FIRRTL circuit.  A target consists of a circuit, a root module, an
@@ -79,7 +79,7 @@ reference ::= (name) ("[" (index) "]" | "." (field))*
 ```
 
 Targets are specific enough to refer to any specific module in a folded,
-unfolded, or partially folded representation. 
+unfolded, or partially folded representation.
 
 To show some examples of what these look like, consider the following example
 circuit. This consists of four instances of module `Baz`, two instances of
@@ -98,7 +98,7 @@ circuit Foo:
 ```
 
 | Folded Module   | Unfolded Modules  |
-| --------------- | ----------------- | 
+| --------------- | ----------------- |
 | <img title="Folded Modules" src="includes/img/firrtl-folded-module.png"/> | <img title="Unfolded Modules" src="includes/img/firrtl-unfolded-module.png"/> |
 
 Using targets (or multiple targets), any specific module, instance, or
@@ -124,7 +124,7 @@ local target representation.
 The MLIR FIRRTL compiler supports an inline format for annotations as an
 extension to the FIRRTL syntax. These inline annotations are helpful for making
 single-file annotated FIRRTL code. This is not supported by the Scala FIRRTL
-compiler.  
+compiler.
 
 Inline annotations are attached to the `circuit`, and are JSON wrapped in `%[`
 and `]`.
@@ -193,7 +193,7 @@ any unused annotations still in the circuit. For example, the `ModuleInliner`
 pass removes `firrtl.passes.InlineAnnotation` by inlining annotated modules or
 instances. JSON Annotations map to the builtin MLIR attributes. An annotation
 is implemented using a DictionaryAttr, which holds the class, target, any
-annotation specific data. 
+annotation specific data.
 
 ## Annotations
 
@@ -347,10 +347,10 @@ Example:
 | target     | string | Reference target                        |
 
 The `DontTouchAnnotation` prevents the removal of elements through
-optimization. This annotation is an optimization barrier, for 
+optimization. This annotation is an optimization barrier, for
 example, it blocks constant propagation through it.
 This annotation also ensures that the name of the object is
-preserved, and not discarded or modified. 
+preserved, and not discarded or modified.
 
 Example:
 ```json
@@ -855,7 +855,7 @@ what the field in the bundle is.
 
 Creates a SystemVerilog interface for each bundle type.
 
-#### GrandCentralView$SerializedViewAnnotation
+#### ViewAnnotation, GrandCentralView$SerializedViewAnnotation
 
 | Property    | Type     | Description                                                              |
 | ----------- | -------- | ------------------                                                       |
@@ -1040,7 +1040,7 @@ Example:
 ## Attributes in SV
 
 Some annotations transfrom into attributes consumed by non-FIRRTL passes.  This
-section describes well-defined attributes used by HW/SV passes. 
+section describes well-defined attributes used by HW/SV passes.
 
 
 ### firrtl.moduleHierarchyFile
