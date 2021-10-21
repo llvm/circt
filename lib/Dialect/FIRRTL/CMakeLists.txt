@@ -1,3 +1,4 @@
+include_directories(.)
 add_circt_dialect_library(CIRCTFIRRTL
   FIRRTLAnnotations.cpp
   FIRRTLAttributes.cpp

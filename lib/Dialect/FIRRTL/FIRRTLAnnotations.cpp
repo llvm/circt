@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -211,7 +212,7 @@ bool AnnotationSet::hasAnnotationImpl(StringRef className) const {
 }
 
 bool AnnotationSet::hasDontTouch() const {
-  return hasAnnotation("firrtl.transforms.DontTouchAnnotation");
+  return hasAnnotation(dontTouchAnnoClass);
 }
 
 /// Add more annotations to this AttributeSet.
@@ -397,4 +398,16 @@ Annotation AnnotationSetIterator::operator*() const {
     return Annotation(dictAttr);
   else
     return Annotation(attr.cast<SubAnnotationAttr>().getAnnotations());
+}
+
+//===----------------------------------------------------------------------===//
+// Annotation Details
+//===----------------------------------------------------------------------===//
+
+/// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
+/// simply passes through as a string without any decoding.
+bool circt::firrtl::isOMIRStringEncodedPassthrough(StringRef type) {
+  return type == "OMID" || type == "OMReference" || type == "OMBigInt" ||
+         type == "OMLong" || type == "OMString" || type == "OMDouble" ||
+         type == "OMBigDecimal" || type == "OMDeleted" || type == "OMConstant";
 }
