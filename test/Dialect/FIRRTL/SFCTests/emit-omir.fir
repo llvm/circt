@@ -35,15 +35,24 @@ circuit Foo : %[[
           {"info": "", "name": "e", "value": "OMDontTouchedReferenceTarget:~Foo|Foo"},
           {"info": "", "name": "f", "value": "OMReferenceTarget:~Foo|Bar"}
         ]
+      },
+      {
+        "info": "",
+        "id": "OMID:2",
+        "fields": [
+          {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+          {"info": "", "name": "instancePath", "value": "OMMemberReferenceTarget:~Foo|Bar>mem"}
+        ]
       }
     ]
   }
 ]]
+  extmodule MySRAM:
+    defname = MySRAM
   module Foo :
     inst bar of Bar
-    skip
   module Bar :
-    skip
+    inst mem of MySRAM
 
 ; CHECK-LABEL: FILE "omir.json"
 
@@ -82,3 +91,7 @@ circuit Foo : %[[
 ; CHECK-NEXT:  "value": "OMDontTouchedReferenceTarget:~Foo|Foo"
 ; CHECK-LABEL: "name": "f"
 ; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Bar"
+
+; CHECK-LABEL: "id": "OMID:2"
+; CHECK-LABEL: "name": "instancePath"
+; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo/bar:Bar>mem"
