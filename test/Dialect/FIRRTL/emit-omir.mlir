@@ -185,8 +185,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
   }
 }
 // CHECK-LABEL: firrtl.circuit "SRAMPaths" {
-// CHEFCK-NEXT:    firrtl.nla @nla_0 [@SRAMPaths, @Submodule, @MySRAM] ["sub", "mem", "MySRAM"]
-// CHECK-NEXT:    firrtl.extmodule @MySRAM()
+// CHECK:    firrtl.extmodule @MySRAM()
 // CHECK-NEXT:    firrtl.module @Submodule() {
 // CHECK-NEXT:      firrtl.instance mem
 // CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
@@ -194,13 +193,15 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NEXT:    }
 // CHECK-NEXT:    firrtl.module @SRAMPaths() {
 // CHECK-NEXT:      firrtl.instance sub
+// CHECK-SAME:        {circt.nonlocal = @[[nla_0:.+]], class = "circt.nonlocal"}
 // CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
-// CHECK-SAME:        {circt.nonlocal = @nla_0, class = "circt.nonlocal"}
 // CHECK-SAME:        @Submodule()
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
-// CHECK-SAME:  \22name\22: \22omType\22,\0A \22value\22: [\0A \22OMString:OMLazyModule\22,\0A \22OMString:OMSRAM\22\0A]
-// CHECK-SAME:  \22name\22: \22instancePath\22,\0A \22value\22: \22OMMemberReferenceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}>mem\22
+// CHECK-SAME:  \22name\22: \22omType\22,\0A        \22value\22: [\0A          \22OMString:OMLazyModule\22,\0A          \22OMString:OMSRAM\22\0A
+// CHECK-SAME:  \22name\22: \22instancePath\22,\0A \22value\22: \22OMMemberReferenceTarget:
+// CHECK-SAME: ~SRAMPaths|{{[{][{]0[}][}]}}
+// CHECK-SAME: /sub:{{[{][{]1[}][}]}}>mem\22
 // CHECK-SAME:  #hw.output_file<"omir.json", excludeFromFileList>
 // CHECK-SAME:  symbols = [@SRAMPaths, @Submodule]
