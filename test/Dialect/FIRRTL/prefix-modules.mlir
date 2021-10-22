@@ -187,3 +187,46 @@ firrtl.circuit "GCTInterfacePrefix"
     firrtl.instance dut @DUT()
   }
 }
+
+// CHECK: firrtl.circuit "T_NLATop"
+firrtl.circuit "NLATop" {
+
+  firrtl.nla @nla [@NLATop, @Aardvark, @Zebra] ["test", "test", "Zebra"]
+  // CHECK: firrtl.nla @nla [@T_NLATop, @T_Aardvark, @T_A_Z_Zebra] ["test", "test", "Zebra"]
+  // CHECK: firrtl.module @T_NLATop
+  firrtl.module @NLATop()
+    attributes {annotations = [{
+      class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+      prefix = "T_",
+      inclusive = true
+    }]} {
+
+    // CHECK:  firrtl.instance test  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @T_Aardvark()
+    firrtl.instance test  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Aardvark()
+
+    // CHECK: firrtl.instance test2 @T_Z_Zebra()
+    firrtl.instance test2 @Zebra()
+  }
+
+  // CHECK: firrtl.module @T_Aardvark
+  firrtl.module @Aardvark()
+    attributes {annotations = [{
+      class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+      prefix = "A_",
+      inclusive = false
+    }]} {
+
+    // CHECK:  firrtl.instance test  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @T_A_Z_Zebra()
+    firrtl.instance test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Zebra()
+  }
+
+  // CHECK: firrtl.module @T_Z_Zebra
+  // CHECK: firrtl.module @T_A_Z_Zebra
+  firrtl.module @Zebra() 
+    attributes {annotations = [{
+      class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+      prefix = "Z_",
+      inclusive = true
+    }]} {
+  }
+}
