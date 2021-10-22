@@ -818,7 +818,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        StringRef name, ArrayRef<Direction> portDirections,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
+                       ArrayRef<Attribute> portAnnotations, unit lowerToBind) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -828,7 +828,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       direction::packAttribute(builder.getContext(), portDirections));
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
-  result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
+  result.addAttribute("lowerToBind", builder.getUnitAttr(lowerToBind));
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),

@@ -27,7 +27,7 @@ def InstanceOp : FIRRTLOp<"instance", [
                        APIntAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
-                       BoolAttr:$lowerToBind);
+                       UnitAttr:$lowerToBind);
 
   let results = (outs Variadic<FIRRTLType>:$results);
 
@@ -43,7 +43,7 @@ def InstanceOp : FIRRTLOp<"instance", [
                    "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"bool","false">:$lowerToBind)>,
+                   CArg<"mlir::UnitAttr","false">:$lowerToBind)>,
 
     /// Constructor when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
@@ -110,7 +110,7 @@ def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
   let summary = "Defines a memory port on CHIRRTL memory";
   let description = [{
     This operation defines a new memory port on a `seqmem` or `combmem`CHISEL.
-    `data` is the data returned from the memory port.  
+    `data` is the data returned from the memory port.
 
     The memory port requires an access point, which sets the enable condition
     of the port, the clock, and the address.  This is done by passing the the
