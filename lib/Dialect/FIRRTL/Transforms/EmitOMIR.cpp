@@ -44,15 +44,6 @@ struct Tracker {
   NonLocalAnchor nla;
 };
 
-/// Construct the annotation array with a new thing appended.
-static ArrayAttr appendArrayAttr(ArrayAttr array, Attribute a) {
-  if (!array)
-    return ArrayAttr::get(a.getContext(), ArrayRef<Attribute>{a});
-  SmallVector<Attribute> old(array.begin(), array.end());
-  old.push_back(a);
-  return ArrayAttr::get(a.getContext(), old);
-}
-
 class EmitOMIRPass : public EmitOMIRBase<EmitOMIRPass> {
 public:
   using EmitOMIRBase::outputFilename;
@@ -311,11 +302,11 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
 
   // Assemble the NLA annotation to be put on all the operations participating
   // in the path.
-  NamedAttrList nlaFields;
-  nlaFields.append("circt.nonlocal",
-                   FlatSymbolRefAttr::get(builder.getStringAttr(nlaName)));
-  nlaFields.append("class", StringAttr::get(context, "circt.nonlocal"));
-  auto nlaAttr = DictionaryAttr::get(context, nlaFields);
+  auto nlaAttr = builder.getDictionaryAttr({
+      builder.getNamedAttr("circt.nonlocal",
+                           FlatSymbolRefAttr::get(context, nlaName)),
+      builder.getNamedAttr("class", StringAttr::get(context, "circt.nonlocal")),
+  });
 
   // Get all the paths instantiating this module.
   auto mod = tracker.op->getParentOfType<FModuleOp>();
@@ -337,30 +328,25 @@ void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
     return;
   }
 
+  // Assemble the module and name path for the NLA. Also attach an NLA reference
+  // annotation to each instance participating in the path.
   SmallVector<Attribute> modpath, namepath;
-  for (InstanceOp inst : paths[0]) {
-    // This instance op is part of the NLA path, set the circt.nonlocal
-    // attribute.
-    inst->setAttr(getAnnotationAttrName(),
-                  appendArrayAttr(AnnotationSet(inst).getArrayAttr(), nlaAttr));
-    namepath.push_back(builder.getStringAttr(inst.name()));
-    modpath.push_back(
-        FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
-  }
-  tracker.op->setAttr(
-      getAnnotationAttrName(),
-      appendArrayAttr(AnnotationSet(tracker.op).getArrayAttr(), nlaAttr));
-  modpath.push_back(
-      FlatSymbolRefAttr::get(tracker.op->getParentOfType<FModuleOp>()));
-  namepath.push_back(opName);
-  auto modpathAttr = ArrayAttr::get(context, modpath);
-  auto namepathAttr = ArrayAttr::get(context, namepath);
-  tracker.nla = builder.create<NonLocalAnchor>(builder.getUnknownLoc(),
-                                               builder.getStringAttr(nlaName),
-                                               modpathAttr, namepathAttr);
-  // The NLA can be removed after this pass.
+  auto addToPath = [&](Operation *op, StringAttr name) {
+    AnnotationSet annos(op);
+    annos.addAnnotations(nlaAttr);
+    annos.applyToOperation(op);
+    modpath.push_back(FlatSymbolRefAttr::get(op->getParentOfType<FModuleOp>()));
+    namepath.push_back(name);
+  };
+  for (InstanceOp inst : paths[0])
+    addToPath(inst, inst.nameAttr());
+  addToPath(tracker.op, opName);
+
+  // Add the NLA to the tracker and mark it to be deleted later.
+  tracker.nla = builder.create<NonLocalAnchor>(
+      builder.getUnknownLoc(), builder.getStringAttr(nlaName),
+      builder.getArrayAttr(modpath), builder.getArrayAttr(namepath));
   removeTempNLAs.push_back(tracker.nla);
-  LLVM_DEBUG(llvm::dbgs() << "- OMIR tracker op: " << *tracker.op << "\n");
 }
 
 /// Emit a source locator into a string, for inclusion in the `info` field of
