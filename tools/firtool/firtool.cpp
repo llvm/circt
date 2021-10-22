@@ -226,6 +226,10 @@ static cl::list<std::string>
                        cl::desc("Optional input object model 2.0 file"),
                        cl::CommaSeparated, cl::value_desc("filename"));
 
+static cl::opt<std::string>
+    omirOutFile("output-omir", cl::desc("file name for the output omir"),
+                cl::init(""));
+
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
@@ -396,7 +400,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         replSeqMem, replSeqMemCircuit, replSeqMemFile));
 
   if (emitOMIR)
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createEmitOMIRPass());
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createEmitOMIRPass(omirOutFile));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
