@@ -483,3 +483,25 @@ firrtl.circuit "Duplicate" {
 // INLINE-NEXT:     firrtl.connect %WriteMemory2_W0_mask, %32 : !firrtl.uint<1>, !firrtl.uint<1>
 // INLINE-NEXT:   }
 // INLINE-NEXT: }
+
+// Check that the annotation assocaited with the memory gets copied to the
+// external memory.  Ensure that this works correctly for both the wrapper and
+// inline variants.  (Specifically that the wrapper variant only copies the
+// annotation onto the external memory and not the wrapper module.)
+firrtl.circuit "AnnotationsMove" {
+  firrtl.module @AnnotationsMove() {
+     %r0 = firrtl.mem Undefined {
+       annotations = [{class = "a"}],
+       depth = 16 : i64,
+       name = "ReadMemory",
+       portNames = ["read0"],
+       readLatency = 1 : i32,
+       writeLatency = 1 : i32} :
+     !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>
+  }
+}
+
+// CHECK-LABEL: "AnnotationsMove"
+// WRAPPER:     firrtl.instance ReadMemory {annotations = [{class = "a"}]} @ReadMemory_ext
+// INLINE:      firrtl.instance ReadMemory {annotations = [{class = "a"}]} @ReadMemory
+// CHECK-NOT:   {class = "a"}

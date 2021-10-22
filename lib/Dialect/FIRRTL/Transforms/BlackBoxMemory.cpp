@@ -198,8 +198,8 @@ static FModuleOp createWrapperModule(MemOp op,
 
   // Create the module
   builder.setInsertionPointToStart(moduleOp.getBody());
-  auto instanceOp =
-      builder.create<InstanceOp>(op.getLoc(), extModuleOp, op.name());
+  auto instanceOp = builder.create<InstanceOp>(
+      op.getLoc(), extModuleOp, op.name(), AnnotationSet(op).getArray());
 
   // Connect the ports between the memory module and the instance of the black
   // box memory module. The outer module has a single bundle representing each
@@ -361,7 +361,8 @@ replaceMemWithExtModule(DenseMap<MemOp, FExtModuleOp, MemOpInfo> &knownMems,
 
   // Create an instance of the black box module
   auto instanceOp =
-      builder.create<InstanceOp>(memOp.getLoc(), extModuleOp, memOp.name());
+      builder.create<InstanceOp>(memOp.getLoc(), extModuleOp, memOp.name(),
+                                 AnnotationSet(memOp).getArray());
 
   // Create a wire for every memory port
   SmallVector<Value, 2> results;
