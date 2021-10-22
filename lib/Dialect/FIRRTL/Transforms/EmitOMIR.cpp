@@ -134,9 +134,12 @@ void EmitOMIRPass::runOnOperation() {
   MLIRContext *context = &getContext();
   anyFailures = false;
   symtbl = nullptr;
+  circuitNamespace = nullptr;
+  instancePaths = nullptr;
   trackers.clear();
   symbols.clear();
   symbolIndices.clear();
+  removeTempNLAs.clear();
   CircuitOp circuitOp = getOperation();
 
   // Gather the relevant annotations from the circuit. On the one hand these are
@@ -277,6 +280,7 @@ void EmitOMIRPass::runOnOperation() {
     }
     nla->erase();
   }
+  removeTempNLAs.clear();
 
   // Emit the OMIR JSON as a verbatim op.
   auto builder = OpBuilder(circuitOp);
@@ -567,8 +571,10 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     auto diag = getOperation().emitError("tracked OMIR target of type `")
                 << type << "` was deleted";
     diag.attachNote(getOperation().getLoc())
-        << type << " should never be deleted";
-    diag.attachNote(getOperation().getLoc()) << node;
+        << "`" << type << "` should never be deleted";
+    if (auto path = node.getAs<StringAttr>("path"))
+      diag.attachNote(getOperation().getLoc())
+          << "original path: `" << path.getValue() << "`";
     anyFailures = true;
     return jsonStream.value("<error>");
   }

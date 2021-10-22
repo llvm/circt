@@ -28,7 +28,6 @@ firrtl.circuit "NoNodes" attributes {annotations = [{class = "freechips.rocketch
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim "[]"
-// CHECK-SAME:  #hw.output_file<"omir.json", excludeFromFileList>
 
 //===----------------------------------------------------------------------===//
 // Empty node
@@ -47,7 +46,6 @@ firrtl.circuit "EmptyNode" attributes {annotations = [{class = "freechips.rocket
 // CHECK-SAME:  \22info\22: \22\22
 // CHECK-SAME:  \22id\22: \22OMID:0\22
 // CHECK-SAME:  \22fields\22: []
-// CHECK-SAME:  #hw.output_file<"omir.json", excludeFromFileList>
 
 //===----------------------------------------------------------------------===//
 // Source locator serialization
@@ -79,7 +77,6 @@ firrtl.circuit "SourceLocators" attributes {annotations = [{class = "freechips.r
 // CHECK-SAME:      \22value\22: \22OMReference:0\22
 // CHECK-SAME:    }
 // CHECK-SAME:  ]
-// CHECK-SAME:  #hw.output_file<"omir.json", excludeFromFileList>
 
 //===----------------------------------------------------------------------===//
 // Check that all the OMIR types support serialization
@@ -147,7 +144,6 @@ firrtl.circuit "AllTypesSupported" attributes {annotations = [{
 // CHECK-SAME:    \22bar\22: 9001
 // CHECK-SAME:    \22foo\22: true
 // CHECK-SAME:  }
-// CHECK-SAME:  #hw.output_file<"omir.json", excludeFromFileList>
 
 //===----------------------------------------------------------------------===//
 // Trackers as Local Annotations
@@ -188,7 +184,6 @@ firrtl.circuit "LocalTrackers" attributes {annotations = [{
 // CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]1[}][}]}}>b\22
 // CHECK-SAME:  \22name\22: \22OMReferenceTarget4\22
 // CHECK-SAME:  \22value\22: \22OMReferenceTarget:~LocalTrackers|{{[{][{]1[}][}]}}>a\22
-// CHECK-SAME:  #hw.output_file<"omir.json", excludeFromFileList>
 // CHECK-SAME:  symbols = [@A, @LocalTrackers]
 
 //===----------------------------------------------------------------------===//
@@ -214,8 +209,30 @@ firrtl.circuit "NonLocalTrackers" attributes {annotations = [{
 // CHECK:       sv.verbatim
 // CHECK-SAME:  \22name\22: \22OMReferenceTarget1\22
 // CHECK-SAME:  \22value\22: \22OMReferenceTarget:~NonLocalTrackers|{{[{][{]0[}][}]}}/b:{{[{][{]1[}][}]}}/a:{{[{][{]2[}][}]}}\22
-// CHECK-SAME:  #hw.output_file<"omir.json", excludeFromFileList>
 // CHECK-SAME:  symbols = [@NonLocalTrackers, @B, @A]
+
+//===----------------------------------------------------------------------===//
+// Targets that are allowed to lose their tracker
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "DeletedTargets" attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [{info = #loc, id = "OMID:0", fields = {
+    a = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMReferenceTarget"}},
+    b = {info = #loc, index = 2, value = {omir.tracker, id = 1, type = "OMMemberReferenceTarget"}},
+    c = {info = #loc, index = 3, value = {omir.tracker, id = 2, type = "OMMemberInstanceTarget"}}
+  }}]
+}]} {
+  firrtl.module @DeletedTargets() {}
+}
+// CHECK-LABEL: firrtl.circuit "DeletedTargets"
+// CHECK:       sv.verbatim
+// CHECK-SAME:  \22name\22: \22a\22
+// CHECK-SAME:  \22value\22: \22OMDeleted\22
+// CHECK-SAME:  \22name\22: \22b\22
+// CHECK-SAME:  \22value\22: \22OMDeleted\22
+// CHECK-SAME:  \22name\22: \22c\22
+// CHECK-SAME:  \22value\22: \22OMDeleted\22
 
 //===----------------------------------------------------------------------===//
 // Make SRAM Paths Absolute
@@ -258,5 +275,4 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-SAME:  ]
 // CHECK-SAME:  \22name\22: \22instancePath\22
 // CHECK-SAME:  22value\22: \22OMMemberReferenceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}>mem\22
-// CHECK-SAME:  #hw.output_file<"omir.json", excludeFromFileList>
 // CHECK-SAME:  symbols = [@SRAMPaths, @Submodule]
