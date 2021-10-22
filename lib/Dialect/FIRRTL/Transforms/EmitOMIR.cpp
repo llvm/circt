@@ -99,18 +99,17 @@ private:
 } // namespace
 
 /// Check if an `OMNode` is an `OMSRAM` and requires special treatment of its
-/// instance path field. This returns true if the node has an array field
-/// `omType` that contains a `OMString:OMSRAM` entry, and if it has an
-/// `instancePath` field which is a scattered tracker. Upon success, the tracker
-/// ID is stored in `id`, otherwise `id` is nulled.
-static bool isOMSRAM(Attribute &node, IntegerAttr &id) {
-  id = {};
+/// instance path field. This returns the ID of the tracker stored in the
+/// `instancePath` field if the node has an array field `omType` that contains a
+/// `OMString:OMSRAM` entry.
+static IntegerAttr isOMSRAM(Attribute &node) {
   auto dict = node.dyn_cast<DictionaryAttr>();
   if (!dict)
-    return false;
+    return {};
   auto idAttr = dict.getAs<StringAttr>("id");
   if (!idAttr)
-    return false;
+    return {};
+  IntegerAttr id;
   if (auto infoAttr = dict.getAs<DictionaryAttr>("fields")) {
     if (auto iP = infoAttr.getAs<DictionaryAttr>("instancePath"))
       if (auto v = iP.getAs<DictionaryAttr>("value"))
@@ -121,9 +120,9 @@ static bool isOMSRAM(Attribute &node, IntegerAttr &id) {
         for (auto attr : valueArr)
           if (auto str = attr.dyn_cast<StringAttr>())
             if (str.getValue().equals("OMString:OMSRAM"))
-              return bool(id);
+              return id;
   }
-  return false;
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
@@ -176,8 +175,7 @@ void EmitOMIRPass::runOnOperation() {
       LLVM_DEBUG(llvm::dbgs() << "- OMIR: " << nodesAttr << "\n");
       annoNodes.push_back(nodesAttr.getValue());
       for (auto node : nodesAttr) {
-        IntegerAttr id;
-        if (isOMSRAM(node, id)) {
+        if (auto id = isOMSRAM(node)) {
           LLVM_DEBUG(llvm::dbgs() << "  - is SRAM with tracker " << id << "\n");
           sramIDs.insert(id);
         }
