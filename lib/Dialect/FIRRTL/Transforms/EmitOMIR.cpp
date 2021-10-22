@@ -59,6 +59,7 @@ public:
 
 private:
   void runOnOperation() override;
+  void makeTrackerAbsolute(Tracker &tracker);
 
   void emitSourceInfo(Location input, SmallString<64> &into);
   void emitOMNode(Attribute node, llvm::json::OStream &jsonStream);
@@ -90,8 +91,10 @@ private:
 
   /// Whether any errors have occurred in the current `runOnOperation`.
   bool anyFailures;
-  /// A symbol table for the current operation.
+  /// Analyses for the current operation; only valid within `runOnOperation`.
   SymbolTable *symtbl;
+  CircuitNamespace *circuitNamespace;
+  InstancePathCache *instancePaths;
   /// OMIR target trackers gathered in the current operation, by tracker ID.
   DenseMap<Attribute, Tracker> trackers;
   /// The list of symbols to be interpolated in the verbatim JSON. This gets
@@ -99,11 +102,18 @@ private:
   /// collected.
   SmallVector<Attribute> symbols;
   SmallDenseMap<Attribute, unsigned> symbolIndices;
+  /// Temporary `firrtl.nla` operations to be deleted at the end of the pass.
+  SmallVector<NonLocalAnchor> removeTempNLAs;
 };
 } // namespace
 
+/// Check if an `OMNode` is an `OMSRAM` and requires special treatment of its
+/// instance path field. This returns true if the node has an array field
+/// `omType` that contains a `OMString:OMSRAM` entry, and if it has an
+/// `instancePath` field which is a scattered tracker. Upon success, the tracker
+/// ID is stored in `id`, otherwise `id` is nulled.
 static bool isOMSRAM(Attribute &node, IntegerAttr &id) {
-
+  id = {};
   auto dict = node.dyn_cast<DictionaryAttr>();
   if (!dict)
     return false;
@@ -112,16 +122,15 @@ static bool isOMSRAM(Attribute &node, IntegerAttr &id) {
     return false;
   if (auto infoAttr = dict.getAs<DictionaryAttr>("fields")) {
     if (auto iP = infoAttr.getAs<DictionaryAttr>("instancePath"))
-      if (auto v = iP.getAs<DictionaryAttr>("value")) {
+      if (auto v = iP.getAs<DictionaryAttr>("value"))
         if (v.getAs<UnitAttr>("omir.tracker"))
           id = v.getAs<IntegerAttr>("id");
-      }
     if (auto omTy = infoAttr.getAs<DictionaryAttr>("omType"))
       if (auto valueArr = omTy.getAs<ArrayAttr>("value"))
         for (auto attr : valueArr)
           if (auto str = attr.dyn_cast<StringAttr>())
             if (str.getValue().equals("OMString:OMSRAM"))
-              return true;
+              return bool(id);
   }
   return false;
 }
@@ -138,14 +147,14 @@ void EmitOMIRPass::runOnOperation() {
   symbols.clear();
   symbolIndices.clear();
   CircuitOp circuitOp = getOperation();
-  CircuitNamespace circtNameSpace(circuitOp);
+
   // Gather the relevant annotations from the circuit. On the one hand these are
   // all the actual `OMIRAnnotation`s that need processing and emission, as well
   // as an optional `OMIRFileAnnotation` that overrides the default OMIR output
-  // file.
+  // file. Also while we're at it, keep track of all OMIR nodes that qualify as
+  // an SRAM and that require their trackers to be turned into NLAs starting at
+  // the root of the hierarchy.
   SmallVector<ArrayRef<Attribute>> annoNodes;
-
-  // Gather the Ids that correspond to SRAM nodes.
   DenseSet<Attribute> sramIDs;
   Optional<StringRef> outputFilename = {};
 
@@ -172,10 +181,10 @@ void EmitOMIRPass::runOnOperation() {
       }
       LLVM_DEBUG(llvm::dbgs() << "- OMIR: " << nodesAttr << "\n");
       annoNodes.push_back(nodesAttr.getValue());
-      IntegerAttr id;
       for (auto node : nodesAttr) {
+        IntegerAttr id;
         if (isOMSRAM(node, id)) {
-          LLVM_DEBUG(llvm::dbgs() << "\n Found SRAM :" << nodesAttr << "\n");
+          LLVM_DEBUG(llvm::dbgs() << "  - is SRAM with tracker " << id << "\n");
           sramIDs.insert(id);
         }
       }
@@ -186,13 +195,16 @@ void EmitOMIRPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
+  // Establish some of the analyses we need throughout the pass.
+  SymbolTable currentSymtbl(circuitOp);
+  CircuitNamespace currentCircuitNamespace(circuitOp);
+  InstancePathCache currentInstancePaths(getAnalysis<InstanceGraph>());
+  symtbl = &currentSymtbl;
+  circuitNamespace = &currentCircuitNamespace;
+  instancePaths = &currentInstancePaths;
+
   // Traverse the IR and collect all tracker annotations that were previously
   // scattered into the circuit.
-  SymbolTable currentSymtbl(circuitOp);
-  symtbl = &currentSymtbl;
-  // Get the InstanceGraph analysis for constructing the hierarchical paths.
-  auto instancePathCache = InstancePathCache(getAnalysis<InstanceGraph>());
-  SmallVector<Operation *> removeTempNLAs;
   circuitOp.walk([&](Operation *op) {
     AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
       if (!anno.isClass(omirTrackerAnnoClass))
@@ -206,62 +218,11 @@ void EmitOMIRPass::runOnOperation() {
         anyFailures = true;
         return true;
       }
-      // If the Id matches with one of the Sram Ids, then construct the NLA for
-      // instancePath.
-      if (sramIDs.erase(tracker.id)) {
-        auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
-        auto opName = op->getAttrOfType<StringAttr>("name");
-        // Construct the NLA name.
-        auto nlaName = circtNameSpace.newName(opName.getValue());
-        SmallVector<Attribute> mods, insts;
-        NamedAttrList naAttr;
-        naAttr.append("circt.nonlocal",
-                      FlatSymbolRefAttr::get(builder.getStringAttr(nlaName)));
-        naAttr.append("class", StringAttr::get(context, "circt.nonlocal"));
-        auto mod = op->getParentOfType<FModuleOp>();
-        // Get all the paths instantiating this module.
-        auto paths = instancePathCache.getAbsolutePaths(mod);
-        // There should be only one path, TODO: add an assert here ?
-        if (paths.size() > 1) {
-          mod.emitError("cannot emit OMIR, SRAM has multiple instance paths");
-          anyFailures = true;
-          return true;
-        }
-        auto p = *paths.begin();
-        if (p.empty()) {
-          mod.emitError(
-              "cannot emit OMIR, failed to construct SRAM instance path");
-          anyFailures = true;
-          return true;
-        }
-        for (InstanceOp inst : p) {
-          // This instance op is part of the NLA path, set the circt.nonlocal
-          // attribute.
-          inst->setAttr(getAnnotationAttrName(),
-                        appendArrayAttr(AnnotationSet(inst).getArrayAttr(),
-                                        DictionaryAttr::get(context, naAttr)));
-          insts.push_back(builder.getStringAttr(inst.name()));
-          mods.push_back(
-              FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
-        }
-        op->setAttr(getAnnotationAttrName(),
-                    appendArrayAttr(AnnotationSet(op).getArrayAttr(),
-                                    DictionaryAttr::get(context, naAttr)));
-        mods.push_back(
-            FlatSymbolRefAttr::get(op->getParentOfType<FModuleOp>()));
-        insts.push_back(opName);
-        auto modAttr = ArrayAttr::get(context, mods);
-        auto instAttr = ArrayAttr::get(context, insts);
-        tracker.nla = builder.create<NonLocalAnchor>(
-            builder.getUnknownLoc(), builder.getStringAttr(nlaName), modAttr,
-            instAttr);
-        // The NLA can be removed after this pass.
-        removeTempNLAs.push_back(tracker.nla);
-      }
-      LLVM_DEBUG(llvm::dbgs() << "- OMIR tracker op: " << *tracker.op << "\n");
       if (auto nlaSym = anno.getMember<FlatSymbolRefAttr>("circt.nonlocal"))
         tracker.nla =
             dyn_cast_or_null<NonLocalAnchor>(symtbl->lookup(nlaSym.getAttr()));
+      if (sramIDs.erase(tracker.id))
+        makeTrackerAbsolute(tracker);
       trackers.insert({tracker.id, tracker});
       return true;
     });
@@ -273,6 +234,7 @@ void EmitOMIRPass::runOnOperation() {
     circuitOp.emitError("cannot find SRAM with tracker ID:" + idStr);
     return signalPassFailure();
   }
+
   // If an OMIR output filename has been specified as a pass parameter, override
   // whatever the annotations have configured. If neither are specified we just
   // bail.
@@ -301,6 +263,30 @@ void EmitOMIRPass::runOnOperation() {
   if (anyFailures)
     return signalPassFailure();
 
+  // Delete the temporary NLAs. This requires us to visit all the nodes along
+  // the NLA's path and remove `circt.nonlocal` annotations referring to the
+  // NLA.
+  for (auto nla : removeTempNLAs) {
+    LLVM_DEBUG(llvm::dbgs() << "Removing " << nla << "\n");
+    for (auto modName : nla.modpath().getAsRange<FlatSymbolRefAttr>()) {
+      Operation *mod = symtbl->lookup(modName.getValue());
+      mod->walk([&](InstanceOp instOp) {
+        AnnotationSet::removeAnnotations(instOp, [&](Annotation anno) {
+          auto match =
+              anno.isClass("circt.nonlocal") &&
+              anno.getMember<FlatSymbolRefAttr>("circt.nonlocal").getAttr() ==
+                  nla.sym_nameAttr();
+          if (match)
+            LLVM_DEBUG(llvm::dbgs()
+                       << "- Removing " << anno.getDict() << " from " << modName
+                       << "." << instOp.name() << "\n");
+          return match;
+        });
+      });
+    }
+    nla->erase();
+  }
+
   // Emit the OMIR JSON as a verbatim op.
   auto builder = OpBuilder(circuitOp);
   builder.setInsertionPointAfter(circuitOp);
@@ -310,8 +296,71 @@ void EmitOMIRPass::runOnOperation() {
       context, *outputFilename, /*excludeFromFilelist=*/true);
   verbatimOp->setAttr("output_file", fileAttr);
   verbatimOp.symbolsAttr(ArrayAttr::get(context, symbols));
-  for (auto nla : removeTempNLAs)
-    nla->erase();
+}
+
+/// Make a tracker absolute by adding an NLA to it which starts at the root
+/// module of the circuit. Generates an error if any module along the path is
+/// instantiated multiple times.
+void EmitOMIRPass::makeTrackerAbsolute(Tracker &tracker) {
+  auto *context = &getContext();
+  auto builder = OpBuilder::atBlockBegin(getOperation().getBody());
+
+  // Pick a name for the NLA that doesn't collide with anything.
+  auto opName = tracker.op->getAttrOfType<StringAttr>("name");
+  auto nlaName = circuitNamespace->newName("omir_nla_" + opName.getValue());
+
+  // Assemble the NLA annotation to be put on all the operations participating
+  // in the path.
+  NamedAttrList nlaFields;
+  nlaFields.append("circt.nonlocal",
+                   FlatSymbolRefAttr::get(builder.getStringAttr(nlaName)));
+  nlaFields.append("class", StringAttr::get(context, "circt.nonlocal"));
+  auto nlaAttr = DictionaryAttr::get(context, nlaFields);
+
+  // Get all the paths instantiating this module.
+  auto mod = tracker.op->getParentOfType<FModuleOp>();
+  auto paths = instancePaths->getAbsolutePaths(mod);
+  if (paths.empty()) {
+    tracker.op->emitError("OMIR node targets uninstantiated component `")
+        << opName.getValue() << "`";
+    anyFailures = true;
+    return;
+  }
+  if (paths.size() > 1) {
+    auto diag = tracker.op->emitError("OMIR node targets ambiguous component `")
+                << opName.getValue() << "`";
+    diag.attachNote(tracker.op->getLoc())
+        << "may refer to the following paths:";
+    for (auto path : paths)
+      formatInstancePath(diag.attachNote(tracker.op->getLoc()) << "- ", path);
+    anyFailures = true;
+    return;
+  }
+
+  SmallVector<Attribute> modpath, namepath;
+  for (InstanceOp inst : paths[0]) {
+    // This instance op is part of the NLA path, set the circt.nonlocal
+    // attribute.
+    inst->setAttr(getAnnotationAttrName(),
+                  appendArrayAttr(AnnotationSet(inst).getArrayAttr(), nlaAttr));
+    namepath.push_back(builder.getStringAttr(inst.name()));
+    modpath.push_back(
+        FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
+  }
+  tracker.op->setAttr(
+      getAnnotationAttrName(),
+      appendArrayAttr(AnnotationSet(tracker.op).getArrayAttr(), nlaAttr));
+  modpath.push_back(
+      FlatSymbolRefAttr::get(tracker.op->getParentOfType<FModuleOp>()));
+  namepath.push_back(opName);
+  auto modpathAttr = ArrayAttr::get(context, modpath);
+  auto namepathAttr = ArrayAttr::get(context, namepath);
+  tracker.nla = builder.create<NonLocalAnchor>(builder.getUnknownLoc(),
+                                               builder.getStringAttr(nlaName),
+                                               modpathAttr, namepathAttr);
+  // The NLA can be removed after this pass.
+  removeTempNLAs.push_back(tracker.nla);
+  LLVM_DEBUG(llvm::dbgs() << "- OMIR tracker op: " << *tracker.op << "\n");
 }
 
 /// Emit a source locator into a string, for inclusion in the `info` field of
@@ -589,13 +638,13 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   // specifically refer to.
   StringRef componentName;
   if (isa<WireOp, RegOp, RegResetOp, InstanceOp, NodeOp, MemOp>(tracker.op)) {
-    AnnotationSet::addDontTouch(tracker.op);
-    LLVM_DEBUG(llvm::dbgs()
-               << "Marking OMIR-targeted " << tracker.op << " as dont-touch\n");
     // TODO: This should *really* drop a symbol placeholder into the JSON. But
     // we currently don't have any symbols for these FIRRTL ops. May be solved
     // through NLAs.
     componentName = tracker.op->getAttrOfType<StringAttr>("name").getValue();
+    AnnotationSet::addDontTouch(tracker.op);
+    LLVM_DEBUG(llvm::dbgs() << "Marking OMIR-targeted `" << componentName
+                            << "` as dont-touch\n");
   } else if (!isa<FModuleOp>(tracker.op)) {
     tracker.op->emitError("invalid target for `") << type << "` OMIR";
     anyFailures = true;
