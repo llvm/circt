@@ -1,5 +1,5 @@
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-blackbox-memory{emit-wrapper=true})' %s | FileCheck --check-prefix=WRAPPER %s
-// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-blackbox-memory{emit-wrapper=false})' %s | FileCheck --check-prefix=INLINE %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-blackbox-memory{emit-wrapper=true})' %s | FileCheck --check-prefixes=CHECK,WRAPPER %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-blackbox-memory{emit-wrapper=false})' %s | FileCheck --check-prefixes=CHECK,INLINE %s
 
 firrtl.circuit "Read" {
   firrtl.module @Read() {
@@ -18,7 +18,7 @@ firrtl.circuit "Read" {
   }
 }
 
-// WRAPPER-LABEL: firrtl.circuit "Read" {
+// CHECK-LABEL:  firrtl.circuit "Read" {
 // WRAPPER-NEXT:   firrtl.extmodule @ReadMemory_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.sint<8>) attributes {depth = 16 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // WRAPPER-NEXT:   firrtl.module @ReadMemory(in %read0: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<8>>) {
 // WRAPPER-NEXT:     %ReadMemory_R0_addr, %ReadMemory_R0_en, %ReadMemory_R0_clk, %ReadMemory_R0_data = firrtl.instance ReadMemory @ReadMemory_ext
@@ -44,7 +44,6 @@ firrtl.circuit "Read" {
 // WRAPPER-NEXT:   }
 // WRAPPER-NEXT: }
 
-// INLINE-LABEL: firrtl.circuit "Read" {
 // INLINE-NEXT:   firrtl.extmodule @ReadMemory_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.sint<8>) attributes {depth = 16 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // INLINE-NEXT:   firrtl.module @Read() {
 // INLINE-NEXT:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -74,7 +73,7 @@ firrtl.circuit "Write" {
   }
 }
 
-// WRAPPER-LABEL: firrtl.circuit "Write" {
+// CHECK-LABEL:  firrtl.circuit "Write" {
 // WRAPPER-NEXT:   firrtl.extmodule @WriteMemory_ext(in W0_addr: !firrtl.uint<1>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.sint<8>, in W0_mask: !firrtl.uint<1>) attributes {depth = 1 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // WRAPPER-NEXT:   firrtl.module @WriteMemory(in %write0: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>) {
 // WRAPPER-NEXT:     %WriteMemory_W0_addr, %WriteMemory_W0_en, %WriteMemory_W0_clk, %WriteMemory_W0_data, %WriteMemory_W0_mask = firrtl.instance WriteMemory @WriteMemory_ext
@@ -94,7 +93,6 @@ firrtl.circuit "Write" {
 // WRAPPER-NEXT:   }
 // WRAPPER-NEXT: }
 
-// INLINE-LABEL: firrtl.circuit "Write" {
 // INLINE-NEXT:   firrtl.extmodule @WriteMemory_ext(in W0_addr: !firrtl.uint<1>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.sint<8>, in W0_mask: !firrtl.uint<1>) attributes {depth = 1 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // INLINE-NEXT:   firrtl.module @Write() {
 // INLINE-NEXT:     %WriteMemory_W0_addr, %WriteMemory_W0_en, %WriteMemory_W0_clk, %WriteMemory_W0_data, %WriteMemory_W0_mask = firrtl.instance WriteMemory @WriteMemory_ext
@@ -177,7 +175,7 @@ firrtl.circuit "MemSimple" {
   }
 }
 
-// WRAPPER-LABEL: firrtl.circuit "MemSimple" {
+// CHECK-LABEL:  firrtl.circuit "MemSimple" {
 // WRAPPER-NEXT:   firrtl.extmodule @_M_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.sint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.sint<42>, in W0_mask: !firrtl.uint<1>) attributes {depth = 12 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // WRAPPER-NEXT:   firrtl.module @_M(in %read: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: sint<42>>, in %write: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<42>, mask: uint<1>>) {
 // WRAPPER-NEXT:     %_M_R0_addr, %_M_R0_en, %_M_R0_clk, %_M_R0_data, %_M_W0_addr, %_M_W0_en, %_M_W0_clk, %_M_W0_data, %_M_W0_mask = firrtl.instance _M @_M_ext
@@ -235,7 +233,6 @@ firrtl.circuit "MemSimple" {
 // WRAPPER-NEXT:   }
 // WRAPPER-NEXT: }
 
-// INLINE-LABEL: firrtl.circuit "MemSimple" {
 // INLINE-NEXT:   firrtl.extmodule @_M_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.sint<42>, in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.sint<42>, in W0_mask: !firrtl.uint<1>) attributes {depth = 12 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // INLINE-NEXT:   firrtl.module @MemSimple(in %clock1: !firrtl.clock, in %clock2: !firrtl.clock, in %inpred: !firrtl.uint<1>, in %indata: !firrtl.sint<42>, out %result: !firrtl.sint<42>) {
 // INLINE-NEXT:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
@@ -302,7 +299,7 @@ firrtl.circuit "NameCollision" {
   }
 }
 
-// WRAPPER-LABEL: firrtl.circuit "NameCollision" {
+// CHECK-LABEL:  firrtl.circuit "NameCollision" {
 // WRAPPER-NEXT:   firrtl.extmodule @NameCollisionMemory_ext_1(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.sint<8>, in W0_mask: !firrtl.uint<1>) attributes {depth = 16 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // WRAPPER-NEXT:   firrtl.module @NameCollisionMemory_0(in %write0: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>) {
 // WRAPPER-NEXT:     %NameCollisionMemory_W0_addr, %NameCollisionMemory_W0_en, %NameCollisionMemory_W0_clk, %NameCollisionMemory_W0_data, %NameCollisionMemory_W0_mask = firrtl.instance NameCollisionMemory @NameCollisionMemory_ext_1
@@ -337,7 +334,6 @@ firrtl.circuit "NameCollision" {
 // WRAPPER-NEXT:   }
 // WRAPPER-NEXT: }
 
-// INLINE-LABEL: firrtl.circuit "NameCollision" {
 // INLINE-NEXT:   firrtl.extmodule @NameCollisionMemory_ext_1(in W0_addr: !firrtl.uint<4>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.sint<8>, in W0_mask: !firrtl.uint<1>) attributes {depth = 16 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // INLINE-NEXT:   firrtl.extmodule @NameCollisionMemory_ext_0(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.sint<8>) attributes {depth = 16 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // INLINE-NEXT:   firrtl.module @NameCollisionMemory_ext() {
@@ -379,7 +375,7 @@ firrtl.circuit "Duplicate" {
   }
 }
 
-// WRAPPER-LABEL: firrtl.circuit "Duplicate" {
+// CHECK-LABEL:  firrtl.circuit "Duplicate" {
 // WRAPPER-NEXT:   firrtl.extmodule @WriteMemory_ext(in W0_addr: !firrtl.uint<1>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.sint<8>, in W0_mask: !firrtl.uint<1>) attributes {depth = 1 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // WRAPPER-NEXT:   firrtl.module @WriteMemory(in %write0: !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<8>, mask: uint<1>>) {
 // WRAPPER-NEXT:     %WriteMemory_W0_addr, %WriteMemory_W0_en, %WriteMemory_W0_clk, %WriteMemory_W0_data, %WriteMemory_W0_mask = firrtl.instance WriteMemory @WriteMemory_ext
@@ -416,7 +412,6 @@ firrtl.circuit "Duplicate" {
 // WRAPPER-NEXT:   }
 // WRAPPER-NEXT: }
 
-// INLINE-LABEL: firrtl.circuit "Duplicate" {
 // INLINE-NEXT:   firrtl.extmodule @WriteMemory_ext(in W0_addr: !firrtl.uint<1>, in W0_en: !firrtl.uint<1>, in W0_clk: !firrtl.clock, in W0_data: !firrtl.sint<8>, in W0_mask: !firrtl.uint<1>) attributes {depth = 1 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // INLINE-NEXT:   firrtl.extmodule @ReadMemory_ext(in R0_addr: !firrtl.uint<4>, in R0_en: !firrtl.uint<1>, in R0_clk: !firrtl.clock, out R0_data: !firrtl.sint<8>) attributes {depth = 16 : i64, generator = "FIRRTLMemory", readLatency = 1 : i32, ruw = 0 : i32, writeLatency = 1 : i32}
 // INLINE-NEXT:   firrtl.module @Duplicate() {
