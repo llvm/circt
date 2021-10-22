@@ -36,6 +36,20 @@ constexpr const char *omirFileAnnoClass =
 constexpr const char *omirTrackerAnnoClass =
     "freechips.rocketchip.objectmodel.OMIRTracker";
 
+// Grand Central Annotations
+constexpr const char *dataTapsClass =
+    "sifive.enterprise.grandcentral.DataTapsAnnotation";
+constexpr const char *memTapClass =
+    "sifive.enterprise.grandcentral.MemTapAnnotation";
+constexpr const char *deletedKeyClass =
+    "sifive.enterprise.grandcentral.DeletedDataTapKey";
+constexpr const char *literalKeyClass =
+    "sifive.enterprise.grandcentral.LiteralDataTapKey";
+constexpr const char *referenceKeyClass =
+    "sifive.enterprise.grandcentral.ReferenceDataTapKey";
+constexpr const char *internalKeyClass =
+    "sifive.enterprise.grandcentral.DataTapModuleSignalKey";
+
 } // namespace firrtl
 } // namespace circt
 
