@@ -43,12 +43,6 @@ struct Tracker {
   /// If this tracker is non-local, this is the corresponding anchor.
   NonLocalAnchor nla;
 };
-/// Get annotations or an empty set of annotations.
-static ArrayAttr getAnnotationsFrom(Operation *op) {
-  if (auto annots = op->getAttrOfType<ArrayAttr>(getAnnotationAttrName()))
-    return annots;
-  return ArrayAttr::get(op->getContext(), {});
-}
 
 /// Construct the annotation array with a new thing appended.
 static ArrayAttr appendArrayAttr(ArrayAttr array, Attribute a) {
@@ -108,7 +102,7 @@ private:
 };
 } // namespace
 
-static bool isOmSram(ArrayAttr &nodes, size_t &id) {
+static bool isOMSRAM(ArrayAttr &nodes, IntegerAttr &id) {
 
   for (auto node : nodes) {
     auto dict = node.dyn_cast<DictionaryAttr>();
@@ -117,12 +111,11 @@ static bool isOmSram(ArrayAttr &nodes, size_t &id) {
     auto idAttr = dict.getAs<StringAttr>("id");
     if (!idAttr)
       return false;
-    // id = std::stoi(idAttr.getValue().str());
     if (auto infoAttr = dict.getAs<DictionaryAttr>("fields")) {
       if (auto iP = infoAttr.getAs<DictionaryAttr>("instancePath"))
         if (auto v = iP.getAs<DictionaryAttr>("value")) {
           if (v.getAs<UnitAttr>("omir.tracker"))
-            id = v.getAs<IntegerAttr>("id").getInt();
+            id = v.getAs<IntegerAttr>("id");
         }
       if (auto omTy = infoAttr.getAs<DictionaryAttr>("omType"))
         if (auto valueArr = omTy.getAs<ArrayAttr>("value"))
@@ -147,7 +140,7 @@ void EmitOMIRPass::runOnOperation() {
   symbols.clear();
   symbolIndices.clear();
   CircuitOp circuitOp = getOperation();
-
+  CircuitNamespace circtNameSpace(circuitOp);
   // Gather the relevant annotations from the circuit. On the one hand these are
   // all the actual `OMIRAnnotation`s that need processing and emission, as well
   // as an optional `OMIRFileAnnotation` that overrides the default OMIR output
@@ -155,7 +148,7 @@ void EmitOMIRPass::runOnOperation() {
   SmallVector<ArrayRef<Attribute>> annoNodes;
 
   // Gather the Ids that correspond to SRAM nodes.
-  DenseMap<size_t, bool> sramIDs;
+  DenseSet<Attribute> sramIDs;
   Optional<StringRef> outputFilename = {};
 
   AnnotationSet::removeAnnotations(circuitOp, [&](Annotation anno) {
@@ -181,10 +174,10 @@ void EmitOMIRPass::runOnOperation() {
       }
       LLVM_DEBUG(llvm::dbgs() << "- OMIR: " << nodesAttr << "\n");
       annoNodes.push_back(nodesAttr.getValue());
-      size_t id = 0;
-      if (isOmSram(nodesAttr, id)) {
+      IntegerAttr id;
+      if (isOMSRAM(nodesAttr, id)) {
         LLVM_DEBUG(llvm::dbgs() << "\n Found SRAM :" << nodesAttr << "\n");
-        sramIDs[id] = true;
+        sramIDs.insert(id);
       }
       return true;
     }
@@ -215,11 +208,11 @@ void EmitOMIRPass::runOnOperation() {
       }
       // If the Id matches with one of the Sram Ids, then construct the NLA for
       // instancePath.
-      if (sramIDs.count(tracker.id.getInt())) {
+      if (sramIDs.erase(tracker.id)) {
         auto builder = OpBuilder::atBlockEnd(circuitOp.getBody());
         auto opName = op->getAttrOfType<StringAttr>("name");
         // Construct the NLA name.
-        auto nlaName = opName.getValue() + "__nla__";
+        auto nlaName = circtNameSpace.newName(opName.getValue());
         SmallVector<Attribute> mods;
         SmallVector<Attribute> insts;
         NamedAttrList naAttr;
@@ -238,7 +231,7 @@ void EmitOMIRPass::runOnOperation() {
             // attribute.
             inst->setAttr(
                 getAnnotationAttrName(),
-                appendArrayAttr(getAnnotationsFrom(inst),
+                appendArrayAttr(AnnotationSet(inst).getArrayAttr(),
                                 DictionaryAttr::get(context, naAttr)));
             insts.push_back(builder.getStringAttr(inst.name()));
             mods.push_back(
@@ -247,7 +240,7 @@ void EmitOMIRPass::runOnOperation() {
           break;
         }
         op->setAttr(getAnnotationAttrName(),
-                    appendArrayAttr(getAnnotationsFrom(op),
+                    appendArrayAttr(AnnotationSet(op).getArrayAttr(),
                                     DictionaryAttr::get(context, naAttr)));
         mods.push_back(
             FlatSymbolRefAttr::get(op->getParentOfType<FModuleOp>()));
