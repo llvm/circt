@@ -41,7 +41,15 @@ circuit Foo : %[[
         "id": "OMID:2",
         "fields": [
           {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-          {"info": "", "name": "instancePath", "value": "OMMemberReferenceTarget:~Foo|Bar>mem"}
+          {"info": "", "name": "instancePath", "value": "OMMemberReferenceTarget:~Foo|Bar>mem1"}
+        ]
+      },
+      {
+        "info": "",
+        "id": "OMID:3",
+        "fields": [
+          {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+          {"info": "", "name": "instancePath", "value": "OMMemberReferenceTarget:~Foo|Bar>mem2"}
         ]
       }
     ]
@@ -52,7 +60,15 @@ circuit Foo : %[[
   module Foo :
     inst bar of Bar
   module Bar :
-    inst mem of MySRAM
+    inst mem1 of MySRAM
+    mem mem2 :
+        data-type => UInt<42>
+        depth => 8
+        read-latency => 0
+        write-latency => 1
+        reader => port
+        read-under-write => undefined
+    mem2.port is invalid
 
 ; CHECK-LABEL: FILE "omir.json"
 
@@ -94,4 +110,8 @@ circuit Foo : %[[
 
 ; CHECK-LABEL: "id": "OMID:2"
 ; CHECK-LABEL: "name": "instancePath"
-; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo/bar:Bar>mem"
+; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo/bar:Bar>mem1"
+
+; CHECK-LABEL: "id": "OMID:3"
+; CHECK-LABEL: "name": "instancePath"
+; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo/bar:Bar>mem2"
