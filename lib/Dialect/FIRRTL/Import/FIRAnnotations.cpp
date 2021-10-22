@@ -888,11 +888,12 @@ scatterOMIR(Attribute original, unsigned &annotationID,
   // Convert a string-encoded type to a dictionary that includes the type
   // information and an identifier derived from the current annotationID.  Then
   // increment the annotationID.  Return the constructed dictionary.
-  auto addID = [&](StringRef tpe) -> DictionaryAttr {
+  auto addID = [&](StringRef tpe, StringRef path) -> DictionaryAttr {
     NamedAttrList fields;
     fields.append("id",
                   IntegerAttr::get(IntegerType::get(ctx, 64), annotationID++));
     fields.append("omir.tracker", UnitAttr::get(ctx));
+    fields.append("path", StringAttr::get(ctx, path));
     fields.append("type", StringAttr::get(ctx, tpe));
     return DictionaryAttr::getWithSorted(ctx, fields);
   };
@@ -932,7 +933,7 @@ scatterOMIR(Attribute original, unsigned &annotationID,
           newAnnotations[leafTarget].push_back(
               DictionaryAttr::get(ctx, tracker));
 
-          return addID(tpe);
+          return addID(tpe, value);
         }
 
         // The following are types that may exist, but we do not unbox them.  At

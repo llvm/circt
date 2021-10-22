@@ -262,13 +262,13 @@ circuit Foo: %[[
     inst f of F
 
     ; CHECK-LABEL: firrtl.circuit "Foo"
-    ; CHECK-SAME:    a = {{{[^{}]+}} value = {id = [[aID:[0-9]+]] : i64, omir.tracker, type = {{"OM[a-zA-Z]+"}}
-    ; CHECK-SAME:    b = {{{[^{}]+}} value = {id = [[bID:[0-9]+]] : i64, omir.tracker, type = {{"OM[a-zA-Z]+"}}
-    ; CHECK-SAME:    c = {{{[^{}]+}} value = {id = [[cID:[0-9]+]] : i64, omir.tracker, type = {{"OM[a-zA-Z]+"}}
-    ; CHECK-SAME:    d = {{{[^{}]+}} value = {id = [[dID:[0-9]+]] : i64, omir.tracker, type = {{"OM[a-zA-Z]+"}}
-    ; CHECK-SAME:    e = {{{[^{}]+}} value = {id = [[eID:[0-9]+]] : i64, omir.tracker, type = {{"OM[a-zA-Z]+"}}
-    ; CHECK-SAME:    f = {{{[^{}]+}} value = {id = [[fID:[0-9]+]] : i64, omir.tracker, type = {{"OM[a-zA-Z]+"}}
-    ; CHECK-SAME:    g = {{{[^{}]+}} value = {id = [[gID:[0-9]+]] : i64, omir.tracker, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    a = {{{[^{}]+}} value = {id = [[aID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    b = {{{[^{}]+}} value = {id = [[bID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    c = {{{[^{}]+}} value = {id = [[cID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    d = {{{[^{}]+}} value = {id = [[dID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    e = {{{[^{}]+}} value = {id = [[eID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    f = {{{[^{}]+}} value = {id = [[fID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    g = {{{[^{}]+}} value = {id = [[gID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
     ; CHECK-DAG:   firrtl.nla @[[Foo_eE_E:nla_[0-9]+]]
     ; CHECK-DAG:   firrtl.nla @[[Foo_cC_C:nla_[0-9]+]]
     ; CHECK:       firrtl.module @C

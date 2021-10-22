@@ -35,50 +35,83 @@ circuit Foo : %[[
           {"info": "", "name": "e", "value": "OMDontTouchedReferenceTarget:~Foo|Foo"},
           {"info": "", "name": "f", "value": "OMReferenceTarget:~Foo|Bar"}
         ]
+      },
+      {
+        "info": "",
+        "id": "OMID:2",
+        "fields": [
+          {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+          {"info": "", "name": "instancePath", "value": "OMMemberReferenceTarget:~Foo|Bar>mem1"}
+        ]
+      },
+      {
+        "info": "",
+        "id": "OMID:3",
+        "fields": [
+          {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+          {"info": "", "name": "instancePath", "value": "OMMemberReferenceTarget:~Foo|Bar>mem2"}
+        ]
       }
     ]
   }
 ]]
+  extmodule MySRAM:
+    defname = MySRAM
   module Foo :
     inst bar of Bar
-    skip
   module Bar :
-    skip
+    inst mem1 of MySRAM
+    mem mem2 :
+        data-type => UInt<42>
+        depth => 8
+        read-latency => 0
+        write-latency => 1
+        reader => port
+        read-under-write => undefined
+    mem2.port is invalid
 
 ; CHECK-LABEL: FILE "omir.json"
 
-; CHECK-LABEL: "id": "OMID:0"
-; CHECK-LABEL: "name": "a"
+; CHECK:       "id": "OMID:0"
+; CHECK:       "name": "a"
 ; CHECK-NEXT:  "value": "OMReference:0"
-; CHECK-LABEL: "name": "b"
+; CHECK:       "name": "b"
 ; CHECK-NEXT:  "value": "OMBigInt:42"
-; CHECK-LABEL: "name": "c"
+; CHECK:       "name": "c"
 ; CHECK-NEXT:  "value": "OMLong:ff"
-; CHECK-LABEL: "name": "d"
+; CHECK:       "name": "d"
 ; CHECK-NEXT:  "value": "OMString:hello"
-; CHECK-LABEL: "name": "f"
+; CHECK:       "name": "f"
 ; CHECK-NEXT:  "value": "OMBigDecimal:10.5"
-; CHECK-LABEL: "name": "g"
+; CHECK:       "name": "g"
 ; CHECK-NEXT:  "value": "OMDeleted"
-; CHECK-LABEL: "name": "h"
+; CHECK:       "name": "h"
 ; CHECK-NEXT:  "value": "OMConstant:UInt<2>(\"h1\")"
-; CHECK-LABEL: "name": "i"
+; CHECK:       "name": "i"
 ; CHECK-NEXT:  "value": 42
-; CHECK-LABEL: "name": "j"
+; CHECK:       "name": "j"
 ; CHECK-NEXT:  "value": true
-; CHECK-LABEL: "name": "k"
+; CHECK:       "name": "k"
 ; CHECK-NEXT:  "value": 3.14
 
-; CHECK-LABEL: "id": "OMID:1"
-; CHECK-LABEL: "name": "a"
+; CHECK:       "id": "OMID:1"
+; CHECK:       "name": "a"
 ; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Foo"
-; CHECK-LABEL: "name": "b"
+; CHECK:       "name": "b"
 ; CHECK-NEXT:  "value": "OMInstanceTarget:~Foo|Foo"
-; CHECK-LABEL: "name": "c"
+; CHECK:       "name": "c"
 ; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo"
-; CHECK-LABEL: "name": "d"
+; CHECK:       "name": "d"
 ; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo"
-; CHECK-LABEL: "name": "e"
+; CHECK:       "name": "e"
 ; CHECK-NEXT:  "value": "OMDontTouchedReferenceTarget:~Foo|Foo"
-; CHECK-LABEL: "name": "f"
+; CHECK:       "name": "f"
 ; CHECK-NEXT:  "value": "OMReferenceTarget:~Foo|Bar"
+
+; CHECK:       "id": "OMID:2"
+; CHECK:       "name": "instancePath"
+; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo/bar:Bar>mem1"
+
+; CHECK:       "id": "OMID:3"
+; CHECK:       "name": "instancePath"
+; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo/bar:Bar>mem2"
