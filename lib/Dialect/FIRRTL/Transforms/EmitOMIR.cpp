@@ -351,9 +351,9 @@ void EmitOMIRPass::emitSourceInfo(Location input, SmallString<64> &into) {
   input->walk([&](Location loc) {
     if (FileLineColLoc fileLoc = loc.dyn_cast<FileLineColLoc>()) {
       into.append(into.empty() ? "@[" : " ");
-      auto twine = Twine(fileLoc.getFilename()) + " " +
-                   Twine(fileLoc.getLine()) + ":" + Twine(fileLoc.getColumn());
-      twine.toVector(into);
+      (Twine(fileLoc.getFilename()) + " " + Twine(fileLoc.getLine()) + ":" +
+       Twine(fileLoc.getColumn()))
+          .toVector(into);
     }
     return WalkResult::advance();
   });
