@@ -102,28 +102,26 @@ private:
 };
 } // namespace
 
-static bool isOMSRAM(ArrayAttr &nodes, IntegerAttr &id) {
+static bool isOMSRAM(Attribute &node, IntegerAttr &id) {
 
-  for (auto node : nodes) {
-    auto dict = node.dyn_cast<DictionaryAttr>();
-    if (!dict)
-      return false;
-    auto idAttr = dict.getAs<StringAttr>("id");
-    if (!idAttr)
-      return false;
-    if (auto infoAttr = dict.getAs<DictionaryAttr>("fields")) {
-      if (auto iP = infoAttr.getAs<DictionaryAttr>("instancePath"))
-        if (auto v = iP.getAs<DictionaryAttr>("value")) {
-          if (v.getAs<UnitAttr>("omir.tracker"))
-            id = v.getAs<IntegerAttr>("id");
-        }
-      if (auto omTy = infoAttr.getAs<DictionaryAttr>("omType"))
-        if (auto valueArr = omTy.getAs<ArrayAttr>("value"))
-          for (auto attr : valueArr)
-            if (auto str = attr.dyn_cast<StringAttr>())
-              if (str.getValue().equals("OMString:OMSRAM"))
-                return true;
-    }
+  auto dict = node.dyn_cast<DictionaryAttr>();
+  if (!dict)
+    return false;
+  auto idAttr = dict.getAs<StringAttr>("id");
+  if (!idAttr)
+    return false;
+  if (auto infoAttr = dict.getAs<DictionaryAttr>("fields")) {
+    if (auto iP = infoAttr.getAs<DictionaryAttr>("instancePath"))
+      if (auto v = iP.getAs<DictionaryAttr>("value")) {
+        if (v.getAs<UnitAttr>("omir.tracker"))
+          id = v.getAs<IntegerAttr>("id");
+      }
+    if (auto omTy = infoAttr.getAs<DictionaryAttr>("omType"))
+      if (auto valueArr = omTy.getAs<ArrayAttr>("value"))
+        for (auto attr : valueArr)
+          if (auto str = attr.dyn_cast<StringAttr>())
+            if (str.getValue().equals("OMString:OMSRAM"))
+              return true;
   }
   return false;
 }
@@ -175,9 +173,11 @@ void EmitOMIRPass::runOnOperation() {
       LLVM_DEBUG(llvm::dbgs() << "- OMIR: " << nodesAttr << "\n");
       annoNodes.push_back(nodesAttr.getValue());
       IntegerAttr id;
-      if (isOMSRAM(nodesAttr, id)) {
-        LLVM_DEBUG(llvm::dbgs() << "\n Found SRAM :" << nodesAttr << "\n");
-        sramIDs.insert(id);
+      for (auto node : nodesAttr) {
+        if (isOMSRAM(node, id)) {
+          LLVM_DEBUG(llvm::dbgs() << "\n Found SRAM :" << nodesAttr << "\n");
+          sramIDs.insert(id);
+        }
       }
       return true;
     }
@@ -213,31 +213,36 @@ void EmitOMIRPass::runOnOperation() {
         auto opName = op->getAttrOfType<StringAttr>("name");
         // Construct the NLA name.
         auto nlaName = circtNameSpace.newName(opName.getValue());
-        SmallVector<Attribute> mods;
-        SmallVector<Attribute> insts;
+        SmallVector<Attribute> mods, insts;
         NamedAttrList naAttr;
         naAttr.append("circt.nonlocal",
                       FlatSymbolRefAttr::get(builder.getStringAttr(nlaName)));
         naAttr.append("class", StringAttr::get(context, "circt.nonlocal"));
+        auto mod = op->getParentOfType<FModuleOp>();
         // Get all the paths instantiating this module.
-        auto paths = instancePathCache.getAbsolutePaths(
-            op->getParentOfType<FModuleOp>());
+        auto paths = instancePathCache.getAbsolutePaths(mod);
         // There should be only one path, TODO: add an assert here ?
-        for (auto p : paths) {
-          if (p.empty())
-            continue;
-          for (InstanceOp inst : p) {
-            // This instance op is part of the NLA path, set the circt.nonlocal
-            // attribute.
-            inst->setAttr(
-                getAnnotationAttrName(),
-                appendArrayAttr(AnnotationSet(inst).getArrayAttr(),
-                                DictionaryAttr::get(context, naAttr)));
-            insts.push_back(builder.getStringAttr(inst.name()));
-            mods.push_back(
-                FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
-          }
-          break;
+        if (paths.size() > 1) {
+          mod.emitError("cannot emit OMIR, SRAM has multiple instance paths");
+          anyFailures = true;
+          return true;
+        }
+        auto p = *paths.begin();
+        if (p.empty()) {
+          mod.emitError(
+              "cannot emit OMIR, failed to construct SRAM instance path");
+          anyFailures = true;
+          return true;
+        }
+        for (InstanceOp inst : p) {
+          // This instance op is part of the NLA path, set the circt.nonlocal
+          // attribute.
+          inst->setAttr(getAnnotationAttrName(),
+                        appendArrayAttr(AnnotationSet(inst).getArrayAttr(),
+                                        DictionaryAttr::get(context, naAttr)));
+          insts.push_back(builder.getStringAttr(inst.name()));
+          mods.push_back(
+              FlatSymbolRefAttr::get(inst->getParentOfType<FModuleOp>()));
         }
         op->setAttr(getAnnotationAttrName(),
                     appendArrayAttr(AnnotationSet(op).getArrayAttr(),
@@ -262,6 +267,12 @@ void EmitOMIRPass::runOnOperation() {
     });
   });
 
+  if (!sramIDs.empty()) {
+    SmallVector<char> idStr;
+    sramIDs.begin()->cast<IntegerAttr>().getValue().toStringSigned(idStr);
+    circuitOp.emitError("cannot find SRAM with tracker ID:" + idStr);
+    return signalPassFailure();
+  }
   // If an OMIR output filename has been specified as a pass parameter, override
   // whatever the annotations have configured. If neither are specified we just
   // bail.
@@ -577,7 +588,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   // Serialize any potential component *inside* the module that this target may
   // specifically refer to.
   StringRef componentName;
-  if (isa<WireOp, RegOp, RegResetOp, InstanceOp, NodeOp>(tracker.op)) {
+  if (isa<WireOp, RegOp, RegResetOp, InstanceOp, NodeOp, MemOp>(tracker.op)) {
     AnnotationSet::addDontTouch(tracker.op);
     LLVM_DEBUG(llvm::dbgs()
                << "Marking OMIR-targeted " << tracker.op << " as dont-touch\n");
