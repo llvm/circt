@@ -240,14 +240,29 @@ firrtl.circuit "DeletedTargets" attributes {annotations = [{
 
 firrtl.circuit "SRAMPaths" attributes {annotations = [{
   class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
-  nodes = [{info = #loc, id = "OMID:0", fields = {
-    omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-    instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
-  }}]
+  nodes = [
+    {
+      info = #loc,
+      id = "OMID:0",
+      fields = {
+        omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+        instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
+      }
+    },
+    {
+      info = #loc,
+      id = "OMID:1",
+      fields = {
+        omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+        instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 1, type = "OMMemberReferenceTarget"}}
+      }
+    }
+  ]
 }]} {
   firrtl.extmodule @MySRAM()
   firrtl.module @Submodule() {
-    firrtl.instance mem {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
+    firrtl.instance mem1 {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} @MySRAM()
+    %mem2_port = firrtl.mem Undefined {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}], depth = 8, name = "mem2", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32 } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<42>>
   }
   firrtl.module @SRAMPaths() {
     firrtl.instance sub @Submodule()
@@ -256,9 +271,13 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-LABEL: firrtl.circuit "SRAMPaths" {
 // CHECK-NEXT:    firrtl.extmodule @MySRAM()
 // CHECK-NEXT:    firrtl.module @Submodule() {
-// CHECK-NEXT:      firrtl.instance mem
+// CHECK-NEXT:      firrtl.instance mem1
 // CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
 // CHECK-SAME:        @MySRAM()
+// CHECK-NEXT:      firrtl.mem
+// CHECK-SAME:        {class = "firrtl.transforms.DontTouchAnnotation"}
+// CHECK-SAME:        name = "mem2"
+// CHECK-SAME:        : !firrtl.bundle
 // CHECK-NEXT:    }
 // CHECK-NEXT:    firrtl.module @SRAMPaths() {
 // CHECK-NEXT:      firrtl.instance sub
@@ -268,11 +287,20 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
-// CHECK-SAME:  \22name\22: \22omType\22
-// CHECK-SAME:  \22value\22: [
-// CHECK-SAME:    \22OMString:OMLazyModule\22
-// CHECK-SAME:    \22OMString:OMSRAM\22\0A
-// CHECK-SAME:  ]
-// CHECK-SAME:  \22name\22: \22instancePath\22
-// CHECK-SAME:  22value\22: \22OMMemberReferenceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}>mem\22
+// CHECK-SAME:  \22id\22: \22OMID:0\22
+// CHECK-SAME:    \22name\22: \22omType\22
+// CHECK-SAME:    \22value\22: [
+// CHECK-SAME:      \22OMString:OMLazyModule\22
+// CHECK-SAME:      \22OMString:OMSRAM\22\0A
+// CHECK-SAME:    ]
+// CHECK-SAME:    \22name\22: \22instancePath\22
+// CHECK-SAME:    \22value\22: \22OMMemberReferenceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}>mem1\22
+// CHECK-SAME:  \22id\22: \22OMID:1\22
+// CHECK-SAME:    \22name\22: \22omType\22
+// CHECK-SAME:    \22value\22: [
+// CHECK-SAME:      \22OMString:OMLazyModule\22
+// CHECK-SAME:      \22OMString:OMSRAM\22\0A
+// CHECK-SAME:    ]
+// CHECK-SAME:    \22name\22: \22instancePath\22
+// CHECK-SAME:    \22value\22: \22OMMemberReferenceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}>mem2\22
 // CHECK-SAME:  symbols = [@SRAMPaths, @Submodule]

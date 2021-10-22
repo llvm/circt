@@ -222,13 +222,6 @@ void EmitOMIRPass::runOnOperation() {
     });
   });
 
-  if (!sramIDs.empty()) {
-    SmallVector<char> idStr;
-    sramIDs.begin()->cast<IntegerAttr>().getValue().toStringSigned(idStr);
-    circuitOp.emitError("cannot find SRAM with tracker ID:" + idStr);
-    return signalPassFailure();
-  }
-
   // If an OMIR output filename has been specified as a pass parameter, override
   // whatever the annotations have configured. If neither are specified we just
   // bail.
