@@ -147,11 +147,35 @@ LogicalResult checkParameterInContext(Attribute value, Operation *module,
 /// thus can be used by multiple threads).  The
 /// "freeze" method transitions between the two states.
 class SymbolCache {
+  // Construct a string key with embedded null.  StringMapImpl::FindKey uses
+  // explicit lengths and stores keylength, rather than relying on null
+  // characters.
+  SmallVector<char> mkInnerKey(StringRef mod, StringRef name) const {
+    SmallVector<char> key;
+    key.append(mod.begin(), mod.end());
+    key.push_back(0);
+    key.append(name.begin(), name.end());
+    return key;
+  }
+
 public:
+  struct Item {
+    Operation *op;
+    size_t port;
+  };
+
   /// In the building phase, add symbols.
   void addDefinition(StringAttr symbol, Operation *op) {
     assert(!isFrozen && "cannot mutate a frozen cache");
-    symbolCache[symbol.getValue()] = op;
+    symbolCache[symbol.getValue()] = {op, ~0UL};
+  }
+
+  // Add inner names, which might be ports
+  void addDefinition(StringAttr symbol, StringRef name, Operation *op,
+                     size_t port = ~0UL) {
+    assert(!isFrozen && "cannot mutate a frozen cache");
+    auto key = mkInnerKey(symbol.getValue(), name);
+    symbolCache[StringRef(key.data(), key.size())] = {op, port};
   }
 
   /// Mark the cache as frozen, which allows it to be shared across threads.
@@ -160,7 +184,10 @@ public:
   Operation *getDefinition(StringRef symbol) const {
     assert(isFrozen && "cannot read from this cache until it is frozen");
     auto it = symbolCache.find(symbol);
-    return it != symbolCache.end() ? it->second : nullptr;
+    if (it == symbolCache.end())
+      return nullptr;
+    assert(it->second.port == ~0UL && "Simple Names should never be ports");
+    return it->second.op;
   }
 
   Operation *getDefinition(StringAttr symbol) const {
@@ -171,15 +198,26 @@ public:
     return getDefinition(symbol.getValue());
   }
 
+  Item getDefinition(StringRef symbol, StringRef name) const {
+    assert(isFrozen && "cannot read from this cache until it is frozen");
+    auto key = mkInnerKey(symbol, name);
+    auto it = symbolCache.find(StringRef(key.data(), key.size()));
+    return it == symbolCache.end() ? Item{nullptr, ~0UL} : it->second;
+  }
+
+  Item getDefinition(StringAttr symbol, StringAttr name) const {
+    return getDefinition(symbol.getValue(), name.getValue());
+  }
+
 private:
   bool isFrozen = false;
 
   /// This stores a lookup table from symbol attribute to the operation
   /// (hw.module, hw.instance, etc) that defines it.
   /// TODO: It is super annoying that symbols are *defined* as StringAttr, but
-  /// are then referenced as FlatSymbolRefAttr.  Why can't we have nice pointer
-  /// uniqued things?? :-(
-  llvm::StringMap<Operation *> symbolCache;
+  /// are then referenced as FlatSymbolRefAttr.  Why can't we have nice
+  /// pointer uniqued things?? :-(
+  llvm::StringMap<Item> symbolCache;
 };
 
 } // namespace hw

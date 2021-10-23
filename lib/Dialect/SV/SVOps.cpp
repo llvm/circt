@@ -12,9 +12,9 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/HW/HWAttributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -120,11 +120,13 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   }
 
   if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs(), {SymbolTable::getSymbolAttrName(), hw::InnerName::getInnerNameAttrName()});
+    p.printOptionalAttrDict(op->getAttrs(),
+                            {SymbolTable::getSymbolAttrName(),
+                             hw::InnerName::getInnerNameAttrName()});
   else
     p.printOptionalAttrDict(op->getAttrs(),
                             {"name", SymbolTable::getSymbolAttrName(),
-                            hw::InnerName::getInnerNameAttrName()});
+                             hw::InnerName::getInnerNameAttrName()});
 }
 
 //===----------------------------------------------------------------------===//
@@ -986,7 +988,7 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
   if (!name)
     name = builder.getStringAttr("");
   if (sym_name)
-    odsState.addAttribute(SymbolTable::getSymbolAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
@@ -1156,8 +1158,7 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 
 /// Instances must be at the top level of the hw.module (or within a `ifdef)
 // and are typically at the end of it, so we scan backwards to find them.
-static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name,
-                                                Block *body) {
+static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
     if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
       if (instance.inner_sym() &&
@@ -1178,7 +1179,7 @@ static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name,
 
 hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
-  //FIXME
+  // FIXME
   if (cache)
     if (auto *result = cache->getDefinition(instance().getName()))
       return dyn_cast<hw::InstanceOp>(result);
@@ -1206,6 +1207,12 @@ static LogicalResult verifyBindOp(BindOp op) {
   if (!inst->getAttr("doNotPrint"))
     return op.emitError("Referenced instance isn't marked as doNotPrint");
   return success();
+}
+
+void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
+                   StringAttr name) {
+  auto ref = hw::InnerRefAttr::get(mod, name);
+  odsState.addAttribute("instance", ref);
 }
 
 //===----------------------------------------------------------------------===//

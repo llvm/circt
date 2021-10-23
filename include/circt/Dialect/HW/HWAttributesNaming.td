@@ -10,16 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-
-def InnerDefAttr : AttrDef<HWDialect, "InnerDef"> {
-  let summary = "Marks an entity visible inside a module";
-  let description = [{
-    This works like a symbol, but inside a module and can be applied to non-ops (ports).
-  }];
-  let mnemonic = "innerName";
-  let parameters = (ins "::mlir::StringAttr":$inner_sym);
-}
-
 def InnerRefAttr : AttrDef<HWDialect, "InnerRef"> {
   let summary = "Refer to a name inside a module";
   let description = [{

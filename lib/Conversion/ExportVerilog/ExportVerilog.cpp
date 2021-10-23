@@ -15,7 +15,7 @@
 #include "ExportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
-#include "circt/Dialect/HW/HWAttributes.h" 
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/SV/SVVisitors.h"
@@ -604,15 +604,46 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
-  SmallVector<Operation *, 8> symOps;
+  SmallVector<SmallString<12>, 8> symOps;
+  auto namify = [&](Operation *op, size_t port) {
+    // Get the verilog name of the operation, add the name if not already
+    // done.
+    if (port == ~0UL) {
+      // FIXME: is this really necessary?  Shouldn't all referenced innernames
+      // have been named?
+      if (names.hasName(op)) {
+        return names.getName(op);
+      } else {
+        StringRef symOpName = getSymOpName(op);
+        if (!symOpName.empty()) {
+          return symOpName;
+        } else {
+          op->emitError("cannot get name for symbol");
+          return StringRef("<INVALID>");
+        }
+      }
+    }
+    // port case
+    if (auto mod = dyn_cast<HWModuleOp>(op))
+      return names.getName(mod.getArgument(port));
+    if (auto mod = dyn_cast<HWModuleExternOp>(op))
+      return names.getName(mod.getArgument(port));
+    if (auto mod = dyn_cast<HWModuleGeneratedOp>(op))
+      return names.getName(mod.getArgument(port));
+    llvm_unreachable("Unkown named thing with port");
+  };
+
   for (auto sym : symAttrs) {
     if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
       if (auto symOp = state.symbolCache.getDefinition(fsym))
-        symOps.push_back(symOp);
-    if (auto isym = sym.dyn_cast<InnerRefAttr>())
-      if (auto symOp = state.symbolCache.getDefinition(isym.getName()))
-        symOps.push_back(symOp);
+        symOps.push_back(namify(symOp, ~0UL));
+    if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
+      auto symOp =
+          state.symbolCache.getDefinition(isym.getModule(), isym.getName());
+      symOps.push_back(namify(symOp.op, symOp.port));
+    }
   }
+
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
   // returning true.  This returns false if no substitution is found.
@@ -658,22 +689,7 @@ void EmitterBase::emitTextWithSubstitutions(
         operandEmitter(op->getOperand(operandNo));
       else if ((operandNo - op->getNumOperands()) < numSymOps) {
         unsigned symOpNum = operandNo - op->getNumOperands();
-        Operation *symOp = symOps[symOpNum];
-        // Get the verilog name of the operation, add the name if not already
-        // done.
-        if (names.hasName(symOp)) {
-          os << names.getName(symOp);
-        } else {
-          StringRef symOpName = getSymOpName(symOp);
-          if (!symOpName.empty()) {
-            os << symOpName;
-          } else {
-            std::string opStr;
-            llvm::raw_string_ostream tName(opStr);
-            tName << *symOp;
-            op->emitError("cannot get name for symbol: " + tName.str());
-          }
-        }
+        os << symOps[symOpNum];
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
@@ -3870,10 +3886,17 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   /// non-hierarchical references which we need to be careful about during
   /// emission.
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
+    for (size_t p = 0, e = moduleOp.getNumArguments(); p != e; ++p)
+      for (auto argAttr : moduleOp.getArgAttrs(p))
+        if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
+                                    moduleOp, p);
+    // Deal with ops
     for (Operation &op : *moduleOp.getBodyBlock()) {
       // Populate the symbolCache with all operations that can define a symbol.
-      if (auto name = op.getAttrOfType<StringAttr>(hw::InnerName::getInnerNameAttrName()))
-        symbolCache.addDefinition(name, &op);
+      if (auto name = op.getAttrOfType<StringAttr>(
+              hw::InnerName::getInnerNameAttrName()))
+        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), &op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     }

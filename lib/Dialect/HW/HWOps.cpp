@@ -1002,8 +1002,8 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     // Parsing an optional symbol name doesn't fail, so no need to check the
     // result.
-    (void)parser.parseOptionalSymbolName(sym_nameAttr, "sym_name",
-                                         result.attributes);
+    (void)parser.parseOptionalSymbolName(
+        sym_nameAttr, InnerName::getInnerNameAttrName(), result.attributes);
   }
 
   auto parseInputPort = [&]() -> ParseResult {
@@ -1089,7 +1089,7 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
   });
   p << ')';
   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{
-                              "instanceName", "sym_name", "moduleName",
+                              "instanceName", "inner_sym", "moduleName",
                               "argNames", "resultNames", "parameters"});
 }
 
