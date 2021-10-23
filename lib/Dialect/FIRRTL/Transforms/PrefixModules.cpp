@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "../AnnotationDetails.h"
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -91,6 +92,7 @@ namespace {
 class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   void renameModuleBody(std::string prefix, FModuleOp module);
   void renameModule(FModuleOp module);
+  void renameExtModule(FExtModuleOp extModule);
   void runOnOperation() override;
 
   /// Mutate Grand Central Interface definitions (an Annotation on the circuit)
@@ -133,17 +135,26 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       memOp.nameAttr(StringAttr::get(context, prefix + memOp.name()));
     } else if (auto instanceOp = dyn_cast<InstanceOp>(op)) {
       auto target =
-          dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instanceOp));
+          dyn_cast<FModuleLike>(instanceGraph->getReferencedModule(instanceOp));
 
-      // Skip this rename if the instance is an external module.
-      if (!target)
-        return;
+      // Skip all external modules, unless one of the following conditions
+      // is true:
+      //   - This is a Grand Central Data Tap
+      //   - This is a Grand Central Mem Tap
+      if (auto *extModule = dyn_cast_or_null<FExtModuleOp>(&target)) {
+        auto isDataTap = AnnotationSet(*extModule).hasAnnotation(dataTapsClass);
+        auto isMemTap =
+            AnnotationSet::forPort(*extModule, 0).hasAnnotation(memTapClass);
+        if (!isDataTap && !isMemTap)
+          return;
+      }
+
       // Record that we must prefix the target module with the current prefix.
-      recordPrefix(prefixMap, target.getName(), prefix);
+      recordPrefix(prefixMap, target.moduleName(), prefix);
 
       // Fixup this instance op to use the prefixed module name.  Note that the
       // referenced FModuleOp will be renamed later.
-      auto newTarget = (prefix + getPrefix(target) + target.getName()).str();
+      auto newTarget = (prefix + getPrefix(target) + target.moduleName()).str();
       AnnotationSet instAnnos(instanceOp);
       // If the instance has NonLocalAnchor, then update its module name also.
       // There can be multiple NonLocalAnchors attached to the instance op.
@@ -256,6 +267,44 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   AnnotationSet(newAnnotations, builder.getContext()).applyToOperation(module);
 }
 
+/// Apply prefixes from the `prefixMap` to an external module.  No modifications
+/// are made if there are no prefixes for this external module.  If one prefix
+/// exists, then the external module will be updated in place.  If multiple
+/// prefixes exist, then the original external module will be updated in place
+/// and prefixes _after_ the first will cause the module to be cloned
+/// ("duplicated" in Scala FIRRTL Compiler terminology).  The logic of this
+/// member function is the same as `renameModule` except that there is no module
+/// body to recursively update.
+void PrefixModulesPass::renameExtModule(FExtModuleOp extModule) {
+  // Lookup prefixes for this module.  If none exist, bail out.
+  auto &prefixes = prefixMap[extModule.getName()];
+  if (prefixes.empty())
+    return;
+
+  OpBuilder builder(extModule);
+  builder.setInsertionPointAfter(extModule);
+
+  // Function to apply an outer prefix to an external module.  If the module has
+  // an optional "defname" (a name that will be used to generate Verilog), also
+  // update the defname.
+  auto applyPrefixToNameAndDefName = [&](FExtModuleOp &extModule,
+                                         StringRef prefix) {
+    extModule.setName((prefix + extModule.getName()).str());
+    if (auto defname = extModule.defname())
+      extModule->setAttr("defname",
+                         builder.getStringAttr(prefix + defname.getValue()));
+  };
+
+  // Duplicate the external module if there is more than one prefix.
+  for (auto &prefix : drop_begin(prefixes)) {
+    auto duplicate = cast<FExtModuleOp>(builder.clone(*extModule));
+    applyPrefixToNameAndDefName(duplicate, prefix);
+  }
+
+  // Update the original module with a new prefix.
+  applyPrefixToNameAndDefName(extModule, prefixes.front());
+}
+
 void PrefixModulesPass::runOnOperation() {
   auto *context = &getContext();
   instanceGraph = &getAnalysis<InstanceGraph>();
@@ -289,12 +338,11 @@ void PrefixModulesPass::runOnOperation() {
   // required prefixes to be applied.
   DenseSet<InstanceGraphNode *> visited;
   for (auto *current : *instanceGraph) {
-    auto module = dyn_cast<FModuleOp>(current->getModule());
-    if (!module)
-      continue;
     for (auto &node : llvm::inverse_post_order_ext(current, visited)) {
       if (auto module = dyn_cast<FModuleOp>(node->getModule()))
         renameModule(module);
+      if (auto extModule = dyn_cast<FExtModuleOp>(node->getModule()))
+        renameExtModule(extModule);
     }
   }
 
