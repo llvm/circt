@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
 #include "../AnnotationDetails.h"
+#include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
