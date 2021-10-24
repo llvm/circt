@@ -123,14 +123,10 @@ Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
       .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
           [](auto) { return Flow::Duplex; })
       .Case<InstanceOp>([&](auto inst) {
-        for (auto arg : llvm::enumerate(inst.getResults()))
-          if (arg.value() == val) {
-            if (inst.getPortDirection(arg.index()) == Direction::Out)
-              return accumulatedFlow;
-            else
-              return swap();
-          }
-        llvm_unreachable("couldn't find result in results");
+        auto resultNo = val.cast<OpResult>().getResultNumber();
+        if (inst.getPortDirection(resultNo) == Direction::Out)
+          return accumulatedFlow;
+        return swap();
       })
       .Case<MemOp>([&](auto op) { return swap(); })
       // Anything else acts like a universal source.
