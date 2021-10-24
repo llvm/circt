@@ -192,7 +192,9 @@ firrtl.circuit "GCTInterfacePrefix"
 firrtl.circuit "NLATop" {
 
   firrtl.nla @nla [@NLATop, @Aardvark, @Zebra] ["test", "test", "Zebra"]
+  firrtl.nla @nla_1 [@NLATop, @Aardvark, @Zebra] ["test", "test_1", "Zebra"]
   // CHECK: firrtl.nla @nla [@T_NLATop, @T_Aardvark, @T_A_Z_Zebra] ["test", "test", "Zebra"]
+  // CHECK: firrtl.nla @nla_1 [@T_NLATop, @T_Aardvark, @T_A_Z_Zebra] ["test", "test_1", "Zebra"]
   // CHECK: firrtl.module @T_NLATop
   firrtl.module @NLATop()
     attributes {annotations = [{
@@ -201,8 +203,8 @@ firrtl.circuit "NLATop" {
       inclusive = true
     }]} {
 
-    // CHECK:  firrtl.instance test  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @T_Aardvark()
-    firrtl.instance test  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Aardvark()
+    // CHECK:  firrtl.instance test  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @T_Aardvark()
+    firrtl.instance test  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]}@Aardvark()
 
     // CHECK: firrtl.instance test2 @T_Z_Zebra()
     firrtl.instance test2 @Zebra()
@@ -218,6 +220,7 @@ firrtl.circuit "NLATop" {
 
     // CHECK:  firrtl.instance test  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @T_A_Z_Zebra()
     firrtl.instance test {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]}@Zebra()
+    firrtl.instance test1 {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]}@Zebra()
   }
 
   // CHECK: firrtl.module @T_Z_Zebra
