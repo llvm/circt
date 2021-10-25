@@ -198,7 +198,7 @@ Attribute InnerRefAttr::parse(DialectAsmParser &p, Type type) {
 }
 
 void InnerRefAttr::print(DialectAsmPrinter &p) const {
-  p << "innerNameRef<";
+  p << getMnemonic() << "<";
   p.printSymbolName(getModule().getValue());
   p << "::";
   p.printSymbolName(getName().getValue());

@@ -611,17 +611,13 @@ void EmitterBase::emitTextWithSubstitutions(
     if (port == ~0UL) {
       // FIXME: is this really necessary?  Shouldn't all referenced innernames
       // have been named?
-      if (names.hasName(op)) {
+      if (names.hasName(op))
         return names.getName(op);
-      } else {
-        StringRef symOpName = getSymOpName(op);
-        if (!symOpName.empty()) {
-          return symOpName;
-        } else {
-          op->emitError("cannot get name for symbol");
-          return StringRef("<INVALID>");
-        }
-      }
+      StringRef symOpName = getSymOpName(op);
+      if (!symOpName.empty())
+        return symOpName;
+      op->emitError("cannot get name for symbol");
+      return StringRef("<INVALID>");
     }
     // port case
     if (auto mod = dyn_cast<HWModuleOp>(op))

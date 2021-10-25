@@ -186,7 +186,7 @@ public:
     auto it = symbolCache.find(symbol);
     if (it == symbolCache.end())
       return nullptr;
-    assert(it->second.port == ~0UL && "Simple Names should never be ports");
+    assert(it->second.port == ~0UL && "Module names should never be ports");
     return it->second.op;
   }
 
