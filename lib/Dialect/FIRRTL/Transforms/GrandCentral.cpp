@@ -646,7 +646,7 @@ void GrandCentralPass::runOnOperation() {
     auto diag = op->emitOpError() << "is marked as a GrandCentral '" << msg
                                   << "', but it is instantiated more than once";
     for (auto instance : instances)
-      diag.attachNote(instance->getLoc()) << "parent is instantiated here";
+      diag.attachNote(instance->getLoc()) << "module is instantiated here";
     return None;
   };
 
