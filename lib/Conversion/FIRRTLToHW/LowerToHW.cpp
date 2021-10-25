@@ -2254,7 +2254,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // so that this can be moved outside of module once we're guaranteed to not be
   // a parallel context.
   StringAttr symbol;
-  if (oldInstance->getAttrOfType<mlir::UnitAttr>("lowerToBind").getValue()) {
+  if (oldInstance->getAttrOfType<UnitAttr>("lowerToBind").getValue()) {
     symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
     auto instanceSymbol = SymbolRefAttr::get(symbol);
     auto moduleSymbol = SymbolRefAttr::get(theModule.getNameAttr());

@@ -43,7 +43,7 @@ def InstanceOp : FIRRTLOp<"instance", [
                    "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
-                   CArg<"mlir::UnitAttr","false">:$lowerToBind)>,
+                   CArg<"UnitAttr","false">:$lowerToBind)>,
 
     /// Constructor when you have the target module in hand.
     OpBuilder<(ins "FModuleLike":$module,
