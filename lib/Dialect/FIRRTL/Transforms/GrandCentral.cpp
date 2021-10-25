@@ -628,11 +628,10 @@ void GrandCentralPass::runOnOperation() {
   auto exactlyOneInstance = [&](FModuleOp op,
                                 StringRef msg) -> Optional<InstanceOp> {
     auto uses = getSymbolTable().getSymbolUses(op, circuitOp);
-    SmallVector<InstanceOp, 4> instances;
 
-    for (auto u : uses.getValue())
-      if (auto inst = dyn_cast<InstanceOp>(u.getUser()))
-        instances.push_back(inst);
+    auto instances = llvm::make_filter_range(uses.getValue(), [&](auto u) {
+      return (isa<InstanceOp>(u.getUser()));
+    });
 
     if (instances.empty()) {
       op->emitOpError() << "is marked as a GrandCentral '" << msg
@@ -641,12 +640,13 @@ void GrandCentralPass::runOnOperation() {
     }
 
     if (llvm::hasSingleElement(instances))
-      return *instances.begin();
+      return cast<InstanceOp>((*(instances.begin())).getUser());
 
     auto diag = op->emitOpError() << "is marked as a GrandCentral '" << msg
                                   << "', but it is instantiated more than once";
     for (auto instance : instances)
-      diag.attachNote(instance->getLoc()) << "module is instantiated here";
+      diag.attachNote(instance.getUser()->getLoc())
+          << "parent is instantiated here";
     return None;
   };
 

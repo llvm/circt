@@ -196,15 +196,6 @@ firrtl.circuit "multiInstance2" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
      defName = "Foo",
-     elements = [
-       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        description = "description of foo",
-        name = "foo",
-        id = 1 : i64},
-       {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-        description = "multi\nline\ndescription\nof\nbar",
-        name = "bar",
-        id = 2 : i64}],
      id = 0 : i64,
      name = "View"},
     {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
@@ -225,19 +216,13 @@ firrtl.circuit "multiInstance2" attributes {
        name = "view",
        type = "parent"}
     ]} {
-    %a = firrtl.wire {annotations = [
-      {a},
-      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-       id = 1 : i64}]} : !firrtl.uint<2>
-    %b = firrtl.wire {annotations = [
-      {a},
-      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-       id = 2 : i64}]} : !firrtl.uint<4>
+    %a = firrtl.wire : !firrtl.uint<2>
+    %b = firrtl.wire : !firrtl.uint<4>
     firrtl.instance View_companion @View_companion()
   }
   firrtl.module @multiInstance2() {
-    firrtl.instance dut @DUTE() // expected-note {{module is instantiated here}}
-    firrtl.instance dut1 @DUTE() // expected-note {{module is instantiated here}}
+    firrtl.instance dut @DUTE() // expected-note {{parent is instantiated here}}
+    firrtl.instance dut1 @DUTE() // expected-note {{parent is instantiated here}}
   }
   firrtl.nla @nla1 [@multiInstance1] ["dut"]
   firrtl.nla @nla2 [@multiInstance1] ["dut1"]
