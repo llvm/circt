@@ -140,7 +140,7 @@ firrtl.circuit "Top" {
 
   // CHECK: firrtl.module @T_Z_Zebra
   // CHECK: firrtl.module @T_A_Z_Zebra
-  firrtl.module @Zebra() 
+  firrtl.module @Zebra()
     attributes {annotations = [{
       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
       prefix = "Z_",
@@ -225,7 +225,7 @@ firrtl.circuit "NLATop" {
 
   // CHECK: firrtl.module @T_Z_Zebra
   // CHECK: firrtl.module @T_A_Z_Zebra
-  firrtl.module @Zebra() 
+  firrtl.module @Zebra()
     attributes {annotations = [{
       class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
       prefix = "Z_",
