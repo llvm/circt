@@ -209,10 +209,6 @@ public:
     return getDefinition(symbol.getValue(), name.getValue());
   }
 
-  Operation *getDefinition(FlatSymbolRefAttr symbol) const {
-    return getDefinition(symbol.getAttr());
-  }
-
 private:
   bool isFrozen = false;
 
