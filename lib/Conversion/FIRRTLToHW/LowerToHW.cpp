@@ -2908,7 +2908,7 @@ LogicalResult FIRRTLLowering::visitStmt(StopOp op) {
 /// `lowerVerificationStatement`.
 template <typename... Args>
 static Operation *buildImmediateVerifOp(ImplicitLocOpBuilder &builder,
-                                        StringRef opName, Args &&... args) {
+                                        StringRef opName, Args &&...args) {
   if (opName == "assert")
     return builder.create<sv::AssertOp>(std::forward<Args>(args)...);
   if (opName == "assume")
@@ -2923,7 +2923,7 @@ static Operation *buildImmediateVerifOp(ImplicitLocOpBuilder &builder,
 /// `lowerVerificationStatement`.
 template <typename... Args>
 static Operation *buildConcurrentVerifOp(ImplicitLocOpBuilder &builder,
-                                         StringRef opName, Args &&... args) {
+                                         StringRef opName, Args &&...args) {
   if (opName == "assert")
     return builder.create<sv::AssertConcurrentOp>(std::forward<Args>(args)...);
   if (opName == "assume")
