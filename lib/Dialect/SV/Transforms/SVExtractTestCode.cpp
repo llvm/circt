@@ -182,8 +182,8 @@ static hw::HWModuleOp createModuleForCut(hw::HWModuleOp op,
   b = OpBuilder::atBlockEnd(
       &op->getParentOfType<mlir::ModuleOp>()->getRegion(0).front());
 
-  auto bindOp = b.create<sv::BindOp>(op.getLoc(),
-                                     op.getNameAttr() , inst.inner_symAttr());
+  auto bindOp =
+      b.create<sv::BindOp>(op.getLoc(), op.getNameAttr(), inst.inner_symAttr());
   if (fileName)
     bindOp->setAttr("output_file", fileName);
   return newMod;
