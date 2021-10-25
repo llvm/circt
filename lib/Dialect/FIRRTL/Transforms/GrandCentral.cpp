@@ -627,19 +627,24 @@ void GrandCentralPass::runOnOperation() {
   // the module is not instantiated or is multiply instantiated.
   auto exactlyOneInstance = [&](FModuleOp op,
                                 StringRef msg) -> Optional<InstanceOp> {
-    auto instances = getSymbolTable().getSymbolUses(op, circuitOp);
-    if (!instances.hasValue()) {
+    auto uses = getSymbolTable().getSymbolUses(op, circuitOp);
+
+    auto instances = llvm::make_filter_range(uses.getValue(), [&](auto u) {
+      return (isa<InstanceOp>(u.getUser()));
+    });
+
+    if (instances.empty()) {
       op->emitOpError() << "is marked as a GrandCentral '" << msg
                         << "', but is never instantiated";
       return None;
     }
 
-    if (llvm::hasSingleElement(instances.getValue()))
-      return cast<InstanceOp>((*(instances.getValue().begin())).getUser());
+    if (llvm::hasSingleElement(instances))
+      return cast<InstanceOp>((*(instances.begin())).getUser());
 
     auto diag = op->emitOpError() << "is marked as a GrandCentral '" << msg
                                   << "', but it is instantiated more than once";
-    for (auto instance : instances.getValue())
+    for (auto instance : instances)
       diag.attachNote(instance.getUser()->getLoc())
           << "parent is instantiated here";
     return None;
