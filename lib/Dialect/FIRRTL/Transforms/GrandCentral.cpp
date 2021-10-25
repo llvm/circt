@@ -553,7 +553,8 @@ void GrandCentralPass::runOnOperation() {
       }
 
       maybeExtractInfo = {directory, filename};
-      // Intentional fallthrough.  Extraction info may be needed later.
+      // Do not delete this annotation.  Extraction info may be needed later.
+      return false;
     }
     if (anno.isClass(
             "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation")) {
