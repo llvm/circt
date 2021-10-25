@@ -188,3 +188,42 @@ firrtl.circuit "Foo" attributes {
     firrtl.instance dut @DUT()
   }
 }
+
+
+// ----- 
+// expected-error @+1 {{'firrtl.circuit' op contains a 'companion' with id '0', but does not contain a GrandCentral 'parent' with the same id}}
+firrtl.circuit "multiInstance2" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     id = 0 : i64,
+     name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  // expected-error @+1 {{'firrtl.module' op is marked as a GrandCentral 'parent', but it is instantiated more than once}}
+  firrtl.module @DUTE() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    %a = firrtl.wire : !firrtl.uint<2>
+    %b = firrtl.wire : !firrtl.uint<4>
+    firrtl.instance View_companion @View_companion()
+  }
+  firrtl.module @multiInstance2() {
+    firrtl.instance dut @DUTE() // expected-note {{parent is instantiated here}}
+    firrtl.instance dut1 @DUTE() // expected-note {{parent is instantiated here}}
+  }
+  firrtl.nla @nla1 [@multiInstance1] ["dut"]
+  firrtl.nla @nla2 [@multiInstance1] ["dut1"]
+}

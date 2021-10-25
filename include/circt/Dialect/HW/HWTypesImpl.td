@@ -28,7 +28,6 @@ def IntTypeImpl : HWType<"Int"> {
 
   let mnemonic = "int";
   let parameters = (ins "::mlir::Attribute":$width);
-  //let genVerifyDecl = 1;
 
   let skipDefaultBuilders = 1;
 
@@ -170,6 +169,8 @@ def TypeAliasType : HWType<"TypeAlias"> {
   ];
 
   let extraClassDeclaration = [{
-    Optional<TypedeclOp> getTypeDecl(Operation *op);
+    /// Return the Typedecl referenced by this TypeAlias, given the module to
+    /// look in.  This returns null when the IR is malformed.
+    TypedeclOp getTypeDecl(const SymbolCache &cache);
   }];
 }

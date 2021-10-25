@@ -262,27 +262,27 @@ circuit Foo: %[[
     inst f of F
 
     ; CHECK-LABEL: firrtl.circuit "Foo"
-    ; CHECK-SAME:    a = {{{[^{}]+}} value = {id = [[aID:[0-9]+]] : i64, type = [[aType:"OM[a-zA-Z]+"]]
-    ; CHECK-SAME:    b = {{{[^{}]+}} value = {id = [[bID:[0-9]+]] : i64, type = [[bType:"OM[a-zA-Z]+"]]
-    ; CHECK-SAME:    c = {{{[^{}]+}} value = {id = [[cID:[0-9]+]] : i64, type = [[cType:"OM[a-zA-Z]+"]]
-    ; CHECK-SAME:    d = {{{[^{}]+}} value = {id = [[dID:[0-9]+]] : i64, type = [[dType:"OM[a-zA-Z]+"]]
-    ; CHECK-SAME:    e = {{{[^{}]+}} value = {id = [[eID:[0-9]+]] : i64, type = [[eType:"OM[a-zA-Z]+"]]
-    ; CHECK-SAME:    f = {{{[^{}]+}} value = {id = [[fID:[0-9]+]] : i64, type = [[fType:"OM[a-zA-Z]+"]]
-    ; CHECK-SAME:    g = {{{[^{}]+}} value = {id = [[gID:[0-9]+]] : i64, type = [[gType:"OM[a-zA-Z]+"]]
+    ; CHECK-SAME:    a = {{{[^{}]+}} value = {id = [[aID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    b = {{{[^{}]+}} value = {id = [[bID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    c = {{{[^{}]+}} value = {id = [[cID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    d = {{{[^{}]+}} value = {id = [[dID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    e = {{{[^{}]+}} value = {id = [[eID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    f = {{{[^{}]+}} value = {id = [[fID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
+    ; CHECK-SAME:    g = {{{[^{}]+}} value = {id = [[gID:[0-9]+]] : i64, omir.tracker, path = {{"[a-zA-Z~|:/>]+"}}, type = {{"OM[a-zA-Z]+"}}
     ; CHECK-DAG:   firrtl.nla @[[Foo_eE_E:nla_[0-9]+]]
     ; CHECK-DAG:   firrtl.nla @[[Foo_cC_C:nla_[0-9]+]]
     ; CHECK:       firrtl.module @C
-    ; CHECK-SAME:    {circt.nonlocal = @[[Foo_cC_C]], id = [[cID]] : i64, type = [[cType]]}
+    ; CHECK-SAME:    {circt.nonlocal = @[[Foo_cC_C]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[cID]] : i64}
     ; CHECK:       firrtl.module @D
-    ; CHECK-SAME:    {id = [[dID]] : i64, type = [[dType]]}
+    ; CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[dID]] : i64}
     ; CHECK:       firrtl.module @E
-    ; CHECK-SAME:    {circt.nonlocal = @[[Foo_eE_E]], id = [[eID]] : i64, type = [[eType]]}
+    ; CHECK-SAME:    {circt.nonlocal = @[[Foo_eE_E]], class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[eID]] : i64}
     ; CHECK:       firrtl.module @F
-    ; CHECK-SAME:    {id = [[fID]] : i64, type = [[fType]]}
+    ; CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[fID]] : i64}
     ; CHECK:       firrtl.module @Foo
     ; CHECK-NEXT:  %a = firrtl.wire
-    ; CHECK-SAME:    {id = [[aID]] : i64, type = [[aType]]}
+    ; CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[aID]] : i64}
     ; CHECK-NEXT:  %b = firrtl.wire
-    ; CHECK-SAME:    {id = [[bID]] : i64, type = [[bType]]}
+    ; CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[bID]] : i64}
     ; CHECK-NEXT:  %g = firrtl.wire
-    ; CHECK-SAME:    {id = [[gID]] : i64, type = [[gType]]}
+    ; CHECK-SAME:    {class = "freechips.rocketchip.objectmodel.OMIRTracker", id = [[gID]] : i64}

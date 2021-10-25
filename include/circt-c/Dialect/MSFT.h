@@ -44,35 +44,37 @@ MLIR_CAPI_EXPORTED void mlirMSFTAddPhysLocationAttr(MlirOperation op,
                                                     CirctMSFTPrimitiveType type,
                                                     long x, long y, long num);
 
-bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
-MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext, CirctMSFTPrimitiveType,
-                                           uint64_t x, uint64_t y,
-                                           uint64_t num);
-CirctMSFTPrimitiveType circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute);
-uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
-uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
-uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
+MLIR_CAPI_EXPORTED bool
+    circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute circtMSFTPhysLocationAttrGet(
+    MlirContext, CirctMSFTPrimitiveType, uint64_t x, uint64_t y, uint64_t num);
+MLIR_CAPI_EXPORTED CirctMSFTPrimitiveType
+    circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute);
+MLIR_CAPI_EXPORTED uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute);
+MLIR_CAPI_EXPORTED uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
+MLIR_CAPI_EXPORTED uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
 
-bool circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute);
-MlirAttribute circtMSFTRootedInstancePathAttrGet(MlirContext,
-                                                 MlirAttribute rootSym,
-                                                 MlirAttribute *pathStringAttrs,
-                                                 size_t num);
+MLIR_CAPI_EXPORTED bool
+    circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute
+circtMSFTRootedInstancePathAttrGet(MlirContext, MlirAttribute rootSym,
+                                   MlirAttribute *pathStringAttrs, size_t num);
 
 typedef struct {
   MlirAttribute instance;
   MlirAttribute attr;
 } CirctMSFTSwitchInstanceCase;
 
-bool circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute);
-MlirAttribute circtMSFTSwitchInstanceAttrGet(
+MLIR_CAPI_EXPORTED bool
+    circtMSFTAttributeIsASwitchInstanceAttribute(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute circtMSFTSwitchInstanceAttrGet(
     MlirContext, CirctMSFTSwitchInstanceCase *listOfCases, size_t numCases);
-size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute);
-void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute,
-                                         CirctMSFTSwitchInstanceCase *dstArray,
-                                         size_t space);
+MLIR_CAPI_EXPORTED size_t circtMSFTSwitchInstanceAttrGetNumCases(MlirAttribute);
+MLIR_CAPI_EXPORTED void circtMSFTSwitchInstanceAttrGetCases(
+    MlirAttribute, CirctMSFTSwitchInstanceCase *dstArray, size_t space);
 
-MlirOperation circtMSFTGetInstance(MlirOperation root, MlirAttribute path);
+MLIR_CAPI_EXPORTED MlirOperation circtMSFTGetInstance(MlirOperation root,
+                                                      MlirAttribute path);
 
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
@@ -82,12 +84,13 @@ typedef struct {
   void *ptr;
 } CirctMSFTPrimitiveDB;
 
-CirctMSFTPrimitiveDB circtMSFTCreatePrimitiveDB(MlirContext);
-void circtMSFTDeletePrimitiveDB(CirctMSFTPrimitiveDB self);
-MlirLogicalResult circtMSFTPrimitiveDBAddPrimitive(CirctMSFTPrimitiveDB,
-                                                   MlirAttribute locAndPrim);
-bool circtMSFTPrimitiveDBIsValidLocation(CirctMSFTPrimitiveDB,
-                                         MlirAttribute locAndPrim);
+MLIR_CAPI_EXPORTED CirctMSFTPrimitiveDB circtMSFTCreatePrimitiveDB(MlirContext);
+MLIR_CAPI_EXPORTED void circtMSFTDeletePrimitiveDB(CirctMSFTPrimitiveDB self);
+MLIR_CAPI_EXPORTED MlirLogicalResult circtMSFTPrimitiveDBAddPrimitive(
+    CirctMSFTPrimitiveDB, MlirAttribute locAndPrim);
+MLIR_CAPI_EXPORTED bool
+circtMSFTPrimitiveDBIsValidLocation(CirctMSFTPrimitiveDB,
+                                    MlirAttribute locAndPrim);
 
 //===----------------------------------------------------------------------===//
 // PlacementDB.
@@ -104,17 +107,17 @@ typedef struct {
   MlirOperation op;
 } CirctMSFTPlacedInstance;
 
-CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
-                                                CirctMSFTPrimitiveDB seed);
-void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
+MLIR_CAPI_EXPORTED CirctMSFTPlacementDB
+circtMSFTCreatePlacementDB(MlirOperation top, CirctMSFTPrimitiveDB seed);
+MLIR_CAPI_EXPORTED void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self);
+MLIR_CAPI_EXPORTED
 size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB);
-MlirLogicalResult
-circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB, MlirAttribute loc,
-                                 CirctMSFTPlacedInstance inst);
-bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB,
-                                          MlirAttribute loc,
-                                          CirctMSFTPlacedInstance *out);
-MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
+MLIR_CAPI_EXPORTED MlirLogicalResult circtMSFTPlacementDBAddPlacement(
+    CirctMSFTPlacementDB, MlirAttribute loc, CirctMSFTPlacedInstance inst);
+MLIR_CAPI_EXPORTED bool
+circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB, MlirAttribute loc,
+                                     CirctMSFTPlacedInstance *out);
+MLIR_CAPI_EXPORTED MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
     CirctMSFTPlacementDB, CirctMSFTPrimitiveType prim, uint64_t column,
     uint64_t nearestToY);
 
@@ -123,11 +126,9 @@ typedef void (*CirctMSFTPlacementCallback)(MlirAttribute loc,
                                            void *userData);
 /// Walk all the placements within 'bounds' ([xmin, xmax, ymin, ymax], inclusive
 /// on all sides), with -1 meaning unbounded.
-void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB,
-                                        CirctMSFTPlacementCallback,
-                                        int64_t bounds[4],
-                                        CirctMSFTPrimitiveType primTypeFilter,
-                                        void *userData);
+MLIR_CAPI_EXPORTED void circtMSFTPlacementDBWalkPlacements(
+    CirctMSFTPlacementDB, CirctMSFTPlacementCallback, int64_t bounds[4],
+    CirctMSFTPrimitiveType primTypeFilter, void *userData);
 
 #ifdef __cplusplus
 }

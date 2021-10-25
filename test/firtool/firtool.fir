@@ -5,6 +5,7 @@
 ; RUN: firtool %s --format=fir -verilog |             FileCheck %s --check-prefix=VERILOG
 ; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --mlir --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | FileCheck %s --check-prefix=OMIR
+; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
 
 circuit test_mod : %[[{"a": "a"}]]
 
@@ -28,6 +29,18 @@ circuit test_mod : %[[{"a": "a"}]]
 ; OMIR-SAME:          value = "OMString:hello"}},
 ; OMIR-SAME:      id = "OMID:0",
 ; OMIR-SAME:      info = #loc1}]}
+
+
+; OMIROUT-LABEL: FILE "meta.omir.json" -----
+; OMIROUT:     "info": "@[Foo.scala 32:32]",
+; OMIROUT-NEXT:     "id": "OMID:0",
+; OMIROUT-NEXT:     "fields": [
+; OMIROUT-NEXT:       {
+; OMIROUT-NEXT:         "info": "@[Foo.scala 64:64 Bar.scala 128:128]",
+; OMIROUT-NEXT:         "name": "stringVal",
+; OMIROUT-NEXT:         "value": "OMString:hello"
+; OMIROUT-NEXT:       }
+
 
   module test_mod :
     input clock : Clock

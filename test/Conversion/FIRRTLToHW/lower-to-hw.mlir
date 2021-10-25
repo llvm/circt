@@ -1078,7 +1078,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @FooDUT
-  // CHECK: attributes {firrtl.moduleHierarchyFile
+  // firrtl.moduleHierarchyFile should only be present if both the
+  // MarkDUTAnnotation and the circuit-level ModuleHierarchyAnnotation are
+  // present.
+  // CHECK-NOT: firrtl.moduleHierarchyFile
   firrtl.module @FooDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 

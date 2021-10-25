@@ -93,11 +93,23 @@ class PrefixModulesPass : public PrefixModulesBase<PrefixModulesPass> {
   void renameModule(FModuleOp module);
   void runOnOperation() override;
 
+  /// Mutate Grand Central Interface definitions (an Annotation on the circuit)
+  /// with a field "prefix" containing the prefix for that annotation.  This
+  /// relies on information built up during renameModule and stored in
+  /// interfacePrefixMap.
+  void prefixGrandCentralInterfaces();
+
   /// This is a map from a module name to new prefixes to be applied.
   PrefixMap prefixMap;
 
+  /// A map of Grand Central interface ID to prefix.
+  DenseMap<Attribute, std::string> interfacePrefixMap;
+
   /// Cached instance graph analysis.
   InstanceGraph *instanceGraph = nullptr;
+
+  /// Map of symbol name to NonLocalAnchor op.
+  llvm::StringMap<Operation *> nlaMap;
 
   /// Boolean keeping track of any name changes.
   bool anythingChanged = false;
@@ -126,13 +138,40 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       // Skip this rename if the instance is an external module.
       if (!target)
         return;
-
       // Record that we must prefix the target module with the current prefix.
       recordPrefix(prefixMap, target.getName(), prefix);
 
       // Fixup this instance op to use the prefixed module name.  Note that the
       // referenced FModuleOp will be renamed later.
       auto newTarget = (prefix + getPrefix(target) + target.getName()).str();
+      AnnotationSet instAnnos(instanceOp);
+      // If the instance has NonLocalAnchor, then update its module name also.
+      // There can be multiple NonLocalAnchors attached to the instance op.
+
+      for (Annotation anno : instAnnos) {
+        if (anno.isClass("circt.nonlocal"))
+          if (auto nla = anno.getMember("circt.nonlocal")) {
+            auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
+            auto f = nlaMap.find(nlaName);
+            if (f == nlaMap.end())
+              instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
+            else {
+              auto nlaOp = dyn_cast<NonLocalAnchor>(f->second);
+              // Iterate over the modules of the NonLocalAnchor op, and update
+              // it.
+              SmallVector<Attribute, 4> newMods;
+              for (auto oldMod : nlaOp.modpath()) {
+                if (instanceOp.moduleNameAttr() ==
+                    oldMod.cast<FlatSymbolRefAttr>())
+                  newMods.push_back(FlatSymbolRefAttr::get(context, newTarget));
+                else
+                  newMods.push_back(oldMod.cast<FlatSymbolRefAttr>());
+              }
+              nlaOp->setAttr("modpath", ArrayAttr::get(context, newMods));
+            }
+          }
+      }
+
       instanceOp.moduleNameAttr(FlatSymbolRefAttr::get(context, newTarget));
     }
   });
@@ -179,6 +218,42 @@ void PrefixModulesPass::renameModule(FModuleOp module) {
   auto &outerPrefix = prefixes.front();
   module.setName(outerPrefix + moduleName);
   renameModuleBody((outerPrefix + innerPrefix).str(), module);
+
+  // If this module contains a Grand Central interface, then also apply renames
+  // to that, but only if there are prefixes to apply.
+  if (prefixes.empty())
+    return;
+  AnnotationSet annotations(module);
+  if (!annotations.hasAnnotation(
+          "sifive.enterprise.grandcentral.ViewAnnotation"))
+    return;
+  auto prefixFull = (outerPrefix + innerPrefix).str();
+  SmallVector<Attribute> newAnnotations;
+  for (auto anno : annotations) {
+    if (!anno.isClass("sifive.enterprise.grandcentral.ViewAnnotation")) {
+      newAnnotations.push_back(anno.getDict());
+      continue;
+    }
+
+    NamedAttrList newAnno;
+    for (auto pair : anno.getDict()) {
+      if (pair.first == "name") {
+        newAnno.append(
+            pair.first,
+            builder.getStringAttr(Twine(prefixFull) +
+                                  pair.second.cast<StringAttr>().getValue()));
+        continue;
+      }
+      newAnno.append(pair.first, pair.second);
+    }
+    newAnnotations.push_back(
+        DictionaryAttr::getWithSorted(builder.getContext(), newAnno));
+
+    // Record that we need to apply this prefix to the interface definition.
+    if (anno.getMember<StringAttr>("type").getValue() == "parent")
+      interfacePrefixMap[anno.getMember<IntegerAttr>("id")] = prefixFull;
+  }
+  AnnotationSet(newAnnotations, builder.getContext()).applyToOperation(module);
 }
 
 void PrefixModulesPass::runOnOperation() {
@@ -186,11 +261,29 @@ void PrefixModulesPass::runOnOperation() {
   instanceGraph = &getAnalysis<InstanceGraph>();
   auto circuitOp = getOperation();
 
+  // Record all the NLA ops in the circt.
+  for (auto nla : circuitOp.body().getOps<NonLocalAnchor>())
+    nlaMap[nla.sym_name()] = nla;
+
   // If the main module is prefixed, we have to update the CircuitOp.
   auto mainModule = instanceGraph->getTopLevelModule();
   auto prefix = getPrefix(mainModule);
-  if (!prefix.empty())
-    circuitOp.nameAttr(StringAttr::get(context, prefix + circuitOp.name()));
+  if (!prefix.empty()) {
+    auto newMainModuleName = ((prefix + circuitOp.name()).str());
+    circuitOp.nameAttr(StringAttr::get(context, newMainModuleName));
+    // Now update all the NLAs that have the top level module symbol.
+    for (auto &n : nlaMap) {
+      auto nla = cast<NonLocalAnchor>(n.second);
+      auto oldMods = nla.modpath();
+      if (oldMods.empty())
+        continue;
+      SmallVector<Attribute, 4> newMods(oldMods.begin(), oldMods.end());
+      if (nla.modpath()[0].cast<FlatSymbolRefAttr>().getValue().equals(
+              mainModule.moduleName()))
+        newMods[0] = FlatSymbolRefAttr::get(context, newMainModuleName);
+      nla->setAttr("modpath", ArrayAttr::get(context, newMods));
+    }
+  }
 
   // Walk all Modules in a top-down order.  For each module, look at the list of
   // required prefixes to be applied.
@@ -205,9 +298,56 @@ void PrefixModulesPass::runOnOperation() {
     }
   }
 
+  // Update any interface definitions if needed.
+  prefixGrandCentralInterfaces();
+
   prefixMap.clear();
+  interfacePrefixMap.clear();
   if (!anythingChanged)
     markAllAnalysesPreserved();
+}
+
+/// Mutate circuit-level annotations to add prefix information to Grand Central
+/// (SystemVerilog) interfaces.  Add a "prefix" field to each interface
+/// definition (an annotation with class "AugmentedBundleType") that holds the
+/// prefix that was determined during runOnModule.  It is assumed that this
+/// field did not exist before.
+void PrefixModulesPass::prefixGrandCentralInterfaces() {
+  // Early exit if no interfaces need prefixes.
+  if (interfacePrefixMap.empty())
+    return;
+
+  auto circuit = getOperation();
+  OpBuilder builder(circuit);
+
+  SmallVector<Attribute> newCircuitAnnotations;
+  for (auto anno : AnnotationSet(circuit)) {
+    // Only mutate this annotation if it is an AugmentedBundleType and
+    // interfacePrefixMap has prefix information for it.
+    StringRef prefix;
+    if (anno.isClass("sifive.enterprise.grandcentral.AugmentedBundleType")) {
+      if (auto id = anno.getMember<IntegerAttr>("id"))
+        prefix = interfacePrefixMap[id];
+    }
+
+    // Nothing to do.  Copy the annotation.
+    if (prefix.empty()) {
+      newCircuitAnnotations.push_back(anno.getDict());
+      continue;
+    }
+
+    // Add a "prefix" field with the prefix for this interface.  This is safe to
+    // put at the back and do a `getWithSorted` because the last field is
+    // conveniently called "name".
+    NamedAttrList newAnno(anno.getDict().getValue());
+    newAnno.append("prefix", builder.getStringAttr(prefix));
+    newCircuitAnnotations.push_back(
+        DictionaryAttr::getWithSorted(builder.getContext(), newAnno));
+  }
+
+  // Overwrite the old circuit annotation with the new one created here.
+  AnnotationSet(newCircuitAnnotations, builder.getContext())
+      .applyToOperation(circuit);
 }
 
 std::unique_ptr<mlir::Pass> circt::firrtl::createPrefixModulesPass() {
