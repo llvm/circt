@@ -61,7 +61,9 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
 
       // Insert a dependence into the problem.
       Problem::Dependence dep(memoryDep.source, op);
-      assert(succeeded(problem.insertDependence(dep)));
+      auto depInserted = problem.insertDependence(dep);
+      assert(succeeded(depInserted));
+      (void)depInserted;
 
       // Use the lower bound of the innermost loop for this dependence. This
       // assumes outer loops execute sequentially, i.e. one iteration of the
@@ -81,11 +83,15 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
 
     // Model the implicit value flow from the `yield` to the `if`'s result(s).
     Problem::Dependence depThen(op.getThenBlock()->getTerminator(), op);
-    assert(succeeded(problem.insertDependence(depThen)));
+    auto depInserted = problem.insertDependence(depThen);
+    assert(succeeded(depInserted));
+    (void)depInserted;
 
     if (op.hasElse()) {
       Problem::Dependence depElse(op.getElseBlock()->getTerminator(), op);
-      assert(succeeded(problem.insertDependence(depElse)));
+      depInserted = problem.insertDependence(depElse);
+      assert(succeeded(depInserted));
+      (void)depInserted;
     }
 
     return WalkResult::advance();
@@ -96,7 +102,9 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   auto *anchor = forOp.getBody()->getTerminator();
   forOp.getBody()->walk([&](AffineWriteOpInterface op) {
     Problem::Dependence dep(op, anchor);
-    assert(succeeded(problem.insertDependence(dep)));
+    auto depInserted = problem.insertDependence(dep);
+    assert(succeeded(depInserted));
+    (void)depInserted;
   });
 
   // Handle explicitly computed loop-carried values, i.e. excluding the
@@ -112,7 +120,9 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
 
       for (Operation *iterArgUser : iterArgs[i].getUsers()) {
         Problem::Dependence dep(iterArgDefiner, iterArgUser);
-        assert(succeeded(problem.insertDependence(dep)));
+        auto depInserted = problem.insertDependence(dep);
+        assert(succeeded(depInserted));
+        (void)depInserted;
 
         // Values always flow between subsequent iterations.
         problem.setDistance(dep, 1);
