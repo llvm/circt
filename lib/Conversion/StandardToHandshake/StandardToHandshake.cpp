@@ -1704,7 +1704,7 @@ struct HandshakeInsertBufferPass
 
   void runOnOperation() override {
     if (strategies.empty())
-      strategies = {"cycles"};
+      strategies = {"all"};
 
     for (auto strategy : strategies) {
       if (strategy == "cycles")
