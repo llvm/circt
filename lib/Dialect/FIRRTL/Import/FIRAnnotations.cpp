@@ -619,14 +619,36 @@ static Optional<DictionaryAttr> parseAugmentedType(
       return llvm::Optional<std::pair<std::string, ArrayAttr>>();
 
     // TODO: Enable support for non-local annotations.
-    if (!pathAttr.empty()) {
-      auto diag = mlir::emitError(
-          loc,
-          "Annotation '" + clazz + "' with path '" + path +
-              "' encodes an unsupported non-local target via the 'path' key.");
-
-      diag.attachNote() << "The encoded target is: " << refTarget;
-      return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+    std::string strpath;
+    for (auto p : pathAttr) {
+      auto dict = p.dyn_cast_or_null<DictionaryAttr>();
+      if (!dict) {
+        mlir::emitError(loc,
+                        "Annotation '" + clazz +
+                            " has invalid type (expected DictionaryAttr).");
+        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+      }
+      auto instHolder =
+          tryGetAs<DictionaryAttr>(dict, dict, "_1", loc, clazz, path);
+      auto modHolder =
+          tryGetAs<DictionaryAttr>(dict, dict, "_2", loc, clazz, path);
+      if (!instHolder || !modHolder) {
+        mlir::emitError(loc,
+                        "Annotation '" + clazz +
+                            " has invalid type (expected DictionaryAttr).");
+        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+      }
+      auto inst = tryGetAs<StringAttr>(instHolder, instHolder, "value", loc,
+                                       clazz, path);
+      auto mod =
+          tryGetAs<StringAttr>(modHolder, modHolder, "value", loc, clazz, path);
+      if (!inst || !mod) {
+        mlir::emitError(loc,
+                        "Annotation '" + clazz +
+                            " has invalid type (expected DictionaryAttr).");
+        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+      }
+      strpath += ":" + inst.getValue().str() + "|" + mod.getValue().str();
     }
 
     auto refAttr =
@@ -678,7 +700,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
 
     return llvm::Optional<std::pair<std::string, ArrayAttr>>(
         {(Twine("~" + circuitAttr.getValue() + "|" + moduleAttr.getValue() +
-                ">" + refAttr.getValue()))
+                strpath + ">" + refAttr.getValue()))
              .str(),
          ArrayAttr::get(context, componentAttrs)});
   };
