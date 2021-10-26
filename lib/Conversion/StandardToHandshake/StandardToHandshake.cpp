@@ -124,32 +124,32 @@ static void dotPrintNode(llvm::raw_fd_ostream &outfile, Operation *op,
                      [&](auto) { return "cmerge"; })
                  .Case<handshake::ConditionalBranchOp>(
                      [&](auto) { return "cbranch"; })
-                 .Case<AddIOp>([&](auto) { return "+"; })
-                 .Case<SubIOp>([&](auto) { return "-"; })
-                 .Case<AndOp>([&](auto) { return "&"; })
-                 .Case<OrOp>([&](auto) { return "|"; })
-                 .Case<XOrOp>([&](auto) { return "^"; })
-                 .Case<MulIOp>([&](auto) { return "*"; })
-                 .Case<SignedShiftRightOp, UnsignedShiftRightOp>(
+                 .Case<arith::AddIOp>([&](auto) { return "+"; })
+                 .Case<arith::SubIOp>([&](auto) { return "-"; })
+                 .Case<arith::AndIOp>([&](auto) { return "&"; })
+                 .Case<arith::OrIOp>([&](auto) { return "|"; })
+                 .Case<arith::XOrIOp>([&](auto) { return "^"; })
+                 .Case<arith::MulIOp>([&](auto) { return "*"; })
+                 .Case<arith::ShRSIOp, arith::ShRUIOp>(
                      [&](auto) { return ">>"; })
-                 .Case<ShiftLeftOp>([&](auto) { return "<<"; })
-                 .Case<CmpIOp>([&](CmpIOp op) {
+                 .Case<arith::ShLIOp>([&](auto) { return "<<"; })
+                 .Case<arith::CmpIOp>([&](arith::CmpIOp op) {
                    switch (op.predicate()) {
-                   case CmpIPredicate::eq:
+                   case arith::CmpIPredicate::eq:
                      return "==";
-                   case CmpIPredicate::ne:
+                   case arith::CmpIPredicate::ne:
                      return "!=";
-                   case CmpIPredicate::uge:
-                   case CmpIPredicate::sge:
+                   case arith::CmpIPredicate::uge:
+                   case arith::CmpIPredicate::sge:
                      return ">=";
-                   case CmpIPredicate::ugt:
-                   case CmpIPredicate::sgt:
+                   case arith::CmpIPredicate::ugt:
+                   case arith::CmpIPredicate::sgt:
                      return ">";
-                   case CmpIPredicate::ule:
-                   case CmpIPredicate::sle:
+                   case arith::CmpIPredicate::ule:
+                   case arith::CmpIPredicate::sle:
                      return "<=";
-                   case CmpIPredicate::ult:
-                   case CmpIPredicate::slt:
+                   case arith::CmpIPredicate::ult:
+                   case arith::CmpIPredicate::slt:
                      return "<";
                    }
                    llvm_unreachable("unhandled cmpi predicate");
