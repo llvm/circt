@@ -624,8 +624,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
       auto dict = p.dyn_cast_or_null<DictionaryAttr>();
       if (!dict) {
         mlir::emitError(loc,
-                        "Annotation '" + clazz +
-                            " has invalid type (expected DictionaryAttr).");
+                        "annotation '" + clazz +
+                            " has invalid type (expected DictionaryAttr)");
         return {};
       }
       auto instHolder =
@@ -634,8 +634,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
           tryGetAs<DictionaryAttr>(dict, dict, "_2", loc, clazz, path);
       if (!instHolder || !modHolder) {
         mlir::emitError(loc,
-                        "Annotation '" + clazz +
-                            " has invalid type (expected DictionaryAttr).");
+                        "annotation '" + clazz +
+                            " has invalid type (expected DictionaryAttr)");
         return {};
       }
       auto inst = tryGetAs<StringAttr>(instHolder, instHolder, "value", loc,
@@ -644,8 +644,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
           tryGetAs<StringAttr>(modHolder, modHolder, "value", loc, clazz, path);
       if (!inst || !mod) {
         mlir::emitError(loc,
-                        "Annotation '" + clazz +
-                            " has invalid type (expected DictionaryAttr).");
+                        "annotation '" + clazz +
+                            " has invalid type (expected DictionaryAttr)");
         return {};
       }
       strpath += "/" + inst.getValue().str() + ":" + mod.getValue().str();
@@ -660,8 +660,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
       auto dict = component.dyn_cast_or_null<DictionaryAttr>();
       if (!dict) {
         mlir::emitError(loc,
-                        "Annotation '" + clazz + "' with path '" + cPath +
-                            " has invalid type (expected DictionaryAttr).");
+                        "annotation '" + clazz + "' with path '" + cPath +
+                            " has invalid type (expected DictionaryAttr)");
         return {};
       }
       auto classAttr =
