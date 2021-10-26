@@ -892,7 +892,7 @@ hw.module @verbatim_M2(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A, verbatim_M1 -- verbatim_M2)
   sv.verbatim  "MACRO({{0}}, {{1}}, {{2}} -- {{3}})" 
                 (%add, %xor)  : i8,i8 
-                {symbols = [@verbatim_M1, @verbatim_M2, @verbatim_b1]}
+                {symbols = [@verbatim_M1, @verbatim_M2, #hw.innerNameRef<@verbatim_M1::@verbatim_b1>]}
 }
 
 // CHECK-LABEL: module InlineAutomaticLogicInit(
