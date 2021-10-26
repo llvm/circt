@@ -233,3 +233,57 @@ firrtl.circuit "NLATop" {
     }]} {
   }
 }
+
+// Prefixes should be applied to Grand Central Data or Mem taps.  Check that a
+// multiply instantiated Data/Mem tap is cloned ("duplicated" in Scala FIRRTL
+// Compiler terminology) if needed.  (Note: multiply instantiated taps are
+// completely untrodden territory for Grand Central.  However, the behavior here
+// is the exact same as how normal modules are cloned.)
+//
+// CHECK-LABLE: firrtl.circuit "GCTDataMemTapsPrefix"
+firrtl.circuit "GCTDataMemTapsPrefix" {
+  // CHECK:      firrtl.extmodule @FOO_DataTap
+  // CHECK-SAME:   defname = "FOO_DataTap"
+  firrtl.extmodule @DataTap()
+    attributes {annotations = [{
+      class = "sifive.enterprise.grandcentral.DataTapsAnnotation"}],
+      defname = "DataTap"}
+  // The Mem tap should be prefixed with "FOO_" and cloned to create a copy
+  // prefixed with "BAR_".
+  //
+  // CHECK:      firrtl.extmodule @FOO_MemTap
+  // CHECK-SAME:   defname = "FOO_MemTap"
+  // CHECK:      firrtl.extmodule @BAR_MemTap
+  // CHECK-SAME:   defname = "BAR_MemTap"
+  firrtl.extmodule @MemTap(
+    out mem: !firrtl.vector<uint<1>, 1>
+      [#firrtl.subAnno<fieldID = 1, {
+        class = "sifive.enterprise.grandcentral.MemTapAnnotation",
+        id = 0 : i64,
+        word = 0 : i64}>])
+    attributes {defname = "MemTap"}
+  // Module DUT has a "FOO_" prefix.
+  firrtl.module @DUT()
+    attributes {annotations = [
+      {class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+       prefix = "FOO_",
+       inclusive = true}]} {
+    // CHECK: firrtl.instance d @FOO_DataTap
+    firrtl.instance d @DataTap()
+    // CHECK: firrtl.instance m @FOO_MemTap
+    %a = firrtl.instance m @MemTap(out mem: !firrtl.vector<uint<1>, 1>)
+  }
+  // Module DUT2 has a "BAR_" prefix.
+  firrtl.module @DUT2()
+    attributes {annotations = [
+      {class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+       prefix = "BAR_",
+       inclusive = true}]} {
+    // CHECK: firrtl.instance m @BAR_MemTap
+    %a = firrtl.instance m @MemTap(out mem: !firrtl.vector<uint<1>, 1>)
+  }
+  firrtl.module @GCTDataMemTapsPrefix() {
+    firrtl.instance dut @DUT()
+    firrtl.instance dut @DUT2()
+  }
+}
