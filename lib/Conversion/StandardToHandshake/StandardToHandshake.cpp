@@ -1770,7 +1770,7 @@ struct HandshakeAnalysisPass
     ModuleOp m = getOperation();
 
     for (auto func : m.getOps<handshake::FuncOp>()) {
-      dotPrint(func, "output");
+      dotPrint(func, func.getName());
 
       int count = 0;
       int fork_count = 0;
