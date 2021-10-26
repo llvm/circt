@@ -623,9 +623,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
     for (auto p : pathAttr) {
       auto dict = p.dyn_cast_or_null<DictionaryAttr>();
       if (!dict) {
-        mlir::emitError(loc,
-                        "annotation '" + clazz +
-                            " has invalid type (expected DictionaryAttr)");
+        mlir::emitError(loc, "annotation '" + clazz +
+                                 " has invalid type (expected DictionaryAttr)");
         return {};
       }
       auto instHolder =
@@ -633,9 +632,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
       auto modHolder =
           tryGetAs<DictionaryAttr>(dict, dict, "_2", loc, clazz, path);
       if (!instHolder || !modHolder) {
-        mlir::emitError(loc,
-                        "annotation '" + clazz +
-                            " has invalid type (expected DictionaryAttr)");
+        mlir::emitError(loc, "annotation '" + clazz +
+                                 " has invalid type (expected DictionaryAttr)");
         return {};
       }
       auto inst = tryGetAs<StringAttr>(instHolder, instHolder, "value", loc,
@@ -643,9 +641,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
       auto mod =
           tryGetAs<StringAttr>(modHolder, modHolder, "value", loc, clazz, path);
       if (!inst || !mod) {
-        mlir::emitError(loc,
-                        "annotation '" + clazz +
-                            " has invalid type (expected DictionaryAttr)");
+        mlir::emitError(loc, "annotation '" + clazz +
+                                 " has invalid type (expected DictionaryAttr)");
         return {};
       }
       strpath += "/" + inst.getValue().str() + ":" + mod.getValue().str();
@@ -659,9 +656,8 @@ static Optional<DictionaryAttr> parseAugmentedType(
       auto component = componentAttr[i];
       auto dict = component.dyn_cast_or_null<DictionaryAttr>();
       if (!dict) {
-        mlir::emitError(loc,
-                        "annotation '" + clazz + "' with path '" + cPath +
-                            " has invalid type (expected DictionaryAttr)");
+        mlir::emitError(loc, "annotation '" + clazz + "' with path '" + cPath +
+                                 " has invalid type (expected DictionaryAttr)");
         return {};
       }
       auto classAttr =
