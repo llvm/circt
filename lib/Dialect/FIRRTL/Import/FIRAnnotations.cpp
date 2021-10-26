@@ -618,15 +618,15 @@ static Optional<DictionaryAttr> parseAugmentedType(
     if (!circuitAttr || !moduleAttr || !pathAttr || !componentAttr)
       return llvm::Optional<std::pair<std::string, ArrayAttr>>();
 
-    // TODO: Enable support for non-local annotations.
-    std::string strpath;
+    // Parse non-local annotations.
+    SmallString<32> strpath;
     for (auto p : pathAttr) {
       auto dict = p.dyn_cast_or_null<DictionaryAttr>();
       if (!dict) {
         mlir::emitError(loc,
                         "Annotation '" + clazz +
                             " has invalid type (expected DictionaryAttr).");
-        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+        return {};
       }
       auto instHolder =
           tryGetAs<DictionaryAttr>(dict, dict, "_1", loc, clazz, path);
@@ -636,7 +636,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
         mlir::emitError(loc,
                         "Annotation '" + clazz +
                             " has invalid type (expected DictionaryAttr).");
-        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+        return {};
       }
       auto inst = tryGetAs<StringAttr>(instHolder, instHolder, "value", loc,
                                        clazz, path);
@@ -646,9 +646,9 @@ static Optional<DictionaryAttr> parseAugmentedType(
         mlir::emitError(loc,
                         "Annotation '" + clazz +
                             " has invalid type (expected DictionaryAttr).");
-        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+        return {};
       }
-      strpath += ":" + inst.getValue().str() + "|" + mod.getValue().str();
+      strpath += "/" + inst.getValue().str() + ":" + mod.getValue().str();
     }
 
     auto refAttr =
@@ -662,12 +662,12 @@ static Optional<DictionaryAttr> parseAugmentedType(
         mlir::emitError(loc,
                         "Annotation '" + clazz + "' with path '" + cPath +
                             " has invalid type (expected DictionaryAttr).");
-        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+        return {};
       }
       auto classAttr =
           tryGetAs<StringAttr>(dict, refTarget, "class", loc, clazz, cPath);
       if (!classAttr)
-        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+        return {};
 
       auto value = dict.get("value");
 
@@ -695,7 +695,7 @@ static Optional<DictionaryAttr> parseAugmentedType(
                           "for subfield  or IntegerAttr for subindex).")
               .attachNote()
           << "The value received was: " << value << "\n";
-      return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+      return {};
     }
 
     return llvm::Optional<std::pair<std::string, ArrayAttr>>(
