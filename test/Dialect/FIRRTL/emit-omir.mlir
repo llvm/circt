@@ -246,6 +246,10 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
       id = "OMID:0",
       fields = {
         omType = {info = #loc, index = 0, value = ["OMString:OMLazyModule", "OMString:OMSRAM"]},
+        // We purposefully pick the wrong `OMMemberTarget` here, to check that
+        // it actually gets emitted as a `OMMemberInstanceTarget`. These can
+        // change back and forth as the FIRRTL passes work on the IR, and the
+        // OMIR output should reflect the final target.
         instancePath = {info = #loc, index = 1, value = {omir.tracker, id = 0, type = "OMMemberReferenceTarget"}}
       }
     },
@@ -294,7 +298,7 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-SAME:      \22OMString:OMSRAM\22\0A
 // CHECK-SAME:    ]
 // CHECK-SAME:    \22name\22: \22instancePath\22
-// CHECK-SAME:    \22value\22: \22OMMemberReferenceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}>mem1\22
+// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}/mem1:{{[{][{]2[}][}]}}\22
 // CHECK-SAME:  \22id\22: \22OMID:1\22
 // CHECK-SAME:    \22name\22: \22omType\22
 // CHECK-SAME:    \22value\22: [
@@ -302,5 +306,5 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-SAME:      \22OMString:OMSRAM\22\0A
 // CHECK-SAME:    ]
 // CHECK-SAME:    \22name\22: \22instancePath\22
-// CHECK-SAME:    \22value\22: \22OMMemberReferenceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}>mem2\22
-// CHECK-SAME:  symbols = [@SRAMPaths, @Submodule]
+// CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}/mem2:FIRRTLMem_{{[^\\]+}}\22
+// CHECK-SAME:  symbols = [@SRAMPaths, @Submodule, @MySRAM]
