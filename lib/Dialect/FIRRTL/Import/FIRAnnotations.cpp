@@ -618,15 +618,34 @@ static Optional<DictionaryAttr> parseAugmentedType(
     if (!circuitAttr || !moduleAttr || !pathAttr || !componentAttr)
       return llvm::Optional<std::pair<std::string, ArrayAttr>>();
 
-    // TODO: Enable support for non-local annotations.
-    if (!pathAttr.empty()) {
-      auto diag = mlir::emitError(
-          loc,
-          "Annotation '" + clazz + "' with path '" + path +
-              "' encodes an unsupported non-local target via the 'path' key.");
-
-      diag.attachNote() << "The encoded target is: " << refTarget;
-      return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+    // Parse non-local annotations.
+    SmallString<32> strpath;
+    for (auto p : pathAttr) {
+      auto dict = p.dyn_cast_or_null<DictionaryAttr>();
+      if (!dict) {
+        mlir::emitError(loc, "annotation '" + clazz +
+                                 " has invalid type (expected DictionaryAttr)");
+        return {};
+      }
+      auto instHolder =
+          tryGetAs<DictionaryAttr>(dict, dict, "_1", loc, clazz, path);
+      auto modHolder =
+          tryGetAs<DictionaryAttr>(dict, dict, "_2", loc, clazz, path);
+      if (!instHolder || !modHolder) {
+        mlir::emitError(loc, "annotation '" + clazz +
+                                 " has invalid type (expected DictionaryAttr)");
+        return {};
+      }
+      auto inst = tryGetAs<StringAttr>(instHolder, instHolder, "value", loc,
+                                       clazz, path);
+      auto mod =
+          tryGetAs<StringAttr>(modHolder, modHolder, "value", loc, clazz, path);
+      if (!inst || !mod) {
+        mlir::emitError(loc, "annotation '" + clazz +
+                                 " has invalid type (expected DictionaryAttr)");
+        return {};
+      }
+      strpath += "/" + inst.getValue().str() + ":" + mod.getValue().str();
     }
 
     auto refAttr =
@@ -637,15 +656,14 @@ static Optional<DictionaryAttr> parseAugmentedType(
       auto component = componentAttr[i];
       auto dict = component.dyn_cast_or_null<DictionaryAttr>();
       if (!dict) {
-        mlir::emitError(loc,
-                        "Annotation '" + clazz + "' with path '" + cPath +
-                            " has invalid type (expected DictionaryAttr).");
-        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+        mlir::emitError(loc, "annotation '" + clazz + "' with path '" + cPath +
+                                 " has invalid type (expected DictionaryAttr)");
+        return {};
       }
       auto classAttr =
           tryGetAs<StringAttr>(dict, refTarget, "class", loc, clazz, cPath);
       if (!classAttr)
-        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+        return {};
 
       auto value = dict.get("value");
 
@@ -673,12 +691,12 @@ static Optional<DictionaryAttr> parseAugmentedType(
                           "for subfield  or IntegerAttr for subindex).")
               .attachNote()
           << "The value received was: " << value << "\n";
-      return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+      return {};
     }
 
     return llvm::Optional<std::pair<std::string, ArrayAttr>>(
         {(Twine("~" + circuitAttr.getValue() + "|" + moduleAttr.getValue() +
-                ">" + refAttr.getValue()))
+                strpath + ">" + refAttr.getValue()))
              .str(),
          ArrayAttr::get(context, componentAttrs)});
   };
