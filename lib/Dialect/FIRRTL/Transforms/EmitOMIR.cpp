@@ -571,7 +571,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   }
   auto tracker = trackerIt->second;
 
-  // In case this is a `OMMemberTarget`, handle the case where the component
+  // In case this is an `OMMemberTarget`, handle the case where the component
   // used to be a "reference target" (wire, register, memory, node) when the
   // OMIR was read in, but has been change to an "instance target" during the
   // execution of the compiler. This mainly occurs during mapping of
