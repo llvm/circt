@@ -442,6 +442,22 @@ struct ModuleNameManager {
     return getName(ValueOrOp(op));
   }
 
+  StringRef getName(Operation *op, size_t port) {
+    // Module come in flavors and have ports, but don't have an opInterface in
+    // common to access the ports as blockvalues.  Thus we have to enumerate
+    // modules here.
+    BlockArgument blockArg;
+    if (auto mod = dyn_cast<HWModuleOp>(op))
+      blockArg = mod.getArgument(port);
+    if (auto mod = dyn_cast<HWModuleExternOp>(op))
+      blockArg = mod.getArgument(port);
+    if (auto mod = dyn_cast<HWModuleGeneratedOp>(op))
+      blockArg = mod.getArgument(port);
+    if (!blockArg)
+      llvm_unreachable("Unknown named thing with port");
+    return getName(blockArg);
+  }
+
   bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
 
   bool hasName(Operation *op) {
@@ -605,38 +621,31 @@ void EmitterBase::emitTextWithSubstitutions(
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
   SmallVector<SmallString<12>, 8> symOps;
-  auto namify = [&](Operation *op, size_t port) {
+  auto namify = [&](SymbolCache::Item item) {
     // Get the verilog name of the operation, add the name if not already
     // done.
-    if (port == ~0UL) {
-      // FIXME: is this really necessary?  Shouldn't all referenced innernames
-      // have been named?
-      if (names.hasName(op))
-        return names.getName(op);
-      StringRef symOpName = getSymOpName(op);
-      if (!symOpName.empty())
-        return symOpName;
-      op->emitError("cannot get name for symbol");
-      return StringRef("<INVALID>");
-    }
-    // port case
-    if (auto mod = dyn_cast<HWModuleOp>(op))
-      return names.getName(mod.getArgument(port));
-    if (auto mod = dyn_cast<HWModuleExternOp>(op))
-      return names.getName(mod.getArgument(port));
-    if (auto mod = dyn_cast<HWModuleGeneratedOp>(op))
-      return names.getName(mod.getArgument(port));
-    llvm_unreachable("Unkown named thing with port");
+    auto op = item.getOp();
+    if (item.hasPort())
+      return names.getName(op, item.getPort());
+    // FIXME: is this really necessary?  Shouldn't all referenced innernames
+    // have been named?
+    if (names.hasName(op))
+      return names.getName(op);
+    StringRef symOpName = getSymOpName(op);
+    if (!symOpName.empty())
+      return symOpName;
+    op->emitError("cannot get name for symbol");
+    return StringRef("<INVALID>");
   };
 
   for (auto sym : symAttrs) {
     if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
       if (auto symOp = state.symbolCache.getDefinition(fsym))
-        symOps.push_back(namify(symOp, ~0UL));
+        symOps.push_back(namify(symOp));
     if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
       auto symOp =
           state.symbolCache.getDefinition(isym.getModule(), isym.getName());
-      symOps.push_back(namify(symOp.op, symOp.port));
+      symOps.push_back(namify(symOp));
     }
   }
 

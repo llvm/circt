@@ -147,19 +147,16 @@ LogicalResult checkParameterInContext(Attribute value, Operation *module,
 /// thus can be used by multiple threads).  The
 /// "freeze" method transitions between the two states.
 class SymbolCache {
-  // Construct a string key with embedded null.  StringMapImpl::FindKey uses
-  // explicit lengths and stores keylength, rather than relying on null
-  // characters.
-  SmallVector<char> mkInnerKey(StringRef mod, StringRef name) const {
-    SmallVector<char> key;
-    key.append(mod.begin(), mod.end());
-    key.push_back(0);
-    key.append(name.begin(), name.end());
-    return key;
-  }
-
 public:
-  struct Item {
+  class Item {
+  public:
+    Item(Operation *op) : op(op), port(~0ULL) {}
+    Item(Operation *op, size_t port) : op(op), port(port) {}
+    bool hasPort() const { return port != ~0ULL; }
+    Operation *getOp() const { return op; }
+    size_t getPort() const { return port; }
+
+  private:
     Operation *op;
     size_t port;
   };
@@ -167,7 +164,7 @@ public:
   /// In the building phase, add symbols.
   void addDefinition(StringAttr symbol, Operation *op) {
     assert(!isFrozen && "cannot mutate a frozen cache");
-    symbolCache[symbol.getValue()] = {op, ~0UL};
+    symbolCache.try_emplace(symbol.getValue(), op, ~0UL);
   }
 
   // Add inner names, which might be ports
@@ -175,7 +172,7 @@ public:
                      size_t port = ~0UL) {
     assert(!isFrozen && "cannot mutate a frozen cache");
     auto key = mkInnerKey(symbol.getValue(), name);
-    symbolCache[StringRef(key.data(), key.size())] = {op, port};
+    symbolCache.try_emplace(StringRef(key.data(), key.size()), op, port);
   }
 
   /// Mark the cache as frozen, which allows it to be shared across threads.
@@ -186,8 +183,8 @@ public:
     auto it = symbolCache.find(symbol);
     if (it == symbolCache.end())
       return nullptr;
-    assert(it->second.port == ~0UL && "Module names should never be ports");
-    return it->second.op;
+    assert(!it->second.hasPort() && "Module names should never be ports");
+    return it->second.getOp();
   }
 
   Operation *getDefinition(StringAttr symbol) const {
@@ -218,6 +215,19 @@ private:
   /// are then referenced as FlatSymbolRefAttr.  Why can't we have nice
   /// pointer uniqued things?? :-(
   llvm::StringMap<Item> symbolCache;
+
+  // Construct a string key with embedded null.  StringMapImpl::FindKey uses
+  // explicit lengths and stores keylength, rather than relying on null
+  // characters.
+  SmallVector<char> mkInnerKey(StringRef mod, StringRef name) const {
+    assert(!mod.contains(0) && !name.contains(0) &&
+           "Null character in identifier");
+    SmallVector<char> key;
+    key.append(mod.begin(), mod.end());
+    key.push_back(0);
+    key.append(name.begin(), name.end());
+    return key;
+  }
 };
 
 } // namespace hw

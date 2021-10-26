@@ -1088,9 +1088,10 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
     p << res.getType();
   });
   p << ')';
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{
-                              "instanceName", "inner_sym", "moduleName",
-                              "argNames", "resultNames", "parameters"});
+  p.printOptionalAttrDict(
+      op->getAttrs(),
+      /*elidedAttrs=*/{"instanceName", InnerName::getInnerNameAttrName(),
+                       "moduleName", "argNames", "resultNames", "parameters"});
 }
 
 /// Return the name of the specified input port or null if it cannot be
