@@ -1909,17 +1909,16 @@ static bool isExpressionEmittedInline(Operation *op) {
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
     return true;
 
+  // If this operation has multiple uses, we can't generally inline it.
+  if (!op->getResult(0).hasOneUse()) {
+    // ... unless it is nullary and duplicable, then we can emit it inline.
+    if (op->getNumOperands() != 0 || !isDuplicatableNullaryExpression(op))
+      return false;
+  }
+
   // If it isn't structurally possible to inline this expression, emit it out
   // of line.
-  if (isExpressionUnableToInline(op))
-    return false;
-
-  // If it has a single use, emit it inline.
-  if (op->getResult(0).hasOneUse())
-    return true;
-
-  // If it is nullary and duplicable, then we can emit it inline.
-  return op->getNumOperands() == 0 && isDuplicatableNullaryExpression(op);
+  return !isExpressionUnableToInline(op);
 }
 
 namespace {
