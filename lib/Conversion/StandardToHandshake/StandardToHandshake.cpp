@@ -75,6 +75,117 @@ void removeBasicBlocks(handshake::FuncOp funcOp) {
   }
 }
 
+static bool isControlOp(Operation *op) {
+  return op->hasAttr("control") &&
+         op->getAttrOfType<BoolAttr>("control").getValue();
+}
+
+static void dotPrintNode(llvm::raw_fd_ostream &outfile, Operation *op,
+                         DenseMap<Operation *, unsigned> &opIDs) {
+  outfile << "\t\t";
+  outfile << "\"" + op->getName().getStringRef().str() + "_" +
+                 to_string(opIDs[op]) + "\"";
+  outfile << " [";
+
+  /// Fill color
+  outfile << "fillcolor = ";
+  outfile
+      << llvm::TypeSwitch<Operation *, std::string>(op)
+             .Case<handshake::ForkOp, handshake::LazyForkOp, handshake::MuxOp,
+                   handshake::JoinOp>([&](auto) { return "lavender"; })
+             .Case<handshake::BufferOp>([&](auto) { return "lightgreen"; })
+             .Case<handshake::ReturnOp>([&](auto) { return "gold"; })
+             .Case<handshake::SinkOp, handshake::ConstantOp>(
+                 [&](auto) { return "gainsboro"; })
+             .Case<handshake::MemoryOp, handshake::LoadOp, handshake::StoreOp>(
+                 [&](auto) { return "coral"; })
+             .Case<handshake::MergeOp, handshake::ControlMergeOp,
+                   handshake::BranchOp, handshake::ConditionalBranchOp>(
+                 [&](auto) { return "lightblue"; })
+             .Default([&](auto) { return "moccasin"; });
+
+  /// Shape
+  outfile << ", shape=";
+  if (op->getDialect()->getNamespace() == "handshake")
+    outfile << "box";
+  else
+    outfile << "oval";
+
+  /// Label
+  outfile << ", label=\"";
+  outfile << llvm::TypeSwitch<Operation *, std::string>(op)
+                 .Case<handshake::ConstantOp>([&](auto op) {
+                   return std::to_string(
+                       op->template getAttrOfType<mlir::IntegerAttr>("value")
+                           .getValue()
+                           .getSExtValue());
+                 })
+                 .Case<handshake::ControlMergeOp>(
+                     [&](auto) { return "cmerge"; })
+                 .Case<handshake::ConditionalBranchOp>(
+                     [&](auto) { return "cbranch"; })
+                 .Case<AddIOp>([&](auto) { return "+"; })
+                 .Case<SubIOp>([&](auto) { return "-"; })
+                 .Case<AndOp>([&](auto) { return "&"; })
+                 .Case<OrOp>([&](auto) { return "|"; })
+                 .Case<XOrOp>([&](auto) { return "^"; })
+                 .Case<MulIOp>([&](auto) { return "*"; })
+                 .Case<SignedShiftRightOp, UnsignedShiftRightOp>(
+                     [&](auto) { return ">>"; })
+                 .Case<ShiftLeftOp>([&](auto) { return "<<"; })
+                 .Case<CmpIOp>([&](CmpIOp op) {
+                   switch (op.predicate()) {
+                   case CmpIPredicate::eq:
+                     return "==";
+                   case CmpIPredicate::ne:
+                     return "!=";
+                   case CmpIPredicate::uge:
+                   case CmpIPredicate::sge:
+                     return ">=";
+                   case CmpIPredicate::ugt:
+                   case CmpIPredicate::sgt:
+                     return ">";
+                   case CmpIPredicate::ule:
+                   case CmpIPredicate::sle:
+                     return "<=";
+                   case CmpIPredicate::ult:
+                   case CmpIPredicate::slt:
+                     return "<";
+                   }
+                   llvm_unreachable("unhandled cmpi predicate");
+                 })
+                 .Default([&](auto op) {
+                   auto opDialect = op->getDialect()->getNamespace();
+                   std::string label = op->getName().getStringRef().str();
+                   if (opDialect == "handshake")
+                     label.erase(0, StringLiteral("handshake.").size());
+
+                   return label;
+                 });
+  outfile << "\"";
+
+  /// Style; add dashed border for control nodes
+  outfile << ", style=\"filled";
+  if (isControlOp(op))
+    outfile << ", dashed";
+
+  outfile << "\"";
+
+  outfile << "]\n";
+}
+
+/// Returns true if v is used as a control operand in op
+static bool isControlOperand(Operation *op, Value v) {
+  if (isControlOp(op))
+    return true;
+
+  return llvm::TypeSwitch<Operation *, bool>(op)
+      .Case<handshake::MuxOp, handshake::ConditionalBranchOp>(
+          [&](auto op) { return v == op.getOperand(0); })
+      .Case<handshake::ControlMergeOp>([&](auto) { return true; })
+      .Default([](auto) { return false; });
+}
+
 template <typename FuncOp>
 void dotPrint(FuncOp f, StringRef name) {
   // Prints DOT representation of the dataflow graph, used for debugging.
@@ -96,15 +207,12 @@ void dotPrint(FuncOp f, StringRef name) {
 
   for (Block &block : f) {
     outfile << "\tsubgraph cluster_" + to_string(blockIDs[&block]) + " {\n";
-    outfile << "\tcolor = \"darkgreen\";\n";
-    outfile << "\t\tlabel = \" block " + to_string(blockIDs[&block]) + "\";\n";
+    outfile << "\tnode [shape=box style=filled fillcolor=\"white\"]\n";
+    outfile << "\tcolor = \"darkgreen\"\n";
+    outfile << "\t\tlabel = \" block " + to_string(blockIDs[&block]) + "\"\n";
 
-    for (Operation &op : block) {
-      outfile << "\t\t";
-      outfile << "\"" + op.getName().getStringRef().str() + "_" +
-                     to_string(opIDs[&op]) + "\"";
-      outfile << "\n";
-    }
+    for (Operation &op : block)
+      dotPrintNode(outfile, &op, opIDs);
 
     for (Operation &op : block) {
       if (op.getNumResults() == 0)
@@ -120,9 +228,30 @@ void dotPrint(FuncOp f, StringRef name) {
             outfile << " -> ";
             outfile << "\"" + useOp->getName().getStringRef().str() + "_" +
                            to_string(opIDs[useOp]) + "\"";
+
+            if (isControlOp(&op) || isControlOperand(useOp, result))
+              outfile << " [style=\"dashed\"]\n";
+
             outfile << "\n";
           }
         }
+      }
+    }
+
+    /// Annotate block argument uses
+    for (auto barg : enumerate(block.getArguments())) {
+      std::string argName = "arg" + std::to_string(barg.index());
+      outfile << "\t\"" << argName << "\" [shape=diamond";
+      if (barg.index() == block.getNumArguments() - 1)
+        outfile << ", style=dashed";
+      outfile << "]\n";
+      for (auto useOp : barg.value().getUsers()) {
+        outfile << argName << " -> \""
+                << useOp->getName().getStringRef().str() + "_" +
+                       to_string(opIDs[useOp]) + "\"";
+        if (isControlOperand(useOp, barg.value()))
+          outfile << " [style=\"dashed\"]";
+        outfile << "\n";
       }
     }
 
