@@ -41,7 +41,7 @@ circuit Foo : %[[
         "id": "OMID:2",
         "fields": [
           {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
-          {"info": "", "name": "instancePath", "value": "OMMemberReferenceTarget:~Foo|Bar>mem1"}
+          {"info": "", "name": "instancePath", "value": "OMMemberInstanceTarget:~Foo|Bar>mem1"}
         ]
       },
       {
@@ -110,8 +110,8 @@ circuit Foo : %[[
 
 ; CHECK:       "id": "OMID:2"
 ; CHECK:       "name": "instancePath"
-; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo/bar:Bar>mem1"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/bar:Bar/mem1:MySRAM"
 
 ; CHECK:       "id": "OMID:3"
 ; CHECK:       "name": "instancePath"
-; CHECK-NEXT:  "value": "OMMemberReferenceTarget:~Foo|Foo/bar:Bar>mem2"
+; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/bar:Bar/mem2:FIRRTLMem_{{[^"]+}}"

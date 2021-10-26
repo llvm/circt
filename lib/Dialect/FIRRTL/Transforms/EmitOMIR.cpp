@@ -571,6 +571,14 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
   }
   auto tracker = trackerIt->second;
 
+  // In case this is an `OMMemberTarget`, handle the case where the component
+  // used to be a "reference target" (wire, register, memory, node) when the
+  // OMIR was read in, but has been change to an "instance target" during the
+  // execution of the compiler. This mainly occurs during mapping of
+  // `firrtl.mem` operations to a corresponding `firrtl.instance`.
+  if (type == "OMMemberReferenceTarget" && isa<InstanceOp, MemOp>(tracker.op))
+    type = "OMMemberInstanceTarget";
+
   // Serialize the target circuit first.
   SmallString<64> target(type);
   target.append(":~");
@@ -634,8 +642,30 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     return jsonStream.value("<error>");
   }
   if (!componentName.empty()) {
-    target.push_back('>');
-    target.append(componentName);
+    // Check if the targeted component is going to be emitted as an instance.
+    // This is trivially the case for `InstanceOp`s, but also for `MemOp`s that
+    // get converted to an instance during lowering to HW dialect and generator
+    // callout.
+    [&] {
+      if (type == "OMMemberInstanceTarget") {
+        if (auto instOp = dyn_cast<InstanceOp>(tracker.op)) {
+          target.push_back('/');
+          target.append(instOp.name());
+          target.push_back(':');
+          target.append(addSymbol(instOp.moduleNameAttr()));
+          return;
+        }
+        if (auto memOp = dyn_cast<MemOp>(tracker.op)) {
+          target.push_back('/');
+          target.append(memOp.name());
+          target.push_back(':');
+          target.append(memOp.getSummary().getFirMemoryName());
+          return;
+        }
+      }
+      target.push_back('>');
+      target.append(componentName);
+    }();
   }
 
   jsonStream.value(target);
