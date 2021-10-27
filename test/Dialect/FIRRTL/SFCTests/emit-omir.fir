@@ -51,6 +51,13 @@ circuit Foo : %[[
           {"info": "", "name": "omType", "value": ["OMString:OMLazyModule", "OMString:OMSRAM"]},
           {"info": "", "name": "instancePath", "value": "OMMemberReferenceTarget:~Foo|Bar>mem2"}
         ]
+      },
+      {
+        "info": "",
+        "id": "OMID:4",
+        "fields": [
+          {"info": "", "name": "containingModule", "value": "OMInstanceTarget:~Foo|Foo"}
+        ]
       }
     ]
   }
@@ -58,7 +65,10 @@ circuit Foo : %[[
   extmodule MySRAM:
     defname = MySRAM
   module Foo :
+    input x : UInt<17>
+    output y : UInt<19>
     inst bar of Bar
+    y <= x
   module Bar :
     inst mem1 of MySRAM
     mem mem2 :
@@ -115,3 +125,20 @@ circuit Foo : %[[
 ; CHECK:       "id": "OMID:3"
 ; CHECK:       "name": "instancePath"
 ; CHECK-NEXT:  "value": "OMMemberInstanceTarget:~Foo|Foo/bar:Bar/mem2:FIRRTLMem_{{[^"]+}}"
+
+; CHECK:       "id": "OMID:4"
+; CHECK:       "name": "containingModule"
+; CHECK-NEXT:  "value": "OMInstanceTarget:~Foo|Foo"
+; CHECK:       "name": "ports"
+; CHECK-NEXT:  "value": [
+; CHECK-NEXT:    {
+; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>x",
+; CHECK-NEXT:      "direction": "OMString:Input",
+; CHECK-NEXT:      "width": "OMBigInt:17"
+; CHECK-NEXT:    }
+; CHECK-NEXT:    {
+; CHECK-NEXT:      "ref": "OMDontTouchedReferenceTarget:~Foo|Foo>y",
+; CHECK-NEXT:      "direction": "OMString:Output",
+; CHECK-NEXT:      "width": "OMBigInt:19"
+; CHECK-NEXT:    }
+; CHECK-NEXT:  ]
