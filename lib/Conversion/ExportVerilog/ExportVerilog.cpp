@@ -442,6 +442,22 @@ struct ModuleNameManager {
     return getName(ValueOrOp(op));
   }
 
+  StringRef getName(Operation *op, size_t port) {
+    // Module come in flavors and have ports, but don't have an opInterface in
+    // common to access the ports as blockvalues.  Thus we have to enumerate
+    // modules here.
+    BlockArgument blockArg;
+    if (auto mod = dyn_cast<HWModuleOp>(op))
+      blockArg = mod.getArgument(port);
+    if (auto mod = dyn_cast<HWModuleExternOp>(op))
+      blockArg = mod.getArgument(port);
+    if (auto mod = dyn_cast<HWModuleGeneratedOp>(op))
+      blockArg = mod.getArgument(port);
+    if (!blockArg)
+      llvm_unreachable("Unknown named thing with port");
+    return getName(blockArg);
+  }
+
   bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
 
   bool hasName(Operation *op) {
@@ -604,11 +620,40 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
-  SmallVector<Operation *, 8> symOps;
-  for (auto sym : symAttrs)
-    if (auto symOp =
-            state.symbolCache.getDefinition(sym.cast<FlatSymbolRefAttr>()))
-      symOps.push_back(symOp);
+  SmallVector<SmallString<12>, 8> symOps;
+  auto namify = [&](SymbolCache::Item item) {
+    // Get the verilog name of the operation, add the name if not already
+    // done.
+    auto op = item.getOp();
+    if (item.hasPort())
+      return names.getName(op, item.getPort());
+    // FIXME: is this really necessary?  Shouldn't all referenced innernames
+    // have been named?
+    if (!names.hasName(op)) {
+      llvm::errs() << "ADL: @" << op->getAttrOfType<StringAttr>("sym_name")
+                   << "\n";
+      op->dump();
+      llvm::errs() << "**END\n";
+    }
+    if (names.hasName(op))
+      return names.getName(op);
+    StringRef symOpName = getSymOpName(op);
+    if (!symOpName.empty())
+      return symOpName;
+    op->emitError("cannot get name for symbol");
+    return StringRef("<INVALID>");
+  };
+
+  for (auto sym : symAttrs) {
+    if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
+      if (auto symOp = state.symbolCache.getDefinition(fsym))
+        symOps.push_back(namify(symOp));
+    if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
+      auto symOp =
+          state.symbolCache.getDefinition(isym.getModule(), isym.getName());
+      symOps.push_back(namify(symOp));
+    }
+  }
 
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
@@ -655,22 +700,7 @@ void EmitterBase::emitTextWithSubstitutions(
         operandEmitter(op->getOperand(operandNo));
       else if ((operandNo - op->getNumOperands()) < numSymOps) {
         unsigned symOpNum = operandNo - op->getNumOperands();
-        Operation *symOp = symOps[symOpNum];
-        // Get the verilog name of the operation, add the name if not already
-        // done.
-        if (names.hasName(symOp)) {
-          os << names.getName(symOp);
-        } else {
-          StringRef symOpName = getSymOpName(symOp);
-          if (!symOpName.empty()) {
-            os << symOpName;
-          } else {
-            std::string opStr;
-            llvm::raw_string_ostream tName(opStr);
-            tName << *symOp;
-            op->emitError("cannot get name for symbol: " + tName.str());
-          }
-        }
+        os << symOps[symOpNum];
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
@@ -3866,20 +3896,28 @@ struct SharedEmitterState {
 /// of an explicit output file attribute.
 void SharedEmitterState::gatherFiles(bool separateModules) {
 
-  /// Collect all the instance symbols from the specified module and add them
-  /// to the IRCache.  Instances only exist at the top level of the module.
-  /// Also keep track of any modules that contain bind operations.  These are
-  /// non-hierarchical references which we need to be careful about during
-  /// emission.
+  /// Collect all the inner names from the specified module and add them to the
+  /// IRCache.  Declarations (named things) only exist at the top level of the
+  /// module.  Also keep track of any modules that contain bind operations.
+  /// These are non-hierarchical references which we need to be careful about
+  /// during emission.
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
     for (Operation &op : *moduleOp.getBodyBlock()) {
       // Populate the symbolCache with all operations that can define a symbol.
-      if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-        if (auto name = symOp.getNameAttr())
-          symbolCache.addDefinition(name, symOp);
+      if (auto name = op.getAttrOfType<StringAttr>(
+              hw::InnerName::getInnerNameAttrName()))
+        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), &op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     }
+  };
+  /// Collect any port marked as being referenced via symbol.
+  auto collectPorts = [&](auto moduleOp) {
+    for (size_t p = 0, e = moduleOp.getNumArguments(); p != e; ++p)
+      for (auto argAttr : moduleOp.getArgAttrs(p))
+        if (auto sym = argAttr.second.template dyn_cast<FlatSymbolRefAttr>())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
+                                    moduleOp, p);
   };
 
   SmallString<32> outputPath;
@@ -3942,6 +3980,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<HWModuleOp>([&](auto mod) {
           // Build the IR cache.
           symbolCache.addDefinition(mod.getNameAttr(), mod);
+          collectPorts(mod);
           collectInstanceSymbolsAndBinds(mod);
 
           // Emit into a separate file named after the module.
@@ -3966,9 +4005,10 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<HWModuleExternOp>([&](auto op) {
+        .Case<HWModuleExternOp>([&](HWModuleExternOp op) {
           // Build the IR cache.
           symbolCache.addDefinition(op.getNameAttr(), op);
+          collectPorts(op);
           if (separateModules)
             separateFile(op, "extern_modules.sv");
           else
@@ -3982,7 +4022,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           } else
             separateFile(op, "");
         })
-        .Case<HWGeneratorSchemaOp>([&](auto schemaOp) {
+        .Case<HWGeneratorSchemaOp>([&](HWGeneratorSchemaOp schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
         })
         .Case<TypeScopeOp>([&](TypeScopeOp op) {

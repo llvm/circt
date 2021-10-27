@@ -44,7 +44,7 @@ class InOutElementConstraint<string value, string inoutValue>
                    inoutValue, value, "sv::getInOutElementType($_self)">;
 
 // This type is an array of FlatSymbolRefAttr.
-//TODO: This should be moved to mlir, it does not depend on HW dialect.
+// TODO: This should be moved to mlir, it does not depend on HW dialect.
 def SymRefArrayAttr: ArrayAttrBase<
     And<[
       // Guarantee this is an ArrayAttr first
@@ -53,6 +53,19 @@ def SymRefArrayAttr: ArrayAttrBase<
       CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
             "[&](::mlir::Attribute attr) { return attr.isa<"
             "::mlir::FlatSymbolRefAttr>();})">]>,
+    ""> {
+  let constBuilderCall = "$_builder.getArrayAttr($0)";
+}
+
+// Like a SymRefArrayAttr, but can also refer to names inside modules.
+def NameRefArrayAttr: ArrayAttrBase<
+    And<[
+      // Guarantee this is an ArrayAttr first
+      CPred<"$_self.isa<::mlir::ArrayAttr>()">,
+      // Guarantee all elements are symbols or name refs
+      CPred<"::llvm::all_of($_self.cast<::mlir::ArrayAttr>(), "
+            "[&](::mlir::Attribute attr) { return attr.isa<"
+            "::mlir::FlatSymbolRefAttr, ::hw::InnerRefAttr>();})">]>,
     ""> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
@@ -68,3 +81,4 @@ def StringArrayAttr: ArrayAttrBase<
     ""> {
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
+

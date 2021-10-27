@@ -22,7 +22,7 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     } else {
   // CHECK-NEXT:     if (PRINTF_COND_ & 1'bx & 1'bz & 1'bz & cond & forceWire)
       %tmp = sv.verbatim.expr "PRINTF_COND_" : () -> i1
-      %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [@wire1] }
+      %verb_tmp = sv.verbatim.expr "{{0}}" : () -> i1 {symbols = [#hw.innerNameRef<@M1::@wire1>] }
       %tmp1 = sv.constantX : i1
       %tmp2 = sv.constantZ : i1
       %tmp3 = comb.and %tmp, %tmp1, %tmp2, %tmp2, %cond, %verb_tmp : i1
@@ -844,7 +844,7 @@ hw.module @DontDuplicateSideEffectingVerbatim() {
     // CHECK: automatic logic [41:0] _T = SIDEEFFECT;
     %tmp = sv.verbatim.expr.se "SIDEEFFECT" : () -> i42
     // CHECK: automatic logic [41:0] _T_0 = b;
-    %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [@regSym]}
+    %verb_tmp = sv.verbatim.expr.se "{{0}}" : () -> i42 {symbols = [#hw.innerNameRef<@DontDuplicateSideEffectingVerbatim::@regSym>]}
     // CHECK: a = _T;
     sv.bpassign %a, %tmp : i42
     // CHECK: a = _T;
@@ -877,10 +877,10 @@ hw.module @verbatim_M1(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A reg=reg1, verbatim_M2, verbatim_inout_2, aa1,reg2 = reg2 )
   sv.verbatim  "MACRO({{0}}, {{1}} reg={{2}}, {{3}}, {{4}}, {{5}},reg2 = {{6}} )" 
           (%add, %xor)  : i8,i8
-          {symbols = [@verbatim_reg1, @verbatim_M2, 
-          @verbatim_inout_2, @verbatim_b1, @verbatim_reg2]}
+          {symbols = [#hw.innerNameRef<@verbatim_M1::@verbatim_reg1>, @verbatim_M2, 
+          @verbatim_inout_2, #hw.innerNameRef<@verbatim_M1::@verbatim_b1>, #hw.innerNameRef<@verbatim_M1::@verbatim_reg2>]}
   // CHECK: Wire : wire25
-  sv.verbatim " Wire : {{0}}" {symbols = [@verbatim_wireSym1]}
+  sv.verbatim " Wire : {{0}}" {symbols = [#hw.innerNameRef<@verbatim_M1::@verbatim_wireSym1>]}
 }
 
 // CHECK-LABEL: module verbatim_M2(
@@ -892,7 +892,7 @@ hw.module @verbatim_M2(%clock : i1, %cond : i1, %val : i8) {
   // CHECK: MACRO(val + 8'h2A, val ^ 8'h2A, verbatim_M1 -- verbatim_M2)
   sv.verbatim  "MACRO({{0}}, {{1}}, {{2}} -- {{3}})" 
                 (%add, %xor)  : i8,i8 
-                {symbols = [@verbatim_M1, @verbatim_M2, @verbatim_b1]}
+                {symbols = [@verbatim_M1, @verbatim_M2, #hw.innerNameRef<@verbatim_M1::@verbatim_b1>]}
 }
 
 // CHECK-LABEL: module InlineAutomaticLogicInit(
@@ -1031,7 +1031,7 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
 }
 
 hw.module @bindInMod() {
-  sv.bind @bindInst in @remoteInstDut
+  sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
 }
 
 // CHECK-LABEL: module bindInMod();
@@ -1044,7 +1044,7 @@ hw.module @bindInMod() {
 // CHECK-NEXT: );
 // CHECK: endmodule
 
-sv.bind @bindInst2 in @remoteInstDut
+sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
 
 // CHECK-LABEL: bind remoteInstDut extInst a2 (
 // CHECK-NEXT:   ._h (mywire),

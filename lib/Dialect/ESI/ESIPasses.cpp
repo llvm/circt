@@ -583,7 +583,7 @@ void ESIPortsPass::updateInstance(HWModuleOp mod, InstanceOp inst) {
   // Clone the instance.
   b.setInsertionPointAfter(inst);
   auto newInst = b.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
-                                      inst.parameters(), inst.sym_nameAttr());
+                                      inst.parameters(), inst.inner_symAttr());
 
   // -----
   // Wrap the results back into ESI channels and connect up all the ready
@@ -819,7 +819,7 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   // Create the new instance!
   InstanceOp newInst =
       instBuilder.create<InstanceOp>(mod, inst.instanceNameAttr(), newOperands,
-                                     inst.parameters(), inst.sym_nameAttr());
+                                     inst.parameters(), inst.inner_symAttr());
 
   // Go through the old list of non-ESI result values, and replace them with the
   // new non-ESI results.

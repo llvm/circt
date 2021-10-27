@@ -29,7 +29,7 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [NoSideEffect, HasCustomSSAName]> {
     }];
 
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
-                  DefaultValuedAttr<SymRefArrayAttr,"{}">:$symbols);
+                  DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
   let results = (outs AnySignlessIntegerOrInOutType:$result);
   let assemblyFormat = [{
     $string (`(` $operands^ `)`)?
@@ -65,7 +65,7 @@ def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName]> {
     }];
 
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
-                 DefaultValuedAttr<SymRefArrayAttr,"{}">:$symbols );
+                 DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols );
   let results = (outs AnySignlessIntegerOrInOutType:$result);
   let assemblyFormat = [{
     $string (`(` $operands^ `)`)?

@@ -408,7 +408,7 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
   hw.output %1 : i1
 }
 
-sv.bind @__BindEmissionInstance__ in @BindEmission {output_file = #hw.output_file<"BindTest/BindEmissionInstance.sv", excludeFromFileList>}
+sv.bind #hw.innerNameRef<@BindEmission::@__BindEmissionInstance__> {output_file = #hw.output_file<"BindTest/BindEmissionInstance.sv", excludeFromFileList>}
 // CHECK-LABL: module BindEmissionInstance()
 hw.module @BindEmissionInstance() {
   hw.output

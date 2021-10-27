@@ -325,7 +325,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def InstanceOp : HWOp<"instance", [Symbol,
+def InstanceOp : HWOp<"instance", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Create an instance of a module";
@@ -343,7 +343,7 @@ def InstanceOp : HWOp<"instance", [Symbol,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<SymbolNameAttr>:$sym_name);
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs Variadic<AnyType>);
 
   let builders = [
