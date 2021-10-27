@@ -859,6 +859,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     input clock: Clock
     input cond: UInt<1>
     input enable: UInt<1>
+    input not_reset: UInt<1>
     input value: UInt<42>
 
     ; rocket-chip properties
@@ -974,3 +975,25 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.assume %clock, [[TMP]], %enable, "Hello Assume"(%value) : !firrtl.uint<42>
     ; CHECK-SAME: guards = ["USE_UNR_ONLY_CONSTRAINTS", "USE_FORMAL_ONLY_CONSTRAINTS"]
     ; CHECK-SAME: name = "verif_library_label_voodoo"
+
+    ; New flavor of when-encoded verification that also includes an assert
+    assert(clock, cond, enable, "hello")
+    node not_cond = eq(cond, UInt<1>(0))
+    when not_cond:
+      printf(clock, enable, "Assertion failed: hello")
+    ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello"
+    ; CHECK: [[TMP:%.+]] = firrtl.not %not_cond
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello"
+    ; CHECK-SAME: name = "chisel3_builtin"
+
+    when not_reset:
+      assert(clock, cond, enable, "hello outside reset")
+      node not_cond2 = eq(cond, UInt<1>(0))
+      when not_cond2:
+        printf(clock, enable, "Assertion failed: hello outside reset")
+    ; CHECK: firrtl.when %not_reset {
+    ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello"
+    ; CHECK: [[TMP:%.+]] = firrtl.not %not_cond2
+    ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello outside reset"
+    ; CHECK-SAME: name = "chisel3_builtin"
+    ; CHECK: }
