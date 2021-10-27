@@ -186,25 +186,23 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
   auto ctx = top.getContext();
   if (!anno)
     return;
-  if (auto _dir = anno.get("directory"))
-    if (auto dir = _dir.cast<StringAttr>()) {
-      SmallVector<NamedAttribute> old;
-      for (auto i : top->getAttrs())
-        old.push_back(i);
-      old.emplace_back(Identifier::get(attrBase, ctx),
-                       hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
-      top->setAttrs(old);
-    }
-  if (auto _file = anno.get("filename"))
-    if (auto file = _file.cast<StringAttr>()) {
-      SmallVector<NamedAttribute> old;
-      for (auto i : top->getAttrs())
-        old.push_back(i);
-      old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
-                       hw::OutputFileAttr::getFromFilename(
-                           ctx, file.getValue(), /*excludeFromFileList=*/true));
-      top->setAttrs(old);
-    }
+  if (auto dir = anno.getAs<StringAttr>("directory")) {
+    SmallVector<NamedAttribute> old;
+    for (auto i : top->getAttrs())
+      old.push_back(i);
+    old.emplace_back(Identifier::get(attrBase, ctx),
+                     hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
+    top->setAttrs(old);
+  }
+  if (auto file = anno.getAs<StringAttr>("filename")) {
+    SmallVector<NamedAttribute> old;
+    for (auto i : top->getAttrs())
+      old.push_back(i);
+    old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
+                     hw::OutputFileAttr::getFromFilename(
+                         ctx, file.getValue(), /*excludeFromFileList=*/true));
+    top->setAttrs(old);
+  }
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
