@@ -233,7 +233,46 @@ firrtl.circuit "NLATop" {
     }]} {
   }
 }
+//  If a module is instantiated multiple times, and prefixing creates multiple
+// copies of the module based on the context, then some of the NLAs can become
+// invalid. The following test checks that.
 
+firrtl.circuit "NLA1Top" {
+  // CHECK: firrtl.nla @nla_0 [@NLA1Top, @Aardvark, @XXX_Bobcat, @XXX_Zebra] ["t_a", "a_b", "b_z", "x"]
+  firrtl.nla @nla_0 [@NLA1Top, @Aardvark, @Bobcat, @Zebra] ["t_a", "a_b", "b_z", "x"]
+  // CHECK:    firrtl.nla @nla_1 [@NLA1Top, @Bobcat, @Zebra] ["t_b", "b_z", "x"]
+  // Should not be: firrtl.nla @nla_1 [@NLA1Top, @Bobcat, @XXX_Zebra] ["t_b", "b_z", "x"]
+  firrtl.nla @nla_1 [@NLA1Top, @Bobcat, @Zebra] ["t_b", "b_z", "x"]
+  firrtl.module @NLA1Top() {
+    firrtl.instance t_a {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @Aardvark()
+    firrtl.instance t_b {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Bobcat()
+  }
+  // CHECK-LABEL: firrtl.module @Aardvark()
+  firrtl.module @Aardvark()
+    attributes {annotations = [{
+      class = "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
+      prefix = "XXX_",
+      inclusive = false
+    }]} {
+    firrtl.instance a_b {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @Bobcat()
+    // CHECK: firrtl.instance a_b  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @XXX_Bobcat()
+  }
+  // CHECK-LABEL: firrtl.module @Bobcat()
+  firrtl.module @Bobcat() {
+    firrtl.instance b_z {annotations = [
+        {circt.nonlocal = @nla_0, class = "circt.nonlocal"},
+        {circt.nonlocal = @nla_1, class = "circt.nonlocal"}
+      ]} @Zebra()
+      // CHECK: firrtl.instance b_z  {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Zebra()
+      // After prefixing, the nla_0 must be dropped.
+  }
+
+  // CHECK-LABEL: firrtl.module @XXX_Bobcat()
+  // CHECK:       firrtl.instance b_z  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @XXX_Zebra()
+  // After prefixing, the nla_1 must be dropped.
+
+  firrtl.module @Zebra() { }
+}  
 // Prefixes should be applied to Grand Central Data or Mem taps.  Check that a
 // multiply instantiated Data/Mem tap is cloned ("duplicated" in Scala FIRRTL
 // Compiler terminology) if needed.  (Note: multiply instantiated taps are

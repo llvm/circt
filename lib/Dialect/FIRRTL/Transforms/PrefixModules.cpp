@@ -156,32 +156,57 @@ void PrefixModulesPass::renameModuleBody(std::string prefix, FModuleOp module) {
       // referenced FModuleOp will be renamed later.
       auto newTarget = (prefix + getPrefix(target) + target.moduleName()).str();
       AnnotationSet instAnnos(instanceOp);
-      // If the instance has NonLocalAnchor, then update its module name also.
+      // If the instance has NonLocalAnchor, then update its module name.
       // There can be multiple NonLocalAnchors attached to the instance op.
+      // Also remove invalid NLAs. When duplicating a module, some of its NLAs
+      // can become redundant. Check if the modules in the NLA match with the
+      // current context.
 
-      for (Annotation anno : instAnnos) {
-        if (anno.isClass("circt.nonlocal"))
-          if (auto nla = anno.getMember("circt.nonlocal")) {
-            auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
-            auto f = nlaMap.find(nlaName);
-            if (f == nlaMap.end())
-              instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
-            else {
+      AnnotationSet::removeAnnotations(
+          instanceOp, [&](Annotation anno) -> bool {
+            if (!anno.isClass("circt.nonlocal"))
+              return false;
+            if (auto nla = anno.getMember("circt.nonlocal")) {
+
+              auto nlaName = nla.cast<FlatSymbolRefAttr>().getValue();
+              // Get the NLA op, from the symbol name.
+              auto f = nlaMap.find(nlaName);
+              if (f == nlaMap.end()) {
+                instanceOp.emitError("cannot find NonLocalAnchor :" + nlaName);
+                return false;
+              }
               auto nlaOp = dyn_cast<NonLocalAnchor>(f->second);
-              // Iterate over the modules of the NonLocalAnchor op, and update
-              // it.
+              // Iterate over the modules of the NonLocalAnchor op, and
+              // update it.
               SmallVector<Attribute, 4> newMods;
-              for (auto oldMod : nlaOp.modpath()) {
-                if (instanceOp.moduleNameAttr() ==
-                    oldMod.cast<FlatSymbolRefAttr>())
+              bool validNLA = false;
+              auto oldModPath = nlaOp.modpath();
+              for (auto oldMod : llvm::enumerate(oldModPath)) {
+                auto oldModName = oldMod.value().cast<FlatSymbolRefAttr>();
+                // First look for the current module in the path, then check if
+                // the next module in the path is same as this instance op
+                // refers to.
+                if (!validNLA &&
+                    oldModName.getValue().equals(module.getName()) &&
+                    ((oldMod.index() + 1) < oldModPath.size() &&
+                     oldModPath[oldMod.index() + 1] ==
+                         instanceOp.moduleNameAttr()))
+                  validNLA = true;
+
+                // Update the module name.
+                if (instanceOp.moduleNameAttr() == oldModName)
                   newMods.push_back(FlatSymbolRefAttr::get(context, newTarget));
                 else
-                  newMods.push_back(oldMod.cast<FlatSymbolRefAttr>());
+                  newMods.push_back(oldModName);
               }
+              // If the instance context not found in the NLA modPath, then it
+              // is an invalid NLA, remove it.
+              if (!validNLA)
+                return true;
               nlaOp->setAttr("modpath", ArrayAttr::get(context, newMods));
             }
-          }
-      }
+            return false;
+          });
 
       instanceOp.moduleNameAttr(FlatSymbolRefAttr::get(context, newTarget));
     }
