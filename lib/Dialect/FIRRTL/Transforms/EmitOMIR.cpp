@@ -56,6 +56,8 @@ private:
   void emitOMNode(Attribute node, llvm::json::OStream &jsonStream);
   void emitOMField(Identifier fieldName, DictionaryAttr field,
                    llvm::json::OStream &jsonStream);
+  void emitOptionalRTLPorts(DictionaryAttr node,
+                            llvm::json::OStream &jsonStream);
   void emitValue(Attribute node, llvm::json::OStream &jsonStream);
   void emitTrackedTarget(DictionaryAttr node, llvm::json::OStream &jsonStream);
 
@@ -393,7 +395,8 @@ void EmitOMIRPass::emitOMNode(Attribute node, llvm::json::OStream &jsonStream) {
 
   // Extract and order the fields of this node.
   SmallVector<std::tuple<unsigned, Identifier, DictionaryAttr>> orderedFields;
-  if (auto fieldsDict = dict.getAs<DictionaryAttr>("fields")) {
+  auto fieldsDict = dict.getAs<DictionaryAttr>("fields");
+  if (fieldsDict) {
     for (auto nameAndField : fieldsDict.getValue()) {
       auto fieldDict = nameAndField.second.dyn_cast<DictionaryAttr>();
       if (!fieldDict) {
@@ -425,6 +428,9 @@ void EmitOMIRPass::emitOMNode(Attribute node, llvm::json::OStream &jsonStream) {
         if (anyFailures)
           return;
       }
+      if (auto node = fieldsDict.getAs<DictionaryAttr>("containingModule"))
+        if (auto value = node.getAs<DictionaryAttr>("value"))
+          emitOptionalRTLPorts(value, jsonStream);
     });
   });
 }
@@ -448,6 +454,70 @@ void EmitOMIRPass::emitOMField(Identifier fieldName, DictionaryAttr field,
     jsonStream.attributeBegin("value");
     emitValue(field.get("value"), jsonStream);
     jsonStream.attributeEnd();
+  });
+}
+
+// If the given `node` refers to a valid tracker in the IR, gather the
+// additional port metadata of the module it refers to. Then emit this port
+// metadata as a `ports` array field for the surrounding `OMNode`.
+void EmitOMIRPass::emitOptionalRTLPorts(DictionaryAttr node,
+                                        llvm::json::OStream &jsonStream) {
+  // First make sure we actually have a valid tracker. If not, just silently
+  // abort and don't emit any port metadata.
+  auto idAttr = node.getAs<IntegerAttr>("id");
+  auto trackerIt = trackers.find(idAttr);
+  if (!idAttr || !node.getAs<UnitAttr>("omir.tracker") ||
+      trackerIt == trackers.end())
+    return;
+  auto tracker = trackerIt->second;
+
+  // Lookup the module the tracker refers to. If it points at something *within*
+  // a module, go dig up the surrounding module. This is roughly what
+  // `Target.referringModule(...)` does on the Scala side.
+  auto module = dyn_cast<FModuleLike>(tracker.op);
+  if (!module)
+    module = tracker.op->getParentOfType<FModuleLike>();
+  if (!module) {
+    LLVM_DEBUG(llvm::dbgs() << "Not emitting RTL ports since tracked operation "
+                               "does not have a FModuleLike parent: "
+                            << *tracker.op << "\n");
+    return;
+  }
+  LLVM_DEBUG(llvm::dbgs() << "Emitting RTL ports for module `"
+                          << module.moduleName() << "`\n");
+
+  // Emit the JSON.
+  SmallString<64> buf;
+  jsonStream.object([&] {
+    buf.clear();
+    emitSourceInfo(module.getLoc(), buf);
+    jsonStream.attribute("info", buf);
+    jsonStream.attribute("name", "ports");
+    jsonStream.attributeArray("value", [&] {
+      for (auto &port : module.getPorts()) {
+        jsonStream.object([&] {
+          // Emit the `ref` field.
+          buf.assign("OMDontTouchedReferenceTarget:~");
+          buf.append(getOperation().name());
+          buf.push_back('|');
+          buf.append(addSymbol(module));
+          buf.push_back('>');
+          // TODO: This should really use a symbol on the port.
+          buf.append(port.name.getValue());
+          jsonStream.attribute("ref", buf);
+
+          // Emit the `direction` field.
+          buf.assign("OMString:");
+          buf.append(port.isOutput() ? "Output" : "Input");
+          jsonStream.attribute("direction", buf);
+
+          // Emit the `width` field.
+          buf.assign("OMBigInt:");
+          Twine(port.type.getBitWidthOrSentinel()).toVector(buf);
+          jsonStream.attribute("width", buf);
+        });
+      }
+    });
   });
 }
 

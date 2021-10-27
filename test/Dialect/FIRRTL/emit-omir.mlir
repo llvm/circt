@@ -235,7 +235,7 @@ firrtl.circuit "DeletedTargets" attributes {annotations = [{
 // CHECK-SAME:  \22value\22: \22OMDeleted\22
 
 //===----------------------------------------------------------------------===//
-// Make SRAM Paths Absolute
+// Make SRAM Paths Absolute (`SetOMIRSRAMPaths`)
 //===----------------------------------------------------------------------===//
 
 firrtl.circuit "SRAMPaths" attributes {annotations = [{
@@ -291,20 +291,108 @@ firrtl.circuit "SRAMPaths" attributes {annotations = [{
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
+
 // CHECK-SAME:  \22id\22: \22OMID:0\22
 // CHECK-SAME:    \22name\22: \22omType\22
 // CHECK-SAME:    \22value\22: [
 // CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22\0A
+// CHECK-SAME:      \22OMString:OMSRAM\22
 // CHECK-SAME:    ]
 // CHECK-SAME:    \22name\22: \22instancePath\22
 // CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}/mem1:{{[{][{]2[}][}]}}\22
+
 // CHECK-SAME:  \22id\22: \22OMID:1\22
 // CHECK-SAME:    \22name\22: \22omType\22
 // CHECK-SAME:    \22value\22: [
 // CHECK-SAME:      \22OMString:OMLazyModule\22
-// CHECK-SAME:      \22OMString:OMSRAM\22\0A
+// CHECK-SAME:      \22OMString:OMSRAM\22
 // CHECK-SAME:    ]
 // CHECK-SAME:    \22name\22: \22instancePath\22
 // CHECK-SAME:    \22value\22: \22OMMemberInstanceTarget:~SRAMPaths|{{[{][{]0[}][}]}}/sub:{{[{][{]1[}][}]}}/mem2:FIRRTLMem_{{[^\\]+}}\22
+
 // CHECK-SAME:  symbols = [@SRAMPaths, @Submodule, @MySRAM]
+
+//===----------------------------------------------------------------------===//
+// Add module port information to the OMIR (`SetOMIRPorts`)
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "AddPorts" attributes {annotations = [{
+  class = "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  nodes = [
+    {
+      info = #loc,
+      id = "OMID:0",
+      fields = {
+        containingModule = {
+          info = #loc,
+          index = 0,
+          value = {
+            omir.tracker,
+            id = 0,
+            path = "~AddPorts|AddPorts",
+            type = "OMInstanceTarget"
+          }
+        }
+      }
+    },
+    {
+      info = #loc,
+      id = "OMID:1",
+      fields = {
+        containingModule = {
+          info = #loc,
+          index = 0,
+          value = {
+            omir.tracker,
+            id = 1,
+            path = "~AddPorts|AddPorts>w",
+            type = "OMReferenceTarget"
+          }
+        }
+      }
+    }
+  ]
+}]} {
+  firrtl.module @AddPorts(in %x: !firrtl.uint<17>, out %y: !firrtl.uint<19>) attributes {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 0}]} {
+    %w = firrtl.wire {annotations = [{class = "freechips.rocketchip.objectmodel.OMIRTracker", id = 1}]} : !firrtl.uint<17>
+    firrtl.connect %y, %x : !firrtl.uint<19>, !firrtl.uint<17>
+  }
+}
+// CHECK-LABEL: firrtl.circuit "AddPorts"
+// CHECK:       sv.verbatim
+
+// CHECK-SAME:  \22id\22: \22OMID:0\22
+// CHECK-SAME:    \22name\22: \22containingModule\22
+// CHECK-SAME:    \22value\22: \22OMInstanceTarget:~AddPorts|{{[{][{]0[}][}]}}\22
+// CHECK-SAME:    \22name\22: \22ports\22
+// CHECK-SAME:    \22value\22: [
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>x\22
+// CHECK-SAME:        \22direction\22: \22OMString:Input\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:17\22
+// CHECK-SAME:      }
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>y\22
+// CHECK-SAME:        \22direction\22: \22OMString:Output\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:19\22
+// CHECK-SAME:      }
+// CHECK-SAME:    ]
+
+// CHECK-SAME:  \22id\22: \22OMID:1\22
+// CHECK-SAME:    \22name\22: \22containingModule\22
+// CHECK-SAME:    \22value\22: \22OMReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>w\22
+// CHECK-SAME:    \22name\22: \22ports\22
+// CHECK-SAME:    \22value\22: [
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>x\22
+// CHECK-SAME:        \22direction\22: \22OMString:Input\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:17\22
+// CHECK-SAME:      }
+// CHECK-SAME:      {
+// CHECK-SAME:        \22ref\22: \22OMDontTouchedReferenceTarget:~AddPorts|{{[{][{]0[}][}]}}>y\22
+// CHECK-SAME:        \22direction\22: \22OMString:Output\22
+// CHECK-SAME:        \22width\22: \22OMBigInt:19\22
+// CHECK-SAME:      }
+// CHECK-SAME:    ]
+
+// CHECK-SAME:  symbols = [@AddPorts]
