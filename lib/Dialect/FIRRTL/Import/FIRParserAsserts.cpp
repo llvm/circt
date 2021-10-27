@@ -14,6 +14,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
 using namespace circt;
@@ -252,6 +253,54 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     flavor = VerifFlavor::ChiselAssert;
   else
     return success();
+
+  // Check if the condition of the `WhenOp` is a trivial inversion operation,
+  // and remove any immediately preceding verification ops that ensure this
+  // condition. This caters to the following pattern emitted by Chisel:
+  //
+  //     assert(clock, cond, enable, ...)
+  //     node N = eq(cond, UInt<1>(0))
+  //     when N:
+  //       printf(clock, enable, ...)
+  Value flippedCond = whenStmt.condition();
+  if (auto node = flippedCond.getDefiningOp<NodeOp>())
+    flippedCond = node.input();
+  if (auto notOp = flippedCond.getDefiningOp<NotPrimOp>()) {
+    flippedCond = notOp.input();
+  } else if (auto eqOp = flippedCond.getDefiningOp<EQPrimOp>()) {
+    auto isConst0 = [](Value v) {
+      if (auto constOp = v.getDefiningOp<ConstantOp>())
+        return constOp.value().isZero();
+      return false;
+    };
+    if (isConst0(eqOp.lhs()))
+      flippedCond = eqOp.rhs();
+    else if (isConst0(eqOp.rhs()))
+      flippedCond = eqOp.lhs();
+    else
+      flippedCond = {};
+  } else {
+    flippedCond = {};
+  }
+
+  // If we have found such a condition, erase any verification ops that use it
+  // and that match the op we are about to assemble. This is necessary since the
+  // `printf` op actually carries all the information we need for the assert,
+  // while the actual `assert` has none of it. This makes me sad.
+  if (flippedCond) {
+    SmallVector<Operation *, 1> opsToErase;
+    for (const auto &user : flippedCond.getUsers()) {
+      TypeSwitch<Operation *>(user).Case<AssertOp, AssumeOp, CoverOp>(
+          [&](auto op) {
+            if (op.clock() == printOp.clock() &&
+                op.enable() == printOp.cond() &&
+                op.predicate() == flippedCond && !op.isConcurrent())
+              opsToErase.push_back(op);
+          });
+    }
+    for (auto op : opsToErase)
+      op->erase();
+  }
 
   builder.setInsertionPointAfter(whenStmt);
 
