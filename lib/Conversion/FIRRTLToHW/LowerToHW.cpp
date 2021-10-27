@@ -399,9 +399,12 @@ void FIRRTLModuleLowering::runOnOperation() {
   SmallVector<FModuleOp, 32> modulesToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass, "firrtl.assert");
-  moveVerifAnno(getOperation(), circuitAnno, assumeAnnoClass, "firrtl.assume");
-  moveVerifAnno(getOperation(), circuitAnno, coverAnnoClass, "firrtl.cover");
+  moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass,
+                "firrtl.extract.assert");
+  moveVerifAnno(getOperation(), circuitAnno, assumeAnnoClass,
+                "firrtl.extract.assume");
+  moveVerifAnno(getOperation(), circuitAnno, coverAnnoClass,
+                "firrtl.extract.cover");
   circuitAnno.removeAnnotationsWithClass(assertAnnoClass, assumeAnnoClass,
                                          coverAnnoClass);
 
