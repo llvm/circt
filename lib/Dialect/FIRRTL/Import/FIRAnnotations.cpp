@@ -800,7 +800,13 @@ static Optional<DictionaryAttr> parseAugmentedType(
 
     auto id = newID();
 
+    // TODO: We don't support non-local annotations, so force this annotation
+    // into a local annotation.  This does not properly check that the
+    // non-local and local targets are totally equivalent.
     auto target = maybeTarget.getValue();
+    auto localTarget = std::get<0>(expandNonLocal(target.first).back());
+    auto subTargets = target.second;
+
     NamedAttrList elementIface, elementScattered, dontTouch;
 
     // Populate the annotation for the interface element.
@@ -817,14 +823,14 @@ static Optional<DictionaryAttr> parseAugmentedType(
         "class",
         StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
     // If there are sub-targets, then add these.
-    if (target.second) {
-      elementScattered.append("target", target.second);
-      dontTouch.append("target", target.second);
+    if (subTargets) {
+      elementScattered.append("target", subTargets);
+      dontTouch.append("target", subTargets);
     }
 
-    newAnnotations[target.first].push_back(
+    newAnnotations[localTarget].push_back(
         DictionaryAttr::getWithSorted(context, elementScattered));
-    newAnnotations[target.first].push_back(
+    newAnnotations[localTarget].push_back(
         DictionaryAttr::getWithSorted(context, dontTouch));
 
     return DictionaryAttr::getWithSorted(context, elementIface);
