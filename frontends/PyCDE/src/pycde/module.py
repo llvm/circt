@@ -359,7 +359,7 @@ def _module_base(cls, extern_name: str, params={}):
               raise ConnectionError(
                   "`no_connect` is only valid on extern module ports")
             else:
-              value = Value.get(create_const_zero(type))
+              value = create_const_zero(type)
           else:
             value = obj_to_value(input, type)
         else:

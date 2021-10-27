@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pycde
 from pycde import (Input, Output, module, externmodule, generator, types, dim)
-from circt.dialects import comb, hw
+from pycde.dialects import comb, hw
 from circt.support import connect
 
 
@@ -36,7 +36,7 @@ def PolynomialCompute(coefficients: Coefficients):
       for power, coeff in enumerate(coefficients.coeff):
         coeffVal = hw.ConstantOp.create(types.i32, coeff)
         if power == 0:
-          newPartialSum = coeffVal.result
+          newPartialSum = coeffVal
         else:
           partialSum = taps[-1]
           if power == 1:

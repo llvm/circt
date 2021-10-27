@@ -3,7 +3,7 @@
 
 from pycde import System, module, generator, types
 
-from circt.dialects import hw
+from pycde.dialects import hw
 
 
 @module
