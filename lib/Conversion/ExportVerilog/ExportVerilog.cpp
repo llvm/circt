@@ -2236,18 +2236,22 @@ public:
 
 private:
   llvm::raw_svector_ostream stringStream;
-  // All statements are emitted into a temporary buffer, this is it.
+  /// All statements are emitted into a temporary buffer, this is it.
   SmallVectorImpl<char> &outBuffer;
 
-  // Track the legalized names.
+  /// Track the legalized names.
   ModuleNameManager &names;
 
-  // This is the index of the start of the current statement being emitted.
+  /// This is the index of the start of the current statement being emitted.
   size_t statementBeginningIndex = 0;
 
   /// This is the index of the end of the declaration region of the current
   /// 'begin' block, used to emit variable declarations.
   size_t blockDeclarationInsertPointIndex = 0;
+
+  /// This keeps track of the number of statements emitted, important for
+  /// determining if we need to put out a begin/end marker in a block
+  /// declaration.
   size_t numStatementsEmitted = 0;
 };
 
@@ -3190,7 +3194,7 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
 }
 
 void StmtEmitter::emitStatement(Operation *op) {
-  // Know where the start of this statement is in case any out of band precuror
+  // Know where the start of this statement is in case any out-of-band precursor
   // statements need to be emitted.
   statementBeginningIndex = outBuffer.size();
 
