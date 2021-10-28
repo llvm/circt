@@ -78,13 +78,13 @@ circuit Top :
 ; CHECK: module DataTap_2_impl_0(
 ; CHECK:   output  _1, _0
 ; CHECK: );
-; CHECK:   assign _1 = child.child.bb.foo.bar.out;
-; CHECK:   assign _0 = child.child.bb.foo.bar.in;
+; CHECK:   assign _1 = Top.child.child.bb.foo.bar.out;
+; CHECK:   assign _0 = Top.child.child.bb.foo.bar.in;
 ; CHECK: endmodule
 
 ; CHECK: module MemTap_2_impl_0(
 ; CHECK:   output  _1, _0
 ; CHECK: );
-; CHECK:   assign _1 = child.child.M.Memory[1];
-; CHECK:   assign _0 = child.child.M.Memory[0];
+; CHECK:   assign _1 = Top.child.child.M.Memory[1];
+; CHECK:   assign _0 = Top.child.child.M.Memory[0];
 ; CHECK: endmodule
