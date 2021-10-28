@@ -323,8 +323,8 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-NEXT: wire [7:0]            myUArray1[0:41];
   %myUArray1 = sv.wire : !hw.inout<uarray<42 x i8>>
 
-  // CHECK-NEXT: wire [41:0][3:0]      myWireUArray2[0:2];
-  %myWireUArray2 = sv.wire : !hw.inout<uarray<3 x array<42 x i4>>>
+  // CHECK-NEXT: wire [9:0][7:0]       myUArray2[0:13][0:11];
+  %myUArray2 = sv.wire : !hw.inout<uarray<14 x uarray<12 x array<10 x i8>>>>
 
   // CHECK-EMPTY:
 
