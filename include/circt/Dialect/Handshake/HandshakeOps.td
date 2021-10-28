@@ -426,16 +426,16 @@ def ConstantOp : Handshake_Op<"constant", [
 ]> {
   let summary = "constant operation";
   let description = [{
-    The "handshake.const" has a constant value.When triggered by its
-    single input, it sends the constant value to its single
+    The "handshake.const" has a constant value. When triggered by its
+    single `ctrl` input, it sends the constant value to its single
     successor.
   }];
 
-  let arguments = (ins AnyType, AnyAttr : $value);
+  let arguments = (ins AnyAttr:$value, AnyType:$ctrl);
   let results = (outs AnyType);
 
   // let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Attribute":$value, "Value":$operand)>];
+  let builders = [OpBuilder<(ins "Attribute":$value, "Value":$ctrl)>];
 
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
