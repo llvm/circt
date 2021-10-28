@@ -3,9 +3,7 @@
 
 // This test checks correct simulation of the following operations and ensures
 // that the endianess semantics as described in the rationale are followed.
-// * hw.array_create
-// * hw.struct_create
-// * hw.bitcast
+// * comb.concat
 
 // CHECK: 0ps 0d 0e  root/int  0x00000000
 // CHECK-NEXT: 1000ps 0d 0e  root/int  0x01020304
