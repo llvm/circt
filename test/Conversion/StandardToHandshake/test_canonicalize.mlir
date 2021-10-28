@@ -3,7 +3,7 @@
 module {
 
   // CHECK-LABEL: handshake.func @simple(
-  // CHECK-SAME:                         %[[VAL_0:.*]]: none, ...) -> none {
+  // CHECK-SAME:                         %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["arg0"]} {
   handshake.func @simple(%arg0: none, ...) -> none {
 
     // CHECK: %[[VAL_1:.*]] = "handshake.constant"(%[[VAL_0:.*]]) {value = 1 : index} : (none) -> index

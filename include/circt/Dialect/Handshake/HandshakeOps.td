@@ -14,8 +14,8 @@
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
 def FuncOp : Op<Handshake_Dialect, "func", [
-   NativeOpTrait<"IsIsolatedFromAbove">,
-   NativeOpTrait<"FunctionLike">,
+   IsolatedFromAbove,
+   FunctionLike,
    Symbol,
    RegionKindInterface
 ]> {
@@ -35,22 +35,13 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
   let builders =
        [OpBuilder<(ins "StringRef":$name, "FunctionType":$type,
-                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
-                      CArg<"ArrayRef<NamedAttrList>", "{}">:$argAttrs),
+                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs),
                       [{
                      $_state.addAttribute(SymbolTable::getSymbolAttrName(),
                                          $_builder.getStringAttr(name));
                      $_state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
                      $_state.attributes.append(attrs.begin(), attrs.end());
                      $_state.addRegion();
-
-                     // Not needed?? Arguments are already included in attrs
-                     /* assert(type.getNumInputs() == argAttrs.size());
-                      SmallString<8> argAttrName;
-                      for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
-                        if (auto argDict = argAttrs[i].getDictionary())
-                          $_state.addAttribute(getArgAttrName(i, argAttrName),
-                      argDict);*/
                    }]>];
 
   let extraClassDeclaration = [{
@@ -63,9 +54,6 @@ def FuncOp : Op<Handshake_Dialect, "func", [
           .getValue()
           .cast<FunctionType>();
     }
-    // bool isVarArg() {
-    //   return getType().getUnderlyingType()->isFunctionVarArg();
-    // }
 
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<handshake::FuncOp>;
@@ -94,11 +82,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
   }];
 
   let verifier = [{ return ::verify$cppClass(*this); }];
-  let printer = [{
-    FunctionType fnType = getType();
-    mlir::function_like_impl::printFunctionLikeOp(p, *this, fnType.getInputs(),
-        /*isVariadic=*/true, fnType.getResults());
-  }];
+  let printer = [{ return ::print$cppClass(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
