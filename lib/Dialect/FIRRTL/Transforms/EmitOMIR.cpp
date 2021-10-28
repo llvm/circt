@@ -361,6 +361,8 @@ void EmitOMIRPass::emitSourceInfo(Location input, SmallString<64> &into) {
   });
   if (!into.empty())
     into.append("]");
+  else
+    into.append("UnlocatableSourceInfo");
 }
 
 /// Emit an entire `OMNode` as JSON.
@@ -626,7 +628,7 @@ void EmitOMIRPass::emitTrackedTarget(DictionaryAttr node,
     // `OMDeleted` node.
     if (type == "OMReferenceTarget" || type == "OMMemberReferenceTarget" ||
         type == "OMMemberInstanceTarget")
-      return jsonStream.value("OMDeleted");
+      return jsonStream.value("OMDeleted:");
 
     // The remaining types produce an error upon removal of the target.
     auto diag = getOperation().emitError("tracked OMIR target of type `")

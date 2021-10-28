@@ -43,7 +43,7 @@ firrtl.circuit "EmptyNode" attributes {annotations = [{class = "freechips.rocket
 // CHECK-NEXT:    }
 // CHECK-NEXT:  }
 // CHECK-NEXT:  sv.verbatim
-// CHECK-SAME:  \22info\22: \22\22
+// CHECK-SAME:  \22info\22: \22UnlocatableSourceInfo\22
 // CHECK-SAME:  \22id\22: \22OMID:0\22
 // CHECK-SAME:  \22fields\22: []
 
@@ -228,11 +228,11 @@ firrtl.circuit "DeletedTargets" attributes {annotations = [{
 // CHECK-LABEL: firrtl.circuit "DeletedTargets"
 // CHECK:       sv.verbatim
 // CHECK-SAME:  \22name\22: \22a\22
-// CHECK-SAME:  \22value\22: \22OMDeleted\22
+// CHECK-SAME:  \22value\22: \22OMDeleted:\22
 // CHECK-SAME:  \22name\22: \22b\22
-// CHECK-SAME:  \22value\22: \22OMDeleted\22
+// CHECK-SAME:  \22value\22: \22OMDeleted:\22
 // CHECK-SAME:  \22name\22: \22c\22
-// CHECK-SAME:  \22value\22: \22OMDeleted\22
+// CHECK-SAME:  \22value\22: \22OMDeleted:\22
 
 //===----------------------------------------------------------------------===//
 // Make SRAM Paths Absolute (`SetOMIRSRAMPaths`)
