@@ -754,20 +754,20 @@ firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
     {class = "sifive.enterprise.grandcentral.ViewAnnotation", defName = "Foo", id = 0, name = "View", type = "companion"}
   ]} {}
 
-  firrtl.module @DUT(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) attributes {annotations = [
+  firrtl.module @DUT() attributes {annotations = [
     {class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 0, name = "view", type = "parent"}
   ]} {
-    %a0 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1}]} : !firrtl.uint<1>
-    %a1 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2}]} : !firrtl.uint<1>
-    %a2 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3}]} : !firrtl.uint<1>
-    %b0 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4}]} : !firrtl.uint<1>
-    %b1 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 5}]} : !firrtl.uint<1>
-    %b2 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 6}]} : !firrtl.uint<1>
+    %a0 = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1}]} : !firrtl.uint<1>
+    %a1 = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2}]} : !firrtl.uint<1>
+    %a2 = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3}]} : !firrtl.uint<1>
+    %b0 = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4}]} : !firrtl.uint<1>
+    %b1 = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 5}]} : !firrtl.uint<1>
+    %b2 = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 6}]} : !firrtl.uint<1>
     firrtl.instance View_companion @View_companion()
   }
 
   firrtl.module @NestedInterfaceVectorTypes() {
-    %dut_clock, %dut_reset = firrtl.instance dut @DUT(in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+    firrtl.instance dut @DUT()
   }
 }
 
@@ -831,14 +831,14 @@ firrtl.circuit "VerbatimTypesInVector" attributes {annotations = [
     {class = "sifive.enterprise.grandcentral.ViewAnnotation", defName = "Foo", id = 0, name = "View", type = "companion"}
   ]} {}
 
-  firrtl.module @DUT(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) attributes {annotations = [
+  firrtl.module @DUT() attributes {annotations = [
     {class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 0, name = "view", type = "parent"}
   ]} {
     firrtl.instance View_companion @View_companion()
   }
 
   firrtl.module @VerbatimTypesInVector() {
-    %dut_clock, %dut_reset = firrtl.instance dut @DUT(in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+    firrtl.instance dut @DUT()
   }
 }
 
