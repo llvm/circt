@@ -627,14 +627,6 @@ void EmitterBase::emitTextWithSubstitutions(
     auto op = item.getOp();
     if (item.hasPort())
       return names.getName(op, item.getPort());
-    // FIXME: is this really necessary?  Shouldn't all referenced innernames
-    // have been named?
-    if (!names.hasName(op)) {
-      llvm::errs() << "ADL: @" << op->getAttrOfType<StringAttr>("sym_name")
-                   << "\n";
-      op->dump();
-      llvm::errs() << "**END\n";
-    }
     if (names.hasName(op))
       return names.getName(op);
     StringRef symOpName = getSymOpName(op);
