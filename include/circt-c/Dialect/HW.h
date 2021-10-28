@@ -116,6 +116,9 @@ MLIR_CAPI_EXPORTED MlirStringRef hwParamDeclAttrGetName(MlirAttribute decl);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetType(MlirAttribute decl);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetValue(MlirAttribute decl);
 
+MLIR_CAPI_EXPORTED bool hwAttrIsAParamVerbatimAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text);
+
 #ifdef __cplusplus
 }
 #endif
