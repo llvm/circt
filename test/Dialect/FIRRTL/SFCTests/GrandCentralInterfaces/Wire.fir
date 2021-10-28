@@ -1,5 +1,6 @@
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
+; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s --annotation-file %S/YAML.anno.json | FileCheck %s --check-prefixes YAML
 
 circuit Top :
   module Submodule :
@@ -241,3 +242,73 @@ circuit Top :
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK:          endinterface
+
+    ; YAML:           FILE "Wire/firrtl/gct/gct.yaml"
+    ; YAML:             - name: MyInterface
+    ; YAML-NEXT:          fields:
+    ; YAML-NEXT:            - name: uint
+    ; YAML-NEXT:              description: 'a wire called ''uint'''
+    ; YAML-NEXT:              dimensions: [  ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:            - name: vec
+    ; YAML-NEXT:              description: 'a vector called ''vec'''
+    ; YAML-NEXT:              dimensions: [ 2 ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:            - name: multivec
+    ; YAML-NEXT:              description: 'a 2D vector called ''multivec'''
+    ; YAML-NEXT:              dimensions: [ 3, 2 ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:            - name: sub_uint
+    ; YAML-NEXT:              description: 'a wire called ''uint'' in the submodule'
+    ; YAML-NEXT:              dimensions: [  ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:            - name: sub_vec
+    ; YAML-NEXT:              description: 'a vector called ''vec'' in the submodule'
+    ; YAML-NEXT:              dimensions: [ 2 ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:          instances:
+    ; YAML-NEXT:            - name: vecOfBundle
+    ; YAML-NEXT:              description: a vector of a bundle
+    ; YAML-NEXT:              dimensions: [ 2 ]
+    ; YAML-NEXT:              interface:
+    ; YAML-NEXT:                name: VecOfBundle
+    ; YAML-NEXT:                fields:
+    ; YAML-NEXT:                  - name: sint
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    width: 2
+    ; YAML-NEXT:                  - name: uint
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    width: 4
+    ; YAML-NEXT:                instances: []
+    ; YAML-NEXT:            - name: otherOther
+    ; YAML-NEXT:              description: another bundle
+    ; YAML-NEXT:              dimensions: [  ]
+    ; YAML-NEXT:              interface:
+    ; YAML-NEXT:                name: OtherOther
+    ; YAML-NEXT:                fields: []
+    ; YAML-NEXT:                instances:
+    ; YAML-NEXT:                  - name: other
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    interface:
+    ; YAML-NEXT:                      name: Other
+    ; YAML-NEXT:                      fields:
+    ; YAML-NEXT:                        - name: sint
+    ; YAML-NEXT:                          dimensions: [  ]
+    ; YAML-NEXT:                          width: 2
+    ; YAML-NEXT:                        - name: uint
+    ; YAML-NEXT:                          dimensions: [  ]
+    ; YAML-NEXT:                          width: 4
+    ; YAML-NEXT:                      instances: []
+    ; YAML-NEXT:            - name: sub_vecOfBundle
+    ; YAML-NEXT:              description: "a vector of a bundle in the submodule with a\n// multiline comment"
+    ; YAML-NEXT:              dimensions: [ 2 ]
+    ; YAML-NEXT:              interface:
+    ; YAML-NEXT:                name: Sub_vecOfBundle
+    ; YAML-NEXT:                fields:
+    ; YAML-NEXT:                  - name: sint
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    width: 2
+    ; YAML-NEXT:                  - name: uint
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    width: 4
+    ; YAML-NEXT:                instances: []
