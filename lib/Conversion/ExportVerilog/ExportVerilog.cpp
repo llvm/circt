@@ -941,8 +941,8 @@ void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
         printUnpackedTypePostfix(inoutType.getElementType(), os);
       })
       .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        printUnpackedTypePostfix(arrayType.getElementType(), os);
         os << "[0:" << (arrayType.getSize() - 1) << "]";
+        printUnpackedTypePostfix(arrayType.getElementType(), os);
       })
       .Case<InterfaceType>([&](auto) {
         // Interface instantiations have parentheses like a module with no

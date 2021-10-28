@@ -341,7 +341,7 @@ firrtl.circuit "VecOfVec" attributes {
 
 // CHECK:      firrtl.module @View_mapping
 // CHECK-NEXT:    assign View.foo[0][0]
-// CHECK-NEXT:    assign View.foo[1][0]
+// CHECK-NEXT:    assign View.foo[0][1]
 
 // CHECK:      sv.interface {{.+}} @Foo
 // CHECK:        sv.interface.signal @foo : !hw.uarray<1xuarray<2xi3>>
@@ -708,3 +708,142 @@ firrtl.circuit "PrefixInterfacesAnnotation"
 
 // Interface "Bar" is prefixed.
 // CHECK:       sv.interface @PREFIX_Bar
+
+// -----
+
+firrtl.circuit "NestedInterfaceVectorTypes" attributes {annotations = [
+  {
+    class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    id = 0,
+    name = "View",
+    defName = "Foo",
+    elements = [{
+      class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+      name = "bar",
+      description = "description of bar",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          name = "baz",
+          elements = [
+            {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1, name = "baz"},
+            {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2, name = "baz"},
+            {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3, name = "baz"}
+          ]
+        },
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          name = "baz",
+          elements = [
+            {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4, name = "baz"},
+            {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 5, name = "baz"},
+            {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 6, name = "baz"}
+          ]
+        }
+      ]
+    }]
+  },
+  {
+    class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+    directory = "gct-dir",
+    filename = "gct-dir/bindings.sv"
+  }
+]} {
+
+  firrtl.module @View_companion() attributes {annotations = [
+    {class = "sifive.enterprise.grandcentral.ViewAnnotation", defName = "Foo", id = 0, name = "View", type = "companion"}
+  ]} {}
+
+  firrtl.module @DUT(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) attributes {annotations = [
+    {class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 0, name = "view", type = "parent"}
+  ]} {
+    %a0 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 1}]} : !firrtl.uint<1>
+    %a1 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 2}]} : !firrtl.uint<1>
+    %a2 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 3}]} : !firrtl.uint<1>
+    %b0 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 4}]} : !firrtl.uint<1>
+    %b1 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 5}]} : !firrtl.uint<1>
+    %b2 = firrtl.reg %clock {annotations = [{class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = 6}]} : !firrtl.uint<1>
+    firrtl.instance View_companion @View_companion()
+  }
+
+  firrtl.module @NestedInterfaceVectorTypes() {
+    %dut_clock, %dut_reset = firrtl.instance dut @DUT(in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "NestedInterfaceVectorTypes"
+// CHECK:         firrtl.module @View_mapping
+// CHECK-NEXT:      sv.verbatim "assign View.bar[0][0] = dut.a0;"
+// CHECK-NEXT:      sv.verbatim "assign View.bar[0][1] = dut.a1;"
+// CHECK-NEXT:      sv.verbatim "assign View.bar[0][2] = dut.a2;"
+// CHECK-NEXT:      sv.verbatim "assign View.bar[1][0] = dut.b0;"
+// CHECK-NEXT:      sv.verbatim "assign View.bar[1][1] = dut.b1;"
+// CHECK-NEXT:      sv.verbatim "assign View.bar[1][2] = dut.b2;"
+// CHECK:         sv.interface {
+// CHECK-SAME:      @Foo
+// CHECK-NEXT:      sv.verbatim "// description of bar"
+// CHECK-NEXT:      sv.interface.signal @bar : !hw.uarray<2xuarray<3xi1>>
+
+// -----
+
+firrtl.circuit "VerbatimTypesInVector" attributes {annotations = [
+  {
+    class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+    id = 0,
+    name = "View",
+    defName = "Foo",
+    elements = [{
+      class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+      name = "bar",
+      description = "description of bar",
+      elements = [
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          name = "baz",
+          description = "description of baz",
+          elements = [
+            {class = "sifive.enterprise.grandcentral.AugmentedStringType", name = "baz"},
+            {class = "sifive.enterprise.grandcentral.AugmentedStringType", name = "baz"},
+            {class = "sifive.enterprise.grandcentral.AugmentedStringType", name = "baz"}
+          ]
+        },
+        {
+          class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+          name = "baz",
+          description = "description of baz",
+          elements = [
+            {class = "sifive.enterprise.grandcentral.AugmentedStringType", name = "baz"},
+            {class = "sifive.enterprise.grandcentral.AugmentedStringType", name = "baz"},
+            {class = "sifive.enterprise.grandcentral.AugmentedStringType", name = "baz"}
+          ]
+        }
+      ]
+    }]
+  },
+  {
+    class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+    directory = "gct-dir",
+    filename = "gct-dir/bindings.sv"
+  }
+]} {
+
+  firrtl.module @View_companion() attributes {annotations = [
+    {class = "sifive.enterprise.grandcentral.ViewAnnotation", defName = "Foo", id = 0, name = "View", type = "companion"}
+  ]} {}
+
+  firrtl.module @DUT(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) attributes {annotations = [
+    {class = "sifive.enterprise.grandcentral.ViewAnnotation", id = 0, name = "view", type = "parent"}
+  ]} {
+    firrtl.instance View_companion @View_companion()
+  }
+
+  firrtl.module @VerbatimTypesInVector() {
+    %dut_clock, %dut_reset = firrtl.instance dut @DUT(in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "VerbatimTypesInVector"
+// CHECK:         sv.interface {
+// CHECK-SAME:      @Foo
+// CHECK-NEXT:      sv.verbatim "// description of bar"
+// CHECK-NEXT:      sv.verbatim "// <unsupported string type> bar[2][3];"
