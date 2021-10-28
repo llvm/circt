@@ -264,6 +264,23 @@ struct CircuitLoweringState {
     binds.push_back(op);
   }
 
+  // Record the FIRRTL op names to the hw.innerNameRef map for the module.
+  void updateNames(StringRef moduleName,
+                   const llvm::StringMap<StringRef> &names) {
+    std::lock_guard<std::mutex> lock(namesMutex);
+    oldToNewSymNames[moduleName] = names;
+  }
+  // Get the hw.innerNameRef for the op within the module.
+  StringRef getModuleOpSymName(StringRef moduleName, StringRef opName) const {
+    auto i = oldToNewSymNames.find(moduleName);
+    if (i != oldToNewSymNames.end()) {
+      auto i2 = i->second.find(opName);
+      if (i2 != i->second.end())
+        return i2->second;
+    }
+    return {};
+  }
+
 private:
   friend struct FIRRTLModuleLowering;
   CircuitLoweringState(const CircuitLoweringState &) = delete;
@@ -283,6 +300,12 @@ private:
 
   // Control access to binds.
   std::mutex bindsMutex;
+
+  // Map of module name to FIRRTL op name to the hw.innerNameRef.
+  llvm::StringMap<llvm::StringMap<StringRef>> oldToNewSymNames;
+
+  // Control access to symbol names map.
+  std::mutex namesMutex;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -356,7 +379,8 @@ private:
   void lowerModuleBody(FModuleOp oldModule,
                        CircuitLoweringState &loweringState);
   void lowerModuleOperations(hw::HWModuleOp module,
-                             CircuitLoweringState &loweringState);
+                             CircuitLoweringState &loweringState,
+                             llvm::StringMap<StringRef> &opNameToSymName);
 
   void lowerMemoryDecls(ArrayRef<FirMemory> mems,
                         CircuitLoweringState &loweringState);
@@ -397,6 +421,10 @@ void FIRRTLModuleLowering::runOnOperation() {
   CircuitLoweringState state(circuit, enableAnnotationWarning);
 
   SmallVector<FModuleOp, 32> modulesToProcess;
+  SmallVector<Operation *, 8> verbatimOps;
+  // Map of symbol name to the NonLocalAnchor operation.
+  llvm::StringMap<std::pair<Operation *, SmallVector<hw::InnerRefAttr, 2>>>
+      nlaMap;
 
   AnnotationSet circuitAnno(circuit);
   moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass,
@@ -421,6 +449,18 @@ void FIRRTLModuleLowering::runOnOperation() {
         .Case<FExtModuleOp>([&](auto extModule) {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
+        })
+        .Case<NonLocalAnchor>([&](NonLocalAnchor nla) {
+          SmallVector<hw::InnerRefAttr, 2> updatedOps(nla.modpath().size());
+          // The updatedOps should be populated with all the lowered symbols
+          // corresponding to the nla instance path.
+          nlaMap[nla.sym_name()] = std::pair(nla, updatedOps);
+          // Drop the NLA.
+        })
+        .Case<sv::VerbatimOp>([&](sv::VerbatimOp ver) {
+          // Ensure the verbatim op is lowered.
+          ver->moveBefore(topLevelModule, topLevelModule->end());
+          verbatimOps.push_back(ver);
         })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
@@ -455,6 +495,39 @@ void FIRRTLModuleLowering::runOnOperation() {
       &getContext(), 0, modulesToProcess.size(),
       [&](auto index) { lowerModuleBody(modulesToProcess[index], state); });
 
+  auto builder = OpBuilder::atBlockEnd(topLevelModule);
+  // Create the map from the nla to hw.innerNameRef.
+  for (auto &mapIter : nlaMap) {
+    auto nla = cast<NonLocalAnchor>(mapIter.second.first);
+    for (auto modPath : llvm::enumerate(nla.modpath())) {
+      auto modName = modPath.value().cast<FlatSymbolRefAttr>().getValue();
+      auto opName =
+          nla.namepath()[modPath.index()].cast<StringAttr>().getValue();
+      auto newSymName = state.getModuleOpSymName(modName, opName);
+      if (!newSymName.empty())
+        mapIter.second.second[modPath.index()] = hw::InnerRefAttr::get(
+            circuit.getContext(), builder.getStringAttr(modName),
+            builder.getStringAttr(newSymName));
+    }
+  }
+
+  for (auto vOp : verbatimOps) {
+    auto verbatimOp = cast<sv::VerbatimOp>(vOp);
+    SmallVector<Attribute, 8> symbols;
+    for (auto &s : verbatimOp.symbols()) {
+      auto symName = s.dyn_cast<FlatSymbolRefAttr>().getAttr().getValue();
+      auto nlaOp = nlaMap.find(symName);
+      if (nlaOp != nlaMap.end()) {
+        hw::InnerRefAttr loweredSym = nlaOp->second.second.back();
+        if (!loweredSym)
+          nlaOp->second.first->emitError("lowering for NonLocalAnchor failed");
+        symbols.push_back(loweredSym);
+      } else
+        symbols.push_back(s);
+    }
+    auto builder = Builder(verbatimOp);
+    verbatimOp->setAttr("symbols", builder.getArrayAttr(symbols));
+  }
   // Move binds from inside modules to outside modules.
   for (auto bind : state.binds) {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
@@ -1043,9 +1116,11 @@ void FIRRTLModuleLowering::lowerModuleBody(
 
   // We are done with our cursor op.
   cursor.erase();
-
+  // Map of op name to the lowered symbol name.
+  llvm::StringMap<StringRef> opNameToSymName;
   // Lower all of the other operations.
-  lowerModuleOperations(newModule, loweringState);
+  lowerModuleOperations(newModule, loweringState, opNameToSymName);
+  loweringState.updateNames(oldModule.getName(), opNameToSymName);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1055,9 +1130,11 @@ void FIRRTLModuleLowering::lowerModuleBody(
 namespace {
 struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
 
-  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState)
+  FIRRTLLowering(hw::HWModuleOp module, CircuitLoweringState &circuitState,
+                 llvm::StringMap<StringRef> &opNameToSymName)
       : theModule(module), circuitState(circuitState),
-        builder(module.getLoc(), module.getContext()) {}
+        builder(module.getLoc(), module.getContext()),
+        opNameToSymName(opNameToSymName) {}
 
   void run();
 
@@ -1288,12 +1365,15 @@ private:
   /// This is true if we've emitted `INIT_RANDOM_PROLOG_ into an initial
   /// block in this module already.
   bool randomizePrologEmitted;
+
+  llvm::StringMap<StringRef> &opNameToSymName;
 };
 } // end anonymous namespace
 
 void FIRRTLModuleLowering::lowerModuleOperations(
-    hw::HWModuleOp module, CircuitLoweringState &loweringState) {
-  FIRRTLLowering(module, loweringState).run();
+    hw::HWModuleOp module, CircuitLoweringState &loweringState,
+    llvm::StringMap<StringRef> &opNameToSymName) {
+  FIRRTLLowering(module, loweringState, opNameToSymName).run();
 }
 
 // This is the main entrypoint for the lowering pass.
@@ -1860,6 +1940,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     // name. Note: Same symbol name for all such wires in the module.
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__"));
 
+  opNameToSymName[op.name()] = symName.getValue();
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
@@ -1900,6 +1981,7 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     auto symName = builder.getStringAttr(Twine("__") + moduleName +
                                          Twine("__") + name.getValue());
 
+    opNameToSymName[op.name()] = symName.getValue();
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     builder.create<sv::AssignOp>(wire, operand);
   }
@@ -1991,11 +2073,15 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     return setLowering(op, Value());
 
   // Add symbol if DontTouch annotation present.
+  bool addSym = AnnotationSet::removeAnnotations(
+      op, "firrtl.transforms.DontTouchAnnotation");
   auto regResult =
-      AnnotationSet::removeAnnotations(op,
-                                       "firrtl.transforms.DontTouchAnnotation")
+      addSym
           ? builder.create<sv::RegOp>(resultType, op.nameAttr(), op.nameAttr())
           : builder.create<sv::RegOp>(resultType, op.nameAttr());
+
+  if (addSym)
+    opNameToSymName[op.name()] = regResult.name();
   (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
@@ -2020,6 +2106,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     return failure();
 
   auto regResult = builder.create<sv::RegOp>(resultType, op.nameAttr());
+  opNameToSymName[op.name()] = regResult.name();
   (void)setLowering(op, regResult);
 
   auto resetFn = [&]() {
@@ -2179,6 +2266,10 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
       /*parameters=*/builder.getArrayAttr({}),
       /*sym_name=*/StringAttr());
+  // Mem name should be mapped to the memory module name, and not the instance
+  // name.
+  opNameToSymName[op.name()] = memModuleAttr.getValue();
+
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
@@ -2265,14 +2356,18 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
     // Add the bind to the circuit state.  This will be moved outside of the
     // encapsulating module after all modules have been processed in parallel.
     circuitState.addBind(bindOp);
-  }
+  } else if (AnnotationSet::removeAnnotations(
+                 oldInstance, "firrtl.transforms.DontTouchAnnotation"))
+    symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
 
   // Create the new hw.instance operation.
   auto newInstance = builder.create<hw::InstanceOp>(
       newModule, oldInstance.nameAttr(), operands, parameters, symbol);
 
-  if (symbol)
+  if (symbol) {
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
+    opNameToSymName[oldInstance.name()] = symbol.getValue();
+  }
 
   // Now that we have the new hw.instance, we need to remap all of the users
   // of the outputs/results to the values returned by the instance.
