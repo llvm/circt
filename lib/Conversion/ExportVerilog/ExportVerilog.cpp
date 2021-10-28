@@ -3913,8 +3913,8 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   /// Collect any port marked as being referenced via symbol.
   auto collectPorts = [&](auto moduleOp) {
     for (size_t p = 0, e = moduleOp.getNumArguments(); p != e; ++p)
-      for (auto argAttr : moduleOp.getArgAttrs(p))
-        if (auto sym = argAttr.second.template dyn_cast<FlatSymbolRefAttr>())
+      for (std::pair<Identifier, Attribute> argAttr : moduleOp.getArgAttrs(p))
+        if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p);
   };
