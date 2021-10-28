@@ -139,20 +139,20 @@ private:
 
   /// Recursively examine an AugmentedType to populate the "mappings" file
   /// (generate XMRs) for this interface.  This does not build new interfaces.
-  bool traverseField(Attribute field, IntegerAttr id, Twine path);
+  bool traverseField(Attribute field, IntegerAttr id, Twine path, Twine index);
 
   /// Recursively examine an AugmentedType to both build new interfaces and
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
   /// the type of the field exmained.
   Optional<TypeSum> computeField(Attribute field, IntegerAttr id,
-                                 StringAttr prefix, Twine path);
+                                 StringAttr prefix, Twine path, Twine index);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
   /// and populate a "mappings" file (generate XMRs).  Return none if the
   /// interface is invalid.
   Optional<sv::InterfaceOp> traverseBundle(AugmentedBundleTypeAttr bundle,
                                            IntegerAttr id, StringAttr prefix,
-                                           Twine path);
+                                           Twine path, Twine index);
 
   /// Return the module associated with this value.
   FModuleLike getEnclosingModule(Value value);
@@ -295,7 +295,7 @@ Optional<Attribute> GrandCentralPass::fromAttr(Attribute attr) {
 }
 
 bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
-                                     Twine path) {
+                                     Twine path, Twine index) {
   return TypeSwitch<Attribute, bool>(field)
       .Case<AugmentedGroundTypeAttr>([&](auto ground) {
         Value leafValue = leafMap.lookup(ground.getID());
@@ -319,15 +319,16 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           FModuleOp module =
               cast<FModuleOp>(blockArg.getOwner()->getParentOp());
           builder.create<sv::VerbatimOp>(
-              uloc, "assign " + path + " = " + srcRef +
+              uloc, "assign " + path + index + " = " + srcRef +
                         module.getPortName(blockArg.getArgNumber()) + ";");
         } else {
           auto leafModuleName = leafValue.getDefiningOp()
                                     ->getAttr("name")
                                     .cast<StringAttr>()
                                     .getValue();
-          builder.create<sv::VerbatimOp>(
-              uloc, "assign " + path + " = " + srcRef + leafModuleName + ";");
+          builder.create<sv::VerbatimOp>(uloc, "assign " + path + index +
+                                                   " = " + srcRef +
+                                                   leafModuleName + ";");
         }
         return true;
       })
@@ -338,8 +339,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           auto field = fromAttr(elements[i]);
           if (!field)
             return false;
-          notFailed &=
-              traverseField(field.getValue(), id, path + "[" + Twine(i) + "]");
+          notFailed &= traverseField(field.getValue(), id, path,
+                                     +"[" + Twine(i) + "]" + index);
         }
         return notFailed;
       })
@@ -353,7 +354,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
           if (!name)
             name = element.cast<DictionaryAttr>().getAs<StringAttr>("defName");
           anyFailed &=
-              traverseField(field.getValue(), id, path + "." + name.getValue());
+              traverseField(field.getValue(), id,
+                            path + index + "." + name.getValue(), Twine());
         }
 
         return anyFailed;
@@ -369,8 +371,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
 
 Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
                                                  IntegerAttr id,
-                                                 StringAttr prefix,
-                                                 Twine path) {
+                                                 StringAttr prefix, Twine path,
+                                                 Twine index) {
 
   auto unsupported = [&](StringRef name, StringRef kind) {
     return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
@@ -380,7 +382,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
       .Case<AugmentedGroundTypeAttr>(
           [&](AugmentedGroundTypeAttr ground) -> Optional<TypeSum> {
             // Traverse to generate mappings.
-            traverseField(field, id, path);
+            traverseField(field, id, path, index);
             auto value = leafMap.lookup(ground.getID());
             auto tpe = value.getType().cast<FIRRTLType>();
             if (!tpe.isGround()) {
@@ -399,7 +401,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             auto elements = vector.getElements();
             auto firstElement = fromAttr(elements[0]);
             auto elementType = computeField(firstElement.getValue(), id, prefix,
-                                            path + "[" + Twine(0) + "]");
+                                            path, "[0]" + index);
             if (!elementType)
               return None;
 
@@ -407,8 +409,8 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
               auto subField = fromAttr(elements[i]);
               if (!subField)
                 return None;
-              notFailed &= traverseField(subField.getValue(), id,
-                                         path + "[" + Twine(i) + "]");
+              notFailed &= traverseField(subField.getValue(), id, path,
+                                         "[" + Twine(i) + "]" + index);
             }
 
             if (auto *tpe = std::get_if<Type>(&elementType.getValue()))
@@ -420,7 +422,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
-            auto iface = traverseBundle(bundle, id, prefix, path);
+            auto iface = traverseBundle(bundle, id, prefix, path, index);
             assert(iface && iface.getValue());
             return VerbatimType({getInterfaceName(prefix, bundle), true});
           })
@@ -452,7 +454,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
 /// drive the interface. Returns false on any failure and true on success.
 Optional<sv::InterfaceOp>
 GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
-                                 StringAttr prefix, Twine path) {
+                                 StringAttr prefix, Twine path, Twine index) {
   auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
   sv::InterfaceOp iface;
   builder.setInsertionPointToEnd(getOperation().getBody());
@@ -474,8 +476,9 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
       return None;
 
     auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
-    auto elementType = computeField(field.getValue(), id, prefix,
-                                    path + "." + name.getValue());
+    auto elementType =
+        computeField(field.getValue(), id, prefix,
+                     path + index + "." + name.getValue(), Twine());
     if (!elementType)
       return None;
 
@@ -951,8 +954,9 @@ void GrandCentralPass::runOnOperation() {
     // Error out if this returns None (indicating that the annotation annotation
     // is malformed in some way).  A good error message is generated inside
     // `traverseBundle` or the functions it calls.
-    auto iface = traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
-                                companionIDMap.lookup(bundle.getID()).name);
+    auto iface =
+        traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
+                       companionIDMap.lookup(bundle.getID()).name, Twine());
     if (!iface) {
       removalError = true;
       continue;

@@ -287,6 +287,67 @@ firrtl.circuit "InterfaceVecOfBundleType" attributes {
 
 // -----
 
+firrtl.circuit "VecOfVec" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     elements = [
+       {class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+        description = "description of foo",
+        elements = [
+          {class = "sifive.enterprise.grandcentral.AugmentedVectorType",
+           description = "description of foo",
+           elements = [
+             {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+              id = 1 : i64,
+              name = "foo"},
+             {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+              id = 2 : i64,
+              name = "foo"}],
+           name = "foo"}],
+        name = "foo"}],
+      id = 0 : i64,
+      name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  firrtl.module @DUT() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    %a = firrtl.wire {annotations = [
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       id = 1 : i64},
+      {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
+       id = 2 : i64}]} : !firrtl.uint<3>
+    firrtl.instance View_companion @View_companion()
+  }
+  firrtl.module @VecOfVec() {
+    firrtl.instance dut @DUT()
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "VecOfVec"
+
+// CHECK:      firrtl.module @View_mapping
+// CHECK-NEXT:    assign View.foo[0][0]
+// CHECK-NEXT:    assign View.foo[1][0]
+
+// CHECK:      sv.interface {{.+}} @Foo
+// CHECK:        sv.interface.signal @foo : !hw.uarray<1xuarray<2xi3>>
+
+// -----
+
 firrtl.circuit "InterfaceNode" attributes {
   annotations = [
     {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
