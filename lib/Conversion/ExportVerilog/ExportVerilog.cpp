@@ -2286,17 +2286,20 @@ void StmtEmitter::emitExpression(Value exp,
   // declarations for each variable separately from the assignments to them.
   // Otherwise we just emit inline 'wire' declarations.
   if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
-    std::string stuffAfterDeclarations(
-        outBuffer.begin() + blockDeclarationInsertPointIndex, outBuffer.end());
-    outBuffer.resize(blockDeclarationInsertPointIndex);
+    // Emit the declarations into a temporary buffer to collect the text.
+    SmallVector<char, 128> declBuffer;
+    StmtEmitter declEmitter(emitter, declBuffer, names);
+
     for (auto *expr : tooLargeSubExpressions) {
-      if (!emitDeclarationForTemporary(expr))
-        os << ";\n";
+      if (!declEmitter.emitDeclarationForTemporary(expr))
+        declEmitter.os << ";\n";
       ++numStatementsEmitted;
     }
-    blockDeclarationInsertPointIndex = outBuffer.size();
-    outBuffer.append(stuffAfterDeclarations.begin(),
-                     stuffAfterDeclarations.end());
+
+    // Take the text and insert it into the right place.
+    outBuffer.insert(outBuffer.begin() + blockDeclarationInsertPointIndex,
+                     declBuffer.begin(), declBuffer.end());
+    blockDeclarationInsertPointIndex += declBuffer.size();
   }
 
   // Emit each stmt expression in turn.
