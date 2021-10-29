@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "../AnnotationDetails.h"
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/CircuitNamespace.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
@@ -896,8 +897,7 @@ void GrandCentralPass::runOnOperation() {
       worklist.push_back(anno);
       return true;
     }
-    if (anno.isClass(
-            "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation")) {
+    if (anno.isClass(extractGrandCentralClass)) {
       if (maybeExtractInfo.hasValue()) {
         emitCircuitError("more than one 'ExtractGrandCentralAnnotation' was "
                          "found, but exactly one must be provided");
