@@ -165,3 +165,15 @@ def OutputOp : MSFTOp<"output", [Terminator, HasParent<"MSFTModuleOp">,
 
   let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
 }
+
+def PhysicalRegionOp : MSFTOp<"physical_region",
+    [Symbol, HasParent<"mlir::ModuleOp">]> {
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    PhysicalBoundsArray:$bounds
+  );
+
+  let assemblyFormat = [{
+    $sym_name `,` $bounds attr-dict
+  }];
+}

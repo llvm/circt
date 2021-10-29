@@ -61,3 +61,30 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
     "PrimitiveTypeAttr":$primitiveType,
     "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
 }
+
+def PhysicalBounds : MSFT_Attr<"PhysicalBounds"> {
+  let summary = "Describes a rectangle bounding a physical region on a device";
+  let mnemonic = "physical_bounds";
+  let parameters = (ins
+    "uint64_t":$xMin,
+    "uint64_t":$xMax,
+    "uint64_t":$yMin,
+    "uint64_t":$yMax
+  );
+}
+
+def PhysicalBoundsArray : TypedArrayAttrBase<PhysicalBounds,
+  "array of PhysicalBounds">;
+
+def PhysicalRegionRef : MSFT_Attr<"PhysicalRegionRef"> {
+  let summary = "Describes a reference to a physical region on a device";
+  let description = [{
+    Annotate a particular entity within an op with the region of the devices
+    on an FPGA to which it should mapped. The physicalRegion must refer to a
+    PhysicalRegion operation.
+  }];
+  let mnemonic = "physical_region_ref";
+  let parameters = (ins
+    "FlatSymbolRefAttr":$physicalRegion
+  );
+}
