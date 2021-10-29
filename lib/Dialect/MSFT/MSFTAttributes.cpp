@@ -115,6 +115,29 @@ void PhysLocationAttr::print(DialectAsmPrinter &p) const {
     << ", " << getX() << ", " << getY() << ", " << getNum() << '>';
 }
 
+Attribute LogicLockedRegionAttr::parse(DialectAsmParser &p, Type type) {
+  StringRef regionName;
+  uint64_t xMin, xMax, yMin, yMax;
+  if (p.parseLess() || p.parseKeyword(&regionName) || p.parseComma() ||
+      p.parseInteger(xMin) || p.parseComma() || p.parseInteger(xMax) ||
+      p.parseComma() || p.parseInteger(yMin) || p.parseComma() ||
+      p.parseInteger(yMax) || p.parseGreater()) {
+    llvm::SMLoc loc = p.getCurrentLocation();
+    p.emitError(loc, "unable to parse logic locked region");
+    return Attribute();
+  }
+
+  auto regionNameAttr = StringAttr::get(p.getContext(), regionName);
+
+  return LogicLockedRegionAttr::get(p.getContext(), regionNameAttr, xMin, xMax,
+                                    yMin, yMax);
+}
+
+void LogicLockedRegionAttr::print(DialectAsmPrinter &p) const {
+  p << "logic_locked_region<" << getRegionName().getValue() << ", " << getXMin()
+    << ", " << getXMax() << ", " << getYMin() << ", " << getYMax() << '>';
+}
+
 Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {
   StringRef attrName;
   Attribute attr;

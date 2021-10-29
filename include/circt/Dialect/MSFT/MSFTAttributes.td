@@ -55,3 +55,18 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
     "PrimitiveTypeAttr":$primitiveType,
     "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
 }
+
+def LogicLockedRegion : MSFT_Attr<"LogicLockedRegion"> {
+  let summary = "Describes a physical region on a device";
+  let description = [{
+    Annotate a particular entity within an op with the region of the devices
+    on an FPGA to which it should mapped. The bounds are the absolute lower and
+    upper bounds in the X and Y axis. The region name is a string, and any ops
+    annotated with the same string will be mapped to the same region.
+  }];
+  let mnemonic = "logic_locked_region";
+  let parameters = (ins
+    "StringAttr":$regionName,
+    "uint64_t":$xMin, "uint64_t":$xMax,
+    "uint64_t":$yMin, "uint64_t":$yMax);
+}
