@@ -18,6 +18,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/STLExtras.h"
@@ -301,6 +302,10 @@ class GrandCentralTapsPass : public GrandCentralTapsBase<GrandCentralTapsPass> {
   DenseMap<Key, Operation *> tappedOps;
   DenseMap<Key, Port> tappedPorts;
   SmallVector<PortWiring, 8> portWiring;
+
+  /// The name of the directory where data and mem tap modules should be
+  /// output.
+  StringAttr maybeExtractDirectory = {};
 };
 
 void GrandCentralTapsPass::runOnOperation() {
@@ -330,6 +335,19 @@ void GrandCentralTapsPass::runOnOperation() {
   //   - ReferenceDataTapKey: relative path with "." + source name
   //   - DataTapModuleSignalKey: relative path with "." + internal path
   // - Generate a body for the blackbox module with the signal mapping
+
+  AnnotationSet circuitAnnotations(circuitOp);
+  if (auto dict = circuitAnnotations.getAnnotation(extractGrandCentralClass)) {
+    auto directory = dict.getAs<StringAttr>("directory");
+    if (!directory) {
+      circuitOp->emitError()
+          << "contained an invalid 'ExtractGrandCentralAnnotation' that does "
+             "not contain a 'directory' field: "
+          << dict;
+      return signalPassFailure();
+    }
+    maybeExtractDirectory = directory;
+  }
 
   // Gather a list of extmodules that have data or mem tap annotations to be
   // expanded.
@@ -465,6 +483,14 @@ void GrandCentralTapsPass::runOnOperation() {
                  << blackBox.extModule.getName() << " for " << path << ")\n");
       auto impl =
           builder.create<FModuleOp>(name, ports, blackBox.filteredModuleAnnos);
+      // If extraction information was provided via an
+      // `ExtractGrandCentralAnnotation`, put the created data or memory taps
+      // inside this directory.
+      if (maybeExtractDirectory)
+        impl->setAttr("output_file",
+                      hw::OutputFileAttr::getFromDirectoryAndFilename(
+                          &getContext(), maybeExtractDirectory.getValue(),
+                          impl.getName() + ".sv"));
       builder.setInsertionPointToEnd(impl.getBody());
 
       // Connect the output ports to the appropriate tapped object.
