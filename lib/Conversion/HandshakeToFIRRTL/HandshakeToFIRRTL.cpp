@@ -2262,6 +2262,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   }
 
 private:
+  /// Top level FIRRTL circuit operation, which we'll emit into. Marked as
+  /// mutable due to circuitOp.getBody() being non-const.
   mutable CircuitOp circuitOp;
 };
 
