@@ -80,6 +80,8 @@ public:
   /// Assign an instance to a primitive. Return false if another instance is
   /// already placed at that location.
   LogicalResult addPlacement(PhysLocationAttr, PlacedInstance);
+  /// Assign an operation to a region. Return false on failure.
+  LogicalResult addPlacement(LogicLockedRegionAttr, PlacedInstance);
   /// Using the operation attributes, add the proper placements to the database.
   /// Return the number of placements which weren't added due to conflicts.
   size_t addPlacements(FlatSymbolRefAttr rootMod, mlir::Operation *);
@@ -102,6 +104,10 @@ public:
                           std::make_tuple(-1, -1, -1, -1),
                       Optional<PrimitiveType> primType = {});
 
+  /// Walk the region placement information.
+  void walkRegionPlacements(
+      function_ref<void(LogicLockedRegionAttr, PlacedInstance)>);
+
 private:
   MLIRContext *ctxt;
   Operation *top;
@@ -110,12 +116,15 @@ private:
   using DimNumMap = DenseMap<size_t, DimDevType>;
   using DimYMap = DenseMap<size_t, DimNumMap>;
   using DimXMap = DenseMap<size_t, DimYMap>;
+  using InstanceRegion = std::pair<PlacedInstance, LogicLockedRegionAttr>;
+  using RegionPlacements = SmallVector<InstanceRegion>;
 
   /// Get the leaf node. Abstract this out to make it easier to change the
   /// underlying data structure.
   Optional<PlacedInstance *> getLeaf(PhysLocationAttr);
 
   DimXMap placements;
+  RegionPlacements regionPlacements;
   bool seeded;
 };
 

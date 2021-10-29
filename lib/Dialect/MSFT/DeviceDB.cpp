@@ -92,6 +92,13 @@ LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
   return success();
 }
 
+/// Assign an operation to a region. Return false on failure.
+LogicalResult PlacementDB::addPlacement(LogicLockedRegionAttr region,
+                                        PlacedInstance inst) {
+  regionPlacements.emplace_back(inst, region);
+  return success();
+}
+
 /// Using the operation attributes, add the proper placements to the database.
 /// Return the number of placements which weren't added due to conflicts.
 size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
@@ -110,16 +117,25 @@ size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
             if (instPath.getRootModule() != rootMod)
               continue;
 
+            // Enforce attribute naming convention.
+            if (!attrName.startswith("loc:")) {
+              op->emitOpError(
+                  "PhysLoc attributes must have names starting with 'loc'");
+              ++numFailed;
+              continue;
+            }
+            auto nameSuffix = attrName.substr(4);
+
             // If we recognize the type, validate and add it.
             if (auto loc = caseAttr.getAttr().dyn_cast<PhysLocationAttr>()) {
-              if (!attrName.startswith("loc:")) {
-                op->emitOpError(
-                    "PhysLoc attributes must have names starting with 'loc'");
+              LogicalResult added =
+                  addPlacement(loc, PlacedInstance{instPath, nameSuffix, op});
+              if (failed(added))
                 ++numFailed;
-                continue;
-              }
+            } else if (auto region = caseAttr.getAttr()
+                                         .dyn_cast<LogicLockedRegionAttr>()) {
               LogicalResult added = addPlacement(
-                  loc, PlacedInstance{instPath, attrName.substr(4), op});
+                  region, PlacedInstance{instPath, nameSuffix, op});
               if (failed(added))
                 ++numFailed;
             }
@@ -251,4 +267,13 @@ void PlacementDB::walkPlacements(
       }
     }
   }
+}
+
+/// Walk the region placement information.
+void PlacementDB::walkRegionPlacements(
+    function_ref<void(LogicLockedRegionAttr, PlacedInstance)> callback) {
+  for (auto placementIter = regionPlacements.begin(),
+            e = regionPlacements.end();
+       placementIter != e; ++placementIter)
+    callback(placementIter->second, placementIter->first);
 }

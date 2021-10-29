@@ -40,9 +40,23 @@ struct TclOutputState {
 };
 } // anonymous namespace
 
-void emitPath(TclOutputState &s, RootedInstancePathAttr path) {
+static void emitPath(TclOutputState &s, RootedInstancePathAttr path) {
   for (auto part : path.getPath())
     s.os << part.getValue() << '|';
+}
+
+static void emitInstancePath(TclOutputState &s,
+                             PlacementDB::PlacedInstance inst) {
+  // To which entity does this apply?
+  s.os << " -to $parent|";
+  emitPath(s, inst.path);
+  // If instance name is specified, add it in between the parent entity path and
+  // the child entity patch.
+  if (auto instOp = dyn_cast<hw::InstanceOp>(inst.op))
+    s.os << instOp.instanceName() << '|';
+  else if (auto name = inst.op->getAttrOfType<StringAttr>("name"))
+    s.os << name.getValue() << '|';
+  s.os << inst.subpath;
 }
 
 /// Emit tcl in the form of:
@@ -71,16 +85,38 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
   s.os << "_X" << pla.getX() << "_Y" << pla.getY() << "_" << numCharacter
        << pla.getNum();
 
-  // To which entity does this apply?
-  s.os << " -to $parent|";
-  emitPath(s, inst.path);
-  // If instance name is specified, add it in between the parent entity path and
-  // the child entity patch.
-  if (auto instOp = dyn_cast<hw::InstanceOp>(inst.op))
-    s.os << instOp.instanceName() << '|';
-  else if (auto name = inst.op->getAttrOfType<StringAttr>("name"))
-    s.os << name.getValue() << '|';
-  s.os << inst.subpath << '\n';
+  emitInstancePath(s, inst);
+  s.os << '\n';
+}
+
+/// Emit tcl in the form of:
+/// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
+static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
+                 LogicLockedRegionAttr region) {
+  // PLACE_REGION directive.
+  s.indent() << "set_instance_assignment -name PLACE_REGION \"";
+  s.os << 'X' << region.getXMin() << ' ';
+  s.os << 'Y' << region.getYMin() << ' ';
+  s.os << 'X' << region.getXMax() << ' ';
+  s.os << 'Y' << region.getYMax() << '"';
+  emitInstancePath(s, inst);
+  s.os << '\n';
+
+  // RESERVE_PLACE_REGION directive.
+  s.indent() << "set_instance_assignment -name RESERVE_PLACE_REGION OFF";
+  emitInstancePath(s, inst);
+  s.os << '\n';
+
+  // CORE_ONLY_PLACE_REGION directive.
+  s.indent() << "set_instance_assignment -name CORE_ONLY_PLACE_REGION ON";
+  emitInstancePath(s, inst);
+  s.os << '\n';
+
+  // REGION_NAME directive.
+  s.indent() << "set_instance_assignment -name REGION_NAME ";
+  s.os << region.getRegionName().getValue();
+  emitInstancePath(s, inst);
+  s.os << '\n';
 }
 
 /// Write out all the relevant tcl commands. Create one 'proc' per module which
@@ -99,6 +135,11 @@ LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
   db.walkPlacements(
       [&state](PhysLocationAttr loc, PlacementDB::PlacedInstance inst) {
         emit(state, inst, loc);
+      });
+
+  db.walkRegionPlacements(
+      [&state](LogicLockedRegionAttr region, PlacementDB::PlacedInstance inst) {
+        emit(state, inst, region);
       });
 
   os << "}\n\n";

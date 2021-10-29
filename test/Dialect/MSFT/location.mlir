@@ -23,3 +23,9 @@ hw.module @deeper() {
   hw.instance "leaf" @leaf() -> ()
   // TCL: set_location_assignment M20K_X15_Y9_N3 -to $parent|branch|leaf|foo|memBank2
 }
+
+// TCL-LABEL: proc regions_config
+hw.module @regions() {
+  %0 = hw.constant 0 : i1 { "loc:reg1" = #msft.switch.inst<@regions[]=#msft.logic_locked_region<region1, 0, 10, 0, 10>> }
+  %1 = hw.constant 1 : i1 { "loc:reg2" = #msft.switch.inst<@regions[]=#msft.logic_locked_region<region2, 0, 10, 10, 20>> }
+}
