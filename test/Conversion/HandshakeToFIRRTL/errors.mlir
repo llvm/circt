@@ -22,7 +22,7 @@ module {
 // -----
 
 // test multiple candidate top components
-// expected-error @+1 {{'builtin.module' op multiple candidate top-level modules detected (bar, foo). Please remove one of these from the input file.}}
+// expected-error @+1 {{'builtin.module' op multiple candidate top-level modules detected (bar, foo). Please remove one of these from the source program.}}
 module {
   handshake.func @bar(%ctrl : none) -> (none) {
     %0 = handshake.instance @baz(%ctrl) : (none) -> (none)
