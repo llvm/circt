@@ -77,15 +77,20 @@ size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB self) {
 MlirLogicalResult
 circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self, MlirAttribute cLoc,
                                  CirctMSFTPlacedInstance cInst) {
-  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  Attribute attr = unwrap(cLoc);
   RootedInstancePathAttr path =
       unwrap(cInst.path).cast<RootedInstancePathAttr>();
   StringAttr subpath = StringAttr::get(
-      loc.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
+      attr.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
   auto inst =
       PlacementDB::PlacedInstance{path, subpath.getValue(), unwrap(cInst.op)};
 
-  return wrap(unwrap(self)->addPlacement(loc, inst));
+  if (auto loc = attr.dyn_cast<PhysLocationAttr>())
+    return wrap(unwrap(self)->addPlacement(loc, inst));
+  if (auto region = attr.dyn_cast<LogicLockedRegionAttr>())
+    return wrap(unwrap(self)->addPlacement(region, inst));
+
+  return wrap(failure());
 }
 bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB self,
                                           MlirAttribute cLoc,
@@ -156,6 +161,18 @@ MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext cCtxt,
   auto ctxt = unwrap(cCtxt);
   return wrap(PhysLocationAttr::get(
       ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num));
+}
+
+bool circtMSFTAttributeIsALogicLockedRegionAttr(MlirAttribute attr) {
+  return unwrap(attr).isa<LogicLockedRegionAttr>();
+}
+MlirAttribute circtMSFTAttributeLogicLockedRegionAttrGet(
+    MlirContext cCtxt, MlirStringRef regionName, uint64_t xMin, uint64_t xMax,
+    uint64_t yMin, uint64_t yMax) {
+  auto ctxt = unwrap(cCtxt);
+  auto regionNameAttr = StringAttr::get(ctxt, unwrap(regionName));
+  return wrap(
+      LogicLockedRegionAttr::get(ctxt, regionNameAttr, xMin, xMax, yMin, yMax));
 }
 
 CirctMSFTPrimitiveType

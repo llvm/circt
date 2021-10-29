@@ -3,7 +3,7 @@
 import pycde
 import circt.dialects.hw
 
-from pycde.attributes import placement
+from pycde.attributes import placement, logic_locked_region
 from pycde.devicedb import PhysLocation, PrimitiveType
 
 
@@ -93,6 +93,8 @@ instance_attrs.lookup(pycde.AppID("UnParameterized")).add_attribute(loc)
 loc = placement(["memory", "bank"], PrimitiveType.DSP, 39, 25, 0)
 instance_attrs.lookup(pycde.AppID("UnParameterized",
                                   "Nothing")).add_attribute(loc)
+region = logic_locked_region(["reg1"], "region1", 0, 10, 0, 10)
+instance_attrs.lookup(pycde.AppID("UnParameterized")).add_attribute(region)
 test_inst = t.get_instance(Test)
 test_inst.walk(instance_attrs.apply_attributes_visitor)
 
@@ -116,4 +118,8 @@ print("=== Tcl")
 # CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
 # CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
 # CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
+# CHECK-DAG:  set_instance_assignment -name PLACE_REGION "X0 Y0 X10 Y10" -to $parent|UnParameterized|reg1
+# CHECK-DAG:  set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|UnParameterized|reg1
+# CHECK-DAG:  set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|UnParameterized|reg1
+# CHECK-DAG:  set_instance_assignment -name REGION_NAME region1 -to $parent|UnParameterized|reg1
 t.print_tcl(Test)

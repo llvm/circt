@@ -36,6 +36,15 @@ class PhysLocation:
     return f"PhysLocation<{loc.devtype}, x:{loc.x}, y:{loc.y}, num:{loc.num}>"
 
 
+class LogicLockedRegion:
+  __slots__ = ["_region"]
+
+  def __init__(self, region_name: str, x_min: int, x_max: int, y_min: int,
+               y_max: int):
+    self._region = msft.LogicLockedRegionAttr.get(region_name, x_min, x_max,
+                                                  y_min, y_max)
+
+
 class PrimitiveDB:
   __slots__ = ["_db"]
 

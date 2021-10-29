@@ -55,6 +55,12 @@ MLIR_CAPI_EXPORTED uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute);
 MLIR_CAPI_EXPORTED uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute);
 
 MLIR_CAPI_EXPORTED bool
+    circtMSFTAttributeIsALogicLockedRegionAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirAttribute circtMSFTAttributeLogicLockedRegionAttrGet(
+    MlirContext, MlirStringRef regionName, uint64_t xMin, uint64_t xMax,
+    uint64_t yMin, uint64_t yMax);
+
+MLIR_CAPI_EXPORTED bool
     circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute
 circtMSFTRootedInstancePathAttrGet(MlirContext, MlirAttribute rootSym,

@@ -155,6 +155,20 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
         return circtMSFTPhysLocationAttrGetNum(self);
       });
 
+  mlir_attribute_subclass(m, "LogicLockedRegionAttr",
+                          circtMSFTAttributeIsALogicLockedRegionAttr)
+      .def_classmethod(
+          "get",
+          [](py::object cls, std::string regionName, uint64_t xMin,
+             uint64_t xMax, uint64_t yMin, uint64_t yMax, MlirContext ctxt) {
+            return cls(circtMSFTAttributeLogicLockedRegionAttrGet(
+                ctxt, mlirStringRefCreateFromCString(regionName.c_str()), xMin,
+                xMax, yMin, yMax));
+          },
+          "Create a physical location attribute", py::arg(),
+          py::arg("region_nam"), py::arg("x_min"), py::arg("x_max"),
+          py::arg("y_min"), py::arg("y_max"), py::arg("ctxt") = py::none());
+
   mlir_attribute_subclass(m, "RootedInstancePathAttr",
                           circtMSFTAttributeIsARootedInstancePathAttribute)
       .def_classmethod(
