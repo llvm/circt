@@ -3,8 +3,8 @@
 firrtl.circuit "TestHarness" attributes {
   annotations = [{
     class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
-    directory = "builds/sandbox/dataTaps/firrtl",
-    filename = "builds/sandbox/dataTaps/firrtl/bindings.sv"
+    directory = "outputDirectory",
+    filename = "outputDirectory/bindings.sv"
   }]
 } {
   // CHECK-LABEL: firrtl.module @Bar
@@ -116,7 +116,7 @@ firrtl.circuit "TestHarness" attributes {
     firrtl.connect %out, %bar_out : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
-  // CHECK: firrtl.module [[DT:@DataTap.*]](
+  // CHECK: firrtl.module @[[DT:DataTap.*]](
   // CHECK-SAME: out %_9: !firrtl.uint<1>
   // CHECK-SAME: out %_8: !firrtl.sint<8>
   // CHECK-SAME: out %_7: !firrtl.uint<1>
@@ -127,6 +127,7 @@ firrtl.circuit "TestHarness" attributes {
   // CHECK-SAME: out %_2: !firrtl.uint<1>
   // CHECK-SAME: out %_1: !firrtl.clock
   // CHECK-SAME: out %_0: !firrtl.uint<1>
+  // CHECK-SAME: #hw.output_file<"outputDirectory/[[DT]].sv">
   // CHECK-NEXT: [[V9:%.+]] = firrtl.constant 0 : !firrtl.uint<1>
   // CHECK-NEXT: firrtl.connect %_9, [[V9]]
   // CHECK-NEXT: [[V8:%.+]] = firrtl.constant -42 : !firrtl.sint<8>
@@ -178,11 +179,12 @@ firrtl.circuit "TestHarness" attributes {
     defname = "DataTap"
   }
 
-  // CHECK: firrtl.module [[MT:@MemTap.*]](
+  // CHECK: firrtl.module @[[MT:MemTap.*]](
   // CHECK-NOT: class = "sifive.enterprise.grandcentral.MemTapAnnotation"
   // CHECK-SAME: out %mem_0: !firrtl.uint<1>
   // CHECK-SAME: out %mem_1: !firrtl.uint<1>
   // CHECK-SAME: class = "firrtl.transforms.NoDedupAnnotation"
+  // CHECK-SAME: #hw.output_file<"outputDirectory/[[MT]].sv">
   // CHECK-NEXT: [[V0:%.+]] = firrtl.verbatim.expr "foo.bar.mem.Memory[0]"
   // CHECK-NEXT: firrtl.connect %mem_0, [[V0:%.+]]
   // CHECK-NEXT: [[V1:%.+]] = firrtl.verbatim.expr "foo.bar.mem.Memory[1]"
@@ -227,9 +229,9 @@ firrtl.circuit "TestHarness" attributes {
     firrtl.connect %out, %foo_out : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.instance bigScary @BlackHole()
     %0 = firrtl.instance extmoduleWithTappedPort @ExtmoduleWithTappedPort(out out: !firrtl.uint<1>)
-    // CHECK: firrtl.instance dataTap [[DT]]
+    // CHECK: firrtl.instance dataTap @[[DT]]
     %DataTap_9, %DataTap_8, %DataTap_7, %DataTap_6, %DataTap_5, %DataTap_4, %DataTap_3, %DataTap_2, %DataTap_1, %DataTap_0 = firrtl.instance dataTap @DataTap(out _9: !firrtl.uint<1>, out _8: !firrtl.sint<8>, out _7: !firrtl.uint<1>, out _6: !firrtl.uint<1>, out _5: !firrtl.uint<1>, out _4: !firrtl.uint<1>, out _3: !firrtl.uint<1>, out _2: !firrtl.uint<1>, out _1: !firrtl.clock, out _0: !firrtl.uint<1>)
-    // CHECK: firrtl.instance memTap [[MT]]
+    // CHECK: firrtl.instance memTap @[[MT]]
     %MemTap_mem_0, %MemTap_mem_1 = firrtl.instance memTap @MemTap(out mem_0: !firrtl.uint<1>, out mem_1: !firrtl.uint<1>)
   }
 }
