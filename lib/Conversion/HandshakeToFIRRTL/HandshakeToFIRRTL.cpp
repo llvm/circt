@@ -2313,9 +2313,10 @@ static LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
         sorted.insert(sorted.begin(), node);
       };
   for (auto it : instanceGraph) {
-    if (visited.count(it.first) == 0 && !cyclic) {
+    if (visited.count(it.first) == 0)
       cycleUtil(it.first, {});
-    }
+    if (cyclic)
+      break;
   }
 
   if (cyclic) {
@@ -2335,7 +2336,7 @@ static LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
     err << "multiple candidate top-level modules detected (";
     llvm::interleaveComma(candidateTopLevel, err,
                           [&](auto topLevel) { err << topLevel; });
-    err << "). Please remove one of these from the input file.";
+    err << "). Please remove one of these from the source program.";
     return err;
   }
   topLevel = *candidateTopLevel.begin();
