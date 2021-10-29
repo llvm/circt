@@ -861,6 +861,17 @@ bool handshake::JoinOp::tryExecute(
   return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
 }
 
+static LogicalResult verifyInstanceOp(handshake::InstanceOp op) {
+  if (op->getNumOperands() == 0)
+    return op.emitOpError() << "must provide at least a control operand.";
+
+  if (!op.getControl().getType().dyn_cast<NoneType>())
+    return op.emitOpError()
+           << "last operand must be a control (none-typed) operand.";
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen'd op method definitions
 //===----------------------------------------------------------------------===//

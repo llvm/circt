@@ -1636,12 +1636,19 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
 LogicalResult replaceCallOps(handshake::FuncOp f,
                              ConversionPatternRewriter &rewriter) {
   for (Block &block : f) {
+    /// An instance is activated whenever control arrives at the basic block of
+    /// the source callOp.
+    Operation *cntrlMg =
+        block.isEntryBlock() ? getStartOp(&block) : getControlMerge(&block);
+    assert(cntrlMg);
     for (Operation &op : block) {
       if (auto callOp = dyn_cast<CallOp>(op)) {
+        llvm::SmallVector<Value> operands;
+        llvm::copy(callOp.getOperands(), std::back_inserter(operands));
+        operands.push_back(cntrlMg->getResult(0));
         rewriter.setInsertionPoint(callOp);
         rewriter.replaceOpWithNewOp<handshake::InstanceOp>(
-            callOp, callOp.getCallee(), callOp.getResultTypes(),
-            callOp.getOperands());
+            callOp, callOp.getCallee(), callOp.getResultTypes(), operands);
       }
     }
   }
@@ -1701,10 +1708,10 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
       },
       ctx, newFuncOp);
 
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(replaceCallOps, ctx, newFuncOp);
   (void)partiallyLowerFuncOp<handshake::FuncOp>(setControlOnlyPath, ctx,
                                                 newFuncOp);
   (void)partiallyLowerFuncOp<handshake::FuncOp>(addMergeOps, ctx, newFuncOp);
+  (void)partiallyLowerFuncOp<handshake::FuncOp>(replaceCallOps, ctx, newFuncOp);
   (void)partiallyLowerFuncOp<handshake::FuncOp>(addBranchOps, ctx, newFuncOp);
   (void)partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp);
   (void)partiallyLowerFuncOp<handshake::FuncOp>(connectConstantsToControl, ctx,

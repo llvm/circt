@@ -157,11 +157,18 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
     CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<SymbolRefAttr>("module");
     }
+
+    /// Get the control operand of this instance op
+    Value getControl() {
+      return getOperands().back();
+    }
   }];
 
   let assemblyFormat = [{
     $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
   }];
+
+  let verifier = [{ return ::verify$cppClass(*this); }];
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
