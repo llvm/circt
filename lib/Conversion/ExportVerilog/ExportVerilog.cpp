@@ -13,6 +13,7 @@
 #include "circt/Conversion/ExportVerilog.h"
 #include "../PassDetail.h"
 #include "ExportVerilogInternals.h"
+#include "RearrangableOStream.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombVisitors.h"
 #include "circt/Dialect/HW/HWAttributes.h"
@@ -2118,10 +2119,10 @@ class StmtEmitter : public EmitterBase,
 public:
   /// Create an ExprEmitter for the specified module emitter, and keeping track
   /// of any emitted expressions in the specified set.
-  StmtEmitter(ModuleEmitter &emitter, SmallVectorImpl<char> &outBuffer,
+  StmtEmitter(ModuleEmitter &emitter, RearrangableOStream &outStream,
               ModuleNameManager &names)
-      : EmitterBase(emitter.state, stringStream), emitter(emitter),
-        stringStream(outBuffer), outBuffer(outBuffer), names(names) {}
+      : EmitterBase(emitter.state, outStream), emitter(emitter),
+        rearrangableStream(outStream), names(names) {}
 
   void emitStatement(Operation *op);
   void emitStatementBlock(Block &body);
@@ -2130,7 +2131,7 @@ public:
   /// Emit the declaration for the temporary operation. If the operation is not
   /// a constant, emit no initializer and no semicolon, e.g. `wire foo`, and
   /// return false. If the operation *is* a constant, also emit the initializer
-  /// and semicolon, e.g. `localparam K = 1'h0`, and return true.
+  /// and semicolon, e.g. `localparam K = 1'h0;`, and return true.
   bool emitDeclarationForTemporary(Operation *op);
 
 private:
@@ -2227,19 +2228,19 @@ public:
   ModuleEmitter &emitter;
 
 private:
-  llvm::raw_svector_ostream stringStream;
-  /// All statements are emitted into a temporary buffer, this is it.
-  SmallVectorImpl<char> &outBuffer;
+  /// This is the current ostream we're emiting to, when we know it is a
+  /// rearrangableStream.
+  RearrangableOStream &rearrangableStream;
 
   /// Track the legalized names.
   ModuleNameManager &names;
 
   /// This is the index of the start of the current statement being emitted.
-  size_t statementBeginningIndex = 0;
+  RearrangableOStream::Cursor statementBeginning;
 
   /// This is the index of the end of the declaration region of the current
   /// 'begin' block, used to emit variable declarations.
-  size_t blockDeclarationInsertPointIndex = 0;
+  RearrangableOStream::Cursor blockDeclarationInsertPoint;
 
   /// This keeps track of the number of statements emitted, important for
   /// determining if we need to put out a begin/end marker in a block
@@ -2256,11 +2257,11 @@ private:
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
-  assert(statementBeginningIndex >= blockDeclarationInsertPointIndex &&
-         "indexes out of order");
+  SmallVector<char, 128> exprBuffer;
   SmallVector<Operation *> tooLargeSubExpressions;
-  ExprEmitter(emitter, outBuffer, emittedExprs, tooLargeSubExpressions, names)
+  ExprEmitter(emitter, exprBuffer, emittedExprs, tooLargeSubExpressions, names)
       .emitExpression(exp, parenthesizeIfLooserThan);
+  os.write(exprBuffer.data(), exprBuffer.size());
 
   // It is possible that the emitted expression was too large to fit on a line
   // and needs to be split.  If so, the new subexpressions that need emitting
@@ -2269,44 +2270,65 @@ void StmtEmitter::emitExpression(Value exp,
   if (tooLargeSubExpressions.empty())
     return;
 
-  // Pop this statement off and save it to the side.
-  std::string thisStmt(outBuffer.begin() + statementBeginningIndex,
-                       outBuffer.end());
-  outBuffer.resize(statementBeginningIndex);
-
   // If we are working on a procedural statement, we need to emit the
   // declarations for each variable separately from the assignments to them.
   // Otherwise we just emit inline 'wire' declarations.
+  RearrangableOStream::Cursor declStartCursor, declEndCursor;
   if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
-    // Emit the declarations into a temporary buffer to collect the text.
-    SmallVector<char, 128> declBuffer;
-    StmtEmitter declEmitter(emitter, declBuffer, names);
+    // Split the current segment to make sure the cursors we are about to create
+    // don't get invalidated by statement reordering.
+    rearrangableStream.splitCurrentSegment();
 
+    // We're about to emit new things that we want to rearrange.
+    declStartCursor = rearrangableStream.getCursor();
+
+    // Emit the declarations into the stream.
     for (auto *expr : tooLargeSubExpressions) {
-      if (!declEmitter.emitDeclarationForTemporary(expr))
-        declEmitter.os << ";\n";
+      // TODO: This results in a lot of things like this:
+      //   automatic logic _tmp;
+      //   automatic logic _tmp_0;
+      // which could be turned into a comma separated list and properly
+      // justified.  We could collect these and emit them all at once when
+      // we recurse up to finishing off the procedural statement.  That would
+      // also eliminate the need for blockDeclarationInsertPoint to be so
+      // 'global'.
+      if (!emitDeclarationForTemporary(expr))
+        os << ";\n";
       ++numStatementsEmitted;
     }
-
-    // Take the text and insert it into the right place.
-    outBuffer.insert(outBuffer.begin() + blockDeclarationInsertPointIndex,
-                     declBuffer.begin(), declBuffer.end());
-    blockDeclarationInsertPointIndex += declBuffer.size();
+    declEndCursor = rearrangableStream.getCursor();
   }
 
+  /// Generating new statements will change `statementBeginning`, so make sure
+  /// to keep track of what it is.
+  auto prevStmtBeginning = statementBeginning;
+
   // Emit each stmt expression in turn.
+  auto stmtStartCursor = rearrangableStream.getCursor();
   for (auto *expr : tooLargeSubExpressions) {
-    statementBeginningIndex = outBuffer.size();
     ++numStatementsEmitted;
     emitStatementExpression(expr);
   }
 
-  // Re-add this statement now that all the preceeding ones are out.
-  statementBeginningIndex = outBuffer.size();
-  outBuffer.append(thisStmt.begin(), thisStmt.end());
+  // Rearrange all of the generated text for these statements to before the
+  // previous statement we were emitting, and restore statementBeginning to the
+  // right place.
+  statementBeginning = rearrangableStream.moveRangeBefore(
+      prevStmtBeginning, stmtStartCursor, rearrangableStream.getCursor());
+
+  if (!declStartCursor.isInvalid()) {
+    // Scoop up all of the stuff we just emitted, and move it to the
+    // blockDeclarationInsertPoint.
+    blockDeclarationInsertPoint = rearrangableStream.moveRangeBefore(
+        blockDeclarationInsertPoint, declStartCursor, declEndCursor);
+  }
 }
 
 void StmtEmitter::emitStatementExpression(Operation *op) {
+  // Know where the start of this statement is in case any out-of-band precursor
+  // statements need to be emitted.
+  statementBeginning = rearrangableStream.getCursor();
+
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
   if (op->getResult(0).use_empty()) {
@@ -2764,13 +2786,13 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
   //
   // Solve this by emitting the statements, determining if we need to
   // emit the begin, and if so, emit the begin retroactively.
-  size_t beginInsertPoint = outBuffer.size();
+  RearrangableOStream::Cursor beginInsertPoint = rearrangableStream.getCursor();
   emitLocationInfoAndNewLine(locationOps);
 
   // Change the blockDeclarationInsertPointIndex for the statements in this
   // block, and restore it back when we move on to code after the block.
-  llvm::SaveAndRestore<size_t> X(blockDeclarationInsertPointIndex,
-                                 outBuffer.size());
+  llvm::SaveAndRestore<RearrangableOStream::Cursor> X(
+      blockDeclarationInsertPoint, rearrangableStream.getCursor());
   auto numEmittedBefore = getNumStatementsEmitted();
   emitStatementBlock(*block);
 
@@ -2779,9 +2801,7 @@ void StmtEmitter::emitBlockAsStatement(Block *block,
     return;
 
   // Otherwise we emit the begin and end logic.
-  StringRef beginStr = " begin";
-  outBuffer.insert(outBuffer.begin() + beginInsertPoint, beginStr.begin(),
-                   beginStr.end());
+  rearrangableStream.insertLiteral(beginInsertPoint, " begin");
 
   indent() << "end";
   if (!multiLineComment.empty())
@@ -3189,10 +3209,6 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
 }
 
 void StmtEmitter::emitStatement(Operation *op) {
-  // Know where the start of this statement is in case any out-of-band precursor
-  // statements need to be emitted.
-  statementBeginningIndex = outBuffer.size();
-
   // Expressions may either be ignored or emitted as an expression statements.
   if (isVerilogExpression(op)) {
     if (emitter.outOfLineExpressions.count(op)) {
@@ -3203,6 +3219,10 @@ void StmtEmitter::emitStatement(Operation *op) {
   }
 
   ++numStatementsEmitted;
+
+  // Know where the start of this statement is in case any out-of-band precursor
+  // statements need to be emitted.
+  statementBeginning = rearrangableStream.getCursor();
 
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
@@ -3331,7 +3351,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
 
   // Okay, now that we have measured the things to emit, emit the things.
   for (const auto &record : valuesToEmit) {
-    statementBeginningIndex = outBuffer.size();
+    statementBeginning = rearrangableStream.getCursor();
 
     // We have two different sorts of things that we proactively emit:
     // declarations (wires, regs, localpamarams, etc) and expressions that
@@ -3388,7 +3408,7 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     // temporary declaration, put it after the already-emitted declarations.
     // This is important to maintain incrementally after each statement, because
     // each statement can generate spills when they are overly-long.
-    blockDeclarationInsertPointIndex = outBuffer.size();
+    blockDeclarationInsertPoint = rearrangableStream.getCursor();
   }
 
   os << '\n';
@@ -3412,10 +3432,10 @@ void StmtEmitter::emitStatementBlock(Block &body) {
 }
 
 void ModuleEmitter::emitStatement(Operation *op) {
-  SmallString<128> outputBuffer;
+  RearrangableOStream outputBuffer;
   ModuleNameManager names;
   StmtEmitter(*this, outputBuffer, names).emitStatement(op);
-  os << outputBuffer;
+  outputBuffer.print(os);
 }
 
 //===----------------------------------------------------------------------===//
@@ -3751,10 +3771,10 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
   reduceIndent();
 
   // Emit the body of the module.
-  SmallString<128> outputBuffer;
+  RearrangableOStream outputBuffer;
   StmtEmitter(*this, outputBuffer, names)
       .emitStatementBlock(*module.getBodyBlock());
-  os << outputBuffer;
+  outputBuffer.print(os);
   os << "endmodule\n\n";
 
   currentModuleOp = HWModuleOp();
