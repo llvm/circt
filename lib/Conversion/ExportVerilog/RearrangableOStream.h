@@ -19,7 +19,7 @@ namespace ExportVerilog {
 /// This class is a raw_ostream that supports streaming a wide variety of text
 /// data into it, but explicitly manages the orders of chunks.  It is used by
 /// ExportVerilog to support efficient insertion of text into text regions that
-/// have already been generated.  There are thre major concepts here: chunks,
+/// have already been generated.  There are three major concepts here: chunks,
 /// segments, and cursors.
 ///
 /// A "chunk" is a slab of memory that we throw text into.  We use a simple
@@ -27,11 +27,14 @@ namespace ExportVerilog {
 /// the chunk.  This is what makes this a fancy raw_ostream.
 ///
 /// "Segments" are slices of chunks represented as StringRef's.  These segments
-/// are stored in a list and can be reordered to move text around without the
+/// are stored in a list and can be reordered to move text around within the
 /// generated output.  This is what makes this "Rearrangable".
 ///
 /// "Cursors" are like iterators into the segment stream, which is the unit of
-/// reordering.
+/// reordering.  They are free to create, but you need to be a bit careful about
+/// invalidation: they are invalidated when the segment they refer to is split
+/// before their offset point.  Assertions in the code should catch the most
+/// common problems here.
 class RearrangableOStream : public raw_ostream {
 public:
   explicit RearrangableOStream() {
@@ -47,8 +50,10 @@ public:
       free(ptr);
   }
 
-  /// A Cursor represents a position in the ostream.
+  /// A Cursor represents a position in the raw_ostream.  This is represented
+  /// with a segment+offset pair.
   struct Cursor {
+    // Default construct a cursor in "invalid state".
     Cursor() : node(std::list<StringRef>::iterator()), offset(~size_t()) {}
 
     bool isInvalid() const { return offset == ~size_t(); }
@@ -89,7 +94,8 @@ public:
   void dump();
 
   /// Split and close off the currently emitted segment, and start a new one.
-  /// This can help with cursor invalidation problems.
+  /// This can help with cursor invalidation problems, because any cursor
+  /// created at a split segment cannot be invalidated (it has offset = 0).
   void splitCurrentSegment();
 
 private:
@@ -100,8 +106,8 @@ private:
   /// cursor which is guaranteed to be at the start of the segment (offset=0).
   Cursor splitSegment(Cursor position);
 
+  // Implement the raw_ostream interface.
   void write_impl(const char *ptr, size_t size) override;
-
   uint64_t current_pos() const override {
     llvm_unreachable("current_pos not supported");
   }
