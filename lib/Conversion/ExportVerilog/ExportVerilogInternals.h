@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef TRANSLATION_EXPORT_VERILOG_EXPORTVERILOGINTERNAL_H
-#define TRANSLATION_EXPORT_VERILOG_EXPORTVERILOGINTERNAL_H
+#ifndef CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
+#define CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -162,4 +162,4 @@ GlobalNameTable legalizeGlobalNames(ModuleOp topLevel);
 
 } // namespace circt
 
-#endif // TRANSLATION_EXPORT_VERILOG_EXPORTVERILOGINTERNAL_H
+#endif // CONVERSION_EXPORTVERILOG_EXPORTVERILOGINTERNAL_H

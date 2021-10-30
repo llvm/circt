@@ -1456,7 +1456,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
 
         // A helper function that returns the indeces of the "data", "rdata",
         // and "wdata" fields in the bundle corresponding to a memory port.
-        auto dataFieldIndices = [](MemOp::PortKind kind) {
+        auto dataFieldIndices = [](MemOp::PortKind kind) -> ArrayRef<unsigned> {
           static const unsigned indices[] = {3, 5};
           switch (kind) {
           case MemOp::PortKind::Read:
