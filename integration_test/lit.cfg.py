@@ -96,7 +96,7 @@ if config.verilator_path != "":
   config.available_features.add('rtl-sim')
   llvm_config.with_environment('VERILATOR_PATH', config.verilator_path)
 
-# Enable Questa if it has been detected.
+# Enable Quartus if it has been detected.
 if config.quartus_path != "":
   tool_dirs.append(os.path.dirname(config.quartus_path))
   tools.append('quartus')

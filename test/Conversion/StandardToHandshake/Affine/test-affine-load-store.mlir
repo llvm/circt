@@ -5,7 +5,7 @@
 // Simple load-store pair that has WAR dependence using constant address.
 
 func @load_store () -> () {
-  %c0 = constant 0 : index
+  %c0 = arith.constant 0 : index
   %A = memref.alloc() : memref<10xf32>
   %0 = affine.load %A[%c0] : memref<10xf32>
   affine.store %0, %A[%c0] : memref<10xf32>
@@ -31,7 +31,7 @@ func @load_store () -> () {
 // Simple load-store pair that has WAR dependence with addresses in affine expressions.
 
 func @affine_map_addr () -> () {
-  %c5 = constant 5 : index
+  %c5 = arith.constant 5 : index
   %A = memref.alloc() : memref<10xf32>
   %0 = affine.load %A[%c5 + 1] : memref<10xf32>
   affine.store %0, %A[%c5 - 1] : memref<10xf32>
@@ -47,10 +47,10 @@ func @affine_map_addr () -> () {
 // CHECK-NEXT:   %[[VAL5:.*]] = "handshake.constant"(%[[VAL3]]#2) {value = 5 : index} : (none) -> index
 // CHECK-NEXT:   %[[VAL6:.*]]:2 = "handshake.fork"(%[[VAL5]]) {control = false} : (index) -> (index, index)
 // CHECK-NEXT:   %[[VAL7:.*]] = "handshake.constant"(%[[VAL3]]#1) {value = 1 : index} : (none) -> index
-// CHECK-NEXT:   %[[VAL8:.*]] = addi %[[VAL6]]#0, %[[VAL7]] : index
+// CHECK-NEXT:   %[[VAL8:.*]] = arith.addi %[[VAL6]]#0, %[[VAL7]] : index
 // CHECK-NEXT:   %[[VAL9:.*]], %[[ADDR]] = "handshake.load"(%[[VAL8]], %[[VAL0]]#0, %[[VAL2]]#1) : (index, f32, none) -> (f32, index)
 // CHECK-NEXT:   %[[VAL10:.*]] = "handshake.constant"(%[[VAL3]]#0) {value = -1 : index} : (none) -> index
-// CHECK-NEXT:   %[[VAL11:.*]] = addi %[[VAL6]]#1, %[[VAL10]] : index
+// CHECK-NEXT:   %[[VAL11:.*]] = arith.addi %[[VAL6]]#1, %[[VAL10]] : index
 // CHECK-NEXT:   %[[VAL12:.*]] = "handshake.join"(%[[VAL2]]#0, %[[VAL1]]#0) {control = true} : (none, none) -> none
 // CHECK-NEXT:   %[[VAL13]]:2 = "handshake.store"(%[[VAL9]], %[[VAL11]], %[[VAL12]]) : (f32, index, none) -> (f32, index)
 // CHECK-NEXT:   handshake.return %[[VAL4]] : none

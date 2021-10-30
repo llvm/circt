@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "../AnnotationDetails.h"
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -50,23 +51,6 @@ public:
   }
 };
 } // end namespace llvm
-
-//===----------------------------------------------------------------------===//
-// Static class names
-//===----------------------------------------------------------------------===//
-
-static constexpr const char *dataTapsClass =
-    "sifive.enterprise.grandcentral.DataTapsAnnotation";
-static constexpr const char *memTapClass =
-    "sifive.enterprise.grandcentral.MemTapAnnotation";
-static constexpr const char *deletedKeyClass =
-    "sifive.enterprise.grandcentral.DeletedDataTapKey";
-static constexpr const char *literalKeyClass =
-    "sifive.enterprise.grandcentral.LiteralDataTapKey";
-static constexpr const char *referenceKeyClass =
-    "sifive.enterprise.grandcentral.ReferenceDataTapKey";
-static constexpr const char *internalKeyClass =
-    "sifive.enterprise.grandcentral.DataTapModuleSignalKey";
 
 //===----------------------------------------------------------------------===//
 // Utilities

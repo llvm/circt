@@ -9,7 +9,3 @@ add_public_tablegen_target(CIRCTLLHDEnumsIncGen)
 mlir_tablegen(LLHDAttributes.h.inc -gen-attrdef-decls)
 mlir_tablegen(LLHDAttributes.cpp.inc -gen-attrdef-defs)
 add_public_tablegen_target(CIRCTLLHDAttributesIncGen)
-
-set(LLVM_TARGET_DEFINITIONS LLHDCanonicalization.td)
-mlir_tablegen(LLHDCanonicalization.inc -gen-rewriters)
-add_public_tablegen_target(CIRCTLLHDCanonicalizationIncGen)

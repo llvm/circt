@@ -182,6 +182,30 @@ FileListAttr FileListAttr::getFromFilename(MLIRContext *context,
 }
 
 //===----------------------------------------------------------------------===//
+// InnerRefAttr
+//===----------------------------------------------------------------------===//
+
+Attribute InnerRefAttr::parse(DialectAsmParser &p, Type type) {
+  SymbolRefAttr attr;
+  if (p.parseLess() || p.parseAttribute<SymbolRefAttr>(attr) ||
+      p.parseGreater())
+    return Attribute();
+  if (attr.getNestedReferences().size() != 1)
+    return Attribute();
+  auto *context = p.getContext();
+  return InnerRefAttr::get(context, attr.getRootReference(),
+                           attr.getLeafReference());
+}
+
+void InnerRefAttr::print(DialectAsmPrinter &p) const {
+  p << getMnemonic() << "<";
+  p.printSymbolName(getModule().getValue());
+  p << "::";
+  p.printSymbolName(getName().getValue());
+  p << ">";
+}
+
+//===----------------------------------------------------------------------===//
 // ParamDeclAttr
 //===----------------------------------------------------------------------===//
 

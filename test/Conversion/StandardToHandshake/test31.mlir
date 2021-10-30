@@ -32,7 +32,7 @@
 // CHECK:           %[[VAL_25]]:5 = "handshake.fork"(%[[VAL_34]]#1) {control = false} : (index) -> (index, index, index, index, index)
 // CHECK:           %[[VAL_36:.*]] = "handshake.mux"(%[[VAL_25]]#0, %[[VAL_37:.*]], %[[VAL_20]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_38:.*]]:2 = "handshake.fork"(%[[VAL_36]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_39:.*]] = cmpi slt, %[[VAL_38]]#1, %[[VAL_27]]#1 : index
+// CHECK:           %[[VAL_39:.*]] = arith.cmpi slt, %[[VAL_38]]#1, %[[VAL_27]]#1 : index
 // CHECK:           %[[VAL_40:.*]]:6 = "handshake.fork"(%[[VAL_39]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_41:.*]], %[[VAL_42:.*]] = "handshake.conditional_branch"(%[[VAL_40]]#5, %[[VAL_27]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_42]]) : (index) -> ()
@@ -59,15 +59,15 @@
 // CHECK:           %[[VAL_64:.*]]:2 = "handshake.fork"(%[[VAL_63]]#3) {control = true} : (none) -> (none, none)
 // CHECK:           %[[VAL_65:.*]] = "handshake.join"(%[[VAL_64]]#1, %[[VAL_6]]#3, %[[VAL_5]]#1, %[[VAL_2]]#1) {control = true} : (none, none, none, none) -> none
 // CHECK:           "handshake.sink"(%[[VAL_62]]#1) : (index) -> ()
-// CHECK:           %[[VAL_66:.*]] = addi %[[VAL_54]]#1, %[[VAL_56]]#1 : index
+// CHECK:           %[[VAL_66:.*]] = arith.addi %[[VAL_54]]#1, %[[VAL_56]]#1 : index
 // CHECK:           %[[VAL_67:.*]] = "handshake.constant"(%[[VAL_64]]#0) {value = 7 : index} : (none) -> index
-// CHECK:           %[[VAL_68:.*]] = addi %[[VAL_66]], %[[VAL_67]] : index
+// CHECK:           %[[VAL_68:.*]] = arith.addi %[[VAL_66]], %[[VAL_67]] : index
 // CHECK:           %[[VAL_69:.*]]:3 = "handshake.fork"(%[[VAL_68]]) {control = false} : (index) -> (index, index, index)
 // CHECK:           %[[VAL_70:.*]], %[[VAL_8]] = "handshake.load"(%[[VAL_69]]#2, %[[VAL_6]]#1, %[[VAL_63]]#2) : (index, f32, none) -> (f32, index)
-// CHECK:           %[[VAL_71:.*]] = addi %[[VAL_54]]#0, %[[VAL_58]]#1 : index
+// CHECK:           %[[VAL_71:.*]] = arith.addi %[[VAL_54]]#0, %[[VAL_58]]#1 : index
 // CHECK:           %[[VAL_72:.*]], %[[VAL_4]] = "handshake.load"(%[[VAL_69]]#1, %[[VAL_2]]#0, %[[VAL_63]]#1) : (index, f32, none) -> (f32, index)
-// CHECK:           %[[VAL_73:.*]] = addf %[[VAL_70]], %[[VAL_72]] : f32
-// CHECK:           %[[VAL_74:.*]] = addf %[[VAL_60]]#1, %[[VAL_60]]#2 : f32
+// CHECK:           %[[VAL_73:.*]] = arith.addf %[[VAL_70]], %[[VAL_72]] : f32
+// CHECK:           %[[VAL_74:.*]] = arith.addf %[[VAL_60]]#1, %[[VAL_60]]#2 : f32
 // CHECK:           "handshake.sink"(%[[VAL_74]]) : (f32) -> ()
 // CHECK:           %[[VAL_75:.*]] = "handshake.join"(%[[VAL_63]]#0, %[[VAL_5]]#0) {control = true} : (none, none) -> none
 // CHECK:           %[[VAL_3]]:2 = "handshake.store"(%[[VAL_73]], %[[VAL_69]]#0, %[[VAL_75]]) : (f32, index, none) -> (f32, index)
@@ -85,23 +85,23 @@
 
     %0 = memref.alloc() : memref<10xf32>
     %10 = memref.alloc() : memref<10xf32>
-    %c0 = constant 0 : index
-    %c10 = constant 10 : index
+    %c0 = arith.constant 0 : index
+    %c10 = arith.constant 10 : index
     %9 = memref.load %0[%c0] : memref<10xf32>
-    %c1 = constant 1 : index
+    %c1 = arith.constant 1 : index
     br ^bb1(%c0 : index)
   ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
-    %2 = cmpi slt, %1, %c10 : index
+    %2 = arith.cmpi slt, %1, %c10 : index
     cond_br %2, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
-    %3 = addi %1, %arg0 : index
-    %c7 = constant 7 : index
-    %4 = addi %3, %c7 : index
+    %3 = arith.addi %1, %arg0 : index
+    %c7 = arith.constant 7 : index
+    %4 = arith.addi %3, %c7 : index
     %5 = memref.load %0[%4] : memref<10xf32>
-    %6 = addi %1, %c1 : index
+    %6 = arith.addi %1, %c1 : index
     %7 = memref.load %10[%4] : memref<10xf32>
-    %8 = addf %5, %7 : f32
-    %11 = addf %9, %9 : f32
+    %8 = arith.addf %5, %7 : f32
+    %11 = arith.addf %9, %9 : f32
     memref.store %8, %10[%4] : memref<10xf32>
     br ^bb1(%6 : index)
   ^bb3: // pred: ^bb1

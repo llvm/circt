@@ -39,7 +39,7 @@ func @load_store(memref<4x4xi32>, index, index) {
 // CHECK: }
 
 ^bb0(%0: memref<4x4xi32>, %1: index, %2: index):
-  %c1 = constant 11 : i32
+  %c1 = arith.constant 11 : i32
   memref.store %c1, %0[%1, %2] : memref<4x4xi32>
   %3 = memref.load %0[%1, %2] : memref<4x4xi32>
   return

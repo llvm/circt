@@ -41,6 +41,10 @@ static const char assumeAnnoClass[] =
 static const char coverAnnoClass[] =
     "sifive.enterprise.firrtl.ExtractCoverageAnnotation";
 static const char dutAnnoClass[] = "sifive.enterprise.firrtl.MarkDUTAnnotation";
+static const char moduleHierAnnoClass[] =
+    "sifive.enterprise.firrtl.ModuleHierarchyAnnotation";
+static const char testHarnessHierAnnoClass[] =
+    "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation";
 static const char verifBBClass[] =
     "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation";
 
@@ -175,19 +179,6 @@ static bool isZeroBitFIRRTLType(Type type) {
   return type.cast<FIRRTLType>().getPassiveType().getBitWidthOrSentinel() == 0;
 }
 
-static StringAttr getMetadataDir(CircuitOp circuit) {
-  AnnotationSet annos(circuit);
-  auto diranno = annos.getAnnotation(metadataDirectoryAttrName);
-  if (!diranno)
-    return StringAttr::get(circuit.getContext(), "");
-  auto dir = diranno.get("dirname");
-  if (!dir)
-    return StringAttr::get(circuit.getContext(), "");
-  if (!dir.isa<StringAttr>())
-    return StringAttr::get(circuit.getContext(), "");
-  return dir.cast<StringAttr>();
-}
-
 /// Move a ExtractTestCode related annotation from annotations to an attribute.
 static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
                           StringRef annoClass, StringRef attrBase) {
@@ -195,25 +186,23 @@ static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
   auto ctx = top.getContext();
   if (!anno)
     return;
-  if (auto _dir = anno.get("directory"))
-    if (auto dir = _dir.cast<StringAttr>()) {
-      SmallVector<NamedAttribute> old;
-      for (auto i : top->getAttrs())
-        old.push_back(i);
-      old.emplace_back(Identifier::get(attrBase, ctx),
-                       hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
-      top->setAttrs(old);
-    }
-  if (auto _file = anno.get("filename"))
-    if (auto file = _file.cast<StringAttr>()) {
-      SmallVector<NamedAttribute> old;
-      for (auto i : top->getAttrs())
-        old.push_back(i);
-      old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
-                       hw::OutputFileAttr::getFromFilename(
-                           ctx, file.getValue(), /*excludeFromFileList=*/true));
-      top->setAttrs(old);
-    }
+  if (auto dir = anno.getAs<StringAttr>("directory")) {
+    SmallVector<NamedAttribute> old;
+    for (auto i : top->getAttrs())
+      old.push_back(i);
+    old.emplace_back(Identifier::get(attrBase, ctx),
+                     hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue()));
+    top->setAttrs(old);
+  }
+  if (auto file = anno.getAs<StringAttr>("filename")) {
+    SmallVector<NamedAttribute> old;
+    for (auto i : top->getAttrs())
+      old.push_back(i);
+    old.emplace_back(Identifier::get(attrBase + ".bindfile", ctx),
+                     hw::OutputFileAttr::getFromFilename(
+                         ctx, file.getValue(), /*excludeFromFileList=*/true));
+    top->setAttrs(old);
+  }
 }
 
 static SmallVector<FirMemory> collectFIRRTLMemories(FModuleOp module) {
@@ -322,9 +311,22 @@ void CircuitLoweringState::processRemainingAnnotations(
             // passes that have all run by now. Since no one is responsible for
             // consuming these, they will linger around and can be ignored.
             "sifive.enterprise.firrtl.ScalaClassAnnotation", dutAnnoClass,
+            metadataDirectoryAttrName,
+            "sifive.enterprise.firrtl.ElaborationArtefactsDirectory",
+            "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+            "sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory",
+            // This annotation is used to mark which external modules are
+            // imported blackboxes from the BlackBoxReader pass.
+            "firrtl.transforms.BlackBox",
+            // This annotation is used by several GrandCentral passes.
+            "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
             // The following will be handled while lowering the verification
             // ops.
-            assertAnnoClass, assumeAnnoClass, coverAnnoClass))
+            assertAnnoClass, assumeAnnoClass, coverAnnoClass,
+            // The following will be handled after lowering FModule ops, since
+            // they are still needed on the circuit until after lowering
+            // FModules.
+            moduleHierAnnoClass, testHarnessHierAnnoClass))
       continue;
 
     mlir::emitWarning(op->getLoc(), "unprocessed annotation:'" + a.getClass() +
@@ -397,9 +399,12 @@ void FIRRTLModuleLowering::runOnOperation() {
   SmallVector<FModuleOp, 32> modulesToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass, "firrtl.assert");
-  moveVerifAnno(getOperation(), circuitAnno, assumeAnnoClass, "firrtl.assume");
-  moveVerifAnno(getOperation(), circuitAnno, coverAnnoClass, "firrtl.cover");
+  moveVerifAnno(getOperation(), circuitAnno, assertAnnoClass,
+                "firrtl.extract.assert");
+  moveVerifAnno(getOperation(), circuitAnno, assumeAnnoClass,
+                "firrtl.extract.assume");
+  moveVerifAnno(getOperation(), circuitAnno, coverAnnoClass,
+                "firrtl.extract.cover");
   circuitAnno.removeAnnotationsWithClass(assertAnnoClass, assumeAnnoClass,
                                          coverAnnoClass);
 
@@ -426,6 +431,11 @@ void FIRRTLModuleLowering::runOnOperation() {
         });
   }
 
+  // At this point, it is safe to the module hierarchy annotations, since they
+  // would have been used while lowering modules.
+  circuitAnno.removeAnnotationsWithClass(moduleHierAnnoClass,
+                                         testHarnessHierAnnoClass);
+
   SmallVector<FirMemory> memories;
   if (getContext().isMultithreadingEnabled()) {
     // TODO: Update this to use a mlir::parallelTransformReduce once it exists.
@@ -449,16 +459,6 @@ void FIRRTLModuleLowering::runOnOperation() {
   for (auto bind : state.binds) {
     bind->moveBefore(bind->getParentOfType<hw::HWModuleOp>());
   }
-
-  // Add attributes specific to the new main module, since the notion of a
-  // "main" module goes away after lowering to HW.
-  auto *newMainModule = state.oldToNewModuleMap[circuit.getMainModule()];
-  newMainModule->setAttr(moduleHierarchyFileAttrName,
-                         hw::OutputFileAttr::getFromDirectoryAndFilename(
-                             circuit.getContext(),
-                             getMetadataDir(circuit).getValue(),
-                             "testharness_hier.json",
-                             /*excludeFromFilelist=*/true));
 
   // Finally delete all the old modules.
   for (auto oldNew : state.oldToNewModuleMap)
@@ -804,18 +804,27 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
 
   // Transform module annotations
   AnnotationSet annos(oldModule);
-  // Mark the design under test as a module of interest for exporting module
-  // hierarchy information.
+
+  // Grab output file from circuit-level annotation and lower to an attribute on
+  // the module.
+  auto setModuleHierarchyFileAttr = [&](const char hierAnnoClass[]) {
+    AnnotationSet circuitAnnos(loweringState.circuitOp);
+    if (auto hierAnno = circuitAnnos.getAnnotation(hierAnnoClass))
+      newModule->setAttr(
+          moduleHierarchyFileAttrName,
+          hw::OutputFileAttr::getFromFilename(
+              &getContext(),
+              hierAnno.get("filename").cast<StringAttr>().getValue(),
+              /*excludeFromFileList=*/true));
+  };
   if (annos.removeAnnotation(dutAnnoClass))
-    newModule->setAttr(
-        moduleHierarchyFileAttrName,
-        hw::OutputFileAttr::getFromDirectoryAndFilename(
-            &getContext(),
-            getMetadataDir(oldModule->getParentOfType<CircuitOp>()).getValue(),
-            "module_hier.json",
-            /*excludeFromFileList=*/true));
+    setModuleHierarchyFileAttr(moduleHierAnnoClass);
+  if (loweringState.circuitOp.getMainModule() == oldModule)
+    setModuleHierarchyFileAttr(testHarnessHierAnnoClass);
+
   if (annos.removeAnnotation(verifBBClass))
     newModule->setAttr("firrtl.extract.cover.extra", builder.getUnitAttr());
+
   loweringState.processRemainingAnnotations(oldModule, annos);
   return newModule;
 }
@@ -2248,9 +2257,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   StringAttr symbol;
   if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
     symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
-    auto instanceSymbol = SymbolRefAttr::get(symbol);
-    auto moduleSymbol = SymbolRefAttr::get(theModule.getNameAttr());
-    auto bindOp = builder.create<sv::BindOp>(instanceSymbol, moduleSymbol);
+    auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(), symbol);
     // If the lowered op already had output file information, then use that.
     // Otherwise, generate some default bind information.
     if (auto outputFile = oldInstance->getAttr("output_file"))

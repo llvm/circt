@@ -93,41 +93,13 @@ def FuncOp : Op<Handshake_Dialect, "func", [
     }
   }];
 
-  let verifier = [{
-    // If this function is external there is nothing to do.
-    if (isExternal())
-      return success();
-
-    // Verify that the argument list of the function and the arg list of the
-    // entry block line up.  The trait already verified that the number of
-    // arguments is the same between the signature and the block.
-    auto fnInputTypes = getType().getInputs();
-    Block &entryBlock = front();
-
-    for (unsigned i = 0, e = entryBlock.getNumArguments(); i != e; ++i)
-      if (fnInputTypes[i] != entryBlock.getArgument(i).getType())
-        return emitOpError("type of entry block argument #")
-               << i << '(' << entryBlock.getArgument(i).getType()
-               << ") must match the type of the corresponding argument in "
-               << "function signature(" << fnInputTypes[i] << ')';
-
-    return success();
-  }];
+  let verifier = [{ return ::verify$cppClass(*this); }];
   let printer = [{
     FunctionType fnType = getType();
     mlir::function_like_impl::printFunctionLikeOp(p, *this, fnType.getInputs(),
         /*isVariadic=*/true, fnType.getResults());
   }];
-  let parser = [{
-    auto buildFuncType =
-        [](Builder & builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
-           mlir::function_like_impl::VariadicFlag, std::string &) {
-      return builder.getFunctionType(argTypes, results);
-    };
-
-    return mlir::function_like_impl::parseFunctionLikeOp(parser, result,
-        /*allowVariadic=*/true, buildFuncType);
-  }];
+  let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
 // InstanceOp
@@ -454,16 +426,16 @@ def ConstantOp : Handshake_Op<"constant", [
 ]> {
   let summary = "constant operation";
   let description = [{
-    The "handshake.const" has a constant value.When triggered by its
-    single input, it sends the constant value to its single
+    The "handshake.const" has a constant value. When triggered by its
+    single `ctrl` input, it sends the constant value to its single
     successor.
   }];
 
-  let arguments = (ins AnyType, AnyAttr : $value);
+  let arguments = (ins AnyAttr:$value, AnyType:$ctrl);
   let results = (outs AnyType);
 
   // let skipDefaultBuilders = 1;
-  let builders = [OpBuilder<(ins "Attribute":$value, "Value":$operand)>];
+  let builders = [OpBuilder<(ins "Attribute":$value, "Value":$ctrl)>];
 
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{

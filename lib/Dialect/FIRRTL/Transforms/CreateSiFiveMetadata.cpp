@@ -45,7 +45,12 @@ class CreateSiFiveMetadataPass
   FModuleOp dutMod;
 
 public:
-  CreateSiFiveMetadataPass(bool e) { replSeqMem = e; }
+  CreateSiFiveMetadataPass(bool _replSeqMem, StringRef _replSeqMemCircuit,
+                           StringRef _replSeqMemFile) {
+    replSeqMem = _replSeqMem;
+    replSeqMemCircuit = _replSeqMemCircuit.str();
+    replSeqMemFile = _replSeqMemFile.str();
+  }
 };
 } // end anonymous namespace
 
@@ -135,6 +140,7 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
             for (InstanceOp inst : p) {
               hierName = hierName + "." + inst.name().str();
             }
+            hierName = hierName + "." + memOp.name().str();
             hierNames.push_back(hierName);
             jsonStream.value(hierName);
           }
@@ -148,8 +154,8 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   std::string dutJsonBuffer;
   llvm::raw_string_ostream dutOs(dutJsonBuffer);
   llvm::json::OStream dutJson(dutOs);
-  DenseMap<StringRef, SmallVector<MemOp>> dutMems;
-  DenseMap<StringRef, SmallVector<MemOp>> tbMems;
+  llvm::StringMap<SmallVector<MemOp>> dutMems;
+  llvm::StringMap<SmallVector<MemOp>> tbMems;
 
   for (auto mod : circuitOp.getOps<FModuleOp>()) {
     bool isDut = dutModuleSet.contains(mod);
@@ -162,16 +168,16 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
         tbMems[name].push_back(memOp);
     }
   }
-  std::string seqMemConfStr, tbConfStr;
+  std::string seqMemConfStr;
   dutJson.array([&] {
     for (auto &dutM : dutMems)
-      createMemMetadata(dutM.getSecond(), dutJson, seqMemConfStr);
+      createMemMetadata(dutM.second, dutJson, seqMemConfStr);
   });
   testBenchJson.array([&] {
     // The tbConfStr is populated here, but unused, it will not be printed to
     // file.
     for (auto &tbM : tbMems)
-      createMemMetadata(tbM.getSecond(), testBenchJson, tbConfStr);
+      createMemMetadata(tbM.second, testBenchJson, seqMemConfStr);
   });
 
   auto *context = &getContext();
@@ -201,11 +207,15 @@ LogicalResult CreateSiFiveMetadataPass::emitMemoryMetadata() {
   if (!seqMemConfStr.empty()) {
     auto confVerbatimOp =
         builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), seqMemConfStr);
-    StringRef confFile = "memory";
-    if (dutMod)
-      confFile = dutMod.getName();
-    auto fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
-        context, metadataDir, confFile + ".conf", /*excludeFromFilelist=*/true);
+    if (replSeqMemFile.empty()) {
+      circuitOp->emitError("metadata emission failed, the option "
+                           "`-repl-seq-mem-file=<filename>` is mandatory for "
+                           "specifying a valid seq mem metadata file");
+      return failure();
+    }
+
+    auto fileAttr = hw::OutputFileAttr::getFromFilename(
+        context, replSeqMemFile, /*excludeFromFilelist=*/true);
     confVerbatimOp->setAttr("output_file", fileAttr);
   }
 
@@ -448,7 +458,8 @@ void CreateSiFiveMetadataPass::runOnOperation() {
   markAnalysesPreserved<InstanceGraph>();
 }
 
-std::unique_ptr<mlir::Pass>
-circt::firrtl::createCreateSiFiveMetadataPass(bool replSeqMem) {
-  return std::make_unique<CreateSiFiveMetadataPass>(replSeqMem);
+std::unique_ptr<mlir::Pass> circt::firrtl::createCreateSiFiveMetadataPass(
+    bool replSeqMem, StringRef replSeqMemCircuit, StringRef replSeqMemFile) {
+  return std::make_unique<CreateSiFiveMetadataPass>(
+      replSeqMem, replSeqMemCircuit, replSeqMemFile);
 }

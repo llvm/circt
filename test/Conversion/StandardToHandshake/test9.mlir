@@ -29,7 +29,7 @@ func @affine_dma_wait(%arg0: index) {
 // CHECK:           %[[VAL_17]]:6 = "handshake.fork"(%[[VAL_28]]#1) {control = false} : (index) -> (index, index, index, index, index, index)
 // CHECK:           %[[VAL_30:.*]] = "handshake.mux"(%[[VAL_17]]#0, %[[VAL_31:.*]], %[[VAL_13]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_32:.*]]:2 = "handshake.fork"(%[[VAL_30]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_33:.*]] = cmpi slt, %[[VAL_32]]#1, %[[VAL_19]]#1 : index
+// CHECK:           %[[VAL_33:.*]] = arith.cmpi slt, %[[VAL_32]]#1, %[[VAL_19]]#1 : index
 // CHECK:           %[[VAL_34:.*]]:7 = "handshake.fork"(%[[VAL_33]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_35:.*]], %[[VAL_36:.*]] = "handshake.conditional_branch"(%[[VAL_34]]#6, %[[VAL_19]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_36]]) : (index) -> ()
@@ -58,11 +58,11 @@ func @affine_dma_wait(%arg0: index) {
 // CHECK:           %[[VAL_60:.*]]:2 = "handshake.control_merge"(%[[VAL_45]]) {control = true} : (none) -> (none, index)
 // CHECK:           %[[VAL_61:.*]]:2 = "handshake.fork"(%[[VAL_60]]#0) {control = true} : (none) -> (none, none)
 // CHECK:           "handshake.sink"(%[[VAL_60]]#1) : (index) -> ()
-// CHECK:           %[[VAL_62:.*]] = addi %[[VAL_50]]#1, %[[VAL_52]]#1 : index
+// CHECK:           %[[VAL_62:.*]] = arith.addi %[[VAL_50]]#1, %[[VAL_52]]#1 : index
 // CHECK:           %[[VAL_63:.*]] = "handshake.constant"(%[[VAL_61]]#0) {value = 17 : index} : (none) -> index
-// CHECK:           %[[VAL_64:.*]] = addi %[[VAL_62]], %[[VAL_63]] : index
+// CHECK:           %[[VAL_64:.*]] = arith.addi %[[VAL_62]], %[[VAL_63]] : index
 // CHECK:           memref.dma_wait %[[VAL_54]]#1{{\[}}%[[VAL_64]]], %[[VAL_56]]#1 : memref<1xi32>
-// CHECK:           %[[VAL_65:.*]] = addi %[[VAL_50]]#0, %[[VAL_58]]#1 : index
+// CHECK:           %[[VAL_65:.*]] = arith.addi %[[VAL_50]]#0, %[[VAL_58]]#1 : index
 // CHECK:           %[[VAL_21]] = "handshake.branch"(%[[VAL_52]]#0) {control = false} : (index) -> index
 // CHECK:           %[[VAL_23]] = "handshake.branch"(%[[VAL_54]]#0) {control = false} : (memref<1xi32>) -> memref<1xi32>
 // CHECK:           %[[VAL_25]] = "handshake.branch"(%[[VAL_56]]#0) {control = false} : (index) -> index
@@ -77,20 +77,20 @@ func @affine_dma_wait(%arg0: index) {
 // CHECK:       }
 
     %0 = memref.alloc() : memref<1xi32>
-    %c64 = constant 64 : index
-    %c0 = constant 0 : index
-    %c10 = constant 10 : index
-    %c1 = constant 1 : index
+    %c64 = arith.constant 64 : index
+    %c0 = arith.constant 0 : index
+    %c10 = arith.constant 10 : index
+    %c1 = arith.constant 1 : index
     br ^bb1(%c0 : index)
   ^bb1(%1: index):      // 2 preds: ^bb0, ^bb2
-    %2 = cmpi slt, %1, %c10 : index
+    %2 = arith.cmpi slt, %1, %c10 : index
     cond_br %2, ^bb2, ^bb3
   ^bb2: // pred: ^bb1
-    %3 = addi %1, %arg0 : index
-    %c17 = constant 17 : index
-    %4 = addi %3, %c17 : index
+    %3 = arith.addi %1, %arg0 : index
+    %c17 = arith.constant 17 : index
+    %4 = arith.addi %3, %c17 : index
     memref.dma_wait %0[%4], %c64 : memref<1xi32>
-    %5 = addi %1, %c1 : index
+    %5 = arith.addi %1, %c1 : index
     br ^bb1(%5 : index)
   ^bb3: // pred: ^bb1
     return

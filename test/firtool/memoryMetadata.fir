@@ -1,4 +1,4 @@
-; RUN: firtool %s --format=fir  --annotation-file %s.anno.json --repl-seq-mem --verilog |  FileCheck %s
+; RUN: firtool %s --format=fir  --annotation-file %s.anno.json --repl-seq-mem --repl-seq-mem-file="metadata/dutModule.conf" --verilog |  FileCheck %s
 
 ; CHECK-LABEL: external module FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a
 
@@ -178,13 +178,13 @@ circuit test:
 ; CHECK:      [{"module_name":"FIRRTLMem_1_1_0_8_16_1_1_1_0_1_a","depth":16,"width":8,"masked":"true",
 ; CHECK-SAME: "read":"true","write":"true","readwrite":"false",
 ; CHECK_SAME: "mask_granularity":8,"extra_ports":[],
-; CHECK-SAME: hierarchy":["test.[[h2]].[[m]]","test.[[h1]]"
+; CHECK-SAME: hierarchy":["test.[[h2]].[[m]].tbMemoryKind1","test.[[h1]].tbMemoryKind1"
 
 ; CHECK-LABEL:       FILE "metadata/seq_mems.json"
 ; CHECK:       [{"module_name":"FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a","depth":32,"width":8,"masked":"true",
 ; CHECK-SAME:  "read":"true","write":"true","readwrite":"false",
 ; CHECK_SAME:  "mask_granularity":8,"extra_ports":[],
-; CHECK-SAME:  "hierarchy":["test.[[m2]].[[m]]"
+; CHECK-SAME:  "hierarchy":["test.[[m2]].[[m]].dutMemory"
 
 ; CHECK-LABEL: FILE "metadata/dutModule.conf"
 ; CHECK: name FIRRTLMem_1_1_0_8_32_1_1_1_0_1_a depth 32 width 8 ports mwrite,read mask_gran 8

@@ -37,7 +37,27 @@ def GroupOpInterface : OpInterface<"GroupInterface"> {
         Region* region = &$_op->getRegion(0);
         assert(region->hasOneBlock() && "The body should have one Block.");
         return &region->front();
-      }]>
+      }]>,
+    InterfaceMethod<
+      "Determines whether the given port is driven by this group.",
+      "LogicalResult",
+      "drivesPort",
+      (ins "Value":$port)>,
+    InterfaceMethod<
+      "Determines whether all the given ports are driven by this group.",
+      "LogicalResult",
+      "drivesAllPorts",
+      (ins "ValueRange":$ports)>,
+    InterfaceMethod<
+      "Determines whether any of the given ports are driven by this group.",
+      "LogicalResult",
+      "drivesAnyPort",
+      (ins "ValueRange":$ports)>,
+    InterfaceMethod<
+      "Determines whether any of the given ports are read by this group.",
+      "LogicalResult",
+      "readsAnyPort",
+      (ins "ValueRange":$ports)>
   ];
   let verify = [{ return verifyGroupInterface(op); }];
 }

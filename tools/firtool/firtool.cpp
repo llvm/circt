@@ -111,11 +111,22 @@ static cl::opt<bool>
                  cl::desc("emit metadata for metadata annotations"),
                  cl::init(true));
 
+static cl::opt<bool> emitOMIR("emit-omir",
+                              cl::desc("emit OMIR annotations to a JSON file"),
+                              cl::init(true));
+
 static cl::opt<bool> replSeqMem(
     "repl-seq-mem",
     cl::desc(
         "replace the seq mem for macro replacement and emit relevant metadata"),
     cl::init(false));
+static cl::opt<std::string>
+    replSeqMemCircuit("repl-seq-mem-circuit",
+                      cl::desc("circuit root for seq mem metadata"),
+                      cl::init(""));
+static cl::opt<std::string>
+    replSeqMemFile("repl-seq-mem-file",
+                   cl::desc("file name for seq mem metadata"), cl::init(""));
 
 static cl::opt<bool> imconstprop(
     "imconstprop",
@@ -214,6 +225,10 @@ static cl::list<std::string>
     inputOMIRFilenames("omir-file",
                        cl::desc("Optional input object model 2.0 file"),
                        cl::CommaSeparated, cl::value_desc("filename"));
+
+static cl::opt<std::string>
+    omirOutFile("output-omir", cl::desc("file name for the output omir"),
+                cl::init(""));
 
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
@@ -381,8 +396,12 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
         createSimpleCanonicalizerPass());
 
   if (emitMetadata)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
+        replSeqMem, replSeqMemCircuit, replSeqMemFile));
+
+  if (emitOMIR)
     pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createCreateSiFiveMetadataPass(replSeqMem));
+        firrtl::createEmitOMIRPass(omirOutFile));
 
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||

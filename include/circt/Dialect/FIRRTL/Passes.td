@@ -102,7 +102,25 @@ def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
   }];
   let constructor = "circt::firrtl::createCreateSiFiveMetadataPass()";
   let options = [Option<"replSeqMem", "repl-seq-mem", "bool", "false",
-      "Lower the seq mem for macro replacement and emit relevant metadata">];
+      "Lower the seq mem for macro replacement and emit relevant metadata">,
+    Option<"replSeqMemCircuit", "repl-seq-mem-circuit", "std::string", "",
+      "Circuit root for seq mem metadata">,
+    Option<"replSeqMemFile", "repl-seq-mem-file", "std::string", "",
+      "File to which emit seq meme metadata">
+  ];
+}
+
+def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
+  let summary = "Emit OMIR annotations";
+  let description = [{
+    This pass gathers the `OMIRAnnotation`s in the design, updates the contained
+    targets with the trackers that were scattered throughout the design upon
+    reading the OMIR, and serializes the resulting data into a JSON file.
+  }];
+  let constructor = "circt::firrtl::createEmitOMIRPass()";
+  let options = [Option<"outputFilename", "file", "std::string", "",
+      "Output file for the JSON-serialized OMIR data">];
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }
 
 def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {

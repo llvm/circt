@@ -179,7 +179,7 @@ def HandshakeInsertBuffer
   let constructor = "circt::createHandshakeInsertBufferPass()";
   let options = [
     ListOption<"strategies", "strategies", "std::string",
-               "List of strategies to apply. Possible values are: cycles",
+               "List of strategies to apply. Possible values are: cycles, all (default)",
                "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
   ];
 }

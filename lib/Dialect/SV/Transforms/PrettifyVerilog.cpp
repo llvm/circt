@@ -124,12 +124,8 @@ bool PrettifyVerilogPass::prettifyUnaryOperator(Operation *op) {
 
       // If the constant is in a different block, clone or move it into the
       // block.
-      if (constant->getBlock() != op->getBlock()) {
-        if (constant->hasOneUse())
-          constant->moveBefore(op);
-        else
-          operand.set(OpBuilder(op).clone(*constant)->getResult(0));
-      }
+      if (constant->getBlock() != op->getBlock())
+        operand.set(OpBuilder(op).clone(*constant)->getResult(0));
     }
   };
 

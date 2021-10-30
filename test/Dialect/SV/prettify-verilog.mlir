@@ -16,7 +16,7 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
   %b = comb.add %unary, %arg2 : i8
 
 
-  // Multi-use xor gets duplicated, and we need to make sure there is a local
+  // Multi-use arith.xori gets duplicated, and we need to make sure there is a local
   // constant as well.
   %true = hw.constant true
   %c = comb.xor %arg3, %true : i1
@@ -176,4 +176,29 @@ hw.module @MoveInstances(%a_in: i8) {
   hw.instance "xyz3" @MyExtModule(in: %b: i8) -> ()
 
   %b = comb.add %a_in, %a_in : i8
+}
+
+
+// CHECK-LABEL: hw.module @unary_sink_crash
+hw.module @unary_sink_crash(%arg0: i1) {
+  %true = hw.constant true
+  %c = comb.xor %arg0, %true : i1
+  // CHECK-NOT: hw.constant
+  // CHECK-NOT: comb.xor
+  // CHECK: sv.initial
+  sv.initial {
+    // CHECK: [[TRUE1:%.+]] = hw.constant true
+    // CHECK: [[XOR1:%.+]] = comb.xor %arg0, [[TRUE1]]
+    // CHECK: sv.if [[XOR1]]
+    sv.if %c {
+      sv.fatal 1
+    }
+
+    // CHECK: [[TRUE2:%.+]] = hw.constant true
+    // CHECK: [[XOR2:%.+]] = comb.xor %arg0, [[TRUE2]]
+    // CHECK: sv.if [[XOR2]]
+    sv.if %c {
+      sv.fatal 1
+    }
+  }
 }

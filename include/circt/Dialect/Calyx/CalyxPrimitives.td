@@ -135,10 +135,16 @@ class CalyxLibraryOp<string mnemonic, list<OpTrait> traits = []> :
     native Calyx compiler.
 
     ```mlir
-      // A 32-bit adder.
+      // A 32-bit adder. This falls under the binary library operations.
       %add.left, %add.right, %add.out = calyx.std_add @add : i32, i32, i32
-      // A 8-bit comparison operator (with a 1-bit output).
+
+      // An 8-bit comparison operator (with a 1-bit output). This falls under
+      // the boolean binary library operations.
       %gt.left, %gt.right, %gt.out = calyx.std_gt @gt : i8, i8, i1
+
+      // An 8-bit to 16-bit pad operator. This falls under the unary
+      // library operations.
+      %pad.in, %pad.out = calyx.std_pad @pad : i8, i16
     ```
   }];
 

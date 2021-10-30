@@ -57,7 +57,7 @@ Annotations have then been used for all manner of extensions including:
 
 A circuit is described, stored, and optimized in a folded representation. For
 example, there may be multiple instances of a module which will eventually
-become multiple physical copies of that module on the die. 
+become multiple physical copies of that module on the die.
 
 Targets are a mechanism to identify specific hardware in specific instances of
 modules in a FIRRTL circuit.  A target consists of a circuit, a root module, an
@@ -79,7 +79,7 @@ reference ::= (name) ("[" (index) "]" | "." (field))*
 ```
 
 Targets are specific enough to refer to any specific module in a folded,
-unfolded, or partially folded representation. 
+unfolded, or partially folded representation.
 
 To show some examples of what these look like, consider the following example
 circuit. This consists of four instances of module `Baz`, two instances of
@@ -98,7 +98,7 @@ circuit Foo:
 ```
 
 | Folded Module   | Unfolded Modules  |
-| --------------- | ----------------- | 
+| --------------- | ----------------- |
 | <img title="Folded Modules" src="includes/img/firrtl-folded-module.png"/> | <img title="Unfolded Modules" src="includes/img/firrtl-unfolded-module.png"/> |
 
 Using targets (or multiple targets), any specific module, instance, or
@@ -124,7 +124,7 @@ local target representation.
 The MLIR FIRRTL compiler supports an inline format for annotations as an
 extension to the FIRRTL syntax. These inline annotations are helpful for making
 single-file annotated FIRRTL code. This is not supported by the Scala FIRRTL
-compiler.  
+compiler.
 
 Inline annotations are attached to the `circuit`, and are JSON wrapped in `%[`
 and `]`.
@@ -193,13 +193,33 @@ any unused annotations still in the circuit. For example, the `ModuleInliner`
 pass removes `firrtl.passes.InlineAnnotation` by inlining annotated modules or
 instances. JSON Annotations map to the builtin MLIR attributes. An annotation
 is implemented using a DictionaryAttr, which holds the class, target, any
-annotation specific data. 
+annotation specific data.
 
 ## Annotations
 
 Annotations here are written in their JSON format. A "reference target"
 indicates that the annotation could target anything object in the hierarchy,
 although there may be further restrictions in the annotation.
+
+### BlackBox
+
+| Property   | Type   | Description                  |
+| ---------- | ------ | -------------                |
+| class      | string | `firrtl.transforms.BlackBox` |
+| target     | string | An ExtModule name target     |
+
+This annotation is attached to any external module created from any of the
+other blackbox annotations, such as `BlackBoxInlineAnno`. This is used when
+generating metadata about external modules to distinguish generated modules.
+This annotation is internal to the MLIR FIRRTL compiler.
+
+Example:
+```json
+{
+  "class": "firrtl.transforms.BlackBox",
+  "target": "~Foo|Foo",
+}
+```
 
 ### [BlackBoxInlineAnno](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/BlackBoxInlineAnno.html)
 
@@ -301,6 +321,24 @@ Example:
 }
 ```
 
+### ElaborationArtefactsDirectory
+
+| Property   | Type   | Description                                              |
+| ---------- | ------ | -------------                                            |
+| class      | string | `sifive.enterprise.firrtl.ElaborationArtefactsDirectory` |
+| dirname    | string | The artifact output directory                            |
+
+This annotation is used to indicate the output directory or artifacts generated
+by the ElaborationArtefacts transform.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.ElaborationArtefactsDirectory",
+  "dirname": "output/artefacts"
+}
+```
+
 ### [DontTouchAnnotation](https://www.chisel-lang.org/api/firrtl/latest/firrtl/transforms/DontTouchAnnotation.html)
 
 | Property   | Type   | Description                             |
@@ -309,10 +347,10 @@ Example:
 | target     | string | Reference target                        |
 
 The `DontTouchAnnotation` prevents the removal of elements through
-optimization. This annotation is an optimization barrier, for 
+optimization. This annotation is an optimization barrier, for
 example, it blocks constant propagation through it.
 This annotation also ensures that the name of the object is
-preserved, and not discarded or modified. 
+preserved, and not discarded or modified.
 
 Example:
 ```json
@@ -413,6 +451,45 @@ Example:
 }
 ```
 
+### MetadataDirAnnotation
+
+| Property   | Type   | Description                                      |
+| ---------- | ------ | -------------                                    |
+| class      | string | `sifive.enterprise.firrtl.MetadataDirAnnotation` |
+| dirname    | string | The directory to place generated metadata in     |
+
+This annotation is used to define the directory where metadata should be
+emitted. When this annotation is not present, metadata will be emitted to the
+"metadata" directory by default.
+
+Example:
+```json
+{
+  "class":"sifive.enterprise.firrtl.MetadataDirAnnotation",
+  "dirname":"build/metadata"
+}
+```
+
+### ModuleHierarchyAnnotation
+
+| Property   | Type   | Description                                          |
+| ---------- | ------ | -------------                                        |
+| class      | string | `sifive.enterprise.firrtl.ModuleHierarchyAnnotation` |
+| filename   | string | The full output file path.                           |
+
+This annotation indicates that a module hierarchy JSON file should be emitted
+for the module hierarchy rooted at the design under test (DUT), as indicated by
+the `MarkDUTAnnotation`. See the SV attribute, `firrtl.moduleHierarchyFile`, for
+information about the JSON file format.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.ModuleHierarchyAnnotation",
+  "filename": "./dir/hier.json"
+}
+```
+
 ### NestedPrefixModulesAnnotation
 
 | Property   | Type   | Description                                              |
@@ -427,12 +504,116 @@ If `inclusive` is false, it will only rename modules instantiated underneath
 the target module.  If a module is required to have two different prefixes, it
 will be cloned.
 
+This annotation is also applied to any interfaces or modules generated by the
+Grand Central Views/Interfaces pass.  This annotation is applied _before_
+`PrefixInterfacesAnnotation`.
+
 Example:
 ```json
 {
   "class": "sifive.enterprise.firrtl.NestedPrefixModulesAnnotation",
   "prefix": "MyPrefix_",
   "inclusive": true
+}
+```
+
+### OMIRFileAnnotation
+
+| Property   | Type   | Description                                           |
+| ---------- | ------ | -------------                                         |
+| class      | string | `freechips.rocketchip.objectmodel.OMIRFileAnnotation` |
+| filename   | string | Output file to emit OMIR to                           |
+
+This annotation defines the output file to write the JSON-serialized OMIR to after compilation.
+
+Example:
+```json
+{
+  "class": "freechips.rocketchip.objectmodel.OMIRFileAnnotation",
+  "filename": "path/to/omir.json"
+}
+```
+
+### OMIRAnnotation
+
+| Property   | Type   | Description                                       |
+| ---------- | ------ | -------------                                     |
+| class      | string | `freechips.rocketchip.objectmodel.OMIRAnnotation` |
+| nodes      | array  | A list of OMIR nodes                              |
+
+This annotation specifies a piece of Object Model 2.0 IR. The `nodes` field
+is an array of individual OMIR nodes (Scala class `OMNode`), which have the
+following form:
+```json
+{
+  "info": "@[FileA line:col FileB line:col ...]",
+  "id": "OMID:42",
+  "fields": [/*...*/]
+}
+```
+The `fields` entry is an array of individual OMIR fields (Scala class `OMField`), which have the following form:
+```json
+{
+  "info": "@[FileA line:col FileB line:col ...]",
+  "name": "foo",
+  "value": /*...*/
+}
+```
+The `value` field can be a JSON array or dictionary (corresponding to the `OMArray` and `OMMap` Scala classes, respectively), or any of the string-encoded OMIR classes:
+
+- `OMMap:<fields>`
+- `OMArray:<elements>`
+- `OMReference:<id>`
+- `OMBigInt:<value>`
+- `OMInt:<value>`
+- `OMLong:<value>`
+- `OMString:<value>`
+- `OMBoolean:<value>`
+- `OMDouble:<value>`
+- `OMBigDecimal:<value>`
+- `OMFrozenTarget:<omir>`
+- `OMDeleted`
+- `OMConstant:<literal>`
+- `OMReferenceTarget:<target>`
+- `OMMemberReferenceTarget:<target>`
+- `OMMemberInstanceTarget:<target>`
+- `OMInstanceTarget:<target>`
+- `OMDontTouchedReferenceTarget:<target>`
+
+Example:
+```json
+{
+  "class": "freechips.rocketchip.objectmodel.OMIRAnnotation",
+  "nodes": [
+    {
+      "info": "",
+      "id": "OMID:0",
+      "fields": [
+        {"info": "", "name": "a", "value": "OMReference:0"},
+        {"info": "", "name": "b", "value": "OMBigInt:42"},
+        {"info": "", "name": "c", "value": "OMLong:ff"},
+        {"info": "", "name": "d", "value": "OMString:hello"},
+        {"info": "", "name": "f", "value": "OMBigDecimal:10.5"},
+        {"info": "", "name": "g", "value": "OMDeleted:"},
+        {"info": "", "name": "h", "value": "OMConstant:UInt<2>(\"h1\")"},
+        {"info": "", "name": "i", "value": 42},
+        {"info": "", "name": "j", "value": true},
+        {"info": "", "name": "k", "value": 3.14}
+      ]
+    },
+    {
+      "info": "",
+      "id": "OMID:1",
+      "fields": [
+        {"info": "", "name": "a", "value": "OMReferenceTarget:~Foo|Foo"},
+        {"info": "", "name": "b", "value": "OMInstanceTarget:~Foo|Foo"},
+        {"info": "", "name": "c", "value": "OMMemberReferenceTarget:~Foo|Foo"},
+        {"info": "", "name": "d", "value": "OMMemberInstanceTarget:~Foo|Foo"},
+        {"info": "", "name": "e", "value": "OMDontTouchedReferenceTarget:~Foo|Foo"},
+        {"info": "", "name": "f", "value": "OMReferenceTarget:~Foo|Bar"}
+      ]
+    }
+  ]
 }
 ```
 
@@ -554,6 +735,71 @@ Example:
 {
   "class":"sifive.enterprise.firrtl.SitestTestHarnessBlackBoxAnnotation",
   "filename":"./testharness_blackboxes.json"
+}
+```
+
+### SubCircuitsTargetDirectory
+
+| Property   | Type   | Description                                                        |
+| ---------- | ------ | -------------                                                      |
+| class      | string | `sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory` |
+| dir        | string | The sub-circuit output directory                                   |
+
+This annotation is used to indicate the directory to serialize sub-circuits to
+by GrandCentral. Sub-circuits will be put in subdirectories of `dir`, named by
+their `circuitPackage` field.
+
+In the Scala FIRRTL compiler this is attached to the circuit with the
+commandline option `sub-circuits-target-dir`.
+```
+-sub-circuit-targets-dir <dir>
+-sctd <dir>
+```
+
+```
+Example:
+```json
+{
+  "class":"sifive.enterprise.grandcentral.phases.SubCircuitsTargetDirectory",
+  "dir":"verilog/verif.subcircuits"
+}
+```
+
+### TestBenchDirAnnotation
+
+| Property   | Type   | Description                                       |
+| ---------- | ------ | -------------                                     |
+| class      | string | `sifive.enterprise.firrtl.TestBenchDirAnnotation` |
+| dirname    | string | The output directory                              |
+
+This annotation is used to indicate where to emit the test bench modules
+generated by GrandCentral.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.TestBenchDirAnnotation",
+  "dirname": "output/testbench"
+}
+```
+
+### TestHarnessHierarchyAnnotation
+
+| Property   | Type   | Description                                               |
+| ---------- | ------ | -------------                                             |
+| class      | string | `sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation` |
+| filename   | string | The full output file path.                                |
+
+This annotation indicates that a module hierarchy JSON file should be emitted
+for the module hierarchy rooted at the circuit root module, which is assumed to
+be the test harness. See the SV attribute, `firrtl.moduleHierarchyFile`, for
+information about the JSON file format.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.firrtl.TestHarnessHierarchyAnnotation",
+  "filename": "./dir/hier.json"
 }
 ```
 
@@ -713,7 +959,7 @@ what the field in the bundle is.
 
 Creates a SystemVerilog interface for each bundle type.
 
-#### GrandCentralView$SerializedViewAnnotation
+#### ViewAnnotation, GrandCentralView$SerializedViewAnnotation
 
 | Property    | Type     | Description                                                              |
 | ----------- | -------- | ------------------                                                       |
@@ -723,9 +969,27 @@ Creates a SystemVerilog interface for each bundle type.
 | parent      | string   | Module target of the module the interface will be referencing            |
 | view        | object   | AugmentedBundleType representing the interface                           |
 
-Grand Central Interfaces are used to emit SystemVerilog interfaces with stable
-names. `SerializedViewAnnotation` implies `DontTouchAnnotation` on any
-`AugmentedGroundType.ref` target.
+These annotations (which are equivalent) are used to represent a SystemVerilog
+interface, a location in which it should be instantiated, and XMRs to drive the
+interface.  Any XMR sources receive `DontTouchAnnotation` to prevent these from
+being inadvertently deleted.  Note: this currently differs from the SFC
+implementation where constant propagation is not supposed to be blocked by an
+XMR.  Instead the source should be promoted to a literal value and driven on the
+interface.
+
+Either `ViewAnnotation` or `GrandCentralView$SerializedViewAnnotation` are the
+same in CIRCT.  The latter, has its "view" value serialized (again) to JSON and
+string-escaped.  When CIRCT sees any JSON string it tries to recursively
+deserialize it.  If this fails, this is deemed to be a string.  If this
+succeeds, then the JSON is unpacked.
+
+The reason for this double serialization is due to a quirk of the JSON library
+that the SFC uses.  This JSON library uses a type class pattern for users to
+tell it how to deserialize custom types.  Because the `ViewAnnotation`lives in a
+SiFive library, there is no mechanism to provide a type class implementation to
+the function that does annotation deserialization inside the SFC.  Doubly
+serializing enables the deserialization to be delayed until SFC Grand Central
+passes run and a type class implementation is available.
 
 Example:
 ```json
@@ -775,6 +1039,115 @@ the `ExtractGrandCentralCode` transform.)
 
 The directory member has no effect on the filename member, i.e., the directory
 will not be prepended to the filename.
+
+Example:
+```json
+{
+  "class": "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+  "directory": "gct-dir",
+  "filename": "gct-dir/bindings.sv"
+}
+```
+
+#### PrefixInterfacesAnnotation
+
+| Property | Type   | Description                                               |
+|----------|--------|-----------------------------------------------------------|
+| class    | string | sifive.enterprise.grandcentral.PrefixInterfacesAnnotation |
+| prefix   | string | A prefix to apply to all interface names                  |
+
+This annotation can be used to set a global prefix for all interfaces generated
+by Grand Central, including nested interfaces.  The prefix will be applied
+_after_ any prefixes set by `NestedPrefixModulesAnnotation`.
+
+This annotation may only exist zero or one times.  This differs from the SFC
+implementation which will choose the first instance of this annotation.
+
+Example:
+
+``` json
+{
+  "class": "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation",
+  "prefix": "PREFIX_"
+}
+```
+
+#### GrandCentralHierarchyFileAnnotation
+
+| Property | Type   | Description                                                              |
+|----------|--------|--------------------------------------------------------------------------|
+| class    | string | sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation       |
+| filename | string | A filename where a YAML representation of the interface should be placed |
+
+This annotation, if present, will emit a
+[YAML](https://en.wikipedia.org/wiki/YAML) representation of all interfaces that
+were generated by the Grand Central views pass.  Equivalently, this is a
+different serialization of the information contained in all `ViewAnnotation`s.
+
+An example of this annotation is as follows:
+
+``` json
+{
+  "class"
+      : "sifive.enterprise.grandcentral.GrandCentralHierarchyFileAnnotation",
+        "filename" : "directory/file.yaml"
+}
+```
+
+The format of the produced YAML file is a one-to-one mapping of the
+SystemVerilog interface to YAML.  Consider the following SystemVerilog interface
+produced by GrandCentral:
+
+``` systemverilog
+interface Foo;
+  // A 4-bit type
+  logic [3:0] a;
+  // A 2D vector of an 8-bit type
+  logic [7:0] b [1:0][0:0];
+  // A 1D vector of instances of Bar
+  Bar bar[4]();
+endinterface
+
+interface Bar;
+  logic c;
+endinterface
+
+interface Baz;
+  logic d;
+endinterface
+```
+
+This will produce the following YAML representation:
+
+``` yaml
+- name: Foo
+  fields:
+    - name: a
+      description: A 4-bit type
+      dimensions: [  ]
+      width: 4
+    - name: b
+      description: A 2D vector of an 8-bit type
+      dimensions: [ 1, 2 ]
+      width: 8
+  instances:
+    - name: bar
+      description: A 1D vector of instances of Bar
+      dimensions: [ 4 ]
+      interface:
+        name: Bar
+        fields:
+          - name: c
+            dimensions: [ ]
+            width: 1
+        instances: []
+- name: Baz:
+  fields:
+    - name: d
+      dimensions: [ ]
+      width: 1
+  instances: []
+```
 
 ### Data Taps
 
@@ -889,13 +1262,22 @@ Example:
 ## Attributes in SV
 
 Some annotations transfrom into attributes consumed by non-FIRRTL passes.  This
-section describes well-defined attributes used by HW/SV passes. 
+section describes well-defined attributes used by HW/SV passes.
 
 
 ### firrtl.moduleHierarchyFile
 
 Used by HWExportModuleHierarchy.  Signifies a root from which to dump the module
 hierarchy as a json file. This attribute has type OutputFileAttr.
+
+The exported JSON file encodes a recursive tree of module instances as JSON
+objects, with each object containing the following members:
+
+- `instance_name` - A string describing the name of the instance. Note that the
+  root module will have its `instance_name` set to the module's name.
+- `module_name` - A string describing the name of the module.
+- `instances` - An array of objects, where each object is a direct instance
+  within the current module.
 
 ### firrtl.extract.assert
 

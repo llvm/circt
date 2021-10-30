@@ -48,7 +48,7 @@
 // CHECK-NEXT: }
 module {
   func @main(%arg0 : i32, %arg1 : i32) -> i32 {
-    %0 = cmpi slt, %arg0, %arg1 : i32
+    %0 = arith.cmpi slt, %arg0, %arg1 : i32
     cond_br %0, ^bb1, ^bb2
   ^bb1:
     br ^bb3(%arg0 : i32)
@@ -162,23 +162,23 @@ module {
 // CHECK-NEXT: }
 module {
   func @main(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
-    %cst = constant 0 : i32
+    %cst = arith.constant 0 : i32
     %0:3 = scf.while (%arg3 = %arg0, %arg4 = %cst, %arg5 = %cst) : (i32, i32, i32) -> (i32, i32, i32) {
-      %1 = cmpi slt, %arg3, %arg1 : i32
+      %1 = arith.cmpi slt, %arg3, %arg1 : i32
       scf.condition(%1) %arg3, %arg4, %arg5 : i32, i32, i32
     } do {
     ^bb0(%arg3: i32, %arg4: i32, %arg5: i32):  // no predecessors
       %1:2 = scf.execute_region -> (i32, i32) {
-        %4 = cmpi slt, %arg4, %arg5 : i32
+        %4 = arith.cmpi slt, %arg4, %arg5 : i32
         cond_br %4, ^bb0, ^bb1
       ^bb0:
-        %3 = addi %arg4, %arg5 : i32
+        %3 = arith.addi %arg4, %arg5 : i32
         scf.yield %3, %3 : i32, i32
       ^bb1:
-        %5 = addi %arg4, %arg5 : i32
+        %5 = arith.addi %arg4, %arg5 : i32
         scf.yield %5, %5 : i32, i32
       }
-      %2 = addi %arg3, %arg2 : i32
+      %2 = arith.addi %arg3, %arg2 : i32
       scf.yield %2, %1#0, %1#1 : i32, i32, i32
     }
     return %0#2 : i32
@@ -288,23 +288,23 @@ module {
 // CHECK-NEXT: }
 module {
   func @main(%arg0: i32, %arg1: i32, %arg2: i32) -> i32 {
-    %cst = constant 0 : i32
+    %cst = arith.constant 0 : i32
     %0:3 = scf.while (%arg3 = %arg0, %arg4 = %cst, %arg5 = %cst) : (i32, i32, i32) -> (i32, i32, i32) {
-      %1 = cmpi slt, %arg3, %arg1 : i32
+      %1 = arith.cmpi slt, %arg3, %arg1 : i32
       scf.condition(%1) %arg3, %arg4, %arg5 : i32, i32, i32
     } do {
     ^bb0(%arg3: i32, %arg4: i32, %arg5: i32):  // no predecessors
       %1:2 = scf.execute_region -> (i32, i32) {
-        %4 = cmpi slt, %arg4, %arg5 : i32
+        %4 = arith.cmpi slt, %arg4, %arg5 : i32
         cond_br %4, ^bb0, ^bb1
       ^bb0:
-        %3 = addi %arg4, %arg5 : i32
+        %3 = arith.addi %arg4, %arg5 : i32
         scf.yield %3, %3 : i32, i32
       ^bb1:
-        %5 = subi %arg4, %arg5 : i32
+        %5 = arith.subi %arg4, %arg5 : i32
         scf.yield %5, %5 : i32, i32
       }
-      %2 = addi %arg3, %arg2 : i32
+      %2 = arith.addi %arg3, %arg2 : i32
       scf.yield %2, %1#0, %1#1 : i32, i32, i32
     }
     return %0#2 : i32
@@ -364,9 +364,9 @@ module {
 // CHECK-NEXT: }
 module {
   func @main(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 {
-    %0 = addi %a0, %a1 : i32
-    %1 = addi %0, %a1 : i32
-    %b = cmpi uge, %1, %a2 : i32
+    %0 = arith.addi %a0, %a1 : i32
+    %1 = arith.addi %0, %a1 : i32
+    %b = arith.cmpi uge, %1, %a2 : i32
     cond_br %b, ^bb1, ^bb2
   ^bb1:
     return %a1 : i32

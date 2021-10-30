@@ -9,10 +9,10 @@
 // CHECK:           %[[VAL_2:.*]] = "handshake.constant"(%[[VAL_1]]#2) {value = 0 : index} : (none) -> index
 // CHECK:           %[[VAL_3:.*]] = "handshake.constant"(%[[VAL_1]]#1) {value = -1 : index} : (none) -> index
 // CHECK:           %[[VAL_4:.*]]:2 = "handshake.fork"(%[[VAL_3]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_5:.*]] = muli %[[VAL_4]]#0, %[[VAL_4]]#1 : index
+// CHECK:           %[[VAL_5:.*]] = arith.muli %[[VAL_4]]#0, %[[VAL_4]]#1 : index
 // CHECK:           %[[VAL_6:.*]] = "handshake.constant"(%[[VAL_1]]#0) {value = 20 : index} : (none) -> index
-// CHECK:           %[[VAL_7:.*]] = addi %[[VAL_5]], %[[VAL_6]] : index
-// CHECK:           %[[VAL_8:.*]] = cmpi sge, %[[VAL_7]], %[[VAL_2]] : index
+// CHECK:           %[[VAL_7:.*]] = arith.addi %[[VAL_5]], %[[VAL_6]] : index
+// CHECK:           %[[VAL_8:.*]] = arith.cmpi sge, %[[VAL_7]], %[[VAL_2]] : index
 // CHECK:           %[[VAL_9:.*]], %[[VAL_10:.*]] = "handshake.conditional_branch"(%[[VAL_8]], %[[VAL_1]]#3) {control = true} : (i1, none) -> (none, none)
 // CHECK:           %[[VAL_11:.*]]:2 = "handshake.control_merge"(%[[VAL_9]]) {control = true} : (none) -> (none, index)
 // CHECK:           %[[VAL_12:.*]]:4 = "handshake.fork"(%[[VAL_11]]#0) {control = true} : (none) -> (none, none, none, none)
@@ -31,7 +31,7 @@
 // CHECK:           %[[VAL_21]]:3 = "handshake.fork"(%[[VAL_26]]#1) {control = false} : (index) -> (index, index, index)
 // CHECK:           %[[VAL_28:.*]] = "handshake.mux"(%[[VAL_21]]#0, %[[VAL_29:.*]], %[[VAL_17]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_30:.*]]:2 = "handshake.fork"(%[[VAL_28]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_31:.*]] = cmpi slt, %[[VAL_30]]#1, %[[VAL_23]]#1 : index
+// CHECK:           %[[VAL_31:.*]] = arith.cmpi slt, %[[VAL_30]]#1, %[[VAL_23]]#1 : index
 // CHECK:           %[[VAL_32:.*]]:4 = "handshake.fork"(%[[VAL_31]]) {control = false} : (i1) -> (i1, i1, i1, i1)
 // CHECK:           %[[VAL_33:.*]], %[[VAL_34:.*]] = "handshake.conditional_branch"(%[[VAL_32]]#3, %[[VAL_23]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_34]]) : (index) -> ()
@@ -49,8 +49,8 @@
 // CHECK:           "handshake.sink"(%[[VAL_45]]#1) : (index) -> ()
 // CHECK:           %[[VAL_47:.*]] = "handshake.constant"(%[[VAL_46]]#1) {value = 0 : index} : (none) -> index
 // CHECK:           %[[VAL_48:.*]] = "handshake.constant"(%[[VAL_46]]#0) {value = -10 : index} : (none) -> index
-// CHECK:           %[[VAL_49:.*]] = addi %[[VAL_42]]#1, %[[VAL_48]] : index
-// CHECK:           %[[VAL_50:.*]] = cmpi sge, %[[VAL_49]], %[[VAL_47]] : index
+// CHECK:           %[[VAL_49:.*]] = arith.addi %[[VAL_42]]#1, %[[VAL_48]] : index
+// CHECK:           %[[VAL_50:.*]] = arith.cmpi sge, %[[VAL_49]], %[[VAL_47]] : index
 // CHECK:           %[[VAL_51:.*]]:4 = "handshake.fork"(%[[VAL_50]]) {control = false} : (i1) -> (i1, i1, i1, i1)
 // CHECK:           %[[VAL_52:.*]], %[[VAL_53:.*]] = "handshake.conditional_branch"(%[[VAL_51]]#3, %[[VAL_42]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           %[[VAL_54:.*]], %[[VAL_55:.*]] = "handshake.conditional_branch"(%[[VAL_51]]#2, %[[VAL_43]]) {control = false} : (i1, index) -> (index, index)
@@ -71,7 +71,7 @@
 // CHECK:           %[[VAL_72:.*]] = "handshake.mux"(%[[VAL_69]]#0, %[[VAL_66]], %[[VAL_57]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_73:.*]]:2 = "handshake.control_merge"(%[[VAL_67]], %[[VAL_59]]) {control = true} : (none, none) -> (none, index)
 // CHECK:           %[[VAL_69]]:3 = "handshake.fork"(%[[VAL_73]]#1) {control = false} : (index) -> (index, index, index)
-// CHECK:           %[[VAL_74:.*]] = addi %[[VAL_68]], %[[VAL_71]]#1 : index
+// CHECK:           %[[VAL_74:.*]] = arith.addi %[[VAL_68]], %[[VAL_71]]#1 : index
 // CHECK:           %[[VAL_25]] = "handshake.branch"(%[[VAL_71]]#0) {control = false} : (index) -> index
 // CHECK:           %[[VAL_22]] = "handshake.branch"(%[[VAL_72]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_27]] = "handshake.branch"(%[[VAL_73]]#0) {control = true} : (none) -> none
@@ -96,7 +96,7 @@
 // CHECK:           %[[VAL_87]]:3 = "handshake.fork"(%[[VAL_92]]#1) {control = false} : (index) -> (index, index, index)
 // CHECK:           %[[VAL_94:.*]] = "handshake.mux"(%[[VAL_87]]#0, %[[VAL_95:.*]], %[[VAL_83]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_96:.*]]:2 = "handshake.fork"(%[[VAL_94]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_97:.*]] = cmpi slt, %[[VAL_96]]#1, %[[VAL_89]]#1 : index
+// CHECK:           %[[VAL_97:.*]] = arith.cmpi slt, %[[VAL_96]]#1, %[[VAL_89]]#1 : index
 // CHECK:           %[[VAL_98:.*]]:4 = "handshake.fork"(%[[VAL_97]]) {control = false} : (i1) -> (i1, i1, i1, i1)
 // CHECK:           %[[VAL_99:.*]], %[[VAL_100:.*]] = "handshake.conditional_branch"(%[[VAL_98]]#3, %[[VAL_89]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_100]]) : (index) -> ()
@@ -114,8 +114,8 @@
 // CHECK:           "handshake.sink"(%[[VAL_111]]#1) : (index) -> ()
 // CHECK:           %[[VAL_113:.*]] = "handshake.constant"(%[[VAL_112]]#1) {value = 0 : index} : (none) -> index
 // CHECK:           %[[VAL_114:.*]] = "handshake.constant"(%[[VAL_112]]#0) {value = -10 : index} : (none) -> index
-// CHECK:           %[[VAL_115:.*]] = addi %[[VAL_108]]#1, %[[VAL_114]] : index
-// CHECK:           %[[VAL_116:.*]] = cmpi sge, %[[VAL_115]], %[[VAL_113]] : index
+// CHECK:           %[[VAL_115:.*]] = arith.addi %[[VAL_108]]#1, %[[VAL_114]] : index
+// CHECK:           %[[VAL_116:.*]] = arith.cmpi sge, %[[VAL_115]], %[[VAL_113]] : index
 // CHECK:           %[[VAL_117:.*]]:4 = "handshake.fork"(%[[VAL_116]]) {control = false} : (i1) -> (i1, i1, i1, i1)
 // CHECK:           %[[VAL_118:.*]], %[[VAL_119:.*]] = "handshake.conditional_branch"(%[[VAL_117]]#3, %[[VAL_108]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           %[[VAL_120:.*]], %[[VAL_121:.*]] = "handshake.conditional_branch"(%[[VAL_117]]#2, %[[VAL_109]]) {control = false} : (i1, index) -> (index, index)
@@ -147,7 +147,7 @@
 // CHECK:           %[[VAL_142]]:6 = "handshake.fork"(%[[VAL_153]]#1) {control = false} : (index) -> (index, index, index, index, index, index)
 // CHECK:           %[[VAL_155:.*]] = "handshake.mux"(%[[VAL_142]]#0, %[[VAL_156:.*]], %[[VAL_138]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_157:.*]]:2 = "handshake.fork"(%[[VAL_155]]) {control = false} : (index) -> (index, index)
-// CHECK:           %[[VAL_158:.*]] = cmpi slt, %[[VAL_157]]#1, %[[VAL_144]]#1 : index
+// CHECK:           %[[VAL_158:.*]] = arith.cmpi slt, %[[VAL_157]]#1, %[[VAL_144]]#1 : index
 // CHECK:           %[[VAL_159:.*]]:7 = "handshake.fork"(%[[VAL_158]]) {control = false} : (i1) -> (i1, i1, i1, i1, i1, i1, i1)
 // CHECK:           %[[VAL_160:.*]], %[[VAL_161:.*]] = "handshake.conditional_branch"(%[[VAL_159]]#6, %[[VAL_144]]#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:           "handshake.sink"(%[[VAL_161]]) : (index) -> ()
@@ -168,7 +168,7 @@
 // CHECK:           %[[VAL_180:.*]] = "handshake.merge"(%[[VAL_168]]) : (index) -> index
 // CHECK:           %[[VAL_181:.*]]:2 = "handshake.control_merge"(%[[VAL_170]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_181]]#1) : (index) -> ()
-// CHECK:           %[[VAL_182:.*]] = addi %[[VAL_174]], %[[VAL_176]]#1 : index
+// CHECK:           %[[VAL_182:.*]] = arith.addi %[[VAL_174]], %[[VAL_176]]#1 : index
 // CHECK:           %[[VAL_146]] = "handshake.branch"(%[[VAL_176]]#0) {control = false} : (index) -> index
 // CHECK:           %[[VAL_143]] = "handshake.branch"(%[[VAL_177]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_148]] = "handshake.branch"(%[[VAL_178]]) {control = false} : (index) -> index
@@ -191,7 +191,7 @@
 // CHECK:           %[[VAL_195:.*]] = "handshake.mux"(%[[VAL_192]]#0, %[[VAL_189]], %[[VAL_123]]) : (index, index, index) -> index
 // CHECK:           %[[VAL_196:.*]]:2 = "handshake.control_merge"(%[[VAL_190]], %[[VAL_125]]) {control = true} : (none, none) -> (none, index)
 // CHECK:           %[[VAL_192]]:3 = "handshake.fork"(%[[VAL_196]]#1) {control = false} : (index) -> (index, index, index)
-// CHECK:           %[[VAL_197:.*]] = addi %[[VAL_191]], %[[VAL_194]]#1 : index
+// CHECK:           %[[VAL_197:.*]] = arith.addi %[[VAL_191]], %[[VAL_194]]#1 : index
 // CHECK:           %[[VAL_91]] = "handshake.branch"(%[[VAL_194]]#0) {control = false} : (index) -> index
 // CHECK:           %[[VAL_88]] = "handshake.branch"(%[[VAL_195]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_93]] = "handshake.branch"(%[[VAL_196]]#0) {control = true} : (none) -> none
@@ -202,63 +202,63 @@
 // CHECK:         }
 // CHECK:       }
 
-    %c0 = constant 0 : index
-    %c-1 = constant -1 : index
-    %1 = muli %c-1, %c-1 : index
-    %c20 = constant 20 : index
-    %2 = addi %1, %c20 : index
-    %3 = cmpi sge, %2, %c0 : index
+    %c0 = arith.constant 0 : index
+    %c-1 = arith.constant -1 : index
+    %1 = arith.muli %c-1, %c-1 : index
+    %c20 = arith.constant 20 : index
+    %2 = arith.addi %1, %c20 : index
+    %3 = arith.cmpi sge, %2, %c0 : index
     cond_br %3, ^bb1, ^bb7
   ^bb1: // pred: ^bb0
-    %c0_0 = constant 0 : index
-    %c42 = constant 42 : index
-    %c1 = constant 1 : index
+    %c0_0 = arith.constant 0 : index
+    %c42 = arith.constant 42 : index
+    %c1 = arith.constant 1 : index
     br ^bb2(%c0_0 : index)
   ^bb2(%4: index):      // 2 preds: ^bb1, ^bb5
-    %5 = cmpi slt, %4, %c42 : index
+    %5 = arith.cmpi slt, %4, %c42 : index
     cond_br %5, ^bb3, ^bb6
   ^bb3: // pred: ^bb2
-    %c0_1 = constant 0 : index
-    %c-10 = constant -10 : index
-    %6 = addi %4, %c-10 : index
-    %7 = cmpi sge, %6, %c0_1 : index
+    %c0_1 = arith.constant 0 : index
+    %c-10 = arith.constant -10 : index
+    %6 = arith.addi %4, %c-10 : index
+    %7 = arith.cmpi sge, %6, %c0_1 : index
     cond_br %7, ^bb4, ^bb5
   ^bb4: // pred: ^bb3
     br ^bb5
   ^bb5: // 2 preds: ^bb3, ^bb4
-    %8 = addi %4, %c1 : index
+    %8 = arith.addi %4, %c1 : index
     br ^bb2(%8 : index)
   ^bb6: // pred: ^bb2
     br ^bb7
   ^bb7: // 2 preds: ^bb0, ^bb6
-    %c0_2 = constant 0 : index
-    %c42_3 = constant 42 : index
-    %c1_4 = constant 1 : index
+    %c0_2 = arith.constant 0 : index
+    %c42_3 = arith.constant 42 : index
+    %c1_4 = arith.constant 1 : index
     br ^bb8(%c0_2 : index)
   ^bb8(%9: index):      // 2 preds: ^bb7, ^bb14
-    %10 = cmpi slt, %9, %c42_3 : index
+    %10 = arith.cmpi slt, %9, %c42_3 : index
     cond_br %10, ^bb9, ^bb15
   ^bb9: // pred: ^bb8
-    %c0_5 = constant 0 : index
-    %c-10_6 = constant -10 : index
-    %11 = addi %9, %c-10_6 : index
-    %12 = cmpi sge, %11, %c0_5 : index
+    %c0_5 = arith.constant 0 : index
+    %c-10_6 = arith.constant -10 : index
+    %11 = arith.addi %9, %c-10_6 : index
+    %12 = arith.cmpi sge, %11, %c0_5 : index
     cond_br %12, ^bb10, ^bb14
   ^bb10:        // pred: ^bb9
-    %c0_7 = constant 0 : index
-    %c42_8 = constant 42 : index
-    %c1_9 = constant 1 : index
+    %c0_7 = arith.constant 0 : index
+    %c42_8 = arith.constant 42 : index
+    %c1_9 = arith.constant 1 : index
     br ^bb11(%c0_7 : index)
   ^bb11(%13: index):    // 2 preds: ^bb10, ^bb12
-    %14 = cmpi slt, %13, %c42_8 : index
+    %14 = arith.cmpi slt, %13, %c42_8 : index
     cond_br %14, ^bb12, ^bb13
   ^bb12:        // pred: ^bb11
-    %15 = addi %13, %c1_9 : index
+    %15 = arith.addi %13, %c1_9 : index
     br ^bb11(%15 : index)
   ^bb13:        // pred: ^bb11
     br ^bb14
   ^bb14:        // 2 preds: ^bb9, ^bb13
-    %16 = addi %9, %c1_4 : index
+    %16 = arith.addi %9, %c1_4 : index
     br ^bb8(%16 : index)
   ^bb15:        // pred: ^bb8
     return

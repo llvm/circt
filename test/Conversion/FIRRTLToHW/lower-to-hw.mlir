@@ -581,9 +581,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %1455 = builtin.unrealized_conversion_cast %hits_1_7 : !firrtl.uint<1> to !firrtl.uint<1>
   }
 
-  // CHECK: sv.bind @[[bazSymbol:.+]] in @bindTest
+  // CHECK: sv.bind #hw.innerNameRef<@bindTest::@[[bazSymbol:.+]]>
   // CHECK-NOT: output_file
-  // CHECK-NEXT: sv.bind @[[quxSymbol:.+]] in @bindTest {
+  // CHECK-NEXT: sv.bind #hw.innerNameRef<@bindTest::@[[quxSymbol:.+]]> {
   // CHECK-SAME: output_file = #hw.output_file<"outputDir/bindings.sv", excludeFromFileList>
   // CHECK-NEXT: hw.module @bindTest()
   firrtl.module @bindTest() {
@@ -1078,7 +1078,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module @FooDUT
-  // CHECK: attributes {firrtl.moduleHierarchyFile
+  // firrtl.moduleHierarchyFile should only be present if both the
+  // MarkDUTAnnotation and the circuit-level ModuleHierarchyAnnotation are
+  // present.
+  // CHECK-NOT: firrtl.moduleHierarchyFile
   firrtl.module @FooDUT() attributes {annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]} {}
 

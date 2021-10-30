@@ -440,7 +440,7 @@ def VerbatimOp : SVOp<"verbatim"> {
     sv.verbatim allows operand substitutions with {{0}} syntax.
   }];
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
-                  DefaultValuedAttr<SymRefArrayAttr,"{}">:$symbols);
+                  DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
 
   let assemblyFormat =
     "$string (`(` $operands^ `)` `:` type($operands))? attr-dict";
@@ -473,12 +473,14 @@ def BindOp : SVOp<"bind", []> {
   }];
 
   let arguments =
-   (ins FlatSymbolRefAttr:$boundInstance, FlatSymbolRefAttr:$instanceModule);
+   (ins InnerRefAttr:$instance);
   let results = (outs);
   let verifier = "return ::verify$cppClass(*this);";
 
-  let assemblyFormat = "$boundInstance `in` $instanceModule attr-dict";
-
+  let assemblyFormat = "$instance attr-dict";
+  let builders = [
+    OpBuilder<(ins "StringAttr":$mod, "StringAttr":$name)>
+  ];
   let extraClassDeclaration = [{
     /// Lookup the instance for the bind.  This returns null on invalid IR.
     hw::InstanceOp getReferencedInstance(const hw::SymbolCache *cache = nullptr);

@@ -323,8 +323,8 @@ hw.module @wires(%in4: i4, %in8: i8) -> (a: i4, b: i8, c: i8) {
   // CHECK-NEXT: wire [7:0]            myUArray1[0:41];
   %myUArray1 = sv.wire : !hw.inout<uarray<42 x i8>>
 
-  // CHECK-NEXT: wire [41:0][3:0]      myWireUArray2[0:2];
-  %myWireUArray2 = sv.wire : !hw.inout<uarray<3 x array<42 x i4>>>
+  // CHECK-NEXT: wire [9:0][7:0]       myUArray2[0:13][0:11];
+  %myUArray2 = sv.wire : !hw.inout<uarray<14 x uarray<12 x array<10 x i8>>>>
 
   // CHECK-EMPTY:
 
@@ -899,5 +899,21 @@ hw.module @VerilogCompatParameters<p1: i42, p2: i32, p3: f64 = 1.5,
   // CHECK-NEXT:   parameter             p3 = 1.500000e+00,
   // CHECK-NEXT:   parameter             p4 = 4,
   // CHECK-NEXT:   parameter             p5 = "foo")
+
+}
+
+
+// CHECK-LABEL: module parameterizedTypes
+// CHECK: #(parameter param = 1,
+// CHECK:   parameter wire_0 = 2) (
+hw.module @parameterizedTypes<param: i32 = 1, wire: i32 = 2>
+// CHECK: input [16:0]{{ *}}a,
+  (%a: !hw.int<17>,
+// CHECK: input [param + 4294967295:0] b);
+   %b: !hw.int<#hw.param.decl.ref<"param">>) {
+
+  // Check that the parameter name renamification propagates.
+// CHECK: wire [wire_0 + 4294967295:0] paramWire;
+  %paramWire = sv.wire : !hw.inout<!hw.int<#hw.param.decl.ref<"wire">>>
 
 }

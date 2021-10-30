@@ -22,7 +22,7 @@ module {
     // CHECK-NEXT: %[[VAL_2:.*]]:2 = "handshake.fork"(%[[VAL_0:.*]]) {control = true} : (none) -> (none, none)
     %5:2 = "handshake.fork"(%3) {control = true} : (none) -> (none, none)
     %6 = "handshake.constant"(%5#0) {value = 42 : index} : (none) -> index
-    %7 = addi %4, %6 : index
+    %7 = arith.addi %4, %6 : index
     "handshake.sink"(%7) : (index) -> ()
     handshake.return %5#1 : none
   }

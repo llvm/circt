@@ -94,6 +94,10 @@ struct SubExprInfo {
 // Helper routines
 //===----------------------------------------------------------------------===//
 
+static Attribute getInt32Attr(MLIRContext *ctx, uint32_t value) {
+  return Builder(ctx).getI32IntegerAttr(value);
+}
+
 /// Return true for nullary operations that are better emitted multiple
 /// times as inline expression (when they have multiple uses) rather than having
 /// a temporary wire.
@@ -168,63 +172,40 @@ static int getBitWidthOrSentinel(Type type) {
 }
 
 /// Push this type's dimension into a vector.
-static void getTypeDims(SmallVectorImpl<int64_t> &dims, Type type,
+static void getTypeDims(SmallVectorImpl<Attribute> &dims, Type type,
                         Location loc) {
-  if (auto inout = type.dyn_cast<hw::InOutType>())
+  if (auto integer = hw::type_dyn_cast<IntegerType>(type)) {
+    if (integer.getWidth() != 1)
+      dims.push_back(getInt32Attr(type.getContext(), integer.getWidth()));
+    return;
+  }
+  if (auto array = hw::type_dyn_cast<ArrayType>(type)) {
+    dims.push_back(getInt32Attr(type.getContext(), array.getSize()));
+    getTypeDims(dims, array.getElementType(), loc);
+
+    return;
+  }
+  if (auto intType = hw::type_dyn_cast<IntType>(type)) {
+    dims.push_back(intType.getWidth());
+    return;
+  }
+
+  if (auto inout = hw::type_dyn_cast<InOutType>(type))
     return getTypeDims(dims, inout.getElementType(), loc);
-  if (auto uarray = type.dyn_cast<hw::UnpackedArrayType>())
+  if (auto uarray = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
     return getTypeDims(dims, uarray.getElementType(), loc);
-  if (type.isa<InterfaceType>())
-    return;
-  if (hw::type_isa<StructType>(type))
+  if (hw::type_isa<InterfaceType>(type) || hw::type_isa<StructType>(type))
     return;
 
-  int width;
-  if (auto arrayType = hw::type_dyn_cast<hw::ArrayType>(type)) {
-    width = arrayType.getSize();
-  } else {
-    width = getBitWidthOrSentinel(type);
-  }
-  if (width == -1)
-    mlir::emitError(loc, "value has an unsupported verilog type ") << type;
-
-  if (width != 1) // Width 1 is implicit.
-    dims.push_back(width);
-
-  if (auto arrayType = type.dyn_cast<hw::ArrayType>()) {
-    getTypeDims(dims, arrayType.getElementType(), loc);
-  }
-}
-
-/// Emit a list of dimensions.
-static void emitDims(ArrayRef<int64_t> dims, raw_ostream &os) {
-  for (int64_t width : dims)
-    switch (width) {
-    case -1: // -1 is an invalid type.
-      os << "<<invalid type>>";
-      return;
-    case 0:
-      os << "/*Zero Width*/";
-      break;
-    default:
-      os << '[' << (width - 1) << ":0]";
-      break;
-    }
-}
-
-/// Emit a type's packed dimensions, returning whether or not text was emitted.
-static void emitTypeDims(Type type, Location loc, raw_ostream &os) {
-  SmallVector<int64_t, 4> dims;
-  getTypeDims(dims, type, loc);
-  emitDims(dims, os);
+  mlir::emitError(loc, "value has an unsupported verilog type ") << type;
 }
 
 /// True iff 'a' and 'b' have the same wire dims.
 static bool haveMatchingDims(Type a, Type b, Location loc) {
-  SmallVector<int64_t, 4> aDims;
+  SmallVector<Attribute, 4> aDims;
   getTypeDims(aDims, a, loc);
 
-  SmallVector<int64_t, 4> bDims;
+  SmallVector<Attribute, 4> bDims;
   getTypeDims(bDims, b, loc);
 
   return aDims == bDims;
@@ -258,99 +239,6 @@ static Type stripUnpackedTypes(Type type) {
         return stripUnpackedTypes(arrayType.getElementType());
       })
       .Default([](Type type) { return type; });
-}
-
-/// Output the basic type that consists of packed and primitive types.  This is
-/// those to the left of the name in verilog. implicitIntType controls whether
-/// to print a base type for (logic) for inteters or whether the caller will
-/// have handled this (with logic, wire, reg, etc).
-/// Returns true when anything was printed out.
-static bool printPackedTypeImpl(Type type, raw_ostream &os, Operation *op,
-                                SmallVectorImpl<int64_t> &dims,
-                                bool implicitIntType,
-                                bool singleBitDefaultType) {
-  return TypeSwitch<Type, bool>(type)
-      .Case<IntegerType>([&](IntegerType integerType) {
-        if (!implicitIntType)
-          os << "logic";
-        if (integerType.getWidth() != 1 || !singleBitDefaultType)
-          dims.push_back(integerType.getWidth());
-        if (!dims.empty() && !implicitIntType)
-          os << ' ';
-
-        emitDims(dims, os);
-        return !dims.empty() || !implicitIntType;
-      })
-      .Case<InOutType>([&](InOutType inoutType) {
-        return printPackedTypeImpl(inoutType.getElementType(), os, op, dims,
-                                   implicitIntType, singleBitDefaultType);
-      })
-      .Case<StructType>([&](StructType structType) {
-        os << "struct packed {";
-        for (auto &element : structType.getElements()) {
-          SmallVector<int64_t, 8> structDims;
-          printPackedTypeImpl(stripUnpackedTypes(element.type), os, op,
-                              structDims, /*implicitIntType=*/false,
-                              /*singleBitDefaultType=*/true);
-          os << ' ' << element.name << "; ";
-        }
-        os << '}';
-        emitDims(dims, os);
-        return true;
-      })
-      .Case<ArrayType>([&](ArrayType arrayType) {
-        dims.push_back(arrayType.getSize());
-        return printPackedTypeImpl(arrayType.getElementType(), os, op, dims,
-                                   implicitIntType, singleBitDefaultType);
-      })
-      .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
-      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        os << "<<unexpected unpacked array>>";
-        op->emitError("Unexpected unpacked array in packed type ") << arrayType;
-        return true;
-      })
-      .Case<TypeAliasType>([&](TypeAliasType typeRef) {
-        auto typedecl = typeRef.getDecl(op);
-        if (!typedecl.hasValue())
-          return false;
-
-        os << typedecl.getValue().getPreferredName();
-        emitDims(dims, os);
-        return true;
-      })
-      .Default([&](Type type) {
-        os << "<<invalid type '" << type << "'>>";
-        op->emitError("value has an unsupported verilog type ") << type;
-        return true;
-      });
-}
-
-/// Print the specified packed portion of the type to the specified stream.  The
-/// operation specified is used in the case of an error for its location.
-///  * When `implicitIntType` is false, a "logic" is printed.  This is used in
-///        struct fields and typedefs.
-///  * When `singleBitDefaultType` is false, single bit values are printed as
-///       `[0:0]`.  This is used in parameter lists.
-/// This returns true if anything was printed out.
-static bool printPackedType(Type type, raw_ostream &os, Operation *op,
-                            bool implicitIntType = true,
-                            bool singleBitDefaultType = true) {
-  SmallVector<int64_t, 8> packedDimensions;
-  return printPackedTypeImpl(type, os, op, packedDimensions, implicitIntType,
-                             singleBitDefaultType);
-}
-
-/// Output the unpacked array dimensions.  This is the part of the type that is
-/// to the right of the name.
-static void printUnpackedTypePostfix(Type type, raw_ostream &os) {
-  TypeSwitch<Type, void>(type)
-      .Case<InOutType>([&](InOutType inoutType) {
-        printUnpackedTypePostfix(inoutType.getElementType(), os);
-      })
-      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
-        printUnpackedTypePostfix(arrayType.getElementType(), os);
-        os << "[0:" << (arrayType.getSize() - 1) << "]";
-      });
 }
 
 /// Return the word (e.g. "reg") in Verilog to declare the specified thing.
@@ -554,6 +442,22 @@ struct ModuleNameManager {
     return getName(ValueOrOp(op));
   }
 
+  StringRef getName(Operation *op, size_t port) {
+    // Module come in flavors and have ports, but don't have an opInterface in
+    // common to access the ports as blockvalues.  Thus we have to enumerate
+    // modules here.
+    BlockArgument blockArg;
+    if (auto mod = dyn_cast<HWModuleOp>(op))
+      blockArg = mod.getArgument(port);
+    if (auto mod = dyn_cast<HWModuleExternOp>(op))
+      blockArg = mod.getArgument(port);
+    if (auto mod = dyn_cast<HWModuleGeneratedOp>(op))
+      blockArg = mod.getArgument(port);
+    if (!blockArg)
+      llvm_unreachable("Unknown named thing with port");
+    return getName(blockArg);
+  }
+
   bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
 
   bool hasName(Operation *op) {
@@ -620,12 +524,16 @@ namespace {
 /// various emitters.
 class VerilogEmitterState {
 public:
-  explicit VerilogEmitterState(const LoweringOptions &options,
+  explicit VerilogEmitterState(ModuleOp designOp,
+                               const LoweringOptions &options,
                                const SymbolCache &symbolCache,
                                const GlobalNameTable &globalNames,
                                raw_ostream &os)
-      : options(options), symbolCache(symbolCache), globalNames(globalNames),
-        os(os) {}
+      : designOp(designOp), options(options), symbolCache(symbolCache),
+        globalNames(globalNames), os(os) {}
+
+  /// This is the root mlir::ModuleOp that holds the whole design being emitted.
+  ModuleOp designOp;
 
   /// The emitter options which control verilog emission.
   const LoweringOptions options;
@@ -712,11 +620,32 @@ void EmitterBase::emitTextWithSubstitutions(
 
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
-  SmallVector<Operation *, 8> symOps;
-  for (auto sym : symAttrs)
-    if (auto symOp =
-            state.symbolCache.getDefinition(sym.cast<FlatSymbolRefAttr>()))
-      symOps.push_back(symOp);
+  SmallVector<SmallString<12>, 8> symOps;
+  auto namify = [&](SymbolCache::Item item) {
+    // Get the verilog name of the operation, add the name if not already
+    // done.
+    auto op = item.getOp();
+    if (item.hasPort())
+      return names.getName(op, item.getPort());
+    if (names.hasName(op))
+      return names.getName(op);
+    StringRef symOpName = getSymOpName(op);
+    if (!symOpName.empty())
+      return symOpName;
+    op->emitError("cannot get name for symbol");
+    return StringRef("<INVALID>");
+  };
+
+  for (auto sym : symAttrs) {
+    if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
+      if (auto symOp = state.symbolCache.getDefinition(fsym))
+        symOps.push_back(namify(symOp));
+    if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
+      auto symOp =
+          state.symbolCache.getDefinition(isym.getModule(), isym.getName());
+      symOps.push_back(namify(symOp));
+    }
+  }
 
   // Scan 'line' for a substitution, emitting any non-substitution prefix,
   // then the mentioned operand, chopping the relevant text off 'line' and
@@ -763,22 +692,7 @@ void EmitterBase::emitTextWithSubstitutions(
         operandEmitter(op->getOperand(operandNo));
       else if ((operandNo - op->getNumOperands()) < numSymOps) {
         unsigned symOpNum = operandNo - op->getNumOperands();
-        Operation *symOp = symOps[symOpNum];
-        // Get the verilog name of the operation, add the name if not already
-        // done.
-        if (names.hasName(symOp)) {
-          os << names.getName(symOp);
-        } else {
-          StringRef symOpName = getSymOpName(symOp);
-          if (!symOpName.empty()) {
-            os << symOpName;
-          } else {
-            std::string opStr;
-            llvm::raw_string_ostream tName(opStr);
-            tName << *symOp;
-            op->emitError("cannot get name for symbol: " + tName.str());
-          }
-        }
+        os << symOps[symOpNum];
       } else {
         emitError(op, "operand " + llvm::utostr(operandNo) + " isn't valid");
         continue;
@@ -816,15 +730,42 @@ public:
   void emitBind(BindOp op);
   void emitBindInterface(BindInterfaceOp op);
 
+  //===--------------------------------------------------------------------===//
+  // Methods for formatting types.
+
+  /// Emit a type's packed dimensions.
+  void emitTypeDims(Type type, Location loc, raw_ostream &os);
+
+  /// Print the specified packed portion of the type to the specified stream,
+  ///
+  ///  * When `implicitIntType` is false, a "logic" is printed.  This is used in
+  ///        struct fields and typedefs.
+  ///  * When `singleBitDefaultType` is false, single bit values are printed as
+  ///       `[0:0]`.  This is used in parameter lists.
+  ///
+  /// This returns true if anything was printed.
+  bool printPackedType(Type type, raw_ostream &os, Location loc,
+                       bool implicitIntType = true,
+                       bool singleBitDefaultType = true);
+
+  /// Output the unpacked array dimensions.  This is the part of the type that
+  /// is to the right of the name.
+  void printUnpackedTypePostfix(Type type, raw_ostream &os);
+
+  //===--------------------------------------------------------------------===//
+  // Methods for formatting parameters.
+
   /// Prints a parameter attribute expression in a Verilog compatible way to the
   /// specified stream.  This returns the precedence of the generated string.
   SubExprInfo printParamValue(Attribute value, raw_ostream &os,
                               function_ref<InFlightDiagnostic()> emitError);
 
-public:
   SubExprInfo printParamValue(Attribute value, raw_ostream &os,
                               VerilogPrecedence parenthesizeIfLooserThan,
                               function_ref<InFlightDiagnostic()> emitError);
+
+  //===--------------------------------------------------------------------===//
+  // Mutable state while emitting a module body.
 
   /// This is the current module being emitted for a HWModuleOp.
   HWModuleOp currentModuleOp;
@@ -842,6 +783,168 @@ public:
 };
 
 } // end anonymous namespace
+
+//===----------------------------------------------------------------------===//
+// Methods for formatting types.
+
+/// Emit a list of dimensions.
+static void emitDims(ArrayRef<Attribute> dims, raw_ostream &os, Location loc,
+                     ModuleEmitter &emitter) {
+  for (Attribute width : dims) {
+    if (!width) {
+      os << "<<invalid type>>";
+      continue;
+    }
+    if (auto intAttr = width.dyn_cast<IntegerAttr>()) {
+      if (intAttr.getValue().isZero())
+        os << "/*Zero Width*/";
+      else
+        os << '[' << (intAttr.getValue().getZExtValue() - 1) << ":0]";
+      continue;
+    }
+
+    // Otherwise it must be a parameterized dimension.  Shove the "-1" into the
+    // attribute so it gets printed in canonical form.
+    auto negOne = getInt32Attr(loc.getContext(), -1);
+    width = ParamExprAttr::get(PEO::Add, width, negOne);
+    os << '[';
+    emitter.printParamValue(width, os, [loc]() {
+      return mlir::emitError(loc, "invalid parameter in type");
+    });
+    os << ":0]";
+  }
+}
+
+/// Emit a type's packed dimensions.
+void ModuleEmitter::emitTypeDims(Type type, Location loc, raw_ostream &os) {
+  SmallVector<Attribute, 4> dims;
+  getTypeDims(dims, type, loc);
+  emitDims(dims, os, loc, *this);
+}
+
+/// Output the basic type that consists of packed and primitive types.  This is
+/// those to the left of the name in verilog. implicitIntType controls whether
+/// to print a base type for (logic) for inteters or whether the caller will
+/// have handled this (with logic, wire, reg, etc).
+///
+/// Returns true when anything was printed out.
+static bool printPackedTypeImpl(Type type, raw_ostream &os, Location loc,
+                                SmallVectorImpl<Attribute> &dims,
+                                bool implicitIntType, bool singleBitDefaultType,
+                                ModuleEmitter &emitter) {
+  return TypeSwitch<Type, bool>(type)
+      .Case<IntegerType>([&](IntegerType integerType) {
+        if (!implicitIntType)
+          os << "logic";
+        if (integerType.getWidth() != 1 || !singleBitDefaultType)
+          dims.push_back(
+              getInt32Attr(type.getContext(), integerType.getWidth()));
+        if (!dims.empty() && !implicitIntType)
+          os << ' ';
+
+        emitDims(dims, os, loc, emitter);
+        return !dims.empty() || !implicitIntType;
+      })
+      .Case<IntType>([&](IntType intType) {
+        if (!implicitIntType)
+          os << "logic ";
+        dims.push_back(intType.getWidth());
+        emitDims(dims, os, loc, emitter);
+        return true;
+      })
+      .Case<ArrayType>([&](ArrayType arrayType) {
+        dims.push_back(
+            getInt32Attr(arrayType.getContext(), arrayType.getSize()));
+        return printPackedTypeImpl(arrayType.getElementType(), os, loc, dims,
+                                   implicitIntType, singleBitDefaultType,
+                                   emitter);
+      })
+      .Case<InOutType>([&](InOutType inoutType) {
+        return printPackedTypeImpl(inoutType.getElementType(), os, loc, dims,
+                                   implicitIntType, singleBitDefaultType,
+                                   emitter);
+      })
+      .Case<StructType>([&](StructType structType) {
+        os << "struct packed {";
+        for (auto &element : structType.getElements()) {
+          SmallVector<Attribute, 8> structDims;
+          printPackedTypeImpl(stripUnpackedTypes(element.type), os, loc,
+                              structDims, /*implicitIntType=*/false,
+                              /*singleBitDefaultType=*/true, emitter);
+          os << ' ' << element.name;
+          emitter.printUnpackedTypePostfix(element.type, os);
+          os << "; ";
+        }
+        os << '}';
+        emitDims(dims, os, loc, emitter);
+        return true;
+      })
+
+      .Case<InterfaceType>([](InterfaceType ifaceType) { return false; })
+      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
+        os << "<<unexpected unpacked array>>";
+        mlir::emitError(loc, "Unexpected unpacked array in packed type ")
+            << arrayType;
+        return true;
+      })
+      .Case<TypeAliasType>([&](TypeAliasType typeRef) {
+        auto typedecl = typeRef.getTypeDecl(emitter.state.symbolCache);
+        if (!typedecl) {
+          mlir::emitError(loc, "unresolvable type reference");
+          return false;
+        }
+        if (typedecl.type() != typeRef.getInnerType()) {
+          mlir::emitError(loc, "declared type did not match aliased type");
+          return false;
+        }
+
+        os << typedecl.getPreferredName();
+        emitDims(dims, os, typedecl->getLoc(), emitter);
+        return true;
+      })
+      .Default([&](Type type) {
+        os << "<<invalid type '" << type << "'>>";
+        mlir::emitError(loc, "value has an unsupported verilog type ") << type;
+        return true;
+      });
+}
+
+/// Print the specified packed portion of the type to the specified stream,
+///
+///  * When `implicitIntType` is false, a "logic" is printed.  This is used in
+///        struct fields and typedefs.
+///  * When `singleBitDefaultType` is false, single bit values are printed as
+///       `[0:0]`.  This is used in parameter lists.
+///
+/// This returns true if anything was printed.
+bool ModuleEmitter::printPackedType(Type type, raw_ostream &os, Location loc,
+                                    bool implicitIntType,
+                                    bool singleBitDefaultType) {
+  SmallVector<Attribute, 8> packedDimensions;
+  return printPackedTypeImpl(type, os, loc, packedDimensions, implicitIntType,
+                             singleBitDefaultType, *this);
+}
+
+/// Output the unpacked array dimensions.  This is the part of the type that is
+/// to the right of the name.
+void ModuleEmitter::printUnpackedTypePostfix(Type type, raw_ostream &os) {
+  TypeSwitch<Type, void>(type)
+      .Case<InOutType>([&](InOutType inoutType) {
+        printUnpackedTypePostfix(inoutType.getElementType(), os);
+      })
+      .Case<UnpackedArrayType>([&](UnpackedArrayType arrayType) {
+        os << "[0:" << (arrayType.getSize() - 1) << "]";
+        printUnpackedTypePostfix(arrayType.getElementType(), os);
+      })
+      .Case<InterfaceType>([&](auto) {
+        // Interface instantiations have parentheses like a module with no
+        // ports.
+        os << "()";
+      });
+}
+
+//===----------------------------------------------------------------------===//
+// Methods for formatting parameters.
 
 /// Prints a parameter attribute expression in a Verilog compatible way to the
 /// specified stream.  This returns the precedence of the generated string.
@@ -1482,7 +1585,7 @@ SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
   Type toType = op.getType();
   if (!haveMatchingDims(toType, op.input().getType(), op.getLoc())) {
     os << "/*cast(bit";
-    emitTypeDims(toType, op.getLoc(), os);
+    emitter.emitTypeDims(toType, op.getLoc(), os);
     os << ")*/";
   }
   return emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
@@ -1828,17 +1931,16 @@ static bool isExpressionEmittedInline(Operation *op) {
   if (op->hasOneUse() && isa<hw::OutputOp>(*op->getUsers().begin()))
     return true;
 
+  // If this operation has multiple uses, we can't generally inline it.
+  if (!op->getResult(0).hasOneUse()) {
+    // ... unless it is nullary and duplicable, then we can emit it inline.
+    if (op->getNumOperands() != 0 || !isDuplicatableNullaryExpression(op))
+      return false;
+  }
+
   // If it isn't structurally possible to inline this expression, emit it out
   // of line.
-  if (isExpressionUnableToInline(op))
-    return false;
-
-  // If it has a single use, emit it inline.
-  if (op->getResult(0).hasOneUse())
-    return true;
-
-  // If it is nullary and duplicable, then we can emit it inline.
-  return op->getNumOperands() == 0 && isDuplicatableNullaryExpression(op);
+  return !isExpressionUnableToInline(op);
 }
 
 namespace {
@@ -1930,8 +2032,8 @@ void NameCollector::collectNames(Block &block) {
       // Convert the port's type to a string and measure it.
       {
         llvm::raw_svector_ostream stringStream(typeString);
-        printPackedType(stripUnpackedTypes(result.getType()), stringStream,
-                        &op);
+        moduleEmitter.printPackedType(stripUnpackedTypes(result.getType()),
+                                      stringStream, op.getLoc());
       }
       maxTypeWidth = std::max(typeString.size(), maxTypeWidth);
     }
@@ -1970,7 +2072,8 @@ class TypeScopeEmitter
       public hw::TypeScopeVisitor<TypeScopeEmitter, LogicalResult> {
 public:
   /// Create a TypeScopeEmitter for the specified module emitter.
-  TypeScopeEmitter(VerilogEmitterState &state) : EmitterBase(state) {}
+  TypeScopeEmitter(ModuleEmitter &emitter)
+      : EmitterBase(emitter.state), emitter(emitter) {}
 
   void emitTypeScopeBlock(Block &body);
 
@@ -1978,6 +2081,8 @@ private:
   friend class TypeScopeVisitor<TypeScopeEmitter, LogicalResult>;
 
   LogicalResult visitTypeScope(TypedeclOp op);
+
+  ModuleEmitter &emitter;
 };
 
 } // end anonymous namespace
@@ -1993,9 +2098,10 @@ void TypeScopeEmitter::emitTypeScopeBlock(Block &body) {
 
 LogicalResult TypeScopeEmitter::visitTypeScope(TypedeclOp op) {
   indent() << "typedef ";
-  printPackedType(stripUnpackedTypes(op.type()), os, op, false);
-  printUnpackedTypePostfix(op.type(), os);
+  emitter.printPackedType(stripUnpackedTypes(op.type()), os, op.getLoc(),
+                          false);
   os << ' ' << op.getPreferredName();
+  emitter.printUnpackedTypePostfix(op.type(), os);
   os << ";\n";
   return success();
 }
@@ -2122,18 +2228,22 @@ public:
 
 private:
   llvm::raw_svector_ostream stringStream;
-  // All statements are emitted into a temporary buffer, this is it.
+  /// All statements are emitted into a temporary buffer, this is it.
   SmallVectorImpl<char> &outBuffer;
 
-  // Track the legalized names.
+  /// Track the legalized names.
   ModuleNameManager &names;
 
-  // This is the index of the start of the current statement being emitted.
+  /// This is the index of the start of the current statement being emitted.
   size_t statementBeginningIndex = 0;
 
   /// This is the index of the end of the declaration region of the current
   /// 'begin' block, used to emit variable declarations.
   size_t blockDeclarationInsertPointIndex = 0;
+
+  /// This keeps track of the number of statements emitted, important for
+  /// determining if we need to put out a begin/end marker in a block
+  /// declaration.
   size_t numStatementsEmitted = 0;
 };
 
@@ -2168,17 +2278,20 @@ void StmtEmitter::emitExpression(Value exp,
   // declarations for each variable separately from the assignments to them.
   // Otherwise we just emit inline 'wire' declarations.
   if (tooLargeSubExpressions[0]->getParentOp()->hasTrait<ProceduralRegion>()) {
-    std::string stuffAfterDeclarations(
-        outBuffer.begin() + blockDeclarationInsertPointIndex, outBuffer.end());
-    outBuffer.resize(blockDeclarationInsertPointIndex);
+    // Emit the declarations into a temporary buffer to collect the text.
+    SmallVector<char, 128> declBuffer;
+    StmtEmitter declEmitter(emitter, declBuffer, names);
+
     for (auto *expr : tooLargeSubExpressions) {
-      if (!emitDeclarationForTemporary(expr))
-        os << ";\n";
+      if (!declEmitter.emitDeclarationForTemporary(expr))
+        declEmitter.os << ";\n";
       ++numStatementsEmitted;
     }
-    blockDeclarationInsertPointIndex = outBuffer.size();
-    outBuffer.append(stuffAfterDeclarations.begin(),
-                     stuffAfterDeclarations.end());
+
+    // Take the text and insert it into the right place.
+    outBuffer.insert(outBuffer.begin() + blockDeclarationInsertPointIndex,
+                     declBuffer.begin(), declBuffer.end());
+    blockDeclarationInsertPointIndex += declBuffer.size();
   }
 
   // Emit each stmt expression in turn.
@@ -3042,9 +3155,10 @@ LogicalResult StmtEmitter::visitSV(InterfaceOp op) {
 
 LogicalResult StmtEmitter::visitSV(InterfaceSignalOp op) {
   indent();
-  printPackedType(stripUnpackedTypes(op.type()), os, op, false);
+  emitter.printPackedType(stripUnpackedTypes(op.type()), os, op->getLoc(),
+                          false);
   os << ' ' << state.globalNames.getInterfaceVerilogName(op);
-  printUnpackedTypePostfix(op.type(), os);
+  emitter.printUnpackedTypePostfix(op.type(), os);
   os << ";\n";
   return success();
 }
@@ -3075,7 +3189,7 @@ LogicalResult StmtEmitter::visitSV(AssignInterfaceSignalOp op) {
 }
 
 void StmtEmitter::emitStatement(Operation *op) {
-  // Know where the start of this statement is in case any out of band precuror
+  // Know where the start of this statement is in case any out-of-band precursor
   // statements need to be emitted.
   statementBeginningIndex = outBuffer.size();
 
@@ -3177,7 +3291,8 @@ bool StmtEmitter::emitDeclarationForTemporary(Operation *op) {
   os << declWord;
   if (!declWord.empty())
     os << ' ';
-  if (printPackedType(stripUnpackedTypes(op->getResult(0).getType()), os, op))
+  if (emitter.printPackedType(stripUnpackedTypes(op->getResult(0).getType()),
+                              os, op->getLoc()))
     os << ' ';
   os << names.getName(op->getResult(0));
 
@@ -3244,13 +3359,8 @@ void StmtEmitter::collectNamesEmitDecls(Block &block) {
     // Emit the name.
     os << names.getName(record.value);
 
-    // Interface instantiations have parentheses like a module with no ports.
-    if (type.isa<InterfaceType>()) {
-      os << "()";
-    } else {
-      // Print out any array subscripts.
-      printUnpackedTypePostfix(type, os);
-    }
+    // Print out any array subscripts or other post-name stuff.
+    emitter.printUnpackedTypePostfix(type, os);
 
     if (auto localparam = dyn_cast<LocalParamOp>(op)) {
       os << " = ";
@@ -3488,7 +3598,7 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
           return;
         }
 
-      printPackedType(type, sstream, module,
+      printPackedType(type, sstream, module->getLoc(),
                       /*implicitIntType=*/true,
                       // Print single-bit values as explicit `[0:0]` type.
                       /*singleBitDefaultType=*/false);
@@ -3555,7 +3665,8 @@ void ModuleEmitter::emitHWModule(HWModuleOp module) {
     portTypeStrings.push_back({});
     {
       llvm::raw_svector_ostream stringStream(portTypeStrings.back());
-      printPackedType(stripUnpackedTypes(port.type), stringStream, module);
+      printPackedType(stripUnpackedTypes(port.type), stringStream,
+                      module->getLoc());
     }
 
     maxTypeWidth = std::max(portTypeStrings.back().size(), maxTypeWidth);
@@ -3731,7 +3842,7 @@ private:
 /// then shared across all per-file emissions that happen in parallel.
 struct SharedEmitterState {
   /// The MLIR module to emit.
-  ModuleOp rootOp;
+  ModuleOp designOp;
 
   /// The main file that collects all operations that are neither replicated
   /// per-file ops nor specifically assigned to a file.
@@ -3765,8 +3876,9 @@ struct SharedEmitterState {
   /// Information about renamed global symbols, parameters, etc.
   const GlobalNameTable globalNames;
 
-  explicit SharedEmitterState(ModuleOp rootOp, GlobalNameTable globalNames)
-      : rootOp(rootOp), options(rootOp), globalNames(std::move(globalNames)) {}
+  explicit SharedEmitterState(ModuleOp designOp, GlobalNameTable globalNames)
+      : designOp(designOp), options(designOp),
+        globalNames(std::move(globalNames)) {}
   void gatherFiles(bool separateModules);
 
   using EmissionList = std::vector<StringOrOpToEmit>;
@@ -3783,24 +3895,32 @@ struct SharedEmitterState {
 /// of an explicit output file attribute.
 void SharedEmitterState::gatherFiles(bool separateModules) {
 
-  /// Collect all the instance symbols from the specified module and add them
-  /// to the IRCache.  Instances only exist at the top level of the module.
-  /// Also keep track of any modules that contain bind operations.  These are
-  /// non-hierarchical references which we need to be careful about during
-  /// emission.
+  /// Collect all the inner names from the specified module and add them to the
+  /// IRCache.  Declarations (named things) only exist at the top level of the
+  /// module.  Also keep track of any modules that contain bind operations.
+  /// These are non-hierarchical references which we need to be careful about
+  /// during emission.
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
     for (Operation &op : *moduleOp.getBodyBlock()) {
       // Populate the symbolCache with all operations that can define a symbol.
-      if (auto symOp = dyn_cast<mlir::SymbolOpInterface>(op))
-        if (auto name = symOp.getNameAttr())
-          symbolCache.addDefinition(name, symOp);
+      if (auto name = op.getAttrOfType<StringAttr>(
+              hw::InnerName::getInnerNameAttrName()))
+        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), &op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     }
   };
+  /// Collect any port marked as being referenced via symbol.
+  auto collectPorts = [&](auto moduleOp) {
+    for (size_t p = 0, e = moduleOp.getNumArguments(); p != e; ++p)
+      for (std::pair<Identifier, Attribute> argAttr : moduleOp.getArgAttrs(p))
+        if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
+                                    moduleOp, p);
+  };
 
   SmallString<32> outputPath;
-  for (auto &op : *rootOp.getBody()) {
+  for (auto &op : *designOp.getBody()) {
     auto info = OpFileInfo{&op, replicatedOps.size()};
 
     bool hasFileName = false;
@@ -3859,6 +3979,7 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
         .Case<HWModuleOp>([&](auto mod) {
           // Build the IR cache.
           symbolCache.addDefinition(mod.getNameAttr(), mod);
+          collectPorts(mod);
           collectInstanceSymbolsAndBinds(mod);
 
           // Emit into a separate file named after the module.
@@ -3883,15 +4004,16 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           else
             rootFile.ops.push_back(info);
         })
-        .Case<HWModuleExternOp>([&](auto op) {
+        .Case<HWModuleExternOp>([&](HWModuleExternOp op) {
           // Build the IR cache.
           symbolCache.addDefinition(op.getNameAttr(), op);
+          collectPorts(op);
           if (separateModules)
             separateFile(op, "extern_modules.sv");
           else
             rootFile.ops.push_back(info);
         })
-        .Case<VerbatimOp, IfDefOp, TypeScopeOp>([&](Operation *op) {
+        .Case<VerbatimOp, IfDefOp>([&](Operation *op) {
           // Emit into a separate file using the specified file name or
           // replicate the operation in each outputfile.
           if (!attr) {
@@ -3899,8 +4021,16 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
           } else
             separateFile(op, "");
         })
-        .Case<HWGeneratorSchemaOp>([&](auto schemaOp) {
+        .Case<HWGeneratorSchemaOp>([&](HWGeneratorSchemaOp schemaOp) {
           symbolCache.addDefinition(schemaOp.getNameAttr(), schemaOp);
+        })
+        .Case<TypeScopeOp>([&](TypeScopeOp op) {
+          symbolCache.addDefinition(op.getNameAttr(), op);
+          // TODO: How do we want to handle typedefs in a split output?
+          if (!attr) {
+            replicatedOps.push_back(op);
+          } else
+            separateFile(op, "");
         })
         .Case<BindOp, BindInterfaceOp>([&](auto op) {
           if (!attr) {
@@ -3964,7 +4094,8 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
       .Case<InterfaceOp, VerbatimOp, IfDefOp>(
           [&](auto op) { ModuleEmitter(state).emitStatement(op); })
       .Case<TypeScopeOp>([&](auto typedecls) {
-        TypeScopeEmitter(state).emitTypeScopeBlock(*typedecls.getBodyBlock());
+        ModuleEmitter emitter(state);
+        TypeScopeEmitter(emitter).emitTypeScopeBlock(*typedecls.getBodyBlock());
       })
       .Default([&](auto *op) {
         state.encounteredError = true;
@@ -3976,7 +4107,7 @@ static void emitOperation(VerilogEmitterState &state, Operation *op) {
 /// specified file.
 void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
                                  bool parallelize) {
-  MLIRContext *context = rootOp->getContext();
+  MLIRContext *context = designOp->getContext();
 
   // Disable parallelization overhead if MLIR threading is disabled.
   if (parallelize)
@@ -3985,7 +4116,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
   // If we aren't parallelizing output, directly output each operation to the
   // specified stream.
   if (!parallelize) {
-    VerilogEmitterState state(options, symbolCache, globalNames, os);
+    VerilogEmitterState state(designOp, options, symbolCache, globalNames, os);
     for (auto &entry : thingsToEmit) {
       if (auto *op = entry.getOperation())
         emitOperation(state, op);
@@ -4014,7 +4145,8 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
 
     SmallString<256> buffer;
     llvm::raw_svector_ostream tmpStream(buffer);
-    VerilogEmitterState state(options, symbolCache, globalNames, tmpStream);
+    VerilogEmitterState state(designOp, options, symbolCache, globalNames,
+                              tmpStream);
     emitOperation(state, op);
     stringOrOp.setString(buffer);
   });
@@ -4030,7 +4162,7 @@ void SharedEmitterState::emitOps(EmissionList &thingsToEmit, raw_ostream &os,
     }
 
     // If this wasn't emitted to a string (e.g. it is a bind) do so now.
-    VerilogEmitterState state(options, symbolCache, globalNames, os);
+    VerilogEmitterState state(designOp, options, symbolCache, globalNames, os);
     emitOperation(state, op);
   }
 }
@@ -4117,9 +4249,8 @@ createOutputFile(StringRef fileName, StringRef dirname,
   // Create the output directory if needed.
   std::error_code error = llvm::sys::fs::create_directories(outputDir);
   if (error) {
-    mlir::emitError(emitter.rootOp.getLoc(),
-                    "cannot create output directory \"" + outputDir +
-                        "\": " + error.message());
+    emitter.designOp.emitError("cannot create output directory \"")
+        << outputDir << "\": " << error.message();
     emitter.encounteredError = true;
     return {};
   }
@@ -4128,7 +4259,7 @@ createOutputFile(StringRef fileName, StringRef dirname,
   std::string errorMessage;
   auto output = mlir::openOutputFile(outputFilename, &errorMessage);
   if (!output) {
-    mlir::emitError(emitter.rootOp.getLoc(), errorMessage);
+    emitter.designOp.emitError(errorMessage);
     emitter.encounteredError = true;
   }
   return output;

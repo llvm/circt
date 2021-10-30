@@ -202,11 +202,16 @@ private:
 using InstancePath = ArrayRef<InstanceOp>;
 
 template <typename T>
-static T &operator<<(T &os, const InstancePath &path) {
-  os << "$root";
+inline static T &formatInstancePath(T &into, const InstancePath &path) {
+  into << "$root";
   for (auto inst : path)
-    os << "/" << inst.name() << ":" << inst.moduleName();
-  return os;
+    into << "/" << inst.name() << ":" << inst.moduleName();
+  return into;
+}
+
+template <typename T>
+static T &operator<<(T &os, const InstancePath &path) {
+  return formatInstancePath(os, path);
 }
 
 /// A data structure that caches and provides absolute paths to module instances

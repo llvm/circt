@@ -24,9 +24,9 @@
 // CHECK-NOT: foo_assert
 // CHECK-NOT: foo_assume
 // CHECK-NOT: foo_cover
-// CHECK: sv.bind @__ETC_issue1246_assert in @issue1246
-// CHECK: sv.bind @__ETC_issue1246_assume in @issue1246 {output_file = #hw.output_file<"file4", excludeFromFileList>}
-// CHECK: sv.bind @__ETC_issue1246_cover in @issue1246
+// CHECK: sv.bind #hw.innerNameRef<@issue1246::@__ETC_issue1246_assert>
+// CHECK: sv.bind #hw.innerNameRef<@issue1246::@__ETC_issue1246_assume> {output_file = #hw.output_file<"file4", excludeFromFileList>}
+// CHECK: sv.bind #hw.innerNameRef<@issue1246::@__ETC_issue1246_cover> 
 module attributes {firrtl.extract.assert =  #hw.output_file<"dir3/", excludeFromFileList, includeReplicatedOps>, firrtl.extract.assume.bindfile = #hw.output_file<"file4", excludeFromFileList>} {
   hw.module.extern @foo_cover(%a : i1) attributes {"firrtl.extract.cover.extra"} 
   hw.module.extern @foo_assume(%a : i1) attributes {"firrtl.extract.assume.extra"} 

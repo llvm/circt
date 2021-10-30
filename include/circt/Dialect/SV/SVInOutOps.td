@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 // Note that net declarations like 'wire' should not appear in an always block.
-def WireOp : SVOp<"wire", [NonProceduralOp, Symbol,
+def WireOp : SVOp<"wire", [NonProceduralOp, 
           DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Define a new wire";
   let description = [{
@@ -20,21 +20,21 @@ def WireOp : SVOp<"wire", [NonProceduralOp, Symbol,
      See SV Spec 6.7, pp97.
     }];
 
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$sym_name);
+  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringAttr", "StringAttr()">:$name,
-                      CArg<"StringAttr", "StringAttr()">:$sym_name)>,
+                      CArg<"StringAttr", "StringAttr()">:$inner_sym)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
     }]>
   ];
 
-  let assemblyFormat = [{ (`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict)
+  let assemblyFormat = [{ (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
                           `:` type($result) }];
   let hasCanonicalizeMethod = true;
 
@@ -42,37 +42,29 @@ def WireOp : SVOp<"wire", [NonProceduralOp, Symbol,
     Type getElementType() {
       return result().getType().cast<InOutType>().getElementType();
     }
-
-    //===------------------------------------------------------------------===//
-    // SymbolOpInterface Methods
-    //===------------------------------------------------------------------===//
-
-    /// An WireOp may optionally define a symbol.
-    bool isOptionalSymbol() { return true; }
-
   }];
   let verifier = [{ return ::verifyWireOp(*this); }];
 }
 
-def RegOp : SVOp<"reg", [Symbol,
+def RegOp : SVOp<"reg", [
           DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Define a new `reg` in SystemVerilog";
    let description = [{
      Declare a SystemVerilog Variable Declaration of 'reg' type.
      See SV Spec 6.8, pp100.
    }];
-  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$sym_name);
+  let arguments = (ins StrAttr:$name, OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                     CArg<"StringAttr", "StringAttr()">:$name,
-                    CArg<"StringAttr", "StringAttr()">:$sym_name)>
+                    CArg<"StringAttr", "StringAttr()">:$inner_sym)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
-  let assemblyFormat = [{ (`sym` $sym_name^)? custom<ImplicitSSAName>(attr-dict)
+  let assemblyFormat = [{ (`sym` $inner_sym^)? custom<ImplicitSSAName>(attr-dict)
                           `:` type($result) }];
   let hasCanonicalizeMethod = true;
 
@@ -80,13 +72,6 @@ def RegOp : SVOp<"reg", [Symbol,
     Type getElementType() {
       return result().getType().cast<InOutType>().getElementType();
     }
-
-    //===------------------------------------------------------------------===//
-    // SymbolOpInterface Methods
-    //===------------------------------------------------------------------===//
-
-    /// An RegOp may optionally define a symbol.
-    bool isOptionalSymbol() { return true; }
   }];
 }
 

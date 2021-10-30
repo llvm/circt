@@ -521,12 +521,11 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
 
   return parser.parseCommaSeparatedList(
       OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
-        StringAttr name;
+        std::string name;
         Type type;
         Attribute value;
 
-        if (!(name = module_like_impl::parsePortName(parser)) ||
-            parser.parseColonType(type))
+        if (parser.parseKeywordOrString(&name) || parser.parseColonType(type))
           return failure();
 
         // Parse the default value if present.
@@ -536,7 +535,8 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
         }
 
         auto &builder = parser.getBuilder();
-        parameters.push_back(ParamDeclAttr::get(builder.getContext(), name,
+        parameters.push_back(ParamDeclAttr::get(builder.getContext(),
+                                                builder.getStringAttr(name),
                                                 TypeAttr::get(type), value));
         return success();
       });
@@ -985,6 +985,7 @@ LogicalResult InstanceOp::verifyCustom() {
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    OperationState &result) {
+  auto *context = result.getContext();
   StringAttr instanceNameAttr;
   StringAttr sym_nameAttr;
   FlatSymbolRefAttr moduleNameAttr;
@@ -1001,14 +1002,15 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     // Parsing an optional symbol name doesn't fail, so no need to check the
     // result.
-    (void)parser.parseOptionalSymbolName(sym_nameAttr, "sym_name",
-                                         result.attributes);
+    (void)parser.parseOptionalSymbolName(
+        sym_nameAttr, InnerName::getInnerNameAttrName(), result.attributes);
   }
 
   auto parseInputPort = [&]() -> ParseResult {
-    argNames.push_back(module_like_impl::parsePortName(parser));
-    if (!argNames.back())
+    std::string portName;
+    if (parser.parseKeywordOrString(&portName))
       return failure();
+    argNames.push_back(StringAttr::get(context, portName));
     inputsOperands.push_back({});
     inputsTypes.push_back({});
     return failure(parser.parseColon() ||
@@ -1017,9 +1019,10 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   };
 
   auto parseResultPort = [&]() -> ParseResult {
-    resultNames.push_back(module_like_impl::parsePortName(parser));
-    if (!resultNames.back())
+    std::string portName;
+    if (parser.parseKeywordOrString(&portName))
       return failure();
+    resultNames.push_back(StringAttr::get(parser.getContext(), portName));
     allResultTypes.push_back({});
     return parser.parseColonType(allResultTypes.back());
   };
@@ -1061,13 +1064,13 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
       return;
     }
 
-    module_like_impl::printPortName(portList[nextPort++].name, p.getStream());
+    p.printKeywordOrString(portList[nextPort++].name.getValue());
     p << ": ";
   };
 
   p << ' ';
   p.printAttributeWithoutType(op.instanceNameAttr());
-  if (auto attr = op.sym_nameAttr()) {
+  if (auto attr = op.inner_symAttr()) {
     p << " sym ";
     p.printSymbolName(attr.getValue());
   }
@@ -1085,9 +1088,10 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
     p << res.getType();
   });
   p << ')';
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{
-                              "instanceName", "sym_name", "moduleName",
-                              "argNames", "resultNames", "parameters"});
+  p.printOptionalAttrDict(
+      op->getAttrs(),
+      /*elidedAttrs=*/{"instanceName", InnerName::getInnerNameAttrName(),
+                       "moduleName", "argNames", "resultNames", "parameters"});
 }
 
 /// Return the name of the specified input port or null if it cannot be

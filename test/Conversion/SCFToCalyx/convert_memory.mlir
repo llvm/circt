@@ -57,19 +57,19 @@
 // CHECK-NEXT: }
 module {
   func @main() {
-    %c0 = constant 0 : index
-    %c1 = constant 1 : index
-    %c64 = constant 64 : index
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : index
+    %c64 = arith.constant 64 : index
     %0 = memref.alloc() : memref<64xi32>
     %1 = memref.alloc() : memref<64xi32>
     scf.while(%arg0 = %c0) : (index) -> (index) {
-      %cond = cmpi ult, %arg0, %c64 : index
+      %cond = arith.cmpi ult, %arg0, %c64 : index
       scf.condition(%cond) %arg0 : index
     } do {
     ^bb0(%arg1: index):
       %v = memref.load %0[%arg1] : memref<64xi32>
       memref.store %v, %1[%arg1] : memref<64xi32>
-      %inc = addi %arg1, %c1 : index
+      %inc = arith.addi %arg1, %c1 : index
       scf.yield %inc : index
     }
     return
@@ -126,11 +126,11 @@ module {
 module {
   func @main(%arg0 : i32) -> i32 {
     %0 = memref.alloc() : memref<64xi32>
-    %c0 = constant 0 : index
-    %c1 = constant 1 : i32
-    %1 = addi %arg0, %c1 : i32
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : i32
+    %1 = arith.addi %arg0, %c1 : i32
     memref.store %1, %0[%c0] : memref<64xi32>
-    %3 = addi %1, %c1 : i32
+    %3 = arith.addi %1, %c1 : i32
     return %3 : i32
   }
 }
@@ -184,12 +184,12 @@ module {
 module {
   func @main(%arg0 : i32) -> i32 {
     %0 = memref.alloc() : memref<64xi32>
-    %c0 = constant 0 : index
-    %c1 = constant 1 : i32
-    %1 = addi %arg0, %c1 : i32
-    %2 = addi %1, %c1 : i32
+    %c0 = arith.constant 0 : index
+    %c1 = arith.constant 1 : i32
+    %1 = arith.addi %arg0, %c1 : i32
+    %2 = arith.addi %1, %c1 : i32
     memref.store %1, %0[%c0] : memref<64xi32>
-    %3 = addi %2, %c1 : i32
+    %3 = arith.addi %2, %c1 : i32
     return %3 : i32
   }
 }
@@ -248,11 +248,11 @@ module {
 module {
   func @main(%arg0 : i6) -> i32 {
     %0 = memref.alloc() : memref<64xi32>
-    %c1 = constant 1 : index
-    %arg0_idx =  index_cast %arg0 : i6 to index
+    %c1 = arith.constant 1 : index
+    %arg0_idx =  arith.index_cast %arg0 : i6 to index
     %1 = memref.load %0[%arg0_idx] : memref<64xi32>
     %2 = memref.load %0[%c1] : memref<64xi32>
-    %3 = addi %1, %2 : i32
+    %3 = arith.addi %1, %2 : i32
     return %3 : i32
   }
 }
@@ -323,7 +323,7 @@ module {
 // CHECH-NEXT: }
 module {
   func @main(%i : i8) -> index {
-    %0 = index_cast %i : i8 to index
+    %0 = arith.index_cast %i : i8 to index
     return %0 : index
   }
 }

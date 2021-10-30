@@ -32,18 +32,6 @@ StringAttr module_like_impl::getPortNameAttr(MLIRContext *context,
   return StringAttr::get(context, name);
 }
 
-/// Parse a portname as a keyword or a quote surrounded string.
-StringAttr module_like_impl::parsePortName(OpAsmParser &parser) {
-  StringAttr result;
-  StringRef keyword;
-  if (succeeded(parser.parseOptionalKeyword(&keyword)))
-    return parser.getBuilder().getStringAttr(keyword);
-
-  if (parser.parseAttribute(result, parser.getBuilder().getType<NoneType>()))
-    return {};
-  return result;
-}
-
 /// Parse a function result list.
 ///
 ///   function-result-list ::= function-result-list-parens
@@ -58,9 +46,10 @@ ParseResult module_like_impl::parseFunctionResultList(
     SmallVectorImpl<Attribute> &resultNames) {
 
   auto parseElt = [&]() -> ParseResult {
-    resultNames.push_back(parsePortName(parser));
-    if (!resultNames.back())
+    std::string portName;
+    if (parser.parseKeywordOrString(&portName))
       return failure();
+    resultNames.push_back(StringAttr::get(parser.getContext(), portName));
 
     resultTypes.emplace_back();
     resultAttrs.emplace_back();
@@ -94,28 +83,6 @@ ParseResult module_like_impl::parseModuleFunctionSignature(
     return parseFunctionResultList(parser, resultTypes, resultAttrs,
                                    resultNames);
   return success();
-}
-
-/// Return true if this string parses as a valid MLIR keyword, false otherwise.
-static bool isValidKeyword(StringRef name) {
-  if (name.empty() || (!isalpha(name[0]) && name[0] != '_'))
-    return false;
-  for (auto c : name.drop_front()) {
-    if (!isalpha(c) && !isdigit(c) && c != '_' && c != '$' && c != '.')
-      return false;
-  }
-
-  return true;
-}
-
-/// Print a port name as a MLIR keyword or quoted if necessary.
-void module_like_impl::printPortName(StringAttr name, llvm::raw_ostream &os) {
-  // Print this as a bareword if it can be parsed as an MLIR keyword,
-  // otherwise print it as a quoted string.
-  if (isValidKeyword(name.getValue()))
-    os << name.getValue();
-  else
-    os << name;
 }
 
 void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
@@ -170,7 +137,7 @@ void module_like_impl::printModuleSignature(OpAsmPrinter &p, Operation *op,
     for (size_t i = 0, e = resultTypes.size(); i < e; ++i) {
       if (i != 0)
         p << ", ";
-      printPortName(getModuleResultNameAttr(op, i), p.getStream());
+      p.printKeywordOrString(getModuleResultNameAttr(op, i).getValue());
       p << ": ";
       p.printType(resultTypes[i]);
       p.printOptionalAttrDict(getResultAttrs(op, i));

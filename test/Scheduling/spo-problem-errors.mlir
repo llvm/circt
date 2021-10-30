@@ -15,9 +15,9 @@ func @limited_but_zero_latency() attributes {
 func @oversubscribed(%a0 : i32, %a1 : i32, %a2 : i32) -> i32 attributes {
   operatortypes = [ { name = "limited", latency = 1, limit = 2} ]
   } {
-  %0 = addi %a0, %a0 { problemStartTime = 0 } : i32
-  %1 = addi %a1, %0 { opr = "limited", problemStartTime = 1 } : i32
-  %2 = addi %0, %a2 { opr = "limited", problemStartTime = 1 } : i32
-  %3 = addi %0, %0 { opr = "limited", problemStartTime = 1 } : i32
+  %0 = arith.addi %a0, %a0 { problemStartTime = 0 } : i32
+  %1 = arith.addi %a1, %0 { opr = "limited", problemStartTime = 1 } : i32
+  %2 = arith.addi %0, %a2 { opr = "limited", problemStartTime = 1 } : i32
+  %3 = arith.addi %0, %0 { opr = "limited", problemStartTime = 1 } : i32
   return { problemStartTime = 2 } %3 : i32
 }
