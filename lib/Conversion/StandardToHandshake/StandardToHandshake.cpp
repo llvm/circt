@@ -761,7 +761,9 @@ LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
       for (auto result : op.getResults())
         if (result.use_empty()) {
           rewriter.setInsertionPointAfter(&op);
-          rewriter.create<SinkOp>(op.getLoc(), result);
+          auto sinkOp = rewriter.create<SinkOp>(op.getLoc(), result);
+          if (result.getType().isa<NoneType>())
+            sinkOp->setAttr("control", rewriter.getBoolAttr(true));
         }
     }
   }

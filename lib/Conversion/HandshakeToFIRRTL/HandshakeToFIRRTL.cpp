@@ -870,7 +870,6 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
-  Value argData = argSubfields[2];
 
   // A Sink operation is always ready to accept tokens.
   auto signalType = argValid.getType().cast<FIRRTLType>();
@@ -879,6 +878,15 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
 
   rewriter.eraseOp(argValid.getDefiningOp());
+
+  if (auto ctrlAttr = op->getAttrOfType<BoolAttr>("control");
+      ctrlAttr && ctrlAttr.getValue())
+    return true;
+
+  // Non-control sink; must also have a data operand.
+  assert(argSubfields.size() >= 3 &&
+         "expected a data operand to a non-control sink op");
+  Value argData = argSubfields[2];
   rewriter.eraseOp(argData.getDefiningOp());
   return true;
 }
