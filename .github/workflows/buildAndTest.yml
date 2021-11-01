@@ -132,50 +132,6 @@ jobs:
         run: utils/build-llvm.sh
 
       # --------
-      # Build and test CIRCT in both debug and release mode.
-      # --------
-
-      # Our PR builds are trying to test the two corners of the build matrix:
-      # clang + release + noassert + shared
-      # gcc   + debug   + assert   + static 
-
-      # Build the CIRCT test target in release mode with assertions using Clang.
-      - name: Build and Test CIRCT (Clang release)
-        run: |
-          mkdir build_clang
-          cd build_clang
-          cmake .. \
-            -DBUILD_SHARED_LIBS=ON \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DLLVM_ENABLE_ASSERTIONS=OFF \
-            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
-            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
-            -DCMAKE_LINKER=lld \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make check-circt -j$(nproc)
-          make circt-doc
-
-      # Build the CIRCT test target in debug mode with assertions using GCC.
-      - name: Build and Test CIRCT (GCC debug)
-        run: |
-          mkdir build_gcc
-          cd build_gcc
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DLLVM_ENABLE_ASSERTIONS=ON \
-            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
-            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
-            -DCMAKE_LINKER=lld \
-            -DCMAKE_C_COMPILER=gcc \
-            -DCMAKE_CXX_COMPILER=g++ \
-            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
-          make check-circt -j$(nproc)
-          make circt-doc
-
-      # --------
       # Lint the CIRCT C++ code.
       # -------
 
@@ -288,5 +244,49 @@ jobs:
             cat clang-tidy.patch
             echo "================"
           fi
+
+      # --------
+      # Build and test CIRCT in both debug and release mode.
+      # --------
+
+      # Our PR builds are trying to test the two corners of the build matrix:
+      # clang + release + noassert + shared
+      # gcc   + debug   + assert   + static
+
+      # Build the CIRCT test target in release mode with assertions using Clang.
+      - name: Build and Test CIRCT (Clang release)
+        run: |
+          mkdir build_clang
+          cd build_clang
+          cmake .. \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=OFF \
+            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
+            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
+            -DCMAKE_LINKER=lld \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          make check-circt -j$(nproc)
+          make circt-doc
+
+      # Build the CIRCT test target in debug mode with assertions using GCC.
+      - name: Build and Test CIRCT (GCC debug)
+        run: |
+          mkdir build_gcc
+          cd build_gcc
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
+            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
+            -DCMAKE_LINKER=lld \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit
+          make check-circt -j$(nproc)
+          make circt-doc
 
     # --- end of build-circt job.
