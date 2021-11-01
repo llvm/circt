@@ -138,7 +138,7 @@ jobs:
             echo "================"
           fi
 
-
+  # --- end of sanity-check job.
 
   # Build the LLVM submodule then cache it. Do not rebuild if hit in the
   # cache.
