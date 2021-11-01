@@ -36,7 +36,6 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
-#include <deque>
 
 using namespace circt;
 using namespace firrtl;
@@ -335,42 +334,39 @@ Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
 bool TypeLoweringVisitor::processSAPath(Operation *op) {
   // Does this LHS have a subaccessop?
   SmallVector<Operation *> writePath = getSAWritePath(op);
-  if (!writePath.empty()) {
-    lowerSAWritePath(op, writePath);
-    // Unhook the writePath from the connect.  This isn't the right type, but we
-    // are deleting the op anyway.
-    op->eraseOperands(0, 2);
-    // See how far up the tree we can delete things.
-    for (size_t i = 0; i < writePath.size(); ++i) {
-      if (writePath[i]->use_empty()) {
-        writePath[i]->erase();
-      } else {
-        break;
-      }
+  if (writePath.empty())
+    return false;
+
+  lowerSAWritePath(op, writePath);
+  // Unhook the writePath from the connect.  This isn't the right type, but we
+  // are deleting the op anyway.
+  op->eraseOperands(0, 2);
+  // See how far up the tree we can delete things.
+  for (size_t i = 0; i < writePath.size(); ++i) {
+    if (writePath[i]->use_empty()) {
+      writePath[i]->erase();
+    } else {
+      break;
     }
-    opsToRemove.push_back(op);
-    return true;
   }
-  return false;
+  opsToRemove.push_back(op);
+  return true;
 }
 
 void TypeLoweringVisitor::lowerBlock(Block *block) {
-  // Lower the operations.
-  for (auto &iop : llvm::reverse(*block)) {
-    // We erase old ops eagerly so we don't have dangling uses we've already
+  // Lower the operations bottom up.
+  for (auto it = block->rbegin(), e = block->rend(); it != e;) {
+    auto &iop = *it;
+    builder->setInsertionPoint(&iop);
+    builder->setLoc(iop.getLoc());
+    dispatchVisitor(&iop);
+    ++it;
+    // Erase old ops eagerly so we don't have dangling uses we've already
     // lowered.
     for (auto *op : opsToRemove)
       op->erase();
     opsToRemove.clear();
-
-    builder->setInsertionPoint(&iop);
-    builder->setLoc(iop.getLoc());
-    dispatchVisitor(&iop);
   }
-
-  for (auto *op : opsToRemove)
-    op->erase();
-  opsToRemove.clear();
 }
 
 void TypeLoweringVisitor::lowerProducer(
@@ -1218,7 +1214,7 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
-  std::deque<Operation *> ops;
+  std::vector<Operation *> ops;
   llvm::for_each(getOperation().getBody()->getOperations(),
                  [&](Operation &op) { ops.push_back(&op); });
 
