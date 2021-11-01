@@ -18,7 +18,7 @@ func @foo(%0 : i32) -> i32 {
 // CHECK:           %[[VAL_2:.*]] = "handshake.merge"(%[[VAL_0]]) : (i32) -> i32
 // CHECK:           %[[VAL_3:.*]]:2 = "handshake.fork"(%[[VAL_1]]) {control = true} : (none) -> (none, none)
 // CHECK:           %[[VAL_4:.*]]:2 = handshake.instance @bar(%[[VAL_2]], %[[VAL_3]]#0) : (i32, none) -> (i32, none)
-// CHECK:           "handshake.sink"(%[[VAL_4]]#1) : (none) -> ()
+// CHECK:           "handshake.sink"(%[[VAL_4]]#1) {control = true} : (none) -> ()
 // CHECK:           handshake.return %[[VAL_4]]#0, %[[VAL_3]]#1 : i32, none
 // CHECK:         }
 
@@ -56,7 +56,7 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_17:.*]]:2 = "handshake.fork"(%[[VAL_16]]#0) {control = true} : (none) -> (none, none)
 // CHECK:           "handshake.sink"(%[[VAL_16]]#1) : (index) -> ()
 // CHECK:           %[[VAL_18:.*]]:2 = handshake.instance @add(%[[VAL_14]], %[[VAL_15]], %[[VAL_17]]#1) : (i32, i32, none) -> (i32, none)
-// CHECK:           "handshake.sink"(%[[VAL_18]]#1) : (none) -> ()
+// CHECK:           "handshake.sink"(%[[VAL_18]]#1) {control = true} : (none) -> ()
 // CHECK:           %[[VAL_19:.*]] = "handshake.branch"(%[[VAL_17]]#0) {control = true} : (none) -> none
 // CHECK:           %[[VAL_20:.*]] = "handshake.branch"(%[[VAL_18]]#0) {control = false} : (i32) -> i32
 // CHECK:           %[[VAL_21:.*]] = "handshake.merge"(%[[VAL_9]]) : (i32) -> i32
@@ -65,7 +65,7 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
 // CHECK:           %[[VAL_24:.*]]:2 = "handshake.fork"(%[[VAL_23]]#0) {control = true} : (none) -> (none, none)
 // CHECK:           "handshake.sink"(%[[VAL_23]]#1) : (index) -> ()
 // CHECK:           %[[VAL_25:.*]]:2 = handshake.instance @sub(%[[VAL_21]], %[[VAL_22]], %[[VAL_24]]#1) : (i32, i32, none) -> (i32, none)
-// CHECK:           "handshake.sink"(%[[VAL_25]]#1) : (none) -> ()
+// CHECK:           "handshake.sink"(%[[VAL_25]]#1) {control = true} : (none) -> ()
 // CHECK:           %[[VAL_26:.*]] = "handshake.branch"(%[[VAL_24]]#0) {control = true} : (none) -> none
 // CHECK:           %[[VAL_27:.*]] = "handshake.branch"(%[[VAL_25]]#0) {control = false} : (i32) -> i32
 // CHECK:           %[[VAL_28:.*]]:2 = "handshake.control_merge"(%[[VAL_26]], %[[VAL_19]]) {control = true} : (none, none) -> (none, index)
