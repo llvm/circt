@@ -44,5 +44,6 @@ include "circt/Dialect/SV/SVInOutOps.td"
 include "circt/Dialect/SV/SVStatements.td"
 include "circt/Dialect/SV/SVVerification.td"
 include "circt/Dialect/SV/SVTypeDecl.td"
+include "circt/Dialect/SV/SVAttributes.td"
 
 #endif // CIRCT_DIALECT_SV_SV

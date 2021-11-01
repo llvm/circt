@@ -1,4 +1,5 @@
 add_circt_dialect_library(CIRCTSV
+  SVAttributes.cpp
   SVDialect.cpp
   SVOps.cpp
   SVTypes.cpp
@@ -7,6 +8,7 @@ add_circt_dialect_library(CIRCTSV
   ${CIRCT_MAIN_INCLUDE_DIR}/circt/Dialect/SV
 
   DEPENDS
+  MLIRSVAttrIncGen
   MLIRSVIncGen
 
   LINK_COMPONENTS

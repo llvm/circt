@@ -276,3 +276,11 @@ hw.module @XMR_src(%a : i23) {
     // CHECK: = sv.indexed_part_select %[[v4]][%[[in4:.+]]  decrement : 5] : i18, i4
     hw.output %c, %d : i3, i5
 }
+
+// CHECK-LABEL: @ModuleWithSVAttributes
+// CHECK-SAME:    #sv.attribute<"moduleWithAttributes">
+// CHECK-SAME:    #sv.attribute<"foo"="bar">
+hw.module @ModuleWithSVAttributes()
+  attributes {attribute_instances = [
+    #sv.attribute<"moduleWithAttributes">,
+    #sv.attribute<"foo"="bar">]} {}

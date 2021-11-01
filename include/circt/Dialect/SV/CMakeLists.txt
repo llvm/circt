@@ -13,6 +13,11 @@ mlir_tablegen(SVStructs.cpp.inc -gen-struct-attr-defs)
 add_public_tablegen_target(MLIRSVStructsIncGen)
 add_dependencies(circt-headers MLIRSVStructsIncGen)
 
+mlir_tablegen(SVAttributes.h.inc -gen-attrdef-decls -attrdefs-dialect sv)
+mlir_tablegen(SVAttributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect sv)
+add_public_tablegen_target(MLIRSVAttrIncGen)
+add_circt_doc(SV -gen-attrdef-doc SVAttributes Dialects/)
+
 set(LLVM_TARGET_DEFINITIONS SVPasses.td)
 mlir_tablegen(SVPasses.h.inc -gen-pass-decls)
 add_public_tablegen_target(CIRCTSVTransformsIncGen)

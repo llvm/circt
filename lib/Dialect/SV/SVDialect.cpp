@@ -32,6 +32,9 @@ void SVDialect::initialize() {
   // Register types.
   registerTypes();
 
+  // Register attributes.
+  registerAttributes();
+
   // Register operations.
   addOperations<
 #define GET_OP_LIST
