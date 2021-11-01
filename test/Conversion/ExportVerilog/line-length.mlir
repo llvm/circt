@@ -45,3 +45,21 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 // LIMIT_LONG-NEXT:   wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
 // LIMIT_LONG-NEXT:                       a + a + a + a + a + a + a + a + a;
 // LIMIT_LONG-NEXT:   assign b = _tmp + _tmp_0;
+
+hw.module @moduleWithComment()
+  attributes {comment = "The quick brown fox jumps over the lazy dog.  The quick brown fox jumps over the lazy dog.\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"} {}
+
+// SHORT-LABEL:   // The quick brown fox jumps over the
+// SHORT-NEXT:    // lazy dog.  The quick brown fox jumps
+// SHORT-NEXT:    // over the lazy dog.
+// SHORT-NEXT:    // aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+// SHORT-NEXT:    module moduleWithComment
+//
+// DEFAULT-LABEL: // The quick brown fox jumps over the lazy dog.  The quick brown fox jumps over the lazy
+// DEFAULT-NEXT:  // dog.
+// DEFAULT-NEXT:  // aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+// DEFAULT-NEXT:  module moduleWithComment
+//
+// LONG-LABEL:    // The quick brown fox jumps over the lazy dog.  The quick brown fox jumps over the lazy dog.
+// LONG-NEXT:     // aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+// LONG-NEXT:     module moduleWithComment
