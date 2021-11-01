@@ -884,11 +884,8 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
     return true;
 
   // Non-control sink; must also have a data operand.
-  if (argSubfields.size() < 3) {
-    op.emitOpError() << "expected a data operand to a non-control sink op";
-    return false;
-  }
-
+  assert(argSubfields.size() >= 3 &&
+         "expected a data operand to a non-control sink op");
   Value argData = argSubfields[2];
   rewriter.eraseOp(argData.getDefiningOp());
   return true;
