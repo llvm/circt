@@ -534,16 +534,13 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 /// the FIRRTL circt. Return the matched submodule if true, otherwise return
 /// nullptr.
 static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
-  for (auto moduleOp : circuitOp.getOps<FModuleOp>()) {
-    if (getSubModuleName(oldOp) == moduleOp.getName())
-      return moduleOp;
-  }
+  auto moduleOp = circuitOp.lookupSymbol<FModuleOp>(getSubModuleName(oldOp));
 
-  assert(!isa<handshake::InstanceOp>(oldOp) &&
-         "handshake.instance target modules should always have been lowered "
-         "before the modules that reference them!");
-
-  return FModuleOp(nullptr);
+  if (isa<handshake::InstanceOp>(oldOp))
+    assert(moduleOp &&
+           "handshake.instance target modules should always have been lowered "
+           "before the modules that reference them!");
+  return moduleOp;
 }
 
 /// All standard expressions and handshake elastic components will be converted
