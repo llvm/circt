@@ -28,7 +28,7 @@ using namespace circt::analysis;
 static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
                                   unsigned depth,
                                   MemoryDependenceResult &results) {
-  for (auto *source : memoryOps) {
+  for (auto  *source : memoryOps) {
     for (auto *destination : memoryOps) {
       if (source == destination)
         continue;
