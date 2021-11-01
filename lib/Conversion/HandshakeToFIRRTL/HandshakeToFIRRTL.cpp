@@ -2144,6 +2144,9 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                                    [](BlockArgument &arg) -> bool {
                                      return arg.getType().isa<ClockType>();
                                    });
+    assert(firstClock != topArgs.end() && "Expected a clock signal");
+    unsigned firstClkIdx = std::distance(topArgs.begin(), firstClock);
+
     if (portIndex < numIns) {
       // Connect input ports.
       rewriter.create<ConnectOp>(oldOp->getLoc(), result,
@@ -2153,8 +2156,11 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
       Value newResult = oldOp->getResult(portIndex - numIns);
       newResult.replaceAllUsesWith(result);
     } else {
-      // Connect clock or reset signal.
-      auto signal = *(firstClock + 2 * clockDomain + portIndex - numArgs);
+      // Connect clock or reset signal(s).
+      unsigned clkOrResetIdx =
+          firstClkIdx + 2 * clockDomain + portIndex - numArgs;
+      assert(topArgs.size() > clkOrResetIdx);
+      auto signal = topArgs[clkOrResetIdx];
       rewriter.create<ConnectOp>(oldOp->getLoc(), result, signal);
     }
     ++portIndex;
