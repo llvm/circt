@@ -107,15 +107,15 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
   let summary = "module instantiate operation";
   let description = [{
     The `instance` operation represents the instantiation of a module.  This
-	 is similar to a function call, except that different instances of the
-	 same module are guaranteed to have their own distinct state.
-    The instantiated module is encoded as a
-    symbol reference attribute named "module".
+	  is similar to a function call, except that different instances of the
+	  same module are guaranteed to have their own distinct state.
+    The instantiated module is encoded as a symbol reference attribute named
+    "module". An instance operation takes a control input as its last argument
+    and returns a control output as its last result.
 
     Example:
-
     ```mlir
-    %2 = handshake.instance @my_add(%0, %1) : (f32, f32) -> f32
+    %2:2 = handshake.instance @my_add(%0, %1, %ctrl) : (f32, f32, none) -> (f32, none)
     ```
   }];
 
@@ -127,12 +127,14 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
       $_state.addOperands(operands);
       $_state.addAttribute("module", SymbolRefAttr::get(module));
       $_state.addTypes(module.getType().getResults());
+      $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
   }]>, OpBuilder<
     (ins "SymbolRefAttr":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
       $_state.addAttribute("module", module);
       $_state.addTypes(results);
+      $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
   }]>, OpBuilder<
     (ins "StringRef":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
