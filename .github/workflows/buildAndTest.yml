@@ -13,6 +13,8 @@ jobs:
   sanity-check:
     name: Sanity Check
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/circt/images/circt-ci-build:20210929220136
     steps:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
@@ -142,6 +144,7 @@ jobs:
   # cache.
   build-llvm:
     name: Build LLVM
+    needs: sanity-check
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/circt/images/circt-ci-build:20210929220136
