@@ -97,7 +97,7 @@ LogicalResult IfOp::canonicalize(IfOp op, mlir::PatternRewriter &rewriter) {
   if (!constantOp)
     return result;
 
-  int condition = constantOp.getValue().dyn_cast<IntegerAttr>().getInt();
+  int condition = constantOp.value().dyn_cast<IntegerAttr>().getInt();
   BlockAndValueMapping operandMap;
   SmallVector<Value> yieldedValues;
   operandMap.map(op.getRegionTimeVar(), op.tstart());
@@ -121,6 +121,7 @@ LogicalResult NextIterOp::canonicalize(NextIterOp op,
 
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
+
 OpFoldResult TimeOp::fold(ArrayRef<Attribute> operands) {
   auto timeVar = this->timevar();
   auto delay = this->delay();

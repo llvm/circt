@@ -18,10 +18,10 @@ private:
   size_t hwModuleInputArgNum = 0;
   size_t hwModuleResultArgNum = 0;
   SmallVector<hw::PortInfo> portInfoList;
-  SmallVector<hw::PortInfo *> mapFuncInputToHWPortInfo;
+  SmallVector<hw::PortInfo> mapFuncInputToHWPortInfo;
 };
 
-Type convertType(Type type);
+Type convertToHWType(Type type);
 
 bool isRecvBus(DictionaryAttr busAttr);
 

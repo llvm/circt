@@ -283,4 +283,12 @@ Operation *declareExternalFuncForCall(hir::CallOp callOp,
 
   return declOp;
 }
+
+circt::Type getElementType(circt::Type ty) {
+  if (auto tensorTy = ty.dyn_cast<mlir::TensorType>())
+    return getElementType(tensorTy.getElementType());
+  if (auto busTy = ty.dyn_cast<hir::BusType>())
+    return getElementType(busTy.getElementType());
+  return ty;
+}
 } // namespace helper

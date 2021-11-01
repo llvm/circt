@@ -324,7 +324,8 @@ void printWithSSANames(mlir::OpAsmPrinter &printer, Operation *op,
       "offset", "delay",        "ports",
       "port",   "result_attrs", "callee",
       "funcTy", "portNums",     "operand_segment_sizes",
-      "index",  "mem_type",     "argNames"};
+      "index",  "mem_type",     "argNames",
+      "value"};
   if (!namesDisagree)
     elidedAttrs.push_back("names");
   printer.printOptionalAttrDict(op->getAttrs(), elidedAttrs);

@@ -413,12 +413,11 @@ def SendOp : HIR_Op<"send", []> {
       ```mlir hir.send %1 to %v[%0] : !hir.bus<...>```
   }];
 
-  let arguments = (ins AnyType:$value, HIR_BusType:$bus, I64Attr:$index,
+  let arguments = (ins AnyType:$value, HIR_BusType:$bus,
       Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs );
   let assemblyFormat = [{
-    $value `to` $bus `[` $index`]`
-      `at` custom<TimeAndOffset> ($tstart, $offset) attr-dict  `:` type($value) `to` type($bus)  
+    $value `to` $bus `at` custom<TimeAndOffset> ($tstart, $offset) attr-dict `:` type($value) `to` type($bus)  
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -431,13 +430,12 @@ def RecvOp : HIR_Op<"recv", []> {
       ```mlir %v = hir.recv %x[%0] : !hir.bus<...> -> i32```
   }];
 
-  let arguments = (ins HIR_BusType:$bus,I64Attr:$index, 
+  let arguments = (ins HIR_BusType:$bus,
       Optional<HIR_TimeType> :$tstart, OptionalAttr<I64Attr>: $offset);
   let results = (outs AnyType:$res);
 
   let assemblyFormat = [{
-    $bus `[` $index `]`  
-      `at` custom<TimeAndOffset>($tstart, $offset) custom<WithSSANames>(attr-dict)  `:` type($bus) `->` type($res)  
+    $bus `at` custom<TimeAndOffset>($tstart, $offset) custom<WithSSANames>(attr-dict)  `:` type($bus) `->` type($res)  
   }];
   let hasCanonicalizeMethod = true;
 }
@@ -584,19 +582,6 @@ def LatchOp: HIR_Op<"latch",[NoSideEffect]>{
   let hasFolder = true;
 }
 
-def AssignOp: HIR_Op<"assign",[]>{
-  let summary = "Assign a constant value to a bus.";
-  let description = [{
-    This op delays the input value by a fixed amount of time.
-      Example:
-      ```mlir %yy = hir.delay %xx by %1 at %tj```
-  }];
-
-  let arguments = (ins AnyAttr:$value, HIR_BusType : $bus);
-  let results = (outs);
-  let assemblyFormat = [{$value `to` $bus attr-dict `:` type($bus)}];
-}
-
 def AddIOp: HIR_Op<"addi",[NoSideEffect]>{
   let summary = "Integer add operation";
   let description = [{
@@ -707,11 +692,11 @@ def TensorExtractOp :HIR_Op<"tensor.extract",[NoSideEffect]>{
       ```mlir %1 = hir.tensor.extract %x[%0] : tensor<4x!hir.bus<...>>```
   }];
 
-  let arguments = (ins AnyType: $tensor, Variadic<Index>: $indices, ArrayAttr: $ports);
+  let arguments = (ins AnyType: $tensor, Variadic<Index>: $indices);
   let results = (outs HIR_BusType: $res);
 
   let assemblyFormat = [{ $tensor `[`$indices`]` custom<WithSSANames>(attr-dict) `:`
-    type($tensor) `->` type($res) `ports` $ports}];
+    type($tensor) `->` type($res) }];
 }
 
 def MemrefExtractOp :HIR_Op<"memref.extract",[NoSideEffect]>{
@@ -787,7 +772,7 @@ def TensorInsertOp: HIR_Op<"tensor.insert",[NoSideEffect]>{
         = hir.tensor.insert %element into %tensor[%c0,%c1] : type(%res)```
   }];
 
-  let arguments = (ins AnyType: $element, AnyType:$input_tensor,
+  let arguments = (ins AnyType: $element, AnyType:$tensor,
   Variadic<Index>: $indices);
   let results = (outs AnyType: $res);
 
@@ -795,19 +780,20 @@ def TensorInsertOp: HIR_Op<"tensor.insert",[NoSideEffect]>{
   let printer = [{return print$cppClass(p,*this);}];
 }
 
-def BusAssignOp: HIR_Op<"bus.assign",[NoSideEffect,SameOperandsAndResultType]>{
+def BusAssignOp: HIR_Op<"bus.assign",[]>{
   let summary = "Assign one bus/tensor-of-buses to another.";
   let description = [{
-    This op assigns one bus to another.
+    This op assigns one bus/tensor to another.
       Examples:
-      ```mlir %merged_bus 
-        = hir.bus.assign %dest, %src: !hir.bus<i32>```
+      ```mlir 
+        hir.bus.assign %dest, %src: !hir.bus<i32>```
   }];
 
   let arguments = (ins AnyType: $dest, AnyType:$src);
-  let results = (outs AnyType: $res);
 
-  let assemblyFormat = [{ $dest `,` $src custom<WithSSANames>(attr-dict) `:` type($res) }];
+  let assemblyFormat = [{ $dest `,` $src custom<WithSSANames>(attr-dict) `:`
+  type($dest)
+  custom<CopyType>(type($src),ref(type($dest))) }];
 }
 
 def BusOrOp: HIR_Op<"bus.or",[NoSideEffect,SameOperandsAndResultType]>{
@@ -823,6 +809,21 @@ def BusOrOp: HIR_Op<"bus.or",[NoSideEffect,SameOperandsAndResultType]>{
   let results = (outs AnyType: $res);
 
   let assemblyFormat = [{ $left `,` $right custom<WithSSANames>(attr-dict) `:` type($res) }];
+}
+
+def BusBroadcastOp: HIR_Op<"bus.broadcast",[NoSideEffect]>{
+  let summary = "broadcast bus to tensor of buses";
+  let description = [{
+    This op creates a new tensor of buses from a bus by broadcasting it.
+      Examples:
+      ```mlir %t 
+        = hir.bus.broadcast %b : !hir.bus<i32> -> tensor<4x!hir.bus<i32>>```
+  }];
+
+  let arguments = (ins HIR_BusType: $bus);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ $bus custom<WithSSANames>(attr-dict) `:` type($bus) `->`type($res)}];
 }
 
 #endif // HIR_OPS

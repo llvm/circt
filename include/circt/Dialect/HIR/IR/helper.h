@@ -57,5 +57,6 @@ llvm::Optional<mlir::StringRef> getOptionalName(mlir::Operation *operation,
 circt::Operation *declareExternalFuncForCall(
     circt::hir::CallOp callOp, circt::SmallVector<circt::StringRef> inputNames,
     circt::SmallVector<circt::StringRef> resultNames = {});
+circt::Type getElementType(circt::Type);
 } // namespace helper
 #endif

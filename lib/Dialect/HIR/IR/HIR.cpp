@@ -991,7 +991,7 @@ static ParseResult parseTensorInsertOp(OpAsmParser &parser,
 }
 
 static void printTensorInsertOp(OpAsmPrinter &printer, hir::TensorInsertOp op) {
-  printer << " " << op.element() << " into " << op.input_tensor();
+  printer << " " << op.element() << " into " << op.tensor();
   printer << "[";
   printer.printOperands(op.indices());
   printer << "]";

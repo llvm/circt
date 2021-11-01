@@ -8,10 +8,13 @@
 #include <iostream>
 using namespace circt;
 using namespace hir;
-void insertEnableSendLogic(OpBuilder &builder, Value inEnableBus,
-                           Value outEnableBus, Value tVar,
-                           IntegerAttr offsetAttr, ArrayRef<Value> indices);
+Value insertEnableSendLogic(OpBuilder &builder, Value inEnableBus, Value tVar,
+                            IntegerAttr offsetAttr, ArrayRef<Value> indices);
 
-void insertDataSendLogic(OpBuilder &builder, Value data, Value enableBus,
-                         Value inDataBus, Value outDataBus, Value tVar,
-                         IntegerAttr offsetAttr, ArrayRef<Value> indices);
+Value insertDataSendLogic(OpBuilder &builder, Value data, Value inDataBus,
+                          Value tVar, IntegerAttr offsetAttr,
+                          ArrayRef<Value> indices);
+
+Value insertDataRecvLogic(OpBuilder &builder, Location loc, ArrayAttr names,
+                          uint64_t rdLatency, Value dataBusT, Value tVar,
+                          IntegerAttr offsetAttr, ArrayRef<Value> indices);

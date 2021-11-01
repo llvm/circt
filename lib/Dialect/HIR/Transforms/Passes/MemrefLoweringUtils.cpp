@@ -11,7 +11,17 @@
 #include <iostream>
 using namespace circt;
 using namespace hir;
-
+// Helper functions.
+static Type getTensorElementType(Value tensor) {
+  auto ty = tensor.getType().dyn_cast<mlir::TensorType>();
+  assert(ty);
+  return ty.getElementType();
+}
+static Type getBusElementType(Value bus) {
+  auto ty = bus.getType().dyn_cast<hir::BusType>();
+  assert(ty);
+  return ty.getElementType();
+}
 // hir.func @ADDR_BRAM_2P_BxDxT_loc_0x1(%addr:i<LogD>,
 //                                      %addr_data_in:tensor<Bx!hir.bus<LogD>>,
 //                                      %addr_en_in:tensor<Bx!hir.bus<i1>>,
@@ -38,77 +48,97 @@ using namespace hir;
 //    hir.return
 //}
 
-void insertEnableSendLogic(OpBuilder &builder, Value inEnableBus,
-                           Value outEnableBus, Value tVar,
-                           IntegerAttr offsetAttr, ArrayRef<Value> indices) {
+Value insertEnableSendLogic(OpBuilder &builder, Value prevEnableBus, Value tVar,
+                            IntegerAttr offsetAttr, ArrayRef<Value> indices) {
 
+  auto nextEnableBus = builder.create<hir::BusOp>(builder.getUnknownLoc(),
+                                                  prevEnableBus.getType());
   auto c1 = builder.create<mlir::ConstantOp>(
       builder.getUnknownLoc(), builder.getI1Type(),
       mlir::IntegerAttr::get(builder.getI1Type(), 1));
-  auto attrC0 = builder.getI64IntegerAttr(0);
-  ArrayAttr ports = builder.getStrArrayAttr({"send"});
+  auto attrC0 = IntegerAttr::get(c1.getType(), 0);
 
-  if (inEnableBus.getType().isa<hir::BusType>()) {
-    builder.create<hir::SendOp>(builder.getUnknownLoc(), c1, outEnableBus,
-                                attrC0, tVar, offsetAttr);
-    return;
+  if (prevEnableBus.getType().isa<hir::BusType>()) {
+    builder.create<hir::SendOp>(builder.getUnknownLoc(), c1, nextEnableBus,
+                                tVar, offsetAttr);
+    return nextEnableBus;
   }
   auto i1BusTy = hir::BusType::get(builder.getContext(), builder.getI1Type());
   auto tBus = builder.create<hir::BusOp>(builder.getUnknownLoc(), i1BusTy);
   builder
-      .create<hir::SendOp>(builder.getUnknownLoc(), c1, tBus, attrC0, tVar,
-                           offsetAttr)
+      .create<hir::SendOp>(builder.getUnknownLoc(), c1, tBus, tVar, offsetAttr)
       ->setAttr("default", attrC0);
 
   auto enable = builder.create<hir::TensorExtractOp>(
-      builder.getUnknownLoc(),
-      inEnableBus.getType().dyn_cast<mlir::TensorType>().getElementType(),
-      inEnableBus, indices, ports);
+      builder.getUnknownLoc(), getTensorElementType(nextEnableBus),
+      nextEnableBus, indices);
   auto orBus = builder.create<hir::BusOrOp>(builder.getUnknownLoc(),
                                             enable.getType(), tBus, enable);
   auto newEnableBus = builder.create<hir::TensorInsertOp>(
-      builder.getUnknownLoc(), inEnableBus.getType(), orBus, inEnableBus,
+      builder.getUnknownLoc(), nextEnableBus.getType(), orBus, nextEnableBus,
       indices);
-  builder.create<hir::BusAssignOp>(builder.getUnknownLoc(), outEnableBus,
+  builder.create<hir::BusAssignOp>(builder.getUnknownLoc(), prevEnableBus,
                                    newEnableBus);
+  return nextEnableBus;
 }
 
-void insertDataSendLogic(OpBuilder &builder, Value data, Value enableBus,
-                         Value inDataBus, Value outDataBus, Value tVar,
-                         IntegerAttr offsetAttr, ArrayRef<Value> indices) {
-
+Value insertDataSendLogic(OpBuilder &builder, Value data, Value prevDataBusT,
+                          Value tVar, IntegerAttr offsetAttr,
+                          ArrayRef<Value> indices) {
+  Value nextDataBusT = builder.create<hir::BusOp>(builder.getUnknownLoc(),
+                                                  prevDataBusT.getType());
   auto c1 = builder.create<mlir::ConstantOp>(
       builder.getUnknownLoc(), builder.getI1Type(),
       mlir::IntegerAttr::get(builder.getI1Type(), 1));
-  auto attrC0 = builder.getI64IntegerAttr(0);
-  ArrayAttr ports = builder.getStrArrayAttr({"send"});
+  auto attrC0 = IntegerAttr::get(c1.getType(), 0);
 
-  if (inDataBus.getType().isa<hir::BusType>()) {
-    builder.create<hir::SendOp>(builder.getUnknownLoc(), data, outDataBus,
-                                attrC0, tVar, offsetAttr);
-    return;
+  if (prevDataBusT.getType().isa<hir::BusType>()) {
+    builder.create<hir::SendOp>(builder.getUnknownLoc(), data, nextDataBusT,
+                                tVar, offsetAttr);
+    return nextDataBusT;
   }
 
   auto i1BusTy = hir::BusType::get(builder.getContext(), builder.getI1Type());
   auto tBus = builder.create<hir::BusOp>(builder.getUnknownLoc(), i1BusTy);
   builder
-      .create<hir::SendOp>(builder.getUnknownLoc(), c1, tBus, attrC0, tVar,
-                           offsetAttr)
+      .create<hir::SendOp>(builder.getUnknownLoc(), c1, tBus, tVar, offsetAttr)
       ->setAttr("default", attrC0);
 
-  auto inData = builder.create<hir::TensorExtractOp>(
-      builder.getUnknownLoc(),
-      inDataBus.getType().dyn_cast<mlir::TensorType>().getElementType(),
-      inDataBus, indices, ports);
-  auto newData =
-      builder.create<hir::BusOp>(builder.getUnknownLoc(), inData.getType());
-  builder.create<hir::SendOp>(builder.getUnknownLoc(), data, newData, attrC0,
-                              tVar, offsetAttr);
-  auto outData = builder.create<hir::BusSelectOp>(
-      builder.getUnknownLoc(), inData.getType(), tBus, newData, inData);
-  auto newDataBus = builder.create<hir::TensorInsertOp>(
-      builder.getUnknownLoc(), inDataBus.getType(), outData, inDataBus,
+  auto nextDataBus = builder.create<hir::TensorExtractOp>(
+      builder.getUnknownLoc(), getTensorElementType(nextDataBusT), nextDataBusT,
       indices);
-  builder.create<hir::BusAssignOp>(builder.getUnknownLoc(), outDataBus,
+  auto dataBus = builder.create<hir::BusOp>(builder.getUnknownLoc(),
+                                            nextDataBus.getType());
+  builder.create<hir::SendOp>(builder.getUnknownLoc(), data, dataBus, tVar,
+                              offsetAttr);
+  auto combinedData = builder.create<hir::BusSelectOp>(
+      builder.getUnknownLoc(), nextDataBus.getType(), tBus, dataBus,
+      nextDataBus);
+  auto newDataBus = builder.create<hir::TensorInsertOp>(
+      builder.getUnknownLoc(), nextDataBusT.getType(), combinedData,
+      nextDataBusT, indices);
+  builder.create<hir::BusAssignOp>(builder.getUnknownLoc(), prevDataBusT,
                                    newDataBus);
+  return nextDataBusT;
+}
+
+Value insertDataRecvLogic(OpBuilder &builder, Location loc, ArrayAttr names,
+                          uint64_t rdLatency, Value dataBusT, Value tVar,
+                          IntegerAttr offsetAttr, ArrayRef<Value> indices) {
+
+  assert(rdLatency >= 0);
+  auto recvOffsetAttr =
+      (rdLatency == 0)
+          ? offsetAttr
+          : builder.getI64IntegerAttr(offsetAttr.getInt() + rdLatency);
+
+  auto dataBus = builder.create<hir::TensorExtractOp>(
+      builder.getUnknownLoc(), getTensorElementType(dataBusT), dataBusT);
+
+  auto receiveOp = builder.create<hir::RecvOp>(loc, getBusElementType(dataBus),
+                                               dataBus, tVar, recvOffsetAttr);
+
+  if (names)
+    receiveOp->setAttr("names", names);
+  return receiveOp.getResult();
 }

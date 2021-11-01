@@ -8,7 +8,8 @@ void FuncToHWModulePortMap::addFuncInput(StringAttr name,
                                          Type type) {
   assert(name);
   assert(type);
-  assert(direction != hw::PortDirection::INOUT);
+  assert((direction == hw::PortDirection::INPUT) ||
+         (direction == hw::PortDirection::OUTPUT));
 
   size_t argNum = (direction == hw::PortDirection::INPUT)
                       ? (hwModuleInputArgNum++)
@@ -17,7 +18,8 @@ void FuncToHWModulePortMap::addFuncInput(StringAttr name,
   portInfoList.push_back(
       {.name = name, .direction = direction, .type = type, .argNum = argNum});
 
-  mapFuncInputToHWPortInfo.push_back(&portInfoList.back());
+  mapFuncInputToHWPortInfo.push_back(
+      {.name = name, .direction = direction, .type = type, .argNum = argNum});
 }
 void FuncToHWModulePortMap::addClk(OpBuilder &builder) {
   auto clkName = builder.getStringAttr("clk");
@@ -45,7 +47,10 @@ ArrayRef<hw::PortInfo> FuncToHWModulePortMap::getPortInfoList() {
 
 const hw::PortInfo
 FuncToHWModulePortMap::getPortInfoForFuncInput(size_t inputArgNum) {
-  return *mapFuncInputToHWPortInfo[inputArgNum];
+  auto modulePortInfo = mapFuncInputToHWPortInfo[inputArgNum];
+  assert((modulePortInfo.direction == hw::PortDirection::INPUT) ||
+         (modulePortInfo.direction == hw::PortDirection::OUTPUT));
+  return modulePortInfo;
 }
 
 IntegerType convertToIntegerType(Type ty) {
@@ -71,22 +76,32 @@ Type convertToArrayType(mlir::Type elementTy, ArrayRef<int64_t> shape) {
     return hw::ArrayType::get(convertToArrayType(elementTy, shape.slice(1)),
                               shape[0]);
   assert(shape[0] > 0);
-  return hw::ArrayType::get(convertType(elementTy), shape[0]);
+  return hw::ArrayType::get(convertToHWType(elementTy), shape[0]);
 }
 
 Type convertTensorType(mlir::TensorType tensorTy) {
-  if (tensorTy.getShape().size() > 0)
-    return convertToArrayType(tensorTy.getElementType(), tensorTy.getShape());
-  return convertType(tensorTy.getElementType());
+  auto elementType = convertToHWType(tensorTy.getElementType());
+  return hw::ArrayType::get(elementType, tensorTy.getNumElements());
 }
 
-Type convertType(Type type) {
+Type convertTupleType(mlir::TupleType tupleTy) {
+  uint64_t width = 0;
+  for (auto ty : tupleTy.getTypes()) {
+    assert(ty.isa<IntegerType>());
+    width += ty.dyn_cast<IntegerType>().getWidth();
+  }
+  return IntegerType::get(tupleTy.getContext(), width);
+}
+
+Type convertToHWType(Type type) {
   if (auto ty = type.dyn_cast<hir::BusType>())
     return convertBusType(ty);
   if (auto ty = type.dyn_cast<mlir::TensorType>())
     return convertTensorType(ty);
   if (type.isa<hir::TimeType>())
     return IntegerType::get(type.getContext(), 1);
+  if (auto ty = type.dyn_cast<mlir::TupleType>())
+    return convertTupleType(ty);
   return type;
 }
 
@@ -116,7 +131,7 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
   uint64_t i;
   for (i = 0; i < funcTy.getInputTypes().size(); i++) {
     auto originalTy = funcTy.getInputTypes()[i];
-    auto hwTy = convertType(originalTy);
+    auto hwTy = convertToHWType(originalTy);
     assert(hwTy);
     auto attr = funcTy.getInputAttrs()[i];
     auto name = inputNames[i].dyn_cast<StringAttr>();
@@ -135,8 +150,9 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
   // Add clk input arg.
   portMap.addClk(builder);
 
+  // Add hir.func results.
   for (uint64_t i = 0; i < funcTy.getResultTypes().size(); i++) {
-    auto hwTy = convertType(funcTy.getResultTypes()[i]);
+    auto hwTy = convertToHWType(funcTy.getResultTypes()[i]);
     auto name = resultNames[i].dyn_cast<StringAttr>();
     portMap.addFuncResult(name, hwTy);
   }
@@ -145,7 +161,7 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
 }
 
 Operation *getConstantX(OpBuilder *builder, Type originalTy) {
-  auto hwTy = convertType(originalTy);
+  auto hwTy = convertToHWType(originalTy);
   if (auto ty = hwTy.dyn_cast<hw::ArrayType>()) {
     auto *element = getConstantX(builder, ty.getElementType());
     uint64_t size = ty.getSize();
