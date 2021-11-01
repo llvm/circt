@@ -43,6 +43,136 @@ using mlir::LocationAttr;
 namespace json = llvm::json;
 
 //===----------------------------------------------------------------------===//
+// Parser-related utilities
+//===----------------------------------------------------------------------===//
+
+namespace circt {
+namespace firrtl {
+ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
+                                   WhenOp whenStmt);
+} // namespace firrtl
+} // namespace circt
+
+std::pair<bool, Optional<LocationAttr>> circt::firrtl::maybeStringToLocation(
+    StringRef spelling, bool skipParsing, Identifier &locatorFilenameCache,
+    FileLineColLoc &fileLineColLocCache, MLIRContext *context) {
+  // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
+  if (!spelling.startswith("@[") || !spelling.endswith("]"))
+    return {false, None};
+
+  spelling = spelling.drop_front(2).drop_back(1);
+
+  // Decode the locator in "spelling", returning the filename and filling in
+  // lineNo and colNo on success.  On failure, this returns an empty filename.
+  auto decodeLocator = [&](StringRef input, unsigned &resultLineNo,
+                           unsigned &resultColNo) -> StringRef {
+    // Split at the last space.
+    auto spaceLoc = input.find_last_of(' ');
+    if (spaceLoc == StringRef::npos)
+      return {};
+
+    auto filename = input.take_front(spaceLoc);
+    auto lineAndColumn = input.drop_front(spaceLoc + 1);
+
+    // Decode the line/column.  If the colon is missing, then it will be empty
+    // here.
+    StringRef lineStr, colStr;
+    std::tie(lineStr, colStr) = lineAndColumn.split(':');
+
+    // Decode the line number and the column number if present.
+    if (lineStr.getAsInteger(10, resultLineNo))
+      return {};
+    if (!colStr.empty()) {
+      if (colStr.front() != '{') {
+        if (colStr.getAsInteger(10, resultColNo))
+          return {};
+      } else {
+        // compound locator, just parse the first part for now
+        if (colStr.drop_front().split(',').first.getAsInteger(10, resultColNo))
+          return {};
+      }
+    }
+    return filename;
+  };
+
+  // Decode the locator spelling, reporting an error if it is malformed.
+  unsigned lineNo = 0, columnNo = 0;
+  StringRef filename = decodeLocator(spelling, lineNo, columnNo);
+  if (filename.empty())
+    return {false, None};
+
+  // If info locators are ignored, don't actually apply them.  We still do all
+  // the verification above though.
+  if (skipParsing)
+    return {true, None};
+
+  /// Return an FileLineColLoc for the specified location, but use a bit of
+  /// caching to reduce thrasing the MLIRContext.
+  auto getFileLineColLoc = [&](StringRef filename, unsigned lineNo,
+                               unsigned columnNo) -> FileLineColLoc {
+    // Check our single-entry cache for this filename.
+    Identifier filenameId = locatorFilenameCache;
+    if (filenameId.str() != filename) {
+      // We missed!  Get the right identifier.
+      locatorFilenameCache = filenameId = Identifier::get(filename, context);
+
+      // If we miss in the filename cache, we also miss in the FileLineColLoc
+      // cache.
+      return fileLineColLocCache =
+                 FileLineColLoc::get(filenameId, lineNo, columnNo);
+    }
+
+    // If we hit the filename cache, check the FileLineColLoc cache.
+    auto result = fileLineColLocCache;
+    if (result && result.getLine() == lineNo && result.getColumn() == columnNo)
+      return result;
+
+    return fileLineColLocCache =
+               FileLineColLoc::get(filenameId, lineNo, columnNo);
+  };
+
+  // Compound locators will be combined with spaces, like:
+  //  @[Foo.scala 123:4 Bar.scala 309:14]
+  // and at this point will be parsed as a-long-string-with-two-spaces at
+  // 309:14.   We'd like to parse this into two things and represent it as an
+  // MLIR fused locator, but we want to be conservatively safe for filenames
+  // that have a space in it.  As such, we are careful to make sure we can
+  // decode the filename/loc of the result.  If so, we accumulate results,
+  // backward, in this vector.
+  SmallVector<Location> extraLocs;
+  auto spaceLoc = filename.find_last_of(' ');
+  while (spaceLoc != StringRef::npos) {
+    // Try decoding the thing before the space.  Validates that there is another
+    // space and that the file/line can be decoded in that substring.
+    unsigned nextLineNo = 0, nextColumnNo = 0;
+    auto nextFilename =
+        decodeLocator(filename.take_front(spaceLoc), nextLineNo, nextColumnNo);
+
+    // On failure we didn't have a joined locator.
+    if (nextFilename.empty())
+      break;
+
+    // On success, remember what we already parsed (Bar.Scala / 309:14), and
+    // move on to the next chunk.
+    auto loc =
+        getFileLineColLoc(filename.drop_front(spaceLoc + 1), lineNo, columnNo);
+    extraLocs.push_back(loc);
+    filename = nextFilename;
+    lineNo = nextLineNo;
+    columnNo = nextColumnNo;
+    spaceLoc = filename.find_last_of(' ');
+  }
+
+  LocationAttr result = getFileLineColLoc(filename, lineNo, columnNo);
+  if (!extraLocs.empty()) {
+    extraLocs.push_back(result);
+    std::reverse(extraLocs.begin(), extraLocs.end());
+    result = FusedLoc::get(context, extraLocs);
+  }
+  return {true, result};
+}
+
+//===----------------------------------------------------------------------===//
 // SharedParserConstants
 //===----------------------------------------------------------------------===//
 
@@ -388,131 +518,27 @@ ParseResult FIRParser::parseOptionalInfoLocator(LocationAttr &result) {
 
   auto loc = getToken().getLoc();
 
-  // See if we can parse this token into a File/Line/Column record.  If not,
-  // just ignore it with a warning.
-  auto unknownFormat = [&]() -> ParseResult {
-    mlir::emitWarning(translateLocation(loc),
-                      "ignoring unknown @ info record format");
-    return success();
-  };
-
   auto spelling = getTokenSpelling();
   consumeToken(FIRToken::fileinfo);
 
-  // The spelling of the token looks something like "@[Decoupled.scala 221:8]".
-  if (!spelling.startswith("@[") || !spelling.endswith("]"))
-    return unknownFormat();
+  auto locationPair = maybeStringToLocation(
+      spelling, constants.options.ignoreInfoLocators, locatorFilenameCache,
+      fileLineColLocCache, getContext());
 
-  spelling = spelling.drop_front(2).drop_back(1);
+  // If parsing failed, then indicate that a weird info was found.
+  if (!locationPair.first) {
+    mlir::emitWarning(translateLocation(loc),
+                      "ignoring unknown @ info record format");
+    return success();
+  }
 
-  // Decode the locator in "spelling", returning the filename and filling in
-  // lineNo and colNo on success.  On failure, this returns an empty filename.
-  auto decodeLocator = [&](StringRef input, unsigned &resultLineNo,
-                           unsigned &resultColNo) -> StringRef {
-    // Split at the last space.
-    auto spaceLoc = input.find_last_of(' ');
-    if (spaceLoc == StringRef::npos)
-      return {};
-
-    auto filename = input.take_front(spaceLoc);
-    auto lineAndColumn = input.drop_front(spaceLoc + 1);
-
-    // Decode the line/column.  If the colon is missing, then it will be empty
-    // here.
-    StringRef lineStr, colStr;
-    std::tie(lineStr, colStr) = lineAndColumn.split(':');
-
-    // Decode the line number and the column number if present.
-    if (lineStr.getAsInteger(10, resultLineNo))
-      return {};
-    if (!colStr.empty()) {
-      if (colStr.front() != '{') {
-        if (colStr.getAsInteger(10, resultColNo))
-          return {};
-      } else {
-        // compound locator, just parse the first part for now
-        if (colStr.drop_front().split(',').first.getAsInteger(10, resultColNo))
-          return {};
-      }
-    }
-    return filename;
-  };
-
-  // Decode the locator spelling, reporting an error if it is malformed.
-  unsigned lineNo = 0, columnNo = 0;
-  StringRef filename = decodeLocator(spelling, lineNo, columnNo);
-  if (filename.empty())
-    return unknownFormat();
-
-  // If info locators are ignored, don't actually apply them.  We still do all
-  // the verification above though.
-  if (constants.options.ignoreInfoLocators)
+  // If the parsing succeeded, but we are supposed to drop locators, then just
+  // return.
+  if (locationPair.first && constants.options.ignoreInfoLocators)
     return success();
 
-  /// Return an FileLineColLoc for the specified location, but use a bit of
-  /// caching to reduce thrasing the MLIRContext.
-  auto getFileLineColLoc = [&](StringRef filename, unsigned lineNo,
-                               unsigned columnNo) -> FileLineColLoc {
-    // Check our single-entry cache for this filename.
-    Identifier filenameId = locatorFilenameCache;
-    if (filenameId.str() != filename) {
-      // We missed!  Get the right identifier.
-      locatorFilenameCache = filenameId =
-          Identifier::get(filename, getContext());
-
-      // If we miss in the filename cache, we also miss in the FileLineColLoc
-      // cache.
-      return fileLineColLocCache =
-                 FileLineColLoc::get(filenameId, lineNo, columnNo);
-    }
-
-    // If we hit the filename cache, check the FileLineColLoc cache.
-    auto result = fileLineColLocCache;
-    if (result && result.getLine() == lineNo && result.getColumn() == columnNo)
-      return result;
-
-    return fileLineColLocCache =
-               FileLineColLoc::get(filenameId, lineNo, columnNo);
-  };
-
-  // Compound locators will be combined with spaces, like:
-  //  @[Foo.scala 123:4 Bar.scala 309:14]
-  // and at this point will be parsed as a-long-string-with-two-spaces at
-  // 309:14.   We'd like to parse this into two things and represent it as an
-  // MLIR fused locator, but we want to be conservatively safe for filenames
-  // that have a space in it.  As such, we are careful to make sure we can
-  // decode the filename/loc of the result.  If so, we accumulate results,
-  // backward, in this vector.
-  SmallVector<Location> extraLocs;
-  auto spaceLoc = filename.find_last_of(' ');
-  while (spaceLoc != StringRef::npos) {
-    // Try decoding the thing before the space.  Validates that there is another
-    // space and that the file/line can be decoded in that substring.
-    unsigned nextLineNo = 0, nextColumnNo = 0;
-    auto nextFilename =
-        decodeLocator(filename.take_front(spaceLoc), nextLineNo, nextColumnNo);
-
-    // On failure we didn't have a joined locator.
-    if (nextFilename.empty())
-      break;
-
-    // On success, remember what we already parsed (Bar.Scala / 309:14), and
-    // move on to the next chunk.
-    auto loc =
-        getFileLineColLoc(filename.drop_front(spaceLoc + 1), lineNo, columnNo);
-    extraLocs.push_back(loc);
-    filename = nextFilename;
-    lineNo = nextLineNo;
-    columnNo = nextColumnNo;
-    spaceLoc = filename.find_last_of(' ');
-  }
-
-  result = getFileLineColLoc(filename, lineNo, columnNo);
-  if (!extraLocs.empty()) {
-    extraLocs.push_back(result);
-    std::reverse(extraLocs.begin(), extraLocs.end());
-    result = FusedLoc::get(getContext(), extraLocs);
-  }
+  // Otherwise, set the location attribute and return.
+  result = locationPair.second.getValue();
   return success();
 }
 
@@ -2276,33 +2302,6 @@ ParseResult FIRStmtParser::parsePrintf() {
   locationProcessor.setLoc(startTok.getLoc());
 
   auto formatStrUnescaped = FIRToken::getStringValue(formatString);
-  StringRef formatStringRef(formatStrUnescaped);
-  // Generate concurrent verification statements
-  if (formatStringRef.startswith("cover:")) {
-    APInt constOne(1, 1, false);
-    Value constTrue =
-        builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<CoverOp>(clock, condition, constTrue, formatStrUnescaped, "",
-                            /*isConcurrent=*/true);
-    return success();
-  }
-  if (formatStringRef.startswith("assert:")) {
-    APInt constOne(1, 1, false);
-    Value constTrue =
-        builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssertOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "", /*isConcurrent=*/true);
-    return success();
-  }
-  if (formatStringRef.startswith("assume:")) {
-    APInt constOne(1, 1, false);
-    Value constTrue =
-        builder.create<ConstantOp>(UIntType::get(getContext(), 1), constOne);
-    builder.create<AssumeOp>(clock, condition, constTrue, formatStrUnescaped,
-                             "", /*isConcurrent=*/true);
-    return success();
-  }
-
   builder.create<PrintFOp>(clock, condition,
                            builder.getStringAttr(formatStrUnescaped), operands,
                            name);
@@ -2364,8 +2363,8 @@ ParseResult FIRStmtParser::parseAssert() {
 
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
-  builder.create<AssertOp>(clock, predicate, enable,
-                           StringRef(messageUnescaped), name.getValue());
+  builder.create<AssertOp>(clock, predicate, enable, messageUnescaped,
+                           ValueRange{}, name.getValue());
   return success();
 }
 
@@ -2388,7 +2387,7 @@ ParseResult FIRStmtParser::parseAssume() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<AssumeOp>(clock, predicate, enable, messageUnescaped,
-                           name.getValue());
+                           ValueRange{}, name.getValue());
   return success();
 }
 
@@ -2411,7 +2410,7 @@ ParseResult FIRStmtParser::parseCover() {
   locationProcessor.setLoc(startTok.getLoc());
   auto messageUnescaped = FIRToken::getStringValue(message);
   builder.create<CoverOp>(clock, predicate, enable, messageUnescaped,
-                          name.getValue());
+                          ValueRange{}, name.getValue());
   return success();
 }
 
@@ -2477,13 +2476,13 @@ ParseResult FIRStmtParser::parseWhen(unsigned whenIndent) {
 
   // If the else is present, handle it otherwise we're done.
   if (getToken().isNot(FIRToken::kw_else))
-    return success();
+    return foldWhenEncodedVerifOp(builder, whenStmt);
 
   // If the 'else' is less indented than the when, then it must belong to some
   // containing 'when'.
   auto elseIndent = getIndentation();
   if (elseIndent.hasValue() && elseIndent.getValue() < whenIndent)
-    return success();
+    return foldWhenEncodedVerifOp(builder, whenStmt);
 
   consumeToken(FIRToken::kw_else);
 
@@ -2583,15 +2582,15 @@ ParseResult FIRStmtParser::parseInstance() {
   // Look up the module that is being referenced.
   auto circuit =
       builder.getBlock()->getParentOp()->getParentOfType<CircuitOp>();
-  auto referencedModule = circuit.lookupSymbol(moduleName);
+  auto referencedModule =
+      dyn_cast_or_null<FModuleLike>(circuit.lookupSymbol(moduleName));
   if (!referencedModule) {
     emitError(startTok.getLoc(),
               "use of undefined module name '" + moduleName + "' in instance");
     return failure();
   }
 
-  SmallVector<PortInfo> modulePorts =
-      cast<FModuleLike>(referencedModule).getPorts();
+  SmallVector<PortInfo> modulePorts = referencedModule.getPorts();
 
   // Make a bundle of the inputs and outputs of the specified module.
   SmallVector<Type, 4> resultTypes;
@@ -2605,7 +2604,7 @@ ParseResult FIRStmtParser::parseInstance() {
 
   InstanceOp result;
   if (getConstants().options.rawAnnotations) {
-    result = builder.create<InstanceOp>(resultTypes, moduleName, id);
+    result = builder.create<InstanceOp>(referencedModule, id);
   } else {
     // Combine annotations that are ReferenceTargets and InstanceTargets.  By
     // example, this will lookup all annotations with either of the following
@@ -2617,7 +2616,7 @@ ParseResult FIRStmtParser::parseInstance() {
          getModuleTarget() + "/" + id + ":" + moduleName},
         startTok.getLoc(), resultNamesAndTypes, moduleContext.targetsInModule);
 
-    result = builder.create<InstanceOp>(resultTypes, moduleName, id,
+    result = builder.create<InstanceOp>(referencedModule, id,
                                         annotations.first.getValue(),
                                         annotations.second.getValue());
   }
@@ -3048,7 +3047,8 @@ struct FIRCircuitParser : public FIRParser {
       : FIRParser(state, lexer), mlirModule(mlirModule) {}
 
   ParseResult
-  parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf);
+  parseCircuit(SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBuf,
+               SmallVectorImpl<const llvm::MemoryBuffer *> &omirBuf);
 
 private:
   /// Add annotations from a string to the internal annotation map.  Report
@@ -3060,6 +3060,11 @@ private:
   ParseResult importAnnotationsRaw(SMLoc loc, StringRef circuitTarget,
                                    StringRef annotationsStr,
                                    SmallVector<Attribute> &attrs);
+  /// Generate OMIR-derived annotations.  Report errors if the OMIR is malformed
+  /// in any way.  This also performs scattering of the OMIR to introduce
+  /// tracking annotations in the circuit.
+  ParseResult importOMIR(CircuitOp circuit, SMLoc loc, StringRef circuitTarget,
+                         StringRef omirStr, size_t &nlaNumber);
 
   ParseResult parseModule(CircuitOp circuit, StringRef circuitTarget,
                           unsigned indent);
@@ -3138,6 +3143,55 @@ ParseResult FIRCircuitParser::importAnnotations(CircuitOp circuit, SMLoc loc,
   if (!fromJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
                 circuit, nlaNumber)) {
     auto diag = emitError(loc, "Invalid/unsupported annotation format");
+    std::string jsonErrorMessage =
+        "See inline comments for problem area in JSON:\n";
+    llvm::raw_string_ostream s(jsonErrorMessage);
+    root.printErrorContext(annotations.get(), s);
+    diag.attachNote() << jsonErrorMessage;
+    return failure();
+  }
+
+  if (!scatterCustomAnnotations(thisAnnotationMap, circuit, annotationID,
+                                translateLocation(loc), nlaNumber))
+    return failure();
+
+  // Merge the attributes we just parsed into the global set we're accumulating.
+  llvm::StringMap<ArrayAttr> &resultAnnoMap = getConstants().annotationMap;
+  for (auto &thisEntry : thisAnnotationMap) {
+    auto &existing = resultAnnoMap[thisEntry.getKey()];
+    if (!existing) {
+      existing = thisEntry.getValue();
+      continue;
+    }
+
+    SmallVector<Attribute> annotationVec(existing.begin(), existing.end());
+    annotationVec.append(thisEntry.getValue().begin(),
+                         thisEntry.getValue().end());
+    existing = ArrayAttr::get(getContext(), annotationVec);
+  }
+
+  return success();
+}
+
+ParseResult FIRCircuitParser::importOMIR(CircuitOp circuit, SMLoc loc,
+                                         StringRef circuitTarget,
+                                         StringRef annotationsStr,
+                                         size_t &nlaNumber) {
+
+  auto annotations = json::parse(annotationsStr);
+  if (auto err = annotations.takeError()) {
+    handleAllErrors(std::move(err), [&](const json::ParseError &a) {
+      auto diag = emitError(loc, "Failed to parse OMIR file");
+      diag.attachNote() << a.message();
+    });
+    return failure();
+  }
+
+  json::Path::Root root;
+  llvm::StringMap<ArrayAttr> thisAnnotationMap;
+  if (!fromOMIRJSON(annotations.get(), circuitTarget, thisAnnotationMap, root,
+                    circuit.getContext())) {
+    auto diag = emitError(loc, "Invalid/unsupported OMIR format");
     std::string jsonErrorMessage =
         "See inline comments for problem area in JSON:\n";
     llvm::raw_string_ostream s(jsonErrorMessage);
@@ -3411,17 +3465,17 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 
   // Install all of the ports into the symbol table, associated with their
   // block arguments.
-  auto argIt = moduleOp.args_begin();
   auto portList = moduleOp.getPorts();
-  for (auto portAndLoc : llvm::zip(portList, portLocs)) {
-    PortInfo &port = std::get<0>(portAndLoc);
-    if (moduleContext.addSymbolEntry(port.getName(), *argIt,
-                                     std::get<1>(portAndLoc)))
+  auto portArgs = moduleOp.getArguments();
+  for (auto tuple : llvm::zip(portList, portLocs, portArgs)) {
+    PortInfo &port = std::get<0>(tuple);
+    llvm::SMLoc loc = std::get<1>(tuple);
+    BlockArgument portArg = std::get<2>(tuple);
+    if (moduleContext.addSymbolEntry(port.getName(), portArg, loc))
       return failure();
-    ++argIt;
   }
 
-  FIRStmtParser stmtParser(*moduleOp.getBodyBlock(), moduleContext);
+  FIRStmtParser stmtParser(*moduleOp.getBody(), moduleContext);
 
   // Parse the moduleBlock.
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
@@ -3433,9 +3487,12 @@ FIRCircuitParser::parseModuleBody(DeferredModuleToParse &deferredModule) {
 /// circuit ::= 'circuit' id ':' info? INDENT module* DEDENT EOF
 ///
 /// If non-null, annotationsBuf is a memory buffer containing JSON annotations.
+/// If non-null, omirBufs is a vector of memory buffers containing SiFive Object
+/// Model IR (which is JSON).
 ///
 ParseResult FIRCircuitParser::parseCircuit(
-    SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs) {
+    SmallVectorImpl<const llvm::MemoryBuffer *> &annotationsBufs,
+    SmallVectorImpl<const llvm::MemoryBuffer *> &omirBufs) {
   auto indent = getIndentation();
   if (!indent.hasValue())
     return emitError("'circuit' must be first token on its line"), failure();
@@ -3480,6 +3537,11 @@ ParseResult FIRCircuitParser::parseCircuit(
                                annotationsBuf->getBuffer(), rawAnno))
         return failure();
 
+    if (!omirBufs.empty())
+      mlir::emitWarning(translateLocation(info.getFIRLoc()))
+          << "OMIR is not supported with the 'raw' annotation processing right "
+             "now and will just be ignored";
+
     // Get annotations associated with this circuit. These are either:
     //   1. Annotations with no target (which we use "~" to identify)
     //   2. Annotations targeting the circuit, e.g., "~Foo"
@@ -3500,6 +3562,13 @@ ParseResult FIRCircuitParser::parseCircuit(
     for (auto annotationsBuf : annotationsBufs)
       if (importAnnotations(circuit, info.getFIRLoc(), circuitTarget,
                             annotationsBuf->getBuffer(), nlaNumber))
+        return failure();
+
+    // Process OMIR files as annotations with a class of
+    // "freechips.rocketchip.objectmodel.OMNode"
+    for (auto *omirBuf : omirBufs)
+      if (importOMIR(circuit, info.getFIRLoc(), circuitTarget,
+                     omirBuf->getBuffer(), nlaNumber))
         return failure();
 
     // Get annotations associated with this circuit. These are either:
@@ -3598,9 +3667,15 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                                              FIRParserOptions options) {
   auto sourceBuf = sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID());
   SmallVector<const llvm::MemoryBuffer *> annotationsBufs;
-  for (int i = 1, e = sourceMgr.getNumBuffers(); i < e; ++i)
+  unsigned fileID = 1;
+  for (unsigned e = options.numAnnotationFiles + 1; fileID < e; ++fileID)
     annotationsBufs.push_back(
-        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + i));
+        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
+
+  SmallVector<const llvm::MemoryBuffer *> omirBufs;
+  for (unsigned e = sourceMgr.getNumBuffers(); fileID < e; ++fileID)
+    omirBufs.push_back(
+        sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
 
   context->loadDialect<FIRRTLDialect>();
 
@@ -3610,7 +3685,8 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
                           /*column=*/0)));
   SharedParserConstants state(context, options);
   FIRLexer lexer(sourceMgr, context);
-  if (FIRCircuitParser(state, lexer, *module).parseCircuit(annotationsBufs))
+  if (FIRCircuitParser(state, lexer, *module)
+          .parseCircuit(annotationsBufs, omirBufs))
     return nullptr;
 
   // Make sure the parse module has no other structural problems detected by

@@ -6,234 +6,195 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This describes the MLIR ops for field and slice extractions.
+// This describes the LLHD ops for field and slice extractions.
 //
 //===----------------------------------------------------------------------===//
 
-def LLHD_ExtractSliceOp : LLHD_Op<"extract_slice", [
-    NoSideEffect,
-    PredOpTrait<
-      "'start' + size of the slice have to be smaller or equal to the 'target' "
-      "size",
-      CPred<"$start.cast<IntegerAttr>().getInt() + this->getSliceSize() <= "
-            "this->getTargetSize()">>,
-    SameTypeArbitraryWidth<
-      "'target' and 'result' have to be both either signless integers, signals "
-      "or arrays with the same element type",
-      "$target", "$result">
-  ]> {
-  let summary = "Extract a slice of consecutive elements.";
+//===----------------------------------------------------------------------===//
+// Constraint definitions
+//===----------------------------------------------------------------------===//
+
+class SigIndexBitWidthConstraint<string index, string input>
+  : TypesMatchWith<"Index width should be exactly clog2 (size of array)",
+                   input, index,
+                   [{
+                     IntegerType::get($_self.getContext(),
+                     llvm::Log2_64_Ceil(llhd::getLLHDTypeWidth($_self)))
+                   }]>;
+
+class SigArrayElementTypeConstraint<string result, string input>
+  : TypesMatchWith<"must be a signal of the arrays element type",
+                   input, result,
+                   "llhd::SigType::get(llhd::getLLHDElementType($_self))">;
+
+class SameSigArrayElementTypeConstraint<string result, string input>
+  : PredOpTrait<"arrays element type must match",
+                CPred<"llhd::getLLHDElementType($" # result # ".getType()) == "
+                      # "llhd::getLLHDElementType($" # input # ".getType())">>;
+
+class SmallerOrEqualResultTypeWidthConstraint<string result, string input>
+  : PredOpTrait<"width of " # result # " type has to be smaller than or " #
+                "equal to the " # input # " type",
+                CPred<"llhd::getLLHDTypeWidth($" # result # ".getType()) <= " #
+                      "llhd::getLLHDTypeWidth($" # input  # ".getType())">>;
+
+//===----------------------------------------------------------------------===//
+// Integer Operations
+//===----------------------------------------------------------------------===//
+
+def LLHD_SigExtractOp : LLHD_Op<"sig.extract",
+    [NoSideEffect,
+     SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
+     SigIndexBitWidthConstraint<"lowBit", "input">]> {
+
+  let summary = "Extract a range of bits from an integer signal";
   let description = [{
-    The `llhd.extract_slice` operation allows access to a slice of the `$target`
-    operand. The `$start` attribute defines the index of the first element.
-    The return type is the same as `$target` but with the width of the
-    specified result type.
-    If `%target` is a signal, a new subsignal aliasing the slice will be
-    returned.
-
-    Example:
-
-    ```mlir
-    %0 = llhd.const 123 : i32
-    %1 = llhd.extract_slice %0, 0 : i32 -> i2
-
-    %2 = llhd.sig %0 : i32
-    %3 = llhd.extract_slice %2, 0 : !llhd.sig<i32> -> !llhd.sig<i5>
-    ```
+    The `llhd.sig.extract` operation allows to access a range of bits
+    of the `$input` operand, starting at the index given by the `$lowBit`
+    operand. The result length is defined by the result type.
   }];
 
-  let arguments = (ins
-    AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>: $target,
-    IndexAttr: $start);
-
-  let results = (outs
-    AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>: $result);
+  let arguments = (ins LLHD_SigType<[HWIntegerType]>:$input,
+                       HWIntegerType:$lowBit);
+  let results = (outs LLHD_SigType<[HWIntegerType]>: $result);
 
   let assemblyFormat = [{
-    $target `,` $start attr-dict `:` type($target) `->` type($result)
+    $input `from` $lowBit attr-dict `:` functional-type($input, $result)
   }];
 
   let extraClassDeclaration = [{
-    unsigned getSliceSize()  { return getLLHDTypeWidth(result().getType()); }
-    unsigned getTargetSize() { return getLLHDTypeWidth(target().getType()); }
+    unsigned resultWidth()  { return getLLHDTypeWidth(result().getType()); }
+    unsigned inputWidth() { return getLLHDTypeWidth(input().getType()); }
   }];
-
-  let hasFolder = 1;
+  let hasFolder = true;
 }
 
-def LLHD_DynExtractSliceOp : LLHD_Op<"dyn_extract_slice", [
-    NoSideEffect,
-    SameTypeArbitraryWidth<
-      "'target' and 'result' types have to match apart from their width",
-      "$target", "$result">,
-    PredOpTrait<
-      "the result width cannot be larger than the target operand width",
-      CPred<"this->getTargetWidth() >= this->getSliceWidth()">>
-  ]> {
-  let summary = "Dynamically extract a slice of consecutive elements";
+//===----------------------------------------------------------------------===//
+// Array Operations
+//===----------------------------------------------------------------------===//
+
+def LLHD_SigArraySliceOp : LLHD_Op<"sig.array_slice",
+    [NoSideEffect,
+     SmallerOrEqualResultTypeWidthConstraint<"result", "input">,
+     SameSigArrayElementTypeConstraint<"result", "input">,
+     SigIndexBitWidthConstraint<"lowIndex", "input">]> {
+
+  let summary = "Get a range of consecutive values from a signal of an array";
   let description = [{
-    The `llhd.dyn_extract_slice` operation allows to dynamically access a slice
-    of the `$target` operand, starting at the index given by the `$start`
+    The `llhd.sig.array_slice` operation allows to access a sub-range of the
+    `$input` operand, starting at the index given by the `$lowIndex`
     operand. The resulting slice length is defined by the result type.
-    The `$target` operand kind has to match the result kind.
-    If `$target` is an array, only the number of elements can change, while
-    the element type has to remain the same.
+    Returns a signal aliasing the elements of the slice.
+
+    Width of 'lowIndex' is defined to be the precise number of bits required to
+    index the 'input' array. More precisely: for an input array of size M,
+    the width of 'lowIndex' is ceil(log2(M)). Lower and upper bound indexes
+    which are larger than the size of the 'input' array results in undefined
+    behavior.
 
     Example:
 
     ```mlir
-    %0 = llhd.const 0x0f0 : i12
-    %1 = llhd.const 4 : i3
-
-    %3 = llhd.dyn_extract_slice %0, %1 : (i12, i3) -> i4    // %3: 0xf
+    %3 = llhd.sig.array_slice %input at %lowIndex : 
+      (!llhd.sig<!hw.array<4xi8>>) -> !llhd.sig<!hw.array<2xi8>>
     ```
   }];
 
-  let arguments = (ins
-    AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>: $target,
-    HWIntegerType: $start);
-
-  let results = (outs
-    AnyTypeOf<[HWIntegerType, ArrayType,
-               LLHD_SigType<[HWIntegerType, ArrayType]>]>: $result);
+  let arguments = (ins LLHD_SigType<[ArrayType]>: $input,
+                       HWIntegerType: $lowIndex);
+  let results = (outs LLHD_SigType<[ArrayType]>: $result);
 
   let assemblyFormat = [{
-    operands attr-dict `:` functional-type(operands, results)
+    $input `at` $lowIndex attr-dict `:` functional-type($input, $result)
   }];
 
   let extraClassDeclaration = [{
-    unsigned getSliceWidth()  { return getLLHDTypeWidth(result().getType()); }
-    unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); }
+    unsigned resultWidth()  { return getLLHDTypeWidth(result().getType()); }
+    unsigned inputWidth() { return getLLHDTypeWidth(input().getType()); }
+    hw::ArrayType getInputArrayType() {
+      return input().getType().cast<llhd::SigType>().getUnderlyingType()
+        .cast<hw::ArrayType>();
+    }
+    hw::ArrayType getResultArrayType() {
+      return result().getType().cast<llhd::SigType>().getUnderlyingType()
+        .cast<hw::ArrayType>();
+    }
   }];
-
-  let hasCanonicalizer = 1;
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
 }
 
-def LLHD_ExtractElementOp : LLHD_Op<"extract_element", [
-    NoSideEffect,
-    PredOpTrait<"'index' has to be smaller than the width of the 'target' type",
-      CPred<"$index.cast<IntegerAttr>().getInt() < getTargetWidth()">>,
-    TypesMatchWith<
-      "'result' type must match the type of 'target' at position 'index', or "
-      "in case 'target' is a signal, it must be a signal of the underlying type"
-      " of 'target' at position 'index'",
-      "target", "result",
-      "($_self.isa<llhd::SigType>() "
-        "? llhd::SigType::get("
-          "getElementTypeAtIndex($index.cast<IntegerAttr>().getInt())) "
-        ": getElementTypeAtIndex($index.cast<IntegerAttr>().getInt()))">
-  ]> {
-  let summary = [{
-    Extract an element from an array, tuple, or signal of an array or tuple.
-  }];
+def LLHD_SigArrayGetOp : LLHD_Op<"sig.array_get",
+    [NoSideEffect,
+     SigIndexBitWidthConstraint<"index", "input">,
+     SigArrayElementTypeConstraint<"result", "input">]> {
+
+  let summary = "Extract an element from a signal of an array.";
   let description = [{
-    The `llhd.extract_element` operation allows access to an element of the
-    `$target` operand. The `$index` attribute defines the index of the element
-    to extract. If `%target` is a signal, a new subsignal aliasing the element
+    The `llhd.sig.array_get` operation allows to access the element of the
+    `$input` operand at position `$index`. A new subsignal aliasing the element
     will be returned.
 
     Example:
 
     ```mlir
-    %init = llhd.const 3 : i8
-    %0 = llhd.array_uniform %init : !llhd.array<3xi8>
-    %1 = llhd.extract_element %0, 0 : !llhd.array<3xi8> -> i8
-
-    %2 = llhd.sig %0 : !llhd.array<3xi8>
-    %3 = llhd.extract_element %2, 0
-      : !llhd.sig<!llhd.array<3xi8>> -> !llhd.sig<i8>
-
-    %4 = llhd.const 8 : i16
-    %5 = llhd.tuple %0, %4 : tuple<!llhd.array<3xi8>, i16>
-    %6 = llhd.extract_element %5, 1 : tuple<!llhd.array<3xi8>, i16> -> i16
+    // Returns a !llhd.sig<i8>
+    %0 = llhd.sig.array_get %arr[%index] : !llhd.sig<!hw.array<4xi8>>
     ```
   }];
 
-  let arguments = (ins AnyTypeOf<[
-      ArrayType,
-      StructType,
-      LLHD_SigType<[ArrayType, StructType]>
-    ]>: $target,
-    IndexAttr: $index);
+  let arguments = (ins LLHD_SigType<[ArrayType]>:$input, HWIntegerType:$index);
+  let results = (outs LLHD_SigType<[HWNonInOutType]>: $result);
 
-  let results = (outs AnyType: $result);
-
-  let assemblyFormat = [{
-    $target `,` $index attr-dict `:` type($target) `->` type($result)
-  }];
+  let assemblyFormat = "$input `[` $index `]` attr-dict `:` type($input)";
 
   let extraClassDeclaration = [{
-    unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); };
-
-    Type getElementTypeAtIndex(unsigned index) {
-      Type targetType = target().getType();
-      if (auto sig = targetType.dyn_cast<llhd::SigType>())
-        targetType = sig.getUnderlyingType();
-      if (auto array = targetType.dyn_cast<hw::ArrayType>())
-        return array.getElementType();
-      return targetType.cast<hw::StructType>().getElements()[index].type;
+    hw::ArrayType getArrayType() {
+      return input().getType().cast<llhd::SigType>()
+      .getUnderlyingType().cast<hw::ArrayType>();
     }
   }];
-
-  let hasFolder = 1;
+  let hasCanonicalizeMethod = true;
 }
 
-def LLHD_DynExtractElementOp : LLHD_Op<"dyn_extract_element", [
-  NoSideEffect,
-  TypesMatchWith<"'result' must be the element type of the 'target' array, in "
-    "case 'target' is a signal of an array, 'result' also is a signal of the "
-    "array element type",
-    "target", "result",
-    "($_self.isa<llhd::SigType>() ? llhd::SigType::get(getElementType()) "
-                                 ": getElementType())">
-  ]> {
-  let summary = [{
-    Dynamically extract an element from an array or signal of array.
-  }];
+//===----------------------------------------------------------------------===//
+// Structure Operations
+//===----------------------------------------------------------------------===//
+
+def LLHD_SigStructExtractOp : LLHD_Op<"sig.struct_extract",
+    [NoSideEffect, InferTypeOpInterface]> {
+  let summary = "Extract a field from a signal of a struct.";
   let description = [{
-    The `llhd.dyn_extract_element` operation allows to dynamically access an
-    element of the `$target` operand. The `$index` operand defines the index of
-    the element to extract. If `%target` is a signal, a new subsignal aliasing
-    the element will be returned.
+    The `llhd.sig.struct_extract` operation allows access to the field of the
+    `$input` operand given by its name via the `$field` attribute. 
+    A new subsignal aliasing the field will be returned.
 
     Example:
 
     ```mlir
-    %index = llhd.const 1 : i2
-
-    %init = llhd.const 3 : i8
-    %0 = llhd.array_uniform %init : !llhd.array<3xi8>
-    %1 = llhd.dyn_extract_element %0, %index : (!llhd.array<3xi8>, i2) -> i8
-
-    %2 = llhd.sig %0 : !llhd.array<3xi8>
-    %3 = llhd.dyn_extract_element %2, %index
-      : (!llhd.sig<!llhd.array<3xi8>>, i2) -> !llhd.sig<i8>
+    // Returns a !llhd.sig<i8>
+    %0 = llhd.sig.struct_extract %struct["foo"]
+      : !llhd.sig<!hw.struct<foo: i8, bar: i16>>
     ```
   }];
 
-  let arguments = (ins
-    AnyTypeOf<[ArrayType, LLHD_SigType<[ArrayType]>]>: $target,
-    HWIntegerType: $index);
+  let arguments = (ins LLHD_SigType<[StructType]>:$input, StrAttr:$field);
+  let results = (outs LLHD_SigType<[HWNonInOutType]>:$result);
 
-  let results = (outs AnyType: $result);
-
-  let assemblyFormat = [{
-    $target `,` $index attr-dict `:` functional-type(operands, results)
-  }];
+  let assemblyFormat = "$input `[` $field `]` attr-dict `:` type($input)";
 
   let extraClassDeclaration = [{
-    unsigned getTargetWidth() { return getLLHDTypeWidth(target().getType()); }
-
-    Type getElementType() {
-      Type targetType = target().getType();
-      if (auto sig = targetType.dyn_cast<llhd::SigType>())
-        targetType = sig.getUnderlyingType();
-      return targetType.cast<hw::ArrayType>().getElementType();
+    hw::StructType getStructType() {
+      return input().getType().cast<llhd::SigType>().getUnderlyingType()
+        .cast<hw::StructType>();
     }
-  }];
 
-  let hasCanonicalizer = 1;
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
 }

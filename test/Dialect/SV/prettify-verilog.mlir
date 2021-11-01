@@ -1,5 +1,5 @@
 // RUN: circt-opt -prettify-verilog %s | FileCheck %s
-// RUN: circt-opt -prettify-verilog %s | circt-translate  --export-verilog | FileCheck %s --check-prefix=VERILOG
+// RUN: circt-opt -prettify-verilog %s | circt-opt --export-verilog | FileCheck %s --check-prefix=VERILOG
 
 // CHECK-LABEL: hw.module @unary_ops
 hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
@@ -16,7 +16,7 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
   %b = comb.add %unary, %arg2 : i8
 
 
-  // Multi-use xor gets duplicated, and we need to make sure there is a local
+  // Multi-use arith.xori gets duplicated, and we need to make sure there is a local
   // constant as well.
   %true = hw.constant true
   %c = comb.xor %arg3, %true : i1
@@ -27,7 +27,7 @@ hw.module @unary_ops(%arg0: i8, %arg1: i8, %arg2: i8, %arg3: i1)
     // CHECK: [[XOR3:%.+]] = comb.xor %arg3, [[TRUE2]]
     // CHECK: sv.if [[XOR3]]
     sv.if %c {
-      sv.fatal
+      sv.fatal 1
     }
   }
 
@@ -124,17 +124,17 @@ hw.module @sink_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1) {
       // CHECK: [[OR:%.*]] = comb.or %a2, %a3 : i1
       // CHECK: sv.if [[OR]]
       sv.if %0  {
-        sv.fatal
+        sv.fatal 1
       }
       // CHECK: sv.if [[XOR]]
       sv.if %2  {
-        sv.fatal
+        sv.fatal 1
       }
     }
 
     // CHECK: sv.if [[XOR]]
     sv.if %2  {
-      sv.fatal
+      sv.fatal 1
     }
   }
   hw.output
@@ -152,12 +152,12 @@ hw.module @dont_sink_se_expression(%clock: i1, %a: i1, %a2: i1, %a3: i1, %a4: i1
     // CHECK: [[SINK:%.*]] = sv.verbatim.expr "SINK_ME"
     // CHECK: sv.if [[SINK]]
     sv.if %0  {
-      sv.fatal
+      sv.fatal 1
     }
 
     // CHECK: sv.if [[DONT_TOUCH]]
     sv.if %1  {
-      sv.fatal
+      sv.fatal 1
     }
   }
   hw.output
@@ -176,4 +176,29 @@ hw.module @MoveInstances(%a_in: i8) {
   hw.instance "xyz3" @MyExtModule(in: %b: i8) -> ()
 
   %b = comb.add %a_in, %a_in : i8
+}
+
+
+// CHECK-LABEL: hw.module @unary_sink_crash
+hw.module @unary_sink_crash(%arg0: i1) {
+  %true = hw.constant true
+  %c = comb.xor %arg0, %true : i1
+  // CHECK-NOT: hw.constant
+  // CHECK-NOT: comb.xor
+  // CHECK: sv.initial
+  sv.initial {
+    // CHECK: [[TRUE1:%.+]] = hw.constant true
+    // CHECK: [[XOR1:%.+]] = comb.xor %arg0, [[TRUE1]]
+    // CHECK: sv.if [[XOR1]]
+    sv.if %c {
+      sv.fatal 1
+    }
+
+    // CHECK: [[TRUE2:%.+]] = hw.constant true
+    // CHECK: [[XOR2:%.+]] = comb.xor %arg0, [[TRUE2]]
+    // CHECK: sv.if [[XOR2]]
+    sv.if %c {
+      sv.fatal 1
+    }
+  }
 }

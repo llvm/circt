@@ -16,31 +16,41 @@ def InstanceOp : FIRRTLOp<"instance", [
   let description = [{
     This represents an instance of a module.  The results are the modules inputs
     and outputs.  The inputs have flip type, the outputs do not.
+
+    Examples:
+    ```mlir
+    %0 = firrtl.instance foo @Foo(in io: !firrtl.uint)
+    ```
   }];
 
   let arguments = (ins FlatSymbolRefAttr:$moduleName, StrAttr:$name,
+                       APIntAttr:$portDirections, StrArrayAttr:$portNames,
                        AnnotationArrayAttr:$annotations,
                        PortAnnotationsAttr:$portAnnotations,
                        BoolAttr:$lowerToBind);
+
   let results = (outs Variadic<FIRRTLType>:$results);
 
-  let assemblyFormat =
-    "$moduleName custom<InstanceOp>(attr-dict) (`:` type($results)^ )?";
-
   let verifier = "return ::verifyInstanceOp(*this);";
+  let printer = "printInstanceOp(p, *this);";
+  let parser = "return parseInstanceOp(parser, result);";
 
   let builders = [
     OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
                    "::mlir::StringRef":$moduleName,
-                   CArg<"StringRef", "{}">:$name,
+                   "::mlir::StringRef":$name,
+                   "::mlir::ArrayRef<Direction>":$portDirections,
+                   "::mlir::ArrayRef<Attribute>":$portNames,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
                    CArg<"bool","false">:$lowerToBind)>,
 
-    /// Constructor that creates a version of the specified instance, but that
-    /// erases some number of results from it.
-    OpBuilder<(ins "InstanceOp":$existingInstance,
-                   "::mlir::ArrayRef<unsigned>":$resultsToErase)>
+    /// Constructor when you have the target module in hand.
+    OpBuilder<(ins "FModuleLike":$module,
+                   "mlir::StringRef":$name,
+                   CArg<"ArrayRef<Attribute>", "{}">:$annotations,
+                   CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
+                   CArg<"bool","false">:$lowerToBind)>
   ];
 
   let extraClassDeclaration = [{
@@ -49,9 +59,14 @@ def InstanceOp : FIRRTLOp<"instance", [
     FModuleLike getReferencedModule();
     FModuleLike getReferencedModule(SymbolTable& symtbl);
 
+    /// Return the port direction for the specified result number.
+    Direction getPortDirection(size_t resultNo) {
+      return direction::get(portDirections()[resultNo]);
+    }
+
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo) {
-      return getReferencedModule().portName(resultNo);
+      return portNames()[resultNo].cast<StringAttr>();
     }
     StringRef getPortNameStr(size_t resultNo) {
       return getPortName(resultNo).getValue();
@@ -189,7 +204,7 @@ def MemOp : FIRRTLOp<"mem"> {
 
     /// Return the type of a port given the memory depth, type, and kind
     static BundleType getTypeForPort(uint64_t depth, FIRRTLType dataType,
-                                     PortKind portKind);
+                                     PortKind portKind, size_t maskBits = 0);
 
     /// Return the name and kind of ports supported by this memory.
     SmallVector<NamedPort> getPorts();
@@ -202,6 +217,9 @@ def MemOp : FIRRTLOp<"mem"> {
 
     /// Return the data-type field of the memory, the type of each element.
     FIRRTLType getDataType();
+
+    /// Return the number of mask bits.
+    size_t getMaskBits();
 
     /// Return the port name for the specified result number.
     StringAttr getPortName(size_t resultNo);
@@ -222,6 +240,12 @@ def MemOp : FIRRTLOp<"mem"> {
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    /// Get the number of read ports, write ports and read write ports.
+    void getNumPorts(size_t &numReadPorts, size_t &numWritePorts, size_t &numReadWritePorts);
+
+    // Extract the relevant attributes from the MemOp and return a FirMemory object.
+    FirMemory getSummary();
   }];
 }
 
@@ -272,8 +296,9 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
+
     ```
-      %name = firrtl.reg %clockVal : t1
+    %name = firrtl.reg %clockVal : t1
     ```
     }];
 
@@ -305,7 +330,7 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
     }];
 
   let arguments = (
-    ins ClockType:$clockVal, ResetType:$resetSignal, PassiveType:$resetValue,
+    ins ClockType:$clockVal, AnyResetType:$resetSignal, PassiveType:$resetValue,
         StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs PassiveType:$result);
 

@@ -106,10 +106,10 @@ firrtl.circuit "top" {
 // -----
 // Should not allow ResetType as an ExtModule output
 firrtl.circuit "top" {
-  firrtl.extmodule @ext(out %out: !firrtl.bundle<foo: reset>)
+  firrtl.extmodule @ext(out out: !firrtl.bundle<foo: reset>)
   firrtl.module @top(out %out: !firrtl.reset) {
     // expected-error @+1 {{reset network never driven with concrete type}}
-    %e_out = firrtl.instance @ext  {name = "e"} : !firrtl.bundle<foo: reset>
+    %e_out = firrtl.instance e @ext(out out: !firrtl.bundle<foo: reset>)
     %0 = firrtl.subfield %e_out(0) : (!firrtl.bundle<foo: reset>) -> !firrtl.reset
     firrtl.connect %out, %0 : !firrtl.reset, !firrtl.reset
   }
@@ -204,22 +204,29 @@ firrtl.circuit "Top" {
   // expected-note @+1 {{reset domain 'otherReset' of module 'Child' declared here:}}
   firrtl.module @Child(in %clock: !firrtl.clock, in %otherReset: !firrtl.asyncreset) attributes {portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
     // expected-note @+1 {{instance 'child/inst' is in reset domain rooted at 'otherReset' of module 'Child'}}
-    %inst_clock = firrtl.instance @Foo {name = "inst"} : !firrtl.clock
+    %inst_clock = firrtl.instance inst @Foo(in clock: !firrtl.clock)
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
   }
   firrtl.module @Other(in %clock: !firrtl.clock) attributes {annotations = [{class = "sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation"}]} {
     // expected-note @+1 {{instance 'other/inst' is in no reset domain}}
-    %inst_clock = firrtl.instance @Foo {name = "inst"} : !firrtl.clock
+    %inst_clock = firrtl.instance inst @Foo(in clock: !firrtl.clock)
     firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
   }
   // expected-note @+1 {{reset domain 'reset' of module 'Top' declared here:}}
   firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) attributes {portAnnotations = [[],[{class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
-    %child_clock, %child_otherReset = firrtl.instance @Child {name = "child"} : !firrtl.clock, !firrtl.asyncreset
-    %other_clock = firrtl.instance @Other {name = "other"} : !firrtl.clock
+    %child_clock, %child_otherReset = firrtl.instance child @Child(in clock: !firrtl.clock, in otherReset: !firrtl.asyncreset)
+    %other_clock = firrtl.instance other @Other(in clock: !firrtl.clock)
     // expected-note @+1 {{instance 'foo' is in reset domain rooted at 'reset' of module 'Top'}}
-    %foo_clock = firrtl.instance @Foo {name = "foo"} : !firrtl.clock
+    %foo_clock = firrtl.instance foo @Foo(in clock: !firrtl.clock)
     firrtl.connect %child_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %other_clock, %clock : !firrtl.clock, !firrtl.clock
     firrtl.connect %foo_clock, %clock : !firrtl.clock, !firrtl.clock
   }
+}
+
+// -----
+
+firrtl.circuit "UninferredReset" {
+  // expected-error @+1 {{contains an abstract reset type after InferResets}}
+  firrtl.module @UninferredReset(in %reset: !firrtl.reset) {}
 }

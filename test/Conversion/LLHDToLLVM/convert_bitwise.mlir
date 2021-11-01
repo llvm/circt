@@ -84,48 +84,6 @@ func @convert_shr_i5_i2_i2(%base : i5, %hidden : i2, %amount : i2) {
   return
 }
 
-// CHECK-LABEL:   llvm.func @convert_shr_sig(
-// CHECK-SAME:                               %[[VAL_0:.*]]: !llvm.ptr<i8>,
-// CHECK-SAME:                               %[[VAL_1:.*]]: !llvm.ptr<struct<()>>,
-// CHECK-SAME:                               %[[VAL_2:.*]]: !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>) {
-// CHECK:           %[[VAL_3:.*]] = llvm.mlir.constant(0 : i32) : i32
-// CHECK:           %[[VAL_4:.*]] = llvm.getelementptr %[[VAL_2]]{{\[}}%[[VAL_3]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
-// CHECK:           %[[VAL_5:.*]] = llvm.mlir.constant(8 : i32) : i32
-// CHECK:           %[[VAL_6:.*]] = llvm.mlir.constant(0 : i32) : i32
-// CHECK:           %[[VAL_7:.*]] = llvm.mlir.constant(1 : i32) : i32
-// CHECK:           %[[VAL_8:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_6]], %[[VAL_6]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32, i32) -> !llvm.ptr<ptr<i8>>
-// CHECK:           %[[VAL_9:.*]] = llvm.load %[[VAL_8]] : !llvm.ptr<ptr<i8>>
-// CHECK:           %[[VAL_10:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_6]], %[[VAL_7]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32, i32) -> !llvm.ptr<i64>
-// CHECK:           %[[VAL_11:.*]] = llvm.load %[[VAL_10]] : !llvm.ptr<i64>
-// CHECK:           %[[VAL_12:.*]] = llvm.mlir.constant(2 : i32) : i32
-// CHECK:           %[[VAL_13:.*]] = llvm.mlir.constant(3 : i32) : i32
-// CHECK:           %[[VAL_14:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_6]], %[[VAL_12]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32, i32) -> !llvm.ptr<i64>
-// CHECK:           %[[VAL_15:.*]] = llvm.load %[[VAL_14]] : !llvm.ptr<i64>
-// CHECK:           %[[VAL_16:.*]] = llvm.getelementptr %[[VAL_4]]{{\[}}%[[VAL_6]], %[[VAL_13]]] : (!llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>, i32, i32) -> !llvm.ptr<i64>
-// CHECK:           %[[VAL_17:.*]] = llvm.load %[[VAL_16]] : !llvm.ptr<i64>
-// CHECK:           %[[VAL_18:.*]] = llvm.zext %[[VAL_5]] : i32 to i64
-// CHECK:           %[[VAL_19:.*]] = llvm.add %[[VAL_11]], %[[VAL_18]] : i64
-// CHECK:           %[[VAL_20:.*]] = llvm.ptrtoint %[[VAL_9]] : !llvm.ptr<i8> to i64
-// CHECK:           %[[VAL_21:.*]] = llvm.mlir.constant(8 : i64) : i64
-// CHECK:           %[[VAL_22:.*]] = llvm.udiv %[[VAL_19]], %[[VAL_21]] : i64
-// CHECK:           %[[VAL_23:.*]] = llvm.add %[[VAL_20]], %[[VAL_22]] : i64
-// CHECK:           %[[VAL_24:.*]] = llvm.inttoptr %[[VAL_23]] : i64 to !llvm.ptr<i8>
-// CHECK:           %[[VAL_25:.*]] = llvm.urem %[[VAL_19]], %[[VAL_21]] : i64
-// CHECK:           %[[VAL_26:.*]] = llvm.mlir.undef : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_27:.*]] = llvm.insertvalue %[[VAL_24]], %[[VAL_26]][0 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_28:.*]] = llvm.insertvalue %[[VAL_25]], %[[VAL_27]][1 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_29:.*]] = llvm.insertvalue %[[VAL_15]], %[[VAL_28]][2 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_30:.*]] = llvm.insertvalue %[[VAL_17]], %[[VAL_29]][3 : i32] : !llvm.struct<(ptr<i8>, i64, i64, i64)>
-// CHECK:           %[[VAL_31:.*]] = llvm.mlir.constant(1 : i32) : i32
-// CHECK:           %[[VAL_32:.*]] = llvm.alloca %[[VAL_31]] x !llvm.struct<(ptr<i8>, i64, i64, i64)> {alignment = 4 : i64} : (i32) -> !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
-// CHECK:           llvm.store %[[VAL_30]], %[[VAL_32]] : !llvm.ptr<struct<(ptr<i8>, i64, i64, i64)>>
-// CHECK:           llvm.return
-// CHECK:         }
-llhd.entity @convert_shr_sig (%sI32 : !llhd.sig<i32>) -> () {
-  %0 = hw.constant 8 : i32
-  %1 = llhd.shr %sI32, %sI32, %0 : (!llhd.sig<i32>, !llhd.sig<i32>, i32) -> !llhd.sig<i32>
-}
-
 // CHECK-LABEL: llvm.func @convert_comb_shift
 func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
 
@@ -139,7 +97,7 @@ func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
   %2 = comb.shrs %1, %arg1 : i32
 
   // CHECK: %[[CNT:.*]] = "llvm.intr.ctpop"(%arg0) : (i32) -> i32
-  // CHECK: llvm.trunc %[[CNT]] : i32 to i1 
+  // CHECK: llvm.trunc %[[CNT]] : i32 to i1
   %3 = comb.parity %arg0 : i32
 
   // CHECK: %[[AMT:.*]] = llvm.mlir.constant(5 : i32) : i32
@@ -163,7 +121,7 @@ func @convert_comb_shift(%arg0: i32, %arg1: i32, %arg2: i1) -> i32 {
   // CHECK: %[[ZEXT3:.*]] = llvm.zext %arg0 : i32 to i96
   // CHECK: %[[SHIFT3:.*]] = llvm.shl %[[ZEXT3]], %[[A3]]  : i96
   // CHECK: llvm.or %[[OR2]], %[[SHIFT3]]  : i96
-  %6 = comb.concat %arg0, %arg1, %arg0 : (i32, i32, i32) -> i96
+  %6 = comb.concat %arg0, %arg1, %arg0 : i32, i32, i32
 
   // CHECK: llvm.select %arg2, %arg0, %arg1 : i1, i32
   %7 = comb.mux %arg2, %arg0, %arg1 : i32

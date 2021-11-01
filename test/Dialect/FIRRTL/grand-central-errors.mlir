@@ -51,10 +51,10 @@ firrtl.circuit "NonGroundType" attributes {
         {a},
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
          id = 1 : i64}]} : !firrtl.vector<uint<2>, 1>
-    firrtl.instance @View_companion { name = "View_companion" }
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @NonGroundType() {
-    firrtl.instance @DUT {name = "dut"}
+    firrtl.instance dut @DUT()
   }
 }
 
@@ -98,16 +98,14 @@ firrtl.circuit "Foo" attributes {
        name = "View",
        type = "parent"}]} {
     // expected-error @+1 {{'firrtl.instance' op is marked as an interface element, but this should be impossible due to how the Chisel Grand Central API works}}
-    %bar_a = firrtl.instance @Bar {
-      portAnnotations = [[
+    %bar_a = firrtl.instance bar @Bar(in a: !firrtl.uint<1> [
         {class = "sifive.enterprise.grandcentral.AugmentedGroundType",
-         id = 1 : i64}]],
-      name = "bar"} : !firrtl.uint<1>
+         id = 1 : i64}])
     firrtl.connect %bar_a, %a : !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.instance @View_companion { name = "View_companion" }
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @Foo() {
-    %dut_a = firrtl.instance @DUT {name = "dut"} : !firrtl.uint<1>
+    %dut_a = firrtl.instance dut @DUT(in a: !firrtl.uint<1>)
   }
 }
 
@@ -149,10 +147,10 @@ firrtl.circuit "Foo" attributes {
       portNames = ["r"],
       readLatency = 0 : i32,
       writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>
-    firrtl.instance @View_companion { name = "View_companion" }
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @Foo() {
-    %dut_a = firrtl.instance @DUT {name = "dut"} : !firrtl.uint<1>
+    %dut_a = firrtl.instance dut @DUT(in a: !firrtl.uint<1>)
   }
 }
 
@@ -184,9 +182,48 @@ firrtl.circuit "Foo" attributes {
        id = 0 : i64,
        name = "View",
        type = "parent"}]} {
-    firrtl.instance @View_companion {name = "View_companion"}
+    firrtl.instance View_companion @View_companion()
   }
   firrtl.module @Foo() {
-    firrtl.instance @DUT {name = "dut"}
+    firrtl.instance dut @DUT()
   }
+}
+
+
+// ----- 
+// expected-error @+1 {{'firrtl.circuit' op contains a 'companion' with id '0', but does not contain a GrandCentral 'parent' with the same id}}
+firrtl.circuit "multiInstance2" attributes {
+  annotations = [
+    {class = "sifive.enterprise.grandcentral.AugmentedBundleType",
+     defName = "Foo",
+     id = 0 : i64,
+     name = "View"},
+    {class = "sifive.enterprise.grandcentral.ExtractGrandCentralAnnotation",
+     directory = "gct-dir",
+     filename = "gct-dir/bindings.sv"}]} {
+  firrtl.module @View_companion() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       defName = "Foo",
+       id = 0 : i64,
+       name = "View",
+       type = "companion"}]} {}
+  // expected-error @+1 {{'firrtl.module' op is marked as a GrandCentral 'parent', but it is instantiated more than once}}
+  firrtl.module @DUTE() attributes {
+    annotations = [
+      {class = "sifive.enterprise.grandcentral.ViewAnnotation",
+       id = 0 : i64,
+       name = "view",
+       type = "parent"}
+    ]} {
+    %a = firrtl.wire : !firrtl.uint<2>
+    %b = firrtl.wire : !firrtl.uint<4>
+    firrtl.instance View_companion @View_companion()
+  }
+  firrtl.module @multiInstance2() {
+    firrtl.instance dut @DUTE() // expected-note {{parent is instantiated here}}
+    firrtl.instance dut1 @DUTE() // expected-note {{parent is instantiated here}}
+  }
+  firrtl.nla @nla1 [@multiInstance1] ["dut"]
+  firrtl.nla @nla2 [@multiInstance1] ["dut1"]
 }

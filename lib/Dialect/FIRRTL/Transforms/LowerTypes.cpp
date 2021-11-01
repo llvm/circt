@@ -124,6 +124,37 @@ static SmallVector<Operation *> getSAWritePath(Operation *op) {
   return retval;
 }
 
+/// Returns whether the given annotation requires precise tracking of the field
+/// ID as it gets replicated across lowered operations.
+static bool isAnnotationSensitiveToFieldID(Annotation anno) {
+  return anno.isClass("sifive.enterprise.grandcentral.SignalDriverAnnotation");
+}
+
+/// If an annotation on one operation is replicated across multiple IR
+/// operations as a result of type lowering, the replicated annotations may want
+/// to track which field ID they were applied to. This function adds a fieldID
+/// to such a replicated operation, if the annotation in question requires it.
+static Attribute updateAnnotationFieldID(MLIRContext *ctxt, Attribute attr,
+                                         unsigned fieldID) {
+  DictionaryAttr dict = attr.cast<DictionaryAttr>();
+
+  // No need to do anything if the annotation applies to the entire field.
+  if (fieldID == 0)
+    return attr;
+
+  // Only certain annotations require precise tracking of field IDs.
+  Annotation anno(dict);
+  if (!isAnnotationSensitiveToFieldID(anno))
+    return attr;
+
+  // Add the new ID to the existing field ID in the annotation.
+  if (auto existingFieldID = anno.getMember<IntegerAttr>("fieldID"))
+    fieldID += existingFieldID.getValue().getZExtValue();
+  NamedAttrList fields(dict);
+  fields.set("fieldID", IntegerAttr::get(IntegerType::get(ctxt, 64), fieldID));
+  return DictionaryAttr::get(ctxt, fields);
+}
+
 /// Copy annotations from \p annotations to \p loweredAttrs, except annotations
 /// with "target" key, that do not match the field suffix.
 static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
@@ -154,8 +185,9 @@ static ArrayAttr filterAnnotations(MLIRContext *ctxt, ArrayAttr annotations,
           retval.push_back(subAnno.getAnnotations());
         }
       }
-    } else
-      retval.push_back(opAttr);
+    } else {
+      retval.push_back(updateAnnotationFieldID(ctxt, opAttr, field.fieldID));
+    }
   }
   return ArrayAttr::get(ctxt, retval);
 }
@@ -229,7 +261,8 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 namespace {
 struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
 
-  TypeLoweringVisitor(MLIRContext *context) : context(context) {}
+  TypeLoweringVisitor(MLIRContext *context, bool f)
+      : context(context), flattenAggregateMemData(f) {}
   using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
   using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
@@ -238,11 +271,9 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   /// type lowering on all operations.
   void lowerModule(Operation *op);
 
-  bool
-  lowerArg(Operation *module, size_t argIndex,
-           SmallVectorImpl<std::pair<PortInfo, SmallVector<NamedAttribute>>>
-               &newArgs,
-           SmallVectorImpl<Value> &lowering);
+  bool lowerArg(Operation *module, size_t argIndex,
+                SmallVectorImpl<PortInfo> &newArgs,
+                SmallVectorImpl<Value> &lowering);
   std::pair<Value, PortInfo> addArg(Operation *module, unsigned insertPt,
                                     FIRRTLType srcType,
                                     FlatBundleFieldEntry field,
@@ -261,6 +292,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
   void visitExpr(SubaccessOp op);
   void visitExpr(MuxPrimOp op);
   void visitExpr(mlir::UnrealizedConversionCastOp op);
+  void visitExpr(BitCastOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(PartialConnectOp op);
   void visitStmt(WhenOp op);
@@ -277,6 +309,9 @@ private:
   Value getSubWhatever(Value val, size_t index);
 
   MLIRContext *context;
+  /// Create a single memory from an aggregate type (instead of one per field)
+  /// if this flag is enabled.
+  bool flattenAggregateMemData;
 
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
@@ -407,7 +442,7 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
                             PortInfo &oldArg) {
   Value newValue;
   if (auto mod = dyn_cast<FModuleOp>(module)) {
-    Block *body = mod.getBodyBlock();
+    Block *body = mod.getBody();
     // Append the new argument.
     newValue = body->insertArgument(insertPt, field.type);
   }
@@ -429,22 +464,21 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
 }
 
 // Lower arguments with bundle type by flattening them.
-bool TypeLoweringVisitor::lowerArg(
-    Operation *module, size_t argIndex,
-    SmallVectorImpl<std::pair<PortInfo, SmallVector<NamedAttribute>>> &newArgs,
-    SmallVectorImpl<Value> &lowering) {
+bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
+                                   SmallVectorImpl<PortInfo> &newArgs,
+                                   SmallVectorImpl<Value> &lowering) {
 
   // Flatten any bundle types.
   SmallVector<FlatBundleFieldEntry> fieldTypes;
-  auto srcType = newArgs[argIndex].first.type.cast<FIRRTLType>();
+  auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
   if (!peelType(srcType, fieldTypes))
     return false;
 
   for (auto field : llvm::enumerate(fieldTypes)) {
     auto newValue = addArg(module, 1 + argIndex + field.index(), srcType,
-                           field.value(), newArgs[argIndex].first);
+                           field.value(), newArgs[argIndex]);
     newArgs.insert(newArgs.begin() + 1 + argIndex + field.index(),
-                   std::make_pair(newValue.second, newArgs[argIndex].second));
+                   newValue.second);
     // Lower any other arguments by copying them to keep the relative order.
     lowering.push_back(newValue.first);
   }
@@ -613,6 +647,35 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
   lowerBlock(&op.getElseBlock());
 }
 
+// Convert an aggregate type into a flat list of fields.
+// This is used to flatten the aggregate memory datatype.
+// Recursively populate the results with each ground type field.
+static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
+  std::function<bool(FIRRTLType)> flatten = [&](FIRRTLType type) -> bool {
+    return TypeSwitch<FIRRTLType, bool>(type)
+        .Case<BundleType>([&](auto bundle) {
+          for (auto &elt : bundle.getElements())
+            if (!flatten(elt.type))
+              return false;
+          return true;
+        })
+        .Case<FVectorType>([&](auto vector) {
+          for (size_t i = 0, e = vector.getNumElements(); i != e; ++i)
+            if (!flatten(vector.getElementType()))
+              return false;
+          return true;
+        })
+        .Case<IntType>([&](auto iType) {
+          results.push_back({iType});
+          return iType.getWidth().hasValue();
+        })
+        .Default([&](auto) { return false; });
+  };
+  if (flatten(type))
+    return true;
+  return false;
+}
+
 /// Lower memory operations. A new memory is created for every leaf
 /// element in a memory's data type.
 void TypeLoweringVisitor::visitDecl(MemOp op) {
@@ -622,7 +685,6 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     return;
 
   SmallVector<MemOp> newMemories;
-  SmallVector<Value> wireToOldResult;
   SmallVector<WireOp> oldPorts;
 
   // Wires for old ports
@@ -634,11 +696,76 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     oldPorts.push_back(wire);
     result.replaceAllUsesWith(wire.getResult());
   }
+  // The vector of leaf elements type after flattening the data.
+  SmallVector<IntType> flatMemType;
+  // MaskGranularity : how many bits each mask bit controls.
+  size_t maskGran = 1;
+  // Total mask bitwidth after flattening.
+  uint32_t totalmaskWidths = 0;
+  // How many mask bits each field type requires.
+  SmallVector<unsigned> maskWidths;
 
-  // Memory for each field
-  for (auto field : fields)
-    newMemories.push_back(cloneMemWithNewType(builder, op, field));
+  auto hasSubAnno = [&]() -> bool {
+    for (size_t portIdx = 0, e = op.getNumResults(); portIdx < e; ++portIdx)
+      for (auto attr : op.getPortAnnotation(portIdx)) {
+        if (auto subAnno = attr.dyn_cast<SubAnnotationAttr>())
+          return true;
+      }
+    return false;
+  };
+  // If subannotations present on aggregate fields, we cannot flatten the
+  // memory. It must be split into one memory per aggregate field.
+  if (flattenAggregateMemData)
+    if (hasSubAnno() || !flattenType(op.getDataType(), flatMemType))
+      flattenAggregateMemData = false;
 
+  if (flattenAggregateMemData) {
+    SmallVector<Operation *, 8> flatData;
+    SmallVector<int32_t> memWidths;
+    // Get the width of individual aggregate leaf elements.
+    for (auto f : flatMemType)
+      memWidths.push_back(f.getWidth().getValue());
+
+    maskGran = memWidths[0];
+    size_t memFlatWidth = 0;
+    // Compute the GCD of all data bitwidths.
+    for (auto w : memWidths) {
+      memFlatWidth += w;
+      maskGran = llvm::GreatestCommonDivisor64(maskGran, w);
+    }
+    for (auto w : memWidths) {
+      // How many mask bits required for each flattened field.
+      auto mWidth = w / maskGran;
+      maskWidths.push_back(mWidth);
+      totalmaskWidths += mWidth;
+    }
+    // Now create a new memory of type flattened data.
+    // ----------------------------------------------
+    SmallVector<Type, 8> ports;
+    SmallVector<Attribute, 8> portNames;
+
+    // Create a new memoty data type of unsigned and computed width.
+    auto flatType = UIntType::get(context, memFlatWidth);
+    auto opPorts = op.getPorts();
+    for (size_t portIdx = 0, e = opPorts.size(); portIdx < e; ++portIdx) {
+      auto port = opPorts[portIdx];
+      ports.push_back(MemOp::getTypeForPort(op.depth(), flatType, port.second,
+                                            totalmaskWidths));
+      portNames.push_back(port.first);
+    }
+
+    auto flatMem = builder->create<MemOp>(
+        ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
+        portNames, op.name(), op.annotations().getValue(),
+        op.portAnnotations().getValue());
+    // Done creating the memory.
+    // ----------------------------------------------
+    newMemories.push_back(flatMem);
+  } else {
+    // Memory for each field
+    for (auto field : fields)
+      newMemories.push_back(cloneMemWithNewType(builder, op, field));
+  }
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
     auto result = oldPorts[index];
@@ -651,13 +778,56 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       // go both directions, depending on the port direction.
       if (name == "data" || name == "mask" || name == "wdata" ||
           name == "wmask" || name == "rdata") {
-        for (auto field : fields) {
-          auto realOldField = getSubWhatever(oldField, field.index);
-          auto newField = getSubWhatever(
-              newMemories[field.index].getResult(index), fieldIndex);
-          if (rType.getElement(fieldIndex).isFlip)
-            std::swap(realOldField, newField);
-          builder->create<ConnectOp>(newField, realOldField);
+        if (flattenAggregateMemData) {
+          // If memory was flattened instead of one memory per aggregate field.
+          Value newField =
+              getSubWhatever(newMemories[0].getResult(index), fieldIndex);
+          Value realOldField = oldField;
+          if (rType.getElement(fieldIndex).isFlip) {
+            // Cast the memory read data from flat type to aggregate.
+            newField = builder->createOrFold<BitCastOp>(
+                oldField.getType().cast<FIRRTLType>(), newField);
+            // Write the aggregate read data.
+            builder->create<ConnectOp>(realOldField, newField);
+          } else {
+            // Cast the input aggregate write data to flat type.
+            realOldField = builder->create<BitCastOp>(
+                newField.getType().cast<FIRRTLType>(), oldField);
+            // Mask bits require special handling, since some of the mask bits
+            // need to be repeated, direct bitcasting wouldn't work. Depending
+            // on the mask granularity, some mask bits will be repeated.
+            if ((name == "mask" || name == "wmask") &&
+                (maskWidths.size() < totalmaskWidths)) {
+              Value catMasks;
+              for (auto m : llvm::enumerate(maskWidths)) {
+                // Get the mask bit.
+                auto mBit = builder->createOrFold<BitsPrimOp>(
+                    realOldField, m.index(), m.index());
+                // Check how many times the mask bit needs to be prepend.
+                for (size_t repeat = 0; repeat < m.value(); repeat++)
+                  if (m.index() == 0 && repeat == 0)
+                    catMasks = mBit;
+                  else
+                    catMasks = builder->createOrFold<CatPrimOp>(mBit, catMasks);
+              }
+              realOldField = catMasks;
+            }
+            // Now set the mask or write data.
+            // Ensure that the types match.
+            builder->create<ConnectOp>(
+                newField,
+                builder->createOrFold<BitCastOp>(
+                    newField.getType().cast<FIRRTLType>(), realOldField));
+          }
+        } else {
+          for (auto field : fields) {
+            auto realOldField = getSubWhatever(oldField, field.index);
+            auto newField = getSubWhatever(
+                newMemories[field.index].getResult(index), fieldIndex);
+            if (rType.getElement(fieldIndex).isFlip)
+              std::swap(realOldField, newField);
+            builder->create<ConnectOp>(newField, realOldField);
+          }
         }
       } else {
         for (auto mem : newMemories) {
@@ -680,14 +850,8 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
-  // First get all the info for existing ports
-  SmallVector<std::pair<PortInfo, SmallVector<NamedAttribute>>> newArgs;
-  for (auto port : llvm::enumerate(extModule.getPorts())) {
-    SmallVector<NamedAttribute> argAttrs;
-    AnnotationSet::forPort(extModule, port.index(), argAttrs);
-    newArgs.push_back(std::make_pair(port.value(), argAttrs));
-  }
 
+  auto newArgs = extModule.getPorts();
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
     if (lowerArg(extModule, argIndex, newArgs, lowering))
@@ -706,47 +870,42 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   for (auto attr : extModule->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != "portNames" && attr.first != direction::attrKey &&
-        attr.first != "portAnnotations" &&
-        attr.first != mlir::function_like_impl::getArgDictAttrName())
+    if (attr.first != "portDirections" && attr.first != "portNames" &&
+        attr.first != "portTypes" && attr.first != "portAnnotations")
       newModuleAttrs.push_back(attr);
 
-  SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
-  SmallVector<Attribute, 8> newArgAttrs;
+  SmallVector<Attribute> newArgNames;
+  SmallVector<Attribute, 8> newPortTypes;
   SmallVector<Attribute, 8> newArgAnnotations;
-  SmallVector<Type, 8> inputTypes;
 
   for (auto &port : newArgs) {
-    newArgNames.push_back(port.first.name);
-    newArgDirections.push_back(port.first.direction);
-    newArgAttrs.push_back(builder.getDictionaryAttr(port.second));
-    newArgAnnotations.push_back(port.first.annotations.getArrayAttr());
-    inputTypes.push_back(port.first.type);
+    newArgDirections.push_back(port.direction);
+    newArgNames.push_back(port.name);
+    newPortTypes.push_back(TypeAttr::get(port.type));
+    newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
+
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get("portDirections", context),
+                     direction::packAttribute(context, newArgDirections)));
+
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder.getArrayAttr(newArgNames)));
-  newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get(direction::attrKey, context),
-                     direction::packAttribute(newArgDirections, context)));
+
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portTypes", context),
+                                          builder.getArrayAttr(newPortTypes)));
+
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get("portAnnotations", context),
                      builder.getArrayAttr(newArgAnnotations)));
 
-  // Attach new argument attributes.
-  newModuleAttrs.push_back(NamedAttribute(
-      builder.getIdentifier(mlir::function_like_impl::getArgDictAttrName()),
-      builder.getArrayAttr(newArgAttrs)));
-
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
-
-  // Keep the module's type up-to-date.
-  extModule.setType(builder.getFunctionType(inputTypes, {}));
 }
 
 void TypeLoweringVisitor::visitDecl(FModuleOp module) {
-  auto *body = module.getBodyBlock();
+  auto *body = module.getBody();
 
   ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
   builder = &theBuilder;
@@ -756,18 +915,11 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   // Lower the module block arguments.
   SmallVector<unsigned> argsToRemove;
-  // First get all the info for existing ports
-  SmallVector<std::pair<PortInfo, SmallVector<NamedAttribute>>> newArgs;
-  for (auto port : llvm::enumerate(module.getPorts())) {
-    SmallVector<NamedAttribute> argAttrs;
-    AnnotationSet::forPort(module, port.index(), argAttrs);
-    newArgs.push_back(std::make_pair(port.value(), argAttrs));
-  }
-
+  auto newArgs = module.getPorts();
   for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowerings;
     if (lowerArg(module, argIndex, newArgs, lowerings)) {
-      auto arg = module.getPortArgument(argIndex);
+      auto arg = module.getArgument(argIndex);
       processUsers(arg, lowerings);
       argsToRemove.push_back(argIndex);
     }
@@ -785,41 +937,37 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
   for (auto attr : module->getAttrDictionary())
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
-    if (attr.first != "portNames" && attr.first != direction::attrKey &&
-        attr.first != "portAnnotations" &&
-        attr.first != mlir::function_like_impl::getArgDictAttrName())
+    if (attr.first != "portNames" && attr.first != "portDirections" &&
+        attr.first != "portTypes" && attr.first != "portAnnotations")
       newModuleAttrs.push_back(attr);
 
-  SmallVector<Attribute> newArgNames;
   SmallVector<Direction> newArgDirections;
-  SmallVector<Attribute, 8> newArgAttrs;
+  SmallVector<Attribute> newArgNames;
+  SmallVector<Attribute> newArgTypes;
   SmallVector<Attribute, 8> newArgAnnotations;
+
   for (auto &port : newArgs) {
-    newArgNames.push_back(port.first.name);
-    newArgDirections.push_back(port.first.direction);
-    newArgAttrs.push_back(builder->getDictionaryAttr(port.second));
-    newArgAnnotations.push_back(port.first.annotations.getArrayAttr());
+    newArgDirections.push_back(port.direction);
+    newArgNames.push_back(port.name);
+    newArgTypes.push_back(TypeAttr::get(port.type));
+    newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
+
+  newModuleAttrs.push_back(
+      NamedAttribute(Identifier::get("portDirections", context),
+                     direction::packAttribute(context, newArgDirections)));
+
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portNames", context),
                                           builder->getArrayAttr(newArgNames)));
-  newModuleAttrs.push_back(
-      NamedAttribute(Identifier::get(direction::attrKey, context),
-                     direction::packAttribute(newArgDirections, context)));
+
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portTypes", context),
+                                          builder->getArrayAttr(newArgTypes)));
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get("portAnnotations", context),
                      builder->getArrayAttr(newArgAnnotations)));
 
-  // Attach new argument attributes.
-  newModuleAttrs.push_back(NamedAttribute(
-      builder->getIdentifier(mlir::function_like_impl::getArgDictAttrName()),
-      builder->getArrayAttr(newArgAttrs)));
-
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
-
-  // Keep the module's type up-to-date.
-  auto moduleType = builder->getFunctionType(body->getArgumentTypes(), {});
-  module->setAttr(module.getTypeAttrName(), TypeAttr::get(moduleType));
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
@@ -891,12 +1039,74 @@ void TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
   lowerProducer(op, clone);
 }
 
+// Expand BitCastOp of aggregates
+void TypeLoweringVisitor::visitExpr(BitCastOp op) {
+  Value srcLoweredVal = op.input();
+  // If the input is of aggregate type, then cat all the leaf fields to form a
+  // UInt type result. That is, first bitcast the aggregate type to a UInt.
+  // Attempt to get the bundle types.
+  SmallVector<FlatBundleFieldEntry> fields;
+  if (peelType(op.input().getType(), fields)) {
+    size_t uptoBits = 0;
+    // Loop over the leaf aggregates and concat each of them to get a UInt.
+    // Bitcast the fields to handle nested aggregate types.
+    for (auto field : llvm::enumerate(fields)) {
+      auto fieldBitwidth = getBitWidth(field.value().type).getValue();
+      // Ignore zero width fields, like empty bundles.
+      if (fieldBitwidth == 0)
+        continue;
+      Value src = getSubWhatever(op.input(), field.index());
+      // The src could be an aggregate type, bitcast it to a UInt type.
+      src = builder->createOrFold<BitCastOp>(
+          UIntType::get(context, fieldBitwidth), src);
+      // Take the first field, or else Cat the previous fields with this field.
+      if (uptoBits == 0)
+        srcLoweredVal = src;
+      else
+        srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+      // Record the total bits already accumulated.
+      uptoBits += fieldBitwidth;
+    }
+  } else
+    srcLoweredVal = builder->createOrFold<AsUIntPrimOp>(srcLoweredVal);
+  // Now the input has been cast to srcLoweredVal, which is of UInt type.
+  // If the result is an aggregate type, then use lowerProducer.
+  if (op.getResult().getType().isa<BundleType, FVectorType>()) {
+    // uptoBits is used to keep track of the bits that have been extracted.
+    size_t uptoBits = 0;
+    auto clone = [&](FlatBundleFieldEntry field, StringRef name,
+                     ArrayAttr attrs) -> Operation * {
+      // All the fields must have valid bitwidth, a requirement for BitCastOp.
+      auto fieldBits = getBitWidth(field.type).getValue();
+      // If empty field, then it doesnot have any use, so replace it with an
+      // invalid op, which should be trivially removed.
+      if (fieldBits == 0)
+        return builder->create<InvalidValueOp>(field.type);
+
+      // Assign the field to the corresponding bits from the input.
+      // Bitcast the field, incase its an aggregate type.
+      auto extractBits = builder->create<BitsPrimOp>(
+          srcLoweredVal, uptoBits + fieldBits - 1, uptoBits);
+      uptoBits += fieldBits;
+      return builder->create<BitCastOp>(field.type, extractBits);
+    };
+    lowerProducer(op, clone);
+  } else {
+    // If ground type, then replace the result.
+    if (op.getType().dyn_cast<SIntType>())
+      srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
+    op.getResult().replaceAllUsesWith(srcLoweredVal);
+    opsToRemove.push_back(op);
+  }
+}
+
 void TypeLoweringVisitor::visitDecl(InstanceOp op) {
+  bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
-  SmallVector<StringAttr, 8> resultNames;
-  bool skip = true;
   auto oldPortAnno = op.portAnnotations();
+  SmallVector<Direction> newDirs;
+  SmallVector<Attribute> newNames;
   SmallVector<Attribute> newPortAnno;
 
   endFields.push_back(0);
@@ -906,12 +1116,18 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
     if (!peelType(srcType, fieldTypes)) {
+      newDirs.push_back(op.getPortDirection(i));
+      newNames.push_back(op.getPortName(i));
       resultTypes.push_back(srcType);
       newPortAnno.push_back(oldPortAnno[i]);
     } else {
       skip = false;
+      auto oldName = op.getPortNameStr(i);
+      auto oldDir = op.getPortDirection(i);
       // Store the flat type for the new bundle type.
       for (auto field : fieldTypes) {
+        newDirs.push_back(direction::get((unsigned)oldDir ^ field.isOutput));
+        newNames.push_back(builder->getStringAttr(oldName + field.suffix));
         resultTypes.push_back(field.type);
         newPortAnno.push_back(filterAnnotations(
             context, oldPortAnno[i].dyn_cast_or_null<ArrayAttr>(), srcType,
@@ -926,7 +1142,9 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
 
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
-      resultTypes, op.moduleNameAttr(), op.nameAttr(), op.annotations(),
+      resultTypes, op.moduleNameAttr(), op.nameAttr(),
+      direction::packAttribute(context, newDirs),
+      builder->getArrayAttr(newNames), op.annotations(),
       builder->getArrayAttr(newPortAnno), op.lowerToBindAttr());
 
   SmallVector<Value> lowered;
@@ -993,6 +1211,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
 
 namespace {
 struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
+  LowerTypesPass(bool f) { flattenAggregateMemData = f; }
   void runOnOperation() override;
 };
 } // end anonymous namespace
@@ -1004,11 +1223,13 @@ void LowerTypesPass::runOnOperation() {
                  [&](Operation &op) { ops.push_back(&op); });
 
   mlir::parallelForEachN(&getContext(), 0, ops.size(), [&](auto index) {
-    TypeLoweringVisitor(&getContext()).lowerModule(ops[index]);
+    TypeLoweringVisitor(&getContext(), flattenAggregateMemData)
+        .lowerModule(ops[index]);
   });
 }
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerFIRRTLTypesPass() {
-  return std::make_unique<LowerTypesPass>();
+std::unique_ptr<mlir::Pass>
+circt::firrtl::createLowerFIRRTLTypesPass(bool replSeqMem) {
+  return std::make_unique<LowerTypesPass>(replSeqMem);
 }

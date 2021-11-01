@@ -49,10 +49,9 @@ def CircuitOp : FIRRTLOp<"circuit",
   let verifier = "return ::verifyCircuitOp(*this);";
 }
 
-def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, FunctionLike, Symbol, 
-                                    SingleBlock, NoTerminator, 
-                                    DeclareOpInterfaceMethods<FModuleLike>,
-                                    HasParent<"CircuitOp">]> {
+def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
+                                    NoTerminator, HasParent<"CircuitOp">,
+                                    DeclareOpInterfaceMethods<FModuleLike>]> {
   let summary = "FIRRTL Module";
   let description = [{
     The "firrtl.module" operation represents a Verilog module, including a given
@@ -60,9 +59,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, FunctionLike, Symbol,
     the module.
   }];
   let arguments =
-            (ins StrArrayAttr:$portNames,
-                 DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-                 DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations);
+            (ins DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations);
 
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
@@ -74,16 +71,18 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, FunctionLike, Symbol,
   ];
 
   let extraClassDeclaration = [{
-    using FunctionLike::end;
-    using FunctionLike::front;
-    using FunctionLike::getBody;
+    Block *getBody() { return &body().front(); }
+
+    using iterator = Block::iterator;
+    iterator begin() { return getBody()->begin(); }
+    iterator end() { return getBody()->end(); }
+
+    Block::BlockArgListType getArguments() {
+      return getBody()->getArguments();
+    }
 
     // Return the block argument for the port with the specified index.
-    BlockArgument getPortArgument(size_t portNumber);
-
-    // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
-    // squatting on the name.
-    Block *getBodyBlock() { return &body().front(); }
+    BlockArgument getArgument(size_t portNumber);
 
     OpBuilder getBodyBuilder() {
       assert(!body().empty() && "Unexpected empty 'body' region.");
@@ -97,48 +96,24 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, FunctionLike, Symbol,
     /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
     /// be in order and unique.
     void erasePorts(ArrayRef<unsigned> portIndices);
-
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<FModuleOp>;
-
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getBodyBlock()->getNumArguments(); }
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
-
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    ///  safely.
-    LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
-                           "' attribute of function type");
-      return success();
-    }
-  public:
   }];
 
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
-  let verifier = "return ::verifyFModuleOp(*this);";
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule", 
-      [IsolatedFromAbove, FunctionLike, Symbol, 
-       DeclareOpInterfaceMethods<FModuleLike>, HasParent<"CircuitOp">]> {
+      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
+       DeclareOpInterfaceMethods<FModuleLike>]> {
   let summary = "FIRRTL extmodule";
   let description = [{
     The "firrtl.extmodule" operation represents an external reference to a
     Verilog module, including a given name and a list of ports.
   }];
-  let arguments = (ins StrArrayAttr:$portNames,
+  let arguments = (ins
                    OptionalAttr<StrAttr>:$defname,
                    OptionalAttr<DictionaryAttr>:$parameters,
-                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
-                   DefaultValuedAttr<PortAnnotationsAttr, "{}">:$portAnnotations
+                   DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations
                   );
   let results = (outs);
   let regions = (region AnyRegion:$body);
@@ -150,31 +125,6 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];
-
-  let extraClassDeclaration = [{
-  private:
-    // This trait needs access to the hooks defined below.
-    friend class OpTrait::FunctionLike<FExtModuleOp>;
-
-    /// Returns the number of arguments, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncArguments() { return getType().getInputs().size(); }
-
-    /// Returns the number of results, implementing OpTrait::FunctionLike.
-    unsigned getNumFuncResults() { return getType().getResults().size(); }
-
-    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
-    /// attribute is present and checks if it holds a function type.  Ensures
-    /// getType, getNumFuncArguments, and getNumFuncResults can be called
-    ///  safely.
-    LogicalResult verifyType() {
-      auto type = getTypeAttr().getValue();
-      if (!type.isa<FunctionType>())
-        return emitOpError("requires '" + getTypeAttrName() +
-                           "' attribute of function type");
-      return success();
-    }
-  public:
-  }];
 
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";

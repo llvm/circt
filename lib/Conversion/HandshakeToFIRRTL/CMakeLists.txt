@@ -9,6 +9,7 @@ add_circt_library(CIRCTHandshakeToFIRRTL
   CIRCTHandshake
   MLIRIR
   MLIRPass
+  MLIRArithmetic
   MLIRStandard
   MLIRSupport
   MLIRTransforms

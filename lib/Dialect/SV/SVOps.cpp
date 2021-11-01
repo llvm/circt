@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/Builders.h"
@@ -119,10 +120,13 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
   }
 
   if (namesDisagree)
-    p.printOptionalAttrDict(op->getAttrs(), {SymbolTable::getSymbolAttrName()});
+    p.printOptionalAttrDict(op->getAttrs(),
+                            {SymbolTable::getSymbolAttrName(),
+                             hw::InnerName::getInnerNameAttrName()});
   else
     p.printOptionalAttrDict(op->getAttrs(),
-                            {"name", SymbolTable::getSymbolAttrName()});
+                            {"name", SymbolTable::getSymbolAttrName(),
+                             hw::InnerName::getInnerNameAttrName()});
 }
 
 //===----------------------------------------------------------------------===//
@@ -203,7 +207,7 @@ void RegOp::build(OpBuilder &builder, OperationState &odsState,
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (sym_name)
-    odsState.addAttribute(SymbolTable::getSymbolAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -219,7 +223,7 @@ void RegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // If this reg is only written to, delete the reg and all writers.
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
   // If the reg has a symbol, then we can't delete it.
-  if (op.sym_nameAttr())
+  if (op.inner_symAttr())
     return failure();
   // Check that all operations on the wire are sv.assigns. All other wire
   // operations will have been handled by other canonicalization.
@@ -898,6 +902,13 @@ void GetModportOp::build(OpBuilder &builder, OperationState &state, Value value,
         value, fieldAttr);
 }
 
+/// Lookup the op for the modport declaration.  This returns null on invalid
+/// IR.
+InterfaceModportOp
+GetModportOp::getReferencedDecl(const hw::SymbolCache &cache) {
+  return dyn_cast_or_null<InterfaceModportOp>(cache.getDefinition(fieldAttr()));
+}
+
 void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
                                   Value iface, StringRef signalName) {
   auto ifaceTy = iface.getType().dyn_cast<InterfaceType>();
@@ -908,6 +919,14 @@ void ReadInterfaceSignalOp::build(OpBuilder &builder, OperationState &state,
   assert(ifaceDefOp &&
          "ReadInterfaceSignalOp could not resolve an InterfaceOp.");
   build(builder, state, ifaceDefOp.getSignalType(signalName), iface, fieldAttr);
+}
+
+/// Lookup the op for the signal declaration.  This returns null on invalid
+/// IR.
+InterfaceSignalOp
+ReadInterfaceSignalOp::getReferencedDecl(const hw::SymbolCache &cache) {
+  return dyn_cast_or_null<InterfaceSignalOp>(
+      cache.getDefinition(signalNameAttr()));
 }
 
 ParseResult parseIfaceTypeAndSignal(OpAsmParser &p, Type &ifaceTy,
@@ -969,7 +988,7 @@ void WireOp::build(OpBuilder &builder, OperationState &odsState,
   if (!name)
     name = builder.getStringAttr("");
   if (sym_name)
-    odsState.addAttribute(SymbolTable::getSymbolAttrName(), sym_name);
+    odsState.addAttribute(hw::InnerName::getInnerNameAttrName(), sym_name);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
@@ -987,7 +1006,7 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 // If this wire is only written to, delete the wire and all writers.
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   // If the wire has a symbol, then we can't delete it.
-  if (wire.sym_nameAttr())
+  if (wire.inner_symAttr())
     return failure();
 
   // Wires have inout type, so they'll have assigns and read_inout operations
@@ -1139,12 +1158,11 @@ LogicalResult PAssignOp::canonicalize(PAssignOp op, PatternRewriter &rewriter) {
 
 /// Instances must be at the top level of the hw.module (or within a `ifdef)
 // and are typically at the end of it, so we scan backwards to find them.
-static hw::InstanceOp findInstanceSymbolInBlock(FlatSymbolRefAttr name,
-                                                Block *body) {
+static hw::InstanceOp findInstanceSymbolInBlock(StringAttr name, Block *body) {
   for (auto &op : llvm::reverse(body->getOperations())) {
     if (auto instance = dyn_cast<hw::InstanceOp>(op)) {
-      if (instance.sym_name() &&
-          instance.sym_name().getValue() == name.getValue())
+      if (instance.inner_sym() &&
+          instance.inner_sym().getValue() == name.getValue())
         return instance;
     }
 
@@ -1161,8 +1179,9 @@ static hw::InstanceOp findInstanceSymbolInBlock(FlatSymbolRefAttr name,
 
 hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
   // If we have a cache, directly look up the referenced instance.
+  // FIXME
   if (cache)
-    if (auto *result = cache->getDefinition(boundInstanceAttr()))
+    if (auto *result = cache->getDefinition(instance().getName()))
       return dyn_cast<hw::InstanceOp>(result);
 
   // Otherwise, resolve the instance by looking up the hw.module...
@@ -1171,12 +1190,12 @@ hw::InstanceOp BindOp::getReferencedInstance(const hw::SymbolCache *cache) {
     return {};
 
   auto hwModule = dyn_cast_or_null<hw::HWModuleOp>(
-      topLevelModuleOp.lookupSymbol(instanceModule()));
+      topLevelModuleOp.lookupSymbol(instance().getModule()));
   if (!hwModule)
     return {};
 
   // ... then look up the instance within it.
-  return findInstanceSymbolInBlock(boundInstanceAttr(),
+  return findInstanceSymbolInBlock(instance().getName(),
                                    hwModule.getBodyBlock());
 }
 
@@ -1190,29 +1209,10 @@ static LogicalResult verifyBindOp(BindOp op) {
   return success();
 }
 
-//===----------------------------------------------------------------------===//
-// Custom printer/parsers to be used with custom<> ODS assembly formats.
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseOmitEmptyStringAttr(OpAsmParser &p, StringAttr &str) {
-  // TODO: No OpAsmParser::parseOptionalAttribute(StringAttr &a, Type b) API
-  // exists.  OpAsmParser::parseAttribute(StringAttr &a, Type b) does exist, but
-  // produces an opError during parsing.  This should eventually be cleaned up
-  // to avoid the need to use a dummy attribute list.
-  NamedAttrList dummy;
-  p.parseOptionalAttribute(str, p.getBuilder().getType<mlir::NoneType>(),
-                           "label", dummy);
-  if (!str) {
-    str = p.getBuilder().getStringAttr("");
-    return success();
-  }
-  return success();
-}
-
-static void printOmitEmptyStringAttr(OpAsmPrinter &p, Operation *op,
-                                     StringAttr str) {
-  if (str && !str.getValue().empty())
-    p.printAttributeWithoutType(str);
+void BindOp::build(OpBuilder &builder, OperationState &odsState, StringAttr mod,
+                   StringAttr name) {
+  auto ref = hw::InnerRefAttr::get(mod, name);
+  odsState.addAttribute("instance", ref);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1243,6 +1243,41 @@ static LogicalResult verifyBindInterfaceOp(BindInterfaceOp op) {
   if (!inst->getAttr("doNotPrint"))
     return op.emitError("Referenced interface isn't marked as doNotPrint");
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// XMROp
+//===----------------------------------------------------------------------===//
+
+ParseResult parseXMRPath(::mlir::OpAsmParser &parser, ArrayAttr &pathAttr,
+                         StringAttr &terminalAttr) {
+  SmallVector<Attribute> strings;
+  ParseResult ret = parser.parseCommaSeparatedList([&]() {
+    StringAttr result;
+    StringRef keyword;
+    if (succeeded(parser.parseOptionalKeyword(&keyword))) {
+      strings.push_back(parser.getBuilder().getStringAttr(keyword));
+      return success();
+    }
+    if (succeeded(parser.parseAttribute(
+            result, parser.getBuilder().getType<NoneType>()))) {
+      strings.push_back(result);
+      return success();
+    }
+    return failure();
+  });
+  if (succeeded(ret)) {
+    pathAttr = parser.getBuilder().getArrayAttr(
+        ArrayRef(strings.begin(), strings.end() - 1));
+    terminalAttr = (*strings.rbegin()).cast<StringAttr>();
+  }
+  return ret;
+}
+
+void printXMRPath(OpAsmPrinter &p, XMROp op, ArrayAttr pathAttr,
+                  StringAttr terminalAttr) {
+  llvm::interleaveComma(pathAttr, p);
+  p << ", " << terminalAttr;
 }
 
 //===----------------------------------------------------------------------===//

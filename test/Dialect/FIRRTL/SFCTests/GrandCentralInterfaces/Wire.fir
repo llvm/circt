@@ -1,14 +1,15 @@
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s | FileCheck %s --check-prefixes CHECK,EXTRACT
 ; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json %s | FileCheck %s --check-prefixes CHECK,NOEXTRACT
+; RUN: firtool --firrtl-grand-central --verilog --annotation-file %S/Wire.anno.json --annotation-file %S/Extract.anno.json %s --annotation-file %S/YAML.anno.json | FileCheck %s --check-prefixes YAML
 
 circuit Top :
   module Submodule :
     input clock : Clock
     input reset : Reset
-    input in : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
-    output out : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
+    input in : { uint : UInt<1>, vec : UInt<1>[2], multivec : UInt<1>[3][2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
+    output out : { uint : UInt<1>, vec : UInt<1>[2], multivec : UInt<1>[3][2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
 
-    wire w : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
+    wire w : { uint : UInt<1>, vec : UInt<1>[2], multivec : UInt<1>[3][2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
     w.otherOther.other.sint <= in.otherOther.other.sint
     w.otherOther.other.uint <= in.otherOther.other.uint
     w.vecOfBundle[0].sint <= in.vecOfBundle[0].sint
@@ -17,6 +18,12 @@ circuit Top :
     w.vecOfBundle[1].uint <= in.vecOfBundle[1].uint
     w.vec[0] <= in.vec[0]
     w.vec[1] <= in.vec[1]
+    w.multivec[0][0] <= in.multivec[0][0]
+    w.multivec[0][1] <= in.multivec[0][1]
+    w.multivec[0][2] <= in.multivec[0][2]
+    w.multivec[1][0] <= in.multivec[1][0]
+    w.multivec[1][1] <= in.multivec[1][1]
+    w.multivec[1][2] <= in.multivec[1][2]
     w.uint <= in.uint
     out.otherOther.other.sint <= w.otherOther.other.sint
     out.otherOther.other.uint <= w.otherOther.other.uint
@@ -26,6 +33,12 @@ circuit Top :
     out.vecOfBundle[1].uint <= w.vecOfBundle[1].uint
     out.vec[0] <= w.vec[0]
     out.vec[1] <= w.vec[1]
+    out.multivec[0][0] <= w.multivec[0][0]
+    out.multivec[0][1] <= w.multivec[0][1]
+    out.multivec[0][2] <= w.multivec[0][2]
+    out.multivec[1][0] <= w.multivec[1][0]
+    out.multivec[1][1] <= w.multivec[1][1]
+    out.multivec[1][2] <= w.multivec[1][2]
     out.uint <= w.uint
 
   module MyView_companion :
@@ -37,10 +50,10 @@ circuit Top :
   module DUT :
     input clock : Clock
     input reset : Reset
-    input in : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
-    output out : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
+    input in : { uint : UInt<1>, vec : UInt<1>[2], multivec : UInt<1>[3][2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
+    output out : { uint : UInt<1>, vec : UInt<1>[2], multivec : UInt<1>[3][2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
 
-    wire w : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
+    wire w : { uint : UInt<1>, vec : UInt<1>[2], multivec : UInt<1>[3][2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
     inst submodule of Submodule
     submodule.clock <= clock
     submodule.reset <= reset
@@ -52,6 +65,12 @@ circuit Top :
     w.vecOfBundle[1].uint <= in.vecOfBundle[1].uint
     w.vec[0] <= in.vec[0]
     w.vec[1] <= in.vec[1]
+    w.multivec[0][0] <= in.multivec[0][0]
+    w.multivec[0][1] <= in.multivec[0][1]
+    w.multivec[0][2] <= in.multivec[0][2]
+    w.multivec[1][0] <= in.multivec[1][0]
+    w.multivec[1][1] <= in.multivec[1][1]
+    w.multivec[1][2] <= in.multivec[1][2]
     w.uint <= in.uint
     submodule.in.otherOther.other.sint <= w.otherOther.other.sint
     submodule.in.otherOther.other.uint <= w.otherOther.other.uint
@@ -61,6 +80,12 @@ circuit Top :
     submodule.in.vecOfBundle[1].uint <= w.vecOfBundle[1].uint
     submodule.in.vec[0] <= w.vec[0]
     submodule.in.vec[1] <= w.vec[1]
+    submodule.in.multivec[0][0] <= w.multivec[0][0]
+    submodule.in.multivec[0][1] <= w.multivec[0][1]
+    submodule.in.multivec[0][2] <= w.multivec[0][2]
+    submodule.in.multivec[1][0] <= w.multivec[1][0]
+    submodule.in.multivec[1][1] <= w.multivec[1][1]
+    submodule.in.multivec[1][2] <= w.multivec[1][2]
     submodule.in.uint <= w.uint
     out.otherOther.other.sint <= submodule.out.otherOther.other.sint
     out.otherOther.other.uint <= submodule.out.otherOther.other.uint
@@ -70,14 +95,20 @@ circuit Top :
     out.vecOfBundle[1].uint <= submodule.out.vecOfBundle[1].uint
     out.vec[0] <= submodule.out.vec[0]
     out.vec[1] <= submodule.out.vec[1]
+    out.multivec[0][0] <= submodule.out.multivec[0][0]
+    out.multivec[0][1] <= submodule.out.multivec[0][1]
+    out.multivec[0][2] <= submodule.out.multivec[0][2]
+    out.multivec[1][0] <= submodule.out.multivec[1][0]
+    out.multivec[1][1] <= submodule.out.multivec[1][1]
+    out.multivec[1][2] <= submodule.out.multivec[1][2]
     out.uint <= submodule.out.uint
     inst MyView_companion of MyView_companion
 
   module Top :
     input clock : Clock
     input reset : UInt<1>
-    input in : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
-    output out : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
+    input in : { uint : UInt<1>, vec : UInt<1>[2], multivec : UInt<1>[3][2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
+    output out : { uint : UInt<1>, vec : UInt<1>[2], multivec : UInt<1>[3][2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
 
     inst dut of DUT
     dut.clock <= clock
@@ -90,6 +121,12 @@ circuit Top :
     dut.in.vecOfBundle[1].uint <= in.vecOfBundle[1].uint
     dut.in.vec[0] <= in.vec[0]
     dut.in.vec[1] <= in.vec[1]
+    dut.in.multivec[0][0] <= in.multivec[0][0]
+    dut.in.multivec[0][1] <= in.multivec[0][1]
+    dut.in.multivec[0][2] <= in.multivec[0][2]
+    dut.in.multivec[1][0] <= in.multivec[1][0]
+    dut.in.multivec[1][1] <= in.multivec[1][1]
+    dut.in.multivec[1][2] <= in.multivec[1][2]
     dut.in.uint <= in.uint
     out.otherOther.other.sint <= dut.out.otherOther.other.sint
     out.otherOther.other.uint <= dut.out.otherOther.other.uint
@@ -99,6 +136,12 @@ circuit Top :
     out.vecOfBundle[1].uint <= dut.out.vecOfBundle[1].uint
     out.vec[0] <= dut.out.vec[0]
     out.vec[1] <= dut.out.vec[1]
+    out.multivec[0][0] <= dut.out.multivec[0][0]
+    out.multivec[0][1] <= dut.out.multivec[0][1]
+    out.multivec[0][2] <= dut.out.multivec[0][2]
+    out.multivec[1][0] <= dut.out.multivec[1][0]
+    out.multivec[1][1] <= dut.out.multivec[1][1]
+    out.multivec[1][2] <= dut.out.multivec[1][2]
     out.uint <= dut.out.uint
 
     ; NOEXTRACT:      module MyView_companion();
@@ -130,6 +173,12 @@ circuit Top :
     ; CHECK-NEXT:       assign MyView.uint = dut.w_uint;
     ; CHECK-NEXT:       assign MyView.vec[0] = dut.w_vec_0;
     ; CHECK-NEXT:       assign MyView.vec[1] = dut.w_vec_1;
+    ; CHECK-NEXT:       assign MyView.multivec[0][0] = dut.w_multivec_0_0;
+    ; CHECK-NEXT:       assign MyView.multivec[0][1] = dut.w_multivec_0_1;
+    ; CHECK-NEXT:       assign MyView.multivec[0][2] = dut.w_multivec_0_2;
+    ; CHECK-NEXT:       assign MyView.multivec[1][0] = dut.w_multivec_1_0;
+    ; CHECK-NEXT:       assign MyView.multivec[1][1] = dut.w_multivec_1_1;
+    ; CHECK-NEXT:       assign MyView.multivec[1][2] = dut.w_multivec_1_2;
     ; CHECK-NEXT:       assign MyView.vecOfBundle[0].sint = dut.w_vecOfBundle_0_sint;
     ; CHECK-NEXT:       assign MyView.vecOfBundle[0].uint = dut.w_vecOfBundle_0_uint;
     ; CHECK-NEXT:       assign MyView.vecOfBundle[1].sint = dut.w_vecOfBundle_1_sint;
@@ -152,6 +201,8 @@ circuit Top :
     ; CHECK-NEXT:       logic uint;
     ; CHECK-NEXT:       // a vector called 'vec'
     ; CHECK-NEXT:       logic vec[0:1];
+    ; CHECK-NEXT:       // a 2D vector called 'multivec'
+    ; CHECK-NEXT:       logic multivec[0:1][0:2];
     ; CHECK-NEXT:       // a vector of a bundle
     ; CHECK-NEXT:       VecOfBundle vecOfBundle[2]();
     ; CHECK-NEXT:       // another bundle
@@ -191,3 +242,73 @@ circuit Top :
     ; CHECK-NEXT:       logic [1:0] sint;
     ; CHECK-NEXT:       logic [3:0] uint;
     ; CHECK:          endinterface
+
+    ; YAML:           FILE "Wire/firrtl/gct/gct.yaml"
+    ; YAML:             - name: MyInterface
+    ; YAML-NEXT:          fields:
+    ; YAML-NEXT:            - name: uint
+    ; YAML-NEXT:              description: 'a wire called ''uint'''
+    ; YAML-NEXT:              dimensions: [  ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:            - name: vec
+    ; YAML-NEXT:              description: 'a vector called ''vec'''
+    ; YAML-NEXT:              dimensions: [ 2 ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:            - name: multivec
+    ; YAML-NEXT:              description: 'a 2D vector called ''multivec'''
+    ; YAML-NEXT:              dimensions: [ 3, 2 ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:            - name: sub_uint
+    ; YAML-NEXT:              description: 'a wire called ''uint'' in the submodule'
+    ; YAML-NEXT:              dimensions: [  ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:            - name: sub_vec
+    ; YAML-NEXT:              description: 'a vector called ''vec'' in the submodule'
+    ; YAML-NEXT:              dimensions: [ 2 ]
+    ; YAML-NEXT:              width: 1
+    ; YAML-NEXT:          instances:
+    ; YAML-NEXT:            - name: vecOfBundle
+    ; YAML-NEXT:              description: a vector of a bundle
+    ; YAML-NEXT:              dimensions: [ 2 ]
+    ; YAML-NEXT:              interface:
+    ; YAML-NEXT:                name: VecOfBundle
+    ; YAML-NEXT:                fields:
+    ; YAML-NEXT:                  - name: sint
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    width: 2
+    ; YAML-NEXT:                  - name: uint
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    width: 4
+    ; YAML-NEXT:                instances: []
+    ; YAML-NEXT:            - name: otherOther
+    ; YAML-NEXT:              description: another bundle
+    ; YAML-NEXT:              dimensions: [  ]
+    ; YAML-NEXT:              interface:
+    ; YAML-NEXT:                name: OtherOther
+    ; YAML-NEXT:                fields: []
+    ; YAML-NEXT:                instances:
+    ; YAML-NEXT:                  - name: other
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    interface:
+    ; YAML-NEXT:                      name: Other
+    ; YAML-NEXT:                      fields:
+    ; YAML-NEXT:                        - name: sint
+    ; YAML-NEXT:                          dimensions: [  ]
+    ; YAML-NEXT:                          width: 2
+    ; YAML-NEXT:                        - name: uint
+    ; YAML-NEXT:                          dimensions: [  ]
+    ; YAML-NEXT:                          width: 4
+    ; YAML-NEXT:                      instances: []
+    ; YAML-NEXT:            - name: sub_vecOfBundle
+    ; YAML-NEXT:              description: "a vector of a bundle in the submodule with a\n// multiline comment"
+    ; YAML-NEXT:              dimensions: [ 2 ]
+    ; YAML-NEXT:              interface:
+    ; YAML-NEXT:                name: Sub_vecOfBundle
+    ; YAML-NEXT:                fields:
+    ; YAML-NEXT:                  - name: sint
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    width: 2
+    ; YAML-NEXT:                  - name: uint
+    ; YAML-NEXT:                    dimensions: [  ]
+    ; YAML-NEXT:                    width: 4
+    ; YAML-NEXT:                instances: []

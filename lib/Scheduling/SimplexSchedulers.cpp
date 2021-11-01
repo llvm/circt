@@ -219,8 +219,10 @@ void SimplexSchedulerBase::fillConstraintRow(SmallVector<int> &row,
   Operation *dst = dep.getDestination();
   unsigned latency = *prob.getLatency(*prob.getLinkedOperatorType(src));
   row[parameter1Column] = -latency; // note the negation
-  row[startTimeLocations[startTimeVariables[src]]] = 1;
-  row[startTimeLocations[startTimeVariables[dst]]] = -1;
+  if (src != dst) { // note that these coefficients just zero out in self-arcs.
+    row[startTimeLocations[startTimeVariables[src]]] = 1;
+    row[startTimeLocations[startTimeVariables[dst]]] = -1;
+  }
 }
 
 void SimplexSchedulerBase::buildTableau() {

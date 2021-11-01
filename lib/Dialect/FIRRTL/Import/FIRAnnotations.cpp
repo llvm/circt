@@ -11,19 +11,24 @@
 //===----------------------------------------------------------------------===//
 
 #include "FIRAnnotations.h"
+#include "AnnotationDetails.h"
 
+#include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OperationSupport.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/JSON.h"
 
 namespace json = llvm::json;
 
 using namespace circt;
 using namespace firrtl;
+using mlir::UnitAttr;
 
 /// Split a target into a base target (including a reference if one exists) and
 /// an optional array of subfield/subindex tokens.
@@ -214,7 +219,7 @@ static llvm::Optional<std::string> canonicalizeTarget(StringRef target) {
 /// specialized to print a useful error message, specific to custom annotation
 /// process, on failure.
 template <typename A>
-static A tryGetAs(DictionaryAttr &dict, DictionaryAttr &root, StringRef key,
+static A tryGetAs(DictionaryAttr &dict, const Attribute &root, StringRef key,
                   Location loc, Twine className, Twine path = Twine()) {
   // Check that the key exists.
   auto value = dict.get(key);
@@ -304,7 +309,36 @@ static Attribute convertJSONToAttribute(MLIRContext *context,
   }
 
   llvm_unreachable("Impossible unhandled JSON type");
-};
+}
+
+static std::string addNLATargets(
+    MLIRContext *context, StringRef targetStrRef, CircuitOp circuit,
+    size_t &nlaNumber, NamedAttrList &metadata,
+    llvm::StringMap<llvm::SmallVector<Attribute>> &mutableAnnotationMap) {
+
+  auto nlaTargets = expandNonLocal(targetStrRef);
+
+  FlatSymbolRefAttr nlaSym;
+  if (nlaTargets.size() > 1) {
+    nlaSym = buildNLA(circuit, ++nlaNumber, nlaTargets);
+    metadata.append("circt.nonlocal", nlaSym);
+  }
+
+  for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
+    NamedAttrList pathmetadata;
+    pathmetadata.append("circt.nonlocal", nlaSym);
+    pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
+    mutableAnnotationMap[std::get<0>(nlaTargets[i])].push_back(
+        DictionaryAttr::get(context, pathmetadata));
+  }
+
+  // Annotations on the element instance.
+  auto leafTarget =
+      splitAndAppendTarget(metadata, std::get<0>(nlaTargets.back()), context)
+          .first;
+
+  return leafTarget.str();
+}
 
 /// Deserialize a JSON value into FIRRTL Annotations.  Annotations are
 /// represented as a Target-keyed arrays of attributes.  The input JSON value is
@@ -386,13 +420,7 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
 
     // Build up the Attribute to represent the Annotation and store it in the
     // global Target -> Attribute mapping.
-    auto NLATargets = expandNonLocal(targetStrRef);
-
     NamedAttrList metadata;
-    // Annotations on the element instance.
-    auto leafTarget =
-        splitAndAppendTarget(metadata, std::get<0>(NLATargets.back()), context)
-            .first;
     for (auto field : *object) {
       if (auto value = convertJSONToAttribute(context, field.second, p)) {
         metadata.append(field.first, value);
@@ -400,21 +428,12 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
       }
       return false;
     }
-    FlatSymbolRefAttr nlaSym;
-    if (NLATargets.size() > 1) {
-      nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
-      metadata.append("circt.nonlocal", nlaSym);
-    }
+
+    auto leafTarget = addNLATargets(context, targetStrRef, circuit, nlaNumber,
+                                    metadata, mutableAnnotationMap);
+
     mutableAnnotationMap[leafTarget].push_back(
         DictionaryAttr::get(context, metadata));
-
-    for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
-      NamedAttrList pathmetadata;
-      pathmetadata.append("circt.nonlocal", nlaSym);
-      pathmetadata.append("class", StringAttr::get(context, "circt.nonlocal"));
-      mutableAnnotationMap[std::get<0>(NLATargets[i])].push_back(
-          DictionaryAttr::get(context, pathmetadata));
-    }
   }
 
   // Convert the mutable Annotation map to a SmallVector<ArrayAttr>.
@@ -426,6 +445,130 @@ bool circt::firrtl::fromJSON(json::Value &value, StringRef circuitTarget,
 
     annotationMap[a] = ArrayAttr::get(context, mutableAnnotationMap[a]);
   }
+
+  return true;
+}
+
+/// Convert a JSON value containing OMIR JSON (an array of OMNodes), convert
+/// this to an OMIRAnnotation, and add it to a mutable `annotationMap` argument.
+bool circt::firrtl::fromOMIRJSON(json::Value &value, StringRef circuitTarget,
+                                 llvm::StringMap<ArrayAttr> &annotationMap,
+                                 json::Path path, MLIRContext *context) {
+  // The JSON value must be an array of objects.  Anything else is reported as
+  // invalid.
+  auto *array = value.getAsArray();
+  if (!array) {
+    path.report(
+        "Expected OMIR to be an array of nodes, but found something else.");
+    return false;
+  }
+
+  // Build a mutable map of Target to Annotation.
+  SmallVector<Attribute> omnodes;
+  for (size_t i = 0, e = (*array).size(); i != e; ++i) {
+    auto *object = (*array)[i].getAsObject();
+    auto p = path.index(i);
+    if (!object) {
+      p.report("Expected OMIR to be an array of objects, but found an array of "
+               "something else.");
+      return false;
+    }
+
+    // Manually built up OMNode.
+    NamedAttrList omnode;
+
+    // Validate that this looks like an OMNode.  This should have three fields:
+    //   - "info": String
+    //   - "id": String that starts with "OMID:"
+    //   - "fields": Array<Object>
+    // Fields is optional and is a dictionary encoded as an array of objects:
+    //   - "info": String
+    //   - "name": String
+    //   - "value": JSON
+    // The dictionary is keyed by the "name" member and the array of fields is
+    // guaranteed to not have collisions of the "name" key.
+    auto maybeInfo = object->getString("info");
+    if (!maybeInfo) {
+      p.report("OMNode missing mandatory member \"info\" with type \"string\"");
+      return false;
+    }
+    auto maybeID = object->getString("id");
+    if (!maybeID || !maybeID.getValue().startswith("OMID:")) {
+      p.report("OMNode missing mandatory member \"id\" with type \"string\" "
+               "that starts with \"OMID:\"");
+      return false;
+    }
+    auto *maybeFields = object->get("fields");
+    if (maybeFields && !maybeFields->getAsArray()) {
+      p.report("OMNode has \"fields\" member with incorrect type (expected "
+               "\"array\")");
+      return false;
+    }
+    Attribute fields;
+    if (!maybeFields)
+      fields = DictionaryAttr::get(context, {});
+    else {
+      auto array = *maybeFields->getAsArray();
+      NamedAttrList fieldAttrs;
+      for (size_t i = 0, e = array.size(); i != e; ++i) {
+        auto *field = array[i].getAsObject();
+        auto pI = p.field("fields").index(i);
+        if (!field) {
+          pI.report("OMNode has field that is not an \"object\"");
+          return false;
+        }
+        auto maybeInfo = field->getString("info");
+        if (!maybeInfo) {
+          pI.report(
+              "OMField missing mandatory member \"info\" with type \"string\"");
+          return false;
+        }
+        auto maybeName = field->getString("name");
+        if (!maybeName) {
+          pI.report(
+              "OMField missing mandatory member \"name\" with type \"string\"");
+          return false;
+        }
+        auto *maybeValue = field->get("value");
+        if (!maybeValue) {
+          pI.report("OMField missing mandatory member \"value\"");
+          return false;
+        }
+        NamedAttrList values;
+        values.append("info", StringAttr::get(context, maybeInfo.getValue()));
+        values.append("value", convertJSONToAttribute(context, *maybeValue,
+                                                      pI.field("value")));
+        fieldAttrs.append(maybeName.getValue(),
+                          DictionaryAttr::get(context, values));
+      }
+      fields = DictionaryAttr::get(context, fieldAttrs);
+    }
+
+    omnode.append("info", StringAttr::get(context, maybeInfo.getValue()));
+    omnode.append("id", convertJSONToAttribute(context, *object->get("id"),
+                                               p.field("id")));
+    omnode.append("fields", fields);
+    omnodes.push_back(DictionaryAttr::get(context, omnode));
+  }
+
+  NamedAttrList omirAnnoFields;
+  omirAnnoFields.append("class", StringAttr::get(context, omirAnnoClass));
+  omirAnnoFields.append("nodes", convertJSONToAttribute(context, value, path));
+
+  DictionaryAttr omirAnno = DictionaryAttr::get(context, omirAnnoFields);
+
+  // If no circuit annotations exist, just insert the OMIRAnnotation.
+  auto &oldAnnotations = annotationMap["~"];
+  if (!oldAnnotations) {
+    oldAnnotations = ArrayAttr::get(context, {omirAnno});
+    return true;
+  }
+
+  // Rewrite the ArrayAttr for the circuit.
+  SmallVector<Attribute> newAnnotations(oldAnnotations.begin(),
+                                        oldAnnotations.end());
+  newAnnotations.push_back(omirAnno);
+  oldAnnotations = ArrayAttr::get(context, newAnnotations);
 
   return true;
 }
@@ -475,15 +618,34 @@ static Optional<DictionaryAttr> parseAugmentedType(
     if (!circuitAttr || !moduleAttr || !pathAttr || !componentAttr)
       return llvm::Optional<std::pair<std::string, ArrayAttr>>();
 
-    // TODO: Enable support for non-local annotations.
-    if (!pathAttr.empty()) {
-      auto diag = mlir::emitError(
-          loc,
-          "Annotation '" + clazz + "' with path '" + path +
-              "' encodes an unsupported non-local target via the 'path' key.");
-
-      diag.attachNote() << "The encoded target is: " << refTarget;
-      return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+    // Parse non-local annotations.
+    SmallString<32> strpath;
+    for (auto p : pathAttr) {
+      auto dict = p.dyn_cast_or_null<DictionaryAttr>();
+      if (!dict) {
+        mlir::emitError(loc, "annotation '" + clazz +
+                                 " has invalid type (expected DictionaryAttr)");
+        return {};
+      }
+      auto instHolder =
+          tryGetAs<DictionaryAttr>(dict, dict, "_1", loc, clazz, path);
+      auto modHolder =
+          tryGetAs<DictionaryAttr>(dict, dict, "_2", loc, clazz, path);
+      if (!instHolder || !modHolder) {
+        mlir::emitError(loc, "annotation '" + clazz +
+                                 " has invalid type (expected DictionaryAttr)");
+        return {};
+      }
+      auto inst = tryGetAs<StringAttr>(instHolder, instHolder, "value", loc,
+                                       clazz, path);
+      auto mod =
+          tryGetAs<StringAttr>(modHolder, modHolder, "value", loc, clazz, path);
+      if (!inst || !mod) {
+        mlir::emitError(loc, "annotation '" + clazz +
+                                 " has invalid type (expected DictionaryAttr)");
+        return {};
+      }
+      strpath += "/" + inst.getValue().str() + ":" + mod.getValue().str();
     }
 
     auto refAttr =
@@ -494,15 +656,14 @@ static Optional<DictionaryAttr> parseAugmentedType(
       auto component = componentAttr[i];
       auto dict = component.dyn_cast_or_null<DictionaryAttr>();
       if (!dict) {
-        mlir::emitError(loc,
-                        "Annotation '" + clazz + "' with path '" + cPath +
-                            " has invalid type (expected DictionaryAttr).");
-        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+        mlir::emitError(loc, "annotation '" + clazz + "' with path '" + cPath +
+                                 " has invalid type (expected DictionaryAttr)");
+        return {};
       }
       auto classAttr =
           tryGetAs<StringAttr>(dict, refTarget, "class", loc, clazz, cPath);
       if (!classAttr)
-        return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+        return {};
 
       auto value = dict.get("value");
 
@@ -530,12 +691,12 @@ static Optional<DictionaryAttr> parseAugmentedType(
                           "for subfield  or IntegerAttr for subindex).")
               .attachNote()
           << "The value received was: " << value << "\n";
-      return llvm::Optional<std::pair<std::string, ArrayAttr>>();
+      return {};
     }
 
     return llvm::Optional<std::pair<std::string, ArrayAttr>>(
         {(Twine("~" + circuitAttr.getValue() + "|" + moduleAttr.getValue() +
-                ">" + refAttr.getValue()))
+                strpath + ">" + refAttr.getValue()))
              .str(),
          ArrayAttr::get(context, componentAttrs)});
   };
@@ -639,7 +800,13 @@ static Optional<DictionaryAttr> parseAugmentedType(
 
     auto id = newID();
 
+    // TODO: We don't support non-local annotations, so force this annotation
+    // into a local annotation.  This does not properly check that the
+    // non-local and local targets are totally equivalent.
     auto target = maybeTarget.getValue();
+    auto localTarget = std::get<0>(expandNonLocal(target.first).back());
+    auto subTargets = target.second;
+
     NamedAttrList elementIface, elementScattered, dontTouch;
 
     // Populate the annotation for the interface element.
@@ -656,14 +823,14 @@ static Optional<DictionaryAttr> parseAugmentedType(
         "class",
         StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
     // If there are sub-targets, then add these.
-    if (target.second) {
-      elementScattered.append("target", target.second);
-      dontTouch.append("target", target.second);
+    if (subTargets) {
+      elementScattered.append("target", subTargets);
+      dontTouch.append("target", subTargets);
     }
 
-    newAnnotations[target.first].push_back(
+    newAnnotations[localTarget].push_back(
         DictionaryAttr::getWithSorted(context, elementScattered));
-    newAnnotations[target.first].push_back(
+    newAnnotations[localTarget].push_back(
         DictionaryAttr::getWithSorted(context, dontTouch));
 
     return DictionaryAttr::getWithSorted(context, elementIface);
@@ -717,6 +884,344 @@ static Optional<DictionaryAttr> parseAugmentedType(
   return None;
 }
 
+/// Recursively walk Object Model IR and convert FIRRTL targets to identifiers
+/// while scattering trackers into the newAnnotations argument.
+///
+/// Object Model IR consists of a type hierarchy built around recursive arrays
+/// and dictionaries whose leaves are "string-encoded types".  This is an Object
+/// Model-specific construct that puts type information alongside a value.
+/// Concretely, these look like:
+///
+///     'OM' type ':' value
+///
+/// This function is only concerned with unpacking types whose values are FIRRTL
+/// targets.  This is because these need to be kept up-to-date with
+/// modifications made to the circuit whereas other types are just passing
+/// through CIRCT.
+///
+/// At a later time this understanding may be expanded or Object Model IR may
+/// become its own Dialect.  At this time, this function is trying to do as
+/// minimal work as possible to just validate that the OMIR looks okay without
+/// doing lots of unnecessary unpacking/repacking of string-encoded types.
+static Optional<Attribute>
+scatterOMIR(Attribute original, unsigned &annotationID,
+            llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
+            CircuitOp circuit, size_t &nlaNumber) {
+  auto *ctx = original.getContext();
+
+  // Convert a string-encoded type to a dictionary that includes the type
+  // information and an identifier derived from the current annotationID.  Then
+  // increment the annotationID.  Return the constructed dictionary.
+  auto addID = [&](StringRef tpe, StringRef path) -> DictionaryAttr {
+    NamedAttrList fields;
+    fields.append("id",
+                  IntegerAttr::get(IntegerType::get(ctx, 64), annotationID++));
+    fields.append("omir.tracker", UnitAttr::get(ctx));
+    fields.append("path", StringAttr::get(ctx, path));
+    fields.append("type", StringAttr::get(ctx, tpe));
+    return DictionaryAttr::getWithSorted(ctx, fields);
+  };
+
+  return TypeSwitch<Attribute, Optional<Attribute>>(original)
+      // Most strings in the Object Model are actually string-encoded types.
+      // These are types which look like: "<type>:<value>".  This code will
+      // examine all strings, parse them into type and value, and then either
+      // store them in their unpacked state (and possibly scatter trackers into
+      // the circuit), store them in their packed state (because CIRCT is not
+      // expected to care about them right now), or error if we see them
+      // (because they should not exist and are expected to serialize to a
+      // different format).
+      .Case<StringAttr>([&](StringAttr str) -> Optional<Attribute> {
+        // Unpack the string into type and value.
+        StringRef tpe, value;
+        std::tie(tpe, value) = str.getValue().split(":");
+
+        // These are string-encoded types that are targets in the circuit.
+        // These require annotations to be scattered for them.  Replace their
+        // target with an ID and scatter a tracker.
+        if (tpe == "OMReferenceTarget" || tpe == "OMMemberReferenceTarget" ||
+            tpe == "OMMemberInstanceTarget" || tpe == "OMInstanceTarget" ||
+            tpe == "OMDontTouchedReferenceTarget") {
+          NamedAttrList tracker;
+          tracker.append("class", StringAttr::get(ctx, omirTrackerAnnoClass));
+          tracker.append(
+              "id", IntegerAttr::get(IntegerType::get(ctx, 64), annotationID));
+
+          auto canonTarget = canonicalizeTarget(value);
+          if (!canonTarget)
+            return None;
+
+          auto leafTarget = addNLATargets(ctx, *canonTarget, circuit, nlaNumber,
+                                          tracker, newAnnotations);
+
+          newAnnotations[leafTarget].push_back(
+              DictionaryAttr::get(ctx, tracker));
+
+          return addID(tpe, value);
+        }
+
+        // The following are types that may exist, but we do not unbox them.  At
+        // a later time, we may want to change this behavior and unbox these if
+        // we wind up building out an Object Model dialect:
+        if (isOMIRStringEncodedPassthrough(tpe))
+          return str;
+
+        // The following types are not expected to exist because they have
+        // serializations to JSON types or are removed during serialization.
+        // Hence, any of the following types are NOT expected to exist and we
+        // error if we see them.  These are explicitly specified as opposed to
+        // being handled in the "unknown" catch-all case below because we want
+        // to provide a good error message that a user may be doing something
+        // very weird.
+        if (tpe == "OMMap" || tpe == "OMArray" || tpe == "OMBoolean" ||
+            tpe == "OMInt" || tpe == "OMDouble" || tpe == "OMFrozenTarget") {
+          auto diag =
+              mlir::emitError(circuit.getLoc())
+              << "found known string-encoded OMIR type \"" << tpe
+              << "\", but this type should not be seen as it has a defined "
+                 "serialization format that does NOT use a string-encoded type";
+          diag.attachNote()
+              << "the problematic OMIR is reproduced here: " << original;
+          return None;
+        }
+
+        // This is a catch-all for any unknown types.
+        auto diag = mlir::emitError(circuit.getLoc())
+                    << "found unknown string-encoded OMIR type \"" << tpe
+                    << "\" (Did you misspell it?  Is CIRCT missing an Object "
+                       "Model OMIR type?)";
+        diag.attachNote() << "the problematic OMIR is reproduced here: "
+                          << original;
+        return None;
+      })
+      // For an array, just recurse into each element and rewrite the array with
+      // the results.
+      .Case<ArrayAttr>([&](ArrayAttr arr) -> Optional<Attribute> {
+        SmallVector<Attribute> newArr;
+        for (auto element : arr) {
+          auto newElement = scatterOMIR(element, annotationID, newAnnotations,
+                                        circuit, nlaNumber);
+          if (!newElement)
+            return None;
+          newArr.push_back(newElement.getValue());
+        }
+        return ArrayAttr::get(ctx, newArr);
+      })
+      // For a dictionary, recurse into each value and rewrite the key/value
+      // pairs.
+      .Case<DictionaryAttr>([&](DictionaryAttr dict) -> Optional<Attribute> {
+        NamedAttrList newAttrs;
+        for (auto pairs : dict) {
+          auto maybeValue = scatterOMIR(pairs.second, annotationID,
+                                        newAnnotations, circuit, nlaNumber);
+          if (!maybeValue)
+            return None;
+          newAttrs.append(pairs.first, maybeValue.getValue());
+        }
+        return DictionaryAttr::get(ctx, newAttrs);
+      })
+      // These attributes are all expected.  They are OMIR types, but do not
+      // have string-encodings (hence why these should error if we see them as
+      // strings).
+      .Case</* OMBoolean */ BoolAttr, /* OMDouble */ FloatAttr,
+            /* OMInt */ IntegerAttr>(
+          [](auto passThrough) { return passThrough; })
+      // Error if we see anything else.
+      .Default([&](auto) -> Optional<Attribute> {
+        auto diag = mlir::emitError(circuit.getLoc())
+                    << "found unexpected MLIR attribute \"" << original
+                    << "\" while trying to scatter OMIR";
+        return None;
+      });
+}
+
+/// Convert an Object Model Field into an optional pair of a string key and a
+/// dictionary attribute.  Expand internal source locator strings to location
+/// attributes.  Scatter any FIRRTL targets into the circuit. If this is an
+/// illegal Object Model Field return None.
+///
+/// Each Object Model Field consists of three mandatory members with
+/// the following names and types:
+///
+///   - "info": Source Locator String
+///   - "name": String
+///   - "value": Object Model IR
+///
+/// The key is the "name" and the dictionary consists of the "info" and "value"
+/// members.  Each value is recursively traversed to scatter any FIRRTL targets
+/// that may be used inside it.
+///
+/// This conversion from an object (dictionary) to key--value pair is safe
+/// because each Object Model Field in an Object Model Node must have a unique
+/// "name".  Anything else is illegal Object Model.
+static Optional<std::pair<StringRef, DictionaryAttr>>
+scatterOMField(Attribute original, const Attribute root, unsigned &annotationID,
+               llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
+               CircuitOp circuit, size_t &nlaNumber, Location loc,
+               unsigned index) {
+  // The input attribute must be a dictionary.
+  DictionaryAttr dict = original.dyn_cast<DictionaryAttr>();
+  if (!dict) {
+    llvm::errs() << "OMField is not a dictionary, but should be: " << original
+                 << "\n";
+    return None;
+  }
+
+  auto *ctx = circuit.getContext();
+
+  // Generate an arbitrary identifier to use for caching when using
+  // `maybeStringToLocation`.
+  Identifier locatorFilenameCache = Identifier::get(".", ctx);
+  FileLineColLoc fileLineColLocCache;
+
+  // Convert location from a string to a location attribute.
+  auto infoAttr = tryGetAs<StringAttr>(dict, root, "info", loc, omirAnnoClass);
+  if (!infoAttr)
+    return None;
+  auto maybeLoc =
+      maybeStringToLocation(infoAttr.getValue(), false, locatorFilenameCache,
+                            fileLineColLocCache, ctx);
+  mlir::LocationAttr infoLoc;
+  if (maybeLoc.first)
+    infoLoc = maybeLoc.second.getValue();
+  else
+    infoLoc = UnknownLoc::get(ctx);
+
+  // Extract the name attribute.
+  auto nameAttr = tryGetAs<StringAttr>(dict, root, "name", loc, omirAnnoClass);
+  if (!nameAttr)
+    return None;
+
+  // The value attribute is unstructured and just copied over.
+  auto valueAttr = tryGetAs<Attribute>(dict, root, "value", loc, omirAnnoClass);
+  if (!valueAttr)
+    return None;
+  auto newValue =
+      scatterOMIR(valueAttr, annotationID, newAnnotations, circuit, nlaNumber);
+  if (!newValue)
+    return None;
+
+  NamedAttrList values;
+  // We add the index if one was provided.  This can be used later to
+  // reconstruct the order of the original array.
+  values.append("index", IntegerAttr::get(IntegerType::get(ctx, 64), index));
+  values.append("info", infoLoc);
+  values.append("value", newValue.getValue());
+
+  return {{nameAttr.getValue(), DictionaryAttr::getWithSorted(ctx, values)}};
+}
+
+/// Convert an Object Model Node to an optional dictionary, convert source
+/// locator strings to location attributes, and scatter FIRRTL targets into the
+/// circuit.  If this is an illegal Object Model Node, then return None.
+///
+/// An Object Model Node is expected to look like:
+///
+///   - "info": Source Locator String
+///   - "id": String-encoded integer ('OMID' ':' Integer)
+///   - "fields": Array<Object>
+///
+/// The "fields" member may be absent.  If so, then construct an empty array.
+static Optional<DictionaryAttr>
+scatterOMNode(Attribute original, const Attribute root, unsigned &annotationID,
+              llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
+              CircuitOp circuit, size_t &nlaNumber, Location loc) {
+
+  /// The input attribute must be a dictionary.
+  DictionaryAttr dict = original.dyn_cast<DictionaryAttr>();
+  if (!dict) {
+    llvm::errs() << "OMNode is not a dictionary, but should be: " << original
+                 << "\n";
+    return None;
+  }
+
+  NamedAttrList omnode;
+  auto *ctx = circuit.getContext();
+
+  // Generate an arbitrary identifier to use for caching when using
+  // `maybeStringToLocation`.
+  Identifier locatorFilenameCache = Identifier::get(".", ctx);
+  FileLineColLoc fileLineColLocCache;
+
+  // Convert the location from a string to a location attribute.
+  auto infoAttr = tryGetAs<StringAttr>(dict, root, "info", loc, omirAnnoClass);
+  if (!infoAttr)
+    return None;
+  auto maybeLoc =
+      maybeStringToLocation(infoAttr.getValue(), false, locatorFilenameCache,
+                            fileLineColLocCache, ctx);
+  mlir::LocationAttr infoLoc;
+  if (maybeLoc.first)
+    infoLoc = maybeLoc.second.getValue();
+  else
+    infoLoc = UnknownLoc::get(ctx);
+
+  // Extract the OMID.  Don't parse this, just leave it as a string.
+  auto idAttr = tryGetAs<StringAttr>(dict, root, "id", loc, omirAnnoClass);
+  if (!idAttr)
+    return None;
+
+  // Convert the fields from an ArrayAttr to a DictionaryAttr keyed by their
+  // "name".  If no fields member exists, then just create an empty dictionary.
+  // Note that this is safe to construct because all fields must have unique
+  // "name" members relative to each other.
+  auto maybeFields = dict.getAs<ArrayAttr>("fields");
+  DictionaryAttr fields;
+  if (!maybeFields)
+    fields = DictionaryAttr::get(ctx);
+  else {
+    auto fieldAttr = maybeFields.getValue();
+    NamedAttrList fieldAttrs;
+    for (size_t i = 0, e = fieldAttr.size(); i != e; ++i) {
+      auto field = fieldAttr[i];
+      if (auto newField =
+              scatterOMField(field, root, annotationID, newAnnotations, circuit,
+                             nlaNumber, loc, i)) {
+        fieldAttrs.append(newField.getValue().first,
+                          newField.getValue().second);
+        continue;
+      }
+      return None;
+    }
+    fields = DictionaryAttr::get(ctx, fieldAttrs);
+  }
+
+  omnode.append("fields", fields);
+  omnode.append("id", idAttr);
+  omnode.append("info", infoLoc);
+
+  return DictionaryAttr::getWithSorted(ctx, omnode);
+}
+
+/// Main entry point to handle scattering of an OMIRAnnotation.  Return the
+/// modified optional attribute on success and None on failure.  Any scattered
+/// annotations will be added to the reference argument `newAnnotations`.
+static Optional<Attribute> scatterOMIRAnnotation(
+    DictionaryAttr dict, unsigned &annotationID,
+    llvm::StringMap<llvm::SmallVector<Attribute>> &newAnnotations,
+    CircuitOp circuit, size_t &nlaNumber, Location loc) {
+
+  auto nodes = tryGetAs<ArrayAttr>(dict, dict, "nodes", loc, omirAnnoClass);
+  if (!nodes)
+    return None;
+
+  SmallVector<Attribute> newNodes;
+  for (auto node : nodes) {
+    auto newNode = scatterOMNode(node, dict, annotationID, newAnnotations,
+                                 circuit, nlaNumber, loc);
+    if (!newNode)
+      return None;
+    newNodes.push_back(newNode.getValue());
+  }
+
+  auto *ctx = circuit.getContext();
+
+  NamedAttrList newAnnotation;
+  newAnnotation.append("class", StringAttr::get(ctx, omirAnnoClass));
+  newAnnotation.append("nodes", ArrayAttr::get(ctx, newNodes));
+  return DictionaryAttr::get(ctx, newAnnotation);
+}
+
 /// Convert known custom FIRRTL Annotations with compound targets to multiple
 /// attributes that are attached to IR operations where they have semantic
 /// meaning.  This rewrites the input \p annotationMap to convert non-specific
@@ -741,6 +1246,19 @@ bool circt::firrtl::scatterCustomAnnotations(
   /// together.  This mutates the by-reference parameter annotationID.
   auto newID = [&]() {
     return IntegerAttr::get(IntegerType::get(context, 64), annotationID++);
+  };
+
+  /// Add a don't touch annotation for a target.
+  auto addDontTouch = [&](StringRef target,
+                          Optional<ArrayAttr> subfields = {}) {
+    NamedAttrList fields;
+    fields.append(
+        "class",
+        StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
+    if (subfields)
+      fields.append("target", *subfields);
+    newAnnotations[target].push_back(
+        DictionaryAttr::getWithSorted(context, fields));
   };
 
   // Loop over all non-specific annotations that target "~".
@@ -793,14 +1311,9 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto target = canonicalizeTarget(blackBoxAttr.getValue());
       if (!target)
         return false;
-      NamedAttrList dontTouchAnn;
-      dontTouchAnn.append(
-          "class",
-          StringAttr::get(context, "firrtl.transforms.DontTouchAnnotation"));
       newAnnotations[target.getValue()].push_back(
           DictionaryAttr::getWithSorted(context, attrs));
-      newAnnotations[target.getValue()].push_back(
-          DictionaryAttr::getWithSorted(context, dontTouchAnn));
+      addDontTouch(target.getValue());
 
       // Process all the taps.
       auto keyAttr = tryGetAs<ArrayAttr>(dict, dict, "keys", loc, clazz);
@@ -828,13 +1341,7 @@ bool circt::firrtl::scatterCustomAnnotations(
             splitAndAppendTarget(port, maybePortTarget.getValue(), context);
         port.append("class", classAttr);
         port.append("id", id);
-
-        if (portPair.second.hasValue())
-          appendTarget(dontTouchAnn, portPair.second.getValue());
-        newAnnotations[portPair.first].push_back(
-            DictionaryAttr::getWithSorted(context, dontTouchAnn));
-        if (portPair.second.hasValue())
-          dontTouchAnn.pop_back();
+        addDontTouch(portPair.first, portPair.second);
 
         if (classAttr.getValue() ==
             "sifive.enterprise.grandcentral.ReferenceDataTapKey") {
@@ -858,15 +1365,10 @@ bool circt::firrtl::scatterCustomAnnotations(
             nlaSym = buildNLA(circuit, ++nlaNumber, NLATargets);
             source.append("circt.nonlocal", nlaSym);
           }
-          if (leafTarget.second.hasValue())
-            appendTarget(dontTouchAnn, leafTarget.second.getValue());
           source.append("type", StringAttr::get(context, "source"));
           newAnnotations[leafTarget.first].push_back(
               DictionaryAttr::get(context, source));
-          newAnnotations[leafTarget.first].push_back(
-              DictionaryAttr::get(context, dontTouchAnn));
-          if (leafTarget.second.hasValue())
-            dontTouchAnn.pop_back();
+          addDontTouch(leafTarget.first, leafTarget.second);
 
           for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
             NamedAttrList pathmetadata;
@@ -904,8 +1406,7 @@ bool circt::firrtl::scatterCustomAnnotations(
             return false;
           newAnnotations[moduleTarget.getValue()].push_back(
               DictionaryAttr::getWithSorted(context, module));
-          newAnnotations[moduleTarget.getValue()].push_back(
-              DictionaryAttr::getWithSorted(context, dontTouchAnn));
+          addDontTouch(moduleTarget.getValue());
 
           // Port Annotations generation.
           port.append("portID", portID);
@@ -1049,6 +1550,157 @@ bool circt::firrtl::scatterCustomAnnotations(
         return false;
 
       newAnnotations["~"].push_back(prunedAttr.getValue());
+      continue;
+    }
+
+    // Scatter signal driver annotations to the sources *and* the targets of the
+    // drives.
+    if (clazz == "sifive.enterprise.grandcentral.SignalDriverAnnotation") {
+      auto id = newID();
+
+      // Rework the circuit-level annotation to no longer include the
+      // information we are scattering away anyway.
+      NamedAttrList fields;
+      auto annotationsAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "annotations", loc, clazz);
+      auto circuitAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuit", loc, clazz);
+      auto circuitPackageAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuitPackage", loc, clazz);
+      if (!annotationsAttr || !circuitAttr || !circuitPackageAttr)
+        return false;
+      fields.append("class", classAttr);
+      fields.append("id", id);
+      fields.append("annotations", annotationsAttr);
+      fields.append("circuit", circuitAttr);
+      fields.append("circuitPackage", circuitPackageAttr);
+      newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
+
+      // A callback that will scatter every source and sink target pair to the
+      // corresponding two ends of the connection.
+      llvm::StringSet annotatedModules;
+      auto handleTarget = [&](Attribute attr, unsigned i, bool isSource) {
+        auto targetId = newID();
+        DictionaryAttr targetDict = attr.dyn_cast<DictionaryAttr>();
+        if (!targetDict) {
+          mlir::emitError(loc, "SignalDriverAnnotation source and sink target "
+                               "entries must be dictionaries")
+                  .attachNote()
+              << "annotation:" << dict << "\n";
+          return false;
+        }
+
+        // Dig up the two sides of the link.
+        auto path = (Twine(clazz) + "." + (isSource ? "source" : "sink") +
+                     "Targets[" + Twine(i) + "]")
+                        .str();
+        auto remoteAttr =
+            tryGetAs<StringAttr>(targetDict, dict, "_1", loc, path);
+        auto localAttr =
+            tryGetAs<StringAttr>(targetDict, dict, "_2", loc, path);
+        if (!localAttr || !remoteAttr)
+          return false;
+
+        // Build the two annotations.
+        for (auto pair : std::array{std::make_pair(localAttr, true),
+                                    std::make_pair(remoteAttr, false)}) {
+          auto canonTarget = canonicalizeTarget(pair.first.getValue());
+          if (!canonTarget)
+            return false;
+
+          // HACK: Ignore the side of the connection that targets the *other*
+          // circuit. We do this by checking whether the canonicalized target
+          // begins with `~CircuitName|`. If it doesn't, we skip.
+          // TODO: Once we properly support multiple circuits, this can go and
+          // the annotation can scatter properly.
+          StringRef prefix(*canonTarget);
+          if (!(prefix.consume_front("~") &&
+                prefix.consume_front(circuit.name()) &&
+                prefix.consume_front("|"))) {
+            continue;
+          }
+
+          // Assemble the annotation on this side of the connection.
+          NamedAttrList fields;
+          fields.append("class", classAttr);
+          fields.append("id", id);
+          fields.append("targetId", targetId);
+          fields.append("peer", pair.second ? remoteAttr : localAttr);
+          fields.append("side", StringAttr::get(
+                                    context, pair.second ? "local" : "remote"));
+          fields.append("dir",
+                        StringAttr::get(context, isSource ? "source" : "sink"));
+
+          // Handle subfield and non-local targets.
+          auto NLATargets = expandNonLocal(*canonTarget);
+          auto leafTarget = splitAndAppendTarget(
+              fields, std::get<0>(NLATargets.back()), context);
+          if (NLATargets.size() > 1) {
+            buildNLA(circuit, ++nlaNumber, NLATargets);
+            fields.append("circt.nonlocal",
+                          FlatSymbolRefAttr::get(context, *canonTarget));
+          }
+          newAnnotations[leafTarget.first].push_back(
+              DictionaryAttr::get(context, fields));
+
+          // Add a don't touch annotation to whatever this annotation targets.
+          addDontTouch(leafTarget.first, leafTarget.second);
+
+          // Keep track of the enclosing module.
+          annotatedModules.insert(
+              (StringRef(std::get<0>(NLATargets.back())).split("|").first +
+               "|" + std::get<1>(NLATargets.back()))
+                  .str());
+
+          // Annotate instances along the NLA path.
+          for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+            NamedAttrList fields;
+            fields.append("circt.nonlocal",
+                          FlatSymbolRefAttr::get(context, *canonTarget));
+            fields.append("class", StringAttr::get(context, "circt.nonlocal"));
+            newAnnotations[std::get<0>(NLATargets[i])].push_back(
+                DictionaryAttr::get(context, fields));
+          }
+        }
+
+        return true;
+      };
+
+      // Handle the source and sink targets.
+      auto sourcesAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "sourceTargets", loc, clazz);
+      auto sinksAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "sinkTargets", loc, clazz);
+      if (!sourcesAttr || !sinksAttr)
+        return false;
+      unsigned i = 0;
+      for (auto attr : sourcesAttr)
+        if (!handleTarget(attr, i++, true))
+          return false;
+      i = 0;
+      for (auto attr : sinksAttr)
+        if (!handleTarget(attr, i++, false))
+          return false;
+
+      // Indicate which modules have embedded `SignalDriverAnnotation`s.
+      for (auto &module : annotatedModules) {
+        NamedAttrList fields;
+        fields.append("class", classAttr);
+        fields.append("id", id);
+        newAnnotations[module.getKey()].push_back(
+            DictionaryAttr::get(context, fields));
+      }
+
+      continue;
+    }
+
+    // Scatter trackers out from OMIR JSON.
+    if (clazz == omirAnnoClass) {
+      auto newAnno = scatterOMIRAnnotation(dict, annotationID, newAnnotations,
+                                           circuit, nlaNumber, loc);
+      if (!newAnno)
+        return false;
+      newAnnotations["~"].push_back(newAnno.getValue());
       continue;
     }
 

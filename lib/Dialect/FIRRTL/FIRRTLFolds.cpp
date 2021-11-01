@@ -987,6 +987,21 @@ LogicalResult CatPrimOp::canonicalize(CatPrimOp op, PatternRewriter &rewriter) {
   return failure();
 }
 
+OpFoldResult BitCastOp::fold(ArrayRef<Attribute> operands) {
+  auto op = (*this);
+  // BitCast is redundant if input and result types are same.
+  if (op.getType() == op.input().getType())
+    return op.input();
+
+  // Two consecutive BitCasts are redundant if first bitcast type is same as the
+  // final result type.
+  if (BitCastOp in = dyn_cast_or_null<BitCastOp>(op.input().getDefiningOp()))
+    if (op.getType() == in.input().getType())
+      return in.input();
+
+  return {};
+}
+
 OpFoldResult BitsPrimOp::fold(ArrayRef<Attribute> operands) {
   auto inputType = input().getType().cast<FIRRTLType>();
   // If we are extracting the entire input, then return it.
@@ -1549,10 +1564,10 @@ struct foldResetMux : public mlir::RewritePattern {
 
 void RegResetOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                              MLIRContext *context) {
-  results.insert<patterns::RegresetWithZeroReset,
-                 patterns::RegresetWithInvalidReset,
-                 patterns::RegresetWithInvalidResetValue, foldResetMux,
-                 patterns::DropNameRegReset>(context);
+  results.insert<patterns::RegResetWithZeroReset,
+                 patterns::RegResetWithInvalidReset,
+                 patterns::RegResetWithInvalidResetValue,
+                 patterns::DropNameRegReset, foldResetMux>(context);
 }
 
 LogicalResult MemOp::canonicalize(MemOp op, PatternRewriter &rewriter) {

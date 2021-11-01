@@ -136,11 +136,9 @@ of your pipeline should work well:
   modulePM.addPass(createCSEPass());
   modulePM.addPass(createSimpleCanonicalizerPass());
 
-  // Required: Legalize unsupported operations within modules.
+  // Required: Legalize unsupported operations within modules.  Do not run
+  // passes after this that aren't aware of LoweringOptions.
   modulePM.addPass(sv::createHWLegalizeModulesPass());
-
-  // Required: Legalize the names of modules themselves.
-  pm.addPass(sv::createHWLegalizeNamesPass());
 
   // Optional: Tidy up the IR to improve verilog emission quality.
   modulePM.addPass(sv::createPrettifyVerilogPass());
@@ -148,9 +146,6 @@ of your pipeline should work well:
   // Actually export the module.
   exportVerilog(theModule, ...);
 ```
-
-It isn't safe to run an arbitrary passes after the legalization passes because
-those passes could reintroduce an invalid construct.  TODO: [HWLegalizeNames should go away](https://github.com/llvm/circt/issues/1708) to fix this problem.
 
 ## `exportVerilog` Internals
 

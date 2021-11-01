@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -create-dataflow -split-input-file -verify-diagnostics
+// RUN: circt-opt %s -lower-std-to-handshake -split-input-file -verify-diagnostics
 
 // expected-error @+1 {{'handshake.func' op failed to rewrite Affine loops}}
 func @doubly_nested()->() {

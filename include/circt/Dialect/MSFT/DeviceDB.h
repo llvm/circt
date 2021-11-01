@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Represent the possible placements and actual placements of primitives on an
-// FPGA.
+// Represent the placements of primitives on an FPGA.
 //
 //===----------------------------------------------------------------------===//
 
@@ -22,6 +21,37 @@
 namespace circt {
 namespace msft {
 
+/// A data structure to contain locations of the primitives on the
+/// device.
+class PrimitiveDB {
+public:
+  /// Create a DB treating 'top' as the root module.
+  PrimitiveDB(MLIRContext *);
+
+  /// Place a primitive at a location.
+  LogicalResult addPrimitive(PhysLocationAttr);
+  /// Check to see if a primitive exists.
+  bool isValidLocation(PhysLocationAttr);
+
+  /// Iterate over all the primitive locations, executing 'callback' on each
+  /// one.
+  void foreach (function_ref<void(PhysLocationAttr)> callback) const;
+
+private:
+  using DimPrimitiveType = DenseSet<PrimitiveType>;
+  using DimNumMap = DenseMap<size_t, DimPrimitiveType>;
+  using DimYMap = DenseMap<size_t, DimNumMap>;
+  using DimXMap = DenseMap<size_t, DimYMap>;
+
+  /// Get the leaf node. Abstract this out to make it easier to change the
+  /// underlying data structure.
+  DimPrimitiveType &getLeaf(PhysLocationAttr);
+  // TODO: Create read-only version of getLeaf.
+
+  DimXMap placements;
+  MLIRContext *ctxt;
+};
+
 /// A data structure to contain both the locations of the primitives on the
 /// device and instance assignments to said primitives locations, aka
 /// placements.
@@ -30,10 +60,11 @@ namespace msft {
 /// transforms. As a result, this class should only be used for analysis and
 /// then thrown away. It is permissible to persist it through transformations so
 /// long as it is maintained along with the transformations.
-class DeviceDB {
+class PlacementDB {
 public:
   /// Create a DB treating 'top' as the root module.
-  DeviceDB(Operation *top);
+  PlacementDB(Operation *top);
+  PlacementDB(Operation *top, const PrimitiveDB &seed);
 
   // TODO: Add calls to model the device primitive locations.
 
@@ -58,19 +89,34 @@ public:
   /// Lookup the instance at a particular location.
   Optional<PlacedInstance> getInstanceAt(PhysLocationAttr);
 
-  /// Walk the placement information in some sort of reasonable order.
-  void walkPlacements(function_ref<void(PhysLocationAttr, PlacedInstance)>);
+  /// Find the nearest unoccupied primitive location to 'nearestToY' in
+  /// 'column'.
+  PhysLocationAttr getNearestFreeInColumn(PrimitiveType prim, uint64_t column,
+                                          uint64_t nearestToY);
+
+  /// Walk the placement information in some sort of reasonable order. Bounds
+  /// restricts the walk to a rectangle of [xmin, xmax, ymin, ymax] (inclusive),
+  /// with -1 meaning unbounded.
+  void walkPlacements(function_ref<void(PhysLocationAttr, PlacedInstance)>,
+                      std::tuple<int64_t, int64_t, int64_t, int64_t> bounds =
+                          std::make_tuple(-1, -1, -1, -1),
+                      Optional<PrimitiveType> primType = {});
 
 private:
   MLIRContext *ctxt;
   Operation *top;
 
-  using DimDevType = DenseMap<DeviceType, PlacedInstance>;
+  using DimDevType = DenseMap<PrimitiveType, PlacedInstance>;
   using DimNumMap = DenseMap<size_t, DimDevType>;
   using DimYMap = DenseMap<size_t, DimNumMap>;
   using DimXMap = DenseMap<size_t, DimYMap>;
 
+  /// Get the leaf node. Abstract this out to make it easier to change the
+  /// underlying data structure.
+  Optional<PlacedInstance *> getLeaf(PhysLocationAttr);
+
   DimXMap placements;
+  bool seeded;
 };
 
 } // namespace msft

@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import pycde
-from pycde import (Input, Output, Parameter, module, externmodule, generator,
-                   types, dim)
+from pycde import (Input, Output, module, externmodule, generator, types, dim)
 from circt.dialects import comb, hw
 from circt.support import connect
 
@@ -19,11 +18,9 @@ def PolynomialCompute(coefficients: Coefficients):
     x = Input(types.i32)
     y = Output(types.int(8 * 4))
 
-    unused_parameter = Parameter(True)
-
     def __init__(self, name: str):
       """coefficients is in 'd' -> 'a' order."""
-      self.instanceName = name
+      self.instance_name = name
 
     @staticmethod
     def get_module_name():
@@ -53,7 +50,7 @@ def PolynomialCompute(coefficients: Coefficients):
         taps.append(newPartialSum)
 
       # Final output
-      return {"y": taps[-1]}
+      mod.y = taps[-1]
 
   return PolynomialCompute
 
@@ -67,6 +64,15 @@ class CoolPolynomialCompute:
     self.coefficients = coefficients
 
 
+@externmodule("parameterized_extern")
+def ExternWithParams(a, b):
+
+  class M:
+    pass
+
+  return M
+
+
 class Coefficients:
 
   def __init__(self, coeff):
@@ -78,7 +84,7 @@ class PolynomialSystem:
   y = Output(types.i32)
 
   @generator
-  def construct(_):
+  def construct(ports):
     i32 = types.i32
     x = hw.ConstantOp.create(i32, 23)
     poly = PolynomialCompute(Coefficients([62, 42, 6]))("example")
@@ -89,33 +95,46 @@ class PolynomialSystem:
 
     cp = CoolPolynomialCompute([4, 42])
     cp.x.connect(23)
-    return {"y": poly.y}
+
+    m = ExternWithParams(8, 3)()
+    m.name = "pexternInst"
+
+    ports.y = poly.y
 
 
 poly = pycde.System([PolynomialSystem])
+poly.print()
 
 print("Generating 1...")
 poly.generate(iters=1)
 
 print("Printing...")
 poly.print()
-# CHECK-LABEL:  hw.module @pycde.PolynomialSystem() -> (y: i32)
-# CHECK:    [[REG0:%.+]] = "pycde.PolynomialCompute"(%c23_i32) {instanceName = "example", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG1:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [62, 42, 6]}, module_name = "PolyComputeForCoeff_62_42_6", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG2:%.+]] = "pycde.PolynomialCompute"([[REG0]]) {instanceName = "example2", opNames = ["x"], parameters = {coefficients = {coeff = [1, 2, 3, 4, 5]}, module_name = "PolyComputeForCoeff_1_2_3_4_5", unused_parameter = true}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    [[REG3:%.+]] = "pycde.CoolPolynomialCompute"(%c23_i32{{.*}}) {coefficients = [4, 42], opNames = ["x"], parameters = {}, resultNames = ["y"]} : (i32) -> i32
-# CHECK:    hw.output [[REG0]] : i32
+# CHECK-LABEL: msft.module @PolynomialSystem {} () -> (y: i32) {
+# CHECK:         %example.y = msft.instance @example @PolyComputeForCoeff_62_42_6(%c23_i32) : (i32) -> i32
+# CHECK:         %example2.y = msft.instance @example2 @PolyComputeForCoeff_62_42_6(%example.y) : (i32) -> i32
+# CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff_1_2_3_4_5(%example.y) : (i32) -> i32
+# CHECK:         %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %{{.+}}: i32) -> (y: i32)
+# CHECK:         hw.instance "M" @parameterized_extern<a: i64 = 8, b: i64 = 3>() -> ()
+# CHECK:         msft.output %example.y : i32
+# CHECK:       }
+# CHECK:       msft.module @PolyComputeForCoeff_62_42_6 {coefficients = {coeff = [62, 42, 6]}} (%x: i32) -> (y: i32)
+# CHECK:       msft.module @PolyComputeForCoeff_1_2_3_4_5 {coefficients = {coeff = [1, 2, 3, 4, 5]}} (%x: i32) -> (y: i32)
+# CHECK:       hw.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
+# CHECK:       hw.module.extern @parameterized_extern<a: i64, b: i64>() attributes {verilogName = "parameterized_extern"}
 
-print("Generating 2...")
-poly.generate(iters=1)
+print("Generating rest...")
+poly.generate()
 
-print("Printing...")
+print("=== Post-generate IR...")
+poly.run_passes()
 poly.print()
-# CHECK-LABEL: hw.module @pycde.PolynomialSystem
-# CHECK: %example.y = hw.instance "example" @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32) {parameters = {}}
-# CHECK: %example2.y = hw.instance "example2" @PolyComputeForCoeff_62_42_6(x: %example.y: i32) -> (y: i32) {parameters = {}}
-# CHECK: %example2.y_0 = hw.instance "example2" @PolyComputeForCoeff_1_2_3_4_5(x: %example.y: i32) -> (y: i32) {parameters = {}}
-# CHECK: %pycde.CoolPolynomialCompute.y = hw.instance "pycde.CoolPolynomialCompute" @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32) {coefficients = [4, 42], parameters = {}}
+# CHECK-LABEL: === Post-generate IR...
+# CHECK: hw.module @PolynomialSystem
+# CHECK: %example.y = hw.instance "example" sym @example @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
+# CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6(x: %0: i32) -> (y: i32)
+# CHECK: %example2_1.y = hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %1: i32) -> (y: i32)
+# CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
 # CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (y: i32)
 # CHECK: hw.constant 62
 # CHECK: hw.constant 42

@@ -65,12 +65,6 @@ public:
   /// Get an annotation set for the specified module port.
   static AnnotationSet forPort(FModuleLike module, size_t portNo);
 
-  /// Get an annotation set for the specified module port, as well as other
-  /// argument attributes.
-  static AnnotationSet
-  forPort(FModuleLike module, size_t portNo,
-          SmallVectorImpl<NamedAttribute> &otherAttributes);
-
   /// Get an annotation set for the specified value.
   static AnnotationSet get(Value v);
 
@@ -79,10 +73,6 @@ public:
 
   /// Return this annotation set as an ArrayAttr.
   ArrayAttr getArrayAttr() const { return annotations; }
-
-  /// Return this annotation set as an argument attribute dictionary for a port.
-  DictionaryAttr
-  getArgumentAttrDict(ArrayRef<NamedAttribute> otherPortAttrs = {}) const;
 
   /// Store the annotations in this set in an operation's `annotations`
   /// attribute, overwriting any existing annotations. Removes the `annotations`
@@ -169,6 +159,13 @@ public:
 
   /// firrtl.transforms.DontTouchAnnotation
   bool hasDontTouch() const;
+  bool setDontTouch(bool dontTouch);
+  bool addDontTouch();
+  bool removeDontTouch();
+  static bool hasDontTouch(Operation *op);
+  static bool setDontTouch(Operation *op, bool dontTouch);
+  static bool addDontTouch(Operation *op);
+  static bool removeDontTouch(Operation *op);
 
   bool operator==(const AnnotationSet &other) const {
     return annotations == other.annotations;
@@ -190,6 +187,7 @@ public:
   /// removed, false otherwise.
   bool removeAnnotation(Annotation anno);
   bool removeAnnotation(Attribute anno);
+  bool removeAnnotation(StringRef className);
 
   /// Remove all annotations from this annotation set for which `predicate`
   /// returns true. The predicate is guaranteed to be called on every

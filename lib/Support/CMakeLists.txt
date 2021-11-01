@@ -3,10 +3,11 @@
 ##===----------------------------------------------------------------------===//
 
 
-file(GLOB globbed *.cpp)
-
 add_circt_library(CIRCTSupport
-  ${globbed}
+  BackedgeBuilder.cpp
+  FieldRef.cpp
+  LoweringOptions.cpp
+  Path.cpp
   
   ADDITIONAL_HEADER_DIRS
 

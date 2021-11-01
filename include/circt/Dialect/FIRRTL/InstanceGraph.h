@@ -41,6 +41,8 @@ public:
   InstanceGraphNode *getTarget() const { return target; }
 
 private:
+  friend class InstanceGraph;
+
   /// The InstanceOp that this is tracking.
   InstanceOp instance;
 
@@ -169,6 +171,18 @@ public:
   iterator begin() { return nodes.begin(); }
   iterator end() { return nodes.end(); }
 
+  //===-------------------------------------------------------------------------
+  // Methods to keep an InstanceGraph up to date.
+  //
+  // These methods are not thread safe.  Make sure that modifications are
+  // properly synchronized or performed in a serial context.  When the
+  // InstanceGraph is used as an analysis, this is only safe when the pass is
+  // on a CircuitOp.
+
+  // Replaces an instance of a module with another instance. The target module
+  // of both InstanceOps must be the same.
+  void replaceInstance(InstanceOp inst, InstanceOp newInst);
+
 private:
   /// Get the node corresponding to the module.  If the node has does not exist
   /// yet, it will be created.
@@ -188,11 +202,16 @@ private:
 using InstancePath = ArrayRef<InstanceOp>;
 
 template <typename T>
-static T &operator<<(T &os, const InstancePath &path) {
-  os << "$root";
+inline static T &formatInstancePath(T &into, const InstancePath &path) {
+  into << "$root";
   for (auto inst : path)
-    os << "/" << inst.name() << ":" << inst.moduleName();
-  return os;
+    into << "/" << inst.name() << ":" << inst.moduleName();
+  return into;
+}
+
+template <typename T>
+static T &operator<<(T &os, const InstancePath &path) {
+  return formatInstancePath(os, path);
 }
 
 /// A data structure that caches and provides absolute paths to module instances
@@ -221,7 +240,7 @@ private:
 
 namespace llvm {
 template <>
-struct GraphTraits<circt::firrtl::InstanceGraphNode> {
+struct GraphTraits<circt::firrtl::InstanceGraphNode *> {
   using NodeType = circt::firrtl::InstanceGraphNode;
   using NodeRef = NodeType *;
 
@@ -244,7 +263,7 @@ struct GraphTraits<circt::firrtl::InstanceGraphNode> {
 
 template <>
 struct GraphTraits<circt::firrtl::InstanceGraph *>
-    : public GraphTraits<circt::firrtl::InstanceGraphNode> {
+    : public GraphTraits<circt::firrtl::InstanceGraphNode *> {
   using nodes_iterator = circt::firrtl::InstanceGraph::iterator;
 
   static NodeRef getEntryNode(circt::firrtl::InstanceGraph *instanceGraph) {

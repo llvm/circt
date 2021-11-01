@@ -4,7 +4,8 @@
 import circt
 from circt.dialects import hw
 
-from mlir.ir import Context, Location, InsertionPoint, IntegerType, IntegerAttr, Module
+from mlir.ir import (Context, Location, InsertionPoint, IntegerType,
+                     IntegerAttr, Module, StringAttr, TypeAttr)
 
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
@@ -63,3 +64,16 @@ with Context() as ctx, Location.unknown():
   print(typeAlias.inner_type)
   print(typeAlias.scope)
   print(typeAlias.name)
+
+  pdecl = hw.ParamDeclAttr.get("param1", TypeAttr.get(i32),
+                               IntegerAttr.get(i32, 13))
+  # CHECK: #hw.param.decl<"param1": i32 = 13 : i32>
+  print(pdecl)
+
+  pdecl = hw.ParamDeclAttr.get_nodefault("param2", TypeAttr.get(i32))
+  # CHECK: #hw.param.decl<"param2": i32>
+  print(pdecl)
+
+  pverbatim = hw.ParamVerbatimAttr.get(StringAttr.get("this is verbatim"))
+  # CHECK: #hw.param.verbatim<"this is verbatim">
+  print(pverbatim)

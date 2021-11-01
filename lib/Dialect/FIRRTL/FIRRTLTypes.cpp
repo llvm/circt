@@ -127,9 +127,9 @@ static ParseResult parseFIRRTLType(FIRRTLType &result,
 ///
 /// bundle-elt ::= identifier ':' type
 /// ```
-static OptionalParseResult customTypeParser(MLIRContext *context,
-                                            DialectAsmParser &parser,
+static OptionalParseResult customTypeParser(DialectAsmParser &parser,
                                             StringRef name, Type &result) {
+  auto *context = parser.getContext();
   if (name.equals("clock"))
     return result = ClockType::get(context), success();
   if (name.equals("reset"))
@@ -161,44 +161,38 @@ static OptionalParseResult customTypeParser(MLIRContext *context,
   }
 
   if (name.equals("bundle")) {
-    if (parser.parseLess())
-      return failure();
-
     SmallVector<BundleType::BundleElement, 4> elements;
-    if (parser.parseOptionalGreater()) {
-      // Parse all of the bundle-elt's.
-      do {
-        std::string nameStr;
-        StringRef name;
-        FIRRTLType type;
 
-        // The 'name' can be an identifier or an integer.
-        auto parseIntOrStringName = [&]() -> ParseResult {
-          uint32_t fieldIntName;
-          auto intName = parser.parseOptionalInteger(fieldIntName);
-          if (intName.hasValue()) {
-            nameStr = llvm::utostr(fieldIntName);
-            name = nameStr;
-            return intName.getValue();
-          }
+    auto parseBundleElement = [&]() -> ParseResult {
+      std::string nameStr;
+      StringRef name;
+      FIRRTLType type;
 
-          // Otherwise must be an identifier.
-          return parser.parseKeyword(&name);
-          return success();
-        };
-
-        if (parseIntOrStringName())
+      // The 'name' can be an identifier or an integer.
+      uint32_t fieldIntName;
+      auto intName = parser.parseOptionalInteger(fieldIntName);
+      if (intName.hasValue()) {
+        if (failed(intName.getValue()))
           return failure();
-        bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
-        if (parser.parseColon() || parseFIRRTLType(type, parser))
+        nameStr = llvm::utostr(fieldIntName);
+        name = nameStr;
+      } else {
+        // Otherwise must be an identifier.
+        if (parser.parseKeyword(&name))
           return failure();
+      }
 
-        elements.push_back({StringAttr::get(context, name), isFlip, type});
-      } while (!parser.parseOptionalComma());
-
-      if (parser.parseGreater())
+      bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
+      if (parser.parseColon() || parseFIRRTLType(type, parser))
         return failure();
-    }
+
+      elements.push_back({StringAttr::get(context, name), isFlip, type});
+      return success();
+    };
+
+    if (parser.parseCommaSeparatedList(mlir::AsmParser::Delimiter::LessGreater,
+                                       parseBundleElement))
+      return failure();
 
     return result = BundleType::get(elements, context), success();
   }
@@ -225,16 +219,15 @@ static OptionalParseResult customTypeParser(MLIRContext *context,
 /// refer to a type defined in this dialect.
 static ParseResult parseType(Type &result, StringRef name,
                              DialectAsmParser &parser) {
-  auto *context = parser.getBuilder().getContext();
   OptionalParseResult parseResult;
 
   // Try the generated type parser.
-  parseResult = generatedTypeParser(context, parser, name, result);
+  parseResult = generatedTypeParser(parser, name, result);
   if (parseResult.hasValue())
     return parseResult.getValue();
 
   // Try the custom type parser.
-  parseResult = customTypeParser(context, parser, name, result);
+  parseResult = customTypeParser(parser, name, result);
   if (parseResult.hasValue())
     return parseResult.getValue();
 
@@ -979,7 +972,7 @@ void CMemoryType::print(mlir::DialectAsmPrinter &printer) const {
   printer << ", " << getNumElements() << ">";
 }
 
-Type CMemoryType::parse(MLIRContext *context, DialectAsmParser &parser) {
+Type CMemoryType::parse(DialectAsmParser &parser) {
   FIRRTLType elementType;
   unsigned numElements;
   if (parser.parseLess() || parseFIRRTLType(elementType, parser) ||
@@ -1008,4 +1001,40 @@ void FIRRTLDialect::registerTypes() {
            BundleType, FVectorType,
            // CHIRRTL Types
            CMemoryType, CMemoryPortType>();
+}
+
+// Get the bit width for this type, return None  if unknown. Unlike
+// getBitWidthOrSentinel(), this can recursively compute the bitwidth of
+// aggregate types. For bundle and vectors, recursively get the width of each
+// field element and return the total bit width of the aggregate type. This
+// returns None, if any of the bundle fields is a flip type, or ground type with
+// unknown bit width.
+llvm::Optional<int32_t> firrtl::getBitWidth(FIRRTLType type) {
+  std::function<llvm::Optional<int32_t>(FIRRTLType)> getWidth =
+      [&](FIRRTLType type) -> llvm::Optional<int32_t> {
+    return TypeSwitch<FIRRTLType, llvm::Optional<int32_t>>(type)
+        .Case<BundleType>([&](BundleType bundle) {
+          int32_t width = 0;
+          for (auto &elt : bundle.getElements()) {
+            if (elt.isFlip)
+              return llvm::Optional<int32_t>(None);
+            auto w = getBitWidth(elt.type);
+            if (!w.hasValue())
+              return llvm::Optional<int32_t>(None);
+            width += w.getValue();
+          }
+          return llvm::Optional<int32_t>(width);
+        })
+        .Case<FVectorType>([&](auto vector) {
+          auto w = getBitWidth(vector.getElementType());
+          if (!w.hasValue())
+            return llvm::Optional<int32_t>(None);
+          return llvm::Optional<int32_t>(w.getValue() *
+                                         vector.getNumElements());
+        })
+        .Case<IntType>([&](IntType iType) { return iType.getWidth(); })
+        .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+        .Default([&](auto t) { return llvm::Optional<int32_t>(None); });
+  };
+  return getWidth(type);
 }

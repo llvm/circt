@@ -2001,5 +2001,13 @@ firrtl.module @namedrop(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in
   firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK: firrtl.connect %out, %in
 }
+  firrtl.module @BitCast(out %o:!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>> ) {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<3>)
+    %b2 = firrtl.bitcast %b : (!firrtl.uint<3>) -> (!firrtl.uint<3>)
+    %c = firrtl.bitcast %b2 :  (!firrtl.uint<3>)-> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>)
+    firrtl.connect %o, %c : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+    // CHECK: firrtl.connect %o, %a : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+  }
 
 }

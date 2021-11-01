@@ -34,54 +34,64 @@ MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
 }
 
 //===----------------------------------------------------------------------===//
-// Generator registration.
+// PrimitiveDB.
 //===----------------------------------------------------------------------===//
 
-void mlirMSFTRegisterGenerator(MlirContext cCtxt, const char *opName,
-                               const char *generatorName,
-                               mlirMSFTGeneratorCallback cb,
-                               MlirAttribute parameters) {
-  mlir::MLIRContext *ctxt = unwrap(cCtxt);
-  MSFTDialect *msft = ctxt->getLoadedDialect<MSFTDialect>();
-  msft->registerGenerator(
-      llvm::StringRef(opName), llvm::StringRef(generatorName),
-      [cb](mlir::Operation *op) {
-        return unwrap(cb.callback(wrap(op), cb.userData));
-      },
-      unwrap(parameters));
+DEFINE_C_API_PTR_METHODS(CirctMSFTPrimitiveDB, circt::msft::PrimitiveDB)
+
+CirctMSFTPrimitiveDB circtMSFTCreatePrimitiveDB(MlirContext ctxt) {
+  return wrap(new PrimitiveDB(unwrap(ctxt)));
+}
+void circtMSFTDeletePrimitiveDB(CirctMSFTPrimitiveDB self) {
+  delete unwrap(self);
+}
+MlirLogicalResult circtMSFTPrimitiveDBAddPrimitive(CirctMSFTPrimitiveDB self,
+                                                   MlirAttribute cLoc) {
+  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  return wrap(unwrap(self)->addPrimitive(loc));
+}
+bool circtMSFTPrimitiveDBIsValidLocation(CirctMSFTPrimitiveDB self,
+                                         MlirAttribute cLoc) {
+  PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
+  return unwrap(self)->isValidLocation(loc);
 }
 
 //===----------------------------------------------------------------------===//
-// DeviceDB.
+// PlacementDB.
 //===----------------------------------------------------------------------===//
 
-DEFINE_C_API_PTR_METHODS(CirctMSFTDeviceDB, circt::msft::DeviceDB)
+DEFINE_C_API_PTR_METHODS(CirctMSFTPlacementDB, circt::msft::PlacementDB)
 
-CirctMSFTDeviceDB circtMSFTCreateDeviceDB(MlirOperation top) {
-  return wrap(new DeviceDB(unwrap(top)));
+CirctMSFTPlacementDB circtMSFTCreatePlacementDB(MlirOperation top,
+                                                CirctMSFTPrimitiveDB seed) {
+  if (seed.ptr == nullptr)
+    return wrap(new PlacementDB(unwrap(top)));
+  return wrap(new PlacementDB(unwrap(top), *unwrap(seed)));
 }
-void circtMSFTDeleteDeviceDB(CirctMSFTDeviceDB self) { delete unwrap(self); }
-size_t circtMSFTDeviceDBAddDesignPlacements(CirctMSFTDeviceDB self) {
+void circtMSFTDeletePlacementDB(CirctMSFTPlacementDB self) {
+  delete unwrap(self);
+}
+size_t circtMSFTPlacementDBAddDesignPlacements(CirctMSFTPlacementDB self) {
   return unwrap(self)->addDesignPlacements();
 }
-MlirLogicalResult circtMSFTDeviceDBAddPlacement(CirctMSFTDeviceDB self,
-                                                MlirAttribute cLoc,
-                                                CirctMSFTPlacedInstance cInst) {
+MlirLogicalResult
+circtMSFTPlacementDBAddPlacement(CirctMSFTPlacementDB self, MlirAttribute cLoc,
+                                 CirctMSFTPlacedInstance cInst) {
   PhysLocationAttr loc = unwrap(cLoc).cast<PhysLocationAttr>();
   RootedInstancePathAttr path =
       unwrap(cInst.path).cast<RootedInstancePathAttr>();
   StringAttr subpath = StringAttr::get(
       loc.getContext(), StringRef(cInst.subpath, cInst.subpathLength));
   auto inst =
-      DeviceDB::PlacedInstance{path, subpath.getValue(), unwrap(cInst.op)};
+      PlacementDB::PlacedInstance{path, subpath.getValue(), unwrap(cInst.op)};
 
   return wrap(unwrap(self)->addPlacement(loc, inst));
 }
-bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB self,
-                                       MlirAttribute cLoc,
-                                       CirctMSFTPlacedInstance *out) {
+bool circtMSFTPlacementDBTryGetInstanceAt(CirctMSFTPlacementDB self,
+                                          MlirAttribute cLoc,
+                                          CirctMSFTPlacedInstance *out) {
   auto loc = unwrap(cLoc).cast<PhysLocationAttr>();
-  Optional<DeviceDB::PlacedInstance> inst = unwrap(self)->getInstanceAt(loc);
+  Optional<PlacementDB::PlacedInstance> inst = unwrap(self)->getInstanceAt(loc);
   if (!inst)
     return false;
   if (out != nullptr) {
@@ -93,16 +103,44 @@ bool circtMSFTDeviceDBTryGetInstanceAt(CirctMSFTDeviceDB self,
   return true;
 }
 
+MlirAttribute circtMSFTPlacementDBGetNearestFreeInColumn(
+    CirctMSFTPlacementDB cdb, CirctMSFTPrimitiveType prim, uint64_t column,
+    uint64_t nearestToY) {
+  auto db = unwrap(cdb);
+  return wrap(
+      db->getNearestFreeInColumn((PrimitiveType)prim, column, nearestToY));
+}
+
+void circtMSFTPlacementDBWalkPlacements(CirctMSFTPlacementDB cdb,
+                                        CirctMSFTPlacementCallback ccb,
+                                        int64_t bounds[4],
+                                        CirctMSFTPrimitiveType cPrimTypeFilter,
+                                        void *userData) {
+  PlacementDB *db = unwrap(cdb);
+  auto cb = [ccb, userData](PhysLocationAttr loc,
+                            PlacementDB::PlacedInstance p) {
+    CirctMSFTPlacedInstance cPlacement = {wrap(p.path), p.subpath.data(),
+                                          p.subpath.size(), wrap(p.op)};
+    ccb(wrap(loc), cPlacement, userData);
+  };
+  Optional<PrimitiveType> primTypeFilter;
+  if (cPrimTypeFilter >= 0)
+    primTypeFilter = static_cast<PrimitiveType>(cPrimTypeFilter);
+  db->walkPlacements(
+      cb, std::make_tuple(bounds[0], bounds[1], bounds[2], bounds[3]),
+      primTypeFilter);
+}
+
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
 //===----------------------------------------------------------------------===//
 
 void mlirMSFTAddPhysLocationAttr(MlirOperation cOp, const char *entityName,
-                                 DeviceType type, long x, long y, long num) {
+                                 PrimitiveType type, long x, long y, long num) {
   mlir::Operation *op = unwrap(cOp);
   mlir::MLIRContext *ctxt = op->getContext();
-  PhysLocationAttr loc =
-      PhysLocationAttr::get(ctxt, DeviceTypeAttr::get(ctxt, type), x, y, num);
+  PhysLocationAttr loc = PhysLocationAttr::get(
+      ctxt, PrimitiveTypeAttr::get(ctxt, type), x, y, num);
   llvm::SmallString<64> entity("loc:");
   entity.append(entityName);
   op->setAttr(entity, loc);
@@ -112,27 +150,29 @@ bool circtMSFTAttributeIsAPhysLocationAttribute(MlirAttribute attr) {
   return unwrap(attr).isa<PhysLocationAttr>();
 }
 MlirAttribute circtMSFTPhysLocationAttrGet(MlirContext cCtxt,
-                                           CirctMSFTDevType devType, uint64_t x,
-                                           uint64_t y, uint64_t num) {
+                                           CirctMSFTPrimitiveType devType,
+                                           uint64_t x, uint64_t y,
+                                           uint64_t num) {
   auto ctxt = unwrap(cCtxt);
   return wrap(PhysLocationAttr::get(
-      ctxt, DeviceTypeAttr::get(ctxt, (DeviceType)devType), x, y, num));
+      ctxt, PrimitiveTypeAttr::get(ctxt, (PrimitiveType)devType), x, y, num));
 }
 
-CirctMSFTDevType circtMSFTPhysLocationAttrGetDeviceType(MlirAttribute attr) {
-  return (CirctMSFTDevType)unwrap(attr)
+CirctMSFTPrimitiveType
+circtMSFTPhysLocationAttrGetPrimitiveType(MlirAttribute attr) {
+  return (CirctMSFTPrimitiveType)unwrap(attr)
       .cast<PhysLocationAttr>()
-      .getDevType()
+      .getPrimitiveType()
       .getValue();
 }
 uint64_t circtMSFTPhysLocationAttrGetX(MlirAttribute attr) {
-  return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getX();
+  return (CirctMSFTPrimitiveType)unwrap(attr).cast<PhysLocationAttr>().getX();
 }
 uint64_t circtMSFTPhysLocationAttrGetY(MlirAttribute attr) {
-  return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getY();
+  return (CirctMSFTPrimitiveType)unwrap(attr).cast<PhysLocationAttr>().getY();
 }
 uint64_t circtMSFTPhysLocationAttrGetNum(MlirAttribute attr) {
-  return (CirctMSFTDevType)unwrap(attr).cast<PhysLocationAttr>().getNum();
+  return (CirctMSFTPrimitiveType)unwrap(attr).cast<PhysLocationAttr>().getNum();
 }
 
 bool circtMSFTAttributeIsARootedInstancePathAttribute(MlirAttribute cAttr) {

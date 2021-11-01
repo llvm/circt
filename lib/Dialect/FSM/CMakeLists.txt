@@ -1,7 +1,7 @@
-file(GLOB globbed *.cpp)
-
 add_circt_dialect_library(CIRCTFSM
-  ${globbed}
+  FSMDialect.cpp
+  FSMOps.cpp
+  FSMTypes.cpp
 
   DEPENDS
   MLIRFSMIncGen

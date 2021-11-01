@@ -52,6 +52,78 @@ firrtl.circuit "" {
 
 // -----
 
+firrtl.circuit "foo" {
+// expected-error @+1 {{ports should all be FIRRTL types}}
+firrtl.module @foo(in %a: i1) {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{requires 1 port directions}}
+firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portDirections = 3 : i2} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{requires 1 port names}}
+firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portNames=[]} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{port names should all be string attributes}}
+firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portNames=[1 : i1]} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{op requires 1 port annotations}}
+firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portAnnotations=[[], []]} {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{annotations must be dictionaries or subannotations}}
+firrtl.module @foo(in %a: !firrtl.uint<1> ["hello"]) {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{requires one region}}
+"firrtl.module"() ( { }, { })
+   {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+    portNames = ["in0"], portAnnotations = []} : () -> ()
+}
+
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{entry block must have 1 arguments to match module signature}}
+"firrtl.module"() ( {
+  ^entry:
+}) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+    portNames = ["in0"], portAnnotations = []} : () -> ()
+}
+
+// -----
+
+firrtl.circuit "foo" {
+// expected-error @+1 {{block argument types should match signature types}}
+"firrtl.module"() ( {
+  ^entry(%a: i1):
+}) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
+    portNames = ["in0"], portAnnotations = []} : () -> ()
+}
+
+// -----
+
 firrtl.circuit "Foo" {
 firrtl.module @Foo() {
   // expected-error @+1 {{invalid kind of type specified}}
@@ -126,7 +198,6 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-error @+1 {{'firrtl.extmodule' op attribute 'defname' with value "Bar" conflicts with the name of another module in the circuit}}
   firrtl.extmodule @Foo() attributes { defname = "Bar" }
   // expected-note @+1 {{previous module declared here}}
@@ -139,46 +210,38 @@ firrtl.circuit "Foo" {
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Foo(in %a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Foo(in a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has 0 ports which is different from a previously defined extmodule with the same 'defname' which has 1 ports}}
   firrtl.extmodule @Bar() attributes { defname = "Foo" }
-
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Foo(in %a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Foo(in a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "b" which does not match the name of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have name "a"}}
-  firrtl.extmodule @Foo_(in %b : !firrtl.uint<1>) attributes { defname = "Foo" }
-
+  firrtl.extmodule @Foo_(in b : !firrtl.uint<1>) attributes { defname = "Foo" }
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
-  firrtl.extmodule @Foo(in %a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
+  firrtl.extmodule @Foo(in a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Bar(in %a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Bar(in a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.uint<2>' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint<1>'}}
-  firrtl.extmodule @Baz(in %a : !firrtl.uint<2>) attributes { defname = "Foo" }
-
+  firrtl.extmodule @Baz(in a : !firrtl.uint<2>) attributes { defname = "Foo" }
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Foo(in %a : !firrtl.uint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Foo(in a : !firrtl.uint<1>) attributes { defname = "Foo" }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.sint<1>' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint<1>'}}
-  firrtl.extmodule @Foo_(in %a : !firrtl.sint<1>) attributes { defname = "Foo" }
-
+  firrtl.extmodule @Foo_(in a : !firrtl.sint<1>) attributes { defname = "Foo" }
 }
 
 // -----
@@ -186,77 +249,89 @@ firrtl.circuit "Foo" {
 firrtl.circuit "Foo" {
 
   // expected-note @+1 {{previous extmodule definition occurred here}}
-  firrtl.extmodule @Foo(in %a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
+  firrtl.extmodule @Foo(in a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = 2 : i32 } }
   // expected-error @+1 {{'firrtl.extmodule' op with 'defname' attribute "Foo" has a port with name "a" which has a different type '!firrtl.sint' which does not match the type of the port in the same position of a previously defined extmodule with the same 'defname', expected port to have type '!firrtl.uint'}}
-  firrtl.extmodule @Bar(in %a : !firrtl.sint<1>) attributes { defname = "Foo" }
+  firrtl.extmodule @Bar(in a : !firrtl.sint<1>) attributes { defname = "Foo" }
 
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-error @+1 {{has unknown extmodule parameter value 'width' = @Foo}}
-  firrtl.extmodule @Foo(in %a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = @Foo } }
-
+  firrtl.extmodule @Foo(in a : !firrtl.uint<2>) attributes { defname = "Foo", parameters = { width = @Foo } }
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   firrtl.extmodule @Foo()
   // expected-error @+1 {{'firrtl.instance' op should be embedded in a 'firrtl.module'}}
-  firrtl.instance @Foo {name = ""}
-
+  firrtl.instance "" @Foo()
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{containing module declared here}}
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op is a recursive instantiation of its containing module}}
-    firrtl.instance @Foo {name = ""}
+    firrtl.instance "" @Foo()
   }
-
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg0" must be '!firrtl.uint<1>', but got '!firrtl.uint<2>'}}
-    %a = firrtl.instance @Callee {name = ""} : !firrtl.uint<2>
+    %a = firrtl.instance "" @Callee(in arg0: !firrtl.uint<2>)
   }
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1> ) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op has a wrong number of results; expected 1 but got 0}}
-    firrtl.instance @Callee {name = ""}
+    firrtl.instance "" @Callee()
   }
 }
 
 // -----
 
 firrtl.circuit "Foo" {
-
   // expected-note @+1 {{original module declared here}}
   firrtl.module @Callee(in %arg0: !firrtl.uint<1>, in %arg1: !firrtl.bundle<valid: uint<1>>) { }
   firrtl.module @Foo() {
     // expected-error @+1 {{'firrtl.instance' op result type for "arg1" must be '!firrtl.bundle<valid: uint<1>>', but got '!firrtl.bundle<valid: uint<2>>'}}
-    %a:2 = firrtl.instance @Callee {name = ""}
-    : !firrtl.uint<1>, !firrtl.bundle<valid: uint<2>>
+    %a:2 = firrtl.instance "" @Callee(in arg0: !firrtl.uint<1>, in arg1: !firrtl.bundle<valid: uint<2>>)
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(in %arg0: !firrtl.uint<1>, in %arg1: !firrtl.bundle<valid: uint<1>>) { }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op name for port 1 must be "arg1", but got "xxx"}}
+    %a:2 = firrtl.instance "" @Callee(in arg0: !firrtl.uint<1>, in xxx: !firrtl.bundle<valid: uint<1>>)
+  }
+}
+
+// -----
+
+firrtl.circuit "Foo" {
+  // expected-note @+1 {{original module declared here}}
+  firrtl.module @Callee(in %arg0: !firrtl.uint<1>, in %arg1: !firrtl.bundle<valid: uint<1>>) { }
+  firrtl.module @Foo() {
+    // expected-error @+1 {{'firrtl.instance' op direction for "arg1" must be "in", but got "out"}}
+    %a:2 = firrtl.instance "" @Callee(in arg0: !firrtl.uint<1>, out arg1: !firrtl.bundle<valid: uint<1>>)
   }
 }
 
@@ -291,14 +366,6 @@ firrtl.module @X(in %a : !firrtl.uint<4>) {
   %0 = firrtl.bits %a 3 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<2>
 }
 
-}
-
-// -----
-
-firrtl.circuit "BadPort" {
-  // expected-error @+1 {{'firrtl.module' op all module ports must be firrtl types}}
-  firrtl.module @BadPort(in %in1 : i1) {
-  }
 }
 
 // -----
@@ -416,6 +483,14 @@ firrtl.circuit "MemoryPortInvalidReturnType" {
   }
 }
 
+// -----
+
+firrtl.circuit "MemoryInvalidmask" {
+  firrtl.module @MemoryInvalidmask() {
+    // expected-error @+1 {{'firrtl.mem' op the mask width cannot be greater than data width}}
+    %memory_rw = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["rw"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, rdata flip: uint<8>, wmode: uint<1>, wdata: uint<8>, wmask: uint<9>>
+  }
+}
 // -----
 
 firrtl.circuit "MemoryNegativeReadLatency" {
@@ -547,7 +622,37 @@ firrtl.circuit "MemoryPortsWithDifferentTypes" {
 firrtl.circuit "SubfieldOpFieldError" {
   firrtl.module @SubfieldOpFieldError() {
     %w = firrtl.wire  : !firrtl.bundle<a: uint<2>, b: uint<2>>
-    // expected-error @+1 {{subfield element index is greater than the number of fields}}
+    // expected-error @+1 {{}}
     %w_a = firrtl.subfield %w(2) : (!firrtl.bundle<a : uint<2>, b : uint<2>>) -> !firrtl.uint<2>
+  }
+}
+
+// -----
+
+firrtl.circuit "BitCast1" {
+  firrtl.module @BitCast1() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint>
+    // expected-error @+1 {{bitwidth cannot be determined for input operand type}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint>) -> (!firrtl.uint<6>)
+  }
+}
+
+// -----
+
+firrtl.circuit "BitCast2" {
+  firrtl.module @BitCast2() {
+    %a = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>
+    // expected-error @+1 {{the bitwidth of input (3) and result (6) don't match}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<6>)
+  }
+}
+
+// -----
+
+firrtl.circuit "BitCast4" {
+  firrtl.module @BitCast4() {
+    %a = firrtl.wire : !firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>
+    // expected-error @+1 {{bitwidth cannot be determined for input operand type}}
+    %b = firrtl.bitcast %a : (!firrtl.bundle<valid flip: uint<1>, ready: uint<1>, data: uint<1>>) -> (!firrtl.uint<6>)
   }
 }

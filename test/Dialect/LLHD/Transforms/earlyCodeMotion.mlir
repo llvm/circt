@@ -173,23 +173,23 @@ llhd.proc @loop(%in_i : !llhd.sig<i2>) -> () {
 // CHECK:         ^bb2:
 // CHECK:           %[[VAL_9:.*]] = llhd.prb %[[VAL_1]] : !llhd.sig<i1>
 // CHECK:           %[[VAL_10:.*]] = llhd.prb %[[VAL_0]] : !llhd.sig<i1>
-// CHECK:           %[[VAL_11:.*]] = llhd.eq %[[VAL_9]], %[[VAL_5]] : i1
-// CHECK:           %[[VAL_12:.*]] = llhd.neq %[[VAL_10]], %[[VAL_5]] : i1
+// CHECK:           %[[VAL_11:.*]] = comb.icmp eq %[[VAL_9]], %[[VAL_5]] : i1
+// CHECK:           %[[VAL_12:.*]] = comb.icmp ne %[[VAL_10]], %[[VAL_5]] : i1
 // CHECK:           llhd.wait (%[[VAL_1]], %[[VAL_0]] : !llhd.sig<i1>, !llhd.sig<i1>), ^bb3
 // CHECK:         ^bb3:
 // CHECK:           %[[VAL_13:.*]] = llhd.prb %[[VAL_3]] : !llhd.sig<i1>
 // CHECK:           llhd.store %[[VAL_8]], %[[VAL_13]] : !llhd.ptr<i1>
 // CHECK:           llhd.store %[[VAL_8]], %[[VAL_13]] : !llhd.ptr<i1>
 // CHECK:           %[[VAL_14:.*]] = llhd.prb %[[VAL_1]] : !llhd.sig<i1>
-// CHECK:           %[[VAL_15:.*]] = llhd.neq %[[VAL_14]], %[[VAL_5]] : i1
+// CHECK:           %[[VAL_15:.*]] = comb.icmp ne %[[VAL_14]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_16:.*]] = comb.and %[[VAL_11]], %[[VAL_15]] : i1
 // CHECK:           %[[VAL_17:.*]] = llhd.prb %[[VAL_0]] : !llhd.sig<i1>
-// CHECK:           %[[VAL_18:.*]] = llhd.eq %[[VAL_17]], %[[VAL_5]] : i1
+// CHECK:           %[[VAL_18:.*]] = comb.icmp eq %[[VAL_17]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_19:.*]] = comb.and %[[VAL_18]], %[[VAL_12]] : i1
 // CHECK:           %[[VAL_20:.*]] = comb.or %[[VAL_16]], %[[VAL_19]] : i1
-// CHECK:           %[[VAL_21:.*]] = llhd.neq %[[VAL_17]], %[[VAL_5]] : i1
+// CHECK:           %[[VAL_21:.*]] = comb.icmp ne %[[VAL_17]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_22:.*]] = comb.xor %[[VAL_21]], %[[ALLSET]] : i1
-// CHECK:           %[[VAL_23:.*]] = llhd.neq %[[VAL_22]], %[[VAL_5]] : i1
+// CHECK:           %[[VAL_23:.*]] = comb.icmp ne %[[VAL_22]], %[[VAL_5]] : i1
 // CHECK:           %[[VAL_24:.*]] = llhd.prb %[[VAL_2]] : !llhd.sig<i1>
 // CHECK:           cond_br %[[VAL_20]], ^bb4, ^bb2
 // CHECK:         ^bb4:
@@ -225,20 +225,20 @@ llhd.proc @complicated(%rst_ni: !llhd.sig<i1>, %clk_i: !llhd.sig<i1>, %async_ack
   llhd.store %ack_src_q_shadow, %2 : !llhd.ptr<i1>
   %clk_i_prb1 = llhd.prb %clk_i : !llhd.sig<i1>
   %3 = hw.constant 0 : i1
-  %4 = llhd.eq %clk_i_prb, %3 : i1
-  %5 = llhd.neq %clk_i_prb1, %3 : i1
+  %4 = comb.icmp eq %clk_i_prb, %3 : i1
+  %5 = comb.icmp ne %clk_i_prb1, %3 : i1
   %posedge = comb.and %4, %5 : i1
   %rst_ni_prb1 = llhd.prb %rst_ni : !llhd.sig<i1>
-  %6 = llhd.neq %rst_ni_prb, %3 : i1
-  %7 = llhd.eq %rst_ni_prb1, %3 : i1
+  %6 = comb.icmp ne %rst_ni_prb, %3 : i1
+  %7 = comb.icmp eq %rst_ni_prb1, %3 : i1
   %negedge = comb.and %7, %6 : i1
   %event_or = comb.or %posedge, %negedge : i1
   cond_br %event_or, ^event, ^init
 ^event:
   // TR: 0
-  %8 = llhd.neq %rst_ni_prb1, %3 : i1
+  %8 = comb.icmp ne %rst_ni_prb1, %3 : i1
   %9 = comb.xor %8, %allset : i1
-  %10 = llhd.neq %9, %3 : i1
+  %10 = comb.icmp ne %9, %3 : i1
   %11 = llhd.constant_time #llhd.time<0s, 1d, 0e>
   cond_br %10, ^if_true, ^if_false
 ^if_false:

@@ -1,5 +1,5 @@
 // REQUIRES: verilator
-// RUN: circt-translate %s -export-verilog -verify-diagnostics > %t1.sv
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t2.mlir > %t1.sv
 // RUN: verilator --lint-only --top-module A %t1.sv
 // RUN: verilator --lint-only --top-module AB %t1.sv
 // RUN: verilator --lint-only --top-module shl %t1.sv
@@ -72,7 +72,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %cond: i1, %array: !hw.array<10xi4>,
   %21 = comb.icmp ugt %a, %b : i4
   %22 = comb.icmp uge %a, %b : i4
   %23 = comb.parity %a : i4
-  %24 = comb.concat %a, %a, %b : (i4, i4, i4) -> i12
+  %24 = comb.concat %a, %a, %b : i4, i4, i4
   %25 = comb.extract %a from 1 : (i4) -> i2
   %26 = comb.sext %a : (i4) -> i9
   %27 = comb.mux %cond, %a, %b : i4

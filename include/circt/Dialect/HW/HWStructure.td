@@ -60,6 +60,16 @@ def HWModuleOp : HWOp<"module",
       return getAllModulePortInfos(*this);
     }
 
+    /// Return the PortInfo for the specified input or inout port.
+    PortInfo getInOrInoutPort(size_t i) {
+      return getModuleInOrInoutPort(*this, i);
+    }
+
+    /// Return the PortInfo for the specified output port.
+    PortInfo getOutputPort(size_t i) {
+      return getModuleOutputPort(*this, i);
+    }
+
     // TODO(mlir): FunctionLike shouldn't produce a getBody() helper, it is
     // squatting on the name.
     Block *getBodyBlock() { return &body().front(); }
@@ -144,10 +154,22 @@ def HWModuleExternOp : HWOp<"module.extern",
       return getAllModulePortInfos(*this);
     }
 
+    /// Return the PortInfo for the specified input or inout port.
+    PortInfo getInOrInoutPort(size_t i) {
+      return getModuleInOrInoutPort(*this, i);
+    }
+
+    /// Return the PortInfo for the specified output port.
+    PortInfo getOutputPort(size_t i) {
+      return getModuleOutputPort(*this, i);
+    }
+
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
-    StringRef getVerilogModuleName();
+    StringRef getVerilogModuleName() {
+      return getVerilogModuleNameAttr().getValue();
+    }
 
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
@@ -213,9 +235,7 @@ def HWGeneratorSchemaOp : HWOp<"generator.schema",
   let arguments = (ins SymbolNameAttr:$sym_name, StrAttr:$descriptor,
                        StrArrayAttr:$requiredAttrs);
   let results = (outs);
-  let assemblyFormat = [{
-      $sym_name `,` $descriptor `,` $requiredAttrs attr-dict
-    }];
+  let assemblyFormat = "$sym_name `,` $descriptor `,` $requiredAttrs attr-dict";
 }
 
 def HWModuleGeneratedOp : HWOp<"module.generated",
@@ -264,18 +284,14 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
-    StringRef getVerilogModuleName();
+    StringRef getVerilogModuleName() {
+      return getVerilogModuleNameAttr().getValue();
+    }
 
     /// Return the name to use for the Verilog module that we're referencing
     /// here.  This is typically the symbol, but can be overridden with the
     /// verilogName attribute.
-    StringAttr getVerilogModuleNameAttr() {
-      if (auto vName = verilogNameAttr()){
-        return vName;
-      }
-      return (*this)->getAttrOfType<StringAttr>(
-          ::mlir::SymbolTable::getSymbolAttrName());
-    }
+    StringAttr getVerilogModuleNameAttr();
 
     /// Lookup the generator kind for the symbol.  This returns null on
     /// invalid IR.
@@ -309,7 +325,7 @@ def HWModuleGeneratedOp : HWOp<"module.generated",
   let verifier = "return ::verify$cppClass(*this);";
 }
 
-def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
+def InstanceOp : HWOp<"instance", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>,
         DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Create an instance of a module";
@@ -327,7 +343,7 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
                        Variadic<AnyType>:$inputs,
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<SymbolNameAttr>:$sym_name);
+                       OptionalAttr<SymbolNameAttr>:$inner_sym);
   let results = (outs Variadic<AnyType>);
 
   let builders = [
@@ -363,12 +379,12 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
 
     /// Change the names of all the input ports.
     void setArgumentNames(ArrayAttr names) {
-      getOperation()->setAttr("argNames", names);
+      argNamesAttr(names);
     }
 
     /// Change the names of all the result ports.
     void setResultNames(ArrayAttr names) {
-      getOperation()->setAttr("resultNames", names);
+      resultNamesAttr(names);
     }
 
     /// Lookup the module or extmodule for the symbol.  This returns null on
@@ -377,12 +393,12 @@ def InstanceOp : HWOp<"instance", [HasParent<"HWModuleOp">, Symbol,
 
     /// Get the instances's name.
     StringAttr getName() {
-      return (*this)->getAttrOfType<StringAttr>("instanceName");
+      return instanceNameAttr();
     }
 
     /// Set the instance's name.
     void setName(StringAttr name) {
-      (*this)->setAttr("instanceName", name);
+      instanceNameAttr(name);
     }
 
     LogicalResult verifyCustom();

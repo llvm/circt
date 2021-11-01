@@ -23,6 +23,7 @@ namespace circt {
 namespace hw {
 class InstanceOp;
 class SymbolCache;
+class InnerRefAttr;
 } // namespace hw
 
 namespace sv {

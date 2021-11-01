@@ -25,44 +25,85 @@ using namespace circt;
 using namespace circt::msft;
 using namespace mlir::python::adaptors;
 
-static MlirOperation callPyFunc(MlirOperation op, void *userData) {
-  py::gil_scoped_acquire gil;
-  auto replacement = (*(py::function *)userData)(op);
-  return replacement.cast<MlirOperation>();
-}
-
-static void registerGenerator(MlirContext ctxt, std::string opName,
-                              std::string generatorName, py::function cb,
-                              MlirAttribute parameters) {
-  // Since we don't have an 'unregister' call, just allocate in forget about it.
-  py::function *cbPtr = new py::function(cb);
-  mlirMSFTRegisterGenerator(ctxt, opName.c_str(), generatorName.c_str(),
-                            mlirMSFTGeneratorCallback{&callPyFunc, cbPtr},
-                            parameters);
-}
-
-class DeviceDB {
+class PrimitiveDB {
 public:
-  DeviceDB(MlirOperation top) { db = circtMSFTCreateDeviceDB(top); }
+  PrimitiveDB(MlirContext ctxt) { db = circtMSFTCreatePrimitiveDB(ctxt); }
+  ~PrimitiveDB() { circtMSFTDeletePrimitiveDB(db); }
+  bool addPrimitive(MlirAttribute locAndPrim) {
+    return mlirLogicalResultIsSuccess(
+        circtMSFTPrimitiveDBAddPrimitive(db, locAndPrim));
+  }
+  bool isValidLocation(MlirAttribute loc) {
+    return circtMSFTPrimitiveDBIsValidLocation(db, loc);
+  }
+
+  CirctMSFTPrimitiveDB db;
+};
+
+class PlacementDB {
+public:
+  PlacementDB(MlirOperation top, PrimitiveDB *seed) {
+    db = circtMSFTCreatePlacementDB(top, seed ? seed->db
+                                              : CirctMSFTPrimitiveDB{nullptr});
+  }
+  ~PlacementDB() { circtMSFTDeletePlacementDB(db); }
   size_t addDesignPlacements() {
-    return circtMSFTDeviceDBAddDesignPlacements(db);
+    return circtMSFTPlacementDBAddDesignPlacements(db);
   }
   bool addPlacement(MlirAttribute loc, MlirAttribute path, std::string subpath,
                     MlirOperation op) {
-    return mlirLogicalResultIsSuccess(circtMSFTDeviceDBAddPlacement(
+    return mlirLogicalResultIsSuccess(circtMSFTPlacementDBAddPlacement(
         db, loc,
         CirctMSFTPlacedInstance{path, subpath.c_str(), subpath.size(), op}));
   }
   py::object getInstanceAt(MlirAttribute loc) {
     CirctMSFTPlacedInstance inst;
-    if (!circtMSFTDeviceDBTryGetInstanceAt(db, loc, &inst))
+    if (!circtMSFTPlacementDBTryGetInstanceAt(db, loc, &inst))
       return py::none();
     std::string subpath(inst.subpath, inst.subpathLength);
     return (py::tuple)py::cast(std::make_tuple(inst.path, subpath, inst.op));
   }
+  py::object getNearestFreeInColumn(CirctMSFTPrimitiveType prim,
+                                    uint64_t column, uint64_t nearestToY) {
+    MlirAttribute nearest = circtMSFTPlacementDBGetNearestFreeInColumn(
+        db, prim, column, nearestToY);
+    if (!nearest.ptr)
+      return py::none();
+    return py::cast(nearest);
+  }
+  void walkPlacements(
+      py::function pycb,
+      std::tuple<py::object, py::object, py::object, py::object> bounds,
+      py::object prim) {
+
+    auto handleNone = [](py::object o) {
+      return o.is_none() ? -1 : o.cast<int64_t>();
+    };
+    int64_t cBounds[4] = {
+        handleNone(std::get<0>(bounds)), handleNone(std::get<1>(bounds)),
+        handleNone(std::get<2>(bounds)), handleNone(std::get<3>(bounds))};
+    CirctMSFTPrimitiveType cPrim;
+    if (prim.is_none())
+      cPrim = -1;
+    else
+      cPrim = prim.cast<CirctMSFTPrimitiveType>();
+    circtMSFTPlacementDBWalkPlacements(
+        db,
+        [](MlirAttribute loc, CirctMSFTPlacedInstance p, void *userData) {
+          std::string subpath(p.subpath, p.subpathLength);
+          py::gil_scoped_acquire gil;
+          py::function pycb = *((py::function *)(userData));
+          if (!p.op.ptr) {
+            pycb(loc, py::none());
+          } else {
+            pycb(loc, std::make_tuple(p.path, subpath, p.op));
+          }
+        },
+        cBounds, cPrim, &pycb);
+  }
 
 private:
-  CirctMSFTDeviceDB db;
+  CirctMSFTPlacementDB db;
 };
 
 /// Populate the msft python module.
@@ -73,9 +114,9 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
 
   m.def("get_instance", circtMSFTGetInstance, py::arg("root"), py::arg("path"));
 
-  py::enum_<DeviceType>(m, "DeviceType")
-      .value("M20K", DeviceType::M20K)
-      .value("DSP", DeviceType::DSP)
+  py::enum_<PrimitiveType>(m, "PrimitiveType")
+      .value("M20K", PrimitiveType::M20K)
+      .value("DSP", PrimitiveType::DSP)
       .export_values();
 
   m.def("export_tcl", [](MlirOperation mod, py::object fileObject) {
@@ -84,14 +125,11 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
     mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
   });
 
-  m.def("register_generator", &::registerGenerator,
-        "Register a generator for a design module");
-
   mlir_attribute_subclass(m, "PhysLocationAttr",
                           circtMSFTAttributeIsAPhysLocationAttribute)
       .def_classmethod(
           "get",
-          [](py::object cls, DeviceType devType, uint64_t x, uint64_t y,
+          [](py::object cls, PrimitiveType devType, uint64_t x, uint64_t y,
              uint64_t num, MlirContext ctxt) {
             return cls(circtMSFTPhysLocationAttrGet(ctxt, (uint64_t)devType, x,
                                                     y, num));
@@ -102,20 +140,19 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .def_property_readonly(
           "devtype",
           [](MlirAttribute self) {
-            return (DeviceType)circtMSFTPhysLocationAttrGetDeviceType(self);
+            return (PrimitiveType)circtMSFTPhysLocationAttrGetPrimitiveType(
+                self);
           })
       .def_property_readonly("x",
                              [](MlirAttribute self) {
-                               return (DeviceType)circtMSFTPhysLocationAttrGetX(
-                                   self);
+                               return circtMSFTPhysLocationAttrGetX(self);
                              })
       .def_property_readonly("y",
                              [](MlirAttribute self) {
-                               return (DeviceType)circtMSFTPhysLocationAttrGetY(
-                                   self);
+                               return circtMSFTPhysLocationAttrGetY(self);
                              })
       .def_property_readonly("num", [](MlirAttribute self) {
-        return (DeviceType)circtMSFTPhysLocationAttrGetNum(self);
+        return circtMSFTPhysLocationAttrGetNum(self);
       });
 
   mlir_attribute_subclass(m, "RootedInstancePathAttr",
@@ -162,15 +199,34 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
         return circtMSFTSwitchInstanceAttrGetNumCases(self);
       });
 
-  py::class_<DeviceDB>(m, "DeviceDB")
-      .def(py::init<MlirOperation>(), py::arg("top"))
-      .def("add_design_placements", &DeviceDB::addDesignPlacements,
+  py::class_<PrimitiveDB>(m, "PrimitiveDB")
+      .def(py::init<MlirContext>(), py::arg("ctxt") = py::none())
+      .def("add_primitive", &PrimitiveDB::addPrimitive,
+           "Inform the DB about a new placement.", py::arg("loc_and_prim"))
+      .def("is_valid_location", &PrimitiveDB::isValidLocation,
+           "Query the DB as to whether or not a primitive exists.",
+           py::arg("loc"));
+
+  py::class_<PlacementDB>(m, "PlacementDB")
+      .def(py::init<MlirOperation, PrimitiveDB *>(), py::arg("top"),
+           py::arg("seed") = nullptr)
+      .def("add_design_placements", &PlacementDB::addDesignPlacements,
            "Add the placements already present in the design.")
-      .def("add_placement", &DeviceDB::addPlacement,
+      .def("add_placement", &PlacementDB::addPlacement,
            "Inform the DB about a new placement.", py::arg("location"),
            py::arg("path"), py::arg("subpath"), py::arg("op"))
-      .def("get_instance_at", &DeviceDB::getInstanceAt,
+      .def("get_nearest_free_in_column", &PlacementDB::getNearestFreeInColumn,
+           "Find the nearest free primitive location in column.",
+           py::arg("prim_type"), py::arg("column"), py::arg("nearest_to_y"))
+      .def("get_instance_at", &PlacementDB::getInstanceAt,
            "Get the instance at location. Returns None if nothing exists "
            "there. Otherwise, returns (path, subpath, op) of the instance "
-           "there.");
+           "there.")
+      .def("walk_placements", &PlacementDB::walkPlacements,
+           "Walk the placements, with possible bounds. Bounds are (xmin, xmax, "
+           "ymin, ymax) with 'None' being unbounded.",
+           py::arg("callback"),
+           py::arg("bounds") =
+               std::make_tuple(py::none(), py::none(), py::none(), py::none()),
+           py::arg("prim_type") = py::none());
 }

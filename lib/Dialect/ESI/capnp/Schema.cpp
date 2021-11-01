@@ -20,13 +20,13 @@
 #include "capnp/schema-parser.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Format.h"
 
 #include <initializer_list>
-#include <mlir/IR/BuiltinAttributes.h>
 #include <string>
 
 using namespace circt::esi::capnp::detail;
@@ -758,7 +758,7 @@ private:
     auto expectedVal = create<hw::ConstantOp>(loc, val.getType(), expected);
     create<sv::AssertOp>(
         loc, create<comb::ICmpOp>(loc, getI1Type(), pred, val, expectedVal),
-        "");
+        sv::DeferAssertAttr::get(loc.getContext(), sv::DeferAssert::Immediate));
   }
   Location loc;
 };

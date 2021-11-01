@@ -13,7 +13,9 @@
 
 #include "circt/InitAllDialects.h"
 #include "circt/InitAllPasses.h"
+#include "circt/Support/LoweringOptions.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
@@ -25,6 +27,7 @@
 // Defined in the test directory, no public header.
 namespace circt {
 namespace test {
+void registerAnalysisTestPasses();
 void registerSchedulingTestPasses();
 } // namespace test
 } // namespace circt
@@ -37,6 +40,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::LLVM::LLVMDialect>();
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::StandardOpsDialect>();
+  registry.insert<mlir::arith::ArithmeticDialect>();
   registry.insert<mlir::scf::SCFDialect>();
 
   circt::registerAllDialects(registry);
@@ -49,7 +53,11 @@ int main(int argc, char **argv) {
   mlir::registerCanonicalizerPass();
 
   // Register test passes
+  circt::test::registerAnalysisTestPasses();
   circt::test::registerSchedulingTestPasses();
+
+  // Other command line options.
+  circt::registerLoweringCLOptions();
 
   return mlir::failed(
       mlir::MlirOptMain(argc, argv, "CIRCT modular optimizer driver", registry,

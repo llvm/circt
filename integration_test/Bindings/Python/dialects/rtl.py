@@ -96,8 +96,8 @@ with Context() as ctx, Location.unknown():
 
       # CHECK: hw.instance "inst6" @one_input<BANKS: i32 = 2>(a:
       one_input.create("inst6",
-                               a=inst1.a,
-                               parameters={"BANKS": IntegerAttr.get(i32, 2)})
+                       a=inst1.a,
+                       parameters={"BANKS": IntegerAttr.get(i32, 2)})
 
     instance_builder_tests = hw.HWModuleOp(name="instance_builder_tests",
                                            body_builder=instance_builder_body)
@@ -114,7 +114,7 @@ with Context() as ctx, Location.unknown():
   # CHECK-LABEL: === Verilog ===
   print("=== Verilog ===")
 
-  pm = PassManager.parse("hw-legalize-names,hw.module(hw-cleanup)")
+  pm = PassManager.parse("hw.module(hw-cleanup)")
   pm.run(m)
   # CHECK: module MyWidget
   # CHECK: external module FancyThing

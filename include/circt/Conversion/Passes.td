@@ -38,15 +38,52 @@ def HIRToHW : Pass<"hir-to-hw", "mlir::ModuleOp"> {
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "sv::SVDialect"];
 }
+// ExportVerilog and ExportSplitVerilog
+//===----------------------------------------------------------------------===//
+
+def ExportVerilog : Pass<"export-verilog", "mlir::ModuleOp"> {
+  let summary = "Emit the IR to a (System)Verilog file";
+  let description = [{
+      This pass creates empty module bodies for external modules.  This is
+      useful for linting to eliminate missing file errors.
+  }];
+
+  let constructor = "createExportVerilogPass()";
+  let dependentDialects = [
+    "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
+  ];
+}
+
+def ExportSplitVerilog : Pass<"export-split-verilog", "mlir::ModuleOp"> {
+  let summary = "Emit the IR to a (System)Verilog directory of files";
+  let description = [{
+    This pass generates (System)Verilog for the current design, mutating it
+    where necessary to be valid Verilog.
+  }];
+
+  let constructor = "createExportSplitVerilogPass()";
+  let dependentDialects = [
+    "circt::sv::SVDialect", "circt::comb::CombDialect", "circt::hw::HWDialect"
+  ];
+
+  let options = [
+    Option<"directoryName", "dir-name", "std::string",
+            "", "Directory to emit into">
+   ];
+}
+
+//===----------------------------------------------------------------------===//
 // SCFToCalyx
 //===----------------------------------------------------------------------===//
 
 def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
   let summary = "Lower SCF/Standard to Calyx";
-  let description = [{This pass lowers SCF / standard to Calyx.}];
+  let description = "This pass lowers SCF / standard to Calyx.";
   let constructor = "circt::createSCFToCalyxPass()";
   let dependentDialects = [
-    "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect", "comb::CombDialect"];
+    "calyx::CalyxDialect", "::mlir::scf::SCFDialect", "hw::HWDialect",
+    "comb::CombDialect"
+  ];
   let options =
       [Option<"topLevelFunctionOpt", "top-level-function", "std::string", "",
               "Identifier of top-level function to be the entry-point component"
@@ -59,9 +96,7 @@ def SCFToCalyx : Pass<"lower-scf-to-calyx", "mlir::ModuleOp"> {
 
 def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower Calyx to HW";
-  let description = [{
-    This pass lowers Calyx to HW.
-  }];
+  let description = "This pass lowers Calyx to HW.";
   let constructor = "circt::createCalyxToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "sv::SVDialect"];
@@ -73,14 +108,14 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 
 def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower FIRRTL to HW";
-  let description = [{
-    Lower a module of FIRRTL dialect to the HW dialect family.
-  }];
+  let description =
+    "Lower a module of FIRRTL dialect to the HW dialect family.";
   let constructor = "circt::createLowerFIRRTLToHWPass()";
   let dependentDialects = ["comb::CombDialect", "hw::HWDialect",
                            "sv::SVDialect"];
   let options = [
-    Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations", "bool", "false",
+    Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
+           "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">
   ];
 }
@@ -91,9 +126,7 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
 
 def HandshakeToFIRRTL : Pass<"lower-handshake-to-firrtl", "mlir::ModuleOp"> {
   let summary = "Lower Handshake to FIRRTL";
-  let description = [{
-    Lower Handshake to FIRRTL.
-  }];
+  let description = "Lower Handshake to FIRRTL.";
   let constructor = "circt::createHandshakeToFIRRTLPass()";
   let dependentDialects = ["firrtl::FIRRTLDialect"];
 }
@@ -103,13 +136,10 @@ def HandshakeToFIRRTL : Pass<"lower-handshake-to-firrtl", "mlir::ModuleOp"> {
 //===----------------------------------------------------------------------===//
 
 def ConvertLLHDToLLVM : Pass<"convert-llhd-to-llvm", "mlir::ModuleOp"> {
-    let summary = "Convert LLHD to LLVM";
-    let description = [{
-        This pass translates LLHD to LLVM. 
-    }];
-
-    let constructor = "circt::createConvertLLHDToLLVMPass()";
-    let dependentDialects = ["mlir::LLVM::LLVMDialect"];
+  let summary = "Convert LLHD to LLVM";
+  let description = "This pass translates LLHD to LLVM.";
+  let constructor = "circt::createConvertLLHDToLLVMPass()";
+  let dependentDialects = ["mlir::LLVM::LLVMDialect"];
 }
 
 //===----------------------------------------------------------------------===//
@@ -130,24 +160,24 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
-def HandshakeAnalysis : Pass<"analyze-dataflow", "mlir::ModuleOp"> {
+def HandshakeAnalysis : Pass<"handshake-analyze", "mlir::ModuleOp"> {
   let summary = "Print resource (operation) statistics";
   let constructor = "circt::createHandshakeAnalysisPass()";
 }
 
-def HandshakeDataflow : Pass<"create-dataflow", "mlir::ModuleOp"> {
-  let summary = "Convert standard MLIR into dataflow IR";
+def HandshakeDataflow : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
+  let summary = "Lower Standard MLIR into Handshake IR";
   let constructor = "circt::createHandshakeDataflowPass()";
   let dependentDialects = ["handshake::HandshakeDialect"];
 }
 
-def HandshakeCanonicalize : Pass<"canonicalize-dataflow", "handshake::FuncOp"> {
-  let summary = "Canonicalize handshake IR";
+def HandshakeCanonicalize : Pass<"handshake-canonicalize", "handshake::FuncOp"> {
+  let summary = "Canonicalize Handshake IR";
   let constructor = "circt::createHandshakeCanonicalizePass()";
 }
 
-def HandshakeRemoveBlock : Pass<"remove-block-structure", "handshake::FuncOp"> {
-  let summary = "Remove block structure in handshake IR";
+def HandshakeRemoveBlock : Pass<"handshake-remove-block-structure", "handshake::FuncOp"> {
+  let summary = "Remove block structure in Handshake IR";
   let constructor = "circt::createHandshakeRemoveBlockPass()";
 }
 
@@ -157,7 +187,7 @@ def HandshakeInsertBuffer
   let constructor = "circt::createHandshakeInsertBufferPass()";
   let options = [
     ListOption<"strategies", "strategies", "std::string",
-               "List of strategies to apply. Possible values are: cycles",
+               "List of strategies to apply. Possible values are: cycles, all (default)",
                "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
   ];
 }

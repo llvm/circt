@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Conversion/HandshakeToFIRRTL/HandshakeToFIRRTL.h"
+#include "circt/Conversion/HandshakeToFIRRTL.h"
 #include "../PassDetail.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -20,6 +20,8 @@
 #include "mlir/Transforms/Utils.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
+
+#include <set>
 
 using namespace mlir;
 using namespace circt;
@@ -37,7 +39,7 @@ static void legalizeFModule(FModuleOp moduleOp) {
   SmallVector<Operation *, 8> connectOps;
   moduleOp.walk([&](ConnectOp op) { connectOps.push_back(op); });
   for (auto op : connectOps)
-    op->moveBefore(&moduleOp.getBodyBlock()->back());
+    op->moveBefore(&moduleOp.getBody()->back());
 }
 
 /// Get the corresponding FIRRTL type given the built-in data type. Current
@@ -112,25 +114,82 @@ static Value createConstantOp(FIRRTLType opType, APInt value,
   return Value();
 }
 
-static Type getHandshakeDataType(Operation *op) {
-  if (auto memOp = dyn_cast<MemoryOp>(op))
-    return memOp.getMemRefType().getElementType();
-
-  else if (auto sinkOp = dyn_cast<SinkOp>(op)) {
-    // As SinkOp only has one argument, which at this stage is already converted
-    // to a bundled FIRRTLType, here we convert it back to a normal data type.
-    // Is there a better way to do this?
-    auto type = sinkOp.getOperand().getType().cast<BundleType>();
-
-    if (auto dataType = type.getElementType("data")) {
-      auto intType = dataType.cast<firrtl::IntType>();
-      return IntegerType::get(type.getContext(), intType.getWidthOrSentinel(),
-                              intType.isSigned() ? IntegerType::Signed
-                                                 : IntegerType::Unsigned);
-    } else
-      return NoneType::get(type.getContext());
+static Type getHandshakeBundleDataType(BundleType bundle) {
+  if (auto dataType = bundle.getElementType("data")) {
+    auto intType = dataType.cast<firrtl::IntType>();
+    return IntegerType::get(bundle.getContext(), intType.getWidthOrSentinel(),
+                            intType.isSigned() ? IntegerType::Signed
+                                               : IntegerType::Unsigned);
   } else
-    return op->getResult(0).getType();
+    return NoneType::get(bundle.getContext());
+}
+
+/// Extracts the type of the data-carrying type of opType. If opType is a
+/// bundle, getHandshakeBundleDataType extracts the data-carrying type, else,
+/// assume that opType itself is the data-carrying type.
+static Type getOperandDataType(Value op) {
+  auto opType = op.getType();
+  if (auto bundleType = opType.dyn_cast<BundleType>(); bundleType)
+    return getHandshakeBundleDataType(bundleType);
+  return opType;
+}
+
+/// Filters NoneType's from the input.
+static SmallVector<Type> filterNoneTypes(ArrayRef<Type> input) {
+  SmallVector<Type> filterRes;
+  llvm::copy_if(input, std::back_inserter(filterRes),
+                [](Type type) { return !type.isa<NoneType>(); });
+  return filterRes;
+}
+
+/// Returns a set of types which may uniquely identify the provided op. Return
+/// value is <inputTypes, outputTypes>.
+using DiscriminatingTypes = std::pair<SmallVector<Type>, SmallVector<Type>>;
+static DiscriminatingTypes getHandshakeDiscriminatingTypes(Operation *op) {
+  return TypeSwitch<Operation *, DiscriminatingTypes>(op)
+      .Case<MemoryOp>([&](auto memOp) {
+        return DiscriminatingTypes{{},
+                                   {memOp.getMemRefType().getElementType()}};
+      })
+      .Default([&](auto) {
+        // By default, all in- and output types which is not a control type
+        // (NoneType) are discriminating types.
+        std::vector<Type> inTypes, outTypes;
+        llvm::transform(op->getOperands(), std::back_inserter(inTypes),
+                        getOperandDataType);
+        llvm::transform(op->getResults(), std::back_inserter(outTypes),
+                        getOperandDataType);
+        return DiscriminatingTypes{filterNoneTypes(inTypes),
+                                   filterNoneTypes(outTypes)};
+      });
+}
+
+/// Get type name. Currently we only support integer or index types.
+/// The emitted type aligns with the getFIRRTLType() method. Thus all integers
+/// other than signed integers will be emitted as unsigned.
+static std::string getTypeName(Operation *oldOp, Type type) {
+  std::string typeName;
+  // Builtin types
+  if (type.isIntOrIndex()) {
+    if (auto indexType = type.dyn_cast<IndexType>())
+      typeName += "_ui" + std::to_string(indexType.kInternalStorageBitWidth);
+    else if (type.isSignedInteger())
+      typeName += "_si" + std::to_string(type.getIntOrFloatBitWidth());
+    else
+      typeName += "_ui" + std::to_string(type.getIntOrFloatBitWidth());
+  }
+  // FIRRTL types
+  else if (type.isa<SIntType, UIntType>()) {
+    if (auto sintType = type.dyn_cast<SIntType>(); sintType)
+      typeName += "_si" + std::to_string(sintType.getWidthOrSentinel());
+    else {
+      auto uintType = type.cast<UIntType>();
+      typeName += "_ui" + std::to_string(uintType.getWidthOrSentinel());
+    }
+  } else
+    oldOp->emitError() << "unsupported data type '" << type << "'";
+
+  return typeName;
 }
 
 /// Construct a name for creating FIRRTL sub-module.
@@ -138,12 +197,8 @@ static std::string getSubModuleName(Operation *oldOp) {
   // The dialect name is separated from the operation name by '.', which is not
   // valid in SystemVerilog module names. In case this name is used in
   // SystemVerilog output, replace '.' with '_'.
-  std::string prefix = oldOp->getName().getStringRef().str();
-  std::replace(prefix.begin(), prefix.end(), '.', '_');
-
-  std::string subModuleName = prefix + "_" +
-                              std::to_string(oldOp->getNumOperands()) + "ins_" +
-                              std::to_string(oldOp->getNumResults()) + "outs";
+  std::string subModuleName = oldOp->getName().getStringRef().str();
+  std::replace(subModuleName.begin(), subModuleName.end(), '.', '_');
 
   // Add value of the constant operation.
   if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
@@ -160,35 +215,24 @@ static std::string getSubModuleName(Operation *oldOp) {
       oldOp->emitError("unsupported constant type");
   }
 
-  // Add operation data type. Currently we only support integer or index types.
-  // The emitted type aligns with the getFIRRTLType() method. Thus all integers
-  // other than signed integers will be emitted as unsigned.
-  auto type = getHandshakeDataType(oldOp);
-  if (type.isIntOrIndex()) {
-    if (auto indexType = type.dyn_cast<IndexType>())
-      subModuleName +=
-          "_ui" + std::to_string(indexType.kInternalStorageBitWidth);
-    else if (type.isSignedInteger())
-      subModuleName += "_si" + std::to_string(type.getIntOrFloatBitWidth());
-    else
-      subModuleName += "_ui" + std::to_string(type.getIntOrFloatBitWidth());
+  // Add discriminating in- and output types.
+  auto [inTypes, outTypes] = getHandshakeDiscriminatingTypes(oldOp);
+  if (!inTypes.empty())
+    subModuleName += "_in";
+  for (auto inType : inTypes)
+    subModuleName += getTypeName(oldOp, inType);
 
-  } else if (type.isa<NoneType>()) {
-    auto ctrlAttr = oldOp->getAttrOfType<BoolAttr>("control");
-    if (ctrlAttr.getValue())
-      subModuleName += "_ctrl";
-    else
-      oldOp->emitError() << "non-control component has invalid data type '"
-                         << type << "'";
-  } else
-    oldOp->emitError() << "unsupported data type '" << type << "'";
+  if (!outTypes.empty())
+    subModuleName += "_out";
+  for (auto outType : outTypes)
+    subModuleName += getTypeName(oldOp, outType);
 
   // Add memory ID.
   if (auto memOp = dyn_cast<handshake::MemoryOp>(oldOp))
     subModuleName += "_id" + std::to_string(memOp.id());
 
   // Add compare kind.
-  if (auto comOp = dyn_cast<mlir::CmpIOp>(oldOp))
+  if (auto comOp = dyn_cast<mlir::arith::CmpIOp>(oldOp))
     subModuleName += "_" + stringifyEnum(comOp.getPredicate()).str();
 
   // Add buffer information.
@@ -196,6 +240,18 @@ static std::string getSubModuleName(Operation *oldOp) {
     subModuleName += "_" + std::to_string(bufferOp.slots()) + "slots";
     if (bufferOp.isSequential())
       subModuleName += "_seq";
+  }
+
+  // Add control information.
+  if (auto ctrlAttr = oldOp->getAttrOfType<BoolAttr>("control");
+      ctrlAttr && ctrlAttr.getValue()) {
+    // Add some additional discriminating info for non-typed operations.
+    subModuleName += "_" + std::to_string(oldOp->getNumOperands()) + "ins_" +
+                     std::to_string(oldOp->getNumResults()) + "outs";
+    subModuleName += "_ctrl";
+  } else {
+    assert((!inTypes.empty() || !outTypes.empty()) &&
+           "Non-control operators must provide discriminating type info");
   }
 
   return subModuleName;
@@ -440,28 +496,30 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   // Create a FIRRTL module, and inline the funcOp into it.
   auto topModuleOp = rewriter.create<FModuleOp>(
       funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()), ports);
-  rewriter.inlineRegionBefore(funcOp.getBody(), topModuleOp.getBody(),
-                              topModuleOp.end());
+
+  rewriter.inlineRegionBefore(funcOp.body(), topModuleOp.body(),
+                              topModuleOp.body().end());
+
+  // In the following section, we manually merge the two regions and manually
+  // replace arguments. This is an alternative to using rewriter.mergeBlocks; we
+  // do this to ensure that argument SSA values are replaced instantly, instead
+  // of late, as would be the case for mergeBlocks.
 
   // Merge the second block (inlined from funcOp) of the top-module into the
   // entry block.
-  auto blockIterator = topModuleOp.getBody().begin();
-  Block *entryBlock = &*blockIterator;
-  Block *secondBlock = &*(++blockIterator);
+  auto &blockIterator = topModuleOp.body().getBlocks();
+  Block *entryBlock = &blockIterator.front();
+  Block *secondBlock = &*std::next(blockIterator.begin());
 
   // Replace uses of each argument of the second block with the corresponding
   // argument of the entry block.
-  argIndex = 0;
-  for (auto &oldArg : secondBlock->getArguments()) {
-    oldArg.replaceAllUsesWith(entryBlock->getArgument(argIndex));
-    ++argIndex;
-  }
+  for (auto &oldArg : enumerate(secondBlock->getArguments()))
+    oldArg.value().replaceAllUsesWith(entryBlock->getArgument(oldArg.index()));
 
   // Move all operations of the second block to the entry block.
   entryBlock->getOperations().splice(entryBlock->end(),
                                      secondBlock->getOperations());
   rewriter.eraseBlock(secondBlock);
-
   return topModuleOp;
 }
 
@@ -576,25 +634,31 @@ public:
 
   bool visitInvalidOp(Operation *op) { return false; }
 
-  bool visitStdExpr(CmpIOp op);
+  bool visitStdExpr(arith::CmpIOp op);
+  bool visitStdExpr(arith::ExtUIOp op);
+  bool visitStdExpr(arith::TruncIOp op);
+  bool visitStdExpr(arith::IndexCastOp op);
 
 #define HANDLE(OPTYPE, FIRRTLTYPE)                                             \
   bool visitStdExpr(OPTYPE op) { return buildBinaryLogic<FIRRTLTYPE>(), true; }
 
-  HANDLE(AddIOp, AddPrimOp);
-  HANDLE(SubIOp, SubPrimOp);
-  HANDLE(MulIOp, MulPrimOp);
-  HANDLE(SignedDivIOp, DivPrimOp);
-  HANDLE(SignedRemIOp, RemPrimOp);
-  HANDLE(UnsignedDivIOp, DivPrimOp);
-  HANDLE(UnsignedRemIOp, RemPrimOp);
-  HANDLE(XOrOp, XorPrimOp);
-  HANDLE(AndOp, AndPrimOp);
-  HANDLE(OrOp, OrPrimOp);
-  HANDLE(ShiftLeftOp, DShlPrimOp);
-  HANDLE(SignedShiftRightOp, DShrPrimOp);
-  HANDLE(UnsignedShiftRightOp, DShrPrimOp);
+  HANDLE(arith::AddIOp, AddPrimOp);
+  HANDLE(arith::SubIOp, SubPrimOp);
+  HANDLE(arith::MulIOp, MulPrimOp);
+  HANDLE(arith::DivSIOp, DivPrimOp);
+  HANDLE(arith::RemSIOp, RemPrimOp);
+  HANDLE(arith::DivUIOp, DivPrimOp);
+  HANDLE(arith::RemUIOp, RemPrimOp);
+  HANDLE(arith::XOrIOp, XorPrimOp);
+  HANDLE(arith::AndIOp, AndPrimOp);
+  HANDLE(arith::OrIOp, OrPrimOp);
+  HANDLE(arith::ShLIOp, DShlPrimOp);
+  HANDLE(arith::ShRSIOp, DShrPrimOp);
+  HANDLE(arith::ShRUIOp, DShrPrimOp);
 #undef HANDLE
+
+  bool buildZeroExtendOp(unsigned dstWidth);
+  bool buildTruncateOp(unsigned dstWidth);
 
 private:
   ValueVectorList portList;
@@ -603,26 +667,95 @@ private:
 };
 } // namespace
 
-bool StdExprBuilder::visitStdExpr(CmpIOp op) {
+bool StdExprBuilder::visitStdExpr(arith::CmpIOp op) {
   switch (op.getPredicate()) {
-  case CmpIPredicate::eq:
+  case arith::CmpIPredicate::eq:
     return buildBinaryLogic<EQPrimOp>(), true;
-  case CmpIPredicate::ne:
+  case arith::CmpIPredicate::ne:
     return buildBinaryLogic<NEQPrimOp>(), true;
-  case CmpIPredicate::slt:
-  case CmpIPredicate::ult:
+  case arith::CmpIPredicate::slt:
+  case arith::CmpIPredicate::ult:
     return buildBinaryLogic<LTPrimOp>(), true;
-  case CmpIPredicate::sle:
-  case CmpIPredicate::ule:
+  case arith::CmpIPredicate::sle:
+  case arith::CmpIPredicate::ule:
     return buildBinaryLogic<LEQPrimOp>(), true;
-  case CmpIPredicate::sgt:
-  case CmpIPredicate::ugt:
+  case arith::CmpIPredicate::sgt:
+  case arith::CmpIPredicate::ugt:
     return buildBinaryLogic<GTPrimOp>(), true;
-  case CmpIPredicate::sge:
-  case CmpIPredicate::uge:
+  case arith::CmpIPredicate::sge:
+  case arith::CmpIPredicate::uge:
     return buildBinaryLogic<GEQPrimOp>(), true;
   }
   llvm_unreachable("invalid CmpIOp");
+}
+
+bool StdExprBuilder::buildZeroExtendOp(unsigned dstWidth) {
+  ValueVector arg0Subfield = portList[0];
+  ValueVector resultSubfields = portList[1];
+
+  Value arg0Valid = arg0Subfield[0];
+  Value arg0Ready = arg0Subfield[1];
+  Value arg0Data = arg0Subfield[2];
+  Value resultValid = resultSubfields[0];
+  Value resultReady = resultSubfields[1];
+  Value resultData = resultSubfields[2];
+
+  Value resultDataOp =
+      rewriter.create<PadPrimOp>(insertLoc, arg0Data, dstWidth);
+  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
+
+  // Generate valid signal.
+  rewriter.create<ConnectOp>(insertLoc, resultValid, arg0Valid);
+
+  // Generate ready signal.
+  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                               resultReady, arg0Valid);
+  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  return true;
+}
+
+bool StdExprBuilder::buildTruncateOp(unsigned int dstWidth) {
+  ValueVector arg0Subfield = portList[0];
+  ValueVector resultSubfields = portList[1];
+
+  Value arg0Valid = arg0Subfield[0];
+  Value arg0Ready = arg0Subfield[1];
+  Value arg0Data = arg0Subfield[2];
+  Value resultValid = resultSubfields[0];
+  Value resultReady = resultSubfields[1];
+  Value resultData = resultSubfields[2];
+
+  Value resultDataOp =
+      rewriter.create<BitsPrimOp>(insertLoc, arg0Data, dstWidth - 1, 0);
+  rewriter.create<ConnectOp>(insertLoc, resultData, resultDataOp);
+
+  // Generate valid signal.
+  rewriter.create<ConnectOp>(insertLoc, resultValid, arg0Valid);
+
+  // Generate ready signal.
+  auto argReadyOp = rewriter.create<AndPrimOp>(insertLoc, resultReady.getType(),
+                                               resultReady, arg0Valid);
+  rewriter.create<ConnectOp>(insertLoc, arg0Ready, argReadyOp);
+  return true;
+}
+
+bool StdExprBuilder::visitStdExpr(arith::ExtUIOp op) {
+  return buildZeroExtendOp(getFIRRTLType(getOperandDataType(op.getOperand()))
+                               .getBitWidthOrSentinel());
+}
+
+bool StdExprBuilder::visitStdExpr(arith::TruncIOp op) {
+  return buildTruncateOp(getFIRRTLType(getOperandDataType(op.getOperand()))
+                             .getBitWidthOrSentinel());
+}
+
+bool StdExprBuilder::visitStdExpr(arith::IndexCastOp op) {
+  FIRRTLType sourceType = getFIRRTLType(getOperandDataType(op.getOperand()));
+  FIRRTLType targetType = getFIRRTLType(getOperandDataType(op.getResult()));
+  unsigned targetBits = targetType.getBitWidthOrSentinel();
+  unsigned sourceBits = sourceType.getBitWidthOrSentinel();
+  return (targetBits < sourceBits ? buildTruncateOp(targetBits)
+                                  : buildZeroExtendOp(targetBits));
 }
 
 /// Please refer to simple_addi.mlir test case.
@@ -1995,16 +2128,9 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
 
-  llvm::SmallVector<Type> resultTypes;
-
-  // Bundle all ports of the instance into a new flattened bundle type.
-  SmallVector<PortInfo, 8> portInfo = subModuleOp.getPorts();
-  for (auto &port : portInfo)
-    resultTypes.push_back(port.type);
-
   // Create a instance operation.
-  auto instanceOp = rewriter.create<firrtl::InstanceOp>(
-      oldOp->getLoc(), resultTypes, subModuleOp.getName());
+  auto instanceOp =
+      rewriter.create<firrtl::InstanceOp>(oldOp->getLoc(), subModuleOp, "");
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
@@ -2013,11 +2139,14 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
     unsigned numIns = oldOp->getNumOperands();
     unsigned numArgs = numIns + oldOp->getNumResults();
 
-    auto topArgs = topModuleOp.getBody().front().getArguments();
+    auto topArgs = topModuleOp.getBody()->getArguments();
     auto firstClock = std::find_if(topArgs.begin(), topArgs.end(),
                                    [](BlockArgument &arg) -> bool {
                                      return arg.getType().isa<ClockType>();
                                    });
+    assert(firstClock != topArgs.end() && "Expected a clock signal");
+    unsigned firstClkIdx = std::distance(topArgs.begin(), firstClock);
+
     if (portIndex < numIns) {
       // Connect input ports.
       rewriter.create<ConnectOp>(oldOp->getLoc(), result,
@@ -2027,8 +2156,11 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
       Value newResult = oldOp->getResult(portIndex - numIns);
       newResult.replaceAllUsesWith(result);
     } else {
-      // Connect clock or reset signal.
-      auto signal = *(firstClock + 2 * clockDomain + portIndex - numArgs);
+      // Connect clock or reset signal(s).
+      unsigned clkOrResetIdx =
+          firstClkIdx + 2 * clockDomain + portIndex - numArgs;
+      assert(topArgs.size() > clkOrResetIdx);
+      auto signal = topArgs[clkOrResetIdx];
       rewriter.create<ConnectOp>(oldOp->getLoc(), result, signal);
     }
     ++portIndex;
@@ -2084,18 +2216,17 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
 /// Please refer to test_addi.mlir test case.
 struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
+  HandshakeFuncOpLowering(MLIRContext *context, CircuitOp circuitOp)
+      : OpConversionPattern<handshake::FuncOp>(context), circuitOp(circuitOp) {}
 
   LogicalResult
   matchAndRewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    // Create FIRRTL circuit and top-module operation.
-    auto circuitOp = rewriter.create<CircuitOp>(
-        funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()));
     rewriter.setInsertionPointToStart(circuitOp.getBody());
     auto topModuleOp = createTopModuleOp(funcOp, /*numClocks=*/1, rewriter);
 
     // Traverse and convert each operation in funcOp.
-    for (Operation &op : topModuleOp.getBody().front()) {
+    for (Operation &op : *topModuleOp.getBody()) {
       if (isa<handshake::ReturnOp>(op))
         convertReturnOp(&op, topModuleOp, funcOp, rewriter);
 
@@ -2110,8 +2241,8 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
           subModuleOp = createSubModuleOp(topModuleOp, &op, hasClock, rewriter);
 
           Location insertLoc = subModuleOp.getLoc();
-          auto &bodyBlock = subModuleOp.getBody().front();
-          rewriter.setInsertionPoint(&bodyBlock, bodyBlock.end());
+          auto *bodyBlock = subModuleOp.getBody();
+          rewriter.setInsertionPoint(bodyBlock, bodyBlock->end());
 
           ValueVectorList portList =
               extractSubfields(subModuleOp, insertLoc, rewriter);
@@ -2135,7 +2266,88 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
     return success();
   }
+
+private:
+  /// Top level FIRRTL circuit operation, which we'll emit into. Marked as
+  /// mutable due to circuitOp.getBody() being non-const.
+  mutable CircuitOp circuitOp;
 };
+
+using InstanceGraph = std::map<std::string, std::set<std::string>>;
+
+/// Iterates over the handshake::FuncOp's in the program to build an instance
+/// graph. In doing so, we detect whether there are any cycles in this graph, as
+/// well as infer a top module for the design.
+static LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
+                                          InstanceGraph &instanceGraph,
+                                          std::string &topLevel) {
+  // Create use graph
+  auto walkFuncOps = [&](handshake::FuncOp funcOp) {
+    auto &funcUses = instanceGraph[funcOp.getName().str()];
+    funcOp.walk([&](handshake::InstanceOp instanceOp) {
+      funcUses.insert(instanceOp.getModule().str());
+    });
+  };
+  moduleOp.walk(walkFuncOps);
+
+  // find top-level (and cycles) using a topological sort. Initialize all
+  // instances as candidate top level modules; these will be pruned whenever
+  // they are referenced by another module.
+  std::set<std::string> visited, marked, candidateTopLevel;
+  SmallVector<std::string> sorted, cycleTrace;
+  bool cyclic = false;
+  llvm::transform(instanceGraph,
+                  std::inserter(candidateTopLevel, candidateTopLevel.begin()),
+                  [](auto it) { return it.first; });
+  std::function<void(const std::string &, SmallVector<std::string>)> cycleUtil =
+      [&](const std::string &node, SmallVector<std::string> trace) {
+        if (cyclic || visited.count(node))
+          return;
+        trace.push_back(node);
+        if (marked.count(node)) {
+          cyclic = true;
+          cycleTrace = trace;
+          return;
+        }
+        marked.insert(node);
+        for (auto use : instanceGraph[node]) {
+          candidateTopLevel.erase(use);
+          cycleUtil(use, trace);
+        }
+        marked.erase(node);
+        visited.insert(node);
+        sorted.insert(sorted.begin(), node);
+      };
+  for (auto it : instanceGraph) {
+    if (visited.count(it.first) == 0)
+      cycleUtil(it.first, {});
+    if (cyclic)
+      break;
+  }
+
+  if (cyclic) {
+    auto err = moduleOp.emitOpError();
+    err << "cannot lower handshake program - cycle "
+           "detected in instance graph (";
+    llvm::interleave(
+        cycleTrace, err, [&](auto node) { err << node; }, "->");
+    err << ").";
+    return err;
+  }
+  assert(!candidateTopLevel.empty() &&
+         "if non-cyclic, there should be at least 1 candidate top level");
+
+  if (candidateTopLevel.size() > 1) {
+    auto err = moduleOp.emitOpError();
+    err << "multiple candidate top-level modules detected (";
+    llvm::interleaveComma(candidateTopLevel, err,
+                          [&](auto topLevel) { err << topLevel; });
+    err << "). Please remove one of these from the source program.";
+    return err;
+  }
+  topLevel = *candidateTopLevel.begin();
+  return success();
+}
 
 namespace {
 class HandshakeToFIRRTLPass
@@ -2143,13 +2355,28 @@ class HandshakeToFIRRTLPass
 public:
   void runOnOperation() override {
     auto op = getOperation();
+    auto *ctx = op.getContext();
+
+    // Resolve the instance graph to get a top-level module.
+    std::string topLevel;
+    InstanceGraph uses;
+    if (resolveInstanceGraph(op, uses, topLevel).failed()) {
+      signalPassFailure();
+      return;
+    }
+
+    // Create FIRRTL circuit op.
+    OpBuilder builder(ctx);
+    builder.setInsertionPointToStart(op.getBody());
+    auto circuitOp =
+        builder.create<CircuitOp>(op.getLoc(), builder.getStringAttr(topLevel));
 
     ConversionTarget target(getContext());
     target.addLegalDialect<FIRRTLDialect>();
     target.addIllegalDialect<handshake::HandshakeDialect>();
 
     RewritePatternSet patterns(op.getContext());
-    patterns.insert<HandshakeFuncOpLowering>(op.getContext());
+    patterns.insert<HandshakeFuncOpLowering>(op.getContext(), circuitOp);
 
     if (failed(applyPartialConversion(op, target, std::move(patterns))))
       signalPassFailure();

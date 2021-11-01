@@ -307,6 +307,38 @@ void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("control", builder.getBoolAttr(true));
 }
 
+static ParseResult verifyFuncOp(handshake::FuncOp op) {
+  // If this function is external there is nothing to do.
+  if (op.isExternal())
+    return success();
+
+  // Verify that the argument list of the function and the arg list of the
+  // entry block line up.  The trait already verified that the number of
+  // arguments is the same between the signature and the block.
+  auto fnInputTypes = op.getType().getInputs();
+  Block &entryBlock = op.front();
+
+  for (unsigned i = 0, e = entryBlock.getNumArguments(); i != e; ++i)
+    if (fnInputTypes[i] != entryBlock.getArgument(i).getType())
+      return op.emitOpError("type of entry block argument #")
+             << i << '(' << entryBlock.getArgument(i).getType()
+             << ") must match the type of the corresponding argument in "
+             << "function signature(" << fnInputTypes[i] << ')';
+
+  return success();
+}
+
+static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
+  auto buildFuncType =
+      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+         mlir::function_like_impl::VariadicFlag,
+         std::string &) { return builder.getFunctionType(argTypes, results); };
+
+  return mlir::function_like_impl::parseFunctionLikeOp(parser, result,
+                                                       /*allowVariadic=*/true,
+                                                       buildFuncType);
+}
+
 namespace {
 struct EliminateSimpleControlMergesPattern
     : mlir::OpRewritePattern<ControlMergeOp> {
@@ -829,18 +861,16 @@ bool handshake::JoinOp::tryExecute(
   return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
 }
 
-// for let printer/parser/verifier in Handshake_Op class
-/*static LogicalResult verify(ForkOp op) {
+static LogicalResult verifyInstanceOp(handshake::InstanceOp op) {
+  if (op->getNumOperands() == 0)
+    return op.emitOpError() << "must provide at least a control operand.";
+
+  if (!op.getControl().getType().dyn_cast<NoneType>())
+    return op.emitOpError()
+           << "last operand must be a control (none-typed) operand.";
+
   return success();
 }
-void print(OpAsmPrinter &p, ForkOp op) {
-  p << " ";
-  p.printOperands(op.getOperands());
- // p << " : " << op.getType();
-}
-ParseResult parseForkOp(OpAsmParser &parser, OperationState &result) {
-  return success();
-}*/
 
 //===----------------------------------------------------------------------===//
 // TableGen'd op method definitions

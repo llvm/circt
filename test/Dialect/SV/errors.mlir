@@ -77,13 +77,13 @@ hw.module @IfOp(%arg0: i1) {
 // -----
 hw.module @Fatal() {
   // expected-error @+1 {{sv.fatal should be in a procedural region}}
-  sv.fatal
+  sv.fatal 1
 }
 
 // -----
-hw.module @Fatal() {
+hw.module @Finish() {
   // expected-error @+1 {{sv.finish should be in a procedural region}}
-  sv.finish
+  sv.finish 1
 }
 
 // -----
@@ -141,28 +141,28 @@ hw.module @Wire() {
 // -----
 hw.module @Assert(%arg0: i1) {
   // expected-error @+1 {{sv.assert should be in a procedural region}}
-  sv.assert %arg0: i1
+  sv.assert %arg0, immediate
 }
 
 // -----
 hw.module @Assume(%arg0: i1) {
   // expected-error @+1 {{sv.assume should be in a procedural region}}
-  sv.assume %arg0: i1
+  sv.assume %arg0, immediate
 }
 
 // -----
 hw.module @Cover(%arg0: i1) {
   // expected-error @+1 {{sv.cover should be in a procedural region}}
-  sv.cover %arg0: i1
+  sv.cover %arg0, immediate
 }
 
 // -----
 // expected-error @+1 {{Referenced instance doesn't exist}}
-sv.bind @A in @Assume
+sv.bind #hw.innerNameRef<@assume::@A>
 
 // -----
 // expected-error @+1 {{Referenced instance doesn't exist}}
-sv.bind @A in @NotAModule
+sv.bind #hw.innerNameRef<@NotAModule::@A>
 
 
 // -----
@@ -172,7 +172,7 @@ hw.module @InternSrcMod() {
   hw.output
 }
 // expected-error @+1 {{Referenced instance isn't marked as doNotPrint}}
-sv.bind @A in @InternSrcMod
+sv.bind #hw.innerNameRef<@InternSrcMod::@A>
 
 // -----
 

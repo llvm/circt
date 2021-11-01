@@ -405,10 +405,10 @@ private:
             if (auto groupName = op.groupName(); groupName.hasValue())
               os << " with " << groupName.getValue();
 
-            emitCalyxBody([&]() { emitCalyxControl(op.getThenRegion()); });
-            if (op.elseRegionExists())
+            emitCalyxBody([&]() { emitCalyxControl(op.getThenBody()); });
+            if (op.elseBodyExists())
               emitCalyxSection("else",
-                               [&]() { emitCalyxControl(op.getElseRegion()); });
+                               [&]() { emitCalyxControl(op.getElseBody()); });
           })
           .Case<EnableOp>([&](auto op) { emitEnable(op); })
           .Default([&](auto op) {

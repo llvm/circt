@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -65,16 +66,6 @@ AnnotationSet AnnotationSet::forPort(FModuleLike module, size_t portNo) {
   return AnnotationSet(ArrayAttr::get(module->getContext(), {}));
 }
 
-/// Get an annotation set for the specified module port, as well as other
-/// argument attributes.
-AnnotationSet
-AnnotationSet::forPort(FModuleLike module, size_t portNo,
-                       SmallVectorImpl<NamedAttribute> &otherAttributes) {
-  for (auto a : mlir::function_like_impl::getArgAttrs(module, portNo))
-    otherAttributes.push_back(a);
-  return forPort(module, portNo);
-}
-
 /// Get an annotation set for the specified value.
 AnnotationSet AnnotationSet::get(Value v) {
   if (auto op = v.getDefiningOp())
@@ -83,22 +74,6 @@ AnnotationSet AnnotationSet::get(Value v) {
   auto arg = v.dyn_cast<BlockArgument>();
   auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
   return forPort(module, arg.getArgNumber());
-}
-
-/// Return this annotation set as an argument attribute dictionary for a port.
-DictionaryAttr AnnotationSet::getArgumentAttrDict(
-    ArrayRef<NamedAttribute> otherPortAttrs) const {
-  auto *context = getContext();
-  if (empty())
-    return DictionaryAttr::get(context, otherPortAttrs);
-
-  SmallVector<NamedAttribute> allPortAttrs(otherPortAttrs.begin(),
-                                           otherPortAttrs.end());
-  // Annotations are stored as under the "firrtl.annotations" key.
-  allPortAttrs.push_back(
-      {Identifier::get(getDialectAnnotationAttrName(), context),
-       getArrayAttr()});
-  return DictionaryAttr::get(context, allPortAttrs);
 }
 
 /// Store the annotations in this set in an operation's `annotations` attribute,
@@ -237,7 +212,54 @@ bool AnnotationSet::hasAnnotationImpl(StringRef className) const {
 }
 
 bool AnnotationSet::hasDontTouch() const {
-  return hasAnnotation("firrtl.transforms.DontTouchAnnotation");
+  return hasAnnotation(dontTouchAnnoClass);
+}
+
+bool AnnotationSet::setDontTouch(bool dontTouch) {
+  if (dontTouch)
+    return addDontTouch();
+  else
+    return removeDontTouch();
+}
+
+bool AnnotationSet::addDontTouch() {
+  if (hasDontTouch())
+    return false;
+  addAnnotations(DictionaryAttr::get(
+      getContext(), {{Identifier::get("class", getContext()),
+                      StringAttr::get(getContext(), dontTouchAnnoClass)}}));
+  return true;
+}
+
+bool AnnotationSet::removeDontTouch() {
+  return removeAnnotation(dontTouchAnnoClass);
+}
+
+bool AnnotationSet::hasDontTouch(Operation *op) {
+  return AnnotationSet(op).hasDontTouch();
+}
+
+bool AnnotationSet::setDontTouch(Operation *op, bool dontTouch) {
+  if (dontTouch)
+    return addDontTouch(op);
+  else
+    return removeDontTouch(op);
+}
+
+bool AnnotationSet::addDontTouch(Operation *op) {
+  AnnotationSet annos(op);
+  auto changed = annos.addDontTouch();
+  if (changed)
+    annos.applyToOperation(op);
+  return changed;
+}
+
+bool AnnotationSet::removeDontTouch(Operation *op) {
+  AnnotationSet annos(op);
+  auto changed = annos.removeDontTouch();
+  if (changed)
+    annos.applyToOperation(op);
+  return changed;
 }
 
 /// Add more annotations to this AttributeSet.
@@ -296,6 +318,13 @@ bool AnnotationSet::removeAnnotation(Annotation anno) {
 bool AnnotationSet::removeAnnotation(Attribute anno) {
   return removeAnnotations(
       [&](Annotation other) { return other.getDict() == anno; });
+}
+
+/// Remove an annotation from this annotation set. Returns true if any were
+/// removed, false otherwise.
+bool AnnotationSet::removeAnnotation(StringRef className) {
+  return removeAnnotations(
+      [&](Annotation other) { return other.getClass() == className; });
 }
 
 /// Remove all annotations from this annotation set for which `predicate`
@@ -416,4 +445,16 @@ Annotation AnnotationSetIterator::operator*() const {
     return Annotation(dictAttr);
   else
     return Annotation(attr.cast<SubAnnotationAttr>().getAnnotations());
+}
+
+//===----------------------------------------------------------------------===//
+// Annotation Details
+//===----------------------------------------------------------------------===//
+
+/// Check if an OMIR type is a string-encoded value that the FIRRTL dialect
+/// simply passes through as a string without any decoding.
+bool circt::firrtl::isOMIRStringEncodedPassthrough(StringRef type) {
+  return type == "OMID" || type == "OMReference" || type == "OMBigInt" ||
+         type == "OMLong" || type == "OMString" || type == "OMDouble" ||
+         type == "OMBigDecimal" || type == "OMDeleted" || type == "OMConstant";
 }

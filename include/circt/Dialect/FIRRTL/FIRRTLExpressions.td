@@ -611,3 +611,17 @@ def HWStructCastOp : FIRRTLOp<"hwStructCast", [NoSideEffect]> {
 
   let verifier = "return ::verifyHWStructCastOp(*this);";
 }
+
+def BitCastOp: FIRRTLOp<"bitcast", [NoSideEffect]> {
+  let summary = [{
+    Reinterpret one value to another value of the same size and
+    potentially different type. This op is lowered to hw::BitCastOp.
+  }];
+
+  let arguments = (ins FIRRTLType:$input);
+  let results = (outs FIRRTLType:$result);
+  let verifier = "return ::verifyBitCastOp(*this);";
+  let hasFolder = 1;
+
+  let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
+}

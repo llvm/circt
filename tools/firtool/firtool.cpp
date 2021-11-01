@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
@@ -22,7 +23,6 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/LoweringOptions.h"
-#include "circt/Translation/ExportVerilog.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -105,6 +105,28 @@ static cl::opt<bool> disableAnnotationsClassless(
 static cl::opt<bool> disableAnnotationsUnknown(
     "disable-annotation-unknown",
     cl::desc("Ignore unknown annotations when parsing"), cl::init(false));
+
+static cl::opt<bool>
+    emitMetadata("emit-metadata",
+                 cl::desc("emit metadata for metadata annotations"),
+                 cl::init(true));
+
+static cl::opt<bool> emitOMIR("emit-omir",
+                              cl::desc("emit OMIR annotations to a JSON file"),
+                              cl::init(true));
+
+static cl::opt<bool> replSeqMem(
+    "repl-seq-mem",
+    cl::desc(
+        "replace the seq mem for macro replacement and emit relevant metadata"),
+    cl::init(false));
+static cl::opt<std::string>
+    replSeqMemCircuit("repl-seq-mem-circuit",
+                      cl::desc("circuit root for seq mem metadata"),
+                      cl::init(""));
+static cl::opt<std::string>
+    replSeqMemFile("repl-seq-mem-file",
+                   cl::desc("file name for seq mem metadata"), cl::init(""));
 
 static cl::opt<bool> imconstprop(
     "imconstprop",
@@ -199,6 +221,15 @@ static cl::list<std::string>
                              cl::desc("Optional input annotation file"),
                              cl::CommaSeparated, cl::value_desc("filename"));
 
+static cl::list<std::string>
+    inputOMIRFilenames("omir-file",
+                       cl::desc("Optional input object model 2.0 file"),
+                       cl::CommaSeparated, cl::value_desc("filename"));
+
+static cl::opt<std::string>
+    omirOutFile("output-omir", cl::desc("file name for the output omir"),
+                cl::init(""));
+
 static cl::opt<std::string> blackBoxRootPath(
     "blackbox-path",
     cl::desc("Optional path to use as the root of black box annotations"),
@@ -223,12 +254,23 @@ static LogicalResult
 processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
               Optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
   // Add the annotation file if one was explicitly specified.
+  unsigned numAnnotationFiles = 0;
   for (auto inputAnnotationFilename : inputAnnotationFilenames) {
     std::string annotationFilenameDetermined;
     if (!sourceMgr.AddIncludeFile(inputAnnotationFilename, llvm::SMLoc(),
                                   annotationFilenameDetermined)) {
       llvm::errs() << "cannot open input annotation file '"
                    << inputAnnotationFilename
+                   << "': No such file or directory\n";
+      return failure();
+    }
+    ++numAnnotationFiles;
+  }
+
+  for (auto file : inputOMIRFilenames) {
+    std::string filename;
+    if (!sourceMgr.AddIncludeFile(file, llvm::SMLoc(), filename)) {
+      llvm::errs() << "cannot open input annotation file '" << file
                    << "': No such file or directory\n";
       return failure();
     }
@@ -241,6 +283,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     firrtl::FIRParserOptions options;
     options.ignoreInfoLocators = ignoreFIRLocations;
     options.rawAnnotations = newAnno;
+    options.numAnnotationFiles = numAnnotationFiles;
     module = importFIRFile(sourceMgr, &context, options);
   } else {
     auto parserTimer = ts.nest("MLIR Parser");
@@ -279,6 +322,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().addPass(
         firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown,
                                                  disableAnnotationsClassless));
+
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createCSEPass());
@@ -304,7 +348,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // The input mlir file could be firrtl dialect so we might need to clean
   // things up.
   if (lowerTypes) {
-    pm.addNestedPass<firrtl::CircuitOp>(firrtl::createLowerFIRRTLTypesPass());
+    pm.addNestedPass<firrtl::CircuitOp>(
+        firrtl::createLowerFIRRTLTypesPass(replSeqMem));
     // Only enable expand whens if lower types is also enabled.
     if (expandWhens) {
       auto &modulePM = pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>();
@@ -339,6 +384,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     auto &circuitPM = pm.nest<firrtl::CircuitOp>();
     circuitPM.addPass(firrtl::createGrandCentralPass());
     circuitPM.addPass(firrtl::createGrandCentralTapsPass());
+    circuitPM.nest<firrtl::FModuleOp>().addPass(
+        firrtl::createGrandCentralSignalMappingsPass());
   }
 
   // The above passes, IMConstProp in particular, introduce additional
@@ -348,11 +395,19 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
         createSimpleCanonicalizerPass());
 
+  if (emitMetadata)
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createCreateSiFiveMetadataPass(
+        replSeqMem, replSeqMemCircuit, replSeqMemFile));
+
+  if (emitOMIR)
+    pm.nest<firrtl::CircuitOp>().addPass(
+        firrtl::createEmitOMIRPass(omirOutFile));
+
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog) {
     pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
-    pm.addPass(sv::createHWMemSimImplPass());
+    pm.addPass(sv::createHWMemSimImplPass(replSeqMem));
 
     if (extractTestCode)
       pm.addPass(sv::createSVExtractTestCodePass());
@@ -371,17 +426,28 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     // Legalize unsupported operations within the modules.
     pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModulesPass());
 
-    // Legalize the module names.
-    pm.addPass(sv::createHWLegalizeNamesPass());
-
     // Tidy up the IR to improve verilog emission quality.
     if (!disableOptimization) {
       auto &modulePM = pm.nest<hw::HWModuleOp>();
       modulePM.addPass(sv::createPrettifyVerilogPass());
     }
 
-    if (exportModuleHierarchy)
-      pm.addPass(sv::createHWExportModuleHierarchyPass());
+    // Emit a single file or multiple files depending on the output format.
+    switch (outputFormat) {
+    case OutputMLIR:
+    case OutputDisabled:
+      llvm_unreachable("can't reach this");
+    case OutputVerilog:
+      pm.addPass(createExportVerilogPass(outputFile.getValue()->os()));
+      break;
+    case OutputSplitVerilog:
+      pm.addPass(createExportSplitVerilogPass(outputFilename));
+      // Run module hierarchy emission after verilog emission, which ensures we
+      // pick up any changes that verilog emission made.
+      if (exportModuleHierarchy)
+        pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+      break;
+    }
   }
 
   // Load the emitter options from the command line. Command line options if
@@ -391,30 +457,16 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (failed(pm.run(module.get())))
     return failure();
 
-  // Note that we intentionally "leak" the Module into the MLIRContext instead
-  // of deallocating it.  There is no need to deallocate it right before
-  // process exit.
-  mlir::ModuleOp theModule = module.release();
-
-  // Emit a single file or multiple files depending on the output format.
-  switch (outputFormat) {
-  case OutputMLIR: {
+  if (outputFormat == OutputMLIR) {
     auto outputTimer = ts.nest("Print .mlir output");
-    theModule->print(outputFile.getValue()->os());
-    return success();
+    module->print(outputFile.getValue()->os());
   }
-  case OutputDisabled:
-    return success();
-  case OutputVerilog: {
-    auto outputTimer = ts.nest("ExportVerilog emission");
-    return exportVerilog(theModule, outputFile.getValue()->os());
-  }
-  case OutputSplitVerilog: {
-    auto outputTimer = ts.nest("Split ExportVerilog emission");
-    return exportSplitVerilog(theModule, outputFilename);
-  }
-  }
-  return failure();
+
+  // We intentionally "leak" the Module into the MLIRContext instead of
+  // deallocating it.  There is no need to deallocate it right before process
+  // exit.
+  (void)module.release();
+  return success();
 }
 
 /// Process a single split of the input. This allocates a source manager and

@@ -19,8 +19,8 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 // Base class for binary operators.
 class BinOp<string mnemonic, list<OpTrait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins CombIntegerType:$lhs, CombIntegerType:$rhs);
-  let results = (outs CombIntegerType:$result);
+  let arguments = (ins HWIntegerType:$lhs, HWIntegerType:$rhs);
+  let results = (outs HWIntegerType:$result);
 
   let assemblyFormat =
     "$lhs `,` $rhs  attr-dict `:` functional-type($args, $results)";
@@ -36,11 +36,8 @@ class UTBinOp<string mnemonic, list<OpTrait> traits = []> :
 // Base class for variadic operators.
 class VariadicOp<string mnemonic, list<OpTrait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins Variadic<CombIntegerType>:$inputs);
-  let results = (outs CombIntegerType:$result);
-
-  let assemblyFormat =
-    "$inputs attr-dict `:` functional-type($inputs, results)";
+  let arguments = (ins Variadic<HWIntegerType>:$inputs);
+  let results = (outs HWIntegerType:$result);
 }
 
 class UTVariadicOp<string mnemonic, list<OpTrait> traits = []> :
@@ -122,7 +119,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
   }];
 
   let arguments = (ins ICmpPredicate:$predicate,
-                   CombIntegerType:$lhs, CombIntegerType:$rhs);
+                   HWIntegerType:$lhs, HWIntegerType:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs  attr-dict `:` type($lhs)";
@@ -159,7 +156,7 @@ def ICmpOp : CombOp<"icmp", [NoSideEffect, SameTypeOperands]> {
 // Base class for unary reduction operations that produce an i1.
 class UnaryI1ReductionOp<string mnemonic, list<OpTrait> traits = []> :
       CombOp<mnemonic, traits # [NoSideEffect]> {
-  let arguments = (ins CombIntegerType:$input);
+  let arguments = (ins HWIntegerType:$input);
   let results = (outs I1:$result);
   let hasFolder = 1;
 
@@ -177,8 +174,8 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
   let summary = "Extract a range of bits into a smaller value, lowBit "
                 "specifies the lowest bit included.";
 
-  let arguments = (ins CombIntegerType:$input, I32Attr:$lowBit);
-  let results = (outs CombIntegerType:$result);
+  let arguments = (ins HWIntegerType:$input, I32Attr:$lowBit);
+  let results = (outs HWIntegerType:$result);
 
   let assemblyFormat =
     "$input `from` $lowBit attr-dict `:` functional-type($input, $result)";
@@ -198,8 +195,8 @@ def ExtractOp : CombOp<"extract", [NoSideEffect]> {
 def SExtOp : CombOp<"sext", [NoSideEffect]> {
   let summary = "Sign extend an integer to an equal or larger integer";
 
-  let arguments = (ins CombIntegerType:$input);
-  let results = (outs CombIntegerType:$result);
+  let arguments = (ins HWIntegerType:$input);
+  let results = (outs HWIntegerType:$result);
 
   let assemblyFormat =
     "$input attr-dict `:` functional-type($input, $result)";
@@ -213,7 +210,7 @@ def SExtOp : CombOp<"sext", [NoSideEffect]> {
 // Other Operations
 //===----------------------------------------------------------------------===//
 
-def ConcatOp : VariadicOp<"concat"> {
+def ConcatOp : VariadicOp<"concat", [InferTypeOpInterface]> {
   let summary = "Concatenate a variadic list of operands together.";
   let description = [{
     See the HW-SV rationale document for details on operand ordering.
@@ -223,13 +220,24 @@ def ConcatOp : VariadicOp<"concat"> {
   let hasCanonicalizeMethod = true;
   let verifier = "return ::verifyConcatOp(*this);";
 
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+
   let builders = [
-    OpBuilder<(ins "ValueRange":$inputs)>,
     OpBuilder<(ins "Value":$lhs, "Value":$rhs), [{
       return build($_builder, $_state, ValueRange{lhs, rhs});
     }]>,
     OpBuilder<(ins "Value":$hd, "ValueRange":$tl)>,
   ];
+
+  let extraClassDeclaration = [{
+    /// Infer the return types of this operation.
+    static LogicalResult inferReturnTypes(MLIRContext *context,
+                                          Optional<Location> loc,
+                                          ValueRange operands,
+                                          DictionaryAttr attrs,
+                                          mlir::RegionRange regions,
+                                          SmallVectorImpl<Type> &results);
+  }];
 }
 
 // Select one of two values based on a condition.

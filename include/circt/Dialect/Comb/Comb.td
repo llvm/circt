@@ -30,16 +30,11 @@ def CombDialect : Dialect {
   let cppNamespace = "::circt::comb";
 }
 
-// Type constraint that indicates that an operand/result may only be a valid,
-// known, non-directional type.
-def CombIntegerType : Type<CPred<"::isCombIntegerType($_self)">,
-                          "an integer bitvector of one or more bits",
-                          "::mlir::IntegerType">;
-
 // Base class for the operation in this dialect.
 class CombOp<string mnemonic, list<OpTrait> traits = []> :
     Op<CombDialect, mnemonic, traits>;
 
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Comb/Combinational.td"
 
 #endif // COMB_TD

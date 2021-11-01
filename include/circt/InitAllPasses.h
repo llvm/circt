@@ -14,6 +14,7 @@
 #ifndef CIRCT_INITALLPASSES_H_
 #define CIRCT_INITALLPASSES_H_
 
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/Calyx/CalyxPasses.h"
 #include "circt/Dialect/ESI/ESIDialect.h"

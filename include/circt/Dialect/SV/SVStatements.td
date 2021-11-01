@@ -432,30 +432,6 @@ def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
     "$string attr-dict (`(` $operands^ `)` `:` type($operands))?";
 }
 
-def FinishOp : SVOp<"finish", [ProceduralOp]> {
-  let summary = "'$finish' statement";
-  let description = [{
-    Finishes a simulation and exits the simulation process.
-  }];
-
-  let arguments = (ins);
-  let results = (outs);
-
-  let assemblyFormat = "attr-dict";
-}
-
-def FatalOp : SVOp<"fatal", [ProceduralOp]> {
-  let summary = "'$fatal' statement";
-  let description = [{
-    Run-time fatal assertion error.
-  }];
-
-  let arguments = (ins);
-  let results = (outs);
-
-  let assemblyFormat = "attr-dict";
-}
-
 def VerbatimOp : SVOp<"verbatim"> {
   let summary = "Verbatim opaque text emitted inline.";
   let description = [{
@@ -464,7 +440,7 @@ def VerbatimOp : SVOp<"verbatim"> {
     sv.verbatim allows operand substitutions with {{0}} syntax.
   }];
   let arguments = (ins StrAttr:$string, Variadic<AnyType>:$operands,
-                  DefaultValuedAttr<SymRefArrayAttr,"{}">:$symbols);
+                  DefaultValuedAttr<NameRefArrayAttr,"{}">:$symbols);
 
   let assemblyFormat =
     "$string (`(` $operands^ `)` `:` type($operands))? attr-dict";
@@ -481,83 +457,8 @@ def VerbatimOp : SVOp<"verbatim"> {
 }
 
 //===----------------------------------------------------------------------===//
-// Verification Statements
+// Bind Statements
 //===----------------------------------------------------------------------===//
-
-class ImmediateAssertionOp<string mnemonic, list<OpTrait> traits = []> :
-    SVOp<mnemonic, traits> {
-  let arguments = (ins I1:$expression, StrAttr:$label);
-  let results = (outs);
-  let assemblyFormat =
-    "custom<OmitEmptyStringAttr>($label) attr-dict $expression `:` type($expression)";
-}
-
-def AssertOp : ImmediateAssertionOp<"assert", [ProceduralOp]> {
-  let summary = "immediate assertion statement";
-  let description = [{
-    Specify that a Boolean expression is always true.  This can be used to both
-    document the behavior of the design and to test that the design behaves as
-    expected.  See Section 16.3 of the SystemVerilog 2017 specification.
-  }];
-}
-
-def AssumeOp : ImmediateAssertionOp<"assume", [ProceduralOp]> {
-  let summary = "immediate assume statement";
-  let description = [{
-    Specify that a Boolean expression is assumed to always be true.  This can
-    either be used as an assertion-like check that the expression is, in fact,
-    always true or to bound legal input values during testing.  See Section 16.3
-    of the SystemVerilog 2017 specification.
-  }];
-}
-
-def CoverOp : ImmediateAssertionOp<"cover", [ProceduralOp]> {
-  let summary = "immediate cover statement";
-  let description = [{
-    Specify that a Boolean expression should be monitored for coverage, i.e., a
-    simulator will watch if it occurs and how many times it occurs.  See section
-    16.3 of the SystemVerilog 2017 specification.
-  }];
-}
-
-class ConcurrentAssertionOp<string mnemonic, list<OpTrait> traits = []> :
-    SVOp<mnemonic, traits> {
-  let arguments =
-    (ins EventControlAttr:$event, I1:$clock, I1:$property, StrAttr:$label);
-  let results = (outs);
-  let assemblyFormat =
-    "custom<OmitEmptyStringAttr>($label) $event $clock $property attr-dict `:`"
-    " type($property)";
-}
-
-def AssertConcurrentOp : ConcurrentAssertionOp<"assert.concurrent"> {
-  let summary = "concurrent assertion statement, i.e., assert property";
-  let description = [{
-    Specify that a property of the hardware design is true whenever the property
-    is evaluated.  This can be used to both document the behavior of the design
-    and to test that the design behaves as expected.  See section 16.5 of the
-    SystemVerilog 2017 specification.
-  }];
-}
-
-def AssumeConcurrentOp : ConcurrentAssertionOp<"assume.concurrent"> {
-  let summary = "concurrent assume statement, i.e., assume property";
-  let description = [{
-    Specify that a property is assumed to be true whenever the property is
-    evaluated.  This can be used to both document the behavior of the design and
-    to test that the design behaves as expected.  See section 16.5 of the
-    SystemVerilog 2017 specification.
-  }];
-}
-
-def CoverConcurrentOp : ConcurrentAssertionOp<"cover.concurrent"> {
-  let summary = "concurrent cover statement, i.e., cover property";
-  let description = [{
-    Specify that a specific property should be monitored for coverage, i.e., a
-    simulation will watch if it occurrs and how many times it occurs.  See
-    section 16.5 of the SystemVerilog 2017 specification.
-  }];
-}
 
 def BindOp : SVOp<"bind", []> {
   let summary = "indirect instantiation statement";
@@ -572,12 +473,14 @@ def BindOp : SVOp<"bind", []> {
   }];
 
   let arguments =
-   (ins FlatSymbolRefAttr:$boundInstance, FlatSymbolRefAttr:$instanceModule);
+   (ins InnerRefAttr:$instance);
   let results = (outs);
   let verifier = "return ::verify$cppClass(*this);";
 
-  let assemblyFormat = "$boundInstance `in` $instanceModule attr-dict";
-
+  let assemblyFormat = "$instance attr-dict";
+  let builders = [
+    OpBuilder<(ins "StringAttr":$mod, "StringAttr":$name)>
+  ];
   let extraClassDeclaration = [{
     /// Lookup the instance for the bind.  This returns null on invalid IR.
     hw::InstanceOp getReferencedInstance(const hw::SymbolCache *cache = nullptr);
@@ -598,5 +501,136 @@ def BindInterfaceOp : SVOp<"bind.interface", []> {
     sv::InterfaceInstanceOp
     getReferencedInstance(const hw::SymbolCache *cache = nullptr);
   }];
+}
 
+//===----------------------------------------------------------------------===//
+// Simulation Control Tasks
+//===----------------------------------------------------------------------===//
+
+/// A number passed to `$stop` and `$finish` that indicates the level of
+/// verbosity of the diagnostic message to be printed (see section 20.2 of IEEE
+/// 1800-2017):
+///
+/// - `0`: Prints nothing
+/// - `1`: Prints simulation time and location (default)
+/// - `2`: Prints simulation time, location, and statistics about the memory and
+///   CPU time used in simulation
+def VerbosityIntAttr : DefaultValuedAttr<Confined<I8Attr,
+  [IntMinValue<0>, IntMaxValue<2>]>, "1">;
+
+/// Commonalities between `StopOp` and `FinishOp`.
+class FinishOrStopOp<string mnemonic, list<OpTrait> traits = []> :
+    SVOp<mnemonic, [ProceduralOp] # traits> {
+  let arguments = (ins VerbosityIntAttr:$verbosity);
+  let assemblyFormat = "$verbosity attr-dict";
+
+  // First line intentionally left blank.
+  string verbosityDescription = [{
+    The optional `verbosity` parameter controls how much diagnostic information
+    is printed when the system task is executed (see section 20.2 of IEEE
+    1800-2017):
+
+    - `0`: Prints nothing
+    - `1`: Prints simulation time and location (default)
+    - `2`: Prints simulation time, location, and statistics about the memory and
+      CPU time used in simulation
+  }];
+}
+
+def StopOp : FinishOrStopOp<"stop"> {
+  let summary = "`$stop` system task";
+  let description = [{
+    Causes the simulation to be suspended. Does not terminate the simulator.
+  }] # verbosityDescription;
+}
+
+def FinishOp : FinishOrStopOp<"finish"> {
+  let summary = "`$finish` system task";
+  let description = [{
+    Stops the simulation and exits/terminates the simulator process. In practice
+    most GUI-based simulators will show a prompt to the user offering them an
+    opportunity to not close the simulator altogether.
+
+    Other tasks such as `$exit` or `$fatal` implicitly call this system task.
+  }] # verbosityDescription;
+}
+
+def ExitOp : SVOp<"exit", [ProceduralOp]> {
+  let summary = "`$exit` system task";
+  let description = [{
+    Waits for all `program` blocks to complete and then makes an implicit call
+    to `$finish` with default verbosity (level 1) to conclude the simulation.
+  }];
+  let assemblyFormat = "attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Severity Message Tasks
+//===----------------------------------------------------------------------===//
+
+def FatalOp : SVOp<"fatal", [ProceduralOp]> {
+  let summary = "`$fatal` severity message task";
+  let description = [{
+    Generates a run-time fatal error which terminates the simulation with an
+    error code. Makes an implicit call to `$finish`, forwarding the `verbosity`
+    operand. If present, the optional message is printed with any additional
+    operands interpolated into the message string.
+  }];
+  let arguments = (ins
+    VerbosityIntAttr:$verbosity,
+    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
+  let assemblyFormat = [{
+    $verbosity
+    (`,` $message^ (`(` $operands^ `)` `:` type($operands))?)?
+    attr-dict
+  }];
+  let builders = [
+    OpBuilder<(ins CArg<VerbosityIntAttr.returnType,"1">:$verbosity),
+      "build(odsBuilder, odsState, verbosity, StringAttr{}, ValueRange{});">,
+    OpBuilder<(ins VerbosityIntAttr.returnType:$verbosity,
+      "mlir::StringAttr":$message),
+      "build(odsBuilder, odsState, verbosity, message, ValueRange{});">,
+  ];
+}
+
+/// Commonalities between `ErrorOp`, `WarningOp`, and `InfoOp`.
+class NonfatalMessageOp<string mnemonic, list<OpTrait> traits = []> :
+    SVOp<mnemonic, [ProceduralOp] # traits> {
+  string messageDescription = [{
+    If present, the optional message is printed with any additional operands
+    interpolated into the message string.
+  }];
+  let arguments = (ins
+    OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$operands);
+  let assemblyFormat = [{
+    ($message^ (`(` $operands^ `)` `:` type($operands))?)?
+    attr-dict
+  }];
+  let builders = [
+    OpBuilder<(ins),
+      "build(odsBuilder, odsState, StringAttr{}, ValueRange{});">,
+    OpBuilder<(ins "mlir::StringAttr":$message),
+      "build(odsBuilder, odsState, message, ValueRange{});">,
+  ];
+}
+
+def ErrorOp : NonfatalMessageOp<"error"> {
+  let summary = "`$error` severity message task";
+  let description = [{
+    This system task indicates a run-time error.
+  }] # messageDescription;
+}
+
+def WarningOp : NonfatalMessageOp<"warning"> {
+  let summary = "`$warning` severity message task";
+  let description = [{
+    This system task indicates a run-time warning.
+  }] # messageDescription;
+}
+
+def InfoOp : NonfatalMessageOp<"info"> {
+  let summary = "`$info` severity message task";
+  let description = [{
+    This system task indicates a message with no specific severity.
+  }] # messageDescription;
 }

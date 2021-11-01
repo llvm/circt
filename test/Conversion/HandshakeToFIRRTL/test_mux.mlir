@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL: firrtl.module @handshake_mux_3ins_1outs_ui64(
+// CHECK-LABEL: firrtl.module @handshake_mux_in_ui64_ui64_ui64_out_ui64(
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
 // CHECK:   %0 = firrtl.subfield %arg0(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
 // CHECK:   %1 = firrtl.subfield %arg0(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
@@ -37,7 +37,7 @@
 // CHECK: firrtl.module @test_mux(in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg5: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_mux(%arg0: index, %arg1: index, %arg2: index, %arg3: none, ...) -> (index, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_arg3 = firrtl.instance @handshake_mux_3ins_1outs_ui64  {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_arg3 = firrtl.instance "" @handshake_mux_in_ui64_ui64_ui64_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   %0 = "handshake.mux"(%arg0, %arg1, %arg2): (index, index, index) -> index
   handshake.return %0, %arg3 : index, none
 }
@@ -46,7 +46,7 @@ handshake.func @test_mux(%arg0: index, %arg1: index, %arg2: index, %arg3: none, 
 
 // Test a mux tree with an odd number of inputs.
 
-// CHECK-LABEL: firrtl.module @handshake_mux_4ins_1outs_ui64
+// CHECK-LABEL: firrtl.module @handshake_mux_in_ui64_ui64_ui64_ui64_out_ui64
 // CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1(2)
 // CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2(2)
 // CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3(2)
@@ -63,7 +63,7 @@ handshake.func @test_mux_3way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 
 // Test a mux tree with multiple full layers.
 
-// CHECK-LABEL: firrtl.module @handshake_mux_9ins_1outs_ui64
+// CHECK-LABEL: firrtl.module @handshake_mux_in_ui64_ui64_ui64_ui64_ui64_ui64_ui64_ui64_ui64_out_ui64
 // CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1(2)
 // CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2(2)
 // CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3(2)
@@ -90,7 +90,7 @@ handshake.func @test_mux_8way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 
 // Test a mux tree with multiple layers and a partial first layer (odd).
 
-// CHECK-LABEL: firrtl.module @handshake_mux_6ins_1outs_ui64
+// CHECK-LABEL: firrtl.module @handshake_mux_in_ui64_ui64_ui64_ui64_ui64_ui64_out_ui64
 // CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1(2)
 // CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2(2)
 // CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3(2)
@@ -111,7 +111,7 @@ handshake.func @test_mux_5way(%arg0: index, %arg1: index, %arg2: index, %arg3: i
 
 // Test a mux tree with multiple layers and a partial first layer (even).
 
-// CHECK-LABEL: firrtl.module @handshake_mux_7ins_1outs_ui64
+// CHECK-LABEL: firrtl.module @handshake_mux_in_ui64_ui64_ui64_ui64_ui64_ui64_ui64_out_ui64
 // CHECK: %[[DATA1:.+]] = firrtl.subfield %arg1(2)
 // CHECK: %[[DATA2:.+]] = firrtl.subfield %arg2(2)
 // CHECK: %[[DATA3:.+]] = firrtl.subfield %arg3(2)

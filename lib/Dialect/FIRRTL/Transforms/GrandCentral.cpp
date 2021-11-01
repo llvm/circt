@@ -11,14 +11,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/FIRRTL/CircuitNamespace.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/YAMLTraits.h"
 #include <variant>
 
 #define DEBUG_TYPE "gct"
@@ -26,6 +29,334 @@
 using namespace circt;
 using namespace firrtl;
 using llvm::Optional;
+
+//===----------------------------------------------------------------------===//
+// Collateral for generating a YAML representation of a SystemVerilog interface
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+// These macros are used to provide hard-errors if a user tries to use the YAML
+// infrastructure improperly.  We only implement conversion to YAML and not
+// conversion from YAML.  The LLVM YAML infrastructure doesn't provide the
+// ability to differentitate this and we don't need it for the purposes of
+// Grand Central.
+#define UNIMPLEMENTED_DEFAULT(clazz)                                           \
+  llvm_unreachable("default '" clazz                                           \
+                   "' construction is an intentionally *NOT* implemented "     \
+                   "YAML feature (you should never be using this)");
+#define UNIMPLEMENTED_DENORM(clazz)                                            \
+  llvm_unreachable("conversion from YAML to a '" clazz                         \
+                   "' is intentionally *NOT* implemented (you should not be "  \
+                   "converting from YAML to an interface)");
+
+// This namespace provides YAML-related collateral that is specific to Grand
+// Central and should not be placed in the `llvm::yaml` namespace.
+namespace yaml {
+
+/// Context information necessary for YAML generation.
+struct Context {
+  /// A symbol table consisting of _only_ the interfaces construted by the Grand
+  /// Central pass.  This is not a symbol table because we do not have an
+  /// up-to-date symbol table that includes interfaces at the time the Grand
+  /// Central pass finishes.  This structure is easier to build up and is only
+  /// the information we need.
+  DenseMap<Attribute, sv::InterfaceOp> &interfaceMap;
+};
+
+/// A representation of an `sv::InterfaceSignalOp` that includes additional
+/// description information.
+///
+/// TODO: This could be removed if we add `firrtl.DocStringAnnotation` support
+/// or if FIRRTL dialect included support for ops to specify "comment"
+/// information.
+struct DescribedSignal {
+  /// The comment associated with this signal.
+  StringAttr description;
+
+  /// The signal.
+  sv::InterfaceSignalOp signal;
+};
+
+/// This exist to work around the fact that no interface can be instantiated
+/// inside another interface.  This serves to represent an op like this for the
+/// purposes of conversion to YAML.
+///
+/// TODO: Fix this once we have a solution for #1464.
+struct DescribedInstance {
+  StringAttr name;
+
+  /// A comment associated with the interface instance.
+  StringAttr description;
+
+  /// The dimensionality of the interface instantiation.
+  ArrayAttr dimensions;
+
+  /// The symbol associated with the interface.
+  FlatSymbolRefAttr interface;
+};
+
+} // namespace yaml
+} // namespace
+
+// These macros tell the YAML infrastructure that these are types which can
+// show up in vectors and provides implementations of how to serialize these.
+// Each of these macros puts the resulting class into the `llvm::yaml` namespace
+// (which is why these are outside the `llvm::yaml` namespace below).
+LLVM_YAML_IS_SEQUENCE_VECTOR(::yaml::DescribedSignal)
+LLVM_YAML_IS_SEQUENCE_VECTOR(::yaml::DescribedInstance)
+LLVM_YAML_IS_SEQUENCE_VECTOR(sv::InterfaceOp)
+
+// This `llvm::yaml` namespace contains implementations of classes that enable
+// conversion from an `sv::InterfaceOp` to a YAML representation of that
+// interface using [LLVM's YAML I/O library](https://llvm.org/docs/YamlIO.html).
+namespace llvm {
+namespace yaml {
+
+using namespace ::yaml;
+
+/// Conversion from a `DescribedSignal` to YAML.  This is
+/// implemented using YAML normalization to first convert this to an internal
+/// `Field` structure which has a one-to-one mapping to the YAML represntation.
+template <>
+struct MappingContextTraits<DescribedSignal, Context> {
+  /// A one-to-one representation with a YAML representation of a signal/field.
+  struct Field {
+    /// The name of the field.
+    StringRef name;
+
+    /// An optional, textual description of what the field is.
+    Optional<StringRef> description;
+
+    /// The dimensions of the field.
+    SmallVector<unsigned, 2> dimensions;
+
+    /// The width of the underlying type.
+    unsigned width;
+
+    /// Construct a `Field` from a `DescribedSignal` (an `sv::InterfaceSignalOp`
+    /// with an optional description).
+    Field(IO &io, DescribedSignal &op)
+        : name(op.signal.sym_nameAttr().getValue()) {
+
+      // Convert the description from a `StringAttr` (which may be null) to an
+      // `Optional<StringRef>`.  This aligns exactly with the YAML
+      // representation.
+      if (op.description) {
+        description = op.description.getValue();
+        description->consume_front("// ");
+      }
+
+      // Unwrap the type of the field into an array of dimensions and a width.
+      // By example, this is going from the following hardware type:
+      //
+      //     !hw.uarray<1xuarray<2xuarray<3xi8>>>
+      //
+      // To the following representation:
+      //
+      //     dimensions: [ 3, 2, 1 ]
+      //     width: 8
+      //
+      // Note that the above is equivalenet to the following Verilog
+      // specification.
+      //
+      //     wire [7:0] foo [2:0][1:0][0:0]
+      //
+      // Do this by repeatedly unwrapping unpacked array types until you get to
+      // the underlying type.  The dimensions need to be reversed as this
+      // unwrapping happens in reverse order of the final representation.
+      auto tpe = op.signal.type();
+      while (auto vector = tpe.dyn_cast<hw::UnpackedArrayType>()) {
+        dimensions.push_back(vector.getSize());
+        tpe = vector.getElementType();
+      }
+      dimensions = SmallVector<unsigned>(llvm::reverse(dimensions));
+
+      // The final non-array type must be an integer.  Leave this as an assert
+      // with a blind cast because we generated this type in this pass (and we
+      // therefore cannot fail this cast).
+      assert(tpe.isa<IntegerType>());
+      width = tpe.cast<IntegerType>().getWidth();
+    }
+
+    /// A no-argument constructor is necessary to work with LLVM's YAML library.
+    Field(IO &io){UNIMPLEMENTED_DEFAULT("Field")}
+
+    /// This cannot be denomralized back to an interface op.
+    DescribedSignal denormalize(IO &) {
+      UNIMPLEMENTED_DENORM("DescribedSignal")
+    }
+  };
+
+  static void mapping(IO &io, DescribedSignal &op, Context &ctx) {
+    MappingNormalization<Field, DescribedSignal> keys(io, op);
+    io.mapRequired("name", keys->name);
+    io.mapOptional("description", keys->description);
+    io.mapRequired("dimensions", keys->dimensions);
+    io.mapRequired("width", keys->width);
+  }
+};
+
+/// Conversion from a `DescribedInstance` to YAML.  This is implemented using
+/// YAML normalization to first convert the `DescribedInstance` to an internal
+/// `Instance` struct which has a one-to-one representation with the final YAML
+/// representation.
+template <>
+struct MappingContextTraits<DescribedInstance, Context> {
+  /// A YAML-serializable representation of an interface instantiation.
+  struct Instance {
+    /// The name of the interface.
+    StringRef name;
+
+    /// An optional textual description of the interface.
+    Optional<StringRef> description = None;
+
+    /// An array describing the dimnensionality of the interface.
+    SmallVector<int64_t, 2> dimensions;
+
+    /// The underlying interface.
+    FlatSymbolRefAttr interface;
+
+    Instance(IO &io, DescribedInstance &op)
+        : name(op.name.getValue()), interface(op.interface) {
+
+      // Convert the description from a `StringAttr` (which may be null) to an
+      // `Optional<StringRef>`.  This aligns exactly with the YAML
+      // representation.
+      if (op.description) {
+        description = op.description.getValue();
+        description->consume_front("// ");
+      }
+
+      for (auto &d : op.dimensions) {
+        auto dimension = d.dyn_cast<IntegerAttr>();
+        dimensions.push_back(dimension.getInt());
+      }
+    }
+
+    Instance(IO &io){UNIMPLEMENTED_DEFAULT("Instance")}
+
+    DescribedInstance denormalize(IO &) {
+      UNIMPLEMENTED_DENORM("DescribedInstance")
+    }
+  };
+
+  static void mapping(IO &io, DescribedInstance &op, Context &ctx) {
+    MappingNormalization<Instance, DescribedInstance> keys(io, op);
+    io.mapRequired("name", keys->name);
+    io.mapOptional("description", keys->description);
+    io.mapRequired("dimensions", keys->dimensions);
+    io.mapRequired("interface", ctx.interfaceMap[keys->interface], ctx);
+  }
+};
+
+/// Conversion from an `sv::InterfaceOp` to YAML.  This is implemented using
+/// YAML normalization to first convert the interface to an internal `Interface`
+/// which reformats the Grand Central-generated interface into the YAML format.
+template <>
+struct MappingContextTraits<sv::InterfaceOp, Context> {
+  /// A YAML-serializable representation of an interface.  This consists of
+  /// fields (vector or ground types) and nested interfaces.
+  struct Interface {
+    /// The name of the interface.
+    StringRef name;
+
+    /// All ground or vectors that make up the interface.
+    std::vector<DescribedSignal> fields;
+
+    /// Instantiations of _other_ interfaces.
+    std::vector<DescribedInstance> instances;
+
+    /// Construct an `Interface` from an `sv::InterfaceOp`.  This is tuned to
+    /// "parse" the structure of an interface that the Grand Central pass
+    /// generates.  The structure of `Field`s and `Instance`s is documented
+    /// below.
+    ///
+    /// A field will look like the following.  The verbatim description is
+    /// optional:
+    ///
+    ///     sv.verbatim "// <description>" {
+    ///       firrtl.grandcentral.yaml.type = "description",
+    ///       symbols = []}
+    ///     sv.interface.signal @<name> : <type>
+    ///
+    /// An interface instanctiation will look like the following.  The verbatim
+    /// description is optional.
+    ///
+    ///     sv.verbatim "// <description>" {
+    ///       firrtl.grandcentral.type = "description",
+    ///       symbols = []}
+    ///     sv.verbatim "<name> <symbol>();" {
+    ///       firrtl.grandcentral.yaml.name = "<name>",
+    ///       firrtl.grandcentral.yaml.dimensions = [<first dimension>, ...],
+    ///       firrtl.grandcentral.yaml.symbol = @<symbol>,
+    ///       firrtl.grandcentral.yaml.type = "instance",
+    ///       symbols = []}
+    ///
+    Interface(IO &io, sv::InterfaceOp &op) : name(op.getName()) {
+      // A mutable store of the description.  This occurs in the op _before_ the
+      // field or instance, so we need someplace to put it until we use it.
+      StringAttr description = {};
+
+      for (auto &op : op.getBodyBlock()->getOperations()) {
+        TypeSwitch<Operation *>(&op)
+            // A verbatim op is either a description or an interface
+            // instantiation.
+            .Case<sv::VerbatimOp>([&](sv::VerbatimOp op) {
+              auto tpe = op->getAttrOfType<StringAttr>(
+                  "firrtl.grandcentral.yaml.type");
+
+              // This is a descripton.  Update the mutable description and
+              // continue;
+              if (tpe.getValue() == "description") {
+                description = op.stringAttr();
+                return;
+              }
+
+              // This is an unsupported construct. Just drop it.
+              if (tpe.getValue() == "unsupported") {
+                description = {};
+                return;
+              }
+
+              // This is an instance of another interface.  Add the symbol to
+              // the vector of instances.
+              auto name = op->getAttrOfType<StringAttr>(
+                  "firrtl.grandcentral.yaml.name");
+              auto dimensions = op->getAttrOfType<ArrayAttr>(
+                  "firrtl.grandcentral.yaml.dimensions");
+              auto symbol = op->getAttrOfType<FlatSymbolRefAttr>(
+                  "firrtl.grandcentral.yaml.symbol");
+              instances.push_back(
+                  DescribedInstance({name, description, dimensions, symbol}));
+            })
+            // An interface signal op is a field.
+            .Case<sv::InterfaceSignalOp>([&](sv::InterfaceSignalOp op) {
+              fields.push_back(DescribedSignal({description, op}));
+              description = {};
+            });
+      }
+    }
+
+    /// A no-argument constructor is necessary to work with LLVM's YAML library.
+    Interface(IO &io){UNIMPLEMENTED_DEFAULT("Interface")}
+
+    /// This cannot be denomralized back to an interface op.
+    sv::InterfaceOp denormalize(IO &) {
+      UNIMPLEMENTED_DENORM("sv::InterfaceOp")
+    }
+  };
+
+  static void mapping(IO &io, sv::InterfaceOp &op, Context &ctx) {
+    MappingNormalization<Interface, sv::InterfaceOp> keys(io, op);
+    io.mapRequired("name", keys->name);
+    io.mapRequired("fields", keys->fields, ctx);
+    io.mapRequired("instances", keys->instances, ctx);
+  }
+};
+
+} // namespace yaml
+} // namespace llvm
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
@@ -45,14 +376,14 @@ struct VerbatimType {
   bool instantiation;
 
   /// A vector storing the width of each dimension of the type.
-  SmallVector<unsigned, 4> dimensions = {};
+  SmallVector<int32_t, 4> dimensions = {};
 
   /// Serialize this type to a string.
   std::string toStr(StringRef name) {
     SmallString<64> stringType(str);
     stringType.append(" ");
     stringType.append(name);
-    for (auto d : dimensions) {
+    for (auto d : llvm::reverse(dimensions)) {
       stringType.append("[");
       stringType.append(Twine(d).str());
       stringType.append("]");
@@ -67,54 +398,6 @@ struct VerbatimType {
 /// A sum type representing either a type encoded as a string (VerbatimType)
 /// or an actual mlir::Type.
 typedef std::variant<VerbatimType, Type> TypeSum;
-
-/// A namespace that is used to store existing names and generate names.  This
-/// exists to work around limitations of SymbolTables.
-class CircuitNamespace {
-  StringSet<> internal;
-
-public:
-  /// Construct a new namespace from a circuit op.  This namespace will be
-  /// composed of any operation in the first level of the circuit that contains
-  /// a symbol.
-  CircuitNamespace(CircuitOp circuit) {
-    for (Operation &op : *circuit.getBody())
-      if (auto symbol =
-              op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-        internal.insert(symbol.getValue());
-  }
-
-  /// Return a unique name, derived from the input `name`, and add the new name
-  /// to the internal namespace.  There are two possible outcomes for the
-  /// returned name:
-  ///
-  /// 1. The original name is returned.
-  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
-  std::string newName(StringRef name) {
-    // Special case the situation where there is no name collision to avoid
-    // messing with the SmallString allocation below.
-    if (internal.insert(name).second)
-      return name.str();
-    size_t i = 0;
-    llvm::SmallString<64> tryName;
-    do {
-      tryName = (name + "_" + Twine(i++)).str();
-    } while (!internal.insert(tryName).second);
-    return std::string(tryName);
-  }
-
-  /// Return a unique name, derived from the input `name`, and add the new name
-  /// to the internal namespace.  There are two possible outcomes for the
-  /// returned name:
-  ///
-  /// 1. The original name is returned.
-  /// 2. The name is given a `_<n>` suffix where `<n>` is a number starting from
-  ///    `_0` and incrementing by one each time.
-  std::string newName(const Twine &name) {
-    return newName((StringRef)name.str());
-  }
-};
 
 /// Stores the information content of an ExtractGrandCentralAnnotation.
 struct ExtractionInfo {
@@ -167,6 +450,22 @@ private:
   /// Mapping of ID to companion module.
   DenseMap<Attribute, CompanionInfo> companionIDMap;
 
+  /// An optional prefix applied to all interfaces in the design.  This is set
+  /// based on a PrefixInterfacesAnnotation.
+  StringRef interfacePrefix;
+
+  /// Return a string containing the name of an interface.  Apply correct
+  /// prefixing from the interfacePrefix and module-level prefix parameter.
+  std::string getInterfaceName(StringAttr prefix,
+                               AugmentedBundleTypeAttr bundleType) {
+
+    if (prefix)
+      return (prefix.getValue() + interfacePrefix +
+              bundleType.getDefName().getValue())
+          .str();
+    return (interfacePrefix + bundleType.getDefName().getValue()).str();
+  }
+
   /// Recursively examine an AugmentedType to populate the "mappings" file
   /// (generate XMRs) for this interface.  This does not build new interfaces.
   bool traverseField(Attribute field, IntegerAttr id, Twine path);
@@ -174,13 +473,15 @@ private:
   /// Recursively examine an AugmentedType to both build new interfaces and
   /// populate a "mappings" file (generate XMRs) using `traverseField`.  Return
   /// the type of the field exmained.
-  Optional<TypeSum> computeField(Attribute field, IntegerAttr id, Twine path);
+  Optional<TypeSum> computeField(Attribute field, IntegerAttr id,
+                                 StringAttr prefix, Twine path);
 
   /// Recursively examine an AugmentedBundleType to both build new interfaces
   /// and populate a "mappings" file (generate XMRs).  Return none if the
   /// interface is invalid.
   Optional<sv::InterfaceOp> traverseBundle(AugmentedBundleTypeAttr bundle,
-                                           IntegerAttr id, Twine path);
+                                           IntegerAttr id, StringAttr prefix,
+                                           Twine path);
 
   /// Return the module associated with this value.
   FModuleLike getEnclosingModule(Value value);
@@ -188,6 +489,10 @@ private:
   /// Inforamtion about how the circuit should be extracted.  This will be
   /// non-empty if an extraction annotation is found.
   Optional<ExtractionInfo> maybeExtractInfo = None;
+
+  /// A filename describing where to put a YAML representation of the
+  /// interfaces generated by this pass.
+  Optional<StringAttr> maybeHierarchyFileYAML = None;
 
   StringAttr getOutputDirectory() {
     if (maybeExtractInfo.hasValue())
@@ -251,6 +556,9 @@ private:
     } while (!description.empty());
     return std::string(out);
   }
+
+  /// A store of the YAML representation of interfaces.
+  DenseMap<Attribute, sv::InterfaceOp> interfaceMap;
 };
 
 } // namespace
@@ -329,8 +637,8 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
         Value leafValue = leafMap.lookup(ground.getID());
         assert(leafValue && "leafValue not found");
 
-        auto builder = OpBuilder::atBlockEnd(
-            companionIDMap.lookup(id).mapping.getBodyBlock());
+        auto builder =
+            OpBuilder::atBlockEnd(companionIDMap.lookup(id).mapping.getBody());
 
         auto srcPaths =
             instancePaths->getAbsolutePaths(getEnclosingModule(leafValue));
@@ -348,10 +656,7 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
               cast<FModuleOp>(blockArg.getOwner()->getParentOp());
           builder.create<sv::VerbatimOp>(
               uloc, "assign " + path + " = " + srcRef +
-                        module.portNames()[blockArg.getArgNumber()]
-                            .cast<StringAttr>()
-                            .getValue() +
-                        ";");
+                        module.getPortName(blockArg.getArgNumber()) + ";");
         } else {
           auto leafModuleName = leafValue.getDefiningOp()
                                     ->getAttr("name")
@@ -399,7 +704,9 @@ bool GrandCentralPass::traverseField(Attribute field, IntegerAttr id,
 }
 
 Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
-                                                 IntegerAttr id, Twine path) {
+                                                 IntegerAttr id,
+                                                 StringAttr prefix,
+                                                 Twine path) {
 
   auto unsupported = [&](StringRef name, StringRef kind) {
     return VerbatimType({("// <unsupported " + kind + " type>").str(), false});
@@ -427,7 +734,7 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
             bool notFailed = true;
             auto elements = vector.getElements();
             auto firstElement = fromAttr(elements[0]);
-            auto elementType = computeField(firstElement.getValue(), id,
+            auto elementType = computeField(firstElement.getValue(), id, prefix,
                                             path + "[" + Twine(0) + "]");
             if (!elementType)
               return None;
@@ -449,9 +756,9 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
           })
       .Case<AugmentedBundleTypeAttr>(
           [&](AugmentedBundleTypeAttr bundle) -> TypeSum {
-            auto iface = traverseBundle(bundle, id, path);
+            auto iface = traverseBundle(bundle, id, prefix, path);
             assert(iface && iface.getValue());
-            return VerbatimType({(bundle.getDefName().getValue()).str(), true});
+            return VerbatimType({getInterfaceName(prefix, bundle), true});
           })
       .Case<AugmentedStringTypeAttr>([&](auto field) -> TypeSum {
         return unsupported(field.getName().getValue(), "string");
@@ -481,22 +788,21 @@ Optional<TypeSum> GrandCentralPass::computeField(Attribute field,
 /// drive the interface. Returns false on any failure and true on success.
 Optional<sv::InterfaceOp>
 GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
-                                 Twine path) {
+                                 StringAttr prefix, Twine path) {
   auto builder = OpBuilder::atBlockEnd(getOperation().getBody());
   sv::InterfaceOp iface;
   builder.setInsertionPointToEnd(getOperation().getBody());
   auto loc = getOperation().getLoc();
-  auto iFaceName = getNamespace().newName(bundle.getDefName().getValue());
+  auto iFaceName = getNamespace().newName(getInterfaceName(prefix, bundle));
   iface = builder.create<sv::InterfaceOp>(loc, iFaceName);
   if (maybeExtractInfo)
     iface->setAttr("output_file",
-                   hw::OutputFileAttr::get(
-                       getOutputDirectory(),
-                       builder.getStringAttr(iFaceName + ".sv"),
-                       builder.getBoolAttr(true), builder.getBoolAttr(true),
-                       builder.getContext()));
+                   hw::OutputFileAttr::getFromDirectoryAndFilename(
+                       &getContext(), getOutputDirectory().getValue(),
+                       iFaceName + ".sv",
+                       /*excludFromFileList=*/true));
 
-  builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBodyBlock());
+  builder.setInsertionPointToEnd(cast<sv::InterfaceOp>(iface).getBody());
 
   for (auto element : bundle.getElements()) {
     auto field = fromAttr(element);
@@ -504,26 +810,54 @@ GrandCentralPass::traverseBundle(AugmentedBundleTypeAttr bundle, IntegerAttr id,
       return None;
 
     auto name = element.cast<DictionaryAttr>().getAs<StringAttr>("name");
-    auto elementType =
-        computeField(field.getValue(), id, path + "." + name.getValue());
+    auto elementType = computeField(field.getValue(), id, prefix,
+                                    path + "." + name.getValue());
     if (!elementType)
       return None;
 
     auto uloc = builder.getUnknownLoc();
     auto description =
         element.cast<DictionaryAttr>().getAs<StringAttr>("description");
-    if (description)
-      builder.create<sv::VerbatimOp>(
+    if (description) {
+      auto descriptionOp = builder.create<sv::VerbatimOp>(
           uloc, ("// " + cleanupDescription(description.getValue())));
+
+      // If we need to generate a YAML representation of this interface, then
+      // add an attribute indicating that this `sv::VerbatimOp` is actually a
+      // description.
+      if (maybeHierarchyFileYAML)
+        descriptionOp->setAttr("firrtl.grandcentral.yaml.type",
+                               builder.getStringAttr("description"));
+    }
+
     if (auto *str = std::get_if<VerbatimType>(&elementType.getValue())) {
-      builder.create<sv::VerbatimOp>(uloc, str->toStr(name.getValue()));
+      auto instanceOp =
+          builder.create<sv::VerbatimOp>(uloc, str->toStr(name.getValue()));
+
+      // If we need to generate a YAML representation of the interface, then add
+      // attirbutes that describe what this `sv::VerbatimOp` is.
+      if (maybeHierarchyFileYAML) {
+        if (str->instantiation)
+          instanceOp->setAttr("firrtl.grandcentral.yaml.type",
+                              builder.getStringAttr("instance"));
+        else
+          instanceOp->setAttr("firrtl.grandcentral.yaml.type",
+                              builder.getStringAttr("unsupported"));
+        instanceOp->setAttr("firrtl.grandcentral.yaml.name", name);
+        instanceOp->setAttr("firrtl.grandcentral.yaml.dimensions",
+                            builder.getI32ArrayAttr(str->dimensions));
+        instanceOp->setAttr(
+            "firrtl.grandcentral.yaml.symbol",
+            FlatSymbolRefAttr::get(builder.getContext(), str->str));
+      }
       continue;
     }
 
-    builder.create<sv::InterfaceSignalOp>(
-        uloc, name.getValue(), std::get<Type>(elementType.getValue()));
+    auto tpe = std::get<Type>(elementType.getValue());
+    builder.create<sv::InterfaceSignalOp>(uloc, name.getValue(), tpe);
   }
 
+  interfaceMap[FlatSymbolRefAttr::get(builder.getContext(), iFaceName)] = iface;
   return iface;
 }
 
@@ -583,7 +917,52 @@ void GrandCentralPass::runOnOperation() {
       }
 
       maybeExtractInfo = {directory, filename};
-      // Intentional fallthrough.  Extraction info may be needed later.
+      // Do not delete this annotation.  Extraction info may be needed later.
+      return false;
+    }
+    if (anno.isClass("sifive.enterprise.grandcentral."
+                     "GrandCentralHierarchyFileAnnotation")) {
+      if (maybeHierarchyFileYAML.hasValue()) {
+        emitCircuitError("more than one 'GrandCentralHierarchyFileAnnotation' "
+                         "was found, but zero or one may be provided");
+        removalError = true;
+        return false;
+      }
+
+      auto filename = anno.getMember<StringAttr>("filename");
+      if (!filename) {
+        emitCircuitError()
+            << "contained an invalid 'GrandCentralHierarchyFileAnnotation' "
+               "that does not contain 'directory' and 'filename' fields: "
+            << anno.getDict();
+        removalError = true;
+        return false;
+      }
+
+      maybeHierarchyFileYAML = filename;
+      return true;
+    }
+    if (anno.isClass(
+            "sifive.enterprise.grandcentral.PrefixInterfacesAnnotation")) {
+      if (!interfacePrefix.empty()) {
+        emitCircuitError("more than one 'PrefixInterfacesAnnotation' was "
+                         "found, but zero or one may be provided");
+        removalError = true;
+        return false;
+      }
+
+      auto prefix = anno.getMember<StringAttr>("prefix");
+      if (!prefix) {
+        emitCircuitError()
+            << "contained an invalid 'PrefixInterfacesAnnotation' that does "
+               "not contain a 'prefix' field: "
+            << anno.getDict();
+        removalError = true;
+        return false;
+      }
+
+      interfacePrefix = prefix.getValue();
+      return true;
     }
     return false;
   });
@@ -605,6 +984,16 @@ void GrandCentralPass::runOnOperation() {
                    << "\n";
     else
       llvm::dbgs() << "  <none>\n";
+    llvm::dbgs()
+        << "Prefix Info (from PrefixInterfacesAnnotation):\n"
+        << "  prefix: " << interfacePrefix << "\n"
+        << "Hierarchy File Info (from GrandCentralHierarchyFileAnnotation):\n"
+        << "  filename: ";
+    if (maybeHierarchyFileYAML)
+      llvm::dbgs() << maybeHierarchyFileYAML.getValue();
+    else
+      llvm::dbgs() << "<none>";
+    llvm::dbgs() << "\n";
   });
 
   // Setup the builder to create ops _inside the FIRRTL circuit_.  This is
@@ -633,19 +1022,24 @@ void GrandCentralPass::runOnOperation() {
   // the module is not instantiated or is multiply instantiated.
   auto exactlyOneInstance = [&](FModuleOp op,
                                 StringRef msg) -> Optional<InstanceOp> {
-    auto instances = getSymbolTable().getSymbolUses(op, circuitOp);
-    if (!instances.hasValue()) {
+    auto uses = getSymbolTable().getSymbolUses(op, circuitOp);
+
+    auto instances = llvm::make_filter_range(uses.getValue(), [&](auto u) {
+      return (isa<InstanceOp>(u.getUser()));
+    });
+
+    if (instances.empty()) {
       op->emitOpError() << "is marked as a GrandCentral '" << msg
                         << "', but is never instantiated";
       return None;
     }
 
-    if (llvm::hasSingleElement(instances.getValue()))
-      return cast<InstanceOp>((*(instances.getValue().begin())).getUser());
+    if (llvm::hasSingleElement(instances))
+      return cast<InstanceOp>((*(instances.begin())).getUser());
 
     auto diag = op->emitOpError() << "is marked as a GrandCentral '" << msg
                                   << "', but it is instantiated more than once";
-    for (auto instance : instances.getValue())
+    for (auto instance : instances)
       diag.attachNote(instance.getUser()->getLoc())
           << "parent is instantiated here";
     return None;
@@ -773,21 +1167,19 @@ void GrandCentralPass::runOnOperation() {
               auto mapping = builder.create<FModuleOp>(
                   circuitOp.getLoc(), builder.getStringAttr(mappingName),
                   ArrayRef<PortInfo>());
-              auto *ctx = builder.getContext();
               if (maybeExtractInfo)
                 mapping->setAttr(
                     "output_file",
-                    hw::OutputFileAttr::get(
-                        getOutputDirectory(),
-                        builder.getStringAttr(mapping.getName() + ".sv"),
-                        trueAttr, trueAttr, ctx));
+                    hw::OutputFileAttr::getFromDirectoryAndFilename(
+                        &getContext(), getOutputDirectory().getValue(),
+                        mapping.getName() + ".sv",
+                        /*excludeFromFilelist=*/true));
               companionIDMap[id] = {name.getValue(), op, mapping};
 
               // Instantiate the mapping module inside the companion.
-              builder.setInsertionPointToEnd(op.getBodyBlock());
-              builder.create<InstanceOp>(circuitOp.getLoc(),
-                                         SmallVector<Type>({}),
-                                         mapping.getName(), mapping.getName());
+              builder.setInsertionPointToEnd(op.getBody());
+              builder.create<InstanceOp>(circuitOp.getLoc(), mapping,
+                                         mapping.getName());
 
               // Assert that the companion is instantiated once and only once.
               auto instance = exactlyOneInstance(op, "companion");
@@ -801,15 +1193,17 @@ void GrandCentralPass::runOnOperation() {
 
               instance.getValue()->setAttr("lowerToBind", trueAttr);
               instance.getValue()->setAttr(
-                  "output_file", hw::OutputFileAttr::get(
-                                     builder.getStringAttr(""),
-                                     maybeExtractInfo.getValue().bindFilename,
-                                     trueAttr, trueAttr, ctx));
+                  "output_file",
+                  hw::OutputFileAttr::getFromFilename(
+                      &getContext(),
+                      maybeExtractInfo.getValue().bindFilename.getValue(),
+                      /*excludeFromFileList=*/true));
               op->setAttr("output_file",
-                          hw::OutputFileAttr::get(
-                              maybeExtractInfo.getValue().directory,
-                              builder.getStringAttr(op.getName() + ".sv"),
-                              trueAttr, trueAttr, ctx));
+                          hw::OutputFileAttr::getFromDirectoryAndFilename(
+                              &getContext(),
+                              maybeExtractInfo.getValue().directory.getValue(),
+                              op.getName() + ".sv",
+                              /*excludeFromFileList=*/true));
               return true;
             }
 
@@ -899,9 +1293,7 @@ void GrandCentralPass::runOnOperation() {
         FModuleOp module = cast<FModuleOp>(blockArg.getOwner()->getParentOp());
         llvm::dbgs() << "  - " << id.getValue() << ": "
                      << module.getName() + ">" +
-                            module.portNames()[blockArg.getArgNumber()]
-                                .cast<StringAttr>()
-                                .getValue()
+                            module.getPortName(blockArg.getArgNumber())
                      << "\n";
       } else
         llvm::dbgs() << "  - " << id.getValue() << ": "
@@ -923,6 +1315,7 @@ void GrandCentralPass::runOnOperation() {
   // will use XMRs to drive the interface.  If extraction info is available,
   // then the top-level instantiate interface will be marked for extraction via
   // a SystemVerilog bind.
+  SmallVector<sv::InterfaceOp, 2> interfaceVec;
   for (auto anno : worklist) {
     auto bundle = AugmentedBundleTypeAttr::get(&getContext(), anno.getDict());
 
@@ -953,19 +1346,21 @@ void GrandCentralPass::runOnOperation() {
     // Error out if this returns None (indicating that the annotation annotation
     // is malformed in some way).  A good error message is generated inside
     // `traverseBundle` or the functions it calls.
-    auto iface = traverseBundle(bundle, bundle.getID(),
+    auto iface = traverseBundle(bundle, bundle.getID(), bundle.getPrefix(),
                                 companionIDMap.lookup(bundle.getID()).name);
     if (!iface) {
       removalError = true;
       continue;
     }
 
+    interfaceVec.push_back(iface.getValue());
+
     // Instantiate the interface inside the parent.
     builder.setInsertionPointToEnd(
-        parentIDMap.lookup(bundle.getID()).second.getBodyBlock());
+        parentIDMap.lookup(bundle.getID()).second.getBody());
     auto symbolName = getNamespace().newName(
         "__" + companionIDMap.lookup(bundle.getID()).name + "_" +
-        bundle.getDefName().getValue() + "__");
+        getInterfaceName(bundle.getPrefix(), bundle) + "__");
     auto instance = builder.create<sv::InterfaceInstanceOp>(
         getOperation().getLoc(), iface.getValue().getInterfaceType(),
         companionIDMap.lookup(bundle.getID()).name,
@@ -983,10 +1378,30 @@ void GrandCentralPass::runOnOperation() {
         getOperation().getLoc(),
         SymbolRefAttr::get(builder.getContext(),
                            instance.sym_name().getValue()));
-    bind->setAttr("output_file", hw::OutputFileAttr::get(
-                                     builder.getStringAttr(""),
-                                     maybeExtractInfo.getValue().bindFilename,
-                                     trueAttr, trueAttr, bind.getContext()));
+    bind->setAttr("output_file",
+                  hw::OutputFileAttr::getFromFilename(
+                      &getContext(),
+                      maybeExtractInfo.getValue().bindFilename.getValue(),
+                      /*excludeFromFileList=*/true));
+  }
+
+  // If a `GrandCentralHierarchyFileAnnotation` was passed in, generate a YAML
+  // representation of the interfaces that we produced with the filename that
+  // that annotation provided.
+  if (maybeHierarchyFileYAML) {
+    std::string yamlString;
+    llvm::raw_string_ostream stream(yamlString);
+    ::yaml::Context yamlContext({interfaceMap});
+    llvm::yaml::Output yout(stream);
+    yamlize(yout, interfaceVec, true, yamlContext);
+
+    builder.create<sv::VerbatimOp>(builder.getUnknownLoc(), yamlString)
+        ->setAttr("output_file",
+                  hw::OutputFileAttr::getFromFilename(
+                      &getContext(),
+                      maybeHierarchyFileYAML.getValue().getValue(),
+                      /*excludFromFileList=*/true));
+    LLVM_DEBUG({ llvm::dbgs() << "Generated YAML:" << yamlString << "\n"; });
   }
 
   // Signal pass failure if any errors were found while examining circuit

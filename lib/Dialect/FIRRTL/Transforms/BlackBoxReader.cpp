@@ -16,8 +16,10 @@
 #include "PassDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Support/Path.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -32,20 +34,6 @@ using namespace firrtl;
 
 using hw::OutputFileAttr;
 using sv::VerbatimOp;
-
-/// Append a path to an existing path, replacing it if the other path is
-/// absolute. This mimicks the behaviour of `foo/bar` and `/foo/bar` being used
-/// in a working directory `/home`, resulting in `/home/foo/bar` and `/foo/bar`,
-/// respectively.
-static void appendPossiblyAbsolutePath(SmallVectorImpl<char> &base,
-                                       const Twine &suffix) {
-  if (llvm::sys::path::is_absolute(suffix)) {
-    base.clear();
-    suffix.toVector(base);
-  } else {
-    llvm::sys::path::append(base, suffix);
-  }
-}
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
@@ -149,12 +137,20 @@ void BlackBoxReaderPass::runOnOperation() {
 
     SmallVector<Attribute, 4> filteredAnnos;
     for (auto anno : AnnotationSet(&op)) {
-      if (!runOnAnnotation(&op, anno, builder))
+      if (runOnAnnotation(&op, anno, builder))
+        // Since the annotation was consumed, add a `BlackBox` annotation to
+        // indicate that this extmodule was provided by one of the black box
+        // annotations. This is useful for metadata generation.
+        filteredAnnos.push_back(builder.getDictionaryAttr(
+            {{builder.getIdentifier("class"),
+              builder.getStringAttr("firrtl.transforms.BlackBox")}}));
+      else
         filteredAnnos.push_back(anno.getDict());
     }
 
     // Update the operation annotations to exclude the ones we have consumed.
-    anythingChanged |= AnnotationSet(filteredAnnos, context).applyToOperation(&op);
+    anythingChanged |=
+        AnnotationSet(filteredAnnos, context).applyToOperation(&op);
   }
 
   // If we have emitted any files, generate a file list operation that
@@ -182,13 +178,9 @@ void BlackBoxReaderPass::runOnOperation() {
         builder.create<VerbatimOp>(circuitOp->getLoc(), std::move(output));
 
     // Attach the output file information to the verbatim op.
-    auto trueAttr = BoolAttr::get(context, true);
-    op->setAttr("output_file",
-                OutputFileAttr::get(StringAttr::get(context, ""),
-                                    StringAttr::get(context, resourceFileName),
-                                    /*exclude_from_filelist=*/trueAttr,
-                                    /*exclude_replicated_ops=*/trueAttr,
-                                    context));
+    op->setAttr("output_file", hw::OutputFileAttr::getFromFilename(
+                                   context, resourceFileName,
+                                   /*excludeFromFileList=*/true));
   }
 
   // If nothing has changed we can preseve the analysis.
@@ -320,12 +312,9 @@ void BlackBoxReaderPass::setOutputFile(VerbatimOp op, StringAttr fileNameAttr) {
   // explicitly by compiler directives in other source files.
   auto ext = llvm::sys::path::extension(fileName);
   bool exclude = (ext == ".h" || ext == ".vh" || ext == ".svh");
-  auto trueAttr = BoolAttr::get(context, true);
-  op->setAttr("output_file",
-              OutputFileAttr::get(
-                  StringAttr::get(context, targetDir), fileNameAttr,
-                  /*exclude_from_filelist=*/BoolAttr::get(context, exclude),
-                  /*exclude_replicated_ops=*/trueAttr, context));
+  op->setAttr("output_file", OutputFileAttr::getFromDirectoryAndFilename(
+                                 context, targetDir, fileName,
+                                 /*excludeFromFileList=*/exclude));
 
   // Record that this file has been generated.
   assert(!emittedFiles.count(fileNameAttr) &&

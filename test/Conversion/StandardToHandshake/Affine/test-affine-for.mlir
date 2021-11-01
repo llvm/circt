@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -create-dataflow -split-input-file | FileCheck %s
+// RUN: circt-opt %s -lower-std-to-handshake -split-input-file | FileCheck %s
 
 // -----
 
@@ -25,7 +25,7 @@ func @empty_body () -> () {
 // CHECK:   %12:3 = "handshake.fork"(%11#1) {control = false} : (index) -> (index, index, index)
 // CHECK:   %13 = "handshake.mux"(%12#0, %5, %34) : (index, index, index) -> index
 // CHECK:   %14:2 = "handshake.fork"(%13) {control = false} : (index) -> (index, index)
-// CHECK:   %15 = cmpi slt, %14#1, %9#1 : index
+// CHECK:   %15 = arith.cmpi slt, %14#1, %9#1 : index
 // CHECK:   %16:4 = "handshake.fork"(%15) {control = false} : (i1) -> (i1, i1, i1, i1)
 // CHECK:   %trueResult, %falseResult = "handshake.conditional_branch"(%16#3, %9#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:   "handshake.sink"(%falseResult) : (index) -> ()
@@ -49,7 +49,7 @@ func @empty_body () -> () {
 // CHECK:   %28 = "handshake.merge"(%23) : (index) -> index
 // CHECK:   %29:2 = "handshake.control_merge"(%24) {control = true} : (none) -> (none, index)
 // CHECK:   "handshake.sink"(%29#1) : (index) -> ()
-// CHECK:   %30 = addi %25, %27#1 : index
+// CHECK:   %30 = arith.addi %25, %27#1 : index
 // CHECK:   %31 = "handshake.branch"(%27#0) {control = false} : (index) -> index
 // CHECK:   %32 = "handshake.branch"(%28) {control = false} : (index) -> index
 // CHECK:   %33 = "handshake.branch"(%29#0) {control = true} : (none) -> none
@@ -90,7 +90,7 @@ func @load_store () -> () {
 // CHECK:   %14:3 = "handshake.fork"(%13#1) {control = false} : (index) -> (index, index, index)
 // CHECK:   %15 = "handshake.mux"(%14#0, %7, %42) : (index, index, index) -> index
 // CHECK:   %16:2 = "handshake.fork"(%15) {control = false} : (index) -> (index, index)
-// CHECK:   %17 = cmpi slt, %16#1, %11#1 : index
+// CHECK:   %17 = arith.cmpi slt, %16#1, %11#1 : index
 // CHECK:   %18:4 = "handshake.fork"(%17) {control = false} : (i1) -> (i1, i1, i1, i1)
 // CHECK:   %trueResult, %falseResult = "handshake.conditional_branch"(%18#3, %11#0) {control = false} : (i1, index) -> (index, index)
 // CHECK:   "handshake.sink"(%falseResult) : (index) -> ()
@@ -120,7 +120,7 @@ func @load_store () -> () {
 // CHECK:   %36 = "handshake.merge"(%31) : (index) -> index
 // CHECK:   %37:2 = "handshake.control_merge"(%32) {control = true} : (none) -> (none, index)
 // CHECK:   "handshake.sink"(%37#1) : (index) -> ()
-// CHECK:   %38 = addi %33, %35#1 : index
+// CHECK:   %38 = arith.addi %33, %35#1 : index
 // CHECK:   %39 = "handshake.branch"(%35#0) {control = false} : (index) -> index
 // CHECK:   %40 = "handshake.branch"(%36) {control = false} : (index) -> index
 // CHECK:   %41 = "handshake.branch"(%37#0) {control = true} : (none) -> none

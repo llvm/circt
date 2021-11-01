@@ -7,11 +7,11 @@ func @full_load(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32
     { name = "add", latency = 3, limit = 1 },
     { name = "_0", latency = 0 }
   ] } {
-  %0 = addi %a0, %a1 { opr = "add", problemStartTime = 0 } : i32
-  %1 = addi %a1, %a1 { opr = "add", problemStartTime = 1 } : i32
-  %2 = addi %a2, %a3 { opr = "add", problemStartTime = 2 } : i32
-  %3 = addi %a3, %a4 { opr = "add", problemStartTime = 3 } : i32
-  %4 = addi %a4, %a5 { opr = "add", problemStartTime = 4 } : i32
+  %0 = arith.addi %a0, %a1 { opr = "add", problemStartTime = 0 } : i32
+  %1 = arith.addi %a1, %a1 { opr = "add", problemStartTime = 1 } : i32
+  %2 = arith.addi %a2, %a3 { opr = "add", problemStartTime = 2 } : i32
+  %3 = arith.addi %a3, %a4 { opr = "add", problemStartTime = 3 } : i32
+  %4 = arith.addi %a4, %a5 { opr = "add", problemStartTime = 4 } : i32
   %5 = "barrier"(%0, %1, %2, %3, %4) { opr = "_0", problemStartTime = 7 } : (i32, i32, i32, i32, i32) -> i32
   // SIMPLEX: return
   // SIMPLEX-SAME: simplexStartTime = 7
@@ -24,11 +24,11 @@ func @partial_load(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : 
     { name = "add", latency = 3, limit = 3},
     { name = "_0", latency = 0 }
   ] } {
-  %0 = addi %a0, %a1 { opr = "add", problemStartTime = 0 } : i32
-  %1 = addi %a1, %a1 { opr = "add", problemStartTime = 1 } : i32
-  %2 = addi %a2, %a3 { opr = "add", problemStartTime = 0 } : i32
-  %3 = addi %a3, %a4 { opr = "add", problemStartTime = 2 } : i32
-  %4 = addi %a4, %a5 { opr = "add", problemStartTime = 1 } : i32
+  %0 = arith.addi %a0, %a1 { opr = "add", problemStartTime = 0 } : i32
+  %1 = arith.addi %a1, %a1 { opr = "add", problemStartTime = 1 } : i32
+  %2 = arith.addi %a2, %a3 { opr = "add", problemStartTime = 0 } : i32
+  %3 = arith.addi %a3, %a4 { opr = "add", problemStartTime = 2 } : i32
+  %4 = arith.addi %a4, %a5 { opr = "add", problemStartTime = 1 } : i32
   %5 = "barrier"(%0, %1, %2, %3, %4) { opr = "_0", problemStartTime = 10 } : (i32, i32, i32, i32, i32) -> i32
   // SIMPLEX: return
   // SIMPLEX-SAME: simplexStartTime = 4
@@ -42,11 +42,11 @@ func @multiple(%a0 : i32, %a1 : i32, %a2 : i32, %a3 : i32, %a4 : i32, %a5 : i32)
     { name = "fastAdd", latency = 1, limit = 1},
     { name = "_0", latency = 0 }
   ] } {
-  %0 = addi %a0, %a1 { opr = "slowAdd", problemStartTime = 0 } : i32
-  %1 = addi %a1, %a1 { opr = "slowAdd", problemStartTime = 1 } : i32
-  %2 = addi %a2, %a3 { opr = "fastAdd", problemStartTime = 0 } : i32
-  %3 = addi %a3, %a4 { opr = "slowAdd", problemStartTime = 1 } : i32
-  %4 = addi %a4, %a5 { opr = "fastAdd", problemStartTime = 1 } : i32
+  %0 = arith.addi %a0, %a1 { opr = "slowAdd", problemStartTime = 0 } : i32
+  %1 = arith.addi %a1, %a1 { opr = "slowAdd", problemStartTime = 1 } : i32
+  %2 = arith.addi %a2, %a3 { opr = "fastAdd", problemStartTime = 0 } : i32
+  %3 = arith.addi %a3, %a4 { opr = "slowAdd", problemStartTime = 1 } : i32
+  %4 = arith.addi %a4, %a5 { opr = "fastAdd", problemStartTime = 1 } : i32
   %5 = "barrier"(%0, %1, %2, %3, %4) { opr = "_0", problemStartTime = 10 } : (i32, i32, i32, i32, i32) -> i32
   // SIMPLEX: return
   // SIMPLEX-SAME: simplexStartTime = 4

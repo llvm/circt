@@ -5,6 +5,7 @@
 
 // DIALECT: Available Dialects:
 // DIALECT-NEXT: affine
+// DIALECT-NEXT: arith
 // DIALECT-NEXT: builtin
 // DIALECT-NEXT: calyx
 // DIALECT-NEXT: comb

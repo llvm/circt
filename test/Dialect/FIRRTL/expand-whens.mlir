@@ -254,8 +254,9 @@ firrtl.module @nested(in %clock : !firrtl.clock, in %p0 : !firrtl.uint<1>, in %p
 // CHECK-NEXT:   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
 // CHECK-NEXT:   %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
 // CHECK-NEXT:   %0 = firrtl.and %p0, %p1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-// CHECK-NEXT:   %1 = firrtl.mux(%p0, %c1_ui2, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-// CHECK-NEXT:   firrtl.connect %out, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+// CHECK-NEXT:   %1 = firrtl.mux(%p1, %c1_ui2, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK-NEXT:   %2 = firrtl.mux(%p0, %1, %c0_ui2) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
+// CHECK-NEXT:   firrtl.connect %out, %2 : !firrtl.uint<2>, !firrtl.uint<2>
 // CHECK-NEXT: }
 
 
@@ -368,7 +369,7 @@ firrtl.module @bundle_types(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
 firrtl.module @simple(in %in : !firrtl.bundle<a: uint<1>>) { }
 firrtl.module @bundle_ports() {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-  %simple_in = firrtl.instance @simple {name = "test0"}: !firrtl.bundle<a: uint<1>>
+  %simple_in = firrtl.instance test0 @simple(in in : !firrtl.bundle<a: uint<1>>)
   %0 = firrtl.subfield %simple_in(0) : (!firrtl.bundle<a: uint<1>>) -> !firrtl.uint<1>
   firrtl.connect %0, %c1_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
 }
@@ -378,10 +379,10 @@ firrtl.module @simple2(in %in : !firrtl.uint<3>) { }
 firrtl.module @as_passive(in %p : !firrtl.uint<1>) {
   %c2_ui3 = firrtl.constant 2 : !firrtl.uint<3>
   %c3_ui3 = firrtl.constant 3 : !firrtl.uint<3>
-  %simple0_in = firrtl.instance @simple2 {name = "test0"}: !firrtl.uint<3>
+  %simple0_in = firrtl.instance test0 @simple2(in in : !firrtl.uint<3>)
   firrtl.connect %simple0_in, %c2_ui3 : !firrtl.uint<3>, !firrtl.uint<3>
 
-  %simple1_in = firrtl.instance @simple2 {name = "test0"}: !firrtl.uint<3>
+  %simple1_in = firrtl.instance test0 @simple2(in in : !firrtl.uint<3>)
   firrtl.when %p {
     // This is the tricky part, connect the input ports together.
     firrtl.connect %simple1_in, %simple0_in : !firrtl.uint<3>, !firrtl.uint<3>

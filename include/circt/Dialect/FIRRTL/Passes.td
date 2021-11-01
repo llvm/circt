@@ -43,6 +43,11 @@ def LowerFIRRTLTypes : Pass<"firrtl-lower-types", "firrtl::CircuitOp"> {
     pass.
   }];
   let constructor = "circt::firrtl::createLowerFIRRTLTypesPass()";
+  let options = [
+    Option<"flattenAggregateMemData", "flatten-mem", "bool", "false",
+           "Concat all elements of the aggregate data into a single element.">
+
+  ];
 }
 
 def IMConstProp : Pass<"firrtl-imconstprop", "firrtl::CircuitOp"> {
@@ -88,6 +93,34 @@ def BlackBoxMemory : Pass<"firrtl-blackbox-memory", "firrtl::CircuitOp"> {
     Option<"emitWrapper", "emit-wrapper", "bool", "true",
            "Create a wrapper module around the black box external module.">
   ];
+}
+
+def CreateSiFiveMetadata : Pass<"firrtl-emit-metadata", "firrtl::CircuitOp"> {
+  let summary = "Emit metadata of the FIRRTL modules";
+  let description = [{
+    This pass handles the emission of several different kinds of metadata.
+  }];
+  let constructor = "circt::firrtl::createCreateSiFiveMetadataPass()";
+  let options = [Option<"replSeqMem", "repl-seq-mem", "bool", "false",
+      "Lower the seq mem for macro replacement and emit relevant metadata">,
+    Option<"replSeqMemCircuit", "repl-seq-mem-circuit", "std::string", "",
+      "Circuit root for seq mem metadata">,
+    Option<"replSeqMemFile", "repl-seq-mem-file", "std::string", "",
+      "File to which emit seq meme metadata">
+  ];
+}
+
+def EmitOMIR : Pass<"firrtl-emit-omir", "firrtl::CircuitOp"> {
+  let summary = "Emit OMIR annotations";
+  let description = [{
+    This pass gathers the `OMIRAnnotation`s in the design, updates the contained
+    targets with the trackers that were scattered throughout the design upon
+    reading the OMIR, and serializes the resulting data into a JSON file.
+  }];
+  let constructor = "circt::firrtl::createEmitOMIRPass()";
+  let options = [Option<"outputFilename", "file", "std::string", "",
+      "Output file for the JSON-serialized OMIR data">];
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }
 
 def ExpandWhens : Pass<"firrtl-expand-whens", "firrtl::FModuleOp"> {
@@ -231,7 +264,7 @@ def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
       "Search path for black box sources specified via the "
       "`BlackBoxResourceAnno` annotation.">
   ];
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = ["sv::SVDialect", "hw::HWDialect"];
 }
 
 def PrefixModules : Pass<"firrtl-prefix-modules", "firrtl::CircuitOp"> {
@@ -278,6 +311,12 @@ def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
   let summary = "Generate code for grand central data and memory taps";
   let constructor = "circt::firrtl::createGrandCentralTapsPass()";
   let dependentDialects = ["sv::SVDialect"];
+}
+
+def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
+                                      "FModuleOp"> {
+  let summary = "Generate signal mappings that force/probe remote signals";
+  let constructor = "circt::firrtl::createGrandCentralSignalMappingsPass()";
 }
 
 def CheckCombCycles : Pass<"firrtl-check-comb-cycles", "firrtl::CircuitOp"> {

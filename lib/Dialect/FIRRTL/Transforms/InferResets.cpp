@@ -89,7 +89,7 @@ inline bool operator!=(const ResetDomain &a, const ResetDomain &b) {
 static std::pair<StringAttr, FModuleOp> getResetNameAndModule(Value reset) {
   if (auto arg = reset.dyn_cast<BlockArgument>()) {
     auto module = cast<FModuleOp>(arg.getParentRegion()->getParentOp());
-    return {module.portNames()[arg.getArgNumber()].cast<StringAttr>(), module};
+    return {module.getPortNameAttr(arg.getArgNumber()), module};
   } else {
     auto op = reset.getDefiningOp();
     return {op->getAttrOfType<StringAttr>("name"),
@@ -439,6 +439,8 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
   LogicalResult implementAsyncReset(FModuleOp module, ResetDomain &domain);
   void implementAsyncReset(Operation *op, FModuleOp module, Value actualReset);
 
+  LogicalResult verifyNoAbstractReset();
+
   //===--------------------------------------------------------------------===//
   // Utilities
 
@@ -480,7 +482,7 @@ struct InferResetsPass : public InferResetsBase<InferResetsPass> {
       domains;
 
   /// Cache of modules symbols
-  std::unique_ptr<SymbolTable> symtbl;
+  InstanceGraph *instanceGraph;
 };
 } // namespace
 
@@ -490,11 +492,11 @@ void InferResetsPass::runOnOperation() {
   resetDrives.clear();
   annotatedResets.clear();
   domains.clear();
-  symtbl.release();
+  markAnalysesPreserved<InstanceGraph>();
 }
 
 void InferResetsPass::runOnOperationInner() {
-  symtbl = std::make_unique<SymbolTable>(getOperation());
+  instanceGraph = &getAnalysis<InstanceGraph>();
 
   // Trace the uninferred reset networks throughout the design.
   traceResets(getOperation());
@@ -516,6 +518,10 @@ void InferResetsPass::runOnOperationInner() {
 
   // Implement the async resets.
   if (failed(implementAsyncReset()))
+    return signalPassFailure();
+
+  // Require that no Abstract Resets exist on ports in the design.
+  if (failed(verifyNoAbstractReset()))
     return signalPassFailure();
 }
 
@@ -641,7 +647,7 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
 /// instance's port values with the target module's port values.
 void InferResetsPass::traceResets(InstanceOp inst) {
   // Lookup the referenced module. Nothing to do if its an extmodule.
-  auto module = dyn_cast<FModuleOp>(&*inst.getReferencedModule(*symtbl));
+  auto module = dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(inst));
   if (!module)
     return;
   LLVM_DEBUG(llvm::dbgs() << "Visiting instance " << inst.name() << "\n");
@@ -649,7 +655,7 @@ void InferResetsPass::traceResets(InstanceOp inst) {
   // Establish a connection between the instance ports and module ports.
   auto dirs = module.getPortDirections();
   for (auto it : llvm::enumerate(inst.getResults())) {
-    auto dir = direction::get(dirs.getValue()[it.index()]);
+    auto dir = module.getPortDirection(it.index());
     Value dstPort = module.getArgument(it.index());
     Value srcPort = it.value();
     if (dir == Direction::Out)
@@ -727,18 +733,22 @@ void InferResetsPass::traceResets(FIRRTLType dstType, Value dst, unsigned dstID,
       assert(unionLeader == dstLeader || unionLeader == srcLeader);
 
       // If dst got merged into src, append dst's drives to src's, or vice
-      // versa.
-      auto &unionDrives = resetDrives[unionLeader];
+      // versa. Also, remove dst's or src's entry in resetDrives, because they
+      // will never come up as a leader again.
       if (dstLeader != srcLeader) {
-        if (unionLeader == dstLeader)
-          unionDrives.append(std::move(resetDrives[srcLeader]));
-        else
-          unionDrives.append(std::move(resetDrives[dstLeader]));
+        auto &unionDrives = resetDrives[unionLeader]; // needed before finds
+        auto mergedDrivesIt =
+            resetDrives.find(unionLeader == dstLeader ? srcLeader : dstLeader);
+        if (mergedDrivesIt != resetDrives.end()) {
+          unionDrives.append(mergedDrivesIt->second);
+          resetDrives.erase(mergedDrivesIt);
+        }
       }
 
       // Keep note of this drive so we can point the user at the right location
       // in case something goes wrong.
-      unionDrives.push_back({{dstField, dstType}, {srcField, srcType}, loc});
+      resetDrives[unionLeader].push_back(
+          {{dstField, dstType}, {srcField, srcType}, loc});
     }
     return;
   }
@@ -869,8 +879,8 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
       if (auto blockArg = value.dyn_cast<BlockArgument>())
         moduleWorklist.insert(blockArg.getOwner()->getParentOp());
       if (auto instOp = value.getDefiningOp<InstanceOp>())
-        if (auto extmodule =
-                dyn_cast<FExtModuleOp>(&*instOp.getReferencedModule(*symtbl)))
+        if (auto extmodule = dyn_cast<FExtModuleOp>(
+                instanceGraph->getReferencedModule(instOp)))
           extmoduleWorklist.insert({extmodule, instOp});
     }
   }
@@ -911,14 +921,13 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     if (!module)
       continue;
 
-    SmallVector<Type> argTypes;
-    argTypes.reserve(module.getArguments().size());
+    SmallVector<Attribute> argTypes;
+    argTypes.reserve(module.getNumPorts());
     for (auto arg : module.getArguments())
-      argTypes.push_back(arg.getType());
+      argTypes.push_back(TypeAttr::get(arg.getType()));
 
-    auto type =
-        FunctionType::get(op->getContext(), argTypes, /*resultTypes*/ {});
-    module->setAttr(FModuleOp::getTypeAttrName(), TypeAttr::get(type));
+    module->setAttr(FModuleLike::getPortTypesAttrName(),
+                    ArrayAttr::get(op->getContext(), argTypes));
     LLVM_DEBUG(llvm::dbgs()
                << "- Updated type of module '" << module.getName() << "'\n");
   }
@@ -928,9 +937,12 @@ LogicalResult InferResetsPass::updateReset(ResetNetwork net, ResetKind kind) {
     auto module = cast<FExtModuleOp>(pair.first);
     auto instOp = cast<InstanceOp>(pair.second);
 
-    auto type = FunctionType::get(module->getContext(), instOp.getResultTypes(),
-                                  /*resultTypes*/ {});
-    module->setAttr(FExtModuleOp::getTypeAttrName(), TypeAttr::get(type));
+    SmallVector<Attribute> types;
+    for (auto type : instOp.getResultTypes())
+      types.push_back(TypeAttr::get(type));
+
+    module->setAttr(FModuleLike::getPortTypesAttrName(),
+                    ArrayAttr::get(module->getContext(), types));
     LLVM_DEBUG(llvm::dbgs()
                << "- Updated type of extmodule '" << module.getName() << "'\n");
   }
@@ -1117,7 +1129,7 @@ LogicalResult InferResetsPass::collectAnnos(FModuleOp module) {
     if (ignore)
       llvm::dbgs() << "no domain\n";
     else if (auto arg = reset.dyn_cast<BlockArgument>())
-      llvm::dbgs() << "port " << module.portNames()[arg.getArgNumber()] << "\n";
+      llvm::dbgs() << "port " << module.getPortName(arg.getArgNumber()) << "\n";
     else
       llvm::dbgs() << "wire "
                    << reset.getDefiningOp()->getAttrOfType<StringAttr>("name")
@@ -1288,7 +1300,7 @@ void InferResetsPass::determineImpl(FModuleOp module, ResetDomain &domain) {
   auto neededType = domain.reset.getType();
   LLVM_DEBUG(llvm::dbgs() << "- Looking for existing port " << neededName
                           << "\n");
-  auto portNames = module.portNames();
+  auto portNames = module.getPortNames();
   auto ports = llvm::zip(portNames, module.getArguments());
   auto portIt = llvm::find_if(
       ports, [&](auto port) { return std::get<0>(port) == neededName; });
@@ -1405,7 +1417,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     // Lookup the reset domain of the instantiated module. If there is no reset
     // domain associated with that module, or the module is explicitly marked as
     // being in no domain, simply skip.
-    auto refModule = dyn_cast<FModuleOp>(&*instOp.getReferencedModule(*symtbl));
+    auto refModule =
+        dyn_cast<FModuleOp>(instanceGraph->getReferencedModule(instOp));
     if (!refModule)
       return;
     auto domainIt = domains.find(refModule);
@@ -1428,6 +1441,20 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
       resultTypes.append(instOp.getResultTypes().begin(),
                          instOp.getResultTypes().end());
 
+      // Determine new port directions.
+      SmallVector<Direction> newPortDirections;
+      newPortDirections.reserve(instOp.getNumResults() + 1);
+      newPortDirections.push_back(Direction::In);
+      auto oldPortDirections =
+          direction::unpackAttribute(instOp.portDirectionsAttr());
+      newPortDirections.append(oldPortDirections);
+
+      // Determine new port names.
+      SmallVector<Attribute> newPortNames;
+      newPortNames.reserve(instOp.getNumResults() + 1);
+      newPortNames.push_back(domain.newPortName);
+      newPortNames.append(instOp.portNames().begin(), instOp.portNames().end());
+
       // Create a new list of port annotations.
       SmallVector<Attribute> newPortAnnos;
       if (auto oldPortAnnos = instOp.portAnnotations()) {
@@ -1442,12 +1469,13 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
 
       // Create a new instance op with the reset inserted.
       auto newInstOp = builder.create<InstanceOp>(
-          resultTypes, instOp.moduleName(), instOp.name(),
-          instOp.annotations().getValue(), newPortAnnos);
+          resultTypes, instOp.moduleName(), instOp.name(), newPortDirections,
+          newPortNames, instOp.annotations().getValue(), newPortAnnos);
       instReset = newInstOp.getResult(0);
 
       // Update the uses over to the new instance and drop the old instance.
       instOp.replaceAllUsesWith(newInstOp.getResults().drop_front());
+      instanceGraph->replaceInstance(instOp, newInstOp);
       instOp->erase();
       instOp = newInstOp;
     } else if (domain.existingPort.hasValue()) {
@@ -1506,4 +1534,21 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     regOp.resetSignalMutable().assign(actualReset);
     regOp.resetValueMutable().assign(zero);
   }
+}
+
+LogicalResult InferResetsPass::verifyNoAbstractReset() {
+  bool hasAbstractResetPorts = false;
+  for (FModuleLike module : getOperation().getBody()->getOps<FModuleLike>()) {
+    for (PortInfo port : module.getPorts()) {
+      if (port.type.isa<ResetType>()) {
+        module->emitOpError()
+            << "contains an abstract reset type after InferResets";
+        hasAbstractResetPorts = true;
+      }
+    }
+  }
+
+  if (hasAbstractResetPorts)
+    return failure();
+  return success();
 }

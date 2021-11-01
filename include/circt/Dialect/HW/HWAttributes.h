@@ -14,8 +14,14 @@
 
 namespace circt {
 namespace hw {
-class PBOAttr;
-enum class PBO : uint32_t;
+class PEOAttr;
+enum class PEO : uint32_t;
+
+// Eventually move this to an op trait
+struct InnerName {
+  static llvm::StringRef getInnerNameAttrName() { return "inner_sym"; }
+};
+
 } // namespace hw
 } // namespace circt
 

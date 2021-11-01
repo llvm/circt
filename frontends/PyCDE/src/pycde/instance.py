@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 from typing import Union
+
+from pycde.devicedb import PhysLocation, PrimitiveDB, PlacementDB
 from .appid import AppID
 
 import circt.dialects.hw as hw
@@ -12,29 +14,27 @@ from circt import msft
 import mlir.ir as ir
 
 
+# TODO: bug: holds an Operation* without releasing it. Use a level of
+# indirection.
 class Instance:
   """Represents a _specific_ instance, unique in a design. This is in contrast
   to a module instantiation within another module."""
   import pycde.system as system
 
-  def __init__(self, module: ir.Operation, instOp: hw.InstanceOp,
-               parent: Instance, sys: system.System):
+  def __init__(self,
+               module: type,
+               instOp: hw.InstanceOp,
+               parent: Instance,
+               sys: system.System,
+               primdb: PrimitiveDB = None):
     assert module is not None
     self.module = module
     self.instOp = instOp
     self.parent = parent
     if parent is None:
-      self.devicedb = msft.DeviceDB(module.operation)
-      self.devicedb.add_design_placements()
+      self.placedb = PlacementDB(sys._get_circt_mod(module), primdb)
     assert isinstance(sys, Instance.system.System)
     self.sys = sys
-
-  @property
-  def modname(self) -> str:
-    modname: str = ir.StringAttr(self.module.attributes["sym_name"]).value
-    if modname.startswith("pycde.") or modname.startswith("pycde_"):
-      return modname[6:]
-    return modname
 
   @property
   def path(self) -> list[Instance]:
@@ -57,9 +57,7 @@ class Instance:
   @property
   def path_attr(self) -> msft.RootedInstancePathAttr:
     return msft.RootedInstancePathAttr.get(
-        ir.FlatSymbolRefAttr.get(
-            ir.StringAttr(
-                self.root_module.operation.attributes["sym_name"]).value),
+        ir.FlatSymbolRefAttr.get(self.sys._get_module_symbol(self.root_module)),
         [x.name_attr for x in self.path[:-1]])
 
   @property
@@ -82,26 +80,28 @@ class Instance:
     path_names = map(lambda i: i.name, self.path)
     return "<instance: [" + ", ".join(path_names) + "]>"
 
-  def walk_instances(self, callback):
-    if isinstance(self.module, hw.HWModuleExternOp):
+  def walk(self, callback):
+    """Descend the instance hierarchy, calling back on each instance."""
+    circt_mod = self.sys._get_circt_mod(self.module)
+    if isinstance(circt_mod, hw.HWModuleExternOp):
       return
-    for op in self.module.entry_block:
+    for op in circt_mod.entry_block:
       if not isinstance(op, hw.InstanceOp):
         continue
 
       assert "moduleName" in op.attributes
       tgt_modname = ir.FlatSymbolRefAttr(op.attributes["moduleName"]).value
-      tgt_mod = self.sys.get_module(tgt_modname)
-      if tgt_mod is None:
-        continue
+      tgt_mod = self.sys._get_symbol_module(tgt_modname).modcls
+      assert tgt_mod is not None
       inst = Instance(tgt_mod, op, self, self.sys)
       callback(inst)
-      inst.walk_instances(callback)
+      inst.walk(callback)
 
-  def attach_attribute(self, attr_key: str, attr: ir.Attribute):
-    if isinstance(attr, msft.PhysLocationAttr):
+  def _attach_attribute(self, attr_key: str, attr: ir.Attribute):
+    if isinstance(attr, PhysLocation):
       assert attr_key.startswith("loc:")
-      db = self.root_instance.devicedb
+      db = self.root_instance.placedb._db
+      attr = attr._loc
       rc = db.add_placement(attr, self.path_attr, attr_key[4:],
                             self.instOp.operation)
       if not rc:
@@ -122,17 +122,11 @@ class Instance:
 
   def place(self,
             subpath: Union[str, list[str]],
-            devtype: msft.DeviceType,
+            devtype: msft.PrimitiveType,
             x: int,
             y: int,
             num: int = 0):
     loc = msft.PhysLocationAttr.get(devtype, x, y, num)
     if isinstance(subpath, list):
       subpath = "|".join(subpath)
-    self.attach_attribute(f"loc:{subpath}", loc)
-
-  def get_instance_at(self, loc):
-    if isinstance(loc, tuple) and len(loc) == 2:
-      loc = loc[1]
-    assert isinstance(loc, msft.PhysLocationAttr)
-    return self.root_instance.devicedb.get_instance_at(loc)
+    self._attach_attribute(f"loc:{subpath}", loc)

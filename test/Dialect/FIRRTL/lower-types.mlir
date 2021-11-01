@@ -1,4 +1,5 @@
 // RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-types)' %s | FileCheck %s
+// RUN: circt-opt -pass-pipeline='firrtl.circuit(firrtl-lower-types{flatten-mem=true})' %s | FileCheck --check-prefix=FLATTEN %s
 
 firrtl.circuit "TopLevel" {
 
@@ -41,9 +42,10 @@ firrtl.circuit "TopLevel" {
                           out %sink: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
 
     // CHECK-NEXT: %inst_source_valid, %inst_source_ready, %inst_source_data, %inst_sink_valid, %inst_sink_ready, %inst_sink_data
-    // CHECK-SAME: = firrtl.instance @Simple {name = ""} :
-    // CHECK-SAME: !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<64>
-    %sourceV, %sinkV = firrtl.instance @Simple {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+    // CHECK-SAME: = firrtl.instance "" @Simple(
+    // CHECK-SAME: in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>, out sink_valid: !firrtl.uint<1>, in sink_ready: !firrtl.uint<1>, out sink_data: !firrtl.uint<64>
+    %sourceV, %sinkV = firrtl.instance "" @Simple(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
+                        out sink: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
 
     // CHECK-NEXT: firrtl.connect %inst_source_valid, %source_valid
     // CHECK-NEXT: firrtl.connect %source_ready, %inst_source_ready
@@ -215,8 +217,87 @@ firrtl.circuit "TopLevel" {
     // CHECK-NEXT: firrtl.connect %[[WIRE_A_W_DATA]], %wData_a
     // CHECK-NEXT: firrtl.connect %[[WIRE_B_W_DATA]], %wData_b
 
+    // ---------------------------------------------------------------------------------
+    // If flatten memory data is enabled
+    // FLATTEN: %[[memory_r:.+]], %[[memory_w:.+]] = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} 
+    // FLATTEN-SAME: !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<16>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<16>, mask: uint<2>>
+    // FLATTEN: %[[v0:.+]] = firrtl.subfield %[[memory_r]](0)
+    // FLATTEN: firrtl.connect %[[v0]], %[[memory_r_addr:.+]] :
+    // FLATTEN: %[[v1:.+]] = firrtl.subfield %[[memory_r]](1)
+    // FLATTEN: firrtl.connect %[[v1]], %[[memory_r_en:.+]] :
+    // FLATTEN: %[[v2:.+]] = firrtl.subfield %[[memory_r]](2)
+    // FLATTEN: firrtl.connect %[[v2]], %[[memory_r_clk:.+]] :
+    // FLATTEN: %[[v3:.+]] = firrtl.subfield %[[memory_r]](3)
+    //
+    // ---------------------------------------------------------------------------------
+    // Read ports
+    // FLATTEN:  %[[v4:.+]] = firrtl.bits %[[v3]] 7 to 0 :
+    // FLATTEN:  %[[v5:.+]] = firrtl.bits %[[v3]] 15 to 8 :
+    // FLATTEN:  firrtl.connect %[[memory_r_data_a:.+]], %[[v4]] :
+    // FLATTEN:  firrtl.connect %[[memory_r_data_b:.+]], %[[v5]] :
+    // --------------------------------------------------------------------------------
+    // Write Ports
+    // FLATTEN:  %[[v9:.+]] = firrtl.subfield %[[memory_w]](3)
+    // FLATTEN:  %[[v10:.+]] = firrtl.cat %[[memory_w_data_b:.+]], %[[memory_w_data_a:.+]] :
+    // FLATTEN:  firrtl.connect %[[v9]], %[[v10]]
+    //
+    // --------------------------------------------------------------------------------
+    // Mask Ports
+    //  FLATTEN: %[[v11:.+]] = firrtl.subfield %[[memory_w]](4)
+    //  FLATTEN: %[[v12:.+]] = firrtl.cat %[[memory_w_mask_b:.+]], %[[memory_w_mask_a:.+]] :
+    //  FLATTEN: firrtl.connect %[[v11]], %[[v12]]
+    // --------------------------------------------------------------------------------
+    // Connections to module ports
+    // FLATTEN:  firrtl.connect %[[memory_r_clk]], %clock
+    // FLATTEN:  firrtl.connect %[[memory_r_en]], %rEn
+    // FLATTEN:  firrtl.connect %[[memory_r_addr]], %rAddr
+    // FLATTEN:  firrtl.connect %rData_a, %[[memory_r_data_a]] : !firrtl.uint<8>, !firrtl.uint<8>
+    // FLATTEN:  firrtl.connect %rData_b, %[[memory_r_data_b]] : !firrtl.uint<8>, !firrtl.uint<8>
+    // FLATTEN:  firrtl.connect %[[memory_w_mask_a]], %wMask_a : !firrtl.uint<1>, !firrtl.uint<1>
+    // FLATTEN:  firrtl.connect %[[memory_w_mask_b]], %wMask_b : !firrtl.uint<1>, !firrtl.uint<1>
+    // FLATTEN:  firrtl.connect %[[memory_w_data_a]], %wData_a : !firrtl.uint<8>, !firrtl.uint<8>
+    // FLATTEN:  firrtl.connect %[[memory_w_data_b]], %wData_b : !firrtl.uint<8>, !firrtl.uint<8>
   }
 
+  firrtl.module @Mem2_flatten(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out
+  %rData: !firrtl.bundle<a: uint<8>, b: uint<16>>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask:
+  !firrtl.bundle<a: uint<1>, b: uint<1>>, in %wData: !firrtl.bundle<a: uint<8>, b: uint<16>>) {
+    %memory_r, %memory_w = firrtl.mem Undefined {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency
+    = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a:
+    uint<8>, b: uint<16>>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>
+    %0 = firrtl.subfield %memory_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a:
+    uint<8>, b: uint<16>>>) -> !firrtl.clock
+    firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
+    %1 = firrtl.subfield %memory_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<16>>>) -> !firrtl.uint<1>
+    firrtl.connect %1, %rEn : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.subfield %memory_r(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a: uint<8>, b: uint<16>>>) -> !firrtl.uint<4>
+    firrtl.connect %2, %rAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    %3 = firrtl.subfield %memory_r(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: bundle<a:
+    uint<8>, b: uint<16>>>) -> !firrtl.bundle<a: uint<8>, b: uint<16>>
+    firrtl.connect %rData, %3 : !firrtl.bundle<a: uint<8>, b: uint<16>>, !firrtl.bundle<a: uint<8>, b: uint<16>>
+    %4 = firrtl.subfield %memory_w(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.clock
+    firrtl.connect %4, %clock : !firrtl.clock, !firrtl.clock
+    %5 = firrtl.subfield %memory_w(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.uint<1>
+    firrtl.connect %5, %wEn : !firrtl.uint<1>, !firrtl.uint<1>
+    %6 = firrtl.subfield %memory_w(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.uint<4>
+    firrtl.connect %6, %wAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    %7 = firrtl.subfield %memory_w(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.bundle<a: uint<1>, b: uint<1>>
+    firrtl.connect %7, %wMask : !firrtl.bundle<a: uint<1>, b: uint<1>>, !firrtl.bundle<a: uint<1>, b: uint<1>>
+    %8 = firrtl.subfield %memory_w(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: bundle<a: uint<8>, b: uint<16>>, mask: bundle<a: uint<1>, b: uint<1>>>) -> !firrtl.bundle<a: uint<8>, b: uint<16>>
+    firrtl.connect %8, %wData : !firrtl.bundle<a: uint<8>, b: uint<16>>, !firrtl.bundle<a: uint<8>, b: uint<16>>
+
+    // FLATTEN:  %[[memory_r:.+]], %[[memory_w:.+]] = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<24>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<24>, mask: uint<3>>
+    // FLATTEN:  %[[v11:.+]] = firrtl.subfield %[[memory_w]](4)
+    // FLATTENsss  %[[v12:.+]] = firrtl.cat %[[memory_w_mask_b]], %[[memory_w_mask_a]] :
+    // FLATTEN:  %[[v13:.+]] = firrtl.bits %[[v12]] 0 to 0
+    // FLATTEN:  %[[v14:.+]] = firrtl.bits %[[v12]] 1 to 1
+    // FLATTEN:  %[[v15:.+]] = firrtl.cat %[[v14]], %[[v13]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // FLATTEN:  %[[v16:.+]] = firrtl.cat %[[v14]], %[[v15]] : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+    // FLATTEN:  firrtl.connect %[[v11]], %[[v16]] : !firrtl.uint<3>, !firrtl.uint<3>
+    // FLATTEN:  firrtl.connect %[[memory_w_mask_b]], %wMask_b : !firrtl.uint<1>, !firrtl.uint<1>
+    // FLATTEN:  firrtl.connect %[[memory_w_data_a]], %wData_a : !firrtl.uint<8>, !firrtl.uint<8>
+
+  }
 // Test that a memory with a readwrite port is split into 1r1w
 //
 // circuit Foo:
@@ -276,7 +357,7 @@ firrtl.circuit "TopLevel" {
     firrtl.module @mod_2(in %clock: !firrtl.clock, in %inp_a: !firrtl.bundle<inp_d: uint<14>>) {
     }
     firrtl.module @top_mod(in %clock: !firrtl.clock) {
-      %U0_clock, %U0_inp_a = firrtl.instance @mod_2 {name = "U0"} : !firrtl.clock, !firrtl.bundle<inp_d: uint<14>>
+      %U0_clock, %U0_inp_a = firrtl.instance U0 @mod_2(in clock: !firrtl.clock, in inp_a: !firrtl.bundle<inp_d: uint<14>>)
       %0 = firrtl.invalidvalue : !firrtl.clock
       firrtl.connect %U0_clock, %0 : !firrtl.clock, !firrtl.clock
       %1 = firrtl.invalidvalue : !firrtl.bundle<inp_d: uint<14>>
@@ -287,7 +368,7 @@ firrtl.circuit "TopLevel" {
 
 //CHECK-LABEL:     firrtl.module @mod_2(in %clock: !firrtl.clock, in %inp_a_inp_d: !firrtl.uint<14>)
 //CHECK:    firrtl.module @top_mod(in %clock: !firrtl.clock)
-//CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance @mod_2 {name = "U0"} : !firrtl.clock, !firrtl.uint<14>
+//CHECK-NEXT:      %U0_clock, %U0_inp_a_inp_d = firrtl.instance U0 @mod_2(in clock: !firrtl.clock, in inp_a_inp_d: !firrtl.uint<14>)
 //CHECK-NEXT:      %invalid_clock = firrtl.invalidvalue : !firrtl.clock
 //CHECK-NEXT:      firrtl.connect %U0_clock, %invalid_clock : !firrtl.clock, !firrtl.clock
 //CHECK-NEXT:      %invalid_ui14 = firrtl.invalidvalue : !firrtl.uint<14>
@@ -403,11 +484,11 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %out, %in: !firrtl.vector<bundle<a : uint<1>, b flip: uint<1>>, 2>, !firrtl.vector<bundle<a : uint<1>, b flip: uint<1>>, 2>
   }
 
-  // CHECK-LABEL: firrtl.extmodule @ExternalModule(in %source_valid: !firrtl.uint<1>, out %source_ready: !firrtl.uint<1>, in %source_data: !firrtl.uint<64>)
-  firrtl.extmodule @ExternalModule(in %source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>> )
+  // CHECK-LABEL: firrtl.extmodule @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
+  firrtl.extmodule @ExternalModule(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   firrtl.module @Test() {
-    // CHECK:  %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance @ExternalModule  {name = ""} : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<64>
-    %inst_source = firrtl.instance @ExternalModule {name = ""} : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+    // CHECK: %inst_source_valid, %inst_source_ready, %inst_source_data = firrtl.instance "" @ExternalModule(in source_valid: !firrtl.uint<1>, out source_ready: !firrtl.uint<1>, in source_data: !firrtl.uint<64>)
+    %inst_source = firrtl.instance "" @ExternalModule(in source: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   }
 
 // Test RegResetOp lowering
@@ -482,7 +563,7 @@ firrtl.circuit "TopLevel" {
     firrtl.connect %a, %0 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
   firrtl.module @AnnotationsInstanceOp() {
-    %bar_a = firrtl.instance @Bar  {annotations = [{a = "a"}], name = "bar"} : !firrtl.vector<uint<1>, 2>
+    %bar_a = firrtl.instance bar {annotations = [{a = "a"}]} @Bar(out a: !firrtl.vector<uint<1>, 2>)
   }
   // CHECK: firrtl.instance
   // CHECK-SAME: annotations = [{a = "a"}]
@@ -507,6 +588,28 @@ firrtl.circuit "TopLevel" {
   // CHECK: firrtl.wire
   // CHECK-SAME: annotations = [{a = "a"}]
 
+// Test that WireOp annotations which are sensitive to field IDs are annotated
+// with the lowered field IDs.
+  // CHECK-LABEL: firrtl.module @AnnotationsWithFieldIdWireOp
+  firrtl.module @AnnotationsWithFieldIdWireOp() {
+    %foo = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.uint<1>
+    %bar = firrtl.wire {annotations = [{class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}]} : !firrtl.bundle<a: vector<uint<1>, 2>, b: uint<1>>
+    %baz = firrtl.wire {annotations = [#firrtl<"subAnno<fieldID = 2, {class = \"sifive.enterprise.grandcentral.SignalDriverAnnotation\"}>">]} : !firrtl.bundle<a: uint<1>, b: vector<uint<1>, 2>>
+  }
+  // CHECK: %foo = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}
+  // CHECK: %bar_a_0 = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 2 : i64}
+  // CHECK: %bar_a_1 = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 3 : i64}
+  // CHECK: %bar_b = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 4 : i64}
+  // CHECK: %baz_a = firrtl.wire
+  // CHECK-NOT:  {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation"}
+  // CHECK: %baz_b_0 = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 1 : i64}
+  // CHECK: %baz_b_1 = firrtl.wire
+  // CHECK-SAME: {class = "sifive.enterprise.grandcentral.SignalDriverAnnotation", fieldID = 2 : i64}
 
 // Test that Reg/RegResetOp Annotations are copied to lowered registers.
   // CHECK-LABEL: firrtl.module @AnnotationsRegOp
@@ -778,7 +881,7 @@ firrtl.circuit "TopLevel" {
   firrtl.module @PartialConnectLHSFlip(in %a: !firrtl.bundle<b: bundle<c flip: uint<2>>>) { }
    // CHECK-LABEL: firrtl.module @FooFlipType
   firrtl.module @FooFlipType(in %a: !firrtl.bundle<b: bundle<c flip: uint<2>>>) {
-    %mgmt_a = firrtl.instance @PartialConnectLHSFlip  {name = "mgmt"} : !firrtl.bundle<b: bundle<c flip: uint<2>>>
+    %mgmt_a = firrtl.instance mgmt @PartialConnectLHSFlip(in a: !firrtl.bundle<b: bundle<c flip: uint<2>>>)
     %0 = firrtl.subfield %mgmt_a(0) : (!firrtl.bundle<b: bundle<c flip: uint<2>>>) -> !firrtl.bundle<c flip: uint<2>>
     %1 = firrtl.subfield %0(0) : (!firrtl.bundle<c flip: uint<2>>) -> !firrtl.uint<2>
     // CHECK: firrtl.connect %a_b_c, %mgmt_a_b_c : !firrtl.uint<2>, !firrtl.uint<2>
@@ -820,47 +923,35 @@ firrtl.circuit "TopLevel" {
 
 
 // Test that annotations on aggregate ports are copied.
-  firrtl.extmodule @Sub1(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{a}]})
+  firrtl.extmodule @Sub1(in a: !firrtl.vector<uint<1>, 2> [{a}])
   // CHECK-LABEL: firrtl.extmodule @Sub1
-  // CHECK-COUNT-2: firrtl.annotations = [{b}]
-  // CHECK-NOT: firrtl.annotations = [{a}]
-  firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> {firrtl.annotations = [{b}]}) {
-    %sub_a = firrtl.instance @Sub1  {name = "sub", portNames = ["a"]} : !firrtl.vector<uint<1>, 2>
+  // CHECK-COUNT-2: [{b}]
+  // CHECK-NOT: [{a}]
+  firrtl.module @Port(in %a: !firrtl.vector<uint<1>, 2> [{b}]) {
+    %sub_a = firrtl.instance sub @Sub1(in a: !firrtl.vector<uint<1>, 2>)
     firrtl.connect %sub_a, %a : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
 
 // Test that annotations on subfield/subindices of ports are only applied to
-// matching fieldIDs.  Any other arg attributes should be copied.
+// matching fieldIDs.
     // The annotation should be copied to just a.a.  The firrtl.hello arg
     // attribute should be copied to each new port.
-    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> {firrtl.hello}) attributes {portAnnotations = [[#firrtl.subAnno<fieldID = 1, {a}>]]} {}
+    firrtl.module @PortBundle(in %a: !firrtl.bundle<a: uint<1>, b flip: uint<1>> [#firrtl.subAnno<fieldID = 1, {a}>]) {}
     // CHECK-LABEL: firrtl.module @PortBundle
-    // CHECK-COUNT-1: firrtl.annotations = [{a}]
-    // CHECK-COUNT-2: firrtl.hello
-    // CHECK-NOT: firrtl.annotations
-    // CHECK-NOT: firrtl.hello
-
-    // The annotation should be copied to just a[0].  The firrtl.world arg
-    // attribute should be copied to each port.
-    firrtl.extmodule @PortVector(in %a: !firrtl.vector<uint<1>, 2> {firrtl.world}) attributes {portAnnotations = [[#firrtl.subAnno<fieldID = 1, {b}>]]}
-    // CHECK-LABEL: firrtl.extmodule @PortVector
-    // CHECK-COUNT-1: firrtl.annotations = [{b}]
-    // CHECK-COUNT-2: firrtl.world
-    // CHECK-NOT: firrtl.annotations
-    // CHECK-NOT: firrtl.world
+    // CHECK-COUNT-1: [{a}]
 
 // Test that a truncating connect emitted during lower types correctly adds an
 // AsPassive cast on a FlipType originating from an instance.
 //
 // See: https://github.com/llvm/circt/issues/1276
 
-  firrtl.extmodule @Bar2(in %a: !firrtl.uint<2>)
+  firrtl.extmodule @Bar2(in a: !firrtl.uint<2>)
 // CHECK-LABEL: firrtl.module @TruncatingConnectWithFlip
   firrtl.module @TruncatingConnectWithFlip() {
     // CHECK: %[[a_b:.+]] = firrtl.wire
     %a = firrtl.wire  : !firrtl.bundle<b: uint<1>>
-    // CHECK-NEXT: %bar_a = firrtl.instance @Bar
-    %bar_a = firrtl.instance @Bar2  {name = "bar"} : !firrtl.uint<2>
+    // CHECK-NEXT: %bar_a = firrtl.instance bar @Bar
+    %bar_a = firrtl.instance bar @Bar2(in a: !firrtl.uint<2>)
     // CHECK-NEXT: %invalid_ui2 = firrtl.invalidvalue
     %invalid_ui2 = firrtl.invalidvalue : !firrtl.uint<2>
     // CHECK-NEXT: firrtl.connect %bar_a, %invalid_ui2
@@ -1062,8 +1153,8 @@ firrtl.circuit "TopLevel" {
   }
   // CHECK-LABEL firrtl.module @Foo3
   firrtl.module @Foo3() {
-    // CHECK: [{one}], [{two}], []
-    %bar_a, %bar_b = firrtl.instance @Bar3  {name = "bar", portAnnotations = [[{one}], [#firrtl.subAnno<fieldID = 1, {two}>]]} : !firrtl.uint<1>, !firrtl.bundle<baz: uint<1>, qux: uint<1>>
+    // CHECK: in a: !firrtl.uint<1> [{one}], out b_baz: !firrtl.uint<1> [{two}], out b_qux: !firrtl.uint<1>
+    %bar_a, %bar_b = firrtl.instance bar @Bar3(in a: !firrtl.uint<1> [{one}], out b: !firrtl.bundle<baz: uint<1>, qux: uint<1>> [#firrtl.subAnno<fieldID = 1, {two}>])
   }
 
 
@@ -1076,6 +1167,7 @@ firrtl.circuit "TopLevel" {
 //                 {"f":null,"target":"~Foo|Foo>bar.rw.wmask.baz"}]]
 
 // CHECK-LABEL: firrtl.module @Foo4
+// FLATTEN-LABEL: firrtl.module @Foo4
   firrtl.module @Foo4() {
     // CHECK: firrtl.mem
     // CHECK-SAME: portAnnotations = [
@@ -1088,6 +1180,18 @@ firrtl.circuit "TopLevel" {
     // CHECK-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
     // CHECK-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 4, {d}>]
     // CHECK-SAME: [#firrtl.subAnno<fieldID = 4, {e}>]
+
+    // FLATTEN: firrtl.mem
+    // FLATTEN-SAME: portAnnotations = [
+    // FLATTEN-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
+    // FLATTEN-SAME: [#firrtl.subAnno<fieldID = 2, {c}>]
+    // FLATTEN-SAME: [#firrtl.subAnno<fieldID = 4, {e}>, #firrtl.subAnno<fieldID = 7, {f}>]
+
+    // FLATTEN: firrtl.mem
+    // FLATTEN-SAME: portAnnotations = [
+    // FLATTEN-SAME: [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
+    // FLATTEN-SAME: [#firrtl.subAnno<fieldID = 2, {c}>, #firrtl.subAnno<fieldID = 4, {d}>]
+    // FLATTEN-SAME: [#firrtl.subAnno<fieldID = 4, {e}>]
     %bar_r, %bar_w, %bar_rw = firrtl.mem Undefined  {depth = 16 : i64, name = "bar",
         portAnnotations = [
           [{a}, #firrtl.subAnno<fieldID = 4, {b}>],
@@ -1113,6 +1217,7 @@ firrtl.module @TLBBB() {
 
 // This simply has to not crash
 // CHECK-LABEL: firrtl.module @vecmem
+// FLATTEN-LABEL: firrtl.module @vecmem
 firrtl.module @vecmem(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
   %vmem_MPORT, %vmem_rdwrPort = firrtl.mem Undefined  {depth = 32 : i64, name = "vmem", portNames = ["MPORT", "rdwrPort"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, data flip: vector<uint<17>, 8>>, !firrtl.bundle<addr: uint<5>, en: uint<1>, clk: clock, rdata flip: vector<uint<17>, 8>, wmode: uint<1>, wdata: vector<uint<17>, 8>, wmask: vector<uint<1>, 8>>
 }
@@ -1126,15 +1231,136 @@ firrtl.module @bofa(out %auto: !firrtl.bundle<io_out: bundle<foo: bundle<bar: an
 }
 
 // Issue 1436
-firrtl.extmodule @is1436_BAR(out %io: !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>)
+firrtl.extmodule @is1436_BAR(out io: !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>)
 // CHECK-LABEL: firrtl.module @is1436_FOO
 firrtl.module @is1436_FOO() {
-  %thing_io = firrtl.instance @is1436_BAR  {name = "thing"} : !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>
+  %thing_io = firrtl.instance thing @is1436_BAR(out io: !firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>)
   %0 = firrtl.subfield %thing_io(0) : (!firrtl.bundle<llWakeup flip: vector<uint<1>, 1>>) -> !firrtl.vector<uint<1>, 1>
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
   %1 = firrtl.subaccess %0[%c0_ui2] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<2>
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
   }
+  // CHECK-LABEL: firrtl.module @BitCast1
+  firrtl.module @BitCast1(out %o_0: !firrtl.uint<1>, out %o_1: !firrtl.uint<1>) {
+    %a1 = firrtl.wire : !firrtl.uint<4>
+    %b = firrtl.bitcast %a1 : (!firrtl.uint<4>) -> (!firrtl.vector<uint<2>, 2>)
+    // CHECK:  %[[v0:.+]] = firrtl.bits %a1 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v1:.+]] = firrtl.bits %a1 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v2:.+]] = firrtl.cat %[[v1]], %[[v0]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+    %c = firrtl.bitcast %b : (!firrtl.vector<uint<2>, 2>) -> (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>)
+    // CHECK-NEXT:  %[[v3:.+]] = firrtl.bits %[[v2]] 0 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT:  %[[v4:.+]] = firrtl.bits %[[v2]] 1 to 1 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+    // CHECK-NEXT:  %[[v5:.+]] = firrtl.bits %[[v2]] 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    %d = firrtl.wire : !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>
+    // CHECK-NEXT:  %d_valid = firrtl.wire  : !firrtl.uint<1>
+    // CHECK-NEXT:  %d_ready = firrtl.wire  : !firrtl.uint<1>
+    // CHECK-NEXT:  %d_data = firrtl.wire  : !firrtl.uint<2>
+    firrtl.connect %d , %c: !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>, !firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>
+    // CHECK-NEXT:  firrtl.connect %d_valid, %[[v3]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT:  firrtl.connect %d_ready, %[[v4]] : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-NEXT:  firrtl.connect %d_data, %[[v5]] : !firrtl.uint<2>, !firrtl.uint<2>
+    %e = firrtl.bitcast %d : (!firrtl.bundle<valid: uint<1>, ready: uint<1>, data: uint<2>>) -> (!firrtl.bundle<addr: uint<2>, data : vector<uint<1>, 2>>)
+    // CHECK-NEXT:  %[[v6:.+]] = firrtl.cat %d_ready, %d_valid : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v7:.+]] = firrtl.cat %d_data, %[[v6]] : (!firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<4>
+    // CHECK-NEXT:  %[[v8:.+]] = firrtl.bits %[[v7]] 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v9:.+]] = firrtl.bits %[[v7]] 3 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+  %o1 = firrtl.subfield %e(1) : (!firrtl.bundle<addr: uint<2>, data : vector<uint<1>, 2>>) -> !firrtl.vector<uint<1>,2>
+   %c2 = firrtl.bitcast %a1 : (!firrtl.uint<4>) -> (!firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>)
+    %d2 = firrtl.wire : !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
+    firrtl.connect %d2 , %c2: !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data:
+    uint<1>>, !firrtl.bundle<valid: bundle<re: bundle<a: uint<1>>, aa: uint<1>>, ready: uint<1>, data: uint<1>>
+   //CHECK: %[[v10:.+]] = firrtl.bits %[[v9]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK: %[[v11:.+]] = firrtl.bits %[[v9]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK: %[[v12:.+]] = firrtl.bits %a1 1 to 0 : (!firrtl.uint<4>) -> !firrtl.uint<2>
+   //CHECK: %[[v13:.+]] = firrtl.bits %[[v12]] 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK: %[[v14:.+]] = firrtl.bits %[[v13]] 0 to 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+   //CHECK: %[[v15:.+]] = firrtl.bits %[[v12]] 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+   //CHECK: %[[v16:.+]] = firrtl.bits %a1 2 to 2 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+   //CHECK: %[[v17:.+]] = firrtl.bits %a1 3 to 3 : (!firrtl.uint<4>) -> !firrtl.uint<1>
+   //CHECK: %[[d2_valid_re_a:.+]] = firrtl.wire  : !firrtl.uint<1>
+   //CHECK: %[[d2_valid_aa:.+]] = firrtl.wire  : !firrtl.uint<1>
+   //CHECK: %[[d2_ready:.+]] = firrtl.wire  : !firrtl.uint<1>
+   //CHECK: %[[d2_data:.+]] = firrtl.wire  : !firrtl.uint<1>
+   //CHECK: firrtl.connect %[[d2_valid_re_a]], %[[v14]] : !firrtl.uint<1>, !firrtl.uint<1>
+   //CHECK: firrtl.connect %[[d2_valid_aa]], %[[v15]] : !firrtl.uint<1>, !firrtl.uint<1>
+   //CHECK: firrtl.connect %[[d2_ready]], %[[v16]] : !firrtl.uint<1>, !firrtl.uint<1>
+   //CHECK: firrtl.connect %[[d2_data]], %[[v17]] : !firrtl.uint<1>, !firrtl.uint<1>
 
+  }
+
+  firrtl.module @VecMemFlatten(in %clock: !firrtl.clock, in %rAddr: !firrtl.uint<4>, in %rEn: !firrtl.uint<1>, out %rData: !firrtl.vector<uint<8>, 4>, in %wAddr: !firrtl.uint<4>, in %wEn: !firrtl.uint<1>, in %wMask: !firrtl.vector<uint<1>, 4>, in %wData: !firrtl.vector<uint<8>, 4>) {
+    %memory_r, %memory_w = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>
+    %0 = firrtl.subfield %memory_r(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.clock
+    firrtl.connect %0, %clock : !firrtl.clock, !firrtl.clock
+    %1 = firrtl.subfield %memory_r(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.uint<1>
+    firrtl.connect %1, %rEn : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.subfield %memory_r(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.uint<4>
+    firrtl.connect %2, %rAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    %3 = firrtl.subfield %memory_r(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: vector<uint<8>, 4>>) -> !firrtl.vector<uint<8>, 4>
+    firrtl.connect %rData, %3 : !firrtl.vector<uint<8>, 4>, !firrtl.vector<uint<8>, 4>
+    %4 = firrtl.subfield %memory_w(2) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.clock
+    firrtl.connect %4, %clock : !firrtl.clock, !firrtl.clock
+    %5 = firrtl.subfield %memory_w(1) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.uint<1>
+    firrtl.connect %5, %wEn : !firrtl.uint<1>, !firrtl.uint<1>
+    %6 = firrtl.subfield %memory_w(0) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.uint<4>
+    firrtl.connect %6, %wAddr : !firrtl.uint<4>, !firrtl.uint<4>
+    %7 = firrtl.subfield %memory_w(4) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.vector<uint<1>, 4>
+    firrtl.connect %7, %wMask : !firrtl.vector<uint<1>, 4>, !firrtl.vector<uint<1>, 4>
+    %8 = firrtl.subfield %memory_w(3) : (!firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: vector<uint<8>, 4>, mask: vector<uint<1>, 4>>) -> !firrtl.vector<uint<8>, 4>
+    firrtl.connect %8, %wData : !firrtl.vector<uint<8>, 4>, !firrtl.vector<uint<8>, 4>
+  }
+  // FLATTEN-LABEL:  firrtl.module @VecMemFlatten
+  // FLATTEN:    %[[memory_r:.+]], %[[memory_w:.+]] = firrtl.mem Undefined  {depth = 16 : i64, name = "memory", portNames = ["r", "w"], readLatency = 0 : i32, writeLatency = 1 : i32}
+  // FLATTEN-SAME:    !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<32>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<32>, mask: uint<4>>
+  // FLATTEN:    %[[v3:.+]] = firrtl.subfield %[[memory_r]](3)
+  // FLATTEN:    %[[v4:.+]] = firrtl.bits %3 7 to 0 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+  // FLATTEN:    %[[v5:.+]] = firrtl.bits %3 15 to 8 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+  // FLATTEN:    %[[v6:.+]] = firrtl.bits %3 23 to 16 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+  // FLATTEN:    %[[v7:.+]] = firrtl.bits %3 31 to 24 : (!firrtl.uint<32>) -> !firrtl.uint<8>
+  // FLATTEN:    firrtl.connect %[[memory_r_data_0:.+]], %[[v4]]
+  // FLATTEN:    firrtl.connect %[[memory_r_data_1:.+]], %[[v5]]
+  // FLATTEN:    firrtl.connect %[[memory_r_data_2:.+]], %[[v6]]
+  // FLATTEN:    firrtl.connect %[[memory_r_data_3:.+]], %[[v7]]
+
+  // FLATTEN:    %[[v11:.+]] = firrtl.subfield %[[memory_w]](3)
+  // FLATTEN:    %[[v12:.+]] = firrtl.cat %[[memory_w_data_1:.+]], %[[memory_w_data_0:.+]] : (!firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<16>
+  // FLATTEN:    %[[v13:.+]] = firrtl.cat %[[memory_w_data_2:.+]], %[[v12]] : (!firrtl.uint<8>, !firrtl.uint<16>) -> !firrtl.uint<24>
+  // FLATTEN:    %[[v14:.+]] = firrtl.cat %[[memory_w_data_3:.+]], %[[v13]] : (!firrtl.uint<8>, !firrtl.uint<24>) -> !firrtl.uint<32>
+  // FLATTEN:    f[[vir:.+]]rtl.connect %[[v11]], %[[v14]] : !firrtl.uint<32>, !firrtl.uint<32>
+  // FLATTEN:    %[[v15:.+]] = firrtl.subfield %[[memory_w]](4)
+  // FLATTEN:    %[[v16:.+]] = firrtl.cat %[[memory_w_mask_1:.+]], %[[memory_w_mask_0:.+]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  // FLATTEN:    %[[v17:.+]] = firrtl.cat %[[memory_w_mask_2:.+]], %[[v16]] : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
+  // FLATTEN:    %[[v18:.+]] = firrtl.cat %[[memory_w_mask_3:.+]], %[[v17]] : (!firrtl.uint<1>, !firrtl.uint<3>) -> !firrtl.uint<4>
+  // FLATTEN:    firrtl.connect %[[v15]], %[[v18]]
+  // FLATTEN:    firrtl.connect %rData_0, %[[memory_r_data_0]]
+  // FLATTEN:    firrtl.connect %rData_1, %[[memory_r_data_1]]
+  // FLATTEN:    firrtl.connect %rData_2, %[[memory_r_data_2]]
+  // FLATTEN:    firrtl.connect %rData_3, %[[memory_r_data_3]]
+  // FLATTEN:    firrtl.connect %[[memory_w_mask_0]], %wMask_0
+  // FLATTEN:    firrtl.connect %[[memory_w_mask_1]], %wMask_1
+  // FLATTEN:    firrtl.connect %[[memory_w_mask_2]], %wMask_2
+  // FLATTEN:    firrtl.connect %[[memory_w_mask_3]], %wMask_3
+  // FLATTEN:    firrtl.connect %[[memory_w_data_0]], %wData_0
+  // FLATTEN:    firrtl.connect %[[memory_w_data_1]], %wData_1
+  // FLATTEN:    firrtl.connect %[[memory_w_data_2]], %wData_2
+  // FLATTEN:    firrtl.connect %[[memory_w_data_3]], %wData_3
+
+
+// Test that empty bundles can be lowered.
+  // FLATTEN-LABEL: firrtl.module @SiFive_Queue_8()
+  firrtl.module @SiFive_Queue_8()  {
+    %SiFive_ram_MPORT, %SiFive_ram_io_deq_bits_MPORT = firrtl.mem Undefined  {depth = 2 : i64, name = "SiFive_ram", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<id: uint<4>, addr: uint<31>, len: uint<8>, size: uint<3>, burst: uint<2>, lock: uint<1>, cache: uint<4>, prot: uint<3>, qos: uint<4>, user: bundle<>, echo: bundle<>>, mask: bundle<id: uint<1>, addr: uint<1>, len: uint<1>, size: uint<1>, burst: uint<1>, lock: uint<1>, cache: uint<1>, prot: uint<1>, qos: uint<1>, user: bundle<>, echo: bundle<>>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: bundle<id: uint<4>, addr: uint<31>, len: uint<8>, size: uint<3>, burst: uint<2>, lock: uint<1>, cache: uint<4>, prot: uint<3>, qos: uint<4>, user: bundle<>, echo: bundle<>>>
+    // FLATTEN: %SiFive_ram_MPORT, %SiFive_ram_io_deq_bits_MPORT = firrtl.mem Undefined  {depth = 2 : i64, name = "SiFive_ram", portNames = ["MPORT", "io_deq_bits_MPORT"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<60>, mask: uint<60>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<60>>
+   // FLATTEN:   %[[v3:.+]] = firrtl.subfield %SiFive_ram_MPORT(3) : (!firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<60>, mask: uint<60>>) -> !firrtl.uint<60>
+   // FLATTEN:   %[[v4:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_addr:.+]], %[[SiFive_ram_MPORT_data_id:.+]] : (!firrtl.uint<31>, !firrtl.uint<4>) -> !firrtl.uint<35>
+   // FLATTEN:   %[[v5:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_len:.+]], %[[v4]] : (!firrtl.uint<8>, !firrtl.uint<35>) -> !firrtl.uint<43>
+   // FLATTEN:   %[[v6:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_size:.+]], %[[v5]] : (!firrtl.uint<3>, !firrtl.uint<43>) -> !firrtl.uint<46>
+   // FLATTEN:   %[[v7:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_burst:.+]], %[[v6]] : (!firrtl.uint<2>, !firrtl.uint<46>) -> !firrtl.uint<48>
+   // FLATTEN:   %[[v8:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_lock:.+]], %[[v7]] : (!firrtl.uint<1>, !firrtl.uint<48>) -> !firrtl.uint<49>
+   // FLATTEN:   %[[v9:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_cache:.+]], %[[v8]] : (!firrtl.uint<4>, !firrtl.uint<49>) -> !firrtl.uint<53>
+   // FLATTEN:   %[[v10:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_prot:.+]], %[[v9]] : (!firrtl.uint<3>, !firrtl.uint<53>) -> !firrtl.uint<56>
+   // FLATTEN:   %[[v11:.+]] = firrtl.cat %[[SiFive_ram_MPORT_data_qos:.+]], %[[v10]] : (!firrtl.uint<4>, !firrtl.uint<56>) -> !firrtl.uint<60>
+   // FLATTEN:   firrtl.connect %[[v3]], %[[v11]] : !firrtl.uint<60>, !firrtl.uint<60>
+  }
 } // CIRCUIT

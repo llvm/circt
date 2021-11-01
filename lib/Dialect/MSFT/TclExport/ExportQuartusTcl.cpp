@@ -47,7 +47,7 @@ void emitPath(TclOutputState &s, RootedInstancePathAttr path) {
 
 /// Emit tcl in the form of:
 /// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
-static void emit(TclOutputState &s, DeviceDB::PlacedInstance inst,
+static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
                  PhysLocationAttr pla) {
 
   s.indent() << "set_location_assignment ";
@@ -56,12 +56,12 @@ static void emit(TclOutputState &s, DeviceDB::PlacedInstance inst,
   // and DSPs happen to have the same one, probably because they never co-exist
   // at the same location.
   char numCharacter;
-  switch (pla.getDevType().getValue()) {
-  case DeviceType::M20K:
+  switch (pla.getPrimitiveType().getValue()) {
+  case PrimitiveType::M20K:
     s.os << "M20K";
     numCharacter = 'N';
     break;
-  case DeviceType::DSP:
+  case PrimitiveType::DSP:
     s.os << "MPDSP";
     numCharacter = 'N';
     break;
@@ -89,7 +89,7 @@ static void emit(TclOutputState &s, DeviceDB::PlacedInstance inst,
 LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
                                             llvm::raw_ostream &os) {
   TclOutputState state(os);
-  DeviceDB db(hwMod);
+  PlacementDB db(hwMod);
   size_t failures = db.addDesignPlacements();
   if (failures != 0)
     return hwMod->emitError("Could not place ") << failures << " instances";
@@ -97,7 +97,7 @@ LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
   os << "proc " << hwMod.getName() << "_config { parent } {\n";
 
   db.walkPlacements(
-      [&state](PhysLocationAttr loc, DeviceDB::PlacedInstance inst) {
+      [&state](PhysLocationAttr loc, PlacementDB::PlacedInstance inst) {
         emit(state, inst, loc);
       });
 

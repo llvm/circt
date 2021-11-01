@@ -19,22 +19,6 @@
 using namespace circt;
 using namespace comb;
 
-/// Return true if the specified type is a signless non-zero width integer type,
-/// the only type which the comb ops operate.
-static bool isCombIntegerType(mlir::Type type) {
-  Type canonicalType;
-  if (auto typeAlias = type.dyn_cast<hw::TypeAliasType>())
-    canonicalType = typeAlias.getCanonicalType();
-  else
-    canonicalType = type;
-
-  auto intType = canonicalType.dyn_cast<IntegerType>();
-  if (!intType || !intType.isSignless())
-    return false;
-
-  return intType.getWidth() != 0;
-}
-
 //===----------------------------------------------------------------------===//
 // ICmpOp
 //===----------------------------------------------------------------------===//
@@ -198,17 +182,23 @@ static LogicalResult verifyConcatOp(ConcatOp concatOp) {
   return success();
 }
 
-void ConcatOp::build(OpBuilder &builder, OperationState &result,
-                     ValueRange inputs) {
-  build(builder, result, builder.getIntegerType(getTotalWidth(inputs)), inputs);
-}
-
 void ConcatOp::build(OpBuilder &builder, OperationState &result, Value hd,
                      ValueRange tl) {
   result.addOperands(ValueRange{hd});
   result.addOperands(tl);
   unsigned hdWidth = hd.getType().cast<IntegerType>().getWidth();
   result.addTypes(builder.getIntegerType(getTotalWidth(tl) + hdWidth));
+}
+
+LogicalResult ConcatOp::inferReturnTypes(MLIRContext *context,
+                                         Optional<Location> loc,
+                                         ValueRange operands,
+                                         DictionaryAttr attrs,
+                                         mlir::RegionRange regions,
+                                         SmallVectorImpl<Type> &results) {
+  unsigned resultWidth = getTotalWidth(operands);
+  results.push_back(IntegerType::get(context, resultWidth));
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

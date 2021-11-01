@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def DeviceType : I32EnumAttr<"DeviceType",
+def PrimitiveType : I32EnumAttr<"PrimitiveType",
   "Type of device at physical location", [
     I32EnumAttrCase<"M20K", 1>,
     I32EnumAttrCase<"DSP", 2>,
@@ -52,6 +52,6 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
   }];
   let mnemonic = "physloc";
   let parameters = (ins
-    "DeviceTypeAttr":$devType,
+    "PrimitiveTypeAttr":$primitiveType,
     "uint64_t":$x, "uint64_t":$y, "uint64_t":$num);
 }

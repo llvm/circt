@@ -173,14 +173,56 @@ hw.module @test1(%arg0: i1, %arg1: i1, %arg8: i8) {
   %reg24       = sv.reg sym @regSym1 : !hw.inout<i23>
   %wire25      = sv.wire sym @wireSym1 : !hw.inout<i23>
 
+  // Simulation Control Tasks
+  // CHECK-NEXT: sv.initial {
+  // CHECK-NEXT: sv.stop 1
+  // CHECK-NEXT: sv.finish 1
+  // CHECK-NEXT: sv.exit
+  // CHECK-NEXT: }
+  sv.initial {
+    sv.stop 1
+    sv.finish 1
+    sv.exit
+  }
+
+  // Severity Message Tasks
+  // CHECK-NEXT: sv.initial {
+  // CHECK-NEXT: sv.fatal 1
+  // CHECK-NEXT: sv.fatal 1, "hello"
+  // CHECK-NEXT: sv.fatal 1, "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.error
+  // CHECK-NEXT: sv.error "hello"
+  // CHECK-NEXT: sv.error "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.warning
+  // CHECK-NEXT: sv.warning "hello"
+  // CHECK-NEXT: sv.warning "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.info
+  // CHECK-NEXT: sv.info "hello"
+  // CHECK-NEXT: sv.info "hello %d"(%arg0) : i1
+  // CHECK-NEXT: }
+  sv.initial {
+    sv.fatal 1
+    sv.fatal 1, "hello"
+    sv.fatal 1, "hello %d"(%arg0) : i1
+    sv.error
+    sv.error "hello"
+    sv.error "hello %d"(%arg0) : i1
+    sv.warning
+    sv.warning "hello"
+    sv.warning "hello %d"(%arg0) : i1
+    sv.info
+    sv.info "hello"
+    sv.info "hello %d"(%arg0) : i1
+  }
+
   // CHECK-NEXT: hw.output
   hw.output
 }
 
-//CHECK-LABEL: sv.bind @a1 in @AB
-//CHECK-NEXT: sv.bind @b1 in @AB
-sv.bind @a1 in @AB
-sv.bind @b1 in @AB
+//CHECK-LABEL: sv.bind #hw.innerNameRef<@AB::@a1>
+//CHECK-NEXT: sv.bind #hw.innerNameRef<@AB::@b1>
+sv.bind #hw.innerNameRef<@AB::@a1>
+sv.bind #hw.innerNameRef<@AB::@b1>
 
 
 hw.module.extern @ExternDestMod(%a: i1, %b: i2)
@@ -192,4 +234,14 @@ hw.module @InternalDestMod(%a: i1, %b: i2) {}
 hw.module @AB(%a: i1, %b: i2) {
   hw.instance "whatever" sym @a1 @ExternDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
   hw.instance "yo" sym @b1 @InternalDestMod(a: %a: i1, b: %b: i2) -> () {doNotPrint=1}
+}
+
+//CHECK-LABEL: hw.module @XMR_src
+hw.module @XMR_src(%a : i23) {
+  //CHECK-NEXT:   sv.xmr isRooted "a", "b", "c" : !hw.inout<i23>
+  %xmr1 = sv.xmr isRooted a,b,c : !hw.inout<i23>
+  //CHECK-NEXT:   sv.xmr "a", "b", "c" : !hw.inout<i3>
+  %xmr2 = sv.xmr "a",b,c : !hw.inout<i3>
+  %r = sv.read_inout %xmr1 : !hw.inout<i23>
+  sv.assign %xmr1, %a : i23
 }

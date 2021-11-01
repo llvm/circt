@@ -9,8 +9,8 @@ calyx.program "main" {
 
   // CHECK-LABEL: calyx.component @main
   calyx.component @main(%go: i1 {go}, %reset: i1 {reset}, %clk: i1 {clk}) -> (%done: i1 {done}) {
-    %z.go, %z.reset, %z.clk, %z.flag, %z.out, %z.done = calyx.instance "z" @Z : i1, i1, i1, i1, i2, i1
-    %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register "fsm" : i2, i1, i1, i1, i2, i1
+    %z.go, %z.reset, %z.clk, %z.flag, %z.out, %z.done = calyx.instance @z of @Z : i1, i1, i1, i1, i2, i1
+    %fsm.in, %fsm.write_en, %fsm.clk, %fsm.reset, %fsm.out, %fsm.done = calyx.register @fsm : i2, i1, i1, i1, i2, i1
 
     calyx.wires {
       // CHECK: %[[FSM_IS_GROUP_A_BEGIN_STATE:.+]] = comb.icmp eq %fsm.out, {{.+}} : i2
@@ -30,10 +30,10 @@ calyx.program "main" {
       // CHECK-NOT: calyx.group_done
 
       // Verify that assignments are guarded by the group's GoOp and the component's go signal.
-      // CHECK: calyx.assign %z.go = %z.flag, %[[A_GO_AND_COMPONENT_GO]] ? : i1
+      // CHECK: calyx.assign %z.go = %[[A_GO_AND_COMPONENT_GO]] ? %z.flag : i1
       calyx.group @A {
-        %A.go = calyx.group_go %signal_on, %group_A_go_guard ? : i1
-        calyx.assign %z.go = %z.flag, %A.go ? : i1
+        %A.go = calyx.group_go %group_A_go_guard ? %signal_on : i1
+        calyx.assign %z.go = %A.go ? %z.flag : i1
         calyx.group_done %z.done : i1
       }
 
@@ -43,14 +43,14 @@ calyx.program "main" {
 
       // CHECK: %[[UPDATED_A_ASSIGN_GUARD:.+]] = comb.and %[[GROUP_A_ASSIGN_GUARD]], %go : i1
       // Verify that the component's done signal is assigned the top-level group's DoneOp.
-      // CHECK: calyx.assign %done = {{.+}}, %[[SEQ_GROUP_DONE_GUARD]] ? : i1
+      // CHECK: calyx.assign %done = %[[SEQ_GROUP_DONE_GUARD]] ? {{.+}} : i1
 
       // Verify that the assignments in the top-level group use the updated guard.
-      // CHECK: calyx.assign %fsm.in = {{.+}}, %[[UPDATED_A_ASSIGN_GUARD]] ? : i2
+      // CHECK: calyx.assign %fsm.in = %[[UPDATED_A_ASSIGN_GUARD]] ? {{.+}} : i2
       calyx.group @seq {
-        calyx.assign %fsm.in = %fsm_step_1, %group_A_assign_guard ? : i2
-        calyx.assign %fsm.write_en = %signal_on, %group_A_assign_guard ? : i1
-        calyx.group_done %signal_on, %seq_group_done_guard ? : i1
+        calyx.assign %fsm.in = %group_A_assign_guard ? %fsm_step_1 : i2
+        calyx.assign %fsm.write_en = %group_A_assign_guard ? %signal_on : i1
+        calyx.group_done %seq_group_done_guard ? %signal_on : i1
       }
     }
 

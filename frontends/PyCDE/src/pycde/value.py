@@ -7,7 +7,7 @@ from __future__ import annotations
 from .support import get_user_loc
 
 import circt.support as support
-from circt.dialects import comb, hw, seq
+from circt.dialects import comb, hw, msft, seq
 
 import mlir.ir as ir
 
@@ -53,7 +53,8 @@ class Value:
     owner = self.value.owner
     if hasattr(owner, "attributes") and "name" in owner.attributes:
       return ir.StringAttr(owner.attributes["name"]).value
-    if isinstance(owner, ir.Block) and isinstance(owner.owner, hw.HWModuleOp):
+    if isinstance(owner, ir.Block) and isinstance(owner.owner,
+                                                  msft.MSFTModuleOp):
       mod = owner.owner
       return ir.StringAttr(
           ir.ArrayAttr(mod.attributes["argNames"])[self.value.arg_number]).value

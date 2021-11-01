@@ -93,6 +93,73 @@ It is common for EDA tools to hide or optimize away entities which have a
 name beginning with an `_`. FIRRTL considers these names precious (excluding
 FIRRTL temporary names) and will maintain them.
 
+### NonLocalAnchor
+In the `FIRRTL` dialect, only modules have a symbol on them and it might be
+ difficult to globally identify other operations like
+ `instance`, `wire`, `reg` or `mem`.
+The NonLocalAnchor operation (`firrtl.nla`) can be used to identify the unique
+ instance of a `FIRRTL` operation globally.
+`firrtl.nla` can be used to attach nonlocal annotations and also for metadata
+ emission. 
+`firrtl.nla` defines a symbol and contains a list of module symbols followed
+ by a list of instance names corresponding to each module.
+ For example, in the following example, `@nla_0` specifies instance
+ "baz" in module `@FooNL`, followed by instance
+ `"bar"` in module `@BazNL`, followed by 
+ the wire named `"w"` in module `@BarNL`.
+
+`firrtl.nla` can define a unique instance path, and each element along the way
+ carries an annotation with class `circt. nonlocal`, which has a matching
+ `circt. nonlocal` field pointing to the global op. 
+ Thus instances participating in nonlocal paths are readily apparent.
+
+ In the following example the `@nla_0` is used in the verbatim op
+ to capture the final Verilog name of the wire `w`.
+
+The second `nla`, `@nla_1` doesn't specify the instance path and is anchored
+ on all instances of `@BarNL`.
+This example shows that the `firrtl.nla` can be used to attach a symbol with
+ any operation.
+
+
+``` mlir
+ firrtl.circuit "FooNL"   {
+    firrtl.nla @nla_0 [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
+    firrtl.nla @nla_1 [@BarNL] ["w"] 
+    firrtl.module @BarNL() {
+      %w = firrtl.wire  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}, {circt.nonlocal = @nla_1, class = "circt.nonlocal"} ]} : !firrtl.uint      
+    }
+    firrtl.module @BazNL() {
+      firrtl.instance bar  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @BarNL()
+    }
+    firrtl.module @FooNL() {
+      firrtl.instance baz  {annotations = [{circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @BazNL()
+    }    
+  }
+
+sv.verbatim "{{0}}" { symbols = [@nla_0] }
+sv.verbatim "{{0}}" { symbols = [@nla_1] }
+```
+
+Following is an example of attaching non local annotations with a specific instance of the `wire` `w`.
+
+``` mlir
+firrtl.circuit "FooNL"   {
+    firrtl.nla @nla_0 [@FooNL, @BazNL, @BarNL] ["baz", "bar", "w"]
+    
+    firrtl.module @BarNL() {
+      %w = firrtl.wire  {annotations = [{circt.nonlocal = @nla_0, class = "circt.test", nl = "nl"}]} : !firrtl.uint    
+    }
+    firrtl.module @BazNL() {
+      firrtl.instance bar  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @BarNL()
+    }
+    firrtl.module @FooNL() {
+      firrtl.instance baz  {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}]} @BazNL()
+    }
+  }
+```
+
+
 ## Type system
 
 ### Not using standard types
@@ -297,12 +364,68 @@ For a historical discussion of this issue and its development see:
 - [`llvm/circt#989`](https://github.com/llvm/circt/issues/989)
 - [`llvm/circt#992`](https://github.com/llvm/circt/pull/992)
 
+### `firrtl.bitcast`
+The bitcast operation represents a bitwise reinterpretation (cast) of a value. 
+It can be used to cast a vector or bundle type to an int type or vice-versa.
+The bit width of input and result types must be known.
+For an aggregate type, the bit width of every field must be known.
+This always synthesizes away in hardware, and follows the same endianness 
+policy as `hw.bitcast`.
+
 ### `firrtl.mem`
 
 Unlike the SFC, the FIRRTL dialect represents each memory port as a distinct
 result value of the `firrtl.mem` operation.  Also, the `firrtl.mem` node does
 not allow zero port memories for simplicity.  Zero port memories are dropped
 by the .fir file parser.
+
+#### `firrtl.mem` Attributes
+A `firrtl.mem` has the following properties
+1. Data type
+2. Mask bitwidth
+3. Depth
+4. Name
+5. Number of read ports, write ports, read-write ports
+6. Read under write behavior
+7. Read latency
+8. Write latency
+
+##### Mask bitwidth
+Any aggregate memory data type is lowered to ground type by the
+`LowerTypes` pass. After lowering the data type, the data bitwidth must be 
+divisible by mask bitwidth. And we define the property granularity as: 
+`mask granularity = (Data bitwidth)/(Mask bitwidth)`. 
+
+Each mask bit can guard the write to `mask granularity` number of data bits. 
+For a single-bit mask, one-bit guards write to the data, hence 
+`mask granularity = data bitwidth`.
+
+#### Macro replacement
+Memories that satisfy the following conditions are candidates for macro replacement. 
+
+    1. read latency and write latency of one
+    2. only one readwrite port or write port
+    3. zero or one read port
+    4. undefined read-under-write behavior  
+
+A memory generator defines the external module definition corresponding to the
+ memory for macro replacement. Memory generators need metadata to generate the
+ memory definition. SFC uses some metadata files to communicate with the 
+ memory generators.
+   `<design-name>.conf` is a file, that contains the metadata for the
+   memories which are under the "design-under-test" module hierarchy.
+   Following is a sample content of the file:
+   ```
+      name SiFive_cc_dir_ext depth 512 width 248 ports mrw mask_gran 31
+      name SiFive_cc_banks_0_ext depth 2048 width 72 ports rw
+      name SiFive_PL2Cache_cc_banks_0_ext depth 2048 width 72 ports rw
+   ```
+   1. `name` followed by the memory name.
+   2. `depth` followed by the memory depth.
+   3. `width` followed by the data bitwidth.
+   4. `ports` followed by the `mrw` for read-write port, 
+   `mwrite` for a write port and `read` for a read port.
+   5. `mask_gran` followed by the mask granularity. 
 
 ### CHIRRTL Memories
 

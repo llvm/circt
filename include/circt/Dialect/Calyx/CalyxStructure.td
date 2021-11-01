@@ -31,7 +31,7 @@ def UndefinedOp : CalyxOp<"undef", [
 
 def ProgramOp : CalyxContainer<"program", [
     IsolatedFromAbove,
-    SymbolTable
+    SymbolTable /* contains ComponentOp names. */
   ]> {
   let summary = "Calyx Program";
   let description = [{
@@ -58,6 +58,7 @@ def ProgramOp : CalyxContainer<"program", [
 
 def ComponentOp : CalyxOp<"component", [
     HasParent<"ProgramOp">,
+    SymbolTable, /* contains Cell names. */
     Symbol,
     FunctionLike,
     IsolatedFromAbove,
@@ -82,9 +83,10 @@ def ComponentOp : CalyxOp<"component", [
     ```
   }];
 
-  // TODO(Calyx): Allow explicit port naming?
   let arguments = (ins
-    ArrayAttr:$portNames
+    ArrayAttr:$portNames,
+    ArrayAttr:$portAttributes,
+    APIntAttr:$portDirections
   );
   let results = (outs);
   let regions = (region SizedRegion<1>: $body);
@@ -106,7 +108,14 @@ def ComponentOp : CalyxOp<"component", [
       unsigned getNumFuncResults() { return getType().getNumResults(); }
     public:
       /// Returns the body of a Calyx component.
-      Block *getBody() { return &getOperation()->getRegion(0).front(); }
+      Block *getBody() {
+        Region* region = &getOperation()->getRegion(0);
+        assert(region->hasOneBlock() && "The body should have one Block.");
+        return &region->front();
+      }
+
+      /// Returns the region of a Calyx component.
+      Region *getRegion() { return &getOperation()->getRegion(0); }
 
       /// Returns the port information for this component.
       SmallVector<PortInfo> getPortInfo();
@@ -137,7 +146,7 @@ def ComponentOp : CalyxOp<"component", [
 
 def WiresOp : CalyxContainer<"wires", [
     HasParent<"ComponentOp">,
-    SymbolTable
+    SymbolTable /* contains GroupInterface names. */
   ]> {
   let summary = "Calyx Wires";
   let description = [{
@@ -152,6 +161,13 @@ def WiresOp : CalyxContainer<"wires", [
       }
     ```
   }];
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins), [{
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
   let verifier = "return ::verify$cppClass(*this);";
 }
 
@@ -163,7 +179,7 @@ def InstanceOp : CalyxCell<"instance", [
     Represents an instance of a Calyx component, which may include state.
 
     ```mlir
-      %name.in, %name.out = calyx.instance "name" @MyComponent : i64, i16
+      %c.in, %c.out = calyx.instance @c of @MyComponent : i64, i16
     ```
   }];
 
@@ -174,13 +190,13 @@ def InstanceOp : CalyxCell<"instance", [
   }];
 
   let arguments = (ins
-    StrAttr:$instanceName,
+    FlatSymbolRefAttr:$instanceName,
     FlatSymbolRefAttr:$componentName
   );
   let results = (outs Variadic<AnyType>:$results);
 
   let assemblyFormat = [{
-    $instanceName $componentName attr-dict (`:` type($results)^)?
+    $instanceName `of` $componentName attr-dict (`:` type($results)^)?
   }];
 }
 
@@ -223,6 +239,22 @@ def GroupOp : CalyxOp<"group", [
 
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$sym_name $body attr-dict";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name), [{
+      $_state.addAttribute(
+        mlir::SymbolTable::getSymbolAttrName(),
+        StringAttr::get($_state.getContext(), sym_name)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>,
+    OpBuilder<(ins "StringAttr":$sym_name), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
 }
 
 def CombGroupOp : CalyxOp<"comb_group", [
@@ -247,9 +279,7 @@ def CombGroupOp : CalyxOp<"comb_group", [
       }
     ```
   }];
-
   let arguments = (ins SymbolNameAttr: $sym_name);
-
   let extraClassDeclaration = [{
     // Implement RegionKindInterface.
     static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
@@ -258,6 +288,22 @@ def CombGroupOp : CalyxOp<"comb_group", [
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = "$sym_name $body attr-dict";
   let verifier = "return ::verify$cppClass(*this);";
+  let skipDefaultBuilders = true;
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name), [{
+      $_state.addAttribute(
+        mlir::SymbolTable::getSymbolAttrName(),
+        StringAttr::get($_state.getContext(), sym_name)
+      );
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>,
+    OpBuilder<(ins "StringAttr":$sym_name), [{
+      $_state.addAttribute(mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      Region* region = $_state.addRegion();
+      region->push_back(new Block());
+    }]>
+  ];
 }
 
 def AssignOp : CalyxOp<"assign", [
@@ -273,8 +319,8 @@ def AssignOp : CalyxOp<"assign", [
     "calyx.wires" section or a "calyx.group".
 
     ```mlir
-      calyx.assign %1 = %2 : i16
-      calyx.assign %1 = %2, %guard ? : i16
+      calyx.assign %dest = %src : i16
+      calyx.assign %dest = %guard ? %src : i16
     ```
   }];
   let arguments = (ins
@@ -282,13 +328,14 @@ def AssignOp : CalyxOp<"assign", [
     AnyType:$src,
     Optional<I1>:$guard
   );
+  let builders = [
+    OpBuilder<(ins "Value":$dest, "Value":$src), [{
+      $_state.addOperands({dest, src});
+    }]>
+  ];
   let verifier = "return ::verify$cppClass(*this);";
-
-  // TODO(Calyx): Calyx IR typically represents a
-  // guarded assignments as `%dest = %guard ? %src`
-  let assemblyFormat = [{
-    $dest `=` $src (`,` $guard^ `?`)? attr-dict `:` type($dest)
-  }];
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
 }
 
 def GroupDoneOp : CalyxGroupPort<"group_done", [
@@ -302,11 +349,18 @@ def GroupDoneOp : CalyxGroupPort<"group_done", [
     when the group's done operation should be active.
 
     ```mlir
-      calyx.group_done %v1 : i1
-      calyx.group_done %v2, %guard ? : i1
+      calyx.group_done %src : i1
+      calyx.group_done %guard ? %src : i1
     ```
   }];
   let results = (outs);
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
+  let builders = [
+    OpBuilder<(ins "Value":$src), [{
+      $_state.addOperands(src);
+    }]>
+  ];
 }
 
 def GroupGoOp : CalyxGroupPort<"group_go", [
@@ -323,17 +377,17 @@ def GroupGoOp : CalyxGroupPort<"group_go", [
     receive a source until the Compile Control pass.
 
     ```mlir
-      %group_name1.go = calyx.group_go %0 : i1
-      %group_name2.go = calyx.group_go %3, %guard ? : i1
+      %group_name1.go = calyx.group_go %src : i1
+      %group_name2.go = calyx.group_go %guard ? %src : i1
     ```
   }];
   let results = (outs I1);
+  let printer = "return ::print$cppClass(p, *this);";
+  let parser = "return ::parse$cppClass(parser, result);";
   let builders = [
-    OpBuilder<(ins "Value":$src, CArg<"Value", "{}">:$guard), [{
+    OpBuilder<(ins "Value":$src), [{
       $_state.addTypes($_builder.getI1Type());
       $_state.addOperands(src);
-      if (guard)
-        $_state.addOperands(guard);
     }]>
   ];
 }

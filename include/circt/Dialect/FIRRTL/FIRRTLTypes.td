@@ -18,8 +18,8 @@ def FIRRTLType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FIRRTLType>()">,
   "FIRRTLType", "::circt::firrtl::FIRRTLType">;
 
 def ClockType : DialectType<FIRRTLDialect, CPred<"$_self.isa<ClockType>()">,
- "clock", "::circt::firrtl::ClockType">,
- BuildableType<"ClockType::get($_builder.getContext())">;
+    "clock", "::circt::firrtl::ClockType">,
+  BuildableType<"ClockType::get($_builder.getContext())">;
 
 def IntType : DialectType<FIRRTLDialect, CPred<"$_self.isa<IntType>()">,
  "sint or uint type", "::circt::firrtl::IntType">;
@@ -40,15 +40,21 @@ def FVectorType : DialectType<FIRRTLDialect, CPred<"$_self.isa<FVectorType>()">,
   "FVectorType", "::circt::firrtl::FVectorType">;
 
 def UInt1Type : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<UIntType>() && "
-        "($_self.cast<UIntType>().getWidth() == 1 ||"
-        " $_self.cast<UIntType>().getWidth() == None)">,
-   "UInt<1> or UInt", "::circt::firrtl::UIntType">,
-   BuildableType<"UIntType::get($_builder.getContext(), 1)">;
+    CPred<"$_self.isa<UIntType>() && "
+          "($_self.cast<UIntType>().getWidth() == 1 ||"
+          " $_self.cast<UIntType>().getWidth() == None)">,
+    "UInt<1> or UInt", "::circt::firrtl::UIntType">,
+  BuildableType<"UIntType::get($_builder.getContext(), 1)">;
 
 def AsyncResetType : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<AsyncResetType>()">,
-  "AsyncReset", "::circt::firrtl::AsyncResetType">;
+    CPred<"$_self.isa<AsyncResetType>()">,
+    "AsyncReset", "::circt::firrtl::AsyncResetType">,
+  BuildableType<"AsyncResetType::get($_builder.getContext())">;
+
+def ResetType : DialectType<FIRRTLDialect,
+    CPred<"$_self.isa<ResetType>()">,
+    "Reset", "::circt::firrtl::ResetType">,
+  BuildableType<"ResetType::get($_builder.getContext())">;
 
 def PassiveType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isPassive()">,
@@ -116,16 +122,16 @@ def NonZeroIntType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<IntType>() && $_self.cast<IntType>().getWidth() != 0">,
   "Int", "::circt::firrtl::IntType">;
 
-def ResetType : DialectType<FIRRTLDialect,
-  CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isResetType()">,
-  "Reset", "::circt::firrtl::FIRRTLType">;
+def AnyResetType : DialectType<FIRRTLDialect,
+    CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isResetType()">,
+    "Reset", "::circt::firrtl::FIRRTLType">;
 
 def UIntSIntClockType : AnyTypeOf<[SIntType, UIntType, ClockType],
                                   "sint, uint, or clock",
                                   "::circt::firrtl::FIRRTLType">;
 
 def OneBitCastableType : AnyTypeOf<
-  [OneBitType, ResetType, AsyncResetType, ClockType],
+  [OneBitType, AnyResetType, AsyncResetType, ClockType],
   "1-bit uint/sint/analog, reset, asyncreset, or clock",
                                   "::circt::firrtl::FIRRTLType">;
 
@@ -255,6 +261,10 @@ class AugmentedType<string name> : AttrDef<FIRRTLDialect, name> {
     ArrayAttr getElements() { return getUnderlying().getAs<ArrayAttr>("elements"); }
   }];
 
+  code hasPrefix = [{
+    StringAttr getPrefix() { return getUnderlying().getAs<StringAttr>("prefix"); }
+  }];
+
 }
 
 def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
@@ -262,7 +272,8 @@ def AugmentedBundleType : AugmentedType<"AugmentedBundleType"> {
     defaultClassDeclaration #
     hasID #
     hasElements #
-    hasDefName # [{
+    hasDefName #
+    hasPrefix # [{
       bool isRoot() { return getID() != nullptr; }
     }];
 }

@@ -31,13 +31,13 @@ public:
             ReadInOutOp, ArrayIndexInOutOp, VerbatimExprOp, VerbatimExprSEOp,
             ConstantXOp, ConstantZOp,
             // Declarations.
-            RegOp, WireOp, LocalParamOp,
+            RegOp, WireOp, LocalParamOp, XMROp,
             // Control flow.
             IfDefOp, IfDefProceduralOp, IfOp, AlwaysOp, AlwaysCombOp,
             AlwaysFFOp, InitialOp, CaseZOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
-            FWriteOp, FatalOp, FinishOp, VerbatimOp,
+            FWriteOp, VerbatimOp,
             // Type declarations.
             InterfaceOp, InterfaceSignalOp, InterfaceModportOp,
             InterfaceInstanceOp, GetModportOp, AssignInterfaceSignalOp,
@@ -46,7 +46,11 @@ public:
             AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
             CoverConcurrentOp,
             // Bind Statements
-            BindOp>([&](auto expr) -> ResultType {
+            BindOp,
+            // Simulator control tasks
+            StopOp, FinishOp, ExitOp,
+            // Severity message tasks
+            FatalOp, ErrorOp, WarningOp, InfoOp>([&](auto expr) -> ResultType {
           return thisCast->visitSV(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -75,6 +79,7 @@ public:
   HANDLE(RegOp, Unhandled);
   HANDLE(WireOp, Unhandled);
   HANDLE(LocalParamOp, Unhandled);
+  HANDLE(XMROp, Unhandled);
 
   // Expressions
   HANDLE(ReadInOutOp, Unhandled);
@@ -102,8 +107,6 @@ public:
   HANDLE(ReleaseOp, Unhandled);
   HANDLE(AliasOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
-  HANDLE(FatalOp, Unhandled);
-  HANDLE(FinishOp, Unhandled);
   HANDLE(VerbatimOp, Unhandled);
 
   // Type declarations.
@@ -125,6 +128,17 @@ public:
 
   // Bind statements.
   HANDLE(BindOp, Unhandled);
+
+  // Simulator control tasks
+  HANDLE(StopOp, Unhandled);
+  HANDLE(FinishOp, Unhandled);
+  HANDLE(ExitOp, Unhandled);
+
+  // Severity message tasks
+  HANDLE(FatalOp, Unhandled);
+  HANDLE(ErrorOp, Unhandled);
+  HANDLE(WarningOp, Unhandled);
+  HANDLE(InfoOp, Unhandled);
 #undef HANDLE
 };
 

@@ -17,12 +17,13 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
+#include "llvm/ADT/SmallPtrSet.h"
 
 using namespace circt;
 using namespace hw;
 
-/// Return true if the specified operation is a combinatorial logic op.
-bool hw::isCombinatorial(Operation *op) {
+/// Return true if the specified operation is a combinational logic op.
+bool hw::isCombinational(Operation *op) {
   struct IsCombClassifier : public TypeOpVisitor<IsCombClassifier, bool> {
     bool visitInvalidTypeOp(Operation *op) { return false; }
     bool visitUnhandledTypeOp(Operation *op) { return true; }
@@ -40,7 +41,8 @@ enum class Delimiter {
 
 /// Check parameter specified by `value` to see if it is valid within the scope
 /// of the specified module `module`.  If not, emit an error at the location of
-/// `usingOp` and return failure, otherwise return success.
+/// `usingOp` and return failure, otherwise return success.  If `usingOp` is
+/// null, then no diagnostic is generated.
 ///
 /// If `disallowParamRefs` is true, then parameter references are not allowed.
 LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
@@ -52,13 +54,12 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
       value.isa<StringAttr>() || value.isa<ParamVerbatimAttr>())
     return success();
 
-  // Check both arms of an expression.
-  if (auto binop = value.dyn_cast<ParamBinaryAttr>()) {
-    if (failed(checkParameterInContext(binop.getLhs(), module, usingOp,
-                                       disallowParamRefs)) ||
-        failed(checkParameterInContext(binop.getRhs(), module, usingOp,
-                                       disallowParamRefs)))
-      return failure();
+  // Check both subexpressions of an expression.
+  if (auto expr = value.dyn_cast<ParamExprAttr>()) {
+    for (auto op : expr.getOperands())
+      if (failed(
+              checkParameterInContext(op, module, usingOp, disallowParamRefs)))
+        return failure();
     return success();
   }
 
@@ -70,8 +71,9 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
     // Don't allow references to parameters from the default values of a
     // parameter list.
     if (disallowParamRefs) {
-      usingOp->emitOpError("parameter ")
-          << nameAttr << " cannot be used as a default value for a parameter";
+      if (usingOp)
+        usingOp->emitOpError("parameter ")
+            << nameAttr << " cannot be used as a default value for a parameter";
       return failure();
     }
 
@@ -85,19 +87,31 @@ LogicalResult hw::checkParameterInContext(Attribute value, Operation *module,
       if (paramAttr.getType().getValue() == parameterRef.getType())
         return success();
 
-      auto diag = usingOp->emitOpError("parameter ")
-                  << nameAttr << " used with type " << parameterRef.getType()
-                  << "; should have type " << paramAttr.getType().getValue();
-      diag.attachNote(module->getLoc()) << "module declared here";
+      if (usingOp) {
+        auto diag = usingOp->emitOpError("parameter ")
+                    << nameAttr << " used with type " << parameterRef.getType()
+                    << "; should have type " << paramAttr.getType().getValue();
+        diag.attachNote(module->getLoc()) << "module declared here";
+      }
       return failure();
     }
 
-    auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
-    diag.attachNote(module->getLoc()) << "module declared here";
+    if (usingOp) {
+      auto diag = usingOp->emitOpError("use of unknown parameter ") << nameAttr;
+      diag.attachNote(module->getLoc()) << "module declared here";
+    }
     return failure();
   }
 
-  return usingOp->emitOpError("invalid parameter value ") << value;
+  if (usingOp)
+    usingOp->emitOpError("invalid parameter value ") << value;
+  return failure();
+}
+
+/// Return true if the specified attribute tree is made up of nodes that are
+/// valid in a parameter expression.
+bool hw::isValidParameterExpression(Attribute attr, Operation *module) {
+  return succeeded(checkParameterInContext(attr, module, nullptr, false));
 }
 
 //===----------------------------------------------------------------------===//
@@ -176,6 +190,35 @@ void ConstantOp::getAsmResultNames(
 
 OpFoldResult ConstantOp::fold(ArrayRef<Attribute> constants) {
   assert(constants.empty() && "constant has no operands");
+  return valueAttr();
+}
+
+//===----------------------------------------------------------------------===//
+// ParamValueOp
+//===----------------------------------------------------------------------===//
+
+static ParseResult parseParamValue(OpAsmParser &p, Attribute &value,
+                                   Type &resultType) {
+  if (p.parseType(resultType) || p.parseEqual() ||
+      p.parseAttribute(value, resultType))
+    return failure();
+  return success();
+}
+
+static void printParamValue(OpAsmPrinter &p, Operation *, Attribute value,
+                            Type resultType) {
+  p << resultType << " = ";
+  p.printAttributeWithoutType(value);
+}
+
+static LogicalResult verifyParamValueOp(ParamValueOp op) {
+  // Check that the attribute expression is valid in this module.
+  return checkParameterInContext(op.value(),
+                                 op->getParentOfType<hw::HWModuleOp>(), op);
+}
+
+OpFoldResult ParamValueOp::fold(ArrayRef<Attribute> constants) {
+  assert(constants.empty() && "hw.param.value has no operands");
   return valueAttr();
 }
 
@@ -317,20 +360,19 @@ void HWModuleOp::build(OpBuilder &builder, OperationState &result,
 /// Return the name to use for the Verilog module that we're referencing
 /// here.  This is typically the symbol, but can be overridden with the
 /// verilogName attribute.
-StringRef HWModuleExternOp::getVerilogModuleName() {
-  if (auto vname = verilogName())
-    return vname.getValue();
-  return getName();
-}
-
-/// Return the name to use for the Verilog module that we're referencing
-/// here.  This is typically the symbol, but can be overridden with the
-/// verilogName attribute.
 StringAttr HWModuleExternOp::getVerilogModuleNameAttr() {
   if (auto vName = verilogNameAttr())
     return vName;
 
   return (*this)->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName());
+}
+
+StringAttr HWModuleGeneratedOp::getVerilogModuleNameAttr() {
+  if (auto vName = verilogNameAttr()) {
+    return vName;
+  }
+  return (*this)->getAttrOfType<StringAttr>(
+      ::mlir::SymbolTable::getSymbolAttrName());
 }
 
 void HWModuleExternOp::build(OpBuilder &builder, OperationState &result,
@@ -436,6 +478,32 @@ SmallVector<PortInfo> hw::getAllModulePortInfos(Operation *op) {
   return results;
 }
 
+/// Return the PortInfo for the specified input or inout port.
+PortInfo hw::getModuleInOrInoutPort(Operation *op, size_t idx) {
+  auto argTypes = getModuleType(op).getInputs();
+  auto argNames = op->getAttrOfType<ArrayAttr>("argNames");
+
+  bool isInOut = false;
+  auto type = argTypes[idx];
+
+  if (auto inout = type.dyn_cast<InOutType>()) {
+    isInOut = true;
+    type = inout.getElementType();
+  }
+
+  auto direction = isInOut ? PortDirection::INOUT : PortDirection::INPUT;
+  return {argNames[idx].cast<StringAttr>(), direction, type, idx};
+}
+
+/// Return the PortInfo for the specified output port.
+PortInfo hw::getModuleOutputPort(Operation *op, size_t idx) {
+  auto resultNames = op->getAttrOfType<ArrayAttr>("resultNames");
+  auto resultTypes = getModuleType(op).getResults();
+  assert(idx < resultNames.size() && "invalid result number");
+  return {resultNames[idx].cast<StringAttr>(), PortDirection::OUTPUT,
+          resultTypes[idx], idx};
+}
+
 static bool hasAttribute(StringRef name, ArrayRef<NamedAttribute> attrs) {
   for (auto &argAttr : attrs)
     if (argAttr.first == name)
@@ -453,12 +521,11 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
 
   return parser.parseCommaSeparatedList(
       OpAsmParser::Delimiter::OptionalLessGreater, [&]() {
-        StringAttr name;
+        std::string name;
         Type type;
         Attribute value;
 
-        if (!(name = module_like_impl::parsePortName(parser)) ||
-            parser.parseColonType(type))
+        if (parser.parseKeywordOrString(&name) || parser.parseColonType(type))
           return failure();
 
         // Parse the default value if present.
@@ -468,7 +535,8 @@ static ParseResult parseOptionalParameters(OpAsmParser &parser,
         }
 
         auto &builder = parser.getBuilder();
-        parameters.push_back(ParamDeclAttr::get(builder.getContext(), name,
+        parameters.push_back(ParamDeclAttr::get(builder.getContext(),
+                                                builder.getStringAttr(name),
                                                 TypeAttr::get(type), value));
         return success();
       });
@@ -660,11 +728,19 @@ static LogicalResult verifyModuleCommon(Operation *module) {
   if (resultNames.size() != moduleType.getNumResults())
     return module->emitOpError("incorrect number of result names");
 
+  SmallPtrSet<Attribute, 4> paramNames;
+
   // Check parameter default values are sensible.
   for (auto param : module->getAttrOfType<ArrayAttr>("parameters")) {
     auto paramAttr = param.cast<ParamDeclAttr>();
 
-    // Default values are allowed to be missing.
+    // Check that we don't have any redundant parameter names.  These are
+    // resolved by string name: reuse of the same name would cause ambiguities.
+    if (!paramNames.insert(paramAttr.getName()).second)
+      return module->emitOpError("parameter ")
+             << paramAttr << " has the same name as a previous parameter";
+
+    // Default values are allowed to be missing, check them if present.
     auto value = paramAttr.getValue();
     if (!value)
       continue;
@@ -909,6 +985,7 @@ LogicalResult InstanceOp::verifyCustom() {
 
 static ParseResult parseInstanceOp(OpAsmParser &parser,
                                    OperationState &result) {
+  auto *context = result.getContext();
   StringAttr instanceNameAttr;
   StringAttr sym_nameAttr;
   FlatSymbolRefAttr moduleNameAttr;
@@ -925,14 +1002,15 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     // Parsing an optional symbol name doesn't fail, so no need to check the
     // result.
-    (void)parser.parseOptionalSymbolName(sym_nameAttr, "sym_name",
-                                         result.attributes);
+    (void)parser.parseOptionalSymbolName(
+        sym_nameAttr, InnerName::getInnerNameAttrName(), result.attributes);
   }
 
   auto parseInputPort = [&]() -> ParseResult {
-    argNames.push_back(module_like_impl::parsePortName(parser));
-    if (!argNames.back())
+    std::string portName;
+    if (parser.parseKeywordOrString(&portName))
       return failure();
+    argNames.push_back(StringAttr::get(context, portName));
     inputsOperands.push_back({});
     inputsTypes.push_back({});
     return failure(parser.parseColon() ||
@@ -941,9 +1019,10 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   };
 
   auto parseResultPort = [&]() -> ParseResult {
-    resultNames.push_back(module_like_impl::parsePortName(parser));
-    if (!resultNames.back())
+    std::string portName;
+    if (parser.parseKeywordOrString(&portName))
       return failure();
+    resultNames.push_back(StringAttr::get(parser.getContext(), portName));
     allResultTypes.push_back({});
     return parser.parseColonType(allResultTypes.back());
   };
@@ -985,13 +1064,13 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
       return;
     }
 
-    module_like_impl::printPortName(portList[nextPort++].name, p.getStream());
+    p.printKeywordOrString(portList[nextPort++].name.getValue());
     p << ": ";
   };
 
   p << ' ';
   p.printAttributeWithoutType(op.instanceNameAttr());
-  if (auto attr = op.sym_nameAttr()) {
+  if (auto attr = op.inner_symAttr()) {
     p << " sym ";
     p.printSymbolName(attr.getValue());
   }
@@ -1009,9 +1088,10 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp op) {
     p << res.getType();
   });
   p << ')';
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{
-                              "instanceName", "sym_name", "moduleName",
-                              "argNames", "resultNames", "parameters"});
+  p.printOptionalAttrDict(
+      op->getAttrs(),
+      /*elidedAttrs=*/{"instanceName", InnerName::getInnerNameAttrName(),
+                       "moduleName", "argNames", "resultNames", "parameters"});
 }
 
 /// Return the name of the specified input port or null if it cannot be
@@ -1174,7 +1254,7 @@ static ParseResult parseArrayConcatTypes(OpAsmParser &p,
   auto parseElement = [&]() -> ParseResult {
     Type ty;
     if (p.parseType(ty))
-      return p.emitError(p.getCurrentLocation(), "Expected type");
+      return failure();
     auto arrTy = type_dyn_cast<ArrayType>(ty);
     if (!arrTy)
       return p.emitError(p.getCurrentLocation(), "Expected !hw.array type");

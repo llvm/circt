@@ -36,7 +36,8 @@ config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
 config.substitutions.append(('%INC%', config.circt_include_dir))
 config.substitutions.append(('%PYTHON%', config.python_executable))
-config.substitutions.append(('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
+config.substitutions.append(
+    ('%TCL_PATH%', config.circt_src_root + '/build/lib/Bindings/Tcl/'))
 config.substitutions.append(('%CIRCT_SOURCE%', config.circt_src_root))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
@@ -73,7 +74,8 @@ if config.bindings_python_enabled:
       append_path=True)
 
 tool_dirs = [
-    config.circt_tools_dir, config.circt_utils_dir, config.mlir_tools_dir, config.llvm_tools_dir
+    config.circt_tools_dir, config.circt_utils_dir, config.mlir_tools_dir,
+    config.llvm_tools_dir
 ]
 tools = [
     'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
@@ -94,7 +96,7 @@ if config.verilator_path != "":
   config.available_features.add('rtl-sim')
   llvm_config.with_environment('VERILATOR_PATH', config.verilator_path)
 
-# Enable Questa if it has been detected.
+# Enable Quartus if it has been detected.
 if config.quartus_path != "":
   tool_dirs.append(os.path.dirname(config.quartus_path))
   tools.append('quartus')

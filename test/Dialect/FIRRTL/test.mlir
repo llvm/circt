@@ -76,6 +76,9 @@ firrtl.module @Mod2(in %in : !firrtl.uint<8>,
 // CHECK-NEXT:    firrtl.connect %out, %some_name : !firrtl.uint<8>, !firrtl.uint<8>
 // CHECK-NEXT:  }
 
+// Check that quotes port names are paresable and printed with quote only if needed.
+// CHECK: firrtl.extmodule @TrickyNames(in "777": !firrtl.uint, in abc: !firrtl.uint)
+firrtl.extmodule @TrickyNames(in "777": !firrtl.uint, in "abc": !firrtl.uint)
 
 // Modules may be completely empty.
 // CHECK-LABEL: firrtl.module @no_ports() {
@@ -140,10 +143,10 @@ firrtl.module @VerbatimExpr() {
 }
 
 // CHECK-LABL: @LowerToBind
-// CHECK: firrtl.instance @InstanceLowerToBind {lowerToBind = true, name = "foo"}
+// CHECK: firrtl.instance foo {lowerToBind = true} @InstanceLowerToBind()
 firrtl.module @InstanceLowerToBind() {}
 firrtl.module @LowerToBind() {
-  firrtl.instance @InstanceLowerToBind {lowerToBind = true, name = "foo"}
+  firrtl.instance foo {lowerToBind = true} @InstanceLowerToBind()
 }
 
 firrtl.nla @NLA1 [] []
