@@ -194,6 +194,9 @@ static std::string getTypeName(Operation *oldOp, Type type) {
 
 /// Construct a name for creating FIRRTL sub-module.
 static std::string getSubModuleName(Operation *oldOp) {
+  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp); instanceOp)
+    return instanceOp.getModule().str();
+
   // The dialect name is separated from the operation name by '.', which is not
   // valid in SystemVerilog module names. In case this name is used in
   // SystemVerilog output, replace '.' with '_'.
@@ -527,16 +530,19 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 // FIRRTL Sub-module Related Functions
 //===----------------------------------------------------------------------===//
 
-/// Check whether a submodule with the same name has been created elsewhere.
-/// Return the matched submodule if true, otherwise return nullptr.
-static FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation *oldOp) {
-  for (auto &op : topModuleOp->getParentRegion()->front()) {
-    if (auto subModuleOp = dyn_cast<FModuleOp>(op)) {
-      if (getSubModuleName(oldOp) == subModuleOp.getName()) {
-        return subModuleOp;
-      }
-    }
+/// Check whether a submodule with the same name has been created elsewhere in
+/// the FIRRTL circt. Return the matched submodule if true, otherwise return
+/// nullptr.
+static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
+  for (auto moduleOp : circuitOp.getOps<FModuleOp>()) {
+    if (getSubModuleName(oldOp) == moduleOp.getName())
+      return moduleOp;
   }
+
+  assert(!isa<handshake::InstanceOp>(oldOp) &&
+         "handshake.instance target modules should always have been lowered "
+         "before the modules that reference them!");
+
   return FModuleOp(nullptr);
 }
 
@@ -2241,7 +2247,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // This branch takes care of all non-timing operations that require to
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
-        FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
+        FModuleOp subModuleOp = checkSubModuleOp(circuitOp, &op);
         bool hasClock = op.hasTrait<mlir::OpTrait::HasClock>();
 
         // Check if the sub-module already exists.
@@ -2285,10 +2291,12 @@ using InstanceGraph = std::map<std::string, std::set<std::string>>;
 
 /// Iterates over the handshake::FuncOp's in the program to build an instance
 /// graph. In doing so, we detect whether there are any cycles in this graph, as
-/// well as infer a top module for the design.
-static LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
-                                          InstanceGraph &instanceGraph,
-                                          std::string &topLevel) {
+/// well as infer a top module for the design by performing a topological sort
+/// of the instance graph. The result of this sort is placed in sortedFuncs.
+static LogicalResult
+resolveInstanceGraph(ModuleOp moduleOp, InstanceGraph &instanceGraph,
+                     std::string &topLevel,
+                     SmallVectorImpl<std::string> &sortedFuncs) {
   // Create use graph
   auto walkFuncOps = [&](handshake::FuncOp funcOp) {
     auto &funcUses = instanceGraph[funcOp.getName().str()];
@@ -2302,7 +2310,7 @@ static LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
   // instances as candidate top level modules; these will be pruned whenever
   // they are referenced by another module.
   std::set<std::string> visited, marked, candidateTopLevel;
-  SmallVector<std::string> sorted, cycleTrace;
+  SmallVector<std::string> cycleTrace;
   bool cyclic = false;
   llvm::transform(instanceGraph,
                   std::inserter(candidateTopLevel, candidateTopLevel.begin()),
@@ -2324,7 +2332,7 @@ static LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
         }
         marked.erase(node);
         visited.insert(node);
-        sorted.insert(sorted.begin(), node);
+        sortedFuncs.insert(sortedFuncs.begin(), node);
       };
   for (auto it : instanceGraph) {
     if (visited.count(it.first) == 0)
@@ -2368,7 +2376,8 @@ public:
     // Resolve the instance graph to get a top-level module.
     std::string topLevel;
     InstanceGraph uses;
-    if (resolveInstanceGraph(op, uses, topLevel).failed()) {
+    SmallVector<std::string> sortedFuncs;
+    if (resolveInstanceGraph(op, uses, topLevel, sortedFuncs).failed()) {
       signalPassFailure();
       return;
     }
@@ -2383,11 +2392,21 @@ public:
     target.addLegalDialect<FIRRTLDialect>();
     target.addIllegalDialect<handshake::HandshakeDialect>();
 
-    RewritePatternSet patterns(op.getContext());
-    patterns.insert<HandshakeFuncOpLowering>(op.getContext(), circuitOp);
-
-    if (failed(applyPartialConversion(op, target, std::move(patterns))))
-      signalPassFailure();
+    // Convert the handshake.func operations in post-order wrt. the instance
+    // graph. This ensures that any referenced submodules (through
+    // handshake.instance) has already been lowered, and their FIRRTL module
+    // equivalents are available.
+    for (auto funcName : llvm::reverse(sortedFuncs)) {
+      RewritePatternSet patterns(op.getContext());
+      patterns.insert<HandshakeFuncOpLowering>(op.getContext(), circuitOp);
+      auto funcOp = op.lookupSymbol(funcName);
+      assert(funcOp && "Symbol not found in module!");
+      if (failed(applyPartialConversion(funcOp, target, std::move(patterns)))) {
+        signalPassFailure();
+        funcOp->emitOpError() << "error during conversion";
+        return;
+      }
+    }
   }
 };
 } // end anonymous namespace
