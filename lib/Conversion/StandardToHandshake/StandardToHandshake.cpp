@@ -1647,8 +1647,13 @@ LogicalResult replaceCallOps(handshake::FuncOp f,
         llvm::copy(callOp.getOperands(), std::back_inserter(operands));
         operands.push_back(cntrlMg->getResult(0));
         rewriter.setInsertionPoint(callOp);
-        rewriter.replaceOpWithNewOp<handshake::InstanceOp>(
-            callOp, callOp.getCallee(), callOp.getResultTypes(), operands);
+        auto instanceOp = rewriter.create<handshake::InstanceOp>(
+            callOp.getLoc(), callOp.getCallee(), callOp.getResultTypes(),
+            operands);
+        // Replace all results of the source callOp.
+        for (auto it : llvm::zip(callOp.getResults(), instanceOp.getResults()))
+          std::get<0>(it).replaceAllUsesWith(std::get<1>(it));
+        rewriter.eraseOp(callOp);
       }
     }
   }

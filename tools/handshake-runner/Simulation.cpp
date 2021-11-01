@@ -586,8 +586,8 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
           entryBlock.getArguments();
 
       // Create a new value map containing only the arguments of the
-      // InstanceOp. This will be the value and time map for the scope of the
-      // function pointed to by the InstanceOp.
+      // InstanceOp. This will be the value and time map for the callee scope of
+      // the function pointed to by the InstanceOp.
       llvm::DenseMap<mlir::Value, Any> scopeValueMap;
       llvm::DenseMap<mlir::Value, double> scopeTimeMap;
 
@@ -605,9 +605,12 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
           apnonearg;
       std::vector<Any> nestedResults(nRealFuncOuts);
       std::vector<double> nestedResTimes(nRealFuncOuts);
+
+      // Go execute!
       HandshakeExecuter(func, scopeValueMap, scopeTimeMap, nestedResults,
                         nestedResTimes, store, storeTimes, *module);
 
+      // Place the output arguments in the caller scope.
       for (auto nestedRes : enumerate(nestedResults)) {
         out[nestedRes.index()] = nestedRes.value();
         valueMap[instanceOp.getResults()[nestedRes.index()]] =
@@ -615,6 +618,11 @@ LogicalResult HandshakeExecuter::execute(handshake::InstanceOp instanceOp,
         timeMap[instanceOp.getResults()[nestedRes.index()]] =
             nestedResTimes[nestedRes.index()];
       }
+      // ... and the implicit none argument
+      unsigned ctrlResultIdx = instanceOp.getNumResults() - 1;
+      valueMap[instanceOp->getResult(ctrlResultIdx)] = apnonearg;
+      out[ctrlResultIdx] = apnonearg;
+
       return success();
     } else {
       return instanceOp.emitError()
