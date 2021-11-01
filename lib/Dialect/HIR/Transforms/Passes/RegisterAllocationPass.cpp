@@ -271,13 +271,13 @@ LogicalResult RegisterAllocationPass::dispatch(Operation *operation) {
       return failure();
   } else if (auto op = dyn_cast<hir::TimeOp>(operation)) {
     return success();
-  } else if (auto op = dyn_cast<mlir::ConstantOp>(operation)) {
+  } else if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation)) {
     return success();
-  } else if (auto op = dyn_cast<mlir::IndexCastOp>(operation)) {
+  } else if (auto op = dyn_cast<mlir::arith::IndexCastOp>(operation)) {
     return success();
-  } else if (auto op = dyn_cast<mlir::TruncateIOp>(operation)) {
+  } else if (auto op = dyn_cast<mlir::arith::TruncIOp>(operation)) {
     return success();
-  } else if (auto op = dyn_cast<mlir::SignExtendIOp>(operation)) {
+  } else if (auto op = dyn_cast<mlir::arith::ExtSIOp>(operation)) {
     return success();
   } else {
     assert(!dyn_cast<hir::FuncOp>(operation));

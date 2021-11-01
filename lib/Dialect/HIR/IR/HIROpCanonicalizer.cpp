@@ -93,7 +93,7 @@ LogicalResult IfOp::canonicalize(IfOp op, mlir::PatternRewriter &rewriter) {
   LogicalResult result = splitOffsetIntoSeparateOp(op, rewriter);
 
   auto constantOp =
-      dyn_cast_or_null<mlir::ConstantOp>(op.condition().getDefiningOp());
+      dyn_cast_or_null<mlir::arith::ConstantOp>(op.condition().getDefiningOp());
   if (!constantOp)
     return result;
 
@@ -147,7 +147,7 @@ OpFoldResult LatchOp::fold(ArrayRef<Attribute> operands) {
   }
   // If prev op is a constant then this latch op is unnecessary.
   if (auto constantOp =
-          dyn_cast_or_null<mlir::ConstantOp>(input.getDefiningOp()))
+          dyn_cast_or_null<mlir::arith::ConstantOp>(input.getDefiningOp()))
     return input;
   return {};
 }

@@ -281,8 +281,6 @@ MemrefLoweringPass::createBusInstantiationsAndCallOp(hir::AllocaOp op) {
       builder.getUnknownLoc(), SmallVector<Type>(), memModuleName,
       TypeAttr::get(funcTy), inputBuses, tstartRegion, IntegerAttr());
 
-  helper::declareExternalFuncForCall(callOp, inputBusNames);
-
   auto params = builder.getDictionaryAttr(
       {builder.getNamedAttr("ELEMENT_WIDTH",
                             builder.getI64IntegerAttr(elementWidth)),
@@ -291,6 +289,8 @@ MemrefLoweringPass::createBusInstantiationsAndCallOp(hir::AllocaOp op) {
                             builder.getI64IntegerAttr(tensorSize))});
 
   callOp->setAttr("params", params);
+
+  helper::declareExternalFuncForCall(callOp, inputBusNames);
 
   mapMemrefToPortInterfaces.insert(op.res(), memrefPortInterfaces);
   return success();
@@ -305,8 +305,8 @@ static void initUnconnectedEnBusTensor(OpBuilder &builder, Value busTensor,
   auto dataTy =
       helper::getElementType(busTensor.getType()).dyn_cast<IntegerType>();
   assert(dataTy);
-  auto c0 = builder.create<mlir::ConstantOp>(builder.getUnknownLoc(),
-                                             IntegerAttr::get(dataTy, 0));
+  auto c0 = builder.create<mlir::arith::ConstantOp>(
+      builder.getUnknownLoc(), IntegerAttr::get(dataTy, 0));
   auto zeroBus = builder.create<hir::BusOp>(builder.getUnknownLoc(), busTy);
   builder
       .create<hir::SendOp>(builder.getUnknownLoc(), c0, zeroBus, tstart,
@@ -917,9 +917,9 @@ LogicalResult MemrefLoweringPass::visitOp(hir::FuncOp funcOp) {
   }
 
   initUnConnectedPorts(funcOp);
-  // helper::eraseOps(opsToErase);
+  helper::eraseOps(opsToErase);
   mapMemrefToPortInterfaces.clear();
-  // removeMemrefArguments(funcOp);
+  removeMemrefArguments(funcOp);
   return success();
 }
 

@@ -45,9 +45,9 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
 
   for (int i = lb; i < ub; i += step) {
     Value loopIV = builder
-                       .create<mlir::ConstantOp>(builder.getUnknownLoc(),
-                                                 IndexType::get(context),
-                                                 builder.getIndexAttr(0))
+                       .create<mlir::arith::ConstantOp>(builder.getUnknownLoc(),
+                                                        IndexType::get(context),
+                                                        builder.getIndexAttr(0))
                        .getResult();
 
     BlockAndValueMapping operandMap;

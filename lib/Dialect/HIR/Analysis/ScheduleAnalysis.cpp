@@ -32,10 +32,10 @@ private:
   LogicalResult visitOp(LatchOp);
   LogicalResult visitOp(RecvOp);
   LogicalResult visitOp(DelayOp);
-  LogicalResult visitOp(mlir::ConstantOp);
-  LogicalResult visitOp(mlir::IndexCastOp);
-  LogicalResult visitOp(mlir::SignExtendIOp);
-  LogicalResult visitOp(mlir::TruncateIOp);
+  LogicalResult visitOp(mlir::arith::ConstantOp);
+  LogicalResult visitOp(mlir::arith::IndexCastOp);
+  LogicalResult visitOp(mlir::arith::ExtSIOp);
+  LogicalResult visitOp(mlir::arith::TruncIOp);
   template <typename T>
   LogicalResult visitSingleResultOpWithOptionalDelay(T);
 
@@ -90,7 +90,7 @@ LogicalResult ScheduleInfoImpl::dispatch(Operation *operation) {
   } else if (auto op = dyn_cast<LatchOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
-  } else if (auto op = dyn_cast<mlir::ConstantOp>(operation)) {
+  } else if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
   } else if (auto op = dyn_cast<LoadOp>(operation)) {
@@ -120,13 +120,13 @@ LogicalResult ScheduleInfoImpl::dispatch(Operation *operation) {
   } else if (auto op = dyn_cast<DelayOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
-  } else if (auto op = dyn_cast<mlir::IndexCastOp>(operation)) {
+  } else if (auto op = dyn_cast<mlir::arith::IndexCastOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
-  } else if (auto op = dyn_cast<mlir::TruncateIOp>(operation)) {
+  } else if (auto op = dyn_cast<mlir::arith::TruncIOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
-  } else if (auto op = dyn_cast<mlir::SignExtendIOp>(operation)) {
+  } else if (auto op = dyn_cast<mlir::arith::ExtSIOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
   } else if (operation->getNumResults() > 0) {
@@ -250,7 +250,7 @@ LogicalResult ScheduleInfoImpl::visitOp(DelayOp op) {
   return success();
 }
 
-LogicalResult ScheduleInfoImpl::visitOp(mlir::ConstantOp op) {
+LogicalResult ScheduleInfoImpl::visitOp(mlir::arith::ConstantOp op) {
   scheduleInfo.setOfAlwaysValidValues.insert(op.getResult());
   return success();
 }
@@ -268,7 +268,7 @@ LogicalResult ScheduleInfoImpl::visitSingleResultOpWithOptionalDelay(T op) {
   return success();
 }
 
-LogicalResult ScheduleInfoImpl::visitOp(mlir::IndexCastOp op) {
+LogicalResult ScheduleInfoImpl::visitOp(mlir::arith::IndexCastOp op) {
   scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
       scheduleInfo.mapValueToRootTimeVar[op.in()];
 
@@ -280,25 +280,26 @@ LogicalResult ScheduleInfoImpl::visitOp(mlir::IndexCastOp op) {
     scheduleInfo.setOfAlwaysValidValues.insert(op.getResult());
 }
 
-LogicalResult ScheduleInfoImpl::visitOp(mlir::SignExtendIOp op) {
+LogicalResult ScheduleInfoImpl::visitOp(mlir::arith::ExtSIOp op) {
+
   scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.value()];
+      scheduleInfo.mapValueToRootTimeVar[op.in()];
 
   scheduleInfo.mapValueToOffset[op.getResult()] =
-      scheduleInfo.mapValueToOffset[op.value()];
+      scheduleInfo.mapValueToOffset[op.in()];
 
   return success();
-  if (scheduleInfo.setOfAlwaysValidValues.contains(op.value()))
+  if (scheduleInfo.setOfAlwaysValidValues.contains(op.in()))
     scheduleInfo.setOfAlwaysValidValues.insert(op.getResult());
 }
 
-LogicalResult ScheduleInfoImpl::visitOp(mlir::TruncateIOp op) {
+LogicalResult ScheduleInfoImpl::visitOp(mlir::arith::TruncIOp op) {
   scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.value()];
+      scheduleInfo.mapValueToRootTimeVar[op.in()];
 
   scheduleInfo.mapValueToOffset[op.getResult()] =
-      scheduleInfo.mapValueToOffset[op.value()];
-  if (scheduleInfo.setOfAlwaysValidValues.contains(op.value()))
+      scheduleInfo.mapValueToOffset[op.in()];
+  if (scheduleInfo.setOfAlwaysValidValues.contains(op.in()))
     scheduleInfo.setOfAlwaysValidValues.insert(op.getResult());
   return success();
 }

@@ -36,11 +36,11 @@ public:
   // - BinOp $op1, $op2
   // - ForOp(no unroll) $lb, $ub, %step.
   // - IndexCastOp $in
-  // SignExtendIOp(s32->_)/ZeroExtendIOp(u32/i32->_)/TruncateIOp
+  // ExtSIOp(s32->_)/ZeroExtendIOp(u32/i32->_)/TruncIOp
 private:
   LogicalResult updateRegion(Region &region) {
     for (auto &operation : region.front()) {
-      if (auto op = dyn_cast<mlir::IndexCastOp>(operation)) {
+      if (auto op = dyn_cast<mlir::arith::IndexCastOp>(operation)) {
         if (failed(updateOp(op)))
           return failure();
       } else if (auto op = dyn_cast<hir::ForOp>(operation)) {
@@ -64,7 +64,7 @@ private:
       } else if (auto op = dyn_cast<hir::MulFOp>(operation)) {
         if (failed(updateBinOp(op)))
           return failure();
-      } else if (auto op = dyn_cast<mlir::ConstantOp>(operation)) {
+      } else if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation)) {
         continue;
       } else if (auto op = dyn_cast<hir::LoadOp>(operation)) {
         continue;
@@ -82,7 +82,7 @@ private:
   }
 
 private:
-  LogicalResult updateOp(mlir::IndexCastOp);
+  LogicalResult updateOp(mlir::arith::IndexCastOp);
   LogicalResult updateOp(hir::ForOp);
   template <typename T>
   LogicalResult updateBinOp(T);
@@ -106,15 +106,15 @@ Value castToMachineWordSizedInteger(mlir::ImplicitLocOpBuilder &builder,
   if (inTy.getIntOrFloatBitWidth() == MACHINE_WORD_SIZE)
     return in;
   if (inTy.getIntOrFloatBitWidth() > MACHINE_WORD_SIZE)
-    return builder.create<mlir::TruncateIOp>(
+    return builder.create<mlir::arith::TruncIOp>(
         builder.getIntegerType(MACHINE_WORD_SIZE), in);
 
-  return builder.create<mlir::SignExtendIOp>(
+  return builder.create<mlir::arith::ExtSIOp>(
       builder.getIntegerType(MACHINE_WORD_SIZE), in);
 }
 
 Value replaceIndexCastWithIntegerCast(mlir::ImplicitLocOpBuilder &builder,
-                                      mlir::IndexCastOp op) {
+                                      mlir::arith::IndexCastOp op) {
   Value out;
   Type inTy = op.in().getType().dyn_cast<IntegerType>();
   assert(inTy);
@@ -125,10 +125,11 @@ Value replaceIndexCastWithIntegerCast(mlir::ImplicitLocOpBuilder &builder,
     out = op.in();
   else if (inTy.getIntOrFloatBitWidth() >
            op.getResult().getType().getIntOrFloatBitWidth())
-    out = builder.create<mlir::TruncateIOp>(op.getResult().getType(), op.in());
+    out = builder.create<mlir::arith::TruncIOp>(op.getResult().getType(),
+                                                op.in());
   else
     out =
-        builder.create<mlir::SignExtendIOp>(op.getResult().getType(), op.in());
+        builder.create<mlir::arith::ExtSIOp>(op.getResult().getType(), op.in());
   return out;
 }
 
@@ -141,7 +142,7 @@ Value replaceIndexCastWithIntegerCast(mlir::ImplicitLocOpBuilder &builder,
 /// If index_cast from an IntegerType to IndexType then note the original
 /// integer-var in a map.
 
-LogicalResult IndexLoweringPass::updateOp(mlir::IndexCastOp op) {
+LogicalResult IndexLoweringPass::updateOp(mlir::arith::IndexCastOp op) {
   ImplicitLocOpBuilder builder(op.getLoc(), op);
   Value res = op.getResult();
   Value in = op.in();
@@ -186,14 +187,14 @@ LogicalResult IndexLoweringPass::updateOp(hir::ForOp op) {
   // they are constants).
   if (op.lb().getType().isIndex()) {
     Value newLb = builder
-                      .create<mlir::IndexCastOp>(
+                      .create<mlir::arith::IndexCastOp>(
                           builder.getIntegerType(MACHINE_WORD_SIZE), op.lb())
                       .getResult();
     op.lbMutable().assign(newLb);
   }
   if (op.ub().getType().isIndex()) {
     Value newUb = builder
-                      .create<mlir::IndexCastOp>(
+                      .create<mlir::arith::IndexCastOp>(
                           builder.getIntegerType(MACHINE_WORD_SIZE), op.ub())
                       .getResult();
     op.ubMutable().assign(newUb);
@@ -201,7 +202,7 @@ LogicalResult IndexLoweringPass::updateOp(hir::ForOp op) {
   if (op.step().getType().isIndex()) {
     Value newStep =
         builder
-            .create<mlir::IndexCastOp>(
+            .create<mlir::arith::IndexCastOp>(
                 builder.getIntegerType(MACHINE_WORD_SIZE), op.step())
             .getResult();
     op.stepMutable().assign(newStep);
@@ -219,7 +220,7 @@ LogicalResult IndexLoweringPass::updateBinOp(T op) {
       op.op2().getType().template isa<IndexType>()) {
     ImplicitLocOpBuilder builder(op.getLoc(), op);
     Value rhs = builder
-                    .create<mlir::IndexCastOp>(
+                    .create<mlir::arith::IndexCastOp>(
                         builder.getIntegerType(MACHINE_WORD_SIZE), op.op2())
                     .getResult();
     Value newRes = builder.create<hir::AddIOp>(
@@ -231,7 +232,7 @@ LogicalResult IndexLoweringPass::updateBinOp(T op) {
              op.op2().getType().template isa<IntegerType>()) {
     ImplicitLocOpBuilder builder(op.getLoc(), op);
     Value lhs = builder
-                    .create<mlir::IndexCastOp>(
+                    .create<mlir::arith::IndexCastOp>(
                         builder.getIntegerType(MACHINE_WORD_SIZE), op.op1())
                     .getResult();
     Value newRes = builder.create<hir::AddIOp>(

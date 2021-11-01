@@ -178,7 +178,7 @@ Operation *getConstantX(OpBuilder *builder, Type originalTy) {
   return builder->create<sv::ConstantXOp>(builder->getUnknownLoc(), hwTy);
 }
 
-ArrayAttr getHWParams(Attribute paramsAttr) {
+ArrayAttr getHWParams(Attribute paramsAttr, bool ignoreValues) {
   if (!paramsAttr)
     return ArrayAttr();
 
@@ -190,7 +190,7 @@ ArrayAttr getHWParams(Attribute paramsAttr) {
   for (const NamedAttribute &param : params) {
     auto name = builder.getStringAttr(param.first.strref());
     auto type = TypeAttr::get(param.second.getType());
-    auto value = param.second;
+    auto value = ignoreValues ? Attribute() : param.second;
     auto hwParam =
         hw::ParamDeclAttr::get(builder.getContext(), name, type, value);
     hwParams.push_back(hwParam);

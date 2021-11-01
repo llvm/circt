@@ -72,7 +72,7 @@ private:
   void printOperation(Operation *op, unsigned indentAmount = 0);
 
   // Individual op printers.
-  void printConstantOp(mlir::ConstantOp op, unsigned indentAmount = 0);
+  void printConstantOp(mlir::arith::ConstantOp op, unsigned indentAmount = 0);
   void printIfOp(IfOp op, unsigned indentAmount = 0);
   void printForOp(ForOp op, unsigned indentAmount = 0);
   void printUnrollForOp(UnrollForOp op, unsigned indentAmount = 0);
@@ -742,7 +742,7 @@ void VerilogPrinter::printReturnOp(hir::ReturnOp op, unsigned indentAmount) {
   }
 }
 
-void VerilogPrinter::printConstantOp(mlir::ConstantOp op,
+void VerilogPrinter::printConstantOp(mlir::arith::ConstantOp op,
                                      unsigned indentAmount) {
   auto result = op.res();
   unsigned idResult = newValueNumber();
@@ -935,7 +935,7 @@ string formattedOp(Operation *op, string opName) {
 }
 
 void VerilogPrinter::printOperation(Operation *inst, unsigned indentAmount) {
-  if (auto op = dyn_cast<mlir::ConstantOp>(inst)) {
+  if (auto op = dyn_cast<mlir::arith::ConstantOp>(inst)) {
     outBuffer << "\n//" << formattedOp(inst, "ConstantOp");
     return printConstantOp(op, indentAmount);
   }

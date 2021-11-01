@@ -139,7 +139,6 @@ private:
 
     if (tstartRequired)
       body.addArgument(hir::TimeType::get(region.getContext()));
-
     // lower the ops in the region.
     for (Operation &operation : body) {
       if (auto op = dyn_cast<mlir::FuncOp>(operation)) {
@@ -157,23 +156,23 @@ private:
       } else if (auto op = dyn_cast<mlir::memref::StoreOp>(operation)) {
         if (failed(convertOp(op)))
           return failure();
-      } else if (auto op = dyn_cast<mlir::AddIOp>(operation)) {
-        if (failed(convertBinOp<mlir::AddIOp, hir::AddIOp>(op)))
+      } else if (auto op = dyn_cast<mlir::arith::AddIOp>(operation)) {
+        if (failed(convertBinOp<mlir::arith::AddIOp, hir::AddIOp>(op)))
           return failure();
-      } else if (auto op = dyn_cast<mlir::SubIOp>(operation)) {
-        if (failed(convertBinOp<mlir::SubIOp, hir::SubIOp>(op)))
+      } else if (auto op = dyn_cast<mlir::arith::SubIOp>(operation)) {
+        if (failed(convertBinOp<mlir::arith::SubIOp, hir::SubIOp>(op)))
           return failure();
-      } else if (auto op = dyn_cast<mlir::MulIOp>(operation)) {
-        if (failed(convertBinOp<mlir::MulIOp, hir::MulIOp>(op)))
+      } else if (auto op = dyn_cast<mlir::arith::MulIOp>(operation)) {
+        if (failed(convertBinOp<mlir::arith::MulIOp, hir::MulIOp>(op)))
           return failure();
-      } else if (auto op = dyn_cast<mlir::AddFOp>(operation)) {
-        if (failed(convertBinOp<mlir::AddFOp, hir::AddFOp>(op)))
+      } else if (auto op = dyn_cast<mlir::arith::AddFOp>(operation)) {
+        if (failed(convertBinOp<mlir::arith::AddFOp, hir::AddFOp>(op)))
           return failure();
-      } else if (auto op = dyn_cast<mlir::SubFOp>(operation)) {
-        if (failed(convertBinOp<mlir::SubFOp, hir::SubFOp>(op)))
+      } else if (auto op = dyn_cast<mlir::arith::SubFOp>(operation)) {
+        if (failed(convertBinOp<mlir::arith::SubFOp, hir::SubFOp>(op)))
           return failure();
-      } else if (auto op = dyn_cast<mlir::MulFOp>(operation)) {
-        if (failed(convertBinOp<mlir::MulFOp, hir::MulFOp>(op)))
+      } else if (auto op = dyn_cast<mlir::arith::MulFOp>(operation)) {
+        if (failed(convertBinOp<mlir::arith::MulFOp, hir::MulFOp>(op)))
           return failure();
       } else if (auto op = dyn_cast<mlir::ReturnOp>(operation)) {
         if (failed(convertOp(op)))
@@ -372,8 +371,8 @@ LogicalResult StandardToHIRPass::convertOp(mlir::memref::LoadOp op) {
           IntegerType::get(context, helper::clog2(shape[i]));
       castedIndices.push_back(
           builder
-              .create<mlir::IndexCastOp>(builder.getUnknownLoc(),
-                                         correctWidthIntTy, originalIdx)
+              .create<mlir::arith::IndexCastOp>(builder.getUnknownLoc(),
+                                                correctWidthIntTy, originalIdx)
               .getResult());
     } else {
       castedIndices.push_back(originalIdx);
@@ -415,8 +414,8 @@ LogicalResult StandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
           IntegerType::get(context, helper::clog2(shape[i]));
       castedIndices.push_back(
           builder
-              .create<mlir::IndexCastOp>(builder.getUnknownLoc(),
-                                         correctWidthIntTy, originalIdx)
+              .create<mlir::arith::IndexCastOp>(builder.getUnknownLoc(),
+                                                correctWidthIntTy, originalIdx)
               .getResult());
     } else {
       castedIndices.push_back(originalIdx);
@@ -488,7 +487,7 @@ LogicalResult StandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
 LogicalResult StandardToHIRPass::convertOp(mlir::ReturnOp op) {
   OpBuilder builder(op);
   Value c0 = builder
-                 .create<mlir::ConstantOp>(op.getLoc(),
+                 .create<mlir::arith::ConstantOp>(op.getLoc(),
                                            IndexType::get(builder.getContext()),
                                            builder.getIndexAttr(0))
                  .getResult();

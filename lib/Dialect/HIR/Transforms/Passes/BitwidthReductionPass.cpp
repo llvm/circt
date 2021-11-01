@@ -51,7 +51,7 @@ public:
 
 private:
   bool inspectOp(hir::FuncOp op);
-  bool inspectOp(mlir::ConstantOp op);
+  bool inspectOp(mlir::arith::ConstantOp op);
   bool inspectOp(ForOp op);
   bool inspectOp(UnrollForOp op);
   bool inspectOp(LoadOp op);
@@ -106,7 +106,7 @@ bool BitwidthReductionPass::inspectOp(FuncOp op) {
   return true;
 }
 
-bool BitwidthReductionPass::inspectOp(mlir::ConstantOp op) {
+bool BitwidthReductionPass::inspectOp(mlir::arith::ConstantOp op) {
   setIntegerConst(op.res(), op.value().dyn_cast<IntegerAttr>().getInt());
   return true;
 }
@@ -143,7 +143,7 @@ bool BitwidthReductionPass::inspectOp(LoadOp op) { return true; }
 bool BitwidthReductionPass::inspectOp(StoreOp op) { return true; }
 
 bool BitwidthReductionPass::inspectOp(Operation *inst) {
-  if (auto op = dyn_cast<mlir::ConstantOp>(inst)) {
+  if (auto op = dyn_cast<mlir::arith::ConstantOp>(inst)) {
     return inspectOp(op);
   }
   if (auto op = dyn_cast<hir::CallOp>(inst)) {

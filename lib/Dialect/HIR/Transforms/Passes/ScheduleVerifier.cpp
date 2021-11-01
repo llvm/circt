@@ -152,7 +152,7 @@ public:
 
 private:
   bool inspectOp(hir::FuncOp op);
-  bool inspectOp(mlir::ConstantOp op);
+  bool inspectOp(mlir::arith::ConstantOp op);
   bool inspectOp(ForOp op);
   bool inspectOp(hir::LoadOp op);
   bool inspectOp(hir::StoreOp op);
@@ -241,7 +241,7 @@ bool ScheduleVerifier::inspectOp(hir::FuncOp op) {
   return inspectBody(entryBlock);
 }
 
-bool ScheduleVerifier::inspectOp(mlir::ConstantOp op) {
+bool ScheduleVerifier::inspectOp(mlir::arith::ConstantOp op) {
 
   if (op.getResult().getType().dyn_cast<IndexType>())
     setIntegerConst(op.getResult(),
@@ -364,7 +364,7 @@ bool ScheduleVerifier::inspectOp(hir::CallOp op) {
 }
 
 bool ScheduleVerifier::inspectOp(Operation *inst) {
-  if (auto op = dyn_cast<mlir::ConstantOp>(inst))
+  if (auto op = dyn_cast<mlir::arith::ConstantOp>(inst))
     return inspectOp(op);
   if (auto op = dyn_cast<hir::CallOp>(inst))
     return inspectOp(op);

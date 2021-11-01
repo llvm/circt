@@ -117,7 +117,7 @@ void HIRDialect::initialize() {
 
 Operation *HIRDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                            Type type, Location loc) {
-  return builder.create<mlir::ConstantOp>(loc, type, value);
+  return builder.create<mlir::arith::ConstantOp>(loc, type, value);
 }
 
 #include "circt/Dialect/HIR/IR/HIRDialect.cpp.inc"

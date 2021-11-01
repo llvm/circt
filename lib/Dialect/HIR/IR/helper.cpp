@@ -135,7 +135,8 @@ ParseResult parseIntegerAttr(IntegerAttr &value, StringRef attrName,
 }
 
 llvm::Optional<int64_t> getConstantIntValue(Value var) {
-  auto constantOp = dyn_cast_or_null<mlir::ConstantOp>(var.getDefiningOp());
+  auto constantOp =
+      dyn_cast_or_null<mlir::arith::ConstantOp>(var.getDefiningOp());
   if (!constantOp)
     return llvm::None;
 
@@ -146,7 +147,7 @@ llvm::Optional<int64_t> getConstantIntValue(Value var) {
 
 mlir::LogicalResult isConstantIntValue(mlir::Value var) {
 
-  if (dyn_cast<mlir::ConstantOp>(var.getDefiningOp()))
+  if (dyn_cast<mlir::arith::ConstantOp>(var.getDefiningOp()))
     return success();
   return failure();
 }
@@ -254,6 +255,14 @@ llvm::Optional<StringRef> getOptionalName(Operation *operation,
   return name;
 }
 
+circt::Type getElementType(circt::Type ty) {
+  if (auto tensorTy = ty.dyn_cast<mlir::TensorType>())
+    return getElementType(tensorTy.getElementType());
+  if (auto busTy = ty.dyn_cast<hir::BusType>())
+    return getElementType(busTy.getElementType());
+  return ty;
+}
+
 Operation *declareExternalFuncForCall(hir::CallOp callOp,
                                       SmallVector<StringRef> inputNames,
                                       SmallVector<StringRef> resultNames) {
@@ -280,15 +289,8 @@ Operation *declareExternalFuncForCall(hir::CallOp callOp,
     assert(resultNames.size() == callOp.getFuncType().getResultTypes().size());
     declOp->setAttr("resultNames", builder.getStrArrayAttr(resultNames));
   }
-
+  if (auto params = callOp->getAttr("params"))
+    declOp->setAttr("params", params);
   return declOp;
-}
-
-circt::Type getElementType(circt::Type ty) {
-  if (auto tensorTy = ty.dyn_cast<mlir::TensorType>())
-    return getElementType(tensorTy.getElementType());
-  if (auto busTy = ty.dyn_cast<hir::BusType>())
-    return getElementType(busTy.getElementType());
-  return ty;
 }
 } // namespace helper

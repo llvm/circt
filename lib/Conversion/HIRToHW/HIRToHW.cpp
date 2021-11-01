@@ -42,7 +42,7 @@ private:
   LogicalResult visitOp(hir::TensorInsertOp);
   LogicalResult visitOp(hir::TimeOp);
   LogicalResult visitOp(hir::WhileOp);
-  LogicalResult visitOp(mlir::ConstantOp);
+  LogicalResult visitOp(mlir::arith::ConstantOp);
 
 private:
   OpBuilder *builder;
@@ -53,7 +53,7 @@ private:
   hw::HWModuleOp hwModuleOp;
 };
 
-LogicalResult HIRToHWPass::visitOp(mlir::ConstantOp op) {
+LogicalResult HIRToHWPass::visitOp(mlir::arith::ConstantOp op) {
   if (op.getType().isa<mlir::IndexType>())
     return success();
   if (!op.getType().isa<mlir::IntegerType>())
@@ -321,8 +321,10 @@ LogicalResult HIRToHWPass::visitOp(hir::FuncExternOp op) {
                                     op.getInputNames(), op.getResultNames());
   auto name = builder->getStringAttr(op.getNameAttr().getValue().str());
 
-  builder->create<hw::HWModuleExternOp>(op.getLoc(), name,
-                                        portMap.getPortInfoList());
+  builder->create<hw::HWModuleExternOp>(
+      op.getLoc(), name, portMap.getPortInfoList(),
+      op.getNameAttr().getValue().str(),
+      getHWParams(op->getAttr("params"), true));
 
   delete (builder);
   opsToErase.push_back(op);
@@ -362,6 +364,7 @@ LogicalResult HIRToHWPass::visitOp(hir::FuncOp op) {
   this->clk = hwModuleOp.getBodyBlock()->getArguments().back();
   auto visitResult = visitRegion(op.getFuncBody());
 
+  opsToErase.push_back(op);
   delete (builder);
   return visitResult;
 }
@@ -486,9 +489,7 @@ LogicalResult HIRToHWPass::visitRegion(mlir::Region &region) {
 }
 
 LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
-  if (auto op = dyn_cast<mlir::ConstantOp>(operation))
-    return visitOp(op);
-  if (auto op = dyn_cast<mlir::ConstantOp>(operation))
+  if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::BusOp>(operation))
     return visitOp(op);

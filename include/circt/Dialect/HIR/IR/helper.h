@@ -53,10 +53,9 @@ void setNames(mlir::Operation *, mlir::ArrayRef<mlir::StringRef>);
 mlir::SmallVector<mlir::Type> getTypes(mlir::ArrayRef<mlir::Value>);
 llvm::Optional<mlir::StringRef> getOptionalName(mlir::Operation *operation,
                                                 uint64_t resultNum);
-
+circt::Type getElementType(circt::Type);
 circt::Operation *declareExternalFuncForCall(
     circt::hir::CallOp callOp, circt::SmallVector<circt::StringRef> inputNames,
     circt::SmallVector<circt::StringRef> resultNames = {});
-circt::Type getElementType(circt::Type);
 } // namespace helper
 #endif

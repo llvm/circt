@@ -68,13 +68,13 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
   builder.setInsertionPoint(forOp);
   Value initialCondition;
   if (forOp.lb().getType().isSignedInteger())
-    initialCondition = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(),
-                                                    mlir::CmpIPredicate::slt,
-                                                    forOp.lb(), forOp.ub());
+    initialCondition = builder.create<mlir::arith::CmpIOp>(
+        builder.getUnknownLoc(), mlir::arith::CmpIPredicate::slt, forOp.lb(),
+        forOp.ub());
   else
-    initialCondition = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(),
-                                                    mlir::CmpIPredicate::ult,
-                                                    forOp.lb(), forOp.ub());
+    initialCondition = builder.create<mlir::arith::CmpIOp>(
+        builder.getUnknownLoc(), mlir::arith::CmpIPredicate::ult, forOp.lb(),
+        forOp.ub());
   auto whileOp = builder.create<hir::WhileOp>(
       forOp.getLoc(), initialCondition, forOp.tstart(), forOp.offsetAttr());
   auto forNextIterOp = dyn_cast<NextIterOp>(&forOp.body().begin()->back());

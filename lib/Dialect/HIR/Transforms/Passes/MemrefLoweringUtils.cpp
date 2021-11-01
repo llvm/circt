@@ -53,7 +53,7 @@ Value insertEnableSendLogic(OpBuilder &builder, Value prevEnableBus, Value tVar,
 
   auto nextEnableBus = builder.create<hir::BusOp>(builder.getUnknownLoc(),
                                                   prevEnableBus.getType());
-  auto c1 = builder.create<mlir::ConstantOp>(
+  auto c1 = builder.create<mlir::arith::ConstantOp>(
       builder.getUnknownLoc(), builder.getI1Type(),
       mlir::IntegerAttr::get(builder.getI1Type(), 1));
   auto attrC0 = IntegerAttr::get(c1.getType(), 0);
@@ -87,7 +87,7 @@ Value insertDataSendLogic(OpBuilder &builder, Value data, Value prevDataBusT,
                           ArrayRef<Value> indices) {
   Value nextDataBusT = builder.create<hir::BusOp>(builder.getUnknownLoc(),
                                                   prevDataBusT.getType());
-  auto c1 = builder.create<mlir::ConstantOp>(
+  auto c1 = builder.create<mlir::arith::ConstantOp>(
       builder.getUnknownLoc(), builder.getI1Type(),
       mlir::IntegerAttr::get(builder.getI1Type(), 1));
   auto attrC0 = IntegerAttr::get(c1.getType(), 0);

@@ -54,13 +54,13 @@ private:
       } else if (auto op = dyn_cast<hir::MulFOp>(operation)) {
         if (failed(updateOp(op)))
           return failure();
-      } else if (auto op = dyn_cast<mlir::ConstantOp>(operation)) {
+      } else if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation)) {
         continue;
-      } else if (auto op = dyn_cast<mlir::IndexCastOp>(operation)) {
+      } else if (auto op = dyn_cast<mlir::arith::IndexCastOp>(operation)) {
         continue;
-      } else if (auto op = dyn_cast<mlir::TruncateIOp>(operation)) {
+      } else if (auto op = dyn_cast<mlir::arith::TruncIOp>(operation)) {
         continue;
-      } else if (auto op = dyn_cast<mlir::SignExtendIOp>(operation)) {
+      } else if (auto op = dyn_cast<mlir::arith::ExtSIOp>(operation)) {
         continue;
       } else if (auto op = dyn_cast<hir::ReturnOp>(operation)) {
         continue;
