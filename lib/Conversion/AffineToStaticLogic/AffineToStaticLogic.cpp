@@ -21,6 +21,7 @@
 #define DEBUG_TYPE "affine-to-staticlogic"
 
 using namespace mlir;
+using namespace mlir::arith;
 using namespace circt;
 using namespace circt::analysis;
 using namespace circt::scheduling;
@@ -66,7 +67,7 @@ void AffineToStaticLogic::runOnAffineFor(
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
     // Some known combinational ops.
-    if (isa<AddIOp, AffineIfOp, AffineYieldOp, ConstantOp, IndexCastOp,
+    if (isa<AddIOp, AffineIfOp, AffineYieldOp, mlir::ConstantOp, IndexCastOp,
             memref::AllocaOp>(op)) {
       problem.setLinkedOperatorType(op, combOpr);
       return WalkResult::advance();
