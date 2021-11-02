@@ -283,6 +283,10 @@ jobs:
           make check-circt -j$(nproc)
           make circt-doc
 
+      # --------
+      # Lint the CIRCT C++ code.
+      # -------
+
       # Choose the git commit to diff against for the purposes of linting.
       # Since this workflow is triggered on both pushes and pull requests, we
       # have to determine if the pull request target branch is set (which it
@@ -302,15 +306,10 @@ jobs:
           fi
           echo "DIFF_COMMIT_NAME=$DIFF_COMMIT_NAME" >> $GITHUB_ENV
 
-      # --------
-      # Lint the CIRCT C++ code.
-      # -------
-
       # Since we did a shallow fetch for this repo, we must fetch the commit
       # upon which we be diff'ing. The last step set the ref name in the
       # $DIFF_COMMIT_NAME environment variable. When running the fetch, resolve
       # it to the commit hash and pass that hash along to subsequent steps.
-
       - name: git fetch base commit
         continue-on-error: true
         run: |
