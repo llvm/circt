@@ -166,7 +166,9 @@ def HandshakeInsertBuffer
   let options = [
     ListOption<"strategies", "strategies", "std::string",
                "List of strategies to apply. Possible values are: cycles, all (default)",
-               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">
+               "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">,
+    Option<"bufferSize", "buffer-size", "unsigned", /*default=*/"2",
+           "Number of slots in each buffer">,
   ];
 }
 

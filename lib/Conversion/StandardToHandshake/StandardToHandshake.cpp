@@ -1769,7 +1769,8 @@ struct HandshakeInsertBufferPass
     for (auto &arg : f.getBody().front().getArguments()) {
       for (auto &operand : arg.getUses()) {
         if (opVisited.count(operand.getOwner()) == 0)
-          insertBufferDFS(operand.getOwner(), builder, opVisited, opInFlight);
+          insertBufferDFS(operand.getOwner(), builder, bufferSize, opVisited,
+                          opInFlight);
       }
     }
   }
@@ -1780,7 +1781,7 @@ struct HandshakeInsertBufferPass
     auto builder = OpBuilder(f.getContext());
     for (auto &arg : f.getArguments())
       for (auto &use : arg.getUses())
-        insertBufferRecursive(use, builder, /*numSlots=*/2,
+        insertBufferRecursive(use, builder, bufferSize,
                               [](Operation *definingOp, Operation *usingOp) {
                                 return !isa_and_nonnull<BufferOp>(definingOp) &&
                                        !isa<BufferOp>(usingOp);
@@ -1789,7 +1790,7 @@ struct HandshakeInsertBufferPass
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
-  void insertBufferDFS(Operation *op, OpBuilder &builder,
+  void insertBufferDFS(Operation *op, OpBuilder &builder, unsigned numSlots,
                        DenseSet<Operation *> &opVisited,
                        DenseSet<Operation *> &opInFlight) {
     // Mark operation as visited and push into the stack.
@@ -1809,7 +1810,7 @@ struct HandshakeInsertBufferPass
         auto bufferOp = builder.create<handshake::BufferOp>(
             op->getLoc(), value.getType(), value, /*sequential=*/true,
             /*control=*/value.getType().isa<NoneType>(),
-            /*slots=*/2);
+            /*slots=*/numSlots);
         value.replaceUsesWithIf(
             bufferOp,
             function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
@@ -1818,7 +1819,7 @@ struct HandshakeInsertBufferPass
       }
       // For unvisited operations, recursively call insertBufferDFS() method.
       else if (opVisited.count(user) == 0)
-        insertBufferDFS(user, builder, opVisited, opInFlight);
+        insertBufferDFS(user, builder, bufferSize, opVisited, opInFlight);
     }
     // Pop operation out of the stack.
     opInFlight.erase(op);
