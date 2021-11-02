@@ -1,0 +1,18 @@
+module {
+  handshake.func @baz(%a: i32, %ctrl : none) -> (i32, none) {
+    %0 = arith.addi %a, %a : i32
+    handshake.return %0, %ctrl : i32, none
+  }
+
+  handshake.func @bar(%a: i32, %ctrl : none) -> (i32, none) {
+    %c:2 = handshake.instance @baz(%a, %ctrl) : (i32, none) -> (i32, none)
+    "handshake.sink"(%c#1) {control = true} : (none) -> ()
+    handshake.return %c#0, %ctrl : i32, none
+  }
+
+  handshake.func @instance(%a: i32, %ctrl : none) -> (i32, none) {
+    %b:2 = handshake.instance @bar(%a, %ctrl) : (i32, none) -> (i32, none)
+    "handshake.sink"(%b#1) {control = true} : (none) -> ()
+    handshake.return %b#0, %ctrl : i32, none
+  }
+}

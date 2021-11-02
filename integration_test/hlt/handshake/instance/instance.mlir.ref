@@ -1,0 +1,1 @@
+func private @instance(i32) -> i32
