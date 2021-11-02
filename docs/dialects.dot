@@ -1,0 +1,98 @@
+Digraph G {
+  rankdir = TB
+	splines=spline;
+	node [shape=box style=filled fillcolor="white"]
+  compound=true
+
+  
+  // MLIR dialects
+  subgraph cluster_mlir {
+    label = "Upstream MLIR";
+    SCF [fillcolor="lightblue"]
+    Standard [fillcolor="lightblue"]
+    Arith [fillcolor="lightblue"]
+  }
+
+  // ===== Nodes =====
+
+  subgraph cluster_circt {
+    label = "CIRCT"
+    // CIRCT dialectss
+    Calyx
+    Handshake
+    FIRRTL
+    BLLHD [label="Behavioral LLHD"]
+    SLLHD [label="Structural LLHD"]
+    HW
+    SV
+    Comb
+    Seq
+    StaticLogic
+    MSFT
+    ESI
+    FSM
+
+    // Internal tools
+    EmitVerilog [fillcolor="darksalmon"]
+    FIRRTLParser [label="FIRRTL Parser" fillcolor="darksalmon"]
+    Scheduling [fillcolor="darksalmon"]
+  }
+
+  // External tools
+  Moore [shape=octagon fillcolor="gold"]
+  llhd_sim [label="LLHD Sim" shape=octagon fillcolor="gold"]
+  Circilator [shape=octagon fillcolor="gold" style="dashed,filled"]
+  Calyx_native [label="Calyx Native" shape=octagon fillcolor="gold"]
+  
+  // File formats
+  FIRFile [label="FIR file" fillcolor="yellowgreen" shape=note]
+  SVVHDL [label="SV/VHDL file" fillcolor="yellowgreen" shape=note]
+  VCDTrace [label="VHD trace" fillcolor="yellowgreen" shape=note]
+  CPPFile [label="CPP file" fillcolor="yellowgreen" shape=note]
+  SVFile [label="SV file" fillcolor="yellowgreen" shape=note]
+
+  // ===== Connections =====
+
+  // Dialect conversions
+  SCF -> Calyx
+  SCF -> StaticLogic [style=dashed]
+  StaticLogic -> Calyx [style=dashed]
+  Standard -> Calyx
+  Arith -> Calyx
+  Standard -> Handshake
+  Arith -> Handshake
+
+  Handshake -> FIRRTL
+  BLLHD -> SLLHD
+  Calyx -> FSM [style=dashed]
+  Seq -> SV
+  FIRRTL -> HW
+  FSM -> HW
+  ESI -> HW
+  MSFT -> HW
+  HW -> SLLHD 
+  FIRRTL->Comb
+  Comb -> EmitVerilog
+
+  // Tool flows
+  Scheduling -> StaticLogic [dir=both]
+  FIRFile -> FIRRTLParser
+  FIRRTLParser -> FIRRTL
+  FIRRTL -> EmitVerilog
+  HW -> EmitVerilog
+  SV -> EmitVerilog
+  SVVHDL -> Moore
+  Moore -> BLLHD
+  SLLHD -> Circilator [style=dashed]
+  HW -> Circilator [style=dashed]
+  Calyx -> Calyx_native
+  EmitVerilog -> SVFile
+  Circilator -> CPPFile [style=dashed]
+  SLLHD -> llhd_sim
+  llhd_sim -> VCDTrace
+  Calyx_native -> SVFile
+
+  // ====== Some fake edges to coerce a good layout ======
+  SCF -> Scheduling [weight=999 style=invis];
+  EmitVerilog -> SVFile [weight=999 style=invis];
+}
