@@ -40,7 +40,7 @@ protected:
   SmallVector<std::string> getNamespaces() override { return {"circt", "hlt"}; }
 
 private:
-  void emitSimulator();
+  void emitSimulator(handshake::FuncOp hsFuncOp);
 };
 
 } // namespace hlt

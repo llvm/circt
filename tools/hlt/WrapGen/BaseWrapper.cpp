@@ -60,7 +60,7 @@ LogicalResult BaseWrapper::wrap(Operation *refOp, Operation *kernelOp) {
   // InterleaveComma doesn't accept enumerate(inTypes)
   int i = 0;
   bool failed = false;
-  interleaveComma(funcOp.getArgumentTypes(), os(), [&](auto inType) {
+  interleaveComma(funcOp.getType().getInputs(), os(), [&](auto inType) {
     failed |= emitType(os(), kernelOp->getLoc(), inType).failed();
     os() << " in" << i++;
   });

@@ -31,8 +31,10 @@ SmallVector<std::string> HandshakeVerilatorWrapper::getIncludes() {
   return includes;
 }
 
-LogicalResult
-HandshakeVerilatorWrapper::emitPreamble(Operation * /*kernelOp*/) {
+LogicalResult HandshakeVerilatorWrapper::emitPreamble(Operation *kernelOp) {
+  auto hsFuncOp = dyn_cast<handshake::FuncOp>(kernelOp);
+  assert(hsFuncOp && "Expected a handshake op");
+
   if (emitIOTypes(emitVerilatorType).failed())
     return failure();
 
@@ -43,13 +45,13 @@ HandshakeVerilatorWrapper::emitPreamble(Operation * /*kernelOp*/) {
            "TModel>;\n\n";
 
   // Emit simulator.
-  emitSimulator();
+  emitSimulator(hsFuncOp);
 
   // Emit simulator driver type.
   osi() << "using TSim = " << funcName() << "Sim;\n";
   return success();
 }
-void HandshakeVerilatorWrapper::emitSimulator() {
+void HandshakeVerilatorWrapper::emitSimulator(handshake::FuncOp hsFuncOp) {
   osi() << "class " << funcName() << "Sim : public " << funcName()
         << "SimInterface {\n";
   osi() << "public:\n";
@@ -62,11 +64,20 @@ void HandshakeVerilatorWrapper::emitSimulator() {
   osi() << "interface.clock = &dut->clock;\n";
   osi() << "interface.reset = &dut->reset;\n\n";
 
+  auto getInputName = [&](unsigned idx) -> std::string {
+    if (auto argNames = hsFuncOp->getAttrOfType<ArrayAttr>("argNames");
+        argNames) {
+      return argNames[idx].cast<StringAttr>().getValue().str();
+    } else
+      return "arg" + std::to_string(idx);
+  };
+
   unsigned inCtrlIndex = funcOp.getNumArguments();
+  std::string inCtrlName = getInputName(inCtrlIndex);
   unsigned outCtrlIndex = inCtrlIndex + funcOp.getNumResults() + 1;
   osi() << "// --- Handshake interface\n";
-  osi() << "inCtrl->readySig = &dut->arg" << inCtrlIndex << "_ready;\n";
-  osi() << "inCtrl->validSig = &dut->arg" << inCtrlIndex << "_valid;\n";
+  osi() << "inCtrl->readySig = &dut->" << inCtrlName << "_ready;\n";
+  osi() << "inCtrl->validSig = &dut->" << inCtrlName << "_valid;\n";
   osi() << "outCtrl->readySig = &dut->arg" << outCtrlIndex << "_ready;\n";
   osi() << "outCtrl->validSig = &dut->arg" << outCtrlIndex << "_valid;\n\n";
 
@@ -74,7 +85,7 @@ void HandshakeVerilatorWrapper::emitSimulator() {
   auto funcType = funcOp.getType();
   osi() << "// - Input ports\n";
   for (auto &input : enumerate(funcType.getInputs())) {
-    auto arg = "arg" + std::to_string(input.index());
+    auto arg = getInputName(input.index());
     osi() << "addInputPort<HandshakeDataInPort<TArg" << input.index() << ">>(\""
           << arg << "\", ";
     osi() << "&dut->" << arg << "_ready, ";
