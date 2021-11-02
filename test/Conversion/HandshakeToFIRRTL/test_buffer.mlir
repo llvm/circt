@@ -82,7 +82,7 @@
 // CHECK-SAME:  in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1, %inst_clock, %inst_reset = firrtl.instance "" @handshake_buffer_3slots_seq_1ins_1outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+  // CHECK: %handshake_buffer_arg0, %handshake_buffer_arg1, %handshake_buffer_clock, %handshake_buffer_reset = firrtl.instance handshake_buffer @handshake_buffer_3slots_seq_1ins_1outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
   %0 = "handshake.buffer"(%arg0) {control = true, sequential = true, slots = 3 : i32} : (none) -> none
   handshake.return %0, %arg1 : none, none
 }
@@ -121,9 +121,9 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1, %inst_clock, %inst_reset = firrtl.instance "" @handshake_buffer_in_ui64_out_ui64_2slots_seq(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
-  // CHECK: firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
-  // CHECK: firrtl.connect %inst_reset, %reset : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: %handshake_buffer_arg0, %handshake_buffer_arg1, %handshake_buffer_clock, %handshake_buffer_reset = firrtl.instance handshake_buffer @handshake_buffer_in_ui64_out_ui64_2slots_seq(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+  // CHECK: firrtl.connect %handshake_buffer_clock, %clock : !firrtl.clock, !firrtl.clock
+  // CHECK: firrtl.connect %handshake_buffer_reset, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   %0 = "handshake.buffer"(%arg0) {control = false, sequential = true, slots = 2 : i32} : (index) -> index
   handshake.return %0, %arg1 : index, none
 }

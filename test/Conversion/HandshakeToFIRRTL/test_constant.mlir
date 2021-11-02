@@ -29,16 +29,16 @@
 handshake.func @test_constant(%arg0: none, ...) -> (index, i64, ui32, si32, none) {
   %0:5 = "handshake.fork"(%arg0) {control = true} : (none) -> (none, none, none, none, none)
 
-  // CHECK: %inst_arg0_0, %inst_arg1_1 = firrtl.instance "" @handshake_constant_c42_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+  // CHECK: %handshake_constant_arg0, %handshake_constant_arg1 = firrtl.instance handshake_constant  @handshake_constant_c42_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   %1 = "handshake.constant"(%0#0) {value = 42 : index}: (none) -> index
 
-  // CHECK: %inst_arg0_2, %inst_arg1_3 = firrtl.instance "" @handshake_constant_c42_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+  // CHECK: %handshake_constant_arg0_0, %handshake_constant_arg1_1 = firrtl.instance handshake_constant  @handshake_constant_c42_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   %2 = "handshake.constant"(%0#1) {value = 42 : i64}: (none) -> i64
 
-  // CHECK: %inst_arg0_4, %inst_arg1_5 = firrtl.instance "" @handshake_constant_c42_out_ui32(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>)
+  // CHECK: %handshake_constant_arg0_2, %handshake_constant_arg1_3 = firrtl.instance handshake_constant  @handshake_constant_c42_out_ui32(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>)
   %3 = "handshake.constant"(%0#2) {value = 42 : ui32}: (none) -> ui32
 
-  // CHECK: %inst_arg0_6, %inst_arg1_7 = firrtl.instance "" @"handshake_constant_c-11_out_si32"(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>)
+  // CHECK :%handshake_constant_arg0_4, %handshake_constant_arg1_5 = firrtl.instance handshake_constant  @"handshake_constant_c-11_out_si32"(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>)
   %4 = "handshake.constant"(%0#3) {value = -11 : si32}: (none) -> si32
   handshake.return %1, %2, %3, %4, %0#4 : index, i64, ui32, si32, none
 }

@@ -62,7 +62,7 @@
 // CHECK-SAME:  in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_merge(%arg0: index, %arg1: index, %arg2: none, ...) -> (index, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2 = firrtl.instance "" @handshake_merge_in_ui64_ui64_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+  // CHECK: %handshake_merge_arg0, %handshake_merge_arg1, %handshake_merge_arg2 = firrtl.instance handshake_merge @handshake_merge_in_ui64_ui64_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   %0 = "handshake.merge"(%arg0, %arg1) : (index, index) -> index
   handshake.return %0, %arg2 : index, none
 }

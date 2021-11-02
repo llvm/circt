@@ -18,7 +18,7 @@
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_branch(%arg0: index, %arg1: none, ...) -> (index, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1 = firrtl.instance "" @handshake_branch_in_ui64_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+  // CHECK: %handshake_branch_arg0, %handshake_branch_arg1 = firrtl.instance handshake_branch @handshake_branch_in_ui64_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
   %0 = "handshake.branch"(%arg0) {control = false}: (index) -> index
   handshake.return %0, %arg1 : index, none
 }

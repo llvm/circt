@@ -192,16 +192,23 @@ static std::string getTypeName(Operation *oldOp, Type type) {
   return typeName;
 }
 
-/// Construct a name for creating FIRRTL sub-module.
-static std::string getSubModuleName(Operation *oldOp) {
-  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp); instanceOp)
-    return instanceOp.getModule().str();
-
+/// Returns a submodule name resulting from an operation, without discriminating
+/// type information.
+static std::string getBareSubModuleName(Operation *oldOp) {
   // The dialect name is separated from the operation name by '.', which is not
   // valid in SystemVerilog module names. In case this name is used in
   // SystemVerilog output, replace '.' with '_'.
   std::string subModuleName = oldOp->getName().getStringRef().str();
   std::replace(subModuleName.begin(), subModuleName.end(), '.', '_');
+  return subModuleName;
+}
+
+/// Construct a name for creating FIRRTL sub-module.
+static std::string getSubModuleName(Operation *oldOp) {
+  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp); instanceOp)
+    return instanceOp.getModule().str();
+
+  std::string subModuleName = getBareSubModuleName(oldOp);
 
   // Add value of the constant operation.
   if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
@@ -2140,6 +2147,13 @@ bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
 // Old Operation Conversion Functions
 //===----------------------------------------------------------------------===//
 
+static std::string getInstanceName(Operation *op) {
+  if (auto instOp = dyn_cast<handshake::InstanceOp>(op); instOp)
+    return instOp.getModule().str();
+  else
+    return getBareSubModuleName(op);
+}
+
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
 static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
@@ -2148,8 +2162,8 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   rewriter.setInsertionPointAfter(oldOp);
 
   // Create a instance operation.
-  auto instanceOp =
-      rewriter.create<firrtl::InstanceOp>(oldOp->getLoc(), subModuleOp, "");
+  auto instanceOp = rewriter.create<firrtl::InstanceOp>(
+      oldOp->getLoc(), subModuleOp, getInstanceName(oldOp));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.

@@ -95,7 +95,7 @@
 // CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg5: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
 handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, index, none) {
 
-  // CHECK: %inst_arg0, %inst_arg1, %inst_arg2, %inst_arg3, %inst_clock, %inst_reset = firrtl.instance "" @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+  // CHECK: %handshake_control_merge_arg0, %handshake_control_merge_arg1, %handshake_control_merge_arg2, %handshake_control_merge_arg3, %handshake_control_merge_clock, %handshake_control_merge_reset = firrtl.instance handshake_control_merge @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
   %0:2 = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
   handshake.return %0#0, %0#1, %arg2 : none, index, none
 }
@@ -117,7 +117,6 @@ handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none
 // CHECK:   %[[BITS1:.+]] = firrtl.bits %win 0 to 0
 // CHECK:   %[[RESULT_DATA1:.+]] = firrtl.mux(%[[BITS1]], %[[ARG0_DATA]], %[[RESULT_DATA0]])
 // CHECK:   firrtl.connect %[[ARG2_DATA]], %[[RESULT_DATA1]]
-
 handshake.func @test_cmerge_data(%arg0: index, %arg1: index, %arg2: none, ...) -> (index, index, none) {
   %0:2 = "handshake.control_merge"(%arg0, %arg1) {control = false} : (index, index) -> (index, index)
   handshake.return %0#0, %0#1, %arg2 : index, index, none
