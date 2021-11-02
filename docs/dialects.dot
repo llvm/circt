@@ -11,6 +11,7 @@ Digraph G {
     SCF [fillcolor="lightblue"]
     Standard [fillcolor="lightblue"]
     Arith [fillcolor="lightblue"]
+    Affine [fillcolor="lightblue"]
   }
 
   // ===== Nodes =====
@@ -33,14 +34,14 @@ Digraph G {
     FSM
 
     // Internal tools
-    EmitVerilog [fillcolor="darksalmon"]
+    ExportVerilog [fillcolor="darksalmon"]
     FIRRTLParser [label="FIRRTL Parser" fillcolor="darksalmon"]
     Scheduling [fillcolor="darksalmon"]
+    llhd_sim [label="LLHD Sim" fillcolor="darksalmon"]
   }
 
   // External tools
   Moore [shape=octagon fillcolor="gold"]
-  llhd_sim [label="LLHD Sim" shape=octagon fillcolor="gold"]
   Circilator [shape=octagon fillcolor="gold" style="dashed,filled"]
   Calyx_native [label="Calyx Native" shape=octagon fillcolor="gold"]
   
@@ -50,12 +51,14 @@ Digraph G {
   VCDTrace [label="VHD trace" fillcolor="yellowgreen" shape=note]
   CPPFile [label="CPP file" fillcolor="yellowgreen" shape=note]
   SVFile [label="SV file" fillcolor="yellowgreen" shape=note]
+  CapNProto [label="Cap'n Proto file" fillcolor="yellowgreen" shape=note]
+  TCL [label="TCL file" fillcolor="yellowgreen" shape=note]
 
   // ===== Connections =====
 
   // Dialect conversions
   SCF -> Calyx
-  SCF -> StaticLogic [style=dashed]
+  Affine -> StaticLogic [style=dashed]
   StaticLogic -> Calyx [style=dashed]
   Standard -> Calyx
   Arith -> Calyx
@@ -72,27 +75,29 @@ Digraph G {
   MSFT -> HW
   HW -> SLLHD 
   FIRRTL->Comb
-  Comb -> EmitVerilog
+  Comb -> ExportVerilog
 
   // Tool flows
   Scheduling -> StaticLogic [dir=both]
   FIRFile -> FIRRTLParser
   FIRRTLParser -> FIRRTL
-  FIRRTL -> EmitVerilog
-  HW -> EmitVerilog
-  SV -> EmitVerilog
+  HW -> ExportVerilog
+  SV -> ExportVerilog
   SVVHDL -> Moore
   Moore -> BLLHD
   SLLHD -> Circilator [style=dashed]
   HW -> Circilator [style=dashed]
   Calyx -> Calyx_native
-  EmitVerilog -> SVFile
+  ExportVerilog -> SVFile
   Circilator -> CPPFile [style=dashed]
   SLLHD -> llhd_sim
+  Comb -> llhd_sim
   llhd_sim -> VCDTrace
   Calyx_native -> SVFile
+  ESI -> CapNProto
+  MSFT -> TCL
 
   // ====== Some fake edges to coerce a good layout ======
-  SCF -> Scheduling [weight=999 style=invis];
-  EmitVerilog -> SVFile [weight=999 style=invis];
+  Affine -> Scheduling [weight=999 style=invis];
+  ExportVerilog -> SVFile [weight=999 style=invis];
 }

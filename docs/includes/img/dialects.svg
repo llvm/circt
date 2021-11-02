@@ -1,3 +1,442 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="791px" height="621px" viewBox="-0.5 -0.5 791 621" style="background-color: rgb(255, 255, 255);"><defs/><g><path d="M 350 160 L 350 183.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 350 188.88 L 346.5 181.88 L 350 183.63 L 353.5 181.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="290" y="100" width="120" height="60" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 130px; margin-left: 291px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">High FIRRTL</div></div></div></foreignObject><text x="350" y="134" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">High FIRRTL</text></switch></g><path d="M 350 250 L 350 273.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 350 278.88 L 346.5 271.88 L 350 273.63 L 353.5 271.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 410 220 L 460 220 L 460 363.63" fill="none" stroke="#000000" stroke-miterlimit="10" stroke-dasharray="3 3" pointer-events="stroke"/><path d="M 460 368.88 L 456.5 361.88 L 460 363.63 L 463.5 361.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 410 205 L 510 205 L 510 470 L 496.37 470" fill="none" stroke="#000000" stroke-miterlimit="10" stroke-dasharray="3 3" pointer-events="stroke"/><path d="M 491.12 470 L 498.12 466.5 L 496.37 470 L 498.12 473.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="290" y="190" width="120" height="60" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 220px; margin-left: 291px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">Mid FIRRTL</div></div></div></foreignObject><text x="350" y="224" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">Mid FIRRTL</text></switch></g><path d="M 320 340 L 320 370 L 210 370 L 210 393.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 210 398.88 L 206.5 391.88 L 210 393.63 L 213.5 391.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 380 340 L 400 340 L 400 363.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 400 368.88 L 396.5 361.88 L 400 363.63 L 403.5 361.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 410 310 L 582.65 310" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 587.9 310 L 580.9 313.5 L 582.65 310 L 580.9 306.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="290" y="280" width="120" height="60" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 310px; margin-left: 291px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">Low FIRRTL</div></div></div></foreignObject><text x="350" y="314" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">Low FIRRTL</text></switch></g><path d="M 180 460 L 180 490 L 120 490 L 120 513.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 120 518.88 L 116.5 511.88 L 120 513.63 L 123.5 511.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 240 430 L 270 430 L 270 400 L 363.63 400" fill="none" stroke="#000000" stroke-miterlimit="10" stroke-dasharray="3 3" pointer-events="stroke"/><path d="M 368.88 400 L 361.88 403.5 L 363.63 400 L 361.88 396.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 210 460 L 210 490 L 240 490 L 240 513.63" fill="none" stroke="#000000" stroke-miterlimit="10" stroke-dasharray="3 3" pointer-events="stroke"/><path d="M 240 518.88 L 236.5 511.88 L 240 513.63 L 243.5 511.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="120" y="400" width="120" height="60" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 430px; margin-left: 121px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">Structural LLHD</div></div></div></foreignObject><text x="180" y="434" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">Structural LLHD</text></switch></g><path d="M 490 400 L 583.63 400" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 588.88 400 L 581.88 403.5 L 583.63 400 L 581.88 396.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 370 415 L 280 415 L 280 445 L 246.37 445" fill="none" stroke="#000000" stroke-miterlimit="10" stroke-dasharray="3 3" pointer-events="stroke"/><path d="M 241.12 445 L 248.12 441.5 L 246.37 445 L 248.12 448.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 400 430 L 400 440 L 340 440 L 340 490 L 260 490 L 260 513.63" fill="none" stroke="#000000" stroke-miterlimit="10" stroke-dasharray="3 3" pointer-events="stroke"/><path d="M 260 518.88 L 256.5 511.88 L 260 513.63 L 263.5 511.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="370" y="370" width="120" height="60" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 400px; margin-left: 371px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">HW</div></div></div></foreignObject><text x="430" y="404" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">HW</text></switch></g><path d="M 490 490 L 580.62 490" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 585.87 490 L 578.87 493.5 L 580.62 490 L 578.87 486.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="370" y="460" width="120" height="60" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 490px; margin-left: 371px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">SV</div></div></div></foreignObject><text x="430" y="494" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">SV</text></switch></g><path d="M 660 400 L 693.63 400" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 698.88 400 L 691.88 403.5 L 693.63 400 L 691.88 396.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="590" y="280" width="70" height="240" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 68px; height: 1px; padding-top: 400px; margin-left: 591px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">EmitVerilog</div></div></div></foreignObject><text x="625" y="404" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">EmitVerilog</text></switch></g><path d="M 350 70 L 350 93.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 350 98.88 L 346.5 91.88 L 350 93.63 L 353.5 91.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 290 40 L 270 40 L 270 220 L 283.63 220" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 288.88 220 L 281.88 223.5 L 283.63 220 L 281.88 216.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="290" y="10" width="120" height="60" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 40px; margin-left: 291px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">Handshake</div></div></div></foreignObject><text x="350" y="44" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">Handshake</text></switch></g><rect x="330" y="70" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 80px; margin-left: 331px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">1.</div></div></div></foreignObject><text x="340" y="84" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">1.</text></switch></g><rect x="250" y="100" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 110px; margin-left: 251px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">1.</div></div></div></foreignObject><text x="260" y="114" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">1.</text></switch></g><rect x="330" y="160" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 170px; margin-left: 331px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">2.</div></div></div></foreignObject><text x="340" y="174" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">2.</text></switch></g><rect x="330" y="250" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 260px; margin-left: 331px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">2.</div></div></div></foreignObject><text x="340" y="264" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">2.</text></switch></g><rect x="510" y="0" width="280" height="180" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe flex-start; justify-content: unsafe flex-start; width: 278px; height: 1px; padding-top: 7px; margin-left: 512px;"><div style="box-sizing: border-box; font-size: 0; text-align: left; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">1. Handshake to FIRRTL<br />2. Lowering within FIRRTL<br />3. FIRRTL to LLHD<br />4. FIRRTL to HW<br />5. Mid FIRRTL to HW (hypothetical)<br />6. Mid FIRRTL to SV (hypothetical)<br />7. EmitVerilog<br />8. Desequentialization / Process Lowering<br />9. LLHD to LLVM (simulation model)<br />10. LLHD to HW promotion (hypothetical; fallible)<br />11. HW to LLHD (hypothetical)<br />12. Likely almost identical; eventually merge?</div></div></div></foreignObject><text x="512" y="19" fill="#000000" font-family="Helvetica" font-size="12px">1. Handshake to FIRRTL...</text></switch></g><rect x="280" y="350" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 360px; margin-left: 281px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">3.</div></div></div></foreignObject><text x="290" y="364" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">3.</text></switch></g><rect x="380" y="340" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 350px; margin-left: 381px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">4.</div></div></div></foreignObject><text x="390" y="354" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">4.</text></switch></g><rect x="440" y="220" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 230px; margin-left: 441px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">5.</div></div></div></foreignObject><text x="450" y="234" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">5.</text></switch></g><rect x="490" y="205" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 215px; margin-left: 491px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">6.</div></div></div></foreignObject><text x="500" y="219" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">6.</text></switch></g><rect x="410" y="290" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 300px; margin-left: 411px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">7.</div></div></div></foreignObject><text x="420" y="304" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">7.</text></switch></g><rect x="490" y="380" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 390px; margin-left: 491px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">7.</div></div></div></foreignObject><text x="500" y="394" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">7.</text></switch></g><rect x="490" y="470" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 480px; margin-left: 491px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">7.</div></div></div></foreignObject><text x="500" y="484" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">7.</text></switch></g><path d="M 700 380 L 770 380 L 780 390 L 780 420 L 700 420 L 700 380 Z" fill="#d5e8d4" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><path d="M 770 380 L 770 390 L 780 390 Z" fill-opacity="0.05" fill="#000000" stroke="none" pointer-events="all"/><path d="M 770 380 L 770 390 L 780 390" fill="none" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 78px; height: 1px; padding-top: 400px; margin-left: 701px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">SV File</div></div></div></foreignObject><text x="740" y="404" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">SV File</text></switch></g><path d="M 120 560 L 120 573.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 120 578.88 L 116.5 571.88 L 120 573.63 L 123.5 571.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="80" y="520" width="80" height="40" rx="10" ry="10" fill="#fff2cc" stroke="#d6b656" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 78px; height: 1px; padding-top: 540px; margin-left: 81px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">llhd-sim</div></div></div></foreignObject><text x="120" y="544" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">llhd-sim</text></switch></g><path d="M 80 580 L 150 580 L 160 590 L 160 620 L 80 620 L 80 580 Z" fill="#d5e8d4" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><path d="M 150 580 L 150 590 L 160 590 Z" fill-opacity="0.05" fill="#000000" stroke="none" pointer-events="all"/><path d="M 150 580 L 150 590 L 160 590" fill="none" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 78px; height: 1px; padding-top: 600px; margin-left: 81px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">VCD Trace</div></div></div></foreignObject><text x="120" y="604" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">VCD Trace</text></switch></g><path d="M 60 250 L 60 273.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 60 278.88 L 56.5 271.88 L 60 273.63 L 63.5 271.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="20" y="210" width="80" height="40" rx="10" ry="10" fill="#fff2cc" stroke="#d6b656" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 78px; height: 1px; padding-top: 230px; margin-left: 21px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">Moore</div></div></div></foreignObject><text x="60" y="234" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">Moore</text></switch></g><path d="M 60 340 L 60 370 L 150 370 L 150 393.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 150 398.88 L 146.5 391.88 L 150 393.63 L 153.5 391.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="0" y="280" width="120" height="60" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 118px; height: 1px; padding-top: 310px; margin-left: 1px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">Behavioural LLHD</div></div></div></foreignObject><text x="60" y="314" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">Behavioural LLHD</text></switch></g><path d="M 60 170 L 60 203.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 60 208.88 L 56.5 201.88 L 60 203.63 L 63.5 201.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 20 130 L 90 130 L 100 140 L 100 170 L 20 170 L 20 130 Z" fill="#d5e8d4" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><path d="M 90 130 L 90 140 L 100 140 Z" fill-opacity="0.05" fill="#000000" stroke="none" pointer-events="all"/><path d="M 90 130 L 90 140 L 100 140" fill="none" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 78px; height: 1px; padding-top: 150px; margin-left: 21px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">SV/VHDL<br />File</div></div></div></foreignObject><text x="60" y="154" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">SV/VHDL...</text></switch></g><path d="M 180 70 L 180 103.63" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 180 108.88 L 176.5 101.88 L 180 103.63 L 183.5 101.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><path d="M 140 30 L 210 30 L 220 40 L 220 70 L 140 70 L 140 30 Z" fill="#d5e8d4" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><path d="M 210 30 L 210 40 L 220 40 Z" fill-opacity="0.05" fill="#000000" stroke="none" pointer-events="all"/><path d="M 210 30 L 210 40 L 220 40" fill="none" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 78px; height: 1px; padding-top: 50px; margin-left: 141px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">FIR File</div></div></div></foreignObject><text x="180" y="54" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">FIR File</text></switch></g><path d="M 220 130 L 283.63 130" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="stroke"/><path d="M 288.88 130 L 281.88 133.5 L 283.63 130 L 281.88 126.5 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="140" y="110" width="80" height="40" fill="#ffffff" stroke="#000000" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 78px; height: 1px; padding-top: 130px; margin-left: 141px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">FIRRTL Parser</div></div></div></foreignObject><text x="180" y="134" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">FIRRTL Parser</text></switch></g><rect x="90" y="350" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 360px; margin-left: 91px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">8.</div></div></div></foreignObject><text x="100" y="364" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">8.</text></switch></g><rect x="30" y="95" width="60" height="30" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 58px; height: 1px; padding-top: 110px; margin-left: 31px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">HW and Testbench</div></div></div></foreignObject><text x="60" y="114" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">HW and Te...</text></switch></g><rect x="180" y="470" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 480px; margin-left: 181px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">9.</div></div></div></foreignObject><text x="190" y="484" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">9.</text></switch></g><rect x="300" y="380" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 390px; margin-left: 301px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">10.</div></div></div></foreignObject><text x="310" y="394" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">10.</text></switch></g><rect x="300" y="415" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 425px; margin-left: 301px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">11.</div></div></div></foreignObject><text x="310" y="429" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">11.</text></switch></g><rect x="220" y="400" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 410px; margin-left: 221px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">12.</div></div></div></foreignObject><text x="230" y="414" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">12.</text></switch></g><rect x="470" y="370" width="20" height="20" fill="none" stroke="none" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 18px; height: 1px; padding-top: 380px; margin-left: 471px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">12.</div></div></div></foreignObject><text x="480" y="384" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">12.</text></switch></g><path d="M 240 560 L 240 573.63" fill="none" stroke="#000000" stroke-miterlimit="10" stroke-dasharray="3 3" pointer-events="stroke"/><path d="M 240 578.88 L 236.5 571.88 L 240 573.63 L 243.5 571.88 Z" fill="#000000" stroke="#000000" stroke-miterlimit="10" pointer-events="all"/><rect x="200" y="520" width="80" height="40" rx="10" ry="10" fill="#fff2cc" stroke="#d6b656" stroke-dasharray="3 3" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 78px; height: 1px; padding-top: 540px; margin-left: 201px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">circilator</div></div></div></foreignObject><text x="240" y="544" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">circilator</text></switch></g><path d="M 200 580 L 270 580 L 280 590 L 280 620 L 200 620 L 200 580 Z" fill="#d5e8d4" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><path d="M 270 580 L 270 590 L 280 590 Z" fill-opacity="0.05" fill="#000000" stroke="none" pointer-events="all"/><path d="M 270 580 L 270 590 L 280 590" fill="none" stroke="#82b366" stroke-miterlimit="10" pointer-events="all"/><g transform="translate(-0.5 -0.5)"><switch><foreignObject style="overflow: visible; text-align: left;" pointer-events="none" width="100%" height="100%" requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"><div xmlns="http://www.w3.org/1999/xhtml" style="display: flex; align-items: unsafe center; justify-content: unsafe center; width: 78px; height: 1px; padding-top: 600px; margin-left: 201px;"><div style="box-sizing: border-box; font-size: 0; text-align: center; "><div style="display: inline-block; font-size: 12px; font-family: Helvetica; color: #000000; line-height: 1.2; pointer-events: all; white-space: normal; word-wrap: normal; ">CPP File</div></div></div></foreignObject><text x="240" y="604" fill="#000000" font-family="Helvetica" font-size="12px" text-anchor="middle">CPP File</text></switch></g></g><switch><g requiredFeatures="http://www.w3.org/TR/SVG11/feature#Extensibility"/><a transform="translate(0,-5)" xlink:href="https://desk.draw.io/support/solutions/articles/16000042487" target="_blank"><text text-anchor="middle" font-size="10px" x="50%" y="100%">Viewer does not support full SVG 1.1</text></a></switch></svg>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.43.0 (0)
+ -->
+<!-- Title: G Pages: 1 -->
+<svg width="761pt" height="670pt"
+ viewBox="0.00 0.00 761.07 670.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 666)">
+<title>G</title>
+<polygon fill="white" stroke="transparent" points="-4,4 -4,-666 757.07,-666 757.07,4 -4,4"/>
+<g id="clust1" class="cluster">
+<title>cluster_mlir</title>
+<polygon fill="none" stroke="black" points="263.98,-579 263.98,-654 583.98,-654 583.98,-579 263.98,-579"/>
+<text text-anchor="middle" x="423.98" y="-638.8" font-family="Times,serif" font-size="14.00">Upstream MLIR</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_circt</title>
+<polygon fill="none" stroke="black" points="244.98,-64 244.98,-571 626.98,-571 626.98,-64 244.98,-64"/>
+<text text-anchor="middle" x="435.98" y="-555.8" font-family="Times,serif" font-size="14.00">CIRCT</text>
+</g>
+<!-- SCF -->
+<g id="node1" class="node">
+<title>SCF</title>
+<polygon fill="lightblue" stroke="black" points="401.98,-623 347.98,-623 347.98,-587 401.98,-587 401.98,-623"/>
+<text text-anchor="middle" x="374.98" y="-601.3" font-family="Times,serif" font-size="14.00">SCF</text>
+</g>
+<!-- Calyx -->
+<g id="node5" class="node">
+<title>Calyx</title>
+<polygon fill="white" stroke="black" points="364.98,-396 308.98,-396 308.98,-360 364.98,-360 364.98,-396"/>
+<text text-anchor="middle" x="336.98" y="-374.3" font-family="Times,serif" font-size="14.00">Calyx</text>
+</g>
+<!-- SCF&#45;&gt;Calyx -->
+<g id="edge1" class="edge">
+<title>SCF&#45;&gt;Calyx</title>
+<path fill="none" stroke="black" d="M375.07,-586.63C374.86,-555.26 372.69,-487.31 358.98,-432 356.77,-423.1 353.31,-413.76 349.78,-405.43"/>
+<polygon fill="black" stroke="black" points="352.94,-403.93 345.67,-396.22 346.55,-406.78 352.94,-403.93"/>
+</g>
+<!-- Standard -->
+<g id="node2" class="node">
+<title>Standard</title>
+<polygon fill="lightblue" stroke="black" points="503.48,-623 420.48,-623 420.48,-587 503.48,-587 503.48,-623"/>
+<text text-anchor="middle" x="461.98" y="-601.3" font-family="Times,serif" font-size="14.00">Standard</text>
+</g>
+<!-- Standard&#45;&gt;Calyx -->
+<g id="edge4" class="edge">
+<title>Standard&#45;&gt;Calyx</title>
+<path fill="none" stroke="black" d="M452.49,-586.95C449.7,-581.84 446.67,-576.22 443.98,-571 412.39,-509.91 411.61,-490.82 375.98,-432 370.29,-422.62 363.39,-412.82 356.98,-404.24"/>
+<polygon fill="black" stroke="black" points="359.64,-401.95 350.79,-396.12 354.07,-406.2 359.64,-401.95"/>
+</g>
+<!-- Handshake -->
+<g id="node6" class="node">
+<title>Handshake</title>
+<polygon fill="white" stroke="black" points="478.98,-396 382.98,-396 382.98,-360 478.98,-360 478.98,-396"/>
+<text text-anchor="middle" x="430.98" y="-374.3" font-family="Times,serif" font-size="14.00">Handshake</text>
+</g>
+<!-- Standard&#45;&gt;Handshake -->
+<g id="edge6" class="edge">
+<title>Standard&#45;&gt;Handshake</title>
+<path fill="none" stroke="black" d="M459.6,-586.72C454.23,-547.77 441.16,-452.88 434.7,-406.05"/>
+<polygon fill="black" stroke="black" points="438.16,-405.46 433.32,-396.03 431.22,-406.42 438.16,-405.46"/>
+</g>
+<!-- Arith -->
+<g id="node3" class="node">
+<title>Arith</title>
+<polygon fill="lightblue" stroke="black" points="575.98,-623 521.98,-623 521.98,-587 575.98,-587 575.98,-623"/>
+<text text-anchor="middle" x="548.98" y="-601.3" font-family="Times,serif" font-size="14.00">Arith</text>
+</g>
+<!-- Arith&#45;&gt;Calyx -->
+<g id="edge5" class="edge">
+<title>Arith&#45;&gt;Calyx</title>
+<path fill="none" stroke="black" d="M531.82,-586.74C526.95,-581.73 521.7,-576.2 516.98,-571 462.52,-510.99 456.18,-489.4 398.98,-432 388.86,-421.85 377.05,-411.44 366.47,-402.57"/>
+<polygon fill="black" stroke="black" points="368.61,-399.79 358.67,-396.11 364.14,-405.18 368.61,-399.79"/>
+</g>
+<!-- Arith&#45;&gt;Handshake -->
+<g id="edge7" class="edge">
+<title>Arith&#45;&gt;Handshake</title>
+<path fill="none" stroke="black" d="M545.1,-586.78C540.15,-566.38 530.55,-531.66 516.98,-504 498.81,-466.98 470.71,-428.49 451.61,-404.18"/>
+<polygon fill="black" stroke="black" points="454.22,-401.84 445.26,-396.19 448.74,-406.2 454.22,-401.84"/>
+</g>
+<!-- Affine -->
+<g id="node4" class="node">
+<title>Affine</title>
+<polygon fill="lightblue" stroke="black" points="329.98,-623 271.98,-623 271.98,-587 329.98,-587 329.98,-623"/>
+<text text-anchor="middle" x="300.98" y="-601.3" font-family="Times,serif" font-size="14.00">Affine</text>
+</g>
+<!-- StaticLogic -->
+<g id="node14" class="node">
+<title>StaticLogic</title>
+<polygon fill="white" stroke="black" points="349.48,-468 252.48,-468 252.48,-432 349.48,-432 349.48,-468"/>
+<text text-anchor="middle" x="300.98" y="-446.3" font-family="Times,serif" font-size="14.00">StaticLogic</text>
+</g>
+<!-- Affine&#45;&gt;StaticLogic -->
+<g id="edge2" class="edge">
+<title>Affine&#45;&gt;StaticLogic</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M271.74,-594.25C261.05,-589.1 250.09,-581.6 243.98,-571 229.1,-545.2 232.08,-531.3 243.98,-504 248.91,-492.68 257.59,-482.68 266.71,-474.51"/>
+<polygon fill="black" stroke="black" points="268.97,-477.19 274.4,-468.09 264.48,-471.81 268.97,-477.19"/>
+</g>
+<!-- Scheduling -->
+<g id="node20" class="node">
+<title>Scheduling</title>
+<polygon fill="darksalmon" stroke="black" points="348.98,-540 252.98,-540 252.98,-504 348.98,-504 348.98,-540"/>
+<text text-anchor="middle" x="300.98" y="-518.3" font-family="Times,serif" font-size="14.00">Scheduling</text>
+</g>
+<!-- Affine&#45;&gt;Scheduling -->
+<!-- FSM -->
+<g id="node17" class="node">
+<title>FSM</title>
+<polygon fill="white" stroke="black" points="528.98,-324 474.98,-324 474.98,-288 528.98,-288 528.98,-324"/>
+<text text-anchor="middle" x="501.98" y="-302.3" font-family="Times,serif" font-size="14.00">FSM</text>
+</g>
+<!-- Calyx&#45;&gt;FSM -->
+<g id="edge10" class="edge">
+<title>Calyx&#45;&gt;FSM</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M365.18,-363.84C368.14,-362.52 371.11,-361.22 373.98,-360 411.7,-343.97 424.03,-341.65 465.61,-324.01"/>
+<polygon fill="black" stroke="black" points="467.13,-327.17 474.94,-320.01 464.37,-320.74 467.13,-327.17"/>
+</g>
+<!-- Calyx_native -->
+<g id="node24" class="node">
+<title>Calyx_native</title>
+<polygon fill="gold" stroke="black" points="151.93,-298.54 151.93,-313.46 107.44,-324 44.52,-324 0.02,-313.46 0.02,-298.54 44.52,-288 107.44,-288 151.93,-298.54"/>
+<text text-anchor="middle" x="75.98" y="-302.3" font-family="Times,serif" font-size="14.00">Calyx Native</text>
+</g>
+<!-- Calyx&#45;&gt;Calyx_native -->
+<g id="edge28" class="edge">
+<title>Calyx&#45;&gt;Calyx_native</title>
+<path fill="none" stroke="black" d="M308.8,-369.44C267.35,-358.33 189,-337.31 134.71,-322.75"/>
+<polygon fill="black" stroke="black" points="135.43,-319.32 124.87,-320.11 133.62,-326.08 135.43,-319.32"/>
+</g>
+<!-- FIRRTL -->
+<g id="node7" class="node">
+<title>FIRRTL</title>
+<polygon fill="white" stroke="black" points="618.48,-324 547.48,-324 547.48,-288 618.48,-288 618.48,-324"/>
+<text text-anchor="middle" x="582.98" y="-302.3" font-family="Times,serif" font-size="14.00">FIRRTL</text>
+</g>
+<!-- Handshake&#45;&gt;FIRRTL -->
+<g id="edge8" class="edge">
+<title>Handshake&#45;&gt;FIRRTL</title>
+<path fill="none" stroke="black" d="M468.16,-359.88C489.23,-350.17 515.75,-337.96 537.98,-327.72"/>
+<polygon fill="black" stroke="black" points="539.61,-330.83 547.22,-323.47 536.68,-324.47 539.61,-330.83"/>
+</g>
+<!-- HW -->
+<g id="node10" class="node">
+<title>HW</title>
+<polygon fill="white" stroke="black" points="460.98,-252 406.98,-252 406.98,-216 460.98,-216 460.98,-252"/>
+<text text-anchor="middle" x="433.98" y="-230.3" font-family="Times,serif" font-size="14.00">HW</text>
+</g>
+<!-- FIRRTL&#45;&gt;HW -->
+<g id="edge12" class="edge">
+<title>FIRRTL&#45;&gt;HW</title>
+<path fill="none" stroke="black" d="M547.29,-288.23C523.98,-277.28 493.65,-263.03 470.23,-252.03"/>
+<polygon fill="black" stroke="black" points="471.52,-248.77 460.98,-247.69 468.54,-255.11 471.52,-248.77"/>
+</g>
+<!-- Comb -->
+<g id="node12" class="node">
+<title>Comb</title>
+<polygon fill="white" stroke="black" points="388.98,-252 330.98,-252 330.98,-216 388.98,-216 388.98,-252"/>
+<text text-anchor="middle" x="359.98" y="-230.3" font-family="Times,serif" font-size="14.00">Comb</text>
+</g>
+<!-- FIRRTL&#45;&gt;Comb -->
+<g id="edge17" class="edge">
+<title>FIRRTL&#45;&gt;Comb</title>
+<path fill="none" stroke="black" d="M547.24,-291.1C544.12,-290.01 541,-288.96 537.98,-288 479.71,-269.56 460.5,-272.8 399.05,-252.07"/>
+<polygon fill="black" stroke="black" points="399.83,-248.64 389.24,-248.68 397.55,-255.25 399.83,-248.64"/>
+</g>
+<!-- BLLHD -->
+<g id="node8" class="node">
+<title>BLLHD</title>
+<polygon fill="white" stroke="black" points="618.48,-252 479.48,-252 479.48,-216 618.48,-216 618.48,-252"/>
+<text text-anchor="middle" x="548.98" y="-230.3" font-family="Times,serif" font-size="14.00">Behavioral LLHD</text>
+</g>
+<!-- SLLHD -->
+<g id="node9" class="node">
+<title>SLLHD</title>
+<polygon fill="white" stroke="black" points="579.98,-180 443.98,-180 443.98,-144 579.98,-144 579.98,-180"/>
+<text text-anchor="middle" x="511.98" y="-158.3" font-family="Times,serif" font-size="14.00">Structural LLHD</text>
+</g>
+<!-- BLLHD&#45;&gt;SLLHD -->
+<g id="edge9" class="edge">
+<title>BLLHD&#45;&gt;SLLHD</title>
+<path fill="none" stroke="black" d="M539.83,-215.7C535.57,-207.64 530.42,-197.89 525.71,-188.98"/>
+<polygon fill="black" stroke="black" points="528.79,-187.31 521.02,-180.1 522.6,-190.58 528.79,-187.31"/>
+</g>
+<!-- llhd_sim -->
+<g id="node21" class="node">
+<title>llhd_sim</title>
+<polygon fill="darksalmon" stroke="black" points="503.98,-108 413.98,-108 413.98,-72 503.98,-72 503.98,-108"/>
+<text text-anchor="middle" x="458.98" y="-86.3" font-family="Times,serif" font-size="14.00">LLHD Sim</text>
+</g>
+<!-- SLLHD&#45;&gt;llhd_sim -->
+<g id="edge31" class="edge">
+<title>SLLHD&#45;&gt;llhd_sim</title>
+<path fill="none" stroke="black" d="M498.88,-143.7C492.59,-135.39 484.93,-125.28 478.01,-116.14"/>
+<polygon fill="black" stroke="black" points="480.75,-113.96 471.93,-108.1 475.17,-118.19 480.75,-113.96"/>
+</g>
+<!-- Circilator -->
+<g id="node23" class="node">
+<title>Circilator</title>
+<polygon fill="gold" stroke="black" stroke-dasharray="5,2" points="753.16,-82.54 753.16,-97.46 718.49,-108 669.46,-108 634.79,-97.46 634.79,-82.54 669.46,-72 718.49,-72 753.16,-82.54"/>
+<text text-anchor="middle" x="693.98" y="-86.3" font-family="Times,serif" font-size="14.00">Circilator</text>
+</g>
+<!-- SLLHD&#45;&gt;Circilator -->
+<g id="edge26" class="edge">
+<title>SLLHD&#45;&gt;Circilator</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M556.5,-143.88C584.55,-133.09 620.66,-119.2 648.83,-108.36"/>
+<polygon fill="black" stroke="black" points="650.36,-111.53 658.44,-104.67 647.85,-104.99 650.36,-111.53"/>
+</g>
+<!-- HW&#45;&gt;SLLHD -->
+<g id="edge16" class="edge">
+<title>HW&#45;&gt;SLLHD</title>
+<path fill="none" stroke="black" d="M453.26,-215.7C462.89,-207.05 474.71,-196.45 485.2,-187.03"/>
+<polygon fill="black" stroke="black" points="487.81,-189.39 492.92,-180.1 483.14,-184.18 487.81,-189.39"/>
+</g>
+<!-- ExportVerilog -->
+<g id="node18" class="node">
+<title>ExportVerilog</title>
+<polygon fill="darksalmon" stroke="black" points="368.98,-180 252.98,-180 252.98,-144 368.98,-144 368.98,-180"/>
+<text text-anchor="middle" x="310.98" y="-158.3" font-family="Times,serif" font-size="14.00">ExportVerilog</text>
+</g>
+<!-- HW&#45;&gt;ExportVerilog -->
+<g id="edge22" class="edge">
+<title>HW&#45;&gt;ExportVerilog</title>
+<path fill="none" stroke="black" d="M406.68,-217.46C390.01,-207.98 368.44,-195.7 349.99,-185.2"/>
+<polygon fill="black" stroke="black" points="351.64,-182.12 341.22,-180.21 348.18,-188.2 351.64,-182.12"/>
+</g>
+<!-- HW&#45;&gt;Circilator -->
+<g id="edge27" class="edge">
+<title>HW&#45;&gt;Circilator</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M461.28,-219.96C464.52,-218.56 467.81,-217.21 470.98,-216 522.23,-196.51 540.85,-206.27 588.98,-180 620.41,-162.84 651.02,-135.28 671,-115.37"/>
+<polygon fill="black" stroke="black" points="673.59,-117.72 678.12,-108.15 668.61,-112.81 673.59,-117.72"/>
+</g>
+<!-- SV -->
+<g id="node11" class="node">
+<title>SV</title>
+<polygon fill="white" stroke="black" points="312.98,-252 258.98,-252 258.98,-216 312.98,-216 312.98,-252"/>
+<text text-anchor="middle" x="285.98" y="-230.3" font-family="Times,serif" font-size="14.00">SV</text>
+</g>
+<!-- SV&#45;&gt;ExportVerilog -->
+<g id="edge23" class="edge">
+<title>SV&#45;&gt;ExportVerilog</title>
+<path fill="none" stroke="black" d="M292.16,-215.7C294.97,-207.81 298.37,-198.3 301.5,-189.55"/>
+<polygon fill="black" stroke="black" points="304.8,-190.7 304.87,-180.1 298.21,-188.34 304.8,-190.7"/>
+</g>
+<!-- Comb&#45;&gt;ExportVerilog -->
+<g id="edge18" class="edge">
+<title>Comb&#45;&gt;ExportVerilog</title>
+<path fill="none" stroke="black" d="M347.86,-215.7C342.11,-207.47 335.12,-197.48 328.77,-188.42"/>
+<polygon fill="black" stroke="black" points="331.55,-186.29 322.95,-180.1 325.82,-190.3 331.55,-186.29"/>
+</g>
+<!-- Comb&#45;&gt;llhd_sim -->
+<g id="edge32" class="edge">
+<title>Comb&#45;&gt;llhd_sim</title>
+<path fill="none" stroke="black" d="M371.92,-215.87C389.16,-191.14 421.16,-145.24 441.19,-116.51"/>
+<polygon fill="black" stroke="black" points="444.15,-118.39 446.99,-108.19 438.4,-114.39 444.15,-118.39"/>
+</g>
+<!-- Seq -->
+<g id="node13" class="node">
+<title>Seq</title>
+<polygon fill="white" stroke="black" points="456.98,-324 402.98,-324 402.98,-288 456.98,-288 456.98,-324"/>
+<text text-anchor="middle" x="429.98" y="-302.3" font-family="Times,serif" font-size="14.00">Seq</text>
+</g>
+<!-- Seq&#45;&gt;SV -->
+<g id="edge11" class="edge">
+<title>Seq&#45;&gt;SV</title>
+<path fill="none" stroke="black" d="M402.89,-291.83C380.21,-280.81 347.62,-264.97 322.61,-252.81"/>
+<polygon fill="black" stroke="black" points="323.95,-249.57 313.43,-248.35 320.89,-255.87 323.95,-249.57"/>
+</g>
+<!-- StaticLogic&#45;&gt;Calyx -->
+<g id="edge3" class="edge">
+<title>StaticLogic&#45;&gt;Calyx</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M309.88,-431.7C313.97,-423.73 318.93,-414.1 323.47,-405.26"/>
+<polygon fill="black" stroke="black" points="326.72,-406.6 328.18,-396.1 320.49,-403.4 326.72,-406.6"/>
+</g>
+<!-- MSFT -->
+<g id="node15" class="node">
+<title>MSFT</title>
+<polygon fill="white" stroke="black" points="312.48,-324 253.48,-324 253.48,-288 312.48,-288 312.48,-324"/>
+<text text-anchor="middle" x="282.98" y="-302.3" font-family="Times,serif" font-size="14.00">MSFT</text>
+</g>
+<!-- MSFT&#45;&gt;HW -->
+<g id="edge15" class="edge">
+<title>MSFT&#45;&gt;HW</title>
+<path fill="none" stroke="black" d="M312.8,-291.35C334.13,-281.56 363.73,-267.94 397.67,-252.13"/>
+<polygon fill="black" stroke="black" points="399.28,-255.24 406.86,-247.84 396.32,-248.89 399.28,-255.24"/>
+</g>
+<!-- TCL -->
+<g id="node31" class="node">
+<title>TCL</title>
+<polygon fill="yellowgreen" stroke="black" points="85.48,-252 20.48,-252 20.48,-216 91.48,-216 91.48,-246 85.48,-252"/>
+<polyline fill="none" stroke="black" points="85.48,-252 85.48,-246 "/>
+<polyline fill="none" stroke="black" points="91.48,-246 85.48,-246 "/>
+<text text-anchor="middle" x="55.98" y="-230.3" font-family="Times,serif" font-size="14.00">TCL file</text>
+</g>
+<!-- MSFT&#45;&gt;TCL -->
+<g id="edge36" class="edge">
+<title>MSFT&#45;&gt;TCL</title>
+<path fill="none" stroke="black" d="M253.26,-297.24C218.77,-288.06 160.03,-271.85 101.65,-252.44"/>
+<polygon fill="black" stroke="black" points="102.5,-249.04 91.9,-249.17 100.27,-255.67 102.5,-249.04"/>
+</g>
+<!-- ESI -->
+<g id="node16" class="node">
+<title>ESI</title>
+<polygon fill="white" stroke="black" points="384.98,-324 330.98,-324 330.98,-288 384.98,-288 384.98,-324"/>
+<text text-anchor="middle" x="357.98" y="-302.3" font-family="Times,serif" font-size="14.00">ESI</text>
+</g>
+<!-- ESI&#45;&gt;HW -->
+<g id="edge14" class="edge">
+<title>ESI&#45;&gt;HW</title>
+<path fill="none" stroke="black" d="M376.76,-287.7C386.15,-279.05 397.66,-268.45 407.89,-259.03"/>
+<polygon fill="black" stroke="black" points="410.42,-261.45 415.41,-252.1 405.68,-256.3 410.42,-261.45"/>
+</g>
+<!-- CapNProto -->
+<g id="node30" class="node">
+<title>CapNProto</title>
+<polygon fill="yellowgreen" stroke="black" points="230.48,-252 109.48,-252 109.48,-216 236.48,-216 236.48,-246 230.48,-252"/>
+<polyline fill="none" stroke="black" points="230.48,-252 230.48,-246 "/>
+<polyline fill="none" stroke="black" points="236.48,-246 230.48,-246 "/>
+<text text-anchor="middle" x="172.98" y="-230.3" font-family="Times,serif" font-size="14.00">Cap&#39;n Proto file</text>
+</g>
+<!-- ESI&#45;&gt;CapNProto -->
+<g id="edge35" class="edge">
+<title>ESI&#45;&gt;CapNProto</title>
+<path fill="none" stroke="black" d="M330.59,-291.72C327.7,-290.42 324.79,-289.16 321.98,-288 293.61,-276.29 261.61,-264.7 234.56,-255.36"/>
+<polygon fill="black" stroke="black" points="235.42,-251.96 224.83,-252.03 233.15,-258.58 235.42,-251.96"/>
+</g>
+<!-- FSM&#45;&gt;HW -->
+<g id="edge13" class="edge">
+<title>FSM&#45;&gt;HW</title>
+<path fill="none" stroke="black" d="M485.17,-287.7C476.85,-279.14 466.67,-268.66 457.59,-259.3"/>
+<polygon fill="black" stroke="black" points="460.07,-256.84 450.59,-252.1 455.05,-261.72 460.07,-256.84"/>
+</g>
+<!-- SVFile -->
+<g id="node29" class="node">
+<title>SVFile</title>
+<polygon fill="yellowgreen" stroke="black" points="230.98,-108 174.98,-108 174.98,-72 236.98,-72 236.98,-102 230.98,-108"/>
+<polyline fill="none" stroke="black" points="230.98,-108 230.98,-102 "/>
+<polyline fill="none" stroke="black" points="236.98,-102 230.98,-102 "/>
+<text text-anchor="middle" x="205.98" y="-86.3" font-family="Times,serif" font-size="14.00">SV file</text>
+</g>
+<!-- ExportVerilog&#45;&gt;SVFile -->
+<g id="edge29" class="edge">
+<title>ExportVerilog&#45;&gt;SVFile</title>
+<path fill="none" stroke="black" d="M279.39,-143.88C264.98,-134.89 248.12,-123.76 234.14,-114.03"/>
+<polygon fill="black" stroke="black" points="236.05,-111.09 225.86,-108.19 232.01,-116.81 236.05,-111.09"/>
+</g>
+<!-- ExportVerilog&#45;&gt;SVFile -->
+<!-- FIRRTLParser -->
+<g id="node19" class="node">
+<title>FIRRTLParser</title>
+<polygon fill="darksalmon" stroke="black" points="618.98,-396 496.98,-396 496.98,-360 618.98,-360 618.98,-396"/>
+<text text-anchor="middle" x="557.98" y="-374.3" font-family="Times,serif" font-size="14.00">FIRRTL Parser</text>
+</g>
+<!-- FIRRTLParser&#45;&gt;FIRRTL -->
+<g id="edge21" class="edge">
+<title>FIRRTLParser&#45;&gt;FIRRTL</title>
+<path fill="none" stroke="black" d="M564.16,-359.7C566.97,-351.81 570.37,-342.3 573.5,-333.55"/>
+<polygon fill="black" stroke="black" points="576.8,-334.7 576.87,-324.1 570.21,-332.34 576.8,-334.7"/>
+</g>
+<!-- Scheduling&#45;&gt;StaticLogic -->
+<g id="edge19" class="edge">
+<title>Scheduling&#45;&gt;StaticLogic</title>
+<path fill="none" stroke="black" d="M300.98,-493.67C300.98,-488.69 300.98,-483.49 300.98,-478.51"/>
+<polygon fill="black" stroke="black" points="297.48,-493.7 300.98,-503.7 304.48,-493.7 297.48,-493.7"/>
+<polygon fill="black" stroke="black" points="304.48,-478.1 300.98,-468.1 297.48,-478.1 304.48,-478.1"/>
+</g>
+<!-- VCDTrace -->
+<g id="node27" class="node">
+<title>VCDTrace</title>
+<polygon fill="yellowgreen" stroke="black" points="498.48,-36 413.48,-36 413.48,0 504.48,0 504.48,-30 498.48,-36"/>
+<polyline fill="none" stroke="black" points="498.48,-36 498.48,-30 "/>
+<polyline fill="none" stroke="black" points="504.48,-30 498.48,-30 "/>
+<text text-anchor="middle" x="458.98" y="-14.3" font-family="Times,serif" font-size="14.00">VHD trace</text>
+</g>
+<!-- llhd_sim&#45;&gt;VCDTrace -->
+<g id="edge33" class="edge">
+<title>llhd_sim&#45;&gt;VCDTrace</title>
+<path fill="none" stroke="black" d="M458.98,-71.7C458.98,-63.98 458.98,-54.71 458.98,-46.11"/>
+<polygon fill="black" stroke="black" points="462.48,-46.1 458.98,-36.1 455.48,-46.1 462.48,-46.1"/>
+</g>
+<!-- Moore -->
+<g id="node22" class="node">
+<title>Moore</title>
+<polygon fill="gold" stroke="black" points="729.71,-298.54 729.71,-313.46 704.09,-324 667.86,-324 642.24,-313.46 642.24,-298.54 667.86,-288 704.09,-288 729.71,-298.54"/>
+<text text-anchor="middle" x="685.98" y="-302.3" font-family="Times,serif" font-size="14.00">Moore</text>
+</g>
+<!-- Moore&#45;&gt;BLLHD -->
+<g id="edge25" class="edge">
+<title>Moore&#45;&gt;BLLHD</title>
+<path fill="none" stroke="black" d="M659.24,-291.34C640.02,-281.52 613.72,-268.08 591.62,-256.79"/>
+<polygon fill="black" stroke="black" points="592.94,-253.53 582.44,-252.1 589.76,-259.77 592.94,-253.53"/>
+</g>
+<!-- CPPFile -->
+<g id="node28" class="node">
+<title>CPPFile</title>
+<polygon fill="yellowgreen" stroke="black" points="724.48,-36 657.48,-36 657.48,0 730.48,0 730.48,-30 724.48,-36"/>
+<polyline fill="none" stroke="black" points="724.48,-36 724.48,-30 "/>
+<polyline fill="none" stroke="black" points="730.48,-30 724.48,-30 "/>
+<text text-anchor="middle" x="693.98" y="-14.3" font-family="Times,serif" font-size="14.00">CPP file</text>
+</g>
+<!-- Circilator&#45;&gt;CPPFile -->
+<g id="edge30" class="edge">
+<title>Circilator&#45;&gt;CPPFile</title>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M693.98,-71.7C693.98,-63.98 693.98,-54.71 693.98,-46.11"/>
+<polygon fill="black" stroke="black" points="697.48,-46.1 693.98,-36.1 690.48,-46.1 697.48,-46.1"/>
+</g>
+<!-- Calyx_native&#45;&gt;SVFile -->
+<g id="edge34" class="edge">
+<title>Calyx_native&#45;&gt;SVFile</title>
+<path fill="none" stroke="black" d="M44.4,-287.78C31.53,-278.93 18.04,-266.86 10.98,-252 4.11,-237.55 3.3,-230.04 10.98,-216 43.67,-156.21 118.51,-120.81 165.39,-103.7"/>
+<polygon fill="black" stroke="black" points="166.68,-106.96 174.94,-100.33 164.35,-100.36 166.68,-106.96"/>
+</g>
+<!-- FIRFile -->
+<g id="node25" class="node">
+<title>FIRFile</title>
+<polygon fill="yellowgreen" stroke="black" points="696.98,-468 634.98,-468 634.98,-432 702.98,-432 702.98,-462 696.98,-468"/>
+<polyline fill="none" stroke="black" points="696.98,-468 696.98,-462 "/>
+<polyline fill="none" stroke="black" points="702.98,-462 696.98,-462 "/>
+<text text-anchor="middle" x="668.98" y="-446.3" font-family="Times,serif" font-size="14.00">FIR file</text>
+</g>
+<!-- FIRFile&#45;&gt;FIRRTLParser -->
+<g id="edge20" class="edge">
+<title>FIRFile&#45;&gt;FIRRTLParser</title>
+<path fill="none" stroke="black" d="M641.82,-431.88C627.44,-422.81 609.6,-411.55 594.07,-401.76"/>
+<polygon fill="black" stroke="black" points="595.56,-398.56 585.24,-396.19 591.83,-404.48 595.56,-398.56"/>
+</g>
+<!-- SVVHDL -->
+<g id="node26" class="node">
+<title>SVVHDL</title>
+<polygon fill="yellowgreen" stroke="black" points="740.48,-396 637.48,-396 637.48,-360 746.48,-360 746.48,-390 740.48,-396"/>
+<polyline fill="none" stroke="black" points="740.48,-396 740.48,-390 "/>
+<polyline fill="none" stroke="black" points="746.48,-390 740.48,-390 "/>
+<text text-anchor="middle" x="691.98" y="-374.3" font-family="Times,serif" font-size="14.00">SV/VHDL file</text>
+</g>
+<!-- SVVHDL&#45;&gt;Moore -->
+<g id="edge24" class="edge">
+<title>SVVHDL&#45;&gt;Moore</title>
+<path fill="none" stroke="black" d="M690.49,-359.7C689.83,-351.98 689.04,-342.71 688.3,-334.11"/>
+<polygon fill="black" stroke="black" points="691.78,-333.77 687.44,-324.1 684.81,-334.37 691.78,-333.77"/>
+</g>
+</g>
+</svg>

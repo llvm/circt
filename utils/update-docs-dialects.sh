@@ -7,28 +7,13 @@
 #
 ##===----------------------------------------------------------------------===##
 #
-# Renders the `docs/dialects.drawio` diagram using the `draw.io` desktop app.
-# diagrams.net (formerly draw.io) is a free online diagram software.
+# Renders the `docs/dialects.dot` diagram using graphviz.
 #
 ##===----------------------------------------------------------------------===##
 
 set -e
 DOCS_DIR=$(cd "$(dirname "$BASH_SOURCE[0]")/../docs" && pwd)
 
-# On macOS the app is an actual application package. On Linux it's usually in
-# the PATH.
-if [[ "$OSTYPE" == "darwin"* ]]; then
-	DRAWIO=/Applications/draw.io.app/Contents/MacOS/draw.io
-else
-	DRAWIO=draw.io
-fi
-
-# Check it's there and resolve the path.
-if DRAWIO=`! which $DRAWIO`; then
-	echo "error: draw.io not installed" >&2
-	exit 1
-fi
-
 # Update the rendered diagrams in the docs.
-$DRAWIO -x -t -s 2 -o $DOCS_DIR/includes/img/dialects.png $DOCS_DIR/dialects.drawio
-$DRAWIO -x -t -s 2 -o $DOCS_DIR/includes/img/dialects.svg $DOCS_DIR/dialects.drawio
+dot -Tpng $DOCS_DIR/dialects.dot > $DOCS_DIR/includes/img/dialects.png
+dot -Tsvg $DOCS_DIR/dialects.dot > $DOCS_DIR/includes/img/dialects.svg
