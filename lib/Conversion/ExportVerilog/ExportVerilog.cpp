@@ -1504,18 +1504,23 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     break;
   }
 
-  auto lastNewLine = outBuffer.begin() + (std::find(outBuffer.rbegin(), outBuffer.rend(), '\n') - outBuffer.rend());
-  unsigned pseudStart = lastNewLine == outBuffer.rend()
-                            ? (outBuffer.begin() + subExprStartIndex)
-                            : (lastNewLine + 1);
-  if (outBuffer.end() - pseudStart > threshold &&
+  // `lastNewlineIndex` represents the last position of a new line character.
+  unsigned int newLineStartIndex = subExprStartIndex;
+  for (auto it = std::prev(outBuffer.end()),
+            end = outBuffer.begin() + subExprStartIndex;
+       it != end; it--) {
+    if (*it == '\n') {
+      newLineStartIndex = it - outBuffer.begin() + 1;
+      break;
+    }
+  }
+
+  if (outBuffer.size() - newLineStartIndex > threshold &&
       parenthesizeIfLooserThan != ForceEmitMultiUse &&
       !isExpressionAlwaysInline(op)) {
     // Inform the module emitter that this expression needs a temporary
     // wire/logic declaration and set it up so it will be referenced instead of
     // emitted inline.
-    LLVM_DEBUG(llvm::dbgs() << "Emit to a temporary wire " << *op << "\n";);
-
     if (!op->hasOneUse()) {
       retroactivelyEmitExpressionIntoTemporary(op);
 
@@ -1530,29 +1535,45 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 
     // Split `outBuffer` into multiple lines.
     SmallVector<char> tmpOutBuffer;
-    auto it = outBuffer.begin() + subExprStartIndex;
-    unsigned int currentLen = 0;
+    llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
+
+    auto it = outBuffer.begin() + newLineStartIndex;
+    unsigned int currentPosition = 0;
     while (it != outBuffer.end()) {
       auto next = std::find(it, outBuffer.end(), ' ');
-      if (next == outBuffer.end())
-        break;
-      unsigned int len = std::distance(it, next);
-      LLVM_DEBUG(llvm::dbgs() << "Len " << len << " " << currentLen << " "
-                              << threshold << "\n";);
-      if (currentLen + len > threshold) {
-        assert(len <= threshold);
-        currentLen = len;
-        tmpOutBuffer.push_back('\n');
+      /*
+      if (it == next) {
+        tmpOs << " ";
+        it = next + 1;
+        currentPosition++;
+        continue;
+      }
+      */
+      unsigned int length = std::distance(it, next);
+
+      LLVM_DEBUG(llvm::dbgs() << "Len " << length << " " << currentPosition
+                              << " " << threshold << "\n";);
+
+      if (currentPosition + length >= threshold) {
+        assert(length <= threshold);
+        tmpOs << "\n";
+        currentPosition = length;
         tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
       } else {
-        currentLen += len;
-        if (!tmpOutBuffer.empty())
-          tmpOutBuffer.push_back(' ');
+        currentPosition += length;
+        if (!tmpOutBuffer.empty()) {
+          currentPosition += 1;
+          tmpOs << ' ';
+        }
         tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
       }
+      if (next == outBuffer.end())
+        break;
       it = next + 1;
     }
-    outBuffer.insert(outBuffer.begin() + subExprStartIndex,
+
+    outBuffer.resize(newLineStartIndex);
+    outBuffer.insert(outBuffer.begin() + newLineStartIndex,
                      tmpOutBuffer.begin(), tmpOutBuffer.end());
   }
 
