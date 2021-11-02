@@ -210,7 +210,7 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD=host \
             -DLLVM_ENABLE_ASSERTIONS=ON \
             -DLLVM_EXTERNAL_PROJECTS=circt \
-            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/..
+            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD/.. 
 
   # --- end of configure-circt-unified job.
 
@@ -269,7 +269,7 @@ jobs:
 
       # Our PR builds are trying to test the two corners of the build matrix:
       # clang + release + noassert + shared
-      # gcc   + debug   + assert   + static
+      # gcc   + debug   + assert   + static 
 
       # Build the CIRCT test target in release mode with assertions using Clang.
       - name: Build and Test CIRCT (Clang release)
