@@ -32,8 +32,8 @@ struct HandshakeInPort : public HandshakePort<VerilatorInPort> {
   void reset() override { *(this->validSig) = !1; }
   bool ready() override {
     // An input port is ready to accept inputs when an input is not already
-    // pushed onto the port (validSig == 1) and the ready signal is set.
-    return *(this->validSig) == 0 && (*this->readySig) == 1;
+    // pushed onto the port (validSig == 1).
+    return *(this->validSig) == 0;
   }
 
   // Writing to an input port implies setting the valid signal.
