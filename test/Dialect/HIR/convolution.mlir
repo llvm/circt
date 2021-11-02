@@ -59,7 +59,7 @@ hir.func @convolution at %t(
         hir.for %k2:index = %0 to %2 step %1 iter_time(%tk2 = %tk1){
           %v = hir.load %wndw[port 0][%k1,%k2] at %tk2 + 1
           : !hir.memref<(bank 3)x(bank 3)xi32>
-          %k2Plus1 = addi %k2, %1 : index
+          %k2Plus1 = arith.addi %k2, %1: index
           hir.store %v to %wndw[port 1][%k1,%k2Plus1] at %tk2 + 1
             :!hir.memref<(bank 3)x(bank 3)xi32>
           hir.next_iter at %tk2

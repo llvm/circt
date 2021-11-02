@@ -9,6 +9,7 @@
 #include "circt/Dialect/HIR/IR/helper.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/DenseSet.h"
 #include <iostream>
 using namespace circt;
@@ -79,14 +80,6 @@ private:
   LogicalResult visitOp(hir::StoreOp);
   LogicalResult visitOp(hir::CallOp);
   LogicalResult visitOp(hir::MemrefExtractOp);
-  Value getEnableSendBusTensor(OpBuilder &, Value &, Value, IntegerAttr,
-                               std::string);
-  Value getDataSendBusTensor(OpBuilder &, Value &, Value, Value, IntegerAttr,
-                             std::string);
-  Value getEnableSendBus(OpBuilder &, Value &, uint64_t, uint64_t, Value,
-                         IntegerAttr, std::string);
-  Value getDataSendBus(OpBuilder &, Value &, Value, uint64_t, uint64_t, Value,
-                       IntegerAttr, std::string);
   MemrefPortInterface defineBusesForMemrefPort(OpBuilder &, hir::MemrefType,
                                                Attribute,
                                                llvm::Optional<StringRef> name);
@@ -501,200 +494,6 @@ void MemrefLoweringPass::removeMemrefArguments(hir::FuncLike op) {
   op->setAttr("argNames", ArrayAttr::get(builder.getContext(), inputNames));
 }
 
-Value MemrefLoweringPass::getEnableSendBusTensor(OpBuilder &builder,
-                                                 Value &originalEnableBusTensor,
-                                                 Value tstart,
-                                                 IntegerAttr offsetAttr,
-                                                 std::string name) {
-  auto forkedEnableBusTensor = topLevelBuilder->create<hir::BusOp>(
-      builder.getUnknownLoc(), originalEnableBusTensor.getType());
-  helper::setNames(forkedEnableBusTensor, {name + "_forked"});
-  auto newEnableBusTensor = topLevelBuilder->create<hir::BusOp>(
-      builder.getUnknownLoc(), forkedEnableBusTensor.getType());
-  helper::setNames(newEnableBusTensor, {name + "_buses"});
-
-  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"send"}));
-  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"recv"}));
-  auto funcTy = hir::FuncType::get(builder.getContext(),
-                                   {originalEnableBusTensor.getType(),
-                                    forkedEnableBusTensor.getType(),
-                                    newEnableBusTensor.getType()},
-                                   {sendAttr, recvAttr, recvAttr}, {}, {});
-
-  auto width = builder.getI64IntegerAttr(
-      helper::getBitWidth(originalEnableBusTensor.getType()
-                              .dyn_cast<mlir::TensorType>()
-                              .getElementType())
-          .getValue());
-  auto numBanks = builder.getI64IntegerAttr(originalEnableBusTensor.getType()
-                                                .dyn_cast<mlir::TensorType>()
-                                                .getNumElements());
-
-  auto combineEnBus = builder.create<hir::CallOp>(
-      builder.getUnknownLoc(), SmallVector<Type>(),
-      createUniqueFuncName(
-          builder.getContext(), "combine_en_bus_tensor",
-          {(uint64_t)width.getInt(), (uint64_t)numBanks.getInt()}),
-      TypeAttr::get(funcTy),
-      SmallVector<Value>(
-          {originalEnableBusTensor, forkedEnableBusTensor, newEnableBusTensor}),
-      tstart, offsetAttr);
-  helper::declareExternalFuncForCall(
-      combineEnBus,
-      {"original_en_bus_tensor", "forked_en_bus_tensor", "new_en_bus_tensor"});
-
-  auto params =
-      builder.getDictionaryAttr({builder.getNamedAttr("WIDTH", width),
-                                 builder.getNamedAttr("NUM_BANKS", numBanks)});
-  combineEnBus->setAttr("params", params);
-  originalEnableBusTensor = newEnableBusTensor;
-  return forkedEnableBusTensor;
-}
-
-Value MemrefLoweringPass::getDataSendBusTensor(
-    OpBuilder &builder, Value &originalDataBusTensor, Value enableBusTensor,
-    Value tstart, IntegerAttr offsetAttr, std::string name) {
-  auto forkedDataBusTensor = topLevelBuilder->create<hir::BusOp>(
-      builder.getUnknownLoc(), originalDataBusTensor.getType());
-  helper::setNames(forkedDataBusTensor, {name + "_forked"});
-  auto newDataBusTensor = topLevelBuilder->create<hir::BusOp>(
-      builder.getUnknownLoc(), forkedDataBusTensor.getType());
-  helper::setNames(newDataBusTensor, {name + "_buses"});
-
-  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"send"}));
-  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"recv"}));
-  auto funcTy = hir::FuncType::get(
-      builder.getContext(),
-      {originalDataBusTensor.getType(), enableBusTensor.getType(),
-       forkedDataBusTensor.getType(), newDataBusTensor.getType()},
-      {sendAttr, recvAttr, recvAttr, recvAttr}, {}, {});
-
-  auto width = builder.getI64IntegerAttr(
-      helper::getBitWidth(originalDataBusTensor.getType()
-                              .dyn_cast<mlir::TensorType>()
-                              .getElementType())
-          .getValue());
-  auto numBanks = builder.getI64IntegerAttr(originalDataBusTensor.getType()
-                                                .dyn_cast<mlir::TensorType>()
-                                                .getNumElements());
-  auto combineDataBus = builder.create<hir::CallOp>(
-      builder.getUnknownLoc(), SmallVector<Type>(),
-      createUniqueFuncName(
-          builder.getContext(), "combine_data_bus_tensor",
-          {(uint64_t)width.getInt(), (uint64_t)numBanks.getInt()}),
-
-      TypeAttr::get(funcTy),
-      SmallVector<Value>({originalDataBusTensor, enableBusTensor,
-                          forkedDataBusTensor, newDataBusTensor}),
-      tstart, offsetAttr);
-
-  helper::declareExternalFuncForCall(
-      combineDataBus, {"original_data_bus_tensor", "en_bus_tensor",
-                       "forked_data_bus_tensor", "new_data_bus_tensor"});
-
-  auto params =
-      builder.getDictionaryAttr({builder.getNamedAttr("WIDTH", width),
-                                 builder.getNamedAttr("NUM_BANKS", numBanks)});
-  combineDataBus->setAttr("params", params);
-  originalDataBusTensor = newDataBusTensor;
-  return forkedDataBusTensor;
-}
-
-Value MemrefLoweringPass::getEnableSendBus(OpBuilder &builder,
-                                           Value &enableBusTensor,
-                                           uint64_t bank, uint64_t numBanks,
-                                           Value tstart, IntegerAttr offsetAttr,
-                                           std::string name) {
-  auto forkedEnableBus = topLevelBuilder->create<hir::BusOp>(
-      builder.getUnknownLoc(), getTensorElementType(enableBusTensor));
-  helper::setNames(forkedEnableBus, {name + "_forked"});
-  auto newEnableBusTensor = topLevelBuilder->create<hir::BusOp>(
-      builder.getUnknownLoc(), enableBusTensor.getType());
-  helper::setNames(newEnableBusTensor, {name + "_buses"});
-
-  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"send"}));
-  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"recv"}));
-  auto funcTy =
-      hir::FuncType::get(builder.getContext(),
-                         {enableBusTensor.getType(), forkedEnableBus.getType(),
-                          newEnableBusTensor.getType()},
-                         {sendAttr, recvAttr, recvAttr}, {}, {});
-
-  auto combineEnBus = builder.create<hir::CallOp>(
-      builder.getUnknownLoc(), SmallVector<Type>(),
-      createUniqueFuncName(builder.getContext(), "combine_en_bus", numBanks),
-
-      TypeAttr::get(funcTy),
-      SmallVector<Value>(
-          {enableBusTensor, forkedEnableBus, newEnableBusTensor}),
-      tstart, offsetAttr);
-
-  helper::declareExternalFuncForCall(
-      combineEnBus, {"original_en_bus_tensor", "forked_en_bus", "new_en_bus"});
-
-  auto params = builder.getDictionaryAttr(
-      {builder.getNamedAttr("BANK", builder.getI64IntegerAttr(bank)),
-       builder.getNamedAttr("NUM_BANKS", builder.getI64IntegerAttr(numBanks))});
-  combineEnBus->setAttr("params", params);
-  enableBusTensor = newEnableBusTensor;
-  return forkedEnableBus;
-}
-
-Value MemrefLoweringPass::getDataSendBus(OpBuilder &builder,
-                                         Value &dataBusTensor, Value enableBus,
-                                         uint64_t bank, uint64_t numBanks,
-                                         Value tstart, IntegerAttr offsetAttr,
-                                         std::string name) {
-  auto forkedDataBus = topLevelBuilder->create<hir::BusOp>(
-      builder.getUnknownLoc(), getTensorElementType(dataBusTensor));
-  helper::setNames(forkedDataBus, {name + "_forked"});
-
-  auto newDataBusTensor = topLevelBuilder->create<hir::BusOp>(
-      builder.getUnknownLoc(), dataBusTensor.getType());
-  helper::setNames(newDataBusTensor, {name + "_buses"});
-  auto sendAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"send"}));
-  auto recvAttr = helper::getDictionaryAttr(builder, "hir.bus.ports",
-                                            builder.getStrArrayAttr({"recv"}));
-  auto funcTy =
-      hir::FuncType::get(builder.getContext(),
-                         {dataBusTensor.getType(), enableBus.getType(),
-                          forkedDataBus.getType(), newDataBusTensor.getType()},
-                         {sendAttr, recvAttr, recvAttr, recvAttr}, {}, {});
-
-  auto width = builder.getI64IntegerAttr(
-      helper::getBitWidth(
-          dataBusTensor.getType().dyn_cast<mlir::TensorType>().getElementType())
-          .getValue());
-
-  auto combineData = builder.create<hir::CallOp>(
-      builder.getUnknownLoc(), SmallVector<Type>(),
-      createUniqueFuncName(builder.getContext(), "combine_data_bus",
-                           {numBanks, (uint64_t)width.getInt()}),
-      TypeAttr::get(funcTy),
-      SmallVector<Value>(
-          {dataBusTensor, enableBus, forkedDataBus, newDataBusTensor}),
-      tstart, offsetAttr);
-
-  helper::declareExternalFuncForCall(
-      combineData, {"original_data_bus_tensor", "en_bus_tensor",
-                    "forked_data_bus", "new_data_bus_tensor"});
-
-  auto params = builder.getDictionaryAttr(
-      {builder.getNamedAttr("BANK", builder.getI64IntegerAttr(bank)),
-       builder.getNamedAttr("NUM_BANKS", builder.getI64IntegerAttr(numBanks)),
-       builder.getNamedAttr("ELEMENT_WIDTH", width)});
-  combineData->setAttr("params", params);
-  dataBusTensor = newDataBusTensor;
-  return forkedDataBus;
-}
-
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
@@ -708,29 +507,33 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
 
+  auto c1 = builder.create<mlir::arith::ConstantOp>(
+      builder.getUnknownLoc(), builder.getI1Type(),
+      mlir::IntegerAttr::get(builder.getI1Type(), 1));
+
   // Insert logic to send address and valid signals to address bus.
   Value addrTuple =
       createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
 
   if (portInterface.addrDataBusTensor) {
     assert(portInterface.addrEnableBusTensor);
-    portInterface.addrEnableBusTensor = insertEnableSendLogic(
-        builder, portInterface.addrEnableBusTensor, op.tstart(),
-        op.offsetAttr(), op.filterIndices(BANK));
+    portInterface.addrEnableBusTensor = insertDataSendLogic(
+        builder, c1, portInterface.addrEnableBusTensor, op.filterIndices(BANK),
+        op.tstart(), op.offsetAttr());
     portInterface.addrDataBusTensor = insertDataSendLogic(
-        builder, addrTuple, portInterface.addrDataBusTensor, op.tstart(),
-        op.offsetAttr(), op.filterIndices(BANK));
+        builder, addrTuple, portInterface.addrDataBusTensor,
+        op.filterIndices(BANK), op.tstart(), op.offsetAttr());
   }
   // Insert logic to send rd valid signal and receive the data after rdLatency.
   assert(portInterface.rdEnableBusTensor);
-  portInterface.rdEnableBusTensor = insertEnableSendLogic(
-      builder, portInterface.rdEnableBusTensor, op.tstart(), op.offsetAttr(),
-      op.filterIndices(BANK));
+  portInterface.rdEnableBusTensor =
+      insertDataSendLogic(builder, c1, portInterface.rdEnableBusTensor,
+                          op.filterIndices(BANK), op.tstart(), op.offsetAttr());
 
   auto loadValue = insertDataRecvLogic(
       builder, op.getLoc(), op->getAttrOfType<mlir::ArrayAttr>("names"),
-      portInterface.rdLatency, portInterface.rdDataBusTensor, op.tstart(),
-      op.offsetAttr(), op.filterIndices(BANK));
+      portInterface.rdDataBusTensor, op.filterIndices(BANK),
+      portInterface.rdLatency, op.tstart(), op.offsetAttr());
 
   op.replaceAllUsesWith(loadValue);
   opsToErase.push_back(op);
@@ -744,28 +547,31 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
 
+  auto c1 = builder.create<mlir::arith::ConstantOp>(
+      builder.getUnknownLoc(), builder.getI1Type(),
+      mlir::IntegerAttr::get(builder.getI1Type(), 1));
   // Insert logic to send address and valid signals to address bus.
   Value addrTuple =
       createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
 
   if (portInterface.addrDataBusTensor) {
     assert(portInterface.addrEnableBusTensor);
-    portInterface.addrEnableBusTensor = insertEnableSendLogic(
-        builder, portInterface.addrEnableBusTensor, op.tstart(),
-        op.offsetAttr(), op.filterIndices(BANK));
+    portInterface.addrEnableBusTensor = insertDataSendLogic(
+        builder, c1, portInterface.addrEnableBusTensor, op.filterIndices(BANK),
+        op.tstart(), op.offsetAttr());
     portInterface.addrDataBusTensor = insertDataSendLogic(
-        builder, addrTuple, portInterface.addrDataBusTensor, op.tstart(),
-        op.offsetAttr(), op.filterIndices(BANK));
+        builder, addrTuple, portInterface.addrDataBusTensor,
+        op.filterIndices(BANK), op.tstart(), op.offsetAttr());
   }
   // Insert logic to send wr valid and data.
   assert(portInterface.wrEnableBusTensor);
-  portInterface.wrEnableBusTensor = insertEnableSendLogic(
-      builder, portInterface.wrEnableBusTensor, op.tstart(), op.offsetAttr(),
-      op.filterIndices(BANK));
+  portInterface.wrEnableBusTensor =
+      insertDataSendLogic(builder, c1, portInterface.wrEnableBusTensor,
+                          op.filterIndices(BANK), op.tstart(), op.offsetAttr());
 
   portInterface.wrDataBusTensor =
       insertDataSendLogic(builder, op.value(), portInterface.wrDataBusTensor,
-                          op.tstart(), op.offsetAttr(), op.filterIndices(BANK));
+                          op.filterIndices(BANK), op.tstart(), op.offsetAttr());
 
   opsToErase.push_back(op);
   return success();
@@ -801,51 +607,61 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
     for (uint64_t j = 0; j < ports.size(); j++) {
       auto &portInterface = mapMemrefToPortInterfaces.get(operand, j);
       if (portInterface.addrEnableBusTensor) {
-        auto addrEnableBusTensor =
-            getEnableSendBusTensor(builder, portInterface.addrEnableBusTensor,
-                                   op.tstart(), op.offsetAttr(), "addr_en");
-        operands.push_back(addrEnableBusTensor);
-        inputTypes.push_back(addrEnableBusTensor.getType());
+        auto addrEnableBusT = builder.create<hir::BusOp>(
+            builder.getUnknownLoc(),
+            portInterface.addrEnableBusTensor.getType());
+        portInterface.addrEnableBusTensor = insertDataTensorSendLogic(
+            builder, addrEnableBusT, portInterface.addrEnableBusTensor,
+            op.tstart(), op.offsetAttr());
+        operands.push_back(addrEnableBusT);
+        inputTypes.push_back(addrEnableBusT.getType());
+        inputAttrs.push_back(sendAttr);
+
+        assert(portInterface.addrDataBusTensor);
+        auto addrDataBusT = builder.create<hir::BusOp>(
+            builder.getUnknownLoc(), portInterface.addrDataBusTensor.getType());
+        portInterface.addrDataBusTensor = insertDataTensorSendLogic(
+            builder, addrDataBusT, portInterface.addrDataBusTensor, op.tstart(),
+            op.offsetAttr());
+        operands.push_back(addrDataBusT);
+        inputTypes.push_back(addrDataBusT.getType());
         inputAttrs.push_back(sendAttr);
       }
-      if (portInterface.addrDataBusTensor) {
-        auto addrDataBusTensor = getDataSendBusTensor(
-            builder, portInterface.addrDataBusTensor, operands.back(),
-            op.tstart(), op.offsetAttr(), "addr_data");
-        operands.push_back(addrDataBusTensor);
-        inputTypes.push_back(addrDataBusTensor.getType());
-        inputAttrs.push_back(sendAttr);
-      }
+
       if (portInterface.rdEnableBusTensor) {
-        auto forkedRdEnableBusTensor =
-            getEnableSendBusTensor(builder, portInterface.rdEnableBusTensor,
-                                   op.tstart(), op.offsetAttr(), "rd_en");
-        operands.push_back(forkedRdEnableBusTensor);
-        inputTypes.push_back(forkedRdEnableBusTensor.getType());
+        auto rdEnableBusT = builder.create<hir::BusOp>(
+            builder.getUnknownLoc(), portInterface.rdEnableBusTensor.getType());
+        portInterface.rdEnableBusTensor = insertDataTensorSendLogic(
+            builder, rdEnableBusT, portInterface.rdEnableBusTensor, op.tstart(),
+            op.offsetAttr());
+        operands.push_back(rdEnableBusT);
+        inputTypes.push_back(rdEnableBusT.getType());
         inputAttrs.push_back(sendAttr);
-      }
-      if (portInterface.rdDataBusTensor) {
-        auto rdDataBusTensor = getDataSendBusTensor(
-            builder, portInterface.rdDataBusTensor, operands.back(),
-            op.tstart(), op.offsetAttr(), "rd_data");
-        operands.push_back(rdDataBusTensor);
-        inputTypes.push_back(rdDataBusTensor.getType());
+
+        assert(portInterface.rdDataBusTensor);
+        operands.push_back(portInterface.rdDataBusTensor);
+        inputTypes.push_back(portInterface.rdDataBusTensor.getType());
         inputAttrs.push_back(recvAttr);
       }
+
       if (portInterface.wrEnableBusTensor) {
-        auto forkedWrEnableBusTensor =
-            getEnableSendBusTensor(builder, portInterface.wrEnableBusTensor,
-                                   op.tstart(), op.offsetAttr(), "wr_en");
-        operands.push_back(forkedWrEnableBusTensor);
-        inputTypes.push_back(forkedWrEnableBusTensor.getType());
+        auto wrEnableBusT = builder.create<hir::BusOp>(
+            builder.getUnknownLoc(), portInterface.wrEnableBusTensor.getType());
+        portInterface.wrEnableBusTensor = insertDataTensorSendLogic(
+            builder, wrEnableBusT, portInterface.wrEnableBusTensor, op.tstart(),
+            op.offsetAttr());
+        operands.push_back(wrEnableBusT);
+        inputTypes.push_back(wrEnableBusT.getType());
         inputAttrs.push_back(sendAttr);
-      }
-      if (portInterface.wrDataBusTensor) {
-        auto wrDataBusTensor = getDataSendBusTensor(
-            builder, portInterface.wrDataBusTensor, operands.back(),
-            op.tstart(), op.offsetAttr(), "wr_data");
-        operands.push_back(wrDataBusTensor);
-        inputTypes.push_back(wrDataBusTensor.getType());
+
+        assert(portInterface.wrDataBusTensor);
+        auto wrDataBusT = builder.create<hir::BusOp>(
+            builder.getUnknownLoc(), portInterface.wrDataBusTensor.getType());
+        portInterface.wrDataBusTensor = insertDataTensorSendLogic(
+            builder, wrDataBusT, portInterface.wrDataBusTensor, op.tstart(),
+            op.offsetAttr());
+        operands.push_back(wrDataBusT);
+        inputTypes.push_back(wrDataBusT.getType());
         inputAttrs.push_back(sendAttr);
       }
     }

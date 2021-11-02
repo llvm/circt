@@ -193,6 +193,28 @@ llvm::Optional<std::string> typeMismatch(Location loc, hir::FuncType ta,
   return llvm::None;
 }
 
+bool isEqual(mlir::DictionaryAttr d1, mlir::DictionaryAttr d2) {
+
+  if (!d1 && !d2)
+    return true;
+  if (!d1 || !d2)
+    return false;
+
+  for (auto param : d1) {
+    auto value = d2.get(param.first);
+    if (!value || (value.getType() != param.second.getType()))
+      return false;
+  }
+
+  for (auto param : d2) {
+    auto value = d1.get(param.first);
+    if (!value || (value.getType() != param.second.getType()))
+      return false;
+  }
+
+  return true;
+}
+
 LogicalResult verifyCallOp(hir::CallOp op) {
   auto inputTypes = op.getFuncType().getInputTypes();
   auto operands = op.getOperands();
@@ -205,8 +227,8 @@ LogicalResult verifyCallOp(hir::CallOp op) {
     }
   }
   auto *calleeDeclOperation = op.getCalleeDecl();
-  // if (!calleeDeclOperation)
-  //  return op.emitError() << "Could not find declaration of the callee.";
+  if (!calleeDeclOperation)
+    return op.emitError() << "Could not find function declaration.";
 
   if (auto funcOp = dyn_cast_or_null<hir::FuncOp>(calleeDeclOperation)) {
     auto error =
@@ -224,6 +246,12 @@ LogicalResult verifyCallOp(hir::CallOp op) {
                  .attachNote(funcExternOp.getLoc())
              << error.getValue();
   }
+  auto callOpParams = op->getAttrOfType<mlir::DictionaryAttr>("params");
+  auto declOpParams =
+      calleeDeclOperation->getAttrOfType<mlir::DictionaryAttr>("params");
+  if (!isEqual(callOpParams, declOpParams))
+    return op.emitError(
+        "Mismatch in params attribute between function declaration and use.");
   return success();
 }
 

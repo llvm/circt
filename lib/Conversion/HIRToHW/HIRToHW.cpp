@@ -524,8 +524,7 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
   if (auto op = dyn_cast<hir::ReturnOp>(operation))
     return visitOp(op);
 
-  // operation->emitRemark() << "Unsupported operation for hir-to-hw pass.";
-  return success();
+  return operation->emitError() << "Unsupported operation for hir-to-hw pass.";
 }
 
 void HIRToHWPass::runOnOperation() {

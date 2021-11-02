@@ -8,13 +8,16 @@
 #include <iostream>
 using namespace circt;
 using namespace hir;
-Value insertEnableSendLogic(OpBuilder &builder, Value inEnableBus, Value tVar,
-                            IntegerAttr offsetAttr, ArrayRef<Value> indices);
 
 Value insertDataSendLogic(OpBuilder &builder, Value data, Value inDataBus,
-                          Value tVar, IntegerAttr offsetAttr,
-                          ArrayRef<Value> indices);
+                          ArrayRef<Value> indices, Value tVar,
+                          IntegerAttr offsetAttr);
 
 Value insertDataRecvLogic(OpBuilder &builder, Location loc, ArrayAttr names,
-                          uint64_t rdLatency, Value dataBusT, Value tVar,
-                          IntegerAttr offsetAttr, ArrayRef<Value> indices);
+                          Value dataBusT, ArrayRef<Value> indices,
+                          uint64_t rdLatency, Value tVar,
+                          IntegerAttr offsetAttr);
+
+Value insertDataTensorSendLogic(OpBuilder &builder, Value currentDataBusT,
+                                Value rootDataBusT, Value tVar,
+                                IntegerAttr offsetAttr);

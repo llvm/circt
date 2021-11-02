@@ -772,7 +772,7 @@ def TensorInsertOp: HIR_Op<"tensor.insert",[NoSideEffect]>{
         = hir.tensor.insert %element into %tensor[%c0,%c1] : type(%res)```
   }];
 
-  let arguments = (ins AnyType: $element, AnyType:$tensor,
+  let arguments = (ins HIR_BusType: $element, AnyType:$tensor,
   Variadic<Index>: $indices);
   let results = (outs AnyType: $res);
 
