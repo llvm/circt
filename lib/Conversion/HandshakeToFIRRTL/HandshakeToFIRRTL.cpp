@@ -449,11 +449,19 @@ static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
 static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
   llvm::SmallVector<PortInfo, 8> ports;
+  auto argNames = funcOp->getAttrOfType<ArrayAttr>("argNames");
+  auto getArgumentName = [&](unsigned index) {
+    if (argNames && argNames.size() > index)
+      return rewriter.getStringAttr(
+          argNames[index].cast<StringAttr>().getValue());
+    else
+      return rewriter.getStringAttr("arg" + std::to_string(index));
+  };
 
   // Add all inputs of funcOp.
   unsigned argIndex = 0;
   for (auto &arg : funcOp.getArguments()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
+    auto portName = getArgumentName(argIndex);
     auto bundlePortType = getBundleType(arg.getType());
 
     if (!bundlePortType)
