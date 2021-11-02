@@ -1541,18 +1541,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     unsigned int currentPosition = 0;
     while (it != outBuffer.end()) {
       auto next = std::find(it, outBuffer.end(), ' ');
-      /*
-      if (it == next) {
-        tmpOs << " ";
-        it = next + 1;
-        currentPosition++;
-        continue;
-      }
-      */
       unsigned int length = std::distance(it, next);
-
-      LLVM_DEBUG(llvm::dbgs() << "Len " << length << " " << currentPosition
-                              << " " << threshold << "\n";);
 
       if (currentPosition + length >= threshold) {
         assert(length <= threshold);
