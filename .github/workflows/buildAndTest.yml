@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           fetch-depth: 2
-          submodules: "false"
+          submodules: "true"
 
       # --------
       # Lint the CIRCT C++ code.
@@ -79,6 +79,22 @@ jobs:
           fi
           echo "Clang-format found no formatting problems"
           exit 0
+
+      # Configure CMake to run clang-tidy
+      - name: Configure CMake
+        run: |
+          mkdir build_assert
+          cd build_assert
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DLLVM_ENABLE_ASSERTIONS=On \
+            -DMLIR_DIR=../llvm/install/lib/cmake/mlir/ \
+            -DLLVM_DIR=../llvm/install/lib/cmake/llvm/ \
+            -DCMAKE_LINKER=lld \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DLLVM_EXTERNAL_LIT=`pwd`/../llvm/build/bin/llvm-lit \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       # Run clang-tidy against only the changes. The 'clang-tidy-diff' script
       # does this if supplied with the diff.
