@@ -1,7 +1,7 @@
 func @comp(%arg0 : i32, %arg1 : i32) -> i32 {
-  %c0_i32 = constant 0 : i32
-  %c1_i32 = constant 1 : i32
-  %0 = cmpi slt, %arg0, %arg1 : i32
+  %c0_i32 = arith.constant 0 : i32
+  %c1_i32 = arith.constant 1 : i32
+  %0 = arith.cmpi slt, %arg0, %arg1 : i32
   cond_br %0, ^bb1, ^bb2
 ^bb1:
   br ^bb3(%c0_i32: i32)

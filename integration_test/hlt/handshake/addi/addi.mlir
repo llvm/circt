@@ -28,21 +28,21 @@ func private @addi_await() -> (i32)
 func private @printI64(i32)   
 func private @printComma()
 func @test_addi() -> i32 {
-  %c0 = constant 0 : index
-  %c1 = constant 1 : index
-  %c10 = constant 10 : index
-  %c1_i32 = constant 1 : i32
-  %c0_i32 = constant 0 : i32
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c10 = arith.constant 10 : index
+  %c1_i32 = arith.constant 1 : i32
+  %c0_i32 = arith.constant 0 : i32
 
   // Call
   scf.for %i = %c0 to %c10 step %c1 {
-    %0 = index_cast %i : index to i32
+    %0 = arith.index_cast %i : index to i32
     call @addi_call(%c1_i32, %0) : (i32, i32) -> ()
   }
 
   // Await
   scf.for %i = %c0 to %c10 step %c1 {
-    %0 = index_cast %i : index to i32
+    %0 = arith.index_cast %i : index to i32
     %res = call @addi_await() : () -> (i32)
     call @printI64(%res) : (i32) -> ()
     call @printComma() : () -> ()

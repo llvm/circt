@@ -1,13 +1,13 @@
 func @exponent(%arg0: i32, %arg1: i32) -> (i32) {
-  %c-1_i32 = constant -1 : i32
-  %c1_i32 = constant 1 : i32
+  %c-1_i32 = arith.constant -1 : i32
+  %c1_i32 = arith.constant 1 : i32
   %0:2 = scf.while (%arg2 = %arg0, %arg3 = %arg1) : (i32, i32) -> (i32, i32) {
-    %1 = cmpi sgt, %arg3, %c1_i32 : i32
+    %1 = arith.cmpi sgt, %arg3, %c1_i32 : i32
     scf.condition(%1) %arg2, %arg3 : i32, i32
   } do {
   ^bb0(%arg2: i32, %arg3: i32):  // no predecessors
-    %1 = muli %arg2, %arg0 : i32
-    %2 = addi %arg3, %c-1_i32 : i32
+    %1 = arith.muli %arg2, %arg0 : i32
+    %2 = arith.addi %arg3, %c-1_i32 : i32
     scf.yield %1, %2 : i32, i32
   }
   return %0#0 : i32

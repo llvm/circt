@@ -27,6 +27,7 @@
 
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
@@ -130,6 +131,7 @@ static mlir::Operation *getOpToWrap(mlir::MLIRContext *ctx,
 static void registerDialects(mlir::DialectRegistry &registry) {
   registry.insert<mlir::memref::MemRefDialect>();
   registry.insert<mlir::StandardOpsDialect>();
+  registry.insert<arith::ArithmeticDialect>();
   registry.insert<scf::SCFDialect>();
   registry.insert<handshake::HandshakeDialect>();
 }

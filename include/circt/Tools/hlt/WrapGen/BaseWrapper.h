@@ -29,6 +29,7 @@ class BaseWrapper {
 public:
   BaseWrapper(StringRef inputFile, StringRef outDir)
       : inputFile(inputFile), outDir(outDir) {}
+  virtual ~BaseWrapper(){};
 
   /// The wrap function takes a source operation and a kernel operation. The
   /// kernel operation is wrapper-specific, whereas the source operation
