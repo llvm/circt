@@ -1504,20 +1504,56 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     break;
   }
 
-  if (outBuffer.size() - subExprStartIndex > threshold &&
+  auto lastNewLine = outBuffer.begin() + (std::find(outBuffer.rbegin(), outBuffer.rend(), '\n') - outBuffer.rend());
+  unsigned pseudStart = lastNewLine == outBuffer.rend()
+                            ? (outBuffer.begin() + subExprStartIndex)
+                            : (lastNewLine + 1);
+  if (outBuffer.end() - pseudStart > threshold &&
       parenthesizeIfLooserThan != ForceEmitMultiUse &&
       !isExpressionAlwaysInline(op)) {
     // Inform the module emitter that this expression needs a temporary
     // wire/logic declaration and set it up so it will be referenced instead of
     // emitted inline.
-    retroactivelyEmitExpressionIntoTemporary(op);
+    LLVM_DEBUG(llvm::dbgs() << "Emit to a temporary wire " << *op << "\n";);
 
-    // Lop this off the buffer we emitted.
-    outBuffer.resize(subExprStartIndex);
+    if (!op->hasOneUse()) {
+      retroactivelyEmitExpressionIntoTemporary(op);
 
-    // Try again, now it will get emitted as a out-of-line leaf.
-    return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
-                       signRequirement);
+      // Lop this off the buffer we emitted.
+      outBuffer.resize(subExprStartIndex);
+
+      // Try again, now it will get emitted as a out-of-line leaf.
+      return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
+                         signRequirement);
+    }
+    // If op has only one uses, we can emit the expression into multipl
+
+    // Split `outBuffer` into multiple lines.
+    SmallVector<char> tmpOutBuffer;
+    auto it = outBuffer.begin() + subExprStartIndex;
+    unsigned int currentLen = 0;
+    while (it != outBuffer.end()) {
+      auto next = std::find(it, outBuffer.end(), ' ');
+      if (next == outBuffer.end())
+        break;
+      unsigned int len = std::distance(it, next);
+      LLVM_DEBUG(llvm::dbgs() << "Len " << len << " " << currentLen << " "
+                              << threshold << "\n";);
+      if (currentLen + len > threshold) {
+        assert(len <= threshold);
+        currentLen = len;
+        tmpOutBuffer.push_back('\n');
+        tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
+      } else {
+        currentLen += len;
+        if (!tmpOutBuffer.empty())
+          tmpOutBuffer.push_back(' ');
+        tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
+      }
+      it = next + 1;
+    }
+    outBuffer.insert(outBuffer.begin() + subExprStartIndex,
+                     tmpOutBuffer.begin(), tmpOutBuffer.end());
   }
 
   // Remember that we emitted this.
