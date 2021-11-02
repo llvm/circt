@@ -1,7 +1,7 @@
 Digraph G {
   rankdir = TB
-	splines=spline;
-	node [shape=box style=filled fillcolor="white"]
+  splines=spline;
+  node [shape=box style=filled fillcolor="white"]
   compound=true
 
   
