@@ -1,9 +1,11 @@
 Digraph G {
+  // Note: Remember to run the circt/utils/update-docs-dialects.sh script after
+  // modifying this file to regenerate the .svg and .png renders of the graph.
   rankdir = TB
   splines=spline;
   node [shape=box style=filled fillcolor="white"]
-  compound=true
-
+  nodesep=0.2 // horizontal compression
+  ranksep=0.5 // vertical compression
   
   // MLIR dialects
   subgraph cluster_mlir {
@@ -18,12 +20,11 @@ Digraph G {
 
   subgraph cluster_circt {
     label = "CIRCT"
-    // CIRCT dialectss
+    // CIRCT dialects
     Calyx
     Handshake
     FIRRTL
-    BLLHD [label="Behavioral LLHD"]
-    SLLHD [label="Structural LLHD"]
+    LLHD
     HW
     SV
     Comb
@@ -38,6 +39,7 @@ Digraph G {
     FIRRTLParser [label="FIRRTL Parser" fillcolor="darksalmon"]
     Scheduling [fillcolor="darksalmon"]
     llhd_sim [label="LLHD Sim" fillcolor="darksalmon"]
+    PyCDE [fillcolor="darksalmon"]
   }
 
   // External tools
@@ -46,13 +48,14 @@ Digraph G {
   Calyx_native [label="Calyx Native" shape=octagon fillcolor="gold"]
   
   // File formats
-  FIRFile [label="FIR file" fillcolor="yellowgreen" shape=note]
-  SVVHDL [label="SV/VHDL file" fillcolor="yellowgreen" shape=note]
-  VCDTrace [label="VHD trace" fillcolor="yellowgreen" shape=note]
-  CPPFile [label="CPP file" fillcolor="yellowgreen" shape=note]
-  SVFile [label="SV file" fillcolor="yellowgreen" shape=note]
-  CapNProto [label="Cap'n Proto file" fillcolor="yellowgreen" shape=note]
-  TCL [label="TCL file" fillcolor="yellowgreen" shape=note]
+  VCDTrace [label=".vcd" fillcolor="yellowgreen" shape=note]
+  CPPFile [label=".cpp" fillcolor="yellowgreen" shape=note]
+  SVFile [label=".sv" fillcolor="yellowgreen" shape=note]
+  CapNProto [label="Cap'n Proto" fillcolor="yellowgreen" shape=note]
+  TCL [label=".tcl" fillcolor="yellowgreen" shape=note]
+  FIRFile [label=".fir" fillcolor="yellowgreen" shape=note]
+  SVVHDL [label=".sv/.vhd" fillcolor="yellowgreen" shape=note]
+  PyFile [label=".py" fillcolor="yellowgreen" shape=note]
 
   // ===== Connections =====
 
@@ -66,14 +69,13 @@ Digraph G {
   Arith -> Handshake
 
   Handshake -> FIRRTL
-  BLLHD -> SLLHD
   Calyx -> FSM [style=dashed]
   Seq -> SV
   FIRRTL -> HW
   FSM -> HW
   ESI -> HW
   MSFT -> HW
-  HW -> SLLHD 
+  HW -> LLHD 
   FIRRTL->Comb
   Comb -> ExportVerilog
 
@@ -83,21 +85,39 @@ Digraph G {
   FIRRTLParser -> FIRRTL
   HW -> ExportVerilog
   SV -> ExportVerilog
-  SVVHDL -> Moore
-  Moore -> BLLHD
-  SLLHD -> Circilator [style=dashed]
+  SVVHDL -> Moore [weight=999]
+  Moore -> LLHD
+  LLHD -> Circilator [style=dashed]
   HW -> Circilator [style=dashed]
   Calyx -> Calyx_native
   ExportVerilog -> SVFile
   Circilator -> CPPFile [style=dashed]
-  SLLHD -> llhd_sim
+  LLHD -> llhd_sim
   Comb -> llhd_sim
+  HW -> llhd_sim
+  Seq -> llhd_sim
   llhd_sim -> VCDTrace
   Calyx_native -> SVFile
   ESI -> CapNProto
   MSFT -> TCL
+  PyFile -> PyCDE
+  PyCDE -> HW
+  PyCDE -> Comb
+  PyCDE -> Seq
+  PyCDE -> LLHD
+  PyCDE -> ESI [style=dashed]
 
   // ====== Some fake edges to coerce a good layout ======
-  Affine -> Scheduling [weight=999 style=invis];
-  ExportVerilog -> SVFile [weight=999 style=invis];
+  // Note: Modify these if you make changes to the above diagram, and things
+  // start looking weird.
+   Standard -> Scheduling [weight=999 style=invis]
+   FIRFile -> PyFile [weight=999 style=invis]
+   Calyx -> Calyx_native [weight=999 style=invis]
+   Calyx_native -> SVVHDL [weight=999 style=invis]
+
+   // Fix the following sink nodes below the CIRCT cluster
+   llhd_sim -> SVFile [weight=999 style=invis]
+   llhd_sim -> Circilator [weight=999 style=invis]
+   llhd_sim -> TCL [weight=999 style=invis]
+   llhd_sim -> CapNProto [weight=999 style=invis]
 }
