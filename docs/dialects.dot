@@ -6,7 +6,7 @@ Digraph G {
   node [shape=box style=filled fillcolor="white"]
   nodesep=0.2 // horizontal compression
   ranksep=0.5 // vertical compression
-  
+
   // MLIR dialects
   subgraph cluster_mlir {
     label = "Upstream MLIR";
@@ -46,7 +46,7 @@ Digraph G {
   Moore [shape=octagon fillcolor="gold"]
   Circilator [shape=octagon fillcolor="gold" style="dashed,filled"]
   Calyx_native [label="Calyx Native" shape=octagon fillcolor="gold"]
-  
+
   // File formats
   VCDTrace [label=".vcd" fillcolor="yellowgreen" shape=note]
   CPPFile [label=".cpp" fillcolor="yellowgreen" shape=note]
@@ -75,7 +75,7 @@ Digraph G {
   FSM -> HW
   ESI -> HW
   MSFT -> HW
-  HW -> LLHD 
+  HW -> LLHD
   FIRRTL->Comb
   Comb -> ExportVerilog
 
@@ -110,14 +110,14 @@ Digraph G {
   // ====== Some fake edges to coerce a good layout ======
   // Note: Modify these if you make changes to the above diagram, and things
   // start looking weird.
-   Standard -> Scheduling [weight=999 style=invis]
-   FIRFile -> PyFile [weight=999 style=invis]
-   Calyx -> Calyx_native [weight=999 style=invis]
-   Calyx_native -> SVVHDL [weight=999 style=invis]
+  Standard -> Scheduling [weight=999 style=invis]
+  FIRFile -> PyFile [weight=999 style=invis]
+  Calyx -> Calyx_native [weight=999 style=invis]
+  Calyx_native -> SVVHDL [weight=999 style=invis]
 
-   // Fix the following sink nodes below the CIRCT cluster
-   llhd_sim -> SVFile [weight=999 style=invis]
-   llhd_sim -> Circilator [weight=999 style=invis]
-   llhd_sim -> TCL [weight=999 style=invis]
-   llhd_sim -> CapNProto [weight=999 style=invis]
+  // Fix the following sink nodes below the CIRCT cluster
+  llhd_sim -> SVFile [weight=999 style=invis]
+  llhd_sim -> Circilator [weight=999 style=invis]
+  llhd_sim -> TCL [weight=999 style=invis]
+  llhd_sim -> CapNProto [weight=999 style=invis]
 }
