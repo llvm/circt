@@ -1521,7 +1521,7 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                          signRequirement);
     };
 
-    if (getenv("NO") || !op->hasOneUse())
+    if (!op->hasOneUse())
       return emitExpressionIntoTemporary();
 
     // If op has only one use, we don't have to spill the expression.
@@ -1530,8 +1530,8 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     SmallVector<char> tmpOutBuffer;
     llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
 
-    // Since outBuffer already contains newline characters, replace them with
-    // spaces.
+    // Since outBuffer already contains newline characters in the recursive
+    // calls, replace them with spaces to align with the current subexpression.
     std::replace(outBuffer.begin() + subExprStartIndex, outBuffer.end(), '\n',
                  ' ');
 
