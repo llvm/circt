@@ -165,12 +165,12 @@ public:
   /// In the building phase, add symbols.
   void addDefinition(StringAttr symbol, Operation *op) {
     assert(!isFrozen && "cannot mutate a frozen cache");
-    symbolCache.try_emplace(symbol.getValue(), op, ~0UL);
+    symbolCache.try_emplace(symbol.getValue(), op, ~0ULL);
   }
 
   // Add inner names, which might be ports
   void addDefinition(StringAttr symbol, StringRef name, Operation *op,
-                     size_t port = ~0UL) {
+                     size_t port = ~0ULL) {
     assert(!isFrozen && "cannot mutate a frozen cache");
     auto key = mkInnerKey(symbol.getValue(), name);
     symbolCache.try_emplace(StringRef(key.data(), key.size()), op, port);
@@ -200,7 +200,7 @@ public:
     assert(isFrozen && "cannot read from this cache until it is frozen");
     auto key = mkInnerKey(symbol, name);
     auto it = symbolCache.find(StringRef(key.data(), key.size()));
-    return it == symbolCache.end() ? Item{nullptr, ~0UL} : it->second;
+    return it == symbolCache.end() ? Item{nullptr, ~0ULL} : it->second;
   }
 
   Item getDefinition(StringAttr symbol, StringAttr name) const {
