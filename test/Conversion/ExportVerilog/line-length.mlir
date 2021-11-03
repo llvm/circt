@@ -12,26 +12,26 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 }
 
 // SHORT-LABEL: module longvariadic
-// SHORT: wire [7:0] _tmp = a + a + a + a + a + a + a + a;
-// SHORT: wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a;
-// SHORT: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a;
-// SHORT: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a;
-// SHORT: wire [7:0] _tmp_3 = _tmp + _tmp_0 + _tmp_1 + _tmp_2;
-// SHORT: wire [7:0] _tmp_4 = a + a + a + a + a + a + a + a;
-// SHORT: wire [7:0] _tmp_5 = a + a + a + a + a + a + a + a;
-// SHORT: wire [7:0] _tmp_6 = a + a + a + a + a + a + a + a;
-// SHORT: wire [7:0] _tmp_7 = a + a + a + a + a + a + a + a;
-// SHORT: wire [7:0] _tmp_8 = _tmp_4 + _tmp_5 + _tmp_6 + _tmp_7;
-// SHORT: assign b = _tmp_3 + _tmp_8;
+// SHORT: assign b =  a + a + a + a + a + a
+// SHORT: + a + a + a + a + a +
+// SHORT: a + a + a + a + a + a
+// SHORT: + a + a + a + a + a +
+// SHORT: a + a + a + a + a + a
+// SHORT: + a + a + a + a + a + a + a + a + a + a
+// SHORT: + a + a + a + a + a +
+// SHORT: a + a + a + a + a + a
+// SHORT: + a + a + a + a + a +
+// SHORT: a + a + a + a + a + a
+// SHORT: + a + a + a + a;
 
 // DEFAULT-LABEL: module longvariadic
-// DEFAULT: wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-// DEFAULT: wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-// DEFAULT: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-// DEFAULT: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-// DEFAULT: assign b = _tmp + _tmp_0 + _tmp_1 + _tmp_2;
+// DEFAULT: assign b = a + a + a + a + a + a + a + a + a + a + a + a
+// DEFAULT: + a + a + a + a + a + a + a + a + a + a + a +
+// DEFAULT: a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// DEFAULT: + a + a + a + a + a + a + a + a + a + a + a +
+// DEFAULT: a + a + a + a + a + a + a + a + a;
 
 // LONG-LABEL: module longvariadic
-// LONG: wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-// LONG: wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-// LONG: assign b = _tmp + _tmp_0;
+// LONG-LABEL: assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+// LONG-LABEL: a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+// LONG-LABEL: a + a + a + a + a + a + a + a + a;

@@ -1504,24 +1504,13 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     break;
   }
 
-  // `lastNewlineIndex` represents the last position of a new line character.
-  unsigned int newLineStartIndex = subExprStartIndex;
-  for (auto it = std::prev(outBuffer.end()),
-            end = outBuffer.begin() + subExprStartIndex;
-       it != end; it--) {
-    if (*it == '\n') {
-      newLineStartIndex = it - outBuffer.begin() + 1;
-      break;
-    }
-  }
-
-  if (outBuffer.size() - newLineStartIndex > threshold &&
+  if (outBuffer.size() - subExprStartIndex > threshold &&
       parenthesizeIfLooserThan != ForceEmitMultiUse &&
       !isExpressionAlwaysInline(op)) {
     // Inform the module emitter that this expression needs a temporary
     // wire/logic declaration and set it up so it will be referenced instead of
     // emitted inline.
-    if (!op->hasOneUse()) {
+    auto emitExpressionIntoTemporary = [&]() {
       retroactivelyEmitExpressionIntoTemporary(op);
 
       // Lop this off the buffer we emitted.
@@ -1530,28 +1519,42 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
       // Try again, now it will get emitted as a out-of-line leaf.
       return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
                          signRequirement);
-    }
-    // If op has only one uses, we can emit the expression into multipl
+    };
 
-    // Split `outBuffer` into multiple lines.
+    if (getenv("NO") || !op->hasOneUse())
+      return emitExpressionIntoTemporary();
+
+    // If op has only one use, we don't have to spill the expression.
+    // Instead, split `outBuffer` into multiple lines by inserting endline
+    // characters appropriately.
     SmallVector<char> tmpOutBuffer;
     llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
 
-    auto it = outBuffer.begin() + newLineStartIndex;
-    unsigned int currentPosition = 0;
+    // Since outBuffer already contains newline characters, replace them with
+    // spaces.
+    std::replace(outBuffer.begin() + subExprStartIndex, outBuffer.end(), '\n',
+                 ' ');
+
+    auto it = outBuffer.begin() + subExprStartIndex;
+    unsigned int currentIndex = 0;
     while (it != outBuffer.end()) {
       auto next = std::find(it, outBuffer.end(), ' ');
-      unsigned int length = std::distance(it, next);
+      unsigned int tokenLength = std::distance(it, next);
 
-      if (currentPosition + length >= threshold) {
-        assert(length <= threshold);
-        tmpOs << "\n";
-        currentPosition = length;
+      if (tokenLength > threshold)
+        return emitExpressionIntoTemporary();
+
+      if (currentIndex + tokenLength > threshold) {
+        tmpOs << '\n';
+        currentIndex = tokenLength;
         tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
       } else {
-        currentPosition += length;
+        currentIndex += tokenLength;
+        assert(tokenLength <= threshold);
+        // If `tmpOutBuffer` is not empty, there exists a token before the
+        // current token so insert a white space.
         if (!tmpOutBuffer.empty()) {
-          currentPosition += 1;
+          currentIndex += 1;
           tmpOs << ' ';
         }
         tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
@@ -1561,8 +1564,9 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
       it = next + 1;
     }
 
-    outBuffer.resize(newLineStartIndex);
-    outBuffer.insert(outBuffer.begin() + newLineStartIndex,
+    // Shrink and rewrite outBuffer.
+    outBuffer.resize(subExprStartIndex);
+    outBuffer.insert(outBuffer.begin() + subExprStartIndex,
                      tmpOutBuffer.begin(), tmpOutBuffer.end());
   }
 
