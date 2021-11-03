@@ -42,14 +42,13 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(InstanceOp, ArrayRef<Value> operands,
+  matchAndRewrite(InstanceOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 };
 } // anonymous namespace
 
 LogicalResult
-InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
-                                    ArrayRef<Value> operands,
+InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
                                     ConversionPatternRewriter &rewriter) const {
   Operation *referencedModule = msftInst.getReferencedModule();
   if (!referencedModule)
@@ -60,7 +59,9 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
         msftInst, "Referenced module was not an HW module");
   auto hwInst = rewriter.create<hw::InstanceOp>(
       msftInst.getLoc(), referencedModule, msftInst.instanceNameAttr(),
-      operands, /*parameters=*/ArrayAttr{}, msftInst.sym_nameAttr());
+      SmallVector<Value>(adaptor.getOperands().begin(),
+                         adaptor.getOperands().end()),
+      /*parameters=*/ArrayAttr{}, msftInst.sym_nameAttr());
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
 }
@@ -72,13 +73,13 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(MSFTModuleOp mod, ArrayRef<Value> operands,
+  matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 };
 } // anonymous namespace
 
 LogicalResult
-ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, ArrayRef<Value> operands,
+ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
                                   ConversionPatternRewriter &rewriter) const {
   if (mod.body().empty()) {
     std::string comment;
@@ -105,7 +106,7 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(OutputOp out, ArrayRef<Value> operands,
+  matchAndRewrite(OutputOp out, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     rewriter.replaceOpWithNewOp<hw::OutputOp>(out, out.getOperands());
     return success();

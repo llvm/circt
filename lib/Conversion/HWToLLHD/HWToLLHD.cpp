@@ -109,7 +109,7 @@ struct ConvertHWModule : public OpConversionPattern<HWModuleOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(HWModuleOp module, ArrayRef<Value> operands,
+  matchAndRewrite(HWModuleOp module, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Collect the HW module's port types.
     FunctionType moduleType = module.getType();
@@ -158,7 +158,7 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(OutputOp output, ArrayRef<Value> operands,
+  matchAndRewrite(OutputOp output, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Get the number of inputs in the entity to offset into the block args.
     auto entity = output->getParentOfType<EntityOp>();
@@ -168,9 +168,9 @@ struct ConvertOutput : public OpConversionPattern<OutputOp> {
 
     // Drive the results from the mapped operands.
     Value delta;
-    for (size_t i = 0, e = operands.size(); i != e; ++i) {
+    for (size_t i = 0, e = adaptor.getOperands().size(); i != e; ++i) {
       // Get the source and destination signals.
-      auto src = operands[i];
+      auto src = adaptor.getOperands()[i];
       auto dest = entity.getArgument(numInputs + i);
       if (!src || !dest)
         return rewriter.notifyMatchFailure(
@@ -212,14 +212,14 @@ struct ConvertInstance : public OpConversionPattern<InstanceOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(InstanceOp instance, ArrayRef<Value> operands,
+  matchAndRewrite(InstanceOp instance, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Value delta;
 
     // Materialize signals for instance arguments that are of non-signal type.
     SmallVector<Value, 4> arguments;
     unsigned argIdx = 0;
-    for (auto arg : operands) {
+    for (auto arg : adaptor.getOperands()) {
       // Connect signals directly.
       auto argType = arg.getType();
       if (argType.isa<SigType>()) {

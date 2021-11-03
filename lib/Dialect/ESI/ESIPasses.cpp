@@ -285,13 +285,13 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(ChannelBuffer buffer, ArrayRef<Value> operands,
+  matchAndRewrite(ChannelBuffer buffer, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 };
 } // anonymous namespace
 
 LogicalResult ChannelBufferLowering::matchAndRewrite(
-    ChannelBuffer buffer, ArrayRef<Value> operands,
+    ChannelBuffer buffer, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto loc = buffer.getLoc();
 
@@ -846,7 +846,7 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(PipelineStage stage, ArrayRef<Value> operands,
+  matchAndRewrite(PipelineStage stage, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 
 private:
@@ -855,7 +855,7 @@ private:
 } // anonymous namespace
 
 LogicalResult PipelineStageLowering::matchAndRewrite(
-    PipelineStage stage, ArrayRef<Value> stageOperands,
+    PipelineStage stage, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto loc = stage.getLoc();
   auto chPort = stage.input().getType().dyn_cast<ChannelPort>();
@@ -912,13 +912,13 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(NullSourceOp nullop, ArrayRef<Value> operands,
+  matchAndRewrite(NullSourceOp nullop, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 };
 } // anonymous namespace
 
 LogicalResult NullSourceOpLowering::matchAndRewrite(
-    NullSourceOp nullop, ArrayRef<Value> stageOperands,
+    NullSourceOp nullop, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
   auto innerType = nullop.out().getType().cast<ChannelPort>().getInner();
   Location loc = nullop.getLoc();
@@ -1000,15 +1000,15 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(WrapSVInterface wrap, ArrayRef<Value> operands,
+  matchAndRewrite(WrapSVInterface wrap, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 };
 } // anonymous namespace
 
 LogicalResult
-WrapInterfaceLower::matchAndRewrite(WrapSVInterface wrap,
-                                    ArrayRef<Value> operands,
+WrapInterfaceLower::matchAndRewrite(WrapSVInterface wrap, OpAdaptor adaptor,
                                     ConversionPatternRewriter &rewriter) const {
+  auto operands = adaptor.getOperands();
   if (operands.size() != 1)
     return rewriter.notifyMatchFailure(wrap, [&operands](Diagnostic &d) {
       d << "wrap.iface has 1 argument. Got " << operands.size() << "operands";
@@ -1042,14 +1042,15 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(UnwrapSVInterface wrap, ArrayRef<Value> operands,
+  matchAndRewrite(UnwrapSVInterface wrap, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 };
 } // anonymous namespace
 
 LogicalResult UnwrapInterfaceLower::matchAndRewrite(
-    UnwrapSVInterface unwrap, ArrayRef<Value> operands,
+    UnwrapSVInterface unwrap, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
+  auto operands = adaptor.getOperands();
   if (operands.size() != 2)
     return rewriter.notifyMatchFailure(unwrap, [&operands](Diagnostic &d) {
       d << "Unwrap.iface has 2 arguments. Got " << operands.size()
@@ -1088,7 +1089,7 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CosimEndpoint, ArrayRef<Value> operands,
+  matchAndRewrite(CosimEndpoint, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const final;
 
 private:
@@ -1097,7 +1098,7 @@ private:
 } // anonymous namespace
 
 LogicalResult
-CosimLowering::matchAndRewrite(CosimEndpoint ep, ArrayRef<Value> operands,
+CosimLowering::matchAndRewrite(CosimEndpoint ep, OpAdaptor operands,
                                ConversionPatternRewriter &rewriter) const {
 #ifndef CAPNP
   (void)builder;
@@ -1192,7 +1193,7 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CapnpEncode enc, ArrayRef<Value> operands,
+  matchAndRewrite(CapnpEncode enc, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
 #ifndef CAPNP
     return rewriter.notifyMatchFailure(enc,
@@ -1219,7 +1220,7 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CapnpDecode dec, ArrayRef<Value> operands,
+  matchAndRewrite(CapnpDecode dec, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
 #ifndef CAPNP
     return rewriter.notifyMatchFailure(dec,
