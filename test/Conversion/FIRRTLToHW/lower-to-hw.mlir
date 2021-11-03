@@ -210,6 +210,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // Nodes with no names are just dropped.
     %22 = firrtl.node %in2 {name = ""} : !firrtl.uint<2>
 
+    // CHECK-NEXT: [[WIRE:%n3]] = sv.wire sym @nodeSym : !hw.inout<i2>
+    // CHECK-NEXT: sv.assign [[WIRE]], %in2 : i2
+    %n3 = firrtl.node sym @nodeSym %in2 : !firrtl.uint<2>
+
     // CHECK-NEXT: [[CVT:%.+]] = comb.concat %false, %in2 : i1, i2
     %23 = firrtl.cvt %22 : (!firrtl.uint<2>) -> !firrtl.sint<3>
 
@@ -1188,4 +1192,25 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
+
+  // CHECK-LABEL: hw.module @InnerNames
+  firrtl.module @InnerNames(
+    in %value: !firrtl.uint<42>,
+    in %clock: !firrtl.clock,
+    in %reset: !firrtl.uint<1>
+  ) {
+    firrtl.instance instName sym @instSym @BitCast1()
+    // CHECK: hw.instance "instName" sym @instSym @BitCast1
+    %nodeName = firrtl.node sym @nodeSym %value : !firrtl.uint<42>
+    // CHECK: [[WIRE:%nodeName]] = sv.wire sym @nodeSym : !hw.inout<i42>
+    // CHECK-NEXT: sv.assign [[WIRE]], %value
+    %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
+    // CHECK: %wireName = sv.wire sym @wireSym : !hw.inout<i42>
+    %regName = firrtl.reg sym @regSym %clock : !firrtl.uint<42>
+    // CHECK: %regName = sv.reg sym @regSym : !hw.inout<i42>
+    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    // CHECK: %regResetName = sv.reg sym @regResetSym : !hw.inout<i42>
+    %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
+    // CHECK: {{%.+}} = hw.instance "memName" sym @memSym
+  }
 }

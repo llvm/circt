@@ -334,7 +334,7 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   auto memory = memBuilder.create<MemOp>(
       resultTypes, readLatency, writeLatency, depth, ruw,
       memBuilder.getArrayAttr(resultNames), name, annotations,
-      memBuilder.getArrayAttr(portAnnotations));
+      memBuilder.getArrayAttr(portAnnotations), StringAttr{});
 
   // Process each memory port, initializing the memory port and inferring when
   // to set the enable signal high.
