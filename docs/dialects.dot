@@ -21,18 +21,18 @@ Digraph G {
   subgraph cluster_circt {
     label = "CIRCT"
     // CIRCT dialects
-    Calyx
-    Handshake
-    FIRRTL
-    LLHD
-    HW
-    SV
-    Comb
-    Seq
-    StaticLogic
-    MSFT
-    ESI
-    FSM
+    Calyx [URL="https://circt.llvm.org/docs/Dialects/Calyx/"]
+    Handshake [URL="https://circt.llvm.org/docs/Dialects/Handshake/"]
+    FIRRTL [URL="https://circt.llvm.org/docs/Dialects/FIRRTL/"]
+    LLHD [URL="https://circt.llvm.org/docs/Dialects/LLHD/"]
+    HW [URL="https://circt.llvm.org/docs/Dialects/HW/"]
+    SV [URL="https://circt.llvm.org/docs/Dialects/SV/"]
+    Comb [URL="https://circt.llvm.org/docs/Dialects/Comb/"]
+    Seq [URL="https://circt.llvm.org/docs/Dialects/Seq/"]
+    StaticLogic [URL="https://circt.llvm.org/docs/Dialects/StaticLogic/"]
+    MSFT [URL="https://circt.llvm.org/docs/Dialects/MSFT/"]
+    ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
+    FSM [URL="https://circt.llvm.org/docs/Dialects/FSM/"]
 
     // Internal tools
     ExportVerilog [fillcolor="darksalmon"]

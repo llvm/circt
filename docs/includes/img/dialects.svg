@@ -28,8 +28,11 @@
 <!-- Calyx -->
 <g id="node5" class="node">
 <title>Calyx</title>
+<g id="a_node5"><a xlink:href="https://circt.llvm.org/docs/Dialects/Calyx/" xlink:title="Calyx">
 <polygon fill="white" stroke="black" points="223.98,-468 167.98,-468 167.98,-432 223.98,-432 223.98,-468"/>
 <text text-anchor="middle" x="195.98" y="-446.3" font-family="Times,serif" font-size="14.00">Calyx</text>
+</a>
+</g>
 </g>
 <!-- SCF&#45;&gt;Calyx -->
 <g id="edge1" class="edge">
@@ -52,8 +55,11 @@
 <!-- Handshake -->
 <g id="node6" class="node">
 <title>Handshake</title>
+<g id="a_node6"><a xlink:href="https://circt.llvm.org/docs/Dialects/Handshake/" xlink:title="Handshake">
 <polygon fill="white" stroke="black" points="334.98,-468 238.98,-468 238.98,-432 334.98,-432 334.98,-468"/>
 <text text-anchor="middle" x="286.98" y="-446.3" font-family="Times,serif" font-size="14.00">Handshake</text>
+</a>
+</g>
 </g>
 <!-- Standard&#45;&gt;Handshake -->
 <g id="edge6" class="edge">
@@ -95,8 +101,11 @@
 <!-- StaticLogic -->
 <g id="node13" class="node">
 <title>StaticLogic</title>
+<g id="a_node13"><a xlink:href="https://circt.llvm.org/docs/Dialects/StaticLogic/" xlink:title="StaticLogic">
 <polygon fill="white" stroke="black" points="264.48,-540 167.48,-540 167.48,-504 264.48,-504 264.48,-540"/>
 <text text-anchor="middle" x="215.98" y="-518.3" font-family="Times,serif" font-size="14.00">StaticLogic</text>
+</a>
+</g>
 </g>
 <!-- Affine&#45;&gt;StaticLogic -->
 <g id="edge2" class="edge">
@@ -107,8 +116,11 @@
 <!-- FSM -->
 <g id="node16" class="node">
 <title>FSM</title>
+<g id="a_node16"><a xlink:href="https://circt.llvm.org/docs/Dialects/FSM/" xlink:title="FSM">
 <polygon fill="white" stroke="black" points="237.98,-396 183.98,-396 183.98,-360 237.98,-360 237.98,-396"/>
 <text text-anchor="middle" x="210.98" y="-374.3" font-family="Times,serif" font-size="14.00">FSM</text>
+</a>
+</g>
 </g>
 <!-- Calyx&#45;&gt;FSM -->
 <g id="edge9" class="edge">
@@ -132,8 +144,11 @@
 <!-- FIRRTL -->
 <g id="node7" class="node">
 <title>FIRRTL</title>
+<g id="a_node7"><a xlink:href="https://circt.llvm.org/docs/Dialects/FIRRTL/" xlink:title="FIRRTL">
 <polygon fill="white" stroke="black" points="323.48,-396 252.48,-396 252.48,-360 323.48,-360 323.48,-396"/>
 <text text-anchor="middle" x="287.98" y="-374.3" font-family="Times,serif" font-size="14.00">FIRRTL</text>
+</a>
+</g>
 </g>
 <!-- Handshake&#45;&gt;FIRRTL -->
 <g id="edge8" class="edge">
@@ -144,8 +159,11 @@
 <!-- HW -->
 <g id="node9" class="node">
 <title>HW</title>
+<g id="a_node9"><a xlink:href="https://circt.llvm.org/docs/Dialects/HW/" xlink:title="HW">
 <polygon fill="white" stroke="black" points="267.98,-324 213.98,-324 213.98,-288 267.98,-288 267.98,-324"/>
 <text text-anchor="middle" x="240.98" y="-302.3" font-family="Times,serif" font-size="14.00">HW</text>
+</a>
+</g>
 </g>
 <!-- FIRRTL&#45;&gt;HW -->
 <g id="edge11" class="edge">
@@ -156,8 +174,11 @@
 <!-- Comb -->
 <g id="node11" class="node">
 <title>Comb</title>
+<g id="a_node11"><a xlink:href="https://circt.llvm.org/docs/Dialects/Comb/" xlink:title="Comb">
 <polygon fill="white" stroke="black" points="339.98,-324 281.98,-324 281.98,-288 339.98,-288 339.98,-324"/>
 <text text-anchor="middle" x="310.98" y="-302.3" font-family="Times,serif" font-size="14.00">Comb</text>
+</a>
+</g>
 </g>
 <!-- FIRRTL&#45;&gt;Comb -->
 <g id="edge16" class="edge">
@@ -168,8 +189,11 @@
 <!-- LLHD -->
 <g id="node8" class="node">
 <title>LLHD</title>
+<g id="a_node8"><a xlink:href="https://circt.llvm.org/docs/Dialects/LLHD/" xlink:title="LLHD">
 <polygon fill="white" stroke="black" points="225.98,-252 167.98,-252 167.98,-216 225.98,-216 225.98,-252"/>
 <text text-anchor="middle" x="196.98" y="-230.3" font-family="Times,serif" font-size="14.00">LLHD</text>
+</a>
+</g>
 </g>
 <!-- llhd_sim -->
 <g id="node20" class="node">
@@ -228,8 +252,11 @@
 <!-- SV -->
 <g id="node10" class="node">
 <title>SV</title>
+<g id="a_node10"><a xlink:href="https://circt.llvm.org/docs/Dialects/SV/" xlink:title="SV">
 <polygon fill="white" stroke="black" points="407.98,-324 353.98,-324 353.98,-288 407.98,-288 407.98,-324"/>
 <text text-anchor="middle" x="380.98" y="-302.3" font-family="Times,serif" font-size="14.00">SV</text>
+</a>
+</g>
 </g>
 <!-- SV&#45;&gt;ExportVerilog -->
 <g id="edge22" class="edge">
@@ -252,8 +279,11 @@
 <!-- Seq -->
 <g id="node12" class="node">
 <title>Seq</title>
+<g id="a_node12"><a xlink:href="https://circt.llvm.org/docs/Dialects/Seq/" xlink:title="Seq">
 <polygon fill="white" stroke="black" points="565.98,-396 511.98,-396 511.98,-360 565.98,-360 565.98,-396"/>
 <text text-anchor="middle" x="538.98" y="-374.3" font-family="Times,serif" font-size="14.00">Seq</text>
+</a>
+</g>
 </g>
 <!-- Seq&#45;&gt;SV -->
 <g id="edge10" class="edge">
@@ -276,8 +306,11 @@
 <!-- MSFT -->
 <g id="node14" class="node">
 <title>MSFT</title>
+<g id="a_node14"><a xlink:href="https://circt.llvm.org/docs/Dialects/MSFT/" xlink:title="MSFT">
 <polygon fill="white" stroke="black" points="497.48,-396 438.48,-396 438.48,-360 497.48,-360 497.48,-396"/>
 <text text-anchor="middle" x="467.98" y="-374.3" font-family="Times,serif" font-size="14.00">MSFT</text>
+</a>
+</g>
 </g>
 <!-- MSFT&#45;&gt;HW -->
 <g id="edge14" class="edge">
@@ -302,8 +335,11 @@
 <!-- ESI -->
 <g id="node15" class="node">
 <title>ESI</title>
+<g id="a_node15"><a xlink:href="https://circt.llvm.org/docs/Dialects/ESI/" xlink:title="ESI">
 <polygon fill="white" stroke="black" points="423.98,-396 369.98,-396 369.98,-360 423.98,-360 423.98,-396"/>
 <text text-anchor="middle" x="396.98" y="-374.3" font-family="Times,serif" font-size="14.00">ESI</text>
+</a>
+</g>
 </g>
 <!-- ESI&#45;&gt;HW -->
 <g id="edge13" class="edge">
