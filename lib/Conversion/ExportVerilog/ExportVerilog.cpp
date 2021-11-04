@@ -622,29 +622,32 @@ void EmitterBase::emitTextWithSubstitutions(
   // Perform operand substitions as we emit the line string.  We turn {{42}}
   // into the value of operand 42.
   SmallVector<SmallString<12>, 8> symOps;
-  auto namify = [&](SymbolCache::Item item) {
+  auto namify = [&](Attribute sym, SymbolCache::Item item) {
     // Get the verilog name of the operation, add the name if not already
     // done.
-    auto op = item.getOp();
-    if (item.hasPort())
-      return names.getName(op, item.getPort());
-    if (names.hasName(op))
-      return names.getName(op);
-    StringRef symOpName = getSymOpName(op);
-    if (!symOpName.empty())
-      return symOpName;
-    op->emitError("cannot get name for symbol");
+    if (auto itemOp = item.getOp()) {
+      if (item.hasPort())
+        return names.getName(itemOp, item.getPort());
+      if (names.hasName(itemOp))
+        return names.getName(itemOp);
+      StringRef symOpName = getSymOpName(itemOp);
+      if (!symOpName.empty())
+        return symOpName;
+      itemOp->emitError("cannot get name for symbol ") << sym;
+    } else {
+      op->emitError("cannot get name for symbol ") << sym;
+    }
     return StringRef("<INVALID>");
   };
 
   for (auto sym : symAttrs) {
     if (auto fsym = sym.dyn_cast<FlatSymbolRefAttr>())
       if (auto symOp = state.symbolCache.getDefinition(fsym))
-        symOps.push_back(namify(symOp));
+        symOps.push_back(namify(sym, symOp));
     if (auto isym = sym.dyn_cast<InnerRefAttr>()) {
       auto symOp =
           state.symbolCache.getDefinition(isym.getModule(), isym.getName());
-      symOps.push_back(namify(symOp));
+      symOps.push_back(namify(sym, symOp));
     }
   }
 
