@@ -2253,7 +2253,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       : OpConversionPattern<handshake::FuncOp>(context), circuitOp(circuitOp) {}
 
   LogicalResult
-  matchAndRewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
+  matchAndRewrite(handshake::FuncOp funcOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.setInsertionPointToStart(circuitOp.getBody());
     auto topModuleOp = createTopModuleOp(funcOp, /*numClocks=*/1, rewriter);
