@@ -102,8 +102,8 @@ private:
 
 /// Check if an `OMNode` is an `OMSRAM` and requires special treatment of its
 /// instance path field. This returns the ID of the tracker stored in the
-/// `instancePath` field if the node has an array field `omType` that contains a
-/// `OMString:OMSRAM` entry.
+/// `instancePath` or `finalPath` field if the node has an array field `omType`
+/// that contains a `OMString:OMSRAM` entry.
 static IntegerAttr isOMSRAM(Attribute &node) {
   auto dict = node.dyn_cast<DictionaryAttr>();
   if (!dict)
@@ -113,8 +113,12 @@ static IntegerAttr isOMSRAM(Attribute &node) {
     return {};
   IntegerAttr id;
   if (auto infoAttr = dict.getAs<DictionaryAttr>("fields")) {
-    if (auto iP = infoAttr.getAs<DictionaryAttr>("instancePath"))
-      if (auto v = iP.getAs<DictionaryAttr>("value"))
+    auto finalPath = infoAttr.getAs<DictionaryAttr>("finalPath");
+    // The following is used prior to an upstream bump in Chisel.
+    if (!finalPath)
+      finalPath = infoAttr.getAs<DictionaryAttr>("instancePath");
+    if (finalPath)
+      if (auto v = finalPath.getAs<DictionaryAttr>("value"))
         if (v.getAs<UnitAttr>("omir.tracker"))
           id = v.getAs<IntegerAttr>("id");
     if (auto omTy = infoAttr.getAs<DictionaryAttr>("omType"))
