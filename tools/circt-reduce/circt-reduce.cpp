@@ -156,32 +156,30 @@ static LogicalResult execute(MLIRContext &context) {
                 << "- Accepting module of size " << bestSize << "\n");
         module = std::move(newModule);
 
-        // If this was already a run across all operations, no need to restart
-        // again at the top. We're done at this point.
-        if (rangeLength == (size_t)-1) {
-          rangeLength = 0;
-        } else {
-          rangeBase = 0;
-          rangeLength = -1;
-        }
+        // We leave `rangeBase` and `rangeLength` untouched in this case. This
+        // causes the next iteration of the loop to try the same pattern again
+        // at the same offset. If the pattern has reached a fixed point, nothing
+        // changes and we proceed. If the pattern has removed an operation, this
+        // will already operate on the next batch of operations which have
+        // likely moved to this point.
 
         // Write the current state to disk if the user asked for it.
         if (keepBest)
           if (failed(writeOutput(module.get())))
             return failure();
       } else {
-        // Try the pattern on the next `rangeLength` number of operations. If we
-        // go past the end of the input, reduce the size of the chunk of
-        // operations we're reducing and start again from the top.
+        // Try the pattern on the next `rangeLength` number of operations.
         rangeBase += rangeLength;
-        if (rangeBase >= opIdx) {
-          // Exhausted all subsets of this size. Try to go smaller.
-          rangeLength = std::min(rangeLength, opIdx) / 2;
-          rangeBase = 0;
-          if (rangeLength > 0)
-            VERBOSE(llvm::errs()
-                    << "- Trying " << rangeLength << " ops at once\n");
-        }
+      }
+
+      // If we have gone past the end of the input, reduce the size of the chunk
+      // of operations we're reducing and start again from the top.
+      if (rangeBase >= opIdx) {
+        rangeLength = std::min(rangeLength, opIdx) / 2;
+        rangeBase = 0;
+        if (rangeLength > 0)
+          VERBOSE(llvm::errs()
+                  << "- Trying " << rangeLength << " ops at once\n");
       }
     }
 
