@@ -19,6 +19,7 @@ import circt.dialects.msft
 import circt.support
 
 from contextvars import ContextVar
+import io
 import sys
 import typing
 
@@ -188,6 +189,18 @@ class System:
     circt.export_verilog(self.mod, out_stream)
 
   def print_tcl(self, top_module: type, out_stream: typing.TextIO = sys.stdout):
+    # Run the ExportQuartusTclPass.
     self.run_passes()
-    spec_mod_symbol = self._module_symbols[top_module._pycde_mod]
-    circt.dialects.msft.export_tcl(self._symbols[spec_mod_symbol], out_stream)
+    pm = mlir.passmanager.PassManager.parse("export-quartus-tcl")
+    pm.run(self.mod)
+
+    # Run ExportVerilog into a temporary buffer to get the Tcl output.
+    # TODO: remove this hacky splitting of the Tcl output, and use
+    # ExportVerilog's split output file functionality directly.
+    tmp_output_io = io.StringIO()
+    circt.export_verilog(self.mod, tmp_output_io)
+    tmp_output_str = tmp_output_io.getvalue()
+    _, tcl_output = tmp_output_str.split(
+        "\n// ----- 8< ----- FILE \"placements.tcl\" ----- 8< -----\n")
+
+    out_stream.write(tcl_output)

@@ -6,11 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -159,8 +161,11 @@ struct ExportQuartusTclPass
 } // anonymous namespace
 
 void ExportQuartusTclPass::runOnOperation() {
-  for (auto hwmod : getOperation().getBody()->getOps<hw::HWModuleOp>())
-    if (failed(exportQuartusTcl(hwmod, llvm::outs())))
+  mlir::ModuleOp mod = getOperation();
+  hw::SymbolCache symCache;
+  populateSymbolCache(mod, symCache);
+  for (auto hwmod : mod.getBody()->getOps<hw::HWModuleOp>())
+    if (failed(exportQuartusTcl(hwmod, symCache)))
       return signalPassFailure();
 }
 

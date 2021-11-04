@@ -85,13 +85,6 @@ with ir.Context() as ctx, ir.Location.unknown():
   assert num_failed == 1
   # ERR: error: 'hw.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by hw.instance "ext1" @MyExternMod
 
-  # CHECK-LABEL: === tcl ===
-  print("=== tcl ===")
-
-  # CHECK: proc top_config { parent } {
-  # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|ext1|foo_subpath
-  msft.export_tcl(top.operation, sys.stdout)
-
   devdb = msft.PrimitiveDB()
   assert not devdb.is_valid_location(physAttr)
   devdb.add_primitive(physAttr)

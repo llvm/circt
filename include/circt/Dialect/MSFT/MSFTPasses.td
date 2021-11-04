@@ -15,5 +15,6 @@ def LowerToHW: Pass<"lower-msft-to-hw", "mlir::ModuleOp"> {
 def ExportQuartusTcl: Pass<"export-quartus-tcl", "mlir::ModuleOp"> {
   let summary = "Export Quartus-flavored Tcl into sv.verbatim node(s)";
   let constructor = "circt::msft::createExportQuartusTclPass()";
-  let dependentDialects = ["circt::msft::MSFTDialect", "circt::hw::HWDialect"];
+  let dependentDialects = ["circt::msft::MSFTDialect", "circt::hw::HWDialect",
+                           "circt::sv::SVDialect"];
 }

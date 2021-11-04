@@ -22,17 +22,6 @@ using namespace circt::msft;
 
 void mlirMSFTRegisterPasses() { circt::msft::registerMSFTPasses(); }
 
-MlirLogicalResult mlirMSFTExportTcl(MlirOperation module,
-                                    MlirStringCallback callback,
-                                    void *userData) {
-  Operation *op = unwrap(module);
-  hw::HWModuleOp hwmod = dyn_cast<hw::HWModuleOp>(op);
-  if (!hwmod)
-    return wrap(op->emitOpError("Export TCL can only be run on HWModules"));
-  mlir::detail::CallbackOstream stream(callback, userData);
-  return wrap(exportQuartusTcl(hwmod, stream));
-}
-
 //===----------------------------------------------------------------------===//
 // PrimitiveDB.
 //===----------------------------------------------------------------------===//

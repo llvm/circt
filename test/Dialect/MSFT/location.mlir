@@ -1,15 +1,20 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --export-quartus-tcl | FileCheck %s --check-prefix=TCL
+// RUN: circt-opt %s --export-quartus-tcl  | FileCheck %s --check-prefix=EXPORT
+// RUN: circt-opt %s --export-quartus-tcl --export-verilog | FileCheck %s --check-prefix=TCL
 
 hw.module.extern @Foo()
 
 // CHECK-LABEL: hw.module @leaf
+// EXPORT-LABEL: hw.module @leaf
 hw.module @leaf() {
-  // CHECK: hw.instance "foo" @Foo() -> () {"loc:memBank2" = #msft.switch.inst<@shallow["leaf"]=#msft.physloc<M20K, 8, 19, 1>, @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3>>} 
+  // CHECK: hw.instance "foo" @Foo() -> () {"loc:memBank2" = #msft.switch.inst<@shallow["leaf"]=#msft.physloc<M20K, 8, 19, 1>, @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3>>}
+  // EXPORT: hw.instance "foo" sym @foo @Foo()
   hw.instance "foo" @Foo() -> () {
     "loc:memBank2" = #msft.switch.inst< @shallow["leaf"]=#msft.physloc<M20K, 8, 19, 1>,
                                         @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3> > }
 }
+
+// TCL-LABEL: FILE "placements.tcl"
 
 // TCL-LABEL: proc shallow_config
 hw.module @shallow() {

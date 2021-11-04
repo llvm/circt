@@ -10,11 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/Translation.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -37,18 +40,27 @@ struct TclOutputState {
     os.indent(2);
     return os;
   };
+
+  SmallVector<Attribute> symbolRefs;
 };
 } // anonymous namespace
 
-void emitPath(TclOutputState &s, RootedInstancePathAttr path) {
-  for (auto part : path.getPath())
-    s.os << part.getValue() << '|';
+void emitPath(TclOutputState &s, RootedInstancePathAttr path,
+              SymbolCache &symCache) {
+  for (auto part : path.getPath()) {
+    auto inst = dyn_cast_or_null<InstanceOp>(symCache.getDefinition(part));
+    assert(inst && "path instance must be in symbol cache");
+    auto mod = inst->getParentOfType<HWModuleOp>();
+    s.os << "{{" << s.symbolRefs.size() << "}}" << '|';
+    s.symbolRefs.push_back(
+        InnerRefAttr::get(mod.getNameAttr(), inst.getName()));
+  }
 }
 
 /// Emit tcl in the form of:
 /// "set_location_assignment MPDSP_X34_Y285_N0 -to $parent|fooInst|entityName"
 static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
-                 PhysLocationAttr pla) {
+                 PhysLocationAttr pla, SymbolCache &symCache) {
 
   s.indent() << "set_location_assignment ";
 
@@ -73,7 +85,7 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
 
   // To which entity does this apply?
   s.os << " -to $parent|";
-  emitPath(s, inst.path);
+  emitPath(s, inst.path, symCache);
   // If instance name is specified, add it in between the parent entity path and
   // the child entity patch.
   if (auto instOp = dyn_cast<hw::InstanceOp>(inst.op))
@@ -83,11 +95,38 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
   s.os << inst.subpath << '\n';
 }
 
+/// Create a SymbolCache to use during Tcl export.
+void circt::msft::populateSymbolCache(mlir::ModuleOp mod, SymbolCache &cache) {
+  // Traverse each module and each instance within the module.
+  for (auto hwMod : mod.getOps<HWModuleOp>()) {
+    for (auto inst : hwMod.getOps<InstanceOp>()) {
+      // If the instance already has a symbol name, use it. Otherwise make the
+      // instance name the symbol name, and use that.
+      StringAttr symName;
+      StringRef symNameAttr = hw::InnerName::getInnerNameAttrName();
+      if (auto existingSym = inst->getAttrOfType<StringAttr>(symNameAttr)) {
+        symName = existingSym;
+      } else {
+        symName = inst.getName();
+        inst->setAttr(symNameAttr, symName);
+      }
+
+      // Add the symbol to the cache.
+      cache.addDefinition(symName, inst);
+    }
+  }
+
+  cache.freeze();
+}
+
 /// Write out all the relevant tcl commands. Create one 'proc' per module which
 /// takes the parent entity name since we don't assume that the created module
 /// is the top level for the entire design.
 LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
-                                            llvm::raw_ostream &os) {
+                                            SymbolCache &symCache) {
+  // Build up the output Tcl, tracking symbol references in state.
+  std::string s;
+  llvm::raw_string_ostream os(s);
   TclOutputState state(os);
   PlacementDB db(hwMod);
   size_t failures = db.addDesignPlacements();
@@ -96,11 +135,24 @@ LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
 
   os << "proc " << hwMod.getName() << "_config { parent } {\n";
 
-  db.walkPlacements(
-      [&state](PhysLocationAttr loc, PlacementDB::PlacedInstance inst) {
-        emit(state, inst, loc);
-      });
+  db.walkPlacements([&state, &symCache](PhysLocationAttr loc,
+                                        PlacementDB::PlacedInstance inst) {
+    emit(state, inst, loc, symCache);
+  });
 
   os << "}\n\n";
+
+  // Create a verbatim op containing the Tcl and symbol references.
+  OpBuilder builder = OpBuilder::atBlockEnd(hwMod->getBlock());
+  auto verbatim = builder.create<sv::VerbatimOp>(
+      builder.getUnknownLoc(), os.str(), ValueRange{},
+      builder.getArrayAttr(state.symbolRefs));
+
+  // Give the verbatim op an output file.
+  // TODO: the filename should be a pass option.
+  auto outputFile =
+      OutputFileAttr::getFromFilename(builder.getContext(), "placements.tcl");
+  verbatim->setAttr("output_file", outputFile);
+
   return success();
 }
