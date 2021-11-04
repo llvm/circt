@@ -1,4 +1,4 @@
-// RUN: circt-translate %s --export-quartus-tcl -verify-diagnostics -split-input-file
+// RUN: circt-opt %s --export-quartus-tcl -verify-diagnostics -split-input-file
 
 hw.module.extern @Foo()
 

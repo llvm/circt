@@ -104,21 +104,3 @@ LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
   os << "}\n\n";
   return success();
 }
-
-static LogicalResult exportQuartusTclForAll(mlir::ModuleOp mod,
-                                            llvm::raw_ostream &os) {
-  for (Operation &op : mod.getBody()->getOperations()) {
-    if (auto hwmod = dyn_cast<hw::HWModuleOp>(op))
-      if (failed(exportQuartusTcl(hwmod, os)))
-        return failure();
-  }
-  return success();
-}
-
-void circt::msft::registerMSFTTclTranslation() {
-  mlir::TranslateFromMLIRRegistration toQuartusTcl(
-      "export-quartus-tcl", exportQuartusTclForAll,
-      [](mlir::DialectRegistry &registry) {
-        registry.insert<MSFTDialect, HWDialect>();
-      });
-}
