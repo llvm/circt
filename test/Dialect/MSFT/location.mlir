@@ -16,6 +16,8 @@ hw.module @leaf() {
 
 // TCL-LABEL: FILE "placements.tcl"
 
+// TCL-NOT: proc leaf_config
+
 // TCL-LABEL: proc shallow_config
 hw.module @shallow() {
   hw.instance "leaf" @leaf() -> ()

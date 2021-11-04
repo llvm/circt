@@ -133,6 +133,10 @@ LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
   if (failures != 0)
     return hwMod->emitError("Could not place ") << failures << " instances";
 
+  // Don't emit empty procs if the database is empty.
+  if (db.empty())
+    return success();
+
   os << "proc " << hwMod.getName() << "_config { parent } {\n";
 
   db.walkPlacements([&state, &symCache](PhysLocationAttr loc,
