@@ -78,6 +78,7 @@ class InstanceBuilder(support.NamedValueOpView):
                      input_port_mapping,
                      pre_args,
                      post_args,
+                     needs_result_type=True,
                      loc=loc,
                      ip=ip)
 
@@ -325,7 +326,7 @@ class ConstantOp:
 
   @staticmethod
   def create(data_type, value):
-    return hw.ConstantOp(data_type, IntegerAttr.get(data_type, value))
+    return hw.ConstantOp(IntegerAttr.get(data_type, value))
 
 
 class ArrayGetOp:

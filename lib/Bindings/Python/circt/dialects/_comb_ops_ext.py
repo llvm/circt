@@ -4,16 +4,6 @@ from circt.support import NamedValueOpView, get_value
 from mlir.ir import IntegerAttr, IntegerType, Type
 
 
-def infer_result_type(operands):
-  types = list(map(lambda arg: get_value(arg).type, operands))
-  if not types:
-    raise TypeError("result type must be specified")
-  all_equal = all(type == types[0] for type in types)
-  if not all_equal:
-    raise TypeError(f"expected same input port types, but received {types}")
-  return types[0]
-
-
 # Builder base classes for non-variadic unary and binary ops.
 class UnaryOpBuilder(NamedValueOpView):
 
@@ -59,10 +49,6 @@ def BinaryOp(base):
 
     @classmethod
     def create(cls, lhs=None, rhs=None, result_type=None):
-      if not result_type:
-        if not lhs and not rhs:
-          raise TypeError("result type must be specified")
-        result_type = infer_result_type([lhs, rhs])
       mapping = {}
       if lhs:
         mapping["lhs"] = lhs
@@ -80,8 +66,7 @@ def VariadicOp(base):
 
     @classmethod
     def create(cls, *args):
-      result_type = infer_result_type(args)
-      return cls(result_type, [get_value(a) for a in args])
+      return cls([get_value(a) for a in args])
 
   return _Class
 
@@ -105,7 +90,10 @@ class ExtractOp:
   @staticmethod
   def create(low_bit, result_type, input=None):
     mapping = {"input": input} if input else {}
-    return ExtractOpBuilder(low_bit, result_type, mapping)
+    return ExtractOpBuilder(low_bit,
+                            result_type,
+                            mapping,
+                            needs_result_type=True)
 
 
 @UnaryOp
@@ -113,9 +101,12 @@ class ParityOp:
   pass
 
 
-@UnaryOp
 class SExtOp:
-  pass
+
+  @classmethod
+  def create(cls, input=None, result_type=None):
+    mapping = {"input": input} if input else {}
+    return UnaryOpBuilder(cls, result_type, mapping, needs_result_type=True)
 
 
 # Sugar classes for the various non-variadic binary ops.
@@ -185,14 +176,12 @@ class XorOp:
   pass
 
 
-# Sugar classes for miscellaneous ops.
+@VariadicOp
 class ConcatOp:
-
-  @classmethod
-  def create(cls, result_type, *args, **kwargs):
-    return cls(result_type, args, **kwargs)
+  pass
 
 
+# Sugar classes for miscellaneous ops.
 @CreatableOp
 class MuxOp:
   pass

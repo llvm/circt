@@ -69,4 +69,5 @@ class CompRegOp:
                           kwargs,
                           reset=reset,
                           reset_value=reset_value,
-                          name=name)
+                          name=name,
+                          needs_result_type=True)
