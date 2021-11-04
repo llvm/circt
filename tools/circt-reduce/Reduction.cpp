@@ -147,6 +147,46 @@ struct OperationPruner : public Reduction {
   std::string getName() const override { return "operation-pruner"; }
 };
 
+/// A sample reduction pattern that removes ports from the root `firrtl.module`
+/// if the port is not used or just invalidated.
+struct RootPortPruner : public Reduction {
+  bool match(Operation *op) const override {
+    auto module = dyn_cast<firrtl::FModuleOp>(op);
+    if (!module)
+      return false;
+    auto circuit = module->getParentOfType<firrtl::CircuitOp>();
+    if (!circuit)
+      return false;
+    return circuit.nameAttr() == module.getNameAttr();
+  }
+  LogicalResult rewrite(Operation *op) const override {
+    assert(match(op));
+    auto module = cast<firrtl::FModuleOp>(op);
+    SmallVector<unsigned> dropPorts;
+    for (unsigned i = 0, e = module.getNumPorts(); i != e; ++i) {
+      bool onlyInvalidated =
+          llvm::all_of(module.getArgument(i).getUses(), [](OpOperand &use) {
+            auto *op = use.getOwner();
+            if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op))
+              return false;
+            if (use.getOperandNumber() != 0)
+              return false;
+            if (!op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>())
+              return false;
+            return true;
+          });
+      if (onlyInvalidated) {
+        dropPorts.push_back(i);
+        for (auto user : module.getArgument(i).getUsers())
+          user->erase();
+      }
+    }
+    module.erasePorts(dropPorts);
+    return success();
+  }
+  std::string getName() const override { return "root-port-pruner"; }
+};
+
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
 /// with wires.
 struct ExtmoduleInstanceRemover : public Reduction {
@@ -202,5 +242,6 @@ void circt::createAllReductions(
   add(std::make_unique<PassReduction>(context, createCSEPass()));
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<OperationPruner>());
+  add(std::make_unique<RootPortPruner>());
   add(std::make_unique<ExtmoduleInstanceRemover>());
 }
