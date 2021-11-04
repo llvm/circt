@@ -310,7 +310,7 @@ def GrandCentral : Pass<"firrtl-grand-central", "CircuitOp"> {
 def GrandCentralTaps : Pass<"firrtl-grand-central-taps", "firrtl::CircuitOp"> {
   let summary = "Generate code for grand central data and memory taps";
   let constructor = "circt::firrtl::createGrandCentralTapsPass()";
-  let dependentDialects = ["sv::SVDialect"];
+  let dependentDialects = ["sv::SVDialect", "circt::hw::HWDialect"];
 }
 
 def GrandCentralSignalMappings : Pass<"firrtl-grand-central-signal-mappings",
