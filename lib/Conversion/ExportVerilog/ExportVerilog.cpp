@@ -1567,9 +1567,9 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
 
     // If op has multiple uses or op is a too large expression, we have to spill
     // the expression.
-    if (getenv("NO") || !op->hasOneUse() ||
-        (outBuffer.size() - subExprStartIndex) >
-            state.options.maximumNumberOfTokens)
+    if (!op->hasOneUse() ||
+        outBuffer.size() - subExprStartIndex >
+            state.options.maximumNumberOfTokensPerExpression)
       return emitExpressionIntoTemporary();
   }
 
