@@ -14,6 +14,8 @@
 #ifndef CIRCT_CONVERSION_CALYXTOHW_CALYXTOHW_H
 #define CIRCT_CONVERSION_CALYXTOHW_CALYXTOHW_H
 
+#include "circt/Dialect/Calyx/CalyxOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include <memory>
 
@@ -22,6 +24,13 @@ class Pass;
 } // namespace mlir
 
 namespace circt {
+namespace calyx {
+
+/// Returns a hw.module.extern operation describing the Verilog module which a
+/// ComponentOp eventually results in.
+hw::HWModuleExternOp getExternHWModule(OpBuilder &builder, ComponentOp op);
+
+} // namespace calyx
 
 std::unique_ptr<mlir::Pass> createCalyxToHWPass();
 
