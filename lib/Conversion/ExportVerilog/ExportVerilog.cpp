@@ -1140,7 +1140,8 @@ public:
   /// expression, we emit that expression, otherwise we emit a reference to the
   /// already computed name.
   ///
-  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
+  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
+                      int indentLevel) {
     // Emit the expression.
     emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
                 /*signRequirement*/ NoRequirement);
@@ -2189,6 +2190,7 @@ private:
 
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
+                 int indentLevel = -1,
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
 
   using StmtVisitor::visitStmt;
@@ -2306,11 +2308,12 @@ private:
 ///
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
+                                 int indentLevel,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
   SmallVector<char, 128> exprBuffer;
   SmallVector<Operation *> tooLargeSubExpressions;
   ExprEmitter(emitter, exprBuffer, emittedExprs, tooLargeSubExpressions, names)
-      .emitExpression(exp, parenthesizeIfLooserThan);
+      .emitExpression(exp, parenthesizeIfLooserThan, indentLevel);
   os.write(exprBuffer.data(), exprBuffer.size());
 
   // It is possible that the emitted expression was too large to fit on a line
