@@ -1004,7 +1004,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // anything outside the module.  Inputs are lowered to zero.
     if (isZeroWidth && port.isInput()) {
       Value newArg = bodyBuilder.create<WireOp>(
-          port.type, "." + port.getName().str() + ".0width_input");
+          port.type, "__" + port.getName().str() + "_0width_input");
       oldArg.replaceAllUsesWith(newArg);
       continue;
     }
@@ -1020,7 +1020,7 @@ void FIRRTLModuleLowering::lowerModuleBody(
     // Outputs need a temporary wire so they can be connect'd to, which we
     // then return.
     Value newArg = bodyBuilder.create<WireOp>(
-        port.type, "." + port.getName().str() + ".output");
+        port.type, "__" + port.getName().str() + "_output");
     // Switch all uses of the old operands to the new ones.
     oldArg.replaceAllUsesWith(newArg);
 

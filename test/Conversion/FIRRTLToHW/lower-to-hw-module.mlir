@@ -98,21 +98,21 @@ firrtl.circuit "Simple" {
                              out %outD: !firrtl.uint<4>,
                              in %inE: !firrtl.uint<3>,
                              out %outE: !firrtl.uint<4>) {
-    // CHECK: %.outB.output = sv.wire : !hw.inout<i4>
-    // CHECK: [[OUTBR:%.+]] = sv.read_inout %.outB.output
+    // CHECK: %[[outBVar:.+]] = sv.wire : !hw.inout<i4>
+    // CHECK: [[OUTBR:%.+]] = sv.read_inout %[[outBVar]]
     // CHECK: [[OUTC:%.+]] = sv.wire : !hw.inout<i4>
-    // CHECK: [[OUTCR:%.+]] = sv.read_inout %.outC.output
+    // CHECK: [[OUTCR:%.+]] = sv.read_inout [[OUTC]]
     // CHECK: [[OUTD:%.+]] = sv.wire : !hw.inout<i4>
-    // CHECK: [[OUTDR:%.+]] = sv.read_inout %.outD.output
+    // CHECK: [[OUTDR:%.+]] = sv.read_inout [[OUTD]]
 
     // Normal
     firrtl.connect %outA, %inA : !firrtl.uint<4>, !firrtl.uint<4>
 
     // Multi connect
     firrtl.connect %outB, %inA : !firrtl.uint<4>, !firrtl.uint<4>
-    // CHECK: sv.assign %.outB.output, %inA : i4
+    // CHECK: sv.assign %[[outBVar]], %inA : i4
     firrtl.connect %outB, %inB : !firrtl.uint<4>, !firrtl.uint<4>
-    // CHECK: sv.assign %.outB.output, %inB : i4
+    // CHECK: sv.assign %[[outBVar]], %inB : i4
 
     %0 = firrtl.sub %inA, %outC : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
 
