@@ -1401,12 +1401,15 @@ void ExprEmitter::formatOutBuffer() {
   SmallVector<char> tmpOutBuffer;
   llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
   auto it = outBuffer.begin();
-  unsigned int currentIndex = 0;
+  unsigned currentIndex = 0;
+
   while (it != outBuffer.end()) {
+    // Split by a white space.
     auto next = std::find(it, outBuffer.end(), ' ');
-    unsigned int tokenLength = std::distance(it, next);
+    unsigned tokenLength = std::distance(it, next);
 
     if (currentIndex + tokenLength > state.options.emittedLineLength) {
+      // It breaks the line constraint, so insert a newline and indent.
       tmpOs << '\n';
       tmpOs.indent(state.currentIndent *
                    SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING);
@@ -1422,11 +1425,12 @@ void ExprEmitter::formatOutBuffer() {
       }
       tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
     }
+
     if (next == outBuffer.end())
       break;
     it = next + 1;
   }
-  outBuffer.swap(tmpOutBuffer);
+  outBuffer = std::move(tmpOutBuffer);
 }
 
 /// We eagerly emit single-use expressions inline into big expression trees...
