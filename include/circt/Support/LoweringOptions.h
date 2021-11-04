@@ -87,7 +87,7 @@ struct LoweringOptions {
 
   /// https://github.com/verilator/verilator/issues/2752
   enum { DEFAULT_TOKEN_NUMBER = 40000 };
-  unsigned maximumNumberOfTokensOnLine = DEFAULT_LINE_LENGTH;
+  unsigned maximumNumberOfTokens = DEFAULT_TOKEN_NUMBER;
 
   /// This is the target width of lines in an emitted Verilog source file in
   /// columns.

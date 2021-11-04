@@ -1140,8 +1140,7 @@ public:
   /// expression, we emit that expression, otherwise we emit a reference to the
   /// already computed name.
   ///
-  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan,
-                      int indentLevel) {
+  void emitExpression(Value exp, VerilogPrecedence parenthesizeIfLooserThan) {
     // Emit the expression.
     emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
                 /*signRequirement*/ NoRequirement);
@@ -1386,6 +1385,41 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
   return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
+static void format(SmallVectorImpl<char> &outBuffer, int indentLevel,
+                   unsigned int lineLength) {
+  if (getenv("NO"))
+    return;
+  SmallVector<char> tmpOutBuffer;
+  llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
+
+  auto it = outBuffer.begin();
+  unsigned int currentIndex = 0;
+  while (it != outBuffer.end()) {
+    auto next = std::find(it, outBuffer.end(), ' ');
+    unsigned int tokenLength = std::distance(it, next);
+
+    if (currentIndex + tokenLength > lineLength) {
+      tmpOs << '\n';
+      tmpOs.indent(indentLevel);
+      currentIndex = tokenLength;
+      tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
+    } else {
+      currentIndex += tokenLength;
+      // If `tmpOutBuffer` is not empty, there exists a token before the
+      // current token so insert a white space.
+      if (!tmpOutBuffer.empty()) {
+        currentIndex += 1;
+        tmpOs << ' ';
+      }
+      tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
+    }
+    if (next == outBuffer.end())
+      break;
+    it = next + 1;
+  }
+  outBuffer.swap(tmpOutBuffer);
+}
+
 /// We eagerly emit single-use expressions inline into big expression trees...
 /// up to the point where they turn into massively long source lines of Verilog.
 /// At that point, we retroactively break the huge expression by inserting
@@ -1522,53 +1556,12 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
                          signRequirement);
     };
 
-    if (!op->hasOneUse())
+    // If op has multiple uses or op is a too large expression, we have to spill
+    // the expression.
+    if (getenv("NO") || !op->hasOneUse() ||
+        (outBuffer.size() - subExprStartIndex) >
+            state.options.maximumNumberOfTokens)
       return emitExpressionIntoTemporary();
-
-    // If op has only one use, we don't have to spill the expression.
-    // Instead, split `outBuffer` into multiple lines by inserting endline
-    // characters appropriately.
-    SmallVector<char> tmpOutBuffer;
-    llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
-
-    // Since outBuffer already contains newline characters in the recursive
-    // calls, replace them with spaces to align with the current subexpression.
-    std::replace(outBuffer.begin() + subExprStartIndex, outBuffer.end(), '\n',
-                 ' ');
-
-    auto it = outBuffer.begin() + subExprStartIndex;
-    unsigned int currentIndex = 0;
-    while (it != outBuffer.end()) {
-      auto next = std::find(it, outBuffer.end(), ' ');
-      unsigned int tokenLength = std::distance(it, next);
-
-      if (tokenLength > threshold)
-        return emitExpressionIntoTemporary();
-
-      if (currentIndex + tokenLength > threshold) {
-        tmpOs << '\n';
-        currentIndex = tokenLength;
-        tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
-      } else {
-        currentIndex += tokenLength;
-        assert(tokenLength <= threshold);
-        // If `tmpOutBuffer` is not empty, there exists a token before the
-        // current token so insert a white space.
-        if (!tmpOutBuffer.empty()) {
-          currentIndex += 1;
-          tmpOs << ' ';
-        }
-        tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
-      }
-      if (next == outBuffer.end())
-        break;
-      it = next + 1;
-    }
-
-    // Shrink and rewrite outBuffer.
-    outBuffer.resize(subExprStartIndex);
-    outBuffer.insert(outBuffer.begin() + subExprStartIndex,
-                     tmpOutBuffer.begin(), tmpOutBuffer.end());
   }
 
   // Remember that we emitted this.
@@ -2190,7 +2183,6 @@ private:
 
   void
   emitExpression(Value exp, SmallPtrSet<Operation *, 8> &emittedExprs,
-                 int indentLevel = -1,
                  VerilogPrecedence parenthesizeIfLooserThan = LowestPrecedence);
 
   using StmtVisitor::visitStmt;
@@ -2298,6 +2290,8 @@ private:
   /// determining if we need to put out a begin/end marker in a block
   /// declaration.
   size_t numStatementsEmitted = 0;
+
+  llvm::Optional<unsigned int> savedStmtIndent;
 };
 
 } // end anonymous namespace
@@ -2308,12 +2302,17 @@ private:
 ///
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
-                                 int indentLevel,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
+  assert(savedStmtIndent.hasValue() &&
+         os.GetNumBytesInBuffer() > savedStmtIndent.getValue() &&
+         "savedStmtIndent must be valid here.");
+
   SmallVector<char, 128> exprBuffer;
   SmallVector<Operation *> tooLargeSubExpressions;
+  int offset = os.GetNumBytesInBuffer() - savedStmtIndent.getValue();
   ExprEmitter(emitter, exprBuffer, emittedExprs, tooLargeSubExpressions, names)
-      .emitExpression(exp, parenthesizeIfLooserThan, indentLevel);
+      .emitExpression(exp, parenthesizeIfLooserThan);
+  format(exprBuffer, offset, state.options.emittedLineLength);
   os.write(exprBuffer.data(), exprBuffer.size());
 
   // It is possible that the emitted expression was too large to fit on a line
@@ -2355,6 +2354,7 @@ void StmtEmitter::emitExpression(Value exp,
   /// Generating new statements will change `statementBeginning`, so make sure
   /// to keep track of what it is.
   auto prevStmtBeginning = statementBeginning;
+  auto prev = savedStmtIndent;
 
   // Emit each stmt expression in turn.
   auto stmtStartCursor = rearrangableStream.getCursor();
@@ -2368,7 +2368,7 @@ void StmtEmitter::emitExpression(Value exp,
   // right place.
   statementBeginning = rearrangableStream.moveRangeBefore(
       prevStmtBeginning, stmtStartCursor, rearrangableStream.getCursor());
-
+  savedStmtIndent = prev;
   if (!declStartCursor.isInvalid()) {
     // Scoop up all of the stuff we just emitted, and move it to the
     // blockDeclarationInsertPoint.
@@ -2381,6 +2381,7 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   // Know where the start of this statement is in case any out-of-band precursor
   // statements need to be emitted.
   statementBeginning = rearrangableStream.getCursor();
+  savedStmtIndent = os.GetNumBytesInBuffer();
 
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
@@ -3276,6 +3277,7 @@ void StmtEmitter::emitStatement(Operation *op) {
   // Know where the start of this statement is in case any out-of-band precursor
   // statements need to be emitted.
   statementBeginning = rearrangableStream.getCursor();
+  savedStmtIndent = os.GetNumBytesInBuffer();
 
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))
