@@ -44,8 +44,8 @@ Reduction::~Reduction() {}
 //===----------------------------------------------------------------------===//
 
 PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
-                             bool canIncreaseSize)
-    : context(context), canIncreaseSize(canIncreaseSize) {
+                             bool canIncreaseSize, bool oneShot)
+    : context(context), canIncreaseSize(canIncreaseSize), oneShot(oneShot) {
   passName = pass->getArgument();
   if (passName.empty())
     passName = pass->getName();
@@ -239,6 +239,16 @@ void circt::createAllReductions(
   add(std::make_unique<PassReduction>(context, firrtl::createInlinerPass()));
   add(std::make_unique<PassReduction>(context,
                                       createSimpleCanonicalizerPass()));
+  add(std::make_unique<PassReduction>(context, firrtl::createLowerCHIRRTLPass(),
+                                      true, true));
+  add(std::make_unique<PassReduction>(context, firrtl::createInferWidthsPass(),
+                                      true, true));
+  add(std::make_unique<PassReduction>(context, firrtl::createInferResetsPass(),
+                                      true, true));
+  add(std::make_unique<PassReduction>(
+      context, firrtl::createLowerFIRRTLTypesPass(), true, true));
+  add(std::make_unique<PassReduction>(context, firrtl::createExpandWhensPass(),
+                                      true, true));
   add(std::make_unique<PassReduction>(context, createCSEPass()));
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<OperationPruner>());

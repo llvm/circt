@@ -118,8 +118,15 @@ static LogicalResult execute(MLIRContext &context) {
   // pattern to successively smaller subsets of the operations until we find one
   // that retains the interesting behavior.
   // ModuleExternalizer pattern;
+  BitVector appliedOneShotPatterns(patterns.size(), false);
   for (unsigned patternIdx = 0; patternIdx < patterns.size();) {
     Reduction &pattern = *patterns[patternIdx];
+    if (pattern.isOneShot() && appliedOneShotPatterns[patternIdx]) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Skipping one-shot `" << pattern.getName() << "`\n");
+      ++patternIdx;
+      continue;
+    }
     VERBOSE(llvm::errs() << "Trying reduction `" << pattern.getName() << "`\n");
     size_t rangeBase = 0;
     size_t rangeLength = -1;
@@ -161,7 +168,11 @@ static LogicalResult execute(MLIRContext &context) {
         // at the same offset. If the pattern has reached a fixed point, nothing
         // changes and we proceed. If the pattern has removed an operation, this
         // will already operate on the next batch of operations which have
-        // likely moved to this point.
+        // likely moved to this point. The only exception are operations that
+        // are marked as "one shot", which explicitly ask to not be re-applied
+        // at the same location.
+        if (pattern.isOneShot())
+          rangeBase += rangeLength;
 
         // Write the current state to disk if the user asked for it.
         if (keepBest)
@@ -182,6 +193,11 @@ static LogicalResult execute(MLIRContext &context) {
                   << "- Trying " << rangeLength << " ops at once\n");
       }
     }
+
+    // If this was a one-shot pattern, mark it as having been applied. This will
+    // prevent further reapplication.
+    if (pattern.isOneShot())
+      appliedOneShotPatterns.set(patternIdx);
 
     // If the pattern provided a successful reduction, restart with the first
     // pattern again, since we might have uncovered additional reduction
