@@ -1,5 +1,5 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-translate %s --export-quartus-tcl | FileCheck %s --check-prefix=TCL
+// RUN: circt-opt %s --export-quartus-tcl | FileCheck %s --check-prefix=TCL
 
 hw.module.extern @Foo()
 

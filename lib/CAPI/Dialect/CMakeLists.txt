@@ -31,7 +31,6 @@ add_mlir_public_c_api_library(CIRCTCAPIMSFT
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTMSFT
-  CIRCTMSFTExportTcl
   )
 
 add_mlir_public_c_api_library(CIRCTCAPIHW

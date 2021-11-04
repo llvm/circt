@@ -33,9 +33,6 @@ namespace msft {
 mlir::LogicalResult exportQuartusTcl(hw::HWModuleOp module,
                                      llvm::raw_ostream &os);
 
-/// Register the Tcl exports.
-void registerMSFTTclTranslation();
-
 } // namespace msft
 } // namespace circt
 

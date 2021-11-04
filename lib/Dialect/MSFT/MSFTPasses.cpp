@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -149,10 +150,26 @@ void LowerToHWPass::runOnOperation() {
     signalPassFailure();
 }
 
+namespace {
+struct ExportQuartusTclPass
+    : public ExportQuartusTclBase<ExportQuartusTclPass> {
+  void runOnOperation() override;
+};
+} // anonymous namespace
+
+void ExportQuartusTclPass::runOnOperation() {
+  for (auto hwmod : getOperation().getBody()->getOps<hw::HWModuleOp>())
+    if (failed(exportQuartusTcl(hwmod, llvm::outs())))
+      return signalPassFailure();
+}
+
 namespace circt {
 namespace msft {
 std::unique_ptr<Pass> createLowerToHWPass() {
   return std::make_unique<LowerToHWPass>();
+}
+std::unique_ptr<Pass> createExportQuartusTclPass() {
+  return std::make_unique<ExportQuartusTclPass>();
 }
 } // namespace msft
 } // namespace circt
