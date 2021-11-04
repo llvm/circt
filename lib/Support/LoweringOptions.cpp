@@ -61,13 +61,16 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       option = option.drop_front(strlen("maximumNumberOfTokensPerExpression="));
       if (option.getAsInteger(10, maximumNumberOfTokensPerExpression)) {
         errorHandler("expected integer source width");
-        emittedLineLength = DEFAULT_LINE_LENGTH;
+        maximumNumberOfTokensPerExpression = DEFAULT_TOKEN_NUMBER;
       }
     } else {
       errorHandler(llvm::Twine("unknown style option \'") + option + "\'");
       // We continue parsing options after a failure.
     }
   }
+  if (maximumNumberOfTokensPerExpression < emittedLineLength)
+    errorHandler("maximumNumberOfTokensPerExpression must be equal or larger "
+                 "than emittedLineLength");
 }
 
 std::string LoweringOptions::toString() const {
