@@ -256,7 +256,13 @@ firrtl.circuit "Foo" {
     %shlPrimOp = firrtl.node %shlPrimOp_tmp : !firrtl.uint
     %shrPrimOp = firrtl.node %shrPrimOp_tmp : !firrtl.uint
 
-    %MyMem_a, %MyMem_b, %MyMem_c = firrtl.mem Undefined {depth = 8, name = "MyMem", portNames = ["a", "b", "c"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>,!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>
+    %MyMem_a, %MyMem_b, %MyMem_c = firrtl.mem Undefined {depth = 8, name = "MyMem", portNames = ["a", "b", "c"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>
+    %MyMem_a_clk = firrtl.subfield %MyMem_a(2) : (!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>) -> !firrtl.clock
+    %MyMem_b_clk = firrtl.subfield %MyMem_b(2) : (!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>) -> !firrtl.clock
+    %MyMem_c_clk = firrtl.subfield %MyMem_c(2) : (!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>) -> !firrtl.clock
+    firrtl.connect %MyMem_a_clk, %someClock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %MyMem_b_clk, %someClock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %MyMem_c_clk, %someClock : !firrtl.clock, !firrtl.clock
     // CHECK:       mem MyMem :
     // CHECK-NEXT:    data-type => UInt<4>
     // CHECK-NEXT:    depth => 8
@@ -266,6 +272,9 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT:    writer => b
     // CHECK-NEXT:    readwriter => c
     // CHECK-NEXT:    read-under-write => undefined
+    // CHECK-NEXT:  MyMem.a.clk <= someClock
+    // CHECK-NEXT:  MyMem.b.clk <= someClock
+    // CHECK-NEXT:  MyMem.c.clk <= someClock
   }
 
   firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing", parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}

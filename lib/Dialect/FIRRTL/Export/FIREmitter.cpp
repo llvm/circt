@@ -475,6 +475,15 @@ void Emitter::emitStatement(AttachOp op) {
 }
 
 void Emitter::emitStatement(MemOp op) {
+  SmallString<16> portName(op.name());
+  portName.push_back('.');
+  auto portNameBaseLen = portName.size();
+  for (auto result : llvm::zip(op.getResults(), op.portNames())) {
+    portName.resize(portNameBaseLen);
+    portName.append(std::get<1>(result).cast<StringAttr>().getValue());
+    addValueName(std::get<0>(result), portName);
+  }
+
   indent() << "mem " << op.name() << " :";
   emitLocationAndNewLine(op);
   addIndent();
