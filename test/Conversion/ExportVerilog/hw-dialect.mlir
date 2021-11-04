@@ -709,7 +709,7 @@ hw.module @Chi() -> (Chi_output : i0) {
 
  hw.module @Foo1360() {
    // CHECK:      RealBar #(
-   // CHECK-NEXT:   .WIDTH0(64'd0),
+   // CHECK-NEXT:   .WIDTH0(0),
    // CHECK-NEXT:   .WIDTH1(4),
    // CHECK-NEXT:   .WIDTH2(40'd6812312123),
    // CHECK-NEXT:   .WIDTH3(-1),
