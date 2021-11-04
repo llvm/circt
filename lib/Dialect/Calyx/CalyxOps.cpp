@@ -182,6 +182,28 @@ LogicalResult calyx::verifyControlLikeOp(Operation *op) {
   }
   return verifyControlBody(op);
 }
+Operation *calyx::getExternHWModule(OpBuilder &builder, ComponentOp op) {
+  SmallVector<hw::PortInfo, 8> hwPortInfos;
+  auto addHWPortInfo = [&](auto portInfos) {
+    for (auto portInfo : enumerate(portInfos)) {
+      hw::PortInfo hwPortInfo;
+      bool isInput = portInfo.value().direction == calyx::Direction::Input;
+      hwPortInfo.direction =
+          isInput ? hw::PortDirection::INPUT : hw::PortDirection::OUTPUT;
+      hwPortInfo.type = portInfo.value().type;
+      hwPortInfo.argNum = portInfo.index();
+      hwPortInfo.name = portInfo.value().name;
+      hwPortInfos.push_back(hwPortInfo);
+    }
+  };
+
+  addHWPortInfo(op.getInputPortInfo());
+  addHWPortInfo(op.getOutputPortInfo());
+
+  auto extOp = builder.create<hw::HWModuleExternOp>(
+      op->getLoc(), builder.getStringAttr(op.getName()), hwPortInfos);
+  return extOp;
+}
 
 // Helper function for parsing a group port operation, i.e. GroupDoneOp and
 // GroupPortOp. These may take one of two different forms:
