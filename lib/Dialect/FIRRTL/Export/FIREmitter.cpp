@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
 #include "circt/Dialect/FIRRTL/CircuitNamespace.h"
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -67,10 +68,10 @@ struct Emitter {
   void emitStatement(AttachOp op);
   void emitStatement(MemOp op);
   void emitStatement(InvalidValueOp op);
-  // TODO: Handle MemoryPortOp
-  // TODO: Handle CMemOp
-  // TODO: Handle MemOp
-  // TODO: Handle SMemOp
+  void emitStatement(CombMemOp op);
+  void emitStatement(SeqMemOp op);
+  void emitStatement(MemoryPortOp op);
+  void emitStatement(MemoryPortAccessOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -132,8 +133,12 @@ struct Emitter {
   HANDLE(XorRPrimOp, "xorr");
 #undef HANDLE
 
+  // Attributes
+  void emitAttribute(MemDirAttr attr);
+  void emitAttribute(RUWAttr attr);
+
   // Types
-  void emitType(FIRRTLType type);
+  void emitType(Type type);
 
   // Locations
   void emitLocation(Location loc);
@@ -309,7 +314,8 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
-              PartialConnectOp, InstanceOp, AttachOp, MemOp, InvalidValueOp>(
+              PartialConnectOp, InstanceOp, AttachOp, MemOp, InvalidValueOp,
+              SeqMemOp, CombMemOp, MemoryPortOp, MemoryPortAccessOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           indent() << "// operation " << op->getName() << "\n";
@@ -531,20 +537,54 @@ void Emitter::emitStatement(MemOp op) {
     indent() << "readwriter => " << readwriter << "\n";
 
   indent() << "read-under-write => ";
-  switch (op.ruw()) {
-  case RUWAttr::Undefined:
-    os << "undefined";
-    break;
-  case RUWAttr::Old:
-    os << "old";
-    break;
-  case RUWAttr::New:
-    os << "new";
-    break;
-  }
+  emitAttribute(op.ruw());
   os << "\n";
 
   reduceIndent();
+}
+
+void Emitter::emitStatement(SeqMemOp op) {
+  indent() << "smem " << op.name() << " : ";
+  emitType(op.getType());
+  os << " ";
+  emitAttribute(op.ruw());
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(CombMemOp op) {
+  indent() << "cmem " << op.name() << " : ";
+  emitType(op.getType());
+  emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(MemoryPortOp op) {
+  // Nothing to output for this operation. 
+}
+
+void Emitter::emitStatement(MemoryPortAccessOp op) {
+  indent();
+
+  // Print the port direction and name.
+  auto port = cast<MemoryPortOp>(op.port().getDefiningOp());
+  emitAttribute(port.direction());
+  os << " mport " << port.name() << " = ";
+
+  // Print the memory name.
+  auto *mem = port.memory().getDefiningOp();
+  if (auto seqMem = dyn_cast<SeqMemOp>(mem))
+    os << seqMem.name();
+  else
+    os << cast<CombMemOp>(mem).name();
+
+  // Print the address.
+  os << "[";
+  emitExpression(op.index());
+  os << "], ";
+
+  // Print the clock.
+  emitExpression(op.clock());
+
+  emitLocationAndNewLine(op);
 }
 
 void Emitter::emitStatement(InvalidValueOp op) {
@@ -645,14 +685,45 @@ void Emitter::emitPrimExpr(StringRef mnemonic, Operation *op,
   os << ")";
 }
 
+void Emitter::emitAttribute(MemDirAttr attr) {
+  switch (attr) {
+  case MemDirAttr::Infer:
+    os << "infer";
+    break;
+  case MemDirAttr::Read:
+    os << "read";
+    break;
+  case MemDirAttr::Write:
+    os << "write";
+    break;
+  case MemDirAttr::ReadWrite:
+    os << "rdwr";
+    break;
+  }
+}
+
+void Emitter::emitAttribute(RUWAttr attr) {
+  switch (attr) {
+  case RUWAttr::Undefined:
+    os << "undefined";
+    break;
+  case RUWAttr::Old:
+    os << "old";
+    break;
+  case RUWAttr::New:
+    os << "new";
+    break;
+  }
+}
+
 /// Emit a FIRRTL type into the output.
-void Emitter::emitType(FIRRTLType type) {
+void Emitter::emitType(Type type) {
   auto emitWidth = [&](Optional<int32_t> width) {
     if (!width.hasValue())
       return;
     os << "<" << *width << ">";
   };
-  TypeSwitch<FIRRTLType>(type)
+  TypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { os << "Clock"; })
       .Case<ResetType>([&](auto) { os << "Reset"; })
       .Case<AsyncResetType>([&](auto) { os << "AsyncReset"; })
@@ -684,6 +755,10 @@ void Emitter::emitType(FIRRTLType type) {
         os << "}";
       })
       .Case<FVectorType>([&](auto type) {
+        emitType(type.getElementType());
+        os << "[" << type.getNumElements() << "]";
+      })
+      .Case<CMemoryType>([&](auto type) {
         emitType(type.getElementType());
         os << "[" << type.getNumElements() << "]";
       })

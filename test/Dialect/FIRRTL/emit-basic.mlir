@@ -43,7 +43,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module Statements :
-  firrtl.module @Statements(in %ui1: !firrtl.uint<1>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>) {
+  firrtl.module @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>) {
     // CHECK: when ui1 :
     // CHECK:   skip
     firrtl.when %ui1 {
@@ -275,6 +275,24 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT:  MyMem.a.clk <= someClock
     // CHECK-NEXT:  MyMem.b.clk <= someClock
     // CHECK-NEXT:  MyMem.c.clk <= someClock
+
+    %combmem = firrtl.combmem : !firrtl.cmemory<uint<3>, 256>
+    %port0_data, %port0_port = firrtl.memoryport Infer %combmem {name = "port0"} : (!firrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !firrtl.cmemoryport)
+    firrtl.when %ui1 {
+      firrtl.memoryport.access %port0_port[%someAddr], %someClock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    }
+    // CHECK:      cmem combmem : UInt<3>[256]
+    // CHECK-NEXT: when ui1 :
+    // CHECK-NEXT:   infer mport port0 = combmem[someAddr], someClock
+
+    %seqmem = firrtl.seqmem Undefined : !firrtl.cmemory<uint<3>, 256>
+    %port1_data, %port1_port = firrtl.memoryport Infer %seqmem {name = "port1"} : (!firrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !firrtl.cmemoryport)
+    firrtl.when %ui1 {
+      firrtl.memoryport.access %port1_port[%someAddr], %someClock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    }
+    // CHECK:      smem seqmem : UInt<3>[256] undefined
+    // CHECK-NEXT: when ui1 :
+    // CHECK-NEXT:   infer mport port1 = seqmem[someAddr], someClock
 
     %invalid_clock = firrtl.invalidvalue : !firrtl.clock
     %dummyReg = firrtl.reg %invalid_clock : !firrtl.uint<42>
