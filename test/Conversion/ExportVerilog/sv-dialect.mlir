@@ -609,9 +609,8 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   // CHECK:  always @(posedge clock) begin
   // CHECK:    $fwrite(32'h80000002, "force output");
-  // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
-  // CHECK:  asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa &
-  // CHECK:  gasfdasafwjhijjafija)
+  // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
+  // CHECK:        asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
   // CHECK:      $fwrite(32'h80000002, "this cond is split");
   // CHECK:  end // always @(posedge)
   sv.always posedge %clock  {
@@ -629,9 +628,8 @@ hw.module @issue728ifdef(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijja
   // CHECK: always @(posedge clock) begin
   // CHECK:    $fwrite(32'h80000002, "force output");
   // CHECK:    `ifdef FUN_AND_GAMES
-  // CHECK:      if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
-  // CHECK: asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa &
-  // CHECK: gasfdasafwjhijjafija)
+  // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
+  // CHECK:        asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
   // CHECK:        $fwrite(32'h80000002, "this cond is split");
   // CHECK:    `endif
   // CHECK: end // always @(posedge)
@@ -947,9 +945,8 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
     // CHECK: automatic logic [41:0] [[THING:.+]] = `THING;
     // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + {{..}}31{really_really_long_port[10]}},
     // CHECK: really_really_long_port};
-    // CHECK: automatic logic [41:0] [[MANYTHING:.+]] = [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]]
-    // CHECK: * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]]
-    // CHECK: * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]];
+    // CHECK: automatic logic [41:0] [[MANYTHING:.+]] = [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
+    // CHECK:                                           [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]];
 
     // Check the indentation level of temporaries.  Issue #1625
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
