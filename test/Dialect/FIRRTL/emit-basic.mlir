@@ -275,6 +275,12 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT:  MyMem.a.clk <= someClock
     // CHECK-NEXT:  MyMem.b.clk <= someClock
     // CHECK-NEXT:  MyMem.c.clk <= someClock
+
+    %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+    %dummyReg = firrtl.reg %invalid_clock : !firrtl.uint<42>
+    // CHECK: wire [[INV:_invalid.*]] : Clock
+    // CHECK-NEXT: [[INV]] is invalid
+    // CHECK-NEXT: reg dummyReg : UInt<42>, [[INV]]
   }
 
   firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing", parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}

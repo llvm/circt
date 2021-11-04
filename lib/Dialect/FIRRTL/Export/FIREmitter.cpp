@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
+#include "circt/Dialect/FIRRTL/CircuitNamespace.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -65,6 +66,7 @@ struct Emitter {
   void emitStatement(InstanceOp op);
   void emitStatement(AttachOp op);
   void emitStatement(MemOp op);
+  void emitStatement(InvalidValueOp op);
   // TODO: Handle MemoryPortOp
   // TODO: Handle CMemOp
   // TODO: Handle MemOp
@@ -188,6 +190,9 @@ private:
     auto it = valueNamesStorage.insert(str);
     valueNames.insert({value, it.first->getKey()});
   }
+
+  /// The current circuit namespace valid within the call to `emitCircuit`.
+  CircuitNamespace circuitNamespace;
 };
 } // namespace
 
@@ -195,11 +200,12 @@ LogicalResult Emitter::finalize() { return failure(encounteredError); }
 
 /// Emit an entire circuit.
 void Emitter::emitCircuit(CircuitOp op) {
+  circuitNamespace.add(op);
   indent() << "circuit " << op.name() << " :\n";
   addIndent();
   for (auto &bodyOp : *op.getBody()) {
     if (encounteredError)
-      return;
+      break;
     TypeSwitch<Operation *>(&bodyOp)
         .Case<FModuleOp, FExtModuleOp>([&](auto op) {
           emitModule(op);
@@ -210,6 +216,7 @@ void Emitter::emitCircuit(CircuitOp op) {
         });
   }
   reduceIndent();
+  circuitNamespace.clear();
 }
 
 /// Emit an entire module.
@@ -289,7 +296,9 @@ void Emitter::emitModulePorts(ArrayRef<PortInfo> ports,
 
 /// Check if an operation is inlined into the emission of their users. For
 /// example, subfields are always inlined.
-static bool isEmittedInline(Operation *op) { return isExpression(op); }
+static bool isEmittedInline(Operation *op) {
+  return isExpression(op) && !isa<InvalidValueOp>(op);
+}
 
 void Emitter::emitStatementsInBlock(Block &block) {
   for (auto &bodyOp : block) {
@@ -300,7 +309,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
-              PartialConnectOp, InstanceOp, AttachOp, MemOp>(
+              PartialConnectOp, InstanceOp, AttachOp, MemOp, InvalidValueOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           indent() << "// operation " << op->getName() << "\n";
@@ -536,6 +545,24 @@ void Emitter::emitStatement(MemOp op) {
   os << "\n";
 
   reduceIndent();
+}
+
+void Emitter::emitStatement(InvalidValueOp op) {
+  // Only emit this invalid value if it is used somewhere else than the RHS of
+  // a connect.
+  if (llvm::all_of(op->getUses(), [&](OpOperand &use) {
+        return use.getOperandNumber() == 1 &&
+               isa<ConnectOp, PartialConnectOp>(use.getOwner());
+      }))
+    return;
+
+  auto name = circuitNamespace.newName("_invalid");
+  addValueName(op, name);
+  indent() << "wire " << name << " : ";
+  emitType(op.getType());
+  emitLocationAndNewLine(op);
+  indent() << name << " is invalid";
+  emitLocationAndNewLine(op);
 }
 
 void Emitter::emitExpression(Value value) {
