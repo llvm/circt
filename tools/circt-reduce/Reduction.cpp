@@ -22,6 +22,7 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Debug.h"
 
 #include "Reduction.h"
@@ -92,6 +93,7 @@ struct ModuleExternalizer : public Reduction {
 /// operations that have no more uses.
 static void pruneUnusedOps(Operation *initialOp) {
   SmallVector<Operation *> worklist;
+  SmallSet<Operation *, 4> handled;
   worklist.push_back(initialOp);
   while (!worklist.empty()) {
     auto op = worklist.pop_back_val();
@@ -99,7 +101,8 @@ static void pruneUnusedOps(Operation *initialOp) {
       continue;
     for (auto arg : op->getOperands())
       if (auto argOp = arg.getDefiningOp())
-        worklist.push_back(argOp);
+        if (handled.insert(argOp).second)
+          worklist.push_back(argOp);
     op->erase();
   }
 }
@@ -119,8 +122,9 @@ struct ConnectInvalidator : public Reduction {
     OpBuilder builder(op);
     auto invOp =
         builder.create<firrtl::InvalidValueOp>(rhs.getLoc(), rhs.getType());
+    auto rhsOp = rhs.getDefiningOp();
     op->setOperand(1, invOp);
-    if (auto rhsOp = rhs.getDefiningOp())
+    if (rhsOp)
       pruneUnusedOps(rhsOp);
     return success();
   }
