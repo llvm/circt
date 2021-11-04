@@ -127,14 +127,4 @@ PortInfo getPortInfo(BlockArgument arg);
 #define GET_OP_CLASSES
 #include "circt/Dialect/Calyx/Calyx.h.inc"
 
-namespace circt {
-namespace calyx {
-
-/// Returns a hw.module.extern operation describing the Verilog module which a
-/// ComponentOp eventually results in.
-Operation *getExternHWModule(OpBuilder &builder, ComponentOp op);
-
-} // namespace calyx
-} // namespace circt
-
 #endif // CIRCT_DIALECT_CALYX_OPS_H
