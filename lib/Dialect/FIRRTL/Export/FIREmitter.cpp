@@ -64,6 +64,7 @@ struct Emitter {
   void emitStatement(PartialConnectOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(AttachOp op);
+  void emitStatement(MemOp op);
   // TODO: Handle MemoryPortOp
   // TODO: Handle CMemOp
   // TODO: Handle MemOp
@@ -299,7 +300,7 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, AssertOp, AssumeOp, CoverOp, ConnectOp,
-              PartialConnectOp, InstanceOp, AttachOp>(
+              PartialConnectOp, InstanceOp, AttachOp, MemOp>(
             [&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           indent() << "// operation " << op->getName() << "\n";
@@ -471,6 +472,61 @@ void Emitter::emitStatement(AttachOp op) {
                         [&](auto operand) { emitExpression(operand); });
   os << ")";
   emitLocationAndNewLine(op);
+}
+
+void Emitter::emitStatement(MemOp op) {
+  indent() << "mem " << op.name() << " :";
+  emitLocationAndNewLine(op);
+  addIndent();
+
+  indent() << "data-type => ";
+  emitType(op.getDataType());
+  os << "\n";
+  indent() << "depth => " << op.depth() << "\n";
+  indent() << "read-latency => " << op.readLatency() << "\n";
+  indent() << "write-latency => " << op.writeLatency() << "\n";
+
+  SmallString<16> reader, writer, readwriter;
+  for (std::pair<StringAttr, MemOp::PortKind> port : op.getPorts()) {
+    auto add = [&](SmallString<16> &to, StringAttr name) {
+      if (!to.empty())
+        to.push_back(' ');
+      to.append(name.getValue());
+    };
+    switch (port.second) {
+    case MemOp::PortKind::Read:
+      add(reader, port.first);
+      break;
+    case MemOp::PortKind::Write:
+      add(writer, port.first);
+      break;
+    case MemOp::PortKind::ReadWrite:
+      add(readwriter, port.first);
+      break;
+    }
+  }
+  if (!reader.empty())
+    indent() << "reader => " << reader << "\n";
+  if (!writer.empty())
+    indent() << "writer => " << writer << "\n";
+  if (!readwriter.empty())
+    indent() << "readwriter => " << readwriter << "\n";
+
+  indent() << "read-under-write => ";
+  switch (op.ruw()) {
+  case RUWAttr::Undefined:
+    os << "undefined";
+    break;
+  case RUWAttr::Old:
+    os << "old";
+    break;
+  case RUWAttr::New:
+    os << "new";
+    break;
+  }
+  os << "\n";
+
+  reduceIndent();
 }
 
 void Emitter::emitExpression(Value value) {

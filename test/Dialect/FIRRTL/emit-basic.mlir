@@ -255,6 +255,17 @@ firrtl.circuit "Foo" {
     %muxPrimOp = firrtl.node %muxPrimOp_tmp : !firrtl.uint
     %shlPrimOp = firrtl.node %shlPrimOp_tmp : !firrtl.uint
     %shrPrimOp = firrtl.node %shrPrimOp_tmp : !firrtl.uint
+
+    %MyMem_a, %MyMem_b, %MyMem_c = firrtl.mem Undefined {depth = 8, name = "MyMem", portNames = ["a", "b", "c"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>,!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>
+    // CHECK:       mem MyMem :
+    // CHECK-NEXT:    data-type => UInt<4>
+    // CHECK-NEXT:    depth => 8
+    // CHECK-NEXT:    read-latency => 0
+    // CHECK-NEXT:    write-latency => 1
+    // CHECK-NEXT:    reader => a
+    // CHECK-NEXT:    writer => b
+    // CHECK-NEXT:    readwriter => c
+    // CHECK-NEXT:    read-under-write => undefined
   }
 
   firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing", parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}
