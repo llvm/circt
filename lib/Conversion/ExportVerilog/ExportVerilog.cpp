@@ -48,6 +48,7 @@ using namespace ExportVerilog;
 #define DEBUG_TYPE "export-verilog"
 
 constexpr int INDENT_AMOUNT = 2;
+constexpr int SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING = 8;
 
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
@@ -1144,6 +1145,10 @@ public:
     // Emit the expression.
     emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
                 /*signRequirement*/ NoRequirement);
+
+    // Emitted expression might break the line length constraint so align it
+    // here.
+    formatOutBuffer();
   }
 
 private:
@@ -1170,6 +1175,7 @@ private:
                           bool isSelfDeterminedUnsignedValue = false);
 
   void retroactivelyEmitExpressionIntoTemporary(Operation *op);
+  void formatOutBuffer();
 
   SubExprInfo visitUnhandledExpr(Operation *op);
   SubExprInfo visitInvalidComb(Operation *op) {
@@ -1385,22 +1391,25 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
   return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
-static void format(SmallVectorImpl<char> &outBuffer, int indentLevel,
-                   unsigned int lineLength) {
-  if (getenv("NO"))
+/// This function split the output buffer into multiple lines if the emitted
+/// length is larger than the constraint.
+void ExprEmitter::formatOutBuffer() {
+  // If the output already satisfies the constraint, skip here.
+  if (outBuffer.size() <= state.options.emittedLineLength)
     return;
+
   SmallVector<char> tmpOutBuffer;
   llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
-
   auto it = outBuffer.begin();
   unsigned int currentIndex = 0;
   while (it != outBuffer.end()) {
     auto next = std::find(it, outBuffer.end(), ' ');
     unsigned int tokenLength = std::distance(it, next);
 
-    if (currentIndex + tokenLength > lineLength) {
+    if (currentIndex + tokenLength > state.options.emittedLineLength) {
       tmpOs << '\n';
-      tmpOs.indent(indentLevel);
+      tmpOs.indent(state.currentIndent *
+                   SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING);
       currentIndex = tokenLength;
       tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
     } else {
@@ -2290,8 +2299,6 @@ private:
   /// determining if we need to put out a begin/end marker in a block
   /// declaration.
   size_t numStatementsEmitted = 0;
-
-  llvm::Optional<unsigned int> savedStmtIndent;
 };
 
 } // end anonymous namespace
@@ -2303,16 +2310,16 @@ private:
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
-  assert(savedStmtIndent.hasValue() &&
-         os.GetNumBytesInBuffer() > savedStmtIndent.getValue() &&
-         "savedStmtIndent must be valid here.");
+  /*
+assert(savedStmtIndent.hasValue() &&
+os.GetNumBytesInBuffer() > savedStmtIndent.getValue() &&
+"savedStmtIndent must be valid here.");
+*/
 
   SmallVector<char, 128> exprBuffer;
   SmallVector<Operation *> tooLargeSubExpressions;
-  int offset = os.GetNumBytesInBuffer() - savedStmtIndent.getValue();
   ExprEmitter(emitter, exprBuffer, emittedExprs, tooLargeSubExpressions, names)
       .emitExpression(exp, parenthesizeIfLooserThan);
-  format(exprBuffer, offset, state.options.emittedLineLength);
   os.write(exprBuffer.data(), exprBuffer.size());
 
   // It is possible that the emitted expression was too large to fit on a line
@@ -2354,7 +2361,6 @@ void StmtEmitter::emitExpression(Value exp,
   /// Generating new statements will change `statementBeginning`, so make sure
   /// to keep track of what it is.
   auto prevStmtBeginning = statementBeginning;
-  auto prev = savedStmtIndent;
 
   // Emit each stmt expression in turn.
   auto stmtStartCursor = rearrangableStream.getCursor();
@@ -2368,7 +2374,6 @@ void StmtEmitter::emitExpression(Value exp,
   // right place.
   statementBeginning = rearrangableStream.moveRangeBefore(
       prevStmtBeginning, stmtStartCursor, rearrangableStream.getCursor());
-  savedStmtIndent = prev;
   if (!declStartCursor.isInvalid()) {
     // Scoop up all of the stuff we just emitted, and move it to the
     // blockDeclarationInsertPoint.
@@ -2381,7 +2386,6 @@ void StmtEmitter::emitStatementExpression(Operation *op) {
   // Know where the start of this statement is in case any out-of-band precursor
   // statements need to be emitted.
   statementBeginning = rearrangableStream.getCursor();
-  savedStmtIndent = os.GetNumBytesInBuffer();
 
   // This is invoked for expressions that have a non-single use.  This could
   // either be because they are dead or because they have multiple uses.
@@ -3277,7 +3281,6 @@ void StmtEmitter::emitStatement(Operation *op) {
   // Know where the start of this statement is in case any out-of-band precursor
   // statements need to be emitted.
   statementBeginning = rearrangableStream.getCursor();
-  savedStmtIndent = os.GetNumBytesInBuffer();
 
   // Handle HW statements.
   if (succeeded(dispatchStmtVisitor(op)))

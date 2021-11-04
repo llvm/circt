@@ -12,26 +12,19 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 }
 
 // SHORT-LABEL: module longvariadic
-// SHORT: assign b =  a + a + a + a + a + a
-// SHORT: + a + a + a + a + a +
-// SHORT: a + a + a + a + a + a
-// SHORT: + a + a + a + a + a +
-// SHORT: a + a + a + a + a + a
-// SHORT: + a + a + a + a + a + a + a + a + a + a
-// SHORT: + a + a + a + a + a +
-// SHORT: a + a + a + a + a + a
-// SHORT: + a + a + a + a + a +
-// SHORT: a + a + a + a + a + a
-// SHORT: + a + a + a + a;
+// SHORT: assign b =  a + a + a + a + a + a + a + a + a + a + a
+// SHORT:             + a + a + a + a + a + a + a + a + a + a +
+// SHORT:             a + a + a + a + a + a + a + a + a + a + a
+// SHORT:             + a + a + a + a + a + a + a + a + a + a +
+// SHORT:             a + a + a + a + a + a + a + a + a + a + a
+// SHORT:             + a + a + a + a + a + a + a + a + a + a +
+// SHORT:             a;
 
 // DEFAULT-LABEL: module longvariadic
-// DEFAULT: assign b = a + a + a + a + a + a + a + a + a + a + a + a
-// DEFAULT: + a + a + a + a + a + a + a + a + a + a + a +
-// DEFAULT: a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
-// DEFAULT: + a + a + a + a + a + a + a + a + a + a + a +
-// DEFAULT: a + a + a + a + a + a + a + a + a;
+// DEFAULT: assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+// DEFAULT:            a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+// DEFAULT:            a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a; 
 
 // LONG-LABEL: module longvariadic
-// LONG-LABEL: assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// LONG-LABEL: a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// LONG-LABEL: a + a + a + a + a + a + a + a + a;
+// LONG-LABEL: assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+//                        + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
