@@ -23,6 +23,12 @@
 #include "Reduction.h"
 
 #define DEBUG_TYPE "circt-reduce"
+#define VERBOSE(X)                                                             \
+  do {                                                                         \
+    if (verbose) {                                                             \
+      X;                                                                       \
+    }                                                                          \
+  } while (false)
 
 using namespace llvm;
 using namespace mlir;
@@ -40,7 +46,7 @@ static cl::opt<std::string>
                    cl::desc("Output filename for the reduced test case"));
 
 static cl::opt<bool>
-    keepBest("keep-best", cl::init(false),
+    keepBest("keep-best", cl::init(true),
              cl::desc("Keep overwriting the output with better reductions"));
 
 static cl::opt<std::string> testerCommand(
@@ -50,6 +56,9 @@ static cl::opt<std::string> testerCommand(
 static cl::list<std::string>
     testerArgs("test-arg", cl::ZeroOrMore,
                cl::desc("Additional arguments to the test"));
+
+static cl::opt<bool> verbose("v", cl::init(true),
+                             cl::desc("Print reduction progress to stderr"));
 
 //===----------------------------------------------------------------------===//
 // Tool Implementation
@@ -79,16 +88,16 @@ static LogicalResult execute(MLIRContext &context) {
   std::string errorMessage;
 
   // Parse the input file.
-  LLVM_DEBUG(llvm::dbgs() << "Reading input\n");
+  VERBOSE(llvm::errs() << "Reading input\n");
   OwningModuleRef module = parseSourceFile(inputFilename, &context);
   if (!module)
     return failure();
 
   // Evaluate the unreduced input.
-  LLVM_DEBUG({
-    llvm::dbgs() << "Testing input with `" << testerCommand << "`\n";
+  VERBOSE({
+    llvm::errs() << "Testing input with `" << testerCommand << "`\n";
     for (auto &arg : testerArgs)
-      llvm::dbgs() << "  with argument `" << arg << "`\n";
+      llvm::errs() << "  with argument `" << arg << "`\n";
   });
   Tester tester(testerCommand, testerArgs);
   auto initialTest = tester.isInteresting(module.get());
@@ -97,7 +106,7 @@ static LogicalResult execute(MLIRContext &context) {
     return failure();
   }
   auto bestSize = initialTest.second;
-  LLVM_DEBUG(llvm::dbgs() << "Initial module has size " << bestSize << "\n");
+  VERBOSE(llvm::errs() << "Initial module has size " << bestSize << "\n");
 
   // Gather a list of reduction patterns that we should try.
   SmallVector<std::unique_ptr<Reduction>> patterns;
@@ -111,8 +120,7 @@ static LogicalResult execute(MLIRContext &context) {
   // ModuleExternalizer pattern;
   for (unsigned patternIdx = 0; patternIdx < patterns.size();) {
     Reduction &pattern = *patterns[patternIdx];
-    LLVM_DEBUG(llvm::dbgs()
-               << "Trying reduction `" << pattern.getName() << "`\n");
+    VERBOSE(llvm::errs() << "Trying reduction `" << pattern.getName() << "`\n");
     size_t rangeBase = 0;
     size_t rangeLength = -1;
     bool patternDidReduce = false;
@@ -130,7 +138,7 @@ static LogicalResult execute(MLIRContext &context) {
         (void)pattern.rewrite(op);
       });
       if (opIdx == 0) {
-        LLVM_DEBUG(llvm::dbgs() << "- No more ops where the pattern applies\n");
+        VERBOSE(llvm::errs() << "- No more ops where the pattern applies\n");
         break;
       }
 
@@ -144,8 +152,8 @@ static LogicalResult execute(MLIRContext &context) {
         // have created additional opportunities.
         patternDidReduce = true;
         bestSize = test.second;
-        LLVM_DEBUG(llvm::dbgs()
-                   << "- Accepting module of size " << bestSize << "\n");
+        VERBOSE(llvm::errs()
+                << "- Accepting module of size " << bestSize << "\n");
         module = std::move(newModule);
 
         // If this was already a run across all operations, no need to restart
@@ -171,8 +179,8 @@ static LogicalResult execute(MLIRContext &context) {
           rangeLength = std::min(rangeLength, opIdx) / 2;
           rangeBase = 0;
           if (rangeLength > 0)
-            LLVM_DEBUG(llvm::dbgs()
-                       << "- Trying " << rangeLength << " ops at once\n");
+            VERBOSE(llvm::errs()
+                    << "- Trying " << rangeLength << " ops at once\n");
         }
       }
     }
@@ -181,8 +189,8 @@ static LogicalResult execute(MLIRContext &context) {
     // pattern again, since we might have uncovered additional reduction
     // opportunities. Otherwise we just keep going to try the next pattern.
     if (patternDidReduce && patternIdx > 0) {
-      LLVM_DEBUG(llvm::dbgs() << "- Reduction `" << pattern.getName()
-                              << "` was successful, starting at the top\n\n");
+      VERBOSE(llvm::errs() << "- Reduction `" << pattern.getName()
+                           << "` was successful, starting at the top\n\n");
       patternIdx = 0;
     } else {
       ++patternIdx;
@@ -190,7 +198,7 @@ static LogicalResult execute(MLIRContext &context) {
   }
 
   // Write the reduced test case to the output.
-  LLVM_DEBUG(llvm::dbgs() << "All reduction strategies exhausted\n");
+  VERBOSE(llvm::errs() << "All reduction strategies exhausted\n");
   return writeOutput(module.get());
 }
 
