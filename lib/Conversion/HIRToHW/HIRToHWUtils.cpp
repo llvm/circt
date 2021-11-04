@@ -80,8 +80,10 @@ Type convertToArrayType(mlir::Type elementTy, ArrayRef<int64_t> shape) {
 }
 
 Type convertTensorType(mlir::TensorType tensorTy) {
-  auto elementType = convertToHWType(tensorTy.getElementType());
-  return hw::ArrayType::get(elementType, tensorTy.getNumElements());
+  auto elementTy = convertToHWType(tensorTy.getElementType());
+  if (tensorTy.getNumElements() == 1)
+    return elementTy;
+  return hw::ArrayType::get(elementTy, tensorTy.getNumElements());
 }
 
 Type convertTupleType(mlir::TupleType tupleTy) {
@@ -163,13 +165,11 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
 Operation *getConstantX(OpBuilder *builder, Type originalTy) {
   auto hwTy = convertToHWType(originalTy);
   if (auto ty = hwTy.dyn_cast<hw::ArrayType>()) {
-    auto *element = getConstantX(builder, ty.getElementType());
+    auto *constX = getConstantX(builder, ty.getElementType());
     uint64_t size = ty.getSize();
-    if (size == 1)
-      return element;
     SmallVector<Value> elementCopies;
     for (uint64_t i = 0; i < size; i++) {
-      elementCopies.push_back(element->getResult(0));
+      elementCopies.push_back(constX->getResult(0));
     }
     return builder->create<hw::ArrayCreateOp>(builder->getUnknownLoc(),
                                               elementCopies);
@@ -196,4 +196,56 @@ ArrayAttr getHWParams(Attribute paramsAttr, bool ignoreValues) {
     hwParams.push_back(hwParam);
   }
   return ArrayAttr::get(builder.getContext(), hwParams);
+}
+
+Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
+                      Optional<StringRef> name, Location loc, Value clk) {
+  assert(input.getType().isa<mlir::IntegerType>() ||
+         input.getType().isa<hw::ArrayType>());
+
+  auto nameAttr = name ? builder->getStringAttr(name.getValue()) : StringAttr();
+
+  Type regTy;
+  if (delay > 1)
+    regTy = hw::ArrayType::get(input.getType(), delay);
+  else
+    regTy = input.getType();
+
+  auto reg =
+      builder->create<sv::RegOp>(builder->getUnknownLoc(), regTy, nameAttr);
+
+  auto regOutput =
+      builder->create<sv::ReadInOutOp>(builder->getUnknownLoc(), reg);
+  Value regInput;
+  if (delay > 1) {
+    auto c1 =
+        helper::materializeIntegerConstant(*builder, 1, helper::clog2(delay));
+    auto sliceTy =
+        hw::ArrayType::get(builder->getContext(), input.getType(), delay - 1);
+    auto regSlice = builder->create<hw::ArraySliceOp>(builder->getUnknownLoc(),
+                                                      sliceTy, regOutput, c1);
+    regInput = builder->create<hw::ArrayConcatOp>(
+        builder->getUnknownLoc(),
+        ArrayRef<Value>({regSlice, builder->create<hw::ArrayCreateOp>(
+                                       builder->getUnknownLoc(), input)}));
+  } else {
+    regInput = input;
+  }
+  builder->create<sv::AlwaysOp>(
+      builder->getUnknownLoc(), sv::EventControl::AtPosEdge, clk,
+      [&reg, &regInput, builder] {
+        builder->create<sv::PAssignOp>(builder->getUnknownLoc(), reg.result(),
+                                       regInput);
+      });
+  Value output;
+  if (delay > 1) {
+    auto c0 =
+        helper::materializeIntegerConstant(*builder, 0, helper::clog2(delay));
+    output = builder->create<hw::ArrayGetOp>(loc, regOutput, c0).getResult();
+  } else {
+    output = regOutput;
+  }
+
+  assert(input.getType() == output.getType());
+  return output;
 }

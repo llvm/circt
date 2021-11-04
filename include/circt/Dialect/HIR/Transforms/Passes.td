@@ -6,6 +6,7 @@ def SimplifyLoop : Pass<"hir-simplify-loop", "hir::FuncOp"> {
   let summary = "Converts ForOp to WhileOp.";
 
   let constructor = "circt::hir::createSimplifyLoopPass()";
+  let dependentDialects = ["circt::hw::HWDialect"];
 }
 
 def IndexLowering : Pass<"hir-lower-index", "hir::FuncOp"> {

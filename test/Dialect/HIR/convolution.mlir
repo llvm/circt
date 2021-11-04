@@ -12,15 +12,15 @@ hir.func @convolution at %t(
   %buff = hir.alloca("bram") :!hir.memref<(bank 3)x16xi32> ports [#r_bram,#w_bram]
   %wndw = hir.alloca("bram") :!hir.memref<(bank 3)x(bank 3)xi32> ports [#r_reg, #w_reg]
 
-  %0 =  constant 0 :index  
-  %1 =  constant 1 :index
-  %2 =  constant 2 :index
-  %3 =  constant 3 :index
-  %4 =  constant 4 :index
-  %ub = constant 15:index
-  %c0_i4 = constant 0 :i4 
-  %c1_i4 = constant 1 :i4
-  %ub_i4 = constant 15 :i4
+  %0 =  arith.constant 0 :index  
+  %1 =  arith.constant 1 :index
+  %2 =  arith.constant 2 :index
+  %3 =  arith.constant 3 :index
+  %4 =  arith.constant 4 :index
+  %ub = arith.constant 15:index
+  %c0_i4 = arith.constant 0 :i4 
+  %c1_i4 = arith.constant 1 :i4
+  %ub_i4 = arith.constant 15 :i4
 
   //Read from input. Update line buffer. Input values to each row of window.
   hir.for %i : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%ti = %t + 1 ){
@@ -73,9 +73,9 @@ hir.func @convolution at %t(
 
   hir.for %i : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%ti = %t + 1 ){
     %t_end=hir.for %j : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%tj = %ti + 1 ){
-      %b1 = cmpi "ugt", %i, %c1_i4 : i4
-      %b2 = cmpi "ugt", %j, %c1_i4 : i4
-      %b3 = and %b1, %b2  : i1
+      %b1 = comb.icmp ugt %i, %c1_i4 : i4
+      %b2 = comb.icmp ugt %j, %c1_i4 : i4
+      %b3 = comb.and %b1, %b2  : i1
 
       hir.if %b3  at time(%tf = %tj){
         %v = hir.call @weighted_average(%wndw) at %tf + 2

@@ -761,7 +761,23 @@ def BusSelectOp: HIR_Op<"bus.select",[NoSideEffect]>{
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
 }
+def SelectOp: HIR_Op<"select",[NoSideEffect]>{
+  let summary = "Select a value.";
+  let description = [{
+    Selects a value from two inputs based on a select input.
+      Examples:
+      ```mlir %merged_bus 
+        = hir.select %select, %input1, %input2 : i32```
+  }];
 
+  let arguments = (ins I1: $select, AnyType:$trueValue,
+  AnyType:$falseValue);
+  let results = (outs AnyType: $res);
+  let assemblyFormat = [{ $select `,` $trueValue `,` $falseValue custom<WithSSANames>(attr-dict)
+  `:` type($res) custom<CopyType>(type($trueValue),ref(type($res)))
+  custom<CopyType>(type($falseValue),ref(type($res))) }];
+
+}
 def TensorInsertOp: HIR_Op<"tensor.insert",[NoSideEffect]>{
   let summary = "Create a new tensor by replacing an element from the input tensor.";
   let description = [{
@@ -826,4 +842,17 @@ def BusBroadcastOp: HIR_Op<"bus.broadcast",[NoSideEffect]>{
   let assemblyFormat = [{ $bus custom<WithSSANames>(attr-dict) `:` type($bus) `->`type($res)}];
 }
 
+def CastOp: HIR_Op<"cast",[NoSideEffect]>{
+  let summary = "Cast between compatible types.";
+  let description = [{
+      Examples:
+      ```mlir %t 
+        = hir.cast %b : !hir.time -> !hir.bus<i1>```
+  }];
+
+  let arguments = (ins AnyType: $input);
+  let results = (outs AnyType: $res);
+
+  let assemblyFormat = [{ $input custom<WithSSANames>(attr-dict) `:` type($input) `->`type($res)}];
+}
 #endif // HIR_OPS

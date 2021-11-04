@@ -3,13 +3,19 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "circt/Dialect/HIR/Transforms/Passes.h"
+#include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/Pass/Pass.h"
-namespace circt {
-namespace hir {
 
+namespace circt {
+namespace hw {
+class HWDialect;
+class HWModuleOp;
+} // namespace hw
+
+namespace hir {
 #define GEN_PASS_CLASSES
 #include "circt/Dialect/HIR/Transforms/Passes.h.inc"
 

@@ -36,3 +36,6 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
 Operation *getConstantX(OpBuilder *, Type);
 
 ArrayAttr getHWParams(Attribute, bool ignoreValues = false);
+
+Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
+                      Optional<StringRef> name, Location loc, Value clk);

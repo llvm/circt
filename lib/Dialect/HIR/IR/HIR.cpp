@@ -924,9 +924,14 @@ static ParseResult parseBusSelectOp(OpAsmParser &parser,
     return failure();
 
   // Build the type of the select bus based on the type of the result.
-  Type i1Ty = hir::BusType::get(builder.getContext(), builder.getI1Type());
-
-  if (parser.resolveOperand(selectBus, i1Ty, result.operands))
+  Type i1BusTy = hir::BusType::get(builder.getContext(), builder.getI1Type());
+  Type selectBusTy;
+  if (auto tensorTy = resTy.dyn_cast<mlir::TensorType>()) {
+    selectBusTy = mlir::RankedTensorType::get(tensorTy.getShape(), i1BusTy);
+  } else {
+    selectBusTy = i1BusTy;
+  }
+  if (parser.resolveOperand(selectBus, selectBusTy, result.operands))
     return failure();
   if (parser.resolveOperand(trueBus, resTy, result.operands))
     return failure();

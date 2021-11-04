@@ -18,6 +18,5 @@ Value insertDataRecvLogic(OpBuilder &builder, Location loc, ArrayAttr names,
                           uint64_t rdLatency, Value tVar,
                           IntegerAttr offsetAttr);
 
-Value insertDataTensorSendLogic(OpBuilder &builder, Value currentDataBusT,
-                                Value rootDataBusT, Value tVar,
-                                IntegerAttr offsetAttr);
+Value insertDataTensorSendLogic(OpBuilder &builder, Value enableBusT,
+                                Value currentDataBusT, Value rootDataBusT);

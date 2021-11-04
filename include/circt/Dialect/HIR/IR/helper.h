@@ -57,5 +57,7 @@ circt::Type getElementType(circt::Type);
 circt::Operation *declareExternalFuncForCall(
     circt::hir::CallOp callOp, circt::SmallVector<circt::StringRef> inputNames,
     circt::SmallVector<circt::StringRef> resultNames = {});
+mlir::Value materializeIntegerConstant(mlir::OpBuilder &builder, int value,
+                                       uint64_t width);
 } // namespace helper
 #endif

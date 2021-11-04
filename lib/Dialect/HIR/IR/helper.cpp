@@ -1,6 +1,7 @@
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -293,4 +294,13 @@ Operation *declareExternalFuncForCall(hir::CallOp callOp,
     declOp->setAttr("params", params);
   return declOp;
 }
+
+Value materializeIntegerConstant(OpBuilder &builder, int value,
+                                 uint64_t width) {
+  return builder.create<hw::ConstantOp>(
+      builder.getUnknownLoc(),
+      builder.getIntegerAttr(IntegerType::get(builder.getContext(), width),
+                             value));
+}
+
 } // namespace helper

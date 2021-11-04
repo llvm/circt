@@ -610,9 +610,9 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
         auto addrEnableBusT = builder.create<hir::BusOp>(
             builder.getUnknownLoc(),
             portInterface.addrEnableBusTensor.getType());
-        portInterface.addrEnableBusTensor = insertDataTensorSendLogic(
-            builder, addrEnableBusT, portInterface.addrEnableBusTensor,
-            op.tstart(), op.offsetAttr());
+        portInterface.addrEnableBusTensor =
+            insertDataTensorSendLogic(builder, addrEnableBusT, addrEnableBusT,
+                                      portInterface.addrEnableBusTensor);
         operands.push_back(addrEnableBusT);
         inputTypes.push_back(addrEnableBusT.getType());
         inputAttrs.push_back(sendAttr);
@@ -620,9 +620,9 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
         assert(portInterface.addrDataBusTensor);
         auto addrDataBusT = builder.create<hir::BusOp>(
             builder.getUnknownLoc(), portInterface.addrDataBusTensor.getType());
-        portInterface.addrDataBusTensor = insertDataTensorSendLogic(
-            builder, addrDataBusT, portInterface.addrDataBusTensor, op.tstart(),
-            op.offsetAttr());
+        portInterface.addrDataBusTensor =
+            insertDataTensorSendLogic(builder, addrEnableBusT, addrDataBusT,
+                                      portInterface.addrDataBusTensor);
         operands.push_back(addrDataBusT);
         inputTypes.push_back(addrDataBusT.getType());
         inputAttrs.push_back(sendAttr);
@@ -631,9 +631,9 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
       if (portInterface.rdEnableBusTensor) {
         auto rdEnableBusT = builder.create<hir::BusOp>(
             builder.getUnknownLoc(), portInterface.rdEnableBusTensor.getType());
-        portInterface.rdEnableBusTensor = insertDataTensorSendLogic(
-            builder, rdEnableBusT, portInterface.rdEnableBusTensor, op.tstart(),
-            op.offsetAttr());
+        portInterface.rdEnableBusTensor =
+            insertDataTensorSendLogic(builder, rdEnableBusT, rdEnableBusT,
+                                      portInterface.rdEnableBusTensor);
         operands.push_back(rdEnableBusT);
         inputTypes.push_back(rdEnableBusT.getType());
         inputAttrs.push_back(sendAttr);
@@ -647,9 +647,9 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
       if (portInterface.wrEnableBusTensor) {
         auto wrEnableBusT = builder.create<hir::BusOp>(
             builder.getUnknownLoc(), portInterface.wrEnableBusTensor.getType());
-        portInterface.wrEnableBusTensor = insertDataTensorSendLogic(
-            builder, wrEnableBusT, portInterface.wrEnableBusTensor, op.tstart(),
-            op.offsetAttr());
+        portInterface.wrEnableBusTensor =
+            insertDataTensorSendLogic(builder, wrEnableBusT, wrEnableBusT,
+                                      portInterface.wrEnableBusTensor);
         operands.push_back(wrEnableBusT);
         inputTypes.push_back(wrEnableBusT.getType());
         inputAttrs.push_back(sendAttr);
@@ -658,8 +658,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
         auto wrDataBusT = builder.create<hir::BusOp>(
             builder.getUnknownLoc(), portInterface.wrDataBusTensor.getType());
         portInterface.wrDataBusTensor = insertDataTensorSendLogic(
-            builder, wrDataBusT, portInterface.wrDataBusTensor, op.tstart(),
-            op.offsetAttr());
+            builder, wrEnableBusT, wrDataBusT, portInterface.wrDataBusTensor);
         operands.push_back(wrDataBusT);
         inputTypes.push_back(wrDataBusT.getType());
         inputAttrs.push_back(sendAttr);

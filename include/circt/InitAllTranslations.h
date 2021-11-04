@@ -11,14 +11,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/ExportVerilog.h"
 #include "circt/Dialect/Calyx/CalyxEmitter.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "circt/Dialect/LLHD/Translation/TranslateToVerilog.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
-#include "circt/Translation/ExportVerilog.h"
-//#include "circt/Translation/HIRToVerilog.h"
 
 #ifndef CIRCT_INITALLTRANSLATIONS_H
 #define CIRCT_INITALLTRANSLATIONS_H
@@ -30,8 +29,6 @@ namespace circt {
 // automatically.
 inline void registerAllTranslations() {
   static bool initOnce = []() {
-    // mlir::hir::registerHIRToVerilogTranslation();
-    registerToVerilogTranslation();
     esi::registerESITranslations();
     calyx::registerToCalyxTranslation();
     firrtl::registerFromFIRFileTranslation();
