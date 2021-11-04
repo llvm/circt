@@ -2310,12 +2310,6 @@ private:
 void StmtEmitter::emitExpression(Value exp,
                                  SmallPtrSet<Operation *, 8> &emittedExprs,
                                  VerilogPrecedence parenthesizeIfLooserThan) {
-  /*
-assert(savedStmtIndent.hasValue() &&
-os.GetNumBytesInBuffer() > savedStmtIndent.getValue() &&
-"savedStmtIndent must be valid here.");
-*/
-
   SmallVector<char, 128> exprBuffer;
   SmallVector<Operation *> tooLargeSubExpressions;
   ExprEmitter(emitter, exprBuffer, emittedExprs, tooLargeSubExpressions, names)
