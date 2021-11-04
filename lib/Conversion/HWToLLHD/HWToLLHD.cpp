@@ -91,7 +91,7 @@ HWToLLHDTypeConverter::HWToLLHDTypeConverter() {
   addConversion([](SigType type) { return type; });
 
   // Materialze probes when arguments are converted from any type to `SigType`.
-  addArgumentMaterialization(
+  addSourceMaterialization(
       [](OpBuilder &builder, Type type, ValueRange values, Location loc) {
         assert(values.size() == 1);
         auto op = builder.create<PrbOp>(loc, type, values[0]);
