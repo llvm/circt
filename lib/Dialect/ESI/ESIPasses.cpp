@@ -1098,7 +1098,7 @@ private:
 } // anonymous namespace
 
 LogicalResult
-CosimLowering::matchAndRewrite(CosimEndpoint ep, OpAdaptor operands,
+CosimLowering::matchAndRewrite(CosimEndpoint ep, OpAdaptor adaptor,
                                ConversionPatternRewriter &rewriter) const {
 #ifndef CAPNP
   (void)builder;
@@ -1107,6 +1107,7 @@ CosimLowering::matchAndRewrite(CosimEndpoint ep, OpAdaptor operands,
 #else
   auto loc = ep.getLoc();
   auto *ctxt = rewriter.getContext();
+  auto operands = adaptor.getOperands();
   Value clk = operands[0];
   Value rstn = operands[1];
   Value send = operands[2];
@@ -1203,6 +1204,7 @@ public:
     capnp::TypeSchema encodeType(enc.dataToEncode().getType());
     if (!encodeType.isSupported())
       return rewriter.notifyMatchFailure(enc, "Type not supported yet");
+    auto operands = adaptor.getOperands();
     Value encoderOutput = encodeType.buildEncoder(rewriter, operands[0],
                                                   operands[1], operands[2]);
     assert(encoderOutput && "Error in TypeSchema.buildEncoder()");
@@ -1230,6 +1232,7 @@ public:
     capnp::TypeSchema decodeType(dec.decodedData().getType());
     if (!decodeType.isSupported())
       return rewriter.notifyMatchFailure(dec, "Type not supported yet");
+    auto operands = adaptor.getOperands();
     Value decoderOutput = decodeType.buildDecoder(rewriter, operands[0],
                                                   operands[1], operands[2]);
     assert(decoderOutput && "Error in TypeSchema.buildDecoder()");
