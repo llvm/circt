@@ -50,6 +50,11 @@ removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
   }
 #endif
 
+  // If the input is empty (which is an optimization we do for certain array
+  // attributes), simply return an empty vector.
+  if (input.empty())
+    return {};
+
   // Copy over the live chunks.
   size_t lastCopied = 0;
   SmallVector<T> result;
