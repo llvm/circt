@@ -191,8 +191,6 @@ class System:
   def print_tcl(self, top_module: type, out_stream: typing.TextIO = sys.stdout):
     # Run the ExportQuartusTclPass.
     self.run_passes()
-    pm = mlir.passmanager.PassManager.parse("export-quartus-tcl")
-    pm.run(self.mod)
 
     # Run ExportVerilog into a temporary buffer to get the Tcl output.
     # TODO: remove this hacky splitting of the Tcl output, and use

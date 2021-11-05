@@ -24,14 +24,14 @@ class ModuleOp;
 
 namespace circt {
 namespace hw {
-class HWModuleOp;
 class SymbolCache;
 } // namespace hw
 
 namespace msft {
+class MSFTModuleOp;
 
 /// Export TCL for a specific hw module.
-mlir::LogicalResult exportQuartusTcl(hw::HWModuleOp module, hw::SymbolCache &);
+mlir::LogicalResult exportQuartusTcl(MSFTModuleOp module, hw::SymbolCache &);
 
 /// Populate a SymbolCache to use during Tcl export.
 void populateSymbolCache(mlir::ModuleOp mod, hw::SymbolCache &);

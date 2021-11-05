@@ -15,6 +15,7 @@
 #include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Builders.h"
@@ -48,12 +49,13 @@ struct TclOutputState {
 void emitPath(TclOutputState &s, RootedInstancePathAttr path,
               SymbolCache &symCache) {
   for (auto part : path.getPath()) {
-    auto inst = dyn_cast_or_null<InstanceOp>(symCache.getDefinition(part));
+    auto inst =
+        dyn_cast_or_null<msft::InstanceOp>(symCache.getDefinition(part));
     assert(inst && "path instance must be in symbol cache");
-    auto mod = inst->getParentOfType<HWModuleOp>();
+    auto mod = inst->getParentOfType<MSFTModuleOp>();
     s.os << "{{" << s.symbolRefs.size() << "}}" << '|';
     s.symbolRefs.push_back(
-        InnerRefAttr::get(mod.getNameAttr(), inst.getName()));
+        InnerRefAttr::get(mod.getNameAttr(), inst.sym_nameAttr()));
   }
 }
 
@@ -88,7 +90,7 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
   emitPath(s, inst.path, symCache);
   // If instance name is specified, add it in between the parent entity path and
   // the child entity patch.
-  if (auto instOp = dyn_cast<hw::InstanceOp>(inst.op))
+  if (auto instOp = dyn_cast<msft::InstanceOp>(inst.op))
     s.os << instOp.instanceName() << '|';
   else if (auto name = inst.op->getAttrOfType<StringAttr>("name"))
     s.os << name.getValue() << '|';
@@ -98,18 +100,10 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
 /// Create a SymbolCache to use during Tcl export.
 void circt::msft::populateSymbolCache(mlir::ModuleOp mod, SymbolCache &cache) {
   // Traverse each module and each instance within the module.
-  for (auto hwMod : mod.getOps<HWModuleOp>()) {
-    for (auto inst : hwMod.getOps<InstanceOp>()) {
-      // If the instance already has a symbol name, use it. Otherwise make the
-      // instance name the symbol name, and use that.
-      StringAttr symName;
-      StringRef symNameAttr = hw::InnerName::getInnerNameAttrName();
-      if (auto existingSym = inst->getAttrOfType<StringAttr>(symNameAttr)) {
-        symName = existingSym;
-      } else {
-        symName = inst.getName();
-        inst->setAttr(symNameAttr, symName);
-      }
+  for (auto hwMod : mod.getOps<MSFTModuleOp>()) {
+    for (auto inst : hwMod.getOps<msft::InstanceOp>()) {
+      // Use the instance symbol name.
+      StringAttr symName = inst.sym_nameAttr();
 
       // Add the symbol to the cache.
       cache.addDefinition(symName, inst);
@@ -122,7 +116,7 @@ void circt::msft::populateSymbolCache(mlir::ModuleOp mod, SymbolCache &cache) {
 /// Write out all the relevant tcl commands. Create one 'proc' per module which
 /// takes the parent entity name since we don't assume that the created module
 /// is the top level for the entire design.
-LogicalResult circt::msft::exportQuartusTcl(hw::HWModuleOp hwMod,
+LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
                                             SymbolCache &symCache) {
   // Build up the output Tcl, tracking symbol references in state.
   std::string s;

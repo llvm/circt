@@ -125,7 +125,15 @@ struct LowerToHWPass : public LowerToHWBase<LowerToHWPass> {
 
 void LowerToHWPass::runOnOperation() {
   auto top = getOperation();
-  auto ctxt = &getContext();
+  auto *ctxt = &getContext();
+
+  // Traverse MSFT location attributes and export the required Tcl into
+  // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
+  hw::SymbolCache symCache;
+  populateSymbolCache(top, symCache);
+  for (auto hwmod : top.getBody()->getOps<msft::MSFTModuleOp>())
+    if (failed(exportQuartusTcl(hwmod, symCache)))
+      return signalPassFailure();
 
   // The `hw::InstanceOp` (which `msft::InstanceOp` lowers to) convenience
   // builder gets its argNames and resultNames from the `hw::HWModuleOp`. So we
@@ -153,29 +161,10 @@ void LowerToHWPass::runOnOperation() {
     signalPassFailure();
 }
 
-namespace {
-struct ExportQuartusTclPass
-    : public ExportQuartusTclBase<ExportQuartusTclPass> {
-  void runOnOperation() override;
-};
-} // anonymous namespace
-
-void ExportQuartusTclPass::runOnOperation() {
-  mlir::ModuleOp mod = getOperation();
-  hw::SymbolCache symCache;
-  populateSymbolCache(mod, symCache);
-  for (auto hwmod : mod.getBody()->getOps<hw::HWModuleOp>())
-    if (failed(exportQuartusTcl(hwmod, symCache)))
-      return signalPassFailure();
-}
-
 namespace circt {
 namespace msft {
 std::unique_ptr<Pass> createLowerToHWPass() {
   return std::make_unique<LowerToHWPass>();
-}
-std::unique_ptr<Pass> createExportQuartusTclPass() {
-  return std::make_unique<ExportQuartusTclPass>();
 }
 } // namespace msft
 } // namespace circt
