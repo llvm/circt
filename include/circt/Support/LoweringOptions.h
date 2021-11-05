@@ -87,7 +87,7 @@ struct LoweringOptions {
 
   /// This parameter limits the maximum number of tokes per one experssion.
   /// https://github.com/verilator/verilator/issues/2752
-  enum { DEFAULT_TOKEN_NUMBER = 20000 };
+  enum { DEFAULT_TOKEN_NUMBER = 40000 };
   unsigned maximumNumberOfTokensPerExpression = DEFAULT_TOKEN_NUMBER;
 
   /// This is the target width of lines in an emitted Verilog source file in
