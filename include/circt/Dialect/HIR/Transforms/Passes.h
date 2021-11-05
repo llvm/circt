@@ -14,7 +14,7 @@
 namespace circt {
 namespace hir {
 
-std::unique_ptr<OperationPass<hir::FuncOp>> createSimplifyLoopPass();
+std::unique_ptr<OperationPass<hir::FuncOp>> createSimplifyCtrlPass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createIndexLoweringPass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createRegisterAllocationPass();
 std::unique_ptr<OperationPass<hir::FuncOp>> createSeqSchedulerPass();

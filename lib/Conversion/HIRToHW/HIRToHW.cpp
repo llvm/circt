@@ -32,6 +32,7 @@ private:
   LogicalResult visitOp(hir::CallOp);
   LogicalResult visitOp(hir::CastOp);
   LogicalResult visitOp(hir::CommentOp);
+  LogicalResult visitOp(mlir::arith::ConstantOp);
   LogicalResult visitOp(hir::CreateTupleOp);
   LogicalResult visitOp(hir::DelayOp);
   LogicalResult visitOp(hir::FuncExternOp);
@@ -44,31 +45,19 @@ private:
   LogicalResult visitOp(hir::SendOp);
   LogicalResult visitOp(hir::TensorExtractOp);
   LogicalResult visitOp(hir::TensorInsertOp);
+  LogicalResult visitOp(hir::TimeGetClkOp);
   LogicalResult visitOp(hir::TimeOp);
   LogicalResult visitOp(hir::WhileOp);
-  LogicalResult visitOp(mlir::arith::ConstantOp);
   LogicalResult visitHWOp(Operation *);
 
 private:
   OpBuilder *builder;
-  llvm::DenseMap<Value, Value> mapHIRToHWValue;
+  BlockAndValueMapping mapHIRToHWValue;
   llvm::DenseMap<StringRef, uint64_t> mapFuncNameToInstanceCount;
   SmallVector<Operation *> opsToErase;
   Value clk;
   hw::HWModuleOp hwModuleOp;
 };
-
-LogicalResult HIRToHWPass::visitOp(mlir::arith::ConstantOp op) {
-  if (op.getType().isa<mlir::IndexType>())
-    return success();
-  if (!op.getType().isa<mlir::IntegerType>())
-    return op.emitError(
-        "hir-to-hw pass only supports IntegerType/IndexType constants.");
-
-  mapHIRToHWValue[op.getResult()] = builder->create<hw::ConstantOp>(
-      op.getLoc(), op.value().dyn_cast<IntegerAttr>());
-  return success();
-}
 
 LogicalResult HIRToHWPass::visitOp(hir::BusOp op) {
   // Add a placeholder SSA Var for the buses. CallOp visit will replace them.
@@ -78,7 +67,7 @@ LogicalResult HIRToHWPass::visitOp(hir::BusOp op) {
   auto name = helper::getOptionalName(constantXOp, 0);
   if (name)
     helper::setNames(constantXOp, {name.getValue()});
-  mapHIRToHWValue[op.res()] = placeHolderSSAVar;
+  mapHIRToHWValue.map(op.res(), placeHolderSSAVar);
   return success();
 }
 
@@ -88,6 +77,12 @@ LogicalResult HIRToHWPass::visitOp(hir::CommentOp op) {
   return success();
 }
 
+LogicalResult HIRToHWPass::visitOp(mlir::arith::ConstantOp op) {
+  if (op.result().getType().isa<mlir::IntegerType>())
+    return op.emitError()
+           << "hir-to-hw pass supports only hw.constant op for integer types.";
+  return success();
+}
 LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
   assert(op.offset().getValue() == 0);
   auto filteredOperands = filterCallOpArgs(op.getFuncType(), op.operands());
@@ -95,16 +90,12 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
   // Get the mapped inputs and create the input types for instance op.
   SmallVector<Value> hwInputs;
   for (auto input : filteredOperands.first) {
-    auto hwInput = mapHIRToHWValue[input];
-    // FIXME: Once all the op visitors are written, replace this with
-    // assert(hwInput).
-    if (!hwInput)
-      return success();
+    auto hwInput = mapHIRToHWValue.lookup(input);
     hwInputs.push_back(hwInput);
   }
   assert(!op.offset() || op.offset().getValue() == 0);
 
-  hwInputs.push_back(mapHIRToHWValue[op.tstart()]);
+  hwInputs.push_back(mapHIRToHWValue.lookup(op.tstart()));
   hwInputs.push_back(this->clk);
 
   auto hwInputTypes = helper::getTypes(hwInputs);
@@ -149,15 +140,14 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
   // buses.
   uint64_t i;
   for (i = 0; i < sendBuses.size(); i++) {
-    auto placeHolderSSAVar = mapHIRToHWValue[sendBuses[i]];
-    assert(placeHolderSSAVar);
+    auto placeHolderSSAVar = mapHIRToHWValue.lookup(sendBuses[i]);
     placeHolderSSAVar.replaceAllUsesWith(instanceOp.getResult(i));
-    mapHIRToHWValue[sendBuses[i]] = instanceOp.getResult(i);
+    mapHIRToHWValue.map(sendBuses[i], instanceOp.getResult(i));
   }
 
   // Map the CallOp return vars to instance op return vars.
   for (uint64_t j = 0; i + j < instanceOp.getNumResults(); j++)
-    mapHIRToHWValue[op.getResult(j)] = instanceOp.getResult(i + j);
+    mapHIRToHWValue.map(op.getResult(j), instanceOp.getResult(i + j));
 
   return success();
 }
@@ -165,21 +155,24 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
 LogicalResult HIRToHWPass::visitOp(hir::CastOp op) {
   assert(convertToHWType(op.input().getType()) ==
          convertToHWType(op.res().getType()));
-  assert(mapHIRToHWValue[op.input()]);
-  mapHIRToHWValue[op.res()] = mapHIRToHWValue[op.input()];
+  mapHIRToHWValue.map(op.res(), mapHIRToHWValue.lookup(op.input()));
+  return success();
+}
+
+LogicalResult HIRToHWPass::visitOp(hir::TimeGetClkOp op) {
+  mapHIRToHWValue.map(op.res(), this->clk);
   return success();
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::TimeOp op) {
-  auto tIn = mapHIRToHWValue[op.timevar()];
-  assert(tIn);
+  auto tIn = mapHIRToHWValue.lookup(op.timevar());
   if (!tIn.getType().isa<mlir::IntegerType>())
     return tIn.getDefiningOp()->emitError()
            << "Expected converted type to be i1.";
   auto name = helper::getOptionalName(op, 0);
   Value res = getDelayedValue(builder, tIn, op.delay(), name, op.getLoc(), clk);
   assert(res.getType().isa<mlir::IntegerType>());
-  mapHIRToHWValue[op.res()] = res;
+  mapHIRToHWValue.map(op.res(), res);
   return success();
 }
 
@@ -188,8 +181,8 @@ LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
   auto &bb = op.body().front();
   assert(!op.offset() || op.offset().getValue() == 0);
 
-  auto conditionBegin = mapHIRToHWValue[op.condition()];
-  auto tstartBegin = mapHIRToHWValue[op.tstart()];
+  auto conditionBegin = mapHIRToHWValue.lookup(op.condition());
+  auto tstartBegin = mapHIRToHWValue.lookup(op.tstart());
 
   // FIXME
   if (!conditionBegin || !tstartBegin)
@@ -223,19 +216,18 @@ LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
   auto tLastName = helper::getOptionalName(op, 0);
   if (tLastName)
     tLast->setAttr("name", builder->getStringAttr(tLastName.getValue()));
-  mapHIRToHWValue[op.getIterTimeVar()] = iterTimeVar;
-  mapHIRToHWValue[op.res()] = tLast;
+  mapHIRToHWValue.map(op.getIterTimeVar(), iterTimeVar);
+  mapHIRToHWValue.map(op.res(), tLast);
   auto visitResult = visitRegion(op.body());
 
   auto nextIterOp = dyn_cast<hir::NextIterOp>(bb.back());
   assert(nextIterOp);
-  assert(mapHIRToHWValue[nextIterOp.tstart()]);
-  assert(mapHIRToHWValue[nextIterOp.condition()]);
 
   // Replace placeholder values.
-  tstartNextIterOp.replaceAllUsesWith(mapHIRToHWValue[nextIterOp.tstart()]);
+  tstartNextIterOp.replaceAllUsesWith(
+      mapHIRToHWValue.lookup(nextIterOp.tstart()));
   conditionNextIterOp.replaceAllUsesWith(
-      mapHIRToHWValue[nextIterOp.condition()]);
+      mapHIRToHWValue.lookup(nextIterOp.condition()));
 
   if (failed(visitResult))
     return failure();
@@ -244,20 +236,17 @@ LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
 
 LogicalResult HIRToHWPass::visitOp(hir::IsFirstIterOp op) {
   auto isFirstIter =
-      mapHIRToHWValue[op->getParentOfType<hir::WhileOp>().tstart()];
-  assert(isFirstIter);
-  mapHIRToHWValue[op.res()] = isFirstIter;
+      mapHIRToHWValue.lookup(op->getParentOfType<hir::WhileOp>().tstart());
+  mapHIRToHWValue.map(op.res(), isFirstIter);
   return success();
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::NextIterOp op) {
   assert(op.offset().getValue() == 0);
-  assert(mapHIRToHWValue[op.tstart()]);
-  assert(mapHIRToHWValue[op.condition()]);
   return success();
 }
 LogicalResult HIRToHWPass::visitOp(hir::ProbeOp op) {
-  auto input = mapHIRToHWValue[op.input()];
+  auto input = mapHIRToHWValue.lookup(op.input());
   assert(input);
   auto wire = builder
                   ->create<sv::WireOp>(builder->getUnknownLoc(),
@@ -272,8 +261,7 @@ LogicalResult HIRToHWPass::visitOp(hir::ProbeOp op) {
 
 LogicalResult HIRToHWPass::visitOp(hir::RecvOp op) {
   assert(op.offset().getValue() == 0);
-  assert(mapHIRToHWValue[op.bus()]);
-  mapHIRToHWValue[op.res()] = mapHIRToHWValue[op.bus()];
+  mapHIRToHWValue.map(op.res(), mapHIRToHWValue.lookup(op.bus()));
   return success();
 }
 
@@ -293,30 +281,29 @@ LogicalResult HIRToHWPass::visitOp(hir::ReturnOp op) {
   for (size_t i = 0; i < funcArgs.size(); i++) {
     auto modulePortInfo = portMap.getPortInfoForFuncInput(i);
     if (modulePortInfo.direction == hw::PortDirection::OUTPUT) {
-      hwOutputs.push_back(mapHIRToHWValue[funcArgs[i]]);
+      hwOutputs.push_back(mapHIRToHWValue.lookup((Value)funcArgs[i]));
     }
   }
 
   // Insert the hir.func outputs.
   for (Value funcResult : op.operands()) {
-    assert(mapHIRToHWValue[funcResult]);
-    hwOutputs.push_back(mapHIRToHWValue[funcResult]);
+    hwOutputs.push_back(mapHIRToHWValue.lookup(funcResult));
   }
 
   auto *oldOutputOp = hwModuleOp.getBodyBlock()->getTerminator();
   oldOutputOp->replaceAllUsesWith(
       builder->create<hw::OutputOp>(builder->getUnknownLoc(), hwOutputs));
-  opsToErase.push_back(oldOutputOp);
+  oldOutputOp->erase();
   return success();
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::SendOp op) {
   assert(op.offset().getValue() == 0);
-  auto value = mapHIRToHWValue[op.value()];
+  auto value = mapHIRToHWValue.lookup(op.value());
   if (!value)
     return op.emitError() << "Could not find mapped value.";
-  auto placeHolderBus = mapHIRToHWValue[op.bus()];
-  auto tstart = mapHIRToHWValue[op.tstart()];
+  auto placeHolderBus = mapHIRToHWValue.lookup(op.bus());
+  auto tstart = mapHIRToHWValue.lookup(op.tstart());
   Value defaultValue;
   if (auto defaultAttr = op->getAttr("default")) {
     assert(defaultAttr.isa<IntegerAttr>());
@@ -329,14 +316,14 @@ LogicalResult HIRToHWPass::visitOp(hir::SendOp op) {
   auto newBus = builder->create<comb::MuxOp>(
       builder->getUnknownLoc(), value.getType(), tstart, value, defaultValue);
   placeHolderBus.replaceAllUsesWith(newBus);
-  mapHIRToHWValue[op.bus()] = newBus;
+  mapHIRToHWValue.map(op.bus(), newBus);
   return success();
 }
 
 Value instantiateBusSelectLogic(OpBuilder &builder, Value selectBus,
                                 Value trueBus, Value falseBus) {
   auto combinedArrayOfValues = builder.create<hw::ArrayCreateOp>(
-      builder.getUnknownLoc(), SmallVector<Value>({falseBus, trueBus}));
+      builder.getUnknownLoc(), SmallVector<Value>({trueBus, falseBus}));
 
   return builder.create<hw::ArrayGetOp>(builder.getUnknownLoc(),
                                         combinedArrayOfValues, selectBus);
@@ -344,30 +331,36 @@ Value instantiateBusSelectLogic(OpBuilder &builder, Value selectBus,
 
 LogicalResult HIRToHWPass::visitOp(hir::BusSelectOp op) {
   if (op.select_bus().getType().isa<hir::BusType>()) {
-    mapHIRToHWValue[op.res()] = instantiateBusSelectLogic(
-        *builder, mapHIRToHWValue[op.select_bus()],
-        mapHIRToHWValue[op.true_bus()], mapHIRToHWValue[op.false_bus()]);
+    mapHIRToHWValue.map(op.res(),
+                        instantiateBusSelectLogic(
+                            *builder, mapHIRToHWValue.lookup(op.select_bus()),
+                            mapHIRToHWValue.lookup(op.true_bus()),
+                            mapHIRToHWValue.lookup(op.false_bus())));
     return success();
   }
 
-  auto arrayTy =
-      mapHIRToHWValue[op.select_bus()].getType().dyn_cast<hw::ArrayType>();
+  auto arrayTy = mapHIRToHWValue.lookup(op.select_bus())
+                     .getType()
+                     .dyn_cast<hw::ArrayType>();
   SmallVector<Value> resultArray;
-  for (size_t i = 0; i < arrayTy.getSize(); i++) {
+  // Push the values in reverse order in resultArray because ArrayCreateOp takes
+  // assumes that the last value in the array corresponds to zero index (high to
+  // low index).
+  for (int i = arrayTy.getSize() - 1; i >= 0; i--) {
     auto ci = helper::materializeIntegerConstant(
         *builder, i, helper::clog2(arrayTy.getSize()));
     auto trueBus = builder->create<hw::ArrayGetOp>(
-        builder->getUnknownLoc(), mapHIRToHWValue[op.true_bus()], ci);
+        builder->getUnknownLoc(), mapHIRToHWValue.lookup(op.true_bus()), ci);
     auto falseBus = builder->create<hw::ArrayGetOp>(
-        builder->getUnknownLoc(), mapHIRToHWValue[op.false_bus()], ci);
+        builder->getUnknownLoc(), mapHIRToHWValue.lookup(op.false_bus()), ci);
     auto selectBus = builder->create<hw::ArrayGetOp>(
-        builder->getUnknownLoc(), mapHIRToHWValue[op.select_bus()], ci);
+        builder->getUnknownLoc(), mapHIRToHWValue.lookup(op.select_bus()), ci);
 
     resultArray.push_back(
         instantiateBusSelectLogic(*builder, selectBus, trueBus, falseBus));
   }
-  mapHIRToHWValue[op.res()] =
-      builder->create<hw::ArrayCreateOp>(builder->getUnknownLoc(), resultArray);
+  mapHIRToHWValue.map(op.res(), builder->create<hw::ArrayCreateOp>(
+                                    builder->getUnknownLoc(), resultArray));
   return success();
 }
 
@@ -396,10 +389,11 @@ void HIRToHWPass::updateHIRToHWMapForFuncInputs(
     if (modulePortInfo.direction == hw::PortDirection::INPUT) {
       auto hwArg =
           hwModuleOp.getBodyBlock()->getArgument(modulePortInfo.argNum);
-      mapHIRToHWValue[funcArgs[i]] = hwArg;
+      mapHIRToHWValue.map(funcArgs[i], hwArg);
     } else {
-      mapHIRToHWValue[funcArgs[i]] =
-          getConstantX(builder, funcArgs[i].getType())->getResult(0);
+      mapHIRToHWValue.map(
+          funcArgs[i],
+          getConstantX(builder, funcArgs[i].getType())->getResult(0));
     }
   }
 }
@@ -430,10 +424,10 @@ LogicalResult HIRToHWPass::visitOp(hir::TensorExtractOp op) {
   auto tensorTy = op.tensor().getType().dyn_cast<mlir::TensorType>();
   auto shape = tensorTy.getShape();
   SmallVector<Value> indices;
-  auto hwTensor = mapHIRToHWValue[op.tensor()];
+  auto hwTensor = mapHIRToHWValue.lookup(op.tensor());
   assert(hwTensor);
   if (!hwTensor.getType().isa<hw::ArrayType>()) {
-    mapHIRToHWValue[op.res()] = hwTensor;
+    mapHIRToHWValue.map(op.res(), hwTensor);
     return success();
   }
 
@@ -447,8 +441,9 @@ LogicalResult HIRToHWPass::visitOp(hir::TensorExtractOp op) {
           IntegerType::get(builder->getContext(),
                            helper::clog2(tensorTy.getNumElements())),
           helper::calcLinearIndex(indices, shape).getValue()));
-  mapHIRToHWValue[op.res()] = builder->create<hw::ArrayGetOp>(
-      builder->getUnknownLoc(), hwTensor, linearIdxValue);
+  mapHIRToHWValue.map(
+      op.res(), builder->create<hw::ArrayGetOp>(builder->getUnknownLoc(),
+                                                hwTensor, linearIdxValue));
   return success();
 }
 
@@ -461,9 +456,9 @@ LogicalResult HIRToHWPass::visitOp(hir::TensorInsertOp op) {
 
   auto tensorTy = op.tensor().getType().dyn_cast<mlir::TensorType>();
   assert(tensorTy);
-  auto hwTensor = mapHIRToHWValue[op.tensor()];
+  auto hwTensor = mapHIRToHWValue.lookup(op.tensor());
   if (!hwTensor.getType().isa<hw::ArrayType>()) {
-    mapHIRToHWValue[op.res()] = mapHIRToHWValue[op.element()];
+    mapHIRToHWValue.map(op.res(), mapHIRToHWValue.lookup(op.element()));
     return success();
   }
 
@@ -495,35 +490,30 @@ LogicalResult HIRToHWPass::visitOp(hir::TensorInsertOp op) {
   auto leftSlice = builder->create<hw::ArraySliceOp>(
       builder->getUnknownLoc(), leftSliceTy, hwTensor, leftIdx);
   auto element = builder->create<hw::ArrayCreateOp>(
-      builder->getUnknownLoc(), mapHIRToHWValue[op.element()]);
+      builder->getUnknownLoc(), mapHIRToHWValue.lookup(op.element()));
 
   auto rightSliceTy = hw::ArrayType::get(
       builder->getContext(), convertToHWType(tensorTy.getElementType()),
       rightWidth);
   auto rightSlice = builder->create<hw::ArraySliceOp>(
       builder->getUnknownLoc(), rightSliceTy, hwTensor, rightIdx);
-  mapHIRToHWValue[op.res()] = builder->create<hw::ArrayConcatOp>(
-      builder->getUnknownLoc(),
-      SmallVector<Value>({leftSlice, element, rightSlice}));
+  mapHIRToHWValue.map(
+      op.res(), builder->create<hw::ArrayConcatOp>(
+                    builder->getUnknownLoc(),
+                    SmallVector<Value>({leftSlice, element, rightSlice})));
   return success();
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusAssignOp op) {
-  assert(mapHIRToHWValue[op.src()]);
-  assert(mapHIRToHWValue[op.dest()]);
-  // auto name = helper::getOptionalName(op.dest());
-  // Value hwRes;
-  // hwRes =
-  //    convertToOptionalNamedValue(*builder, name, mapHIRToHWValue[op.src()]);
-  mapHIRToHWValue[op.dest()] = mapHIRToHWValue[op.src()];
+  mapHIRToHWValue.map(op.dest(), mapHIRToHWValue.lookup(op.src()));
   return success();
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusBroadcastOp op) {
   auto tensorTy = op.res().getType().dyn_cast<mlir::TensorType>();
-  auto hwBus = mapHIRToHWValue[op.bus()];
+  auto hwBus = mapHIRToHWValue.lookup(op.bus());
   if (tensorTy.getNumElements() == 1) {
-    mapHIRToHWValue[op.res()] = hwBus;
+    mapHIRToHWValue.map(op.res(), hwBus);
     return success();
   }
 
@@ -532,15 +522,16 @@ LogicalResult HIRToHWPass::visitOp(hir::BusBroadcastOp op) {
     replicatedArray.push_back(hwBus);
   }
 
-  mapHIRToHWValue[op.res()] = builder->create<hw::ArrayCreateOp>(
-      builder->getUnknownLoc(), replicatedArray);
+  mapHIRToHWValue.map(op.res(), builder->create<hw::ArrayCreateOp>(
+                                    builder->getUnknownLoc(), replicatedArray));
   return success();
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusOrOp op) {
-  mapHIRToHWValue[op.res()] = builder->create<comb::OrOp>(
-      builder->getUnknownLoc(), mapHIRToHWValue[op.left()],
-      mapHIRToHWValue[op.right()]);
+  mapHIRToHWValue.map(op.res(), builder->create<comb::OrOp>(
+                                    builder->getUnknownLoc(),
+                                    mapHIRToHWValue.lookup(op.left()),
+                                    mapHIRToHWValue.lookup(op.right())));
   return success();
 }
 
@@ -548,36 +539,31 @@ LogicalResult HIRToHWPass::visitOp(hir::CreateTupleOp op) {
   SmallVector<Value> mappedArgs;
   SmallVector<Type> mappedArgTypes;
   for (auto arg : op.args()) {
-    assert(mapHIRToHWValue[arg]);
-    mappedArgs.push_back(mapHIRToHWValue[arg]);
-    mappedArgTypes.push_back(mapHIRToHWValue[arg].getType());
+    mappedArgs.push_back(mapHIRToHWValue.lookup(arg));
+    mappedArgTypes.push_back(mapHIRToHWValue.lookup(arg).getType());
   }
 
-  mapHIRToHWValue[op.res()] = builder->create<comb::ConcatOp>(
-      builder->getUnknownLoc(), convertToHWType(op.res().getType()),
-      mappedArgs);
+  mapHIRToHWValue.map(op.res(),
+                      builder->create<comb::ConcatOp>(
+                          builder->getUnknownLoc(),
+                          convertToHWType(op.res().getType()), mappedArgs));
   return success();
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::DelayOp op) {
-  auto input = mapHIRToHWValue[op.input()];
+  auto input = mapHIRToHWValue.lookup(op.input());
   assert(input);
   auto name = helper::getOptionalName(op, 0);
-  mapHIRToHWValue[op.res()] =
-      getDelayedValue(builder, input, op.delay(), name, op.getLoc(), clk);
+  mapHIRToHWValue.map(op.res(), getDelayedValue(builder, input, op.delay(),
+                                                name, op.getLoc(), clk));
   return success();
 }
 
 LogicalResult HIRToHWPass::visitHWOp(Operation *operation) {
-  BlockAndValueMapping operandMap;
-  for (auto &operand : operation->getOpOperands()) {
-    auto mappedOperand = mapHIRToHWValue[operand.get()];
-    assert(mappedOperand);
-    operandMap.map(operand.get(), mappedOperand);
-  }
-  auto *clonedOperation = builder->clone(*operation, operandMap);
+
+  auto *clonedOperation = builder->clone(*operation, mapHIRToHWValue);
   for (size_t i = 0; i < operation->getNumResults(); i++) {
-    mapHIRToHWValue[operation->getResult(i)] = clonedOperation->getResult(i);
+    mapHIRToHWValue.map(operation->getResult(i), clonedOperation->getResult(i));
   }
   return success();
 }
@@ -591,17 +577,19 @@ LogicalResult HIRToHWPass::visitRegion(mlir::Region &region) {
 }
 
 LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
-  if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation))
-    return visitOp(op);
   if (auto op = dyn_cast<hir::BusOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::BusBroadcastOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::CommentOp>(operation))
     return visitOp(op);
+  if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation))
+    return visitOp(op);
   if (auto op = dyn_cast<hir::CallOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::DelayOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::TimeGetClkOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::TimeOp>(operation))
     return visitOp(op);

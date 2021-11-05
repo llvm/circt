@@ -7,6 +7,7 @@
 #include "MemrefLoweringUtils.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -303,8 +304,8 @@ static void initUnconnectedEnBusTensor(OpBuilder &builder, Value busTensor,
   auto dataTy =
       helper::getElementType(busTensor.getType()).dyn_cast<IntegerType>();
   assert(dataTy);
-  auto c0 = builder.create<mlir::arith::ConstantOp>(
-      builder.getUnknownLoc(), IntegerAttr::get(dataTy, 0));
+  auto c0 = builder.create<hw::ConstantOp>(builder.getUnknownLoc(),
+                                           IntegerAttr::get(dataTy, 0));
   auto zeroBus = builder.create<hir::BusOp>(builder.getUnknownLoc(), busTy);
   builder
       .create<hir::SendOp>(builder.getUnknownLoc(), c0, zeroBus, tstart,
@@ -512,7 +513,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
 
-  auto c1 = builder.create<mlir::arith::ConstantOp>(
+  auto c1 = builder.create<hw::ConstantOp>(
       builder.getUnknownLoc(), builder.getI1Type(),
       mlir::IntegerAttr::get(builder.getI1Type(), 1));
 
@@ -552,7 +553,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
   mlir::OpBuilder builder(op.getContext());
   builder.setInsertionPoint(op);
 
-  auto c1 = builder.create<mlir::arith::ConstantOp>(
+  auto c1 = builder.create<hw::ConstantOp>(
       builder.getUnknownLoc(), builder.getI1Type(),
       mlir::IntegerAttr::get(builder.getI1Type(), 1));
   // Insert logic to send address and valid signals to address bus.

@@ -24,6 +24,7 @@ hir.func @convolution at %t(
 
   //Read from input. Update line buffer. Input values to each row of window.
   hir.for %i : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%ti = %t + 1 ){
+    hir.probe %i name "i" : i4
     %tf=hir.for %j : i4 = %c0_i4 to %ub_i4 step %c1_i4 iter_time(%tj = %ti + 1 ){
       %v =  hir.load %A[port 0][%i, %j] at %tj 
       : !hir.memref<16x16xi32>

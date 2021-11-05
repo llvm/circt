@@ -7,6 +7,7 @@
 #include "MemrefLoweringUtils.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include <iostream>
 using namespace circt;
@@ -33,7 +34,7 @@ Value insertDataSendLogic(OpBuilder &builder, Value data, Value rootDataBusT,
   Value nextDataBusT = funcOpBuilder.create<hir::BusOp>(
       funcOpBuilder.getUnknownLoc(), rootDataBusT.getType());
 
-  auto c1 = builder.create<mlir::arith::ConstantOp>(
+  auto c1 = builder.create<hw::ConstantOp>(
       builder.getUnknownLoc(), builder.getI1Type(),
       mlir::IntegerAttr::get(builder.getI1Type(), 1));
   auto attrC0 = IntegerAttr::get(c1.getType(), 0);

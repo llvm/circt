@@ -233,7 +233,7 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
   }
   builder->create<sv::AlwaysOp>(
       builder->getUnknownLoc(), sv::EventControl::AtPosEdge, clk,
-      [&reg, &regInput, builder] {
+      [builder, &reg, &regInput] {
         builder->create<sv::PAssignOp>(builder->getUnknownLoc(), reg.result(),
                                        regInput);
       });

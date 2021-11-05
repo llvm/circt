@@ -8,7 +8,8 @@ add_circt_dialect_library(CIRCTHIRTransforms
   Passes/RegisterAllocationPass.cpp
   Passes/ScheduleVerifier.cpp
   Passes/SeqScheduler.cpp
-  Passes/SimplifyLoop.cpp
+  Passes/SimplifyCtrl.cpp
+  Passes/SimplifyCtrlUtils.cpp
   PassRegistration.cpp
 
   DEPENDS

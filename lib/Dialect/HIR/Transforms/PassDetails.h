@@ -12,8 +12,15 @@
 namespace circt {
 namespace hw {
 class HWDialect;
-class HWModuleOp;
 } // namespace hw
+
+namespace comb {
+class CombDialect;
+} // namespace comb
+
+namespace sv {
+class SVDialect;
+} // namespace sv
 
 namespace hir {
 #define GEN_PASS_CLASSES

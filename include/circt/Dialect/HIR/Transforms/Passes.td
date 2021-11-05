@@ -2,11 +2,12 @@
 #define CIRCT_DIALECT_HIR_TRANSFORMS_PASSES
 include "mlir/Pass/PassBase.td"
 
-def SimplifyLoop : Pass<"hir-simplify-loop", "hir::FuncOp"> {
-  let summary = "Converts ForOp to WhileOp.";
+def SimplifyCtrl : Pass<"hir-simplify-ctrl", "hir::FuncOp"> {
+  let summary = "Simplifies ForOp and IfOp.";
 
-  let constructor = "circt::hir::createSimplifyLoopPass()";
-  let dependentDialects = ["circt::hw::HWDialect"];
+  let constructor = "circt::hir::createSimplifyCtrlPass()";
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
+  "circt::sv::SVDialect"];
 }
 
 def IndexLowering : Pass<"hir-lower-index", "hir::FuncOp"> {

@@ -9,6 +9,7 @@
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 
 #include "circt/Dialect/HIR/IR/helper.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -117,7 +118,12 @@ void HIRDialect::initialize() {
 
 Operation *HIRDialect::materializeConstant(OpBuilder &builder, Attribute value,
                                            Type type, Location loc) {
-  return builder.create<mlir::arith::ConstantOp>(loc, type, value);
+  if (value.getType().isa<IntegerType>())
+    return builder.create<hw::ConstantOp>(loc, type,
+                                          value.dyn_cast<IntegerAttr>());
+  // For index type.
+  return builder.create<mlir::arith::ConstantOp>(loc, type,
+                                                 value.dyn_cast<IntegerAttr>());
 }
 
 #include "circt/Dialect/HIR/IR/HIRDialect.cpp.inc"
