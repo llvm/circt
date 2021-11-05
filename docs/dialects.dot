@@ -1,86 +1,94 @@
-Digraph G {
+digraph G {
   // Note: Remember to run the circt/utils/update-docs-dialects.sh script after
   // modifying this file to regenerate the .svg and .png renders of the graph.
   rankdir = TB
-  splines=spline;
+  splines=spline
   node [shape=box style=filled fillcolor="white"]
   nodesep=0.2 // horizontal compression
   ranksep=0.5 // vertical compression
+  compound=true
 
   // MLIR dialects
   subgraph cluster_mlir {
     label = "Upstream MLIR";
-    SCF [fillcolor="lightblue"]
-    Standard [fillcolor="lightblue"]
-    Arith [fillcolor="lightblue"]
-    Affine [fillcolor="lightblue"]
+    node [fillcolor="#beaed4"]
+    SCF Affine
+    subgraph cluster_std_arith_dialect {
+      label = ""
+      Standard Arith
+    }
   }
-
-  // ===== Nodes =====
 
   subgraph cluster_circt {
     label = "CIRCT"
     // CIRCT dialects
-    Calyx [URL="https://circt.llvm.org/docs/Dialects/Calyx/"]
+    subgraph cluster_HLS {
+      label = "HLS Dialects"
+    }
     Handshake [URL="https://circt.llvm.org/docs/Dialects/Handshake/"]
+    Calyx [URL="https://circt.llvm.org/docs/Dialects/Calyx/"]
     FIRRTL [URL="https://circt.llvm.org/docs/Dialects/FIRRTL/"]
-    LLHD [URL="https://circt.llvm.org/docs/Dialects/LLHD/"]
-    HW [URL="https://circt.llvm.org/docs/Dialects/HW/"]
-    SV [URL="https://circt.llvm.org/docs/Dialects/SV/"]
-    Comb [URL="https://circt.llvm.org/docs/Dialects/Comb/"]
-    Seq [URL="https://circt.llvm.org/docs/Dialects/Seq/"]
     StaticLogic [URL="https://circt.llvm.org/docs/Dialects/StaticLogic/"]
     MSFT [URL="https://circt.llvm.org/docs/Dialects/MSFT/"]
     ESI [URL="https://circt.llvm.org/docs/Dialects/ESI/"]
     FSM [URL="https://circt.llvm.org/docs/Dialects/FSM/"]
 
+    subgraph cluster_RTL {
+      label = "RTL dialects"
+      Seq [URL="https://circt.llvm.org/docs/Dialects/Seq/"]
+      HW [URL="https://circt.llvm.org/docs/Dialects/HW/"]
+      SV [URL="https://circt.llvm.org/docs/Dialects/SV/"]
+      Comb [URL="https://circt.llvm.org/docs/Dialects/Comb/"]
+      LLHD [URL="https://circt.llvm.org/docs/Dialects/LLHD/"]
+    }
+
     // Internal tools
-    ExportVerilog [fillcolor="darksalmon"]
-    FIRRTLParser [label="FIRRTL Parser" fillcolor="darksalmon"]
-    Scheduling [fillcolor="darksalmon"]
-    llhd_sim [label="LLHD Sim" fillcolor="darksalmon"]
-    PyCDE [fillcolor="darksalmon"]
+    subgraph internal_tools{
+      node [fillcolor="#fdc086"]
+      ExportVerilog FIRRTLParser Scheduling llhd_sim PyCDE
+    }
   }
 
   // External tools
-  Moore [shape=octagon fillcolor="gold"]
-  Circilator [shape=octagon fillcolor="gold" style="dashed,filled"]
-  Calyx_native [label="Calyx Native" shape=octagon fillcolor="gold"]
+  subgraph external_tools {
+    node [shape=octagon fillcolor="#ffff99"]
+    Moore Calyx_native Chisel
+    Circilator [style="dashed,filled"]
+  }
 
   // File formats
-  VCDTrace [label=".vcd" fillcolor="yellowgreen" shape=note]
-  CPPFile [label=".cpp" fillcolor="yellowgreen" shape=note]
-  SVFile [label=".sv" fillcolor="yellowgreen" shape=note]
-  CapNProto [label="Cap'n Proto" fillcolor="yellowgreen" shape=note]
-  TCL [label=".tcl" fillcolor="yellowgreen" shape=note]
-  FIRFile [label=".fir" fillcolor="yellowgreen" shape=note]
-  SVVHDL [label=".sv/.vhd" fillcolor="yellowgreen" shape=note]
-  PyFile [label=".py" fillcolor="yellowgreen" shape=note]
+  subgraph file_formats {
+    node [fillcolor="#7fc97f" shape="note"]
+    VCDTrace [label=".vcd"]
+    CPPFile [label=".cpp"]
+    SVFile [label=".sv"]
+    CapNProto [label="Cap'n Proto"]
+    TCL [label=".tcl"]
+    FIRFile [label=".fir"]
+    SVVHDL [label=".sv/.vhd"]
+    PyFile [label=".py"]
+  }
 
   // ===== Connections =====
-
   // Dialect conversions
   SCF -> Calyx
   Affine -> StaticLogic [style=dashed]
   StaticLogic -> Calyx [style=dashed]
-  Standard -> Calyx
-  Arith -> Calyx
-  Standard -> Handshake
-  Arith -> Handshake
+  Arith -> {Handshake Calyx} [ltail=cluster_std_arith_dialect]
 
   Handshake -> FIRRTL
   Calyx -> FSM [style=dashed]
+
+  // Things that lower into a subset of the RTL-like dialects. Cluster these
+  // together to avoid a massive clutter.
+  {FIRRTL FSM ESI MSFT PyCDE} -> HW [lhead=cluster_RTL minlen=1]
   Seq -> SV
-  FIRRTL -> HW
-  FSM -> HW
-  ESI -> HW
-  MSFT -> HW
   HW -> LLHD
-  FIRRTL->Comb
   Comb -> ExportVerilog
 
   // Tool flows
   Scheduling -> StaticLogic [dir=both]
+  Chisel -> FIRFile
   FIRFile -> FIRRTLParser
   FIRRTLParser -> FIRRTL
   HW -> ExportVerilog
@@ -90,21 +98,14 @@ Digraph G {
   LLHD -> Circilator [style=dashed]
   HW -> Circilator [style=dashed]
   Calyx -> Calyx_native
+  Calyx_native -> SVFile
   ExportVerilog -> SVFile
   Circilator -> CPPFile [style=dashed]
-  LLHD -> llhd_sim
-  Comb -> llhd_sim
-  HW -> llhd_sim
-  Seq -> llhd_sim
+  {LLHD Comb HW Seq} -> llhd_sim
   llhd_sim -> VCDTrace
-  Calyx_native -> SVFile
   ESI -> CapNProto
   MSFT -> TCL
   PyFile -> PyCDE
-  PyCDE -> HW
-  PyCDE -> Comb
-  PyCDE -> Seq
-  PyCDE -> LLHD
   PyCDE -> ESI [style=dashed]
 
   // ====== Some fake edges to coerce a good layout ======
