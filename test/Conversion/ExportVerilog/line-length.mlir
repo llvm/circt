@@ -14,37 +14,37 @@ hw.module @longvariadic(%a: i8) -> (b: i8) {
 }
 
 // SHORT-LABEL: module longvariadic
-// SHORT: assign b =  a + a + a + a + a + a + a + a + a + a + a
-// SHORT:             + a + a + a + a + a + a + a + a + a + a +
-// SHORT:             a + a + a + a + a + a + a + a + a + a + a
-// SHORT:             + a + a + a + a + a + a + a + a + a + a +
-// SHORT:             a + a + a + a + a + a + a + a + a + a + a
-// SHORT:             + a + a + a + a + a + a + a + a + a + a +
-// SHORT:             a;
+// SHORT:       assign b = a + a + a + a + a + a + a + a + a + a + a
+// SHORT-NEXT:             + a + a + a + a + a + a + a + a + a + a +
+// SHORT-NEXT:             a + a + a + a + a + a + a + a + a + a + a
+// SHORT-NEXT:             + a + a + a + a + a + a + a + a + a + a +
+// SHORT-NEXT:             a + a + a + a + a + a + a + a + a + a + a
+// SHORT-NEXT:             + a + a + a + a + a + a + a + a + a + a +
+// SHORT-NEXT:             a;
 
 // DEFAULT-LABEL: module longvariadic
-// DEFAULT: assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// DEFAULT:            a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// DEFAULT:            a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a; 
+// DEFAULT:       assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+// DEFAULT-NEXT:             a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+// DEFAULT-NEXT:             a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
 // LONG-LABEL: module longvariadic
-// LONG: assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
-//                  + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
+// LONG:       assign b = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+// LONG-NEXT:             + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
 
 // LIMIT_SHORT-LABEL: module longvariadic
-// LIMIT_SHORT:  wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT:                    + a + a + a + a + a;
-// LIMIT_SHORT:  wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT:                      + a + a + a + a + a;
-// LIMIT_SHORT:  wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT:                      + a + a + a + a + a;
-// LIMIT_SHORT:  wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a + a + a + a
-// LIMIT_SHORT:                      + a + a + a + a + a;
-// LIMIT_SHORT:  assign b = _tmp + _tmp_0 + _tmp_1 + _tmp_2;
+// LIMIT_SHORT:       wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:                    + a + a + a + a + a;
+// LIMIT_SHORT-NEXT:  wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:                      + a + a + a + a + a;
+// LIMIT_SHORT-NEXT:  wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:                      + a + a + a + a + a;
+// LIMIT_SHORT-NEXT:  wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a + a + a + a
+// LIMIT_SHORT-NEXT:                      + a + a + a + a + a;
+// LIMIT_SHORT-NEXT:  assign b = _tmp + _tmp_0 + _tmp_1 + _tmp_2;
 
 // LIMIT_-LABEL: module longvariadic
-// LIMIT_LONG:   wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_LONG:                     a + a + a + a + a + a + a + a + a;
-// LIMIT_LONG:   wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
-// LIMIT_LONG:                       a + a + a + a + a + a + a + a + a;
-// LIMIT_LONG:   assign b = _tmp + _tmp_0;
+// LIMIT_LONG:        wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+// LIMIT_LONG-NEXT:                     a + a + a + a + a + a + a + a + a;
+// LIMIT_LONG-NEXT:   wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+// LIMIT_LONG-NEXT:                       a + a + a + a + a + a + a + a + a;
+// LIMIT_LONG-NEXT:   assign b = _tmp + _tmp_0;
