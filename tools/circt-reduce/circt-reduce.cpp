@@ -118,8 +118,17 @@ static LogicalResult execute(MLIRContext &context) {
   // pattern to successively smaller subsets of the operations until we find one
   // that retains the interesting behavior.
   // ModuleExternalizer pattern;
+  BitVector appliedOneShotPatterns(patterns.size(), false);
+  auto lastReportTime = std::chrono::high_resolution_clock::now();
+  constexpr double reportPeriod = 0.1 /*seconds*/;
   for (unsigned patternIdx = 0; patternIdx < patterns.size();) {
     Reduction &pattern = *patterns[patternIdx];
+    if (pattern.isOneShot() && appliedOneShotPatterns[patternIdx]) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Skipping one-shot `" << pattern.getName() << "`\n");
+      ++patternIdx;
+      continue;
+    }
     VERBOSE(llvm::errs() << "Trying reduction `" << pattern.getName() << "`\n");
     size_t rangeBase = 0;
     size_t rangeLength = -1;
@@ -142,6 +151,20 @@ static LogicalResult execute(MLIRContext &context) {
         break;
       }
 
+      // Show some progress indication.
+      VERBOSE({
+        auto thisReportTime = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = thisReportTime - lastReportTime;
+        if (elapsed.count() >= reportPeriod) {
+          lastReportTime = thisReportTime;
+          size_t boundLength = std::min(rangeLength, opIdx);
+          size_t numDone = rangeBase / boundLength + 1;
+          size_t numTotal = (opIdx + boundLength + 1) / boundLength;
+          llvm::errs() << "  [" << numDone << "/" << numTotal << "; "
+                       << (numDone * 100 / numTotal) << "%]\r";
+        }
+      });
+
       // Check if this reduced module is still interesting, and its overall size
       // is smaller than what we had before.
       auto test = tester.isInteresting(newModule.get());
@@ -156,34 +179,41 @@ static LogicalResult execute(MLIRContext &context) {
                 << "- Accepting module of size " << bestSize << "\n");
         module = std::move(newModule);
 
-        // If this was already a run across all operations, no need to restart
-        // again at the top. We're done at this point.
-        if (rangeLength == (size_t)-1) {
-          rangeLength = 0;
-        } else {
-          rangeBase = 0;
-          rangeLength = -1;
-        }
+        // We leave `rangeBase` and `rangeLength` untouched in this case. This
+        // causes the next iteration of the loop to try the same pattern again
+        // at the same offset. If the pattern has reached a fixed point, nothing
+        // changes and we proceed. If the pattern has removed an operation, this
+        // will already operate on the next batch of operations which have
+        // likely moved to this point. The only exception are operations that
+        // are marked as "one shot", which explicitly ask to not be re-applied
+        // at the same location.
+        if (pattern.isOneShot())
+          rangeBase += rangeLength;
 
         // Write the current state to disk if the user asked for it.
         if (keepBest)
           if (failed(writeOutput(module.get())))
             return failure();
       } else {
-        // Try the pattern on the next `rangeLength` number of operations. If we
-        // go past the end of the input, reduce the size of the chunk of
-        // operations we're reducing and start again from the top.
+        // Try the pattern on the next `rangeLength` number of operations.
         rangeBase += rangeLength;
-        if (rangeBase >= opIdx) {
-          // Exhausted all subsets of this size. Try to go smaller.
-          rangeLength = std::min(rangeLength, opIdx) / 2;
-          rangeBase = 0;
-          if (rangeLength > 0)
-            VERBOSE(llvm::errs()
-                    << "- Trying " << rangeLength << " ops at once\n");
-        }
+      }
+
+      // If we have gone past the end of the input, reduce the size of the chunk
+      // of operations we're reducing and start again from the top.
+      if (rangeBase >= opIdx) {
+        rangeLength = std::min(rangeLength, opIdx) / 2;
+        rangeBase = 0;
+        if (rangeLength > 0)
+          VERBOSE(llvm::errs()
+                  << "- Trying " << rangeLength << " ops at once\n");
       }
     }
+
+    // If this was a one-shot pattern, mark it as having been applied. This will
+    // prevent further reapplication.
+    if (pattern.isOneShot())
+      appliedOneShotPatterns.set(patternIdx);
 
     // If the pattern provided a successful reduction, restart with the first
     // pattern again, since we might have uncovered additional reduction
