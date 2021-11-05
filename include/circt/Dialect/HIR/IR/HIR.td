@@ -451,7 +451,9 @@ def CallOp : HIR_Op<"call", [CallOpInterface,AttrSizedOperandSegments] > {
       ```
   }];
 
-  let arguments = (ins FlatSymbolRefAttr:$callee, 
+  let arguments = (ins 
+      OptionalAttr<StrAttr>:$instance_name,
+      FlatSymbolRefAttr:$callee, 
       TypeAttr : $funcTy,
       Variadic<AnyType>:$operands, 
       Optional<HIR_TimeType>:$tstart,

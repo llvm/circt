@@ -119,9 +119,12 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
   for (auto ty : op.getResultTypes())
     hwResultTypes.push_back(convertToHWType(ty));
 
-  auto instanceName = builder->getStringAttr(
-      op.callee().str() + "_inst" +
-      std::to_string(mapFuncNameToInstanceCount[op.callee()]++));
+  auto instanceName =
+      op.instance_nameAttr()
+          ? op.instance_nameAttr()
+          : builder->getStringAttr(
+                op.callee().str() + "_inst" +
+                std::to_string(mapFuncNameToInstanceCount[op.callee()]++));
 
   auto calleeHWModule = dyn_cast_or_null<hw::HWModuleOp>(op.getCalleeDecl());
   auto calleeHWModuleExtern =

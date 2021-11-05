@@ -60,8 +60,10 @@ hir.func @convolution at %t(
           %v = hir.load %wndw[port 0][%k1,%k2] at %tk2 + 1
           : !hir.memref<(bank 3)x(bank 3)xi32>
           %k2Plus1 = arith.addi %k2, %1: index
+          hir.comment "store op start."
           hir.store %v to %wndw[port 1][%k1,%k2Plus1] at %tk2 + 1
             :!hir.memref<(bank 3)x(bank 3)xi32>
+          hir.comment "store op end."
           hir.next_iter at %tk2
         }{unroll}
         hir.next_iter at %tk1 

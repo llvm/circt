@@ -16,7 +16,7 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   %conc1 = comb.concat %a : i12
 
   // CHECK-NEXT:    [[RES7:%[0-9]+]] = comb.parity [[RES4]] : i12
-  %parity1 = comb.parity %conc1 : i12
+  %parity1 = comb.parity %conc1{name="king"} : i12
 
   // CHECK-NEXT:    [[RES8:%[0-9]+]] = comb.concat [[RES4]], [[RES0]], [[RES1]], [[RES2]], [[RES2]] : i12, i12, i12, i7, i7
   %result = comb.concat %conc1, %b, %c, %d, %d : i12, i12, i12, i7, i7

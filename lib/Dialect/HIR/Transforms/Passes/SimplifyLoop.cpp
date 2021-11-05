@@ -105,7 +105,7 @@ LogicalResult SimplifyLoopPass::visitOp(ForOp forOp) {
         builder.getUnknownLoc(),
         SmallVector<Type>(
             {builder.getI1Type(), forOp.getInductionVar().getType()}),
-        forOpEntryName, TypeAttr::get(funcTy),
+        StringAttr(), forOpEntryName, TypeAttr::get(funcTy),
         SmallVector<Value>({isFirstIter, forOp.lb(), forOp.ub(), forOp.step()}),
         whileOp.getIterTimeVar(), builder.getI64IntegerAttr(0));
     auto width = builder.getI64IntegerAttr(ivTy.getIntOrFloatBitWidth());

@@ -266,13 +266,18 @@ MemrefLoweringPass::createBusInstantiationsAndCallOp(hir::AllocaOp op) {
   auto elementWidth = helper::getBitWidth(memrefTy.getElementType()).getValue();
   auto addrWidth = helper::clog2(memrefTy.getNumElementsPerBank());
   auto tensorSize = memrefTy.getNumBanks();
+
   auto memModuleName = createUniqueFuncName(
       builder.getContext(), op.mem_type().str(),
       {memrefTy.getNumBanks(), memrefTy.getNumElementsPerBank(), elementWidth});
-
+  auto instanceName = helper::getOptionalName(op, 0);
+  auto instanceNameAttr = instanceName
+                              ? builder.getStringAttr(instanceName.getValue())
+                              : StringAttr();
   auto callOp = builder.create<hir::CallOp>(
-      builder.getUnknownLoc(), SmallVector<Type>(), memModuleName,
-      TypeAttr::get(funcTy), inputBuses, tstartRegion, IntegerAttr());
+      builder.getUnknownLoc(), SmallVector<Type>(), instanceNameAttr,
+      memModuleName, TypeAttr::get(funcTy), inputBuses, tstartRegion,
+      IntegerAttr());
 
   auto params = builder.getDictionaryAttr(
       {builder.getNamedAttr("ELEMENT_WIDTH",
@@ -671,7 +676,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::CallOp op) {
       hir::FuncType::get(builder.getContext(), inputTypes, inputAttrs,
                          funcTy.getResultTypes(), funcTy.getResultAttrs());
   auto newCallOp = builder.create<hir::CallOp>(
-      op.getLoc(), op.getResultTypes(), op.calleeAttr(),
+      op.getLoc(), op.getResultTypes(), op.instance_nameAttr(), op.calleeAttr(),
       TypeAttr::get(newFuncTy), operands, op.tstart(), op.offsetAttr());
   op.replaceAllUsesWith(newCallOp);
   opsToErase.push_back(op);

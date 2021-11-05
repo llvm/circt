@@ -280,6 +280,11 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
   SmallVector<OpAsmParser::OperandType, 4> operands;
   llvm::Optional<OpAsmParser::OperandType> tstart;
   IntegerAttr offset;
+  StringAttr instanceNameAttr;
+  auto instanceNameParseResult =
+      parser.parseOptionalAttribute(instanceNameAttr);
+  if (instanceNameParseResult.hasValue() && instanceNameParseResult.getValue())
+    return failure();
 
   if (parser.parseAttribute(calleeAttr))
     return failure();
@@ -327,6 +332,8 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
                           {static_cast<int32_t>(operands.size()),
                            static_cast<int32_t>(tstart.hasValue() ? 1 : 0)}));
 
+  if (instanceNameAttr)
+    result.addAttribute("instance_name", instanceNameAttr);
   result.addAttribute("callee", calleeAttr);
   result.addAttribute("funcTy", TypeAttr::get(calleeTy));
   if (offset)
@@ -337,6 +344,9 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
 }
 
 static void printCallOp(OpAsmPrinter &printer, CallOp op) {
+  printer << " ";
+  if (op.instance_name().hasValue())
+    printer << op.instance_nameAttr();
   printer << " @" << op.callee();
   printer << "(" << op.operands() << ") at ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
