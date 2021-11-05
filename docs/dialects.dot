@@ -81,7 +81,7 @@ digraph G {
 
   // Things that lower into a subset of the RTL-like dialects. Cluster these
   // together to avoid a massive clutter.
-  {FIRRTL FSM ESI MSFT PyCDE} -> HW [lhead=cluster_RTL minlen=1]
+  {FIRRTL FSM ESI MSFT PyCDE} -> HW [lhead=cluster_RTL]
   Seq -> SV
   HW -> LLHD
   Comb -> ExportVerilog
@@ -91,15 +91,12 @@ digraph G {
   Chisel -> FIRFile
   FIRFile -> FIRRTLParser
   FIRRTLParser -> FIRRTL
-  HW -> ExportVerilog
-  SV -> ExportVerilog
+  {HW SV} -> ExportVerilog
   SVVHDL -> Moore [weight=999]
   Moore -> LLHD
-  LLHD -> Circilator [style=dashed]
-  HW -> Circilator [style=dashed]
+  {LLHD HW} -> Circilator [style=dashed]
   Calyx -> Calyx_native
-  Calyx_native -> SVFile
-  ExportVerilog -> SVFile
+  {Calyx_native ExportVerilog} -> SVFile
   Circilator -> CPPFile [style=dashed]
   {LLHD Comb HW Seq} -> llhd_sim
   llhd_sim -> VCDTrace
@@ -113,12 +110,8 @@ digraph G {
   // start looking weird.
   Standard -> Scheduling [weight=999 style=invis]
   FIRFile -> PyFile [weight=999 style=invis]
-  Calyx -> Calyx_native [weight=999 style=invis]
-  Calyx_native -> SVVHDL [weight=999 style=invis]
 
   // Fix the following sink nodes below the CIRCT cluster
-  llhd_sim -> SVFile [weight=999 style=invis]
-  llhd_sim -> Circilator [weight=999 style=invis]
-  llhd_sim -> TCL [weight=999 style=invis]
-  llhd_sim -> CapNProto [weight=999 style=invis]
+  llhd_sim -> {SVFile Circilator TCL CapNProto} [weight=999 style=invis]
+  Calyx_native -> SVFile [weight=999 style=invis]
 }
