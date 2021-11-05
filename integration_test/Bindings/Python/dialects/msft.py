@@ -3,8 +3,7 @@
 # RUN: cat %t | FileCheck --check-prefix=ERR %s
 
 import circt
-from circt import msft
-from circt.dialects import hw, msft as msft_ops
+from circt.dialects import hw, msft
 
 import mlir.ir as ir
 import sys
@@ -30,11 +29,11 @@ with ir.Context() as ctx, ir.Location.unknown():
                         output_ports=[],
                         body_builder=lambda module: hw.OutputOp([]))
 
-    msft_mod = msft_ops.MSFTModuleOp(name='msft_mod',
-                                     input_ports=[],
-                                     output_ports=[],
-                                     parameters=ir.DictAttr.get(
-                                         {"WIDTH": ir.IntegerAttr.get(i32, 8)}))
+    msft_mod = msft.MSFTModuleOp(name='msft_mod',
+                                 input_ports=[],
+                                 output_ports=[],
+                                 parameters=ir.DictAttr.get(
+                                     {"WIDTH": ir.IntegerAttr.get(i32, 8)}))
 
   with ir.InsertionPoint.at_block_terminator(op.body.blocks[0]):
     ext_inst = extmod.create("ext1")

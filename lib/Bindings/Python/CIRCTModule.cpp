@@ -79,7 +79,7 @@ PYBIND11_MODULE(_circt, m) {
 
   py::module esi = m.def_submodule("_esi", "ESI API");
   circt::python::populateDialectESISubmodule(esi);
-  py::module msft = m.def_submodule("msft", "MSFT API");
+  py::module msft = m.def_submodule("_msft", "MSFT API");
   circt::python::populateDialectMSFTSubmodule(msft);
   py::module hw = m.def_submodule("_hw", "HW API");
   circt::python::populateDialectHWSubmodule(hw);

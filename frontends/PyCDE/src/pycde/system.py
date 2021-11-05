@@ -190,4 +190,4 @@ class System:
   def print_tcl(self, top_module: type, out_stream: typing.TextIO = sys.stdout):
     self.run_passes()
     spec_mod_symbol = self._module_symbols[top_module._pycde_mod]
-    circt.msft.export_tcl(self._symbols[spec_mod_symbol], out_stream)
+    circt.dialects.msft.export_tcl(self._symbols[spec_mod_symbol], out_stream)

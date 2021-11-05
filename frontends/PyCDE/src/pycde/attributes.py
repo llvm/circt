@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 from __future__ import annotations
-from circt import msft
+from circt.dialects import msft
 from typing import Union
 
 from pycde.devicedb import PhysLocation

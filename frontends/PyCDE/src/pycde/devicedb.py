@@ -5,7 +5,7 @@
 from __future__ import annotations
 import typing
 
-from circt import msft
+from circt.dialects import msft
 
 PrimitiveType = msft.PrimitiveType
 

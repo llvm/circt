@@ -8,8 +8,7 @@ from typing import Union
 from pycde.devicedb import PhysLocation, PrimitiveDB, PlacementDB
 from .appid import AppID
 
-import circt.dialects.hw as hw
-from circt import msft
+from circt.dialects import hw, msft
 
 import mlir.ir as ir
 
