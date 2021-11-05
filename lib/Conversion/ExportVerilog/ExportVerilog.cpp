@@ -48,6 +48,7 @@ using namespace ExportVerilog;
 #define DEBUG_TYPE "export-verilog"
 
 constexpr int INDENT_AMOUNT = 2;
+constexpr int SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING = 8;
 
 namespace {
 /// This enum keeps track of the precedence level of various binary operators,
@@ -1149,6 +1150,10 @@ public:
     // Emit the expression.
     emitSubExpr(exp, parenthesizeIfLooserThan, OOLTopLevel,
                 /*signRequirement*/ NoRequirement);
+
+    // Emitted expression might break the line length constraint so align it
+    // here.
+    formatOutBuffer();
   }
 
 private:
@@ -1175,6 +1180,7 @@ private:
                           bool isSelfDeterminedUnsignedValue = false);
 
   void retroactivelyEmitExpressionIntoTemporary(Operation *op);
+  void formatOutBuffer();
 
   SubExprInfo visitUnhandledExpr(Operation *op);
   SubExprInfo visitInvalidComb(Operation *op) {
@@ -1390,6 +1396,48 @@ SubExprInfo ExprEmitter::emitUnary(Operation *op, const char *syntax,
   return {Unary, resultAlwaysUnsigned ? IsUnsigned : signedness};
 }
 
+/// This function split the output buffer into multiple lines if the emitted
+/// length is larger than the constraint.
+void ExprEmitter::formatOutBuffer() {
+  // If the output already satisfies the constraint, skip here.
+  if (outBuffer.size() <= state.options.emittedLineLength)
+    return;
+
+  SmallVector<char> tmpOutBuffer;
+  llvm::raw_svector_ostream tmpOs(tmpOutBuffer);
+  auto it = outBuffer.begin();
+  unsigned currentIndex = 0;
+
+  while (it != outBuffer.end()) {
+    // Split by a white space.
+    auto next = std::find(it, outBuffer.end(), ' ');
+    unsigned tokenLength = std::distance(it, next);
+
+    if (currentIndex + tokenLength > state.options.emittedLineLength) {
+      // It breaks the line constraint, so insert a newline and indent.
+      tmpOs << '\n';
+      tmpOs.indent(state.currentIndent *
+                   SPACE_PER_INDENT_IN_EXPRESSION_FORMATTING);
+      currentIndex = tokenLength;
+      tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
+    } else {
+      currentIndex += tokenLength;
+      // If `tmpOutBuffer` is not empty, there exists a token before the
+      // current token so insert a white space.
+      if (!tmpOutBuffer.empty()) {
+        currentIndex += 1;
+        tmpOs << ' ';
+      }
+      tmpOutBuffer.insert(tmpOutBuffer.end(), it, next);
+    }
+
+    if (next == outBuffer.end())
+      break;
+    it = next + 1;
+  }
+  outBuffer = std::move(tmpOutBuffer);
+}
+
 /// We eagerly emit single-use expressions inline into big expression trees...
 /// up to the point where they turn into massively long source lines of Verilog.
 /// At that point, we retroactively break the huge expression by inserting
@@ -1515,14 +1563,23 @@ SubExprInfo ExprEmitter::emitSubExpr(Value exp,
     // Inform the module emitter that this expression needs a temporary
     // wire/logic declaration and set it up so it will be referenced instead of
     // emitted inline.
-    retroactivelyEmitExpressionIntoTemporary(op);
+    auto emitExpressionIntoTemporary = [&]() {
+      retroactivelyEmitExpressionIntoTemporary(op);
 
-    // Lop this off the buffer we emitted.
-    outBuffer.resize(subExprStartIndex);
+      // Lop this off the buffer we emitted.
+      outBuffer.resize(subExprStartIndex);
 
-    // Try again, now it will get emitted as a out-of-line leaf.
-    return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
-                       signRequirement);
+      // Try again, now it will get emitted as a out-of-line leaf.
+      return emitSubExpr(exp, parenthesizeIfLooserThan, outOfLineBehavior,
+                         signRequirement);
+    };
+
+    // If op has multiple uses or op is a too large expression, we have to spill
+    // the expression.
+    if (!op->hasOneUse() ||
+        outBuffer.size() - subExprStartIndex >
+            state.options.maximumNumberOfTokensPerExpression)
+      return emitExpressionIntoTemporary();
   }
 
   // Remember that we emitted this.
@@ -2320,7 +2377,6 @@ void StmtEmitter::emitExpression(Value exp,
   // right place.
   statementBeginning = rearrangableStream.moveRangeBefore(
       prevStmtBeginning, stmtStartCursor, rearrangableStream.getCursor());
-
   if (!declStartCursor.isInvalid()) {
     // Scoop up all of the stuff we just emitted, and move it to the
     // blockDeclarationInsertPoint.
