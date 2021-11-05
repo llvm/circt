@@ -257,12 +257,16 @@ LogicalResult HIRToHWPass::visitOp(hir::NextIterOp op) {
   return success();
 }
 LogicalResult HIRToHWPass::visitOp(hir::ProbeOp op) {
-  assert(mapHIRToHWValue[op.input()]);
-  auto namedValue = convertToNamedValue(*builder, op.verilog_name(),
-                                        mapHIRToHWValue[op.input()]);
+  auto input = mapHIRToHWValue[op.input()];
+  assert(input);
+  auto wire = builder
+                  ->create<sv::WireOp>(builder->getUnknownLoc(),
+                                       input.getType(), op.verilog_nameAttr())
+                  .getResult();
+  builder->create<sv::AssignOp>(builder->getUnknownLoc(), wire, input);
   builder->create<sv::VerbatimOp>(builder->getUnknownLoc(),
                                   builder->getStringAttr("//PROBE: {{0}}"),
-                                  namedValue, builder->getArrayAttr({}));
+                                  wire, builder->getArrayAttr({}));
   return success();
 }
 
