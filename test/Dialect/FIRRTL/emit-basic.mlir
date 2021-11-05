@@ -294,6 +294,9 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: when ui1 :
     // CHECK-NEXT:   infer mport port1 = seqmem[someAddr], someClock
 
+    firrtl.connect %port0_data, %port1_data : !firrtl.uint<3>, !firrtl.uint<3>
+    // CHECK: port0 <= port1
+
     %invalid_clock = firrtl.invalidvalue : !firrtl.clock
     %dummyReg = firrtl.reg %invalid_clock : !firrtl.uint<42>
     // CHECK: wire [[INV:_invalid.*]] : Clock

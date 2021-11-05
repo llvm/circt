@@ -558,7 +558,8 @@ void Emitter::emitStatement(CombMemOp op) {
 }
 
 void Emitter::emitStatement(MemoryPortOp op) {
-  // Nothing to output for this operation. 
+  // Nothing to output for this operation.
+  addValueName(op.data(), op.name());
 }
 
 void Emitter::emitStatement(MemoryPortAccessOp op) {
