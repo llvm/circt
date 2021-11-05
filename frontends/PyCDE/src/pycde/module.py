@@ -201,12 +201,18 @@ class _SpecializedModule:
 
   def instantiate(self, instance_name: str, inputs: dict, loc):
     """Create a instance op."""
+    # TODO: this creates msft.InstanceOp for modules, and hw.InstanceOp for
+    # external modules. This forces passes downstream of the generators to have
+    # to consider both. The difference should either be hidden behind an
+    # interface, or we should just create msft.ExternModule so we can create
+    # msft.InstanceOp in all cases.
     if self.extern_name is None:
       return self.circt_mod.create(instance_name, **inputs, loc=loc)
     else:
       return self.circt_mod.create(instance_name,
                                    **inputs,
                                    parameters=self.parameters,
+                                   sym_name=instance_name,
                                    loc=loc)
 
   def generate(self):

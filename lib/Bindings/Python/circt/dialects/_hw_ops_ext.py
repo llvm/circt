@@ -187,14 +187,16 @@ class ModuleLike:
              name: str,
              parameters: Dict[str, object] = {},
              results=None,
+             sym_name=None,
              loc=None,
              ip=None,
              **kwargs):
     return InstanceBuilder(self,
                            name,
                            kwargs,
-                           parameters=parameters,
                            results=results,
+                           parameters=parameters,
+                           sym_name=sym_name,
                            loc=loc,
                            ip=ip)
 

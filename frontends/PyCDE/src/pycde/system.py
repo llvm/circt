@@ -162,7 +162,6 @@ class System:
     return len(self._generate_queue)
 
   def get_instance(self, mod_cls: object) -> Instance:
-    assert self.passed
     return Instance(mod_cls, None, None, self, self._primdb)
 
   class DevNull:

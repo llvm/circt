@@ -49,13 +49,24 @@ struct TclOutputState {
 void emitPath(TclOutputState &s, RootedInstancePathAttr path,
               SymbolCache &symCache) {
   for (auto part : path.getPath()) {
-    auto inst =
-        dyn_cast_or_null<msft::InstanceOp>(symCache.getDefinition(part));
+    Operation *inst = symCache.getDefinition(part);
     assert(inst && "path instance must be in symbol cache");
     auto mod = inst->getParentOfType<MSFTModuleOp>();
+    assert(mod && "path instance must have MSFT module parent");
+
     s.os << "{{" << s.symbolRefs.size() << "}}" << '|';
-    s.symbolRefs.push_back(
-        InnerRefAttr::get(mod.getNameAttr(), inst.sym_nameAttr()));
+
+    // Generated instances are generally msft.InstanceOp, but since use
+    // hw.HWModuleExternOp directly, instances of extern modules will be
+    // hw.InstanceOp.
+    StringAttr instName;
+    if (auto msftInst = dyn_cast<msft::InstanceOp>(inst))
+      instName = msftInst.sym_nameAttr();
+    else if (auto hwInst = dyn_cast<hw::InstanceOp>(inst))
+      instName = hwInst.inner_symAttr();
+    assert(instName && "path instance must have a symbol name");
+
+    s.symbolRefs.push_back(InnerRefAttr::get(mod.getNameAttr(), instName));
   }
 }
 
@@ -89,9 +100,13 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
   s.os << " -to $parent|";
   emitPath(s, inst.path, symCache);
   // If instance name is specified, add it in between the parent entity path and
-  // the child entity patch.
+  // the child entity path. Generated instances are generally msft.InstanceOp,
+  // but since use hw.HWModuleExternOp directly, instances of extern modules
+  // will be hw.InstanceOp.
   if (auto instOp = dyn_cast<msft::InstanceOp>(inst.op))
     s.os << instOp.instanceName() << '|';
+  if (auto instOp = dyn_cast<hw::InstanceOp>(inst.op))
+    s.os << instOp.inner_sym() << '|';
   else if (auto name = inst.op->getAttrOfType<StringAttr>("name"))
     s.os << name.getValue() << '|';
   s.os << inst.subpath << '\n';
@@ -100,8 +115,8 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
 /// Create a SymbolCache to use during Tcl export.
 void circt::msft::populateSymbolCache(mlir::ModuleOp mod, SymbolCache &cache) {
   // Traverse each module and each instance within the module.
-  for (auto hwMod : mod.getOps<MSFTModuleOp>()) {
-    for (auto inst : hwMod.getOps<msft::InstanceOp>()) {
+  for (auto msftMod : mod.getOps<MSFTModuleOp>()) {
+    for (auto inst : msftMod.getOps<msft::InstanceOp>()) {
       // Use the instance symbol name.
       StringAttr symName = inst.sym_nameAttr();
 

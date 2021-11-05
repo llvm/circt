@@ -86,3 +86,11 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
   @property
   def entry_block(self):
     return self.regions[0].blocks[0]
+
+
+class InstanceOp:
+
+  # Proxy method to make this look like a hw.InstanceOp.
+  @property
+  def instanceName(self):
+    return self.sym_name

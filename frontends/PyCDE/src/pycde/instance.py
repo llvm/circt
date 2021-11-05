@@ -22,7 +22,7 @@ class Instance:
 
   def __init__(self,
                module: type,
-               instOp: hw.InstanceOp,
+               instOp: msft.InstanceOp,
                parent: Instance,
                sys: system.System,
                primdb: PrimitiveDB = None):
@@ -85,7 +85,10 @@ class Instance:
     if isinstance(circt_mod, hw.HWModuleExternOp):
       return
     for op in circt_mod.entry_block:
-      if not isinstance(op, hw.InstanceOp):
+      # Generated instances are generally msft.InstanceOp, but since use
+      # hw.HWModuleExternOp directly, instances of extern modules will be hw.InstanceOp.
+      if ((not isinstance(op, hw.InstanceOp)) and
+          (not isinstance(op, msft.InstanceOp))):
         continue
 
       assert "moduleName" in op.attributes

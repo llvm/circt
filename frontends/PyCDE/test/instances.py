@@ -56,8 +56,6 @@ t.print()
 Test.print()
 UnParameterized.print()
 
-t.run_passes()
-
 # CHECK-LABEL: === Hierarchy
 print("=== Hierarchy")
 # CHECK-NEXT: <instance: [UnParameterized]>
@@ -103,6 +101,8 @@ assert test_inst.placedb.get_instance_at(
 assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
 assert (len(instance_attrs.find_unused()) == 1)
+
+t.run_passes()
 
 print("=== Final mlir dump")
 t.print()
