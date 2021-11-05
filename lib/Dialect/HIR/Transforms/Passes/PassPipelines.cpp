@@ -8,10 +8,9 @@ void circt::hir::registerHIRLoweringPassPipeline() {
       "hir-simplify",
       "Simplify HIR dialect to a bare minimum for lowering to verilog.",
       [](mlir::OpPassManager &pm) {
-        // -canonicalize -inline -hir-loop-unroll -canonicalize -sccp
-        // -hir-lower-memref -sccp -cse
+        // -canonicalize -hir-loop-unroll -canonicalize -sccp
+        // -hir-lower-memref -sccp -cse -canonicalize
         pm.addPass(mlir::createCanonicalizerPass());
-        pm.addPass(mlir::createInlinerPass());
         pm.addPass(circt::hir::createLoopUnrollPass());
         pm.addPass(mlir::createCanonicalizerPass());
         pm.addPass(mlir::createSCCPPass());
@@ -19,5 +18,6 @@ void circt::hir::registerHIRLoweringPassPipeline() {
         pm.addPass(hir::createSimplifyLoopPass());
         pm.addPass(mlir::createSCCPPass());
         pm.addPass(mlir::createCSEPass());
+        pm.addPass(mlir::createCanonicalizerPass());
       });
 }
