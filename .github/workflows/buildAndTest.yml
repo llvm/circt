@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Do sanity check(clang-format and python-format) first.
+  # Do sanity check (clang-format and python-format) first.
   sanity-check:
     name: Sanity Check
     runs-on: ubuntu-latest
