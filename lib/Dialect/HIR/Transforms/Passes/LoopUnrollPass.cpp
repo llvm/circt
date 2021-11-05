@@ -68,9 +68,15 @@ LogicalResult unrollLoopFull(hir::ForOp forOp) {
         assert(nextIterOp.offset().getValue() == 0);
         iterTStart = {
             helper::lookupOrOriginal(operandMap, nextIterOp.tstart())};
-        continue;
+      } else if (auto probeOp = dyn_cast<hir::ProbeOp>(operation)) {
+        auto unrolledName = builder.getStringAttr(probeOp.verilog_name() + "_" +
+                                                  forOp.getInductionVarName() +
+                                                  "_" + std::to_string(i));
+        builder.create<hir::ProbeOp>(
+            probeOp.getLoc(), operandMap.lookup(probeOp.input()), unrolledName);
+      } else {
+        builder.clone(operation, operandMap);
       }
-      builder.clone(operation, operandMap);
     }
   }
 
