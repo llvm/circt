@@ -39,3 +39,7 @@ ArrayAttr getHWParams(Attribute, bool ignoreValues = false);
 
 Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
                       Optional<StringRef> name, Location loc, Value clk);
+
+Value convertToNamedValue(OpBuilder &builder, StringRef name, Value val);
+Value convertToOptionalNamedValue(OpBuilder &builder, Optional<StringRef> name,
+                                  Value val);

@@ -323,6 +323,17 @@ LogicalResult verifyNextIterOp(hir::NextIterOp op) {
                         "is inside a hir.for op.");
   return success();
 }
+
+LogicalResult verifyProbeOp(hir::ProbeOp op) {
+  auto ty = op.input().getType();
+  if (!(helper::isBuiltinSizedType(ty) || ty.isa<hir::TimeType>() ||
+        helper::isBusType(ty)))
+    return op.emitError() << "Unsupported type for hir.probe.";
+  if (op.verilog_name().size() == 0 || op.verilog_name().startswith("%") ||
+      isdigit(op.verilog_name().data()[0]))
+    return op.emitError() << "Invalid name.";
+  return success();
+}
 //-----------------------------------------------------------------------------
 } // namespace hir
 } // namespace circt

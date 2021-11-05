@@ -18,6 +18,7 @@ LogicalResult verifyLoadOp(hir::LoadOp);
 LogicalResult verifyStoreOp(hir::StoreOp);
 LogicalResult verifyIfOp(hir::IfOp);
 LogicalResult verifyNextIterOp(hir::NextIterOp);
+LogicalResult verifyProbeOp(hir::ProbeOp);
 } // namespace hir
 } // namespace circt
 

@@ -256,6 +256,29 @@ llvm::Optional<StringRef> getOptionalName(Operation *operation,
   return name;
 }
 
+llvm::Optional<mlir::StringRef> getOptionalName(mlir::Value v) {
+  Operation *operation = v.getDefiningOp();
+  if (operation) {
+    for (size_t i = 0; i < operation->getNumResults(); i++) {
+      if (operation->getResult(i) == v) {
+        return getOptionalName(operation, i);
+      }
+    }
+    return llvm::None;
+  }
+  auto *bb = v.getParentBlock();
+  auto argNames = bb->getParentOp()->getAttrOfType<mlir::ArrayAttr>("argNames");
+  if (argNames) {
+    assert(argNames.size() == bb->getNumArguments());
+    for (size_t i = 0; i < bb->getNumArguments(); i++) {
+      if (v == bb->getArgument(i)) {
+        return argNames[i].dyn_cast<mlir::StringAttr>().getValue();
+      }
+    }
+  }
+  return llvm::None;
+}
+
 circt::Type getElementType(circt::Type ty) {
   if (auto tensorTy = ty.dyn_cast<mlir::TensorType>())
     return getElementType(tensorTy.getElementType());

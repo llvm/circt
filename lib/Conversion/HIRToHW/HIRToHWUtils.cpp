@@ -249,3 +249,24 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
   assert(input.getType() == output.getType());
   return output;
 }
+Value convertToNamedValue(OpBuilder &builder, StringRef name, Value val) {
+
+  assert(val.getType().isa<mlir::IntegerType>() ||
+         val.getType().isa<hw::ArrayType>());
+  Value namedVal;
+  auto wire = builder.create<sv::WireOp>(builder.getUnknownLoc(), val.getType(),
+                                         builder.getStringAttr(name));
+  builder.create<sv::AssignOp>(builder.getUnknownLoc(), wire, val);
+  return builder.create<sv::ReadInOutOp>(builder.getUnknownLoc(), wire);
+}
+
+Value convertToOptionalNamedValue(OpBuilder &builder, Optional<StringRef> name,
+                                  Value val) {
+
+  assert(val.getType().isa<mlir::IntegerType>() ||
+         val.getType().isa<hw::ArrayType>());
+  if (name) {
+    return convertToNamedValue(builder, name.getValue(), val);
+  }
+  return val;
+}

@@ -38,6 +38,7 @@ private:
   LogicalResult visitOp(hir::FuncOp);
   LogicalResult visitOp(hir::IsFirstIterOp);
   LogicalResult visitOp(hir::NextIterOp);
+  LogicalResult visitOp(hir::ProbeOp);
   LogicalResult visitOp(hir::RecvOp);
   LogicalResult visitOp(hir::ReturnOp);
   LogicalResult visitOp(hir::SendOp);
@@ -255,6 +256,15 @@ LogicalResult HIRToHWPass::visitOp(hir::NextIterOp op) {
   assert(mapHIRToHWValue[op.condition()]);
   return success();
 }
+LogicalResult HIRToHWPass::visitOp(hir::ProbeOp op) {
+  assert(mapHIRToHWValue[op.input()]);
+  auto namedValue = convertToNamedValue(*builder, op.verilog_name(),
+                                        mapHIRToHWValue[op.input()]);
+  builder->create<sv::VerbatimOp>(builder->getUnknownLoc(),
+                                  builder->getStringAttr("//PROBE: {{0}}"),
+                                  namedValue, builder->getArrayAttr({}));
+  return success();
+}
 
 LogicalResult HIRToHWPass::visitOp(hir::RecvOp op) {
   assert(op.offset().getValue() == 0);
@@ -449,7 +459,7 @@ LogicalResult HIRToHWPass::visitOp(hir::TensorInsertOp op) {
   assert(tensorTy);
   auto hwTensor = mapHIRToHWValue[op.tensor()];
   if (!hwTensor.getType().isa<hw::ArrayType>()) {
-    mapHIRToHWValue[op.res()] = hwTensor;
+    mapHIRToHWValue[op.res()] = mapHIRToHWValue[op.element()];
     return success();
   }
 
@@ -497,7 +507,11 @@ LogicalResult HIRToHWPass::visitOp(hir::TensorInsertOp op) {
 LogicalResult HIRToHWPass::visitOp(hir::BusAssignOp op) {
   assert(mapHIRToHWValue[op.src()]);
   assert(mapHIRToHWValue[op.dest()]);
-  mapHIRToHWValue[op.dest()].replaceAllUsesWith(mapHIRToHWValue[op.src()]);
+  // auto name = helper::getOptionalName(op.dest());
+  // Value hwRes;
+  // hwRes =
+  //    convertToOptionalNamedValue(*builder, name, mapHIRToHWValue[op.src()]);
+  mapHIRToHWValue[op.dest()] = mapHIRToHWValue[op.src()];
   return success();
 }
 
@@ -612,6 +626,8 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
   if (auto op = dyn_cast<hir::NextIterOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::CastOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::ProbeOp>(operation))
     return visitOp(op);
   if (auto *dialect = operation->getDialect();
       isa<comb::CombDialect, hw::HWDialect, sv::SVDialect>(dialect))
