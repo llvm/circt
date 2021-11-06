@@ -997,3 +997,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello outside reset"
     ; CHECK-SAME: name = "chisel3_builtin"
     ; CHECK: }
+
+    ; Check that the above doesn't error if the assert is a double user of the
+    ; condition.
+    when not_reset:
+      assert(clock, UInt<1>(1), UInt<1>(1), "double user assert")
+      node not_cond3 = eq(UInt<1>(1), UInt<1>(0))
+      when not_cond3:
+        printf(clock, UInt<1>(1), "Assertion failed: double user assert")
+    ; CHECK-NOT: firrtl.assert %clock, {{.+}} "double user assert"
