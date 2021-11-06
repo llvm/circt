@@ -869,7 +869,8 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   auto memoryOp = rewriter.create<calyx::MemoryOp>(
       allocOp.getLoc(), componentState.getUniqueName("mem"),
       memtype.getElementType().getIntOrFloatBitWidth(), sizes, addrSizes);
-  // Externalize memories by default.
+  // Externalize memories by default. This makes it easier for the native
+  // compiler to provide initialized memories.
   memoryOp->setAttr("external",
                     IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
   componentState.registerMemoryInterface(allocOp.getResult(),
