@@ -992,7 +992,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
       when not_cond2:
         printf(clock, enable, "Assertion failed: hello outside reset")
     ; CHECK: firrtl.when %not_reset {
-    ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello"
+    ; CHECK-NOT: firrtl.assert %clock, %cond, %enable, "hello outside reset"
     ; CHECK: [[TMP:%.+]] = firrtl.not %not_cond2
     ; CHECK-NEXT: firrtl.assert %clock, [[TMP]], %enable, "Assertion failed: hello outside reset"
     ; CHECK-SAME: name = "chisel3_builtin"
