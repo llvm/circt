@@ -3064,10 +3064,10 @@ LogicalResult StmtEmitter::visitSV(CaseZOp op) {
 }
 
 LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
-  StringRef prefix = "";
-  if (op->hasAttr("doNotPrint")) {
-    prefix = "// ";
-    indent() << "// This instance is elsewhere emitted as a bind statement.\n";
+  bool doNotPrint = op->hasAttr("doNotPrint");
+  if (doNotPrint) {
+    indent() << "/* This instance is elsewhere emitted as a bind statement.\n";
+    addIndent();
   }
 
   SmallPtrSet<Operation *, 8> ops;
@@ -3076,7 +3076,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   // Use the specified name or the symbol name as appropriate.
   auto *moduleOp = op.getReferencedModule(&state.symbolCache);
   assert(moduleOp && "Invalid IR");
-  indent() << prefix << getVerilogModuleName(moduleOp);
+  indent() << getVerilogModuleName(moduleOp);
 
   // If this is a parameterized module, then emit the parameters.
   if (!op.parameters().empty()) {
@@ -3099,7 +3099,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
       } else {
         os << ",\n";
       }
-      os.indent(state.currentIndent + INDENT_AMOUNT) << prefix << '.';
+      os.indent(state.currentIndent + INDENT_AMOUNT) << '.';
       os << state.globalNames.getParameterVerilogName(moduleOp,
                                                       param.getName());
       os << '(';
@@ -3111,7 +3111,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     }
     if (printed) {
       os << '\n';
-      indent() << prefix << ')';
+      indent() << ')';
     }
   }
 
@@ -3167,7 +3167,7 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     emitLocationInfoAndNewLine(ops);
 
     // Emit the port's name.
-    indent() << prefix;
+    indent();
     if (!isZeroWidth) {
       // If this is a real port we're printing, then it isn't the first one. Any
       // subsequent ones will need a comma.
@@ -3208,10 +3208,14 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
   if (!isFirst || isZeroWidth) {
     emitLocationInfoAndNewLine(ops);
     ops.clear();
-    indent() << prefix;
+    indent();
   }
   os << ");";
   emitLocationInfoAndNewLine(ops);
+  if (doNotPrint) {
+    reduceIndent();
+    indent() << "*/\n";
+  }
   return success();
 }
 

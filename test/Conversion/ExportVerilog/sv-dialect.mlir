@@ -1015,11 +1015,11 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
 // CHECK-NEXT: wire mywire
 // CHECK-NEXT: myreg
 // CHECK: assign a1__k = 1'h1
-// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT: // extInst a1
+// CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:    extInst a1
 // CHECK: assign a2__k = 1'h1
-// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT: // extInst a2
+// CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:    extInst a2
 }
 
 hw.module @bindInMod() {

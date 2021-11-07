@@ -610,18 +610,20 @@ hw.module @ABC(%a: i1, %b: i2) -> (c: i4) {
 
 // CHECK:   wire [2:0] whatever_c;
 // CHECK-EMPTY:
-// CHECK-NEXT:   // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT:   // ExternDestMod whatever (
-// CHECK-NEXT:   //   .a (a),
-// CHECK-NEXT:   //   .b (b),
-// CHECK-NEXT:   //   .c (whatever_c),
-// CHECK-NEXT:   //   .d (c)
-// CHECK-NEXT:   // );
-// CHECK-NEXT:   // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT:   // InternalDestMod yo (
-// CHECK-NEXT:   //   .a (a),
-// CHECK-NEXT:   //   .b (whatever_c)
-// CHECK-NEXT:   // );
+// CHECK-NEXT:   /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:      ExternDestMod whatever (
+// CHECK-NEXT:        .a (a),
+// CHECK-NEXT:        .b (b),
+// CHECK-NEXT:        .c (whatever_c),
+// CHECK-NEXT:        .d (c)
+// CHECK-NEXT:      );
+// CHECK-NEXT:   */
+// CHECK-NEXT:   /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:      InternalDestMod yo (
+// CHECK-NEXT:        .a (a),
+// CHECK-NEXT:        .b (whatever_c)
+// CHECK-NEXT:      );
+// CHECK-NEXT:   */
 // CHECK-NEXT: endmodule
 
 
