@@ -693,7 +693,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %4 = firrtl.mux(%cond, %value, %count) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
     %5 = firrtl.mux(%reset, %c0_ui2, %4) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
 
-    // CHECK-NEXT: sv.alwaysff(posedge %clock)  {
+    // CHECK-NEXT: sv.always posedge %clock {
     // CHECK-NEXT:   sv.passign %count, %2 : i2
     // CHECK-NEXT: }
     firrtl.connect %count, %5 : !firrtl.uint<2>, !firrtl.uint<2>
@@ -727,9 +727,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %0 = sv.read_inout %reg : !hw.inout<i32>
     // CHECK-NEXT: %reg2 = sv.reg : !hw.inout<i32>
     // CHECK-NEXT: %1 = sv.read_inout %reg2 : !hw.inout<i32>
-    // CHECK-NEXT: sv.alwaysff(posedge %clock) {
-    // CHECK-NEXT: }(syncreset : posedge %reset) {
-    // CHECK-NEXT:    sv.passign %reg2, %c0_i32 : i32
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.if %reset  {
+    // CHECK-NEXT:     sv.passign %reg2, %c0_i32 : i32
+    // CHECK-NEXT:   } else  {
+    // CHECK-NEXT:   }
     // CHECK-NEXT: }
     // CHECK-NEXT: sv.ifdef "SYNTHESIS"  {
     // CHECK-NEXT: } else {
@@ -751,10 +753,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %4 = comb.add %2, %3 : i33
     // CHECK-NEXT: %5 = comb.extract %4 from 1 : (i33) -> i32
     // CHECK-NEXT: %6 = comb.mux %io_en, %io_d, %5 : i32
-    // CHECK-NEXT: sv.alwaysff(posedge %clock) {
-    // CHECK-NEXT:   sv.passign %reg, %6 : i32
-    // CHECK-NEXT: }(asyncreset : posedge %reset) {
-    // CHECK-NEXT:   sv.passign %reg, %c0_i32 : i32
+    // CHECK-NEXT: sv.always posedge %clock, posedge %reset  {
+    // CHECK-NEXT:   sv.if %reset  {
+    // CHECK-NEXT:     sv.passign %reg, %c0_i32 : i32
+    // CHECK-NEXT:   } else  {
+    // CHECK-NEXT:     sv.passign %reg, %6 : i32
+    // CHECK-NEXT:   }
     // CHECK-NEXT: }
     %reg = firrtl.regreset %clock, %4, %c0_ui32 {name = "reg"} : !firrtl.asyncreset, !firrtl.uint<32>, !firrtl.uint<32>
     %reg2 = firrtl.regreset %clock, %reset, %c0_ui32 {name = "reg2"} : !firrtl.uint<1>, !firrtl.uint<32>, !firrtl.uint<32>
@@ -932,7 +936,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   //CHECK-LABEL: hw.module @test_partialconnect(%clock: i1) {
-  //CHECK: sv.alwaysff(posedge %clock)
+  //CHECK: sv.always posedge %clock
   firrtl.module @test_partialconnect(in %clock : !firrtl.clock) {
     %b = firrtl.reg %clock {name = "pcon"} : !firrtl.uint<1>
     %a = firrtl.constant 0 : !firrtl.uint<2>
@@ -1062,8 +1066,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %r = firrtl.regreset %clock, %reset_n, %c0_ui1  : !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %a : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %b, %r : !firrtl.uint<1>, !firrtl.uint<1>
-    // CHECK: sv.alwaysff(posedge %clock)
-    // CHECK-NOT: sv.alwaysff
+    // CHECK: sv.always posedge %clock
+    // CHECK-NOT: sv.always
     // CHECK: hw.output
   }
 

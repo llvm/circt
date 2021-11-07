@@ -408,8 +408,6 @@ void AlwaysOp::build(OpBuilder &builder, OperationState &result,
 
 /// Ensure that the symbol being instantiated exists and is an InterfaceOp.
 static LogicalResult verifyAlwaysOp(AlwaysOp op) {
-  if (op.events().size() != op.getNumOperands())
-    return op.emitError("different number of operands and events");
   return success();
 }
 

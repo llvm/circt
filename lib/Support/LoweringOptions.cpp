@@ -39,8 +39,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
     text = split.second;
     if (option == "") {
       // Empty options are fine.
-    } else if (option == "alwaysFF") {
-      useAlwaysFF = true;
     } else if (option == "noAlwaysComb") {
       noAlwaysComb = true;
     } else if (option == "exprInEventControl") {
@@ -68,16 +66,15 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       // We continue parsing options after a failure.
     }
   }
-  if (maximumNumberOfTokensPerExpression < emittedLineLength)
+  if (maximumNumberOfTokensPerExpression < emittedLineLength) {
     errorHandler("maximumNumberOfTokensPerExpression must be equal or larger "
                  "than emittedLineLength");
+  }
 }
 
 std::string LoweringOptions::toString() const {
   std::string options = "";
   // All options should add a trailing comma to simplify the code.
-  if (useAlwaysFF)
-    options += "alwaysFF,";
   if (noAlwaysComb)
     options += "noAlwaysComb,";
   if (allowExprInEventControl)

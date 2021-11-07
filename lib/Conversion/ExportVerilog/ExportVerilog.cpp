@@ -2972,9 +2972,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  StringRef opString = "always";
-  if (state.options.useAlwaysFF)
-    opString = "always_ff";
+  StringRef opString = "always_ff";
 
   indent() << opString << " @(" << stringifyEventControl(op.clockEdge()) << " ";
   emitExpression(op.clock(), ops);
