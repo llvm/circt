@@ -453,10 +453,11 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
       pm.addPass(createExportVerilogPass(llvm::nulls()));
       break;
     }
-      // Run module hierarchy emission after verilog emission, which ensures we
-      // pick up any changes that verilog emission made.
-      if (exportModuleHierarchy)
-        pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
+
+    // Run module hierarchy emission after verilog emission, which ensures we
+    // pick up any changes that verilog emission made.
+    if (exportModuleHierarchy)
+      pm.addPass(sv::createHWExportModuleHierarchyPass(outputFilename));
   }
 
   // Load the emitter options from the command line. Command line options if
