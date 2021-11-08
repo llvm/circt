@@ -52,7 +52,8 @@ digraph G {
   // External tools
   subgraph external_tools {
     node [shape=octagon fillcolor="#ffff99"]
-    Moore Calyx_native Chisel
+    Moore Chisel
+    Calyx_native [label="Calyx native"]
     Circilator [style="dashed,filled"]
   }
 
