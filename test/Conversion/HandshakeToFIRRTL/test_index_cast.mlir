@@ -14,19 +14,14 @@
 // CHECK-NEXT:   firrtl.connect %1, %7 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT: }
 
-// CHECK-LABEL: firrtl.module @test_index_cast(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>,
-// CHECK-SAME:  in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
-// CHECK-SAME:  out %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>,
-// CHECK-SAME:  out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
-// CHECK-SAME:  in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+// CHECK: firrtl.module @test_index_cast(in %[[VAL_10:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_11:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_12:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out %[[VAL_13:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_14:.*]]: !firrtl.clock, in %[[VAL_15:.*]]: !firrtl.uint<1>) {
+// CHECK:   %[[VAL_16:.*]], %[[VAL_17:.*]] = firrtl.instance arith_index_cast  @arith_index_cast_in_ui64_out_ui8(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>)
+// CHECK:   firrtl.connect %[[VAL_16]], %[[VAL_10]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:   firrtl.connect %[[VAL_12]], %[[VAL_17]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>
+// CHECK:   firrtl.connect %[[VAL_13]], %[[VAL_11]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK: }
 handshake.func @test_index_cast(%arg0: index, %arg1: none, ...) -> (i8, none) {
-  // CHECK:      %arith_index_cast_arg0, %arith_index_cast_arg1 = firrtl.instance arith_index_cast @arith_index_cast_in_ui64_out_ui8(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>)
-  // CHECK-NEXT: firrtl.connect %arith_index_cast_arg0, %arg0 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
   %0 = arith.index_cast %arg0 : index to i8
-
-  // CHECK:      firrtl.connect %arg2, %arith_index_cast_arg1 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>
-  // CHECK-NEXT: firrtl.connect %arg3, %arg1 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
   handshake.return %0, %arg1 : i8, none
 }
 
@@ -59,24 +54,17 @@ handshake.func @test_index_cast(%arg0: index, %arg1: none, ...) -> (i8, none) {
 // CHECK-NEXT:   firrtl.connect %1, %7 : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK-NEXT: }
 
-// CHECK-LABEL: firrtl.module @test_index_cast2(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, 
-// CHECK-SAME:  in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>, 
-// CHECK-SAME:  in %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, 
-// CHECK-SAME:  out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, 
-// CHECK-SAME:  out %arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, 
-// CHECK-SAME:  out %arg5: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, 
-// CHECK-SAME:  in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+// CHECK: firrtl.module @test_index_cast2(in %[[VAL_20:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in %[[VAL_21:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>, in %[[VAL_22:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_23:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_24:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_25:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_26:.*]]: !firrtl.clock, in %[[VAL_27:.*]]: !firrtl.uint<1>) {
+// CHECK:   %[[VAL_28:.*]], %[[VAL_29:.*]] = firrtl.instance arith_index_cast  @arith_index_cast_in_ui8_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+// CHECK:   %[[VAL_30:.*]], %[[VAL_31:.*]] = firrtl.instance arith_index_cast  @arith_index_cast_in_ui9_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+// CHECK:   firrtl.connect %[[VAL_28]], %[[VAL_20]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>
+// CHECK:   firrtl.connect %[[VAL_30]], %[[VAL_21]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>
+// CHECK:   firrtl.connect %[[VAL_23]], %[[VAL_29]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:   firrtl.connect %[[VAL_24]], %[[VAL_31]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:   firrtl.connect %[[VAL_25]], %[[VAL_22]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK: }
 handshake.func @test_index_cast2(%arg0: i8, %arg1 : i9, %arg2: none, ...) -> (index, index, none) {
-// CHECK: %arith_index_cast_arg0, %arith_index_cast_arg1 = firrtl.instance arith_index_cast @arith_index_cast_in_ui8_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
-// CHECK:%arith_index_cast_arg0_0, %arith_index_cast_arg1_1 = firrtl.instance arith_index_cast @arith_index_cast_in_ui9_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
-// CHECK: firrtl.connect %arith_index_cast_arg0, %arg0 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>
-// CHECK: firrtl.connect %arith_index_cast_arg0_0, %arg1 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<9>>
   %0 = arith.index_cast %arg0 : i8 to index
   %1 = arith.index_cast %arg1 : i9 to index
-
-// CHECK:      firrtl.connect %arg3, %arith_index_cast_arg1 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
-// CHECK-NEXT: firrtl.connect %arg4, %arith_index_cast_arg1_1 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
-// CHECK-NEXT: firrtl.connect %arg5, %arg2 : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
   handshake.return %0, %1, %arg2 : index, index, none
 }

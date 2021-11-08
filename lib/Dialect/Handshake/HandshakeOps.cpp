@@ -378,8 +378,8 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
   if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
     return failure();
 
-  // If argNames wasn't provided manually, infer argNames attribute from the
-  // parsed SSA names.
+  // If argNames and resNames wasn't provided manually, infer argNames attribute
+  // from the parsed SSA names.
   if (!result.attributes.get("argNames"))
     result.addAttribute("argNames", builder.getArrayAttr(argNames));
 

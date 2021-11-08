@@ -37,10 +37,9 @@
 // CHECK: firrtl.connect %[[OUT_DATA_VALID]], %[[ALL_VALID_WIRE]]
 // CHECK: firrtl.connect %[[OUT_ADDR_VALID]], %[[ALL_VALID_WIRE]]
 
-// CHECK-LABEL: firrtl.module @main
+// CHECK: firrtl.module @main(in %[[VAL_24:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in %[[VAL_25:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_26:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_27:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out %[[VAL_28:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_29:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_30:.*]]: !firrtl.clock, in %[[VAL_31:.*]]: !firrtl.uint<1>) {
+// CHECK:   %[[VAL_32:.*]], %[[VAL_33:.*]], %[[VAL_34:.*]], %[[VAL_35:.*]], %[[VAL_36:.*]] = firrtl.instance handshake_store  @handshake_store_in_ui8_ui64_out_ui8_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: none, ...) -> (i8, index, none) {
-  // CHECK: {{.+}} = firrtl.instance handshake_store @handshake_store_in_ui8_ui64_out_ui8_ui64
   %0:2 = "handshake.store"(%arg0, %arg1, %arg2) : (i8, index, none) -> (i8, index)
-
   handshake.return %0#0, %0#1, %arg2 : i8, index, none
 }
