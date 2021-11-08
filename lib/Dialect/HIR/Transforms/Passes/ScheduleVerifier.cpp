@@ -157,8 +157,8 @@ private:
   bool inspectOp(hir::LoadOp op);
   bool inspectOp(hir::StoreOp op);
   bool inspectOp(hir::NextIterOp op);
-  bool inspectOp(hir::SendOp op);
-  bool inspectOp(hir::RecvOp op);
+  bool inspectOp(hir::BusSendOp op);
+  bool inspectOp(hir::BusRecvOp op);
   bool inspectOp(hir::AllocaOp op);
   bool inspectOp(hir::DelayOp op);
   bool inspectOp(hir::CallOp op);
@@ -318,13 +318,13 @@ bool ScheduleVerifier::inspectOp(hir::NextIterOp op) {
   return true;
 }
 
-bool ScheduleVerifier::inspectOp(hir::SendOp op) {
+bool ScheduleVerifier::inspectOp(hir::BusSendOp op) {
   unsigned offset = op.offset() ? op.offset().getValue() : 0;
   return schedule.check(op.getLoc(), getDefiningLoc(op.value()), op.value(),
                         op.tstart(), offset, "input var");
 }
 
-bool ScheduleVerifier::inspectOp(hir::RecvOp op) {
+bool ScheduleVerifier::inspectOp(hir::BusRecvOp op) {
   unsigned offset = op.offset() ? op.offset().getValue() : 0;
   schedule.insert(op.res(), op.tstart(), offset);
   return true;
@@ -378,9 +378,9 @@ bool ScheduleVerifier::inspectOp(Operation *inst) {
     return inspectOp(op);
   if (auto op = dyn_cast<hir::StoreOp>(inst))
     return inspectOp(op);
-  if (auto op = dyn_cast<hir::RecvOp>(inst))
+  if (auto op = dyn_cast<hir::BusRecvOp>(inst))
     return inspectOp(op);
-  if (auto op = dyn_cast<hir::SendOp>(inst))
+  if (auto op = dyn_cast<hir::BusSendOp>(inst))
     return inspectOp(op);
   if (auto op = dyn_cast<hir::NextIterOp>(inst))
     return inspectOp(op);

@@ -132,20 +132,50 @@ LogicalResult SimplifyCtrlPass::visitOp(IfOp op) {
       BusType::get(builder.getContext(), builder.getI1Type()));
 
   builder
-      .create<hir::SendOp>(builder.getUnknownLoc(), c1, conditionBus,
-                           op.tstart(), op.offsetAttr())
+      .create<hir::BusSendOp>(builder.getUnknownLoc(), c1, conditionBus,
+                              op.tstart(), op.offsetAttr())
       ->setAttr("default", IntegerAttr::get(builder.getI1Type(), 0));
 
   // This acts as conditionBus && tstartBus.
-  Value tstartRegionBus = builder.create<hir::BusSelectOp>(
-      builder.getUnknownLoc(), tstartBus.getType(), conditionBus, tstartBus,
-      conditionBus);
-  Value tstartRegion = builder.create<hir::CastOp>(
-      builder.getUnknownLoc(), hir::TimeType::get(builder.getContext()),
-      tstartRegionBus);
+  Value tstartIfRegionBus =
+      builder
+          .create<hir::BusMapOp>(
+              builder.getUnknownLoc(),
+              SmallVector<Value>({conditionBus, tstartBus}),
+              [](OpBuilder &builder, ArrayRef<Value> operands) {
+                Value res = builder.create<comb::AndOp>(
+                    builder.getUnknownLoc(), operands[0], operands[1]);
+                return builder.create<hir::YieldOp>(builder.getUnknownLoc(),
+                                                    res);
+              })
+          .getResult(0);
 
-  ifRegionOperandMap.map(op.getRegionTimeVar(), tstartRegion);
-  elseRegionOperandMap.map(op.getRegionTimeVar(), tstartRegion);
+  Value tstartIfRegion = builder.create<hir::CastOp>(
+      builder.getUnknownLoc(), hir::TimeType::get(builder.getContext()),
+      tstartIfRegionBus);
+
+  Value tstartElseRegionBus =
+      builder
+          .create<hir::BusMapOp>(
+              builder.getUnknownLoc(),
+              SmallVector<Value>({conditionBus, tstartBus}),
+              [](OpBuilder &builder, ArrayRef<Value> operands) {
+                Value c0 = builder.create<hw::ConstantOp>(
+                    builder.getUnknownLoc(),
+                    IntegerAttr::get(builder.getI1Type(), 0));
+                Value res = builder.create<comb::MuxOp>(
+                    builder.getUnknownLoc(), operands[0], c0, operands[1]);
+                return builder.create<hir::YieldOp>(builder.getUnknownLoc(),
+                                                    res);
+              })
+          .getResult(0);
+
+  Value tstartElseRegion = builder.create<hir::CastOp>(
+      builder.getUnknownLoc(), hir::TimeType::get(builder.getContext()),
+      tstartElseRegionBus);
+
+  ifRegionOperandMap.map(op.getRegionTimeVar(), tstartIfRegion);
+  elseRegionOperandMap.map(op.getRegionTimeVar(), tstartElseRegion);
 
   hir::YieldOp ifYield;
   hir::YieldOp elseYield;
@@ -154,7 +184,7 @@ LogicalResult SimplifyCtrlPass::visitOp(IfOp op) {
   auto elseResults =
       inlineRegion(builder, elseRegionOperandMap, op.else_region());
   for (size_t i = 0; i < op.getNumResults(); i++) {
-    op.results()[i].replaceAllUsesWith(builder.create<hir::SelectOp>(
+    op.results()[i].replaceAllUsesWith(builder.create<comb::MuxOp>(
         builder.getUnknownLoc(), ifResults[i].getType(), op.condition(),
         ifResults[i], elseResults[i]));
   }

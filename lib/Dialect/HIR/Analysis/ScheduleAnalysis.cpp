@@ -30,12 +30,9 @@ private:
   LogicalResult visitOp(TimeOp);
   LogicalResult visitOp(CallOp);
   LogicalResult visitOp(LatchOp);
-  LogicalResult visitOp(RecvOp);
+  LogicalResult visitOp(BusRecvOp);
   LogicalResult visitOp(DelayOp);
   LogicalResult visitOp(mlir::arith::ConstantOp);
-  LogicalResult visitOp(mlir::arith::IndexCastOp);
-  LogicalResult visitOp(mlir::arith::ExtSIOp);
-  LogicalResult visitOp(mlir::arith::TruncIOp);
   template <typename T>
   LogicalResult visitSingleResultOpWithOptionalDelay(T);
 
@@ -96,37 +93,10 @@ LogicalResult ScheduleInfoImpl::dispatch(Operation *operation) {
   } else if (auto op = dyn_cast<LoadOp>(operation)) {
     if (failed(visitSingleResultOpWithOptionalDelay(op)))
       return failure();
-  } else if (auto op = dyn_cast<RecvOp>(operation)) {
+  } else if (auto op = dyn_cast<BusRecvOp>(operation)) {
     if (failed(visitOp(op)))
-      return failure();
-  } else if (auto op = dyn_cast<AddIOp>(operation)) {
-    if (failed(visitSingleResultOpWithOptionalDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<SubIOp>(operation)) {
-    if (failed(visitSingleResultOpWithOptionalDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<MulIOp>(operation)) {
-    if (failed(visitSingleResultOpWithOptionalDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<AddFOp>(operation)) {
-    if (failed(visitSingleResultOpWithOptionalDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<SubFOp>(operation)) {
-    if (failed(visitSingleResultOpWithOptionalDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<MulFOp>(operation)) {
-    if (failed(visitSingleResultOpWithOptionalDelay(op)))
       return failure();
   } else if (auto op = dyn_cast<DelayOp>(operation)) {
-    if (failed(visitOp(op)))
-      return failure();
-  } else if (auto op = dyn_cast<mlir::arith::IndexCastOp>(operation)) {
-    if (failed(visitOp(op)))
-      return failure();
-  } else if (auto op = dyn_cast<mlir::arith::TruncIOp>(operation)) {
-    if (failed(visitOp(op)))
-      return failure();
-  } else if (auto op = dyn_cast<mlir::arith::ExtSIOp>(operation)) {
     if (failed(visitOp(op)))
       return failure();
   } else if (operation->getNumResults() > 0) {
@@ -233,7 +203,7 @@ LogicalResult ScheduleInfoImpl::visitOp(LatchOp op) {
   return success();
 }
 
-LogicalResult ScheduleInfoImpl::visitOp(RecvOp op) {
+LogicalResult ScheduleInfoImpl::visitOp(BusRecvOp op) {
   scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
       scheduleInfo.mapValueToRootTimeVar[op.tstart()];
   scheduleInfo.mapValueToOffset[op.getResult()] =
@@ -265,42 +235,6 @@ LogicalResult ScheduleInfoImpl::visitSingleResultOpWithOptionalDelay(T op) {
   scheduleInfo.mapValueToOffset[op.getResult()] =
       scheduleInfo.mapValueToOffset[op.tstart()] + op.offset().getValue() +
       op.delay().getValue();
-  return success();
-}
-
-LogicalResult ScheduleInfoImpl::visitOp(mlir::arith::IndexCastOp op) {
-  scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.in()];
-
-  scheduleInfo.mapValueToOffset[op.getResult()] =
-      scheduleInfo.mapValueToOffset[op.in()];
-
-  return success();
-  if (scheduleInfo.setOfAlwaysValidValues.contains(op.in()))
-    scheduleInfo.setOfAlwaysValidValues.insert(op.getResult());
-}
-
-LogicalResult ScheduleInfoImpl::visitOp(mlir::arith::ExtSIOp op) {
-
-  scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.in()];
-
-  scheduleInfo.mapValueToOffset[op.getResult()] =
-      scheduleInfo.mapValueToOffset[op.in()];
-
-  return success();
-  if (scheduleInfo.setOfAlwaysValidValues.contains(op.in()))
-    scheduleInfo.setOfAlwaysValidValues.insert(op.getResult());
-}
-
-LogicalResult ScheduleInfoImpl::visitOp(mlir::arith::TruncIOp op) {
-  scheduleInfo.mapValueToRootTimeVar[op.getResult()] =
-      scheduleInfo.mapValueToRootTimeVar[op.in()];
-
-  scheduleInfo.mapValueToOffset[op.getResult()] =
-      scheduleInfo.mapValueToOffset[op.in()];
-  if (scheduleInfo.setOfAlwaysValidValues.contains(op.in()))
-    scheduleInfo.setOfAlwaysValidValues.insert(op.getResult());
   return success();
 }
 //-----------------------------------------------------------------------------

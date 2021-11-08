@@ -156,24 +156,6 @@ private:
       } else if (auto op = dyn_cast<mlir::memref::StoreOp>(operation)) {
         if (failed(convertOp(op)))
           return failure();
-      } else if (auto op = dyn_cast<mlir::arith::AddIOp>(operation)) {
-        if (failed(convertBinOp<mlir::arith::AddIOp, hir::AddIOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::arith::SubIOp>(operation)) {
-        if (failed(convertBinOp<mlir::arith::SubIOp, hir::SubIOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::arith::MulIOp>(operation)) {
-        if (failed(convertBinOp<mlir::arith::MulIOp, hir::MulIOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::arith::AddFOp>(operation)) {
-        if (failed(convertBinOp<mlir::arith::AddFOp, hir::AddFOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::arith::SubFOp>(operation)) {
-        if (failed(convertBinOp<mlir::arith::SubFOp, hir::SubFOp>(op)))
-          return failure();
-      } else if (auto op = dyn_cast<mlir::arith::MulFOp>(operation)) {
-        if (failed(convertBinOp<mlir::arith::MulFOp, hir::MulFOp>(op)))
-          return failure();
       } else if (auto op = dyn_cast<mlir::ReturnOp>(operation)) {
         if (failed(convertOp(op)))
           return failure();
@@ -487,9 +469,9 @@ LogicalResult StandardToHIRPass::convertOp(mlir::memref::StoreOp op) {
 LogicalResult StandardToHIRPass::convertOp(mlir::ReturnOp op) {
   OpBuilder builder(op);
   Value c0 = builder
-                 .create<mlir::arith::ConstantOp>(op.getLoc(),
-                                           IndexType::get(builder.getContext()),
-                                           builder.getIndexAttr(0))
+                 .create<mlir::arith::ConstantOp>(
+                     op.getLoc(), IndexType::get(builder.getContext()),
+                     builder.getIndexAttr(0))
                  .getResult();
   for (size_t i = 0; i < op.getNumOperands(); i++) {
     Value memref = enclosingFuncOp.getFuncBody().front().getArgument(

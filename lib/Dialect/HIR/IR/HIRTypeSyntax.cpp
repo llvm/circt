@@ -113,7 +113,7 @@ ParseResult parseBusPortsAttr(DialectAsmParser &parser,
 // Types.
 // Memref Type.
 static Type parseMemrefType(DialectAsmParser &parser, MLIRContext *context) {
-  SmallVector<int64_t, 4> shape;
+  SmallVector<int64_t> shape;
   Type elementType;
   SmallVector<hir::DimKind, 4> dimKinds;
   if (parser.parseLess() || parseBankedDimensionList(parser, shape, dimKinds) ||
@@ -165,7 +165,7 @@ static Type parseInnerFuncType(DialectAsmParser &parser, MLIRContext *context) {
       } else if (type.dyn_cast<hir::MemrefType>()) {
         if (parseMemrefPortsAttr(parser, inputAttrs))
           return Type();
-      } else if (helper::isBusType(type)) {
+      } else if (helper::isBusLikeType(type)) {
         if (parseBusPortsAttr(parser, inputAttrs))
           return Type();
       } else
@@ -239,6 +239,15 @@ static Type parseBusType(DialectAsmParser &parser, MLIRContext *context) {
   return hir::BusType::get(context, elementTy);
 }
 
+static Type parseBusTensorType(DialectAsmParser &parser, MLIRContext *context) {
+
+  Type elementTy;
+  SmallVector<int64_t> shape;
+  if (parser.parseLess() || parser.parseDimensionList(shape) ||
+      parser.parseType(elementTy) || parser.parseGreater())
+    return Type();
+  return hir::BusTensorType::get(context, shape, elementTy);
+}
 // parseType and printType.
 Type HIRDialect::parseType(DialectAsmParser &parser) const {
   StringRef typeKeyword;
@@ -256,6 +265,9 @@ Type HIRDialect::parseType(DialectAsmParser &parser) const {
 
   if (typeKeyword == BusType::getKeyword())
     return parseBusType(parser, getContext());
+
+  if (typeKeyword == BusTensorType::getKeyword())
+    return parseBusTensorType(parser, getContext());
 
   return parser.emitError(parser.getNameLoc(), "unknown hir type"), Type();
 }
@@ -278,7 +290,7 @@ static void printFuncType(FuncType moduleTy, DialectAsmPrinter &printer) {
     } else if (inputTypes[i].dyn_cast<hir::MemrefType>()) {
       auto ports = helper::extractMemrefPortsFromDict(inputAttrs[i]);
       printer << " ports " << ports;
-    } else if (helper::isBusType(inputTypes[i])) {
+    } else if (helper::isBusLikeType(inputTypes[i])) {
       auto busPortStr = helper::extractBusPortFromDict(inputAttrs[i]);
       printer << " ports [" << busPortStr << "]";
     }
@@ -302,6 +314,16 @@ static void printBusType(BusType busTy, DialectAsmPrinter &printer) {
   printer << busTy.getKeyword() << "<" << busTy.getElementType() << ">";
 }
 
+static void printBusTensorType(BusTensorType busTensorTy,
+                               DialectAsmPrinter &printer) {
+  printer << busTensorTy.getKeyword() << "<";
+  for (size_t i = 0; i < busTensorTy.getShape().size(); i++) {
+    printer << busTensorTy.getShape()[i];
+    printer << "x";
+  }
+  printer << busTensorTy.getElementType() << ">";
+}
+
 void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
   if (TimeType timeTy = type.dyn_cast<TimeType>()) {
     printer << timeTy.getKeyword();
@@ -317,6 +339,10 @@ void HIRDialect::printType(Type type, DialectAsmPrinter &printer) const {
   }
   if (BusType busTy = type.dyn_cast<BusType>()) {
     printBusType(busTy, printer);
+    return;
+  }
+  if (BusTensorType busTensorTy = type.dyn_cast<BusTensorType>()) {
+    printBusTensorType(busTensorTy, printer);
     return;
   }
 }

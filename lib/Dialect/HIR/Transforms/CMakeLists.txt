@@ -1,6 +1,5 @@
 add_circt_dialect_library(CIRCTHIRTransforms
   #pass/BitwidthReductionPass.cpp
-  Passes/IndexLoweringPass.cpp
   Passes/LoopUnrollPass.cpp
   Passes/MemrefLoweringPass.cpp
   Passes/MemrefLoweringUtils.cpp

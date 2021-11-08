@@ -43,39 +43,16 @@ LogicalResult StoreOp::canonicalize(StoreOp op,
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
 
-LogicalResult SendOp::canonicalize(SendOp op,
-                                   ::mlir::PatternRewriter &rewriter) {
+LogicalResult BusSendOp::canonicalize(BusSendOp op,
+                                      ::mlir::PatternRewriter &rewriter) {
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
 
-LogicalResult RecvOp::canonicalize(RecvOp op,
-                                   ::mlir::PatternRewriter &rewriter) {
+LogicalResult BusRecvOp::canonicalize(BusRecvOp op,
+                                      ::mlir::PatternRewriter &rewriter) {
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
-LogicalResult AddIOp::canonicalize(AddIOp op,
-                                   ::mlir::PatternRewriter &rewriter) {
-  return splitOffsetIntoSeparateOp(op, rewriter);
-}
-LogicalResult SubIOp::canonicalize(SubIOp op,
-                                   ::mlir::PatternRewriter &rewriter) {
-  return splitOffsetIntoSeparateOp(op, rewriter);
-}
-LogicalResult MulIOp::canonicalize(MulIOp op,
-                                   ::mlir::PatternRewriter &rewriter) {
-  return splitOffsetIntoSeparateOp(op, rewriter);
-}
-LogicalResult AddFOp::canonicalize(AddFOp op,
-                                   ::mlir::PatternRewriter &rewriter) {
-  return splitOffsetIntoSeparateOp(op, rewriter);
-}
-LogicalResult SubFOp::canonicalize(SubFOp op,
-                                   ::mlir::PatternRewriter &rewriter) {
-  return splitOffsetIntoSeparateOp(op, rewriter);
-}
-LogicalResult MulFOp::canonicalize(MulFOp op,
-                                   ::mlir::PatternRewriter &rewriter) {
-  return splitOffsetIntoSeparateOp(op, rewriter);
-}
+
 LogicalResult ForOp::canonicalize(ForOp op, PatternRewriter &rewriter) {
   return splitOffsetIntoSeparateOp(op, rewriter);
 }

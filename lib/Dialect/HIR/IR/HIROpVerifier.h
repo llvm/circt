@@ -5,20 +5,22 @@
 
 namespace circt {
 namespace hir {
-LogicalResult verifyFuncOp(hir::FuncOp);
-LogicalResult verifyFuncExternOp(hir::FuncExternOp);
 LogicalResult verifyAllocaOp(hir::AllocaOp);
+LogicalResult verifyBusTensorMapOp(hir::BusTensorMapOp);
 LogicalResult verifyCallOp(hir::CallOp);
+LogicalResult verifyCastOp(hir::CastOp);
 LogicalResult verifyDelayOp(hir::DelayOp);
-LogicalResult verifyYieldOp(hir::YieldOp);
-LogicalResult verifyLatchOp(hir::LatchOp);
-LogicalResult verifyTimeOp(hir::TimeOp);
 LogicalResult verifyForOp(hir::ForOp);
-LogicalResult verifyLoadOp(hir::LoadOp);
-LogicalResult verifyStoreOp(hir::StoreOp);
+LogicalResult verifyFuncExternOp(hir::FuncExternOp);
+LogicalResult verifyFuncOp(hir::FuncOp);
 LogicalResult verifyIfOp(hir::IfOp);
+LogicalResult verifyLatchOp(hir::LatchOp);
+LogicalResult verifyLoadOp(hir::LoadOp);
 LogicalResult verifyNextIterOp(hir::NextIterOp);
 LogicalResult verifyProbeOp(hir::ProbeOp);
+LogicalResult verifyStoreOp(hir::StoreOp);
+LogicalResult verifyTimeOp(hir::TimeOp);
+LogicalResult verifyYieldOp(hir::YieldOp);
 } // namespace hir
 } // namespace circt
 

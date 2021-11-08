@@ -15,7 +15,7 @@
 namespace circt {
 namespace hir {
 enum PortKind { rd = 0, wr = 1, rw = 2 };
-enum BusDirection { ORIGINAL = 0, FLIPPED = 1 };
+enum BusDirection { SAME = 0, FLIPPED = 1 };
 
 enum DimKind { ADDR = 0, BANK = 1 };
 namespace Details {
@@ -147,6 +147,39 @@ struct BusTypeStorage : public TypeStorage {
   ArrayRef<Type> memberTypes;
   ArrayRef<BusDirection> memberDirections;
 };
+
+/// Storage class for BusTensorType.
+struct BusTensorTypeStorage : public TypeStorage {
+  BusTensorTypeStorage(ArrayRef<int64_t> shape, Type elementTy)
+      : shape(shape), elementTy(elementTy) {}
+
+  using KeyTy = std::tuple<ArrayRef<int64_t>, Type>;
+
+  bool operator==(const KeyTy &key) const {
+    return key == KeyTy(shape, elementTy);
+  }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
+  }
+
+  /// Define a construction function for the key type.
+  static KeyTy getKey(ArrayRef<int64_t> shape, Type elementTy) {
+    return KeyTy(shape, elementTy);
+  }
+
+  /// Define a construction method for creating a new instance of this storage.
+  static BusTensorTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
+                                         const KeyTy &key) {
+    auto shape = allocator.copyInto(std::get<0>(key));
+    auto elementTy = std::get<1>(key);
+    return new (allocator.allocate<BusTensorTypeStorage>())
+        BusTensorTypeStorage(shape, elementTy);
+  }
+
+  ArrayRef<int64_t> shape;
+  Type elementTy;
+};
 } // namespace Details.
 
 /// This class defines hir.time type in the dialect.
@@ -178,7 +211,7 @@ public:
   Type getElementType() { return getImpl()->elementType; }
   ArrayRef<DimKind> getDimKinds() { return getImpl()->dimKinds; }
 
-  uint64_t getNumElementsPerBank() {
+  int64_t getNumElementsPerBank() {
     int count = 1;
     auto dimKinds = getDimKinds();
     auto shape = getShape();
@@ -189,8 +222,8 @@ public:
     return count;
   }
 
-  uint64_t getNumBanks() {
-    uint64_t count = 1;
+  int64_t getNumBanks() {
+    int64_t count = 1;
     auto dimKinds = getDimKinds();
     auto shape = getShape();
     for (size_t i = 0; i < shape.size(); i++) {
@@ -201,10 +234,10 @@ public:
     return count;
   }
 
-  SmallVector<int64_t, 4> filterShape(DimKind dimKind) {
+  SmallVector<int64_t> filterShape(DimKind dimKind) {
     auto shape = getShape();
     auto dimKinds = getDimKinds();
-    SmallVector<int64_t, 4> bankShape;
+    SmallVector<int64_t> bankShape;
     for (size_t i = 0; i < getShape().size(); i++) {
       if (dimKinds[i] == dimKind)
         bankShape.push_back(shape[i]);
@@ -220,13 +253,6 @@ public:
   using Base::Base;
 
   static StringRef getKeyword() { return "func"; }
-
-  // Depricated.
-  // static FuncType get(MLIRContext *context, FunctionType functionTy,
-  //                    ArrayRef<DictionaryAttr> inputAttrs,
-  //                    ArrayRef<DictionaryAttr> resultAttrs) {
-  //  return Base::get(context, functionTy, inputAttrs, resultAttrs);
-  //}
 
   /// Build a new FuncType from the given attributes.
   static FuncType get(MLIRContext *context, ArrayRef<Type> inputTypes,
@@ -260,10 +286,29 @@ public:
   static BusType get(MLIRContext *context, Type type) {
 
     return Base::get(context, StringAttr::get(context, "bus"), type,
-                     hir::BusDirection::ORIGINAL);
+                     hir::BusDirection::SAME);
   }
 
   Type getElementType() { return getImpl()->memberTypes[0]; }
+};
+
+/// This class defines a bus_tensor type.
+class BusTensorType : public Type::TypeBase<BusTensorType, Type,
+                                            Details::BusTensorTypeStorage> {
+public:
+  using Base::Base;
+
+  static StringRef getKeyword() { return "bus_tensor"; }
+  static BusTensorType get(MLIRContext *context, ArrayRef<int64_t> shape,
+                           Type type) {
+
+    return Base::get(context, shape, type);
+  }
+
+  static LogicalResult verify(function_ref<InFlightDiagnostic()> emitError,
+                              ArrayRef<int64_t> shape, Type elementTy);
+  Type getElementType() { return getImpl()->elementTy; }
+  ArrayRef<int64_t> getShape() { return getImpl()->shape; }
 };
 
 /// This class defines bus struct type.

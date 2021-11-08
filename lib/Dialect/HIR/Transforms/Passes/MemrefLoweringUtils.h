@@ -15,7 +15,7 @@ Value insertDataSendLogic(OpBuilder &builder, Value data, Value inDataBus,
 
 Value insertDataRecvLogic(OpBuilder &builder, Location loc, ArrayAttr names,
                           Value dataBusT, ArrayRef<Value> indices,
-                          uint64_t rdLatency, Value tVar,
+                          int64_t rdLatency, Value tVar,
                           IntegerAttr offsetAttr);
 
 Value insertDataTensorSendLogic(OpBuilder &builder, Value enableBusT,

@@ -239,24 +239,6 @@ LogicalResult RegisterAllocationPass::dispatch(Operation *operation) {
   } else if (auto op = dyn_cast<hir::DelayOp>(operation)) {
     if (failed(visitOpWithNoOperandsDelay(op)))
       return failure();
-  } else if (auto op = dyn_cast<hir::AddIOp>(operation)) {
-    if (failed(visitOpWithNoOperandsDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<hir::SubIOp>(operation)) {
-    if (failed(visitOpWithNoOperandsDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<hir::MulIOp>(operation)) {
-    if (failed(visitOpWithNoOperandsDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<hir::AddFOp>(operation)) {
-    if (failed(visitOpWithNoOperandsDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<hir::SubFOp>(operation)) {
-    if (failed(visitOpWithNoOperandsDelay(op)))
-      return failure();
-  } else if (auto op = dyn_cast<hir::MulFOp>(operation)) {
-    if (failed(visitOpWithNoOperandsDelay(op)))
-      return failure();
   } else if (auto op = dyn_cast<hir::LatchOp>(operation)) {
     if (failed(visitOpWithNoOperandsDelay(op)))
       return failure();
@@ -272,12 +254,6 @@ LogicalResult RegisterAllocationPass::dispatch(Operation *operation) {
   } else if (auto op = dyn_cast<hir::TimeOp>(operation)) {
     return success();
   } else if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation)) {
-    return success();
-  } else if (auto op = dyn_cast<mlir::arith::IndexCastOp>(operation)) {
-    return success();
-  } else if (auto op = dyn_cast<mlir::arith::TruncIOp>(operation)) {
-    return success();
-  } else if (auto op = dyn_cast<mlir::arith::ExtSIOp>(operation)) {
     return success();
   } else {
     assert(!dyn_cast<hir::FuncOp>(operation));

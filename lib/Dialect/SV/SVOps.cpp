@@ -10,11 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/SV/SVOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"

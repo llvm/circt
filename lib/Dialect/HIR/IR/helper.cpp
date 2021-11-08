@@ -1,3 +1,4 @@
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/HIRDialect.h"
 #include "circt/Dialect/HIR/IR/helper.h"
@@ -20,7 +21,7 @@ std::string typeString(Type t) {
   return typeStr;
 }
 
-llvm::Optional<uint64_t> getBitWidth(Type type) {
+llvm::Optional<int64_t> getBitWidth(Type type) {
   if (type.dyn_cast<hir::TimeType>())
     return 1;
   if (auto intTy = type.dyn_cast<IntegerType>())
@@ -94,13 +95,8 @@ bool isBuiltinSizedType(Type ty) {
   return false;
 }
 
-bool isBusType(mlir::Type ty) {
-  if (ty.isa<hir::BusType>())
-    return true;
-  if (auto tensorTy = ty.dyn_cast<mlir::TensorType>())
-    if (tensorTy.getElementType().isa<hir::BusType>())
-      return true;
-  return false;
+bool isBusLikeType(mlir::Type ty) {
+  return (ty.isa<hir::BusType>() || ty.isa<hir::BusTensorType>());
 }
 
 TimeType getTimeType(MLIRContext *context) { return TimeType::get(context); }
@@ -187,7 +183,7 @@ extractMemrefPortsFromDict(mlir::DictionaryAttr dict) {
       .second.dyn_cast<ArrayAttr>();
 }
 
-llvm::Optional<uint64_t> getRdLatency(Attribute port) {
+llvm::Optional<int64_t> getRdLatency(Attribute port) {
   auto portDict = port.dyn_cast<DictionaryAttr>();
   auto rdLatencyAttr = portDict.getNamed("rd_latency");
   if (rdLatencyAttr)
@@ -243,7 +239,7 @@ SmallVector<Type> getTypes(ArrayRef<Value> values) {
 }
 
 llvm::Optional<StringRef> getOptionalName(Operation *operation,
-                                          uint64_t resultNum) {
+                                          int64_t resultNum) {
   auto namesAttr = operation->getAttr("names").dyn_cast_or_null<ArrayAttr>();
   if (!namesAttr)
     return llvm::None;
@@ -279,12 +275,14 @@ llvm::Optional<mlir::StringRef> getOptionalName(mlir::Value v) {
   return llvm::None;
 }
 
-circt::Type getElementType(circt::Type ty) {
+llvm::Optional<Type> getElementType(circt::Type ty) {
   if (auto tensorTy = ty.dyn_cast<mlir::TensorType>())
-    return getElementType(tensorTy.getElementType());
+    return tensorTy.getElementType();
   if (auto busTy = ty.dyn_cast<hir::BusType>())
-    return getElementType(busTy.getElementType());
-  return ty;
+    return busTy.getElementType();
+  if (auto busTensorTy = ty.dyn_cast<hir::BusTensorType>())
+    return busTensorTy.getElementType();
+  return llvm::None;
 }
 
 Operation *declareExternalFuncForCall(hir::CallOp callOp,
@@ -318,12 +316,82 @@ Operation *declareExternalFuncForCall(hir::CallOp callOp,
   return declOp;
 }
 
-Value materializeIntegerConstant(OpBuilder &builder, int value,
-                                 uint64_t width) {
+Value materializeIntegerConstant(OpBuilder &builder, int value, int64_t width) {
   return builder.create<hw::ConstantOp>(
       builder.getUnknownLoc(),
       builder.getIntegerAttr(IntegerType::get(builder.getContext(), width),
                              value));
+}
+
+static Optional<Type> convertBusType(hir::BusType busTy) {
+  return convertToHWType(busTy.getElementType());
+}
+
+static Optional<Type> convertTensorType(mlir::TensorType tensorTy) {
+  auto elementHWTy = convertToHWType(tensorTy.getElementType());
+  if (!elementHWTy || tensorTy.getNumElements() == 1)
+    return elementHWTy;
+  return hw::ArrayType::get(*elementHWTy, tensorTy.getNumElements());
+}
+
+static Optional<Type> convertTupleType(mlir::TupleType tupleTy) {
+  int64_t width = 0;
+  for (auto elementTy : tupleTy.getTypes()) {
+    // We can't handle tensors/arrays inside tuple.
+    auto elementHWTy = convertToHWType(elementTy);
+    if (!elementHWTy || elementHWTy.getValue().isa<IntegerType>())
+      return llvm::None;
+    width += (*elementHWTy).dyn_cast<IntegerType>().getWidth();
+  }
+  return IntegerType::get(tupleTy.getContext(), width);
+}
+
+llvm::Optional<Type> convertToHWType(Type type) {
+  if (type.isa<IntegerType>())
+    return type;
+  if (auto ty = type.dyn_cast<hir::BusType>())
+    return convertBusType(ty);
+  if (auto ty = type.dyn_cast<mlir::TensorType>())
+    return convertTensorType(ty);
+  if (type.isa<hir::TimeType>())
+    return IntegerType::get(type.getContext(), 1);
+  if (auto ty = type.dyn_cast<mlir::TupleType>())
+    return convertTupleType(ty);
+  if (type.isa<mlir::FloatType>())
+    return IntegerType::get(type.getContext(), type.getIntOrFloatBitWidth());
+  return llvm::None;
+}
+
+Value insertBusSelectLogic(OpBuilder &builder, Value selectBus, Value trueBus,
+                           Value falseBus) {
+  auto uLoc = builder.getUnknownLoc();
+  return builder
+      .create<hir::BusMapOp>(
+          builder.getUnknownLoc(),
+          ArrayRef<Value>({selectBus, trueBus, falseBus}),
+          [&uLoc](OpBuilder &builder, ArrayRef<Value> operands) {
+            Value result = builder.create<comb::MuxOp>(
+                uLoc, operands[0], operands[1], operands[2]);
+
+            return builder.create<hir::YieldOp>(uLoc, result);
+          })
+      .getResult(0);
+}
+
+Value insertMultiBusSelectLogic(OpBuilder &builder, Value selectBusT,
+                                Value trueBusT, Value falseBusT) {
+  auto uLoc = builder.getUnknownLoc();
+  return builder
+      .create<hir::BusTensorMapOp>(
+          builder.getUnknownLoc(),
+          ArrayRef<Value>({selectBusT, trueBusT, falseBusT}),
+          [&uLoc](OpBuilder &builder, ArrayRef<Value> operands) {
+            Value result = builder.create<comb::MuxOp>(
+                uLoc, operands[0], operands[1], operands[2]);
+
+            return builder.create<hir::YieldOp>(uLoc, result);
+          })
+      .getResult(0);
 }
 
 } // namespace helper

@@ -10,13 +10,6 @@ def SimplifyCtrl : Pass<"hir-simplify-ctrl", "hir::FuncOp"> {
   "circt::sv::SVDialect"];
 }
 
-def IndexLowering : Pass<"hir-lower-index", "hir::FuncOp"> {
-  let summary = "Converts the IndexType to an IntegerType of concrete size.";
-  let description = [{IndexType of for loops (except unrolled for loops) is converted to a concrete type.}];
-
-  let constructor = "circt::hir::createIndexLoweringPass()";
-}
-
 def RegisterAllocation : Pass<"hir-register-alloc", "hir::FuncOp"> {
   let summary = "Register allocation pass for HIR programs.";
   let description = [{Allocates registers for pipeline balancing using hir.delay and hir.latch instructions.}];

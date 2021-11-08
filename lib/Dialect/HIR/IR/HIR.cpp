@@ -185,7 +185,7 @@ verifyBusPortsAttribute(mlir::function_ref<InFlightDiagnostic()> emitError,
 LogicalResult MemrefType::verify(function_ref<InFlightDiagnostic()> emitError,
                                  ArrayRef<int64_t> shape, Type elementType,
                                  ArrayRef<DimKind> dimKinds) {
-  for (uint64_t i = 0; i < shape.size(); i++) {
+  for (size_t i = 0; i < shape.size(); i++) {
     if (dimKinds[i] == ADDR) {
       if ((pow(2, helper::clog2(shape[i]))) != shape[i]) {
         return emitError()
@@ -225,23 +225,17 @@ LogicalResult FuncType::verify(function_ref<InFlightDiagnostic()> emitError,
         return emitError()
                << "Expected hir.memref.ports ArrayAttr for input arg"
                << std::to_string(i) << ".";
-    } else if (inputTypes[i].dyn_cast<hir::BusType>()) {
-      if (failed(verifyBusPortsAttribute(emitError, inputAttrs[i])))
-        return emitError() << "Expected hir.bus.ports ArrayAttr for input arg"
-                           << std::to_string(i) << ".";
-    } else if (auto ty = inputTypes[i].dyn_cast<mlir::TensorType>()) {
-      if (!ty.getElementType().isa<hir::BusType>())
-        return emitError() << "Expected a tensor of sized type or hir.bus.";
+    } else if (helper::isBusLikeType(inputTypes[i])) {
       if (failed(verifyBusPortsAttribute(emitError, inputAttrs[i])))
         return emitError() << "Expected hir.bus.ports ArrayAttr for input arg"
                            << std::to_string(i) << ".";
     } else if (inputTypes[i].dyn_cast<hir::TimeType>()) {
       continue;
     } else {
-      return emitError()
-             << "Expected MLIR-builtin-type or hir::MemrefType or "
-                "hir::BusType or hir::TimeType in inputTypes, got :\n\t"
-             << inputTypes[i];
+      return emitError() << "Expected MLIR-builtin-type or hir::MemrefType or "
+                            "hir::BusType or hir::BusTensorType or "
+                            "hir::TimeType in inputTypes, got :\n\t"
+                         << inputTypes[i];
     }
   }
 
@@ -292,7 +286,6 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
   if (parser.parseLParen())
     return failure();
 
-  llvm::SMLoc argLoc = parser.getCurrentLocation();
   if (parser.parseOperandList(operands))
     return failure();
   if (parser.parseRParen())
@@ -319,7 +312,7 @@ static ParseResult parseCallOp(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(locCalleeTy, "expected !hir.func type!");
 
   if (parser.resolveOperands(operands, funcTy.getFunctionType().getInputs(),
-                             argLoc, result.operands))
+                             parser.getNameLoc(), result.operands))
     return failure();
   if (tstart.hasValue())
     if (parser.resolveOperand(tstart.getValue(), helper::getTimeType(context),
@@ -706,7 +699,7 @@ static ParseResult parseArgList(OpAsmParser &parser,
       } else if (argTy.isa<hir::MemrefType>()) {
         if (parseMemrefPortsAttr(parser, argAttrs))
           return failure();
-      } else if (helper::isBusType(argTy)) {
+      } else if (helper::isBusLikeType(argTy)) {
         if (parseBusPortsAttr(parser, argAttrs))
           return failure();
       } else
@@ -852,7 +845,7 @@ static ParseResult printArgList(OpAsmPrinter &printer, ArrayAttr argNames,
         printer << " delay " << delay;
     } else if (argTypes[i].isa<hir::MemrefType>()) {
       printer << " ports " << helper::extractMemrefPortsFromDict(argAttrs[i]);
-    } else if (helper::isBusType(argTypes[i])) {
+    } else if (helper::isBusLikeType(argTypes[i])) {
       printer << " ports [" << helper::extractBusPortFromDict(argAttrs[i])
               << "]";
     }
@@ -914,62 +907,15 @@ static void printFuncOp(OpAsmPrinter &printer, hir::FuncOp op) {
                                  "sym_name", "argNames", "resultNames"});
 }
 
-/// BusSelectOp parser and printer.
-/// Syntax: hir.bus.select %select_bus, %true_bus, %false_bus
-/// custom<WithSSANames>(attr-dict): type($res)
-static ParseResult parseBusSelectOp(OpAsmParser &parser,
-                                    OperationState &result) {
-  OpAsmParser::OperandType selectBus;
-  OpAsmParser::OperandType trueBus;
-  OpAsmParser::OperandType falseBus;
-  Type resTy;
-  auto builder = parser.getBuilder();
-  if (parser.parseOperand(selectBus) || parser.parseComma() ||
-      parser.parseOperand(trueBus) || parser.parseComma() ||
-      parser.parseOperand(falseBus))
-    return failure();
-  if (parseWithSSANames(parser, result.attributes))
-    return failure();
-  if (parser.parseColonType(resTy))
-    return failure();
-
-  // Build the type of the select bus based on the type of the result.
-  Type i1BusTy = hir::BusType::get(builder.getContext(), builder.getI1Type());
-  Type selectBusTy;
-  if (auto tensorTy = resTy.dyn_cast<mlir::TensorType>()) {
-    selectBusTy = mlir::RankedTensorType::get(tensorTy.getShape(), i1BusTy);
-  } else {
-    selectBusTy = i1BusTy;
-  }
-  if (parser.resolveOperand(selectBus, selectBusTy, result.operands))
-    return failure();
-  if (parser.resolveOperand(trueBus, resTy, result.operands))
-    return failure();
-  if (parser.resolveOperand(falseBus, resTy, result.operands))
-    return failure();
-
-  result.addTypes(resTy);
-  return success();
-}
-
-static void printBusSelectOp(OpAsmPrinter &printer, hir::BusSelectOp op) {
-  printer << " " << op.select_bus() << ", " << op.true_bus() << ", "
-          << op.false_bus();
-
-  printWithSSANames(printer, op, op->getAttrDictionary());
-  printer << " : ";
-  printer << op.res().getType();
-}
-
 /// TensorInsertOp parser and printer.
 /// Syntax: hir.tensor.insert %element into %tensor[%c0, %c1]
 /// custom<WithSSANames>(attr-dict): type($res)
-static ParseResult parseTensorInsertOp(OpAsmParser &parser,
-                                       OperationState &result) {
+static ParseResult parseBusTensorInsertElementOp(OpAsmParser &parser,
+                                                 OperationState &result) {
   OpAsmParser::OperandType element;
   OpAsmParser::OperandType inputTensor;
   SmallVector<OpAsmParser::OperandType> indices;
-  Type resTy;
+  hir::BusTensorType resTy;
   auto builder = parser.getBuilder();
   if (parser.parseOperand(element) || parser.parseKeyword("into") ||
       parser.parseOperand(inputTensor))
@@ -981,17 +927,15 @@ static ParseResult parseTensorInsertOp(OpAsmParser &parser,
 
   if (parseWithSSANames(parser, result.attributes))
     return failure();
-  auto typeLoc = parser.getCurrentLocation();
   if (parser.parseColonType(resTy))
     return failure();
-  auto tensorTy = resTy.dyn_cast<mlir::TensorType>();
-  if (!tensorTy)
-    return parser.emitError(typeLoc) << "Expected tensor type.";
 
-  if (parser.resolveOperand(element, tensorTy.getElementType(),
-                            result.operands))
+  if (parser.resolveOperand(
+          element,
+          hir::BusType::get(parser.getContext(), resTy.getElementType()),
+          result.operands))
     return failure();
-  if (parser.resolveOperand(inputTensor, tensorTy, result.operands))
+  if (parser.resolveOperand(inputTensor, resTy, result.operands))
     return failure();
   if (parser.resolveOperands(indices, builder.getIndexType(), result.operands))
     return failure();
@@ -1000,7 +944,8 @@ static ParseResult parseTensorInsertOp(OpAsmParser &parser,
   return success();
 }
 
-static void printTensorInsertOp(OpAsmPrinter &printer, hir::TensorInsertOp op) {
+static void printBusTensorInsertElementOp(OpAsmPrinter &printer,
+                                          hir::BusTensorInsertElementOp op) {
   printer << " " << op.element() << " into " << op.tensor();
   printer << "[";
   printer.printOperands(op.indices());
@@ -1008,6 +953,140 @@ static void printTensorInsertOp(OpAsmPrinter &printer, hir::TensorInsertOp op) {
   printWithSSANames(printer, op, op->getAttrDictionary());
   printer << " : ";
   printer << op.res().getType();
+}
+
+/// BusMapOp parser and printer
+static ParseResult parseBusMapOp(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::OperandType> operands;
+  SmallVector<Type> regionArgTypes;
+  SmallVector<OpAsmParser::OperandType> regionArgs;
+  if (parser.parseLParen())
+    return failure();
+
+  do {
+    OpAsmParser::OperandType regionArg;
+    OpAsmParser::OperandType operand;
+    if (parser.parseRegionArgument(regionArg) || parser.parseEqual() ||
+        parser.parseOperand(operand))
+      return failure();
+    operands.push_back(operand);
+    regionArgs.push_back(regionArg);
+  } while (succeeded(parser.parseOptionalComma()));
+
+  if (parser.parseRParen() || parser.parseColon())
+    return failure();
+
+  mlir::FunctionType funcTy;
+  if (parser.parseType(funcTy))
+    return failure();
+
+  for (auto ty : funcTy.getInputs()) {
+    auto busTy = ty.dyn_cast<hir::BusType>();
+    if (!busTy)
+      return parser.emitError(parser.getNameLoc())
+             << "Inputs must be hir.bus type.";
+    regionArgTypes.push_back(busTy.getElementType());
+  }
+
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, regionArgs, regionArgTypes))
+    return failure();
+
+  parser.resolveOperands(operands, funcTy.getInputs(), parser.getNameLoc(),
+                         result.operands);
+  result.addTypes(funcTy.getResults());
+  return success();
+}
+
+static void printBusMapOp(OpAsmPrinter &printer, hir::BusMapOp op) {
+  printer << " (";
+  for (size_t i = 0; i < op.getNumOperands(); i++) {
+    if (i > 0)
+      printer << ",";
+    printer << op.body().front().getArgument(i) << " = " << op.operands()[i];
+  }
+  printer << ") : (";
+  for (size_t i = 0; i < op.getNumOperands(); i++) {
+    if (i > 0)
+      printer << ",";
+    printer << op.operands()[i].getType();
+  }
+  printer << ") -> (";
+  for (size_t i = 0; i < op.getNumResults(); i++) {
+    auto result = op.getResult(i);
+    if (i > 0)
+      printer << ",";
+    printer << result.getType();
+  }
+  printer << ")";
+  printer.printRegion(op.body(), false, true);
+}
+
+/// BusTensorMapOp parser and printer
+static ParseResult parseBusTensorMapOp(OpAsmParser &parser,
+                                       OperationState &result) {
+  SmallVector<OpAsmParser::OperandType> operands;
+  SmallVector<OpAsmParser::OperandType> regionArgs;
+  SmallVector<Type> regionArgTypes;
+  if (parser.parseLParen())
+    return failure();
+
+  do {
+    OpAsmParser::OperandType regionArg;
+    OpAsmParser::OperandType operand;
+    if (parser.parseRegionArgument(regionArg) || parser.parseEqual() ||
+        parser.parseOperand(operand))
+      return failure();
+    operands.push_back(operand);
+    regionArgs.push_back(regionArg);
+  } while (succeeded(parser.parseOptionalComma()));
+
+  if (parser.parseRParen() || parser.parseColon())
+    return failure();
+
+  mlir::FunctionType funcTy;
+  if (parser.parseType(funcTy))
+    return failure();
+
+  for (auto ty : funcTy.getInputs()) {
+    auto busTensorTy = ty.dyn_cast<hir::BusTensorType>();
+    if (!busTensorTy)
+      return parser.emitError(parser.getNameLoc())
+             << "Inputs must be hir.bus_tensor type.";
+    regionArgTypes.push_back(busTensorTy.getElementType());
+  }
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, regionArgs, regionArgTypes))
+    return failure();
+
+  parser.resolveOperands(operands, funcTy.getInputs(), parser.getNameLoc(),
+                         result.operands);
+  result.addTypes(funcTy.getResults());
+  return success();
+}
+
+static void printBusTensorMapOp(OpAsmPrinter &printer, hir::BusTensorMapOp op) {
+  printer << " (";
+  for (size_t i = 0; i < op.getNumOperands(); i++) {
+    if (i > 0)
+      printer << ",";
+    printer << op.body().front().getArgument(i) << " = " << op.operands()[i];
+  }
+  printer << ") : (";
+  for (size_t i = 0; i < op.getNumOperands(); i++) {
+    if (i > 0)
+      printer << ",";
+    printer << op.operands()[i].getType();
+  }
+  printer << ") -> (";
+  for (size_t i = 0; i < op.getNumResults(); i++) {
+    auto result = op.getResult(i);
+    if (i > 0)
+      printer << ",";
+    printer << result.getType();
+  }
+  printer << ")";
+  printer.printRegion(op.body(), false, true);
 }
 
 LogicalResult hir::FuncExternOp::verifyType() { return success(); }
@@ -1021,6 +1100,15 @@ LogicalResult hir::FuncOp::verifyType() {
 }
 /// required for functionlike trait
 LogicalResult hir::FuncOp::verifyBody() { return success(); }
+
+LogicalResult
+BusTensorType::verify(mlir::function_ref<InFlightDiagnostic()> emitError,
+                      ArrayRef<int64_t> shape, Type elementTy) {
+  if (!helper::isBuiltinSizedType(elementTy))
+    emitError() << "Bus inner type can only be an integer/float or a "
+                   "tuple/tensor of these types.";
+  return success();
+}
 
 #include "HIROpVerifier.h"
 

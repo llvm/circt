@@ -8,11 +8,11 @@
 #include "mlir/IR/PatternMatch.h"
 
 namespace helper {
-llvm::Optional<uint64_t> getBitWidth(mlir::Type);
+llvm::Optional<int64_t> getBitWidth(mlir::Type);
 unsigned clog2(int);
 
 bool isBuiltinSizedType(mlir::Type);
-bool isBusType(mlir::Type);
+bool isBusLikeType(mlir::Type);
 llvm::Optional<int64_t> getConstantIntValue(mlir::Value var);
 mlir::LogicalResult isConstantIntValue(mlir::Value var);
 mlir::IntegerAttr getI64IntegerAttr(mlir::MLIRContext *context, int value);
@@ -40,7 +40,7 @@ llvm::Optional<int64_t> calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
 int64_t extractDelayFromDict(mlir::DictionaryAttr dict);
 llvm::Optional<mlir::ArrayAttr>
 extractMemrefPortsFromDict(mlir::DictionaryAttr dict);
-llvm::Optional<uint64_t> getRdLatency(mlir::Attribute port);
+llvm::Optional<int64_t> getRdLatency(mlir::Attribute port);
 bool isWrite(mlir::Attribute port);
 bool isRead(mlir::Attribute port);
 llvm::StringRef extractBusPortFromDict(mlir::DictionaryAttr dict);
@@ -52,13 +52,22 @@ void setNames(mlir::Operation *, mlir::ArrayRef<mlir::StringRef>);
 
 mlir::SmallVector<mlir::Type> getTypes(mlir::ArrayRef<mlir::Value>);
 llvm::Optional<mlir::StringRef> getOptionalName(mlir::Operation *operation,
-                                                uint64_t resultNum);
+                                                int64_t resultNum);
 llvm::Optional<mlir::StringRef> getOptionalName(mlir::Value v);
-circt::Type getElementType(circt::Type);
+llvm::Optional<circt::Type> getElementType(circt::Type);
 circt::Operation *declareExternalFuncForCall(
     circt::hir::CallOp callOp, circt::SmallVector<circt::StringRef> inputNames,
     circt::SmallVector<circt::StringRef> resultNames = {});
 mlir::Value materializeIntegerConstant(mlir::OpBuilder &builder, int value,
-                                       uint64_t width);
+                                       int64_t width);
+llvm::Optional<mlir::Type> convertToHWType(mlir::Type type);
+
+mlir::Value insertBusSelectLogic(mlir::OpBuilder &builder,
+                                 mlir::Value selectBus, mlir::Value trueBus,
+                                 mlir::Value falseBus);
+mlir::Value insertMultiBusSelectLogic(mlir::OpBuilder &builder,
+                                      mlir::Value selectBusT,
+                                      mlir::Value trueBusT,
+                                      mlir::Value falseBusT);
 } // namespace helper
 #endif

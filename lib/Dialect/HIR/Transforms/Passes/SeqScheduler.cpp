@@ -36,31 +36,7 @@ private:
       } else if (auto op = dyn_cast<hir::StoreOp>(operation)) {
         if (failed(updateOp(op)))
           return failure();
-      } else if (auto op = dyn_cast<hir::AddIOp>(operation)) {
-        if (failed(updateOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<hir::SubIOp>(operation)) {
-        if (failed(updateOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<hir::MulIOp>(operation)) {
-        if (failed(updateOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<hir::AddFOp>(operation)) {
-        if (failed(updateOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<hir::SubFOp>(operation)) {
-        if (failed(updateOp(op)))
-          return failure();
-      } else if (auto op = dyn_cast<hir::MulFOp>(operation)) {
-        if (failed(updateOp(op)))
-          return failure();
       } else if (auto op = dyn_cast<mlir::arith::ConstantOp>(operation)) {
-        continue;
-      } else if (auto op = dyn_cast<mlir::arith::IndexCastOp>(operation)) {
-        continue;
-      } else if (auto op = dyn_cast<mlir::arith::TruncIOp>(operation)) {
-        continue;
-      } else if (auto op = dyn_cast<mlir::arith::ExtSIOp>(operation)) {
         continue;
       } else if (auto op = dyn_cast<hir::ReturnOp>(operation)) {
         continue;
@@ -89,12 +65,6 @@ private:
   LogicalResult updateOp(hir::ForOp);
   LogicalResult updateOp(hir::LoadOp);
   LogicalResult updateOp(hir::StoreOp);
-  LogicalResult updateOp(hir::AddIOp);
-  LogicalResult updateOp(hir::SubIOp);
-  LogicalResult updateOp(hir::MulIOp);
-  LogicalResult updateOp(hir::AddFOp);
-  LogicalResult updateOp(hir::SubFOp);
-  LogicalResult updateOp(hir::MulFOp);
   LogicalResult updateOp(hir::NextIterOp);
   LogicalResult updateOp(hir::CallOp);
 
@@ -146,48 +116,6 @@ LogicalResult SeqSchedulerPass::updateOp(LoadOp op) {
 }
 
 LogicalResult SeqSchedulerPass::updateOp(hir::StoreOp op) {
-  if (failed(populateSchedule(op)))
-    return failure();
-  this->nextFreeOffset += op.delay().getValueOr(0);
-  return success();
-}
-
-LogicalResult SeqSchedulerPass::updateOp(hir::AddIOp op) {
-  if (failed(populateSchedule(op)))
-    return failure();
-  this->nextFreeOffset += op.delay().getValueOr(0);
-  return success();
-}
-
-LogicalResult SeqSchedulerPass::updateOp(hir::SubIOp op) {
-  if (failed(populateSchedule(op)))
-    return failure();
-  this->nextFreeOffset += op.delay().getValueOr(0);
-  return success();
-}
-
-LogicalResult SeqSchedulerPass::updateOp(hir::MulIOp op) {
-  if (failed(populateSchedule(op)))
-    return failure();
-  this->nextFreeOffset += op.delay().getValueOr(0);
-  return success();
-}
-
-LogicalResult SeqSchedulerPass::updateOp(hir::AddFOp op) {
-  if (failed(populateSchedule(op)))
-    return failure();
-  this->nextFreeOffset += op.delay().getValueOr(0);
-  return success();
-}
-
-LogicalResult SeqSchedulerPass::updateOp(hir::SubFOp op) {
-  if (failed(populateSchedule(op)))
-    return failure();
-  this->nextFreeOffset += op.delay().getValueOr(0);
-  return success();
-}
-
-LogicalResult SeqSchedulerPass::updateOp(hir::MulFOp op) {
   if (failed(populateSchedule(op)))
     return failure();
   this->nextFreeOffset += op.delay().getValueOr(0);

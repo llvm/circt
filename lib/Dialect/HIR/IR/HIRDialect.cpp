@@ -108,7 +108,7 @@ struct HIROpAsmDialectInterface : public mlir::OpAsmDialectInterface {
 // HIR Dialect
 //-----------------------------------------------------------------------------
 void HIRDialect::initialize() {
-  addTypes<TimeType, BusType, FuncType, MemrefType>();
+  addTypes<TimeType, BusType, BusTensorType, FuncType, MemrefType>();
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/HIR/IR/HIR.cpp.inc"

@@ -21,8 +21,6 @@ private:
   SmallVector<hw::PortInfo> mapFuncInputToHWPortInfo;
 };
 
-Type convertToHWType(Type type);
-
 bool isRecvBus(DictionaryAttr busAttr);
 
 std::pair<SmallVector<Value>, SmallVector<Value>>

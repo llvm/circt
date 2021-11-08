@@ -123,6 +123,39 @@ LogicalResult verifyAllocaOp(hir::AllocaOp op) {
   return success();
 }
 
+LogicalResult verifyBusTensorMapOp(hir::BusTensorMapOp op) {
+  if (op.getNumOperands() == 0)
+    return op.emitError() << "Op must have atleast one operand.";
+  if (op.getNumResults() == 0)
+    return op.emitError() << "Op must have atleast one result.";
+  auto busTensorTy =
+      op.getResult(0).getType().dyn_cast_or_null<hir::BusTensorType>();
+  if (!busTensorTy)
+    return op.emitError(
+        "Expected input and result types to be hir.bus_tensor type.");
+
+  for (auto operand : op.operands()) {
+    auto operandTy = operand.getType().dyn_cast_or_null<hir::BusTensorType>();
+    if (!operandTy)
+      return op.emitError(
+          "Expected input and result types to be hir.bus_tensor type.");
+    if (operandTy.getShape() != busTensorTy.getShape())
+      return op.emitError(
+          "Expected all input and result tensors to have same shape.");
+  }
+
+  for (auto result : op.results()) {
+    auto resultTy = result.getType().dyn_cast_or_null<hir::BusTensorType>();
+    if (!resultTy)
+      return op.emitError(
+          "Expected input and result types to be hir.bus_tensor type.");
+    if (resultTy.getShape() != busTensorTy.getShape())
+      return op.emitError(
+          "Expected input and result tensors to have same shape.");
+  }
+  return success();
+}
+
 LogicalResult verifyYieldOp(hir::YieldOp op) {
   auto *operation = op->getParentRegion()->getParentOp();
   auto resultTypes = operation->getResultTypes();
@@ -130,10 +163,8 @@ LogicalResult verifyYieldOp(hir::YieldOp op) {
   if (resultTypes.size() != operands.size())
     return op.emitError() << "Expected " << resultTypes.size() << " operands.";
   for (uint64_t i = 0; i < resultTypes.size(); i++) {
-    if (operands[i].getType() != resultTypes[i])
-      return op.emitError()
-             << "Expected type " << resultTypes[i] << ", found "
-             << operands[i].getType() << " for operand " << i << ".";
+    if (!helper::isBuiltinSizedType(operands[i].getType()))
+      return op.emitError() << "verifyYieldOp: Unsupported input type.";
   }
   return success();
 }
@@ -255,9 +286,24 @@ LogicalResult verifyCallOp(hir::CallOp op) {
   return success();
 }
 
+LogicalResult verifyCastOp(hir::CastOp op) {
+  auto inputHWType = helper::convertToHWType(op.input().getType());
+  auto resultHWType = helper::convertToHWType(op.res().getType());
+  if (!inputHWType)
+    return op.emitError()
+           << "Input type should be convertible to a valid hardware type.";
+  if (!resultHWType)
+    return op.emitError()
+           << "Result type should be convertible to a valid hardware type.";
+  if (*inputHWType != *resultHWType)
+    return op.emitError() << "Incompatible Input and Result types.";
+
+  return success();
+}
+
 LogicalResult verifyDelayOp(hir::DelayOp op) {
   Type inputTy = op.input().getType();
-  if (helper::isBuiltinSizedType(inputTy) || helper::isBusType(inputTy))
+  if (helper::isBuiltinSizedType(inputTy) || helper::isBusLikeType(inputTy))
     return success();
   return op.emitError("hir.delay op only supports signless-integer, float "
                       "and tuple/tensor of these types.");
@@ -327,7 +373,7 @@ LogicalResult verifyNextIterOp(hir::NextIterOp op) {
 LogicalResult verifyProbeOp(hir::ProbeOp op) {
   auto ty = op.input().getType();
   if (!(helper::isBuiltinSizedType(ty) || ty.isa<hir::TimeType>() ||
-        helper::isBusType(ty)))
+        helper::isBusLikeType(ty)))
     return op.emitError() << "Unsupported type for hir.probe.";
   if (op.verilog_name().size() == 0 || op.verilog_name().startswith("%") ||
       isdigit(op.verilog_name().data()[0]))
