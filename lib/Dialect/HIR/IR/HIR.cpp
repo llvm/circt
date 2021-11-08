@@ -1107,6 +1107,9 @@ BusTensorType::verify(mlir::function_ref<InFlightDiagnostic()> emitError,
   if (!helper::isBuiltinSizedType(elementTy))
     emitError() << "Bus inner type can only be an integer/float or a "
                    "tuple/tensor of these types.";
+  for (auto dim : shape)
+    if (dim <= 0)
+      emitError() << "Dimension size must be greater than zero.";
   return success();
 }
 

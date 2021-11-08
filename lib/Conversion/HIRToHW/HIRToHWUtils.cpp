@@ -21,6 +21,7 @@ void FuncToHWModulePortMap::addFuncInput(StringAttr name,
   mapFuncInputToHWPortInfo.push_back(
       {.name = name, .direction = direction, .type = type, .argNum = argNum});
 }
+
 void FuncToHWModulePortMap::addClk(OpBuilder &builder) {
   auto clkName = builder.getStringAttr("clk");
   portInfoList.push_back({.name = clkName,
@@ -28,6 +29,7 @@ void FuncToHWModulePortMap::addClk(OpBuilder &builder) {
                           .type = builder.getI1Type(),
                           .argNum = hwModuleInputArgNum++});
 }
+
 void FuncToHWModulePortMap::addFuncResult(StringAttr name, Type type) {
   assert(name);
   assert(type);
@@ -195,8 +197,8 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
   assert(input.getType() == output.getType());
   return output;
 }
-Value convertToNamedValue(OpBuilder &builder, StringRef name, Value val) {
 
+Value convertToNamedValue(OpBuilder &builder, StringRef name, Value val) {
   assert(val.getType().isa<mlir::IntegerType>() ||
          val.getType().isa<hw::ArrayType>());
   Value namedVal;

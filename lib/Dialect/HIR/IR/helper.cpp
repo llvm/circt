@@ -24,12 +24,17 @@ std::string typeString(Type t) {
 llvm::Optional<int64_t> getBitWidth(Type type) {
   if (type.dyn_cast<hir::TimeType>())
     return 1;
+
   if (auto intTy = type.dyn_cast<IntegerType>())
     return intTy.getWidth();
+
   if (auto floatTy = type.dyn_cast<mlir::FloatType>())
     return floatTy.getWidth();
-  if (auto busTy = type.dyn_cast<hir::BusType>())
-    return getBitWidth(busTy.getElementType());
+
+  if (auto tensorTy = type.dyn_cast<mlir::TensorType>())
+    return tensorTy.getNumElements() *
+           getBitWidth(tensorTy.getElementType()).getValue();
+
   if (auto tupleTy = type.dyn_cast<TupleType>()) {
     int width = 1;
     for (Type ty : tupleTy.getTypes()) {
@@ -40,16 +45,13 @@ llvm::Optional<int64_t> getBitWidth(Type type) {
     }
     return width;
   }
-  if (auto tensorTy = type.dyn_cast<mlir::TensorType>()) {
-    int size = 1;
-    for (auto szDim : tensorTy.getShape())
-      size *= szDim;
 
-    auto widthElementTy = getBitWidth(tensorTy.getElementType());
-    if (!widthElementTy)
-      return llvm::None;
-    return size * widthElementTy.getValue();
-  }
+  if (auto busTy = type.dyn_cast<hir::BusType>())
+    return getBitWidth(busTy.getElementType());
+
+  if (auto busTensorTy = type.dyn_cast<hir::BusTensorType>())
+    return busTensorTy.getNumElements() *
+           getBitWidth(busTensorTy.getElementType()).getValue();
 
   return llvm::None;
 }
@@ -329,9 +331,27 @@ static Optional<Type> convertBusType(hir::BusType busTy) {
 
 static Optional<Type> convertTensorType(mlir::TensorType tensorTy) {
   auto elementHWTy = convertToHWType(tensorTy.getElementType());
-  if (!elementHWTy || tensorTy.getNumElements() == 1)
+  // Tensor element must always be a value type and hence always convertible
+  // to a valid hw type.
+  if (tensorTy.getNumElements() == 1)
     return elementHWTy;
   return hw::ArrayType::get(*elementHWTy, tensorTy.getNumElements());
+}
+
+static Optional<Type> convertBusTensorType(hir::BusTensorType busTensorTy) {
+  auto elementHWTy = convertToHWType(busTensorTy.getElementType());
+  if (!elementHWTy) {
+    Builder builder(busTensorTy.getContext());
+    mlir::emitError(builder.getUnknownLoc())
+        << "Could not convert bus tensor element type "
+        << busTensorTy.getElementType();
+  }
+
+  // BusTensor element must always be a value type and hence always convertible
+  // to a valid hw type.
+  if (busTensorTy.getNumElements() == 1)
+    return elementHWTy;
+  return hw::ArrayType::get(*elementHWTy, busTensorTy.getNumElements());
 }
 
 static Optional<Type> convertTupleType(mlir::TupleType tupleTy) {
@@ -339,7 +359,7 @@ static Optional<Type> convertTupleType(mlir::TupleType tupleTy) {
   for (auto elementTy : tupleTy.getTypes()) {
     // We can't handle tensors/arrays inside tuple.
     auto elementHWTy = convertToHWType(elementTy);
-    if (!elementHWTy || elementHWTy.getValue().isa<IntegerType>())
+    if (!(elementHWTy && elementHWTy.getValue().isa<IntegerType>()))
       return llvm::None;
     width += (*elementHWTy).dyn_cast<IntegerType>().getWidth();
   }
@@ -347,18 +367,20 @@ static Optional<Type> convertTupleType(mlir::TupleType tupleTy) {
 }
 
 llvm::Optional<Type> convertToHWType(Type type) {
+  if (type.isa<TimeType>())
+    return IntegerType::get(type.getContext(), 1);
   if (type.isa<IntegerType>())
     return type;
-  if (auto ty = type.dyn_cast<hir::BusType>())
-    return convertBusType(ty);
-  if (auto ty = type.dyn_cast<mlir::TensorType>())
-    return convertTensorType(ty);
-  if (type.isa<hir::TimeType>())
-    return IntegerType::get(type.getContext(), 1);
-  if (auto ty = type.dyn_cast<mlir::TupleType>())
-    return convertTupleType(ty);
   if (type.isa<mlir::FloatType>())
     return IntegerType::get(type.getContext(), type.getIntOrFloatBitWidth());
+  if (auto ty = type.dyn_cast<mlir::TensorType>())
+    return convertTensorType(ty);
+  if (auto ty = type.dyn_cast<mlir::TupleType>())
+    return convertTupleType(ty);
+  if (auto ty = type.dyn_cast<hir::BusType>())
+    return convertBusType(ty);
+  if (auto ty = type.dyn_cast<hir::BusTensorType>())
+    return convertBusTensorType(ty);
   return llvm::None;
 }
 

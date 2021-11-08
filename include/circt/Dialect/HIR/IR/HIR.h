@@ -309,6 +309,12 @@ public:
                               ArrayRef<int64_t> shape, Type elementTy);
   Type getElementType() { return getImpl()->elementTy; }
   ArrayRef<int64_t> getShape() { return getImpl()->shape; }
+  size_t getNumElements() {
+    size_t numElements = 1;
+    for (auto dim : getShape())
+      numElements *= dim;
+    return numElements;
+  }
 };
 
 /// This class defines bus struct type.

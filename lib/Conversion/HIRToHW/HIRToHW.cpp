@@ -384,8 +384,8 @@ LogicalResult HIRToHWPass::visitOp(hir::FuncOp op) {
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusTensorGetElementOp op) {
-  auto tensorTy = op.tensor().getType().dyn_cast<mlir::TensorType>();
-  auto shape = tensorTy.getShape();
+  auto busTensorTy = op.tensor().getType().dyn_cast<hir::BusTensorType>();
+  auto shape = busTensorTy.getShape();
   SmallVector<Value> indices;
   auto hwTensor = mapHIRToHWValue.lookup(op.tensor());
   assert(hwTensor);
@@ -402,7 +402,7 @@ LogicalResult HIRToHWPass::visitOp(hir::BusTensorGetElementOp op) {
       builder->getUnknownLoc(),
       builder->getIntegerAttr(
           IntegerType::get(builder->getContext(),
-                           helper::clog2(tensorTy.getNumElements())),
+                           helper::clog2(busTensorTy.getNumElements())),
           helper::calcLinearIndex(indices, shape).getValue()));
   mapHIRToHWValue.map(
       op.res(), builder->create<hw::ArrayGetOp>(builder->getUnknownLoc(),
@@ -417,8 +417,7 @@ LogicalResult HIRToHWPass::visitOp(hir::BusTensorInsertElementOp op) {
   // hw.array_concat left, element, right
   // calc left slice.
 
-  auto tensorTy = op.tensor().getType().dyn_cast<mlir::TensorType>();
-  assert(tensorTy);
+  auto tensorTy = op.tensor().getType().dyn_cast<hir::BusTensorType>();
   auto hwTensor = mapHIRToHWValue.lookup(op.tensor());
   if (!hwTensor.getType().isa<hw::ArrayType>()) {
     mapHIRToHWValue.map(op.res(), mapHIRToHWValue.lookup(op.element()));
