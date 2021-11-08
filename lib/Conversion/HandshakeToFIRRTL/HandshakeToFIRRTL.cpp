@@ -466,12 +466,14 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
       return rewriter.getStringAttr("arg" + std::to_string(index));
   };
   auto getResName = [&](unsigned index) {
+    std::string name;
     if (resNames && resNames.size() > index)
-      return rewriter.getStringAttr(
-          resNames[index].cast<StringAttr>().getValue());
+      name = resNames[index].cast<StringAttr>().getValue();
     else if (index == funcOp.getNumResults() - 1)
-      return rewriter.getStringAttr("outCtrl");
-    return rewriter.getStringAttr("out" + std::to_string(index));
+      name = "outCtrl";
+    else
+      name = "out" + std::to_string(index);
+    return rewriter.getStringAttr(name);
   };
 
   // Add all inputs of funcOp.
