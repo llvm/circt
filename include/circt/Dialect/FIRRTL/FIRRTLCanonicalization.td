@@ -86,16 +86,6 @@ def GTWithConstLHS : Pat<
   (LTPrimOp $rhs, $lhs),
   [(NonConstantOp $rhs)]>;
 
-// mux(cond, x, invalid) -> x
-def MuxInvalidLow : Pat<
-  (MuxPrimOp $cond, $x, (InvalidValueOp)),
-  (replaceWithValue $x)>;
-
-// mux(cond, invalid, x) -> x
-def MuxInvalidHigh : Pat<
-  (MuxPrimOp $cond, (InvalidValueOp), $x),
-  (replaceWithValue $x)>;
-
 // mux(cond, x, mux(cond, y, z)) -> mux(cond, x, z)
 def MuxSameCondLow : Pat<
   (MuxPrimOp $cond, $x, (MuxPrimOp $cond, $y, $z)),

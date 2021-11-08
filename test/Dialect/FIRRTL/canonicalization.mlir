@@ -415,11 +415,6 @@ firrtl.module @Mux(in %in: !firrtl.uint<4>,
   %5 = firrtl.mux (%cond, %invalid_ui4, %in) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %5 : !firrtl.uint<4>, !firrtl.uint<4>
 
-  // CHECK: firrtl.connect %out, %in
-  %invalid_ui = firrtl.invalidvalue : !firrtl.uint
-  %6 = firrtl.mux(%cond, %in, %invalid_ui) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint) -> !firrtl.uint
-  firrtl.connect %out, %6 : !firrtl.uint<4>, !firrtl.uint
-
   // CHECK: firrtl.connect %out, %invalid_ui4
   %7 = firrtl.mux (%cond, %invalid_ui4, %invalid_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
   firrtl.connect %out, %7 : !firrtl.uint<4>, !firrtl.uint<4>
