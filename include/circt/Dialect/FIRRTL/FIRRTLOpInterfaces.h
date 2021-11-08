@@ -28,6 +28,7 @@ struct PortInfo {
   StringAttr name;
   FIRRTLType type;
   Direction direction;
+  StringAttr sym;
   Location loc;
   AnnotationSet annotations = AnnotationSet(type.getContext());
 

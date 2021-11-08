@@ -460,8 +460,8 @@ TypeLoweringVisitor::addArg(Operation *module, unsigned insertPt,
   auto direction = (Direction)((unsigned)oldArg.direction ^ field.isOutput);
 
   return std::make_pair(newValue,
-                        PortInfo{name, field.type, direction, oldArg.loc,
-                                 AnnotationSet(newAnnotations)});
+                        PortInfo{name, field.type, direction, oldArg.sym,
+                                 oldArg.loc, AnnotationSet(newAnnotations)});
 }
 
 // Lower arguments with bundle type by flattening them.
@@ -876,18 +876,21 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
     if (attr.first != "portDirections" && attr.first != "portNames" &&
-        attr.first != "portTypes" && attr.first != "portAnnotations")
+        attr.first != "portTypes" && attr.first != "portAnnotations" &&
+        attr.first != "portSyms")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute> newArgNames;
   SmallVector<Attribute, 8> newPortTypes;
+  SmallVector<Attribute, 8> newArgSyms;
   SmallVector<Attribute, 8> newArgAnnotations;
 
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newPortTypes.push_back(TypeAttr::get(port.type));
+    newArgSyms.push_back(port.sym ? port.sym : StringAttr::get(context, ""));
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
@@ -900,6 +903,9 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portTypes", context),
                                           builder.getArrayAttr(newPortTypes)));
+
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portSyms", context),
+                                          builder.getArrayAttr(newArgSyms)));
 
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get("portAnnotations", context),
@@ -944,18 +950,21 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     // Drop old "portNames", directions, and argument attributes.  These are
     // handled differently below.
     if (attr.first != "portNames" && attr.first != "portDirections" &&
-        attr.first != "portTypes" && attr.first != "portAnnotations")
+        attr.first != "portTypes" && attr.first != "portAnnotations" &&
+        attr.first != "portSyms")
       newModuleAttrs.push_back(attr);
 
   SmallVector<Direction> newArgDirections;
   SmallVector<Attribute> newArgNames;
   SmallVector<Attribute> newArgTypes;
+  SmallVector<Attribute> newArgSyms;
   SmallVector<Attribute, 8> newArgAnnotations;
 
   for (auto &port : newArgs) {
     newArgDirections.push_back(port.direction);
     newArgNames.push_back(port.name);
     newArgTypes.push_back(TypeAttr::get(port.type));
+    newArgSyms.push_back(port.sym ? port.sym : StringAttr::get(context, ""));
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
   }
 
@@ -968,6 +977,8 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   newModuleAttrs.push_back(NamedAttribute(Identifier::get("portTypes", context),
                                           builder->getArrayAttr(newArgTypes)));
+  newModuleAttrs.push_back(NamedAttribute(Identifier::get("portSyms", context),
+                                          builder->getArrayAttr(newArgSyms)));
   newModuleAttrs.push_back(
       NamedAttribute(Identifier::get("portAnnotations", context),
                      builder->getArrayAttr(newArgAnnotations)));

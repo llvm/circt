@@ -4,10 +4,13 @@ firrtl.circuit "Foo" {
   firrtl.extmodule @Bar()
 
   // CHECK-LABEL: firrtl.module @Foo
+  // CHECK-SAME: in %value: !firrtl.uint<42> sym @symValue
+  // CHECK-SAME: in %clock: !firrtl.clock sym @symClock
+  // CHECK-SAME: in %reset: !firrtl.asyncreset sym @symReset
   firrtl.module @Foo(
-    in %value: !firrtl.uint<42>,
-    in %clock: !firrtl.clock,
-    in %reset: !firrtl.asyncreset
+    in %value: !firrtl.uint<42> sym @symValue,
+    in %clock: !firrtl.clock sym @symClock,
+    in %reset: !firrtl.asyncreset sym @symReset
   ) {
     // CHECK: firrtl.instance instName sym @instSym @Bar()
     firrtl.instance instName sym @instSym @Bar()

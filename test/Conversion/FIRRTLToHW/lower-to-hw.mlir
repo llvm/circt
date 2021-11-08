@@ -1197,11 +1197,30 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
 
+  // CHECK-LABEL: hw.module.extern @InnerNamesExt
+  // CHECK-SAME:  (
+  // CHECK-SAME:    clockIn: i1 {hw.exportPort = @extClockInSym}
+  // CHECK-SAME:  ) -> (
+  // CHECK-SAME:    clockOut: i1 {hw.exportPort = @extClockOutSym}
+  // CHECK-SAME:  )
+  firrtl.extmodule @InnerNamesExt(
+    in clockIn: !firrtl.clock sym @extClockInSym,
+    out clockOut: !firrtl.clock sym @extClockOutSym
+  )
+
   // CHECK-LABEL: hw.module @InnerNames
+  // CHECK-SAME:  (
+  // CHECK-SAME:    %value: i42 {hw.exportPort = @portValueSym}
+  // CHECK-SAME:    %clock: i1 {hw.exportPort = @portClockSym}
+  // CHECK-SAME:    %reset: i1 {hw.exportPort = @portResetSym}
+  // CHECK-SAME:  ) -> (
+  // CHECK-SAME:    out: i1 {hw.exportPort = @portOutSym}
+  // CHECK-SAME:  )
   firrtl.module @InnerNames(
-    in %value: !firrtl.uint<42>,
-    in %clock: !firrtl.clock,
-    in %reset: !firrtl.uint<1>
+    in %value: !firrtl.uint<42> sym @portValueSym,
+    in %clock: !firrtl.clock sym @portClockSym,
+    in %reset: !firrtl.uint<1> sym @portResetSym,
+    out %out: !firrtl.uint<1> sym @portOutSym
   ) {
     firrtl.instance instName sym @instSym @BitCast1()
     // CHECK: hw.instance "instName" sym @instSym @BitCast1
@@ -1216,5 +1235,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %regResetName = sv.reg sym @regResetSym : !hw.inout<i42>
     %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     // CHECK: {{%.+}} = hw.instance "memName" sym @memSym
+    firrtl.connect %out, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
