@@ -95,11 +95,9 @@
 // CHECK: %[[MEM_STORE_MASK:.+]] = firrtl.subfield %[[MEM_STORE]](4) : {{.*}} -> !firrtl.uint<1>
 // CHECK: firrtl.connect %[[MEM_STORE_MASK]], %[[WRITE_VALID]]
 
-// CHECK-LABEL: firrtl.module @main
+// CHECK: firrtl.module @main(in %[[VAL_69:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in %[[VAL_70:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_71:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_72:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out %[[VAL_73:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_74:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_75:.*]]: !firrtl.clock, in %[[VAL_76:.*]]: !firrtl.uint<1>) {
+// CHECK:   %[[VAL_77:.*]], %[[VAL_78:.*]], %[[VAL_79:.*]], %[[VAL_80:.*]], %[[VAL_81:.*]], %[[VAL_82:.*]], %[[VAL_83:.*]], %[[VAL_84:.*]] = firrtl.instance handshake_memory  @handshake_memory_out_ui8_id0(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg5: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
 handshake.func @main(%arg0: i8, %arg1: index, %arg2: index, ...) -> (i8, none, none) {
-  // CHECK: %handshake_memory_arg0, %handshake_memory_arg1, %handshake_memory_arg2, %handshake_memory_arg3, %handshake_memory_arg4, %handshake_memory_arg5, %handshake_memory_clock, %handshake_memory_reset
-  // CHECK: = firrtl.instance handshake_memory @handshake_memory_out_ui8_id0
   %0:3 = "handshake.memory"(%arg0, %arg1, %arg2) {id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32, type = memref<10xi8>} : (i8, index, index) -> (i8, none, none)
-
   handshake.return %0#0, %0#1, %0#2: i8, none, none
 }

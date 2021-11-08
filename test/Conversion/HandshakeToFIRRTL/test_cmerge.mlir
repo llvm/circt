@@ -91,11 +91,9 @@
 // CHECK:   %[[ARG1_READY0:.+]] = firrtl.eq %[[WIN_OR_DEFAULT]], %[[INDEX1]]
 // CHECK:   firrtl.connect %[[ARG1_READY]], %[[ARG1_READY0]]
 
-// CHECK-LABEL: firrtl.module @test_cmerge(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg5: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+// CHECK: firrtl.module @test_cmerge(in %[[VAL_53:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_54:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_55:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_56:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_57:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_58:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_59:.*]]: !firrtl.clock, in %[[VAL_60:.*]]: !firrtl.uint<1>) {
+// CHECK:   %[[VAL_61:.*]], %[[VAL_62:.*]], %[[VAL_63:.*]], %[[VAL_64:.*]], %[[VAL_65:.*]], %[[VAL_66:.*]] = firrtl.instance handshake_control_merge  @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
 handshake.func @test_cmerge(%arg0: none, %arg1: none, %arg2: none, ...) -> (none, index, none) {
-
-  // CHECK: %handshake_control_merge_arg0, %handshake_control_merge_arg1, %handshake_control_merge_arg2, %handshake_control_merge_arg3, %handshake_control_merge_clock, %handshake_control_merge_reset = firrtl.instance handshake_control_merge @handshake_control_merge_out_ui64_2ins_2outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
   %0:2 = "handshake.control_merge"(%arg0, %arg1) {control = true} : (none, none) -> (none, index)
   handshake.return %0#0, %0#1, %arg2 : none, index, none
 }

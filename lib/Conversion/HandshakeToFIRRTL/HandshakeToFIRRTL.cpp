@@ -457,12 +457,22 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
   llvm::SmallVector<PortInfo, 8> ports;
   auto argNames = funcOp->getAttrOfType<ArrayAttr>("argNames");
+  auto resNames = funcOp->getAttrOfType<ArrayAttr>("outNames");
   auto getArgumentName = [&](unsigned index) {
     if (argNames && argNames.size() > index)
       return rewriter.getStringAttr(
           argNames[index].cast<StringAttr>().getValue());
     else
       return rewriter.getStringAttr("arg" + std::to_string(index));
+  };
+  auto getResName = [&](unsigned index) {
+    if (resNames && resNames.size() > index)
+      return rewriter.getStringAttr(
+          resNames[index].cast<StringAttr>().getValue());
+    else if (index == funcOp.getNumResults() - 1)
+      return rewriter.getStringAttr("outCtrl");
+    else
+      return rewriter.getStringAttr("out" + std::to_string(index));
   };
 
   // Add all inputs of funcOp.
@@ -482,8 +492,9 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   auto funcLoc = funcOp.getLoc();
 
   // Add all outputs of funcOp.
+  argIndex = 0;
   for (auto portType : funcOp.getType().getResults()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
+    auto portName = getResName(argIndex);
     auto bundlePortType = getBundleType(portType);
 
     if (!bundlePortType)
