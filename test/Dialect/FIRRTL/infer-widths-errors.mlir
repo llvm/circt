@@ -107,3 +107,22 @@ firrtl.circuit "Foo"  {
     firrtl.partialconnect %w1, %w0 : !firrtl.vector<uint, 0>, !firrtl.vector<uint<3>, 10>
   }
 }
+
+// -----
+firrtl.circuit "Foo"  {
+  firrtl.module @Foo() {
+    // expected-error @+1 {{uninferred width: invalid value is unconstrained}}
+    %0 = firrtl.invalidvalue : !firrtl.bundle<x: uint>
+  }
+}
+
+// -----
+firrtl.circuit "Foo"  {
+  firrtl.module @Foo() {
+    // This should complain about the wire, not the invalid value.
+    %0 = firrtl.invalidvalue : !firrtl.bundle<x: uint>
+    // expected-error @+1 {{uninferred width: wire "w.x" is unconstrained}}
+    %w = firrtl.wire  : !firrtl.bundle<x: uint>
+    firrtl.connect %w, %0 : !firrtl.bundle<x: uint>, !firrtl.bundle<x: uint>
+  }
+}
