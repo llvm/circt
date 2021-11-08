@@ -22,9 +22,6 @@ digraph G {
   subgraph cluster_circt {
     label = "CIRCT"
     // CIRCT dialects
-    subgraph cluster_HLS {
-      label = "HLS Dialects"
-    }
     Handshake [URL="https://circt.llvm.org/docs/Dialects/Handshake/"]
     Calyx [URL="https://circt.llvm.org/docs/Dialects/Calyx/"]
     FIRRTL [URL="https://circt.llvm.org/docs/Dialects/FIRRTL/"]
