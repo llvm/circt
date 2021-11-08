@@ -174,7 +174,7 @@ class _SpecializedModule:
                                            mlir.ir.TypeAttr.get(i.attr.type))
             for i in self.parameters
         ]
-        return hw.HWModuleExternOp(
+        return msft.MSFTModuleExternOp(
             symbol,
             self.input_ports,
             self.output_ports,
@@ -204,9 +204,14 @@ class _SpecializedModule:
     if self.extern_name is None:
       return self.circt_mod.create(instance_name, **inputs, loc=loc)
     else:
+      paramdecl_list = [
+          hw.ParamDeclAttr.get(p.name, mlir.ir.TypeAttr.get(p.attr.type),
+                               p.attr) for p in self.parameters
+      ]
+      parameters = mlir.ir.ArrayAttr.get(paramdecl_list)
       return self.circt_mod.create(instance_name,
                                    **inputs,
-                                   parameters=self.parameters,
+                                   parameters=parameters,
                                    loc=loc)
 
   def generate(self):

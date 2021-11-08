@@ -18,6 +18,7 @@ class InstanceBuilder(support.NamedValueOpView):
                input_port_mapping,
                *,
                sym_name=None,
+               parameters=None,
                loc=None,
                ip=None):
     self.module = module
@@ -26,14 +27,20 @@ class InstanceBuilder(support.NamedValueOpView):
     if sym_name:
       sym_name = _ir.StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
+    if parameters is None:
+      parameters = _ir.ArrayAttr.get([])
+    post_args = [parameters]
     results = module.type.results
 
-    super().__init__(_msft.InstanceOp,
-                     results,
-                     input_port_mapping,
-                     pre_args, [],
-                     loc=loc,
-                     ip=ip)
+    super().__init__(
+        _msft.InstanceOp,
+        results,
+        input_port_mapping,
+        pre_args,
+        post_args,
+        loc=loc,
+        ip=ip,
+    )
 
   def create_default_value(self, index, data_type, arg_name):
     type = self.module.type.inputs[index]
@@ -86,3 +93,28 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
   @property
   def entry_block(self):
     return self.regions[0].blocks[0]
+
+
+class MSFTModuleExternOp(_hw_ext.ModuleLike):
+
+  @property
+  def parameters(self):
+    return [
+        _hw_ext.ParamDeclAttr(a)
+        for a in _ir.ArrayAttr(self.attributes["parameters"])
+    ]
+
+  def create(self,
+             name: str,
+             parameters=None,
+             results=None,
+             loc=None,
+             ip=None,
+             **kwargs):
+    return InstanceBuilder(self,
+                           name,
+                           kwargs,
+                           sym_name=self.verilogName.value,
+                           parameters=parameters,
+                           loc=loc,
+                           ip=ip)
