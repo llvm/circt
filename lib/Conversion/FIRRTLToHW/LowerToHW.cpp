@@ -1842,27 +1842,22 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     return setLowering(op, Value());
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
-  auto nameAttr = op.nameAttr() ? op.nameAttr() : builder.getStringAttr("");
-
-  if (!AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation"))
-    return setLoweringTo<sv::WireOp>(op, resultType, nameAttr);
-  auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-  auto symName = op.nameAttr();
-  // Prepend the name of the module to make the symbol name unique in the symbol
-  // table, it is already unique in the module. Checking if the name is unique
-  // in the SymbolTable is non-trivial.
-  if (symName && !symName.getValue().empty())
+  auto symName = op.inner_symAttr();
+  auto name = op.nameAttr();
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName) {
+    auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
+    // Prepend the name of the module to make the symbol name unique in the
+    // symbol table, it is already unique in the module. Checking if the name is
+    // unique in the SymbolTable is non-trivial.
     symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
-                                    symName.getValue());
-  else
-    // If marked with DontTouch but does not have a name, then add a symbol
-    // name. Note: Same symbol name for all such wires in the module.
-    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__"));
+                                    name.getValue());
+  }
 
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
-  return setLoweringTo<sv::WireOp>(op, resultType, nameAttr, symName);
+  return setLoweringTo<sv::WireOp>(op, resultType, name, symName);
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -1890,16 +1885,21 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
     return handleZeroBit(op.input(),
                          [&]() { return setLowering(op, Value()); });
 
-  // Node operations are logical noops, but may carry annotations.  Don't touch
-  // indicates we should keep it as a wire.
+  // Node operations are logical noops, but may carry annotations or be referred
+  // to through an inner name. If a don't touch is present, ensure that we have
+  // a symbol name so we can keep the node as a wire.
+  auto symName = op.inner_symAttr();
+  auto name = op.nameAttr();
   if (AnnotationSet::removeAnnotations(
-          op, "firrtl.transforms.DontTouchAnnotation")) {
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName) {
     // name may be empty
-    auto name = op->getAttrOfType<StringAttr>("name");
     auto moduleName = cast<hw::HWModuleOp>(op->getParentOp()).getName();
-    auto symName = builder.getStringAttr(Twine("__") + moduleName +
-                                         Twine("__") + name.getValue());
+    symName = builder.getStringAttr(Twine("__") + moduleName + Twine("__") +
+                                    name.getValue());
+  }
 
+  if (symName) {
     auto wire = builder.create<sv::WireOp>(operand.getType(), name, symName);
     builder.create<sv::AssignOp>(wire, operand);
   }
@@ -1991,11 +1991,13 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     return setLowering(op, Value());
 
   // Add symbol if DontTouch annotation present.
+  auto symName = op.inner_symAttr();
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName)
+    symName = op.nameAttr();
   auto regResult =
-      AnnotationSet::removeAnnotations(op,
-                                       "firrtl.transforms.DontTouchAnnotation")
-          ? builder.create<sv::RegOp>(resultType, op.nameAttr(), op.nameAttr())
-          : builder.create<sv::RegOp>(resultType, op.nameAttr());
+      builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
   (void)setLowering(op, regResult);
 
   initializeRegister(regResult, Value());
@@ -2019,7 +2021,13 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
-  auto regResult = builder.create<sv::RegOp>(resultType, op.nameAttr());
+  auto symName = op.inner_symAttr();
+  if (AnnotationSet::removeAnnotations(
+          op, "firrtl.transforms.DontTouchAnnotation") &&
+      !symName)
+    symName = op.nameAttr();
+  auto regResult =
+      builder.create<sv::RegOp>(resultType, op.nameAttr(), symName);
   (void)setLowering(op, regResult);
 
   auto resetFn = [&]() {
@@ -2178,7 +2186,7 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       resultTypes, builder.getStringAttr(memName), memModuleAttr, operands,
       builder.getArrayAttr(argNames), builder.getArrayAttr(resultNames),
       /*parameters=*/builder.getArrayAttr({}),
-      /*sym_name=*/StringAttr());
+      /*sym_name=*/op.inner_symAttr());
   // Update all users of the result of read ports
   for (auto &ret : returnHolder)
     (void)setLowering(ret.first->getResult(0), inst.getResult(ret.second));
@@ -2254,9 +2262,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   // it and generate a bind op.  Enter the bind into global CircuitLoweringState
   // so that this can be moved outside of module once we're guaranteed to not be
   // a parallel context.
-  StringAttr symbol;
-  if (oldInstance->getAttrOfType<BoolAttr>("lowerToBind").getValue()) {
-    symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
+  StringAttr symbol = oldInstance.inner_symAttr();
+  if (oldInstance.lowerToBind()) {
+    if (!symbol)
+      symbol = builder.getStringAttr("__" + oldInstance.name() + "__");
     auto bindOp = builder.create<sv::BindOp>(theModule.getNameAttr(), symbol);
     // If the lowered op already had output file information, then use that.
     // Otherwise, generate some default bind information.
@@ -2271,7 +2280,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   auto newInstance = builder.create<hw::InstanceOp>(
       newModule, oldInstance.nameAttr(), operands, parameters, symbol);
 
-  if (symbol)
+  if (oldInstance.lowerToBind())
     newInstance->setAttr("doNotPrint", builder.getBoolAttr(true));
 
   // Now that we have the new hw.instance, we need to remap all of the users

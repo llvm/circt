@@ -2838,16 +2838,16 @@ ParseResult FIRStmtParser::parseMem(unsigned memIndent) {
     result = builder.create<MemOp>(
         resultTypes, readLatency, writeLatency, depth, ruw,
         builder.getArrayAttr(resultNames), id, getConstants().emptyArrayAttr,
-        builder.getArrayAttr(portAnnotations));
+        builder.getArrayAttr(portAnnotations), StringAttr{});
   } else {
     auto annotations =
         getSplitAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                             ports, moduleContext.targetsInModule);
 
-    result =
-        builder.create<MemOp>(resultTypes, readLatency, writeLatency, depth,
-                              ruw, builder.getArrayAttr(resultNames), id,
-                              annotations.first, annotations.second);
+    result = builder.create<MemOp>(
+        resultTypes, readLatency, writeLatency, depth, ruw,
+        builder.getArrayAttr(resultNames), id, annotations.first,
+        annotations.second, StringAttr{});
   }
 
   UnbundledValueEntry unbundledValueEntry;
@@ -2904,7 +2904,7 @@ ParseResult FIRStmtParser::parseNode() {
                        moduleContext.targetsInModule, initializerType);
 
   Value result = builder.create<NodeOp>(initializer.getType(), initializer, id,
-                                        annotations);
+                                        annotations, StringAttr{});
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -2932,7 +2932,7 @@ ParseResult FIRStmtParser::parseWire() {
         getAnnotations(getModuleTarget() + ">" + id, startTok.getLoc(),
                        moduleContext.targetsInModule, type);
 
-  auto result = builder.create<WireOp>(type, id, annotations);
+  auto result = builder.create<WireOp>(type, id, annotations, StringAttr{});
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -3027,9 +3027,9 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   Value result;
   if (resetSignal)
     result = builder.create<RegResetOp>(type, clock, resetSignal, resetValue,
-                                        id, annotations);
+                                        id, annotations, StringAttr{});
   else
-    result = builder.create<RegOp>(type, clock, id, annotations);
+    result = builder.create<RegOp>(type, clock, id, annotations, StringAttr{});
 
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
