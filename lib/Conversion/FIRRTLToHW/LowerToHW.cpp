@@ -300,6 +300,11 @@ void CircuitLoweringState::processRemainingAnnotations(
     // This can occur for example if an annotation marks something in the IR as
     // not to be processed by a pass, but that pass hasn't run anyway.
     if (a.isClass(
+            // If the class is `circt.nonlocal`, it's not really an annotation,
+            // but part of a path specifier for another annotation which is
+            // non-local.  We can ignore these path specifiers since there will
+            // be a warning produced for the real annotation.
+            "circt.nonlocal",
             // The following are either consumed by a pass running before
             // LowerToHW, or they have no effect if the pass doesn't run at all.
             // If the accompanying pass runs on the HW dialect, then LowerToHW
@@ -421,6 +426,9 @@ void FIRRTLModuleLowering::runOnOperation() {
         .Case<FExtModuleOp>([&](auto extModule) {
           state.oldToNewModuleMap[&op] =
               lowerExtModule(extModule, topLevelModule, state);
+        })
+        .Case<NonLocalAnchor>([&](auto nla) {
+          // Just drop it.
         })
         .Default([&](Operation *op) {
           // We don't know what this op is.  If it has no illegal FIRRTL types,
