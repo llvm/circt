@@ -379,16 +379,23 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       direction::unpackAttribute(this->getPortDirectionsAttr());
   ArrayRef<Attribute> existingNames = this->getPortNames();
   ArrayRef<Attribute> existingTypes = this->getPortTypes();
+  ArrayRef<Attribute> existingAnnos = this->getPortAnnotations();
   assert(existingDirections.size() == oldNumArgs);
   assert(existingNames.size() == oldNumArgs);
   assert(existingTypes.size() == oldNumArgs);
+  assert(existingAnnos.size() == oldNumArgs || existingAnnos.size() == 0);
 
   SmallVector<Direction> newDirections;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newTypes;
+  SmallVector<Attribute> newAnnos;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
+  newAnnos.reserve(newNumArgs);
+
+  auto EmptyArray = ArrayAttr::get(getContext(), {});
+  bool addAnnos = existingAnnos.size() > 0;
 
   unsigned oldIdx = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
@@ -396,6 +403,8 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
+      if (addAnnos)
+        newAnnos.push_back(existingAnnos[oldIdx]);
       ++oldIdx;
     }
   };
@@ -404,6 +413,8 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     newDirections.push_back(port.second.direction);
     newNames.push_back(port.second.name);
     newTypes.push_back(TypeAttr::get(port.second.type));
+    if (addAnnos)
+      newAnnos.push_back(EmptyArray);
     body->insertArgument(port.first, port.second.type, port.second.loc);
   }
   migrateOldPorts(oldNumArgs);
@@ -413,6 +424,7 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
                    direction::packAttribute(getContext(), newDirections));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
   (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
+  (*this)->setAttr("portAnnotations", ArrayAttr::get(getContext(), newAnnos));
 }
 
 /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
