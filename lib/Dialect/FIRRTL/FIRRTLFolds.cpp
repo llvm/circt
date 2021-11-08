@@ -1131,6 +1131,8 @@ static LogicalResult canonicalizeMux(MuxPrimOp op, PatternRewriter &rewriter) {
 void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.add(canonicalizeMux);
+  results.add<patterns::MuxInvalidLow>(context);
+  results.add<patterns::MuxInvalidHigh>(context);
   results.add<patterns::MuxSameCondLow>(context);
   results.add<patterns::MuxSameCondHigh>(context);
 }
