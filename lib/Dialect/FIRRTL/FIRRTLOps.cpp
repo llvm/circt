@@ -873,8 +873,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                SymbolRefAttr::get(builder.getContext(), module.moduleName()),
                builder.getStringAttr(name), module.getPortDirectionsAttr(),
                module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-               portAnnotationsAttr, builder.getBoolAttr(lowerToBind),
-               innerSym);
+               portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
 }
 
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
@@ -1064,9 +1063,8 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   if (succeeded(parser.parseOptionalKeyword("sym"))) {
     // Parsing an optional symbol name doesn't fail, so no need to check the
     // result.
-    (void)parser.parseOptionalSymbolName(innerSymAttr,
-                                         hw::InnerName::getInnerNameAttrName(),
-                                         result.attributes);
+    (void)parser.parseOptionalSymbolName(
+        innerSymAttr, hw::InnerName::getInnerNameAttrName(), result.attributes);
   }
   if (parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
