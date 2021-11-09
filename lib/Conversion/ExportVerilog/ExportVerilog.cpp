@@ -1413,7 +1413,8 @@ void ExprEmitter::formatOutBuffer() {
     auto next = std::find(it, outBuffer.end(), ' ');
     unsigned tokenLength = std::distance(it, next);
 
-    if (currentIndex + tokenLength > state.options.emittedLineLength) {
+    if (!tmpOutBuffer.empty() &&
+        currentIndex + tokenLength > state.options.emittedLineLength) {
       // It breaks the line constraint, so insert a newline and indent.
       tmpOs << '\n';
       tmpOs.indent(state.currentIndent *
