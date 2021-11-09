@@ -45,6 +45,9 @@ struct PortInfo {
   /// first argument.
   size_t argNum = ~0U;
 
+  /// The optional symbol for this port.
+  StringAttr sym = {};
+
   StringRef getName() const { return name.getValue(); }
   bool isOutput() const { return direction == OUTPUT; }
 
