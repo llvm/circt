@@ -1413,7 +1413,8 @@ void ExprEmitter::formatOutBuffer() {
     auto next = std::find(it, outBuffer.end(), ' ');
     unsigned tokenLength = std::distance(it, next);
 
-    if (currentIndex + tokenLength > state.options.emittedLineLength) {
+    if (!tmpOutBuffer.empty() &&
+        currentIndex + tokenLength > state.options.emittedLineLength) {
       // It breaks the line constraint, so insert a newline and indent.
       tmpOs << '\n';
       tmpOs.indent(state.currentIndent *
@@ -3542,6 +3543,8 @@ void ModuleEmitter::emitBind(BindOp op) {
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : childPortInfo) {
+    auto portName = state.globalNames.getPortVerilogName(childMod, elt);
+    elt.name = Builder(inst.getContext()).getStringAttr(portName);
     maxNameLength = std::max(maxNameLength, elt.getName().size());
   }
 
