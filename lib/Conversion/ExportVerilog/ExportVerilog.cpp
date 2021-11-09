@@ -3543,6 +3543,8 @@ void ModuleEmitter::emitBind(BindOp op) {
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : childPortInfo) {
+    auto portName = state.globalNames.getPortVerilogName(childMod, elt);
+    elt.name = Builder(inst.getContext()).getStringAttr(portName);
     maxNameLength = std::max(maxNameLength, elt.getName().size());
   }
 
