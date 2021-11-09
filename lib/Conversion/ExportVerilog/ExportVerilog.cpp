@@ -444,22 +444,6 @@ struct ModuleNameManager {
     return getName(ValueOrOp(op));
   }
 
-  StringRef getName(Operation *op, size_t port) {
-    // Module come in flavors and have ports, but don't have an opInterface in
-    // common to access the ports as blockvalues.  Thus we have to enumerate
-    // modules here.
-    BlockArgument blockArg;
-    if (auto mod = dyn_cast<HWModuleOp>(op))
-      blockArg = mod.getArgument(port);
-    if (auto mod = dyn_cast<HWModuleExternOp>(op))
-      blockArg = mod.getArgument(port);
-    if (auto mod = dyn_cast<HWModuleGeneratedOp>(op))
-      blockArg = mod.getArgument(port);
-    if (!blockArg)
-      llvm_unreachable("Unknown named thing with port");
-    return getName(blockArg);
-  }
-
   bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
 
   bool hasName(Operation *op) {
@@ -627,8 +611,11 @@ void EmitterBase::emitTextWithSubstitutions(
     // Get the verilog name of the operation, add the name if not already
     // done.
     if (auto itemOp = item.getOp()) {
-      if (item.hasPort())
-        return names.getName(itemOp, item.getPort());
+      if (item.hasPort()) {
+        auto portInfos = getAllModulePortInfos(itemOp);
+        return state.globalNames.getPortVerilogName(itemOp,
+                                                    portInfos[item.getPort()]);
+      }
       if (names.hasName(itemOp))
         return names.getName(itemOp);
       StringRef symOpName = getSymOpName(itemOp);
@@ -3998,11 +3985,17 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   };
   /// Collect any port marked as being referenced via symbol.
   auto collectPorts = [&](auto moduleOp) {
-    for (size_t p = 0, e = moduleOp.getNumArguments(); p != e; ++p)
-      for (std::pair<Identifier, Attribute> argAttr : moduleOp.getArgAttrs(p))
-        if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
+    auto numArgs = moduleOp.getNumArguments();
+    for (size_t p = 0; p != numArgs; ++p)
+      for (auto argAttr : moduleOp.getArgAttrs(p))
+        if (auto sym = argAttr.second.template dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p);
+    for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
+      for (auto resultAttr : moduleOp.getResultAttrs(p))
+        if (auto sym = resultAttr.second.template dyn_cast<FlatSymbolRefAttr>())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
+                                    moduleOp, p + numArgs);
   };
 
   SmallString<32> outputPath;

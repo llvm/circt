@@ -408,6 +408,22 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
   hw.output %1 : i1
 }
 
+
+// Inner name references to input and output ports.
+hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = @symA}) -> (bar: i1 {hw.exportPort = @symB})
+hw.module @VerbatimModule(%signed: i1 {hw.exportPort = @symA}) -> (unsigned: i1 {hw.exportPort = @symB}) {
+  hw.output %signed : i1
+}
+sv.verbatim "VERB: module symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symA>]}
+sv.verbatim "VERB: module symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symB>]}
+sv.verbatim "VERB: module.extern symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symA>]}
+sv.verbatim "VERB: module.extern symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symB>]}
+// CHECK: VERB: module symA `signed_0`
+// CHECK: VERB: module symB `unsigned_1`
+// CHECK: VERB: module.extern symA `foo`
+// CHECK: VERB: module.extern symB `bar`
+
+
 sv.bind #hw.innerNameRef<@BindEmission::@__BindEmissionInstance__> {output_file = #hw.output_file<"BindTest/BindEmissionInstance.sv", excludeFromFileList>}
 // CHECK-LABL: module BindEmissionInstance()
 hw.module @BindEmissionInstance() {
