@@ -1673,7 +1673,9 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
       //   }
       // }
 
-      auto setInsideIfOp = [&]() {
+      auto createIfOp = [&]() {
+        // It is weird but intended. Here we want to create empty sv.if with
+        // else block.
         insideIfOp = builder.create<sv::IfOp>(
             reset, []() {}, []() {});
       };
@@ -1684,10 +1686,10 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
         alwaysOp = builder.create<sv::AlwaysOp>(events, clocks, [&]() {
           if (resetEdge == sv::EventControl::AtNegEdge)
             llvm_unreachable("negative edge for reset is not expected");
-          setInsideIfOp();
+          createIfOp();
         });
       } else {
-        alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, setInsideIfOp);
+        alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, createIfOp);
       }
     } else {
       assert(!resetBody);
