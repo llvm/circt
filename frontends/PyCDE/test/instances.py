@@ -65,8 +65,13 @@ print("=== Hierarchy")
 mod = t.get_instance(Test).walk(lambda inst: print(inst))
 
 locs = pycde.AppIDIndex()
-locs.lookup(pycde.AppID("UnParameterized_1"))["loc"] = \
-  (["memory", "bank"], PrimitiveType.M20K, 39, 25, 0)
+locs.lookup(pycde.AppID("UnParameterized_1"))["loc"] = (
+    ["memory", "bank"],
+    PrimitiveType.M20K,
+    39,
+    25,
+    0,
+)
 
 
 def place_inst(inst):
@@ -95,19 +100,18 @@ test_inst = t.get_instance(Test)
 test_inst.walk(instance_attrs.apply_attributes_visitor)
 
 assert test_inst.placedb.get_instance_at(loc[1]) is not None
-assert test_inst.placedb.get_instance_at(
-    PhysLocation(PrimitiveType.M20K, 0, 0, 0)) is None
+assert (test_inst.placedb.get_instance_at(
+    PhysLocation(PrimitiveType.M20K, 0, 0, 0)) is None)
 
 assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
-assert (len(instance_attrs.find_unused()) == 1)
+assert len(instance_attrs.find_unused()) == 1
 
 t.run_passes()
 
 print("=== Final mlir dump")
 t.print()
 
-# CHECK-LABEL: === Tcl
 print("=== Tcl")
 
 # CHECK-LABEL: proc Test_config { parent }
@@ -116,4 +120,4 @@ print("=== Tcl")
 # CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
 # CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
 # CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
-t.print_tcl(Test)
+t.emit_outputs()

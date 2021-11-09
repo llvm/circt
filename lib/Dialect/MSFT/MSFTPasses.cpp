@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
@@ -36,6 +37,14 @@ namespace msft {
 //===----------------------------------------------------------------------===//
 // Lower MSFT to HW.
 //===----------------------------------------------------------------------===//
+
+NamedAttribute createOutputFileAttr(MLIRContext *context,
+                                    StringRef outputFile) {
+  auto outputFileName = Identifier::get("output_file", context);
+  auto outputFileAttr =
+      hw::OutputFileAttr::getFromFilename(context, outputFile);
+  return NamedAttribute(outputFileName, outputFileAttr);
+}
 
 namespace {
 /// Lower MSFT's InstanceOp to HW's. Currently trivial since `msft.instance` is
@@ -73,11 +82,16 @@ namespace {
 /// Lower MSFT's ModuleOp to HW's.
 struct ModuleOpLowering : public OpConversionPattern<MSFTModuleOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  ModuleOpLowering(MLIRContext *context, StringRef outputFile)
+      : OpConversionPattern::OpConversionPattern(context),
+        outputFile(outputFile) {}
 
   LogicalResult
   matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
+
+private:
+  StringRef outputFile;
 };
 } // anonymous namespace
 
@@ -94,8 +108,11 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
     return success();
   }
 
+  auto outputFileAttr = createOutputFileAttr(rewriter.getContext(), outputFile);
+
   auto hwmod = rewriter.replaceOpWithNewOp<hw::HWModuleOp>(
-      mod, mod.getNameAttr(), mod.getPorts());
+      mod, mod.getNameAttr(), mod.getPorts(), /*parameters=*/ArrayAttr(),
+      /*attributes=*/ArrayRef(outputFileAttr));
   rewriter.eraseBlock(hwmod.getBodyBlock());
   rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
                               hwmod.getBody().end());
@@ -106,20 +123,28 @@ namespace {
 /// Lower MSFT's ModuleExternOp to HW's.
 struct ModuleExternOpLowering : public OpConversionPattern<MSFTModuleExternOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  ModuleExternOpLowering(MLIRContext *context, StringRef outputFile)
+      : OpConversionPattern::OpConversionPattern(context),
+        outputFile(outputFile) {}
 
   LogicalResult
   matchAndRewrite(MSFTModuleExternOp mod, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
+
+private:
+  StringRef outputFile;
 };
 } // anonymous namespace
 
 LogicalResult ModuleExternOpLowering::matchAndRewrite(
     MSFTModuleExternOp mod, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
+  auto outputFileAttr = createOutputFileAttr(rewriter.getContext(), outputFile);
+
   rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
       mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().getValueOr(""),
-      mod.parameters());
+      mod.parameters(), /*attributes=*/ArrayRef(outputFileAttr));
+
   return success();
 }
 
@@ -148,12 +173,22 @@ void LowerToHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
 
+  // Check output file pass options have been specified.
+  if (verilogFile.empty()) {
+    top.emitError("verilogFile pass option was not specified");
+    return signalPassFailure();
+  }
+  if (tclFile.empty()) {
+    top.emitError("tclFile pass option was not specified");
+    return signalPassFailure();
+  }
+
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
   hw::SymbolCache symCache;
   populateSymbolCache(top, symCache);
   for (auto hwmod : top.getBody()->getOps<msft::MSFTModuleOp>())
-    if (failed(exportQuartusTcl(hwmod, symCache)))
+    if (failed(exportQuartusTcl(hwmod, symCache, tclFile)))
       return signalPassFailure();
 
   // The `hw::InstanceOp` (which `msft::InstanceOp` lowers to) convenience
@@ -168,8 +203,8 @@ void LowerToHWPass::runOnOperation() {
   target.addLegalDialect<sv::SVDialect>();
 
   RewritePatternSet patterns(ctxt);
-  patterns.insert<ModuleOpLowering>(ctxt);
-  patterns.insert<ModuleExternOpLowering>(ctxt);
+  patterns.insert<ModuleOpLowering>(ctxt, verilogFile);
+  patterns.insert<ModuleExternOpLowering>(ctxt, verilogFile);
   patterns.insert<OutputOpLowering>(ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))

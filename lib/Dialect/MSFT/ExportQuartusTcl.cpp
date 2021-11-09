@@ -121,7 +121,8 @@ void circt::msft::populateSymbolCache(mlir::ModuleOp mod, SymbolCache &cache) {
 /// takes the parent entity name since we don't assume that the created module
 /// is the top level for the entire design.
 LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
-                                            SymbolCache &symCache) {
+                                            SymbolCache &symCache,
+                                            StringRef outputFile) {
   // Build up the output Tcl, tracking symbol references in state.
   std::string s;
   llvm::raw_string_ostream os(s);
@@ -152,9 +153,9 @@ LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
 
   // Give the verbatim op an output file.
   // TODO: the filename should be a pass option.
-  auto outputFile =
-      OutputFileAttr::getFromFilename(builder.getContext(), "placements.tcl");
-  verbatim->setAttr("output_file", outputFile);
+  auto outputFileAttr =
+      OutputFileAttr::getFromFilename(builder.getContext(), outputFile);
+  verbatim->setAttr("output_file", outputFileAttr);
 
   return success();
 }

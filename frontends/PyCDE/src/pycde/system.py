@@ -20,6 +20,7 @@ import circt.support
 
 from contextvars import ContextVar
 import io
+import os
 import sys
 import typing
 
@@ -37,15 +38,21 @@ class System:
 
   __slots__ = [
       "mod", "modules", "passed", "_module_symbols", "_symbol_modules",
-      "_old_system_token", "_symbols", "_generate_queue", "_primdb"
+      "_old_system_token", "_symbols", "_generate_queue", "_primdb",
+      "_output_directory", "_output_verilog_file", "_output_tcl_file"
   ]
 
-  passes = [
-      "lower-msft-to-hw", "lower-seq-to-sv", "hw.module(prettify-verilog)",
-      "hw.module(hw-cleanup)"
-  ]
+  PASSES = """
+    lower-msft-to-hw{{verilog-file={verilog_file} tcl-file={tcl_file}}},
+    lower-seq-to-sv,hw.module(prettify-verilog),hw.module(hw-cleanup)
+  """
 
-  def __init__(self, modules, primdb: PrimitiveDB = None):
+  def __init__(self,
+               modules,
+               primdb: PrimitiveDB = None,
+               output_directory: str = None,
+               output_verilog_file: str = None,
+               output_tcl_file: str = None):
     self.passed = False
     self.mod = ir.Module.create()
     self.modules = list(modules)
@@ -55,6 +62,18 @@ class System:
     self._generate_queue = []
 
     self._primdb = primdb
+
+    if output_directory is None:
+      output_directory = os.getcwd()
+    self._output_directory = output_directory
+
+    if output_verilog_file is None:
+      output_verilog_file = "pycde.sv"
+    self._output_verilog_file = output_verilog_file
+
+    if output_tcl_file is None:
+      output_tcl_file = "pycde.tcl"
+    self._output_tcl_file = output_tcl_file
 
     with self:
       [m._pycde_mod.create() for m in modules]
@@ -141,6 +160,11 @@ class System:
   def body(self):
     return self.mod.body
 
+  @property
+  def passes(self):
+    return self.PASSES.format(verilog_file=self._output_verilog_file,
+                              tcl_file=self._output_tcl_file).strip()
+
   def print(self, *argv, **kwargs):
     self.mod.operation.print(*argv, **kwargs)
 
@@ -175,7 +199,7 @@ class System:
     if len(self._generate_queue) > 0:
       print("WARNING: running lowering passes on partially generated design!",
             file=sys.stderr)
-    pm = mlir.passmanager.PassManager.parse(",".join(self.passes))
+    pm = mlir.passmanager.PassManager.parse(self.passes)
     # Invalidate the symbol cache
     self._symbols = None
     pm.run(self.mod)
@@ -183,21 +207,6 @@ class System:
     circt.export_verilog(self.mod, System.DevNull())
     self.passed = True
 
-  def print_verilog(self, out_stream: typing.TextIO = sys.stdout):
+  def emit_outputs(self):
     self.run_passes()
-    circt.export_verilog(self.mod, out_stream)
-
-  def print_tcl(self, top_module: type, out_stream: typing.TextIO = sys.stdout):
-    # Run the ExportQuartusTclPass.
-    self.run_passes()
-
-    # Run ExportVerilog into a temporary buffer to get the Tcl output.
-    # TODO: remove this hacky splitting of the Tcl output, and use
-    # ExportVerilog's split output file functionality directly.
-    tmp_output_io = io.StringIO()
-    circt.export_verilog(self.mod, tmp_output_io)
-    tmp_output_str = tmp_output_io.getvalue()
-    _, tcl_output = tmp_output_str.split(
-        "\n// ----- 8< ----- FILE \"placements.tcl\" ----- 8< -----\n")
-
-    out_stream.write(tcl_output)
+    circt.export_split_verilog(self.mod, self._output_directory)

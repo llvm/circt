@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_MSFT_EXPORTTCL_H
 #define CIRCT_DIALECT_MSFT_EXPORTTCL_H
 
+#include "circt/Support/LLVM.h"
+
 namespace llvm {
 class raw_ostream;
 } // namespace llvm
@@ -31,7 +33,8 @@ namespace msft {
 class MSFTModuleOp;
 
 /// Export TCL for a specific hw module.
-mlir::LogicalResult exportQuartusTcl(MSFTModuleOp module, hw::SymbolCache &);
+mlir::LogicalResult exportQuartusTcl(MSFTModuleOp module, hw::SymbolCache &,
+                                     mlir::StringRef outputFile);
 
 /// Populate a SymbolCache to use during Tcl export.
 void populateSymbolCache(mlir::ModuleOp mod, hw::SymbolCache &);

@@ -10,4 +10,10 @@ def LowerToHW: Pass<"lower-msft-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower MSFT ops to hw ops";
   let constructor = "circt::msft::createLowerToHWPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
+  let options = [
+    Option<"verilogFile", "verilog-file", "std::string",
+           "", "File to output Verilog into">,
+    Option<"tclFile", "tcl-file", "std::string",
+           "", "File to output Tcl into">
+  ];
 }
