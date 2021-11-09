@@ -145,7 +145,7 @@ struct LoweringCLOptions {
       llvm::cl::desc(
           "Style options.  Valid flags include: alwaysFF, "
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
-          "disallowLocalVariables, verifLabels, emittedLineLength=<n>,"
+          "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTokensPerExpression=<n>"),
       llvm::cl::value_desc("option")};
 };
