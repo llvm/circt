@@ -77,6 +77,11 @@ PYBIND11_MODULE(_circt, m) {
     mlirExportVerilog(mod, accum.getCallback(), accum.getUserData());
   });
 
+  m.def("export_split_verilog", [](MlirModule mod, std::string directory) {
+    auto cDirectory = mlirStringRefCreateFromCString(directory.c_str());
+    mlirExportSplitVerilog(mod, cDirectory);
+  });
+
   py::module esi = m.def_submodule("_esi", "ESI API");
   circt::python::populateDialectESISubmodule(esi);
   py::module msft = m.def_submodule("_msft", "MSFT API");

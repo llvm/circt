@@ -20,6 +20,10 @@ MLIR_CAPI_EXPORTED MlirLogicalResult mlirExportVerilog(MlirModule,
                                                        MlirStringCallback,
                                                        void *userData);
 
+/// Emits split Verilog files for the specified module into the given directory.
+MLIR_CAPI_EXPORTED MlirLogicalResult mlirExportSplitVerilog(MlirModule,
+                                                            MlirStringRef);
+
 #ifdef __cplusplus
 }
 #endif
