@@ -1886,10 +1886,6 @@ bool firrtl::isConstant(Operation *op) {
           for (auto &use : op.getResult().getUses())
             worklist.push_back(use.getOwner());
         })
-        /*
-        .Case<ConnectOp>([](ConnectOp op) {
-          op.src();
-        })*/
         .Case<ConstantOp, SpecialConstantOp>([](auto) {})
         .Default([&](auto) { constant = false; });
 

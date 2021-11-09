@@ -66,10 +66,9 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
       // We continue parsing options after a failure.
     }
   }
-  if (maximumNumberOfTokensPerExpression < emittedLineLength) {
+  if (maximumNumberOfTokensPerExpression < emittedLineLength)
     errorHandler("maximumNumberOfTokensPerExpression must be equal or larger "
                  "than emittedLineLength");
-  }
 }
 
 std::string LoweringOptions::toString() const {

@@ -1688,7 +1688,8 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
       //   }
       // }
 
-      // It is necessary to create a reset body even though `resetBody` is null.
+      // It is necessary to construct then and else region regardless of
+      // `restBody` and `body`.
       auto createResetBody = [&]() {
         if (resetBody)
           resetBody();
@@ -1697,6 +1698,7 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
         if (body)
           body();
       };
+
       if (resetStyle == ::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
         Value clocks[] = {clock, reset};
