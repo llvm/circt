@@ -2423,6 +2423,7 @@ resolveInstanceGraph(ModuleOp moduleOp, InstanceGraph &instanceGraph,
 
 namespace {
 
+/// Translates a hw::PortInfo to a firrtl::PortInfo.
 static firrtl::PortInfo hwToFIRRTLPortInfo(Location loc,
                                            const hw::PortInfo &hwPortInfo) {
   auto name = hwPortInfo.name;
@@ -2438,6 +2439,9 @@ static firrtl::PortInfo hwToFIRRTLPortInfo(Location loc,
   return firrtl::PortInfo{name, type, direction, loc};
 }
 
+/// Rewrites hw.module.extern operations referenced by handshake.call operations
+/// to an equivalent firrtl.extmodule which can be referenced by a
+/// firrtl.instance operation.
 static LogicalResult rewriteExtCallModules(MLIRContext *ctx, ModuleOp module,
                                            CircuitOp circuit) {
   OpBuilder builder(ctx);
