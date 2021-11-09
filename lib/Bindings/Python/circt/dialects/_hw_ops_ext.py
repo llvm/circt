@@ -10,6 +10,35 @@ import circt.support as support
 from mlir.ir import *
 
 
+def create_parameters(parameters: dict[str, _ir.Attribute], module: ModuleLike):
+  # Compute mapping from parameter name to index, and initialize array.
+  mod_param_decls = module.parameters
+  mod_param_decls_idxs = {
+      decl.name: idx for (idx, decl) in enumerate(mod_param_decls)
+  }
+  inst_param_array = [None] * len(module.parameters)
+
+  # Fill in all the parameters specified.
+  if isinstance(parameters, DictAttr):
+    parameters = {i.name: i.attr for i in parameters}
+  for (pname, pval) in parameters.items():
+    if pname not in mod_param_decls_idxs:
+      raise ValueError(
+          f"Could not find parameter '{pname}' in module parameter decls")
+    idx = mod_param_decls_idxs[pname]
+    param_decl = mod_param_decls[idx]
+    inst_param_array[idx] = hw.ParamDeclAttr.get(pname, param_decl.param_type,
+                                                 pval)
+
+  # Fill in the defaults from the module param decl.
+  for (idx, pval) in enumerate(inst_param_array):
+    if pval is not None:
+      continue
+    inst_param_array[idx] = mod_param_decls[idx]
+
+  return inst_param_array
+
+
 class InstanceBuilder(support.NamedValueOpView):
   """Helper class to incrementally construct an instance of a module."""
 
@@ -26,29 +55,7 @@ class InstanceBuilder(support.NamedValueOpView):
     self.module = module
     instance_name = StringAttr.get(name)
     module_name = FlatSymbolRefAttr.get(StringAttr(module.name).value)
-
-    mod_param_decls = module.parameters
-    mod_param_decls_idxs = {
-        decl.name: idx for (idx, decl) in enumerate(mod_param_decls)
-    }
-    inst_param_array = [None] * len(module.parameters)
-    # Fill in all the parameters specified.
-    if isinstance(parameters, DictAttr):
-      parameters = {i.name: i.attr for i in parameters}
-    for (pname, pval) in parameters.items():
-      if pname not in mod_param_decls_idxs:
-        raise ValueError(
-            f"Could not find parameter '{pname}' in module parameter decls")
-      idx = mod_param_decls_idxs[pname]
-      param_decl = mod_param_decls[idx]
-      inst_param_array[idx] = hw.ParamDeclAttr.get(pname, param_decl.param_type,
-                                                   pval)
-    # Fill in the defaults from the module param decl.
-    for (idx, pval) in enumerate(inst_param_array):
-      if pval is not None:
-        continue
-      inst_param_array[idx] = mod_param_decls[idx]
-
+    inst_param_array = create_parameters(parameters, module)
     if sym_name:
       sym_name = StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
@@ -183,6 +190,12 @@ class ModuleLike:
   def is_external(self):
     return len(self.regions[0].blocks) == 0
 
+  @property
+  def parameters(self) -> list[ParamDeclAttr]:
+    return [
+        hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
+    ]
+
   def create(self,
              name: str,
              parameters: Dict[str, object] = {},
@@ -305,21 +318,10 @@ class HWModuleOp(ModuleLike):
     self.body.blocks.append(*self.type.inputs)
     return self.body.blocks[0]
 
-  @property
-  def parameters(self) -> list[ParamDeclAttr]:
-    return [
-        hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
-    ]
-
 
 class HWModuleExternOp(ModuleLike):
   """Specialization for the HW module op class."""
-
-  @property
-  def parameters(self) -> list[ParamDeclAttr]:
-    return [
-        hw.ParamDeclAttr(a) for a in ArrayAttr(self.attributes["parameters"])
-    ]
+  pass
 
 
 class ConstantOp:

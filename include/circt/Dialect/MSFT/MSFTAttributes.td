@@ -6,6 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+// "Forward-declare" these HW attributes rather than including or duplicating
+// them here. This lets us to refer to them in ODS, but delegates to HW in C++.
+// These are used to represent parameters to MSFTModuleExternOp.
+def ParamDeclAttr : Attr<CPred<"$_self.isa<hw::ParamDeclAttr>()">>;
+def ParamDeclArrayAttr : TypedArrayAttrBase<ParamDeclAttr, "parameter array">;
+
 def PrimitiveType : I32EnumAttr<"PrimitiveType",
   "Type of device at physical location", [
     I32EnumAttrCase<"M20K", 1>,

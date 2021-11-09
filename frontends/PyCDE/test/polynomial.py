@@ -114,14 +114,14 @@ poly.print()
 # CHECK:         %example.y = msft.instance @example @PolyComputeForCoeff_62_42_6(%c23_i32) : (i32) -> i32
 # CHECK:         %example2.y = msft.instance @example2 @PolyComputeForCoeff_62_42_6(%example.y) : (i32) -> i32
 # CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff_1_2_3_4_5(%example.y) : (i32) -> i32
-# CHECK:         %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %{{.+}}: i32) -> (y: i32)
-# CHECK:         hw.instance "M" @parameterized_extern<a: i64 = 8, b: i64 = 3>() -> ()
+# CHECK:         %CoolPolynomialCompute.y = msft.instance @CoolPolynomialCompute @supercooldevice(%{{.+}}) : (i32) -> i32
+# CHECK:         msft.instance @M @parameterized_extern() <a: i64 = 8, b: i64 = 3> : () -> ()
 # CHECK:         msft.output %example.y : i32
 # CHECK:       }
 # CHECK:       msft.module @PolyComputeForCoeff_62_42_6 {coefficients = {coeff = [62, 42, 6]}} (%x: i32) -> (y: i32)
 # CHECK:       msft.module @PolyComputeForCoeff_1_2_3_4_5 {coefficients = {coeff = [1, 2, 3, 4, 5]}} (%x: i32) -> (y: i32)
-# CHECK:       hw.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
-# CHECK:       hw.module.extern @parameterized_extern<a: i64, b: i64>() attributes {verilogName = "parameterized_extern"}
+# CHECK:       msft.module.extern @supercooldevice(%x: i32) -> (y: i32) attributes {verilogName = "supercooldevice"}
+# CHECK:       msft.module.extern @parameterized_extern<a: i64, b: i64>() attributes {verilogName = "parameterized_extern"}
 
 print("Generating rest...")
 poly.generate()
@@ -134,7 +134,7 @@ poly.print()
 # CHECK: %example.y = hw.instance "example" sym @example @PolyComputeForCoeff_62_42_6(x: %c23_i32: i32) -> (y: i32)
 # CHECK: %example2.y = hw.instance "example2" sym @example2 @PolyComputeForCoeff_62_42_6(x: %0: i32) -> (y: i32)
 # CHECK: %example2_1.y = hw.instance "example2_1" sym @example2_1 @PolyComputeForCoeff_1_2_3_4_5(x: %1: i32) -> (y: i32)
-# CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
+# CHECK: %CoolPolynomialCompute.y = hw.instance "CoolPolynomialCompute" sym @CoolPolynomialCompute @supercooldevice(x: %c23_i32{{.*}}: i32) -> (y: i32)
 # CHECK-LABEL: hw.module @PolyComputeForCoeff_62_42_6(%x: i32) -> (y: i32)
 # CHECK: hw.constant 62
 # CHECK: hw.constant 42

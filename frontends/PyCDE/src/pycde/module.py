@@ -174,7 +174,7 @@ class _SpecializedModule:
                                            mlir.ir.TypeAttr.get(i.attr.type))
             for i in self.parameters
         ]
-        return hw.HWModuleExternOp(
+        return msft.MSFTModuleExternOp(
             symbol,
             self.input_ports,
             self.output_ports,
