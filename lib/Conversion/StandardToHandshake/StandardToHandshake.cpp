@@ -1292,12 +1292,12 @@ void setMemOpControlInputs(ConversionPatternRewriter &rewriter,
 }
 
 LogicalResult connectToMemory(handshake::FuncOp f,
-                              MemRefToMemoryAccessOp MemRefOps, bool lsq,
+                              MemRefToMemoryAccessOp memRefOps, bool lsq,
                               ConversionPatternRewriter &rewriter) {
   // Add MemoryOps which represent the memory interface
   // Connect memory operations and control appropriately
   int mem_count = 0;
-  for (auto memory : MemRefOps) {
+  for (auto memory : memRefOps) {
     // First operand corresponds to memref (alloca or function argument)
     Value memrefOperand = getMemRefOperand(memory.first);
 
