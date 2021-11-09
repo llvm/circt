@@ -19,8 +19,6 @@ msft.module @leaf {} () -> () {
   msft.output
 }
 
-// TCL-LABEL: FILE "placements.tcl"
-
 // TCL-NOT: proc leaf_config
 
 // TCL-LABEL: proc shallow_config

@@ -38,14 +38,6 @@ namespace msft {
 // Lower MSFT to HW.
 //===----------------------------------------------------------------------===//
 
-NamedAttribute createOutputFileAttr(MLIRContext *context,
-                                    StringRef outputFile) {
-  auto outputFileName = Identifier::get("output_file", context);
-  auto outputFileAttr =
-      hw::OutputFileAttr::getFromFilename(context, outputFile);
-  return NamedAttribute(outputFileName, outputFileAttr);
-}
-
 namespace {
 /// Lower MSFT's InstanceOp to HW's. Currently trivial since `msft.instance` is
 /// currently a subset of `hw.instance`.
@@ -108,14 +100,18 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
     return success();
   }
 
-  auto outputFileAttr = createOutputFileAttr(rewriter.getContext(), outputFile);
-
   auto hwmod = rewriter.replaceOpWithNewOp<hw::HWModuleOp>(
-      mod, mod.getNameAttr(), mod.getPorts(), /*parameters=*/ArrayAttr(),
-      /*attributes=*/ArrayRef(outputFileAttr));
+      mod, mod.getNameAttr(), mod.getPorts());
   rewriter.eraseBlock(hwmod.getBodyBlock());
   rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
                               hwmod.getBody().end());
+
+  if (!outputFile.empty()) {
+    auto outputFileAttr =
+        hw::OutputFileAttr::getFromFilename(rewriter.getContext(), outputFile);
+    hwmod->setAttr("output_file", outputFileAttr);
+  }
+
   return success();
 }
 namespace {
@@ -139,11 +135,15 @@ private:
 LogicalResult ModuleExternOpLowering::matchAndRewrite(
     MSFTModuleExternOp mod, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
-  auto outputFileAttr = createOutputFileAttr(rewriter.getContext(), outputFile);
-
-  rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
+  auto hwMod = rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
       mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().getValueOr(""),
-      mod.parameters(), /*attributes=*/ArrayRef(outputFileAttr));
+      mod.parameters());
+
+  if (!outputFile.empty()) {
+    auto outputFileAttr =
+        hw::OutputFileAttr::getFromFilename(rewriter.getContext(), outputFile);
+    hwMod->setAttr("output_file", outputFileAttr);
+  }
 
   return success();
 }
@@ -172,16 +172,6 @@ struct LowerToHWPass : public LowerToHWBase<LowerToHWPass> {
 void LowerToHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
-
-  // Check output file pass options have been specified.
-  if (verilogFile.empty()) {
-    top.emitError("verilogFile pass option was not specified");
-    return signalPassFailure();
-  }
-  if (tclFile.empty()) {
-    top.emitError("tclFile pass option was not specified");
-    return signalPassFailure();
-  }
 
   // Traverse MSFT location attributes and export the required Tcl into
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.

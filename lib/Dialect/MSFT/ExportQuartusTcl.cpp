@@ -151,11 +151,12 @@ LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
       builder.getUnknownLoc(), os.str(), ValueRange{},
       builder.getArrayAttr(state.symbolRefs));
 
-  // Give the verbatim op an output file.
-  // TODO: the filename should be a pass option.
-  auto outputFileAttr =
-      OutputFileAttr::getFromFilename(builder.getContext(), outputFile);
-  verbatim->setAttr("output_file", outputFileAttr);
+  // When requested, give the verbatim op an output file.
+  if (!outputFile.empty()) {
+    auto outputFileAttr =
+        OutputFileAttr::getFromFilename(builder.getContext(), outputFile);
+    verbatim->setAttr("output_file", outputFileAttr);
+  }
 
   return success();
 }
