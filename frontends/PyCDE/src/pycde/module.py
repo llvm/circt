@@ -204,14 +204,9 @@ class _SpecializedModule:
     if self.extern_name is None:
       return self.circt_mod.create(instance_name, **inputs, loc=loc)
     else:
-      paramdecl_list = [
-          hw.ParamDeclAttr.get(p.name, mlir.ir.TypeAttr.get(p.attr.type),
-                               p.attr) for p in self.parameters
-      ]
-      parameters = mlir.ir.ArrayAttr.get(paramdecl_list)
       return self.circt_mod.create(instance_name,
                                    **inputs,
-                                   parameters=parameters,
+                                   parameters=self.parameters,
                                    loc=loc)
 
   def generate(self):

@@ -2,7 +2,7 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from circt.dialects import msft as _msft
+from circt.dialects import hw, msft as _msft
 import circt.dialects._hw_ops_ext as _hw_ext
 import circt.support as support
 
@@ -27,9 +27,8 @@ class InstanceBuilder(support.NamedValueOpView):
     if sym_name:
       sym_name = _ir.StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
-    if parameters is None:
-      parameters = _ir.ArrayAttr.get([])
-    post_args = [parameters]
+    parameters = _hw_ext.create_parameters(parameters, module)
+    post_args = [_ir.ArrayAttr.get(parameters)]
     results = module.type.results
 
     super().__init__(
@@ -94,15 +93,15 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
   def entry_block(self):
     return self.regions[0].blocks[0]
 
-
-class MSFTModuleExternOp(_hw_ext.ModuleLike):
-
   @property
   def parameters(self):
     return [
-        _hw_ext.ParamDeclAttr(a)
-        for a in _ir.ArrayAttr(self.attributes["parameters"])
+        hw.ParamDeclAttr.get(p.name, _ir.TypeAttr.get(p.attr.type), p.attr)
+        for p in _ir.DictAttr(self.attributes["parameters"])
     ]
+
+
+class MSFTModuleExternOp(_hw_ext.ModuleLike):
 
   def create(self,
              name: str,
