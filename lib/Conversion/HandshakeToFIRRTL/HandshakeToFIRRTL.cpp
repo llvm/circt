@@ -12,8 +12,10 @@
 
 #include "circt/Conversion/HandshakeToFIRRTL.h"
 #include "../PassDetail.h"
+#include "circt/Dialect/ESI/ESITypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "circt/Dialect/Handshake/Visitor.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -205,8 +207,13 @@ static std::string getBareSubModuleName(Operation *oldOp) {
 
 /// Construct a name for creating FIRRTL sub-module.
 static std::string getSubModuleName(Operation *oldOp) {
-  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp); instanceOp)
-    return instanceOp.getModule().str();
+  if (auto instanceLike =
+          llvm::TypeSwitch<Operation *, Optional<std::string>>(oldOp)
+              .Case<handshake::InstanceOp, handshake::CallOp>(
+                  [&](auto op) { return op.getModule().str(); })
+              .Default([](auto) { return Optional<std::string>(); });
+      instanceLike.hasValue())
+    return instanceLike.getValue();
 
   std::string subModuleName = getBareSubModuleName(oldOp);
 
@@ -455,7 +462,7 @@ static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
 /// supported in the next patch.
 static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
-  llvm::SmallVector<PortInfo, 8> ports;
+  llvm::SmallVector<firrtl::PortInfo, 8> ports;
   auto argNames = funcOp->getAttrOfType<ArrayAttr>("argNames");
   auto resNames = funcOp->getAttrOfType<ArrayAttr>("outNames");
   auto getArgumentName = [&](unsigned index) {
@@ -486,7 +493,8 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::In, arg.getLoc()});
+    ports.push_back(firrtl::PortInfo{portName, bundlePortType, Direction::In,
+                                     arg.getLoc()});
     ++argIndex;
   }
 
@@ -502,24 +510,29 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Out, funcLoc});
+    ports.push_back(
+        firrtl::PortInfo{portName, bundlePortType, Direction::Out, funcLoc});
     ++argIndex;
   }
 
   // Add clock and reset signals.
   if (numClocks == 1) {
-    ports.push_back({rewriter.getStringAttr("clock"),
-                     rewriter.getType<ClockType>(), Direction::In, funcLoc});
-    ports.push_back({rewriter.getStringAttr("reset"),
-                     rewriter.getType<UIntType>(1), Direction::In, funcLoc});
+    ports.push_back(firrtl::PortInfo{rewriter.getStringAttr("clock"),
+                                     rewriter.getType<ClockType>(),
+                                     Direction::In, funcLoc});
+    ports.push_back(firrtl::PortInfo{rewriter.getStringAttr("reset"),
+                                     rewriter.getType<UIntType>(1),
+                                     Direction::In, funcLoc});
   } else if (numClocks > 1) {
     for (unsigned i = 0; i < numClocks; ++i) {
       auto clockName = "clock" + std::to_string(i);
       auto resetName = "reset" + std::to_string(i);
-      ports.push_back({rewriter.getStringAttr(clockName),
-                       rewriter.getType<ClockType>(), Direction::In, funcLoc});
-      ports.push_back({rewriter.getStringAttr(resetName),
-                       rewriter.getType<UIntType>(1), Direction::In, funcLoc});
+      ports.push_back(firrtl::PortInfo{rewriter.getStringAttr(clockName),
+                                       rewriter.getType<ClockType>(),
+                                       Direction::In, funcLoc});
+      ports.push_back(firrtl::PortInfo{rewriter.getStringAttr(resetName),
+                                       rewriter.getType<UIntType>(1),
+                                       Direction::In, funcLoc});
     }
   }
 
@@ -560,13 +573,18 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 /// Check whether a submodule with the same name has been created elsewhere in
 /// the FIRRTL circt. Return the matched submodule if true, otherwise return
 /// nullptr.
-static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
-  auto moduleOp = circuitOp.lookupSymbol<FModuleOp>(getSubModuleName(oldOp));
+static FModuleLike checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
+  auto moduleOp = circuitOp.lookupSymbol<FModuleLike>(getSubModuleName(oldOp));
 
   if (isa<handshake::InstanceOp>(oldOp))
     assert(moduleOp &&
            "handshake.instance target modules should always have been lowered "
            "before the modules that reference them!");
+  if (isa<handshake::CallOp>(oldOp))
+    assert(
+        moduleOp &&
+        "handshake.call target modules should always have been wrapped by a "
+        "FIRRTL external module before lowering the handshake.call operation!");
   return moduleOp;
 }
 
@@ -576,7 +594,7 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
                                    bool hasClock,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
-  llvm::SmallVector<PortInfo, 8> ports;
+  llvm::SmallVector<firrtl::PortInfo, 8> ports;
 
   auto loc = oldOp->getLoc();
 
@@ -590,7 +608,8 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::In, loc});
+    ports.push_back(
+        firrtl::PortInfo{portName, bundlePortType, Direction::In, loc});
     ++argIndex;
   }
 
@@ -603,16 +622,19 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back({portName, bundlePortType, Direction::Out, loc});
+    ports.push_back(
+        firrtl::PortInfo{portName, bundlePortType, Direction::Out, loc});
     ++argIndex;
   }
 
   // Add clock and reset signals.
   if (hasClock) {
-    ports.push_back({rewriter.getStringAttr("clock"),
-                     rewriter.getType<ClockType>(), Direction::In, loc});
-    ports.push_back({rewriter.getStringAttr("reset"),
-                     rewriter.getType<UIntType>(1), Direction::In, loc});
+    ports.push_back(firrtl::PortInfo{rewriter.getStringAttr("clock"),
+                                     rewriter.getType<ClockType>(),
+                                     Direction::In, loc});
+    ports.push_back(firrtl::PortInfo{rewriter.getStringAttr("reset"),
+                                     rewriter.getType<UIntType>(1),
+                                     Direction::In, loc});
   }
 
   return rewriter.create<FModuleOp>(
@@ -2168,7 +2190,7 @@ static std::string getInstanceName(Operation *op) {
 
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
-static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
+static void createInstOp(Operation *oldOp, FModuleLike subModuleOp,
                          FModuleOp topModuleOp, unsigned clockDomain,
                          ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPointAfter(oldOp);
@@ -2278,12 +2300,13 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // This branch takes care of all non-timing operations that require to
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
-        FModuleOp subModuleOp = checkSubModuleOp(circuitOp, &op);
+        FModuleLike subModuleLikeOp = checkSubModuleOp(circuitOp, &op);
         bool hasClock = op.hasTrait<mlir::OpTrait::HasClock>();
 
         // Check if the sub-module already exists.
-        if (!subModuleOp) {
-          subModuleOp = createSubModuleOp(topModuleOp, &op, hasClock, rewriter);
+        if (!subModuleLikeOp) {
+          FModuleOp subModuleOp =
+              createSubModuleOp(topModuleOp, &op, hasClock, rewriter);
 
           Location insertLoc = subModuleOp.getLoc();
           auto *bodyBlock = subModuleOp.getBody();
@@ -2298,10 +2321,12 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
                          .dispatchStdExprVisitor(&op)) {
           } else
             return op.emitError("unsupported operation type");
+
+          subModuleLikeOp = subModuleOp;
         }
 
         // Instantiate the new created sub-module.
-        createInstOp(&op, subModuleOp, topModuleOp, /*clockDomain=*/0,
+        createInstOp(&op, subModuleLikeOp, topModuleOp, /*clockDomain=*/0,
                      rewriter);
       }
     }
@@ -2397,6 +2422,50 @@ resolveInstanceGraph(ModuleOp moduleOp, InstanceGraph &instanceGraph,
 }
 
 namespace {
+
+static firrtl::PortInfo hwToFIRRTLPortInfo(Location loc,
+                                           const hw::PortInfo &hwPortInfo) {
+  auto name = hwPortInfo.name;
+  auto direction = hwPortInfo.direction == hw::PortDirection::INPUT
+                       ? firrtl::Direction::In
+                       : firrtl::Direction::Out;
+  FIRRTLType type;
+  if (auto esiChannel = hwPortInfo.type.dyn_cast<esi::ChannelPort>();
+      esiChannel)
+    type = getBundleType(esiChannel.getInner());
+  else
+    type = getFIRRTLType(hwPortInfo.type);
+  return firrtl::PortInfo{name, type, direction, loc};
+}
+
+static LogicalResult rewriteExtCallModules(MLIRContext *ctx, ModuleOp module,
+                                           CircuitOp circuit) {
+  OpBuilder builder(ctx);
+  builder.setInsertionPoint(circuit.getBody(), circuit.getBody()->begin());
+  module.walk([&](handshake::CallOp callOp) {
+    auto extModule = module.lookupSymbol(callOp.getModule());
+    if (isa<firrtl::FExtModuleOp>(extModule)) {
+      // Module has already been rewritten
+      return;
+    }
+    auto extHwModuleOp = dyn_cast<hw::HWModuleExternOp>(extModule);
+    assert(extHwModuleOp &&
+           "handshake.call expected to reference a hw.module.extern operation");
+    auto loc = extHwModuleOp.getLoc();
+    // Translate port info from HW to FIRRTL.
+    llvm::SmallVector<firrtl::PortInfo> firrtlPortInfos;
+    llvm::transform(
+        extHwModuleOp.getAllPorts(), std::back_inserter(firrtlPortInfos),
+        [&](auto hwPortInfo) { return hwToFIRRTLPortInfo(loc, hwPortInfo); });
+
+    // Replace the predeclaration with a FIRRTL predeclaration.
+    extHwModuleOp.erase();
+    builder.create<firrtl::FExtModuleOp>(
+        loc, builder.getStringAttr(callOp.getModule()), firrtlPortInfos);
+  });
+  return success();
+}
+
 class HandshakeToFIRRTLPass
     : public HandshakeToFIRRTLBase<HandshakeToFIRRTLPass> {
 public:
@@ -2422,6 +2491,14 @@ public:
     ConversionTarget target(getContext());
     target.addLegalDialect<FIRRTLDialect>();
     target.addIllegalDialect<handshake::HandshakeDialect>();
+
+    // handshake.call operations refer to hw.module.extern operations. However,
+    // this pass still targets FIRRTL modules, so we need to rewrite module
+    // predeclarations to FIRRTL external modules.
+    if (rewriteExtCallModules(ctx, op, circuitOp).failed()) {
+      signalPassFailure();
+      return;
+    }
 
     // Convert the handshake.func operations in post-order wrt. the instance
     // graph. This ensures that any referenced submodules (through

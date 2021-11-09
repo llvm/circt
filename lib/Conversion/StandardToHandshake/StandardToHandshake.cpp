@@ -1652,7 +1652,7 @@ LogicalResult replaceCallOps(handshake::FuncOp f,
         block.isEntryBlock() ? getStartOp(&block) : getControlMerge(&block);
     assert(cntrlMg);
     for (Operation &op : block) {
-      if (auto callOp = dyn_cast<CallOp>(op)) {
+      if (auto callOp = dyn_cast<mlir::CallOp>(op)) {
         llvm::SmallVector<Value> operands;
         llvm::copy(callOp.getOperands(), std::back_inserter(operands));
         operands.push_back(cntrlMg->getResult(0));

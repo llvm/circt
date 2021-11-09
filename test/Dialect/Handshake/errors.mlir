@@ -77,3 +77,63 @@ handshake.func @invalid_dynamic_memory() {
   "handshake.memory"() {type = memref<?xi8>, id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32} : () -> ()
   return
 }
+
+// -----
+
+func @foo(%ctrl : none) -> none{
+  return %ctrl : none
+}
+
+handshake.func @invalid_instance_op(%ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.instance' op symbol 'foo' is not a handshake.func operation.}}
+  %0 = handshake.instance @foo(%ctrl) : (none) -> (none)
+  handshake.return %ctrl : none
+}
+
+// -----
+
+func @foo(%ctrl : none) -> none{
+  return %ctrl : none
+}
+
+handshake.func @main(%ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.call' op symbol 'foo' must refer to a hw module.}}
+  %0 = handshake.call @foo(%ctrl) : (none) -> (none)
+  handshake.return %ctrl : none
+}
+
+// -----
+
+hw.module.extern @foo(%in : !esi.channel<i32>) -> ()
+handshake.func @main(%a : i32, %b : i32, %ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.call' op argument number mismatch; expected 'foo' to have at least 2 arguments, but 'foo' has 1 arguments.}}
+  handshake.call @foo(%a, %b) : (i32, i32) -> ()
+  handshake.return %ctrl : none
+}
+
+// -----
+
+hw.module.extern @foo(%in : i32) -> ()
+handshake.func @main(%a : i32, %ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.call' op expected ESI channel port as argument #0 to 'foo'.}}
+  handshake.call @foo(%a) : (i32) -> ()
+  handshake.return %ctrl : none
+}
+
+// -----
+
+hw.module.extern @foo(%in : !esi.channel<i4>) -> ()
+handshake.func @main(%a : i32, %ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.call' op channel type mismatch; expected 'i32' as inner type of port #0 of 'foo' but got 'i4'.}}
+  handshake.call @foo(%a) : (i32) -> ()
+  handshake.return %ctrl : none
+}
+
+// -----
+
+hw.module.extern @foo() -> (out : i32)
+handshake.func @main(%ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.call' op expected ESI channel port as result #0 to 'foo'.}}
+  %0 = handshake.call @foo() : () -> (i32)
+  handshake.return %ctrl : none
+}

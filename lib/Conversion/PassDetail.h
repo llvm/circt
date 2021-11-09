@@ -28,6 +28,10 @@ namespace calyx {
 class CalyxDialect;
 } // namespace calyx
 
+namespace esi {
+class ESIDialect;
+} // namespace esi
+
 namespace firrtl {
 class FIRRTLDialect;
 class FModuleOp;

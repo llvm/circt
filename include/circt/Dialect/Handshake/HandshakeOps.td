@@ -86,12 +86,69 @@ def FuncOp : Op<Handshake_Dialect, "func", [
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
+// Instance-like operations
+class HandshakeInstanceLike<string mnemonic, list<OpTrait> traits = []> :
+  Op<Handshake_Dialect, mnemonic, traits> {
+  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$operands);
+  let results = (outs Variadic<AnyType>);
+  let assemblyFormat = [{
+    $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
+  }];
+
+}
+
+def CallOp : HandshakeInstanceLike<"call", []> {
+  let summary = "Handshake dialect call operation.";
+  let description = [{
+    The `handshake.call` operation represents a latency-insensitive call to
+    some external hardware module. The arguments to and results from a call
+    operation are regular handshake SSA values. `handshake.call`
+    operations interact with the external world through ESI channels. Each
+    argument and result is mapped to an ESI channel and it is expected that
+    there exists an external hardware module which provides the expected
+    ESI interface.
+
+    Example:
+    ```mlir
+    hw.module.extern @mac_esi(%a : !esi.channel<i32>, %b : !esi.channel<i32>) -> (res: !esi.channel<i32>)
+    ...
+    %0 = handshake.call @mac_esi(%a, %b, %c) : (i32, i32, i32) -> (i32)
+    ```
+  }];
+
+  let builders = [OpBuilder<
+    (ins "FuncOp":$module, CArg<"ValueRange", "{}">:$operands), [{
+      $_state.addOperands(operands);
+      $_state.addAttribute("module", SymbolRefAttr::get(module));
+      $_state.addTypes(module.getType().getResults());
+  }]>, OpBuilder<
+    (ins "SymbolRefAttr":$module, "TypeRange":$results,
+     CArg<"ValueRange", "{}">:$operands), [{
+      $_state.addOperands(operands);
+      $_state.addAttribute("module", module);
+      $_state.addTypes(results);
+  }]>, OpBuilder<
+    (ins "StringRef":$module, "TypeRange":$results,
+     CArg<"ValueRange", "{}">:$operands), [{
+       build($_builder, $_state,
+             SymbolRefAttr::get($_builder.getContext(), module), results,
+             operands);
+  }]>];
+
+
+  let extraClassDeclaration = [{
+    StringRef getModule() { return module(); }
+  }];
+ 
+  let verifier = [{ return ::verify$cppClass(*this); }];
+}
+
 // InstanceOp
-def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
+def InstanceOp : HandshakeInstanceLike<"instance", [CallOpInterface]> {
   let summary = "module instantiate operation";
   let description = [{
-    The `instance` operation represents the instantiation of a module.  This
-	  is similar to a function call, except that different instances of the
+    The `instance` operation represents the instantiation of a handshake module.
+    This is similar to a function call, except that different instances of the
 	  same module are guaranteed to have their own distinct state.
     The instantiated module is encoded as a symbol reference attribute named
     "module". An instance operation takes a control input as its last argument
@@ -102,9 +159,6 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
     %2:2 = handshake.instance @my_add(%0, %1, %ctrl) : (f32, f32, none) -> (f32, none)
     ```
   }];
-
-  let arguments = (ins FlatSymbolRefAttr:$module, Variadic<AnyType>:$operands);
-  let results = (outs Variadic<AnyType>);
 
   let builders = [OpBuilder<
     (ins "FuncOp":$module, CArg<"ValueRange", "{}">:$operands), [{
@@ -128,8 +182,14 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
   }]>];
 
   let extraClassDeclaration = [{
-    StringRef getModule() { return module(); }
-    FunctionType getModuleType();
+    /// Get the control operand of this instance op
+    Value getControl() {
+      return getOperands().back();
+    }
+    /// Return the module of this operation.
+    CallInterfaceCallable getCallableForCallee() {
+      return (*this)->getAttrOfType<SymbolRefAttr>("module");
+    }
 
     /// Get the argument operands to the called function.
     operand_range getArgOperands() {
@@ -139,20 +199,9 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
     operand_iterator arg_operand_begin() { return operand_begin(); }
     operand_iterator arg_operand_end() { return operand_end(); }
 
-    /// Return the module of this operation.
-    CallInterfaceCallable getCallableForCallee() {
-      return (*this)->getAttrOfType<SymbolRefAttr>("module");
-    }
-
-    /// Get the control operand of this instance op
-    Value getControl() {
-      return getOperands().back();
-    }
+    StringRef getModule() { return module(); }
   }];
 
-  let assemblyFormat = [{
-    $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
-  }];
 
   let verifier = [{ return ::verify$cppClass(*this); }];
 }

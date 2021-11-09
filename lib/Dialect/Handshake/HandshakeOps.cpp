@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Handshake/HandshakeOps.h"
+#include "circt/Dialect/ESI/ESIOps.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
@@ -926,6 +928,58 @@ static LogicalResult verifyInstanceOp(handshake::InstanceOp op) {
   if (!op.getControl().getType().dyn_cast<NoneType>())
     return op.emitOpError()
            << "last operand must be a control (none-typed) operand.";
+
+  auto parentModule = op->getParentOfType<ModuleOp>();
+  auto calleeOp = parentModule.lookupSymbol(op.getModule());
+  if (!dyn_cast<handshake::FuncOp>(calleeOp))
+    return op.emitOpError() << "symbol '" << op.getModule()
+                            << "' is not a handshake.func operation.";
+
+  return success();
+}
+
+static LogicalResult verifyCallOp(handshake::CallOp op) {
+
+  auto parentModule = op->getParentOfType<ModuleOp>();
+  auto calleeOp = parentModule.lookupSymbol(op.getModule());
+  if (!isa<hw::HWModuleExternOp, hw::HWModuleOp>(calleeOp))
+    return op.emitOpError()
+           << "symbol '" << op.getModule() << "' must refer to a hw module.";
+
+  auto calleeType = mlir::function_like_impl::getFunctionType(calleeOp);
+
+  auto checkIOType = [&](auto opTypeVector, auto calleeOpTypeVector,
+                         StringRef dirString) -> LogicalResult {
+    for (auto ioOp : llvm::enumerate(opTypeVector)) {
+      if (ioOp.index() >= calleeOpTypeVector.size())
+        return op.emitOpError()
+               << dirString << " number mismatch; expected '" << op.getModule()
+               << "' to have at least " << opTypeVector.size() << " "
+               << dirString << "s, but '" << op.getModule() << "' has "
+               << calleeOpTypeVector.size() << " " << dirString << "s.";
+      auto portType = calleeOpTypeVector[ioOp.index()]
+                          .template dyn_cast<esi::ChannelPort>();
+      if (!portType)
+        return op.emitOpError()
+               << "expected ESI channel port as " << dirString << " #"
+               << ioOp.index() << " to '" << op.getModule() << "'.";
+
+      Type expectedChannelType = ioOp.value();
+      if (portType.getInner() != expectedChannelType)
+        return op.emitOpError()
+               << "channel type mismatch; expected " << expectedChannelType
+               << " as inner type of port #" << ioOp.index() << " of '"
+               << op.getModule() << "' but got " << portType.getInner() << ".";
+    }
+    return success();
+  };
+
+  if (checkIOType(op.getOperandTypes(), calleeType.getInputs(), "argument")
+          .failed())
+    return failure();
+  if (checkIOType(op.getResultTypes(), calleeType.getResults(), "result")
+          .failed())
+    return failure();
 
   return success();
 }

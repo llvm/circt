@@ -9,4 +9,6 @@ target_link_libraries(handshake-runner PRIVATE
   ${conversion_libs}
   CIRCTHandshake
   CIRCTStandardToHandshake
+  CIRCTHW
+  CIRCTESI
   )
