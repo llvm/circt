@@ -1662,8 +1662,8 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
   if (!alwaysOp) {
     if (reset) {
       assert(resetStyle != ::ResetType::NoReset);
-      // Here, we want to create folloing sv.always and sv.if. If reset is
-      // async, we need to add reset to a sensitivity list.
+      // Here, we want to create the folloing structure with sv.always and
+      // sv.if. If `reset` is async, we need to add `reset` to a sensitivity list.
       //
       // sv.always @(clockEdge or reset) {
       //   sv.if (reset) {
@@ -1674,8 +1674,8 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
       // }
 
       auto createIfOp = [&]() {
-        // It is weird but intended. Here we want to create empty sv.if with
-        // else block.
+        // It is weird but intended. Here we want to create an empty sv.if with
+        // an else block.
         insideIfOp = builder.create<sv::IfOp>(
             reset, []() {}, []() {});
       };
