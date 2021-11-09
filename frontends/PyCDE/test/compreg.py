@@ -1,4 +1,5 @@
-# RUN: %PYTHON% %s | FileCheck %s
+# RUN: %PYTHON% %s
+# RUN: FileCheck %s --input-file CompReg/CompReg.sv
 
 import pycde
 from pycde import types, module, Input, Output
@@ -19,11 +20,11 @@ class CompReg:
     ports.output = compreg.data
 
 
-mod = pycde.System([CompReg])
+mod = pycde.System([CompReg], name="CompReg")
 mod.print()
 mod.generate()
 mod.print()
-mod.print_verilog()
+mod.emit_outputs()
 
 # CHECK: reg [7:0] [[NAME:.+]];
 # CHECK: always @(posedge clk)

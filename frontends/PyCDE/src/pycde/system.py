@@ -37,9 +37,8 @@ class System:
   output SystemVerilog."""
 
   __slots__ = [
-      "mod", "modules", "passed", "_module_symbols", "_symbol_modules",
-      "_old_system_token", "_symbols", "_generate_queue", "_primdb",
-      "_output_directory", "_output_verilog_file", "_output_tcl_file"
+      "mod", "modules", "name", "passed", "_module_symbols", "_symbol_modules",
+      "_old_system_token", "_symbols", "_generate_queue", "_primdb"
   ]
 
   PASSES = """
@@ -50,30 +49,17 @@ class System:
   def __init__(self,
                modules,
                primdb: PrimitiveDB = None,
-               output_directory: str = None,
-               output_verilog_file: str = None,
-               output_tcl_file: str = None):
+               name: str = "PyCDESystem"):
     self.passed = False
     self.mod = ir.Module.create()
     self.modules = list(modules)
+    self.name = name
     self._module_symbols: dict[_SpecializedModule, str] = {}
     self._symbol_modules: dict[str, _SpecializedModule] = {}
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
 
     self._primdb = primdb
-
-    if output_directory is None:
-      output_directory = os.getcwd()
-    self._output_directory = output_directory
-
-    if output_verilog_file is None:
-      output_verilog_file = "pycde.sv"
-    self._output_verilog_file = output_verilog_file
-
-    if output_tcl_file is None:
-      output_tcl_file = "pycde.tcl"
-    self._output_tcl_file = output_tcl_file
 
     with self:
       [m._pycde_mod.create() for m in modules]
@@ -162,8 +148,8 @@ class System:
 
   @property
   def passes(self):
-    return self.PASSES.format(verilog_file=self._output_verilog_file,
-                              tcl_file=self._output_tcl_file).strip()
+    return self.PASSES.format(verilog_file=self.name + ".sv",
+                              tcl_file=self.name + ".tcl").strip()
 
   def print(self, *argv, **kwargs):
     self.mod.operation.print(*argv, **kwargs)
@@ -209,4 +195,5 @@ class System:
 
   def emit_outputs(self):
     self.run_passes()
-    circt.export_split_verilog(self.mod, self._output_directory)
+    output_directory = os.getcwd() + "/" + self.name
+    circt.export_split_verilog(self.mod, output_directory)

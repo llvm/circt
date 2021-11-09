@@ -1,4 +1,5 @@
 # RUN: %PYTHON% %s 2>&1 | FileCheck %s
+# RUN: FileCheck %s --input-file=Test/Test.tcl --check-prefix=OUTPUT
 
 import pycde
 import circt.dialects.hw
@@ -49,7 +50,7 @@ print(PhysLocation(PrimitiveType.DSP, 39, 25))
 
 # CHECK: msft.module @UnParameterized
 # CHECK-NOT: msft.module @UnParameterized
-t = pycde.System([Test], primdb)
+t = pycde.System([Test], primdb, name="Test")
 t.generate(["construct"])
 t.print()
 
@@ -112,12 +113,10 @@ t.run_passes()
 print("=== Final mlir dump")
 t.print()
 
-print("=== Tcl")
-
-# CHECK-LABEL: proc Test_config { parent }
-# CHECK-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|UnParameterized|Nothing|dsp_inst
-# CHECK-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing|memory|bank
-# CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
-# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
-# CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
+# OUTPUT-LABEL: proc Test_config { parent }
+# OUTPUT-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|UnParameterized|Nothing|dsp_inst
+# OUTPUT-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing|memory|bank
+# OUTPUT-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
+# OUTPUT-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
+# OUTPUT-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
 t.emit_outputs()

@@ -1,4 +1,5 @@
 # RUN: %PYTHON% %s 2>&1 | FileCheck %s
+# RUN: FileCheck %s --input-file PolynomialSystem/PolynomialSystem.sv --check-prefix=OUTPUT
 
 from __future__ import annotations
 
@@ -102,7 +103,7 @@ class PolynomialSystem:
     ports.y = poly.y
 
 
-poly = pycde.System([PolynomialSystem])
+poly = pycde.System([PolynomialSystem], name="PolynomialSystem")
 poly.print()
 
 print("Generating 1...")
@@ -147,10 +148,8 @@ poly.print()
 # CHECK: hw.constant 5
 # CHECK-NOT: hw.module @pycde.PolynomialCompute
 
-print("\n\n=== Verilog ===")
-# CHECK-LABEL: === Verilog ===
-poly.print_verilog()
+poly.emit_outputs()
 
-# CHECK-LABEL:   module PolyComputeForCoeff_62_42_6(
-# CHECK:    input  [31:0] x,
-# CHECK:    output [31:0] y);
+# OUTPUT-LABEL:   module PolyComputeForCoeff_62_42_6(
+# OUTPUT:    input  [31:0] x,
+# OUTPUT:    output [31:0] y);
