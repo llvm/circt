@@ -10,29 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SV_TD
-#define SV_TD
+#ifndef CIRCT_DIALECT_SV_SV
+#define CIRCT_DIALECT_SV_SV
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-def SVDialect : Dialect {
-  let name = "sv";
-
-  let summary = "Types and operations for SV dialect";
-  let description = [{
-    This dialect defines the `sv` dialect, which represents various
-    SystemVerilog-specific constructs in an AST-like representation.
-  }];
-  let dependentDialects = ["circt::comb::CombDialect"];
-  let cppNamespace = "::circt::sv";
-  let extraClassDeclaration = [{
-    /// Register all SV types.
-    void registerTypes();
-  }];
-}
+include "circt/Dialect/SV/SVDialect.td"
 
 // Base class for the operation in this dialect.
 class SVOp<string mnemonic, list<OpTrait> traits = []> :
@@ -59,4 +45,4 @@ include "circt/Dialect/SV/SVStatements.td"
 include "circt/Dialect/SV/SVVerification.td"
 include "circt/Dialect/SV/SVTypeDecl.td"
 
-#endif // SV_TD
+#endif // CIRCT_DIALECT_SV_SV
