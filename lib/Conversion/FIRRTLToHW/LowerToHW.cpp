@@ -1658,25 +1658,12 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
                            resetEdge, reset}];
   auto &alwaysOp = op.first;
   auto &insideIfOp = op.second;
-  if (alwaysOp) {
-    if (reset) {
-      assert(insideIfOp && "reset body must be initialized before");
-      runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp.thenRegion());
-      runWithInsertionPointAtEndOfBlock(body, insideIfOp.elseRegion());
-    } else {
-      runWithInsertionPointAtEndOfBlock(body, alwaysOp.body());
-    }
 
-    // Move the earlier always block(s) down to where the last would have been
-    // inserted.  This ensures that any values used by the always blocks are
-    // defined ahead of the uses, which leads to better generated Verilog.
-    alwaysOp->moveBefore(builder.getInsertionBlock(),
-                         builder.getInsertionPoint());
-  } else {
+  if (!alwaysOp) {
     if (reset) {
       assert(resetStyle != ::ResetType::NoReset);
-      // Here, we want to create the folloing op. If reset is async, we need to
-      // add reset to a sensitivity list.
+      // Here, we want to create folloing sv.always and sv.if. If reset is
+      // async, we need to add reset to a sensitivity list.
       //
       // sv.always @(clockEdge or reset) {
       //   sv.if (reset) {
@@ -1686,43 +1673,42 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
       //   }
       // }
 
-      // It is necessary to construct then and else region regardless of
-      // `restBody` and `body`.
-      auto createResetBody = [&]() {
-        if (resetBody)
-          resetBody();
+      auto setInsideIfOp = [&]() {
+        insideIfOp = builder.create<sv::IfOp>(
+            reset, []() {}, []() {});
       };
-      auto createBody = [&]() {
-        if (body)
-          body();
-      };
-
       if (resetStyle == ::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
         Value clocks[] = {clock, reset};
 
-        alwaysOp = builder.create<sv::AlwaysOp>(events, clocks, [&] {
-          // If reset is asnyc and negative-edge, then flip the reset value.
-          if (resetEdge == sv::EventControl::AtNegEdge) {
-            auto allOnes = getOrCreateIntConstant(
-                APInt::getAllOnes(reset.getType().getIntOrFloatBitWidth()));
-            reset = builder.create<comb::XorOp>(reset, allOnes);
-          }
-          insideIfOp =
-              builder.create<sv::IfOp>(reset, createResetBody, createBody);
+        alwaysOp = builder.create<sv::AlwaysOp>(events, clocks, [&]() {
+          if (resetEdge == sv::EventControl::AtNegEdge)
+            llvm_unreachable("negative edge for reset is not expected");
+          setInsideIfOp();
         });
       } else {
-        alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, [&] {
-          insideIfOp =
-              builder.create<sv::IfOp>(reset, createResetBody, createBody);
-        });
+        alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, setInsideIfOp);
       }
     } else {
       assert(!resetBody);
-      alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, body);
+      alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock);
       insideIfOp = nullptr;
     }
   }
+
+  if (reset) {
+    assert(insideIfOp && "reset body must be initialized before");
+    runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp.thenRegion());
+    runWithInsertionPointAtEndOfBlock(body, insideIfOp.elseRegion());
+  } else {
+    runWithInsertionPointAtEndOfBlock(body, alwaysOp.body());
+  }
+
+  // Move the earlier always block(s) down to where the last would have been
+  // inserted.  This ensures that any values used by the always blocks are
+  // defined ahead of the uses, which leads to better generated Verilog.
+  alwaysOp->moveBefore(builder.getInsertionBlock(),
+                       builder.getInsertionPoint());
 }
 
 void FIRRTLLowering::addToIfDefBlock(StringRef cond,
