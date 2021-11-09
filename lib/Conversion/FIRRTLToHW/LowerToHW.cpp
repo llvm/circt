@@ -1274,8 +1274,7 @@ private:
   // code and ensure that side effects are properly ordered in FIRRTL.
   using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
                                    ::ResetType, sv::EventControl, Value>;
-  llvm::SmallDenseMap<AlwaysKeyType,
-                      std::pair<sv::AlwaysOp, llvm::Optional<sv::IfOp>>>
+  llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
@@ -1661,9 +1660,9 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
   auto &insideIfOp = op.second;
   if (alwaysOp) {
     if (reset) {
-      assert(insideIfOp.hasValue() && "reset body must be initialized before");
-      runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp->thenRegion());
-      runWithInsertionPointAtEndOfBlock(body, insideIfOp->elseRegion());
+      assert(insideIfOp && "reset body must be initialized before");
+      runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp.thenRegion());
+      runWithInsertionPointAtEndOfBlock(body, insideIfOp.elseRegion());
     } else {
       runWithInsertionPointAtEndOfBlock(body, alwaysOp.body());
     }
@@ -1721,7 +1720,7 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
     } else {
       assert(!resetBody);
       alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, body);
-      insideIfOp = llvm::None;
+      insideIfOp = nullptr;
     }
   }
 }
