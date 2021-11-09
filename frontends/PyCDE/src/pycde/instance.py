@@ -61,11 +61,11 @@ class Instance:
 
   @property
   def name(self):
-    return ir.StringAttr(self.instOp.instanceName).value
+    return ir.StringAttr(self.instOp.sym_name).value
 
   @property
   def name_attr(self):
-    return ir.StringAttr(self.instOp.instanceName)
+    return ir.StringAttr(self.instOp.sym_name)
 
   @property
   def is_root(self):
@@ -82,13 +82,10 @@ class Instance:
   def walk(self, callback):
     """Descend the instance hierarchy, calling back on each instance."""
     circt_mod = self.sys._get_circt_mod(self.module)
-    if isinstance(circt_mod, hw.HWModuleExternOp):
+    if isinstance(circt_mod, msft.MSFTModuleExternOp):
       return
     for op in circt_mod.entry_block:
-      # Generated instances are generally msft.InstanceOp, but since use
-      # hw.HWModuleExternOp directly, instances of extern modules will be hw.InstanceOp.
-      if ((not isinstance(op, hw.InstanceOp)) and
-          (not isinstance(op, msft.InstanceOp))):
+      if not isinstance(op, msft.InstanceOp):
         continue
 
       assert "moduleName" in op.attributes

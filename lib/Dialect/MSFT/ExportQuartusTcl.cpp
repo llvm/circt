@@ -49,21 +49,14 @@ struct TclOutputState {
 void emitPath(TclOutputState &s, RootedInstancePathAttr path,
               SymbolCache &symCache) {
   for (auto part : path.getPath()) {
-    Operation *inst = symCache.getDefinition(part);
+    auto inst = cast<msft::InstanceOp>(symCache.getDefinition(part));
     assert(inst && "path instance must be in symbol cache");
     auto mod = inst->getParentOfType<MSFTModuleOp>();
     assert(mod && "path instance must have MSFT module parent");
 
     s.os << "{{" << s.symbolRefs.size() << "}}" << '|';
 
-    // Generated instances are generally msft.InstanceOp, but since use
-    // hw.HWModuleExternOp directly, instances of extern modules will be
-    // hw.InstanceOp.
-    StringAttr instName;
-    if (auto msftInst = dyn_cast<msft::InstanceOp>(inst))
-      instName = msftInst.sym_nameAttr();
-    else if (auto hwInst = dyn_cast<hw::InstanceOp>(inst))
-      instName = hwInst.inner_symAttr();
+    StringAttr instName = inst.sym_nameAttr();
     assert(instName && "path instance must have a symbol name");
 
     s.symbolRefs.push_back(InnerRefAttr::get(mod.getNameAttr(), instName));
@@ -100,13 +93,9 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
   s.os << " -to $parent|";
   emitPath(s, inst.path, symCache);
   // If instance name is specified, add it in between the parent entity path and
-  // the child entity path. Generated instances are generally msft.InstanceOp,
-  // but since use hw.HWModuleExternOp directly, instances of extern modules
-  // will be hw.InstanceOp.
+  // the child entity path.
   if (auto instOp = dyn_cast<msft::InstanceOp>(inst.op))
     s.os << instOp.instanceName() << '|';
-  if (auto instOp = dyn_cast<hw::InstanceOp>(inst.op))
-    s.os << instOp.inner_sym() << '|';
   else if (auto name = inst.op->getAttrOfType<StringAttr>("name"))
     s.os << name.getValue() << '|';
   s.os << inst.subpath << '\n';
