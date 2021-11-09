@@ -11,9 +11,6 @@ from mlir.ir import *
 
 
 def create_parameters(parameters: dict[str, _ir.Attribute], module: ModuleLike):
-  if not parameters:
-    return []
-
   # Compute mapping from parameter name to index, and initialize array.
   mod_param_decls = module.parameters
   mod_param_decls_idxs = {

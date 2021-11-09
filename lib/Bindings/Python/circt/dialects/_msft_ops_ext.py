@@ -27,7 +27,10 @@ class InstanceBuilder(support.NamedValueOpView):
     if sym_name:
       sym_name = _ir.StringAttr.get(sym_name)
     pre_args = [instance_name, module_name]
-    parameters = _hw_ext.create_parameters(parameters, module)
+    if parameters is not None:
+      parameters = _hw_ext.create_parameters(parameters, module)
+    else:
+      parameters = []
     post_args = [_ir.ArrayAttr.get(parameters)]
     results = module.type.results
 
