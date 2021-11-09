@@ -46,7 +46,8 @@ class Value:
         name = f"{basename}__reg{int(reg_num)+1}"
       else:
         name = name + "__reg1"
-    return Value.get(seq.reg(self.value, clock=clk, reset=rst, name=name))
+    with get_user_loc():
+      return Value.get(seq.reg(self.value, clock=clk, reset=rst, name=name))
 
   @property
   def name(self):
@@ -96,11 +97,12 @@ class BitVectorValue(Value):
 
     from .pycde_types import types
     ret_type = types.int(idxs[1] - idxs[0])
-    extracted = comb.ExtractOp.create(idxs[0], ret_type, self.value)
-    ret = Value.get(extracted.result)
-    if self.name is not None:
-      ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
-    return ret
+    with get_user_loc():
+      extracted = comb.ExtractOp.create(idxs[0], ret_type, self.value)
+      ret = Value.get(extracted.result)
+      if self.name is not None:
+        ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+      return ret
 
   def __len__(self):
     return self.type.width

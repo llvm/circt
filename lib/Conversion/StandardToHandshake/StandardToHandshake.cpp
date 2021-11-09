@@ -1662,6 +1662,10 @@ LogicalResult replaceCallOps(handshake::FuncOp f,
   return success();
 }
 
+#define returnOnError(logicalResult)                                           \
+  if (failed(logicalResult))                                                   \
+    return logicalResult;
+
 LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
   // Only retain those attributes that are not constructed by build.
   SmallVector<NamedAttribute, 4> attributes;
@@ -1688,7 +1692,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
 
   // Add control input/output to function arguments/results and create a
   // handshake::FuncOp of appropriate type
-  (void)partiallyLowerFuncOp<mlir::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<mlir::FuncOp>(
       [&](mlir::FuncOp funcOp, PatternRewriter &rewriter) {
         auto noneType = rewriter.getNoneType();
         resTypes.push_back(noneType);
@@ -1699,7 +1703,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
                                     newFuncOp.end());
         return success();
       },
-      ctx, funcOp);
+      ctx, funcOp));
 
   // Rewrite affine.for operations.
   if (failed(partiallyLowerFuncOp<handshake::FuncOp>(rewriteAffineFor, ctx,
@@ -1708,36 +1712,41 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
 
   // Perform dataflow conversion
   MemRefToMemoryAccessOp MemOps;
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
         MemOps = replaceMemoryOps(nfo, rewriter);
         return success();
       },
-      ctx, newFuncOp);
+      ctx, newFuncOp));
 
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(setControlOnlyPath, ctx,
-                                                newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addMergeOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(replaceCallOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addBranchOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(connectConstantsToControl, ctx,
-                                                newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp);
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(setControlOnlyPath, ctx,
+                                                        newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addMergeOps, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(replaceCallOps, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addBranchOps, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp));
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
+      connectConstantsToControl, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp));
   checkDataflowConversion(newFuncOp);
 
   bool lsq = false;
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
         connectToMemory(nfo, MemOps, lsq, rewriter);
         return success();
       },
-      ctx, newFuncOp);
+      ctx, newFuncOp));
 
   // Add  control argument to entry block, replace references to the
   // temporary handshake::StartOp operation, and finally remove the start
   // op.
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, PatternRewriter &rewriter) {
         argTypes.push_back(rewriter.getNoneType());
         auto funcType = rewriter.getFunctionType(argTypes, resTypes);
@@ -1749,7 +1758,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
         rewriter.eraseOp(funcOp);
         return success();
       },
-      ctx, newFuncOp);
+      ctx, newFuncOp));
 
   return success();
 }

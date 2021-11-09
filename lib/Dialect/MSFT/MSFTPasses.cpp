@@ -64,7 +64,7 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
       msftInst.getLoc(), referencedModule, msftInst.instanceNameAttr(),
       SmallVector<Value>(adaptor.getOperands().begin(),
                          adaptor.getOperands().end()),
-      /*parameters=*/ArrayAttr{}, msftInst.sym_nameAttr());
+      msftInst.parameters().getValueOr(ArrayAttr()), msftInst.sym_nameAttr());
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
 }
@@ -99,6 +99,27 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
   rewriter.eraseBlock(hwmod.getBodyBlock());
   rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
                               hwmod.getBody().end());
+  return success();
+}
+namespace {
+
+/// Lower MSFT's ModuleExternOp to HW's.
+struct ModuleExternOpLowering : public OpConversionPattern<MSFTModuleExternOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(MSFTModuleExternOp mod, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final;
+};
+} // anonymous namespace
+
+LogicalResult ModuleExternOpLowering::matchAndRewrite(
+    MSFTModuleExternOp mod, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+  rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
+      mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().getValueOr(""),
+      mod.parameters());
   return success();
 }
 
@@ -142,12 +163,13 @@ void LowerToHWPass::runOnOperation() {
   // Convert everything except instance ops first.
 
   ConversionTarget target(*ctxt);
-  target.addIllegalOp<MSFTModuleOp, OutputOp>();
+  target.addIllegalOp<MSFTModuleOp, MSFTModuleExternOp, OutputOp>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<sv::SVDialect>();
 
   RewritePatternSet patterns(ctxt);
   patterns.insert<ModuleOpLowering>(ctxt);
+  patterns.insert<ModuleExternOpLowering>(ctxt);
   patterns.insert<OutputOpLowering>(ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))

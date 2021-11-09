@@ -9,10 +9,118 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Do sanity check (clang-format and python-format) first.
+  sanity-check:
+    name: Sanity Check
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/circt/images/circt-ci-build:20210929220136
+    steps:
+      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
+      # time.
+      - name: Get CIRCT
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+          submodules: "false"
+
+      # --------
+      # Lint the CIRCT C++ code.
+      # -------
+
+      # Choose the git commit to diff against for the purposes of linting.
+      # Since this workflow is triggered on both pushes and pull requests, we
+      # have to determine if the pull request target branch is set (which it
+      # will only be on the PR triggered flow). If it's not, then compare
+      # against the last commit.
+      - name: choose-commit
+        if: ${{ always() }}
+        env:
+          # Base ref is the target branch, in text form (not hash)
+          PR_BASE: ${{ github.base_ref }}
+        run: |
+          # Run clang-format
+          if [ -z "$PR_BASE" ]; then
+            DIFF_COMMIT_NAME="HEAD^"
+          else
+            DIFF_COMMIT_NAME="$PR_BASE"
+          fi
+          echo "DIFF_COMMIT_NAME=$DIFF_COMMIT_NAME" >> $GITHUB_ENV
+
+      # Since we did a shallow fetch for this repo, we must fetch the commit
+      # upon which we be diff'ing. The last step set the ref name in the
+      # $DIFF_COMMIT_NAME environment variable. When running the fetch, resolve
+      # it to the commit hash and pass that hash along to subsequent steps.
+      - name: git fetch base commit
+        continue-on-error: true
+        run: |
+          if echo "$DIFF_COMMIT_NAME" | grep -q HEAD; then
+            DIFF_COMMIT_SHA=$( git rev-parse $DIFF_COMMIT_NAME )
+          else
+            git fetch --recurse-submodules=no origin $DIFF_COMMIT_NAME
+            DIFF_COMMIT_SHA=$( git rev-parse origin/$DIFF_COMMIT_NAME )
+          fi
+          echo "DIFF_COMMIT=$DIFF_COMMIT_SHA" >> $GITHUB_ENV
+
+      # Run 'git clang-format', comparing against the target commit hash. If
+      # clang-format fixed anything, fail and output a patch.
+      - name: clang-format
+        if: ${{ always() }}
+        run: |
+          # Run clang-format
+          git clang-format $DIFF_COMMIT
+          git diff --ignore-submodules > clang-format.patch
+          if [ -s clang-format.patch ]; then
+            echo "Clang-format found formatting problems in the following " \
+              "files. See diff in the clang-format.patch artifact."
+            git diff --ignore-submodules --name-only
+            git checkout .
+            exit 1
+          fi
+          echo "Clang-format found no formatting problems"
+          exit 0
+
+      # Run yapf to check Python formatting.
+      - name: python-format
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          files=$(git diff --name-only $DIFF_COMMIT | grep -e '\.py' || echo -n)
+          if [[ ! -z $files ]]; then
+            yapf --diff $files
+          fi
+
+      # Upload the format patches to an artifact (zip'd) associated
+      # with the workflow run. Only run this on a failure.
+      - name: Upload format patches
+        uses: actions/upload-artifact@v2
+        continue-on-error: true
+        if: ${{ failure() }}
+        with:
+          name: clang-format-patches
+          path: clang-*.patch
+
+      # Unfortunately, artifact uploads are always zips so display the diff as
+      # well to provide feedback at a glance.
+      - name: clang format patches display
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          # Display patches
+          if [ ! -z clang-format.patch ]; then
+            echo "Clang-format patch"
+            echo "================"
+            cat clang-format.patch
+            echo "================"
+          fi
+
+  # --- end of sanity-check job.
+
   # Build the LLVM submodule then cache it. Do not rebuild if hit in the
   # cache.
   build-llvm:
     name: Build LLVM
+    needs: sanity-check
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/circt/images/circt-ci-build:20210929220136
@@ -213,31 +321,14 @@ jobs:
           fi
           echo "DIFF_COMMIT=$DIFF_COMMIT_SHA" >> $GITHUB_ENV
 
-      # Run 'git clang-format', comparing against the target commit hash. If
-      # clang-format fixed anything, fail and output a patch.
-      - name: clang-format
-        if: ${{ always() }}
-        run: |
-          # Run clang-format
-          git clang-format $DIFF_COMMIT
-          git diff --ignore-submodules > clang-format.patch
-          if [ -s clang-format.patch ]; then
-            echo "Clang-format found formatting problems in the following " \
-              "files. See diff in the clang-format.patch artifact."
-            git diff --ignore-submodules --name-only
-            git checkout .
-            exit 1
-          fi
-          echo "Clang-format found no formatting problems"
-          exit 0
-
       # Run clang-tidy against only the changes. The 'clang-tidy-diff' script
       # does this if supplied with the diff.
       - name: clang-tidy
         if: ${{ always() }}
         run: |
           git diff -U0 $DIFF_COMMIT | \
-            clang-tidy-diff -path build_assert -p1 -fix
+            clang-tidy-diff -path build_clang -p1 -fix
+          git clang-format $DIFF_COMMIT
           git diff --ignore-submodules > clang-tidy.patch
           if [ -s clang-tidy.patch ]; then
             echo "Clang-tidy problems in the following files. " \
@@ -249,39 +340,22 @@ jobs:
           echo "Clang-tidy found no problems"
           exit 0
 
-      # Run yapf to check Python formatting.
-      - name: python-format
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          files=$(git diff --name-only $DIFF_COMMIT | grep -e '\.py' || echo -n)
-          if [[ ! -z $files ]]; then
-            yapf --diff $files
-          fi
-
-      # Upload the format and tidy patches to an artifact (zip'd) associated
+      # Upload the tidy patches to an artifact (zip'd) associated
       # with the workflow run. Only run this on a failure.
-      - name: Upload format and tidy patches
+      - name: Upload tidy patches
         uses: actions/upload-artifact@v2
         continue-on-error: true
         if: ${{ failure() }}
         with:
-          name: clang-format-tidy-patches
+          name: clang-tidy-patches
           path: clang-*.patch
 
       # Unfortunately, artifact uploads are always zips so display the diff as
       # well to provide feedback at a glance.
-      - name: clang format and tidy patches display
+      - name: clang tidy patches display
         if: ${{ failure() }}
         continue-on-error: true
         run: |
-          # Display patches
-          if [ ! -z clang-format.patch ]; then
-            echo "Clang-format patch"
-            echo "================"
-            cat clang-format.patch
-            echo "================"
-          fi
           if [ ! -z clang-tidy.patch ]; then
             echo "Clang-tidy patch"
             echo "================"

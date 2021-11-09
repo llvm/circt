@@ -1470,7 +1470,8 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
       // Create a new instance op with the reset inserted.
       auto newInstOp = builder.create<InstanceOp>(
           resultTypes, instOp.moduleName(), instOp.name(), newPortDirections,
-          newPortNames, instOp.annotations().getValue(), newPortAnnos);
+          newPortNames, instOp.annotations().getValue(), newPortAnnos,
+          instOp.lowerToBind(), instOp.inner_symAttr());
       instReset = newInstOp.getResult(0);
 
       // Update the uses over to the new instance and drop the old instance.
@@ -1503,7 +1504,7 @@ void InferResetsPass::implementAsyncReset(Operation *op, FModuleOp module,
     auto zero = createZeroValue(builder, regOp.getType());
     auto newRegOp = builder.create<RegResetOp>(
         regOp.getType(), regOp.clockVal(), actualReset, zero, regOp.nameAttr(),
-        regOp.annotations());
+        regOp.annotations(), StringAttr{});
     regOp.getResult().replaceAllUsesWith(newRegOp);
     regOp->erase();
     return;

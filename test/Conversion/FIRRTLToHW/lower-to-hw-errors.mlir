@@ -117,6 +117,11 @@ firrtl.circuit "Foo" attributes {annotations = [
         {class = "sifive.enterprise.firrtl.DontObfuscateModuleAnnotation"},
         {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"},
         {class = "sifive.enterprise.firrtl.ScalaClassAnnotation"},
-        {class = "firrtl.transforms.BlackBox"}
+        {class = "firrtl.transforms.BlackBox", circt.nonlocal = @nla_1}
     ]} {}
+    // Non-local annotations should not produce errors either.
+    firrtl.nla  @nla_1 [@Bar, @Foo] ["foo", "Foo"]
+    firrtl.module @Bar() {
+      firrtl.instance foo {annotations = [{circt.nonlocal = @nla_1, class = "circt.nonlocal"}]} @Foo()
+    }
 }

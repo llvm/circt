@@ -6,6 +6,8 @@
 ; RUN: firtool %s --annotation-file %s.anno.json,%s.anno.1.json --mlir --parse-only | FileCheck %s --check-prefix=ANNOTATIONS
 ; RUN: firtool %s --omir-file %s.omir.anno.json --parse-only | FileCheck %s --check-prefix=OMIR
 ; RUN: firtool %s --omir-file %s.omir.anno.json --output-omir meta.omir.json --verilog | FileCheck %s --check-prefix=OMIROUT
+; RUN: firtool %s --format=fir -verilog-ir | circt-opt | FileCheck %s --check-prefix=VERILOG-IR
+
 
 circuit test_mod : %[[{"a": "a"}]]
 
@@ -41,6 +43,8 @@ circuit test_mod : %[[{"a": "a"}]]
 ; OMIROUT-NEXT:         "value": "OMString:hello"
 ; OMIROUT-NEXT:       }
 
+; VERILOG-IR: sv.verbatim{{.*}}Standard header to adapt well known macros to our needs
+; VERILOG-IR: sv.verbatim "`define INIT_RANDOM_PROLOG_
 
   module test_mod :
     input clock : Clock

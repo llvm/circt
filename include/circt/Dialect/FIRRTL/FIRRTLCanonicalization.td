@@ -36,6 +36,7 @@ def NoPortsDontTouch : Constraint<CPred<[{
 
 def NonEmptyStringAttr : Constraint<CPred<"!$0.getValue().empty()">>;
 def uselessNameAttr : Constraint<CPred<"isUselessName($0.getValue())">>;
+def NullAttr : Constraint<CPred<"!$0">>;
 
 // Constraint that enforces equal types
 def EqualTypes : Constraint<CPred<"$0.getType() == $1.getType()">>;
@@ -101,27 +102,27 @@ def MuxSameCondHigh : Pat<
 
 // node(x) -> x
 def EmptyNode : Pat<
-  (NodeOp $x, $name, $annotations),
+  (NodeOp $x, $name, $annotations, $inner_sym),
   (replaceWithValue $x),
-  [(NonEmptyStringAttr $name), (EmptyAttrDict $annotations)]>;
+  [(EmptyAttrDict $annotations), (NullAttr $inner_sym)]>;
 
 // regreset(clock, invalidvalue, resetValue) -> reg(clock)
 def RegResetWithInvalidReset : Pat<
-  (RegResetOp $clock, (InvalidValueOp), $_, $name, $annotations),
-  (RegOp $clock, $name, $annotations),
+  (RegResetOp $clock, (InvalidValueOp), $_, $name, $annotations, $inner_sym),
+  (RegOp $clock, $name, $annotations, $inner_sym),
   []>;
 
 // regreset(clock, reset, invalidvalue) -> reg(clock)
 // This is handled by the `RemoveReset` pass in the original Scala code.
 def RegResetWithInvalidResetValue : Pat<
-  (RegResetOp $clock, $_, (InvalidValueOp), $name, $annotations),
-  (RegOp $clock, $name, $annotations),
+  (RegResetOp $clock, $_, (InvalidValueOp), $name, $annotations, $inner_sym),
+  (RegOp $clock, $name, $annotations, $inner_sym),
   []>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
 def RegResetWithZeroReset : Pat<
-  (RegResetOp $clock, $reset, $_, $name, $annotations),
-  (RegOp $clock, $name, $annotations), [(ZeroConstantOp $reset)]>;
+  (RegResetOp $clock, $reset, $_, $name, $annotations, $inner_sym),
+  (RegOp $clock, $name, $annotations, $inner_sym), [(ZeroConstantOp $reset)]>;
 
 // Return the width of an operation result as an integer attribute.  This is
 // useful to pad another operation up to the width of the original operation.
@@ -157,32 +158,32 @@ def SubWithInvalidOp : Pat<
 
 // node(x,name),!dnt -> node(x, "")
 def DropNameNode : Pat<
-  (NodeOp $x, $name, $annotations),
-  (NodeOp $x, (GetEmptyString), $annotations),
+  (NodeOp $x, $name, $annotations, $inner_sym),
+  (NodeOp $x, (GetEmptyString), $annotations, $inner_sym),
   [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
 
 // wire(name),!dnt -> wire("")
 def DropNameWire : Pat<
-  (WireOp $name, $annotations),
-  (WireOp (GetEmptyString), $annotations),
+  (WireOp $name, $annotations, $inner_sym),
+  (WireOp (GetEmptyString), $annotations, $inner_sym),
   [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
 
 // reg(clk, name),!dnt -> reg(clk, "")
 def DropNameReg : Pat<
-  (RegOp $clk, $name, $annotations),
-  (RegOp $clk, (GetEmptyString), $annotations),
+  (RegOp $clk, $name, $annotations, $inner_sym),
+  (RegOp $clk, (GetEmptyString), $annotations, $inner_sym),
   [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
 
 // regreset(clk, sig, val, name),!dnt -> regreset(clk, sig, val, "")
 def DropNameRegReset : Pat<
-  (RegResetOp $clk, $sig, $val, $name, $annotations),
-  (RegResetOp $clk, $sig, $val, (GetEmptyString), $annotations),
+  (RegResetOp $clk, $sig, $val, $name, $annotations, $inner_sym),
+  (RegResetOp $clk, $sig, $val, (GetEmptyString), $annotations, $inner_sym),
   [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
 
 // Mem(...,name),!dnt -> Mem(...x, "")
 def DropNameMem : Pat<
-  (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $annotations, $portAnno),
-  (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations, $portAnno),
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, $name, $annotations, $portAnno, $inner_sym),
+  (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations, $portAnno, $inner_sym),
   [(uselessNameAttr $name), (NoDontTouch $annotations), (NoPortsDontTouch $portAnno)]>;
 
 // CombMem(name),!dnt -> CombMem("")

@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/GraphTraits.h"
@@ -1011,17 +1012,10 @@ LogicalResult ConstraintSolver::solve() {
 }
 
 // Emits the diagnostic to inform the user about an uninferred width in the
-// design. Returns true if an error was reported, false otherwise. The latter
-// occurs if the unconstrained variable is for an InvalidValueOp, which we
-// ignore.
+// design. Returns true if an error was reported, false otherwise.
 bool ConstraintSolver::emitUninferredWidthError(VarExpr *var) {
   FieldRef fieldRef = info.find(var)->second.back();
   Value value = fieldRef.getValue();
-
-  // We ignore `firrtl.invalidvalue` because we lack the information to infer a
-  // width for these. See comment further below.
-  if (isa_and_nonnull<InvalidValueOp>(value.getDefiningOp()))
-    return false;
 
   auto diag = mlir::emitError(value.getLoc(), "uninferred width:");
 
@@ -1245,7 +1239,23 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       .Case<SpecialConstantOp>([&](auto op) {
         // Nothing required.
       })
-      .Case<WireOp, InvalidValueOp, RegOp>(
+      .Case<InvalidValueOp>([&](auto op) {
+        // We must duplicate the invalid value for each use, since each use can
+        // be inferred to a different width.
+        if (!hasUninferredWidth(op.getType()) || op->use_empty())
+          return;
+
+        auto type = op.getType();
+        ImplicitLocOpBuilder builder(op->getLoc(), op);
+        for (auto &use :
+             llvm::make_early_inc_range(llvm::drop_begin(op->getUses()))) {
+          // - `make_early_inc_range` since `getUses()` is invalidated upon
+          //   `use.set(...)`.
+          // - `drop_begin` such that the first use can keep the original op.
+          use.set(builder.create<InvalidValueOp>(type));
+        }
+      })
+      .Case<WireOp, RegOp>(
           [&](auto op) { declareVars(op.getResult(), op.getLoc()); })
       .Case<RegResetOp>([&](auto op) {
         // The original Scala code also constrains the reset signal to be at
@@ -1399,9 +1409,20 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
       })
 
       // Handle the various connect statements that imply a type constraint.
-      .Case<ConnectOp>([&](auto op) { constrainTypes(op.dest(), op.src()); })
-      .Case<PartialConnectOp>(
-          [&](auto op) { partiallyConstrainTypes(op.dest(), op.src()); })
+      .Case<ConnectOp>([&](auto op) {
+        // If the source is an invalid value, we don't set a constraint between
+        // these two types.
+        if (dyn_cast_or_null<InvalidValueOp>(op.src().getDefiningOp()))
+          return;
+        constrainTypes(op.dest(), op.src());
+      })
+      .Case<PartialConnectOp>([&](auto op) {
+        // If the source is an invalid value, we don't set a constraint between
+        // these two types.
+        if (dyn_cast_or_null<InvalidValueOp>(op.src().getDefiningOp()))
+          return;
+        partiallyConstrainTypes(op.dest(), op.src());
+      })
       .Case<AttachOp>([&](auto op) {
         // Attach connects multiple analog signals together. All signals must
         // have the same bit width. Signals without bit width inherit from the
@@ -1514,7 +1535,7 @@ void InferenceMapping::declareVars(Value value, Location loc) {
       setExpr(FieldRef(value, fieldID), solver.known(width));
       fieldID++;
     } else if (width == -1) {
-      // Unkown width integers create a variable.
+      // Unknown width integers create a variable.
       FieldRef field(value, fieldID);
       solver.setCurrentContextInfo(field);
       setExpr(field, solver.var());
@@ -1765,6 +1786,20 @@ LogicalResult InferenceTypeUpdate::update(CircuitOp op) {
 /// Update the result types of an operation.
 bool InferenceTypeUpdate::updateOperation(Operation *op) {
   bool anyChanged = false;
+
+  // Invalid value operations get their value from a connect which uses them. We
+  // set the width when we see the connect op later on, so that the destination
+  // operand width will have definitely been mapped in.
+  if (isa<InvalidValueOp>(op) &&
+      hasUninferredWidth(op->getResultTypes().front())) {
+    if (op->use_empty() || !isa<ConnectOp>(*op->getUsers().begin())) {
+      auto diag = mlir::emitError(
+          op->getLoc(), "uninferred width: invalid value is unconstrained");
+      anyFailed = true;
+    }
+    return false;
+  }
+
   for (Value v : op->getResults()) {
     anyChanged |= updateValue(v);
     if (anyFailed)
@@ -1775,19 +1810,29 @@ bool InferenceTypeUpdate::updateOperation(Operation *op) {
   // that is wider than the LHS, in which case an additional BitsPrimOp is
   // necessary to truncate the value.
   if (auto con = dyn_cast<ConnectOp>(op)) {
-    auto lhs = con.dest().getType().cast<FIRRTLType>();
-    auto rhs = con.src().getType().cast<FIRRTLType>();
-    auto lhsWidth = lhs.getBitWidthOrSentinel();
-    auto rhsWidth = rhs.getBitWidthOrSentinel();
+    auto lhs = con.dest();
+    auto rhs = con.src();
+    auto lhsType = lhs.getType().cast<FIRRTLType>();
+    auto rhsType = rhs.getType().cast<FIRRTLType>();
+
+    // If the source is an InvalidValue of unknown width, infer the type to be
+    // the same as the destination.
+    if (dyn_cast_or_null<InvalidValueOp>(rhs.getDefiningOp()) &&
+        hasUninferredWidth(rhs.getType()))
+      rhs.setType(lhsType);
+
+    auto lhsWidth = lhsType.getBitWidthOrSentinel();
+    auto rhsWidth = rhsType.getBitWidthOrSentinel();
     if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
       OpBuilder builder(op);
       auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.src(),
                                                     rhsWidth - lhsWidth);
-      if (rhs.isa<SIntType>())
-        trunc = builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhs, trunc);
+      if (rhsType.isa<SIntType>())
+        trunc =
+            builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhsType, trunc);
 
       LLVM_DEBUG(llvm::dbgs()
-                 << "Truncating RHS to " << lhs << " in " << con << "\n");
+                 << "Truncating RHS to " << lhsType << " in " << con << "\n");
       con->replaceUsesOfWith(con.src(), trunc);
     }
   }
@@ -1839,16 +1884,6 @@ bool InferenceTypeUpdate::updateValue(Value value) {
   if (!hasUninferredWidth(type))
     return false;
 
-  // Ignore `InvalidValueOp`, as we generally lack the information to infer a
-  // type for it. These ops tend to end up on one side of a multiplexer, and are
-  // removed at a later canonicalization stage. Since they are directly used as
-  // a multiplexer input, there are no constraints on their size. Inferring them
-  // would involved potentially duplicating them once for each use site, and
-  // then trying to infer their size from context (which we do nowhere else in
-  // FIRRTL).
-  if (isa_and_nonnull<InvalidValueOp>(value.getDefiningOp()))
-    return false;
-
   // If this is an operation that does not generate any free variables that
   // are determined during width inference, simply update the value type based
   // on the operation arguments.
@@ -1880,7 +1915,7 @@ bool InferenceTypeUpdate::updateValue(Value value) {
       fieldID++;
       return type;
     } else if (width == -1) {
-      // Unkown width integers return the solved type.
+      // Unknown width integers return the solved type.
       auto newType = updateType(FieldRef(value, fieldID), type);
       fieldID++;
       return newType;

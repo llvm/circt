@@ -207,7 +207,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   auto newMem = b->create<MemOp>(
       ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
       portNames, (op.name() + field.suffix).str(), op.annotations().getValue(),
-      op.portAnnotations().getValue());
+      op.portAnnotations().getValue(), op.inner_symAttr());
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
@@ -379,6 +379,7 @@ bool TypeLoweringVisitor::lowerProducer(
   SmallVector<Value> lowered;
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
+  StringAttr innerSym = op->getAttrOfType<StringAttr>("inner_sym");
   if (auto nameAttr = op->getAttr("name"))
     if (auto nameStrAttr = nameAttr.dyn_cast<StringAttr>())
       loweredName = nameStrAttr.getValue();
@@ -395,6 +396,13 @@ bool TypeLoweringVisitor::lowerProducer(
     ArrayAttr loweredAttrs =
         filterAnnotations(context, oldAnno, srcType, field);
     auto newOp = clone(field, loweredName, loweredAttrs);
+    // Carry over the inner_sym name, if present.
+    if (innerSym) {
+      if (!lowered.empty())
+        op->emitError("replication due to type lowering renders @")
+            << innerSym.getValue() << " ambiguous";
+      newOp->setAttr("inner_sym", innerSym);
+    }
     lowered.push_back(newOp->getResult(0));
   }
 
@@ -749,7 +757,7 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
     auto flatMem = builder->create<MemOp>(
         ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
         portNames, op.name(), op.annotations().getValue(),
-        op.portAnnotations().getValue());
+        op.portAnnotations().getValue(), op.inner_symAttr());
     // Done creating the memory.
     // ----------------------------------------------
     newMemories.push_back(flatMem);
@@ -758,6 +766,11 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
     for (auto field : fields)
       newMemories.push_back(cloneMemWithNewType(builder, op, field));
   }
+  // Emit an error if the memory had an `inner_sym` that was replicated across
+  // multiple memories.
+  if (newMemories.size() > 1 && op.inner_symAttr())
+    op->emitError("replication due to type lowering renders @")
+        << op.inner_symAttr().getValue() << " ambiguous";
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
     auto result = oldPorts[index];
@@ -968,7 +981,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
 bool TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
-    return builder->create<WireOp>(field.type, name, attrs);
+    return builder->create<WireOp>(field.type, name, attrs, StringAttr{});
   };
   return lowerProducer(op, clone);
 }
@@ -977,7 +990,8 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
 bool TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
-    return builder->create<RegOp>(field.type, op.clockVal(), name, attrs);
+    return builder->create<RegOp>(field.type, op.clockVal(), name, attrs,
+                                  StringAttr{});
   };
   return lowerProducer(op, clone);
 }
@@ -988,7 +1002,8 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
                    ArrayAttr attrs) -> Operation * {
     auto resetVal = getSubWhatever(op.resetValue(), field.index);
     return builder->create<RegResetOp>(field.type, op.clockVal(),
-                                       op.resetSignal(), resetVal, name, attrs);
+                                       op.resetSignal(), resetVal, name, attrs,
+                                       StringAttr{});
   };
   return lowerProducer(op, clone);
 }
@@ -998,7 +1013,8 @@ bool TypeLoweringVisitor::visitDecl(NodeOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.input(), field.index);
-    return builder->create<NodeOp>(field.type, input, name, attrs);
+    return builder->create<NodeOp>(field.type, input, name, attrs,
+                                   StringAttr{});
   };
   return lowerProducer(op, clone);
 }
@@ -1087,11 +1103,11 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
     return lowerProducer(op, clone);
   }
 
-    // If ground type, then replace the result.
-    if (op.getType().dyn_cast<SIntType>())
-      srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
-    op.getResult().replaceAllUsesWith(srcLoweredVal);
-    return true;
+  // If ground type, then replace the result.
+  if (op.getType().dyn_cast<SIntType>())
+    srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
+  op.getResult().replaceAllUsesWith(srcLoweredVal);
+  return true;
 }
 
 bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
@@ -1139,7 +1155,8 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       resultTypes, op.moduleNameAttr(), op.nameAttr(),
       direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.annotations(),
-      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr());
+      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(),
+      op.inner_symAttr());
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;

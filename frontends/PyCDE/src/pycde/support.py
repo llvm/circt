@@ -56,8 +56,9 @@ def create_const_zero(type: ir.Type):
   """Create a 'default' constant value of zero. Used for creating dummy values
   to connect to extern modules with input ports we want to ignore."""
   width = hw.get_bitwidth(type)
-  zero = hw.ConstantOp.create(ir.IntegerType.get_signless(width), 0)
-  return hw.BitcastOp(type, zero.result)
+  with get_user_loc():
+    zero = hw.ConstantOp.create(ir.IntegerType.get_signless(width), 0)
+    return hw.BitcastOp(type, zero.result)
 
 
 class OpOperandConnect(support.OpOperand):
@@ -93,7 +94,8 @@ def obj_to_value(x, type, result_type=None):
   if isinstance(x, int):
     if not isinstance(type, ir.IntegerType):
       raise ValueError(f"Int can only be converted to hw int, not '{type}'")
-    return Value.get(hw.ConstantOp.create(type, x).result)
+    with get_user_loc():
+      return Value.get(hw.ConstantOp.create(type, x).result)
 
   if isinstance(x, list):
     if not isinstance(type, hw.ArrayType):
@@ -104,7 +106,8 @@ def obj_to_value(x, type, result_type=None):
                        f"{len(x)} vs {type.size}")
     list_of_vals = list(map(lambda x: obj_to_value(x, elemty), x))
     # CIRCT's ArrayCreate op takes the array in reverse order.
-    return Value.get(hw.ArrayCreateOp.create(reversed(list_of_vals)).result)
+    with get_user_loc():
+      return Value.get(hw.ArrayCreateOp.create(reversed(list_of_vals)).result)
 
   if isinstance(x, dict):
     if not isinstance(type, hw.StructType):
@@ -118,9 +121,10 @@ def obj_to_value(x, type, result_type=None):
       x.pop(fname)
     if len(x) > 0:
       raise ValueError(f"Extra fields specified: {x}")
-    return Value.get(
-        hw.StructCreateOp.create(elem_name_values,
-                                 result_type=result_type).result)
+    with get_user_loc():
+      return Value.get(
+          hw.StructCreateOp.create(elem_name_values,
+                                   result_type=result_type).result)
 
   raise ValueError(f"Unable to map object '{type(x)}' to MLIR Value")
 

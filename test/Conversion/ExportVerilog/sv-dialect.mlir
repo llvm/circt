@@ -492,11 +492,10 @@ hw.module @issue595_variant2_checkRedunctionAnd(%arr: !hw.array<128xi1>) {
 hw.module @if_multi_line_expr1(%clock: i1, %reset: i1, %really_long_port: i11) {
   %tmp6 = sv.reg  : !hw.inout<i25>
 
-  // CHECK:      if (reset)
+  // CHECK: if (reset)
   // CHECK-NEXT:   tmp6 <= 25'h0;
-  // CHECK-NEXT: else begin
-  // CHECK-NEXT:   automatic logic [24:0] _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
-  // CHECK-NEXT:   tmp6 <= _tmp & 25'h3039;
+  // CHECK-NEXT: else
+  // CHECK-NEXT:   tmp6 <= {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
   // CHECK-NEXT: end
   sv.alwaysff(posedge %clock)  {
     %0 = comb.sext %really_long_port : (i11) -> i25
@@ -517,8 +516,8 @@ hw.module @if_multi_line_expr2(%clock: i1, %reset: i1, %really_long_port: i11) {
   %c12345_i25 = hw.constant 12345 : i25
   %0 = comb.sext %really_long_port : (i11) -> i25
   %1 = comb.and %0, %c12345_i25 : i25
-  // CHECK:        wire [24:0] _tmp = {{..}}14{really_long_port[10]}}, really_long_port};
-  // CHECK-NEXT:   wire [24:0] _T = _tmp & 25'h3039;
+  // CHECK:   wire [24:0] _T = {{..}}14{really_long_port[10]}}, really_long_port} & 25'h3039;
+
 
   // CHECK:      if (reset)
   // CHECK-NEXT:   tmp6 <= 25'h0;
@@ -609,10 +608,9 @@ hw.module @issue720ifdef(%clock: i1, %arg1: i1, %arg2: i1, %arg3: i1) {
 // CHECK-LABEL: module issue728(
 hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   // CHECK:  always @(posedge clock) begin
-  // CHECK:    automatic logic _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
-  // CHECK:    automatic logic _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
   // CHECK:    $fwrite(32'h80000002, "force output");
-  // CHECK:    if (_tmp & _tmp_0)
+  // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
+  // CHECK:        asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
   // CHECK:      $fwrite(32'h80000002, "this cond is split");
   // CHECK:  end // always @(posedge)
   sv.always posedge %clock  {
@@ -628,13 +626,10 @@ hw.module @issue728(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija:
 // CHECK-LABEL: module issue728ifdef(
 hw.module @issue728ifdef(%clock: i1, %asdfasdfasdfasdfafa: i1, %gasfdasafwjhijjafija: i1) {
   // CHECK: always @(posedge clock) begin
-  // CHECK:      automatic logic _tmp;
-  // CHECK:      automatic logic _tmp_0;
   // CHECK:    $fwrite(32'h80000002, "force output");
   // CHECK:    `ifdef FUN_AND_GAMES
-  // CHECK:      _tmp = asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa;
-  // CHECK:      _tmp_0 = gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija;
-  // CHECK:      if (_tmp & _tmp_0)
+  // CHECK:    if (asdfasdfasdfasdfafa & gasfdasafwjhijjafija & asdfasdfasdfasdfafa & gasfdasafwjhijjafija &
+  // CHECK:        asdfasdfasdfasdfafa & gasfdasafwjhijjafija)
   // CHECK:        $fwrite(32'h80000002, "this cond is split");
   // CHECK:    `endif
   // CHECK: end // always @(posedge)
@@ -948,15 +943,12 @@ hw.module @InlineAutomaticLogicInit(%a : i42, %b: i42, %really_really_long_port:
   // CHECK: initial begin
   sv.initial {
     // CHECK: automatic logic [41:0] [[THING:.+]] = `THING;
-    // CHECK: automatic logic [41:0] _tmp = {{..}}31{really_really_long_port[10]}}, really_really_long_port};
-    // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + _tmp;
-    // CHECK: automatic logic [41:0] _tmp_6 = [[THING]] * [[THING]]
-    // CHECK: automatic logic [41:0] _tmp_7 = [[THING]] * [[THING]]
-    // CHECK: automatic logic [41:0] [[MANYTHING:.+]] = _tmp_6 * _tmp_7;
+    // CHECK: automatic logic [41:0] [[THING3:.+]] = [[THING]] + {{..}}31{really_really_long_port[10]}},
+    // CHECK: really_really_long_port};
+    // CHECK: automatic logic [41:0] [[MANYTHING:.+]] = [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] *
+    // CHECK:                                           [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]] * [[THING]];
 
     // Check the indentation level of temporaries.  Issue #1625
-    // CHECK: {{^    }}automatic logic [41:0] _tmp_8;
-    // CHECK: {{^    }}automatic logic [41:0] _tmp_9;
     %thing = sv.verbatim.expr.se "`THING" : () -> i42
 
     %thing2 = comb.sext %really_really_long_port : (i11) -> i42
@@ -1023,11 +1015,11 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
 // CHECK-NEXT: wire mywire
 // CHECK-NEXT: myreg
 // CHECK: assign a1__k = 1'h1
-// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT: // extInst a1
+// CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:    extInst a1
 // CHECK: assign a2__k = 1'h1
-// CHECK-NEXT: // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT: // extInst a2
+// CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:    extInst a2
 }
 
 hw.module @bindInMod() {
