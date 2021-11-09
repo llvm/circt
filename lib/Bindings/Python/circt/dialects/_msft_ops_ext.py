@@ -116,7 +116,7 @@ class MSFTModuleExternOp(_hw_ext.ModuleLike):
     return InstanceBuilder(self,
                            name,
                            kwargs,
-                           sym_name=self.verilogName.value,
+                           sym_name=name,
                            parameters=parameters,
                            loc=loc,
                            ip=ip)
