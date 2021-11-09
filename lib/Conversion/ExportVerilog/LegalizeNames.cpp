@@ -20,6 +20,17 @@ using namespace sv;
 using namespace hw;
 using namespace ExportVerilog;
 
+StringAttr ExportVerilog::getDeclarationName(Operation *op) {
+  if (auto attr = op->getAttrOfType<StringAttr>("name"))
+    return attr;
+  if (auto attr = op->getAttrOfType<StringAttr>("instanceName"))
+    return attr;
+  if (auto attr =
+          op->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
+    return attr;
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // NameCollisionResolver
 //===----------------------------------------------------------------------===//
@@ -134,6 +145,15 @@ void GlobalNameResolver::legalizeModuleNames(HWModuleOp module) {
     if (newName != paramAttr.getName().getValue())
       globalNameTable.addRenamedParam(module, paramAttr.getName(), newName);
   }
+
+  // Legalize the value names.
+  module.walk([&](Operation *op) {
+    if (auto nameAttr = getDeclarationName(op)) {
+      auto newName = nameResolver.getLegalName(nameAttr);
+      if (newName != nameAttr.getValue())
+        globalNameTable.addRenamedDeclaration(op, newName);
+    }
+  });
 }
 
 void GlobalNameResolver::legalizeInterfaceNames(InterfaceOp interface) {

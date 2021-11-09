@@ -19,7 +19,7 @@ hw.module @parametersNameConflict<p1: i42 = 17, wire: i1>(%p1: i8) {
 
   // CHECK: `ifdef SOMEMACRO
   sv.ifdef "SOMEMACRO" {
-    // CHECK: localparam local_0 = wire_1;
+    // CHECK: localparam local_2 = wire_1;
     %local = sv.localparam : i1 { value = #hw.param.decl.ref<"wire">: i1 }
 
     // CHECK: assign myWire = wire_1;
