@@ -61,3 +61,19 @@ handshake.func @invalid_instance_op(%ctrl : none) -> none {
   handshake.instance @foo() : () -> ()
   handshake.return %ctrl : none
 }
+
+// -----
+
+handshake.func @invalid_multidim_memory() {
+  // expected-error @+1 {{'handshake.memory' op memref must have only a single dimension.}}
+  "handshake.memory"() {type = memref<10x10xi8>, id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32} : () -> ()
+  return
+}
+
+// -----
+
+handshake.func @invalid_dynamic_memory() {
+  // expected-error @+1 {{'handshake.memory' op memref dimensions for handshake.memory must be static.}}
+  "handshake.memory"() {type = memref<?xi8>, id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32} : () -> ()
+  return
+}

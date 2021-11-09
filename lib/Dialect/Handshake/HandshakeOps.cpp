@@ -647,6 +647,18 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
   //   result.addSuccessor(succ, {});
 }
 
+static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
+  auto memrefType = op.getMemRefType();
+
+  if (memrefType.getNumDynamicDims() != 0)
+    return op.emitOpError()
+           << "memref dimensions for handshake.memory must be static.";
+  if (memrefType.getShape().size() != 1)
+    return op.emitOpError() << "memref must have only a single dimension.";
+
+  return success();
+}
+
 void MemoryOp::build(OpBuilder &builder, OperationState &result,
                      ArrayRef<Value> operands, int outputs, int control_outputs,
                      bool lsq, int id, Value memref) {
