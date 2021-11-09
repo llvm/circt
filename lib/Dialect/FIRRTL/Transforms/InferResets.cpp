@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/InstanceGraph.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/FieldRef.h"
+#include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/SetVector.h"
@@ -1399,6 +1400,72 @@ LogicalResult InferResetsPass::implementAsyncReset(FModuleOp module,
     if (isa<InstanceOp, RegOp, RegResetOp>(op))
       opsToUpdate.push_back(op);
   });
+
+  // If the reset is a local wire or node, move it upwards such that it
+  // dominates all the operations that it will need to attach to. In the case of
+  // a node this might not be easily possible, so we just spill into a wire in
+  // that case.
+  if (!actualReset.isa<BlockArgument>()) {
+    mlir::DominanceInfo dom(module);
+    // The first op in `opsToUpdate` is the top-most op in the module, since the
+    // ops and blocks are traversed in a depth-first, top-to-bottom order in
+    // `walk`. So we can simply check if the local reset declaration is before
+    // the first op to find out if we need to move anything.
+    auto *resetOp = actualReset.getDefiningOp();
+    if (!opsToUpdate.empty() && !dom.dominates(resetOp, opsToUpdate[0])) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "- Reset doesn't dominate all uses, needs to be moved\n");
+
+      // If the node can't be moved because its input doesn't dominate the
+      // target location, convert it to a wire.
+      auto nodeOp = dyn_cast<NodeOp>(resetOp);
+      if (nodeOp && !dom.dominates(nodeOp.input(), opsToUpdate[0])) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Promoting node to wire for move: " << nodeOp << "\n");
+        ImplicitLocOpBuilder builder(nodeOp.getLoc(), nodeOp);
+        auto wireOp = builder.create<WireOp>(
+            nodeOp.getType(), nodeOp.nameAttr(), nodeOp.annotationsAttr(),
+            nodeOp.inner_symAttr());
+        builder.create<ConnectOp>(wireOp, nodeOp.input());
+        nodeOp->replaceAllUsesWith(wireOp);
+        nodeOp.erase();
+        resetOp = wireOp;
+        actualReset = wireOp;
+        domain.existingValue = wireOp;
+      }
+
+      // Determine the block into which the reset declaration needs to be moved.
+      Block *targetBlock = dom.findNearestCommonDominator(
+          resetOp->getBlock(), opsToUpdate[0]->getBlock());
+      LLVM_DEBUG({
+        if (targetBlock != resetOp->getBlock())
+          llvm::dbgs() << "- Needs to be moved to different block\n";
+      });
+
+      // At this point we have to figure out in front of which operation in the
+      // target block the reset declaration has to be moved. The reset
+      // declaration and the first op it needs to dominate may be buried inside
+      // blocks of other operations (e.g. `WhenOp`), so we have to look through
+      // their parent operations until we find the one that lies within the
+      // target block.
+      auto getParentInBlock = [](Operation *op, Block *block) {
+        while (op && op->getBlock() != block)
+          op = op->getParentOp();
+        return op;
+      };
+      auto *resetOpInTarget = getParentInBlock(resetOp, targetBlock);
+      auto *firstOpInTarget = getParentInBlock(opsToUpdate[0], targetBlock);
+
+      // Move the operation upwards. Since there are situations where the reset
+      // declaration does not dominate the first use, but the `WhenOp` it is
+      // nested within actually *does* come before that use, we have to consider
+      // moving the reset declaration in front of its parent op.
+      if (resetOpInTarget->isBeforeInBlock(firstOpInTarget))
+        resetOp->moveBefore(resetOpInTarget);
+      else
+        resetOp->moveBefore(firstOpInTarget);
+    }
+  }
 
   // Update the operations.
   for (auto *op : opsToUpdate)
