@@ -13,6 +13,8 @@ add_circt_dialect_library(CIRCTHandshake
   LINK_LIBS PUBLIC
   MLIRStandard
   MLIRIR
+  CIRCTESI
+  CIRCTHW
 
   DEPENDS
   MLIRHandshakeInterfacesIncGen
