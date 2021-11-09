@@ -1658,13 +1658,13 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
   auto &op = alwaysBlocks[std::make_tuple(builder.getBlock(), clockEdge, clock,
                                           resetStyle, resetEdge, reset)];
   auto &alwaysOp = op.first;
-  auto &resetBodyIfOp = op.second;
+  auto &insideIfOp = op.second;
   if (alwaysOp) {
     if (reset) {
-      assert(resetBodyIfOp.hasValue() &&
+      assert(insideIfOp.hasValue() &&
              "reset body must be initialized before");
-      runWithInsertionPointAtEndOfBlock(resetBody, resetBodyIfOp->thenRegion());
-      runWithInsertionPointAtEndOfBlock(body, resetBodyIfOp->elseRegion());
+      runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp->thenRegion());
+      runWithInsertionPointAtEndOfBlock(body, insideIfOp->elseRegion());
     } else {
       runWithInsertionPointAtEndOfBlock(body, alwaysOp.body());
     }
@@ -1710,19 +1710,19 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
                 APInt::getAllOnes(reset.getType().getIntOrFloatBitWidth()));
             reset = builder.create<comb::XorOp>(reset, allOnes);
           }
-          resetBodyIfOp =
+          insideIfOp =
               builder.create<sv::IfOp>(reset, createResetBody, createBody);
         });
       } else {
         alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, [&] {
-          resetBodyIfOp =
+          insideIfOp =
               builder.create<sv::IfOp>(reset, createResetBody, createBody);
         });
       }
     } else {
       assert(!resetBody);
       alwaysOp = builder.create<sv::AlwaysOp>(clockEdge, clock, body);
-      resetBodyIfOp = llvm::None;
+      insideIfOp = llvm::None;
     }
   }
 }
