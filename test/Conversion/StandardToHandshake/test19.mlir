@@ -42,7 +42,7 @@ func @affine_applies() {
 // CHECK:           %[[VAL_32:.*]] = arith.muli %[[VAL_15]], %[[VAL_31]] : index
 // CHECK:           %[[VAL_33:.*]] = arith.addi %[[VAL_30]], %[[VAL_32]] : index
 // CHECK:           "handshake.sink"(%[[VAL_33]]) : (index) -> ()
-// CHECK:           handshake.return %[[VAL_1]]#17 : none
+// CHECK:           return %[[VAL_1]]#17 : none
 // CHECK:         }
 // CHECK:       }
 

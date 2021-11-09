@@ -20,7 +20,7 @@ func @affine_apply_floordiv(%arg0: index) -> index {
 // CHECK:           %[[VAL_14:.*]]:2 = "handshake.fork"(%[[VAL_13]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_15:.*]] = arith.subi %[[VAL_8]]#1, %[[VAL_14]]#1 : index
 // CHECK:           %[[VAL_16:.*]] = select %[[VAL_10]]#0, %[[VAL_15]], %[[VAL_14]]#0 : index
-// CHECK:           handshake.return %[[VAL_16]], %[[VAL_4]]#3 : index, none
+// CHECK:           return %[[VAL_16]], %[[VAL_4]]#3 : index, none
 // CHECK:         }
 // CHECK:       }
 

@@ -97,7 +97,7 @@
 // CHECK:           %[[VAL_19]] = "handshake.branch"(%[[VAL_93]]) {control = false} : (index) -> index
 // CHECK:           %[[VAL_94:.*]]:2 = "handshake.control_merge"(%[[VAL_28]]) {control = true} : (none) -> (none, index)
 // CHECK:           "handshake.sink"(%[[VAL_94]]#1) : (index) -> ()
-// CHECK:           handshake.return %[[VAL_94]]#0 : none
+// CHECK:           return %[[VAL_94]]#0 : none
 // CHECK:         }
 // CHECK:       }
 

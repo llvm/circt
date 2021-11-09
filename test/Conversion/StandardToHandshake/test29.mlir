@@ -31,7 +31,7 @@
 
 // Result of load operation is sinked.
 // CHECK:   "handshake.sink"(%[[LDDATA:.+]]) : (i32) -> ()
-// CHECK:   handshake.return %[[STLDNONE_AND_CTRL:.+]] : none
+// CHECK:   return %[[STLDNONE_AND_CTRL:.+]] : none
 // CHECK: }
 
 func @load_store(%0 : memref<4xi32>, %1 : index) {

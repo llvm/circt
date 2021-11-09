@@ -10,6 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "mlir/IR/OpAsmInterface.td"
+
 // This is almost exactly like a standard FuncOp, except that it has some
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
@@ -17,7 +19,8 @@ def FuncOp : Op<Handshake_Dialect, "func", [
    IsolatedFromAbove,
    FunctionLike,
    Symbol,
-   RegionKindInterface
+   RegionKindInterface,
+   OpAsmOpInterface
 ]> {
   let summary = "Handshake dialect function.";
   let description = [{
@@ -96,6 +99,14 @@ def FuncOp : Op<Handshake_Dialect, "func", [
         return emitOpError("requires '" + getTypeAttrName() +
                            "' attribute of function type");
       return success();
+    }
+
+    //===------------------------------------------------------------------===//
+    // OpAsmOpInterface Methods
+    //===------------------------------------------------------------------===//
+
+    static ::llvm::StringRef getDefaultDialect() {
+      return "handshake";
     }
   }];
 
