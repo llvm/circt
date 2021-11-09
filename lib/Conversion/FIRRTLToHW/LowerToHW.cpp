@@ -1661,8 +1661,7 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
   auto &insideIfOp = op.second;
   if (alwaysOp) {
     if (reset) {
-      assert(insideIfOp.hasValue() &&
-             "reset body must be initialized before");
+      assert(insideIfOp.hasValue() && "reset body must be initialized before");
       runWithInsertionPointAtEndOfBlock(resetBody, insideIfOp->thenRegion());
       runWithInsertionPointAtEndOfBlock(body, insideIfOp->elseRegion());
     } else {
