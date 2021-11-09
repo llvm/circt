@@ -1663,7 +1663,8 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
     if (reset) {
       assert(resetStyle != ::ResetType::NoReset);
       // Here, we want to create the folloing structure with sv.always and
-      // sv.if. If `reset` is async, we need to add `reset` to a sensitivity list.
+      // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
+      // list.
       //
       // sv.always @(clockEdge or reset) {
       //   sv.if (reset) {
