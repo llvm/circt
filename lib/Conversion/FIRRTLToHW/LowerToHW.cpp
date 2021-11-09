@@ -1654,8 +1654,8 @@ void FIRRTLLowering::addToAlwaysBlock(sv::EventControl clockEdge, Value clock,
                                       sv::EventControl resetEdge, Value reset,
                                       std::function<void(void)> body,
                                       std::function<void(void)> resetBody) {
-  auto &op = alwaysBlocks[std::make_tuple(builder.getBlock(), clockEdge, clock,
-                                          resetStyle, resetEdge, reset)];
+  auto &op = alwaysBlocks[{builder.getBlock(), clockEdge, clock, resetStyle,
+                           resetEdge, reset}];
   auto &alwaysOp = op.first;
   auto &insideIfOp = op.second;
   if (alwaysOp) {
