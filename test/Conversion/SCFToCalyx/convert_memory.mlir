@@ -474,10 +474,10 @@ module {
 // CHECK-NEXT:      }
 module {
   func @main(%i : index) -> i32 {
-    %c1_1 = arith.constant 1 : i32
+    %c1_32 = arith.constant 1 : i32
     %0 = memref.alloc() : memref<1xi32>
     %1 = memref.load %0[%i] : memref<1xi32>
-    memref.store %c1_1, %0[%i] : memref<1xi32>
+    memref.store %c1_32, %0[%i] : memref<1xi32>
     return %1 : i32
   }
 }
