@@ -608,16 +608,20 @@ void EmitterBase::emitTextWithSubstitutions(
   // into the value of operand 42.
   SmallVector<SmallString<12>, 8> symOps;
   auto namify = [&](Attribute sym, SymbolCache::Item item) {
-    // Get the verilog name of the operation, add the name if not already
-    // done.
+    // CAVEAT: These accesses can reach into other modules through inner name
+    // references, which are currently being processed. Do not add those remote
+    // operations to this module's `names`, which is reserved for things named
+    // *within* this module. Instead, you have to rely on those remote
+    // operations to have been named inside the global names table. If they
+    // haven't, take a look at name name legalization first.
     if (auto itemOp = item.getOp()) {
       if (item.hasPort()) {
         auto portInfos = getAllModulePortInfos(itemOp);
         return state.globalNames.getPortVerilogName(itemOp,
                                                     portInfos[item.getPort()]);
       }
-      if (names.hasName(itemOp))
-        return names.getName(itemOp);
+      if (isa<WireOp, RegOp, LocalParamOp, InstanceOp>(itemOp))
+        return state.globalNames.getDeclarationVerilogName(itemOp);
       StringRef symOpName = getSymOpName(itemOp);
       if (!symOpName.empty())
         return symOpName;
@@ -2036,11 +2040,15 @@ void NameCollector::collectNames(Block &block) {
     // Instances have a instance name to recognize but we don't need to look
     // at the result values and don't need to schedule them as valuesToEmit.
     if (auto instance = dyn_cast<InstanceOp>(op)) {
-      names.addName(&op, instance.instanceName());
+      names.addName(
+          &op,
+          moduleEmitter.state.globalNames.getDeclarationVerilogName(instance));
       continue;
     }
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op)) {
-      names.addName(interface.getResult(), interface.name());
+      names.addName(
+          interface.getResult(),
+          moduleEmitter.state.globalNames.getDeclarationVerilogName(interface));
       continue;
     }
 
@@ -2091,7 +2099,9 @@ void NameCollector::collectNames(Block &block) {
 
     // Notice and renamify named declarations.
     if (isa<WireOp, RegOp, LocalParamOp>(op))
-      names.addName(op.getResult(0), op.getAttrOfType<StringAttr>("name"));
+      names.addName(
+          op.getResult(0),
+          moduleEmitter.state.globalNames.getDeclarationVerilogName(&op));
 
     // Notice and renamify the labels on verification statements.
     if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
@@ -3972,14 +3982,14 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   /// These are non-hierarchical references which we need to be careful about
   /// during emission.
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
-    for (Operation &op : *moduleOp.getBodyBlock()) {
+    moduleOp.walk([&](Operation *op) {
       // Populate the symbolCache with all operations that can define a symbol.
-      if (auto name = op.getAttrOfType<StringAttr>(
+      if (auto name = op->getAttrOfType<StringAttr>(
               hw::InnerName::getInnerNameAttrName()))
-        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), &op);
+        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
-    }
+    });
   };
   /// Collect any port marked as being referenced via symbol.
   auto collectPorts = [&](auto moduleOp) {
