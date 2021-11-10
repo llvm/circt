@@ -52,6 +52,17 @@ static cl::opt<bool> skipInitial(
     "skip-initial", cl::init(false),
     cl::desc("Skip checking the initial input for interestingness"));
 
+static cl::opt<bool> listReductions("list", cl::init(false),
+                                    cl::desc("List all available reductions"));
+
+static cl::list<std::string> includeReductions(
+    "include", cl::ZeroOrMore,
+    cl::desc("Only run a subset of the available reductions"));
+
+static cl::list<std::string>
+    excludeReductions("exclude", cl::ZeroOrMore,
+                      cl::desc("Do not run some of the available reductions"));
+
 static cl::opt<std::string> testerCommand(
     "test", cl::Required,
     cl::desc("A command or script to check if output is interesting"));
@@ -90,6 +101,30 @@ static LogicalResult writeOutput(ModuleOp module) {
 static LogicalResult execute(MLIRContext &context) {
   std::string errorMessage;
 
+  // Gather the sets of included and excluded reductions.
+  llvm::DenseSet<StringRef> inclusionSet(includeReductions.begin(),
+                                         includeReductions.end());
+  llvm::DenseSet<StringRef> exclusionSet(excludeReductions.begin(),
+                                         excludeReductions.end());
+
+  // Gather a list of reduction patterns that we should try.
+  SmallVector<std::unique_ptr<Reduction>> patterns;
+  createAllReductions(&context, [&](auto reduction) {
+    auto name = reduction->getName();
+    if (!inclusionSet.empty() && !inclusionSet.count(name))
+      return;
+    if (exclusionSet.count(name))
+      return;
+    patterns.push_back(std::move(reduction));
+  });
+
+  // Print the list of patterns.
+  if (listReductions) {
+    for (auto &pattern : patterns)
+      llvm::outs() << pattern->getName() << "\n";
+    return success();
+  }
+
   // Parse the input file.
   VERBOSE(llvm::errs() << "Reading input\n");
   OwningModuleRef module = parseSourceFile(inputFilename, &context);
@@ -110,12 +145,6 @@ static LogicalResult execute(MLIRContext &context) {
   }
   auto bestSize = initialTest.getSize();
   VERBOSE(llvm::errs() << "Initial module has size " << bestSize << "\n");
-
-  // Gather a list of reduction patterns that we should try.
-  SmallVector<std::unique_ptr<Reduction>> patterns;
-  createAllReductions(&context, [&](auto reduction) {
-    patterns.push_back(std::move(reduction));
-  });
 
   // Iteratively reduce the input module by applying the current reduction
   // pattern to successively smaller subsets of the operations until we find one
