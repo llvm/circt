@@ -328,15 +328,71 @@ static ParseResult verifyFuncOp(handshake::FuncOp op) {
   return success();
 }
 
-static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
-  auto buildFuncType =
-      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
-         mlir::function_like_impl::VariadicFlag,
-         std::string &) { return builder.getFunctionType(argTypes, results); };
+/// Parses a FuncOp signature using
+/// mlir::function_like_impl::parseFunctionSignature while getting access to the
+/// parsed SSA names to store as attributes.
+static ParseResult parseFuncOpArgs(
+    OpAsmParser &parser, SmallVectorImpl<OpAsmParser::OperandType> &entryArgs,
+    SmallVectorImpl<Type> &argTypes, SmallVectorImpl<Attribute> &argNames,
+    SmallVectorImpl<NamedAttrList> &argAttrs, SmallVectorImpl<Type> &resTypes,
+    SmallVectorImpl<NamedAttrList> &resAttrs) {
+  auto *context = parser.getContext();
 
-  return mlir::function_like_impl::parseFunctionLikeOp(parser, result,
-                                                       /*allowVariadic=*/true,
-                                                       buildFuncType);
+  bool isVariadic;
+  if (mlir::function_like_impl::parseFunctionSignature(
+          parser, /*allowVariadic=*/true, entryArgs, argTypes, argAttrs,
+          isVariadic, resTypes, resAttrs)
+          .failed())
+    return failure();
+
+  llvm::transform(entryArgs, std::back_inserter(argNames), [&](auto arg) {
+    return StringAttr::get(context, arg.name.drop_front());
+  });
+
+  return success();
+}
+
+static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
+  auto &builder = parser.getBuilder();
+  StringAttr nameAttr;
+  SmallVector<OpAsmParser::OperandType, 4> args;
+  SmallVector<Type, 4> argTypes, resTypes;
+  SmallVector<NamedAttrList, 4> argAttributes, resAttributes;
+  SmallVector<Attribute> argNames;
+
+  // Parse signature
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes) ||
+      parseFuncOpArgs(parser, args, argTypes, argNames, argAttributes, resTypes,
+                      resAttributes))
+    return failure();
+  mlir::function_like_impl::addArgAndResultAttrs(builder, result, argAttributes,
+                                                 resAttributes);
+
+  // Set function type
+  result.addAttribute(
+      handshake::FuncOp::getTypeAttrName(),
+      TypeAttr::get(builder.getFunctionType(argTypes, resTypes)));
+
+  // Parse attributes
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+
+  // If argNames and resNames wasn't provided manually, infer argNames attribute
+  // from the parsed SSA names.
+  if (!result.attributes.get("argNames"))
+    result.addAttribute("argNames", builder.getArrayAttr(argNames));
+
+  // Parse region
+  auto *body = result.addRegion();
+  return parser.parseRegion(*body, args, argTypes);
+}
+
+static void printFuncOp(OpAsmPrinter &p, handshake::FuncOp op) {
+  FunctionType fnType = op.getType();
+  mlir::function_like_impl::printFunctionLikeOp(p, op, fnType.getInputs(),
+                                                /*isVariadic=*/true,
+                                                fnType.getResults());
 }
 
 namespace {
@@ -423,7 +479,6 @@ bool handshake::ControlMergeOp::tryExecute(
 
 void handshake::BranchOp::build(OpBuilder &builder, OperationState &result,
                                 Value dataOperand) {
-
   auto type = dataOperand.getType();
   result.types.push_back(type);
   result.addOperands(dataOperand);
@@ -461,7 +516,6 @@ void handshake::ConditionalBranchOp::build(OpBuilder &builder,
                                            OperationState &result,
                                            Value condOperand,
                                            Value dataOperand) {
-
   auto type = dataOperand.getType();
   result.types.append(2, type);
   result.addOperands(condOperand);
@@ -524,7 +578,6 @@ bool handshake::StartOp::tryExecute(
 }
 
 void EndOp::build(OpBuilder &builder, OperationState &result, Value operand) {
-
   result.addOperands(operand);
 }
 
@@ -539,12 +592,10 @@ bool handshake::EndOp::tryExecute(
 
 void handshake::ReturnOp::build(OpBuilder &builder, OperationState &result,
                                 ArrayRef<Value> operands) {
-
   result.addOperands(operands);
 }
 
 void SinkOp::build(OpBuilder &builder, OperationState &result, Value operand) {
-
   result.addOperands(operand);
 }
 
@@ -560,7 +611,6 @@ bool handshake::SinkOp::tryExecute(
 
 void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
                                   Attribute value, Value operand) {
-
   result.addOperands(operand);
 
   auto type = value.getType();
@@ -597,10 +647,21 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
   //   result.addSuccessor(succ, {});
 }
 
+static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
+  auto memrefType = op.getMemRefType();
+
+  if (memrefType.getNumDynamicDims() != 0)
+    return op.emitOpError()
+           << "memref dimensions for handshake.memory must be static.";
+  if (memrefType.getShape().size() != 1)
+    return op.emitOpError() << "memref must have only a single dimension.";
+
+  return success();
+}
+
 void MemoryOp::build(OpBuilder &builder, OperationState &result,
                      ArrayRef<Value> operands, int outputs, int control_outputs,
                      bool lsq, int id, Value memref) {
-
   result.addOperands(operands);
 
   auto memrefType = memref.getType().cast<MemRefType>();
@@ -746,7 +807,6 @@ bool handshake::MemoryOp::tryExecute(
 
 void handshake::LoadOp::build(OpBuilder &builder, OperationState &result,
                               Value memref, ArrayRef<Value> indices) {
-
   // Address indices
   // result.addOperands(memref);
   result.addOperands(indices);
@@ -806,7 +866,6 @@ bool handshake::LoadOp::tryExecute(
 
 void handshake::StoreOp::build(OpBuilder &builder, OperationState &result,
                                Value valueToStore, ArrayRef<Value> indices) {
-
   // Data
   result.addOperands(valueToStore);
 
@@ -838,7 +897,6 @@ bool handshake::StoreOp::tryExecute(
 
 void JoinOp::build(OpBuilder &builder, OperationState &result,
                    ArrayRef<Value> operands) {
-
   auto type = builder.getNoneType();
   result.types.push_back(type);
 
@@ -859,6 +917,17 @@ bool handshake::JoinOp::tryExecute(
     std::vector<std::vector<llvm::Any>> &store,
     std::vector<mlir::Value> &scheduleList) {
   return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 1);
+}
+
+static LogicalResult verifyInstanceOp(handshake::InstanceOp op) {
+  if (op->getNumOperands() == 0)
+    return op.emitOpError() << "must provide at least a control operand.";
+
+  if (!op.getControl().getType().dyn_cast<NoneType>())
+    return op.emitOpError()
+           << "last operand must be a control (none-typed) operand.";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

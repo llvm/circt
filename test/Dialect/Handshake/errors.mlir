@@ -37,3 +37,43 @@ handshake.func @invalid_mux_narrow_select(%arg0: i1, %arg1: i32, %arg2: i32, %ar
   %0 = "handshake.mux"(%arg0, %arg1, %arg2, %arg3) : (i1, i32, i32, i32) -> (i32)
   return %0 : i32
 }
+
+// -----
+
+handshake.func @foo(%ctrl : none) -> none{
+  handshake.return %ctrl : none
+}
+
+handshake.func @invalid_instance_op(%arg0 : i32, %ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.instance' op last operand must be a control (none-typed) operand.}}
+  handshake.instance @foo(%ctrl, %arg0) : (none, i32) -> ()
+  handshake.return %ctrl : none
+}
+
+// -----
+
+handshake.func @foo(%ctrl : none) -> none{
+  handshake.return %ctrl : none
+}
+
+handshake.func @invalid_instance_op(%ctrl : none) -> none {
+  // expected-error @+1 {{'handshake.instance' op must provide at least a control operand.}}
+  handshake.instance @foo() : () -> ()
+  handshake.return %ctrl : none
+}
+
+// -----
+
+handshake.func @invalid_multidim_memory() {
+  // expected-error @+1 {{'handshake.memory' op memref must have only a single dimension.}}
+  "handshake.memory"() {type = memref<10x10xi8>, id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32} : () -> ()
+  return
+}
+
+// -----
+
+handshake.func @invalid_dynamic_memory() {
+  // expected-error @+1 {{'handshake.memory' op memref dimensions for handshake.memory must be static.}}
+  "handshake.memory"() {type = memref<?xi8>, id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32} : () -> ()
+  return
+}

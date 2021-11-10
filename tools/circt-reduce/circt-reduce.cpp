@@ -11,18 +11,23 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Reduction.h"
+#include "Tester.h"
 #include "circt/InitAllDialects.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Parser.h"
-#include "mlir/Reducer/Tester.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
 
-#include "Reduction.h"
-
 #define DEBUG_TYPE "circt-reduce"
+#define VERBOSE(X)                                                             \
+  do {                                                                         \
+    if (verbose) {                                                             \
+      X;                                                                       \
+    }                                                                          \
+  } while (false)
 
 using namespace llvm;
 using namespace mlir;
@@ -40,8 +45,12 @@ static cl::opt<std::string>
                    cl::desc("Output filename for the reduced test case"));
 
 static cl::opt<bool>
-    keepBest("keep-best", cl::init(false),
+    keepBest("keep-best", cl::init(true),
              cl::desc("Keep overwriting the output with better reductions"));
+
+static cl::opt<bool> skipInitial(
+    "skip-initial", cl::init(false),
+    cl::desc("Skip checking the initial input for interestingness"));
 
 static cl::opt<std::string> testerCommand(
     "test", cl::Required,
@@ -50,6 +59,9 @@ static cl::opt<std::string> testerCommand(
 static cl::list<std::string>
     testerArgs("test-arg", cl::ZeroOrMore,
                cl::desc("Additional arguments to the test"));
+
+static cl::opt<bool> verbose("v", cl::init(true),
+                             cl::desc("Print reduction progress to stderr"));
 
 //===----------------------------------------------------------------------===//
 // Tool Implementation
@@ -79,25 +91,25 @@ static LogicalResult execute(MLIRContext &context) {
   std::string errorMessage;
 
   // Parse the input file.
-  LLVM_DEBUG(llvm::dbgs() << "Reading input\n");
+  VERBOSE(llvm::errs() << "Reading input\n");
   OwningModuleRef module = parseSourceFile(inputFilename, &context);
   if (!module)
     return failure();
 
   // Evaluate the unreduced input.
-  LLVM_DEBUG({
-    llvm::dbgs() << "Testing input with `" << testerCommand << "`\n";
+  VERBOSE({
+    llvm::errs() << "Testing input with `" << testerCommand << "`\n";
     for (auto &arg : testerArgs)
-      llvm::dbgs() << "  with argument `" << arg << "`\n";
+      llvm::errs() << "  with argument `" << arg << "`\n";
   });
   Tester tester(testerCommand, testerArgs);
-  auto initialTest = tester.isInteresting(module.get());
-  if (initialTest.first != Tester::Interestingness::True) {
+  auto initialTest = tester.get(module.get());
+  if (!skipInitial && !initialTest.isInteresting()) {
     mlir::emitError(UnknownLoc::get(&context), "input is not interesting");
     return failure();
   }
-  auto bestSize = initialTest.second;
-  LLVM_DEBUG(llvm::dbgs() << "Initial module has size " << bestSize << "\n");
+  auto bestSize = initialTest.getSize();
+  VERBOSE(llvm::errs() << "Initial module has size " << bestSize << "\n");
 
   // Gather a list of reduction patterns that we should try.
   SmallVector<std::unique_ptr<Reduction>> patterns;
@@ -109,10 +121,18 @@ static LogicalResult execute(MLIRContext &context) {
   // pattern to successively smaller subsets of the operations until we find one
   // that retains the interesting behavior.
   // ModuleExternalizer pattern;
+  BitVector appliedOneShotPatterns(patterns.size(), false);
+  auto lastReportTime = std::chrono::high_resolution_clock::now();
+  constexpr double reportPeriod = 0.1 /*seconds*/;
   for (unsigned patternIdx = 0; patternIdx < patterns.size();) {
     Reduction &pattern = *patterns[patternIdx];
-    LLVM_DEBUG(llvm::dbgs()
-               << "Trying reduction `" << pattern.getName() << "`\n");
+    if (pattern.isOneShot() && appliedOneShotPatterns[patternIdx]) {
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Skipping one-shot `" << pattern.getName() << "`\n");
+      ++patternIdx;
+      continue;
+    }
+    VERBOSE(llvm::errs() << "Trying reduction `" << pattern.getName() << "`\n");
     size_t rangeBase = 0;
     size_t rangeLength = -1;
     bool patternDidReduce = false;
@@ -130,59 +150,86 @@ static LogicalResult execute(MLIRContext &context) {
         (void)pattern.rewrite(op);
       });
       if (opIdx == 0) {
-        LLVM_DEBUG(llvm::dbgs() << "- No more ops where the pattern applies\n");
+        VERBOSE(llvm::errs() << "- No more ops where the pattern applies\n");
         break;
       }
 
+      // Show some progress indication.
+      VERBOSE({
+        auto thisReportTime = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = thisReportTime - lastReportTime;
+        if (elapsed.count() >= reportPeriod) {
+          lastReportTime = thisReportTime;
+          size_t boundLength = std::min(rangeLength, opIdx);
+          size_t numDone = rangeBase / boundLength + 1;
+          size_t numTotal = (opIdx + boundLength + 1) / boundLength;
+          llvm::errs() << "  [" << numDone << "/" << numTotal << "; "
+                       << (numDone * 100 / numTotal) << "%]\r";
+        }
+      });
+
       // Check if this reduced module is still interesting, and its overall size
       // is smaller than what we had before.
-      auto test = tester.isInteresting(newModule.get());
-      if (test.first == Tester::Interestingness::True &&
-          (test.second < bestSize || pattern.acceptSizeIncrease())) {
+      auto shouldAccept = [&](TestCase &test) {
+        if (!test.isValid())
+          return false; // don't write to disk if module is busted
+        if (test.getSize() >= bestSize && !pattern.acceptSizeIncrease())
+          return false; // don't run test if size already bad
+        return test.isInteresting();
+      };
+      auto test = tester.get(newModule.get());
+      if (shouldAccept(test)) {
         // Make this reduced module the new baseline and reset our search
         // strategy to start again from the beginning, since this reduction may
         // have created additional opportunities.
         patternDidReduce = true;
-        bestSize = test.second;
-        LLVM_DEBUG(llvm::dbgs()
-                   << "- Accepting module of size " << bestSize << "\n");
+        bestSize = test.getSize();
+        VERBOSE(llvm::errs()
+                << "- Accepting module of size " << bestSize << "\n");
         module = std::move(newModule);
 
-        // If this was already a run across all operations, no need to restart
-        // again at the top. We're done at this point.
-        if (rangeLength == (size_t)-1) {
-          rangeLength = 0;
-        } else {
-          rangeBase = 0;
-          rangeLength = -1;
-        }
+        // We leave `rangeBase` and `rangeLength` untouched in this case. This
+        // causes the next iteration of the loop to try the same pattern again
+        // at the same offset. If the pattern has reached a fixed point, nothing
+        // changes and we proceed. If the pattern has removed an operation, this
+        // will already operate on the next batch of operations which have
+        // likely moved to this point. The only exception are operations that
+        // are marked as "one shot", which explicitly ask to not be re-applied
+        // at the same location.
+        if (pattern.isOneShot())
+          rangeBase += rangeLength;
 
         // Write the current state to disk if the user asked for it.
         if (keepBest)
           if (failed(writeOutput(module.get())))
             return failure();
       } else {
-        // Try the pattern on the next `rangeLength` number of operations. If we
-        // go past the end of the input, reduce the size of the chunk of
-        // operations we're reducing and start again from the top.
+        // Try the pattern on the next `rangeLength` number of operations.
         rangeBase += rangeLength;
-        if (rangeBase >= opIdx) {
-          // Exhausted all subsets of this size. Try to go smaller.
-          rangeLength = std::min(rangeLength, opIdx) / 2;
-          rangeBase = 0;
-          if (rangeLength > 0)
-            LLVM_DEBUG(llvm::dbgs()
-                       << "- Trying " << rangeLength << " ops at once\n");
-        }
+      }
+
+      // If we have gone past the end of the input, reduce the size of the chunk
+      // of operations we're reducing and start again from the top.
+      if (rangeBase >= opIdx) {
+        rangeLength = std::min(rangeLength, opIdx) / 2;
+        rangeBase = 0;
+        if (rangeLength > 0)
+          VERBOSE(llvm::errs()
+                  << "- Trying " << rangeLength << " ops at once\n");
       }
     }
+
+    // If this was a one-shot pattern, mark it as having been applied. This will
+    // prevent further reapplication.
+    if (pattern.isOneShot())
+      appliedOneShotPatterns.set(patternIdx);
 
     // If the pattern provided a successful reduction, restart with the first
     // pattern again, since we might have uncovered additional reduction
     // opportunities. Otherwise we just keep going to try the next pattern.
     if (patternDidReduce && patternIdx > 0) {
-      LLVM_DEBUG(llvm::dbgs() << "- Reduction `" << pattern.getName()
-                              << "` was successful, starting at the top\n\n");
+      VERBOSE(llvm::errs() << "- Reduction `" << pattern.getName()
+                           << "` was successful, starting at the top\n\n");
       patternIdx = 0;
     } else {
       ++patternIdx;
@@ -190,7 +237,7 @@ static LogicalResult execute(MLIRContext &context) {
   }
 
   // Write the reduced test case to the output.
-  LLVM_DEBUG(llvm::dbgs() << "All reduction strategies exhausted\n");
+  VERBOSE(llvm::errs() << "All reduction strategies exhausted\n");
   return writeOutput(module.get());
 }
 

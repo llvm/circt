@@ -43,7 +43,7 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: module Statements :
-  firrtl.module @Statements(in %ui1: !firrtl.uint<1>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>) {
+  firrtl.module @Statements(in %ui1: !firrtl.uint<1>, in %someAddr: !firrtl.uint<8>, in %someClock: !firrtl.clock, in %someReset: !firrtl.reset, out %someOut: !firrtl.uint<1>) {
     // CHECK: when ui1 :
     // CHECK:   skip
     firrtl.when %ui1 {
@@ -255,6 +255,53 @@ firrtl.circuit "Foo" {
     %muxPrimOp = firrtl.node %muxPrimOp_tmp : !firrtl.uint
     %shlPrimOp = firrtl.node %shlPrimOp_tmp : !firrtl.uint
     %shrPrimOp = firrtl.node %shrPrimOp_tmp : !firrtl.uint
+
+    %MyMem_a, %MyMem_b, %MyMem_c = firrtl.mem Undefined {depth = 8, name = "MyMem", portNames = ["a", "b", "c"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>, !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>
+    %MyMem_a_clk = firrtl.subfield %MyMem_a(2) : (!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<4>>) -> !firrtl.clock
+    %MyMem_b_clk = firrtl.subfield %MyMem_b(2) : (!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<4>, mask: uint<1>>) -> !firrtl.clock
+    %MyMem_c_clk = firrtl.subfield %MyMem_c(2) : (!firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, rdata flip: uint<4>, wmode: uint<1>, wdata: uint<4>, wmask: uint<1>>) -> !firrtl.clock
+    firrtl.connect %MyMem_a_clk, %someClock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %MyMem_b_clk, %someClock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %MyMem_c_clk, %someClock : !firrtl.clock, !firrtl.clock
+    // CHECK:       mem MyMem :
+    // CHECK-NEXT:    data-type => UInt<4>
+    // CHECK-NEXT:    depth => 8
+    // CHECK-NEXT:    read-latency => 0
+    // CHECK-NEXT:    write-latency => 1
+    // CHECK-NEXT:    reader => a
+    // CHECK-NEXT:    writer => b
+    // CHECK-NEXT:    readwriter => c
+    // CHECK-NEXT:    read-under-write => undefined
+    // CHECK-NEXT:  MyMem.a.clk <= someClock
+    // CHECK-NEXT:  MyMem.b.clk <= someClock
+    // CHECK-NEXT:  MyMem.c.clk <= someClock
+
+    %combmem = firrtl.combmem : !firrtl.cmemory<uint<3>, 256>
+    %port0_data, %port0_port = firrtl.memoryport Infer %combmem {name = "port0"} : (!firrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !firrtl.cmemoryport)
+    firrtl.when %ui1 {
+      firrtl.memoryport.access %port0_port[%someAddr], %someClock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    }
+    // CHECK:      cmem combmem : UInt<3>[256]
+    // CHECK-NEXT: when ui1 :
+    // CHECK-NEXT:   infer mport port0 = combmem[someAddr], someClock
+
+    %seqmem = firrtl.seqmem Undefined : !firrtl.cmemory<uint<3>, 256>
+    %port1_data, %port1_port = firrtl.memoryport Infer %seqmem {name = "port1"} : (!firrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !firrtl.cmemoryport)
+    firrtl.when %ui1 {
+      firrtl.memoryport.access %port1_port[%someAddr], %someClock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    }
+    // CHECK:      smem seqmem : UInt<3>[256] undefined
+    // CHECK-NEXT: when ui1 :
+    // CHECK-NEXT:   infer mport port1 = seqmem[someAddr], someClock
+
+    firrtl.connect %port0_data, %port1_data : !firrtl.uint<3>, !firrtl.uint<3>
+    // CHECK: port0 <= port1
+
+    %invalid_clock = firrtl.invalidvalue : !firrtl.clock
+    %dummyReg = firrtl.reg %invalid_clock : !firrtl.uint<42>
+    // CHECK: wire [[INV:_invalid.*]] : Clock
+    // CHECK-NEXT: [[INV]] is invalid
+    // CHECK-NEXT: reg dummyReg : UInt<42>, [[INV]]
   }
 
   firrtl.extmodule @MyParameterizedExtModule(in in: !firrtl.uint, out out: !firrtl.uint<8>) attributes {defname = "name_thing", parameters = {DEFAULT = 0 : i64, DEPTH = 3.242000e+01 : f64, FORMAT = "xyz_timeout=%d\0A", WIDTH = 32 : i8}}

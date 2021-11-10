@@ -17,7 +17,7 @@ with Context() as ctx, Location.unknown():
   with InsertionPoint(m.body):
 
     def build(module):
-      constI32 = hw.ConstantOp(i32, IntegerAttr.get(i32, 1))
+      constI32 = hw.ConstantOp(IntegerAttr.get(i32, 1))
       constI1 = hw.ConstantOp.create(i1, 1)
 
       # CHECK: All arguments must be the same type to create an array

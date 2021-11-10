@@ -27,12 +27,6 @@ MLIR_CAPI_EXPORTED void mlirMSFTRegisterPasses();
 // Values represented in `MSFT.td`.
 typedef int32_t CirctMSFTPrimitiveType;
 
-/// Emits tcl for the specified module using the provided callback and user
-/// data
-MLIR_CAPI_EXPORTED MlirLogicalResult mlirMSFTExportTcl(MlirOperation,
-                                                       MlirStringCallback,
-                                                       void *userData);
-
 //===----------------------------------------------------------------------===//
 // MSFT Attributes.
 //===----------------------------------------------------------------------===//

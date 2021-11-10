@@ -19,7 +19,7 @@ def reg(value, clock, reset=None, reset_value=None, name=None):
   if reset:
     if not reset_value:
       zero = IntegerAttr.get(value_type, 0)
-      reset_value = hw.ConstantOp(value_type, zero).result
+      reset_value = hw.ConstantOp(zero).result
     return CompRegOp.create(value_type,
                             input=value,
                             clk=clock,

@@ -26,15 +26,31 @@ class CircuitNamespace {
   llvm::StringSet<> internal;
 
 public:
-  /// Construct a new namespace from a circuit op.  This namespace will be
-  /// composed of any operation in the first level of the circuit that contains
-  /// a symbol.
-  CircuitNamespace(CircuitOp circuit) {
+  CircuitNamespace() {}
+  CircuitNamespace(CircuitOp circuit) { add(circuit); }
+
+  // Copy and move.
+  CircuitNamespace(const CircuitNamespace &other) = default;
+  CircuitNamespace(CircuitNamespace &&other)
+      : internal(std::move(other.internal)) {}
+
+  CircuitNamespace &operator=(const CircuitNamespace &other) = default;
+  CircuitNamespace &operator=(CircuitNamespace &&other) {
+    internal = std::move(other.internal);
+    return *this;
+  }
+
+  /// Populate the namespace from a circuit op. This namespace will be composed
+  /// of any operation in the first level of the circuit that contains a symbol.
+  void add(CircuitOp circuit) {
     for (auto &op : *circuit.getBody())
       if (auto symbol = op.getAttrOfType<mlir::StringAttr>(
               SymbolTable::getSymbolAttrName()))
         internal.insert(symbol.getValue());
   }
+
+  /// Empty the namespace.
+  void clear() { internal.clear(); }
 
   /// Return a unique name, derived from the input `name`, and add the new name
   /// to the internal namespace.  There are two possible outcomes for the

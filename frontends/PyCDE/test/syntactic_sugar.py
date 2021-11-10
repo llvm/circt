@@ -89,5 +89,3 @@ sys.print()
 # CHECK:    [[REG2:%.+]] = hw.struct_extract %struct_data_in["foo"] {name = "struct_data_in__foo"} : !hw.struct<foo: i36>
 # CHECK:    [[REG3:%.+]] = comb.extract [[REG2]] from 0 {name = "struct_data_in__foo_0upto32"} : (i36) -> i32
 # CHECK:    msft.output [[REGR2]], [[REG1]], [[REG3]] : i32, i32, i32
-
-sys.print_verilog()

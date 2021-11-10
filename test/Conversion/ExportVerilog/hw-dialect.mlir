@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF -o %t.mlir | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics -o %t.mlir | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: // external module E
 hw.module.extern @E(%a: i1, %b: i1, %c: i1)
@@ -367,9 +367,8 @@ hw.module @signs(%in1: i4, %in2: i4, %in3: i4, %in4: i4)  {
   %a3 = comb.divu %a1, %a2: i4
   sv.assign %awire, %a3: i4
 
-  // CHECK: wire [3:0] _tmp = $signed(in1) / $signed(in2) + $signed(in1) / $signed(in2);
-  // CHECK: wire [3:0] _tmp_0 = $signed(in1) / $signed(in2) * $signed(in1) / $signed(in2);
-  // CHECK: assign awire = _tmp / _tmp_0;
+  // CHECK: assign awire = $unsigned($signed(in1) / $signed(in2) + $signed(in1) / $signed(in2)) /
+  // CHECK-NEXT:           $unsigned($signed(in1) / $signed(in2) * $signed(in1) / $signed(in2));
   %b1a = comb.divs %in1, %in2: i4
   %b1b = comb.divs %in1, %in2: i4
   %b1c = comb.divs %in1, %in2: i4
@@ -463,15 +462,16 @@ hw.module @cyclic(%a: i1) -> (b: i1) {
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longExpressions
 hw.module @longExpressions(%a: i8, %a2: i8) -> (b: i8) {
-  // CHECK: wire [7:0] _tmp = a + a + a + a + a
+  // CHECK:  assign b = (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a)
+  // CHECK-NEXT:        * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+  // CHECK-NEXT:        a) | (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a
+  // CHECK-NEXT:        + a) * (a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+  // CHECK-NEXT:        a + a);
+
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
-  // CHECK-NEXT: wire [7:0] _tmp_0 = a + a + a
   %2 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
-  // CHECK-NEXT: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a
   %3 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
-  // CHECK-NEXT: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a
   %4 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a : i8
-  // CHECK-NEXT: assign b = _tmp * _tmp_0 | _tmp_1 * _tmp_2;
   %5 = comb.mul %1, %2 : i8
   %6 = comb.mul %3, %4 : i8
   %7 = comb.or %5, %6 : i8
@@ -481,25 +481,10 @@ hw.module @longExpressions(%a: i8, %a2: i8) -> (b: i8) {
 // https://github.com/llvm/circt/issues/668
 // CHECK-LABEL: module longvariadic
 hw.module @longvariadic(%a: i8) -> (b: i8) {
-  // CHECK: wire [7:0] _tmp = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_0 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_1 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_2 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_3 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_4 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_5 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_6 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_7 = _tmp + _tmp_0 + _tmp_1 + _tmp_2 + _tmp_3 + _tmp_4 + _tmp_5 + _tmp_6;
-  // CHECK: wire [7:0] _tmp_8 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_9 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_10 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_11 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_12 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_13 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_14 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_15 = a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a;
-  // CHECK: wire [7:0] _tmp_16 = _tmp_8 + _tmp_9 + _tmp_10 + _tmp_11 + _tmp_12 + _tmp_13 + _tmp_14 + _tmp_15;
-  // CHECK: assign b = _tmp_7 + _tmp_16;
+  // CHECK:  assign b =
+  // CHECK-COUNT-11: a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a +
+  // CHECK-NEXT:     a + a + a;
+
   %1 = comb.add %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
                 %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a, %a,
@@ -625,18 +610,20 @@ hw.module @ABC(%a: i1, %b: i2) -> (c: i4) {
 
 // CHECK:   wire [2:0] whatever_c;
 // CHECK-EMPTY:
-// CHECK-NEXT:   // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT:   // ExternDestMod whatever (
-// CHECK-NEXT:   //   .a (a),
-// CHECK-NEXT:   //   .b (b),
-// CHECK-NEXT:   //   .c (whatever_c),
-// CHECK-NEXT:   //   .d (c)
-// CHECK-NEXT:   // );
-// CHECK-NEXT:   // This instance is elsewhere emitted as a bind statement
-// CHECK-NEXT:   // InternalDestMod yo (
-// CHECK-NEXT:   //   .a (a),
-// CHECK-NEXT:   //   .b (whatever_c)
-// CHECK-NEXT:   // );
+// CHECK-NEXT:   /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:      ExternDestMod whatever (
+// CHECK-NEXT:        .a (a),
+// CHECK-NEXT:        .b (b),
+// CHECK-NEXT:        .c (whatever_c),
+// CHECK-NEXT:        .d (c)
+// CHECK-NEXT:      );
+// CHECK-NEXT:   */
+// CHECK-NEXT:   /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:      InternalDestMod yo (
+// CHECK-NEXT:        .a (a),
+// CHECK-NEXT:        .b (whatever_c)
+// CHECK-NEXT:      );
+// CHECK-NEXT:   */
 // CHECK-NEXT: endmodule
 
 
@@ -709,7 +696,7 @@ hw.module @Chi() -> (Chi_output : i0) {
 
  hw.module @Foo1360() {
    // CHECK:      RealBar #(
-   // CHECK-NEXT:   .WIDTH0(64'd0),
+   // CHECK-NEXT:   .WIDTH0(0),
    // CHECK-NEXT:   .WIDTH1(4),
    // CHECK-NEXT:   .WIDTH2(40'd6812312123),
    // CHECK-NEXT:   .WIDTH3(-1),

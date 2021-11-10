@@ -303,19 +303,34 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(SymbolTable::getSymbolAttrName(), name);
 
   SmallVector<Attribute> argNames, resultNames;
+  SmallVector<Type, 4> argTypes, resultTypes;
+  SmallVector<Attribute> argAttrs, resultAttrs;
+  auto exportPortIdent = Identifier::get("hw.exportPort", builder.getContext());
 
-  SmallVector<Type, 4> argTypes;
   for (auto elt : ports.inputs) {
     if (elt.direction == PortDirection::INOUT && !elt.type.isa<hw::InOutType>())
       elt.type = hw::InOutType::get(elt.type);
     argTypes.push_back(elt.type);
     argNames.push_back(elt.name);
+    Attribute attr;
+    if (elt.sym && !elt.sym.getValue().empty())
+      attr = builder.getDictionaryAttr(
+          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    else
+      attr = builder.getDictionaryAttr({});
+    argAttrs.push_back(attr);
   }
 
-  SmallVector<Type, 4> resultTypes;
   for (auto elt : ports.outputs) {
     resultTypes.push_back(elt.type);
     resultNames.push_back(elt.name);
+    Attribute attr;
+    if (elt.sym && !elt.sym.getValue().empty())
+      attr = builder.getDictionaryAttr(
+          {{exportPortIdent, FlatSymbolRefAttr::get(elt.sym)}});
+    else
+      attr = builder.getDictionaryAttr({});
+    resultAttrs.push_back(attr);
   }
 
   // Allow clients to pass in null for the parameters list.
@@ -327,6 +342,10 @@ static void buildModule(OpBuilder &builder, OperationState &result,
   result.addAttribute(getTypeAttrName(), TypeAttr::get(type));
   result.addAttribute("argNames", builder.getArrayAttr(argNames));
   result.addAttribute("resultNames", builder.getArrayAttr(resultNames));
+  result.addAttribute(mlir::function_like_impl::getArgDictAttrName(),
+                      builder.getArrayAttr(argAttrs));
+  result.addAttribute(mlir::function_like_impl::getResultDictAttrName(),
+                      builder.getArrayAttr(resultAttrs));
   result.addAttribute("parameters", parameters);
   result.addAttributes(attributes);
   result.addRegion();

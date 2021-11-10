@@ -1,10 +1,14 @@
-# RUN: %PYTHON% %s 2>&1 | FileCheck %s
+# RUN: rm -rf %t
+# RUN: OUTPUT_DIRECTORY=%t %PYTHON% %s 2>&1 | FileCheck %s
+# RUN: FileCheck %s --check-prefix=OUTPUT < %t/Test.tcl
 
 import pycde
 import circt.dialects.hw
 
 from pycde.attributes import placement
 from pycde.devicedb import PhysLocation, PrimitiveType
+
+import os
 
 
 @pycde.externmodule
@@ -49,14 +53,15 @@ print(PhysLocation(PrimitiveType.DSP, 39, 25))
 
 # CHECK: msft.module @UnParameterized
 # CHECK-NOT: msft.module @UnParameterized
-t = pycde.System([Test], primdb)
+t = pycde.System([Test],
+                 primdb,
+                 name="Test",
+                 output_directory=os.environ["OUTPUT_DIRECTORY"])
 t.generate(["construct"])
 t.print()
 
 Test.print()
 UnParameterized.print()
-
-t.run_passes()
 
 # CHECK-LABEL: === Hierarchy
 print("=== Hierarchy")
@@ -104,16 +109,15 @@ assert instance_attrs.find_unused() is None
 instance_attrs.lookup(pycde.AppID("doesnotexist")).add_attribute(loc)
 assert (len(instance_attrs.find_unused()) == 1)
 
+t.run_passes()
+
 print("=== Final mlir dump")
 t.print()
 
-# CHECK-LABEL: === Tcl
-print("=== Tcl")
-
-# CHECK-LABEL: proc Test_config { parent }
-# CHECK-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|UnParameterized|Nothing|dsp_inst
-# CHECK-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing|memory|bank
-# CHECK-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
-# CHECK-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
-# CHECK-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
-t.print_tcl(Test)
+# OUTPUT-LABEL: proc Test_config { parent }
+# OUTPUT-DAG:  set_location_assignment MPDSP_X0_Y10_N0 -to $parent|UnParameterized|Nothing|dsp_inst
+# OUTPUT-DAG:  set_location_assignment MPDSP_X39_Y25_N0 -to $parent|UnParameterized|Nothing|memory|bank
+# OUTPUT-DAG:  set_location_assignment M20K_X15_Y25_N0 -to $parent|UnParameterized|memory|bank
+# OUTPUT-DAG:  set_location_assignment MPDSP_X1_Y12_N0 -to $parent|UnParameterized_1|Nothing|dsp_inst
+# OUTPUT-DAG:  set_location_assignment M20K_X39_Y25_N0 -to $parent|UnParameterized_1|memory|bank
+t.emit_outputs()

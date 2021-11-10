@@ -119,12 +119,6 @@ void circt::python::populateDialectMSFTSubmodule(py::module &m) {
       .value("DSP", PrimitiveType::DSP)
       .export_values();
 
-  m.def("export_tcl", [](MlirOperation mod, py::object fileObject) {
-    circt::python::PyFileAccumulator accum(fileObject, false);
-    py::gil_scoped_release();
-    mlirMSFTExportTcl(mod, accum.getCallback(), accum.getUserData());
-  });
-
   mlir_attribute_subclass(m, "PhysLocationAttr",
                           circtMSFTAttributeIsAPhysLocationAttribute)
       .def_classmethod(

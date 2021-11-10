@@ -6,10 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -42,14 +46,13 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(InstanceOp, ArrayRef<Value> operands,
+  matchAndRewrite(InstanceOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
 };
 } // anonymous namespace
 
 LogicalResult
-InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
-                                    ArrayRef<Value> operands,
+InstanceOpLowering::matchAndRewrite(InstanceOp msftInst, OpAdaptor adaptor,
                                     ConversionPatternRewriter &rewriter) const {
   Operation *referencedModule = msftInst.getReferencedModule();
   if (!referencedModule)
@@ -60,7 +63,9 @@ InstanceOpLowering::matchAndRewrite(InstanceOp msftInst,
         msftInst, "Referenced module was not an HW module");
   auto hwInst = rewriter.create<hw::InstanceOp>(
       msftInst.getLoc(), referencedModule, msftInst.instanceNameAttr(),
-      operands, /*parameters=*/ArrayAttr{}, msftInst.sym_nameAttr());
+      SmallVector<Value>(adaptor.getOperands().begin(),
+                         adaptor.getOperands().end()),
+      msftInst.parameters().getValueOr(ArrayAttr()), msftInst.sym_nameAttr());
   rewriter.replaceOp(msftInst, hwInst.getResults());
   return success();
 }
@@ -69,16 +74,21 @@ namespace {
 /// Lower MSFT's ModuleOp to HW's.
 struct ModuleOpLowering : public OpConversionPattern<MSFTModuleOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  ModuleOpLowering(MLIRContext *context, StringRef outputFile)
+      : OpConversionPattern::OpConversionPattern(context),
+        outputFile(outputFile) {}
 
   LogicalResult
-  matchAndRewrite(MSFTModuleOp mod, ArrayRef<Value> operands,
+  matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
+
+private:
+  StringRef outputFile;
 };
 } // anonymous namespace
 
 LogicalResult
-ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, ArrayRef<Value> operands,
+ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
                                   ConversionPatternRewriter &rewriter) const {
   if (mod.body().empty()) {
     std::string comment;
@@ -95,6 +105,46 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, ArrayRef<Value> operands,
   rewriter.eraseBlock(hwmod.getBodyBlock());
   rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
                               hwmod.getBody().end());
+
+  if (!outputFile.empty()) {
+    auto outputFileAttr =
+        hw::OutputFileAttr::getFromFilename(rewriter.getContext(), outputFile);
+    hwmod->setAttr("output_file", outputFileAttr);
+  }
+
+  return success();
+}
+namespace {
+
+/// Lower MSFT's ModuleExternOp to HW's.
+struct ModuleExternOpLowering : public OpConversionPattern<MSFTModuleExternOp> {
+public:
+  ModuleExternOpLowering(MLIRContext *context, StringRef outputFile)
+      : OpConversionPattern::OpConversionPattern(context),
+        outputFile(outputFile) {}
+
+  LogicalResult
+  matchAndRewrite(MSFTModuleExternOp mod, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final;
+
+private:
+  StringRef outputFile;
+};
+} // anonymous namespace
+
+LogicalResult ModuleExternOpLowering::matchAndRewrite(
+    MSFTModuleExternOp mod, OpAdaptor adaptor,
+    ConversionPatternRewriter &rewriter) const {
+  auto hwMod = rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
+      mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().getValueOr(""),
+      mod.parameters());
+
+  if (!outputFile.empty()) {
+    auto outputFileAttr =
+        hw::OutputFileAttr::getFromFilename(rewriter.getContext(), outputFile);
+    hwMod->setAttr("output_file", outputFileAttr);
+  }
+
   return success();
 }
 
@@ -105,7 +155,7 @@ public:
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(OutputOp out, ArrayRef<Value> operands,
+  matchAndRewrite(OutputOp out, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     rewriter.replaceOpWithNewOp<hw::OutputOp>(out, out.getOperands());
     return success();
@@ -121,7 +171,19 @@ struct LowerToHWPass : public LowerToHWBase<LowerToHWPass> {
 
 void LowerToHWPass::runOnOperation() {
   auto top = getOperation();
-  auto ctxt = &getContext();
+  auto *ctxt = &getContext();
+
+  // Traverse MSFT location attributes and export the required Tcl into
+  // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
+  hw::SymbolCache symCache;
+  populateSymbolCache(top, symCache);
+  for (auto moduleName : tops) {
+    auto hwmod = top.lookupSymbol<msft::MSFTModuleOp>(moduleName);
+    if (!hwmod)
+      continue;
+    if (failed(exportQuartusTcl(hwmod, symCache, tclFile)))
+      return signalPassFailure();
+  }
 
   // The `hw::InstanceOp` (which `msft::InstanceOp` lowers to) convenience
   // builder gets its argNames and resultNames from the `hw::HWModuleOp`. So we
@@ -130,12 +192,13 @@ void LowerToHWPass::runOnOperation() {
   // Convert everything except instance ops first.
 
   ConversionTarget target(*ctxt);
-  target.addIllegalOp<MSFTModuleOp, OutputOp>();
+  target.addIllegalOp<MSFTModuleOp, MSFTModuleExternOp, OutputOp>();
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<sv::SVDialect>();
 
   RewritePatternSet patterns(ctxt);
-  patterns.insert<ModuleOpLowering>(ctxt);
+  patterns.insert<ModuleOpLowering>(ctxt, verilogFile);
+  patterns.insert<ModuleExternOpLowering>(ctxt, verilogFile);
   patterns.insert<OutputOpLowering>(ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))

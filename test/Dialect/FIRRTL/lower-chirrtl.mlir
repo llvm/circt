@@ -298,5 +298,17 @@ firrtl.module @EnableInference1(in %p: !firrtl.uint<1>, in %addr: !firrtl.uint<4
     firrtl.connect %v, %ramport_data : !firrtl.uint<32>, !firrtl.uint<32>
   }
 }
-}
 
+// When the address line is larger than the size of the address port, the port
+// connection should be made using a partial connect.
+firrtl.module @AddressLargerThanPort(in %clock: !firrtl.clock, in %addr: !firrtl.uint<3>, out %out: !firrtl.uint<1>) {
+  // CHECK-LABEL: @AddressLargerThanPort
+  %mem = firrtl.seqmem Undefined  : !firrtl.cmemory<uint<1>, 4>
+  %r_data, %r_port = firrtl.memoryport Infer %mem  {name = "r"} : (!firrtl.cmemory<uint<1>, 4>) -> (!firrtl.uint<1>, !firrtl.cmemoryport)
+  // CHECK: [[ADDR:%.+]] = firrtl.subfield %mem_r(0)
+  %addr_node = firrtl.node %addr  : !firrtl.uint<3>
+  // CHECK: firrtl.partialconnect [[ADDR]], %addr_node
+  firrtl.memoryport.access %r_port[%addr_node], %clock : !firrtl.cmemoryport, !firrtl.uint<3>, !firrtl.clock
+  firrtl.connect %out, %r_data : !firrtl.uint<1>, !firrtl.uint<1>
+}
+}

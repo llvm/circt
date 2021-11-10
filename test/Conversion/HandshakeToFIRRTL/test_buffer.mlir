@@ -74,15 +74,15 @@
 // CHECK:   firrtl.connect %ctrlReadyWire2, %[[OUT_READY:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK: }
 
-// CHECK-LABEL: firrtl.module @test_buffer(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
-// CHECK-SAME:  in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
-// CHECK-SAME:  out %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
-// CHECK-SAME:  out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>,
-// CHECK-SAME:  in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+// CHECK: firrtl.module @test_buffer(in %[[VAL_60:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_61:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_62:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_63:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_64:.*]]: !firrtl.clock, in %[[VAL_65:.*]]: !firrtl.uint<1>) {
+// CHECK:   %[[VAL_66:.*]], %[[VAL_67:.*]], %[[VAL_68:.*]], %[[VAL_69:.*]] = firrtl.instance handshake_buffer  @handshake_buffer_3slots_seq_1ins_1outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+// CHECK:   firrtl.connect %[[VAL_66]], %[[VAL_60]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   firrtl.connect %[[VAL_68]], %[[VAL_64]] : !firrtl.clock, !firrtl.clock
+// CHECK:   firrtl.connect %[[VAL_69]], %[[VAL_65]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %[[VAL_62]], %[[VAL_67]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK:   firrtl.connect %[[VAL_63]], %[[VAL_61]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK: }
 handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
-
-  // CHECK: %inst_arg0, %inst_arg1, %inst_clock, %inst_reset = firrtl.instance "" @handshake_buffer_3slots_seq_1ins_1outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
   %0 = "handshake.buffer"(%arg0) {control = true, sequential = true, slots = 3 : i32} : (none) -> none
   handshake.return %0, %arg1 : none, none
 }
@@ -117,13 +117,15 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 // CHECK:   firrtl.connect %[[OUT_DATA:.+]], %ctrlDataWire1 : !firrtl.uint<64>, !firrtl.uint<64>
 // CHECK: }
 
-// CHECK-LABEL: firrtl.module @test_buffer_data(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+// CHECK: firrtl.module @test_buffer_data(in %[[VAL_64:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_65:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_66:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_67:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_68:.*]]: !firrtl.clock, in %[[VAL_69:.*]]: !firrtl.uint<1>) {
+// CHECK:   %[[VAL_70:.*]], %[[VAL_71:.*]], %[[VAL_72:.*]], %[[VAL_73:.*]] = firrtl.instance handshake_buffer  @handshake_buffer_in_ui64_out_ui64_2slots_seq(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+// CHECK:   firrtl.connect %[[VAL_70]], %[[VAL_64]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:   firrtl.connect %[[VAL_72]], %[[VAL_68]] : !firrtl.clock, !firrtl.clock
+// CHECK:   firrtl.connect %[[VAL_73]], %[[VAL_69]] : !firrtl.uint<1>, !firrtl.uint<1>
+// CHECK:   firrtl.connect %[[VAL_66]], %[[VAL_71]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
+// CHECK:   firrtl.connect %[[VAL_67]], %[[VAL_65]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
+// CHECK: }
 handshake.func @test_buffer_data(%arg0: index, %arg1: none, ...) -> (index, none) {
-
-  // CHECK: %inst_arg0, %inst_arg1, %inst_clock, %inst_reset = firrtl.instance "" @handshake_buffer_in_ui64_out_ui64_2slots_seq(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
-  // CHECK: firrtl.connect %inst_clock, %clock : !firrtl.clock, !firrtl.clock
-  // CHECK: firrtl.connect %inst_reset, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   %0 = "handshake.buffer"(%arg0) {control = false, sequential = true, slots = 2 : i32} : (index) -> index
   handshake.return %0, %arg1 : index, none
 }

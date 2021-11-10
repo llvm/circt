@@ -1338,7 +1338,7 @@ static LogicalResult foldSingleSetConnect(ConnectOp op,
   // Only support wire and reg for now.
   if (!isa<WireOp>(connectedDecl) && !isa<RegOp>(connectedDecl))
     return failure();
-  if (AnnotationSet(connectedDecl).hasDontTouch())
+  if (hasDontTouch(connectedDecl))
     return failure();
 
   // Only forward if the types exactly match and there is one connect.
@@ -1436,7 +1436,7 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
     // TODO: May need to be sensitive to "don't touch" or other
     // annotations.
     if (auto wire = dyn_cast_or_null<WireOp>(operand.getDefiningOp())) {
-      if (!AnnotationSet(wire).hasDontTouch() && wire->hasOneUse()) {
+      if (!hasDontTouch(wire.getOperation()) && wire->hasOneUse()) {
         SmallVector<Value> newOperands;
         for (auto newOperand : op.getOperands())
           if (newOperand != operand) // Don't the add wire.
@@ -1518,7 +1518,7 @@ struct foldResetMux : public mlir::RewritePattern {
                                 PatternRewriter &rewriter) const override {
     auto reg = cast<RegResetOp>(op);
     auto reset = dyn_cast_or_null<ConstantOp>(reg.resetValue().getDefiningOp());
-    if (!reset || AnnotationSet(reg).hasDontTouch())
+    if (!reset || hasDontTouch(reg.getOperation()))
       return failure();
     // Find the one true connect, or bail
     ConnectOp con = getSingleConnectUserOf(reg.result());
@@ -1654,9 +1654,9 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
     constOp->moveBefore(&con->getBlock()->front());
 
   if (!constReg)
-    rewriter.replaceOpWithNewOp<RegResetOp>(reg, reg.getType(), reg.clockVal(),
-                                            mux.sel(), mux.high(), reg.name(),
-                                            reg.annotations());
+    rewriter.replaceOpWithNewOp<RegResetOp>(
+        reg, reg.getType(), reg.clockVal(), mux.sel(), mux.high(), reg.name(),
+        reg.annotations(), reg.inner_symAttr());
   auto pt = rewriter.saveInsertionPoint();
   rewriter.setInsertionPoint(con);
   rewriter.replaceOpWithNewOp<ConnectOp>(con, con.dest(),
@@ -1666,7 +1666,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 }
 
 LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
-  if (!(AnnotationSet(op).hasDontTouch()) &&
+  if (!hasDontTouch(op.getOperation()) &&
       succeeded(foldHiddenReset(op, rewriter)))
     return success();
 

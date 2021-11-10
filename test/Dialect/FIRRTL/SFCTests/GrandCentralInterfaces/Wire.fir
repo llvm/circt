@@ -152,7 +152,9 @@ circuit Top :
     ; CHECK-NOT:      endmodule
     ; EXTRACT:          // MyInterface MyView();
     ; NOEXTRACT:        {{^ *}}MyInterface MyView();
-    ; EXTRACT:          // MyView_companion MyView_companion
+    ; EXTRACT:          /* This instance is elsewhere emitted as a bind statement.
+    ; EXTRACT-NEXT:        MyView_companion MyView_companion
+    ; EXTRACT-NEXT:     */
     ; NOEXTRACT:        {{^ *}}MyView_companion MyView_companion
 
     ; EXTRACT:        FILE "Wire/firrtl/bindings.sv"

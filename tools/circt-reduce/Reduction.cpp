@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Reduction.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/InitAllDialects.h"
@@ -22,9 +23,8 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Debug.h"
-
-#include "Reduction.h"
 
 #define DEBUG_TYPE "circt-reduce"
 
@@ -43,8 +43,8 @@ Reduction::~Reduction() {}
 //===----------------------------------------------------------------------===//
 
 PassReduction::PassReduction(MLIRContext *context, std::unique_ptr<Pass> pass,
-                             bool canIncreaseSize)
-    : context(context), canIncreaseSize(canIncreaseSize) {
+                             bool canIncreaseSize, bool oneShot)
+    : context(context), canIncreaseSize(canIncreaseSize), oneShot(oneShot) {
   passName = pass->getArgument();
   if (passName.empty())
     passName = pass->getName();
@@ -92,6 +92,7 @@ struct ModuleExternalizer : public Reduction {
 /// operations that have no more uses.
 static void pruneUnusedOps(Operation *initialOp) {
   SmallVector<Operation *> worklist;
+  SmallSet<Operation *, 4> handled;
   worklist.push_back(initialOp);
   while (!worklist.empty()) {
     auto op = worklist.pop_back_val();
@@ -99,7 +100,8 @@ static void pruneUnusedOps(Operation *initialOp) {
       continue;
     for (auto arg : op->getOperands())
       if (auto argOp = arg.getDefiningOp())
-        worklist.push_back(argOp);
+        if (handled.insert(argOp).second)
+          worklist.push_back(argOp);
     op->erase();
   }
 }
@@ -119,8 +121,9 @@ struct ConnectInvalidator : public Reduction {
     OpBuilder builder(op);
     auto invOp =
         builder.create<firrtl::InvalidValueOp>(rhs.getLoc(), rhs.getType());
+    auto rhsOp = rhs.getDefiningOp();
     op->setOperand(1, invOp);
-    if (auto rhsOp = rhs.getDefiningOp())
+    if (rhsOp)
       pruneUnusedOps(rhsOp);
     return success();
   }
@@ -141,6 +144,46 @@ struct OperationPruner : public Reduction {
     return success();
   }
   std::string getName() const override { return "operation-pruner"; }
+};
+
+/// A sample reduction pattern that removes ports from the root `firrtl.module`
+/// if the port is not used or just invalidated.
+struct RootPortPruner : public Reduction {
+  bool match(Operation *op) const override {
+    auto module = dyn_cast<firrtl::FModuleOp>(op);
+    if (!module)
+      return false;
+    auto circuit = module->getParentOfType<firrtl::CircuitOp>();
+    if (!circuit)
+      return false;
+    return circuit.nameAttr() == module.getNameAttr();
+  }
+  LogicalResult rewrite(Operation *op) const override {
+    assert(match(op));
+    auto module = cast<firrtl::FModuleOp>(op);
+    SmallVector<unsigned> dropPorts;
+    for (unsigned i = 0, e = module.getNumPorts(); i != e; ++i) {
+      bool onlyInvalidated =
+          llvm::all_of(module.getArgument(i).getUses(), [](OpOperand &use) {
+            auto *op = use.getOwner();
+            if (!isa<firrtl::ConnectOp, firrtl::PartialConnectOp>(op))
+              return false;
+            if (use.getOperandNumber() != 0)
+              return false;
+            if (!op->getOperand(1).getDefiningOp<firrtl::InvalidValueOp>())
+              return false;
+            return true;
+          });
+      if (onlyInvalidated) {
+        dropPorts.push_back(i);
+        for (auto user : module.getArgument(i).getUsers())
+          user->erase();
+      }
+    }
+    module.erasePorts(dropPorts);
+    return success();
+  }
+  std::string getName() const override { return "root-port-pruner"; }
 };
 
 /// A sample reduction pattern that replaces instances of `firrtl.extmodule`
@@ -191,12 +234,23 @@ void circt::createAllReductions(
   // sorted by decreasing reduction potential/benefit. For example, things that
   // can knock out entire modules while being cheap should be tried first,
   // before trying to tweak operands of individual arithmetic ops.
-  add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<PassReduction>(context, firrtl::createInlinerPass()));
   add(std::make_unique<PassReduction>(context,
                                       createSimpleCanonicalizerPass()));
+  add(std::make_unique<PassReduction>(context, firrtl::createLowerCHIRRTLPass(),
+                                      true, true));
+  add(std::make_unique<PassReduction>(context, firrtl::createInferWidthsPass(),
+                                      true, true));
+  add(std::make_unique<PassReduction>(context, firrtl::createInferResetsPass(),
+                                      true, true));
+  add(std::make_unique<PassReduction>(
+      context, firrtl::createLowerFIRRTLTypesPass(), true, true));
+  add(std::make_unique<PassReduction>(context, firrtl::createExpandWhensPass(),
+                                      true, true));
+  add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<PassReduction>(context, createCSEPass()));
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<OperationPruner>());
+  add(std::make_unique<RootPortPruner>());
   add(std::make_unique<ExtmoduleInstanceRemover>());
 }

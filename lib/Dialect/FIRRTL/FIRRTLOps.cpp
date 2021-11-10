@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -49,6 +50,11 @@ removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
     assert(indicesToDrop.back() < input.size() && "index out of range");
   }
 #endif
+
+  // If the input is empty (which is an optimization we do for certain array
+  // attributes), simply return an empty vector.
+  if (input.empty())
+    return {};
 
   // Copy over the live chunks.
   size_t lastCopied = 0;
@@ -151,6 +157,24 @@ size_t firrtl::getNumPorts(Operation *op) {
   if (auto module = dyn_cast<FModuleLike>(op))
     return module.getNumPorts();
   return op->getNumResults();
+}
+
+/// Check whether an operation has a `DontTouch` annotation, or a symbol that
+/// should prevent certain types of canonicalizations.
+bool firrtl::hasDontTouch(Operation *op) {
+  return op->getAttr(hw::InnerName::getInnerNameAttrName()) ||
+         AnnotationSet(op).hasDontTouch();
+}
+
+/// Check whether a block argument ("port") or the operation defining a value
+/// has a `DontTouch` annotation, or a symbol that should prevent certain types
+/// of canonicalizations.
+bool firrtl::hasDontTouch(Value value) {
+  if (auto *op = value.getDefiningOp())
+    return hasDontTouch(op);
+  auto arg = value.dyn_cast<BlockArgument>();
+  auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+  return AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
 }
 
 //===----------------------------------------------------------------------===//
@@ -373,16 +397,23 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       direction::unpackAttribute(this->getPortDirectionsAttr());
   ArrayRef<Attribute> existingNames = this->getPortNames();
   ArrayRef<Attribute> existingTypes = this->getPortTypes();
+  ArrayRef<Attribute> existingAnnos = this->getPortAnnotations();
   assert(existingDirections.size() == oldNumArgs);
   assert(existingNames.size() == oldNumArgs);
   assert(existingTypes.size() == oldNumArgs);
+  assert(existingAnnos.size() == oldNumArgs || existingAnnos.size() == 0);
 
   SmallVector<Direction> newDirections;
   SmallVector<Attribute> newNames;
   SmallVector<Attribute> newTypes;
+  SmallVector<Attribute> newAnnos;
   newDirections.reserve(newNumArgs);
   newNames.reserve(newNumArgs);
   newTypes.reserve(newNumArgs);
+  newAnnos.reserve(newNumArgs);
+
+  auto EmptyArray = ArrayAttr::get(getContext(), {});
+  bool addAnnos = existingAnnos.size() > 0;
 
   unsigned oldIdx = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
@@ -390,6 +421,8 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
+      if (addAnnos)
+        newAnnos.push_back(existingAnnos[oldIdx]);
       ++oldIdx;
     }
   };
@@ -398,6 +431,8 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     newDirections.push_back(port.second.direction);
     newNames.push_back(port.second.name);
     newTypes.push_back(TypeAttr::get(port.second.type));
+    if (addAnnos)
+      newAnnos.push_back(EmptyArray);
     body->insertArgument(port.first, port.second.type, port.second.loc);
   }
   migrateOldPorts(oldNumArgs);
@@ -407,6 +442,7 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
                    direction::packAttribute(getContext(), newDirections));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newNames));
   (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newTypes));
+  (*this)->setAttr("portAnnotations", ArrayAttr::get(getContext(), newAnnos));
 }
 
 /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
@@ -814,7 +850,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        StringRef name, ArrayRef<Direction> portDirections,
                        ArrayRef<Attribute> portNames,
                        ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
+                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
+                       StringAttr innerSym) {
   result.addTypes(resultTypes);
   result.addAttribute("moduleName",
                       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -825,6 +862,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
   result.addAttribute("lowerToBind", builder.getBoolAttr(lowerToBind));
+  if (innerSym)
+    result.addAttribute("inner_sym", innerSym);
 
   if (portAnnotations.empty()) {
     SmallVector<Attribute, 16> portAnnotationsVec(resultTypes.size(),
@@ -841,7 +880,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        ArrayRef<Attribute> annotations,
-                       ArrayRef<Attribute> portAnnotations, bool lowerToBind) {
+                       ArrayRef<Attribute> portAnnotations, bool lowerToBind,
+                       StringAttr innerSym) {
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
@@ -863,7 +903,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                SymbolRefAttr::get(builder.getContext(), module.moduleName()),
                builder.getStringAttr(name), module.getPortDirectionsAttr(),
                module.getPortNamesAttr(), builder.getArrayAttr(annotations),
-               portAnnotationsAttr, builder.getBoolAttr(lowerToBind));
+               portAnnotationsAttr, builder.getBoolAttr(lowerToBind), innerSym);
 }
 
 ArrayAttr InstanceOp::getPortAnnotation(unsigned portIdx) {
@@ -1003,12 +1043,16 @@ static void printInstanceOp(OpAsmPrinter &p, InstanceOp &op) {
   // Print the instance name.
   p << " ";
   p.printKeywordOrString(op.name());
+  if (auto attr = op.inner_symAttr()) {
+    p << " sym ";
+    p.printSymbolName(attr.getValue());
+  }
   p << " ";
 
   // Print the attr-dict.
   SmallVector<StringRef, 4> omittedAttrs = {
-      "moduleName", "name",      "portDirections",
-      "portNames",  "portTypes", "portAnnotations"};
+      "moduleName",      "name",     "portDirections", "portNames", "portTypes",
+      "portAnnotations", "inner_sym"};
   if (!op.lowerToBind())
     omittedAttrs.push_back("lowerToBind");
   if (op.annotations().empty())
@@ -1036,6 +1080,7 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   auto &resultAttrs = result.attributes;
 
   std::string name;
+  StringAttr innerSymAttr;
   FlatSymbolRefAttr moduleName;
   SmallVector<OpAsmParser::OperandType> entryArgs;
   SmallVector<Direction, 4> portDirections;
@@ -1043,8 +1088,15 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
   SmallVector<Attribute, 4> portTypes;
   SmallVector<Attribute, 4> portAnnotations;
 
-  if (parser.parseKeywordOrString(&name) ||
-      parser.parseOptionalAttrDict(result.attributes) ||
+  if (parser.parseKeywordOrString(&name))
+    return failure();
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    // Parsing an optional symbol name doesn't fail, so no need to check the
+    // result.
+    (void)parser.parseOptionalSymbolName(
+        innerSymAttr, hw::InnerName::getInnerNameAttrName(), result.attributes);
+  }
+  if (parser.parseOptionalAttrDict(result.attributes) ||
       parser.parseAttribute(moduleName, "moduleName", resultAttrs) ||
       parseModulePorts(parser, /*hasSSAIdentifiers=*/false, entryArgs,
                        portDirections, portNames, portTypes, portAnnotations))
@@ -1127,7 +1179,7 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
                   uint32_t writeLatency, uint64_t depth, RUWAttr ruw,
                   ArrayRef<Attribute> portNames, StringRef name,
                   ArrayRef<Attribute> annotations,
-                  ArrayRef<Attribute> portAnnotations) {
+                  ArrayRef<Attribute> portAnnotations, StringAttr innerSym) {
   result.addAttribute(
       "readLatency",
       builder.getIntegerAttr(builder.getIntegerType(32), readLatency));
@@ -1140,6 +1192,8 @@ void MemOp::build(OpBuilder &builder, OperationState &result,
   result.addAttribute("portNames", builder.getArrayAttr(portNames));
   result.addAttribute("name", builder.getStringAttr(name));
   result.addAttribute("annotations", builder.getArrayAttr(annotations));
+  if (innerSym)
+    result.addAttribute("inner_sym", innerSym);
   result.addTypes(resultTypes);
 
   if (portAnnotations.empty()) {
@@ -2665,6 +2719,7 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
                                  ArrayRef<StringRef> extraElides = {}) {
   // List of attributes to elide when printing the dictionary.
   SmallVector<StringRef, 2> elides(extraElides.begin(), extraElides.end());
+  elides.push_back(hw::InnerName::getInnerNameAttrName());
 
   // Note that we only need to print the "name" attribute if the asmprinter
   // result name disagrees with it.  This can happen in strange cases, e.g.
@@ -2732,8 +2787,8 @@ static ParseResult parseMemOp(OpAsmParser &parser, NamedAttrList &resultAttrs) {
 
 /// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
 static void printMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
-  // "ruw" is always elided.
-  printElidePortAnnotations(p, op, attr, {"ruw"});
+  // "ruw" and "inner_sym" is always elided.
+  printElidePortAnnotations(p, op, attr, {"ruw", "inner_sym"});
 }
 
 //===----------------------------------------------------------------------===//

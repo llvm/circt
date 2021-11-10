@@ -11,6 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+include "circt/Types.td"
+
 // Note that net declarations like 'wire' should not appear in an always block.
 def WireOp : SVOp<"wire", [NonProceduralOp, 
           DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
@@ -91,7 +93,7 @@ def XMROp : SVOp<"xmr", []> {
     generating this op should ensure that any instance or object in the intended
     path has public visibility so paths are not invalidated.
   }];
-  let arguments = (ins UnitAttr:$isRooted, StringArrayAttr:$path, StrAttr:$terminal);
+  let arguments = (ins UnitAttr:$isRooted, StrArrayAttr:$path, StrAttr:$terminal);
   let results = (outs InOutType:$result);
   let assemblyFormat = "(`isRooted` $isRooted^)? custom<XMRPath>($path, $terminal) attr-dict `:` type($result)"; 
 }

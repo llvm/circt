@@ -288,14 +288,16 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
   // `printf` op actually carries all the information we need for the assert,
   // while the actual `assert` has none of it. This makes me sad.
   if (flippedCond) {
-    SmallVector<Operation *, 1> opsToErase;
+    // Use a set to catch cases where a verification op is a double user of the
+    // flipped condition.
+    SmallPtrSet<Operation *, 1> opsToErase;
     for (const auto &user : flippedCond.getUsers()) {
       TypeSwitch<Operation *>(user).Case<AssertOp, AssumeOp, CoverOp>(
           [&](auto op) {
             if (op.clock() == printOp.clock() &&
                 op.enable() == printOp.cond() &&
                 op.predicate() == flippedCond && !op.isConcurrent())
-              opsToErase.push_back(op);
+              opsToErase.insert(op);
           });
     }
     for (auto op : opsToErase)

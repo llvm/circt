@@ -21,6 +21,8 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 
+#include <set>
+
 using namespace mlir;
 using namespace circt;
 using namespace circt::handshake;
@@ -190,13 +192,23 @@ static std::string getTypeName(Operation *oldOp, Type type) {
   return typeName;
 }
 
-/// Construct a name for creating FIRRTL sub-module.
-static std::string getSubModuleName(Operation *oldOp) {
+/// Returns a submodule name resulting from an operation, without discriminating
+/// type information.
+static std::string getBareSubModuleName(Operation *oldOp) {
   // The dialect name is separated from the operation name by '.', which is not
   // valid in SystemVerilog module names. In case this name is used in
   // SystemVerilog output, replace '.' with '_'.
   std::string subModuleName = oldOp->getName().getStringRef().str();
   std::replace(subModuleName.begin(), subModuleName.end(), '.', '_');
+  return subModuleName;
+}
+
+/// Construct a name for creating FIRRTL sub-module.
+static std::string getSubModuleName(Operation *oldOp) {
+  if (auto instanceOp = dyn_cast<handshake::InstanceOp>(oldOp); instanceOp)
+    return instanceOp.getModule().str();
+
+  std::string subModuleName = getBareSubModuleName(oldOp);
 
   // Add value of the constant operation.
   if (auto constOp = dyn_cast<handshake::ConstantOp>(oldOp)) {
@@ -444,11 +456,30 @@ static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
 static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
   llvm::SmallVector<PortInfo, 8> ports;
+  auto argNames = funcOp->getAttrOfType<ArrayAttr>("argNames");
+  auto resNames = funcOp->getAttrOfType<ArrayAttr>("outNames");
+  auto getArgumentName = [&](unsigned index) {
+    if (argNames && argNames.size() > index)
+      return rewriter.getStringAttr(
+          argNames[index].cast<StringAttr>().getValue());
+    else
+      return rewriter.getStringAttr("arg" + std::to_string(index));
+  };
+  auto getResName = [&](unsigned index) {
+    std::string name;
+    if (resNames && resNames.size() > index)
+      name = resNames[index].cast<StringAttr>().getValue();
+    else if (index == funcOp.getNumResults() - 1)
+      name = "outCtrl";
+    else
+      name = "out" + std::to_string(index);
+    return rewriter.getStringAttr(name);
+  };
 
   // Add all inputs of funcOp.
   unsigned argIndex = 0;
   for (auto &arg : funcOp.getArguments()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
+    auto portName = getArgumentName(argIndex);
     auto bundlePortType = getBundleType(arg.getType());
 
     if (!bundlePortType)
@@ -462,8 +493,9 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   auto funcLoc = funcOp.getLoc();
 
   // Add all outputs of funcOp.
+  argIndex = 0;
   for (auto portType : funcOp.getType().getResults()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
+    auto portName = getResName(argIndex);
     auto bundlePortType = getBundleType(portType);
 
     if (!bundlePortType)
@@ -525,17 +557,17 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 // FIRRTL Sub-module Related Functions
 //===----------------------------------------------------------------------===//
 
-/// Check whether a submodule with the same name has been created elsewhere.
-/// Return the matched submodule if true, otherwise return nullptr.
-static FModuleOp checkSubModuleOp(FModuleOp topModuleOp, Operation *oldOp) {
-  for (auto &op : topModuleOp->getParentRegion()->front()) {
-    if (auto subModuleOp = dyn_cast<FModuleOp>(op)) {
-      if (getSubModuleName(oldOp) == subModuleOp.getName()) {
-        return subModuleOp;
-      }
-    }
-  }
-  return FModuleOp(nullptr);
+/// Check whether a submodule with the same name has been created elsewhere in
+/// the FIRRTL circt. Return the matched submodule if true, otherwise return
+/// nullptr.
+static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
+  auto moduleOp = circuitOp.lookupSymbol<FModuleOp>(getSubModuleName(oldOp));
+
+  if (isa<handshake::InstanceOp>(oldOp))
+    assert(moduleOp &&
+           "handshake.instance target modules should always have been lowered "
+           "before the modules that reference them!");
+  return moduleOp;
 }
 
 /// All standard expressions and handshake elastic components will be converted
@@ -868,7 +900,6 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   ValueVector argSubfields = portList.front();
   Value argValid = argSubfields[0];
   Value argReady = argSubfields[1];
-  Value argData = argSubfields[2];
 
   // A Sink operation is always ready to accept tokens.
   auto signalType = argValid.getType().cast<FIRRTLType>();
@@ -877,6 +908,15 @@ bool HandshakeBuilder::visitHandshake(SinkOp op) {
   rewriter.create<ConnectOp>(insertLoc, argReady, highSignal);
 
   rewriter.eraseOp(argValid.getDefiningOp());
+
+  if (auto ctrlAttr = op->getAttrOfType<BoolAttr>("control");
+      ctrlAttr && ctrlAttr.getValue())
+    return true;
+
+  // Non-control sink; must also have a data operand.
+  assert(argSubfields.size() >= 3 &&
+         "expected a data operand to a non-control sink op");
+  Value argData = argSubfields[2];
   rewriter.eraseOp(argData.getDefiningOp());
   return true;
 }
@@ -2119,6 +2159,13 @@ bool HandshakeBuilder::visitHandshake(handshake::LoadOp op) {
 // Old Operation Conversion Functions
 //===----------------------------------------------------------------------===//
 
+static std::string getInstanceName(Operation *op) {
+  if (auto instOp = dyn_cast<handshake::InstanceOp>(op); instOp)
+    return instOp.getModule().str();
+  else
+    return getBareSubModuleName(op);
+}
+
 /// Create InstanceOp in the top-module. This will be called after the
 /// corresponding sub-module and combinational logic are created.
 static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
@@ -2127,8 +2174,8 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
   rewriter.setInsertionPointAfter(oldOp);
 
   // Create a instance operation.
-  auto instanceOp =
-      rewriter.create<firrtl::InstanceOp>(oldOp->getLoc(), subModuleOp, "");
+  auto instanceOp = rewriter.create<firrtl::InstanceOp>(
+      oldOp->getLoc(), subModuleOp, getInstanceName(oldOp));
 
   // Connect the new created instance with its predecessors and successors in
   // the top-module.
@@ -2142,6 +2189,9 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
                                    [](BlockArgument &arg) -> bool {
                                      return arg.getType().isa<ClockType>();
                                    });
+    assert(firstClock != topArgs.end() && "Expected a clock signal");
+    unsigned firstClkIdx = std::distance(topArgs.begin(), firstClock);
+
     if (portIndex < numIns) {
       // Connect input ports.
       rewriter.create<ConnectOp>(oldOp->getLoc(), result,
@@ -2151,8 +2201,11 @@ static void createInstOp(Operation *oldOp, FModuleOp subModuleOp,
       Value newResult = oldOp->getResult(portIndex - numIns);
       newResult.replaceAllUsesWith(result);
     } else {
-      // Connect clock or reset signal.
-      auto signal = *(firstClock + 2 * clockDomain + portIndex - numArgs);
+      // Connect clock or reset signal(s).
+      unsigned clkOrResetIdx =
+          firstClkIdx + 2 * clockDomain + portIndex - numArgs;
+      assert(topArgs.size() > clkOrResetIdx);
+      auto signal = topArgs[clkOrResetIdx];
       rewriter.create<ConnectOp>(oldOp->getLoc(), result, signal);
     }
     ++portIndex;
@@ -2208,13 +2261,12 @@ static void convertReturnOp(Operation *oldOp, FModuleOp topModuleOp,
 /// Please refer to test_addi.mlir test case.
 struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
   using OpConversionPattern<handshake::FuncOp>::OpConversionPattern;
+  HandshakeFuncOpLowering(MLIRContext *context, CircuitOp circuitOp)
+      : OpConversionPattern<handshake::FuncOp>(context), circuitOp(circuitOp) {}
 
   LogicalResult
-  matchAndRewrite(handshake::FuncOp funcOp, ArrayRef<Value> operands,
+  matchAndRewrite(handshake::FuncOp funcOp, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Create FIRRTL circuit and top-module operation.
-    auto circuitOp = rewriter.create<CircuitOp>(
-        funcOp.getLoc(), rewriter.getStringAttr(funcOp.getName()));
     rewriter.setInsertionPointToStart(circuitOp.getBody());
     auto topModuleOp = createTopModuleOp(funcOp, /*numClocks=*/1, rewriter);
 
@@ -2226,7 +2278,7 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
       // This branch takes care of all non-timing operations that require to
       // be instantiated in the top-module.
       else if (op.getDialect()->getNamespace() != "firrtl") {
-        FModuleOp subModuleOp = checkSubModuleOp(topModuleOp, &op);
+        FModuleOp subModuleOp = checkSubModuleOp(circuitOp, &op);
         bool hasClock = op.hasTrait<mlir::OpTrait::HasClock>();
 
         // Check if the sub-module already exists.
@@ -2259,7 +2311,90 @@ struct HandshakeFuncOpLowering : public OpConversionPattern<handshake::FuncOp> {
 
     return success();
   }
+
+private:
+  /// Top level FIRRTL circuit operation, which we'll emit into. Marked as
+  /// mutable due to circuitOp.getBody() being non-const.
+  mutable CircuitOp circuitOp;
 };
+
+using InstanceGraph = std::map<std::string, std::set<std::string>>;
+
+/// Iterates over the handshake::FuncOp's in the program to build an instance
+/// graph. In doing so, we detect whether there are any cycles in this graph, as
+/// well as infer a top module for the design by performing a topological sort
+/// of the instance graph. The result of this sort is placed in sortedFuncs.
+static LogicalResult
+resolveInstanceGraph(ModuleOp moduleOp, InstanceGraph &instanceGraph,
+                     std::string &topLevel,
+                     SmallVectorImpl<std::string> &sortedFuncs) {
+  // Create use graph
+  auto walkFuncOps = [&](handshake::FuncOp funcOp) {
+    auto &funcUses = instanceGraph[funcOp.getName().str()];
+    funcOp.walk([&](handshake::InstanceOp instanceOp) {
+      funcUses.insert(instanceOp.getModule().str());
+    });
+  };
+  moduleOp.walk(walkFuncOps);
+
+  // find top-level (and cycles) using a topological sort. Initialize all
+  // instances as candidate top level modules; these will be pruned whenever
+  // they are referenced by another module.
+  std::set<std::string> visited, marked, candidateTopLevel;
+  SmallVector<std::string> cycleTrace;
+  bool cyclic = false;
+  llvm::transform(instanceGraph,
+                  std::inserter(candidateTopLevel, candidateTopLevel.begin()),
+                  [](auto it) { return it.first; });
+  std::function<void(const std::string &, SmallVector<std::string>)> cycleUtil =
+      [&](const std::string &node, SmallVector<std::string> trace) {
+        if (cyclic || visited.count(node))
+          return;
+        trace.push_back(node);
+        if (marked.count(node)) {
+          cyclic = true;
+          cycleTrace = trace;
+          return;
+        }
+        marked.insert(node);
+        for (auto use : instanceGraph[node]) {
+          candidateTopLevel.erase(use);
+          cycleUtil(use, trace);
+        }
+        marked.erase(node);
+        visited.insert(node);
+        sortedFuncs.insert(sortedFuncs.begin(), node);
+      };
+  for (auto it : instanceGraph) {
+    if (visited.count(it.first) == 0)
+      cycleUtil(it.first, {});
+    if (cyclic)
+      break;
+  }
+
+  if (cyclic) {
+    auto err = moduleOp.emitOpError();
+    err << "cannot lower handshake program - cycle "
+           "detected in instance graph (";
+    llvm::interleave(
+        cycleTrace, err, [&](auto node) { err << node; }, "->");
+    err << ").";
+    return err;
+  }
+  assert(!candidateTopLevel.empty() &&
+         "if non-cyclic, there should be at least 1 candidate top level");
+
+  if (candidateTopLevel.size() > 1) {
+    auto err = moduleOp.emitOpError();
+    err << "multiple candidate top-level modules detected (";
+    llvm::interleaveComma(candidateTopLevel, err,
+                          [&](auto topLevel) { err << topLevel; });
+    err << "). Please remove one of these from the source program.";
+    return err;
+  }
+  topLevel = *candidateTopLevel.begin();
+  return success();
+}
 
 namespace {
 class HandshakeToFIRRTLPass
@@ -2267,16 +2402,42 @@ class HandshakeToFIRRTLPass
 public:
   void runOnOperation() override {
     auto op = getOperation();
+    auto *ctx = op.getContext();
+
+    // Resolve the instance graph to get a top-level module.
+    std::string topLevel;
+    InstanceGraph uses;
+    SmallVector<std::string> sortedFuncs;
+    if (resolveInstanceGraph(op, uses, topLevel, sortedFuncs).failed()) {
+      signalPassFailure();
+      return;
+    }
+
+    // Create FIRRTL circuit op.
+    OpBuilder builder(ctx);
+    builder.setInsertionPointToStart(op.getBody());
+    auto circuitOp =
+        builder.create<CircuitOp>(op.getLoc(), builder.getStringAttr(topLevel));
 
     ConversionTarget target(getContext());
     target.addLegalDialect<FIRRTLDialect>();
     target.addIllegalDialect<handshake::HandshakeDialect>();
 
-    RewritePatternSet patterns(op.getContext());
-    patterns.insert<HandshakeFuncOpLowering>(op.getContext());
-
-    if (failed(applyPartialConversion(op, target, std::move(patterns))))
-      signalPassFailure();
+    // Convert the handshake.func operations in post-order wrt. the instance
+    // graph. This ensures that any referenced submodules (through
+    // handshake.instance) has already been lowered, and their FIRRTL module
+    // equivalents are available.
+    for (auto funcName : llvm::reverse(sortedFuncs)) {
+      RewritePatternSet patterns(op.getContext());
+      patterns.insert<HandshakeFuncOpLowering>(op.getContext(), circuitOp);
+      auto funcOp = op.lookupSymbol(funcName);
+      assert(funcOp && "Symbol not found in module!");
+      if (failed(applyPartialConversion(funcOp, target, std::move(patterns)))) {
+        signalPassFailure();
+        funcOp->emitOpError() << "error during conversion";
+        return;
+      }
+    }
   }
 };
 } // end anonymous namespace

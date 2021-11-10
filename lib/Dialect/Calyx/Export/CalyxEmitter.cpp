@@ -238,8 +238,12 @@ private:
         buffer << addressSymbol() << identifier;
         // The only time we may omit the value is when it is a Boolean attribute
         // with value 1.
-        if (!isBooleanAttribute || intAttr.getValue() != 1)
-          buffer << LParen() << value << RParen();
+        if (!isBooleanAttribute || intAttr.getValue() != 1) {
+          // Retrieve the unsigned representation of the value.
+          SmallVector<char, 4> s;
+          value.toStringUnsigned(s, /*Radix=*/10);
+          buffer << LParen() << s << RParen();
+        }
         buffer << space();
       }
     }

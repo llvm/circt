@@ -11,8 +11,8 @@
 // CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i6
 // CHECK-DAG:        %std_add_0.left, %std_add_0.right, %std_add_0.out = calyx.std_add @std_add_0 : i32, i32, i32
 // CHECK-DAG:        %std_lt_0.left, %std_lt_0.right, %std_lt_0.out = calyx.std_lt @std_lt_0 : i32, i32, i1
-// CHECK-DAG:        %mem_1.addr0, %mem_1.write_data, %mem_1.write_en, %mem_1.clk, %mem_1.read_data, %mem_1.done = calyx.memory @mem_1 <[64] x 32> [6] : i6, i32, i1, i1, i32, i1
-// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] : i6, i32, i1, i1, i32, i1
+// CHECK-DAG:        %mem_1.addr0, %mem_1.write_data, %mem_1.write_en, %mem_1.clk, %mem_1.read_data, %mem_1.done = calyx.memory @mem_1 <[64] x 32> [6] {external = true} : i6, i32, i1, i1, i32, i1
+// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] {external = true} : i6, i32, i1, i1, i32, i1
 // CHECK-DAG:        %while_0_arg0_reg.in, %while_0_arg0_reg.write_en, %while_0_arg0_reg.clk, %while_0_arg0_reg.reset, %while_0_arg0_reg.out, %while_0_arg0_reg.done = calyx.register @while_0_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.group @assign_while_0_init  {
@@ -91,7 +91,7 @@ module {
 // CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i6
 // CHECK-DAG:        %std_add_1.left, %std_add_1.right, %std_add_1.out = calyx.std_add @std_add_1 : i32, i32, i32
 // CHECK-DAG:        %std_add_0.left, %std_add_0.right, %std_add_0.out = calyx.std_add @std_add_0 : i32, i32, i32
-// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] : i6, i32, i1, i1, i32, i1
+// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] {external = true} : i6, i32, i1, i1, i32, i1
 // CHECK-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
@@ -147,7 +147,7 @@ module {
 // CHECK-DAG:        %std_add_2.left, %std_add_2.right, %std_add_2.out = calyx.std_add @std_add_2 : i32, i32, i32
 // CHECK-DAG:        %std_add_1.left, %std_add_1.right, %std_add_1.out = calyx.std_add @std_add_1 : i32, i32, i32
 // CHECK-DAG:        %std_add_0.left, %std_add_0.right, %std_add_0.out = calyx.std_add @std_add_0 : i32, i32, i32
-// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] : i6, i32, i1, i1, i32, i1
+// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] {external = true} : i6, i32, i1, i1, i32, i1
 // CHECK-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
@@ -208,7 +208,7 @@ module {
 // CHECK-DAG:        %load_1_reg.in, %load_1_reg.write_en, %load_1_reg.clk, %load_1_reg.reset, %load_1_reg.out, %load_1_reg.done = calyx.register @load_1_reg : i32, i1, i1, i1, i32, i1
 // CHECK-DAG:        %load_0_reg.in, %load_0_reg.write_en, %load_0_reg.clk, %load_0_reg.reset, %load_0_reg.out, %load_0_reg.done = calyx.register @load_0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-DAG:        %std_pad_0.in, %std_pad_0.out = calyx.std_pad @std_pad_0 : i6, i32
-// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] : i6, i32, i1, i1, i32, i1
+// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] {external = true} : i6, i32, i1, i1, i32, i1
 // CHECK-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32
@@ -266,7 +266,7 @@ module {
 // CHECK-NEXT:     calyx.component @main(%in0: i32, %clk: i1 {clk}, %reset: i1 {reset}, %go: i1 {go}) -> (%out0: i32, %done: i1 {done}) {
 // CHECK-DAG:        %true = hw.constant true
 // CHECK-DAG:        %std_slice_0.in, %std_slice_0.out = calyx.std_slice @std_slice_0 : i32, i6
-// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] : i6, i32, i1, i1, i32, i1
+// CHECK-DAG:        %mem_0.addr0, %mem_0.write_data, %mem_0.write_en, %mem_0.clk, %mem_0.read_data, %mem_0.done = calyx.memory @mem_0 <[64] x 32> [6] {external = true} : i6, i32, i1, i1, i32, i1
 // CHECK-DAG:        %ret_arg0_reg.in, %ret_arg0_reg.write_en, %ret_arg0_reg.clk, %ret_arg0_reg.reset, %ret_arg0_reg.out, %ret_arg0_reg.done = calyx.register @ret_arg0_reg : i32, i1, i1, i1, i32, i1
 // CHECK-NEXT:       calyx.wires  {
 // CHECK-NEXT:         calyx.assign %out0 = %ret_arg0_reg.out : i32

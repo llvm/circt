@@ -36,7 +36,6 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
-#include <deque>
 
 using namespace circt;
 using namespace firrtl;
@@ -208,7 +207,7 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
   auto newMem = b->create<MemOp>(
       ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
       portNames, (op.name() + field.suffix).str(), op.annotations().getValue(),
-      op.portAnnotations().getValue());
+      op.portAnnotations().getValue(), op.inner_symAttr());
 
   SmallVector<Attribute> newAnnotations;
   for (size_t portIdx = 0, e = newMem.getNumResults(); portIdx < e; ++portIdx) {
@@ -259,13 +258,15 @@ static MemOp cloneMemWithNewType(ImplicitLocOpBuilder *b, MemOp op,
 // Module Type Lowering
 //===----------------------------------------------------------------------===//
 namespace {
-struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
+// The visitors all return true if the operation should be deleted, false if
+// not.
+struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
 
   TypeLoweringVisitor(MLIRContext *context, bool f)
       : context(context), flattenAggregateMemData(f) {}
-  using FIRRTLVisitor<TypeLoweringVisitor>::visitDecl;
-  using FIRRTLVisitor<TypeLoweringVisitor>::visitExpr;
-  using FIRRTLVisitor<TypeLoweringVisitor>::visitStmt;
+  using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitDecl;
+  using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitExpr;
+  using FIRRTLVisitor<TypeLoweringVisitor, bool>::visitStmt;
 
   /// If the referenced operation is a FModuleOp or an FExtModuleOp, perform
   /// type lowering on all operations.
@@ -280,29 +281,29 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor> {
                                     PortInfo &oldArg);
 
   // Helpers to manage state.
-  void visitDecl(FExtModuleOp op);
-  void visitDecl(FModuleOp op);
-  void visitDecl(InstanceOp op);
-  void visitDecl(MemOp op);
-  void visitDecl(NodeOp op);
-  void visitDecl(RegOp op);
-  void visitDecl(WireOp op);
-  void visitDecl(RegResetOp op);
-  void visitExpr(InvalidValueOp op);
-  void visitExpr(SubaccessOp op);
-  void visitExpr(MuxPrimOp op);
-  void visitExpr(mlir::UnrealizedConversionCastOp op);
-  void visitExpr(BitCastOp op);
-  void visitStmt(ConnectOp op);
-  void visitStmt(PartialConnectOp op);
-  void visitStmt(WhenOp op);
+  bool visitDecl(FExtModuleOp op);
+  bool visitDecl(FModuleOp op);
+  bool visitDecl(InstanceOp op);
+  bool visitDecl(MemOp op);
+  bool visitDecl(NodeOp op);
+  bool visitDecl(RegOp op);
+  bool visitDecl(WireOp op);
+  bool visitDecl(RegResetOp op);
+  bool visitExpr(InvalidValueOp op);
+  bool visitExpr(SubaccessOp op);
+  bool visitExpr(MuxPrimOp op);
+  bool visitExpr(mlir::UnrealizedConversionCastOp op);
+  bool visitExpr(BitCastOp op);
+  bool visitStmt(ConnectOp op);
+  bool visitStmt(PartialConnectOp op);
+  bool visitStmt(WhenOp op);
 
 private:
   void processUsers(Value val, ArrayRef<Value> mapping);
   bool processSAPath(Operation *);
   void lowerBlock(Block *);
   void lowerSAWritePath(Operation *, ArrayRef<Operation *> writePath);
-  void lowerProducer(Operation *op,
+  bool lowerProducer(Operation *op,
                      llvm::function_ref<Operation *(FlatBundleFieldEntry,
                                                     StringRef, ArrayAttr)>
                          clone);
@@ -315,9 +316,6 @@ private:
 
   /// The builder is set and maintained in the main loop.
   ImplicitLocOpBuilder *builder;
-
-  /// State to keep track of arguments and operations to clean up at the end.
-  SmallVector<Operation *, 16> opsToRemove;
 };
 } // namespace
 
@@ -335,45 +333,40 @@ Value TypeLoweringVisitor::getSubWhatever(Value val, size_t index) {
 bool TypeLoweringVisitor::processSAPath(Operation *op) {
   // Does this LHS have a subaccessop?
   SmallVector<Operation *> writePath = getSAWritePath(op);
-  if (!writePath.empty()) {
-    lowerSAWritePath(op, writePath);
-    // Unhook the writePath from the connect.  This isn't the right type, but we
-    // are deleting the op anyway.
-    op->eraseOperands(0, 2);
-    // See how far up the tree we can delete things.
-    for (size_t i = 0; i < writePath.size(); ++i) {
-      if (writePath[i]->use_empty()) {
-        writePath[i]->erase();
-      } else {
-        break;
-      }
+  if (writePath.empty())
+    return false;
+
+  lowerSAWritePath(op, writePath);
+  // Unhook the writePath from the connect.  This isn't the right type, but we
+  // are deleting the op anyway.
+  op->eraseOperands(0, 2);
+  // See how far up the tree we can delete things.
+  for (size_t i = 0; i < writePath.size(); ++i) {
+    if (writePath[i]->use_empty()) {
+      writePath[i]->erase();
+    } else {
+      break;
     }
-    opsToRemove.push_back(op);
-    return true;
   }
-  return false;
+  return true;
 }
 
 void TypeLoweringVisitor::lowerBlock(Block *block) {
-  // Lower the operations.
-  for (auto &iop : llvm::reverse(*block)) {
-    // We erase old ops eagerly so we don't have dangling uses we've already
-    // lowered.
-    for (auto *op : opsToRemove)
-      op->erase();
-    opsToRemove.clear();
-
+  // Lower the operations bottom up.
+  for (auto it = block->rbegin(), e = block->rend(); it != e;) {
+    auto &iop = *it;
     builder->setInsertionPoint(&iop);
     builder->setLoc(iop.getLoc());
-    dispatchVisitor(&iop);
+    bool removeOp = dispatchVisitor(&iop);
+    ++it;
+    // Erase old ops eagerly so we don't have dangling uses we've already
+    // lowered.
+    if (removeOp)
+      iop.erase();
   }
-
-  for (auto *op : opsToRemove)
-    op->erase();
-  opsToRemove.clear();
 }
 
-void TypeLoweringVisitor::lowerProducer(
+bool TypeLoweringVisitor::lowerProducer(
     Operation *op,
     llvm::function_ref<Operation *(FlatBundleFieldEntry, StringRef, ArrayAttr)>
         clone) {
@@ -381,11 +374,12 @@ void TypeLoweringVisitor::lowerProducer(
   auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
   if (!peelType(srcType, fieldTypes))
-    return;
+    return false;
 
   SmallVector<Value> lowered;
   // Loop over the leaf aggregates.
   SmallString<16> loweredName;
+  StringAttr innerSym = op->getAttrOfType<StringAttr>("inner_sym");
   if (auto nameAttr = op->getAttr("name"))
     if (auto nameStrAttr = nameAttr.dyn_cast<StringAttr>())
       loweredName = nameStrAttr.getValue();
@@ -402,11 +396,18 @@ void TypeLoweringVisitor::lowerProducer(
     ArrayAttr loweredAttrs =
         filterAnnotations(context, oldAnno, srcType, field);
     auto newOp = clone(field, loweredName, loweredAttrs);
+    // Carry over the inner_sym name, if present.
+    if (innerSym) {
+      if (!lowered.empty())
+        op->emitError("replication due to type lowering renders @")
+            << innerSym.getValue() << " ambiguous";
+      newOp->setAttr("inner_sym", innerSym);
+    }
     lowered.push_back(newOp->getResult(0));
   }
 
   processUsers(op->getResult(0), lowered);
-  opsToRemove.push_back(op);
+  return true;
 }
 
 void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
@@ -428,9 +429,9 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
 
 void TypeLoweringVisitor::lowerModule(Operation *op) {
   if (auto module = dyn_cast<FModuleOp>(op))
-    return visitDecl(module);
-  if (auto extModule = dyn_cast<FExtModuleOp>(op))
-    return visitDecl(extModule);
+    visitDecl(module);
+  else if (auto extModule = dyn_cast<FExtModuleOp>(op))
+    visitDecl(extModule);
 }
 
 // Creates and returns a new block argument of the specified type to the
@@ -524,14 +525,14 @@ void TypeLoweringVisitor::lowerSAWritePath(Operation *op,
 }
 
 // Expand connects of aggregates
-void TypeLoweringVisitor::visitStmt(ConnectOp op) {
+bool TypeLoweringVisitor::visitStmt(ConnectOp op) {
   if (processSAPath(op))
-    return;
+    return true;
 
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
   if (!peelType(op.dest().getType(), fields))
-    return;
+    return false;
 
   // Loop over the leaf aggregates.
   for (auto field : llvm::enumerate(fields)) {
@@ -544,12 +545,12 @@ void TypeLoweringVisitor::visitStmt(ConnectOp op) {
     else
       builder->create<ConnectOp>(dest, src);
   }
-  opsToRemove.push_back(op);
+  return true;
 }
 
-void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
+bool TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
   if (processSAPath(op))
-    return;
+    return true;
 
   SmallVector<FlatBundleFieldEntry> srcFields, destFields;
   peelType(op.src().getType(), srcFields);
@@ -567,26 +568,27 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
 
     if (destType == srcType) {
       builder->create<ConnectOp>(dest, src);
-      opsToRemove.push_back(op);
-    } else if (destType.isa<IntType>() && srcType.isa<IntType>() &&
-               destWidth >= 0) {
-      if (destWidth < srcWidth) {
-        // firrtl.tail always returns uint even for sint operands.
-        IntType tmpType = destType.cast<IntType>();
-        if (tmpType.isSigned())
-          tmpType = UIntType::get(destType.getContext(), destWidth);
-        src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
-        // Insert the cast back to signed if needed.
-        if (tmpType != destType)
-          src = builder->create<AsSIntPrimOp>(destType, src);
-      } else {
-        // Need to extend arg
-        src = builder->create<PadPrimOp>(src, destWidth);
-      }
-      builder->create<ConnectOp>(dest, src);
-      opsToRemove.push_back(op);
+      return true;
     }
-    return;
+
+    if (!destType.isa<IntType>() || !srcType.isa<IntType>() || destWidth < 0)
+      return false;
+
+    if (destWidth < srcWidth) {
+      // firrtl.tail always returns uint even for sint operands.
+      IntType tmpType = destType.cast<IntType>();
+      if (tmpType.isSigned())
+        tmpType = UIntType::get(destType.getContext(), destWidth);
+      src = builder->create<TailPrimOp>(tmpType, src, srcWidth - destWidth);
+      // Insert the cast back to signed if needed.
+      if (tmpType != destType)
+        src = builder->create<AsSIntPrimOp>(destType, src);
+    } else {
+      // Need to extend arg
+      src = builder->create<PadPrimOp>(src, destWidth);
+    }
+    builder->create<ConnectOp>(dest, src);
+    return true;
   }
 
   // Aggregates
@@ -628,10 +630,10 @@ void TypeLoweringVisitor::visitStmt(PartialConnectOp op) {
     op.emitError("Unknown aggregate type");
   }
 
-  opsToRemove.push_back(op);
+  return true;
 }
 
-void TypeLoweringVisitor::visitStmt(WhenOp op) {
+bool TypeLoweringVisitor::visitStmt(WhenOp op) {
   // The WhenOp itself does not require any lowering, the only value it uses
   // is a one-bit predicate.  Recursively visit all regions so internal
   // operations are lowered.
@@ -639,12 +641,10 @@ void TypeLoweringVisitor::visitStmt(WhenOp op) {
   // Visit operations in the then block.
   lowerBlock(&op.getThenBlock());
 
-  // If there is no else block, return.
-  if (!op.hasElseRegion())
-    return;
-
   // Visit operations in the else block.
-  lowerBlock(&op.getElseBlock());
+  if (op.hasElseRegion())
+    lowerBlock(&op.getElseBlock());
+  return false; // don't delete the when!
 }
 
 // Convert an aggregate type into a flat list of fields.
@@ -678,11 +678,11 @@ static bool flattenType(FIRRTLType type, SmallVectorImpl<IntType> &results) {
 
 /// Lower memory operations. A new memory is created for every leaf
 /// element in a memory's data type.
-void TypeLoweringVisitor::visitDecl(MemOp op) {
+bool TypeLoweringVisitor::visitDecl(MemOp op) {
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
   if (!peelType(op.getDataType(), fields))
-    return;
+    return false;
 
   SmallVector<MemOp> newMemories;
   SmallVector<WireOp> oldPorts;
@@ -757,7 +757,7 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     auto flatMem = builder->create<MemOp>(
         ports, op.readLatency(), op.writeLatency(), op.depth(), op.ruw(),
         portNames, op.name(), op.annotations().getValue(),
-        op.portAnnotations().getValue());
+        op.portAnnotations().getValue(), op.inner_symAttr());
     // Done creating the memory.
     // ----------------------------------------------
     newMemories.push_back(flatMem);
@@ -766,6 +766,11 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
     for (auto field : fields)
       newMemories.push_back(cloneMemWithNewType(builder, op, field));
   }
+  // Emit an error if the memory had an `inner_sym` that was replicated across
+  // multiple memories.
+  if (newMemories.size() > 1 && op.inner_symAttr())
+    op->emitError("replication due to type lowering renders @")
+        << op.inner_symAttr().getValue() << " ambiguous";
   // Hook up the new memories to the wires the old memory was replaced with.
   for (size_t index = 0, rend = op.getNumResults(); index < rend; ++index) {
     auto result = oldPorts[index];
@@ -838,10 +843,10 @@ void TypeLoweringVisitor::visitDecl(MemOp op) {
       }
     }
   }
-  opsToRemove.push_back(op);
+  return true;
 }
 
-void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
+bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   ImplicitLocOpBuilder theBuilder(extModule.getLoc(), context);
   builder = &theBuilder;
 
@@ -902,9 +907,10 @@ void TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
 
   // Update the module's attributes.
   extModule->setAttrs(newModuleAttrs);
+  return false;
 }
 
-void TypeLoweringVisitor::visitDecl(FModuleOp module) {
+bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   auto *body = module.getBody();
 
   ImplicitLocOpBuilder theBuilder(module.getLoc(), context);
@@ -968,79 +974,83 @@ void TypeLoweringVisitor::visitDecl(FModuleOp module) {
 
   // Update the module's attributes.
   module->setAttrs(newModuleAttrs);
+  return false;
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
-void TypeLoweringVisitor::visitDecl(WireOp op) {
+bool TypeLoweringVisitor::visitDecl(WireOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
-    return builder->create<WireOp>(field.type, name, attrs);
+    return builder->create<WireOp>(field.type, name, attrs, StringAttr{});
   };
-  lowerProducer(op, clone);
+  return lowerProducer(op, clone);
 }
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
-void TypeLoweringVisitor::visitDecl(RegOp op) {
+bool TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
-    return builder->create<RegOp>(field.type, op.clockVal(), name, attrs);
+    return builder->create<RegOp>(field.type, op.clockVal(), name, attrs,
+                                  StringAttr{});
   };
-  lowerProducer(op, clone);
+  return lowerProducer(op, clone);
 }
 
 /// Lower a reg op with a bundle to multiple non-bundled regs.
-void TypeLoweringVisitor::visitDecl(RegResetOp op) {
+bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
     auto resetVal = getSubWhatever(op.resetValue(), field.index);
     return builder->create<RegResetOp>(field.type, op.clockVal(),
-                                       op.resetSignal(), resetVal, name, attrs);
+                                       op.resetSignal(), resetVal, name, attrs,
+                                       StringAttr{});
   };
-  lowerProducer(op, clone);
+  return lowerProducer(op, clone);
 }
 
 /// Lower a wire op with a bundle to multiple non-bundled wires.
-void TypeLoweringVisitor::visitDecl(NodeOp op) {
+bool TypeLoweringVisitor::visitDecl(NodeOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.input(), field.index);
-    return builder->create<NodeOp>(field.type, input, name, attrs);
+    return builder->create<NodeOp>(field.type, input, name, attrs,
+                                   StringAttr{});
   };
-  lowerProducer(op, clone);
+  return lowerProducer(op, clone);
 }
 
 /// Lower an InvalidValue op with a bundle to multiple non-bundled InvalidOps.
-void TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
+bool TypeLoweringVisitor::visitExpr(InvalidValueOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
     return builder->create<InvalidValueOp>(field.type);
   };
-  lowerProducer(op, clone);
+  return lowerProducer(op, clone);
 }
 
 // Expand muxes of aggregates
-void TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
+bool TypeLoweringVisitor::visitExpr(MuxPrimOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
     auto high = getSubWhatever(op.high(), field.index);
     auto low = getSubWhatever(op.low(), field.index);
     return builder->create<MuxPrimOp>(op.sel(), high, low);
   };
-  lowerProducer(op, clone);
+  return lowerProducer(op, clone);
 }
 
 // Expand UnrealizedConversionCastOp of aggregates
-void TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
+bool TypeLoweringVisitor::visitExpr(mlir::UnrealizedConversionCastOp op) {
   auto clone = [&](FlatBundleFieldEntry field, StringRef name,
                    ArrayAttr attrs) -> Operation * {
     auto input = getSubWhatever(op.getOperand(0), field.index);
     return builder->create<mlir::UnrealizedConversionCastOp>(field.type, input);
   };
-  lowerProducer(op, clone);
+  return lowerProducer(op, clone);
 }
 
 // Expand BitCastOp of aggregates
-void TypeLoweringVisitor::visitExpr(BitCastOp op) {
+bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   Value srcLoweredVal = op.input();
   // If the input is of aggregate type, then cat all the leaf fields to form a
   // UInt type result. That is, first bitcast the aggregate type to a UInt.
@@ -1090,17 +1100,17 @@ void TypeLoweringVisitor::visitExpr(BitCastOp op) {
       uptoBits += fieldBits;
       return builder->create<BitCastOp>(field.type, extractBits);
     };
-    lowerProducer(op, clone);
-  } else {
-    // If ground type, then replace the result.
-    if (op.getType().dyn_cast<SIntType>())
-      srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
-    op.getResult().replaceAllUsesWith(srcLoweredVal);
-    opsToRemove.push_back(op);
+    return lowerProducer(op, clone);
   }
+
+  // If ground type, then replace the result.
+  if (op.getType().dyn_cast<SIntType>())
+    srcLoweredVal = builder->create<AsSIntPrimOp>(srcLoweredVal);
+  op.getResult().replaceAllUsesWith(srcLoweredVal);
+  return true;
 }
 
-void TypeLoweringVisitor::visitDecl(InstanceOp op) {
+bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
@@ -1138,14 +1148,15 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
   }
 
   if (skip)
-    return;
+    return false;
 
   // FIXME: annotation update
   auto newInstance = builder->create<InstanceOp>(
       resultTypes, op.moduleNameAttr(), op.nameAttr(),
       direction::packAttribute(context, newDirs),
       builder->getArrayAttr(newNames), op.annotations(),
-      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr());
+      builder->getArrayAttr(newPortAnno), op.lowerToBindAttr(),
+      op.inner_symAttr());
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
@@ -1161,10 +1172,10 @@ void TypeLoweringVisitor::visitDecl(InstanceOp op) {
     else
       op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
   }
-  opsToRemove.push_back(op);
+  return true;
 }
 
-void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
+bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   auto input = op.input();
   auto vType = input.getType().cast<FVectorType>();
 
@@ -1172,8 +1183,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
   if (vType.getNumElements() == 0) {
     Value inv = builder->create<InvalidValueOp>(vType.getElementType());
     op.replaceAllUsesWith(inv);
-    opsToRemove.push_back(op);
-    return;
+    return true;
   }
 
   // Check for constant instances
@@ -1182,8 +1192,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     auto sio =
         builder->create<SubindexOp>(op.input(), arg.value().getExtValue());
     op.replaceAllUsesWith(sio.getResult());
-    opsToRemove.push_back(op);
-    return;
+    return true;
   }
 
   // Reads.  All writes have been eliminated before now
@@ -1202,7 +1211,7 @@ void TypeLoweringVisitor::visitExpr(SubaccessOp op) {
     mux = builder->create<MuxPrimOp>(cond, access, mux);
   }
   op.replaceAllUsesWith(mux);
-  opsToRemove.push_back(op);
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1218,7 +1227,7 @@ struct LowerTypesPass : public LowerFIRRTLTypesBase<LowerTypesPass> {
 
 // This is the main entrypoint for the lowering pass.
 void LowerTypesPass::runOnOperation() {
-  std::deque<Operation *> ops;
+  std::vector<Operation *> ops;
   llvm::for_each(getOperation().getBody()->getOperations(),
                  [&](Operation &op) { ops.push_back(&op); });
 

@@ -761,7 +761,9 @@ LogicalResult addSinkOps(handshake::FuncOp f, OpBuilder &rewriter) {
       for (auto result : op.getResults())
         if (result.use_empty()) {
           rewriter.setInsertionPointAfter(&op);
-          rewriter.create<SinkOp>(op.getLoc(), result);
+          auto sinkOp = rewriter.create<SinkOp>(op.getLoc(), result);
+          if (result.getType().isa<NoneType>())
+            sinkOp->setAttr("control", rewriter.getBoolAttr(true));
         }
     }
   }
@@ -1289,17 +1291,24 @@ void setMemOpControlInputs(ConversionPatternRewriter &rewriter,
   }
 }
 
-void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
-                     bool lsq, ConversionPatternRewriter &rewriter) {
+LogicalResult connectToMemory(handshake::FuncOp f,
+                              MemRefToMemoryAccessOp memRefOps, bool lsq,
+                              ConversionPatternRewriter &rewriter) {
   // Add MemoryOps which represent the memory interface
   // Connect memory operations and control appropriately
   int mem_count = 0;
-  for (auto memory : MemRefOps) {
+  for (auto memory : memRefOps) {
     // First operand corresponds to memref (alloca or function argument)
     Value memrefOperand = getMemRefOperand(memory.first);
 
+    mlir::MemRefType memrefType =
+        memrefOperand.getType().cast<mlir::MemRefType>();
+    if (memrefType.getNumDynamicDims() != 0 ||
+        memrefType.getShape().size() != 1)
+      return emitError(memrefOperand.getLoc())
+             << "memref's must be both statically sized and unidimensional.";
+
     std::vector<Value> operands;
-    // operands.push_back(memrefOperand);
 
     // Get control values which need to connect to memory
     std::vector<Value> controlVals = getControlValues(memory.second);
@@ -1396,6 +1405,7 @@ void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
   // Loads and stores have some sinks which are no longer needed now that they
   // connect to MemoryOp
   removeRedundantSinks(f, rewriter);
+  return success();
 }
 
 // A handshake::StartOp should have been created in the first block of the
@@ -1636,17 +1646,33 @@ struct HandshakeCanonicalizePattern : public ConversionPattern {
 LogicalResult replaceCallOps(handshake::FuncOp f,
                              ConversionPatternRewriter &rewriter) {
   for (Block &block : f) {
+    /// An instance is activated whenever control arrives at the basic block of
+    /// the source callOp.
+    Operation *cntrlMg =
+        block.isEntryBlock() ? getStartOp(&block) : getControlMerge(&block);
+    assert(cntrlMg);
     for (Operation &op : block) {
       if (auto callOp = dyn_cast<CallOp>(op)) {
+        llvm::SmallVector<Value> operands;
+        llvm::copy(callOp.getOperands(), std::back_inserter(operands));
+        operands.push_back(cntrlMg->getResult(0));
         rewriter.setInsertionPoint(callOp);
-        rewriter.replaceOpWithNewOp<handshake::InstanceOp>(
-            callOp, callOp.getCallee(), callOp.getResultTypes(),
-            callOp.getOperands());
+        auto instanceOp = rewriter.create<handshake::InstanceOp>(
+            callOp.getLoc(), callOp.getCallee(), callOp.getResultTypes(),
+            operands);
+        // Replace all results of the source callOp.
+        for (auto it : llvm::zip(callOp.getResults(), instanceOp.getResults()))
+          std::get<0>(it).replaceAllUsesWith(std::get<1>(it));
+        rewriter.eraseOp(callOp);
       }
     }
   }
   return success();
 }
+
+#define returnOnError(logicalResult)                                           \
+  if (failed(logicalResult))                                                   \
+    return logicalResult;
 
 LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
   // Only retain those attributes that are not constructed by build.
@@ -1674,7 +1700,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
 
   // Add control input/output to function arguments/results and create a
   // handshake::FuncOp of appropriate type
-  (void)partiallyLowerFuncOp<mlir::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<mlir::FuncOp>(
       [&](mlir::FuncOp funcOp, PatternRewriter &rewriter) {
         auto noneType = rewriter.getNoneType();
         resTypes.push_back(noneType);
@@ -1685,7 +1711,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
                                     newFuncOp.end());
         return success();
       },
-      ctx, funcOp);
+      ctx, funcOp));
 
   // Rewrite affine.for operations.
   if (failed(partiallyLowerFuncOp<handshake::FuncOp>(rewriteAffineFor, ctx,
@@ -1694,36 +1720,40 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
 
   // Perform dataflow conversion
   MemRefToMemoryAccessOp MemOps;
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
         MemOps = replaceMemoryOps(nfo, rewriter);
         return success();
       },
-      ctx, newFuncOp);
+      ctx, newFuncOp));
 
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(replaceCallOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(setControlOnlyPath, ctx,
-                                                newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addMergeOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addBranchOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(connectConstantsToControl, ctx,
-                                                newFuncOp);
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp);
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(setControlOnlyPath, ctx,
+                                                        newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addMergeOps, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(replaceCallOps, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addBranchOps, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addSinkOps, ctx, newFuncOp));
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
+      connectConstantsToControl, ctx, newFuncOp));
+  returnOnError(
+      partiallyLowerFuncOp<handshake::FuncOp>(addForkOps, ctx, newFuncOp));
   checkDataflowConversion(newFuncOp);
 
   bool lsq = false;
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
-        connectToMemory(nfo, MemOps, lsq, rewriter);
-        return success();
+        return connectToMemory(nfo, MemOps, lsq, rewriter);
       },
-      ctx, newFuncOp);
+      ctx, newFuncOp));
 
   // Add  control argument to entry block, replace references to the
   // temporary handshake::StartOp operation, and finally remove the start
   // op.
-  (void)partiallyLowerFuncOp<handshake::FuncOp>(
+  returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, PatternRewriter &rewriter) {
         argTypes.push_back(rewriter.getNoneType());
         auto funcType = rewriter.getFunctionType(argTypes, resTypes);
@@ -1735,7 +1765,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
         rewriter.eraseOp(funcOp);
         return success();
       },
-      ctx, newFuncOp);
+      ctx, newFuncOp));
 
   return success();
 }
@@ -1755,7 +1785,8 @@ struct HandshakeInsertBufferPass
     for (auto &arg : f.getBody().front().getArguments()) {
       for (auto &operand : arg.getUses()) {
         if (opVisited.count(operand.getOwner()) == 0)
-          insertBufferDFS(operand.getOwner(), builder, opVisited, opInFlight);
+          insertBufferDFS(operand.getOwner(), builder, bufferSize, opVisited,
+                          opInFlight);
       }
     }
   }
@@ -1766,7 +1797,7 @@ struct HandshakeInsertBufferPass
     auto builder = OpBuilder(f.getContext());
     for (auto &arg : f.getArguments())
       for (auto &use : arg.getUses())
-        insertBufferRecursive(use, builder, /*numSlots=*/2,
+        insertBufferRecursive(use, builder, bufferSize,
                               [](Operation *definingOp, Operation *usingOp) {
                                 return !isa_and_nonnull<BufferOp>(definingOp) &&
                                        !isa<BufferOp>(usingOp);
@@ -1775,7 +1806,7 @@ struct HandshakeInsertBufferPass
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one
   /// 2-slot non-transparent buffer will be inserted into each graph cycle.
-  void insertBufferDFS(Operation *op, OpBuilder &builder,
+  void insertBufferDFS(Operation *op, OpBuilder &builder, unsigned numSlots,
                        DenseSet<Operation *> &opVisited,
                        DenseSet<Operation *> &opInFlight) {
     // Mark operation as visited and push into the stack.
@@ -1795,7 +1826,7 @@ struct HandshakeInsertBufferPass
         auto bufferOp = builder.create<handshake::BufferOp>(
             op->getLoc(), value.getType(), value, /*sequential=*/true,
             /*control=*/value.getType().isa<NoneType>(),
-            /*slots=*/2);
+            /*slots=*/numSlots);
         value.replaceUsesWithIf(
             bufferOp,
             function_ref<bool(OpOperand &)>([](OpOperand &operand) -> bool {
@@ -1804,7 +1835,7 @@ struct HandshakeInsertBufferPass
       }
       // For unvisited operations, recursively call insertBufferDFS() method.
       else if (opVisited.count(user) == 0)
-        insertBufferDFS(user, builder, opVisited, opInFlight);
+        insertBufferDFS(user, builder, bufferSize, opVisited, opInFlight);
     }
     // Pop operation out of the stack.
     opInFlight.erase(op);

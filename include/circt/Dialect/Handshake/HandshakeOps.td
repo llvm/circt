@@ -14,8 +14,8 @@
 // extra verification conditions.  In particular, each Value must
 // only have a single use.  Also, it defines a Dominance-Free Scope
 def FuncOp : Op<Handshake_Dialect, "func", [
-   NativeOpTrait<"IsIsolatedFromAbove">,
-   NativeOpTrait<"FunctionLike">,
+   IsolatedFromAbove,
+   FunctionLike,
    Symbol,
    RegionKindInterface
 ]> {
@@ -35,22 +35,13 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
   let builders =
        [OpBuilder<(ins "StringRef":$name, "FunctionType":$type,
-                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs,
-                      CArg<"ArrayRef<NamedAttrList>", "{}">:$argAttrs),
+                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs),
                       [{
                      $_state.addAttribute(SymbolTable::getSymbolAttrName(),
                                          $_builder.getStringAttr(name));
                      $_state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
                      $_state.attributes.append(attrs.begin(), attrs.end());
                      $_state.addRegion();
-
-                     // Not needed?? Arguments are already included in attrs
-                     /* assert(type.getNumInputs() == argAttrs.size());
-                      SmallString<8> argAttrName;
-                      for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
-                        if (auto argDict = argAttrs[i].getDictionary())
-                          $_state.addAttribute(getArgAttrName(i, argAttrName),
-                      argDict);*/
                    }]>];
 
   let extraClassDeclaration = [{
@@ -63,9 +54,6 @@ def FuncOp : Op<Handshake_Dialect, "func", [
           .getValue()
           .cast<FunctionType>();
     }
-    // bool isVarArg() {
-    //   return getType().getUnderlyingType()->isFunctionVarArg();
-    // }
 
     // This trait needs access to the hooks defined below.
     friend class OpTrait::FunctionLike<handshake::FuncOp>;
@@ -94,11 +82,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
   }];
 
   let verifier = [{ return ::verify$cppClass(*this); }];
-  let printer = [{
-    FunctionType fnType = getType();
-    mlir::function_like_impl::printFunctionLikeOp(p, *this, fnType.getInputs(),
-        /*isVariadic=*/true, fnType.getResults());
-  }];
+  let printer = [{ return ::print$cppClass(p, *this); }];
   let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
@@ -107,15 +91,15 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
   let summary = "module instantiate operation";
   let description = [{
     The `instance` operation represents the instantiation of a module.  This
-	 is similar to a function call, except that different instances of the
-	 same module are guaranteed to have their own distinct state.
-    The instantiated module is encoded as a
-    symbol reference attribute named "module".
+	  is similar to a function call, except that different instances of the
+	  same module are guaranteed to have their own distinct state.
+    The instantiated module is encoded as a symbol reference attribute named
+    "module". An instance operation takes a control input as its last argument
+    and returns a control output as its last result.
 
     Example:
-
     ```mlir
-    %2 = handshake.instance @my_add(%0, %1) : (f32, f32) -> f32
+    %2:2 = handshake.instance @my_add(%0, %1, %ctrl) : (f32, f32, none) -> (f32, none)
     ```
   }];
 
@@ -127,12 +111,14 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
       $_state.addOperands(operands);
       $_state.addAttribute("module", SymbolRefAttr::get(module));
       $_state.addTypes(module.getType().getResults());
+      $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
   }]>, OpBuilder<
     (ins "SymbolRefAttr":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
       $_state.addOperands(operands);
       $_state.addAttribute("module", module);
       $_state.addTypes(results);
+      $_state.addTypes({$_builder.getType<::mlir::NoneType>()});
   }]>, OpBuilder<
     (ins "StringRef":$module, "TypeRange":$results,
      CArg<"ValueRange", "{}">:$operands), [{
@@ -157,11 +143,18 @@ def InstanceOp : Handshake_Op<"instance", [CallOpInterface]> {
     CallInterfaceCallable getCallableForCallee() {
       return (*this)->getAttrOfType<SymbolRefAttr>("module");
     }
+
+    /// Get the control operand of this instance op
+    Value getControl() {
+      return getOperands().back();
+    }
   }];
 
   let assemblyFormat = [{
     $module `(` $operands `)` attr-dict `:` functional-type($operands, results)
   }];
+
+  let verifier = [{ return ::verify$cppClass(*this); }];
 }
 
 // This is almost exactly like a standard FuncOp, except that it has some
@@ -498,6 +491,7 @@ def MemoryOp : Handshake_Op<"memory", [
     Each MemoryOp represents an independent memory or memory region (BRAM or external memory).
     It receives memory access requests from load and store operations. For every request,
     it returns data (for load) and a data-less token indicating completion.
+    The memory op represents a flat, unidimensional memory.
     Operands: all stores (stdata1, staddr1, stdata2, staddr2, ...), then all loads (ldaddr1, ldaddr2,...)
     Outputs: all load outputs, ordered the same as
     load addresses (lddata1, lddata2, ...), followed by all none outputs,
@@ -529,6 +523,7 @@ def MemoryOp : Handshake_Op<"memory", [
       return (*this)->getAttrOfType<TypeAttr>("type").getValue().cast<MemRefType>();
     }
   }];
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def LoadOp
