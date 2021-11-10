@@ -17,3 +17,5 @@ add_dependencies(circt-headers MLIRHandshakeAttrsIncGen)
 set(LLVM_TARGET_DEFINITIONS HandshakeCanonicalization.td)
 mlir_tablegen(HandshakeCanonicalization.h.inc -gen-rewriters)
 add_public_tablegen_target(MLIRHandshakeCanonicalizationIncGen)
+
+add_subdirectory(Transforms)

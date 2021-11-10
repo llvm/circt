@@ -20,6 +20,7 @@ target_link_libraries(circt-opt
   CIRCTFSM
   CIRCTHandshake
   CIRCTHandshakeToFIRRTL
+  CIRCTHandshakeTransforms
   CIRCTLLHD
   CIRCTLLHDToLLVM
   CIRCTLLHDTransforms
