@@ -10,6 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SV_SVTYPES
+#define CIRCT_DIALECT_SV_SVTYPES
+
+include "circt/Dialect/SV/SVDialect.td"
+
 class SVType<string name> : TypeDef<SVDialect, name> { }
 
 //===----------------------------------------------------------------------===//
@@ -82,3 +87,4 @@ def StringArrayAttr: ArrayAttrBase<
   let constBuilderCall = "$_builder.getArrayAttr($0)";
 }
 
+#endif // CIRCT_DIALECT_SV_SVTYPES
