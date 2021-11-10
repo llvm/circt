@@ -102,7 +102,7 @@ hw.module @sinkReadInOut(%clk: i1) {
 // CHECK:    sv.read_inout
 
 // VERILOG:  reg [47:0] myreg;
-// VERILOG:  always @(posedge clk)
+// VERILOG:  always_ff @(posedge clk)
 // VERILOG:    myreg <= myreg;
 
 

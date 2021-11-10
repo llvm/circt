@@ -58,10 +58,6 @@ struct LoweringOptions {
   /// the attribute, this will print an error using the ModuleOp.
   void parseFromAttribute(mlir::ModuleOp module);
 
-  /// If true, emit `sv.alwaysff` as Verilog `always_ff` statements.  Otherwise,
-  /// print them as `always` statements
-  bool useAlwaysFF = false;
-
   /// If true, emits `sv.alwayscomb` as Verilog `always @(*)` statements.
   /// Otherwise, print them as `always_comb`.
   bool noAlwaysComb = false;
