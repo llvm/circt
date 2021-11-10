@@ -2972,9 +2972,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  StringRef opString = "always_ff";
-
-  indent() << opString << " @(" << stringifyEventControl(op.clockEdge()) << " ";
+  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " ";
   emitExpression(op.clock(), ops);
   if (op.resetStyle() == ResetType::AsyncReset) {
     os << " or " << stringifyEventControl(*op.resetEdge()) << " ";
@@ -2985,7 +2983,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   // Build the comment string, leave out the signal expressions (since they
   // can be large).
   std::string comment;
-  comment += opString.str() + " @(";
+  comment += "always_ff @(";
   comment += stringifyEventControl(op.clockEdge());
   if (op.resetStyle() == ResetType::AsyncReset) {
     comment += " or ";
