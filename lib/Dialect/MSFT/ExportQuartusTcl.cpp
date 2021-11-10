@@ -51,15 +51,16 @@ void emitPath(TclOutputState &s, RootedInstancePathAttr path,
   for (auto part : path.getPath()) {
     auto inst = cast<msft::InstanceOp>(symCache.getDefinition(part));
     assert(inst && "path instance must be in symbol cache");
-    auto mod = inst->getParentOfType<MSFTModuleOp>();
-    assert(mod && "path instance must have MSFT module parent");
 
+    // We append new symbolRefs to the state, so s.symbolRefs.size() is the
+    // index of the InnerRefAttr we are about to add.
     s.os << "{{" << s.symbolRefs.size() << "}}" << '|';
 
     StringAttr instName = inst.sym_nameAttr();
     assert(instName && "path instance must have a symbol name");
 
-    s.symbolRefs.push_back(InnerRefAttr::get(mod.getNameAttr(), instName));
+    StringAttr modName = inst->getParentOfType<MSFTModuleOp>().getNameAttr();
+    s.symbolRefs.push_back(InnerRefAttr::get(modName, instName));
   }
 }
 

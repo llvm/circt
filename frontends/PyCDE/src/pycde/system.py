@@ -195,5 +195,5 @@ class System:
 
   def emit_outputs(self):
     self.run_passes()
-    output_directory = os.getcwd() + "/" + self.name
+    output_directory = os.path.join(os.getcwd(), self.name)
     circt.export_split_verilog(self.mod, output_directory)
