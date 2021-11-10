@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Reduction.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/InitAllDialects.h"
@@ -24,8 +25,6 @@
 #include "mlir/Transforms/Passes.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Debug.h"
-
-#include "Reduction.h"
 
 #define DEBUG_TYPE "circt-reduce"
 
@@ -235,7 +234,6 @@ void circt::createAllReductions(
   // sorted by decreasing reduction potential/benefit. For example, things that
   // can knock out entire modules while being cheap should be tried first,
   // before trying to tweak operands of individual arithmetic ops.
-  add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<PassReduction>(context, firrtl::createInlinerPass()));
   add(std::make_unique<PassReduction>(context,
                                       createSimpleCanonicalizerPass()));
@@ -249,6 +247,7 @@ void circt::createAllReductions(
       context, firrtl::createLowerFIRRTLTypesPass(), true, true));
   add(std::make_unique<PassReduction>(context, firrtl::createExpandWhensPass(),
                                       true, true));
+  add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<PassReduction>(context, createCSEPass()));
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<OperationPruner>());
