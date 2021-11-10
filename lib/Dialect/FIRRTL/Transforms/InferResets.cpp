@@ -206,13 +206,17 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
             resetSubValue.erase();
         })
         // Look through subaccesses.
-        .Case<SubaccessOp>([&](auto op) {
-          auto resetSubValue =
-              builder.create<SubaccessOp>(resetValue, op.index());
+        .Case<SubaccessOp>([&](SubaccessOp op) {
+          Value resetSubValue;
+          if (op.index() == target)
+            resetSubValue = builder.create<SubaccessOp>(op.input(), resetValue);
+          else
+            resetSubValue = builder.create<SubaccessOp>(resetValue, op.index());
+
           if (insertResetMux(builder, op, reset, resetSubValue))
             resetValueUsed = true;
           else
-            resetSubValue.erase();
+            resetSubValue.getDefiningOp()->erase();
         });
   }
   return resetValueUsed;
