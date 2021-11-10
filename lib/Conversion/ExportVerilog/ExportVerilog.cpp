@@ -3985,13 +3985,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   auto collectPorts = [&](auto moduleOp) {
     auto numArgs = moduleOp.getNumArguments();
     for (size_t p = 0; p != numArgs; ++p)
-      for (auto argAttr : moduleOp.getArgAttrs(p))
-        if (auto sym = argAttr.second.template dyn_cast<FlatSymbolRefAttr>())
+      for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
+        if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p);
     for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
-      for (auto resultAttr : moduleOp.getResultAttrs(p))
-        if (auto sym = resultAttr.second.template dyn_cast<FlatSymbolRefAttr>())
+      for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
+        if (auto sym = resultAttr.second.dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p + numArgs);
   };
