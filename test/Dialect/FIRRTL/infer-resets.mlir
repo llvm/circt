@@ -701,12 +701,9 @@ firrtl.circuit "SubAccess" {
     %reg6 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
     %2 = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
     firrtl.connect %2, %in : !firrtl.uint<8>, !firrtl.uint<8>
-    // CHECK:  %[[c0_ui2:.+]] = firrtl.constant 0 : !firrtl.uint<2>
-    // CHECK-NEXT:  %reg6 = firrtl.regreset %clock, %extraReset, %[[c0_ui2]]  : !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%[[c1_ui2:.+]]] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v1:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
-    // CHECK-NEXT:  %[[v2:.+]] = firrtl.mux(%init, %[[v0]], %in) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
-    // CHECK-NEXT:  firrtl.connect %[[v1]], %[[v2]] : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
+    // CHECK-NEXT:  firrtl.connect %[[v0]], %in : !firrtl.uint<8>, !firrtl.uint<8>
 
   }
 }
