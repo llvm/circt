@@ -72,6 +72,6 @@ with Context() as ctx, Location.unknown():
 
   pm = PassManager.parse("lower-seq-to-sv")
   pm.run(m)
-  # CHECK: always @(posedge clk)
+  # CHECK: always_ff @(posedge clk)
   # CHECK: my_reg <= {{.+}}
   circt.export_verilog(m, sys.stdout)
