@@ -491,6 +491,7 @@ def MemoryOp : Handshake_Op<"memory", [
     Each MemoryOp represents an independent memory or memory region (BRAM or external memory).
     It receives memory access requests from load and store operations. For every request,
     it returns data (for load) and a data-less token indicating completion.
+    The memory op represents a flat, unidimensional memory.
     Operands: all stores (stdata1, staddr1, stdata2, staddr2, ...), then all loads (ldaddr1, ldaddr2,...)
     Outputs: all load outputs, ordered the same as
     load addresses (lddata1, lddata2, ...), followed by all none outputs,
@@ -522,6 +523,7 @@ def MemoryOp : Handshake_Op<"memory", [
       return (*this)->getAttrOfType<TypeAttr>("type").getValue().cast<MemRefType>();
     }
   }];
+  let verifier = "return ::verify$cppClass(*this);";
 }
 
 def LoadOp

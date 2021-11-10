@@ -1291,17 +1291,24 @@ void setMemOpControlInputs(ConversionPatternRewriter &rewriter,
   }
 }
 
-void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
-                     bool lsq, ConversionPatternRewriter &rewriter) {
+LogicalResult connectToMemory(handshake::FuncOp f,
+                              MemRefToMemoryAccessOp memRefOps, bool lsq,
+                              ConversionPatternRewriter &rewriter) {
   // Add MemoryOps which represent the memory interface
   // Connect memory operations and control appropriately
   int mem_count = 0;
-  for (auto memory : MemRefOps) {
+  for (auto memory : memRefOps) {
     // First operand corresponds to memref (alloca or function argument)
     Value memrefOperand = getMemRefOperand(memory.first);
 
+    mlir::MemRefType memrefType =
+        memrefOperand.getType().cast<mlir::MemRefType>();
+    if (memrefType.getNumDynamicDims() != 0 ||
+        memrefType.getShape().size() != 1)
+      return emitError(memrefOperand.getLoc())
+             << "memref's must be both statically sized and unidimensional.";
+
     std::vector<Value> operands;
-    // operands.push_back(memrefOperand);
 
     // Get control values which need to connect to memory
     std::vector<Value> controlVals = getControlValues(memory.second);
@@ -1398,6 +1405,7 @@ void connectToMemory(handshake::FuncOp f, MemRefToMemoryAccessOp MemRefOps,
   // Loads and stores have some sinks which are no longer needed now that they
   // connect to MemoryOp
   removeRedundantSinks(f, rewriter);
+  return success();
 }
 
 // A handshake::StartOp should have been created in the first block of the
@@ -1738,8 +1746,7 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
   bool lsq = false;
   returnOnError(partiallyLowerFuncOp<handshake::FuncOp>(
       [&](handshake::FuncOp nfo, ConversionPatternRewriter &rewriter) {
-        connectToMemory(nfo, MemOps, lsq, rewriter);
-        return success();
+        return connectToMemory(nfo, MemOps, lsq, rewriter);
       },
       ctx, newFuncOp));
 
