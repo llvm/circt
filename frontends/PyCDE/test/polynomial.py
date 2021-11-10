@@ -1,6 +1,6 @@
 # RUN: rm -rf %t
-# RUN: OUTPUT_DIRECTORY=%t %PYTHON% %s 2>&1 | FileCheck %s
-# RUN: FileCheck %s --check-prefix=OUTPUT < %t/PolynomialSystem.sv
+# RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
+# RUN: FileCheck %s --input-file %t/PolynomialSystem.sv --check-prefix=OUTPUT
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pycde import (Input, Output, module, externmodule, generator, types, dim)
 from circt.dialects import comb, hw
 from circt.support import connect
 
-import os
+import sys
 
 
 @module
@@ -108,7 +108,7 @@ class PolynomialSystem:
 
 poly = pycde.System([PolynomialSystem],
                     name="PolynomialSystem",
-                    output_directory=os.environ["OUTPUT_DIRECTORY"])
+                    output_directory=sys.argv[1])
 poly.print()
 
 print("Generating 1...")

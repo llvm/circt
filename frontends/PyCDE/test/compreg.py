@@ -1,6 +1,6 @@
 # RUN: rm -rf %t
-# RUN: OUTPUT_DIRECTORY=%t %PYTHON% %s
-# RUN: FileCheck %s < %t/CompReg.sv
+# RUN: %PYTHON% %s %t
+# RUN: FileCheck %s --input-file %t/CompReg.sv
 
 import pycde
 from pycde import types, module, Input, Output
@@ -8,7 +8,7 @@ from pycde import types, module, Input, Output
 from circt.dialects import seq
 from pycde.module import generator
 
-import os
+import sys
 
 
 @module
@@ -23,9 +23,7 @@ class CompReg:
     ports.output = compreg.data
 
 
-mod = pycde.System([CompReg],
-                   name="CompReg",
-                   output_directory=os.environ["OUTPUT_DIRECTORY"])
+mod = pycde.System([CompReg], name="CompReg", output_directory=sys.argv[1])
 mod.print()
 mod.generate()
 mod.print()
