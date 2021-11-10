@@ -148,6 +148,6 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   # CHECK: proc top_config { parent } {
   # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|ext1|foo_subpath
-  pm = mlir.passmanager.PassManager.parse("lower-msft-to-hw")
+  pm = mlir.passmanager.PassManager.parse("lower-msft-to-hw{tops=top}")
   pm.run(m)
   circt.export_verilog(m, sys.stdout)

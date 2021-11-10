@@ -1,6 +1,6 @@
 // RUN: circt-opt %s -verify-diagnostics | circt-opt -verify-diagnostics | FileCheck %s
-// RUN: circt-opt %s --lower-msft-to-hw | FileCheck %s --check-prefix=LOWER
-// RUN: circt-opt %s --lower-msft-to-hw --export-verilog | FileCheck %s --check-prefix=TCL
+// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper | FileCheck %s --check-prefix=LOWER
+// RUN: circt-opt %s --lower-msft-to-hw=tops=shallow,deeper --export-verilog | FileCheck %s --check-prefix=TCL
 
 hw.module.extern @Foo()
 

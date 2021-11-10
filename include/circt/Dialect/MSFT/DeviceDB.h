@@ -102,9 +102,6 @@ public:
                           std::make_tuple(-1, -1, -1, -1),
                       Optional<PrimitiveType> primType = {});
 
-  /// Helper function to check if the database is empty.
-  bool empty();
-
 private:
   MLIRContext *ctxt;
   Operation *top;

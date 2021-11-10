@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --lower-msft-to-hw -verify-diagnostics -split-input-file
+// RUN: circt-opt %s --lower-msft-to-hw=tops=top -verify-diagnostics -split-input-file
 
 hw.module.extern @Foo()
 

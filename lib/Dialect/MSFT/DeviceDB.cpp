@@ -252,5 +252,3 @@ void PlacementDB::walkPlacements(
     }
   }
 }
-
-bool PlacementDB::empty() { return placements.empty(); }

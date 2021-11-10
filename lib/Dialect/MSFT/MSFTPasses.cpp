@@ -177,9 +177,13 @@ void LowerToHWPass::runOnOperation() {
   // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
   hw::SymbolCache symCache;
   populateSymbolCache(top, symCache);
-  for (auto hwmod : top.getBody()->getOps<msft::MSFTModuleOp>())
+  for (auto moduleName : tops) {
+    auto hwmod = top.lookupSymbol<msft::MSFTModuleOp>(moduleName);
+    if (!hwmod)
+      continue;
     if (failed(exportQuartusTcl(hwmod, symCache, tclFile)))
       return signalPassFailure();
+  }
 
   // The `hw::InstanceOp` (which `msft::InstanceOp` lowers to) convenience
   // builder gets its argNames and resultNames from the `hw::HWModuleOp`. So we

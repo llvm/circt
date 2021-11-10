@@ -38,18 +38,20 @@ class System:
 
   __slots__ = [
       "mod", "modules", "name", "passed", "_module_symbols", "_symbol_modules",
-      "_old_system_token", "_symbols", "_generate_queue", "_primdb"
+      "_old_system_token", "_symbols", "_generate_queue", "_primdb",
+      "_output_directory"
   ]
 
   PASSES = """
-    lower-msft-to-hw{{verilog-file={verilog_file} tcl-file={tcl_file}}},
+    lower-msft-to-hw{{tops={tops} verilog-file={verilog_file} tcl-file={tcl_file}}},
     lower-seq-to-sv,hw.module(prettify-verilog),hw.module(hw-cleanup)
   """
 
   def __init__(self,
                modules,
                primdb: PrimitiveDB = None,
-               name: str = "PyCDESystem"):
+               name: str = "PyCDESystem",
+               output_directory: str = None):
     self.passed = False
     self.mod = ir.Module.create()
     self.modules = list(modules)
@@ -60,6 +62,10 @@ class System:
     self._generate_queue = []
 
     self._primdb = primdb
+
+    if output_directory is None:
+      output_directory = os.path.join(os.getcwd(), self.name)
+    self._output_directory = output_directory
 
     with self:
       [m._pycde_mod.create() for m in modules]
@@ -148,8 +154,12 @@ class System:
 
   @property
   def passes(self):
-    return self.PASSES.format(verilog_file=self.name + ".sv",
-                              tcl_file=self.name + ".tcl").strip()
+    tops = ",".join(self.symbols.keys())
+    verilog_file = self.name + ".sv"
+    tcl_file = self.name + ".tcl"
+    return self.PASSES.format(tops=tops,
+                              verilog_file=verilog_file,
+                              tcl_file=tcl_file).strip()
 
   def print(self, *argv, **kwargs):
     self.mod.operation.print(*argv, **kwargs)
@@ -195,5 +205,4 @@ class System:
 
   def emit_outputs(self):
     self.run_passes()
-    output_directory = os.path.join(os.getcwd(), self.name)
-    circt.export_split_verilog(self.mod, output_directory)
+    circt.export_split_verilog(self.mod, self._output_directory)
