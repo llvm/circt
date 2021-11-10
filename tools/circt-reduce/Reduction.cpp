@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Reduction.h"
+#include "circt/Conversion/CHIRRTLToFIRRTL.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/InitAllDialects.h"
@@ -237,7 +238,7 @@ void circt::createAllReductions(
   add(std::make_unique<PassReduction>(context, firrtl::createInlinerPass()));
   add(std::make_unique<PassReduction>(context,
                                       createSimpleCanonicalizerPass()));
-  add(std::make_unique<PassReduction>(context, firrtl::createLowerCHIRRTLPass(),
+  add(std::make_unique<PassReduction>(context, createLowerCHIRRTLToFIRRTLPass(),
                                       true, true));
   add(std::make_unique<PassReduction>(context, firrtl::createInferWidthsPass(),
                                       true, true));

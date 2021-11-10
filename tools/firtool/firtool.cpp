@@ -41,6 +41,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "circt/Conversion/CHIRRTLToFIRRTL.h"
 
 using namespace llvm;
 using namespace mlir;
@@ -335,7 +336,7 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
 
   if (lowerCHIRRTL)
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
-        firrtl::createLowerCHIRRTLPass());
+        createLowerCHIRRTLToFIRRTLPass());
 
   // Width inference creates canonicalization opportunities.
   if (inferWidths)

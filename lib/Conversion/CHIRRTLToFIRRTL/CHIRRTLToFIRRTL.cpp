@@ -1,4 +1,4 @@
-//===- LowerCHIRRTL.cpp ----------------------------------------*- C++ -*-===//
+//===- LowerCHIRRTLToFIRRTL.cpp ---------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -10,8 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "PassDetails.h"
-
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -22,17 +20,20 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "circt/Conversion/CHIRRTLToFIRRTL.h"
+
+#include "../PassDetail.h"
 
 using namespace circt;
 using namespace firrtl;
 
 namespace {
-struct LowerCHIRRTLPass : public LowerCHIRRTLBase<LowerCHIRRTLPass>,
-                          public FIRRTLVisitor<LowerCHIRRTLPass> {
+struct LowerCHIRRTLToFIRRTL : public LowerCHIRRTLToFIRRTLBase<LowerCHIRRTLToFIRRTL>,
+                          public FIRRTLVisitor<LowerCHIRRTLToFIRRTL> {
 
-  using FIRRTLVisitor<LowerCHIRRTLPass>::visitDecl;
-  using FIRRTLVisitor<LowerCHIRRTLPass>::visitExpr;
-  using FIRRTLVisitor<LowerCHIRRTLPass>::visitStmt;
+  using FIRRTLVisitor<LowerCHIRRTLToFIRRTL>::visitDecl;
+  using FIRRTLVisitor<LowerCHIRRTLToFIRRTL>::visitExpr;
+  using FIRRTLVisitor<LowerCHIRRTLToFIRRTL>::visitStmt;
 
   void visitDecl(CombMemOp op);
   void visitDecl(SeqMemOp op);
@@ -143,7 +144,7 @@ static void connectLeafsTo(ImplicitLocOpBuilder &builder, Value bundle,
 
 /// Connect each leaf of an aggregate type to invalid.  This does not support
 /// aggregates with flip types.
-void LowerCHIRRTLPass::emitInvalid(ImplicitLocOpBuilder &builder, Value value) {
+void LowerCHIRRTLToFIRRTL::emitInvalid(ImplicitLocOpBuilder &builder, Value value) {
   auto type = value.getType();
   auto &invalid = invalidCache[type];
   if (!invalid) {
@@ -180,7 +181,7 @@ static MemOp::PortKind memDirAttrToPortKind(MemDirAttr direction) {
 /// this function we record how the result of each data subfield operation is
 /// used, so that later on we can make sure the SubfieldOp is cloned to index
 /// into the correct rdata and wdata fields of the memory.
-MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
+MemDirAttr LowerCHIRRTLToFIRRTL::inferMemoryPortKind(MemoryPortOp memPort) {
   // This function does a depth-first walk of the use-lists of the memport
   // operation to look through subindex operations and find the places where it
   // is ultimately used.  At each node we record how the children ops are using
@@ -263,7 +264,7 @@ MemDirAttr LowerCHIRRTLPass::inferMemoryPortKind(MemoryPortOp memPort) {
   return mode;
 }
 
-void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
+void LowerCHIRRTLToFIRRTL::replaceMem(Operation *cmem, StringRef name,
                                   bool isSequential, RUWAttr ruw,
                                   ArrayAttr annotations) {
   assert(isa<CombMemOp>(cmem) || isa<SeqMemOp>(cmem));
@@ -462,27 +463,27 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   }
 }
 
-void LowerCHIRRTLPass::visitDecl(CombMemOp combmem) {
+void LowerCHIRRTLToFIRRTL::visitDecl(CombMemOp combmem) {
   replaceMem(combmem, combmem.name(), /*isSequential*/ false,
              RUWAttr::Undefined, combmem.annotations());
 }
 
-void LowerCHIRRTLPass::visitDecl(SeqMemOp seqmem) {
+void LowerCHIRRTLToFIRRTL::visitDecl(SeqMemOp seqmem) {
   replaceMem(seqmem, seqmem.name(), /*isSequential*/ true, seqmem.ruw(),
              seqmem.annotations());
 }
 
-void LowerCHIRRTLPass::visitStmt(MemoryPortOp memPort) {
+void LowerCHIRRTLToFIRRTL::visitStmt(MemoryPortOp memPort) {
   // The memory port is mostly handled while processing the memory.
   opsToDelete.push_back(memPort);
 }
 
-void LowerCHIRRTLPass::visitStmt(MemoryPortAccessOp memPortAccess) {
+void LowerCHIRRTLToFIRRTL::visitStmt(MemoryPortAccessOp memPortAccess) {
   // The memory port access is mostly handled while processing the memory.
   opsToDelete.push_back(memPortAccess);
 }
 
-void LowerCHIRRTLPass::visitStmt(ConnectOp connect) {
+void LowerCHIRRTLToFIRRTL::visitStmt(ConnectOp connect) {
   // Check if we are writing to a memory and, if we are, replace the
   // destination.
   auto writeIt = wdataValues.find(connect.dest());
@@ -510,7 +511,7 @@ void LowerCHIRRTLPass::visitStmt(ConnectOp connect) {
 /// recursive over the types of the destination and source of the partial
 /// connect. This uses lambdas to lazily emit subfield operations on the mask
 /// only when there is a valid pair-wise connection point.
-void LowerCHIRRTLPass::emitPartialConnectMask(
+void LowerCHIRRTLToFIRRTL::emitPartialConnectMask(
     ImplicitLocOpBuilder &builder, Type destType, Type srcType,
     llvm::function_ref<Value(ImplicitLocOpBuilder &)> getSubaccess) {
   if (auto destBundle = destType.dyn_cast<BundleType>()) {
@@ -568,7 +569,7 @@ void LowerCHIRRTLPass::emitPartialConnectMask(
   }
 }
 
-void LowerCHIRRTLPass::visitStmt(PartialConnectOp partialConnect) {
+void LowerCHIRRTLToFIRRTL::visitStmt(PartialConnectOp partialConnect) {
   // Check if we are writing to a memory and, if we are, replace the
   // destination.
   auto writeIt = wdataValues.find(partialConnect.dest());
@@ -610,7 +611,7 @@ void LowerCHIRRTLPass::visitStmt(PartialConnectOp partialConnect) {
 /// write to both the wdata and wmask fields. Users of this subfield operation
 /// will be redirected to the appropriate clone when they are visited.
 template <typename OpType, typename... T>
-void LowerCHIRRTLPass::cloneSubindexOpForMemory(OpType op, Value input,
+void LowerCHIRRTLToFIRRTL::cloneSubindexOpForMemory(OpType op, Value input,
                                                 T... operands) {
   // If the subaccess operation has no direction recorded, then it does not
   // index a CHIRRTL memory and will be left alone.
@@ -643,7 +644,7 @@ void LowerCHIRRTLPass::cloneSubindexOpForMemory(OpType op, Value input,
   }
 }
 
-void LowerCHIRRTLPass::visitExpr(SubaccessOp subaccess) {
+void LowerCHIRRTLToFIRRTL::visitExpr(SubaccessOp subaccess) {
   // Check if the subaccess reads from a memory for
   // the index.
   auto readIt = rdataValues.find(subaccess.index());
@@ -654,17 +655,17 @@ void LowerCHIRRTLPass::visitExpr(SubaccessOp subaccess) {
   cloneSubindexOpForMemory(subaccess, subaccess.input(), subaccess.index());
 }
 
-void LowerCHIRRTLPass::visitExpr(SubfieldOp subfield) {
+void LowerCHIRRTLToFIRRTL::visitExpr(SubfieldOp subfield) {
   cloneSubindexOpForMemory<SubfieldOp>(subfield, subfield.input(),
                                        subfield.fieldIndex());
 }
 
-void LowerCHIRRTLPass::visitExpr(SubindexOp subindex) {
+void LowerCHIRRTLToFIRRTL::visitExpr(SubindexOp subindex) {
   cloneSubindexOpForMemory<SubindexOp>(subindex, subindex.input(),
                                        subindex.index());
 }
 
-void LowerCHIRRTLPass::visitUnhandledOp(Operation *op) {
+void LowerCHIRRTLToFIRRTL::visitUnhandledOp(Operation *op) {
   // For every operand, check if it is reading from a memory port and
   // replace it with a read from the new memory.
   for (auto &operand : op->getOpOperands()) {
@@ -675,7 +676,7 @@ void LowerCHIRRTLPass::visitUnhandledOp(Operation *op) {
   }
 }
 
-void LowerCHIRRTLPass::runOnOperation() {
+void LowerCHIRRTLToFIRRTL::runOnOperation() {
   // Walk the entire body of the module and dispatch the visitor on each
   // function.  This will replace all CHIRRTL memories and ports, and update all
   // uses.
@@ -694,6 +695,6 @@ void LowerCHIRRTLPass::runOnOperation() {
   clear();
 }
 
-std::unique_ptr<mlir::Pass> circt::firrtl::createLowerCHIRRTLPass() {
-  return std::make_unique<LowerCHIRRTLPass>();
+std::unique_ptr<mlir::Pass> circt::createLowerCHIRRTLToFIRRTLPass() {
+  return std::make_unique<LowerCHIRRTLToFIRRTL>();
 }

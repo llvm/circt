@@ -81,6 +81,44 @@ def CalyxToHW : Pass<"lower-calyx-to-hw", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// CHIRRTLToFIRRTL
+//===----------------------------------------------------------------------===//
+
+def LowerCHIRRTLToFIRRTL : Pass<"lower-chirrtl-to-firrtl", "firrtl::FModuleOp"> {
+  let summary = "Infer the memory ports of SeqMem and CombMem";
+  let description = [{
+      This pass finds the CHIRRTL behavioral memories and their ports, and
+      transforms them into standard FIRRTL memory operations.  For each
+      `seqmem` or `combmem`, a new memory is created.  For every `memoryport`
+      operation using a CHIRRTL memory, a memory port is defined on the
+      new standard memory.
+
+      The direction or kind of the port is inferred from how each of the memory
+      ports is used in the IR. If a memory port is only written to, it becomes
+      a `Write` port.  If a memory port is only read from, it become a `Read`
+      port.  If it is used both ways, it becomes a `ReadWrite` port.
+
+      `Write`, `ReadWrite` and combinational `Read` ports are disabled by
+      default, but then enabled when the CHIRRTL memory port is declared.
+      Sequential `Read` ports have more complicated enable inference:
+
+      1. If a wire or register is used as the index of the memory port, then
+         the memory is enabled whenever a non-invalid value is driven to the
+         address. 
+      2. If a node is used as the index of the memory port, then the memory is
+         enabled at the declaration of the node.
+      3. In all other cases, the memory is never enabled.
+
+      In the first two cases, they can easily produce a situation where we try
+      to enable the memory before it is even declared. This produces a
+      compilation error.
+
+  }];
+  let constructor = "circt::createLowerCHIRRTLToFIRRTLPass()";
+  let dependentDialects = ["firrtl::FIRRTLDialect"];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 

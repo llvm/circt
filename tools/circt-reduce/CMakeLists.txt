@@ -12,6 +12,7 @@ target_link_libraries(circt-reduce
   PRIVATE
   CIRCTCalyx
   CIRCTCHIRRTL
+  CIRCTCHIRRTLToFIRRTL
   CIRCTESI
   CIRCTFIRRTL
   CIRCTFIRRTLTransforms
