@@ -1,4 +1,6 @@
-# RUN: %PYTHON% %s 2>&1 | FileCheck %s
+# RUN: rm -rf %t
+# RUN: OUTPUT_DIRECTORY=%t %PYTHON% %s 2>&1 | FileCheck %s
+# RUN: FileCheck %s --check-prefix=OUTPUT < %t/PolynomialSystem.sv
 
 from __future__ import annotations
 
@@ -6,6 +8,8 @@ import pycde
 from pycde import (Input, Output, module, externmodule, generator, types, dim)
 from circt.dialects import comb, hw
 from circt.support import connect
+
+import os
 
 
 @module
@@ -102,7 +106,9 @@ class PolynomialSystem:
     ports.y = poly.y
 
 
-poly = pycde.System([PolynomialSystem])
+poly = pycde.System([PolynomialSystem],
+                    name="PolynomialSystem",
+                    output_directory=os.environ["OUTPUT_DIRECTORY"])
 poly.print()
 
 print("Generating 1...")
@@ -147,10 +153,8 @@ poly.print()
 # CHECK: hw.constant 5
 # CHECK-NOT: hw.module @pycde.PolynomialCompute
 
-print("\n\n=== Verilog ===")
-# CHECK-LABEL: === Verilog ===
-poly.print_verilog()
+poly.emit_outputs()
 
-# CHECK-LABEL:   module PolyComputeForCoeff_62_42_6(
-# CHECK:    input  [31:0] x,
-# CHECK:    output [31:0] y);
+# OUTPUT-LABEL:   module PolyComputeForCoeff_62_42_6(
+# OUTPUT:    input  [31:0] x,
+# OUTPUT:    output [31:0] y);

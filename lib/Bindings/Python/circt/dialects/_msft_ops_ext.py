@@ -74,6 +74,10 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
       ip=None,
   ):
     attrs = {"parameters": parameters}
+    if parameters is not None:
+      attrs["parameters"] = parameters
+    else:
+      attrs["parameters"] = _ir.DictAttr.get({})
     super().__init__(name,
                      input_ports,
                      output_ports,
