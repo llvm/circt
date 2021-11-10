@@ -111,7 +111,7 @@ static bool singleLoadFromMemory(Value memref) {
 /// Returns true if there are no memref::StoreOp uses with the referenced
 /// memory.
 static bool noStoresToMemory(Value memref) {
-  return !llvm::any_of(memref.getUses(), [](OpOperand &user) {
+  return llvm::none_of(memref.getUses(), [](OpOperand &user) {
     return isa<memref::StoreOp>(user.getOwner());
   });
 }
@@ -801,13 +801,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   Value memref = loadOp.memref();
   auto memoryInterface = getComponentState().getMemoryInterface(memref);
   if (noStoresToMemory(memref) && singleLoadFromMemory(memref)) {
-    // Single load from memory with no stores; we do not need to write the
-    // output to a register. This is essentially a "combinational read," and
-    // thus can be used in a combinational group. The `no stores` condition is
-    // required to avoid memory writes and reads in the same block, e.g.
-    //    %ld = memref.load %m[%i]
-    //    %x  = arith.addi %ld, %c1_1
-    //    memref.store %x %m[%i]
+    // Single load from memory; we do not need to write the
+    // output to a register. This is essentially a "combinational read" under
+    // current Calyx semantics with memory, and thus can be done in a
+    // combinational group. Note that if any stores are done to this memory,
+    // we require that the load and store be in separate non-combinational
+    // groups to avoid reading and writing to the same memory in the same group.
     auto combGroup = createGroupForOp<calyx::CombGroupOp>(rewriter, loadOp);
     assignAddressPorts(rewriter, loadOp.getLoc(), combGroup, memoryInterface,
                        loadOp.getIndices());
@@ -1966,7 +1965,7 @@ public:
   /// results are skipped for Once patterns).
   template <typename TPattern, typename... PatternArgs>
   void addOncePattern(SmallVectorImpl<LoweringPattern> &patterns,
-                      PatternArgs &&... args) {
+                      PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), partialPatternRes, args...);
     patterns.push_back(
@@ -1975,7 +1974,7 @@ public:
 
   template <typename TPattern, typename... PatternArgs>
   void addGreedyPattern(SmallVectorImpl<LoweringPattern> &patterns,
-                        PatternArgs &&... args) {
+                        PatternArgs &&...args) {
     RewritePatternSet ps(&getContext());
     ps.add<TPattern>(&getContext(), args...);
     patterns.push_back(
