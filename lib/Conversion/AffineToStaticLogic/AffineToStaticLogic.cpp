@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Transforms/LoopUtils.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "affine-to-staticlogic"
@@ -33,30 +34,38 @@ struct AffineToStaticLogic
   void runOnFunction() override;
 
 private:
-  void runOnAffineFor(AffineForOp forOp,
-                      CyclicSchedulingAnalysis schedulingAnalysis);
+  void populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
+  void solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
+
+  CyclicSchedulingAnalysis *schedulingAnalysis;
 };
 
 } // namespace
 
 void AffineToStaticLogic::runOnFunction() {
-  CyclicSchedulingAnalysis schedulingAnalysis =
-      getAnalysis<CyclicSchedulingAnalysis>();
-  getFunction().walk(
-      [&](AffineForOp forOp) { runOnAffineFor(forOp, schedulingAnalysis); });
+  // Get scheduling analysis for the whole function.
+  schedulingAnalysis = &getAnalysis<CyclicSchedulingAnalysis>();
+
+  // Collect perfectly nested loops and work on them.
+  for (auto root : getOperation().getOps<AffineForOp>()) {
+    SmallVector<AffineForOp> nestedLoops;
+    getPerfectlyNestedLoops(nestedLoops, root);
+    populateOperatorTypes(nestedLoops);
+    solveSchedulingProblem(nestedLoops);
+  }
 }
 
-void AffineToStaticLogic::runOnAffineFor(
-    AffineForOp forOp, CyclicSchedulingAnalysis schedulingAnalysis) {
-  // Only consider innermost AffineForOps.
-  if (isa<AffineForOp>(forOp.getBody()->front()))
-    return;
+void AffineToStaticLogic::populateOperatorTypes(
+    SmallVectorImpl<AffineForOp> &loopNest) {
+  // Scheduling analyis only considers the innermost loop nest for now.
+  auto forOp = loopNest.back();
 
-  // Create a cyclic scheduling problem.
-  CyclicProblem problem = schedulingAnalysis.getProblem(forOp);
+  // Retrieve the cyclic scheduling problem for this loop.
+  CyclicProblem &problem = schedulingAnalysis->getProblem(forOp);
 
   // Load the Calyx operator library into the problem. This is a very minimal
-  // set of combinational and memory operators for now.
+  // set of arithmetic and memory operators for now. This should ultimately be
+  // pulled out into some sort of dialect interface.
   Problem::OperatorType combOpr = problem.getOrInsertOperatorType("comb");
   problem.setLatency(combOpr, 0);
   Problem::OperatorType seqOpr = problem.getOrInsertOperatorType("seq");
@@ -93,23 +102,30 @@ void AffineToStaticLogic::runOnAffineFor(
     forOp.emitError("unsupported operation ") << *unsupported;
     return signalPassFailure();
   }
+}
 
-  // Verify and solve the scheduling problem, and optionally debug it.
-#ifndef NDEBUG
-  if (llvm::isCurrentDebugType(DEBUG_TYPE))
-    forOp.getBody()->walk<WalkOrder::PreOrder>([&](Operation *op) {
-      llvm::dbgs() << "Scheduling inputs for " << *op;
-      auto opr = problem.getLinkedOperatorType(op);
-      llvm::dbgs() << "\nopr = " << opr;
-      llvm::dbgs() << "\nlatency = " << problem.getLatency(*opr);
-      for (auto dep : problem.getDependences(op))
-        if (dep.isAuxiliary())
-          llvm::dbgs() << "\ndep = { distance = " << problem.getDistance(dep)
-                       << ", source = " << *dep.getSource() << '}';
-      llvm::dbgs() << "\n\n";
-    });
-#endif
+void AffineToStaticLogic::solveSchedulingProblem(
+    SmallVectorImpl<AffineForOp> &loopNest) {
+  // Scheduling analyis only considers the innermost loop nest for now.
+  auto forOp = loopNest.back();
 
+  // Retrieve the cyclic scheduling problem for this loop.
+  CyclicProblem &problem = schedulingAnalysis->getProblem(forOp);
+
+  // Optionally debug problem inputs.
+  LLVM_DEBUG(forOp.getBody()->walk<WalkOrder::PreOrder>([&](Operation *op) {
+    llvm::dbgs() << "Scheduling inputs for " << *op;
+    auto opr = problem.getLinkedOperatorType(op);
+    llvm::dbgs() << "\n  opr = " << opr;
+    llvm::dbgs() << "\n  latency = " << problem.getLatency(*opr);
+    for (auto dep : problem.getDependences(op))
+      if (dep.isAuxiliary())
+        llvm::dbgs() << "\n  dep = { distance = " << problem.getDistance(dep)
+                     << ", source = " << *dep.getSource() << " }";
+    llvm::dbgs() << "\n\n";
+  }));
+
+  // Verify and solve the problem.
   if (failed(problem.check()))
     return signalPassFailure();
 
@@ -117,17 +133,16 @@ void AffineToStaticLogic::runOnAffineFor(
   if (failed(scheduleSimplex(problem, anchor)))
     return signalPassFailure();
 
-#ifndef NDEBUG
-  if (llvm::isCurrentDebugType(DEBUG_TYPE)) {
+  // Optionally debug problem outputs.
+  LLVM_DEBUG({
     llvm::dbgs() << "Scheduled initiation interval = "
                  << problem.getInitiationInterval() << "\n\n";
     forOp.getBody()->walk<WalkOrder::PreOrder>([&](Operation *op) {
       llvm::dbgs() << "Scheduling outputs for " << *op;
-      llvm::dbgs() << "\nstart = " << problem.getStartTime(op);
+      llvm::dbgs() << "\n  start = " << problem.getStartTime(op);
       llvm::dbgs() << "\n\n";
     });
-  }
-#endif
+  });
 }
 
 std::unique_ptr<mlir::Pass> circt::createAffineToStaticLogic() {
