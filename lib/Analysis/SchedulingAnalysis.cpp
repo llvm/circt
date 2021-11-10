@@ -134,7 +134,7 @@ void circt::analysis::CyclicSchedulingAnalysis::analyzeForOp(
   problems.insert(std::pair<Operation *, CyclicProblem>(forOp, problem));
 }
 
-CyclicProblem
+CyclicProblem &
 circt::analysis::CyclicSchedulingAnalysis::getProblem(AffineForOp forOp) {
   auto problem = problems.find(forOp);
   assert(problem != problems.end() && "expected problem to exist");
