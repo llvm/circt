@@ -11,16 +11,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Reduction.h"
+#include "Tester.h"
 #include "circt/InitAllDialects.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Parser.h"
-#include "mlir/Reducer/Tester.h"
 #include "mlir/Support/FileUtilities.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/InitLLVM.h"
 #include "llvm/Support/ToolOutputFile.h"
-
-#include "Reduction.h"
 
 #define DEBUG_TYPE "circt-reduce"
 #define VERBOSE(X)                                                             \
@@ -48,6 +47,10 @@ static cl::opt<std::string>
 static cl::opt<bool>
     keepBest("keep-best", cl::init(true),
              cl::desc("Keep overwriting the output with better reductions"));
+
+static cl::opt<bool> skipInitial(
+    "skip-initial", cl::init(false),
+    cl::desc("Skip checking the initial input for interestingness"));
 
 static cl::opt<std::string> testerCommand(
     "test", cl::Required,
@@ -100,12 +103,12 @@ static LogicalResult execute(MLIRContext &context) {
       llvm::errs() << "  with argument `" << arg << "`\n";
   });
   Tester tester(testerCommand, testerArgs);
-  auto initialTest = tester.isInteresting(module.get());
-  if (initialTest.first != Tester::Interestingness::True) {
+  auto initialTest = tester.get(module.get());
+  if (!skipInitial && !initialTest.isInteresting()) {
     mlir::emitError(UnknownLoc::get(&context), "input is not interesting");
     return failure();
   }
-  auto bestSize = initialTest.second;
+  auto bestSize = initialTest.getSize();
   VERBOSE(llvm::errs() << "Initial module has size " << bestSize << "\n");
 
   // Gather a list of reduction patterns that we should try.
@@ -167,14 +170,20 @@ static LogicalResult execute(MLIRContext &context) {
 
       // Check if this reduced module is still interesting, and its overall size
       // is smaller than what we had before.
-      auto test = tester.isInteresting(newModule.get());
-      if (test.first == Tester::Interestingness::True &&
-          (test.second < bestSize || pattern.acceptSizeIncrease())) {
+      auto shouldAccept = [&](TestCase &test) {
+        if (!test.isValid())
+          return false; // don't write to disk if module is busted
+        if (test.getSize() >= bestSize && !pattern.acceptSizeIncrease())
+          return false; // don't run test if size already bad
+        return test.isInteresting();
+      };
+      auto test = tester.get(newModule.get());
+      if (shouldAccept(test)) {
         // Make this reduced module the new baseline and reset our search
         // strategy to start again from the beginning, since this reduction may
         // have created additional opportunities.
         patternDidReduce = true;
-        bestSize = test.second;
+        bestSize = test.getSize();
         VERBOSE(llvm::errs()
                 << "- Accepting module of size " << bestSize << "\n");
         module = std::move(newModule);
