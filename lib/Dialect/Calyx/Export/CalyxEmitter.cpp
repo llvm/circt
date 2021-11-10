@@ -98,7 +98,8 @@ private:
               LeLibOp, LshLibOp, RshLibOp, SliceLibOp, PadLibOp>(
             [&](auto op) { library = "core"; })
         .Case<SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp,
-              SrshLibOp>([&](auto op) { library = "binary_operators"; })
+              SrshLibOp, MultPipeLibOp, DivPipeLibOp>(
+            [&](auto op) { library = "binary_operators"; })
         /*.Case<>([&](auto op) { library = "math"; })*/
         .Default([&](auto op) {
           llvm_unreachable("Type matching failed for this operation.");
@@ -471,7 +472,7 @@ void Emitter::emitComponent(ComponentOp op) {
           .Case<LtLibOp, GtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, SltLibOp,
                 SgtLibOp, SeqLibOp, SneqLibOp, SgeLibOp, SleLibOp, AddLibOp,
                 SubLibOp, ShruLibOp, RshLibOp, SrshLibOp, LshLibOp, AndLibOp,
-                NotLibOp, OrLibOp, XorLibOp>(
+                NotLibOp, OrLibOp, XorLibOp, MultPipeLibOp, DivPipeLibOp>(
               [&](auto op) { emitLibraryPrimTypedByFirstInputPort(op); })
           .Default([&](auto op) {
             emitOpError(op, "not supported for emission inside component");

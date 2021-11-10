@@ -1680,6 +1680,78 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 }
 
 //===----------------------------------------------------------------------===//
+// MultPipe
+//===----------------------------------------------------------------------===//
+
+SmallVector<StringRef> MultPipeLibOp::portNames() {
+  return {"left", "right", "write_en", "clk", "reset", "out", "done"};
+}
+
+SmallVector<Direction> MultPipeLibOp::portDirections() {
+  return {Input, Input, Input, Input, Input, Output, Output};
+}
+
+void MultPipeLibOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
+  MLIRContext *context = getContext();
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList writeEn, clk, reset, done;
+  writeEn.append("go", isSet);
+  clk.append("clk", isSet);
+  reset.append("reset", isSet);
+  done.append("done", isSet);
+  return {
+      DictionaryAttr(),               /* Lhs          */
+      DictionaryAttr(),               /* Rhs          */
+      writeEn.getDictionary(context), /* Write enable */
+      clk.getDictionary(context),     /* Clk          */
+      reset.getDictionary(context),   /* Reset        */
+      DictionaryAttr(),               /* Out          */
+      done.getDictionary(context)     /* Done         */
+  };
+}
+
+//===----------------------------------------------------------------------===//
+// DivPipe
+//===----------------------------------------------------------------------===//
+
+SmallVector<StringRef> DivPipeLibOp::portNames() {
+  return {"left",  "right",    "write_en",  "clk",
+          "reset", "out_quotient", "out_remainder", "done"};
+}
+
+SmallVector<Direction> DivPipeLibOp::portDirections() {
+  return {Input, Input, Input, Input, Input, Output, Output, Output};
+}
+
+void DivPipeLibOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
+  MLIRContext *context = getContext();
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList writeEn, clk, reset, done;
+  writeEn.append("go", isSet);
+  clk.append("clk", isSet);
+  reset.append("reset", isSet);
+  done.append("done", isSet);
+  return {
+      DictionaryAttr(),               /* Lhs          */
+      DictionaryAttr(),               /* Rhs          */
+      writeEn.getDictionary(context), /* Write enable */
+      clk.getDictionary(context),     /* Clk          */
+      reset.getDictionary(context),   /* Reset        */
+      DictionaryAttr(),               /* Quotient     */
+      DictionaryAttr(),               /* Remainder    */
+      done.getDictionary(context)     /* Done         */
+  };
+}
+
+//===----------------------------------------------------------------------===//
 // Calyx library ops
 //===----------------------------------------------------------------------===//
 
