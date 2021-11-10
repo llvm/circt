@@ -321,6 +321,14 @@ unsigned RecursiveTypeProperties::toFlags() const {
 //===----------------------------------------------------------------------===//
 // FIRRTLType Implementation
 //===----------------------------------------------------------------------===//
+bool FIRRTLType::classof(Type type) {
+  // CHIRRTL types cmemory and cmemory port are both in the FIRRTLDialect, but
+  // are not FIRRTLTypes.  This is why we can't just check the dialect here.
+  return TypeSwitch<Type, bool>(type)
+      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
+            AnalogType, BundleType, FVectorType>([](auto type) { return true; })
+      .Default([](auto type) { return false; });
+}
 
 /// Return true if this is a 'ground' type, aka a non-aggregate type.
 bool FIRRTLType::isGround() {

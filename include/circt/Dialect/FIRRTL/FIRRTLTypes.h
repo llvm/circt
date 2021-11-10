@@ -93,9 +93,7 @@ public:
   int32_t getBitWidthOrSentinel();
 
   /// Support method to enable LLVM-style type casting.
-  static bool classof(Type type) {
-    return llvm::isa<FIRRTLDialect>(type.getDialect());
-  }
+  static bool classof(Type type);
 
   /// Return true if this is a valid "reset" type.
   bool isResetType();
