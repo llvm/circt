@@ -380,6 +380,19 @@ LogicalResult verifyProbeOp(hir::ProbeOp op) {
     return op.emitError() << "Invalid name.";
   return success();
 }
+
+LogicalResult verifyBusTensorInsertElementOp(hir::BusTensorInsertElementOp op) {
+  auto busTensorTy = op.tensor().getType().dyn_cast<hir::BusTensorType>();
+  if (!busTensorTy)
+    return op.emitError() << "Expected BusTensorType, got "
+                          << op.tensor().getType();
+  auto busTy = op.element().getType().dyn_cast<hir::BusType>();
+  if (!busTy)
+    return op.emitError() << "Expected BusType, got " << op.element().getType();
+  if (busTy.getElementType() != busTensorTy.getElementType())
+    return op.emitError() << "Incompatible input types";
+  return success();
+}
 //-----------------------------------------------------------------------------
 } // namespace hir
 } // namespace circt

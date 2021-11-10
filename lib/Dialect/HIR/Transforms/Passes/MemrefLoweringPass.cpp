@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MemrefLoweringUtils.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HIR/IR/HIR.h"
 #include "circt/Dialect/HIR/IR/helper.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -111,8 +112,8 @@ static mlir::FlatSymbolRefAttr createUniqueFuncName(MLIRContext *context,
   return FlatSymbolRefAttr::get(context, newName);
 }
 
-Value createAddrTuple(OpBuilder &builder, Location loc,
-                      ArrayRef<Value> indices) {
+Value createLinearAddr(OpBuilder &builder, Location loc,
+                       ArrayRef<Value> indices) {
   if (indices.size() == 0)
     return Value();
 
@@ -120,9 +121,7 @@ Value createAddrTuple(OpBuilder &builder, Location loc,
   for (auto idx : indices)
     idxTypes.push_back(idx.getType());
 
-  return builder
-      .create<hir::CreateTupleOp>(loc, builder.getTupleType(idxTypes), indices)
-      .getResult();
+  return builder.create<comb::ConcatOp>(loc, indices).getResult();
 }
 
 MemrefPortInterface MemrefLoweringPass::defineBusesForMemrefPort(
@@ -134,17 +133,13 @@ MemrefPortInterface MemrefLoweringPass::defineBusesForMemrefPort(
   Type enableTy = hir::BusTensorType::get(context, memrefTy.filterShape(BANK),
                                           builder.getI1Type());
 
-  SmallVector<Type> addrTupleElementTypes;
-  int64_t addrWidth = 0;
+  size_t addrWidth = 0;
   for (int64_t dimSize : memrefTy.filterShape(ADDR)) {
-    addrTupleElementTypes.push_back(
-        IntegerType::get(context, helper::clog2(dimSize)));
     addrWidth += helper::clog2(dimSize);
   }
 
-  Type addrTupleTy =
-      hir::BusTensorType::get(context, memrefTy.filterShape(BANK),
-                              TupleType::get(context, addrTupleElementTypes));
+  Type addrTy = hir::BusTensorType::get(context, memrefTy.filterShape(BANK),
+                                        builder.getIntegerType(addrWidth));
   Type dataTy = hir::BusTensorType::get(context, memrefTy.filterShape(BANK),
                                         memrefTy.getElementType());
 
@@ -153,7 +148,7 @@ MemrefPortInterface MemrefLoweringPass::defineBusesForMemrefPort(
         topLevelBuilder->create<hir::BusTensorOp>(builder.getUnknownLoc(),
                                                   enableTy);
     portInterface.addrDataBusTensor = topLevelBuilder->create<hir::BusTensorOp>(
-        builder.getUnknownLoc(), addrTupleTy);
+        builder.getUnknownLoc(), addrTy);
     if (name) {
       helper::setNames(portInterface.addrEnableBusTensor.getDefiningOp(),
                        {name.getValue().str() + "_addr_en"});
@@ -340,16 +335,13 @@ size_t insertBusTypesAndAttrsForMemrefPort(
   Type enableTy = hir::BusTensorType::get(context, memrefTy.filterShape(BANK),
                                           IntegerType::get(context, 1));
 
-  SmallVector<Type> addrTupleElementTypes;
-
+  size_t addrWidth = 0;
   for (int64_t dimSize : memrefTy.filterShape(ADDR)) {
-    addrTupleElementTypes.push_back(
-        IntegerType::get(context, helper::clog2(dimSize)));
+    addrWidth += helper::clog2(dimSize);
   }
 
-  Type addrTupleTy =
-      hir::BusTensorType::get(context, memrefTy.filterShape(BANK),
-                              TupleType::get(context, addrTupleElementTypes));
+  Type addrTy = hir::BusTensorType::get(context, memrefTy.filterShape(BANK),
+                                        builder.getIntegerType(addrWidth));
   Type dataTy = hir::BusTensorType::get(context, memrefTy.filterShape(BANK),
                                         memrefTy.getElementType());
 
@@ -367,7 +359,7 @@ size_t insertBusTypesAndAttrsForMemrefPort(
     inputAttrs.insert(inputAttrs.begin() + loc, sendAttr);
     inputNames.insert(inputNames.begin() + loc++,
                       memName + std::string("_addr_en"));
-    portInterface.addrDataBusTensor = bb.insertArgument(loc, addrTupleTy);
+    portInterface.addrDataBusTensor = bb.insertArgument(loc, addrTy);
     inputAttrs.insert(inputAttrs.begin() + loc, sendAttr);
     inputNames.insert(inputNames.begin() + loc++, memName + "_addr_data");
   }
@@ -510,7 +502,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::LoadOp op) {
 
   // Insert logic to send address and valid signals to address bus.
   Value addrTuple =
-      createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
+      createLinearAddr(builder, op.getLoc(), op.filterIndices(ADDR));
 
   if (portInterface.addrDataBusTensor) {
     assert(portInterface.addrEnableBusTensor);
@@ -549,7 +541,7 @@ LogicalResult MemrefLoweringPass::visitOp(hir::StoreOp op) {
       mlir::IntegerAttr::get(builder.getI1Type(), 1));
   // Insert logic to send address and valid signals to address bus.
   Value addrTuple =
-      createAddrTuple(builder, op.getLoc(), op.filterIndices(ADDR));
+      createLinearAddr(builder, op.getLoc(), op.filterIndices(ADDR));
 
   if (portInterface.addrDataBusTensor) {
     assert(portInterface.addrEnableBusTensor);

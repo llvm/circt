@@ -26,12 +26,15 @@ private:
 
   LogicalResult visitOp(hir::BusAssignOp);
   LogicalResult visitOp(hir::BusBroadcastOp);
+  LogicalResult visitOp(hir::BusMapOp);
   LogicalResult visitOp(hir::BusOp);
+  LogicalResult visitOp(hir::BusTensorAssignOp);
+  LogicalResult visitOp(hir::BusTensorMapOp);
+  LogicalResult visitOp(hir::BusTensorOp);
   LogicalResult visitOp(hir::CallOp);
   LogicalResult visitOp(hir::CastOp);
   LogicalResult visitOp(hir::CommentOp);
   LogicalResult visitOp(mlir::arith::ConstantOp);
-  LogicalResult visitOp(hir::CreateTupleOp);
   LogicalResult visitOp(hir::DelayOp);
   LogicalResult visitOp(hir::FuncExternOp);
   LogicalResult visitOp(hir::FuncOp);
@@ -57,6 +60,17 @@ private:
   hw::HWModuleOp hwModuleOp;
 };
 
+LogicalResult HIRToHWPass::visitOp(hir::BusMapOp op) {
+  SmallVector<Value> hwOperands;
+  for (auto operand : op.operands())
+    hwOperands.push_back(mapHIRToHWValue.lookup(operand));
+  auto results = insertBusMapLogic(*builder, op.body().front(), hwOperands);
+  for (size_t i = 0; i < op.getNumResults(); i++)
+    mapHIRToHWValue.map(op.getResult(i), results[i]);
+
+  return success();
+}
+
 LogicalResult HIRToHWPass::visitOp(hir::BusOp op) {
   // Add a placeholder SSA Var for the buses. CallOp visit will replace them.
   // We need to do this because HW dialect does not have SSA dominance.
@@ -69,6 +83,56 @@ LogicalResult HIRToHWPass::visitOp(hir::BusOp op) {
   return success();
 }
 
+LogicalResult HIRToHWPass::visitOp(hir::BusTensorMapOp op) {
+  auto uLoc = builder->getUnknownLoc();
+  SmallVector<Value> hwOperandTensors;
+  for (auto operand : op.operands())
+    hwOperandTensors.push_back(mapHIRToHWValue.lookup(operand));
+  auto hwArrayTy = hwOperandTensors[0].getType().dyn_cast<hw::ArrayType>();
+
+  // If the tensor has only one element then treat this like BusMapOp.
+  if (!hwArrayTy) {
+    auto results =
+        insertBusMapLogic(*builder, op.body().front(), hwOperandTensors);
+    for (size_t i = 0; i < op.getNumResults(); i++)
+      op.getResult(i).replaceAllUsesWith(results[i]);
+    return success();
+  }
+
+  // Copy the bus map logic as many times as there are elements in the tensor.
+  // Save the outputs in the results[array-index][result-number] array.
+  SmallVector<SmallVector<Value>> results;
+  for (size_t arrayIdx = 0; arrayIdx < hwArrayTy.getSize(); arrayIdx++) {
+    SmallVector<Value> hwOperands;
+    for (auto hwOperandT : hwOperandTensors)
+      hwOperands.push_back(
+          insertConstArrayGetLogic(*builder, hwOperandT, arrayIdx));
+    results.push_back(
+        insertBusMapLogic(*builder, op.body().front(), hwOperands));
+  }
+
+  // For each result (i.e. results[*][result-num]), create a hw array from the
+  // elements.
+  for (size_t resultNum = 0; resultNum < op.getNumResults(); resultNum++) {
+    SmallVector<Value> resultElements;
+    for (size_t arrayIdx = 0; arrayIdx < hwArrayTy.getSize(); arrayIdx++)
+      resultElements.push_back(results[arrayIdx][resultNum]);
+    mapHIRToHWValue.map(
+        op.getResult(resultNum),
+        builder->create<hw::ArrayCreateOp>(uLoc, resultElements));
+  }
+  return success();
+}
+
+LogicalResult HIRToHWPass::visitOp(hir::BusTensorOp op) {
+  auto *constantXOp = getConstantX(builder, op.getType());
+  auto placeHolderSSAVar = constantXOp->getResult(0);
+  auto name = helper::getOptionalName(constantXOp, 0);
+  if (name)
+    helper::setNames(constantXOp, {name.getValue()});
+  mapHIRToHWValue.map(op.res(), placeHolderSSAVar);
+  return success();
+}
 LogicalResult HIRToHWPass::visitOp(hir::CommentOp op) {
   builder->create<sv::VerbatimOp>(builder->getUnknownLoc(),
                                   "//COMMENT: " + op.comment());
@@ -308,8 +372,7 @@ LogicalResult HIRToHWPass::visitOp(hir::BusSendOp op) {
     defaultValue = builder->create<hw::ConstantOp>(
         builder->getUnknownLoc(), defaultAttr.dyn_cast<IntegerAttr>());
   } else {
-    defaultValue = builder->create<sv::ConstantXOp>(builder->getUnknownLoc(),
-                                                    value.getType());
+    defaultValue = getConstantX(builder, value.getType())->getResult(0);
   }
   auto newBus = builder->create<comb::MuxOp>(
       builder->getUnknownLoc(), value.getType(), tstart, value, defaultValue);
@@ -417,90 +480,109 @@ LogicalResult HIRToHWPass::visitOp(hir::BusTensorInsertElementOp op) {
   // hw.array_concat left, element, right
   // calc left slice.
 
-  auto tensorTy = op.tensor().getType().dyn_cast<hir::BusTensorType>();
+  auto busTensorTy = op.tensor().getType().dyn_cast<hir::BusTensorType>();
+  assert(op.element().getType().dyn_cast<hir::BusType>().getElementType() ==
+         busTensorTy.getElementType());
   auto hwTensor = mapHIRToHWValue.lookup(op.tensor());
   if (!hwTensor.getType().isa<hw::ArrayType>()) {
     mapHIRToHWValue.map(op.res(), mapHIRToHWValue.lookup(op.element()));
     return success();
   }
 
-  assert(tensorTy.getNumElements() > 1);
+  assert(busTensorTy.getNumElements() > 1);
   SmallVector<Value> indices;
   for (auto idx : op.indices()) {
     indices.push_back(idx);
   }
-  auto idx = helper::calcLinearIndex(indices, tensorTy.getShape()).getValue();
-  auto leftWidth = idx;
+  // Note that hw dialect arranges arrays right to left - index zero goes to
+  // rightmost end syntactically.
+  // Strangely, the operand vectors passed to the hw op builders are printed
+  // left to right. So operand[0] would actually be the last
+  auto idx =
+      helper::calcLinearIndex(indices, busTensorTy.getShape()).getValue();
+  auto leftWidth = busTensorTy.getNumElements() - idx - 1;
+  auto rightWidth = idx;
 
   auto leftIdx = builder->create<hw::ConstantOp>(
       builder->getUnknownLoc(),
       builder->getIntegerAttr(
           IntegerType::get(builder->getContext(),
-                           helper::clog2(tensorTy.getNumElements())),
-          0));
-  auto rightWidth = tensorTy.getNumElements() - idx - 1;
+                           helper::clog2(busTensorTy.getNumElements())),
+          idx + 1));
   auto rightIdx = builder->create<hw::ConstantOp>(
       builder->getUnknownLoc(),
       builder->getIntegerAttr(
           IntegerType::get(builder->getContext(),
-                           helper::clog2(tensorTy.getNumElements())),
-          idx + 1));
+                           helper::clog2(busTensorTy.getNumElements())),
+          0));
 
   auto leftSliceTy = hw::ArrayType::get(
       builder->getContext(),
-      *helper::convertToHWType(tensorTy.getElementType()), leftWidth);
-  auto leftSlice = builder->create<hw::ArraySliceOp>(
-      builder->getUnknownLoc(), leftSliceTy, hwTensor, leftIdx);
-  auto element = builder->create<hw::ArrayCreateOp>(
-      builder->getUnknownLoc(), mapHIRToHWValue.lookup(op.element()));
-
+      *helper::convertToHWType(busTensorTy.getElementType()), leftWidth);
   auto rightSliceTy = hw::ArrayType::get(
       builder->getContext(),
-      *helper::convertToHWType(tensorTy.getElementType()), rightWidth);
+      *helper::convertToHWType(busTensorTy.getElementType()), rightWidth);
+
+  auto leftSlice = builder->create<hw::ArraySliceOp>(
+      builder->getUnknownLoc(), leftSliceTy, hwTensor, leftIdx);
   auto rightSlice = builder->create<hw::ArraySliceOp>(
       builder->getUnknownLoc(), rightSliceTy, hwTensor, rightIdx);
+  auto hwElement = mapHIRToHWValue.lookup(op.element());
+  if (*helper::convertToHWType(busTensorTy.getElementType()) !=
+      hwElement.getType()) {
+    return op.emitError() << "Incompatible hw types "
+                          << *helper::convertToHWType(
+                                 busTensorTy.getElementType())
+                          << " and " << hwElement.getType();
+  }
+  auto elementAsArray =
+      builder->create<hw::ArrayCreateOp>(builder->getUnknownLoc(), hwElement);
+
+  assert(leftSlice.getType().isa<hw::ArrayType>());
+  assert(rightSlice.getType().isa<hw::ArrayType>());
+  assert(elementAsArray.getType().isa<hw::ArrayType>());
+  assert(helper::getElementType(leftSliceTy) ==
+         helper::getElementType(elementAsArray.getType()));
+  assert(helper::getElementType(rightSlice.getType()) ==
+         helper::getElementType(elementAsArray.getType()));
   mapHIRToHWValue.map(
-      op.res(), builder->create<hw::ArrayConcatOp>(
-                    builder->getUnknownLoc(),
-                    SmallVector<Value>({leftSlice, element, rightSlice})));
+      op.res(),
+      builder->create<hw::ArrayConcatOp>(
+          builder->getUnknownLoc(),
+          SmallVector<Value>({leftSlice, elementAsArray, rightSlice})));
   return success();
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::BusAssignOp op) {
+  // dest is predefined using a placeholder.
+  mapHIRToHWValue.lookup(op.dest()).replaceAllUsesWith(
+      mapHIRToHWValue.lookup(op.src()));
   mapHIRToHWValue.map(op.dest(), mapHIRToHWValue.lookup(op.src()));
   return success();
 }
 
+LogicalResult HIRToHWPass::visitOp(hir::BusTensorAssignOp op) {
+  // dest is predefined using a placeholder.
+  mapHIRToHWValue.lookup(op.dest()).replaceAllUsesWith(
+      mapHIRToHWValue.lookup(op.src()));
+  mapHIRToHWValue.map(op.dest(), mapHIRToHWValue.lookup(op.src()));
+  return success();
+}
 LogicalResult HIRToHWPass::visitOp(hir::BusBroadcastOp op) {
-  auto tensorTy = op.res().getType().dyn_cast<mlir::TensorType>();
+  auto busTensorTy = op.res().getType().dyn_cast<hir::BusTensorType>();
   auto hwBus = mapHIRToHWValue.lookup(op.bus());
-  if (tensorTy.getNumElements() == 1) {
+  if (busTensorTy.getNumElements() == 1) {
     mapHIRToHWValue.map(op.res(), hwBus);
     return success();
   }
 
   SmallVector<Value> replicatedArray;
-  for (int i = 0; i < tensorTy.getNumElements(); i++) {
+  for (size_t i = 0; i < busTensorTy.getNumElements(); i++) {
     replicatedArray.push_back(hwBus);
   }
 
   mapHIRToHWValue.map(op.res(), builder->create<hw::ArrayCreateOp>(
                                     builder->getUnknownLoc(), replicatedArray));
-  return success();
-}
-
-LogicalResult HIRToHWPass::visitOp(hir::CreateTupleOp op) {
-  SmallVector<Value> mappedArgs;
-  SmallVector<Type> mappedArgTypes;
-  for (auto arg : op.args()) {
-    mappedArgs.push_back(mapHIRToHWValue.lookup(arg));
-    mappedArgTypes.push_back(mapHIRToHWValue.lookup(arg).getType());
-  }
-
-  mapHIRToHWValue.map(
-      op.res(), builder->create<comb::ConcatOp>(
-                    builder->getUnknownLoc(),
-                    *helper::convertToHWType(op.res().getType()), mappedArgs));
   return success();
 }
 
@@ -531,9 +613,15 @@ LogicalResult HIRToHWPass::visitRegion(mlir::Region &region) {
 }
 
 LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
+  if (auto op = dyn_cast<hir::BusMapOp>(operation))
+    return visitOp(op);
   if (auto op = dyn_cast<hir::BusOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::BusBroadcastOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::BusTensorMapOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::BusTensorOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::CommentOp>(operation))
     return visitOp(op);
@@ -561,7 +649,7 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
     return visitOp(op);
   if (auto op = dyn_cast<hir::BusAssignOp>(operation))
     return visitOp(op);
-  if (auto op = dyn_cast<hir::CreateTupleOp>(operation))
+  if (auto op = dyn_cast<hir::BusTensorAssignOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::ReturnOp>(operation))
     return visitOp(op);

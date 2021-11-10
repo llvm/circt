@@ -557,21 +557,6 @@ def MemrefExtractOp :HIR_Op<"memref.extract",[NoSideEffect]>{
     type($res) `ports` $ports  custom<CopyType>(type($mem),ref(type($res)))}];
 }
 
-def CreateTupleOp:HIR_Op<"create_tuple",[NoSideEffect]>{
-  let summary = "creates a tuple from inputs";
-  let description = [{
-    This op creates a tuple of mlir builting types.
-      Examples:
-      ```mlir %1 = hir.create_tuple (%x, %y) : (i1, i32) -> Tuple<i1,i32>```
-  }];
-
-  let arguments = (ins Variadic<AnyType>: $args);
-  let results = (outs AnyType: $res);
-
-  let assemblyFormat = [{ `(` $args`)` custom<WithSSANames>(attr-dict) `:` 
-    `(` type($args) `)` `->` type($res) }];
-}
-
 def UnpackTupleOp:HIR_Op<"unpack_tuple",[NoSideEffect]>{
   let summary = "creates a tuple from inputs";
   let description = [{
@@ -702,7 +687,7 @@ def BusAssignOp: HIR_Op<"bus.assign",[]>{
   custom<CopyType>(type($src),ref(type($dest))) }];
 }
 
-def BusMapOp: HIR_Op<"bus.map",[SingleBlock, NoSideEffect]>{
+def BusMapOp: HIR_Op<"bus.map",[SingleBlock,IsolatedFromAbove, NoSideEffect]>{
   let summary = "Create new buses from input buses.";
   let description = [{
     This op creates new buses from multiple input buses
@@ -807,9 +792,10 @@ def BusTensorInsertElementOp: HIR_Op<"bus_tensor.insert_element",[NoSideEffect]>
 
   let parser = [{return parse$cppClass(parser,result);}];
   let printer = [{return print$cppClass(p,*this);}];
+  let verifier =[{return verify$cppClass(*this);}];
 }
 
-def BusTensorMapOp: HIR_Op<"bus_tensor.map",[SingleBlock, NoSideEffect]>{
+def BusTensorMapOp: HIR_Op<"bus_tensor.map",[SingleBlock,IsolatedFromAbove, NoSideEffect]>{
   let summary = "Create new bus tensors from input bus tensors.";
   let description = [{
     This op creates new bus tensors from multiple input bus tensors

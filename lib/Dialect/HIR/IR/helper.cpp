@@ -22,6 +22,7 @@ std::string typeString(Type t) {
 }
 
 llvm::Optional<int64_t> getBitWidth(Type type) {
+  assert(!type.isa<mlir::TupleType>());
   if (type.dyn_cast<hir::TimeType>())
     return 1;
 
@@ -34,17 +35,6 @@ llvm::Optional<int64_t> getBitWidth(Type type) {
   if (auto tensorTy = type.dyn_cast<mlir::TensorType>())
     return tensorTy.getNumElements() *
            getBitWidth(tensorTy.getElementType()).getValue();
-
-  if (auto tupleTy = type.dyn_cast<TupleType>()) {
-    int width = 1;
-    for (Type ty : tupleTy.getTypes()) {
-      auto widthTy = getBitWidth(ty);
-      if (!widthTy)
-        return llvm::None;
-      width *= widthTy.getValue();
-    }
-    return width;
-  }
 
   if (auto busTy = type.dyn_cast<hir::BusType>())
     return getBitWidth(busTy.getElementType());
@@ -216,12 +206,15 @@ StringRef extractBusPortFromDict(mlir::DictionaryAttr dict) {
   assert(ports.size() == 1);
   return ports[0].dyn_cast<StringAttr>().getValue();
 }
+
 llvm::StringRef getInlineAttrName() { return "inline"; }
-void eraseOps(mlir::ArrayRef<mlir::Operation *> opsToErase) {
+
+void eraseOps(SmallVectorImpl<Operation *> &opsToErase) {
   // Erase the ops in reverse order so that if there are any dependent ops, they
   // get erased first.
   for (auto op = opsToErase.rbegin(); op != opsToErase.rend(); op++)
     (*op)->erase();
+  opsToErase.clear();
 }
 
 Value lookupOrOriginal(BlockAndValueMapping &mapper, Value originalValue) {
@@ -284,6 +277,8 @@ llvm::Optional<Type> getElementType(circt::Type ty) {
     return busTy.getElementType();
   if (auto busTensorTy = ty.dyn_cast<hir::BusTensorType>())
     return busTensorTy.getElementType();
+  if (auto arrayTy = ty.dyn_cast<hw::ArrayType>())
+    return arrayTy.getElementType();
   return llvm::None;
 }
 
@@ -329,15 +324,6 @@ static Optional<Type> convertBusType(hir::BusType busTy) {
   return convertToHWType(busTy.getElementType());
 }
 
-static Optional<Type> convertTensorType(mlir::TensorType tensorTy) {
-  auto elementHWTy = convertToHWType(tensorTy.getElementType());
-  // Tensor element must always be a value type and hence always convertible
-  // to a valid hw type.
-  if (tensorTy.getNumElements() == 1)
-    return elementHWTy;
-  return hw::ArrayType::get(*elementHWTy, tensorTy.getNumElements());
-}
-
 static Optional<Type> convertBusTensorType(hir::BusTensorType busTensorTy) {
   auto elementHWTy = convertToHWType(busTensorTy.getElementType());
   if (!elementHWTy) {
@@ -352,6 +338,15 @@ static Optional<Type> convertBusTensorType(hir::BusTensorType busTensorTy) {
   if (busTensorTy.getNumElements() == 1)
     return elementHWTy;
   return hw::ArrayType::get(*elementHWTy, busTensorTy.getNumElements());
+}
+
+static Optional<Type> convertTensorType(mlir::TensorType tensorTy) {
+  auto elementHWTy = convertToHWType(tensorTy.getElementType());
+  // Tensor element must always be a value type and hence always convertible
+  // to a valid hw type.
+  if (tensorTy.getNumElements() == 1)
+    return elementHWTy;
+  return hw::ArrayType::get(*elementHWTy, tensorTy.getNumElements());
 }
 
 static Optional<Type> convertTupleType(mlir::TupleType tupleTy) {

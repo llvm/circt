@@ -41,3 +41,7 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
 Value convertToNamedValue(OpBuilder &builder, StringRef name, Value val);
 Value convertToOptionalNamedValue(OpBuilder &builder, Optional<StringRef> name,
                                   Value val);
+SmallVector<Value> insertBusMapLogic(OpBuilder &builder, Block &bodyBlock,
+                                     ArrayRef<Value> operands);
+
+Value insertConstArrayGetLogic(OpBuilder &builder, Value arr, int idx);

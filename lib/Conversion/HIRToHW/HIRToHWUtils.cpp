@@ -110,18 +110,25 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
   return portMap;
 }
 
+static Operation *getConstantXArray(OpBuilder *builder, hw::ArrayType hwTy) {
+  assert(hwTy);
+  Value constXValue =
+      getConstantX(builder, hir::BusType::get(builder->getContext(),
+                                              hwTy.getElementType()))
+          ->getResult(0);
+  uint64_t size = hwTy.getSize();
+  SmallVector<Value> constXCopies;
+  for (uint64_t i = 0; i < size; i++) {
+    constXCopies.push_back(constXValue);
+  }
+  return builder->create<hw::ArrayCreateOp>(builder->getUnknownLoc(),
+                                            constXCopies);
+}
+
 Operation *getConstantX(OpBuilder *builder, Type originalTy) {
   auto hwTy = *helper::convertToHWType(originalTy);
-  if (auto ty = hwTy.dyn_cast<hw::ArrayType>()) {
-    auto *constX = getConstantX(builder, ty.getElementType());
-    uint64_t size = ty.getSize();
-    SmallVector<Value> elementCopies;
-    for (uint64_t i = 0; i < size; i++) {
-      elementCopies.push_back(constX->getResult(0));
-    }
-    return builder->create<hw::ArrayCreateOp>(builder->getUnknownLoc(),
-                                              elementCopies);
-  }
+  if (auto hwArrayTy = hwTy.dyn_cast<hw::ArrayType>())
+    return getConstantXArray(builder, hwArrayTy);
   assert(hwTy.isa<IntegerType>());
   return builder->create<sv::ConstantXOp>(builder->getUnknownLoc(), hwTy);
 }
@@ -217,4 +224,33 @@ Value convertToOptionalNamedValue(OpBuilder &builder, Optional<StringRef> name,
     return convertToNamedValue(builder, name.getValue(), val);
   }
   return val;
+}
+
+SmallVector<Value> insertBusMapLogic(OpBuilder &builder, Block &bodyBlock,
+                                     ArrayRef<Value> operands) {
+  BlockAndValueMapping operandMap;
+  SmallVector<Value> results;
+  for (size_t i = 0; i < operands.size(); i++) {
+    operandMap.map(bodyBlock.getArgument(i), operands[i]);
+  }
+  for (auto &operation : bodyBlock) {
+    if (auto yieldOp = dyn_cast<hir::YieldOp>(operation)) {
+      for (size_t i = 0; i < yieldOp.getNumOperands(); i++) {
+        results.push_back(operandMap.lookup(yieldOp.getOperand(i)));
+      }
+    } else
+      builder.clone(operation, operandMap);
+  }
+  return results;
+}
+
+Value insertConstArrayGetLogic(OpBuilder &builder, Value arr, int idx) {
+  auto uLoc = builder.getUnknownLoc();
+  auto arrayTy = arr.getType().dyn_cast<hw::ArrayType>();
+  assert(arrayTy);
+  assert(arrayTy.getSize() > 1);
+  auto cIdx = builder.create<hw::ConstantOp>(
+      uLoc, IntegerAttr::get(
+                builder.getIntegerType(helper::clog2(arrayTy.getSize())), idx));
+  return builder.create<hw::ArrayGetOp>(uLoc, arr, cIdx);
 }

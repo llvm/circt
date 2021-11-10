@@ -1,11 +1,15 @@
 // RUN: circt-opt %s -split-input-file -canonicalize -hir-lower-memref
 #rd = {rd_latency=1}
 #wr = {wr_latency=1}
+#reg_wr = {wr_latency=1}
+#reg_rd = {rd_latency=0}
+#bram_wr = {wr_latency=1}
+#bram_rd = {rd_latency=1}
+
 hir.func @test1 at %t(
 %a :!hir.memref<16x16x(bank 2)x(bank 2)xi48> ports [#rd,#wr],
 %b : i32
 )->(%r:i48) {
-
   %0 = arith.constant 0:index
   %1 = arith.constant 1:index
   %c1_i4 = arith.constant 1:i4
@@ -17,10 +21,7 @@ hir.func @test1 at %t(
   hir.return (%xx) : (i48)
 }{inline}
 
-// -----
 
-#reg_wr = {wr_latency=1}
-#reg_rd = {rd_latency=0}
 hir.func @test2 at %t(){
   %0 = arith.constant 0:index
   %1 = arith.constant 1:index
@@ -37,10 +38,6 @@ hir.func @test2 at %t(){
   hir.comment "end" 
   hir.return
 }
-// -----
-
-#reg_wr = {wr_latency=1}
-#reg_rd = {rd_latency=0}
 
 hir.func.extern @foo at %t(%a_r:!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd]) 
 hir.func.extern @foo2 at %t(%a_r:!hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#reg_rd]) 
@@ -62,23 +59,21 @@ hir.func @test3 at %t(){
   hir.return
 }
 
-// -----
-//
-//#bram_wr = {wr_latency=1}
-//#bram_rd = {rd_latency=1}
-//hir.func @test4 at %t() -> (%res: i8){
-//  %0 = arith.constant 0:index
-//  %1 = arith.constant 1:index
-//  %c1_i1 = arith.constant 1:i1
-//  %c1_i2 = arith.constant 1:i2
-//  %c1_i48 = arith.constant 1.0:i48
-//
-//  %a = hir.alloca("BRAM_2P") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#bram_rd,#bram_wr]
-//  %u = hir.load %a[port 0][%0,%1,%c1_i1,%c1_i2]  at %t: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
-//  %v = hir.load %a[port 0][%1,%1,%c1_i1,%c1_i2]  at %t: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
-//  %r = hir.addi (%u, %v) at %t+1:i8
-//  hir.return (%r) :(i8)
-//}
+
+hir.func @test4 at %t() -> (%res: i8){
+  %0 = arith.constant 0:index
+  %1 = arith.constant 1:index
+  %c1_i1 = arith.constant 1:i1
+  %c1_i2 = arith.constant 1:i2
+  %c1_i48 = arith.constant 1:i48
+
+  %a = hir.alloca("BRAM_2P") : !hir.memref<(bank 2)x(bank 3)x2x4xi8> ports [#bram_rd,#bram_wr]
+  %u = hir.load %a[port 0][%0,%1,%c1_i1,%c1_i2]  at %t: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
+  %v = hir.load %a[port 0][%1,%1,%c1_i1,%c1_i2]  at %t: !hir.memref<(bank 2)x(bank 3)x2x4xi8> delay 1
+  %r = comb.add %u, %v :i8
+  hir.return (%r) :(i8)
+}
+
 //// -----
 //
 //#reg_wr = {wr_latency=1}

@@ -7,6 +7,7 @@ namespace circt {
 namespace hir {
 LogicalResult verifyAllocaOp(hir::AllocaOp);
 LogicalResult verifyBusTensorMapOp(hir::BusTensorMapOp);
+LogicalResult verifyBusTensorInsertElementOp(hir::BusTensorInsertElementOp);
 LogicalResult verifyCallOp(hir::CallOp);
 LogicalResult verifyCastOp(hir::CastOp);
 LogicalResult verifyDelayOp(hir::DelayOp);
