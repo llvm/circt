@@ -691,3 +691,19 @@ firrtl.circuit "MoveAcrossBlocks4" {
     // CHECK-NEXT: firrtl.connect %localReset, [[TMP]]
   }
 }
+
+firrtl.circuit "SubAccess" {
+  firrtl.module @SubAccess(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %init: !firrtl.uint<1>, in %in: !firrtl.uint<8>, in %extraReset: !firrtl.asyncreset ) attributes {
+    // CHECK-LABEL: firrtl.module @SubAccess
+    portAnnotations = [[],[],[],[],[{class = "firrtl.transforms.DontTouchAnnotation"}, {class = "sifive.enterprise.firrtl.FullAsyncResetAnnotation"}]]} {
+    %c1_ui8 = firrtl.constant 1 : !firrtl.uint<2>
+    %arr = firrtl.wire : !firrtl.vector<uint<8>, 1>
+    %reg6 = firrtl.regreset %clock, %init, %c1_ui8 : !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %2 = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
+    firrtl.connect %2, %in : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK:  %reg6 = firrtl.regreset %clock, %extraReset, %c0_ui2  : !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    // CHECK-NEXT:  %[[v0:.+]] = firrtl.subaccess %arr[%reg6] : !firrtl.vector<uint<8>, 1>, !firrtl.uint<2>
+    // CHECK-NEXT:  firrtl.connect %[[v0]], %in : !firrtl.uint<8>, !firrtl.uint<8>
+
+  }
+}
