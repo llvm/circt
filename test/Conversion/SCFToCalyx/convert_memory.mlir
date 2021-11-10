@@ -453,3 +453,31 @@ module {
     return %0, %1 : i32, i32
   }
 }
+
+// -----
+
+// Load followed by store to the same memory should be placed in separate groups.
+
+// CHECK:         calyx.group @bb0_0  {
+// CHECK-NEXT:         calyx.assign %std_slice_1.in = %in0 : i32
+// CHECK-NEXT:         calyx.assign %mem_0.addr0 = %std_slice_1.out : i0
+// CHECK-NEXT:         calyx.assign %load_0_reg.in = %mem_0.read_data : i32
+// CHECK-NEXT:         calyx.assign %load_0_reg.write_en = %true : i1
+// CHECK-NEXT:         calyx.group_done %load_0_reg.done : i1
+// CHECK-NEXT:      }
+// CHECK-NEXT:      calyx.group @bb0_1  {
+// CHECK-NEXT:        calyx.assign %std_slice_0.in = %in0 : i32
+// CHECK-NEXT:        calyx.assign %mem_0.addr0 = %std_slice_0.out : i0
+// CHECK-NEXT:        calyx.assign %mem_0.write_data = %c1_i32 : i32
+// CHECK-NEXT:        calyx.assign %mem_0.write_en = %true : i1
+// CHECK-NEXT:        calyx.group_done %mem_0.done : i1
+// CHECK-NEXT:      }
+module {
+  func @main(%i : index) -> i32 {
+    %c1_32 = arith.constant 1 : i32
+    %0 = memref.alloc() : memref<1xi32>
+    %1 = memref.load %0[%i] : memref<1xi32>
+    memref.store %c1_32, %0[%i] : memref<1xi32>
+    return %1 : i32
+  }
+}
