@@ -1,3 +1,4 @@
+# FIRRTL
 add_circt_dialect(FIRRTL firrtl FIRRTL)
 add_circt_doc(FIRRTL -gen-dialect-doc FIRRTL Dialects/)
 
@@ -23,3 +24,7 @@ mlir_tablegen(FIRRTLOpInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(FIRRTLOpInterfaces.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(CIRCTFIRRTLOpInterfacesIncGen)
 add_dependencies(circt-headers CIRCTFIRRTLOpInterfacesIncGen)
+
+# CHIRRTL
+add_circt_dialect(CHIRRTL chirrtl CHIRRTL)
+add_circt_doc(CHIRRTL -gen-dialect-doc CHIRRTL Dialects/)
