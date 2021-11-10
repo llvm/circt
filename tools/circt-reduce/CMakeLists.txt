@@ -11,6 +11,7 @@ llvm_update_compile_flags(circt-reduce)
 target_link_libraries(circt-reduce
   PRIVATE
   CIRCTCalyx
+  CIRCTCHIRRTL
   CIRCTESI
   CIRCTFIRRTL
   CIRCTFIRRTLTransforms

@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRParser.h"
 #include "FIRAnnotations.h"
 #include "FIRLexer.h"
+#include "circt/Dialect/CHIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Support/LLVM.h"
@@ -35,6 +36,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace chirrtl;
 
 using llvm::SMLoc;
 using llvm::SourceMgr;
@@ -3677,6 +3679,7 @@ OwningModuleRef circt::firrtl::importFIRFile(SourceMgr &sourceMgr,
     omirBufs.push_back(
         sourceMgr.getMemoryBuffer(sourceMgr.getMainFileID() + fileID));
 
+  context->loadDialect<CHIRRTLDialect>();
   context->loadDialect<FIRRTLDialect>();
 
   // This is the result module we are parsing into.

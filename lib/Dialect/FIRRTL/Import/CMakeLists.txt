@@ -7,6 +7,7 @@ add_circt_translation_library(CIRCTImportFIRFile
   ADDITIONAL_HEADER_DIRS
 
   LINK_LIBS PUBLIC
+  CIRCTCHIRRTL
   CIRCTFIRRTL
   MLIRTranslation
   )

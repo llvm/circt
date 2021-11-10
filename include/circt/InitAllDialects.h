@@ -14,6 +14,7 @@
 #ifndef CIRCT_INITALLDIALECTS_H_
 #define CIRCT_INITALLDIALECTS_H_
 
+#include "circt/Dialect/CHIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/Calyx/CalyxDialect.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/ESI/ESIDialect.h"
@@ -35,6 +36,7 @@ inline void registerAllDialects(mlir::DialectRegistry &registry) {
   // clang-format off
   registry.insert<
     calyx::CalyxDialect,
+    chirrtl::CHIRRTLDialect,
     comb::CombDialect,
     esi::ESIDialect,
     firrtl::FIRRTLDialect,

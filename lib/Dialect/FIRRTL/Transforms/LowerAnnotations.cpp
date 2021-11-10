@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/CHIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -25,6 +26,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace chirrtl;
 
 namespace {
 

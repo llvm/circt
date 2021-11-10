@@ -8,6 +8,7 @@
 // DIALECT-NEXT: arith
 // DIALECT-NEXT: builtin
 // DIALECT-NEXT: calyx
+// DIALECT-NEXT: chirrtl
 // DIALECT-NEXT: comb
 // DIALECT-NEXT: esi
 // DIALECT-NEXT: firrtl

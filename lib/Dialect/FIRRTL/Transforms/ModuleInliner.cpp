@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
+#include "circt/Dialect/CHIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -21,6 +22,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace chirrtl;
 
 //===----------------------------------------------------------------------===//
 // Module Inlining Support

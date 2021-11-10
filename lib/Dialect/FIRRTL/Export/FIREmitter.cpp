@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIREmitter.h"
+#include "circt/Dialect/CHIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/CircuitNamespace.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
@@ -26,6 +27,7 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace chirrtl;
 
 //===----------------------------------------------------------------------===//
 // Emitter
@@ -805,6 +807,7 @@ void circt::firrtl::registerToFIRFileTranslation() {
         return exportFIRFile(module, os);
       },
       [](mlir::DialectRegistry &registry) {
+        registry.insert<chirrtl::CHIRRTLDialect>();
         registry.insert<firrtl::FIRRTLDialect>();
       });
 }
