@@ -32,5 +32,5 @@ mod.print()
 mod.emit_outputs()
 
 # CHECK: reg [7:0] [[NAME:.+]];
-# CHECK: always @(posedge clk)
+# CHECK: always_ff @(posedge clk)
 # CHECK: [[NAME]] <= {{.+}}
