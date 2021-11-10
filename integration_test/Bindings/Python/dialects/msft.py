@@ -6,6 +6,7 @@ import circt
 from circt.dialects import hw, msft
 
 import mlir.ir as ir
+import mlir.passmanager
 import sys
 
 with ir.Context() as ctx, ir.Location.unknown():
@@ -15,25 +16,25 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   m = ir.Module.create()
   with ir.InsertionPoint(m.body):
-    extmod = hw.HWModuleExternOp(name='MyExternMod',
-                                 input_ports=[],
-                                 output_ports=[])
+    extmod = msft.MSFTModuleExternOp(name='MyExternMod',
+                                     input_ports=[],
+                                     output_ports=[])
 
-    op = hw.HWModuleOp(name='MyWidget',
-                       input_ports=[],
-                       output_ports=[],
-                       body_builder=lambda module: hw.OutputOp([]))
+    op = msft.MSFTModuleOp(name='MyWidget', input_ports=[], output_ports=[])
+    with ir.InsertionPoint(op.add_entry_block()):
+      msft.OutputOp([])
 
-    top = hw.HWModuleOp(name='top',
-                        input_ports=[],
-                        output_ports=[],
-                        body_builder=lambda module: hw.OutputOp([]))
+    top = msft.MSFTModuleOp(name='top', input_ports=[], output_ports=[])
+    with ir.InsertionPoint(top.add_entry_block()):
+      msft.OutputOp([])
 
     msft_mod = msft.MSFTModuleOp(name='msft_mod',
                                  input_ports=[],
                                  output_ports=[],
                                  parameters=ir.DictAttr.get(
                                      {"WIDTH": ir.IntegerAttr.get(i32, 8)}))
+    with ir.InsertionPoint(msft_mod.add_entry_block()):
+      msft.OutputOp([])
 
   with ir.InsertionPoint.at_block_terminator(op.body.blocks[0]):
     ext_inst = extmod.create("ext1")
@@ -65,8 +66,8 @@ with ir.Context() as ctx, ir.Location.unknown():
                                      ir.Attribute.parse("@inst_none::@ext1"))
   assert (not_found_inst is None)
 
-  # CHECK: hw.module @MyWidget()
-  # CHECK:   hw.output
+  # CHECK: msft.module @MyWidget {} ()
+  # CHECK:   msft.output
   # CHECK: msft.module @msft_mod {WIDTH = 8 : i32} ()
   m.operation.print()
 
@@ -83,7 +84,7 @@ with ir.Context() as ctx, ir.Location.unknown():
 
   num_failed = db.add_design_placements()
   assert num_failed == 1
-  # ERR: error: 'hw.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by hw.instance "ext1" @MyExternMod
+  # ERR: error: 'msft.instance' op Could not apply placement #msft.physloc<M20K, 2, 6, 1>. Position already occupied by msft.instance @ext1 @MyExternMod
 
   devdb = msft.PrimitiveDB()
   assert not devdb.is_valid_location(physAttr)
@@ -140,4 +141,13 @@ with ir.Context() as ctx, ir.Location.unknown():
   bad_loc = msft.PhysLocationAttr.get(msft.M20K, x=7, y=99, num=1)
   rc = seeded_pdb.add_placement(bad_loc, path, "foo_subpath", resolved_inst)
   assert not rc
-  # ERR: error: 'hw.instance' op Could not apply placement. Invalid location
+  # ERR: error: 'msft.instance' op Could not apply placement. Invalid location
+
+  # CHECK-LABEL: === tcl ===
+  print("=== tcl ===")
+
+  # CHECK: proc top_config { parent } {
+  # CHECK:   set_location_assignment M20K_X2_Y6_N1 -to $parent|inst1|ext1|ext1|foo_subpath
+  pm = mlir.passmanager.PassManager.parse("lower-msft-to-hw")
+  pm.run(m)
+  circt.export_verilog(m, sys.stdout)

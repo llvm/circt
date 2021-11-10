@@ -7,6 +7,7 @@
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Registration.h"
@@ -215,7 +216,7 @@ void circtMSFTSwitchInstanceAttrGetCases(MlirAttribute attr,
 }
 
 MlirOperation circtMSFTGetInstance(MlirOperation cRoot, MlirAttribute cPath) {
-  auto root = cast<circt::hw::HWModuleOp>(unwrap(cRoot));
+  auto root = cast<circt::msft::MSFTModuleOp>(unwrap(cRoot));
   auto path = unwrap(cPath).cast<SymbolRefAttr>();
   return wrap(getInstance(root, path));
 }
