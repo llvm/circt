@@ -526,15 +526,19 @@ void GrandCentralTapsPass::runOnOperation() {
         LLVM_DEBUG(llvm::dbgs()
                    << "  - Shortest prefix " << *shortestPrefix << "\n");
 
+        // Determine the module at which the hierarchical name should start.
+        Operation *opInRootModule =
+            shortestPrefix->empty() ? path.back() : shortestPrefix->front();
+        StringRef rootModule =
+            opInRootModule->getParentOfType<FModuleLike>().moduleName();
+
         // Concatenate the prefix into a proper full hierarchical name.
-        SmallString<128> hname;
+        SmallString<128> hname(rootModule);
         for (auto inst : shortestPrefix.getValue()) {
-          if (!hname.empty())
-            hname += '.';
+          hname += '.';
           hname += inst.name();
         }
-        if (!hname.empty())
-          hname += '.';
+        hname += '.';
         hname += port.suffix;
         LLVM_DEBUG(llvm::dbgs() << "  - Connecting as " << hname << "\n");
 
