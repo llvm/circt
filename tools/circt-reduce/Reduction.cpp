@@ -330,7 +330,7 @@ struct OperandForwarder : public Reduction {
 /// their type.
 struct Constantifier : public Reduction {
   bool match(Operation *op) const override {
-    if (op->getNumResults() != 1)
+    if (op->getNumResults() != 1 || op->getNumOperands() == 0)
       return false;
     if (isFlowSensitiveOp(op))
       return false;
