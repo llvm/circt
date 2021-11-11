@@ -1249,6 +1249,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %out, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
+<<<<<<< HEAD
   // CHECK-LABEL: hw.module @regInitRandomReuse
   firrtl.module @regInitRandomReuse(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %o1: !firrtl.uint<2>, out %o2: !firrtl.uint<4>, out %o3: !firrtl.uint<32>, out %o4: !firrtl.uint<100>) {
     %r1 = firrtl.reg %clock  : !firrtl.uint<2>
@@ -1285,4 +1286,84 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.connect %o3, %r3 : !firrtl.uint<32>, !firrtl.uint<32>
     firrtl.connect %o4, %r4 : !firrtl.uint<100>, !firrtl.uint<100>
   }
+=======
+  // CHECK-LABEL: hw.module @init1DVector
+  firrtl.module @init1DVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<1>, 2>) {
+    %r = firrtl.reg %clock  : !firrtl.vector<uint<1>, 2>
+    // CHECK:      sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:   %1 = sv.array_index_inout %r[%false] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT:   %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:   %2 = comb.extract %RANDOM from 0 : (i32) -> i1
+    // CHECK-NEXT:   sv.bpassign %1, %2 : i1
+    // CHECK-NEXT:   %3 = sv.array_index_inout %r[%true] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT:   %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:   %4 = comb.extract %RANDOM_0 from 0 : (i32) -> i1
+    // CHECK-NEXT:   sv.bpassign %3, %4 : i1
+    // CHECK-NEXT: }
+
+    firrtl.connect %r, %a : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    firrtl.connect %b, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    // CHECK:      sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.passign %r, %a : !hw.array<2xi1>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: hw.output %0 : !hw.array<2xi1>
+  }
+
+  // CHECK-LABEL: hw.module @init2DVector
+  firrtl.module @init2DVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<vector<uint<1>, 2>, 2>, out %b: !firrtl.vector<vector<uint<1>, 2>, 2>) {
+    %r = firrtl.reg %clock  : !firrtl.vector<vector<uint<1>, 2>, 2>
+    // CHECK:      sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:   %1 = sv.array_index_inout %r[%false] : !hw.inout<array<2xarray<2xi1>>>, i1
+    // CHECK-NEXT:   %2 = sv.array_index_inout %1[%false] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT:   %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:   %3 = comb.extract %RANDOM from 0 : (i32) -> i1
+    // CHECK-NEXT:   sv.bpassign %2, %3 : i1
+    // CHECK-NEXT:   %4 = sv.array_index_inout %1[%true] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT:   %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:   %5 = comb.extract %RANDOM_0 from 0 : (i32) -> i1
+    // CHECK-NEXT:   sv.bpassign %4, %5 : i1
+    // CHECK-NEXT:   %6 = sv.array_index_inout %r[%true] : !hw.inout<array<2xarray<2xi1>>>, i1
+    // CHECK-NEXT:   %7 = sv.array_index_inout %6[%false] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT:   %RANDOM_1 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:   %8 = comb.extract %RANDOM_1 from 0 : (i32) -> i1
+    // CHECK-NEXT:   sv.bpassign %7, %8 : i1
+    // CHECK-NEXT:   %9 = sv.array_index_inout %6[%true] : !hw.inout<array<2xi1>>, i1
+    // CHECK-NEXT:   %RANDOM_2 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:   %10 = comb.extract %RANDOM_2 from 0 : (i32) -> i1
+    // CHECK-NEXT:   sv.bpassign %9, %10 : i1
+    // CHECK-NEXT: }
+    firrtl.connect %r, %a : !firrtl.vector<vector<uint<1>, 2>, 2>, !firrtl.vector<vector<uint<1>, 2>, 2>
+    firrtl.connect %b, %r : !firrtl.vector<vector<uint<1>, 2>, 2>, !firrtl.vector<vector<uint<1>, 2>, 2>
+
+    // CHECK:      sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.passign %r, %a : !hw.array<2xarray<2xi1>>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: hw.output %0 : !hw.array<2xarray<2xi1>>
+  }
+
+  // CHECK-LABEL: hw.module @connectNarrow
+  // module connectNarraow:
+  //   input clock: Clock
+  //   input a: UInt<1>[2]
+  //   output b: UInt<2>[2]
+
+  //   reg r: UInt<2>[2], clock
+  //   r <= a
+  //   b <= r
+  firrtl.module @connectNarrow(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<2>, 2>) {
+    %r = firrtl.reg %clock  : !firrtl.vector<uint<2>, 2>
+    firrtl.connect %r, %a : !firrtl.vector<uint<2>, 2>, !firrtl.vector<uint<1>, 2>
+    firrtl.connect %b, %r : !firrtl.vector<uint<2>, 2>, !firrtl.vector<uint<2>, 2>
+    // CHECK:       %1 = hw.array_get %a[%false] : !hw.array<2xi1>
+    // CHECK-NEXT:  %2 = comb.concat %false, %1 : i1, i1
+    // CHECK-NEXT:  %3 = hw.array_get %a[%true] : !hw.array<2xi1>
+    // CHECK-NEXT:  %4 = comb.concat %false, %3 : i1, i1
+    // CHECK-NEXT:  %5 = hw.array_create %2, %4 : i2
+    // CHECK-NEXT:  sv.always posedge %clock  {
+    // CHECK-NEXT:    sv.passign %r, %5 : !hw.array<2xi2>
+    // CHECK-NEXT:  }
+    // CHECK-NEXT:  hw.output %0 : !hw.array<2xi2>
+  }
+
+>>>>>>> 73564647 ([FIRRTL/LowerToHW] Add initialization and lowering around connect)
 }

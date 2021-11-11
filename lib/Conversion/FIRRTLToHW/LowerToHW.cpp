@@ -1472,6 +1472,26 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
   return result;
 }
 
+/// Returns a base type from a vector type.
+static FIRRTLType getFIRRTLVectorBaseType(FIRRTLType srcType) {
+  return TypeSwitch<FIRRTLType, FIRRTLType>(srcType)
+      .Case<IntType>([&](auto intType) { return intType; })
+      .Case<FVectorType>([&](FVectorType vectorType) {
+        return getFIRRTLVectorBaseType(vectorType.getElementType());
+      })
+      .Default([&](auto) { return FIRRTLType(); });
+}
+
+/// Returns a base type from a vector type.
+static Type getVectorBaseType(Type srcType) {
+  return TypeSwitch<Type, Type>(srcType)
+      .Case<IntegerType>([&](auto intType) { return intType; })
+      .Case<hw::ArrayType>([&](auto vectorType) {
+        return getVectorBaseType(vectorType.getElementType());
+      })
+      .Default([&](auto) { return Type(); });
+}
+
 /// Return the lowered value corresponding to the specified original value and
 /// then extend it to match the width of destType if needed.
 ///
@@ -1499,6 +1519,67 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     // Otherwise, FIRRTL semantics is that an extension from a zero bit value
     // always produces a zero value in the destination width.
     return getOrCreateIntConstant(destWidth, 0);
+  }
+
+  if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
+    // srcWidth == unsigned(destWidth) --> ok
+    // srcWidth > unsigned(destWidth)  --> error
+    // srcWidth < unsigned(destWidth)  --> insert concat/sext to elements
+
+    auto baseDestType = getFIRRTLVectorBaseType(destType.cast<FIRRTLType>());
+    auto baseSourceType = getFIRRTLVectorBaseType(value.getType().cast<FIRRTLType>());
+    auto baseResultType = getVectorBaseType(result.getType());
+    if (!baseSourceType || !baseDestType || !baseResultType)
+      return {};
+
+    auto srcWidth = baseResultType.cast<IntegerType>().getWidth();
+    auto destWidth = baseDestType.cast<IntType>().getWidthOrSentinel();
+    if (destWidth == -1)
+      return {};
+
+    if (srcWidth == unsigned(destWidth))
+      return result;
+
+    if (srcWidth > unsigned(destWidth)) {
+      builder.emitError("operand should not be a truncation");
+      return {};
+    }
+
+    auto resultType = builder.getIntegerType(destWidth);
+    auto isSigned = baseSourceType.getPassiveType().cast<IntType>().isSigned();
+    auto extend = [&](Value value) {
+      if (isSigned)
+        return builder.createOrFold<comb::SExtOp>(resultType, value);
+      auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
+      return builder.createOrFold<comb::ConcatOp>(zero, value);
+    };
+
+    SmallVector<Value> resultBuffer;
+
+    std::function<void(Value, Type)> recurse = [&](Value result, Type type) {
+      TypeSwitch<Type>(type)
+          .Case<hw::ArrayType>([&](auto a) {
+            int size = resultBuffer.size();
+            for (size_t i = 0, e = a.getSize(); i != e; ++i) {
+              auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
+              auto arrayIndex = builder.create<hw::ArrayGetOp>(result, iIdx);
+              recurse(arrayIndex, a.getElementType());
+            }
+            SmallVector<Value> temp(resultBuffer.begin() + size,
+                                    resultBuffer.end());
+            auto array = builder.createOrFold<hw::ArrayCreateOp>(temp);
+            resultBuffer.resize(size);
+            resultBuffer.push_back(array);
+          })
+          .Default([&](auto type) {
+            auto ret = extend(result);
+            resultBuffer.push_back(ret);
+          });
+    };
+
+    recurse(result, result.getType());
+    assert(resultBuffer.size() == 1);
+    return resultBuffer[0];
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
@@ -2027,18 +2108,21 @@ void FIRRTLLowering::initializeRegister(Value reg, Value resetSignal) {
   // Randomly initialize everything in the register. If the register
   // is an aggregate type, then assign random values to all its
   // constituent ground types.
-  // TODO: Extend this so it recursively initializes everything.
   auto randomInit = [&]() {
     auto type = reg.getType().dyn_cast<hw::InOutType>().getElementType();
-    TypeSwitch<Type>(type)
-        .Case<hw::UnpackedArrayType>([&](auto a) {
-          for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-            auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
-            auto arrayIndex = builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
-            emitRandomInit(arrayIndex, a.getElementType());
-          }
-        })
-        .Default([&](auto type) { emitRandomInit(reg, type); });
+    std::function<void(Value, Type)> recurse = [&](Value reg, Type type) {
+      TypeSwitch<Type>(type)
+          .Case<hw::UnpackedArrayType, hw::ArrayType>([&](auto a) {
+            for (size_t i = 0, e = a.getSize(); i != e; ++i) {
+              auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
+              auto arrayIndex =
+                  builder.create<sv::ArrayIndexInOutOp>(reg, iIdx);
+              recurse(arrayIndex, a.getElementType());
+            }
+          })
+          .Default([&](auto type) { emitRandomInit(reg, type); });
+    };
+    recurse(reg, type);
   };
 
   // Emit the initializer expression for simulation that fills it with random
