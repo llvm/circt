@@ -1704,13 +1704,13 @@ SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),               /* Lhs    */
-      DictionaryAttr(),               /* Rhs    */
-      go.getDictionary(context),      /* Go     */
-      clk.getDictionary(context),     /* Clk    */
-      reset.getDictionary(context),   /* Reset  */
-      DictionaryAttr(),               /* Out    */
-      done.getDictionary(context)     /* Done   */
+      DictionaryAttr(),             /* Lhs    */
+      DictionaryAttr(),             /* Rhs    */
+      go.getDictionary(context),    /* Go     */
+      clk.getDictionary(context),   /* Clk    */
+      reset.getDictionary(context), /* Reset  */
+      DictionaryAttr(),             /* Out    */
+      done.getDictionary(context)   /* Done   */
   };
 }
 
