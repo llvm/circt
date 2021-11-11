@@ -1001,8 +1001,9 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
 // CHECK-LABEL: module extInst
 hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
 
-// CHECK-LABEL: module extInst
-hw.module.extern @extInst2(%signed: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
+// CHECK-LABEL: module extInst2
+// CHECK-NEXT:     input                signed_0, _i, _j, _k
+hw.module @extInst2(%signed: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> () {}
 
 // CHECK-LABEL: module remoteInstDut
 hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
@@ -1034,7 +1035,7 @@ hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
 // CHECK:  assign signed__k = 1'h1
 // CHECK-NEXT:  /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst2 signed_2
-// CHECK-NEXT:    .signed (signed_0)
+// CHECK-NEXT:    .signed_0 (signed_0)
 }
 
 hw.module @bindInMod() {
@@ -1051,12 +1052,10 @@ hw.module @bindInMod() {
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
 // CHECK-NEXT:  bind remoteInstDut extInst2 signed_2 (
-// CHECK-NEXT:    .signed (signed_0),
-// CHECK-NEXT:    ._i     (output_1),
-// CHECK-NEXT:    ._j     (j),
-// CHECK-NEXT:    ._k     (signed__k)
-// CHECK-NEXT:  //._z     (z)
-// CHECK-NEXT:  );
+// CHECK-NEXT:    .signed_0 (signed_0),
+// CHECK-NEXT:    ._i       (output_1),
+// CHECK-NEXT:    ._j       (j),
+// CHECK-NEXT:    ._k       (signed__k)
 // CHECK: endmodule
 
 sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
