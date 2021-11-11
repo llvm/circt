@@ -724,7 +724,7 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
 
   // Reads to MemoryOp and RegisterOp are combinational. Writes are not.
   if (auto r = dyn_cast<RegisterOp>(definingOp)) {
-    return value == r.outPort()
+    return value == r.out()
                ? success()
                : group->emitOpError()
                      << "with register: \"" << r.instanceName()
@@ -891,9 +891,8 @@ static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
           .Case<RegisterOp>([&](auto op) {
             // We only want to verify this is written to if the {write enable,
             // in} port is driven.
-            return succeeded(
-                       group.drivesAnyPort({op.writeEnPort(), op.inPort()}))
-                       ? group.drivesAllPorts({op.writeEnPort(), op.inPort()})
+            return succeeded(group.drivesAnyPort({op.write_en(), op.in()}))
+                       ? group.drivesAllPorts({op.write_en(), op.in()})
                        : success();
           })
           .Case<MemoryOp>([&](auto op) {
@@ -916,7 +915,7 @@ static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
                 LtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, LshLibOp,
                 RshLibOp, SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp,
                 SleLibOp, SrshLibOp>([&](auto op) {
-            Value lhs = op.lhsPort(), rhs = op.rhsPort();
+            Value lhs = op.left(), rhs = op.right();
             return succeeded(group.drivesAnyPort({lhs, rhs}))
                        ? group.drivesAllPorts({lhs, rhs})
                        : success();
