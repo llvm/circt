@@ -64,9 +64,9 @@ void HandshakeVerilatorWrapper::emitSimulator(handshake::FuncOp hsFuncOp) {
   osi() << "interface.clock = &dut->clock;\n";
   osi() << "interface.reset = &dut->reset;\n\n";
 
+  auto argNames = hsFuncOp->getAttrOfType<ArrayAttr>("argNames");
   auto getInputName = [&](unsigned idx) -> std::string {
-    if (auto argNames = hsFuncOp->getAttrOfType<ArrayAttr>("argNames");
-        argNames) {
+    if (argNames) {
       return argNames[idx].cast<StringAttr>().getValue().str();
     } else
       return "arg" + std::to_string(idx);
@@ -93,10 +93,17 @@ void HandshakeVerilatorWrapper::emitSimulator(handshake::FuncOp hsFuncOp) {
     osi() << "&dut->" << arg << "_data);\n";
   }
 
+  auto resNames = hsFuncOp->getAttrOfType<ArrayAttr>("resNames");
+  auto getResName = [&](unsigned idx) -> std::string {
+    if (resNames) {
+      return resNames[idx].cast<StringAttr>().getValue().str();
+    } else
+      return "out" + std::to_string(idx);
+  };
+
   osi() << "\n// - Output ports\n";
   for (auto &res : enumerate(funcType.getResults())) {
-    unsigned resIdx = res.index() + inCtrlIndex + 1;
-    auto arg = "arg" + std::to_string(resIdx);
+    auto arg = getResName(res.index());
     osi() << "addOutputPort<HandshakeDataOutPort<TRes" << res.index() << ">>(\""
           << arg << "\", ";
     osi() << "&dut->" << arg << "_ready, ";
