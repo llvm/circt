@@ -164,6 +164,21 @@ public:
 } // anonymous namespace
 
 namespace {
+/// Simply remove PhysicalRegionOp when done.
+struct PhysicalRegionOpLowering : public OpConversionPattern<PhysicalRegionOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(PhysicalRegionOp physicalRegion, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.eraseOp(physicalRegion);
+    return success();
+  }
+};
+} // anonymous namespace
+
+namespace {
 struct LowerToHWPass : public LowerToHWBase<LowerToHWPass> {
   void runOnOperation() override;
 };
@@ -205,10 +220,17 @@ void LowerToHWPass::runOnOperation() {
     signalPassFailure();
 
   // Then, convert the InstanceOps
-  target.addIllegalDialect<MSFTDialect>();
+  target.addIllegalOp<msft::InstanceOp>();
   RewritePatternSet instancePatterns(ctxt);
   instancePatterns.insert<InstanceOpLowering>(ctxt);
   if (failed(applyPartialConversion(top, target, std::move(instancePatterns))))
+    signalPassFailure();
+
+  // Finally, legalize the rest of the MSFT dialect.
+  target.addIllegalDialect<MSFTDialect>();
+  RewritePatternSet finalPatterns(ctxt);
+  finalPatterns.insert<PhysicalRegionOpLowering>(ctxt);
+  if (failed(applyPartialConversion(top, target, std::move(finalPatterns))))
     signalPassFailure();
 }
 
