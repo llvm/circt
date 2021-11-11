@@ -186,23 +186,4 @@ def DropNameMem : Pat<
   (MemOp $rd, $rw, $depth, $ruw, $portNames, (GetEmptyString), $annotations, $portAnno, $inner_sym),
   [(uselessNameAttr $name), (NoDontTouch $annotations), (NoPortsDontTouch $portAnno)]>;
 
-// CombMem(name),!dnt -> CombMem("")
-def DropNameCombMem : Pat<
-  (CombMemOp $name, $annotations),
-  (CombMemOp (GetEmptyString), $annotations),
-  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
-
-// SeqMem(ruw, name),!dnt -> SeqMem(ruw, "")
-def DropNameSeqMem : Pat<
-  (SeqMemOp $ruw, $name, $annotations),
-  (SeqMemOp $ruw, (GetEmptyString), $annotations),
-  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
-
-// memoryport(..., name),!dnt -> memoryport(..., "")
-def DropNameMemoryPort : Pat<
-  (MemoryPortOp  $memory, $direction, $name, $annotations),
-  (MemoryPortOp  $memory, $direction, (GetEmptyString), $annotations),
-  [(uselessNameAttr $name), (NoDontTouch $annotations)]>;
-
-
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLCANONICALIZATION_TD

@@ -1494,21 +1494,6 @@ void WireOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::DropNameWire>(context);
 }
 
-void CombMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                            MLIRContext *context) {
-  results.insert<patterns::DropNameCombMem>(context);
-}
-
-void SeqMemOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                           MLIRContext *context) {
-  results.insert<patterns::DropNameSeqMem>(context);
-}
-
-void MemoryPortOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                               MLIRContext *context) {
-  results.insert<patterns::DropNameMemoryPort>(context);
-}
-
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
 struct foldResetMux : public mlir::RewritePattern {

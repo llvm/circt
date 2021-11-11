@@ -90,7 +90,6 @@ def CombMemOp : FIRRTLOp<"combmem"> {
   let arguments = (ins StrAttr:$name, AnnotationArrayAttr:$annotations);
   let results = (outs CMemoryType:$result);
   let assemblyFormat = "custom<ImplicitSSAName>(attr-dict) `:` type($result)";
-  let hasCanonicalizer = true;
 }
 
 def SeqMemOp : FIRRTLOp<"seqmem"> {
@@ -103,7 +102,6 @@ def SeqMemOp : FIRRTLOp<"seqmem"> {
                        AnnotationArrayAttr:$annotations);
   let results = (outs CMemoryType:$result);
   let assemblyFormat = "$ruw custom<SeqMemOp>(attr-dict) `:` type($result)";
-  let hasCanonicalizer = true;
 }
 
 def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
@@ -130,7 +128,6 @@ def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
     $direction $memory custom<MemoryPortOp>(attr-dict) `:`
        functional-type(operands, results)
   }];
-  let hasCanonicalizer = true;
 
   let builders = [
     OpBuilder<(ins "::mlir::Type":$dataType, "::mlir::Value":$memory,
