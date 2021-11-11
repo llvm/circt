@@ -819,6 +819,41 @@ static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
   return success();
 }
 
+void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
+                             Value memref, ArrayRef<Value> inputs, int outputs,
+                             int control_outputs, int id) {
+  SmallVector<Value> ops;
+  ops.push_back(memref);
+  llvm::append_range(ops, inputs);
+  result.addOperands(ops);
+
+  auto memrefType = memref.getType().cast<MemRefType>();
+
+  // Data outputs (get their type from memref)
+  result.types.append(outputs, memrefType.getElementType());
+
+  // Control outputs
+  result.types.append(control_outputs, builder.getNoneType());
+
+  // Memory ID (individual ID for each MemoryOp)
+  Type i32Type = builder.getIntegerType(32);
+  result.addAttribute("id", builder.getIntegerAttr(i32Type, id));
+  result.addAttribute("ld_count", builder.getIntegerAttr(i32Type, outputs));
+  result.addAttribute(
+      "st_count", builder.getIntegerAttr(i32Type, control_outputs - outputs));
+}
+
+bool handshake::ExternalMemoryOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  // todo(mortbopet): implement execution of ExternalMemoryOp's.
+  assert(false && "implement me");
+  return 0;
+}
+
 void MemoryOp::build(OpBuilder &builder, OperationState &result,
                      ArrayRef<Value> operands, int outputs, int control_outputs,
                      bool lsq, int id, Value memref) {

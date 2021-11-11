@@ -474,6 +474,10 @@ BlockOps insertMergeOps(handshake::FuncOp f, BlockValues blockLiveIns,
     // Block arguments are not in livein list as they are defined inside the
     // block
     for (auto &arg : block.getArguments()) {
+      // No merges on memref block arguments; these are handled separately.
+      if (arg.getType().isa<mlir::MemRefType>())
+        continue;
+
       Operation *newOp = insertMerge(&block, arg, rewriter);
       blockMerges[&block].push_back(newOp);
       mergePairs[arg] = newOp;
@@ -1122,7 +1126,7 @@ void addMemOpForks(handshake::FuncOp f, ConversionPatternRewriter &rewriter) {
 
   for (Block &block : f) {
     for (Operation &op : block) {
-      if (isa<MemoryOp, StartOp, ControlMergeOp>(op)) {
+      if (isa<MemoryOp, ExternalMemoryOp, StartOp, ControlMergeOp>(op)) {
         for (auto result : op.getResults()) {
           // If there is a result and it is used more than once
           if (!result.use_empty() && !result.hasOneUse())
@@ -1172,21 +1176,6 @@ void removeRedundantSinks(handshake::FuncOp f,
     rewriter.eraseOp(op);
     // op->erase();
   }
-}
-
-Value getMemRefOperand(Value val) {
-  assert(val != nullptr);
-  // If memref is function argument, connect to memory through
-  // its successor merge (all other arguments are connected like that)
-  if (val.isa<BlockArgument>()) {
-    assert(val.hasOneUse());
-    for (auto &u : val.getUses()) {
-      Operation *useOp = u.getOwner();
-      if (isa<MergeOp>(useOp))
-        return useOp->getResult(0);
-    }
-  }
-  return val;
 }
 
 void addJoinOps(ConversionPatternRewriter &rewriter,
@@ -1299,7 +1288,11 @@ LogicalResult connectToMemory(handshake::FuncOp f,
   int mem_count = 0;
   for (auto memory : memRefOps) {
     // First operand corresponds to memref (alloca or function argument)
-    Value memrefOperand = getMemRefOperand(memory.first);
+    Value memrefOperand = memory.first;
+
+    // A memory is external if the memref that defines it is provided as a
+    // function (block) argument.
+    bool isExternalMemory = memrefOperand.isa<BlockArgument>();
 
     mlir::MemRefType memrefType =
         memrefOperand.getType().cast<mlir::MemRefType>();
@@ -1359,9 +1352,15 @@ LogicalResult connectToMemory(handshake::FuncOp f,
     rewriter.setInsertionPointToStart(entryBlock);
 
     // Place memory op next to the alloc op
-    Operation *newOp = rewriter.create<MemoryOp>(
-        entryBlock->front().getLoc(), operands, ld_count, cntrl_count, lsq,
-        mem_count++, memrefOperand);
+    Operation *newOp = nullptr;
+    if (isExternalMemory)
+      newOp = rewriter.create<ExternalMemoryOp>(
+          entryBlock->front().getLoc(), memrefOperand, operands, ld_count,
+          cntrl_count, mem_count++);
+    else
+      newOp = rewriter.create<MemoryOp>(entryBlock->front().getLoc(), operands,
+                                        ld_count, cntrl_count, lsq, mem_count++,
+                                        memrefOperand);
 
     setLoadDataInputs(memory.second, newOp);
 
@@ -1780,6 +1779,12 @@ namespace {
 struct HandshakeInsertBufferPass
     : public HandshakeInsertBufferBase<HandshakeInsertBufferPass> {
 
+  // Returns true if a block argument should have buffers added to its uses.
+  static bool shouldBufferArgument(BlockArgument arg) {
+    // At the moment, buffers only make sense on arguments which we know
+    // will lower down to a handshake bundle.
+    return arg.getType().isIntOrFloat() || arg.getType().isa<NoneType>();
+  }
   // Perform a depth first search and insert buffers when cycles are detected.
   void bufferCyclesStrategy() {
     auto f = getOperation();
@@ -1789,6 +1794,8 @@ struct HandshakeInsertBufferPass
     // Traverse each use of each argument of the entry block.
     auto builder = OpBuilder(f.getContext());
     for (auto &arg : f.getBody().front().getArguments()) {
+      if (!shouldBufferArgument(arg))
+        continue;
       for (auto &operand : arg.getUses()) {
         if (opVisited.count(operand.getOwner()) == 0)
           insertBufferDFS(operand.getOwner(), builder, bufferSize, opVisited,
@@ -1801,13 +1808,16 @@ struct HandshakeInsertBufferPass
   void bufferAllStrategy() {
     auto f = getOperation();
     auto builder = OpBuilder(f.getContext());
-    for (auto &arg : f.getArguments())
+    for (auto &arg : f.getArguments()) {
+      if (!shouldBufferArgument(arg))
+        continue;
       for (auto &use : arg.getUses())
         insertBufferRecursive(use, builder, bufferSize,
                               [](Operation *definingOp, Operation *usingOp) {
                                 return !isa_and_nonnull<BufferOp>(definingOp) &&
                                        !isa<BufferOp>(usingOp);
                               });
+    }
   }
 
   /// DFS-based graph cycle detection and naive buffer insertion. Exactly one

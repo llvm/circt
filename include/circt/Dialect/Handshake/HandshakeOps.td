@@ -551,6 +551,49 @@ def MemoryOp : Handshake_Op<"memory", [
   let verifier = "return ::verify$cppClass(*this);";
 }
 
+def ExternalMemoryOp : Handshake_Op<"extmemory", [
+  DeclareOpInterfaceMethods<ExecutableOpInterface>
+]> {
+  let summary = "external memory";
+  let description = [{
+    An ExternalMemoryOp represents a wrapper around a memref input to a
+    handshake function. The semantics of the load/store operands are identical
+    to what is decribed for MemoryOp. The only difference is that the first
+    operand to this operand is a `memref` value.
+    Upon lowering to FIRRTL, a handshake interface will be created in the
+    top-level component for each load- and store which connected to this memory.
+
+    Example:
+
+    ```mlir
+    handshake.func @main(%i: index, %v: i32, %mem : memref<10xi32>, %ctrl: none) -> none {
+      %stCtrl = "handshake.extmemory"(%mem, %vout, %addr) {id = 0 : i32, ld_count = 0 : i32, lsq = false, st_count = 1 : i32} : (memref<10xi32>, i32, index, index) -> (none)
+      %vout, %addr = "handshake.store"(%v, %i, %ctrl) : (i32, index, none) -> (i32, index)
+      ...
+    }
+    ```
+  }];
+  let arguments = (ins AnyMemRef:$memref,
+                       Variadic<AnyType>:$inputs,
+                       I32Attr : $ld_count,
+                       I32Attr : $st_count,
+                       I32Attr : $id);
+  let results = (outs Variadic<AnyType>:$outputs);
+
+  let skipDefaultBuilders = 1;
+  let builders = [OpBuilder<(
+      ins "Value":$memref, "ArrayRef<Value>":$inputs, "int":$ld_count, "int":$st_count,
+      "int":$id)>
+  ];
+  let assemblyFormat = "`[` `ld` `=` $ld_count `,` `st` `=`  $st_count `]` `(` $memref `:` type($memref) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
+
+  let extraClassDeclaration = [{
+    MemRefType getMemRefType() {
+      return (*this)->getOperand(0).getType().cast<MemRefType>();
+    }
+  }];
+}
+
 def LoadOp
     : Handshake_Op<"load", [DeclareOpInterfaceMethods<ExecutableOpInterface>]> {
   let summary = "load operation";
