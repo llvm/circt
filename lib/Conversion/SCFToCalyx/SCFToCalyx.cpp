@@ -521,7 +521,7 @@ static void buildAssignmentsForRegisterWrite(ComponentLoweringState &state,
   rewriter.create<calyx::AssignOp>(loc, reg.in(), inputValue);
   rewriter.create<calyx::AssignOp>(loc, reg.write_en(),
                                    state.getConstant(rewriter, loc, 1, 1));
-  rewriter.create<calyx::GroupDoneOp>(loc, reg.donePort());
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 }
 
 static calyx::GroupOp buildWhileIterArgAssignments(

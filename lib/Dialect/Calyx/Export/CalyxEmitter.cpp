@@ -514,7 +514,7 @@ void Emitter::emitInstance(InstanceOp op) {
 }
 
 void Emitter::emitRegister(RegisterOp reg) {
-  size_t bitWidth = reg.inPort().getType().getIntOrFloatBitWidth();
+  size_t bitWidth = reg.in().getType().getIntOrFloatBitWidth();
   indent() << getAttributes(reg) << reg.instanceName() << space() << equals()
            << space() << "std_reg" << LParen() << std::to_string(bitWidth)
            << RParen() << semicolonEndL();
