@@ -165,6 +165,7 @@ static LogicalResult execute(MLIRContext &context) {
     size_t rangeBase = 0;
     size_t rangeLength = -1;
     bool patternDidReduce = false;
+    bool allDidReduce = true;
     while (rangeLength > 0) {
       // Apply the pattern to the subset of operations selected by `rangeBase`
       // and `rangeLength`.
@@ -233,6 +234,7 @@ static LogicalResult execute(MLIRContext &context) {
           if (failed(writeOutput(module.get())))
             return failure();
       } else {
+        allDidReduce = false;
         // Try the pattern on the next `rangeLength` number of operations.
         rangeBase += rangeLength;
       }
@@ -240,11 +242,19 @@ static LogicalResult execute(MLIRContext &context) {
       // If we have gone past the end of the input, reduce the size of the chunk
       // of operations we're reducing and start again from the top.
       if (rangeBase >= opIdx) {
-        rangeLength = std::min(rangeLength, opIdx) / 2;
-        rangeBase = 0;
-        if (rangeLength > 0)
-          VERBOSE(llvm::errs()
-                  << "- Trying " << rangeLength << " ops at once\n");
+        // If this is a one-shot pattern and it applied everywhere there's no
+        // need to try again at reduced chunk size. Simply move forward in that
+        // case.
+        if (pattern.isOneShot() && allDidReduce) {
+          rangeLength = 0;
+          rangeBase = 0;
+        } else {
+          rangeLength = std::min(rangeLength, opIdx) / 2;
+          rangeBase = 0;
+          if (rangeLength > 0)
+            VERBOSE(llvm::errs()
+                    << "- Trying " << rangeLength << " ops at once\n");
+        }
       }
     }
 
