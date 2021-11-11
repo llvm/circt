@@ -48,15 +48,6 @@ def RegisterOp : CalyxPrimitive<"register", [
       $_state.addTypes({type, i1Type, i1Type, i1Type, type, i1Type});
     }]>
   ];
-  let extraClassDeclaration = [{
-    Value inPort()      { return getResult(0); }
-    Value writeEnPort() { return getResult(1); }
-    Value clkPort()     { return getResult(2); }
-    Value resetPort()   { return getResult(3); }
-    Value outPort()     { return getResult(4); }
-    Value donePort()    { return getResult(5); }
-  }];
-
 }
 
 def MemoryOp : CalyxPrimitive<"memory", []> {
@@ -163,11 +154,6 @@ class BoolBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
     SameTypeConstraint<"left", "right">
   ]> {
   let results = (outs AnyType:$left, AnyType:$right, I1:$out);
-  let extraClassDeclaration = [{
-    Value lhsPort() { return getResult(0); }
-    Value rhsPort() { return getResult(1); }
-    Value outPort() { return getResult(2); }
-  }];
 }
 
 def LtLibOp  : BoolBinaryLibraryOp<"lt"> {}
@@ -188,11 +174,6 @@ class ArithBinaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
     SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs AnyType:$left, AnyType:$right, AnyType:$out);
-  let extraClassDeclaration = [{
-    Value lhsPort() { return getResult(0); }
-    Value rhsPort() { return getResult(1); }
-    Value outPort() { return getResult(2); }
-  }];
 }
 
 def AddLibOp  : ArithBinaryLibraryOp<"add"> {}
@@ -208,10 +189,6 @@ def XorLibOp  : ArithBinaryLibraryOp<"xor"> {}
 class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [
   ]> {
   let results = (outs AnyInteger:$in, AnyInteger:$out);
-  let extraClassDeclaration = [{
-    Value inPort()  { return getResult(0); }
-    Value outPort() { return getResult(1); }
-  }];
 }
 
 def PadLibOp : UnaryLibraryOp<"pad"> {
