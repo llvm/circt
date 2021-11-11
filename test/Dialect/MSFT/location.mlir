@@ -7,10 +7,10 @@ hw.module.extern @Foo()
 // CHECK-LABEL: msft.module @leaf
 // LOWER-LABEL: hw.module @leaf
 msft.module @leaf {} () -> () {
-  // CHECK: msft.instance @foo @Foo()
-  // LOWER: hw.instance "foo" sym @foo @Foo() -> ()
+  // CHECK: msft.instance @module @Foo()
+  // LOWER: hw.instance "module" sym @module @Foo() -> ()
   // LOWER-NOT: #msft.switch.inst
-  msft.instance @foo @Foo() {
+  msft.instance @module @Foo() {
     "loc:memBank2" = #msft.switch.inst< @shallow["leaf"]=#msft.physloc<M20K, 8, 19, 1>,
                                         @deeper["branch","leaf"]=#msft.physloc<M20K, 15, 9, 3> >
   } : () -> ()
@@ -19,12 +19,14 @@ msft.module @leaf {} () -> () {
   msft.output
 }
 
+// TCL: Foo module_0
+
 // TCL-NOT: proc leaf_config
 
 // TCL-LABEL: proc shallow_config
 msft.module @shallow {} () -> () {
   msft.instance @leaf @leaf() : () -> ()
-  // TCL: set_location_assignment M20K_X8_Y19_N1 -to $parent|leaf|foo|memBank2
+  // TCL: set_location_assignment M20K_X8_Y19_N1 -to $parent|leaf|module_0|memBank2
   msft.output
 }
 
@@ -32,6 +34,6 @@ msft.module @shallow {} () -> () {
 msft.module @deeper {} () -> () {
   msft.instance @branch @shallow() : () -> ()
   msft.instance @leaf @leaf() : () -> ()
-  // TCL: set_location_assignment M20K_X15_Y9_N3 -to $parent|branch|leaf|foo|memBank2
+  // TCL: set_location_assignment M20K_X15_Y9_N3 -to $parent|branch|leaf|module_0|memBank2
   msft.output
 }
