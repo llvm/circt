@@ -2,12 +2,12 @@
 
 // Submodule for the index and i64 ConstantOps as they have the same value and converted type.
 // CHECK-LABEL: firrtl.module @handshake_constant_c42_out_ui64(
-// CHECK-SAME: in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
-// CHECK:   %[[ARG0_VALID:.+]] = firrtl.subfield %arg0(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG0_READY:.+]] = firrtl.subfield %arg0(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG1_VALID:.+]] = firrtl.subfield %arg1(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG1_READY:.+]] = firrtl.subfield %arg1(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG1_DATA:.+]] = firrtl.subfield %arg1(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK-SAME: in %[[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
+// CHECK:   %[[ARG0_VALID:.+]] = firrtl.subfield %[[ARG0]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG0_READY:.+]] = firrtl.subfield %[[ARG0]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG1_VALID:.+]] = firrtl.subfield %[[ARG1]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG1_READY:.+]] = firrtl.subfield %[[ARG1]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG1_DATA:.+]] = firrtl.subfield %[[ARG1]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
 // CHECK:   firrtl.connect %[[ARG1_VALID:.+]], %[[ARG0_VALID:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   firrtl.connect %[[ARG0_READY:.+]], %[[ARG1_READY:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   %c42_ui64 = firrtl.constant 42 : !firrtl.uint<64>
@@ -16,12 +16,12 @@
 
 // Submodule for the ui32 ConstantOp.
 // CHECK-LABEL: firrtl.module @handshake_constant_c42_out_ui32(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) {
+// CHECK-SAME:  in %[[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) {
 // CHECK:   %c42_ui32 = firrtl.constant 42 : !firrtl.uint<32>
 
 // Submodule for the si32 ConstantOp.
 // CHECK-LABEL: firrtl.module @"handshake_constant_c-11_out_si32"(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>) {
+// CHECK-SAME:  in %[[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>) {
 // CHECK:   %c-11_si32 = firrtl.constant -11 : !firrtl.sint<32>
 
 // CHECK: firrtl.module @test_constant(in %[[VAL_97:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_98:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_99:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_100:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, out %[[VAL_101:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>, out %[[VAL_102:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_103:.*]]: !firrtl.clock, in %[[VAL_104:.*]]: !firrtl.uint<1>) {
