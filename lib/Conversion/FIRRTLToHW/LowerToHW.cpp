@@ -1127,6 +1127,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                  std::function<void(void)> elseCtor = {});
   void addIfProceduralBlock(Value cond, std::function<void(void)> thenCtor,
                             std::function<void(void)> elseCtor = {});
+  Value mapArray(Value array, std::function<Value(Value)> fn);
 
   // Create a temporary wire at the current insertion point, and try to
   // eliminate it later as part of lowering post processing.
@@ -1492,6 +1493,38 @@ static Type getVectorBaseType(Type srcType) {
       .Default([&](auto) { return Type(); });
 }
 
+/// Apply `fn` to each array element and construct new array.
+Value FIRRTLLowering::mapArray(Value array, std::function<Value(Value)> fn) {
+  SmallVector<Value> resultBuffer;
+  bool success = true;
+  std::function<void(Value, Type)> recurse = [&](Value value, Type type) {
+    TypeSwitch<Type>(type)
+        .Case<hw::ArrayType>([&](auto a) {
+          int size = resultBuffer.size();
+          for (size_t i = 0, e = a.getSize(); i != e; ++i) {
+            auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
+            auto arrayIndex = builder.create<hw::ArrayGetOp>(value, iIdx);
+            recurse(arrayIndex, a.getElementType());
+            if (!success)
+              return;
+          }
+          SmallVector<Value> temp(resultBuffer.begin() + size,
+                                  resultBuffer.end());
+          auto array = builder.createOrFold<hw::ArrayCreateOp>(temp);
+          resultBuffer.resize(size);
+          resultBuffer.push_back(array);
+        })
+        .Case<IntegerType>([&](auto) { resultBuffer.push_back(fn(value)); })
+        .Default([&](auto) { success = false; });
+  };
+  if (!success)
+    return Value();
+
+  recurse(array, array.getType());
+  assert(resultBuffer.size() == 1);
+  return resultBuffer[0];
+}
+
 /// Return the lowered value corresponding to the specified original value and
 /// then extend it to match the width of destType if needed.
 ///
@@ -1527,7 +1560,8 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     // srcWidth < unsigned(destWidth)  --> insert concat/sext to elements
 
     auto baseDestType = getFIRRTLVectorBaseType(destType.cast<FIRRTLType>());
-    auto baseSourceType = getFIRRTLVectorBaseType(value.getType().cast<FIRRTLType>());
+    auto baseSourceType =
+        getFIRRTLVectorBaseType(value.getType().cast<FIRRTLType>());
     auto baseResultType = getVectorBaseType(result.getType());
     if (!baseSourceType || !baseDestType || !baseResultType)
       return {};
@@ -1554,32 +1588,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
       return builder.createOrFold<comb::ConcatOp>(zero, value);
     };
 
-    SmallVector<Value> resultBuffer;
-
-    std::function<void(Value, Type)> recurse = [&](Value result, Type type) {
-      TypeSwitch<Type>(type)
-          .Case<hw::ArrayType>([&](auto a) {
-            int size = resultBuffer.size();
-            for (size_t i = 0, e = a.getSize(); i != e; ++i) {
-              auto iIdx = getOrCreateIntConstant(log2(e + 1), i);
-              auto arrayIndex = builder.create<hw::ArrayGetOp>(result, iIdx);
-              recurse(arrayIndex, a.getElementType());
-            }
-            SmallVector<Value> temp(resultBuffer.begin() + size,
-                                    resultBuffer.end());
-            auto array = builder.createOrFold<hw::ArrayCreateOp>(temp);
-            resultBuffer.resize(size);
-            resultBuffer.push_back(array);
-          })
-          .Default([&](auto type) {
-            auto ret = extend(result);
-            resultBuffer.push_back(ret);
-          });
-    };
-
-    recurse(result, result.getType());
-    assert(resultBuffer.size() == 1);
-    return resultBuffer[0];
+    return mapArray(result, extend);
   }
 
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
