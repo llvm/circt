@@ -5,6 +5,7 @@
 hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
   %wire42 = sv.reg : !hw.inout<i42>
   %forceWire = sv.wire sym @wire1 : !hw.inout<i1>
+  %partSelectReg = sv.reg : !hw.inout<i42>
  
   %c11_i42 = hw.constant 11: i42
   // CHECK: localparam [41:0] param_x = 42'd11;
@@ -100,9 +101,17 @@ hw.module @M1<param1: i42>(%clock : i1, %cond : i1, %val : i8) {
     // CHECK-NEXT:   if (cond)
     sv.if %cond {
       %c42 = hw.constant 42 : i42
-
       // CHECK-NEXT: wire42 = 42'h2A;
       sv.bpassign %wire42, %c42 : i42
+      %c40 = hw.constant 42 : i40
+
+      %c2_i3 = hw.constant 2 : i3
+      // CHECK-NEXT: partSelectReg[3'h2 +: 40] = 40'h2A;
+      %a = sv.indexed_part_select_inout %partSelectReg[%c2_i3 : 40] : !hw.inout<i42>, i3
+      sv.bpassign %a, %c40 : i40
+      // CHECK-NEXT: partSelectReg[3'h2 -: 40] = 40'h2A;
+      %b = sv.indexed_part_select_inout %partSelectReg[%c2_i3 decrement: 40] : !hw.inout<i42>, i3
+      sv.bpassign %b, %c40 : i40
     } else {
       // CHECK: wire42 = param_y;
       sv.bpassign %wire42, %param_y : i42
@@ -389,6 +398,30 @@ hw.module @reg_0(%in4: i4, %in8: i8) -> (a: i8, b: i8) {
   // CHECK-NEXT: assign a = myReg;
   // CHECK-NEXT: assign b = myRegArray1[in4];
   hw.output %regout, %memout : i8, i8
+}
+
+hw.module @reg_1(%in4: i4, %in8: i8) -> (a : i3, b : i5) {
+  // CHECK-LABEL: module reg_1(
+
+  // CHECK: reg [17:0] myReg2
+  %myReg2 = sv.reg : !hw.inout<i18>
+
+  // CHECK-EMPTY:
+  // CHECK-NEXT: assign myReg2[4'h7 +: 8] = in8;
+  // CHECK-NEXT: assign myReg2[4'h7 -: 8] = in8;
+
+  %c2_i3 = hw.constant 7 : i4
+  %a1 = sv.indexed_part_select_inout %myReg2[%c2_i3 : 8] : !hw.inout<i18>, i4
+  sv.assign %a1, %in8 : i8
+  %b1 = sv.indexed_part_select_inout %myReg2[%c2_i3 decrement: 8] : !hw.inout<i18>, i4
+  sv.assign %b1, %in8 : i8
+  %c3_i3 = hw.constant 3 : i4
+  %r1 = sv.read_inout %myReg2 : !hw.inout<i18>
+  %c = sv.indexed_part_select %r1[%c3_i3 : 3] : i18,i4
+  %d = sv.indexed_part_select %r1[%in4 decrement:5] :i18, i4
+  // CHECK-NEXT: assign a = myReg2[4'h3 +: 3];
+  // CHECK-NEXT: assign b = myReg2[in4 -: 5];
+  hw.output %c, %d : i3,i5
 }
 
 // CHECK-LABEL: issue508

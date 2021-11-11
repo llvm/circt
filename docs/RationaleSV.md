@@ -72,7 +72,45 @@ TODO: Describe `sv.wire`, `sv.reg`,
 ## Expressions
 
 TODO: Describe `sv.read_inout` and `sv.array_index_inout`.
+### Part Select
+Unlike Bit-selects which extract a particular bit from an `InOut` type,
+ part-select can extract several contiguous bits in a vector net, vector reg,
+ integer variable, or time variables. 
+ 
+ `SystemVerilog` supports two types of part-selects, a `constant part-select`
+ and an `indexed part-select`. 
+ `sv.part_select` and `sv.part_select_inout` is lowered to the 
+ `indexed part-select` operation.
+ There are two part select operations defined in SV dialect, 
+ the `sv.part_select` is defined on `Integer` type input and 
+ `sv.part_select_inout` is defined on `inout` type.
 
+ Part select consits of 3 arguments, the input value,
+ a `width` and a `base` and an optional boolean attribute `decrement`.
+ The `width` shall be a compile-time constant expression. 
+ The `base` can be a runtime integer expression. 
+ 
+ The operation selects bits starting at the `base` and ascending 
+ or descending the bit range. The number of bits selected is equal to the
+ `width` expression. The bit addressing is always ascending starting from the
+ `base`, unless the `decrement` attribute is specified.
+
+Part-selects that address a range of bits that are completely out of the
+ address bounds of the net, reg, integer, or time, or when the part-select
+ is x or z, shall yield the value x when read, and shall have no effect on
+ the data stored when written.
+
+Part-selects that are partially out of range shall when read return x for
+ the bits that are out of range, and when written shall only affect the bits
+ that are in range.
+ 
+ In this example, bits starting from `%c2` and of width `1` are addressed.
+ Hence `%0` is of width `1`.
+  ```
+  %0 = sv.part_select_inout %combWire[%c2 : 1] : !hw.inout<i10>, i3, !hw.inout<i1>
+  ```
+  
+  
 ### Verbatim op
 
 The verbatim operation produces a typed value expressed by a string of

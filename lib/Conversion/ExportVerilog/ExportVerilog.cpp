@@ -147,7 +147,8 @@ static StringRef getSymOpName(Operation *symOp) {
 /// MemoryEffects should be checked if a client cares.
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
-  if (isa<ReadInOutOp, ArrayIndexInOutOp, ParamValueOp, XMROp>(op))
+  if (isa<ReadInOutOp, ArrayIndexInOutOp, IndexedPartSelectInOutOp,
+          IndexedPartSelectOp, ParamValueOp, XMROp>(op))
     return true;
 
   // All HW combinational logic ops and SV expression ops are Verilog
@@ -1232,6 +1233,8 @@ private:
     return emitSubExpr(op->getOperand(0), LowestPrecedence, OOLUnary);
   }
   SubExprInfo visitSV(ArrayIndexInOutOp op);
+  SubExprInfo visitSV(IndexedPartSelectInOutOp op);
+  SubExprInfo visitSV(IndexedPartSelectOp op);
 
   // Other
   using TypeOpVisitor::visitTypeOp;
@@ -1821,6 +1824,32 @@ SubExprInfo ExprEmitter::visitSV(ArrayIndexInOutOp op) {
   emitSubExpr(op.index(), LowestPrecedence, OOLBinary);
   os << ']';
   return {Selection, arrayPrec.signedness};
+}
+
+SubExprInfo ExprEmitter::visitSV(IndexedPartSelectInOutOp op) {
+  auto prec = emitSubExpr(op.input(), Selection, OOLUnary);
+  os << '[';
+  emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
+  if (op.decrement())
+    os << " -";
+  else
+    os << " +";
+  os << ": " << op.width();
+  os << ']';
+  return {Selection, prec.signedness};
+}
+
+SubExprInfo ExprEmitter::visitSV(IndexedPartSelectOp op) {
+  auto info = emitSubExpr(op.input(), LowestPrecedence, OOLUnary);
+  os << '[';
+  emitSubExpr(op.base(), LowestPrecedence, OOLBinary);
+  if (op.decrement())
+    os << " -";
+  else
+    os << " +";
+  os << ": " << op.width();
+  os << ']';
+  return info;
 }
 
 SubExprInfo ExprEmitter::visitComb(MuxOp op) {
