@@ -1,22 +1,22 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
 
-// CHECK-LABEL: firrtl.module @handshake_memory_out_ui8_id0
-// CHECK: %[[ST_DATA_VALID:.+]] = firrtl.subfield %arg0(0)
-// CHECK: %[[ST_DATA_READY:.+]] = firrtl.subfield %arg0(1)
-// CHECK: %[[ST_DATA_DATA:.+]] = firrtl.subfield %arg0(2)
-// CHECK: %[[ST_ADDR_VALID:.+]] = firrtl.subfield %arg1(0)
-// CHECK: %[[ST_ADDR_READY:.+]] = firrtl.subfield %arg1(1)
-// CHECK: %[[ST_ADDR_DATA:.+]] = firrtl.subfield %arg1(2)
-// CHECK: %[[LD_ADDR_VALID:.+]] = firrtl.subfield %arg2(0)
-// CHECK: %[[LD_ADDR_READY:.+]] = firrtl.subfield %arg2(1)
-// CHECK: %[[LD_ADDR_DATA:.+]] = firrtl.subfield %arg2(2)
-// CHECK: %[[LD_DATA_VALID:.+]] = firrtl.subfield %arg3(0)
-// CHECK: %[[LD_DATA_READY:.+]] = firrtl.subfield %arg3(1)
-// CHECK: %[[LD_DATA_DATA:.+]] = firrtl.subfield %arg3(2)
-// CHECK: %[[ST_CONTROL_VALID:.+]] = firrtl.subfield %arg4(0)
-// CHECK: %[[ST_CONTROL_READY:.+]] = firrtl.subfield %arg4(1)
-// CHECK: %[[LD_CONTROL_VALID:.+]] = firrtl.subfield %arg5(0)
-// CHECK: %[[LD_CONTROL_READY:.+]] = firrtl.subfield %arg5(1)
+// CHECK:  firrtl.module @handshake_memory_out_ui8_id0(in %[[ARG0:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, in %[[ARG1:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[ARG2:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[ARG3:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<8>>, out %[[ARG4:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[ARG5:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[ARG6:.*]]: !firrtl.clock, in %[[ARG7:.*]]: !firrtl.uint<1>) {
+// CHECK: %[[ST_DATA_VALID:.+]] = firrtl.subfield %[[ARG0]](0)
+// CHECK: %[[ST_DATA_READY:.+]] = firrtl.subfield %[[ARG0]](1)
+// CHECK: %[[ST_DATA_DATA:.+]] = firrtl.subfield %[[ARG0]](2)
+// CHECK: %[[ST_ADDR_VALID:.+]] = firrtl.subfield %[[ARG1]](0)
+// CHECK: %[[ST_ADDR_READY:.+]] = firrtl.subfield %[[ARG1]](1)
+// CHECK: %[[ST_ADDR_DATA:.+]] = firrtl.subfield %[[ARG1]](2)
+// CHECK: %[[LD_ADDR_VALID:.+]] = firrtl.subfield %[[ARG2]](0)
+// CHECK: %[[LD_ADDR_READY:.+]] = firrtl.subfield %[[ARG2]](1)
+// CHECK: %[[LD_ADDR_DATA:.+]] = firrtl.subfield %[[ARG2]](2)
+// CHECK: %[[LD_DATA_VALID:.+]] = firrtl.subfield %[[ARG3]](0)
+// CHECK: %[[LD_DATA_READY:.+]] = firrtl.subfield %[[ARG3]](1)
+// CHECK: %[[LD_DATA_DATA:.+]] = firrtl.subfield %[[ARG3]](2)
+// CHECK: %[[ST_CONTROL_VALID:.+]] = firrtl.subfield %[[ARG4]](0)
+// CHECK: %[[ST_CONTROL_READY:.+]] = firrtl.subfield %[[ARG4]](1)
+// CHECK: %[[LD_CONTROL_VALID:.+]] = firrtl.subfield %[[ARG5]](0)
+// CHECK: %[[LD_CONTROL_READY:.+]] = firrtl.subfield %[[ARG5]](1)
 
 // Construct the memory.
 // CHECK: %[[MEM_LOAD:.+]], %[[MEM_STORE:.+]] = firrtl.mem Old {depth = 10 : i64, name = "mem0", portNames = ["load0", "store0"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
