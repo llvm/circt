@@ -68,14 +68,22 @@ void emitInnerRefPart(TclOutputState &s, Operation *op) {
   s.symbolRefs.push_back(InnerRefAttr::get(modName, nameAttr));
 }
 
-void emitPath(TclOutputState &s, RootedInstancePathAttr path,
+void emitPath(TclOutputState &s, PlacementDB::PlacedInstance inst,
               SymbolCache &symCache) {
+  // Traverse each part of the path.
+  RootedInstancePathAttr path = inst.path;
   for (auto part : path.getPath()) {
     auto inst = cast<msft::InstanceOp>(symCache.getDefinition(part));
     assert(inst && "path instance must be in symbol cache");
 
     emitInnerRefPart(s, inst);
   }
+
+  // If instance name is specified, add it in between the parent entity path and
+  // the child entity path.
+  emitInnerRefPart(s, inst.op);
+
+  s.os << inst.subpath << '\n';
 }
 
 /// Emit tcl in the form of:
@@ -106,12 +114,7 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
 
   // To which entity does this apply?
   s.os << " -to $parent|";
-  emitPath(s, inst.path, symCache);
-  // If instance name is specified, add it in between the parent entity path and
-  // the child entity path.
-  emitInnerRefPart(s, inst.op);
-
-  s.os << inst.subpath << '\n';
+  emitPath(s, inst, symCache);
 }
 
 /// Create a SymbolCache to use during Tcl export.
