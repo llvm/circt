@@ -89,9 +89,9 @@ void CompileControlVisitor::visit(SeqOp seq, ComponentOp &component) {
 
   OpBuilder builder(component->getRegion(0));
   auto fsmRegister = createRegister(builder, component, fsmBitWidth, "fsm");
-  Value fsmIn = fsmRegister.inPort();
-  Value fsmWriteEn = fsmRegister.writeEnPort();
-  Value fsmOut = fsmRegister.outPort();
+  Value fsmIn = fsmRegister.in();
+  Value fsmWriteEn = fsmRegister.write_en();
+  Value fsmOut = fsmRegister.out();
 
   builder.setInsertionPointToStart(wiresBody);
   auto oneConstant = createConstant(builder, wires->getLoc(), 1, 1);
