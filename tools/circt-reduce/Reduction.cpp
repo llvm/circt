@@ -498,11 +498,11 @@ void circt::createAllReductions(
   add(std::make_unique<MemoryStubber>());
   add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<PassReduction>(context, createCSEPass()));
+  add(std::make_unique<ConnectInvalidator>());
+  add(std::make_unique<Constantifier>());
   add(std::make_unique<OperandForwarder<0>>());
   add(std::make_unique<OperandForwarder<1>>());
   add(std::make_unique<OperandForwarder<2>>());
-  add(std::make_unique<Constantifier>());
-  add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<OperationPruner>());
   add(std::make_unique<RootPortPruner>());
   add(std::make_unique<ExtmoduleInstanceRemover>());
