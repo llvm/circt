@@ -400,13 +400,9 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       direction::unpackAttribute(this->getPortDirectionsAttr());
   ArrayRef<Attribute> existingNames = this->getPortNames();
   ArrayRef<Attribute> existingTypes = this->getPortTypes();
-  ArrayRef<Attribute> existingAnnos = this->getPortAnnotations();
-  ArrayRef<Attribute> existingSyms = this->getPortSymbols();
   assert(existingDirections.size() == oldNumArgs);
   assert(existingNames.size() == oldNumArgs);
   assert(existingTypes.size() == oldNumArgs);
-  assert(existingAnnos.size() == oldNumArgs || existingAnnos.empty());
-  assert(existingSyms.size() == oldNumArgs || existingSyms.empty());
 
   SmallVector<Direction> newDirections;
   SmallVector<Attribute> newNames;
@@ -419,8 +415,8 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
   newAnnos.reserve(newNumArgs);
   newSyms.reserve(newNumArgs);
 
-  auto EmptyArray = ArrayAttr::get(getContext(), {});
-  bool addAnnos = existingAnnos.size() > 0;
+  auto emptyArray = ArrayAttr::get(getContext(), {});
+  auto emptyString = StringAttr::get(getContext(), "");
 
   unsigned oldIdx = 0;
   auto migrateOldPorts = [&](unsigned untilOldIdx) {
@@ -428,9 +424,8 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
       newDirections.push_back(existingDirections[oldIdx]);
       newNames.push_back(existingNames[oldIdx]);
       newTypes.push_back(existingTypes[oldIdx]);
-      if (addAnnos)
-        newAnnos.push_back(existingAnnos[oldIdx]);
-      newSyms.push_back(existingSyms[oldIdx]);
+      newAnnos.push_back(getAnnotationsAttrForPort(oldIdx));
+      newSyms.push_back(getPortSymbolAttr(oldIdx));
       ++oldIdx;
     }
   };
@@ -439,14 +434,26 @@ void FModuleOp::insertPorts(ArrayRef<std::pair<unsigned, PortInfo>> ports) {
     newDirections.push_back(port.second.direction);
     newNames.push_back(port.second.name);
     newTypes.push_back(TypeAttr::get(port.second.type));
-    if (addAnnos)
-      newAnnos.push_back(EmptyArray);
-    newSyms.push_back(port.second.sym
-                          ? port.second.sym
-                          : StringAttr::get(port.second.name.getContext(), ""));
+    auto annos = port.second.annotations.getArrayAttr();
+    newAnnos.push_back(annos ? annos : emptyArray);
+    newSyms.push_back(port.second.sym ? port.second.sym : emptyString);
     body->insertArgument(port.first, port.second.type, port.second.loc);
   }
   migrateOldPorts(oldNumArgs);
+
+  // The lack of *any* port annotations is represented by an empty
+  // `portAnnotations` array as a shorthand.
+  if (llvm::all_of(newAnnos, [](Attribute attr) {
+        return attr.cast<ArrayAttr>().empty();
+      }))
+    newAnnos.clear();
+
+  // The lack of *any* port symbol is represented by an empty `portSyms` array
+  // as a shorthand.
+  if (llvm::all_of(newSyms, [](Attribute attr) {
+        return attr.cast<StringAttr>().getValue().empty();
+      }))
+    newSyms.clear();
 
   // Apply these changed markers.
   (*this)->setAttr("portDirections",
@@ -468,12 +475,12 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
   SmallVector<Direction> portDirections =
       direction::unpackAttribute(this->getPortDirectionsAttr());
   ArrayRef<Attribute> portNames = this->getPortNames();
-  ArrayRef<Attribute> portAnno = this->getPortAnnotations();
   ArrayRef<Attribute> portTypes = this->getPortTypes();
+  ArrayRef<Attribute> portAnnos = this->getPortAnnotations();
   ArrayRef<Attribute> portSyms = this->getPortSymbols();
   assert(portDirections.size() == numPorts);
   assert(portNames.size() == numPorts);
-  assert(portAnno.size() == numPorts || portAnno.empty());
+  assert(portAnnos.size() == numPorts || portAnnos.empty());
   assert(portTypes.size() == numPorts);
   assert(portSyms.size() == numPorts || portSyms.empty());
 
@@ -481,17 +488,17 @@ void FModuleOp::erasePorts(ArrayRef<unsigned> portIndices) {
       removeElementsAtIndices<Direction>(portDirections, portIndices);
   SmallVector<Attribute> newPortNames =
       removeElementsAtIndices(portNames, portIndices);
-  SmallVector<Attribute> newPortAnno =
-      removeElementsAtIndices(portAnno, portIndices);
   SmallVector<Attribute> newPortTypes =
       removeElementsAtIndices(portTypes, portIndices);
+  SmallVector<Attribute> newPortAnnos =
+      removeElementsAtIndices(portAnnos, portIndices);
   SmallVector<Attribute> newPortSyms =
       removeElementsAtIndices(portSyms, portIndices);
   (*this)->setAttr("portDirections",
                    direction::packAttribute(getContext(), newPortDirections));
   (*this)->setAttr("portNames", ArrayAttr::get(getContext(), newPortNames));
   (*this)->setAttr("portAnnotations",
-                   ArrayAttr::get(getContext(), newPortAnno));
+                   ArrayAttr::get(getContext(), newPortAnnos));
   (*this)->setAttr("portTypes", ArrayAttr::get(getContext(), newPortTypes));
   (*this)->setAttr("portSyms", ArrayAttr::get(getContext(), newPortSyms));
 
@@ -518,6 +525,20 @@ static void buildModule(OpBuilder &builder, OperationState &result,
     portAnnotations.push_back(ports[i].annotations.getArrayAttr());
     portSyms.push_back(ports[i].sym ? ports[i].sym : builder.getStringAttr(""));
   }
+
+  // The lack of *any* port annotations is represented by an empty
+  // `portAnnotations` array as a shorthand.
+  if (llvm::all_of(portAnnotations, [](Attribute attr) {
+        return attr.cast<ArrayAttr>().empty();
+      }))
+    portAnnotations.clear();
+
+  // The lack of *any* port symbol is represented by an empty `portSyms` array
+  // as a shorthand.
+  if (llvm::all_of(portSyms, [](Attribute attr) {
+        return attr.cast<StringAttr>().getValue().empty();
+      }))
+    portSyms.clear();
 
   // Both attributes are added, even if the module has no ports.
   result.addAttribute(
