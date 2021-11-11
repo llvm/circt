@@ -200,7 +200,6 @@ class System:
     self._symbols = None
     pm.run(self.mod)
     types.declare_types(self.mod)
-    circt.export_verilog(self.mod, System.DevNull())
     self.passed = True
 
   def emit_outputs(self):

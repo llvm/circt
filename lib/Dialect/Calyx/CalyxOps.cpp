@@ -724,7 +724,7 @@ static LogicalResult isCombinational(Value value, GroupInterface group) {
 
   // Reads to MemoryOp and RegisterOp are combinational. Writes are not.
   if (auto r = dyn_cast<RegisterOp>(definingOp)) {
-    return value == r.outPort()
+    return value == r.out()
                ? success()
                : group->emitOpError()
                      << "with register: \"" << r.instanceName()
@@ -891,9 +891,8 @@ static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
           .Case<RegisterOp>([&](auto op) {
             // We only want to verify this is written to if the {write enable,
             // in} port is driven.
-            return succeeded(
-                       group.drivesAnyPort({op.writeEnPort(), op.inPort()}))
-                       ? group.drivesAllPorts({op.writeEnPort(), op.inPort()})
+            return succeeded(group.drivesAnyPort({op.write_en(), op.in()}))
+                       ? group.drivesAllPorts({op.write_en(), op.in()})
                        : success();
           })
           .Case<MemoryOp>([&](auto op) {
@@ -916,7 +915,7 @@ static LogicalResult verifyPrimitivePortDriving(AssignOp assign,
                 LtLibOp, EqLibOp, NeqLibOp, GeLibOp, LeLibOp, LshLibOp,
                 RshLibOp, SgtLibOp, SltLibOp, SeqLibOp, SneqLibOp, SgeLibOp,
                 SleLibOp, SrshLibOp>([&](auto op) {
-            Value lhs = op.lhsPort(), rhs = op.rhsPort();
+            Value lhs = op.left(), rhs = op.right();
             return succeeded(group.drivesAnyPort({lhs, rhs}))
                        ? group.drivesAllPorts({lhs, rhs})
                        : success();
@@ -1677,6 +1676,78 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
   }
 
   return failure();
+}
+
+//===----------------------------------------------------------------------===//
+// MultPipe
+//===----------------------------------------------------------------------===//
+
+SmallVector<StringRef> MultPipeLibOp::portNames() {
+  return {"left", "right", "go", "clk", "reset", "out", "done"};
+}
+
+SmallVector<Direction> MultPipeLibOp::portDirections() {
+  return {Input, Input, Input, Input, Input, Output, Output};
+}
+
+void MultPipeLibOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
+  MLIRContext *context = getContext();
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList go, clk, reset, done;
+  go.append("go", isSet);
+  clk.append("clk", isSet);
+  reset.append("reset", isSet);
+  done.append("done", isSet);
+  return {
+      DictionaryAttr(),             /* Lhs    */
+      DictionaryAttr(),             /* Rhs    */
+      go.getDictionary(context),    /* Go     */
+      clk.getDictionary(context),   /* Clk    */
+      reset.getDictionary(context), /* Reset  */
+      DictionaryAttr(),             /* Out    */
+      done.getDictionary(context)   /* Done   */
+  };
+}
+
+//===----------------------------------------------------------------------===//
+// DivPipe
+//===----------------------------------------------------------------------===//
+
+SmallVector<StringRef> DivPipeLibOp::portNames() {
+  return {"left",         "right",         "go",  "clk", "reset",
+          "out_quotient", "out_remainder", "done"};
+}
+
+SmallVector<Direction> DivPipeLibOp::portDirections() {
+  return {Input, Input, Input, Input, Input, Output, Output, Output};
+}
+
+void DivPipeLibOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  getCellAsmResultNames(setNameFn, *this, this->portNames());
+}
+
+SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
+  MLIRContext *context = getContext();
+  IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
+  NamedAttrList go, clk, reset, done;
+  go.append("go", isSet);
+  clk.append("clk", isSet);
+  reset.append("reset", isSet);
+  done.append("done", isSet);
+  return {
+      DictionaryAttr(),             /* Lhs       */
+      DictionaryAttr(),             /* Rhs       */
+      go.getDictionary(context),    /* Go        */
+      clk.getDictionary(context),   /* Clk       */
+      reset.getDictionary(context), /* Reset     */
+      DictionaryAttr(),             /* Quotient  */
+      DictionaryAttr(),             /* Remainder */
+      done.getDictionary(context)   /* Done      */
+  };
 }
 
 //===----------------------------------------------------------------------===//

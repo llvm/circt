@@ -4,6 +4,10 @@ PyCDE stands for Python circuit design entry. It is an experimental, opinionated
 
 # Installation
 
+## via Pip
+
+PyCDE is now being released on PyPI: https://pypi.org/project/pycde/
+
 ## Installing and Building with Wheels
 
 The simplest way to get started using PyCDE is to install it with the `pip install` command:
