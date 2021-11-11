@@ -272,6 +272,49 @@ static void pruneUnusedOps(Operation *initialOp) {
   }
 }
 
+/// A sample reduction pattern that replaces all uses of an operation with one
+/// of its operands. This can help pruning large parts of the expression tree
+/// rapidly.
+template <unsigned OpNum>
+struct OperandForwarder : public Reduction {
+  bool match(Operation *op) const override {
+    if (op->getNumResults() != 1 || OpNum >= op->getNumOperands())
+      return false;
+    auto resultTy = op->getResult(0).getType().dyn_cast<firrtl::FIRRTLType>();
+    auto opTy = op->getOperand(OpNum).getType().dyn_cast<firrtl::FIRRTLType>();
+    return resultTy && opTy &&
+           resultTy.getWidthlessType() == opTy.getWidthlessType() &&
+           resultTy.isa<firrtl::UIntType, firrtl::SIntType>();
+  }
+  LogicalResult rewrite(Operation *op) const override {
+    assert(match(op));
+    ImplicitLocOpBuilder builder(op->getLoc(), op);
+    auto result = op->getResult(0);
+    auto operand = op->getOperand(OpNum);
+    auto resultTy = result.getType().cast<firrtl::FIRRTLType>();
+    auto operandTy = operand.getType().cast<firrtl::FIRRTLType>();
+    auto resultWidth = resultTy.getBitWidthOrSentinel();
+    auto operandWidth = operandTy.getBitWidthOrSentinel();
+    if ((resultWidth == -1) != (operandWidth == -1))
+      return failure();
+    Value newOp;
+    if (resultWidth < operandWidth)
+      newOp =
+          builder.createOrFold<firrtl::BitsPrimOp>(operand, resultWidth - 1, 0);
+    else if (resultWidth > operandWidth)
+      newOp = builder.createOrFold<firrtl::PadPrimOp>(operand, resultWidth);
+    else
+      newOp = operand;
+    LLVM_DEBUG(llvm::dbgs() << "Forwarding " << newOp << " in " << *op << "\n");
+    result.replaceAllUsesWith(newOp);
+    pruneUnusedOps(op);
+    return success();
+  }
+  std::string getName() const override {
+    return ("operand" + Twine(OpNum) + "-forwarder").str();
+  }
+};
+
 /// A sample reduction pattern that replaces operations with a constant zero of
 /// their type.
 struct Constantifier : public Reduction {
@@ -446,6 +489,9 @@ void circt::createAllReductions(
   add(std::make_unique<MemoryStubber>());
   add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<PassReduction>(context, createCSEPass()));
+  add(std::make_unique<OperandForwarder<0>>());
+  add(std::make_unique<OperandForwarder<1>>());
+  add(std::make_unique<OperandForwarder<2>>());
   add(std::make_unique<Constantifier>());
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<OperationPruner>());
