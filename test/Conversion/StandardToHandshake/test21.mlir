@@ -4,7 +4,7 @@ func @loop_min_max(%arg0: index) {
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @loop_min_max(
-// CHECK-SAME:                                 %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: none, ...) -> none {
+// CHECK-SAME:                                 %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:           %[[VAL_2:.*]] = "handshake.merge"(%[[VAL_0]]) : (index) -> index
 // CHECK:           %[[VAL_3:.*]]:4 = "handshake.fork"(%[[VAL_1]]) {control = true} : (none) -> (none, none, none, none)
 // CHECK:           %[[VAL_4:.*]] = "handshake.constant"(%[[VAL_3]]#2) {value = 0 : index} : (none) -> index

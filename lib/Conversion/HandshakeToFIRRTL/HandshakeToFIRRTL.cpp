@@ -456,30 +456,11 @@ static void extractValues(ArrayRef<ValueVector *> valueVectors, size_t index,
 static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
                                    ConversionPatternRewriter &rewriter) {
   llvm::SmallVector<PortInfo, 8> ports;
-  auto argNames = funcOp->getAttrOfType<ArrayAttr>("argNames");
-  auto resNames = funcOp->getAttrOfType<ArrayAttr>("outNames");
-  auto getArgumentName = [&](unsigned index) {
-    if (argNames && argNames.size() > index)
-      return rewriter.getStringAttr(
-          argNames[index].cast<StringAttr>().getValue());
-    else
-      return rewriter.getStringAttr("arg" + std::to_string(index));
-  };
-  auto getResName = [&](unsigned index) {
-    std::string name;
-    if (resNames && resNames.size() > index)
-      name = resNames[index].cast<StringAttr>().getValue();
-    else if (index == funcOp.getNumResults() - 1)
-      name = "outCtrl";
-    else
-      name = "out" + std::to_string(index);
-    return rewriter.getStringAttr(name);
-  };
 
   // Add all inputs of funcOp.
   unsigned argIndex = 0;
   for (auto &arg : funcOp.getArguments()) {
-    auto portName = getArgumentName(argIndex);
+    auto portName = funcOp.getArgName(argIndex);
     auto bundlePortType = getBundleType(arg.getType());
 
     if (!bundlePortType)
@@ -495,7 +476,7 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   // Add all outputs of funcOp.
   argIndex = 0;
   for (auto portType : funcOp.getType().getResults()) {
-    auto portName = getResName(argIndex);
+    auto portName = funcOp.getResName(argIndex);
     auto bundlePortType = getBundleType(portType);
 
     if (!bundlePortType)

@@ -325,6 +325,32 @@ static ParseResult verifyFuncOp(handshake::FuncOp op) {
              << ") must match the type of the corresponding argument in "
              << "function signature(" << fnInputTypes[i] << ')';
 
+  // Verify that we have a name for each argument and result of this function.
+  auto verifyPortNameAttr = [&](StringRef attrName,
+                                unsigned numIOs) -> LogicalResult {
+    auto portNamesAttr = op->getAttrOfType<ArrayAttr>(attrName);
+
+    if (!portNamesAttr)
+      return op.emitOpError() << "expected attribute '" << attrName << "'.";
+
+    auto portNames = portNamesAttr.getValue();
+    if (portNames.size() != numIOs)
+      return op.emitOpError()
+             << "attribute '" << attrName << "' has " << portNames.size()
+             << " entries but is expected to have " << numIOs << ".";
+
+    if (llvm::any_of(portNames,
+                     [&](Attribute attr) { return !attr.isa<StringAttr>(); }))
+      return op.emitOpError() << "expected all entries in attribute '"
+                              << attrName << "' to be strings.";
+
+    return success();
+  };
+  if (failed(verifyPortNameAttr("argNames", op.getNumArguments())))
+    return failure();
+  if (failed(verifyPortNameAttr("resNames", op.getNumResults())))
+    return failure();
+
   return success();
 }
 
@@ -350,6 +376,80 @@ static ParseResult parseFuncOpArgs(
   });
 
   return success();
+}
+
+/// Generates names for a handshake.func input and output arguments, based on
+/// the number of args as well as a prefix.
+static SmallVector<Attribute> getFuncOpNames(Builder &builder, TypeRange types,
+                                             StringRef prefix) {
+  SmallVector<Attribute> resNames;
+  llvm::transform(
+      llvm::enumerate(types), std::back_inserter(resNames), [&](auto it) {
+        bool lastOperand = it.index() == types.size() - 1;
+        std::string suffix = lastOperand && it.value().template isa<NoneType>()
+                                 ? "Ctrl"
+                                 : std::to_string(it.index());
+        return builder.getStringAttr(prefix + suffix);
+      });
+  return resNames;
+}
+
+void handshake::FuncOp::build(OpBuilder &builder, OperationState &state,
+                              StringRef name, FunctionType type,
+                              ArrayRef<NamedAttribute> attrs) {
+
+  state.addAttribute(SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(name));
+  state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
+  state.attributes.append(attrs.begin(), attrs.end());
+
+  if (const auto *argNamesAttrIt = llvm::find_if(
+          attrs, [&](auto attr) { return attr.first == "argNames"; });
+      argNamesAttrIt == attrs.end())
+    state.addAttribute("argNames", builder.getArrayAttr({}));
+
+  if (llvm::find_if(attrs, [&](auto attr) {
+        return attr.first == "resNames";
+      }) == attrs.end())
+    state.addAttribute("resNames", builder.getArrayAttr({}));
+
+  state.addRegion();
+}
+
+/// Helper function for appending a string to an array attribute, and
+/// rewriting the attribute back to the operation.
+static void addStringToStringArrayAttr(Builder &builder, Operation *op,
+                                       StringRef attrName, StringAttr str) {
+  llvm::SmallVector<Attribute> attrs;
+  llvm::copy(op->getAttrOfType<ArrayAttr>(attrName).getValue(),
+             std::back_inserter(attrs));
+  attrs.push_back(str);
+  op->setAttr(attrName, builder.getArrayAttr(attrs));
+}
+
+void handshake::FuncOp::resolveArgAndResNames() {
+  auto type = getType();
+  Builder builder(getContext());
+
+  /// Generate a set of fallback names. These are used in case names are
+  /// missing from the currently set arg- and res name attributes.
+  auto fallbackArgNames = getFuncOpNames(builder, type.getInputs(), "in");
+  auto fallbackResNames = getFuncOpNames(builder, type.getResults(), "out");
+  auto argNames = getArgNames().getValue();
+  auto resNames = getResNames().getValue();
+
+  /// Use reference names where actual names are missing.
+  auto resolveNames = [&](auto &fallbackNames, auto &actualNames,
+                          StringRef attrName) {
+    for (auto fallbackName : llvm::enumerate(fallbackNames)) {
+      if (actualNames.size() <= fallbackName.index())
+        addStringToStringArrayAttr(
+            builder, this->getOperation(), attrName,
+            fallbackName.value().template cast<StringAttr>());
+    }
+  };
+  resolveNames(fallbackArgNames, argNames, "argNames");
+  resolveNames(fallbackResNames, resNames, "resNames");
 }
 
 static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
@@ -379,9 +479,13 @@ static ParseResult parseFuncOp(OpAsmParser &parser, OperationState &result) {
     return failure();
 
   // If argNames and resNames wasn't provided manually, infer argNames attribute
-  // from the parsed SSA names.
+  // from the parsed SSA names and resNames from our naming convention.
   if (!result.attributes.get("argNames"))
     result.addAttribute("argNames", builder.getArrayAttr(argNames));
+  if (!result.attributes.get("resNames")) {
+    auto resNames = getFuncOpNames(builder, resTypes, "out");
+    result.addAttribute("resNames", builder.getArrayAttr(resNames));
+  }
 
   // Parse region
   auto *body = result.addRegion();

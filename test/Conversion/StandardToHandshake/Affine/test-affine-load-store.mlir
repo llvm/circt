@@ -12,7 +12,7 @@ func @load_store () -> () {
   return
 }
 
-// CHECK: handshake.func @load_store(%[[ARG0:.*]]: none, ...) -> none {
+// CHECK: handshake.func @load_store(%[[ARG0:.*]]: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:   %[[VAL0:.*]]:3 = "handshake.memory"(%[[VAL9:.*]]#0, %[[VAL9]]#1, %[[ADDR:.*]]) {id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32, type = memref<10xf32>} : (f32, index, index) -> (f32, none, none)
 // CHECK:   %[[VAL1:.*]]:2 = "handshake.fork"(%[[VAL0]]#2) {control = true} : (none) -> (none, none)
 // CHECK:   %[[VAL2:.*]]:3 = "handshake.fork"(%[[ARG0]]) {control = true} : (none) -> (none, none, none)
@@ -38,7 +38,7 @@ func @affine_map_addr () -> () {
   return
 }
 
-// CHECK:      handshake.func @affine_map_addr(%[[ARG0:.*]]: none, ...) -> none {
+// CHECK:      handshake.func @affine_map_addr(%[[ARG0:.*]]: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
 // CHECK-NEXT:   %[[VAL0:.*]]:3 = "handshake.memory"(%[[VAL13:.*]]#0, %[[VAL13]]#1, %[[ADDR:.*]]) {id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32, type = memref<10xf32>} : (f32, index, index) -> (f32, none, none)
 // CHECK-NEXT:   %[[VAL1:.*]]:2 = "handshake.fork"(%[[VAL0]]#2) {control = true} : (none) -> (none, none)
 // CHECK-NEXT:   %[[VAL2:.*]]:3 = "handshake.fork"(%[[ARG0]]) {control = true} : (none) -> (none, none, none)

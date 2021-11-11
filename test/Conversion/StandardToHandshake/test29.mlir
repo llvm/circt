@@ -2,7 +2,7 @@
 // RUN: circt-opt -lower-std-to-handshake %s | FileCheck %s
 func @load_store(memref<4xi32>, index) {
 // CHECK-LABEL: handshake.func @load_store(
-// CHECK-SAME:  %arg0: memref<4xi32>, %arg1: index, %arg2: none, ...) -> none {
+// CHECK-SAME:  %arg0: memref<4xi32>, %arg1: index, %arg2: none, ...) -> none attributes {argNames = ["in0", "in1", "inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:   %[[LDDATA_STNONE_LDNONE:.+]]:3 = "handshake.memory"(%[[STDATA_STIDX0:.+]]#0, %[[STDATA_STIDX0:.+]]#1, %[[LDIDX0:.+]]) {id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32, type = memref<4xi32>} : (i32, index, index) -> (i32, none, none)
 // CHECK:   %[[STNONE_STNONE:.+]]:2 = "handshake.fork"(%[[LDDATA_STNONE_LDNONE:.+]]#1) {control = true} : (none) -> (none, none)
 
