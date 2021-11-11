@@ -2447,7 +2447,7 @@ static LogicalResult rewriteExtCallModules(MLIRContext *ctx, ModuleOp module,
   OpBuilder builder(ctx);
   builder.setInsertionPoint(circuit.getBody(), circuit.getBody()->begin());
   module.walk([&](handshake::CallOp callOp) {
-    auto extModule = module.lookupSymbol(callOp.getModule());
+    auto *extModule = module.lookupSymbol(callOp.getModule());
     if (isa<firrtl::FExtModuleOp>(extModule)) {
       // Module has already been rewritten
       return;

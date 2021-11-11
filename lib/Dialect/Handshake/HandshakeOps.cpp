@@ -930,7 +930,7 @@ static LogicalResult verifyInstanceOp(handshake::InstanceOp op) {
            << "last operand must be a control (none-typed) operand.";
 
   auto parentModule = op->getParentOfType<ModuleOp>();
-  auto calleeOp = parentModule.lookupSymbol(op.getModule());
+  auto *calleeOp = parentModule.lookupSymbol(op.getModule());
   if (!dyn_cast<handshake::FuncOp>(calleeOp))
     return op.emitOpError() << "symbol '" << op.getModule()
                             << "' is not a handshake.func operation.";
@@ -941,7 +941,7 @@ static LogicalResult verifyInstanceOp(handshake::InstanceOp op) {
 static LogicalResult verifyCallOp(handshake::CallOp op) {
 
   auto parentModule = op->getParentOfType<ModuleOp>();
-  auto calleeOp = parentModule.lookupSymbol(op.getModule());
+  auto *calleeOp = parentModule.lookupSymbol(op.getModule());
   if (!isa<hw::HWModuleExternOp, hw::HWModuleOp>(calleeOp))
     return op.emitOpError()
            << "symbol '" << op.getModule() << "' must refer to a hw module.";
