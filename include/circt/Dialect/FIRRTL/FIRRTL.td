@@ -20,11 +20,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 
-
-// Base class for the operation in this dialect.
-class FIRRTLOp<string mnemonic, list<OpTrait> traits = []> :
-    Op<FIRRTLDialect, mnemonic, traits>;
-
+include "FIRRTLDialect.td"
 include "FIRRTLAttributes.td"
 include "FIRRTLTypes.td"
 include "FIRRTLOpInterfaces.td"

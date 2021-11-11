@@ -1,4 +1,4 @@
-//===- LowerCHIRRTL.cpp ----------------------------------------*- C++ -*-===//
+//===- LowerCHIRRTL.cpp -----------------------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "PassDetails.h"
-
+#include "circt/Dialect/FIRRTL/CHIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -25,25 +25,31 @@
 
 using namespace circt;
 using namespace firrtl;
+using namespace chirrtl;
 
 namespace {
-struct LowerCHIRRTLPass : public LowerCHIRRTLBase<LowerCHIRRTLPass>,
+struct LowerCHIRRTLPass : public LowerCHIRRTLPassBase<LowerCHIRRTLPass>,
+                          public CHIRRTLVisitor<LowerCHIRRTLPass>,
                           public FIRRTLVisitor<LowerCHIRRTLPass> {
 
   using FIRRTLVisitor<LowerCHIRRTLPass>::visitDecl;
   using FIRRTLVisitor<LowerCHIRRTLPass>::visitExpr;
   using FIRRTLVisitor<LowerCHIRRTLPass>::visitStmt;
 
-  void visitDecl(CombMemOp op);
-  void visitDecl(SeqMemOp op);
-  void visitStmt(MemoryPortOp op);
-  void visitStmt(MemoryPortAccessOp op);
+  void visitCHIRRTL(CombMemOp op);
+  void visitCHIRRTL(SeqMemOp op);
+  void visitCHIRRTL(MemoryPortOp op);
+  void visitCHIRRTL(MemoryPortAccessOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(PartialConnectOp op);
   void visitUnhandledOp(Operation *op);
+
+  // Chain the CHIRRTL visitor to the FIRRTL visitor.
+  void visitInvalidCHIRRTL(Operation *op) { dispatchVisitor(op); }
+  void visitUnhandledCHIRRTL(Operation *op) { visitUnhandledOp(op); }
 
   /// Get a the constant 0.  This constant is inserted at the beginning of the
   /// module.
@@ -462,22 +468,22 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
   }
 }
 
-void LowerCHIRRTLPass::visitDecl(CombMemOp combmem) {
+void LowerCHIRRTLPass::visitCHIRRTL(CombMemOp combmem) {
   replaceMem(combmem, combmem.name(), /*isSequential*/ false,
              RUWAttr::Undefined, combmem.annotations());
 }
 
-void LowerCHIRRTLPass::visitDecl(SeqMemOp seqmem) {
+void LowerCHIRRTLPass::visitCHIRRTL(SeqMemOp seqmem) {
   replaceMem(seqmem, seqmem.name(), /*isSequential*/ true, seqmem.ruw(),
              seqmem.annotations());
 }
 
-void LowerCHIRRTLPass::visitStmt(MemoryPortOp memPort) {
+void LowerCHIRRTLPass::visitCHIRRTL(MemoryPortOp memPort) {
   // The memory port is mostly handled while processing the memory.
   opsToDelete.push_back(memPort);
 }
 
-void LowerCHIRRTLPass::visitStmt(MemoryPortAccessOp memPortAccess) {
+void LowerCHIRRTLPass::visitCHIRRTL(MemoryPortAccessOp memPortAccess) {
   // The memory port access is mostly handled while processing the memory.
   opsToDelete.push_back(memPortAccess);
 }
@@ -679,7 +685,8 @@ void LowerCHIRRTLPass::runOnOperation() {
   // Walk the entire body of the module and dispatch the visitor on each
   // function.  This will replace all CHIRRTL memories and ports, and update all
   // uses.
-  getOperation().getBody()->walk([&](Operation *op) { dispatchVisitor(op); });
+  getOperation().getBody()->walk(
+      [&](Operation *op) { dispatchCHIRRTLVisitor(op); });
 
   // If there are no operations to delete, then we didn't find any CHIRRTL
   // memories.

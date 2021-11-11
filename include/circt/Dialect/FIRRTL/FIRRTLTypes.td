@@ -60,55 +60,6 @@ def PassiveType : DialectType<FIRRTLDialect,
   CPred<"$_self.isa<FIRRTLType>() && $_self.cast<FIRRTLType>().isPassive()">,
   "a passive type (contain no flips)", "::circt::firrtl::FIRRTLType">;
 
-def CMemoryType : TypeDef<FIRRTLDialect, "CMemory"> {
-  let mnemonic = "cmemory";
-  let summary = "a behavioral memory";
-  let description = [{
-    Syntax:
-    ```
-    cmemory-type ::= `cmemory` `<` element-type, element-count `>`
-    ```
-
-    The value of a `cmemory` type represents a behavioral memory with unknown
-    ports.  This is produced by `combmem` and `seqmem` declarations and used by
-    `memoryport` declarations to define memories and their ports. A CMemory is
-    similar to a vector of passive element types.
-
-    Examples:
-
-    ```mlir
-    !firrtl.cmemory<uint<32>, 16>
-    !firrtl.cmemory<bundle<a : uint<1>>, 16>
-    ```
-  }];
-
-  let parameters = (ins "FIRRTLType":$elementType, "unsigned":$numElements);
-
-  let builders = [
-    TypeBuilderWithInferredContext<(ins "FIRRTLType":$elementType,
-                                        "unsigned":$numElements), [{
-      return $_get(elementType.getContext(), elementType, numElements);
-    }]>
-  ];
-
-  let genVerifyDecl = 1;
-}
-
-def CMemoryPortType : TypeDef<FIRRTLDialect, "CMemoryPort"> {
-  let mnemonic = "cmemoryport";
-  let summary = "a behavioral memory port";
-  let description = [{
-    Syntax:
-    ```
-    cmemoryport-type ::= `cmemoryport`
-    ```
-
-    The value of a `cmemoryport` type represents a port which has been
-    declared on a `cmemory`.  This value is used to set the memory port access
-    conditions.
-  }];
-}
-
 //===----------------------------------------------------------------------===//
 // FIRRTL Types Predicates
 //===----------------------------------------------------------------------===//

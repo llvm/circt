@@ -209,15 +209,8 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
 /// parser implementation. Emits an error and returns failure if `name` does not
 /// refer to a type defined in this dialect.
 static ParseResult parseType(Type &result, StringRef name, AsmParser &parser) {
-  OptionalParseResult parseResult;
-
-  // Try the generated type parser.
-  parseResult = generatedTypeParser(parser, name, result);
-  if (parseResult.hasValue())
-    return parseResult.getValue();
-
   // Try the custom type parser.
-  parseResult = customTypeParser(parser, name, result);
+  OptionalParseResult parseResult = customTypeParser(parser, name, result);
   if (parseResult.hasValue())
     return parseResult.getValue();
 
@@ -256,7 +249,7 @@ ParseResult circt::firrtl::parseNestedType(FIRRTLType &result,
   return parseFIRRTLType(result, name, parser);
 }
 
-//===----------------------------------------------------------------------===//
+//===---------------------------------------------------------------------===//
 // Dialect Type Parsing and Printing
 //===----------------------------------------------------------------------===//
 
@@ -952,45 +945,13 @@ std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
 }
 
 //===----------------------------------------------------------------------===//
-// CMemory Type
-//===----------------------------------------------------------------------===//
-
-void CMemoryType::print(AsmPrinter &printer) const {
-  printer << "<";
-  // Don't print element types with "!firrtl.".
-  printNestedType(getElementType(), printer);
-  printer << ", " << getNumElements() << ">";
-}
-
-Type CMemoryType::parse(AsmParser &parser) {
-  FIRRTLType elementType;
-  unsigned numElements;
-  if (parser.parseLess() || parseNestedType(elementType, parser) ||
-      parser.parseComma() || parser.parseInteger(numElements) ||
-      parser.parseGreater())
-    return {};
-  return parser.getChecked<CMemoryType>(elementType, numElements);
-}
-
-LogicalResult CMemoryType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                  FIRRTLType elementType,
-                                  unsigned numElements) {
-  if (!elementType.isPassive()) {
-    return emitError() << "behavioral memory element type must be passive";
-  }
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // FIRRTLDialect
 //===----------------------------------------------------------------------===//
 
 void FIRRTLDialect::registerTypes() {
   addTypes<SIntType, UIntType, ClockType, ResetType, AsyncResetType, AnalogType,
            // Derived Types
-           BundleType, FVectorType,
-           // CHIRRTL Types
-           CMemoryType, CMemoryPortType>();
+           BundleType, FVectorType>();
 }
 
 // Get the bit width for this type, return None  if unknown. Unlike
