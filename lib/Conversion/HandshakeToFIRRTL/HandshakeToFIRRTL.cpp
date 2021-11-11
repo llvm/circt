@@ -576,6 +576,51 @@ static FModuleOp checkSubModuleOp(CircuitOp circuitOp, Operation *oldOp) {
   return moduleOp;
 }
 
+/// A class to be used with getPortInfoForOp. Provides an opaque interface for
+/// generating the port names of an operation; handshake operations generate
+/// names by the Handshake NamedIOInterface;  and other operations, such as
+/// arith ops, are assigned default names.
+class PortNameGenerator {
+public:
+  PortNameGenerator(Operation *op) : builder(op->getContext()) {
+    auto namedOpInterface = dyn_cast<handshake::NamedIOInterface>(op);
+    if (namedOpInterface)
+      inferFromNamedOpInterface(namedOpInterface);
+    else
+      inferDefault(op);
+  }
+
+  StringAttr inputName(unsigned idx) { return inputs[idx]; }
+  StringAttr outputName(unsigned idx) { return outputs[idx]; }
+
+private:
+  using IdxToStrF = const std::function<std::string(unsigned)> &;
+  void infer(Operation *op, IdxToStrF &inF, IdxToStrF &outF) {
+    llvm::transform(
+        llvm::enumerate(op->getOperandTypes()), std::back_inserter(inputs),
+        [&](auto it) { return builder.getStringAttr(inF(it.index())); });
+    llvm::transform(
+        llvm::enumerate(op->getResultTypes()), std::back_inserter(outputs),
+        [&](auto it) { return builder.getStringAttr(outF(it.index())); });
+  }
+
+  void inferDefault(Operation *op) {
+    infer(
+        op, [](unsigned idx) { return "in" + std::to_string(idx); },
+        [](unsigned idx) { return "out" + std::to_string(idx); });
+  }
+
+  void inferFromNamedOpInterface(handshake::NamedIOInterface op) {
+    infer(
+        op, [&](unsigned idx) { return op.getOperandName(idx); },
+        [&](unsigned idx) { return op.getResultName(idx); });
+  }
+
+  Builder builder;
+  llvm::SmallVector<StringAttr> inputs;
+  llvm::SmallVector<StringAttr> outputs;
+};
+
 /// All standard expressions and handshake elastic components will be converted
 /// to a FIRRTL sub-module and be instantiated in the top-module.
 static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
@@ -583,35 +628,34 @@ static FModuleOp createSubModuleOp(FModuleOp topModuleOp, Operation *oldOp,
                                    ConversionPatternRewriter &rewriter) {
   rewriter.setInsertionPoint(topModuleOp);
   llvm::SmallVector<PortInfo, 8> ports;
+  PortNameGenerator portNames(oldOp);
 
   auto loc = oldOp->getLoc();
 
   // Add all inputs of oldOp.
   unsigned argIndex = 0;
-  for (auto portType : oldOp->getOperands().getTypes()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType);
+  for (auto portType : llvm::enumerate(oldOp->getOperandTypes())) {
+    auto bundlePortType = getBundleType(portType.value());
 
     if (!bundlePortType)
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(
-        {portName, bundlePortType, Direction::In, StringAttr{}, loc});
+    ports.push_back({portNames.inputName(portType.index()), bundlePortType,
+                     Direction::In, StringAttr{}, loc});
     ++argIndex;
   }
 
   // Add all outputs of oldOp.
-  for (auto portType : oldOp->getResults().getTypes()) {
-    auto portName = rewriter.getStringAttr("arg" + std::to_string(argIndex));
-    auto bundlePortType = getBundleType(portType);
+  for (auto portType : llvm::enumerate(oldOp->getResultTypes())) {
+    auto bundlePortType = getBundleType(portType.value());
 
     if (!bundlePortType)
       oldOp->emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(
-        {portName, bundlePortType, Direction::Out, StringAttr{}, loc});
+    ports.push_back({portNames.outputName(portType.index()), bundlePortType,
+                     Direction::Out, StringAttr{}, loc});
     ++argIndex;
   }
 

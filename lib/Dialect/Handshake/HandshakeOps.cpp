@@ -59,6 +59,10 @@ bool isReadyToExecute(ArrayRef<mlir::Value> ins, ArrayRef<mlir::Value> outs,
   return true;
 }
 
+static std::string defaultOperandName(unsigned int idx) {
+  return "in" + std::to_string(idx);
+}
+
 // Fetch values from the value map and consume them
 std::vector<llvm::Any>
 fetchValues(ArrayRef<mlir::Value> values,
@@ -231,6 +235,10 @@ void MuxOp::build(OpBuilder &builder, OperationState &result, Value operand,
   // Operands from predecessor blocks
   for (int i = 0, e = inputs; i < e; ++i)
     result.addOperands(operand);
+}
+
+std::string handshake::MuxOp::getOperandName(unsigned int idx) {
+  return idx == 0 ? "select" : defaultOperandName(idx - 1);
 }
 
 bool handshake::MuxOp::tryExecute(

@@ -272,7 +272,8 @@ def MergeOp : Handshake_Op<"merge", [
 
 def MuxOp : Handshake_Op<"mux", [
   NoSideEffect, MergeLikeOpInterface,
-  DeclareOpInterfaceMethods<ExecutableOpInterface>
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
   let summary = "mux operation";
   let description = [{
