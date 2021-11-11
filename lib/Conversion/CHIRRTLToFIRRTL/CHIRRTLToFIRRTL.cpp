@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/CHIRRTLToFIRRTL.h"
+#include "circt/Dialect/CHIRRTL/CHIRRTLDialect.h"
+#include "circt/Dialect/CHIRRTL/CHIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
@@ -20,31 +23,37 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "circt/Conversion/CHIRRTLToFIRRTL.h"
 
 #include "../PassDetail.h"
 
 using namespace circt;
 using namespace firrtl;
+using namespace chirrtl;
 
 namespace {
-struct LowerCHIRRTLToFIRRTL : public LowerCHIRRTLToFIRRTLBase<LowerCHIRRTLToFIRRTL>,
-                          public FIRRTLVisitor<LowerCHIRRTLToFIRRTL> {
+struct LowerCHIRRTLToFIRRTL
+    : public LowerCHIRRTLToFIRRTLBase<LowerCHIRRTLToFIRRTL>,
+      public CHIRRTLVisitor<LowerCHIRRTLToFIRRTL>,
+      public FIRRTLVisitor<LowerCHIRRTLToFIRRTL> {
 
   using FIRRTLVisitor<LowerCHIRRTLToFIRRTL>::visitDecl;
   using FIRRTLVisitor<LowerCHIRRTLToFIRRTL>::visitExpr;
   using FIRRTLVisitor<LowerCHIRRTLToFIRRTL>::visitStmt;
 
-  void visitDecl(CombMemOp op);
-  void visitDecl(SeqMemOp op);
-  void visitStmt(MemoryPortOp op);
-  void visitStmt(MemoryPortAccessOp op);
+  void visitCHIRRTL(CombMemOp op);
+  void visitCHIRRTL(SeqMemOp op);
+  void visitCHIRRTL(MemoryPortOp op);
+  void visitCHIRRTL(MemoryPortAccessOp op);
   void visitExpr(SubaccessOp op);
   void visitExpr(SubfieldOp op);
   void visitExpr(SubindexOp op);
   void visitStmt(ConnectOp op);
   void visitStmt(PartialConnectOp op);
   void visitUnhandledOp(Operation *op);
+
+  // Chain the CHIRRTL visitor to the FIRRTL visitor.
+  void visitInvalidCHIRRTL(Operation *op) { dispatchVisitor(op); }
+  void visitUnhandledCHIRRTL(Operation *op) { visitUnhandledOp(op); }
 
   /// Get a the constant 0.  This constant is inserted at the beginning of the
   /// module.
@@ -144,7 +153,8 @@ static void connectLeafsTo(ImplicitLocOpBuilder &builder, Value bundle,
 
 /// Connect each leaf of an aggregate type to invalid.  This does not support
 /// aggregates with flip types.
-void LowerCHIRRTLToFIRRTL::emitInvalid(ImplicitLocOpBuilder &builder, Value value) {
+void LowerCHIRRTLToFIRRTL::emitInvalid(ImplicitLocOpBuilder &builder,
+                                       Value value) {
   auto type = value.getType();
   auto &invalid = invalidCache[type];
   if (!invalid) {
@@ -265,8 +275,8 @@ MemDirAttr LowerCHIRRTLToFIRRTL::inferMemoryPortKind(MemoryPortOp memPort) {
 }
 
 void LowerCHIRRTLToFIRRTL::replaceMem(Operation *cmem, StringRef name,
-                                  bool isSequential, RUWAttr ruw,
-                                  ArrayAttr annotations) {
+                                      bool isSequential, RUWAttr ruw,
+                                      ArrayAttr annotations) {
   assert(isa<CombMemOp>(cmem) || isa<SeqMemOp>(cmem));
 
   // We have several early breaks in this function, so we record the CHIRRTL
@@ -463,22 +473,22 @@ void LowerCHIRRTLToFIRRTL::replaceMem(Operation *cmem, StringRef name,
   }
 }
 
-void LowerCHIRRTLToFIRRTL::visitDecl(CombMemOp combmem) {
+void LowerCHIRRTLToFIRRTL::visitCHIRRTL(CombMemOp combmem) {
   replaceMem(combmem, combmem.name(), /*isSequential*/ false,
              RUWAttr::Undefined, combmem.annotations());
 }
 
-void LowerCHIRRTLToFIRRTL::visitDecl(SeqMemOp seqmem) {
+void LowerCHIRRTLToFIRRTL::visitCHIRRTL(SeqMemOp seqmem) {
   replaceMem(seqmem, seqmem.name(), /*isSequential*/ true, seqmem.ruw(),
              seqmem.annotations());
 }
 
-void LowerCHIRRTLToFIRRTL::visitStmt(MemoryPortOp memPort) {
+void LowerCHIRRTLToFIRRTL::visitCHIRRTL(MemoryPortOp memPort) {
   // The memory port is mostly handled while processing the memory.
   opsToDelete.push_back(memPort);
 }
 
-void LowerCHIRRTLToFIRRTL::visitStmt(MemoryPortAccessOp memPortAccess) {
+void LowerCHIRRTLToFIRRTL::visitCHIRRTL(MemoryPortAccessOp memPortAccess) {
   // The memory port access is mostly handled while processing the memory.
   opsToDelete.push_back(memPortAccess);
 }
@@ -612,7 +622,7 @@ void LowerCHIRRTLToFIRRTL::visitStmt(PartialConnectOp partialConnect) {
 /// will be redirected to the appropriate clone when they are visited.
 template <typename OpType, typename... T>
 void LowerCHIRRTLToFIRRTL::cloneSubindexOpForMemory(OpType op, Value input,
-                                                T... operands) {
+                                                    T... operands) {
   // If the subaccess operation has no direction recorded, then it does not
   // index a CHIRRTL memory and will be left alone.
   auto it = subfieldDirs.find(op);
@@ -680,7 +690,8 @@ void LowerCHIRRTLToFIRRTL::runOnOperation() {
   // Walk the entire body of the module and dispatch the visitor on each
   // function.  This will replace all CHIRRTL memories and ports, and update all
   // uses.
-  getOperation().getBody()->walk([&](Operation *op) { dispatchVisitor(op); });
+  getOperation().getBody()->walk(
+      [&](Operation *op) { dispatchCHIRRTLVisitor(op); });
 
   // If there are no operations to delete, then we didn't find any CHIRRTL
   // memories.

@@ -276,19 +276,19 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT:  MyMem.b.clk <= someClock
     // CHECK-NEXT:  MyMem.c.clk <= someClock
 
-    %combmem = firrtl.combmem : !firrtl.cmemory<uint<3>, 256>
-    %port0_data, %port0_port = firrtl.memoryport Infer %combmem {name = "port0"} : (!firrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !firrtl.cmemoryport)
+    %combmem = chirrtl.combmem : !chirrtl.cmemory<uint<3>, 256>
+    %port0_data, %port0_port = chirrtl.memoryport Infer %combmem {name = "port0"} : (!chirrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !chirrtl.cmemoryport)
     firrtl.when %ui1 {
-      firrtl.memoryport.access %port0_port[%someAddr], %someClock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+      chirrtl.memoryport.access %port0_port[%someAddr], %someClock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     }
     // CHECK:      cmem combmem : UInt<3>[256]
     // CHECK-NEXT: when ui1 :
     // CHECK-NEXT:   infer mport port0 = combmem[someAddr], someClock
 
-    %seqmem = firrtl.seqmem Undefined : !firrtl.cmemory<uint<3>, 256>
-    %port1_data, %port1_port = firrtl.memoryport Infer %seqmem {name = "port1"} : (!firrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !firrtl.cmemoryport)
+    %seqmem = chirrtl.seqmem Undefined : !chirrtl.cmemory<uint<3>, 256>
+    %port1_data, %port1_port = chirrtl.memoryport Infer %seqmem {name = "port1"} : (!chirrtl.cmemory<uint<3>, 256>) -> (!firrtl.uint<3>, !chirrtl.cmemoryport)
     firrtl.when %ui1 {
-      firrtl.memoryport.access %port1_port[%someAddr], %someClock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+      chirrtl.memoryport.access %port1_port[%someAddr], %someClock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     }
     // CHECK:      smem seqmem : UInt<3>[256] undefined
     // CHECK-NEXT: when ui1 :

@@ -10,15 +10,27 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_CHIRRTL_DIALECT_H
-#define CIRCT_DIALECT_CHIRRTL_DIALECT_H
+#ifndef CIRCT_DIALECT_CHIRRTL_CHIRRTLDIALECT_H
+#define CIRCT_DIALECT_CHIRRTL_CHIRRTLDIALECT_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
-#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
+#include "mlir/IR/OpImplementation.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 
 // Pull in the dialect definition.
 #include "circt/Dialect/CHIRRTL/CHIRRTLDialect.h.inc"
 
-#endif // CIRCT_DIALECT_CHIRRTL_DIALECT_H
+// Include generated types.
+#define GET_TYPEDEF_CLASSES
+#include "circt/Dialect/CHIRRTL/CHIRRTLTypes.h.inc"
+
+// Include generated ops.
+#define GET_OP_CLASSES
+#include "circt/Dialect/CHIRRTL/CHIRRTL.h.inc"
+
+#endif // CIRCT_DIALECT_CHIRRTL_CHIRRTLDIALECT_H

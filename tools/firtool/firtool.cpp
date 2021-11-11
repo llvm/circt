@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Conversion/CHIRRTLToFIRRTL.h"
 #include "circt/Conversion/ExportVerilog.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/CHIRRTL/CHIRRTLDialect.h"
@@ -41,7 +42,6 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/ToolOutputFile.h"
-#include "circt/Conversion/CHIRRTLToFIRRTL.h"
 
 using namespace llvm;
 using namespace mlir;

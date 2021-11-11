@@ -115,7 +115,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
     cmem bar: UInt<1>[8]
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.combmem
+    ; CHECK: chirrtl.combmem
     ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
 
 ; // -----
@@ -212,7 +212,7 @@ circuit Foo: %[[{"a":"a","target":"~Foo|Foo>bar"},{"b":"b","target":"Foo.Foo.bar
     smem bar: UInt<1>[8]
 
     ; CHECK-LABEL: module {
-    ; CHECK: firrtl.seqmem
+    ; CHECK: chirrtl.seqmem
     ; CHECK-SAME: annotations = [{a = "a"}, {b = "b"}]
 
 ; // -----
@@ -350,11 +350,11 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "a": "a"},
     ; CHECK: %_T_3 = firrtl.regreset {{.+}}  {annotations = [{a = "a"}]}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = firrtl.seqmem Undefined {annotations = [{a = "a"}]}
+    ; CHECK: %_T_4 = chirrtl.seqmem Undefined {annotations = [{a = "a"}]}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = firrtl.combmem  {annotations = [{a = "a"}]}
+    ; CHECK: %_T_5 = chirrtl.combmem  {annotations = [{a = "a"}]}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: firrtl.memoryport {{.+}} {annotations = [{a = "a"}]
+    ; CHECK: chirrtl.memoryport {{.+}} {annotations = [{a = "a"}]
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance _T_7 {annotations = [{a = "a"}]}
     inst _T_7 of Bar
@@ -399,13 +399,13 @@ circuit Foo: %[[{"target": "~Foo|Foo>_T_0", "class": "firrtl.transforms.DontTouc
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     reg _T_3 : UInt<4>, clock with :
       reset => (reset, UInt<4>("h0"))
-    ; CHECK: %_T_4 = firrtl.seqmem Undefined  {annotations =
+    ; CHECK: %_T_4 = chirrtl.seqmem Undefined  {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     smem _T_4 : UInt<1>[9] [256]
-    ; CHECK: %_T_5 = firrtl.combmem  {annotations = [
+    ; CHECK: %_T_5 = chirrtl.combmem  {annotations = [
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     cmem _T_5 : UInt<1>[9] [256]
-    ; CHECK: firrtl.memoryport Infer %_T_5 {annotations =
+    ; CHECK: chirrtl.memoryport Infer %_T_5 {annotations =
     ; CHECK-SAME: {class = "firrtl.transforms.DontTouchAnnotation"}
     infer mport _T_6 = _T_5[reset], clock
     ; CHECK: firrtl.instance _T_7 {annotations =
@@ -707,7 +707,7 @@ circuit GCTMemTap : %[
     ; CHECK-SAME:     {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
     ; CHECK-SAME:      id = [[ID]] : i64, word = 1 : i64}>
     ; CHECK: firrtl.module @GCTMemTap
-    ; CHECK: %mem = firrtl.combmem
+    ; CHECK: %mem = chirrtl.combmem
     ; CHECK-SAME: annotations = [
     ; CHECK-SAME:   {class = "sifive.enterprise.grandcentral.MemTapAnnotation",
     ; CHECK-SAME:    id = [[ID]] : i64}]

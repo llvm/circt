@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/CHIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAttributes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -31,6 +32,7 @@
 using mlir::RegionRange;
 using namespace circt;
 using namespace firrtl;
+using namespace chirrtl;
 
 //===----------------------------------------------------------------------===//
 // Utilities
@@ -1131,47 +1133,6 @@ static ParseResult parseInstanceOp(OpAsmParser &parser,
       [](Attribute typeAttr) { return typeAttr.cast<TypeAttr>().getValue(); });
 
   return success();
-}
-
-void MemoryPortOp::build(OpBuilder &builder, OperationState &result,
-                         Type dataType, Value memory, MemDirAttr direction,
-                         StringRef name, ArrayRef<Attribute> annotations) {
-  build(builder, result, CMemoryPortType::get(builder.getContext()), dataType,
-        memory, direction, name, builder.getArrayAttr(annotations));
-}
-
-LogicalResult MemoryPortOp::inferReturnTypes(MLIRContext *context,
-                                             Optional<Location> loc,
-                                             ValueRange operands,
-                                             DictionaryAttr attrs,
-                                             mlir::RegionRange regions,
-                                             SmallVectorImpl<Type> &results) {
-  auto inType = operands[0].getType();
-  auto memType = inType.dyn_cast<CMemoryType>();
-  if (!memType) {
-    if (loc)
-      mlir::emitError(*loc, "memory port requires memory operand");
-    return failure();
-  }
-  results.push_back(memType.getElementType());
-  results.push_back(CMemoryPortType::get(context));
-  return success();
-}
-
-static LogicalResult verifyMemoryPortOp(MemoryPortOp memoryPort) {
-  // MemoryPorts require exactly 1 access. Right now there are no other
-  // operations that could be using that value due to the types.
-  if (!memoryPort.port().hasOneUse())
-    return memoryPort.emitOpError(
-        "port should be used by a firrtl.memoryport.access");
-  return success();
-}
-
-MemoryPortAccessOp MemoryPortOp::getAccess() {
-  auto uses = port().use_begin();
-  if (uses == port().use_end())
-    return {};
-  return cast<MemoryPortAccessOp>(uses->getOwner());
 }
 
 void MemOp::build(OpBuilder &builder, OperationState &result,
@@ -2735,46 +2696,6 @@ static void printImplicitSSAName(OpAsmPrinter &p, Operation *op,
     elides.push_back("name");
 
   printElideAnnotations(p, op, attr, elides);
-}
-
-//===----------------------------------------------------------------------===//
-// MemoryPortOp Custom attr-dict Directive
-//===----------------------------------------------------------------------===//
-
-void MemoryPortOp::getAsmResultNames(
-    function_ref<void(Value, StringRef)> setNameFn) {
-  StringRef base = name();
-  if (base.empty())
-    base = "memport";
-  setNameFn(data(), (base + "_data").str());
-  setNameFn(port(), (base + "_port").str());
-}
-
-static ParseResult parseMemoryPortOp(OpAsmParser &parser,
-                                     NamedAttrList &resultAttrs) {
-  return parseElideAnnotations(parser, resultAttrs);
-}
-
-/// Always elide "direction" and elide "annotations" if it exists or
-/// if it is empty.
-static void printMemoryPortOp(OpAsmPrinter &p, Operation *op,
-                              DictionaryAttr attr) {
-  // "direction" is always elided.
-  printElideAnnotations(p, op, attr, {"direction"});
-}
-
-//===----------------------------------------------------------------------===//
-// SeqMemOp Custom attr-dict Directive
-//===----------------------------------------------------------------------===//
-
-static ParseResult parseSeqMemOp(OpAsmParser &parser,
-                                 NamedAttrList &resultAttrs) {
-  return parseImplicitSSAName(parser, resultAttrs);
-}
-
-/// Always elide "ruw" and elide "annotations" if it exists or if it is empty.
-static void printSeqMemOp(OpAsmPrinter &p, Operation *op, DictionaryAttr attr) {
-  printImplicitSSAName(p, op, attr, {"ruw"});
 }
 
 //===----------------------------------------------------------------------===//

@@ -331,25 +331,25 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; CHECK: firrtl.subaccess %_t[%auto] : !firrtl.vector<uint<1>, 12>, !firrtl.uint<1>
     auto <= _t[auto]
 
-    ; CHECK: %myMem = firrtl.combmem : !firrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>
+    ; CHECK: %myMem = chirrtl.combmem : !chirrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>
     cmem myMem : { id : UInt<4>, resp : UInt<2>} [8] @[Decoupled.scala 209:24]
 
-    ; CHECK: %memValue_data, %memValue_port = firrtl.memoryport Infer %myMem {name = "memValue"} : (!firrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>) -> (!firrtl.bundle<id: uint<4>, resp: uint<2>>, !firrtl.cmemoryport)
-    ; CHECK: firrtl.memoryport.access %memValue_port[%i8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    ; CHECK: %memValue_data, %memValue_port = chirrtl.memoryport Infer %myMem {name = "memValue"} : (!chirrtl.cmemory<bundle<id: uint<4>, resp: uint<2>>, 8>) -> (!firrtl.bundle<id: uint<4>, resp: uint<2>>, !chirrtl.cmemoryport)
+    ; CHECK: chirrtl.memoryport.access %memValue_port[%i8], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     infer mport memValue = myMem[i8], clock
     auto11 <= memValue.id
 
-    ; CHECK: %base_table_0 = firrtl.seqmem Undefined : !firrtl.cmemory<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_0 = chirrtl.seqmem Undefined : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_0 : UInt<1>[9] [256]
-    ; CHECK: %base_table_1 = firrtl.seqmem Old : !firrtl.cmemory<vector<uint<1>, 9>, 256>
+    ; CHECK: %base_table_1 = chirrtl.seqmem Old : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem base_table_1 : UInt<1>[9] [256] old
 
-    ; CHECK: %tableValue_data, %tableValue_port = firrtl.memoryport Read %base_table_1 {name = "tableValue"} : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
-    ; CHECK: firrtl.memoryport.access %tableValue_port[%i8], %clock : !firrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
+    ; CHECK: %tableValue_data, %tableValue_port = chirrtl.memoryport Read %base_table_1 {name = "tableValue"} : (!chirrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !chirrtl.cmemoryport)
+    ; CHECK: chirrtl.memoryport.access %tableValue_port[%i8], %clock : !chirrtl.cmemoryport, !firrtl.uint<8>, !firrtl.clock
     read mport tableValue = base_table_1[i8], clock
 
     ; Check that we can handle large memory sizes.
-    ; CHECK: %testharness = firrtl.seqmem Undefined : !firrtl.cmemory<vector<uint<8>, 16>, 2147483648>
+    ; CHECK: %testharness = chirrtl.seqmem Undefined : !chirrtl.cmemory<vector<uint<8>, 16>, 2147483648>
     smem testharness : UInt<8>[16][2147483648], undefined
 
     ; CHECK: firrtl.pad %i8, 10 : (!firrtl.uint<8>) -> !firrtl.uint<10>
@@ -475,12 +475,12 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; Memory ports should be declared in the scope of the cmemory, but should
     ; be enabled at the location of the mport.
 
-    ; CHECK: %memory = firrtl.seqmem Undefined  : !firrtl.cmemory<vector<uint<1>, 9>, 256>
+    ; CHECK: %memory = chirrtl.seqmem Undefined  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
     smem memory : UInt<1>[9] [256]
 
-    ; CHECK: %xyz0_data, %xyz0_port = firrtl.memoryport Read %memory {name = "xyz0"} : (!firrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !firrtl.cmemoryport)
+    ; CHECK: %xyz0_data, %xyz0_port = chirrtl.memoryport Read %memory {name = "xyz0"} : (!chirrtl.cmemory<vector<uint<1>, 9>, 256>) -> (!firrtl.vector<uint<1>, 9>, !chirrtl.cmemoryport)
     ; CHECK: firrtl.when %cond  {
-    ; CHECK:    firrtl.memoryport.access %xyz0_port[%addr], %clock : !firrtl.cmemoryport, !firrtl.uint, !firrtl.clock
+    ; CHECK:    chirrtl.memoryport.access %xyz0_port[%addr], %clock : !chirrtl.cmemoryport, !firrtl.uint, !firrtl.clock
     ; CHECK: }
     when cond :
       read mport xyz0 = memory[addr], clock
