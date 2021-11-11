@@ -98,7 +98,7 @@ firrtl.circuit "foo" {
 // expected-error @+1 {{requires one region}}
 "firrtl.module"() ( { }, { })
    {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
-    portNames = ["in0"], portAnnotations = []} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSyms = [""]} : () -> ()
 }
 
 
@@ -109,7 +109,7 @@ firrtl.circuit "foo" {
 "firrtl.module"() ( {
   ^entry:
 }) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
-    portNames = ["in0"], portAnnotations = []} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSyms = [""]} : () -> ()
 }
 
 // -----
@@ -119,7 +119,7 @@ firrtl.circuit "foo" {
 "firrtl.module"() ( {
   ^entry(%a: i1):
 }) {sym_name = "foo", portTypes = [!firrtl.uint], portDirections = 1 : i1,
-    portNames = ["in0"], portAnnotations = []} : () -> ()
+    portNames = ["in0"], portAnnotations = [], portSyms = [""]} : () -> ()
 }
 
 // -----

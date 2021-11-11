@@ -3275,8 +3275,8 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
       annotations = AnnotationSet(
           getAnnotations(moduleTarget + ">" + name.getValue(), info.getFIRLoc(),
                          getConstants().targetSet, type));
-    resultPorts.push_back(
-        {name, type, direction::get(isOutput), info.getLoc(), annotations});
+    resultPorts.push_back({name, type, direction::get(isOutput), StringAttr{},
+                           info.getLoc(), annotations});
     resultPortLocs.push_back(info.getFIRLoc());
   }
 

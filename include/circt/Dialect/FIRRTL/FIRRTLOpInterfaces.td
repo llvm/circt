@@ -138,6 +138,35 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     }]>,
 
     //===------------------------------------------------------------------===//
+    // Port Symbols
+    //===------------------------------------------------------------------===//
+
+    InterfaceMethod<"Get the port symbols attribute",
+    "ArrayAttr", "getPortSymbolsAttr", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op->template
+        getAttrOfType<ArrayAttr>(FModuleLike::getPortSymbolsAttrName());
+    }]>,
+
+    InterfaceMethod<"Get the port symbols",
+    "ArrayRef<Attribute>", "getPortSymbols", (ins), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortSymbolsAttr().getValue();
+    }]>,
+
+    InterfaceMethod<"Get a port symbol",
+    "StringAttr", "getPortSymbolAttr", (ins "size_t":$portIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortSymbols()[portIndex].template cast<StringAttr>();
+    }]>,
+
+    InterfaceMethod<"Get a port symbol",
+    "StringRef", "getPortSymbol", (ins "size_t":$portIndex), [{}],
+    /*defaultImplementation=*/[{
+      return $_op.getPortSymbolAttr(portIndex).getValue();
+    }]>,
+
+    //===------------------------------------------------------------------===//
     // All Port Information
     //===------------------------------------------------------------------===//
 
@@ -170,6 +199,11 @@ def FModuleLike : OpInterface<"FModuleLike"> {
     /// Get the attribute name for port annotations.
     static StringRef getPortAnnotationsAttrName() {
       return "portAnnotations";
+    }
+
+    /// Get the attribute name for port symbols.
+    static StringRef getPortSymbolsAttrName() {
+      return "portSyms";
     }
   }];
 

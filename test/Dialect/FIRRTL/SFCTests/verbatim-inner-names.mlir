@@ -2,13 +2,13 @@
 
 firrtl.circuit "Foo" {
   firrtl.extmodule @Bar(
-    in extClockIn: !firrtl.clock,
-    out extClockOut: !firrtl.clock
+    in extClockIn: !firrtl.clock sym @symExtClockIn,
+    out extClockOut: !firrtl.clock sym @symExtClockOut
   )
   firrtl.module @Foo(
-    in %value: !firrtl.uint<42>,
-    in %clock: !firrtl.clock,
-    in %reset: !firrtl.uint<1>
+    in %value: !firrtl.uint<42> sym @symValue,
+    in %clock: !firrtl.clock sym @symClock,
+    in %reset: !firrtl.uint<1> sym @symReset
   ) {
     %instName_clockIn, %instName_clockOut = firrtl.instance instName sym @instSym @Bar(in extClockIn: !firrtl.clock, out extClockOut: !firrtl.clock)
     %nodeName = firrtl.node sym @nodeSym %value : !firrtl.uint<42>
@@ -24,6 +24,16 @@ firrtl.circuit "Foo" {
 
 // CHECK: ----- 8< -----
 sv.verbatim "----- 8< -----"
+sv.verbatim "VERB symExtClockIn = `{{0}}`" {symbols = [#hw.innerNameRef<@Bar::@symExtClockIn>]}
+sv.verbatim "VERB symExtClockOut = `{{0}}`" {symbols = [#hw.innerNameRef<@Bar::@symExtClockOut>]}
+// CHECK-NEXT: VERB symExtClockIn = `extClockIn`
+// CHECK-NEXT: VERB symExtClockOut = `extClockOut`
+sv.verbatim "VERB symValue = `{{0}}`" {symbols = [#hw.innerNameRef<@Foo::@symValue>]}
+sv.verbatim "VERB symClock = `{{0}}`" {symbols = [#hw.innerNameRef<@Foo::@symClock>]}
+sv.verbatim "VERB symReset = `{{0}}`" {symbols = [#hw.innerNameRef<@Foo::@symReset>]}
+// CHECK-NEXT: VERB symValue = `value`
+// CHECK-NEXT: VERB symClock = `clock`
+// CHECK-NEXT: VERB symReset = `reset`
 sv.verbatim "VERB instSym = `{{0}}`" {symbols = [#hw.innerNameRef<@Foo::@instSym>]}
 sv.verbatim "VERB nodeSym = `{{0}}`" {symbols = [#hw.innerNameRef<@Foo::@nodeSym>]}
 sv.verbatim "VERB wireSym = `{{0}}`" {symbols = [#hw.innerNameRef<@Foo::@wireSym>]}
