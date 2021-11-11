@@ -34,12 +34,9 @@ using mlir::TypeStorageAllocator;
 //===----------------------------------------------------------------------===//
 // Type Printing
 //===----------------------------------------------------------------------===//
-
-static void printType(Type type, DialectAsmPrinter &os);
-
 /// Print a type with a custom printer implementation.
 ///
-/// This only prints a subset of all types in the dialect. Use `printType`
+/// This only prints a subset of all types in the dialect. Use `printNestedType`
 /// instead, which will call this function in turn, as appropriate.
 static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &os) {
   auto printWidthQualifier = [&](Optional<int32_t> width) {
@@ -71,13 +68,13 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &os) {
                                 if (element.isFlip)
                                   os << " flip";
                                 os << ": ";
-                                printType(element.type, os);
+                                printNestedType(element.type, os);
                               });
         os << '>';
       })
       .Case<FVectorType>([&](auto vectorType) {
         os << "vector<";
-        printType(vectorType.getElementType(), os);
+        printNestedType(vectorType.getElementType(), os);
         os << ", " << vectorType.getNumElements() << '>';
       })
       .Default([&](auto) { anyFailed = true; });
@@ -85,11 +82,7 @@ static LogicalResult customTypePrinter(Type type, DialectAsmPrinter &os) {
 }
 
 /// Print a type defined by this dialect.
-static void printType(Type type, DialectAsmPrinter &os) {
-  // Try the generated type printer.
-  if (succeeded(generatedTypePrinter(type, os)))
-    return;
-
+void circt::firrtl::printNestedType(Type type, DialectAsmPrinter &os) {
   // Try the custom type printer.
   if (succeeded(customTypePrinter(type, os)))
     return;
@@ -101,9 +94,6 @@ static void printType(Type type, DialectAsmPrinter &os) {
 //===----------------------------------------------------------------------===//
 // Type Parsing
 //===----------------------------------------------------------------------===//
-
-static ParseResult parseFIRRTLType(FIRRTLType &result,
-                                   DialectAsmParser &parser);
 
 /// Parse a type with a custom parser implementation.
 ///
@@ -183,7 +173,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
       }
 
       bool isFlip = succeeded(parser.parseOptionalKeyword("flip"));
-      if (parser.parseColon() || parseFIRRTLType(type, parser))
+      if (parser.parseColon() || parseNestedType(type, parser))
         return failure();
 
       elements.push_back({StringAttr::get(context, name), isFlip, type});
@@ -201,7 +191,7 @@ static OptionalParseResult customTypeParser(DialectAsmParser &parser,
     FIRRTLType elementType;
     unsigned width = 0;
 
-    if (parser.parseLess() || parseFIRRTLType(elementType, parser) ||
+    if (parser.parseLess() || parseNestedType(elementType, parser) ||
         parser.parseComma() || parser.parseInteger(width) ||
         parser.parseGreater())
       return failure();
@@ -258,8 +248,8 @@ static ParseResult parseFIRRTLType(FIRRTLType &result, StringRef name,
 ///
 /// Note that only a subset of types defined in the FIRRTL dialect inherit from
 /// `FIRRTLType`. Use `parseType` to parse *any* of the defined types.
-static ParseResult parseFIRRTLType(FIRRTLType &result,
-                                   DialectAsmParser &parser) {
+ParseResult circt::firrtl::parseNestedType(FIRRTLType &result,
+                                           DialectAsmParser &parser) {
   StringRef name;
   if (parser.parseKeyword(&name))
     return failure();
@@ -272,7 +262,7 @@ static ParseResult parseFIRRTLType(FIRRTLType &result,
 
 /// Print a type registered to this dialect.
 void FIRRTLDialect::printType(Type type, DialectAsmPrinter &os) const {
-  ::printType(type, os);
+  printNestedType(type, os);
 }
 
 /// Parse a type registered to this dialect.
@@ -968,14 +958,14 @@ std::pair<unsigned, bool> FVectorType::rootChildFieldID(unsigned fieldID,
 void CMemoryType::print(mlir::DialectAsmPrinter &printer) const {
   printer << "cmemory<";
   // Don't print element types with "!firrtl.".
-  printType(getElementType(), printer);
+  printNestedType(getElementType(), printer);
   printer << ", " << getNumElements() << ">";
 }
 
 Type CMemoryType::parse(DialectAsmParser &parser) {
   FIRRTLType elementType;
   unsigned numElements;
-  if (parser.parseLess() || parseFIRRTLType(elementType, parser) ||
+  if (parser.parseLess() || parseNestedType(elementType, parser) ||
       parser.parseComma() || parser.parseInteger(numElements) ||
       parser.parseGreater())
     return {};
