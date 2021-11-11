@@ -55,6 +55,10 @@ void AffineToStaticLogic::runOnFunction() {
   }
 }
 
+/// Populate the schedling problem operator types for the dialect we are
+/// targetting. Right now, we assume Calyx, which has a standard library with
+/// well-defined operator latencies. Ultimately, we should move this to a
+/// dialect interface in the Scheduling dialect.
 void AffineToStaticLogic::populateOperatorTypes(
     SmallVectorImpl<AffineForOp> &loopNest) {
   // Scheduling analyis only considers the innermost loop nest for now.
@@ -104,6 +108,7 @@ void AffineToStaticLogic::populateOperatorTypes(
   }
 }
 
+/// Solve the pre-computed scheduling problem.
 void AffineToStaticLogic::solveSchedulingProblem(
     SmallVectorImpl<AffineForOp> &loopNest) {
   // Scheduling analyis only considers the innermost loop nest for now.
