@@ -375,6 +375,7 @@ struct ConnectInvalidator : public Reduction {
     return success();
   }
   std::string getName() const override { return "connect-invalidator"; }
+  bool acceptSizeIncrease() const override { return true; }
 };
 
 /// A sample reduction pattern that removes operations which either produce no
