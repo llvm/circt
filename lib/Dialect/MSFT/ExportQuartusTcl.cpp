@@ -46,21 +46,35 @@ struct TclOutputState {
 };
 } // anonymous namespace
 
+void emitInnerRefPart(TclOutputState &s, Operation *op) {
+  // Extract the name from an InstanceOp or other op with a "name".
+  StringAttr nameAttr;
+  if (auto instOp = dyn_cast<msft::InstanceOp>(op))
+    nameAttr = instOp.instanceNameAttr();
+  else if (auto name = op->getAttrOfType<StringAttr>("name"))
+    nameAttr = name;
+  assert(nameAttr && "placed ops must have a name");
+
+  // We append new symbolRefs to the state, so s.symbolRefs.size() is the
+  // index of the InnerRefAttr we are about to add.
+  s.os << "{{" << s.symbolRefs.size() << "}}" << '|';
+
+  // At this point, everything is contained within MSFTModuleOps.
+  auto mod = op->getParentOfType<MSFTModuleOp>();
+  assert(mod && "named op must be contained in MSFTModuleOp");
+  StringAttr modName = mod.getNameAttr();
+
+  // Append a new inner reference for the template above.
+  s.symbolRefs.push_back(InnerRefAttr::get(modName, nameAttr));
+}
+
 void emitPath(TclOutputState &s, RootedInstancePathAttr path,
               SymbolCache &symCache) {
   for (auto part : path.getPath()) {
     auto inst = cast<msft::InstanceOp>(symCache.getDefinition(part));
     assert(inst && "path instance must be in symbol cache");
 
-    // We append new symbolRefs to the state, so s.symbolRefs.size() is the
-    // index of the InnerRefAttr we are about to add.
-    s.os << "{{" << s.symbolRefs.size() << "}}" << '|';
-
-    StringAttr instName = inst.sym_nameAttr();
-    assert(instName && "path instance must have a symbol name");
-
-    StringAttr modName = inst->getParentOfType<MSFTModuleOp>().getNameAttr();
-    s.symbolRefs.push_back(InnerRefAttr::get(modName, instName));
+    emitInnerRefPart(s, inst);
   }
 }
 
@@ -95,10 +109,8 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
   emitPath(s, inst.path, symCache);
   // If instance name is specified, add it in between the parent entity path and
   // the child entity path.
-  if (auto instOp = dyn_cast<msft::InstanceOp>(inst.op))
-    s.os << instOp.instanceName() << '|';
-  else if (auto name = inst.op->getAttrOfType<StringAttr>("name"))
-    s.os << name.getValue() << '|';
+  emitInnerRefPart(s, inst.op);
+
   s.os << inst.subpath << '\n';
 }
 
