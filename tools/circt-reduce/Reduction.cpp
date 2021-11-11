@@ -103,11 +103,11 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
     for (auto &element : llvm::enumerate(bundleType.getElements())) {
       auto subfield =
-          builder.create<firrtl::SubfieldOp>(value, element.index());
+          builder.createOrFold<firrtl::SubfieldOp>(value, element.index());
       invalidateOutputs(builder, subfield, invalidCache,
                         flip ^ element.value().isFlip);
       if (subfield.use_empty())
-        subfield->erase();
+        subfield.getDefiningOp()->erase();
     }
     return;
   }
@@ -115,10 +115,10 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
   // Descend into vectors by creating subindex ops.
   if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
     for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i) {
-      auto subindex = builder.create<firrtl::SubfieldOp>(value, i);
+      auto subindex = builder.createOrFold<firrtl::SubfieldOp>(value, i);
       invalidateOutputs(builder, subindex, invalidCache, flip);
       if (subindex.use_empty())
-        subindex->erase();
+        subindex.getDefiningOp()->erase();
     }
     return;
   }
@@ -141,17 +141,19 @@ static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
     return;
   if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
     for (auto &element : llvm::enumerate(bundleType.getElements()))
-      reduceXor(builder, into,
-                builder.create<firrtl::SubfieldOp>(value, element.index()));
+      reduceXor(
+          builder, into,
+          builder.createOrFold<firrtl::SubfieldOp>(value, element.index()));
     return;
   }
   if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
     for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i)
-      reduceXor(builder, into, builder.create<firrtl::SubfieldOp>(value, i));
+      reduceXor(builder, into,
+                builder.createOrFold<firrtl::SubfieldOp>(value, i));
     return;
   }
   if (type.isa<firrtl::UIntType, firrtl::SIntType>())
-    into = into ? builder.create<firrtl::XorPrimOp>(into, value) : value;
+    into = into ? builder.createOrFold<firrtl::XorPrimOp>(into, value) : value;
 }
 
 /// A sample reduction pattern that maps `firrtl.instance` to a set of
@@ -214,14 +216,14 @@ struct MemoryStubber : public Reduction {
       Value input, output;
       switch (memOp.getPortKind(i)) {
       case firrtl::MemOp::PortKind::Read:
-        output = builder.create<firrtl::SubfieldOp>(wire, 3);
+        output = builder.createOrFold<firrtl::SubfieldOp>(wire, 3);
         break;
       case firrtl::MemOp::PortKind::Write:
-        input = builder.create<firrtl::SubfieldOp>(wire, 3);
+        input = builder.createOrFold<firrtl::SubfieldOp>(wire, 3);
         break;
       case firrtl::MemOp::PortKind::ReadWrite:
-        input = builder.create<firrtl::SubfieldOp>(wire, 5);
-        output = builder.create<firrtl::SubfieldOp>(wire, 3);
+        input = builder.createOrFold<firrtl::SubfieldOp>(wire, 5);
+        output = builder.createOrFold<firrtl::SubfieldOp>(wire, 3);
         break;
       }
 
@@ -231,7 +233,7 @@ struct MemoryStubber : public Reduction {
       for (unsigned i = 0; i != numFields; ++i) {
         if (i != 2 && i != 3 && i != 5)
           reduceXor(builder, xorInputs,
-                    builder.create<firrtl::SubfieldOp>(wire, i));
+                    builder.createOrFold<firrtl::SubfieldOp>(wire, i));
       }
       if (input)
         reduceXor(builder, xorInputs, input);
