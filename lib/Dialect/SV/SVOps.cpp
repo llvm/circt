@@ -1136,7 +1136,7 @@ static LogicalResult verifyIndexedPartSelectOp(Operation *op) {
   return TypeSwitch<Operation *, LogicalResult>(op)
       .Case<IndexedPartSelectOp, IndexedPartSelectInOutOp>(
           [&](auto p) -> LogicalResult {
-            unsigned inputWidth, resultWidth;
+            unsigned inputWidth = 0, resultWidth = 0;
             auto width = p.width();
             if (isa<IndexedPartSelectInOutOp>(p)) {
               if (auto i = p.input()
@@ -1154,8 +1154,11 @@ static LogicalResult verifyIndexedPartSelectOp(Operation *op) {
                 resultWidth = resType.getWidth();
               else
                 return op->emitError("result element type must be Integer");
-            } else
+            } else {
               resultWidth = p.getType().template cast<IntegerType>().getWidth();
+              inputWidth =
+                  p.input().getType().template cast<IntegerType>().getWidth();
+            }
             if (width > inputWidth)
               return op->emitError(
                   "slice width should not be greater than input width");
