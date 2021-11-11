@@ -893,12 +893,12 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
   rewriter.create<calyx::AssignOp>(
       loc, multPipe.go(), getComponentState().getConstant(rewriter, loc, 1, 1));
   // The group is done when the register write is complete.
-  rewriter.create<calyx::GroupDoneOp>(loc, reg.donePort());
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
 
   // Register the values for the pipeline.
-  getComponentState().registerEvaluatingGroup(multPipe.outPort(), group);
-  getComponentState().registerEvaluatingGroup(multPipe.lhsPort(), group);
-  getComponentState().registerEvaluatingGroup(multPipe.rhsPort(), group);
+  getComponentState().registerEvaluatingGroup(multPipe.out(), group);
+  getComponentState().registerEvaluatingGroup(multPipe.left(), group);
+  getComponentState().registerEvaluatingGroup(multPipe.right(), group);
 
   return success();
 }
