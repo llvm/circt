@@ -64,6 +64,10 @@ def PhysLocation : MSFT_Attr<"PhysLocation"> {
 
 def PhysicalBounds : MSFT_Attr<"PhysicalBounds"> {
   let summary = "Describes a rectangle bounding a physical region on a device";
+  let description = [{
+    Describes a rectangular bound within a device. The lower and upper bounds
+    must be specified for both the X and Y axis. The bounds are inclusive.
+  }];
   let mnemonic = "physical_bounds";
   let parameters = (ins
     "uint64_t":$xMin,
