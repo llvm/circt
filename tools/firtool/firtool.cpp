@@ -372,8 +372,11 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   if (inliner)
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInlinerPass());
 
-  if (imconstprop && !disableOptimization)
+  bool nonConstAsyncResetValueIsError = false;
+  if (imconstprop && !disableOptimization) {
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
+    nonConstAsyncResetValueIsError = true;
+  }
 
   // Read black box source files into the IR.
   StringRef blackBoxRoot = blackBoxRootPath.empty()
@@ -410,7 +413,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   // Lower if we are going to verilog or if lowering was specifically requested.
   if (lowerToHW || outputFormat == OutputVerilog ||
       outputFormat == OutputSplitVerilog || outputFormat == OutputVerilogIR) {
-    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue()));
+    pm.addPass(createLowerFIRRTLToHWPass(enableAnnotationWarning.getValue(),
+                                         nonConstAsyncResetValueIsError));
     pm.addPass(sv::createHWMemSimImplPass(replSeqMem));
 
     if (extractTestCode)

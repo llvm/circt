@@ -94,7 +94,10 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
   let options = [
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
-    "Emit warnings on unprocessed annotations during lower-to-hw pass">
+    "Emit warnings on unprocessed annotations during lower-to-hw pass">,
+    Option<"nonConstAsyncResetValueIsError",
+           "error-on-non-const-async-reset-values", "bool", "false",
+    "Emit errors instead of warnings on non-constant async reset values">
   ];
 }
 
