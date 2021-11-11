@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/MSFT/DeviceDB.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
@@ -57,7 +58,7 @@ void emitInnerRefPart(TclOutputState &s, Operation *op) {
 
   // We append new symbolRefs to the state, so s.symbolRefs.size() is the
   // index of the InnerRefAttr we are about to add.
-  s.os << "{{" << s.symbolRefs.size() << "}}" << '|';
+  s.os << "{{" << s.symbolRefs.size() << "}}";
 
   // At this point, everything is contained within MSFTModuleOps.
   auto mod = op->getParentOfType<MSFTModuleOp>();
@@ -77,13 +78,20 @@ void emitPath(TclOutputState &s, PlacementDB::PlacedInstance inst,
     assert(inst && "path instance must be in symbol cache");
 
     emitInnerRefPart(s, inst);
+    s.os << '|';
   }
 
   // If instance name is specified, add it in between the parent entity path and
   // the child entity path.
   emitInnerRefPart(s, inst.op);
 
-  s.os << inst.subpath << '\n';
+  // Some placements don't require subpaths.
+  if (!inst.subpath.empty()) {
+    s.os << '|';
+    s.os << inst.subpath;
+  }
+
+  s.os << '\n';
 }
 
 /// Emit tcl in the form of:
@@ -113,6 +121,52 @@ static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
        << pla.getNum();
 
   // To which entity does this apply?
+  s.os << " -to $parent|";
+  emitPath(s, inst, symCache);
+}
+
+/// Emit tcl in the form of:
+/// set_instance_assignment -name PLACE_REGION "X1 Y1 X20 Y20" -to $parent|a|b|c
+/// set_instance_assignment -name RESERVE_PLACE_REGION OFF -to $parent|a|b|c
+/// set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to $parent|a|b|c
+/// set_instance_assignment -name REGION_NAME test_region -to $parent|a|b|c
+static void emit(TclOutputState &s, PlacementDB::PlacedInstance inst,
+                 PhysicalRegionRefAttr regionRef, SymbolCache &symCache) {
+  auto topModule = inst.op->getParentOfType<mlir::ModuleOp>();
+  auto physicalRegion =
+      topModule.lookupSymbol<PhysicalRegionOp>(regionRef.getPhysicalRegion());
+  assert(physicalRegion && "must reference an existant physical region");
+
+  // PLACE_REGION directive.
+  s.indent() << "set_instance_assignment -name PLACE_REGION \"";
+  auto physicalBounds =
+      physicalRegion.bounds().getAsRange<PhysicalBoundsAttr>();
+  llvm::interleave(
+      physicalBounds, s.os,
+      [&s](PhysicalBoundsAttr bounds) {
+        s.os << 'X' << bounds.getXMin() << ' ';
+        s.os << 'Y' << bounds.getYMin() << ' ';
+        s.os << 'X' << bounds.getXMax() << ' ';
+        s.os << 'Y' << bounds.getYMax();
+      },
+      ";");
+  s.os << '"';
+  s.os << " -to $parent|";
+  emitPath(s, inst, symCache);
+
+  // RESERVE_PLACE_REGION directive.
+  s.indent() << "set_instance_assignment -name RESERVE_PLACE_REGION OFF";
+  s.os << " -to $parent|";
+  emitPath(s, inst, symCache);
+
+  // CORE_ONLY_PLACE_REGION directive.
+  s.indent() << "set_instance_assignment -name CORE_ONLY_PLACE_REGION ON";
+  s.os << " -to $parent|";
+  emitPath(s, inst, symCache);
+
+  // REGION_NAME directive.
+  s.indent() << "set_instance_assignment -name REGION_NAME ";
+  s.os << physicalRegion.getName();
   s.os << " -to $parent|";
   emitPath(s, inst, symCache);
 }
@@ -154,6 +208,12 @@ LogicalResult circt::msft::exportQuartusTcl(MSFTModuleOp hwMod,
                                         PlacementDB::PlacedInstance inst) {
     emit(state, inst, loc, symCache);
   });
+
+  db.walkRegionPlacements(
+      [&state, &symCache](PhysicalRegionRefAttr regionRef,
+                          PlacementDB::PlacedInstance inst) {
+        emit(state, inst, regionRef, symCache);
+      });
 
   os << "}\n\n";
 
