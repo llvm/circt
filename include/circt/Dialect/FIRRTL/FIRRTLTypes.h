@@ -398,6 +398,12 @@ public:
 // unknown bit width.
 llvm::Optional<int32_t> getBitWidth(FIRRTLType type);
 
+// Parse a FIRRTL type without a leading `!firrtl.` dialect tag.
+ParseResult parseNestedType(FIRRTLType &result, AsmParser &parser);
+
+// Print a FIRRTL type without a leading `!firrtl.` dialect tag.
+void printNestedType(Type type, AsmPrinter &os);
+
 } // namespace firrtl
 } // namespace circt
 
