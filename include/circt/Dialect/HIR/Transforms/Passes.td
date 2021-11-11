@@ -6,8 +6,7 @@ def SimplifyCtrl : Pass<"hir-simplify-ctrl", "hir::FuncOp"> {
   let summary = "Simplifies ForOp and IfOp.";
 
   let constructor = "circt::hir::createSimplifyCtrlPass()";
-  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
-  "circt::sv::SVDialect"];
+  let dependentDialects = ["circt::comb::CombDialect"];
 }
 
 def RegisterAllocation : Pass<"hir-register-alloc", "hir::FuncOp"> {

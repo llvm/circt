@@ -13,9 +13,9 @@ void circt::hir::registerHIRLoweringPassPipeline() {
         pm.addPass(mlir::createCanonicalizerPass());
         pm.addPass(circt::hir::createLoopUnrollPass());
         pm.addPass(mlir::createCanonicalizerPass());
+        pm.addPass(hir::createSimplifyCtrlPass());
         pm.addPass(mlir::createSCCPPass());
         pm.addPass(circt::hir::createMemrefLoweringPass());
-        pm.addPass(hir::createSimplifyCtrlPass());
         pm.addPass(mlir::createSCCPPass());
         pm.addPass(mlir::createCSEPass());
         pm.addPass(mlir::createCanonicalizerPass());

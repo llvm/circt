@@ -46,7 +46,6 @@ private:
   LogicalResult visitOp(hir::BusSendOp);
   LogicalResult visitOp(hir::BusTensorGetElementOp);
   LogicalResult visitOp(hir::BusTensorInsertElementOp);
-  LogicalResult visitOp(hir::TimeGetClkOp);
   LogicalResult visitOp(hir::TimeOp);
   LogicalResult visitOp(hir::WhileOp);
   LogicalResult visitHWOp(Operation *);
@@ -57,6 +56,7 @@ private:
   llvm::DenseMap<StringRef, uint64_t> mapFuncNameToInstanceCount;
   SmallVector<Operation *> opsToErase;
   Value clk;
+  Value reset;
   hw::HWModuleOp hwModuleOp;
 };
 
@@ -159,6 +159,7 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
 
   hwInputs.push_back(mapHIRToHWValue.lookup(op.tstart()));
   hwInputs.push_back(this->clk);
+  hwInputs.push_back(this->reset);
 
   auto hwInputTypes = helper::getTypes(hwInputs);
 
@@ -221,18 +222,14 @@ LogicalResult HIRToHWPass::visitOp(hir::CastOp op) {
   return success();
 }
 
-LogicalResult HIRToHWPass::visitOp(hir::TimeGetClkOp op) {
-  mapHIRToHWValue.map(op.res(), this->clk);
-  return success();
-}
-
 LogicalResult HIRToHWPass::visitOp(hir::TimeOp op) {
   auto tIn = mapHIRToHWValue.lookup(op.timevar());
   if (!tIn.getType().isa<mlir::IntegerType>())
     return tIn.getDefiningOp()->emitError()
            << "Expected converted type to be i1.";
   auto name = helper::getOptionalName(op, 0);
-  Value res = getDelayedValue(builder, tIn, op.delay(), name, op.getLoc(), clk);
+  Value res =
+      getDelayedValue(builder, tIn, op.delay(), name, op.getLoc(), clk, reset);
   assert(res.getType().isa<mlir::IntegerType>());
   mapHIRToHWValue.map(op.res(), res);
   return success();
@@ -246,9 +243,7 @@ LogicalResult HIRToHWPass::visitOp(hir::WhileOp op) {
   auto conditionBegin = mapHIRToHWValue.lookup(op.condition());
   auto tstartBegin = mapHIRToHWValue.lookup(op.tstart());
 
-  // FIXME
-  if (!conditionBegin || !tstartBegin)
-    return success();
+  assert(conditionBegin && tstartBegin);
 
   auto conditionTrue = builder->create<hw::ConstantOp>(
       builder->getUnknownLoc(),
@@ -429,7 +424,7 @@ LogicalResult HIRToHWPass::visitOp(hir::FuncOp op) {
   this->builder->setInsertionPoint(op);
   auto portMap = getHWModulePortMap(*builder, op.getFuncType(),
                                     op.getInputNames(), op.getResultNames());
-  auto name = builder->getStringAttr("hw_" + op.getNameAttr().getValue().str());
+  auto name = builder->getStringAttr(op.getNameAttr().getValue().str());
 
   this->hwModuleOp = builder->create<hw::HWModuleOp>(op.getLoc(), name,
                                                      portMap.getPortInfoList());
@@ -438,7 +433,8 @@ LogicalResult HIRToHWPass::visitOp(hir::FuncOp op) {
   updateHIRToHWMapForFuncInputs(
       hwModuleOp, op.getFuncBody().front().getArguments(), portMap);
 
-  this->clk = hwModuleOp.getBodyBlock()->getArguments().back();
+  this->clk = getClkFromHWModule(hwModuleOp);
+  this->reset = getResetFromHWModule(hwModuleOp);
   auto visitResult = visitRegion(op.getFuncBody());
 
   opsToErase.push_back(op);
@@ -591,7 +587,7 @@ LogicalResult HIRToHWPass::visitOp(hir::DelayOp op) {
   assert(input);
   auto name = helper::getOptionalName(op, 0);
   mapHIRToHWValue.map(op.res(), getDelayedValue(builder, input, op.delay(),
-                                                name, op.getLoc(), clk));
+                                                name, op.getLoc(), clk, reset));
   return success();
 }
 
@@ -630,8 +626,6 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
   if (auto op = dyn_cast<hir::CallOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::DelayOp>(operation))
-    return visitOp(op);
-  if (auto op = dyn_cast<hir::TimeGetClkOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::TimeOp>(operation))
     return visitOp(op);

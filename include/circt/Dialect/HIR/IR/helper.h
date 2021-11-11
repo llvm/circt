@@ -69,5 +69,6 @@ mlir::Value insertMultiBusSelectLogic(mlir::OpBuilder &builder,
                                       mlir::Value selectBusT,
                                       mlir::Value trueBusT,
                                       mlir::Value falseBusT);
+mlir::Value emitRegisterAlloca(mlir::OpBuilder &builder, mlir::Type elementTy);
 } // namespace helper
 #endif

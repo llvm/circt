@@ -72,7 +72,9 @@ def NextIterOp : HIR_Op<"next_iter", [AttrSizedOperandSegments, ParentOneOf<["Fo
   let verifier =[{return verify$cppClass(*this);}];
 }
 
-def IsFirstIterOp :HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>,NoSideEffect]>{
+//isFirstIter has a side-effect otherwise cse will merge is_first_iter from
+//different loops in a loop nest.
+def IsFirstIterOp :HIR_Op<"is_first_iter",[ParentOneOf<["WhileOp","ForOp"]>]>{
   let summary = "Returns true if this is the first iteration.";
   let results = (outs I1:$res);
 
@@ -319,6 +321,7 @@ def WhileOp : HIR_Op<"while", [SingleBlock, RecursiveSideEffects]> {
   let builders = [OpBuilder<(ins "Value":$condition, "Value":$tstart, "IntegerAttr":$offset),[{
     build($_builder,$_state,hir::TimeType::get($_builder.getContext()), condition, tstart, offset);
   }]>];
+  let hasCanonicalizeMethod =true;
 }
 
 def AllocaOp :HIR_Op<"alloca",[]> {
@@ -601,22 +604,6 @@ def ProbeOp: HIR_Op<"probe",[]>{
 
   let assemblyFormat = [{ $input `name` $verilog_name attr-dict `:` type($input)}];
   let verifier =[{return verify$cppClass(*this);}];
-}
-
-def TimeGetClkOp: HIR_Op<"time.get_clk",[NoSideEffect]>{
-  let summary = "Get the hardware clock corresponding to the time var.";
-  let description = [{
-    This op extracts the clock associated with the time var. This is used to mix
-    hir with SV dialect ops such as always blocks.
-      Examples:
-      ```mlir %t 
-        = hir.time.get_clk %t : i1```
-  }];
-
-  let arguments = (ins HIR_TimeType: $timevar);
-  let results = (outs I1:$res);
-
-  let assemblyFormat = [{ $timevar custom<WithSSANames>(attr-dict) `:` type($res)}];
 }
 
 //Bus.

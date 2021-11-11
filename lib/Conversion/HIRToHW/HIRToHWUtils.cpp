@@ -30,6 +30,14 @@ void FuncToHWModulePortMap::addClk(OpBuilder &builder) {
                           .argNum = hwModuleInputArgNum++});
 }
 
+void FuncToHWModulePortMap::addReset(OpBuilder &builder) {
+  auto resetName = builder.getStringAttr("rst");
+  portInfoList.push_back({.name = resetName,
+                          .direction = hw::PortDirection::INPUT,
+                          .type = builder.getI1Type(),
+                          .argNum = hwModuleInputArgNum++});
+}
+
 void FuncToHWModulePortMap::addFuncResult(StringAttr name, Type type) {
   assert(name);
   assert(type);
@@ -99,6 +107,8 @@ FuncToHWModulePortMap getHWModulePortMap(OpBuilder &builder,
 
   // Add clk input arg.
   portMap.addClk(builder);
+  // Add reset input arg.
+  portMap.addReset(builder);
 
   // Add hir.func results.
   for (uint64_t i = 0; i < funcTy.getResultTypes().size(); i++) {
@@ -154,7 +164,8 @@ ArrayAttr getHWParams(Attribute paramsAttr, bool ignoreValues) {
 }
 
 Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
-                      Optional<StringRef> name, Location loc, Value clk) {
+                      Optional<StringRef> name, Location loc, Value clk,
+                      Value reset) {
   assert(input.getType().isa<mlir::IntegerType>() ||
          input.getType().isa<hw::ArrayType>());
 
@@ -171,14 +182,15 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
 
   auto regOutput =
       builder->create<sv::ReadInOutOp>(builder->getUnknownLoc(), reg);
+
   Value regInput;
   if (delay > 1) {
-    auto c1 =
-        helper::materializeIntegerConstant(*builder, 1, helper::clog2(delay));
+    auto c0 =
+        helper::materializeIntegerConstant(*builder, 0, helper::clog2(delay));
     auto sliceTy =
         hw::ArrayType::get(builder->getContext(), input.getType(), delay - 1);
     auto regSlice = builder->create<hw::ArraySliceOp>(builder->getUnknownLoc(),
-                                                      sliceTy, regOutput, c1);
+                                                      sliceTy, regOutput, c0);
     regInput = builder->create<hw::ArrayConcatOp>(
         builder->getUnknownLoc(),
         ArrayRef<Value>({regSlice, builder->create<hw::ArrayCreateOp>(
@@ -186,17 +198,34 @@ Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
   } else {
     regInput = input;
   }
-  builder->create<sv::AlwaysOp>(
+  auto bodyCtor = [builder, &reg, &regInput] {
+    builder->create<sv::PAssignOp>(builder->getUnknownLoc(), reg.result(),
+                                   regInput);
+  };
+  Value regResetValue;
+  auto zeroBit = builder->create<hw::ConstantOp>(
+      builder->getUnknownLoc(), IntegerAttr::get(input.getType(), 0));
+  if (delay > 1)
+    regResetValue = builder->create<hw::ArrayCreateOp>(
+        builder->getUnknownLoc(), SmallVector<Value>(delay, zeroBit));
+  else
+    regResetValue = zeroBit;
+
+  auto resetCtor = [builder, &reg, &regResetValue] {
+    builder->create<sv::PAssignOp>(builder->getUnknownLoc(), reg.result(),
+                                   regResetValue);
+  };
+
+  builder->create<sv::AlwaysFFOp>(
       builder->getUnknownLoc(), sv::EventControl::AtPosEdge, clk,
-      [builder, &reg, &regInput] {
-        builder->create<sv::PAssignOp>(builder->getUnknownLoc(), reg.result(),
-                                       regInput);
-      });
+      ResetType::SyncReset, sv::EventControl::AtPosEdge, reset, bodyCtor,
+      resetCtor);
+
   Value output;
   if (delay > 1) {
-    auto c0 =
-        helper::materializeIntegerConstant(*builder, 0, helper::clog2(delay));
-    output = builder->create<hw::ArrayGetOp>(loc, regOutput, c0).getResult();
+    auto cEnd = helper::materializeIntegerConstant(*builder, delay - 1,
+                                                   helper::clog2(delay));
+    output = builder->create<hw::ArrayGetOp>(loc, regOutput, cEnd).getResult();
   } else {
     output = regOutput;
   }
@@ -253,4 +282,14 @@ Value insertConstArrayGetLogic(OpBuilder &builder, Value arr, int idx) {
       uLoc, IntegerAttr::get(
                 builder.getIntegerType(helper::clog2(arrayTy.getSize())), idx));
   return builder.create<hw::ArrayGetOp>(uLoc, arr, cIdx);
+}
+
+Value getClkFromHWModule(hw::HWModuleOp op) {
+  auto idxClk = op.getBodyBlock()->getNumArguments() - 2;
+  return op.getBodyBlock()->getArguments()[idxClk];
+}
+
+Value getResetFromHWModule(hw::HWModuleOp op) {
+  auto idxReset = op.getBodyBlock()->getNumArguments() - 1;
+  return op.getBodyBlock()->getArguments()[idxReset];
 }

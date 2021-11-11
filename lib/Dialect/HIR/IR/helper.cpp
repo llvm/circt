@@ -411,4 +411,16 @@ Value insertMultiBusSelectLogic(OpBuilder &builder, Value selectBusT,
       .getResult(0);
 }
 
+Value emitRegisterAlloca(OpBuilder &builder, Type elementTy) {
+  auto rdAttr = builder.getDictionaryAttr(
+      builder.getNamedAttr("rd_latency", builder.getI64IntegerAttr(0)));
+  auto wrAttr = builder.getDictionaryAttr(
+      builder.getNamedAttr("wr_latency", builder.getI64IntegerAttr(1)));
+  auto ports = builder.getArrayAttr({rdAttr, wrAttr});
+  return builder.create<hir::AllocaOp>(
+      builder.getUnknownLoc(),
+      hir::MemrefType::get(builder.getContext(), 1, elementTy,
+                           hir::DimKind::BANK),
+      builder.getStringAttr("reg"), ports);
+}
 } // namespace helper

@@ -11,6 +11,7 @@ public:
   void addFuncInput(StringAttr name, hw::PortDirection direction, Type type);
   void addFuncResult(StringAttr name, Type type);
   void addClk(OpBuilder &);
+  void addReset(OpBuilder &);
   ArrayRef<hw::PortInfo> getPortInfoList();
   const hw::PortInfo getPortInfoForFuncInput(size_t inputArgNum);
 
@@ -36,7 +37,8 @@ Operation *getConstantX(OpBuilder *, Type);
 ArrayAttr getHWParams(Attribute, bool ignoreValues = false);
 
 Value getDelayedValue(OpBuilder *builder, Value input, int64_t delay,
-                      Optional<StringRef> name, Location loc, Value clk);
+                      Optional<StringRef> name, Location loc, Value clk,
+                      Value reset);
 
 Value convertToNamedValue(OpBuilder &builder, StringRef name, Value val);
 Value convertToOptionalNamedValue(OpBuilder &builder, Optional<StringRef> name,
@@ -45,3 +47,6 @@ SmallVector<Value> insertBusMapLogic(OpBuilder &builder, Block &bodyBlock,
                                      ArrayRef<Value> operands);
 
 Value insertConstArrayGetLogic(OpBuilder &builder, Value arr, int idx);
+
+Value getClkFromHWModule(hw::HWModuleOp op);
+Value getResetFromHWModule(hw::HWModuleOp op);

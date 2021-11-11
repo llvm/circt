@@ -38,6 +38,11 @@ LogicalResult LoadOp::canonicalize(LoadOp op,
   return splitOffsetIntoSeparateOp(op, rewriter);
 }
 
+LogicalResult WhileOp::canonicalize(WhileOp op,
+                                    ::mlir::PatternRewriter &rewriter) {
+  return splitOffsetIntoSeparateOp(op, rewriter);
+}
+
 LogicalResult StoreOp::canonicalize(StoreOp op,
                                     ::mlir::PatternRewriter &rewriter) {
   return splitOffsetIntoSeparateOp(op, rewriter);

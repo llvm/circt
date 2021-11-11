@@ -519,9 +519,8 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
   if (parser.parseOperand(conditionVar))
     return failure();
 
-  if (parser.parseKeyword("at") || parser.parseKeyword("iter_time") ||
-      parser.parseLParen() || parser.parseRegionArgument(iterTimeVar) ||
-      parser.parseEqual())
+  if (parser.parseKeyword("iter_time") || parser.parseLParen() ||
+      parser.parseRegionArgument(iterTimeVar) || parser.parseEqual())
     return failure();
 
   if (parseTimeAndOffset(parser, tstart, offset) || parser.parseRParen())
@@ -555,7 +554,7 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
 
 static void printWhileOp(OpAsmPrinter &printer, WhileOp op) {
   printer << " " << op.condition();
-  printer << " at iter_time(" << op.getIterTimeVar() << " = ";
+  printer << " iter_time(" << op.getIterTimeVar() << " = ";
   printTimeAndOffset(printer, op, op.tstart(), op.offsetAttr());
   printer << ")";
   printer.printRegion(op->getRegion(0),
