@@ -88,6 +88,170 @@ struct ModuleExternalizer : public Reduction {
   std::string getName() const override { return "module-externalizer"; }
 };
 
+/// Invalidate all the leaf fields of a value with a given flippedness by
+/// connecting an invalid value to them. This is useful for ensuring that all
+/// output ports of an instance or memory (including those nested in bundles)
+/// are properly invalidated.
+static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
+                              SmallDenseMap<Type, Value, 8> &invalidCache,
+                              bool flip = false) {
+  auto type = value.getType().dyn_cast<firrtl::FIRRTLType>();
+  if (!type)
+    return;
+
+  // Descend into bundles by creating subfield ops.
+  if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
+    for (auto &element : llvm::enumerate(bundleType.getElements())) {
+      auto subfield =
+          builder.create<firrtl::SubfieldOp>(value, element.index());
+      invalidateOutputs(builder, subfield, invalidCache,
+                        flip ^ element.value().isFlip);
+      if (subfield.use_empty())
+        subfield->erase();
+    }
+    return;
+  }
+
+  // Descend into vectors by creating subindex ops.
+  if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
+    for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i) {
+      auto subindex = builder.create<firrtl::SubfieldOp>(value, i);
+      invalidateOutputs(builder, subindex, invalidCache, flip);
+      if (subindex.use_empty())
+        subindex->erase();
+    }
+    return;
+  }
+
+  // Only drive outputs.
+  if (flip)
+    return;
+  Value invalid = invalidCache.lookup(type);
+  if (!invalid) {
+    invalid = builder.create<firrtl::InvalidValueOp>(type);
+    invalidCache.insert({type, invalid});
+  }
+  builder.create<firrtl::ConnectOp>(value, invalid);
+}
+
+/// Reduce all leaf fields of a value through an XOR tree.
+static void reduceXor(ImplicitLocOpBuilder &builder, Value &into, Value value) {
+  auto type = value.getType().dyn_cast<firrtl::FIRRTLType>();
+  if (!type)
+    return;
+  if (auto bundleType = type.dyn_cast<firrtl::BundleType>()) {
+    for (auto &element : llvm::enumerate(bundleType.getElements()))
+      reduceXor(builder, into,
+                builder.create<firrtl::SubfieldOp>(value, element.index()));
+    return;
+  }
+  if (auto vectorType = type.dyn_cast<firrtl::FVectorType>()) {
+    for (unsigned i = 0, e = vectorType.getNumElements(); i != e; ++i)
+      reduceXor(builder, into, builder.create<firrtl::SubfieldOp>(value, i));
+    return;
+  }
+  if (type.isa<firrtl::UIntType, firrtl::SIntType>())
+    into = into ? builder.create<firrtl::XorPrimOp>(into, value) : value;
+}
+
+/// A sample reduction pattern that maps `firrtl.instance` to a set of
+/// invalidated wires. This often shortcuts a long iterative process of connect
+/// invalidation, module externalization, and wire stripping
+struct InstanceStubber : public Reduction {
+  bool match(Operation *op) const override {
+    return isa<firrtl::InstanceOp>(op);
+  }
+  LogicalResult rewrite(Operation *op) const override {
+    auto instOp = cast<firrtl::InstanceOp>(op);
+    LLVM_DEBUG(llvm::dbgs() << "Stubbing instance `" << instOp.name() << "`\n");
+    ImplicitLocOpBuilder builder(instOp.getLoc(), instOp);
+    SmallDenseMap<Type, Value, 8> invalidCache;
+    for (unsigned i = 0, e = instOp.getNumResults(); i != e; ++i) {
+      auto result = instOp.getResult(i);
+      auto name = builder.getStringAttr(Twine(instOp.name()) + "_" +
+                                        instOp.getPortNameStr(i));
+      auto wire = builder.create<firrtl::WireOp>(
+          result.getType(), name, instOp.getPortAnnotation(i), StringAttr{});
+      invalidateOutputs(builder, wire, invalidCache,
+                        instOp.getPortDirection(i) == firrtl::Direction::In);
+      result.replaceAllUsesWith(wire);
+    }
+    auto moduleOp = instOp.getReferencedModule();
+    instOp->erase();
+    if (SymbolTable::symbolKnownUseEmpty(
+            moduleOp, moduleOp->getParentOfType<ModuleOp>())) {
+      LLVM_DEBUG(llvm::dbgs() << "- Removing now unused module `"
+                              << moduleOp.moduleName() << "`\n");
+      moduleOp->erase();
+    }
+    return success();
+  }
+  std::string getName() const override { return "instance-stubber"; }
+  bool acceptSizeIncrease() const override { return true; }
+};
+
+/// A sample reduction pattern that maps `firrtl.mem` to a set of invalidated
+/// wires.
+struct MemoryStubber : public Reduction {
+  bool match(Operation *op) const override { return isa<firrtl::MemOp>(op); }
+  LogicalResult rewrite(Operation *op) const override {
+    auto memOp = cast<firrtl::MemOp>(op);
+    LLVM_DEBUG(llvm::dbgs() << "Stubbing memory `" << memOp.name() << "`\n");
+    ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
+    SmallDenseMap<Type, Value, 8> invalidCache;
+    Value xorInputs;
+    SmallVector<Value> outputs;
+    for (unsigned i = 0, e = memOp.getNumResults(); i != e; ++i) {
+      auto result = memOp.getResult(i);
+      auto name = builder.getStringAttr(Twine(memOp.name()) + "_" +
+                                        memOp.getPortNameStr(i));
+      auto wire = builder.create<firrtl::WireOp>(
+          result.getType(), name, memOp.getPortAnnotation(i), StringAttr{});
+      invalidateOutputs(builder, wire, invalidCache, true);
+      result.replaceAllUsesWith(wire);
+
+      // Isolate the input and output data fields of the port.
+      Value input, output;
+      switch (memOp.getPortKind(i)) {
+      case firrtl::MemOp::PortKind::Read:
+        output = builder.create<firrtl::SubfieldOp>(wire, 3);
+        break;
+      case firrtl::MemOp::PortKind::Write:
+        input = builder.create<firrtl::SubfieldOp>(wire, 3);
+        break;
+      case firrtl::MemOp::PortKind::ReadWrite:
+        input = builder.create<firrtl::SubfieldOp>(wire, 5);
+        output = builder.create<firrtl::SubfieldOp>(wire, 3);
+        break;
+      }
+
+      // Reduce all input ports to a single one through an XOR tree.
+      unsigned numFields =
+          wire.getType().cast<firrtl::BundleType>().getNumElements();
+      for (unsigned i = 0; i != numFields; ++i) {
+        if (i != 2 && i != 3 && i != 5)
+          reduceXor(builder, xorInputs,
+                    builder.create<firrtl::SubfieldOp>(wire, i));
+      }
+      if (input)
+        reduceXor(builder, xorInputs, input);
+
+      // Track the output port to hook it up to the XORd input later.
+      if (output)
+        outputs.push_back(output);
+    }
+
+    // Hook up the outputs.
+    for (auto output : outputs)
+      builder.create<firrtl::ConnectOp>(output, xorInputs);
+
+    memOp->erase();
+    return success();
+  }
+  std::string getName() const override { return "memory-stubber"; }
+  bool acceptSizeIncrease() const override { return true; }
+};
+
 /// Starting at the given `op`, traverse through it and its operands and erase
 /// operations that have no more uses.
 static void pruneUnusedOps(Operation *initialOp) {
@@ -247,6 +411,8 @@ void circt::createAllReductions(
       context, firrtl::createLowerFIRRTLTypesPass(), true, true));
   add(std::make_unique<PassReduction>(context, firrtl::createExpandWhensPass(),
                                       true, true));
+  add(std::make_unique<InstanceStubber>());
+  add(std::make_unique<MemoryStubber>());
   add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<PassReduction>(context, createCSEPass()));
   add(std::make_unique<ConnectInvalidator>());
