@@ -1684,7 +1684,7 @@ LogicalResult WhileOp::canonicalize(WhileOp whileOp,
 //===----------------------------------------------------------------------===//
 
 SmallVector<StringRef> MultPipeLibOp::portNames() {
-  return {"left", "right", "write_en", "clk", "reset", "out", "done"};
+  return {"left", "right", "go", "clk", "reset", "out", "done"};
 }
 
 SmallVector<Direction> MultPipeLibOp::portDirections() {
@@ -1698,19 +1698,19 @@ void MultPipeLibOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
   MLIRContext *context = getContext();
   IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
-  NamedAttrList writeEn, clk, reset, done;
-  writeEn.append("go", isSet);
+  NamedAttrList go, clk, reset, done;
+  go.append("go", isSet);
   clk.append("clk", isSet);
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),               /* Lhs          */
-      DictionaryAttr(),               /* Rhs          */
-      writeEn.getDictionary(context), /* Write enable */
-      clk.getDictionary(context),     /* Clk          */
-      reset.getDictionary(context),   /* Reset        */
-      DictionaryAttr(),               /* Out          */
-      done.getDictionary(context)     /* Done         */
+      DictionaryAttr(),               /* Lhs    */
+      DictionaryAttr(),               /* Rhs    */
+      go.getDictionary(context),      /* Go     */
+      clk.getDictionary(context),     /* Clk    */
+      reset.getDictionary(context),   /* Reset  */
+      DictionaryAttr(),               /* Out    */
+      done.getDictionary(context)     /* Done   */
   };
 }
 
@@ -1719,8 +1719,8 @@ SmallVector<DictionaryAttr> MultPipeLibOp::portAttributes() {
 //===----------------------------------------------------------------------===//
 
 SmallVector<StringRef> DivPipeLibOp::portNames() {
-  return {"left",  "right",    "write_en",  "clk",
-          "reset", "out_quotient", "out_remainder", "done"};
+  return {"left",         "right",         "go",  "clk", "reset",
+          "out_quotient", "out_remainder", "done"};
 }
 
 SmallVector<Direction> DivPipeLibOp::portDirections() {
@@ -1734,20 +1734,20 @@ void DivPipeLibOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 SmallVector<DictionaryAttr> DivPipeLibOp::portAttributes() {
   MLIRContext *context = getContext();
   IntegerAttr isSet = IntegerAttr::get(IntegerType::get(context, 1), 1);
-  NamedAttrList writeEn, clk, reset, done;
-  writeEn.append("go", isSet);
+  NamedAttrList go, clk, reset, done;
+  go.append("go", isSet);
   clk.append("clk", isSet);
   reset.append("reset", isSet);
   done.append("done", isSet);
   return {
-      DictionaryAttr(),               /* Lhs          */
-      DictionaryAttr(),               /* Rhs          */
-      writeEn.getDictionary(context), /* Write enable */
-      clk.getDictionary(context),     /* Clk          */
-      reset.getDictionary(context),   /* Reset        */
-      DictionaryAttr(),               /* Quotient     */
-      DictionaryAttr(),               /* Remainder    */
-      done.getDictionary(context)     /* Done         */
+      DictionaryAttr(),             /* Lhs       */
+      DictionaryAttr(),             /* Rhs       */
+      go.getDictionary(context),    /* Go        */
+      clk.getDictionary(context),   /* Clk       */
+      reset.getDictionary(context), /* Reset     */
+      DictionaryAttr(),             /* Quotient  */
+      DictionaryAttr(),             /* Remainder */
+      done.getDictionary(context)   /* Done      */
   };
 }
 

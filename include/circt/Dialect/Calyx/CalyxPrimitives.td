@@ -215,15 +215,15 @@ def XorLibOp  : CombinationalArithBinaryLibraryOp<"xor"> {}
 def MultPipeLibOp : ArithBinaryLibraryOp<"mult_pipe", [
     SameTypeConstraint<"left", "out">
   ]> {
-  let results = (outs AnyType:$left, AnyType:$right, I1:$write_en, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
+  let results = (outs AnyType:$left, AnyType:$right, I1:$go, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
   let extraClassDeclaration = [{
-    Value lhsPort()     { return getResult(0); }
-    Value rhsPort()     { return getResult(1); }
-    Value writeEnPort() { return getResult(2); }
-    Value clkPort()     { return getResult(3); }
-    Value resetPort()   { return getResult(4); }
-    Value outPort()     { return getResult(5); }
-    Value donePort()    { return getResult(6); }
+    Value lhsPort()   { return getResult(0); }
+    Value rhsPort()   { return getResult(1); }
+    Value goPort()    { return getResult(2); }
+    Value clkPort()   { return getResult(3); }
+    Value resetPort() { return getResult(4); }
+    Value outPort()   { return getResult(5); }
+    Value donePort()  { return getResult(6); }
   }];
 }
 
@@ -232,13 +232,13 @@ def DivPipeLibOp : ArithBinaryLibraryOp<"div_pipe", [
     SameTypeConstraint<"right", "out_remainder">
   ]> {
   let results = (outs
-    AnyType:$left, AnyType:$right, I1:$write_en, I1:$clk, I1:$reset,
+    AnyType:$left, AnyType:$right, I1:$go, I1:$clk, I1:$reset,
     AnyType:$out_quotient, AnyType:$out_remainder, I1:$done
   );
   let extraClassDeclaration = [{
     Value lhsPort()       { return getResult(0); }
     Value rhsPort()       { return getResult(1); }
-    Value writeEnPort()   { return getResult(2); }
+    Value goPort()        { return getResult(2); }
     Value clkPort()       { return getResult(3); }
     Value resetPort()     { return getResult(4); }
     Value quotientPort()  { return getResult(5); }
