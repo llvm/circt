@@ -673,7 +673,7 @@ class BuildOpGroups : public FuncOpPartialLoweringPattern {
                              memref::StoreOp,
                              /// standard arithmetic
                              AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp,
-                             AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp,
+                             AndIOp, XOrIOp, OrIOp, ExtUIOp, TruncIOp, MulIOp,
                              IndexCastOp>(
                   [&](auto op) { return buildOp(rewriter, op).succeeded(); })
               .template Case<scf::WhileOp, mlir::FuncOp, scf::ConditionOp>(
@@ -702,6 +702,7 @@ private:
                         arith::ConstantOp constOp) const;
   LogicalResult buildOp(PatternRewriter &rewriter, AddIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, SubIOp op) const;
+  LogicalResult buildOp(PatternRewriter &rewriter, MulIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRUIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShRSIOp op) const;
   LogicalResult buildOp(PatternRewriter &rewriter, ShLIOp op) const;
@@ -853,8 +854,7 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
 
   // This is a sequential group, so register it as being scheduleable for the
   // block.
-  getComponentState().addBlockScheduleable(storeOp->getBlock(),
-                                           cast<calyx::GroupOp>(group));
+  getComponentState().addBlockScheduleable(storeOp->getBlock(), group);
   assignAddressPorts(rewriter, storeOp.getLoc(), group, memoryInterface,
                      storeOp.getIndices());
   rewriter.setInsertionPointToEnd(group.getBody());
@@ -864,6 +864,42 @@ LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
       storeOp.getLoc(), memoryInterface.writeEn(),
       getComponentState().getConstant(rewriter, storeOp.getLoc(), 1, 1));
   rewriter.create<calyx::GroupDoneOp>(storeOp.getLoc(), memoryInterface.done());
+  return success();
+}
+
+LogicalResult BuildOpGroups::buildOp(PatternRewriter &rewriter,
+                                     MulIOp mul) const {
+  Location loc = mul.getLoc();
+  Type width = mul.result().getType(), one = rewriter.getI1Type();
+  auto multPipe =
+      getComponentState().getNewLibraryOpInstance<calyx::MultPipeLibOp>(
+          rewriter, loc, {width, width, one, one, one, width, one});
+  // Pass the result from the MulIOp to the Calyx primitive.
+  mul.result().replaceAllUsesWith(multPipe.out());
+  auto reg = createReg(getComponentState(), rewriter, mul.getLoc(),
+                       getComponentState().getUniqueName("mult_reg"),
+                       width.getIntOrFloatBitWidth());
+  // Multiplication pipelines are not combinational, so a GroupOp is required.
+  auto group = createGroupForOp<calyx::GroupOp>(rewriter, mul);
+  getComponentState().addBlockScheduleable(mul->getBlock(), group);
+
+  rewriter.setInsertionPointToEnd(group.getBody());
+  rewriter.create<calyx::AssignOp>(loc, multPipe.left(), mul.lhs());
+  rewriter.create<calyx::AssignOp>(loc, multPipe.right(), mul.rhs());
+  // Write the output to this register.
+  rewriter.create<calyx::AssignOp>(loc, reg.in(), multPipe.out());
+  // The write enable port is high when the pipeline is done.
+  rewriter.create<calyx::AssignOp>(loc, reg.write_en(), multPipe.done());
+  rewriter.create<calyx::AssignOp>(
+      loc, multPipe.go(), getComponentState().getConstant(rewriter, loc, 1, 1));
+  // The group is done when the register write is complete.
+  rewriter.create<calyx::GroupDoneOp>(loc, reg.done());
+
+  // Register the values for the pipeline.
+  getComponentState().registerEvaluatingGroup(multPipe.out(), group);
+  getComponentState().registerEvaluatingGroup(multPipe.left(), group);
+  getComponentState().registerEvaluatingGroup(multPipe.right(), group);
+
   return success();
 }
 
@@ -1723,13 +1759,15 @@ private:
       /// - Component inputs
       /// - Register and memory reads
       /// - Constant ops (constant ops are not evaluated by any group)
+      /// - Multiplication pipelines are sequential.
       /// - 'While' return values (these are registers, however, 'while'
       ///   return values have at the current point of conversion not yet
       ///   been rewritten to their register outputs, see comment in
       ///   LateSSAReplacement)
       if (src.isa<BlockArgument>() ||
           isa<calyx::RegisterOp, calyx::MemoryOp, hw::ConstantOp,
-              arith::ConstantOp, scf::WhileOp>(src.getDefiningOp()))
+              arith::ConstantOp, calyx::MultPipeLibOp, scf::WhileOp>(
+              src.getDefiningOp()))
         continue;
 
       auto srcCombGroup = state.getEvaluatingGroup<calyx::CombGroupOp>(src);
@@ -1942,7 +1980,7 @@ public:
     target.addIllegalDialect<ArithmeticDialect>();
     target.addLegalOp<AddIOp, SubIOp, CmpIOp, ShLIOp, ShRUIOp, ShRSIOp, AndIOp,
                       XOrIOp, OrIOp, ExtUIOp, TruncIOp, CondBranchOp, BranchOp,
-                      ReturnOp, arith::ConstantOp, IndexCastOp>();
+                      MulIOp, ReturnOp, arith::ConstantOp, IndexCastOp>();
 
     RewritePatternSet legalizePatterns(&getContext());
     legalizePatterns.add<DummyPattern>(&getContext());
