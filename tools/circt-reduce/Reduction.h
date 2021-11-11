@@ -16,8 +16,9 @@
 #include <memory>
 #include <string>
 
+#include "llvm/ADT/StringRef.h"
+
 namespace llvm {
-class StringRef;
 template <typename T>
 class function_ref;
 } // namespace llvm

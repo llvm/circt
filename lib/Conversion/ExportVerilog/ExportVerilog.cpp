@@ -444,22 +444,6 @@ struct ModuleNameManager {
     return getName(ValueOrOp(op));
   }
 
-  StringRef getName(Operation *op, size_t port) {
-    // Module come in flavors and have ports, but don't have an opInterface in
-    // common to access the ports as blockvalues.  Thus we have to enumerate
-    // modules here.
-    BlockArgument blockArg;
-    if (auto mod = dyn_cast<HWModuleOp>(op))
-      blockArg = mod.getArgument(port);
-    if (auto mod = dyn_cast<HWModuleExternOp>(op))
-      blockArg = mod.getArgument(port);
-    if (auto mod = dyn_cast<HWModuleGeneratedOp>(op))
-      blockArg = mod.getArgument(port);
-    if (!blockArg)
-      llvm_unreachable("Unknown named thing with port");
-    return getName(blockArg);
-  }
-
   bool hasName(Value value) { return nameTable.count(ValueOrOp(value)); }
 
   bool hasName(Operation *op) {
@@ -624,13 +608,20 @@ void EmitterBase::emitTextWithSubstitutions(
   // into the value of operand 42.
   SmallVector<SmallString<12>, 8> symOps;
   auto namify = [&](Attribute sym, SymbolCache::Item item) {
-    // Get the verilog name of the operation, add the name if not already
-    // done.
+    // CAVEAT: These accesses can reach into other modules through inner name
+    // references, which are currently being processed. Do not add those remote
+    // operations to this module's `names`, which is reserved for things named
+    // *within* this module. Instead, you have to rely on those remote
+    // operations to have been named inside the global names table. If they
+    // haven't, take a look at name name legalization first.
     if (auto itemOp = item.getOp()) {
-      if (item.hasPort())
-        return names.getName(itemOp, item.getPort());
-      if (names.hasName(itemOp))
-        return names.getName(itemOp);
+      if (item.hasPort()) {
+        auto portInfos = getAllModulePortInfos(itemOp);
+        return state.globalNames.getPortVerilogName(itemOp,
+                                                    portInfos[item.getPort()]);
+      }
+      if (isa<WireOp, RegOp, LocalParamOp, InstanceOp>(itemOp))
+        return state.globalNames.getDeclarationVerilogName(itemOp);
       StringRef symOpName = getSymOpName(itemOp);
       if (!symOpName.empty())
         return symOpName;
@@ -1413,7 +1404,8 @@ void ExprEmitter::formatOutBuffer() {
     auto next = std::find(it, outBuffer.end(), ' ');
     unsigned tokenLength = std::distance(it, next);
 
-    if (currentIndex + tokenLength > state.options.emittedLineLength) {
+    if (!tmpOutBuffer.empty() &&
+        currentIndex + tokenLength > state.options.emittedLineLength) {
       // It breaks the line constraint, so insert a newline and indent.
       tmpOs << '\n';
       tmpOs.indent(state.currentIndent *
@@ -2048,11 +2040,15 @@ void NameCollector::collectNames(Block &block) {
     // Instances have a instance name to recognize but we don't need to look
     // at the result values and don't need to schedule them as valuesToEmit.
     if (auto instance = dyn_cast<InstanceOp>(op)) {
-      names.addName(&op, instance.instanceName());
+      names.addName(
+          &op,
+          moduleEmitter.state.globalNames.getDeclarationVerilogName(instance));
       continue;
     }
     if (auto interface = dyn_cast<InterfaceInstanceOp>(op)) {
-      names.addName(interface.getResult(), interface.name());
+      names.addName(
+          interface.getResult(),
+          moduleEmitter.state.globalNames.getDeclarationVerilogName(interface));
       continue;
     }
 
@@ -2103,7 +2099,9 @@ void NameCollector::collectNames(Block &block) {
 
     // Notice and renamify named declarations.
     if (isa<WireOp, RegOp, LocalParamOp>(op))
-      names.addName(op.getResult(0), op.getAttrOfType<StringAttr>("name"));
+      names.addName(
+          op.getResult(0),
+          moduleEmitter.state.globalNames.getDeclarationVerilogName(&op));
 
     // Notice and renamify the labels on verification statements.
     if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp, AssumeConcurrentOp,
@@ -2972,11 +2970,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   SmallPtrSet<Operation *, 8> ops;
   ops.insert(op);
 
-  StringRef opString = "always";
-  if (state.options.useAlwaysFF)
-    opString = "always_ff";
-
-  indent() << opString << " @(" << stringifyEventControl(op.clockEdge()) << " ";
+  indent() << "always_ff @(" << stringifyEventControl(op.clockEdge()) << " ";
   emitExpression(op.clock(), ops);
   if (op.resetStyle() == ResetType::AsyncReset) {
     os << " or " << stringifyEventControl(*op.resetEdge()) << " ";
@@ -2987,7 +2981,7 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
   // Build the comment string, leave out the signal expressions (since they
   // can be large).
   std::string comment;
-  comment += opString.str() + " @(";
+  comment += "always_ff @(";
   comment += stringifyEventControl(op.clockEdge());
   if (op.resetStyle() == ResetType::AsyncReset) {
     comment += " or ";
@@ -3542,6 +3536,8 @@ void ModuleEmitter::emitBind(BindOp op) {
   // Get the max port name length so we can align the '('.
   size_t maxNameLength = 0;
   for (auto &elt : childPortInfo) {
+    auto portName = state.globalNames.getPortVerilogName(childMod, elt);
+    elt.name = Builder(inst.getContext()).getStringAttr(portName);
     maxNameLength = std::max(maxNameLength, elt.getName().size());
   }
 
@@ -3986,22 +3982,28 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   /// These are non-hierarchical references which we need to be careful about
   /// during emission.
   auto collectInstanceSymbolsAndBinds = [&](HWModuleOp moduleOp) {
-    for (Operation &op : *moduleOp.getBodyBlock()) {
+    moduleOp.walk([&](Operation *op) {
       // Populate the symbolCache with all operations that can define a symbol.
-      if (auto name = op.getAttrOfType<StringAttr>(
+      if (auto name = op->getAttrOfType<StringAttr>(
               hw::InnerName::getInnerNameAttrName()))
-        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), &op);
+        symbolCache.addDefinition(moduleOp.getNameAttr(), name.getValue(), op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
-    }
+    });
   };
   /// Collect any port marked as being referenced via symbol.
   auto collectPorts = [&](auto moduleOp) {
-    for (size_t p = 0, e = moduleOp.getNumArguments(); p != e; ++p)
-      for (std::pair<Identifier, Attribute> argAttr : moduleOp.getArgAttrs(p))
+    auto numArgs = moduleOp.getNumArguments();
+    for (size_t p = 0; p != numArgs; ++p)
+      for (NamedAttribute argAttr : moduleOp.getArgAttrs(p))
         if (auto sym = argAttr.second.dyn_cast<FlatSymbolRefAttr>())
           symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
                                     moduleOp, p);
+    for (size_t p = 0, e = moduleOp.getNumResults(); p != e; ++p)
+      for (NamedAttribute resultAttr : moduleOp.getResultAttrs(p))
+        if (auto sym = resultAttr.second.dyn_cast<FlatSymbolRefAttr>())
+          symbolCache.addDefinition(moduleOp.getNameAttr(), sym.getValue(),
+                                    moduleOp, p + numArgs);
   };
 
   SmallString<32> outputPath;

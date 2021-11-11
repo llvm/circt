@@ -1,4 +1,4 @@
-// RUN: circt-opt %s -export-verilog -verify-diagnostics --lowering-options=alwaysFF | FileCheck %s --strict-whitespace
+// RUN: circt-opt %s -export-verilog -verify-diagnostics | FileCheck %s --strict-whitespace
 
 // CHECK-LABEL: module inputs_only(
 // CHECK-NEXT: input a, b);
@@ -408,6 +408,34 @@ hw.module @UnaryParensIssue755(%a: i8) -> (b: i1) {
   hw.output %1 : i1
 }
 
+
+// Inner name references to ports which are renamed to avoid collisions with
+// reserved Verilog keywords.
+hw.module.extern @VerbatimModuleExtern(%foo: i1 {hw.exportPort = @symA}) -> (bar: i1 {hw.exportPort = @symB})
+// CHECK-LABEL: module VerbatimModule(
+// CHECK-NEXT:    input  signed_0
+// CHECK-NEXT:    output unsigned_1
+hw.module @VerbatimModule(%signed: i1 {hw.exportPort = @symA}) -> (unsigned: i1 {hw.exportPort = @symB}) {
+  %parameter = sv.wire sym @symC : !hw.inout<i4>
+  %localparam = sv.reg sym @symD : !hw.inout<i4>
+  // CHECK: wire [3:0] parameter_2;
+  // CHECK: reg  [3:0] localparam_3;
+  hw.output %signed : i1
+}
+sv.verbatim "VERB: module symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symA>]}
+sv.verbatim "VERB: module symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symB>]}
+sv.verbatim "VERB: module symC `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symC>]}
+sv.verbatim "VERB: module symD `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModule::@symD>]}
+sv.verbatim "VERB: module.extern symA `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symA>]}
+sv.verbatim "VERB: module.extern symB `{{0}}`" {symbols = [#hw.innerNameRef<@VerbatimModuleExtern::@symB>]}
+// CHECK: VERB: module symA `signed_0`
+// CHECK: VERB: module symB `unsigned_1`
+// CHECK: VERB: module symC `parameter_2`
+// CHECK: VERB: module symD `localparam_3`
+// CHECK: VERB: module.extern symA `foo`
+// CHECK: VERB: module.extern symB `bar`
+
+
 sv.bind #hw.innerNameRef<@BindEmission::@__BindEmissionInstance__> {output_file = #hw.output_file<"BindTest/BindEmissionInstance.sv", excludeFromFileList>}
 // CHECK-LABL: module BindEmissionInstance()
 hw.module @BindEmissionInstance() {
@@ -420,6 +448,18 @@ hw.module @BindEmission() -> () {
   // CHECK-NEXT: */
   hw.instance "BindEmissionInstance" sym @__BindEmissionInstance__ @BindEmissionInstance() -> ()  {doNotPrint = true}
   hw.output
+}
+
+hw.module @bind_rename_port(%.io_req_ready.output: i1, %reset: i1, %clock: i1) {
+  // CHECK-LABEL: module bind_rename_port
+  // CHECK-NEXT: input _io_req_ready_output, reset, clock
+  hw.output
+}
+
+hw.module @SiFive_MulDiv(%clock: i1, %reset: i1) -> (io_req_ready: i1) {
+  %false = hw.constant false
+  hw.instance "InvisibleBind_assert" sym @__ETC_SiFive_MulDiv_assert @bind_rename_port(".io_req_ready.output": %false: i1, reset: %reset: i1, clock: %clock: i1) -> () {doNotPrint = true}
+  hw.output %false : i1
 }
 
 sv.bind.interface @__Interface__ {output_file = #hw.output_file<"BindTest/BindInterface.sv", excludeFromFileList>}
@@ -438,3 +478,9 @@ hw.module @BindInterface() -> () {
 
 // CHECK-LABEL: FILE "BindTest{{.}}BindInterface.sv"
 // CHECK: bind BindInterface Interface bar (.*);
+
+sv.bind #hw.innerNameRef<@SiFive_MulDiv::@__ETC_SiFive_MulDiv_assert>
+// CHECK-LABEL: bind SiFive_MulDiv bind_rename_port InvisibleBind_assert
+// CHECK-NEXT:  ._io_req_ready_output (InvisibleBind_assert_.io_req_ready.output)
+// CHECK-NEXT:  .reset                (reset),
+// CHECK-NEXT:  .clock                (clock)

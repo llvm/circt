@@ -10,10 +10,13 @@ def LowerToHW: Pass<"lower-msft-to-hw", "mlir::ModuleOp"> {
   let summary = "Lower MSFT ops to hw ops";
   let constructor = "circt::msft::createLowerToHWPass()";
   let dependentDialects = ["circt::sv::SVDialect", "circt::hw::HWDialect"];
-}
-
-def ExportQuartusTcl: Pass<"export-quartus-tcl", "mlir::ModuleOp"> {
-  let summary = "Export Quartus-flavored Tcl into sv.verbatim node(s)";
-  let constructor = "circt::msft::createExportQuartusTclPass()";
-  let dependentDialects = ["circt::msft::MSFTDialect", "circt::hw::HWDialect"];
+  let options = [
+    ListOption<"tops", "tops", "std::string",
+               "List of top modules to export Tcl for",
+	       "llvm::cl::ZeroOrMore, llvm::cl::MiscFlags::CommaSeparated">,
+    Option<"verilogFile", "verilog-file", "std::string",
+           "", "File to output Verilog into">,
+    Option<"tclFile", "tcl-file", "std::string",
+           "", "File to output Tcl into">
+  ];
 }

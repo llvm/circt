@@ -39,8 +39,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
     text = split.second;
     if (option == "") {
       // Empty options are fine.
-    } else if (option == "alwaysFF") {
-      useAlwaysFF = true;
     } else if (option == "noAlwaysComb") {
       noAlwaysComb = true;
     } else if (option == "exprInEventControl") {
@@ -76,8 +74,6 @@ void LoweringOptions::parse(StringRef text, ErrorHandlerT errorHandler) {
 std::string LoweringOptions::toString() const {
   std::string options = "";
   // All options should add a trailing comma to simplify the code.
-  if (useAlwaysFF)
-    options += "alwaysFF,";
   if (noAlwaysComb)
     options += "noAlwaysComb,";
   if (allowExprInEventControl)
@@ -145,7 +141,7 @@ struct LoweringCLOptions {
       llvm::cl::desc(
           "Style options.  Valid flags include: alwaysFF, "
           "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
-          "disallowLocalVariables, verifLabels, emittedLineLength=<n>,"
+          "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
           "maximumNumberOfTokensPerExpression=<n>"),
       llvm::cl::value_desc("option")};
 };

@@ -159,6 +159,24 @@ size_t firrtl::getNumPorts(Operation *op) {
   return op->getNumResults();
 }
 
+/// Check whether an operation has a `DontTouch` annotation, or a symbol that
+/// should prevent certain types of canonicalizations.
+bool firrtl::hasDontTouch(Operation *op) {
+  return op->getAttr(hw::InnerName::getInnerNameAttrName()) ||
+         AnnotationSet(op).hasDontTouch();
+}
+
+/// Check whether a block argument ("port") or the operation defining a value
+/// has a `DontTouch` annotation, or a symbol that should prevent certain types
+/// of canonicalizations.
+bool firrtl::hasDontTouch(Value value) {
+  if (auto *op = value.getDefiningOp())
+    return hasDontTouch(op);
+  auto arg = value.dyn_cast<BlockArgument>();
+  auto module = cast<FModuleOp>(arg.getOwner()->getParentOp());
+  return AnnotationSet::forPort(module, arg.getArgNumber()).hasDontTouch();
+}
+
 //===----------------------------------------------------------------------===//
 // CircuitOp
 //===----------------------------------------------------------------------===//

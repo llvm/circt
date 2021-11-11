@@ -15,6 +15,8 @@ variety of languages: the Cap'nProto website lists C++, C#, Erlang, Go,
 Haskell, JavaScript, Ocaml, Python, and Rust as languages which support
 messages and RPC!
 
+Status: **prototype**
+
 ## Usage
 
 To interface with RTL simulators, the [DPI

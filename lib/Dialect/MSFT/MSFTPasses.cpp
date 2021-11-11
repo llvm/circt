@@ -6,11 +6,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/MSFT/ExportTcl.h"
 #include "circt/Dialect/MSFT/MSFTDialect.h"
 #include "circt/Dialect/MSFT/MSFTOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -71,11 +74,16 @@ namespace {
 /// Lower MSFT's ModuleOp to HW's.
 struct ModuleOpLowering : public OpConversionPattern<MSFTModuleOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  ModuleOpLowering(MLIRContext *context, StringRef outputFile)
+      : OpConversionPattern::OpConversionPattern(context),
+        outputFile(outputFile) {}
 
   LogicalResult
   matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
+
+private:
+  StringRef outputFile;
 };
 } // anonymous namespace
 
@@ -97,6 +105,13 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
   rewriter.eraseBlock(hwmod.getBodyBlock());
   rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
                               hwmod.getBody().end());
+
+  if (!outputFile.empty()) {
+    auto outputFileAttr =
+        hw::OutputFileAttr::getFromFilename(rewriter.getContext(), outputFile);
+    hwmod->setAttr("output_file", outputFileAttr);
+  }
+
   return success();
 }
 namespace {
@@ -104,20 +119,32 @@ namespace {
 /// Lower MSFT's ModuleExternOp to HW's.
 struct ModuleExternOpLowering : public OpConversionPattern<MSFTModuleExternOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  ModuleExternOpLowering(MLIRContext *context, StringRef outputFile)
+      : OpConversionPattern::OpConversionPattern(context),
+        outputFile(outputFile) {}
 
   LogicalResult
   matchAndRewrite(MSFTModuleExternOp mod, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
+
+private:
+  StringRef outputFile;
 };
 } // anonymous namespace
 
 LogicalResult ModuleExternOpLowering::matchAndRewrite(
     MSFTModuleExternOp mod, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
-  rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
+  auto hwMod = rewriter.replaceOpWithNewOp<hw::HWModuleExternOp>(
       mod, mod.getNameAttr(), mod.getPorts(), mod.verilogName().getValueOr(""),
       mod.parameters());
+
+  if (!outputFile.empty()) {
+    auto outputFileAttr =
+        hw::OutputFileAttr::getFromFilename(rewriter.getContext(), outputFile);
+    hwMod->setAttr("output_file", outputFileAttr);
+  }
+
   return success();
 }
 
@@ -146,6 +173,18 @@ void LowerToHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
 
+  // Traverse MSFT location attributes and export the required Tcl into
+  // templated `sv::VerbatimOp`s with symbolic references to the instance paths.
+  hw::SymbolCache symCache;
+  populateSymbolCache(top, symCache);
+  for (auto moduleName : tops) {
+    auto hwmod = top.lookupSymbol<msft::MSFTModuleOp>(moduleName);
+    if (!hwmod)
+      continue;
+    if (failed(exportQuartusTcl(hwmod, symCache, tclFile)))
+      return signalPassFailure();
+  }
+
   // The `hw::InstanceOp` (which `msft::InstanceOp` lowers to) convenience
   // builder gets its argNames and resultNames from the `hw::HWModuleOp`. So we
   // have to lower `msft::MSFTModuleOp` before we lower `msft::InstanceOp`.
@@ -158,8 +197,8 @@ void LowerToHWPass::runOnOperation() {
   target.addLegalDialect<sv::SVDialect>();
 
   RewritePatternSet patterns(ctxt);
-  patterns.insert<ModuleOpLowering>(ctxt);
-  patterns.insert<ModuleExternOpLowering>(ctxt);
+  patterns.insert<ModuleOpLowering>(ctxt, verilogFile);
+  patterns.insert<ModuleExternOpLowering>(ctxt, verilogFile);
   patterns.insert<OutputOpLowering>(ctxt);
 
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
@@ -173,26 +212,10 @@ void LowerToHWPass::runOnOperation() {
     signalPassFailure();
 }
 
-namespace {
-struct ExportQuartusTclPass
-    : public ExportQuartusTclBase<ExportQuartusTclPass> {
-  void runOnOperation() override;
-};
-} // anonymous namespace
-
-void ExportQuartusTclPass::runOnOperation() {
-  for (auto hwmod : getOperation().getBody()->getOps<hw::HWModuleOp>())
-    if (failed(exportQuartusTcl(hwmod, llvm::outs())))
-      return signalPassFailure();
-}
-
 namespace circt {
 namespace msft {
 std::unique_ptr<Pass> createLowerToHWPass() {
   return std::make_unique<LowerToHWPass>();
-}
-std::unique_ptr<Pass> createExportQuartusTclPass() {
-  return std::make_unique<ExportQuartusTclPass>();
 }
 } // namespace msft
 } // namespace circt

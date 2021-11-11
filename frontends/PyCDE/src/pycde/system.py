@@ -19,6 +19,8 @@ import circt.dialects.msft
 import circt.support
 
 from contextvars import ContextVar
+import io
+import os
 import sys
 import typing
 
@@ -35,25 +37,35 @@ class System:
   output SystemVerilog."""
 
   __slots__ = [
-      "mod", "modules", "passed", "_module_symbols", "_symbol_modules",
-      "_old_system_token", "_symbols", "_generate_queue", "_primdb"
+      "mod", "modules", "name", "passed", "_module_symbols", "_symbol_modules",
+      "_old_system_token", "_symbols", "_generate_queue", "_primdb",
+      "_output_directory"
   ]
 
-  passes = [
-      "lower-msft-to-hw", "lower-seq-to-sv", "hw.module(prettify-verilog)",
-      "hw.module(hw-cleanup)"
-  ]
+  PASSES = """
+    lower-msft-to-hw{{tops={tops} verilog-file={verilog_file} tcl-file={tcl_file}}},
+    lower-seq-to-sv,hw.module(prettify-verilog),hw.module(hw-cleanup)
+  """
 
-  def __init__(self, modules, primdb: PrimitiveDB = None):
+  def __init__(self,
+               modules,
+               primdb: PrimitiveDB = None,
+               name: str = "PyCDESystem",
+               output_directory: str = None):
     self.passed = False
     self.mod = ir.Module.create()
     self.modules = list(modules)
+    self.name = name
     self._module_symbols: dict[_SpecializedModule, str] = {}
     self._symbol_modules: dict[str, _SpecializedModule] = {}
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
 
     self._primdb = primdb
+
+    if output_directory is None:
+      output_directory = os.path.join(os.getcwd(), self.name)
+    self._output_directory = output_directory
 
     with self:
       [m._pycde_mod.create() for m in modules]
@@ -140,6 +152,15 @@ class System:
   def body(self):
     return self.mod.body
 
+  @property
+  def passes(self):
+    tops = ",".join(self.symbols.keys())
+    verilog_file = self.name + ".sv"
+    tcl_file = self.name + ".tcl"
+    return self.PASSES.format(tops=tops,
+                              verilog_file=verilog_file,
+                              tcl_file=tcl_file).strip()
+
   def print(self, *argv, **kwargs):
     self.mod.operation.print(*argv, **kwargs)
 
@@ -161,7 +182,6 @@ class System:
     return len(self._generate_queue)
 
   def get_instance(self, mod_cls: object) -> Instance:
-    assert self.passed
     return Instance(mod_cls, None, None, self, self._primdb)
 
   class DevNull:
@@ -175,19 +195,13 @@ class System:
     if len(self._generate_queue) > 0:
       print("WARNING: running lowering passes on partially generated design!",
             file=sys.stderr)
-    pm = mlir.passmanager.PassManager.parse(",".join(self.passes))
+    pm = mlir.passmanager.PassManager.parse(self.passes)
     # Invalidate the symbol cache
     self._symbols = None
     pm.run(self.mod)
     types.declare_types(self.mod)
-    circt.export_verilog(self.mod, System.DevNull())
     self.passed = True
 
-  def print_verilog(self, out_stream: typing.TextIO = sys.stdout):
+  def emit_outputs(self):
     self.run_passes()
-    circt.export_verilog(self.mod, out_stream)
-
-  def print_tcl(self, top_module: type, out_stream: typing.TextIO = sys.stdout):
-    self.run_passes()
-    spec_mod_symbol = self._module_symbols[top_module._pycde_mod]
-    circt.dialects.msft.export_tcl(self._symbols[spec_mod_symbol], out_stream)
+    circt.export_split_verilog(self.mod, self._output_directory)
