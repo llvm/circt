@@ -270,6 +270,35 @@ static void pruneUnusedOps(Operation *initialOp) {
   }
 }
 
+/// A sample reduction pattern that replaces operations with a constant zero of
+/// their type.
+struct Constantifier : public Reduction {
+  bool match(Operation *op) const override {
+    if (op->getNumResults() != 1)
+      return false;
+    if (isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp,
+            firrtl::InstanceOp, firrtl::SubfieldOp, firrtl::SubindexOp,
+            firrtl::SubaccessOp>(op))
+      return false;
+    auto type = op->getResult(0).getType().dyn_cast<firrtl::FIRRTLType>();
+    return type && type.isa<firrtl::UIntType, firrtl::SIntType>();
+  }
+  LogicalResult rewrite(Operation *op) const override {
+    assert(match(op));
+    OpBuilder builder(op);
+    auto type = op->getResult(0).getType().cast<firrtl::FIRRTLType>();
+    auto width = type.getBitWidthOrSentinel();
+    if (width == -1)
+      width = 64;
+    auto newOp = builder.create<firrtl::ConstantOp>(
+        op->getLoc(), type, APSInt(width, type.isa<firrtl::UIntType>()));
+    op->replaceAllUsesWith(newOp);
+    pruneUnusedOps(op);
+    return success();
+  }
+  std::string getName() const override { return "constantifier"; }
+};
+
 /// A sample reduction pattern that replaces the right-hand-side of
 /// `firrtl.connect` and `firrtl.partialconnect` operations with a
 /// `firrtl.invalidvalue`. This removes uses from the fanin cone to these
@@ -415,6 +444,7 @@ void circt::createAllReductions(
   add(std::make_unique<MemoryStubber>());
   add(std::make_unique<ModuleExternalizer>());
   add(std::make_unique<PassReduction>(context, createCSEPass()));
+  add(std::make_unique<Constantifier>());
   add(std::make_unique<ConnectInvalidator>());
   add(std::make_unique<OperationPruner>());
   add(std::make_unique<RootPortPruner>());
