@@ -216,15 +216,6 @@ def MultPipeLibOp : ArithBinaryLibraryOp<"mult_pipe", [
     SameTypeConstraint<"left", "out">
   ]> {
   let results = (outs AnyType:$left, AnyType:$right, I1:$go, I1:$clk, I1:$reset, AnyType:$out, I1:$done);
-  let extraClassDeclaration = [{
-    Value lhsPort()   { return getResult(0); }
-    Value rhsPort()   { return getResult(1); }
-    Value goPort()    { return getResult(2); }
-    Value clkPort()   { return getResult(3); }
-    Value resetPort() { return getResult(4); }
-    Value outPort()   { return getResult(5); }
-    Value donePort()  { return getResult(6); }
-  }];
 }
 
 def DivPipeLibOp : ArithBinaryLibraryOp<"div_pipe", [
@@ -235,16 +226,6 @@ def DivPipeLibOp : ArithBinaryLibraryOp<"div_pipe", [
     AnyType:$left, AnyType:$right, I1:$go, I1:$clk, I1:$reset,
     AnyType:$out_quotient, AnyType:$out_remainder, I1:$done
   );
-  let extraClassDeclaration = [{
-    Value lhsPort()       { return getResult(0); }
-    Value rhsPort()       { return getResult(1); }
-    Value goPort()        { return getResult(2); }
-    Value clkPort()       { return getResult(3); }
-    Value resetPort()     { return getResult(4); }
-    Value quotientPort()  { return getResult(5); }
-    Value remainderPort() { return getResult(6); }
-    Value donePort()      { return getResult(7); }
-  }];
 }
 
 class UnaryLibraryOp<string mnemonic> : CalyxLibraryOp<mnemonic, [Combinational]> {
