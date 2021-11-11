@@ -1001,29 +1001,45 @@ hw.module @XMR_src(%a : i23) -> (aa: i3) {
 // CHECK-LABEL: module extInst
 hw.module.extern @extInst(%_h: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
 
+// CHECK-LABEL: module extInst
+hw.module.extern @extInst2(%signed: i1, %_i: i1, %_j: i1, %_k: i1, %_z :i0) -> ()
+
 // CHECK-LABEL: module remoteInstDut
 hw.module @remoteInstDut(%i: i1, %j: i1, %z: i0) -> () {
   %mywire = sv.wire : !hw.inout<i1>
   %mywire_rd = sv.read_inout %mywire : !hw.inout<i1>
   %myreg = sv.reg : !hw.inout<i1>
   %myreg_rd = sv.read_inout %myreg : !hw.inout<i1>
+  %signed = sv.wire  : !hw.inout<i1>
+  %mywire_rd1 = sv.read_inout %signed : !hw.inout<i1>
+  %output = sv.reg : !hw.inout<i1>
+  %myreg_rd1 = sv.read_inout %output: !hw.inout<i1>
   %0 = hw.constant 1 : i1
   hw.instance "a1" sym @bindInst @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
   hw.instance "a2" sym @bindInst2 @extInst(_h: %mywire_rd: i1, _i: %myreg_rd: i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
-// CHECK: wire a2__k
+  hw.instance "signed" sym @bindInst3 @extInst2(signed: %mywire_rd1 : i1, _i: %myreg_rd1 : i1, _j: %j: i1, _k: %0: i1, _z: %z: i0) -> () {doNotPrint=1}
+// CHECK: wire signed__k
+// CHECK-NEXT: wire a2__k
 // CHECK-NEXT: wire a1__k
 // CHECK-NEXT: wire mywire
 // CHECK-NEXT: myreg
+// CHECK-NEXT: wire signed_0
+// CHECK-NEXT: reg  output_1
 // CHECK: assign a1__k = 1'h1
 // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst a1
 // CHECK: assign a2__k = 1'h1
 // CHECK-NEXT: /* This instance is elsewhere emitted as a bind statement
 // CHECK-NEXT:    extInst a2
+// CHECK:  assign signed__k = 1'h1
+// CHECK-NEXT:  /* This instance is elsewhere emitted as a bind statement
+// CHECK-NEXT:    extInst2 signed_2
+// CHECK-NEXT:    .signed (signed_0)
 }
 
 hw.module @bindInMod() {
   sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst>
+  sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst3>
 }
 
 // CHECK-LABEL: module bindInMod();
@@ -1034,6 +1050,13 @@ hw.module @bindInMod() {
 // CHECK-NEXT:   ._k (a1__k)
 // CHECK-NEXT: //._z (z)
 // CHECK-NEXT: );
+// CHECK-NEXT:  bind remoteInstDut extInst2 signed_2 (
+// CHECK-NEXT:    .signed (signed_0),
+// CHECK-NEXT:    ._i     (output_1),
+// CHECK-NEXT:    ._j     (j),
+// CHECK-NEXT:    ._k     (signed__k)
+// CHECK-NEXT:  //._z     (z)
+// CHECK-NEXT:  );
 // CHECK: endmodule
 
 sv.bind #hw.innerNameRef<@remoteInstDut::@bindInst2>
