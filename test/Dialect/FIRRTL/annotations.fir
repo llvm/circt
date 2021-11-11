@@ -1114,7 +1114,6 @@ circuit Sub : %[[{
 ; Grand Central's ModuleReplacementAnnotation is properly scattered to the circuit
 ; and the targeted operations.
 
-
 circuit Top : %[[{
   "class": "sifive.enterprise.grandcentral.ModuleReplacementAnnotation",
   "targets": [
@@ -1122,7 +1121,7 @@ circuit Top : %[[{
     "~Top|Top/childWrapper:ChildWrapper/child:Child"
   ],
   "circuit": "",
-  "annotations": [],
+  "annotations": ["foo", "bar"],
   "circuitPackage": "other",
   "dontTouches":[
     "~Top|Child>in",
@@ -1146,10 +1145,10 @@ circuit Top : %[[{
     inst childWrapper of ChildWrapper
 
 ; CHECK-LABEL: firrtl.circuit "Top"
-; CHECK-SAME: {annotations = [], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation", id = [[ID:.+]] : i64}
+; CHECK-SAME: {annotations = ["foo", "bar"], circuit = "", circuitPackage = "other", class = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation", id = [[ID:.+]] : i64}
 
 ; CHECK: %child_in, %child_out = firrtl.instance child
-; CHECK-SAME: {annotations = [{circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", class = "circt.nonlocal"}]} @Child(in in: !firrtl.uint<123>, out out: !firrtl.uint<456>)
+; CHECK-SAME: {annotations = [{circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", class = "circt.nonlocal"}]}
 
 ; CHECK: firrtl.extmodule @Child(
 ; CHECK-SAME:   in in: !firrtl.uint<123> [{class = "firrtl.transforms.DontTouchAnnotation"}],

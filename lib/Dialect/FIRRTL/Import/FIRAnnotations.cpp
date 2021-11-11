@@ -1705,7 +1705,8 @@ bool circt::firrtl::scatterCustomAnnotations(
           tryGetAs<StringAttr>(dict, dict, "circuitPackage", loc, clazz);
       auto dontTouchesAttr =
           tryGetAs<ArrayAttr>(dict, dict, "dontTouches", loc, clazz);
-      if (!annotationsAttr || !circuitAttr || !circuitPackageAttr || !dontTouchesAttr)
+      if (!annotationsAttr || !circuitAttr || !circuitPackageAttr ||
+          !dontTouchesAttr)
         return false;
       fields.append("class", classAttr);
       fields.append("id", id);
@@ -1715,11 +1716,12 @@ bool circt::firrtl::scatterCustomAnnotations(
       newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
 
       // Add a don't touches for each target in "dontTouches" list
-      for (auto dontTouch: dontTouchesAttr) {
+      for (auto dontTouch : dontTouchesAttr) {
         StringAttr targetString = dontTouch.dyn_cast<StringAttr>();
         if (!targetString) {
-          mlir::emitError(loc, "ModuleReplacementAnnotation dontTouches "
-                               "entries must be strings")
+          mlir::emitError(
+              loc,
+              "ModuleReplacementAnnotation dontTouches entries must be strings")
                   .attachNote()
               << "annotation:" << dict << "\n";
           return false;
@@ -1738,16 +1740,14 @@ bool circt::firrtl::scatterCustomAnnotations(
       auto targets = tryGetAs<ArrayAttr>(dict, dict, "targets", loc, clazz);
       if (!targets)
         return false;
-      for (auto targetAttr: targets) {
-        auto targetId = newID();
+      for (auto targetAttr : targets) {
         NamedAttrList fields;
-        fields.append("class", classAttr);
         fields.append("id", id);
-        fields.append("targetId", targetId);
         StringAttr targetString = targetAttr.dyn_cast<StringAttr>();
         if (!targetString) {
-          mlir::emitError(loc, "ModuleReplacementAnnotation targets "
-                               "entries must be strings")
+          mlir::emitError(
+              loc,
+              "ModuleReplacementAnnotation targets entries must be strings")
                   .attachNote()
               << "annotation:" << dict << "\n";
           return false;
