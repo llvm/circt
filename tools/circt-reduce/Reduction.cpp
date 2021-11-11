@@ -272,18 +272,31 @@ static void pruneUnusedOps(Operation *initialOp) {
   }
 }
 
+/// Check whether an operation interacts with flows in any way, which can make
+/// replacement and operand forwarding harder in some cases.
+static bool isFlowSensitiveOp(Operation *op) {
+  return isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp,
+             firrtl::InstanceOp, firrtl::SubfieldOp, firrtl::SubindexOp,
+             firrtl::SubaccessOp>(op);
+}
+
 /// A sample reduction pattern that replaces all uses of an operation with one
 /// of its operands. This can help pruning large parts of the expression tree
 /// rapidly.
 template <unsigned OpNum>
 struct OperandForwarder : public Reduction {
   bool match(Operation *op) const override {
-    if (op->getNumResults() != 1 || OpNum >= op->getNumOperands())
+    if (op->getNumResults() != 1 || op->getNumOperands() < 2 ||
+        OpNum >= op->getNumOperands())
+      return false;
+    if (isFlowSensitiveOp(op))
       return false;
     auto resultTy = op->getResult(0).getType().dyn_cast<firrtl::FIRRTLType>();
     auto opTy = op->getOperand(OpNum).getType().dyn_cast<firrtl::FIRRTLType>();
     return resultTy && opTy &&
            resultTy.getWidthlessType() == opTy.getWidthlessType() &&
+           (resultTy.getBitWidthOrSentinel() == -1) ==
+               (opTy.getBitWidthOrSentinel() == -1) &&
            resultTy.isa<firrtl::UIntType, firrtl::SIntType>();
   }
   LogicalResult rewrite(Operation *op) const override {
@@ -295,8 +308,6 @@ struct OperandForwarder : public Reduction {
     auto operandTy = operand.getType().cast<firrtl::FIRRTLType>();
     auto resultWidth = resultTy.getBitWidthOrSentinel();
     auto operandWidth = operandTy.getBitWidthOrSentinel();
-    if ((resultWidth == -1) != (operandWidth == -1))
-      return failure();
     Value newOp;
     if (resultWidth < operandWidth)
       newOp =
@@ -321,9 +332,7 @@ struct Constantifier : public Reduction {
   bool match(Operation *op) const override {
     if (op->getNumResults() != 1)
       return false;
-    if (isa<firrtl::WireOp, firrtl::RegOp, firrtl::RegResetOp,
-            firrtl::InstanceOp, firrtl::SubfieldOp, firrtl::SubindexOp,
-            firrtl::SubaccessOp>(op))
+    if (isFlowSensitiveOp(op))
       return false;
     auto type = op->getResult(0).getType().dyn_cast<firrtl::FIRRTLType>();
     return type && type.isa<firrtl::UIntType, firrtl::SIntType>();
