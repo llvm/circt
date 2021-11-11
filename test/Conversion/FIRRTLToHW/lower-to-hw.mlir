@@ -1217,4 +1217,41 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     // CHECK: {{%.+}} = hw.instance "memName" sym @memSym
   }
+
+  // CHECK-LABEL: hw.module @regInitRandomReuse
+  firrtl.module @regInitRandomReuse(in %clock: !firrtl.clock, in %a: !firrtl.uint<1>, out %o1: !firrtl.uint<2>, out %o2: !firrtl.uint<4>, out %o3: !firrtl.uint<32>, out %o4: !firrtl.uint<100>) {
+    %r1 = firrtl.reg %clock  : !firrtl.uint<2>
+    %r2 = firrtl.reg %clock  : !firrtl.uint<4>
+    %r3 = firrtl.reg %clock  : !firrtl.uint<32>
+    %r4 = firrtl.reg %clock  : !firrtl.uint<100>
+    // CHECK:       sv.ifdef.procedural "RANDOMIZE_REG_INIT"  {
+    // CHECK-NEXT:    %RANDOM = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:    %8 = comb.extract %RANDOM from 0 : (i32) -> i2
+    // CHECK-NEXT:    sv.bpassign %r1, %8 : i2
+    // CHECK-NEXT:    %9 = comb.extract %RANDOM from 2 : (i32) -> i4
+    // CHECK-NEXT:    sv.bpassign %r2, %9 : i4
+    // CHECK-NEXT:    %10 = comb.extract %RANDOM from 6 : (i32) -> i26
+    // CHECK-NEXT:    %RANDOM_0 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:    %11 = comb.extract %RANDOM_0 from 0 : (i32) -> i6
+    // CHECK-NEXT:    %12 = comb.concat %10, %11 : i26, i6
+    // CHECK-NEXT:    sv.bpassign %r3, %12 : i32
+    // CHECK-NEXT:    %13 = comb.extract %RANDOM_0 from 6 : (i32) -> i26
+    // CHECK-NEXT:    %RANDOM_1 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:    %RANDOM_2 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:    %RANDOM_3 = sv.verbatim.expr.se "`RANDOM" : () -> i32 {symbols = []}
+    // CHECK-NEXT:    %14 = comb.extract %RANDOM_3 from 0 : (i32) -> i10
+    // CHECK-NEXT:    %15 = comb.concat %RANDOM_2, %14 : i32, i10
+    // CHECK-NEXT:    %16 = comb.concat %RANDOM_1, %15 : i32, i42
+    // CHECK-NEXT:    %17 = comb.concat %13, %16 : i26, i74
+    // CHECK-NEXT:    sv.bpassign %r4, %17 : i100
+    // CHECK-NEXT:  }
+    firrtl.connect %r1, %a : !firrtl.uint<2>, !firrtl.uint<1>
+    firrtl.connect %r2, %a : !firrtl.uint<4>, !firrtl.uint<1>
+    firrtl.connect %r3, %a : !firrtl.uint<32>, !firrtl.uint<1>
+    firrtl.connect %r4, %a : !firrtl.uint<100>, !firrtl.uint<1>
+    firrtl.connect %o1, %r1 : !firrtl.uint<2>, !firrtl.uint<2>
+    firrtl.connect %o2, %r2 : !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.connect %o3, %r3 : !firrtl.uint<32>, !firrtl.uint<32>
+    firrtl.connect %o4, %r4 : !firrtl.uint<100>, !firrtl.uint<100>
+  }
 }
