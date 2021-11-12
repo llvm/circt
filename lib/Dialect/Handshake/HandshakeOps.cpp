@@ -451,7 +451,7 @@ void handshake::FuncOp::resolveArgAndResNames() {
   auto argNames = getArgNames().getValue();
   auto resNames = getResNames().getValue();
 
-  /// Use reference names where actual names are missing.
+  /// Use fallback names where actual names are missing.
   auto resolveNames = [&](auto &fallbackNames, auto &actualNames,
                           StringRef attrName) {
     for (auto fallbackName : llvm::enumerate(fallbackNames)) {
