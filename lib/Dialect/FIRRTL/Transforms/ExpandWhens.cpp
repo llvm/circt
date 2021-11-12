@@ -148,7 +148,7 @@ public:
         for (auto &element : bundleType.getElements()) {
           id++;
           if (element.isFlip)
-            declare(element.type, swapFlow(flow));
+            declare(element.type, flipFlow(flow));
           else
             declare(element.type, flow);
         }

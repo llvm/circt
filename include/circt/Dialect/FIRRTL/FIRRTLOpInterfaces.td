@@ -12,6 +12,59 @@
 
 include "mlir/IR/OpBase.td"
 
+def FlowKind : OpInterface<"FlowKind"> {
+  let cppNamespace = "circt::firrtl";
+  let description = [{
+    Allows operations to specify what kind of flow they have.  When an operation
+    does not implement this interface, they are assumed to have "source" flow.
+
+    If an operation has results, they should implement `getFlow`.  If they
+  }];
+  let methods = [
+    InterfaceMethod<"Get the flow of a value",
+    "::circt::firrtl::FlowResult", "getFlow",
+    (ins "::mlir::OpResult":$result),
+    /*methodBody=*/[{
+      // Ask the op implementation what the flow is.
+      return $_op.getFlow(result);
+    }], /*defaultImplementation=*/[{
+      // By default all results arguments are source flow.
+      return ::circt::firrtl::Flow::Source;
+    }]>,
+
+    InterfaceMethod<"Get the flow of a block argument.",
+    "::circt::firrtl::FlowResult", "getBlockArgFlow",
+    (ins "::mlir::BlockArgument":$arg),
+    /*methodBody=*/[{
+      // Ask the op implementation what the flow is.
+      return $_op.getBlockArgFlow(arg);
+    }], /*defaultImplementation=*/[{
+      // By default all block arguments are source flow.
+      return ::circt::firrtl::Flow::Source;
+    }]>
+  ];
+  let extraClassDeclaration = [{
+    /// Compute the flow for a Value, \p val, as determined by the FIRRTL
+    /// specification.  This recursively walks backwards from \p val to the
+    /// declaration.  The resulting flow is a combination of the declaration
+    /// flow (output ports and instance inputs are sinks, registers and wires
+    /// are duplex, anything else is a source) and the number of intermediary
+    /// flips. An even number of flips will result in the same flow as the
+    /// declaration. An odd number of flips will result in reversed flow being
+    /// returned.  The reverse of source is sink.  The reverse of sink is
+    /// source.  The reverse of duplex is duplex.
+    static Flow get(Value value);
+  }];
+}
+
+/// Convenience helper for overriding the result flow kind.
+def ResultFlowKind : OpTraitList<[
+  DeclareOpInterfaceMethods<FlowKind, ["getFlow"]>]>;
+
+/// Convenience helper for overriding the block argument flow kind.
+def ArgumentFlowKind : OpTraitList<[
+  DeclareOpInterfaceMethods<FlowKind, ["getBlockArgumentFlow"]>]>;
+
 def FModuleLike : OpInterface<"FModuleLike"> {
   let cppNamespace = "circt::firrtl";
   let description = "Provide common  module information.";

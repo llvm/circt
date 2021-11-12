@@ -1478,7 +1478,7 @@ private:
   // implicit connect semantics.  The FIRRTL dialect models it as a primitive
   // that returns an "Invalid Value", followed by an explicit connect to make
   // the representation simpler and more consistent.
-  void emitInvalidate(Value val) { emitInvalidate(val, foldFlow(val)); }
+  void emitInvalidate(Value val) { emitInvalidate(val, FlowKind::get(val)); }
 
   /// Parse an @info marker if present and inform locationProcessor about it.
   ParseResult parseOptionalInfo() {
@@ -1555,7 +1555,7 @@ void FIRStmtParser::emitInvalidate(Value val, Flow flow) {
         for (size_t i = 0, e = tpe.getNumElements(); i < e; ++i) {
           auto subfield = builder.create<SubfieldOp>(val, i);
           emitInvalidate(subfield,
-                         subfield.isFieldFlipped() ? swapFlow(flow) : flow);
+                         subfield.isFieldFlipped() ? flipFlow(flow) : flow);
         }
       })
       .Case<FVectorType>([&](auto tpe) {

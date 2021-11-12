@@ -53,6 +53,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 
 def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
                                     NoTerminator, HasParent<"CircuitOp">,
+                                    ArgumentFlowKind,
                                     DeclareOpInterfaceMethods<FModuleLike>]> {
   let summary = "FIRRTL Module";
   let description = [{
@@ -98,14 +99,17 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
     /// Erases the ports listed in `portIndices`.  `portIndices` is expected to
     /// be in order and unique.
     void erasePorts(ArrayRef<unsigned> portIndices);
+
+    /// Get the flow of a block argument.
+    FlowResult getBlockArgFlow(BlockArgument arg);
   }];
 
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
 }
 
-def FExtModuleOp : FIRRTLOp<"extmodule", 
-      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">,
+def FExtModuleOp : FIRRTLOp<"extmodule",
+      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, ArgumentFlowKind,
        DeclareOpInterfaceMethods<FModuleLike>]> {
   let summary = "FIRRTL extmodule";
   let description = [{
@@ -127,7 +131,10 @@ def FExtModuleOp : FIRRTLOp<"extmodule",
                       CArg<"StringRef", "StringRef()">:$defnamAttr,
                       CArg<"ArrayAttr", "ArrayAttr()">:$annotations)>
   ];
-
+  let extraClassDeclaration = [{
+    /// Get the flow of a block argument.
+    FlowResult getBlockArgFlow(BlockArgument arg);
+  }];
   let printer = "return ::print$cppClass(p, *this);";
   let parser = "return ::parse$cppClass(parser, result);";
   let verifier = "return ::verifyFExtModuleOp(*this);";

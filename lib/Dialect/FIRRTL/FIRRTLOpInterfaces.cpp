@@ -20,6 +20,63 @@ using namespace mlir;
 using namespace llvm;
 using namespace circt::firrtl;
 
+//===----------------------------------------------------------------------===//
+// FlowKind
+//===----------------------------------------------------------------------===//
+
+Flow circt::firrtl::flipFlow(Flow flow) {
+  switch (flow) {
+  case Flow::Source:
+    return Flow::Sink;
+  case Flow::Sink:
+    return Flow::Source;
+  case Flow::Duplex:
+    return Flow::Duplex;
+  }
+}
+
+static Flow mergeFlow(Flow a, Flow b) {
+  switch (a) {
+  case Flow::Source:
+    return b;
+  case Flow::Sink:
+    return flipFlow(b);
+  case Flow::Duplex:
+    return Flow::Duplex;
+  }
+}
+
+Flow FlowKind::get(Value value) {
+  Flow flow = Flow::Source;
+
+  do {
+    if (auto blockArg = value.dyn_cast<BlockArgument>()) {
+      auto op = dyn_cast<FlowKind>(value.getParentBlock()->getParentOp());
+      // If the operation doesn't implement the interface, return the result
+      // so far.
+      if (!op)
+        return flow;
+      auto result = op.getBlockArgFlow(blockArg);
+      flow = mergeFlow(result.getFlow(), flow);
+      value = result.getValue();
+    } else {
+      auto op = dyn_cast<FlowKind>(value.getDefiningOp());
+      // If the operation doesn't implement the interface, return the result
+      // so far.
+      if (!op)
+        return flow;
+      auto result = op.getFlow(value.cast<OpResult>());
+      flow = mergeFlow(result.getFlow(), flow);
+      value = result.getValue();
+    }
+  } while (value && flow != Flow::Duplex);
+  return flow;
+}
+
+//===----------------------------------------------------------------------===//
+// FModuleLike
+//===----------------------------------------------------------------------===//
+
 LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
   // Verify port types first.  This is used as the basis for the number of
   // ports required everywhere else.

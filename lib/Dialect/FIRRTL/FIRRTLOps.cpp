@@ -78,67 +78,6 @@ removeElementsAtIndices(ArrayRef<T> input, ArrayRef<unsigned> indicesToDrop) {
   return result;
 }
 
-bool firrtl::isDuplexValue(Value val) {
-  Operation *op = val.getDefiningOp();
-  // Block arguments are not duplex values.
-  if (!op)
-    return false;
-  return TypeSwitch<Operation *, bool>(op)
-      .Case<SubfieldOp, SubindexOp, SubaccessOp>(
-          [](auto op) { return isDuplexValue(op.input()); })
-      .Case<RegOp, RegResetOp, WireOp>([](auto) { return true; })
-      .Default([](auto) { return false; });
-}
-
-Flow firrtl::swapFlow(Flow flow) {
-  switch (flow) {
-  case Flow::Source:
-    return Flow::Sink;
-  case Flow::Sink:
-    return Flow::Source;
-  case Flow::Duplex:
-    return Flow::Duplex;
-  }
-  llvm_unreachable("invalid flow");
-}
-
-Flow firrtl::foldFlow(Value val, Flow accumulatedFlow) {
-  auto swap = [&accumulatedFlow]() -> Flow {
-    return swapFlow(accumulatedFlow);
-  };
-
-  if (auto blockArg = val.dyn_cast<BlockArgument>()) {
-    auto op = val.getParentBlock()->getParentOp();
-    auto direction =
-        cast<FModuleLike>(op).getPortDirection(blockArg.getArgNumber());
-    if (direction == Direction::Out)
-      return swap();
-    return accumulatedFlow;
-  }
-
-  Operation *op = val.getDefiningOp();
-
-  return TypeSwitch<Operation *, Flow>(op)
-      .Case<SubfieldOp>([&](auto op) {
-        return foldFlow(op.input(),
-                        op.isFieldFlipped() ? swap() : accumulatedFlow);
-      })
-      .Case<SubindexOp, SubaccessOp>(
-          [&](auto op) { return foldFlow(op.input(), accumulatedFlow); })
-      // Registers, Wires, and behavioral memory ports are always Duplex.
-      .Case<RegOp, RegResetOp, WireOp, MemoryPortOp>(
-          [](auto) { return Flow::Duplex; })
-      .Case<InstanceOp>([&](auto inst) {
-        auto resultNo = val.cast<OpResult>().getResultNumber();
-        if (inst.getPortDirection(resultNo) == Direction::Out)
-          return accumulatedFlow;
-        return swap();
-      })
-      .Case<MemOp>([&](auto op) { return swap(); })
-      // Anything else acts like a universal source.
-      .Default([&](auto) { return accumulatedFlow; });
-}
-
 // TODO: This is doing the same walk as foldFlow.  These two functions can be
 // combined and return a (flow, kind) product.
 DeclKind firrtl::getDeclarationKind(Value val) {
@@ -376,9 +315,21 @@ SmallVector<PortInfo> FExtModuleOp::getPorts() {
   return results;
 }
 
+FlowResult FExtModuleOp::getBlockArgFlow(BlockArgument arg) {
+  if (getPortDirection(arg.getArgNumber()) == Direction::Out)
+    return Flow::Sink;
+  return Flow::Source;
+}
+
 // Return the port with the specified name.
 BlockArgument FModuleOp::getArgument(size_t portNumber) {
   return getBody()->getArgument(portNumber);
+}
+
+FlowResult FModuleOp::getBlockArgFlow(BlockArgument arg) {
+  if (getPortDirection(arg.getArgNumber()) == Direction::Out)
+    return Flow::Sink;
+  return Flow::Source;
 }
 
 /// Inserts the given ports. The insertion indices are expected to be in order.
@@ -843,6 +794,12 @@ FModuleLike InstanceOp::getReferencedModule() {
 
 FModuleLike InstanceOp::getReferencedModule(SymbolTable &symbolTable) {
   return symbolTable.lookup<FModuleLike>(moduleNameAttr().getLeafReference());
+}
+
+FlowResult InstanceOp::getFlow(OpResult result) {
+  if (getPortDirection(result.getResultNumber()) == Direction::In)
+    return Flow::Sink;
+  return Flow::Source;
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
@@ -1636,7 +1593,7 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (foldFlow(connect.src()) == Flow::Sink) {
+  if (FlowKind::get(connect.src()) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(connect.src());
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
@@ -1650,7 +1607,7 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
     }
   }
 
-  if (foldFlow(connect.dest()) == Flow::Source) {
+  if (FlowKind::get(connect.dest()) == Flow::Source) {
     auto diag = connect.emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
@@ -1671,7 +1628,7 @@ static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
            << ". Types are not weakly equivalent.";
 
   // Check that the flows make sense.
-  if (foldFlow(partialConnect.src()) == Flow::Sink) {
+  if (FlowKind::get(partialConnect.src()) == Flow::Sink) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(partialConnect.src());
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
@@ -1685,7 +1642,7 @@ static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
     }
   }
 
-  if (foldFlow(partialConnect.dest()) == Flow::Source) {
+  if (FlowKind::get(partialConnect.dest()) == Flow::Source) {
     auto diag = partialConnect.emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";

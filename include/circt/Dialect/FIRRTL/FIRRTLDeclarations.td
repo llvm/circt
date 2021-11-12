@@ -10,7 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-def InstanceOp : FIRRTLOp<"instance", [
+def InstanceOp : FIRRTLOp<"instance", [ResultFlowKind,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Instantiate an instance of a module";
   let description = [{
@@ -78,6 +78,9 @@ def InstanceOp : FIRRTLOp<"instance", [
     /// Hooks for port annotations.
     ArrayAttr getPortAnnotation(unsigned portIdx);
     void setAllPortAnnotations(ArrayRef<Attribute> annotations);
+
+    /// Get the flow of this operation.
+    FlowResult getFlow(OpResult result);
   }];
 }
 
@@ -106,7 +109,7 @@ def SeqMemOp : FIRRTLOp<"seqmem"> {
   let hasCanonicalizer = true;
 }
 
-def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
+def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface, ResultFlowKind,
          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmResultNames"]>]> {
   let summary = "Declares a memory port on a memory";
 
@@ -151,6 +154,11 @@ def MemoryPortOp : FIRRTLOp<"memoryport", [InferTypeOpInterface,
                                           DictionaryAttr attrs,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
+
+    /// Get the flow of this operation.
+    FlowResult getFlow(OpResult result) {
+      return Flow::Duplex;
+    }
   }];
 }
 
@@ -173,7 +181,7 @@ def MemoryPortAccessOp : FIRRTLOp<"memoryport.access"> {
   }];
 }
 
-def MemOp : FIRRTLOp<"mem"> {
+def MemOp : FIRRTLOp<"mem", [ResultFlowKind]> {
   let summary = "Define a new mem";
   let arguments =
     (ins Confined<I32Attr, [IntMinValue<0>]>:$readLatency,
@@ -254,6 +262,11 @@ def MemOp : FIRRTLOp<"mem"> {
 
     // Extract the relevant attributes from the MemOp and return a FirMemory object.
     FirMemory getSummary();
+
+    /// Get the flow of this operation.
+    FlowResult getFlow(OpResult result) {
+      return Flow::Sink;
+    }
   }];
 }
 
@@ -305,7 +318,7 @@ def NodeOp : FIRRTLOp<"node",
   }];
 }
 
-def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
+def RegOp : FIRRTLOp<"reg", [ResultFlowKind]> {
   let summary = "Define a new register";
   let description = [{
     Declare a new register:
@@ -335,10 +348,18 @@ def RegOp : FIRRTLOp<"reg", [/*MemAlloc*/]> {
     (`sym` $inner_sym^)?
     operands custom<ImplicitSSAName>(attr-dict) `:` type($result)
   }];
+
+  let extraClassDeclaration = [{
+    /// Get the flow of this operation.
+    FlowResult getFlow(OpResult result) {
+      return Flow::Duplex;
+    }
+  }];
+
   let hasCanonicalizeMethod = true;
 }
 
-def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
+def RegResetOp : FIRRTLOp<"regreset", [ResultFlowKind]> {
   let summary = "Define a new register with a reset";
   let description = [{
     Declare a new register:
@@ -371,10 +392,17 @@ def RegResetOp : FIRRTLOp<"regreset", [/*MemAlloc*/]> {
     `:` type($resetSignal) `,` type($resetValue) `,` type($result)
   }];
 
+  let extraClassDeclaration = [{
+    /// Get the flow of this operation.
+    FlowResult getFlow(OpResult result) {
+      return Flow::Duplex;
+    }
+  }];
+
   let hasCanonicalizer = true;
 }
 
-def WireOp : FIRRTLOp<"wire", []> {
+def WireOp : FIRRTLOp<"wire", [ResultFlowKind]> {
   let summary = "Define a new wire";
   let description = [{
     Declare a new wire:
@@ -402,5 +430,13 @@ def WireOp : FIRRTLOp<"wire", []> {
     (`sym` $inner_sym^)?
     custom<ImplicitSSAName>(attr-dict) `:` type($result)
   }];
+
+  let extraClassDeclaration = [{
+    /// Get the flow of this operation.
+    FlowResult getFlow(OpResult result) {
+      return Flow::Duplex;
+    }
+  }];
+
   let hasCanonicalizer = true;
 }

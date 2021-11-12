@@ -23,6 +23,41 @@ namespace firrtl {
 
 class FIRRTLType;
 
+//===----------------------------------------------------------------------===//
+// FlowKind
+//===----------------------------------------------------------------------===//
+
+enum class Flow { Source, Sink, Duplex };
+
+/// Get a flow's reverse.
+Flow flipFlow(Flow flow);
+
+/// This is used to represent the result of querying the flow of an operation.
+/// If the operation has sink or source flow, this can be implicitly created
+/// from a Flow instance.  If an operation has the same flow as a different
+/// value, presumably one of its arguments, this can be implcitly created from
+/// a Value.  If the operation has the flipped flow of a value, it can signal so
+/// by using `FlowResult::flipOf(value)`.
+struct FlowResult {
+  /*implicit*/ FlowResult(Flow flow) : flow(flow) {}
+  /*implicit*/ FlowResult(Value value) : value(value) {}
+  static FlowResult flipOf(Value value) {
+    return FlowResult(Flow::Sink, value);
+  }
+
+  Flow getFlow() { return flow; }
+  Value getValue() { return value; }
+
+private:
+  FlowResult(Flow flow, Value value) : flow(flow), value(value) {}
+  Flow flow = Flow::Source;
+  Value value;
+};
+
+//===----------------------------------------------------------------------===//
+// FModuleLike
+//===----------------------------------------------------------------------===//
+
 /// This holds the name and type that describes the module's ports.
 struct PortInfo {
   StringAttr name;

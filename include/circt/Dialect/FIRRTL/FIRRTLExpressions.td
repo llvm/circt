@@ -144,7 +144,7 @@ def InvalidValueOp : FIRRTLOp<"invalidvalue", [NoSideEffect, ConstantLike]> {
   let assemblyFormat = "attr-dict `:` type($result)";
 }
 
-def SubfieldOp : FIRRTLExprOp<"subfield"> {
+def SubfieldOp : FIRRTLExprOp<"subfield", [ResultFlowKind]> {
   let summary = "Extract a subfield of another value";
   let description = [{
     The subfield expression refers to a subelement of an expression with a
@@ -179,6 +179,15 @@ def SubfieldOp : FIRRTLExprOp<"subfield"> {
       return FieldRef(input(), input().getType().cast<BundleType>()
                                       .getFieldID(fieldIndex()));
     }
+
+    /// Get the flow of this operation.
+    FlowResult getFlow(OpResult result) {
+      // The flow of this operation is based on the input. If this is a flipped
+      // field, we are the flip of the parent's flow.
+      if (isFieldFlipped())
+        return FlowResult::flipOf(input());
+      return input();
+    }
   }];
 
   let verifier = "return ::verifySubfieldOp(*this);";
@@ -190,7 +199,7 @@ class IndexConstraint<string value, string resultValue>
                    "firrtl::getVectorElementType($_self)">;
 
 def SubindexOp : FIRRTLExprOp<"subindex", [
-    IndexConstraint<"input", "result">
+    IndexConstraint<"input", "result">, ResultFlowKind
   ]> {
   let summary = "Extract an element of a vector value";
   let description = [{
@@ -216,11 +225,17 @@ def SubindexOp : FIRRTLExprOp<"subindex", [
       return FieldRef(input(), input().getType().cast<FVectorType>()
                                       .getFieldID(index()));
     }
+    
+    /// Get the flow of this operation.
+    FlowResult getFlow(OpResult result) {
+      // The flow of this operation is based on its input.
+      return input();
+    }
   }];
 }
 
 def SubaccessOp : FIRRTLExprOp<"subaccess", [
-    IndexConstraint<"input", "result">
+    IndexConstraint<"input", "result">, ResultFlowKind
   ]> {
   let summary = "Extract a dynamic element of a vector value";
   let description = [{
@@ -237,6 +252,14 @@ def SubaccessOp : FIRRTLExprOp<"subaccess", [
 
   let assemblyFormat =
      "$input `[` $index `]` attr-dict `:` type($input) `,` type($index)";
+  
+  let firrtlExtraClassDeclaration = [{
+    /// Get the flow of this operation.
+    FlowResult getFlow(OpResult result) {
+      // The flow of this operation is based on its input.
+      return input();
+    }
+  }];
 
   let hasCanonicalizeMethod = true;
 }

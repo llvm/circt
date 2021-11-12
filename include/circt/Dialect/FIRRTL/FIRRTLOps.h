@@ -41,29 +41,6 @@ size_t getNumPorts(Operation *op);
 bool isConstant(Operation *op);
 bool isConstant(Value value);
 
-/// Returns true if the value results from an expression with duplex flow.
-/// Duplex values have special treatment in bundle connect operations, and
-/// their flip orientation is not used to determine the direction of each
-/// pairwise connect.
-bool isDuplexValue(Value val);
-
-enum class Flow { Source, Sink, Duplex };
-
-/// Get a flow's reverse.
-Flow swapFlow(Flow flow);
-
-/// Compute the flow for a Value, \p val, as determined by the FIRRTL
-/// specification.  This recursively walks backwards from \p val to the
-/// declaration.  The resulting flow is a combination of the declaration flow
-/// (output ports and instance inputs are sinks, registers and wires are
-/// duplex, anything else is a source) and the number of intermediary flips.
-/// An even number of flips will result in the same flow as the declaration.
-/// An odd number of flips will result in reversed flow being returned.  The
-/// reverse of source is sink.  The reverse of sink is source.  The reverse of
-/// duplex is duplex.  The \p accumulatedFlow parameter sets the initial flow.
-/// A user should normally \a not have to change this from its default of \p
-/// Flow::Source.
-Flow foldFlow(Value val, Flow accumulatedFlow = Flow::Source);
 
 enum class DeclKind { Port, Instance, Other };
 
