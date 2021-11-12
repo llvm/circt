@@ -9,14 +9,18 @@
 #include "circt/Conversion/AffineToStaticLogic.h"
 #include "../PassDetail.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
+#include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Analysis/AffineAnalysis.h"
 #include "mlir/Dialect/Affine/IR/AffineMemoryOpInterfaces.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/LoopUtils.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "affine-to-staticlogic"
@@ -26,6 +30,7 @@ using namespace mlir::arith;
 using namespace circt;
 using namespace circt::analysis;
 using namespace circt::scheduling;
+using namespace circt::staticlogic;
 
 namespace {
 
@@ -36,6 +41,7 @@ struct AffineToStaticLogic
 private:
   void populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
   void solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
+  void createStaticLogicPipeline(SmallVectorImpl<AffineForOp> &loopNest);
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
@@ -47,11 +53,18 @@ void AffineToStaticLogic::runOnFunction() {
   schedulingAnalysis = &getAnalysis<CyclicSchedulingAnalysis>();
 
   // Collect perfectly nested loops and work on them.
-  for (auto root : getOperation().getOps<AffineForOp>()) {
+  auto outerLoops = getOperation().getOps<AffineForOp>();
+  for (auto root : llvm::make_early_inc_range(outerLoops)) {
     SmallVector<AffineForOp> nestedLoops;
     getPerfectlyNestedLoops(nestedLoops, root);
+
+    // Restrict to single loops to simplify things for now.
+    if (nestedLoops.size() != 1)
+      continue;
+
     populateOperatorTypes(nestedLoops);
     solveSchedulingProblem(nestedLoops);
+    createStaticLogicPipeline(nestedLoops);
   }
 }
 
@@ -148,6 +161,66 @@ void AffineToStaticLogic::solveSchedulingProblem(
       llvm::dbgs() << "\n\n";
     });
   });
+}
+
+/// Create the pipeline op for a loop nest.
+void AffineToStaticLogic::createStaticLogicPipeline(
+    SmallVectorImpl<AffineForOp> &loopNest) {
+  auto outerLoop = loopNest.front();
+  auto innerLoop = loopNest.back();
+  ImplicitLocOpBuilder builder(outerLoop.getLoc(), outerLoop);
+
+  // Create constants for the loop's lower and upper bounds.
+  int64_t lbValue = innerLoop.getConstantLowerBound();
+  auto lowerBound = builder.create<arith::ConstantOp>(
+      IntegerAttr::get(builder.getI64Type(), lbValue));
+  int64_t ubValue = innerLoop.getConstantUpperBound();
+  auto upperBound = builder.create<arith::ConstantOp>(
+      IntegerAttr::get(builder.getI64Type(), ubValue));
+  int64_t stepValue = innerLoop.getStep();
+  auto step = builder.create<arith::ConstantOp>(
+      IntegerAttr::get(builder.getI64Type(), stepValue));
+
+  // Create the pipeline op, with the same result types as the inner loop. An
+  // iter arg is created for the induction variable.
+  TypeRange resultTypes = innerLoop.getResultTypes();
+
+  SmallVector<Value> iterArgs;
+  iterArgs.push_back(lowerBound);
+  iterArgs.append(innerLoop.getIterOperands().begin(),
+                  innerLoop.getIterOperands().end());
+
+  auto pipeline = builder.create<PipelineWhileOp>(resultTypes, iterArgs);
+
+  // Create the condition, which currently just compares the induction variable
+  // to the upper bound.
+  Block &condBlock = pipeline.getCondBlock();
+  builder.setInsertionPointToStart(&condBlock);
+  auto cmpResult = builder.create<arith::CmpIOp>(
+      builder.getI1Type(), arith::CmpIPredicate::ult, condBlock.getArgument(0),
+      upperBound);
+  condBlock.getTerminator()->insertOperands(0, {cmpResult});
+
+  // Create the first stage.
+  Block &stagesBlock = pipeline.getStagesBlock();
+  builder.setInsertionPointToStart(&stagesBlock);
+  auto stage = builder.create<PipelineStageOp>(lowerBound.getType());
+  auto &stageBlock = stage.getBodyBlock();
+  builder.setInsertionPointToStart(&stageBlock);
+
+  // Add the induction variable increment to the first stage.
+  auto incResult =
+      builder.create<arith::AddIOp>(stagesBlock.getArgument(0), step);
+  stageBlock.getTerminator()->insertOperands(0, {incResult});
+
+  // Add the induction variable result to the terminator iter args.
+  auto stagesTerminator =
+      cast<PipelineTerminatorOp>(stagesBlock.getTerminator());
+  stagesTerminator.iter_argsMutable().append({stage.getResult(0)});
+
+  // Remove the loop nest from the IR.
+  for (auto loop : llvm::reverse(loopNest))
+    loop.erase();
 }
 
 std::unique_ptr<mlir::Pass> circt::createAffineToStaticLogic() {

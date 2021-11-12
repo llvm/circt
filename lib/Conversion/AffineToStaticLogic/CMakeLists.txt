@@ -8,4 +8,5 @@ add_circt_library(CIRCTAffineToStaticLogic
   MLIRPass
   CIRCTScheduling
   CIRCTSchedulingAnalysis
+  CIRCTStaticLogicOps
   )
