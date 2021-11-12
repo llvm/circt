@@ -5,6 +5,7 @@ set(LLVM_OPTIONAL_SOURCES
   )
 
 add_circt_dialect_library(CIRCTStaticLogicOps
+  StaticLogicAttributes.cpp
   StaticLogicOps.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -18,4 +19,5 @@ add_circt_dialect_library(CIRCTStaticLogicOps
 
   DEPENDS
   MLIRStaticLogicIncGen
+  MLIRStaticLogicAttrIncGen
 )
