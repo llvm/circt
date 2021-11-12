@@ -1493,16 +1493,6 @@ Value FIRRTLLowering::getLoweredValue(Value value) {
 }
 
 /// Returns a base type from a vector type.
-static FIRRTLType getFIRRTLVectorBaseType(FIRRTLType srcType) {
-  return TypeSwitch<FIRRTLType, FIRRTLType>(srcType)
-      .Case<IntType>([&](auto intType) { return intType; })
-      .Case<FVectorType>([&](FVectorType vectorType) {
-        return getFIRRTLVectorBaseType(vectorType.getElementType());
-      })
-      .Default([&](auto) { return FIRRTLType(); });
-}
-
-/// Returns a base type from a vector type.
 static Type getVectorBaseType(Type srcType) {
   return TypeSwitch<Type, Type>(srcType)
       .Case<IntegerType>([&](auto intType) { return intType; })
@@ -1578,9 +1568,9 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value value, Type destType) {
     // srcWidth > unsigned(destWidth)  --> error
     // srcWidth < unsigned(destWidth)  --> insert concat/sext to elements
 
-    auto baseDestType = getFIRRTLVectorBaseType(destType.cast<FIRRTLType>());
+    auto baseDestType = destType.cast<FIRRTLType>().getVectorBaseType();
     auto baseSourceType =
-        getFIRRTLVectorBaseType(value.getType().cast<FIRRTLType>());
+        value.getType().cast<FIRRTLType>().getVectorBaseType();
     auto baseResultType = getVectorBaseType(result.getType());
     if (!baseSourceType || !baseDestType || !baseResultType)
       return {};
@@ -1664,9 +1654,9 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     // srcWidth > unsigned(destWidth)  --> insert extract
     // srcWidth < unsigned(destWidth)  --> insert concat/sext to elements
 
-    auto baseDestType = getFIRRTLVectorBaseType(destType.cast<FIRRTLType>());
+    auto baseDestType = destType.cast<FIRRTLType>().getVectorBaseType();
     auto baseSourceType =
-        getFIRRTLVectorBaseType(value.getType().cast<FIRRTLType>());
+        value.getType().cast<FIRRTLType>().getVectorBaseType();
     auto baseResultType = getVectorBaseType(result.getType());
     if (!baseSourceType || !baseDestType || !baseResultType)
       return {};
