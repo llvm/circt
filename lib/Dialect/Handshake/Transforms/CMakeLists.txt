@@ -1,5 +1,6 @@
 add_circt_dialect_library(CIRCTHandshakeTransforms
   Analysis.cpp
+  PassHelpers.cpp
 
   DEPENDS
   CIRCTHandshakeTransformsIncGen
