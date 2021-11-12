@@ -102,29 +102,29 @@ struct HandshakeOpCountPass
 
     for (auto func : m.getOps<handshake::FuncOp>()) {
       int count = 0;
-      int fork_count = 0;
-      int merge_count = 0;
-      int branch_count = 0;
-      int join_count = 0;
+      int forkCount = 0;
+      int mergeCount = 0;
+      int branchCount = 0;
+      int joinCount = 0;
       for (Operation &op : func.getOps()) {
         if (isa<ForkOp>(op))
-          fork_count++;
+          forkCount++;
         else if (isa<MergeLikeOpInterface>(op))
-          merge_count++;
+          mergeCount++;
         else if (isa<ConditionalBranchOp>(op))
-          branch_count++;
+          branchCount++;
         else if (isa<JoinOp>(op))
-          join_count++;
+          joinCount++;
         else if (!isa<handshake::BranchOp>(op) && !isa<SinkOp>(op) &&
                  !isa<TerminatorOp>(op))
           count++;
       }
 
-      llvm::outs() << "// Fork count: " << fork_count << "\n";
-      llvm::outs() << "// Merge count: " << merge_count << "\n";
-      llvm::outs() << "// Branch count: " << branch_count << "\n";
-      llvm::outs() << "// Join count: " << join_count << "\n";
-      int total = count + fork_count + merge_count + branch_count;
+      llvm::outs() << "// Fork count: " << forkCount << "\n";
+      llvm::outs() << "// Merge count: " << mergeCount << "\n";
+      llvm::outs() << "// Branch count: " << branchCount << "\n";
+      llvm::outs() << "// Join count: " << joinCount << "\n";
+      int total = count + forkCount + mergeCount + branchCount;
       llvm::outs() << "// Total op count: " << total << "\n";
     }
   }
@@ -442,7 +442,7 @@ std::string HandshakeDotPrintPass::dotPrint(mlir::raw_indented_ostream &os,
     if (barg.index() == bodyBlock->getNumArguments() - 1)
       os << ", style=dashed";
     os << "]\n";
-    for (auto useOp : barg.value().getUsers()) {
+    for (auto *useOp : barg.value().getUsers()) {
       os << "" << getLocalName(instanceName, argName) << " -> "
          << getUsedByNode(barg.value(), useOp);
       if (isControlOperand(useOp, barg.value()))
