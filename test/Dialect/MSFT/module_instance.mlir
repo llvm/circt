@@ -14,9 +14,9 @@ hw.module @top () {
   // HWLOW: %extern.out = hw.instance "extern" sym @extern @Extern<param: i1 = false>(in: %true: i1) -> (out: i1)
 }
 
-// CHECK-LABEL: msft.module @B {WIDTH = 1 : i64} (%a: i4) -> (nameOfPortInSV: i4) {
-// HWLOW-LABEL: hw.module @B(%a: i4) -> (nameOfPortInSV: i4) {
-msft.module @B { "WIDTH" = 1 } (%a: i4) -> (nameOfPortInSV: i4) {
+// CHECK-LABEL: msft.module @B {WIDTH = 1 : i64} (%a: i4) -> (nameOfPortInSV: i4) attributes {fileName = "b.sv"} {
+// HWLOW-LABEL: hw.module @B(%a: i4) -> (nameOfPortInSV: i4) attributes {output_file = #hw.output_file<"b.sv", includeReplicatedOps>} {
+msft.module @B { "WIDTH" = 1 } (%a: i4) -> (nameOfPortInSV: i4) attributes {fileName = "b.sv"} {
   %0 = comb.add %a, %a : i4
   // CHECK: comb.add %a, %a : i4
   // HWLOW: comb.add %a, %a : i4

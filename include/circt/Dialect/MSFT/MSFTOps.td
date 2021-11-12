@@ -66,7 +66,8 @@ def MSFTModuleOp : MSFTOp<"module",
   }];
   let arguments = (ins
       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-      DictionaryAttr:$parameters);
+      DictionaryAttr:$parameters,
+      OptionalAttr<StrAttr>:$fileName);
   let results = (outs);
   let regions = (region OneOrNoBlocksRegion:$body);
 

@@ -70,6 +70,7 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
       input_ports=[],
       output_ports=[],
       parameters: _ir.DictAttr = None,
+      file_name: str = None,
       loc=None,
       ip=None,
   ):
@@ -78,6 +79,8 @@ class MSFTModuleOp(_hw_ext.ModuleLike):
       attrs["parameters"] = parameters
     else:
       attrs["parameters"] = _ir.DictAttr.get({})
+    if file_name is not None:
+      attrs["fileName"] = _ir.StringAttr.get(file_name)
     super().__init__(name,
                      input_ports,
                      output_ports,

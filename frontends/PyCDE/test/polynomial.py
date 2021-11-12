@@ -1,6 +1,6 @@
 # RUN: rm -rf %t
 # RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
-# RUN: FileCheck %s --input-file %t/PolynomialSystem.sv --check-prefix=OUTPUT
+# RUN: FileCheck %s --input-file %t/PolynomialCompute.sv --check-prefix=OUTPUT
 
 from __future__ import annotations
 
@@ -71,6 +71,8 @@ class CoolPolynomialCompute:
 @externmodule("parameterized_extern")
 def ExternWithParams(a, b):
 
+  typedef1 = types.struct({"a": types.i1}, "exTypedef")
+
   class M:
     pass
 
@@ -116,7 +118,7 @@ poly.generate(iters=1)
 
 print("Printing...")
 poly.print()
-# CHECK-LABEL: msft.module @PolynomialSystem {} () -> (y: i32) {
+# CHECK-LABEL: msft.module @PolynomialSystem {} () -> (y: i32) attributes {fileName = "PolynomialSystem.sv"} {
 # CHECK:         %example.y = msft.instance @example @PolyComputeForCoeff_62_42_6(%c23_i32) : (i32) -> i32
 # CHECK:         %example2.y = msft.instance @example2 @PolyComputeForCoeff_62_42_6(%example.y) : (i32) -> i32
 # CHECK:         %example2_1.y = msft.instance @example2_1 @PolyComputeForCoeff_1_2_3_4_5(%example.y) : (i32) -> i32

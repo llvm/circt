@@ -106,9 +106,14 @@ ModuleOpLowering::matchAndRewrite(MSFTModuleOp mod, OpAdaptor adaptor,
   rewriter.inlineRegionBefore(mod.getBody(), hwmod.getBody(),
                               hwmod.getBody().end());
 
-  if (!outputFile.empty()) {
-    auto outputFileAttr =
-        hw::OutputFileAttr::getFromFilename(rewriter.getContext(), outputFile);
+  auto opOutputFile = mod.fileName();
+  if (opOutputFile) {
+    auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
+        rewriter.getContext(), *opOutputFile, false, true);
+    hwmod->setAttr("output_file", outputFileAttr);
+  } else if (!outputFile.empty()) {
+    auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
+        rewriter.getContext(), outputFile, false, true);
     hwmod->setAttr("output_file", outputFileAttr);
   }
 
@@ -140,8 +145,8 @@ LogicalResult ModuleExternOpLowering::matchAndRewrite(
       mod.parameters());
 
   if (!outputFile.empty()) {
-    auto outputFileAttr =
-        hw::OutputFileAttr::getFromFilename(rewriter.getContext(), outputFile);
+    auto outputFileAttr = hw::OutputFileAttr::getFromFilename(
+        rewriter.getContext(), outputFile, false, true);
     hwMod->setAttr("output_file", outputFileAttr);
   }
 
