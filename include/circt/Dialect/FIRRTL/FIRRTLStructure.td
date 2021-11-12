@@ -53,7 +53,7 @@ def CircuitOp : FIRRTLOp<"circuit",
 
 def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
                                     NoTerminator, HasParent<"CircuitOp">,
-                                    ArgumentFlowKind,
+                                    BlockArgFlowKind,
                                     DeclareOpInterfaceMethods<FModuleLike>]> {
   let summary = "FIRRTL Module";
   let description = [{
@@ -109,7 +109,7 @@ def FModuleOp : FIRRTLOp<"module", [IsolatedFromAbove, Symbol, SingleBlock,
 }
 
 def FExtModuleOp : FIRRTLOp<"extmodule",
-      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, ArgumentFlowKind,
+      [IsolatedFromAbove, Symbol, HasParent<"CircuitOp">, BlockArgFlowKind,
        DeclareOpInterfaceMethods<FModuleLike>]> {
   let summary = "FIRRTL extmodule";
   let description = [{

@@ -60,8 +60,8 @@ def ResultFlowKind : OpTraitList<[
   DeclareOpInterfaceMethods<FlowKind, ["getFlow"]>]>;
 
 /// Convenience helper for overriding the block argument flow kind.
-def ArgumentFlowKind : OpTraitList<[
-  DeclareOpInterfaceMethods<FlowKind, ["getBlockArgumentFlow"]>]>;
+def BlockArgFlowKind : OpTraitList<[
+  DeclareOpInterfaceMethods<FlowKind, ["getBlockArgFlow"]>]>;
 
 def FModuleLike : OpInterface<"FModuleLike"> {
   let cppNamespace = "circt::firrtl";
