@@ -1,4 +1,4 @@
-// RUN: circt-opt -lower-firrtl-to-hw  %s | FileCheck %s
+// RUN: circt-opt -lower-firrtl-to-hw -verify-diagnostics %s | FileCheck %s
 
 firrtl.circuit "Simple"   attributes {annotations = [{class =
 "sifive.enterprise.firrtl.ExtractAssumptionsAnnotation", directory = "dir1",  filename = "./dir1/filename1" }, {class =
@@ -1152,18 +1152,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @AsyncResetThroughWires(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
     %c9000_ui42 = firrtl.constant 9000 : !firrtl.uint<42>
     %c9001_ui42 = firrtl.constant 9001 : !firrtl.uint<42>
+    // expected-note @+1 {{reset value defined here}}
     %constWire = firrtl.wire : !firrtl.uint<42>
     firrtl.connect %constWire, %c9000_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
     firrtl.connect %constWire, %c9001_ui42 : !firrtl.uint<42>, !firrtl.uint<42>
-    // The following should not error because the reset values are constant.
+    // The following is warning because the reset values are not constant at compile time.
+    // expected-warning @+1 {{register with async reset requires constant reset value}}
     %r0 = firrtl.regreset %clock, %arst, %constWire : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
   }
 
   // CHECK-LABEL: hw.module @AsyncResetThroughNodes(
   firrtl.module @AsyncResetThroughNodes(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset) {
     %c1337_ui42 = firrtl.constant 1337 : !firrtl.uint<42>
+    // expected-note @+1 {{reset value defined here}}
     %constNode = firrtl.node %c1337_ui42 : !firrtl.uint<42>
-    // The following should not error because the reset values are constant.
+    // The following is warning because the reset values are not constant at compile time.
+    // expected-warning @+1 {{register with async reset requires constant reset value}}
     %r0 = firrtl.regreset %clock, %arst, %constNode : !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
   }
 
