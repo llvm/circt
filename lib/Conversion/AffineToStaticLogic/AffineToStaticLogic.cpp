@@ -21,6 +21,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/LoopUtils.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "affine-to-staticlogic"
@@ -39,9 +40,10 @@ struct AffineToStaticLogic
   void runOnFunction() override;
 
 private:
-  void populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
-  void solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
-  void createStaticLogicPipeline(SmallVectorImpl<AffineForOp> &loopNest);
+  LogicalResult populateOperatorTypes(SmallVectorImpl<AffineForOp> &loopNest);
+  LogicalResult solveSchedulingProblem(SmallVectorImpl<AffineForOp> &loopNest);
+  LogicalResult
+  createStaticLogicPipeline(SmallVectorImpl<AffineForOp> &loopNest);
 
   CyclicSchedulingAnalysis *schedulingAnalysis;
 };
@@ -62,9 +64,17 @@ void AffineToStaticLogic::runOnFunction() {
     if (nestedLoops.size() != 1)
       continue;
 
-    populateOperatorTypes(nestedLoops);
-    solveSchedulingProblem(nestedLoops);
-    createStaticLogicPipeline(nestedLoops);
+    // Populate the target operator types.
+    if (failed(populateOperatorTypes(nestedLoops)))
+      return signalPassFailure();
+
+    // Solve the scheduling problem computed by the analysis.
+    if (failed(solveSchedulingProblem(nestedLoops)))
+      return signalPassFailure();
+
+    // Convert the IR.
+    if (failed(createStaticLogicPipeline(nestedLoops)))
+      return signalPassFailure();
   }
 }
 
@@ -72,7 +82,7 @@ void AffineToStaticLogic::runOnFunction() {
 /// targetting. Right now, we assume Calyx, which has a standard library with
 /// well-defined operator latencies. Ultimately, we should move this to a
 /// dialect interface in the Scheduling dialect.
-void AffineToStaticLogic::populateOperatorTypes(
+LogicalResult AffineToStaticLogic::populateOperatorTypes(
     SmallVectorImpl<AffineForOp> &loopNest) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
@@ -92,37 +102,40 @@ void AffineToStaticLogic::populateOperatorTypes(
 
   Operation *unsupported;
   WalkResult result = forOp.getBody()->walk([&](Operation *op) {
-    // Some known combinational ops.
-    if (isa<AddIOp, AffineIfOp, AffineYieldOp, mlir::ConstantOp, IndexCastOp,
-            memref::AllocaOp>(op)) {
-      problem.setLinkedOperatorType(op, combOpr);
-      return WalkResult::advance();
-    }
-
-    // Some known sequential ops.
-    if (isa<AffineReadOpInterface, AffineWriteOpInterface>(op)) {
-      problem.setLinkedOperatorType(op, seqOpr);
-      return WalkResult::advance();
-    }
-
-    // Some known multi-cycle ops.
-    if (isa<MulIOp>(op)) {
-      problem.setLinkedOperatorType(op, mcOpr);
-      return WalkResult::advance();
-    }
-
-    unsupported = op;
-    return WalkResult::interrupt();
+    return TypeSwitch<Operation *, WalkResult>(op)
+        .Case<AddIOp, AffineIfOp, AffineYieldOp, mlir::ConstantOp, IndexCastOp,
+              memref::AllocaOp>([&](Operation *combOp) {
+          // Some known combinational ops.
+          problem.setLinkedOperatorType(combOp, combOpr);
+          return WalkResult::advance();
+        })
+        .Case<AffineReadOpInterface, AffineWriteOpInterface>(
+            [&](Operation *seqOp) {
+              // Some known sequential ops. In certain cases, reads may be
+              // combinational in Calyx, but taking advantage of that is left as
+              // a future enhancement.
+              problem.setLinkedOperatorType(seqOp, seqOpr);
+              return WalkResult::advance();
+            })
+        .Case<MulIOp>([&](Operation *mcOp) {
+          // Some known multi-cycle ops.
+          problem.setLinkedOperatorType(mcOp, mcOpr);
+          return WalkResult::advance();
+        })
+        .Default([&](Operation *badOp) {
+          unsupported = op;
+          return WalkResult::interrupt();
+        });
   });
 
-  if (result.wasInterrupted()) {
-    forOp.emitError("unsupported operation ") << *unsupported;
-    return signalPassFailure();
-  }
+  if (result.wasInterrupted())
+    return forOp.emitError("unsupported operation ") << *unsupported;
+
+  return success();
 }
 
 /// Solve the pre-computed scheduling problem.
-void AffineToStaticLogic::solveSchedulingProblem(
+LogicalResult AffineToStaticLogic::solveSchedulingProblem(
     SmallVectorImpl<AffineForOp> &loopNest) {
   // Scheduling analyis only considers the innermost loop nest for now.
   auto forOp = loopNest.back();
@@ -145,11 +158,11 @@ void AffineToStaticLogic::solveSchedulingProblem(
 
   // Verify and solve the problem.
   if (failed(problem.check()))
-    return signalPassFailure();
+    return failure();
 
   auto *anchor = forOp.getBody()->getTerminator();
   if (failed(scheduleSimplex(problem, anchor)))
-    return signalPassFailure();
+    return failure();
 
   // Optionally debug problem outputs.
   LLVM_DEBUG({
@@ -161,10 +174,12 @@ void AffineToStaticLogic::solveSchedulingProblem(
       llvm::dbgs() << "\n\n";
     });
   });
+
+  return success();
 }
 
 /// Create the pipeline op for a loop nest.
-void AffineToStaticLogic::createStaticLogicPipeline(
+LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
     SmallVectorImpl<AffineForOp> &loopNest) {
   auto outerLoop = loopNest.front();
   auto innerLoop = loopNest.back();
@@ -221,6 +236,8 @@ void AffineToStaticLogic::createStaticLogicPipeline(
   // Remove the loop nest from the IR.
   for (auto loop : llvm::reverse(loopNest))
     loop.erase();
+
+  return success();
 }
 
 std::unique_ptr<mlir::Pass> circt::createAffineToStaticLogic() {
