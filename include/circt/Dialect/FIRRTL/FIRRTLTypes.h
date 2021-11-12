@@ -86,6 +86,10 @@ public:
   /// widths.
   FIRRTLType getWidthlessType();
 
+  /// Return a base type of vector type. Return null if this is not a base
+  /// vector type(N-dim vector without a bundle).
+  FIRRTLType getVectorBaseType();
+
   /// If this is an IntType, AnalogType, or sugar type for a single bit (Clock,
   /// Reset, etc) then return the bitwidth.  Return -1 if the is one of these
   /// types but without a specified bitwidth.  Return -2 if this isn't a simple

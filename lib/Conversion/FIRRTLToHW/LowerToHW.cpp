@@ -935,16 +935,34 @@ static Value tryEliminatingConnectsToValue(Value flipValue,
                 connectSrc)
             .getResult(0);
 
-  // We know it must be the destination operand due to the types, but the
-  // source may not match the destination width.
-  auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
-  if (destTy.getBitWidthOrSentinel() !=
-      connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
-    // The only type mismatchs we care about is due to integer width
-    // differences.
-    auto destWidth = destTy.getBitWidthOrSentinel();
-    assert(destWidth != -1 && "must know integer widths");
-    connectSrc = builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
+  if (connectSrc.getType().isa<FVectorType>()) {
+    // TODO: Probably we can apply PadPrimOp for each elements.
+    auto srcBaseType =
+        connectSrc.getType().cast<FIRRTLType>().getVectorBaseType();
+    auto destBaseType = flipValue.getType()
+                            .cast<FIRRTLType>()
+                            .getPassiveType()
+                            .getVectorBaseType();
+    if (!srcBaseType || !destBaseType)
+      return {};
+    if (srcBaseType.getBitWidthOrSentinel() == -1 ||
+        destBaseType.getBitWidthOrSentinel() == -1 ||
+        (srcBaseType.getBitWidthOrSentinel() !=
+         destBaseType.getBitWidthOrSentinel()))
+      return {};
+  } else {
+    // We know it must be the destination operand due to the types, but the
+    // source may not match the destination width.
+    auto destTy = flipValue.getType().cast<FIRRTLType>().getPassiveType();
+    if (destTy.getBitWidthOrSentinel() !=
+        connectSrc.getType().cast<FIRRTLType>().getBitWidthOrSentinel()) {
+      // The only type mismatchs we care about is due to integer width
+      // differences.
+      auto destWidth = destTy.getBitWidthOrSentinel();
+      assert(destWidth != -1 && "must know integer widths");
+      connectSrc =
+          builder.createOrFold<PadPrimOp>(destTy, connectSrc, destWidth);
+    }
   }
 
   // Remove the connect and use its source as the value for the output.
@@ -1148,6 +1166,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   UnloweredOpResult handleUnloweredOp(Operation *op);
   LogicalResult visitExpr(ConstantOp op);
   LogicalResult visitExpr(SpecialConstantOp op);
+  LogicalResult visitExpr(SubindexOp op);
   LogicalResult visitExpr(SubfieldOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) { return failure(); }
@@ -1640,6 +1659,47 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
     return getOrCreateIntConstant(destWidth, 0);
   }
 
+  if (auto array = result.getType().dyn_cast<hw::ArrayType>()) {
+    // srcWidth == unsigned(destWidth) --> ok
+    // srcWidth > unsigned(destWidth)  --> insert extract
+    // srcWidth < unsigned(destWidth)  --> insert concat/sext to elements
+
+    auto baseDestType = getFIRRTLVectorBaseType(destType.cast<FIRRTLType>());
+    auto baseSourceType =
+        getFIRRTLVectorBaseType(value.getType().cast<FIRRTLType>());
+    auto baseResultType = getVectorBaseType(result.getType());
+    if (!baseSourceType || !baseDestType || !baseResultType)
+      return {};
+
+    auto srcWidth = baseResultType.cast<IntegerType>().getWidth();
+    auto destWidth = baseDestType.cast<IntType>().getWidthOrSentinel();
+
+    if (srcWidth == unsigned(destWidth))
+      return result;
+
+    if (destWidth == 0)
+      return {};
+
+    auto resultType = builder.getIntegerType(destWidth);
+    if (srcWidth > unsigned(destWidth)) {
+      auto extract = [&](Value value) {
+        return builder.createOrFold<comb::ExtractOp>(resultType, result, 0);
+        builder.emitError("operand should not be a truncation");
+      };
+      return mapArray(result, extract);
+    }
+
+    auto isSigned = baseSourceType.getPassiveType().cast<IntType>().isSigned();
+    auto extend = [&](Value value) {
+      if (isSigned)
+        return builder.createOrFold<comb::SExtOp>(resultType, value);
+      auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
+      return builder.createOrFold<comb::ConcatOp>(zero, value);
+    };
+
+    return mapArray(result, extend);
+  }
+
   auto srcWidth = result.getType().cast<IntegerType>().getWidth();
   if (srcWidth == unsigned(destWidth))
     return result;
@@ -1948,6 +2008,22 @@ LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
 LogicalResult FIRRTLLowering::visitExpr(SpecialConstantOp op) {
   return setLowering(op,
                      getOrCreateIntConstant(APInt(/*bitWidth*/ 1, op.value())));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(SubindexOp op) {
+  if (getLoweredValue(op) || !op.input())
+    return success();
+  if (isZeroBitFIRRTLType(op->getResult(0).getType()))
+    return setLowering(op, Value());
+
+  auto resultType = lowerType(op->getResult(0).getType());
+  Value value = getLoweredValue(op.input());
+  assert(resultType && value && "subindex type lowering failed");
+  auto iIdx = getOrCreateIntConstant(
+      log2(op.input().getType().cast<FVectorType>().getNumElements() + 1),
+      op.index());
+
+  return setLoweringTo<hw::ArrayGetOp>(op, resultType, value, iIdx);
 }
 
 LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {

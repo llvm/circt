@@ -1350,19 +1350,46 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   //   reg r: UInt<2>[2], clock
   //   r <= a
   //   b <= r
-  firrtl.module @connectNarrow(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<2>, 2>) {
+  firrtl.module @connectNarrow(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 2>, out %b: !firrtl.vector<uint<3>, 2>) {
     %r = firrtl.reg %clock  : !firrtl.vector<uint<2>, 2>
     firrtl.connect %r, %a : !firrtl.vector<uint<2>, 2>, !firrtl.vector<uint<1>, 2>
-    firrtl.connect %b, %r : !firrtl.vector<uint<2>, 2>, !firrtl.vector<uint<2>, 2>
-    // CHECK:       %1 = hw.array_get %a[%false] : !hw.array<2xi1>
-    // CHECK-NEXT:  %2 = comb.concat %false, %1 : i1, i1
-    // CHECK-NEXT:  %3 = hw.array_get %a[%true] : !hw.array<2xi1>
-    // CHECK-NEXT:  %4 = comb.concat %false, %3 : i1, i1
-    // CHECK-NEXT:  %5 = hw.array_create %2, %4 : i2
-    // CHECK-NEXT:  sv.always posedge %clock  {
-    // CHECK-NEXT:    sv.passign %r, %5 : !hw.array<2xi2>
-    // CHECK-NEXT:  }
-    // CHECK-NEXT:  hw.output %0 : !hw.array<2xi2>
+    firrtl.connect %b, %r : !firrtl.vector<uint<3>, 2>, !firrtl.vector<uint<2>, 2>
+    // CHECK:      %2 = hw.array_get %a[%false] : !hw.array<2xi1>
+    // CHECK-NEXT: %3 = comb.concat %false, %2 : i1, i1
+    // CHECK-NEXT: %4 = hw.array_get %a[%true] : !hw.array<2xi1>
+    // CHECK-NEXT: %5 = comb.concat %false, %4 : i1, i1
+    // CHECK-NEXT: %6 = hw.array_create %3, %5 : i2
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.passign %r, %6 : !hw.array<2xi2>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %7 = hw.array_get %1[%false] : !hw.array<2xi2>
+    // CHECK-NEXT: %8 = comb.concat %false, %7 : i1, i2
+    // CHECK-NEXT: %9 = hw.array_get %1[%true] : !hw.array<2xi2>
+    // CHECK-NEXT: %10 = comb.concat %false, %9 : i1, i2
+    // CHECK-NEXT: %11 = hw.array_create %8, %10 : i3
+    // CHECK-NEXT: sv.assign %.b.output, %11 : !hw.array<2xi3>
+    // CHECK-NEXT: hw.output %0 : !hw.array<2xi3>
+  }
+
+  // CHECK-LABEL: hw.module @SubIndex
+  firrtl.module @SubIndex(in %a: !firrtl.vector<vector<uint<1>, 2>, 2>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 2>) {
+    %r1 = firrtl.reg %clock  : !firrtl.uint<1>
+    %r2 = firrtl.reg %clock  : !firrtl.vector<uint<1>, 2>
+    %0 = firrtl.subindex %a[0] : !firrtl.vector<vector<uint<1>, 2>, 2>
+    %1 = firrtl.subindex %0[1] : !firrtl.vector<uint<1>, 2>
+    firrtl.connect %r1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.subindex %a[1] : !firrtl.vector<vector<uint<1>, 2>, 2>
+    firrtl.connect %r2, %2 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    firrtl.connect %o1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %o2, %r2 : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    // CHECK:      %2 = hw.array_get %a[%false] : !hw.array<2xarray<2xi1>>
+    // CHECK-NEXT: %3 = hw.array_get %2[%true] : !hw.array<2xi1>
+    // CHECK-NEXT: %4 = hw.array_get %a[%true] : !hw.array<2xarray<2xi1>>
+    // CHECK-NEXT: sv.always posedge %clock  {
+    // CHECK-NEXT:   sv.passign %r1, %3 : i1
+    // CHECK-NEXT:   sv.passign %r2, %4 : !hw.array<2xi1>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: hw.output %0, %1 : i1, !hw.array<2xi1>
   }
 
 >>>>>>> 73564647 ([FIRRTL/LowerToHW] Add initialization and lowering around connect)
