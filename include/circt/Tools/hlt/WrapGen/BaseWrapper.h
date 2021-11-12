@@ -27,8 +27,7 @@ namespace hlt {
 
 class BaseWrapper {
 public:
-  BaseWrapper(StringRef inputFile, StringRef outDir)
-      : inputFile(inputFile), outDir(outDir) {}
+  BaseWrapper(StringRef outDir) : outDir(outDir) {}
   virtual ~BaseWrapper(){};
 
   /// The wrap function takes a source operation and a kernel operation. The
@@ -60,7 +59,6 @@ protected:
   std::unique_ptr<raw_fd_ostream> outputFile;
   std::unique_ptr<raw_indented_ostream> outputFileIndented;
   std::string outputFilename;
-  StringRef inputFile;
   StringRef outDir;
   FuncOp funcOp;
 

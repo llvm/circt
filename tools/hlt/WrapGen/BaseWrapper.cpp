@@ -20,7 +20,7 @@ namespace circt {
 namespace hlt {
 
 LogicalResult BaseWrapper::wrap(Operation *refOp, Operation *kernelOp) {
-  funcOp = dyn_cast<FuncOp>(refOp);
+  funcOp = dyn_cast<mlir::FuncOp>(refOp);
   if (!funcOp)
     return refOp->emitOpError()
            << "Expected the reference operation to be a builtin.func operation";

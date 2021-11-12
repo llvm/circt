@@ -9,7 +9,7 @@
 // RUN:               -reconcile-unrealized-casts > ${TESTNAME}_tb.mlir
 
 // Build standard simulator
-// RUN: hlt-wrapgen --ref %s.kernel --kernel %s.kernel --name ${TESTNAME} -o .
+// RUN: hlt-wrapgen --ref %s.kernel --kernel %s.kernel --name ${TESTNAME} --type=std -o .
 // RUN: mlir-opt %s.kernel -convert-scf-to-std                                 \
 // RUN:                    -convert-std-to-llvm                                \
 // RUN: | mlir-translate --mlir-to-llvmir -o=${TESTNAME}.ll

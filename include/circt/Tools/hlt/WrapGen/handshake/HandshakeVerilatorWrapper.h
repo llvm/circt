@@ -18,6 +18,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 
+#include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 
 #include "circt/Tools/hlt/WrapGen/BaseWrapper.h"
@@ -40,7 +41,7 @@ protected:
   SmallVector<std::string> getNamespaces() override { return {"circt", "hlt"}; }
 
 private:
-  void emitSimulator(handshake::FuncOp hsFuncOp);
+  void emitSimulator(firrtl::FModuleLike handshakeFirMod);
 };
 
 } // namespace hlt

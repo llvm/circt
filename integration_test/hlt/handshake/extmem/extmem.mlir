@@ -2,6 +2,7 @@
 
 // === Lower testbench to LLVMIR
 // RUN:   mlir-opt %s -convert-scf-to-std                                      \
+// RUN:               -convert-memref-to-llvm                                  \
 // RUN:               -convert-std-to-llvm                                     \
 // RUN:               -reconcile-unrealized-casts > ${TESTNAME}_tb.mlir
 
@@ -23,7 +24,7 @@
 
 
 func private @extmem_call(%mem : memref<16xi32>, %idx : index) -> ()
-func private @extmem_await() -> (i32)
+func private @extmem_await() -> ()
 func private @printI64(i32)
 func private @printComma()
 func @test_extmem() -> i32 {
@@ -46,7 +47,8 @@ func @test_extmem() -> i32 {
   // Await
   scf.for %i = %c0 to %c10 step %c1 {
     %0 = arith.index_cast %i : index to i32
-    %res = call @extmem_await() : () -> (i32)
+    call @extmem_await() : () -> ()
+    %res = memref.load %mem[%i] : memref<16xi32>
     call @printI64(%res) : (i32) -> ()
     call @printComma() : () -> ()
   }

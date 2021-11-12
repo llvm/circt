@@ -32,8 +32,10 @@ SmallVector<std::string> HandshakeVerilatorWrapper::getIncludes() {
 }
 
 LogicalResult HandshakeVerilatorWrapper::emitPreamble(Operation *kernelOp) {
-  auto hsFuncOp = dyn_cast<handshake::FuncOp>(kernelOp);
-  assert(hsFuncOp && "Expected a handshake op");
+  auto handshakeFirMod = dyn_cast<firrtl::FModuleLike>(kernelOp);
+  if (!handshakeFirMod)
+    return kernelOp->emitOpError() << "Expected a FIRRTL module of the "
+                                      "handshake kernel that is to be wrapped";
 
   if (emitIOTypes(emitVerilatorType).failed())
     return failure();
@@ -45,13 +47,15 @@ LogicalResult HandshakeVerilatorWrapper::emitPreamble(Operation *kernelOp) {
            "TModel>;\n\n";
 
   // Emit simulator.
-  emitSimulator(hsFuncOp);
+  emitSimulator(handshakeFirMod);
 
   // Emit simulator driver type.
   osi() << "using TSim = " << funcName() << "Sim;\n";
   return success();
 }
-void HandshakeVerilatorWrapper::emitSimulator(handshake::FuncOp hsFuncOp) {
+
+void HandshakeVerilatorWrapper::emitSimulator(
+    firrtl::FModuleLike handshakeFirMod) {
   osi() << "class " << funcName() << "Sim : public " << funcName()
         << "SimInterface {\n";
   osi() << "public:\n";
@@ -64,22 +68,26 @@ void HandshakeVerilatorWrapper::emitSimulator(handshake::FuncOp hsFuncOp) {
   osi() << "interface.clock = &dut->clock;\n";
   osi() << "interface.reset = &dut->reset;\n\n";
 
-  auto argNames = hsFuncOp->getAttrOfType<ArrayAttr>("argNames");
-  auto getInputName = [&](unsigned idx) -> std::string {
-    if (argNames) {
-      return argNames[idx].cast<StringAttr>().getValue().str();
-    } else
-      return "arg" + std::to_string(idx);
+  auto getInputName = [&](unsigned idx) -> StringRef {
+    return handshakeFirMod.getPortName(idx);
+  };
+  unsigned inCtrlIndex = funcOp.getNumArguments();
+  auto getResName = [&](unsigned idx) -> StringRef {
+    idx += inCtrlIndex + 1;
+    return handshakeFirMod.getPortName(idx);
   };
 
-  unsigned inCtrlIndex = funcOp.getNumArguments();
-  std::string inCtrlName = getInputName(inCtrlIndex);
-  unsigned outCtrlIndex = inCtrlIndex + funcOp.getNumResults() + 1;
+  auto inCtrlName = getInputName(inCtrlIndex);
+  auto outCtrlName = getResName(funcOp.getNumResults());
   osi() << "// --- Handshake interface\n";
   osi() << "inCtrl->readySig = &dut->" << inCtrlName << "_ready;\n";
   osi() << "inCtrl->validSig = &dut->" << inCtrlName << "_valid;\n";
-  osi() << "outCtrl->readySig = &dut->arg" << outCtrlIndex << "_ready;\n";
-  osi() << "outCtrl->validSig = &dut->arg" << outCtrlIndex << "_valid;\n\n";
+  osi() << "outCtrl->readySig = &dut->" << outCtrlName << "_ready;\n";
+  osi() << "outCtrl->validSig = &dut->" << outCtrlName << "_valid;\n\n";
+
+  // We expect equivalence between the order of function arguments and the ports
+  // of the FIRRTL module. Additionally, the handshake layer has then added
+  // one more argument and return port for the control signals.
 
   osi() << "// --- Model interface\n";
   auto funcType = funcOp.getType();
@@ -92,15 +100,6 @@ void HandshakeVerilatorWrapper::emitSimulator(handshake::FuncOp hsFuncOp) {
     osi() << "&dut->" << arg << "_valid, ";
     osi() << "&dut->" << arg << "_data);\n";
   }
-
-  auto resNames = hsFuncOp->getAttrOfType<ArrayAttr>("resNames");
-  auto getResName = [&](unsigned idx) -> std::string {
-    if (resNames) {
-      return resNames[idx].cast<StringAttr>().getValue().str();
-    } else
-      return "out" + std::to_string(idx);
-  };
-
   osi() << "\n// - Output ports\n";
   for (auto &res : enumerate(funcType.getResults())) {
     auto arg = getResName(res.index());

@@ -25,6 +25,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/SourceMgr.h"
 
+#include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
 #include "circt/Dialect/Handshake/HandshakeDialect.h"
 #include "circt/Dialect/Handshake/HandshakeOps.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
@@ -57,26 +58,29 @@ static cl::opt<std::string>
     functionName("name", cl::Required,
                  cl::desc("The name of the function to wrap"), cl::init("-"));
 
+enum class KernelType { HandshakeFIRRTL, Standard };
+
+static cl::opt<KernelType> kernelType(
+    "type", cl::Required,
+    cl::desc("The type of the kernel to wrap. This will guide "
+             "which wrapper is used, and what operation type the "
+             "source kernel operation should be."),
+    cl::init(KernelType::HandshakeFIRRTL),
+    llvm::cl::values(clEnumValN(KernelType::HandshakeFIRRTL, "handshakeFIRRTL",
+                                "Use the Handshake wrapper"),
+                     clEnumValN(KernelType::Standard, "std",
+                                "Use the standard wrapper")));
 namespace circt {
 namespace hlt {
 
 /// Instantiates a wrapper based on the type of the kernel operation.
-static std::unique_ptr<BaseWrapper> getWrapperForKernelOp(Operation *op) {
-  return llvm::TypeSwitch<Operation *, std::unique_ptr<BaseWrapper>>(op)
-      .Case<handshake::FuncOp>([&](auto) {
-        return std::make_unique<HandshakeVerilatorWrapper>(inputKernelFilename,
-                                                           outputDirectory);
-      })
-      .Case<FuncOp>([&](auto) {
-        return std::make_unique<StdWrapper>(inputKernelFilename,
-                                            outputDirectory);
-      })
-      .Default(
-          [&](auto op) {
-            op->emitOpError()
-                << "No wrapper registered for the type of this operation.";
-            return nullptr;
-          });
+static std::unique_ptr<BaseWrapper> getWrapper() {
+  switch (kernelType) {
+  case KernelType::HandshakeFIRRTL:
+    return std::make_unique<HandshakeVerilatorWrapper>(outputDirectory);
+  case KernelType::Standard:
+    return std::make_unique<StdWrapper>(outputDirectory);
+  }
 }
 
 /// Container for the current set of loaded modules.
@@ -119,13 +123,22 @@ static mlir::Operation *getOpToWrap(mlir::MLIRContext *ctx,
     return nullptr;
   }
 
-  Operation *op = mod.lookupSymbol(symbol);
-  if (!op) {
+  Operation *targetOp = nullptr;
+  SymbolTable::walkSymbolTables(
+      mod, /*unused*/ false, [&](Operation *symOp, bool) {
+        Operation *op = SymbolTable::lookupSymbolIn(symOp, symbol);
+        if (op) {
+          assert(targetOp == nullptr);
+          targetOp = op;
+        }
+      });
+
+  if (!targetOp) {
     errs() << "Found no definitions of symbol '" << symbol << "' in '" << fn
            << "'\n";
     return nullptr;
   }
-  return op;
+  return targetOp;
 }
 
 static void registerDialects(mlir::DialectRegistry &registry) {
@@ -134,6 +147,7 @@ static void registerDialects(mlir::DialectRegistry &registry) {
   registry.insert<arith::ArithmeticDialect>();
   registry.insert<scf::SCFDialect>();
   registry.insert<handshake::HandshakeDialect>();
+  registry.insert<firrtl::FIRRTLDialect>();
 }
 
 } // namespace hlt
@@ -161,7 +175,7 @@ int main(int argc, char **argv) {
     return 1;
 
   /// Locate wrapping handler for the operation.
-  auto wrapper = circt::hlt::getWrapperForKernelOp(kernelOp);
+  auto wrapper = circt::hlt::getWrapper();
   if (!wrapper)
     return 1;
 
