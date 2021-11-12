@@ -1729,9 +1729,9 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(targetString.getValue());
         if (!canonTarget)
           return false;
-        auto NLATargets = expandNonLocal(*canonTarget);
+        auto nlaTargets = expandNonLocal(*canonTarget);
         auto leafTarget = splitAndAppendTarget(
-            fields, std::get<0>(NLATargets.back()), context);
+            fields, std::get<0>(nlaTargets.back()), context);
 
         // Add a don't touch annotation to whatever this annotation targets.
         addDontTouch(leafTarget.first, leafTarget.second);
@@ -1755,11 +1755,11 @@ bool circt::firrtl::scatterCustomAnnotations(
         auto canonTarget = canonicalizeTarget(targetString.getValue());
         if (!canonTarget)
           return false;
-        auto NLATargets = expandNonLocal(*canonTarget);
+        auto nlaTargets = expandNonLocal(*canonTarget);
         auto leafTarget = splitAndAppendTarget(
-            fields, std::get<0>(NLATargets.back()), context);
-        if (NLATargets.size() > 1) {
-          buildNLA(circuit, ++nlaNumber, NLATargets);
+            fields, std::get<0>(nlaTargets.back()), context);
+        if (nlaTargets.size() > 1) {
+          buildNLA(circuit, ++nlaNumber, nlaTargets);
           fields.append("circt.nonlocal",
                         FlatSymbolRefAttr::get(context, *canonTarget));
         }
@@ -1767,12 +1767,12 @@ bool circt::firrtl::scatterCustomAnnotations(
             DictionaryAttr::get(context, fields));
 
         // Annotate instances along the NLA path.
-        for (int i = 0, e = NLATargets.size() - 1; i < e; ++i) {
+        for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
           NamedAttrList fields;
           fields.append("circt.nonlocal",
                         FlatSymbolRefAttr::get(context, *canonTarget));
           fields.append("class", StringAttr::get(context, "circt.nonlocal"));
-          newAnnotations[std::get<0>(NLATargets[i])].push_back(
+          newAnnotations[std::get<0>(nlaTargets[i])].push_back(
               DictionaryAttr::get(context, fields));
         }
       }
