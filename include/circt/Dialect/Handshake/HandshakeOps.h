@@ -37,20 +37,6 @@ class TerminatorOp;
 
 #include "circt/Dialect/Handshake/HandshakeInterfaces.h.inc"
 
-// template <typename T> struct FunctionPass : public OperationPass<T, FuncOp> {
-//   /// The polymorphic API that runs the pass over the currently held
-//   function. virtual void runOnFunction() = 0;
-
-//   /// The polymorphic API that runs the pass over the currently held
-//   operation. void runOnOperation() final {
-//     if (!getFunction().isExternal())
-//       runOnFunction();
-//   }
-
-//   /// Return the current module being transformed.
-//   FuncOp getFunction() { return this->getOperation(); }
-// };
-
 } // end namespace handshake
 } // end namespace circt
 
