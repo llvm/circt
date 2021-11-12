@@ -16,7 +16,7 @@
 // CHECK: firrtl.instance baz {annotations = [{circt.nonlocal = @nla, class = "circt.nonlocal"}, {circt.nonlocal = @nla_0, class = "circt.nonlocal"}]} @BazNL()
 // CHECK: firrtl.module @FooL
 // CHECK: %w3 = firrtl.wire {annotations = [{class = "circt.test", nl = "nl3"}]}
-firrtl.circuit "FooNL"  attributes {annotations = [
+firrtl.circuit "FooNL"  attributes {raw_annotations = [
   {class = "circt.test", nl = "nl", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w"},
   {class = "circt.test", nl = "nl2", target = "~FooNL|FooNL/baz:BazNL/bar:BarNL>w2.b[2]"},
   {class = "circt.test", nl = "nl3", target = "~FooNL|FooL>w3"}

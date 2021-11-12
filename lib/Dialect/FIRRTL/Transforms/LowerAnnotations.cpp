@@ -607,39 +607,42 @@ LogicalResult LowerAnnotationsPass::applyAnnotation(DictionaryAttr anno,
   // See if we handle the class
   auto record = getAnnotationHandler(annoClassVal, ignoreUnhandledAnno);
   if (!record)
-    return state.circuit.emitWarning("Unhandled annotation: ") << anno;
+    return state.circuit.emitWarning("Unhandled annotation: ") << annoClassVal;
 
   // Try to apply the annotation
   auto target = record->resolver(anno, state);
   if (!target)
     return state.circuit.emitError("Unable to resolve target of annotation: ")
-           << anno;
+           << annoClassVal;
   if (record->applier(*target, anno, state).failed())
-    return state.circuit.emitError("Unable to apply annotation: ") << anno;
+    return state.circuit.emitError("Unable to apply annotation: ")
+           << annoClassVal;
   return success();
 }
 
 // This is the main entrypoint for the lowering pass.
 void LowerAnnotationsPass::runOnOperation() {
   CircuitOp circuit = getOperation();
-  SymbolTable modules(circuit);
   // Grab the annotations.
-  for (auto anno : circuit.annotations())
-    worklistAttrs.push_back(anno.cast<DictionaryAttr>());
-  // Clear the annotations.
-  circuit.annotationsAttr(ArrayAttr::get(circuit.getContext(), {}));
-  size_t numFailures = 0;
-  ApplyState state{circuit, modules,
-                   [&](DictionaryAttr ann) { worklistAttrs.push_back(ann); }
+  if (auto raw = circuit->getAttrOfType<ArrayAttr>("raw_annotations")) {
+    SymbolTable modules(circuit);
+    for (auto anno : raw)
+      worklistAttrs.push_back(anno.cast<DictionaryAttr>());
+    // Clear the raw annotations.
+    circuit->removeAttr("raw_annotations");
+    ApplyState state{circuit, modules,
+                     [&](DictionaryAttr ann) { worklistAttrs.push_back(ann); }
 
-  };
-  while (!worklistAttrs.empty()) {
-    auto attr = worklistAttrs.pop_back_val();
-    if (applyAnnotation(attr, state).failed())
-      ++numFailures;
+    };
+    size_t numFailures = 0;
+    while (!worklistAttrs.empty()) {
+      auto attr = worklistAttrs.pop_back_val();
+      if (applyAnnotation(attr, state).failed())
+        ++numFailures;
+    }
+    if (numFailures)
+      signalPassFailure();
   }
-  if (numFailures)
-    signalPassFailure();
 }
 
 /// This is the pass constructor.

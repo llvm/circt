@@ -3519,7 +3519,6 @@ ParseResult FIRCircuitParser::parseCircuit(
   std::string circuitTarget = "~" + name.getValue().str();
   size_t nlaNumber = 0;
 
-  ArrayAttr annotations;
   if (getConstants().options.rawAnnotations) {
     SmallVector<Attribute> rawAnno;
     // Deal with any inline annotations, if they exist.  These are processed
@@ -3545,10 +3544,9 @@ ParseResult FIRCircuitParser::parseCircuit(
     // Get annotations associated with this circuit. These are either:
     //   1. Annotations with no target (which we use "~" to identify)
     //   2. Annotations targeting the circuit, e.g., "~Foo"
-    annotations = b.getArrayAttr(rawAnno);
-
+    ArrayAttr annotations = b.getArrayAttr(rawAnno);
+    circuit->setAttr("raw_annotations", annotations);
   } else {
-
     // Deal with any inline annotations, if they exist.  These are processed
     // first to place any annotations from an annotation file *after* the inline
     // annotations.  While arbitrary, this makes the annotation file have
@@ -3574,10 +3572,10 @@ ParseResult FIRCircuitParser::parseCircuit(
     // Get annotations associated with this circuit. These are either:
     //   1. Annotations with no target (which we use "~" to identify)
     //   2. Annotations targeting the circuit, e.g., "~Foo"
-    annotations = getAnnotations({"~", circuitTarget}, info.getFIRLoc(),
-                                 getConstants().targetSet);
+    ArrayAttr annotations = getAnnotations(
+        {"~", circuitTarget}, info.getFIRLoc(), getConstants().targetSet);
+    circuit->setAttr("annotations", annotations);
   }
-  circuit->setAttr("annotations", annotations);
   deferredModules.reserve(16);
 
   // Parse any contained modules.

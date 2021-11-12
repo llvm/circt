@@ -322,10 +322,8 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   pm.enableTiming(ts);
   applyPassManagerCLOptions(pm);
 
-  if (newAnno)
-    pm.nest<firrtl::CircuitOp>().addPass(
-        firrtl::createLowerFIRRTLAnnotationsPass(disableAnnotationsUnknown,
-                                                 disableAnnotationsClassless));
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerFIRRTLAnnotationsPass(
+      disableAnnotationsUnknown, disableAnnotationsClassless));
 
   if (!disableOptimization) {
     pm.nest<firrtl::CircuitOp>().nest<firrtl::FModuleOp>().addPass(
