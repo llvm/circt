@@ -1,9 +1,9 @@
 module driver();
   logic clock = 0;
   logic reset = 0;
-  logic arg0_valid, arg0_ready;
   logic out0_valid, out0_ready;
   logic [31:0] out0_data;
+  logic inCtrl_valid, inCtrl_ready;
   logic outCtrl_valid, outCtrl_ready;
 
   top dut (.*);
@@ -15,7 +15,7 @@ module driver();
   end
 
   initial begin
-    arg0_valid = 1;
+    inCtrl_valid = 1;
     out0_ready = 1;
     outCtrl_ready = 1;
 
@@ -26,7 +26,7 @@ module driver();
 
     // Hold valid high for one clock cycle.
     @(posedge clock);
-    arg0_valid = 0;
+    inCtrl_valid = 0;
 
     wait(out0_valid == 1);
 
