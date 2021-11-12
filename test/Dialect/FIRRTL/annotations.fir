@@ -1155,6 +1155,6 @@ circuit Top : %[[{
 ; CHECK-SAME:   out out: !firrtl.uint<456> [{class = "firrtl.transforms.DontTouchAnnotation"}]
 ; CHECK-SAME: )
 ; CHECK-SAME: attributes {annotations = [
-; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/child:Child", class = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation", id = [[ID]] : i64, targetId = 1 : i64},
-; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", class = "sifive.enterprise.grandcentral.ModuleReplacementAnnotation", id = [[ID]] : i64, targetId = 2 : i64}
+; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/child:Child", id = [[ID]] : i64},
+; CHECK-SAME:   {circt.nonlocal = @"~Top|Top/childWrapper:ChildWrapper/child:Child", id = [[ID]] : i64}
 ; CHECK-SAME: ]}
