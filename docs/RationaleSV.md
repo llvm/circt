@@ -72,17 +72,16 @@ TODO: Describe `sv.wire`, `sv.reg`,
 ## Expressions
 
 TODO: Describe `sv.read_inout` and `sv.array_index_inout`.
-### Part Select
-Unlike Bit-selects which extract a particular bit from an `InOut` type,
+### Indexed Part Select
+Unlike Bit-selects which extract a particular bit from integer types,
  part-select can extract several contiguous bits in a vector net, vector reg,
  integer variable, or time variables. 
  
  `SystemVerilog` supports two types of part-selects, a `constant part-select`
  and an `indexed part-select`. 
- `sv.part_select` and `sv.part_select_inout` is lowered to the 
- `indexed part-select` operation.
- There are two part select operations defined in SV dialect, 
- the `sv.part_select` is defined on `Integer` type input and 
+SV dialect has two ops named `sv.part_select` and `sv.part_select_inout`,
+that is lowered to the `indexed part-select` operation.
+ The `sv.part_select` is defined on `Integer` type input and 
  `sv.part_select_inout` is defined on `inout` type.
 
  Part select consits of 3 arguments, the input value,
