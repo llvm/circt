@@ -326,7 +326,7 @@ jobs:
       - name: clang-tidy
         if: ${{ always() }}
         run: |
-          git diff -U0 $DIFF_COMMIT | \
+          git diff -U0 $DIFF_COMMIT...HEAD | \
             clang-tidy-diff -path build_clang -p1 -fix
           git clang-format $DIFF_COMMIT
           git diff --ignore-submodules > clang-tidy.patch
