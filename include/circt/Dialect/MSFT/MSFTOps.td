@@ -66,14 +66,17 @@ def MSFTModuleOp : MSFTOp<"module",
   }];
   let arguments = (ins
       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-      DictionaryAttr:$parameters);
+      DictionaryAttr:$parameters,
+      OptionalAttr<StrAttr>:$fileName);
   let results = (outs);
   let regions = (region OneOrNoBlocksRegion:$body);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<hw::PortInfo>":$ports,
-                   "ArrayRef<NamedAttribute>":$params)>
+                   "ArrayRef<NamedAttribute>":$params)>,
+    OpBuilder<(ins "StringAttr":$name, "ArrayRef<hw::PortInfo>":$ports,
+                   "ArrayRef<NamedAttribute>":$params, "StringAttr":$fileName)>
   ];
 
   let extraClassDeclaration = [{

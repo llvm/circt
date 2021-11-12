@@ -39,7 +39,7 @@ class System:
   __slots__ = [
       "mod", "modules", "name", "passed", "_module_symbols", "_symbol_modules",
       "_old_system_token", "_symbols", "_generate_queue", "_primdb",
-      "_output_directory"
+      "_output_directory", "files"
   ]
 
   PASSES = """
@@ -60,6 +60,7 @@ class System:
     self._symbol_modules: dict[str, _SpecializedModule] = {}
     self._symbols: typing.Set[str] = None
     self._generate_queue = []
+    self.files: typing.Set[str] = set()
 
     self._primdb = primdb
 
@@ -113,6 +114,9 @@ class System:
     # Add to the generation queue, if necessary.
     if isinstance(op, circt.dialects.msft.MSFTModuleOp):
       self._generate_queue.append(spec_mod)
+      file_name = spec_mod.modcls.__name__ + ".sv"
+      self.files.add(file_name)
+      op.fileName = ir.StringAttr.get(file_name)
 
   def _get_symbol_module(self, symbol):
     """Get the _SpecializedModule for a symbol."""

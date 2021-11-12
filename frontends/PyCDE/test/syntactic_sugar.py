@@ -80,7 +80,7 @@ top.print()
 sys = System([ComplexPorts])
 sys.generate()
 sys.print()
-# CHECK:  msft.module @ComplexPorts {} (%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32) {
+# CHECK:  msft.module @ComplexPorts {} (%clk: i1, %data_in: !hw.array<3xi32>, %sel: i2, %struct_data_in: !hw.struct<foo: i36>) -> (a: i32, b: i32, c: i32)
 # CHECK:    %c0_i2 = hw.constant 0 : i2
 # CHECK:    [[REG0:%.+]] = hw.array_get %data_in[%c0_i2] {name = "data_in__0"} : !hw.array<3xi32>
 # CHECK:    [[REGR1:%data_in__0__reg1]] = seq.compreg [[REG0]], %clk : i32
