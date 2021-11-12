@@ -8,7 +8,7 @@ func @minimal() {
   // CHECK: %[[STEP:.+]] = arith.constant 1 : [[ITER_TYPE]]
 
   // Pipeline header.
-  // CHECK: staticlogic.pipeline.while #staticlogic.II<1> iter_args(%[[ITER_ARG:.+]] = %[[LB]]) : ([[ITER_TYPE]]) -> ()
+  // CHECK: staticlogic.pipeline.while II = 1 iter_args(%[[ITER_ARG:.+]] = %[[LB]]) : ([[ITER_TYPE]]) -> ()
 
   // Condition block.
   // CHECK: %[[COND_RESULT:.+]] = arith.cmpi ult, %[[ITER_ARG]]

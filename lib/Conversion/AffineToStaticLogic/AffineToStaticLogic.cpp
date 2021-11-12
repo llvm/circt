@@ -10,7 +10,6 @@
 #include "../PassDetail.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
-#include "circt/Dialect/StaticLogic/StaticLogicAttributes.h"
 #include "circt/Scheduling/Algorithms.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Analysis/AffineAnalysis.h"
@@ -207,10 +206,8 @@ LogicalResult AffineToStaticLogic::createStaticLogicPipeline(
   // iter arg is created for the induction variable.
   TypeRange resultTypes = innerLoop.getResultTypes();
 
-  auto iiAttr =
+  auto ii =
       builder.getI64IntegerAttr(problem.getInitiationInterval().getValue());
-  InitiationIntervalAttr ii =
-      InitiationIntervalAttr::get(builder.getContext(), iiAttr);
 
   SmallVector<Value> iterArgs;
   iterArgs.push_back(lowerBound);

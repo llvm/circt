@@ -24,8 +24,10 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-include "circt/Dialect/StaticLogic/StaticLogicDialect.td"
-include "circt/Dialect/StaticLogic/StaticLogicAttributes.td"
+def StaticLogic_Dialect : Dialect {
+  let name = "staticlogic";
+  let cppNamespace = "::circt::staticlogic";
+}
 
 def PipelineOp : Op<StaticLogic_Dialect, "pipeline", [NoSideEffect]> {
   let summary = "pipeline operation";
@@ -81,11 +83,6 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
     not isolated from above, but could be if this is helpful. A pipeline
     contains two regions: `condition` and `stages`.
 
-    The pipeline has an initiation interval attribute, which is computed by the
-    Scheduling infrastructure when the pipeline is created. The verifier checks
-    that uses of the `iter_args` are valid w.r.t. the initiaion interval. Any
-    transformations to the pipeline must keep this attribute in sync.
-
     The pipeline may accept an optional `iter_args`, similar to the SCF dialect,
     for representing loop-carried values like induction variables or reductions.
     When the pipeline starts execution, the registers indicated as `iter_args`
@@ -112,7 +109,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
   }];
 
   let arguments = (ins
-    InitiationIntervalAttr:$II,
+    OptionalAttr<I64Attr>:$II,
     Variadic<AnyType>:$iterArgs
   );
 
@@ -139,7 +136,7 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
 
   let skipDefaultBuilders = 1;
   let builders = [
-    OpBuilder<(ins "mlir::TypeRange":$resultTypes, "InitiationIntervalAttr":$II,
+    OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::IntegerAttr":$II,
                    "mlir::ValueRange":$iterArgs)>
   ];
 

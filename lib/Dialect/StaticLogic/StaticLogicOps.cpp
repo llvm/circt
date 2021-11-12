@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
-#include "circt/Dialect/StaticLogic/StaticLogicAttributes.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -28,11 +27,18 @@ using namespace circt::staticlogic;
 
 static ParseResult parsePipelineWhileOp(OpAsmParser &parser,
                                         OperationState &result) {
-  // Parse initiation interval.
-  InitiationIntervalAttr ii;
-  if (parser.parseAttribute(ii))
-    return failure();
-  result.addAttribute("II", ii);
+  // Parse optional initiation interval.
+  auto parsedII = parser.parseOptionalKeyword("II");
+  if (parsedII.succeeded()) {
+    if (parser.parseEqual())
+      return failure();
+
+    IntegerAttr ii;
+    if (parser.parseAttribute(ii))
+      return failure();
+
+    result.addAttribute("II", ii);
+  }
 
   // Parse iter_args assignment list.
   SmallVector<OpAsmParser::OperandType> regionArgs, operands;
@@ -69,7 +75,8 @@ static ParseResult parsePipelineWhileOp(OpAsmParser &parser,
 
 static void printPipelineWhileOp(OpAsmPrinter &p, PipelineWhileOp op) {
   // Print the initiation interval.
-  p << ' ' << op.II();
+  if (op.II().hasValue())
+    p << " II = " << ' ' << op.II().getValue();
 
   // Print iter_args assignment list.
   p << " iter_args(";
@@ -151,7 +158,7 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
 }
 
 void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
-                            TypeRange resultTypes, InitiationIntervalAttr ii,
+                            TypeRange resultTypes, IntegerAttr ii,
                             ValueRange iterArgs) {
   OpBuilder::InsertionGuard g(builder);
 
@@ -259,6 +266,4 @@ void StaticLogicDialect::initialize() {
 #define GET_OP_LIST
 #include "circt/Dialect/StaticLogic/StaticLogic.cpp.inc"
       >();
-
-  registerAttributes();
 }
