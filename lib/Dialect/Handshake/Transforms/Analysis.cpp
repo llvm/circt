@@ -20,7 +20,6 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/IndentedOstream.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/Debug.h"
 
 using namespace circt;
 using namespace handshake;
