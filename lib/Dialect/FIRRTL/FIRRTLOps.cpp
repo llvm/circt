@@ -1593,7 +1593,7 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
 
   // TODO: Relax this to allow reads from output ports,
   // instance/memory input ports.
-  if (FlowKind::get(connect.src()) == Flow::Sink) {
+  if (FlowKind::isSink(connect.src())) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(connect.src());
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
@@ -1607,7 +1607,7 @@ static LogicalResult verifyConnectOp(ConnectOp connect) {
     }
   }
 
-  if (FlowKind::get(connect.dest()) == Flow::Source) {
+  if (FlowKind::isSource(connect.dest())) {
     auto diag = connect.emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";
@@ -1628,7 +1628,7 @@ static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
            << ". Types are not weakly equivalent.";
 
   // Check that the flows make sense.
-  if (FlowKind::get(partialConnect.src()) == Flow::Sink) {
+  if (FlowKind::isSink(partialConnect.src())) {
     // A sink that is a port output or instance input used as a source is okay.
     auto kind = getDeclarationKind(partialConnect.src());
     if (kind != DeclKind::Port && kind != DeclKind::Instance) {
@@ -1642,7 +1642,7 @@ static LogicalResult verifyPartialConnectOp(PartialConnectOp partialConnect) {
     }
   }
 
-  if (FlowKind::get(partialConnect.dest()) == Flow::Source) {
+  if (FlowKind::isSource(partialConnect.dest())) {
     auto diag = partialConnect.emitOpError()
                 << "has invalid flow: the left-hand-side has source flow "
                    "(expected sink or duplex flow).";

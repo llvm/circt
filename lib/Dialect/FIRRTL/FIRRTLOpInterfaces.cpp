@@ -73,6 +73,18 @@ Flow FlowKind::get(Value value) {
   return flow;
 }
 
+bool FlowKind::isSource(Value value) {
+  return FlowKind::get(value) == Flow::Source;
+}
+
+bool FlowKind::isSink(Value value) {
+  return FlowKind::get(value) == Flow::Sink;
+}
+
+bool FlowKind::isDuplex(Value value) {
+  return FlowKind::get(value) == Flow::Duplex;
+}
+
 //===----------------------------------------------------------------------===//
 // FModuleLike
 //===----------------------------------------------------------------------===//

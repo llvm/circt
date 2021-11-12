@@ -52,6 +52,15 @@ def FlowKind : OpInterface<"FlowKind"> {
     /// returned.  The reverse of source is sink.  The reverse of sink is
     /// source.  The reverse of duplex is duplex.
     static Flow get(Value value);
+
+    /// Check if the computed flow of the value is `Flow::Source`.
+    static bool isSource(Value value);
+
+    /// Check if the computed flow of the value is `Flow::Sink`.
+    static bool isSink(Value value);
+
+    /// Check if the computed flow of the value is `Flow::Duplex`.
+    static bool isDuplex(Value value);
   }];
 }
 
