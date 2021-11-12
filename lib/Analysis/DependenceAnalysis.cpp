@@ -32,6 +32,7 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
     for (auto *destination : memoryOps) {
       if (source == destination)
         continue;
+
       // Initialize the dependence list for this destination.
       if (results.count(destination) == 0)
         results[destination] = SmallVector<MemoryDependence>();

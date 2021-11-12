@@ -16,24 +16,6 @@
 include "mlir/Pass/PassBase.td"
 
 //===----------------------------------------------------------------------===//
-// AffineToStaticLogic
-//===----------------------------------------------------------------------===//
-
-def AffineToStaticLogic : FunctionPass<"convert-affine-to-staticlogic"> {
-  let summary = "Convert Affine dialect to StaticLogic pipelines";
-  let description = [{
-    This pass analyzes Affine loops and control flow, creates a Scheduling
-    problem using the Calyx operator library, solves the problem, and lowers
-    the loops to a StaticLogic pipeline.
-  }];
-  let constructor = "circt::createAffineToStaticLogic()";
-  let dependentDialects = [
-    "circt::staticlogic::StaticLogicDialect",
-    "mlir::arith::ArithmeticDialect"
-  ];
-}
-
-//===----------------------------------------------------------------------===//
 // ExportVerilog and ExportSplitVerilog
 //===----------------------------------------------------------------------===//
 
