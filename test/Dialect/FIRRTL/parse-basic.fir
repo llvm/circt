@@ -907,10 +907,11 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule" {
     ; just set to 1; the actual check `^value !== 'x` is implicit.
     when cond:
       printf(clock, enable, "assertNotX:%d:value must not be X!", value)
-    ; CHECK: [[TMP1:%.+]] = firrtl.xorr %value
-    ; CHECK: [[TMP2:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} !== 1'bx"([[TMP1]])
-    ; CHECK: [[TMP3:%.+]] = firrtl.or %cond, [[TMP2]]
-    ; CHECK: firrtl.assert %clock, [[TMP3]], %enable, "value must not be X!"
+    ; CHECK: [[TMP1:%.+]] = firrtl.not %cond
+    ; CHECK: [[TMP2:%.+]] = firrtl.xorr %value
+    ; CHECK: [[TMP3:%.+]] = firrtl.verbatim.expr "{{[{][{]0[}][}]}} !== 1'bx"([[TMP2]])
+    ; CHECK: [[TMP4:%.+]] = firrtl.or [[TMP1]], [[TMP3]]
+    ; CHECK: firrtl.assert %clock, [[TMP4]], %enable, "value must not be X!"
     ; CHECK-SAME: name = "notX"
 
     ; Chisel built-in assertions

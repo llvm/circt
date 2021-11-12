@@ -344,20 +344,19 @@ ParseResult foldWhenEncodedVerifOp(ImplicitLocOpBuilder &builder,
     // practice the Scala impl of ExtractTestCode just discards that `%d` label
     // and replaces it with `notX`. Also prepare the condition to be checked
     // here.
-    Value predicate;
+    Value notCond = builder.create<NotPrimOp>(whenStmt.condition());
+    Value predicate = notCond;
     if (flavor == VerifFlavor::AssertNotX) {
       label = "notX";
       if (printOp.operands().size() != 1) {
         printOp.emitError("printf-encoded assertNotX requires one operand");
         return failure();
       }
-      // Construct a `whenCond | (value !== 1'bx)` predicate.
+      // Construct a `!whenCond | (value !== 1'bx)` predicate.
       predicate = builder.create<XorRPrimOp>(printOp.operands()[0]);
       predicate = builder.create<VerbatimExprOp>(UIntType::get(context, 1),
                                                  "{{0}} !== 1'bx", predicate);
-      predicate = builder.create<OrPrimOp>(whenStmt.condition(), predicate);
-    } else {
-      predicate = builder.create<NotPrimOp>(whenStmt.condition());
+      predicate = builder.create<OrPrimOp>(notCond, predicate);
     }
 
     // CAVEAT: The Scala impl of ExtractTestCode explicitly sets `emitSVA` to
