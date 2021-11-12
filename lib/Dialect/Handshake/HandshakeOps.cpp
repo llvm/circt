@@ -295,6 +295,11 @@ static LogicalResult verify(MuxOp op) {
   return success();
 }
 
+std::string handshake::ControlMergeOp::getResultName(unsigned int idx) {
+  assert(idx == 0 || idx == 1);
+  return idx == 0 ? "dataOut" : "index";
+}
+
 void ControlMergeOp::build(OpBuilder &builder, OperationState &result,
                            Value operand, int inputs) {
 
@@ -624,6 +629,16 @@ bool handshake::BranchOp::tryExecute(
   return tryToExecute(getOperation(), valueMap, timeMap, scheduleList, 0);
 }
 
+std::string handshake::ConditionalBranchOp::getOperandName(unsigned int idx) {
+  assert(idx == 0 || idx == 1);
+  return idx == 0 ? "cond" : "data";
+}
+
+std::string handshake::ConditionalBranchOp::getResultName(unsigned int idx) {
+  assert(idx == 0 || idx == 1);
+  return idx == ConditionalBranchOp::falseIndex ? "outFalse" : "outTrue";
+}
+
 void handshake::ConditionalBranchOp::build(OpBuilder &builder,
                                            OperationState &result,
                                            Value condOperand,
@@ -721,6 +736,11 @@ bool handshake::SinkOp::tryExecute(
   return true;
 }
 
+std::string handshake::ConstantOp::getOperandName(unsigned int idx) {
+  assert(idx == 0);
+  return "ctrl";
+}
+
 void handshake::ConstantOp::build(OpBuilder &builder, OperationState &result,
                                   Attribute value, Value operand) {
   result.addOperands(operand);
@@ -757,6 +777,34 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
   result.addSuccessors(successors);
   // for (auto &succ : successors)
   //   result.addSuccessor(succ, {});
+}
+
+std::string handshake::MemoryOp::getOperandName(unsigned int idx) {
+  unsigned nLoads = getLdCount().getZExtValue();
+  unsigned nStores = getStCount().getZExtValue();
+  std::string name;
+  if (idx < nStores * 2) {
+    bool isData = idx % 2 == 0;
+    name = isData ? "stData" + std::to_string(idx / 2)
+                  : "stAddr" + std::to_string(idx / 2);
+  } else {
+    idx -= 2 * nStores;
+    name = "ldAddr" + std::to_string(idx);
+  }
+  return name;
+}
+
+std::string handshake::MemoryOp::getResultName(unsigned int idx) {
+  unsigned nLoads = getLdCount().getZExtValue();
+  unsigned nStores = getStCount().getZExtValue();
+  std::string name;
+  if (idx < nLoads)
+    name = "lddata" + std::to_string(idx);
+  else if (idx < nLoads + nStores)
+    name = "stDone" + std::to_string(idx - nLoads);
+  else
+    name = "ldDone" + std::to_string(idx - nLoads - nStores);
+  return name;
 }
 
 static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {

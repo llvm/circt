@@ -314,7 +314,8 @@ def MuxOp : Handshake_Op<"mux", [
 
 def ControlMergeOp : Handshake_Op<"control_merge", [
   NoSideEffect, MergeLikeOpInterface, HasClock,
-  DeclareOpInterfaceMethods<ExecutableOpInterface>
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
   let summary = "control merge operation";
   let description = [{
@@ -366,7 +367,9 @@ def BranchOp : Handshake_Op<"branch", [
 }
 
 def ConditionalBranchOp : Handshake_Op<"conditional_branch", [
-  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>
+  NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
   let summary = "conditional branch operation";
   let description = [{
@@ -434,7 +437,8 @@ def NeverOp : Handshake_Op<"never", [NoSideEffect]> {
 
 def ConstantOp : Handshake_Op<"constant", [
   NoSideEffect, DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<GeneralOpInterface>
+  DeclareOpInterfaceMethods<GeneralOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>
 ]> {
   let summary = "constant operation";
   let description = [{
@@ -503,7 +507,9 @@ def TerminatorOp : Handshake_Op<"terminator", [Terminator]> {
 def MemRefTypeAttr : TypeAttrBase<"MemRefType", "memref type attribute">;
 def MemoryOp : Handshake_Op<"memory", [
   DeclareOpInterfaceMethods<ExecutableOpInterface>,
-  DeclareOpInterfaceMethods<MemoryOpInterface>, HasClock
+  DeclareOpInterfaceMethods<MemoryOpInterface>, HasClock,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
   let summary = "memory";
   let description = [{
