@@ -3,7 +3,7 @@
 func @bar(%0 : i32) -> i32 {
 // CHECK-LABEL:   handshake.func @bar(
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,
-// CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none) {
+// CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
 // CHECK:           %[[VAL_2:.*]] = "handshake.merge"(%[[VAL_0]]) : (i32) -> i32
 // CHECK:           handshake.return %[[VAL_2]], %[[VAL_1]] : i32, none
 // CHECK:         }
@@ -14,7 +14,7 @@ func @bar(%0 : i32) -> i32 {
 func @foo(%0 : i32) -> i32 {
 // CHECK-LABEL:   handshake.func @foo(
 // CHECK-SAME:                        %[[VAL_0:.*]]: i32,
-// CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none) {
+// CHECK-SAME:                        %[[VAL_1:.*]]: none, ...) -> (i32, none) attributes {argNames = ["in0", "inCtrl"], resNames = ["out0", "outCtrl"]} {
 // CHECK:           %[[VAL_2:.*]] = "handshake.merge"(%[[VAL_0]]) : (i32) -> i32
 // CHECK:           %[[VAL_3:.*]]:2 = "handshake.fork"(%[[VAL_1]]) {control = true} : (none) -> (none, none)
 // CHECK:           %[[VAL_4:.*]]:2 = handshake.instance @bar(%[[VAL_2]], %[[VAL_3]]#0) : (i32, none) -> (i32, none)
@@ -42,7 +42,7 @@ func @sub(%arg0 : i32, %arg1: i32) -> i32 {
   return %0 : i32
 }
 
-// CHECK:   handshake.func @main(%[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: none, ...) -> (i32, none) {
+// CHECK:   handshake.func @main(%[[VAL_0:.*]]: i32, %[[VAL_1:.*]]: i32, %[[VAL_2:.*]]: i1, %[[VAL_3:.*]]: none, ...) -> (i32, none) attributes {argNames = ["in0", "in1", "in2", "inCtrl"], resNames = ["out0", "outCtrl"]} {
 // CHECK:           %[[VAL_4:.*]] = "handshake.merge"(%[[VAL_0]]) : (i32) -> i32
 // CHECK:           %[[VAL_5:.*]] = "handshake.merge"(%[[VAL_1]]) : (i32) -> i32
 // CHECK:           %[[VAL_6:.*]] = "handshake.merge"(%[[VAL_2]]) : (i1) -> i1

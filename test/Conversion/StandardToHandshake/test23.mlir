@@ -4,7 +4,7 @@ func @multi_cond(%arg0: index, %arg1: index, %arg2: index, %arg3: index) {
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @multi_cond(
-// CHECK-SAME:                               %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: index, %[[VAL_2:.*]]: index, %[[VAL_3:.*]]: index, %[[VAL_4:.*]]: none, ...) -> none {
+// CHECK-SAME:                               %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: index, %[[VAL_2:.*]]: index, %[[VAL_3:.*]]: index, %[[VAL_4:.*]]: none, ...) -> none attributes {argNames = ["in0", "in1", "in2", "in3", "inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:           %[[VAL_5:.*]] = "handshake.merge"(%[[VAL_0]]) : (index) -> index
 // CHECK:           %[[VAL_6:.*]]:2 = "handshake.fork"(%[[VAL_5]]) {control = false} : (index) -> (index, index)
 // CHECK:           %[[VAL_7:.*]] = "handshake.merge"(%[[VAL_1]]) : (index) -> index

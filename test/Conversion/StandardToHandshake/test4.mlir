@@ -4,7 +4,7 @@ func @ops(f32, f32, i32, i32) -> (f32, i32) {
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @ops(
-// CHECK-SAME:                        %[[VAL_0:.*]]: f32, %[[VAL_1:.*]]: f32, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i32, %[[VAL_4:.*]]: none, ...) -> (f32, i32, none) {
+// CHECK-SAME:                        %[[VAL_0:.*]]: f32, %[[VAL_1:.*]]: f32, %[[VAL_2:.*]]: i32, %[[VAL_3:.*]]: i32, %[[VAL_4:.*]]: none, ...) -> (f32, i32, none) attributes {argNames = ["in0", "in1", "in2", "in3", "inCtrl"], resNames = ["out0", "out1", "outCtrl"]} {
 // CHECK:           %[[VAL_5:.*]] = "handshake.merge"(%[[VAL_0]]) : (f32) -> f32
 // CHECK:           %[[VAL_6:.*]]:3 = "handshake.fork"(%[[VAL_5]]) {control = false} : (f32) -> (f32, f32, f32)
 // CHECK:           %[[VAL_7:.*]] = "handshake.merge"(%[[VAL_1]]) : (f32) -> f32

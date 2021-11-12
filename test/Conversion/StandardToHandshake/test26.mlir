@@ -4,7 +4,7 @@
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @if_only(
-// CHECK-SAME:                            %[[VAL_0:.*]]: none, ...) -> none {
+// CHECK-SAME:                            %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:           %[[VAL_1:.*]]:4 = "handshake.fork"(%[[VAL_0]]) {control = true} : (none) -> (none, none, none, none)
 // CHECK:           %[[VAL_2:.*]] = "handshake.constant"(%[[VAL_1]]#2) {value = 0 : index} : (none) -> index
 // CHECK:           %[[VAL_3:.*]]:2 = "handshake.fork"(%[[VAL_2]]) {control = false} : (index) -> (index, index)

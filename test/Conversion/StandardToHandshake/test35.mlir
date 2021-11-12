@@ -4,7 +4,7 @@
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @test(
-// CHECK-SAME:                         %[[VAL_0:.*]]: none, ...) -> none {
+// CHECK-SAME:                         %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:           %[[VAL_1:.*]]:3 = "handshake.memory"(%[[VAL_2:.*]]#0, %[[VAL_2]]#1, %[[VAL_3:.*]]) {id = 1 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32, type = memref<10xf32>} : (f32, index, index) -> (f32, none, none)
 // CHECK:           %[[VAL_4:.*]]:3 = "handshake.memory"(%[[VAL_5:.*]]#0, %[[VAL_5]]#1, %[[VAL_6:.*]]) {id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32, type = memref<10xf32>} : (f32, index, index) -> (f32, none, none)
 // CHECK:           %[[VAL_7:.*]]:3 = "handshake.fork"(%[[VAL_0]]) {control = true} : (none) -> (none, none, none)

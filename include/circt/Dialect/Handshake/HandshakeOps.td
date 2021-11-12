@@ -35,14 +35,7 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
   let builders =
        [OpBuilder<(ins "StringRef":$name, "FunctionType":$type,
-                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs),
-                      [{
-                     $_state.addAttribute(SymbolTable::getSymbolAttrName(),
-                                         $_builder.getStringAttr(name));
-                     $_state.addAttribute(getTypeAttrName(), TypeAttr::get(type));
-                     $_state.attributes.append(attrs.begin(), attrs.end());
-                     $_state.addRegion();
-                   }]>];
+                      CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs)>];
 
   let extraClassDeclaration = [{
     // Add an entry block to an empty function, and set up the block arguments
@@ -67,6 +60,31 @@ def FuncOp : Op<Handshake_Dialect, "func", [
 
     /// Returns the number of results. This is a hook for OpTrait::FunctionLike.
     unsigned getNumFuncResults() { return getType().getResults().size(); }
+
+    /// Returns the names of the arguments to this function.
+    ArrayAttr getArgNames() {
+      return (*this)->getAttrOfType<ArrayAttr>("argNames");
+    }
+
+    /// Returns the names of the results from this function.
+    ArrayAttr getResNames() {
+      return (*this)->getAttrOfType<ArrayAttr>("resNames");
+    }
+
+    /// Returns the argument name at the given index.
+    StringAttr getArgName(unsigned idx) {
+      return getArgNames()[idx].cast<StringAttr>();
+    }
+
+    /// Returns the result name at the given index.
+    StringAttr getResName(unsigned idx) {
+      return getResNames()[idx].cast<StringAttr>();
+    }
+
+    /// Resolve argument and result names. This can be used during building of
+    /// a handshake.func operation to ensure that names provided by an incoming
+    /// operation fulfills the name requirements of the handshake function.
+    void resolveArgAndResNames();
 
     /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
     /// attribute is present and checks if it holds a function type.  Ensures

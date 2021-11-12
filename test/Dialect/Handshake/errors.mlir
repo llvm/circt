@@ -77,3 +77,31 @@ handshake.func @invalid_dynamic_memory() {
   "handshake.memory"() {type = memref<?xi8>, id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32} : () -> ()
   return
 }
+
+// -----
+
+// expected-error @+1 {{'handshake.func' op attribute 'argNames' has 2 entries but is expected to have 3.}}
+handshake.func @invalid_num_argnames(%a : i32, %b : i32, %c : none) -> none attributes {argNames = ["a", "b"]} {
+  handshake.return %c : none
+}
+
+// -----
+
+// expected-error @+1 {{'handshake.func' op expected all entries in attribute 'argNames' to be strings.}}
+handshake.func @invalid_type_argnames(%a : i32, %b : none) -> none attributes {argNames = ["a", 2 : i32]} {
+  handshake.return %b : none
+}
+
+// -----
+
+// expected-error @+1 {{'handshake.func' op attribute 'resNames' has 1 entries but is expected to have 2.}}
+handshake.func @invalid_num_resnames(%a : i32, %b : i32, %c : none) -> (i32, none) attributes {resNames = ["a"]} {
+  handshake.return %a, %c : i32, none
+}
+
+// -----
+
+// expected-error @+1 {{'handshake.func' op expected all entries in attribute 'resNames' to be strings.}}
+handshake.func @invalid_type_resnames(%a : i32, %b : none) -> none attributes {resNames = [2 : i32]} {
+  handshake.return %b : none
+}

@@ -4,7 +4,7 @@ func @dfs_block_order() -> (i32) {
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @dfs_block_order(
-// CHECK-SAME:                                    %[[VAL_0:.*]]: none, ...) -> (i32, none) {
+// CHECK-SAME:                                    %[[VAL_0:.*]]: none, ...) -> (i32, none) attributes {argNames = ["inCtrl"], resNames = ["out0", "outCtrl"]} {
 // CHECK:           %[[VAL_1:.*]]:2 = "handshake.fork"(%[[VAL_0]]) {control = true} : (none) -> (none, none)
 // CHECK:           %[[VAL_2:.*]] = "handshake.constant"(%[[VAL_1]]#0) {value = 42 : i32} : (none) -> i32
 // CHECK:           %[[VAL_3:.*]] = "handshake.branch"(%[[VAL_1]]#1) {control = true} : (none) -> none

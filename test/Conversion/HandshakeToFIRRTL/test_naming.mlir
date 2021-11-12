@@ -23,7 +23,7 @@ handshake.func @main(%a: index, %b: index, %inCtrl: none, ...) -> (index, none) 
 // CHECK:  out %coutTest: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, 
 // CHECK:  in %clock: !firrtl.clock, 
 // CHECK:  in %reset: !firrtl.uint<1>) {
-handshake.func @main(%a: index, %b: index, %inCtrl: none, ...) -> (index, none) attributes {argNames = ["aTest", "bTest", "cTest"], outNames = ["outTest", "coutTest"]} {
+handshake.func @main(%a: index, %b: index, %inCtrl: none, ...) -> (index, none) attributes {argNames = ["aTest", "bTest", "cTest"], resNames = ["outTest", "coutTest"]} {
   %0 = arith.addi %a, %b : index
   handshake.return %0, %inCtrl : index, none
 }

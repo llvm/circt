@@ -1759,6 +1759,12 @@ LogicalResult lowerFuncOp(mlir::FuncOp funcOp, MLIRContext *ctx) {
         auto funcType = rewriter.getFunctionType(argTypes, resTypes);
         nfo.setType(funcType);
         auto ctrlArg = nfo.front().addArgument(rewriter.getNoneType());
+
+        // We've now added all types to the handshake.funcOp; resolve arg- and
+        // res names to ensure they are up to date with the final type
+        // signature.
+        nfo.resolveArgAndResNames();
+
         Operation *startOp = findStartOp(&nfo.getRegion());
         startOp->getResult(0).replaceAllUsesWith(ctrlArg);
         rewriter.eraseOp(startOp);

@@ -4,7 +4,7 @@ func @simple_loop() {
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @simple_loop(
-// CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none {
+// CHECK-SAME:                                %[[VAL_0:.*]]: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:           %[[VAL_1:.*]] = "handshake.branch"(%[[VAL_0]]) {control = true} : (none) -> none
 // CHECK:           %[[VAL_2:.*]]:2 = "handshake.control_merge"(%[[VAL_1]]) {control = true} : (none) -> (none, index)
 // CHECK:           %[[VAL_3:.*]]:3 = "handshake.fork"(%[[VAL_2]]#0) {control = true} : (none) -> (none, none, none)

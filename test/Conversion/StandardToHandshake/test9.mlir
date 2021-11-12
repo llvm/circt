@@ -4,7 +4,7 @@ func @affine_dma_wait(%arg0: index) {
 // CHECK:       module {
 
 // CHECK-LABEL:   handshake.func @affine_dma_wait(
-// CHECK-SAME:                                    %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: none, ...) -> none {
+// CHECK-SAME:                                    %[[VAL_0:.*]]: index, %[[VAL_1:.*]]: none, ...) -> none attributes {argNames = ["in0", "inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:           %[[VAL_2:.*]] = "handshake.merge"(%[[VAL_0]]) : (index) -> index
 // CHECK:           %[[VAL_3:.*]]:5 = "handshake.fork"(%[[VAL_1]]) {control = true} : (none) -> (none, none, none, none, none)
 // CHECK:           %[[VAL_4:.*]] = memref.alloc() : memref<1xi32>

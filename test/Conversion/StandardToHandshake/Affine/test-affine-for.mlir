@@ -9,7 +9,7 @@ func @empty_body () -> () {
   return
 }
 
-// CHECK: handshake.func @empty_body(%arg0: none, ...) -> none {
+// CHECK: handshake.func @empty_body(%arg0: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:   %0:4 = "handshake.fork"(%arg0) {control = true} : (none) -> (none, none, none, none)
 // CHECK:   %1 = "handshake.constant"(%0#2) {value = 0 : index} : (none) -> index
 // CHECK:   %2 = "handshake.constant"(%0#1) {value = 10 : index} : (none) -> index
@@ -72,7 +72,7 @@ func @load_store () -> () {
   return
 }
 
-// CHECK: handshake.func @load_store(%arg0: none, ...) -> none {
+// CHECK: handshake.func @load_store(%arg0: none, ...) -> none attributes {argNames = ["inCtrl"], resNames = ["outCtrl"]} {
 // CHECK:   %0:3 = "handshake.memory"(%28#0, %28#1, %addressResults) {id = 0 : i32, ld_count = 1 : i32, lsq = false, st_count = 1 : i32, type = memref<10xf32>} : (f32, index, index) -> (f32, none, none)
 // CHECK:   %1:2 = "handshake.fork"(%0#2) {control = true} : (none) -> (none, none)
 // CHECK:   %2:4 = "handshake.fork"(%arg0) {control = true} : (none) -> (none, none, none, none)
