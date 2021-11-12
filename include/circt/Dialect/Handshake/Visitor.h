@@ -32,10 +32,11 @@ public:
             // Handshake nodes.
             BranchOp, BufferOp, ConditionalBranchOp, ConstantOp, ControlMergeOp,
             EndOp, ForkOp, FuncOp, InstanceOp, JoinOp, LazyForkOp, LoadOp,
-            MemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp, SourceOp, StartOp,
-            StoreOp, TerminatorOp>([&](auto opNode) -> ResultType {
-          return thisCast->visitHandshake(opNode, args...);
-        })
+            MemoryOp, ExternalMemoryOp, MergeOp, MuxOp, ReturnOp, SinkOp,
+            SourceOp, StartOp, StoreOp, TerminatorOp>(
+            [&](auto opNode) -> ResultType {
+              return thisCast->visitHandshake(opNode, args...);
+            })
         .Default([&](auto opNode) -> ResultType {
           return thisCast->visitInvalidOp(op, args...);
         });
@@ -72,6 +73,7 @@ public:
   HANDLE(LazyForkOp);
   HANDLE(LoadOp);
   HANDLE(MemoryOp);
+  HANDLE(ExternalMemoryOp);
   HANDLE(MergeOp);
   HANDLE(MuxOp);
   HANDLE(ReturnOp);

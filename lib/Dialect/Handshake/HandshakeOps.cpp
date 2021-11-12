@@ -779,9 +779,7 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
   //   result.addSuccessor(succ, {});
 }
 
-std::string handshake::MemoryOp::getOperandName(unsigned int idx) {
-  unsigned nLoads = getLdCount().getZExtValue();
-  unsigned nStores = getStCount().getZExtValue();
+static std::string getMemoryOperandName(unsigned nStores, unsigned idx) {
   std::string name;
   if (idx < nStores * 2) {
     bool isData = idx % 2 == 0;
@@ -794,9 +792,12 @@ std::string handshake::MemoryOp::getOperandName(unsigned int idx) {
   return name;
 }
 
-std::string handshake::MemoryOp::getResultName(unsigned int idx) {
-  unsigned nLoads = getLdCount().getZExtValue();
-  unsigned nStores = getStCount().getZExtValue();
+std::string handshake::MemoryOp::getOperandName(unsigned int idx) {
+  return getMemoryOperandName(getStCount().getZExtValue(), idx);
+}
+
+static std::string getMemoryResultName(unsigned nLoads, unsigned nStores,
+                                       unsigned idx) {
   std::string name;
   if (idx < nLoads)
     name = "lddata" + std::to_string(idx);
@@ -805,6 +806,11 @@ std::string handshake::MemoryOp::getResultName(unsigned int idx) {
   else
     name = "ldDone" + std::to_string(idx - nLoads - nStores);
   return name;
+}
+
+std::string handshake::MemoryOp::getResultName(unsigned int idx) {
+  return getMemoryResultName(getLdCount().getZExtValue(),
+                             getStCount().getZExtValue(), idx);
 }
 
 static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
@@ -817,6 +823,51 @@ static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
     return op.emitOpError() << "memref must have only a single dimension.";
 
   return success();
+}
+
+std::string handshake::ExternalMemoryOp::getOperandName(unsigned int idx) {
+  if (idx == 0)
+    return "extmem";
+
+  return getMemoryOperandName(stCount(), idx - 1);
+}
+
+std::string handshake::ExternalMemoryOp::getResultName(unsigned int idx) {
+  return getMemoryResultName(ldCount(), stCount(), idx);
+}
+
+void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
+                             Value memref, ArrayRef<Value> inputs, int ldCount,
+                             int stCount, int id) {
+  SmallVector<Value> ops;
+  ops.push_back(memref);
+  llvm::append_range(ops, inputs);
+  result.addOperands(ops);
+
+  auto memrefType = memref.getType().cast<MemRefType>();
+
+  // Data outputs (get their type from memref)
+  result.types.append(ldCount, memrefType.getElementType());
+
+  // Control outputs
+  result.types.append(stCount + ldCount, builder.getNoneType());
+
+  // Memory ID (individual ID for each MemoryOp)
+  Type i32Type = builder.getIntegerType(32);
+  result.addAttribute("id", builder.getIntegerAttr(i32Type, id));
+  result.addAttribute("ldCount", builder.getIntegerAttr(i32Type, ldCount));
+  result.addAttribute("stCount", builder.getIntegerAttr(i32Type, stCount));
+}
+
+bool handshake::ExternalMemoryOp::tryExecute(
+    llvm::DenseMap<mlir::Value, llvm::Any> &valueMap,
+    llvm::DenseMap<unsigned, unsigned> &memoryMap,
+    llvm::DenseMap<mlir::Value, double> &timeMap,
+    std::vector<std::vector<llvm::Any>> &store,
+    std::vector<mlir::Value> &scheduleList) {
+  // todo(mortbopet): implement execution of ExternalMemoryOp's.
+  assert(false && "implement me");
+  return 0;
 }
 
 void MemoryOp::build(OpBuilder &builder, OperationState &result,
