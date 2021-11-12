@@ -1280,7 +1280,7 @@ private:
   SubExprInfo visitComb(ShrSOp op) {
     // >>> is only an arithmetic shift right when both operands are signed.
     // Otherwise it does a logical shift.
-    return emitBinary(op, LowestPrecedence, ">>>",
+    return emitBinary(op, Shift, ">>>",
                       EB_RequireSignedOperands | EB_ForceResultSigned |
                           EB_RHS_UnsignedWithSelfDeterminedWidth);
   }
