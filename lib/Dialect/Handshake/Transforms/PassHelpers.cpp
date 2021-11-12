@@ -82,7 +82,7 @@ LogicalResult resolveInstanceGraph(ModuleOp moduleOp,
 
   if (cyclic) {
     auto err = moduleOp.emitOpError();
-    err << "cannot lower handshake program - cycle "
+    err << "cannot deduce top level function - cycle "
            "detected in instance graph (";
     llvm::interleave(
         cycleTrace, err, [&](auto node) { err << node; }, "->");
