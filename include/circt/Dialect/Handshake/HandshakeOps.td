@@ -552,7 +552,9 @@ def MemoryOp : Handshake_Op<"memory", [
 }
 
 def ExternalMemoryOp : Handshake_Op<"extmemory", [
-  DeclareOpInterfaceMethods<ExecutableOpInterface>
+  DeclareOpInterfaceMethods<ExecutableOpInterface>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getOperandName"]>,
+  DeclareOpInterfaceMethods<NamedIOInterface, ["getResultName"]>
 ]> {
   let summary = "external memory";
   let description = [{

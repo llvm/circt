@@ -779,9 +779,7 @@ void handshake::TerminatorOp::build(OpBuilder &builder, OperationState &result,
   //   result.addSuccessor(succ, {});
 }
 
-std::string handshake::MemoryOp::getOperandName(unsigned int idx) {
-  unsigned nLoads = getLdCount().getZExtValue();
-  unsigned nStores = getStCount().getZExtValue();
+static std::string getMemoryOperandName(unsigned nStores, unsigned idx) {
   std::string name;
   if (idx < nStores * 2) {
     bool isData = idx % 2 == 0;
@@ -794,9 +792,12 @@ std::string handshake::MemoryOp::getOperandName(unsigned int idx) {
   return name;
 }
 
-std::string handshake::MemoryOp::getResultName(unsigned int idx) {
-  unsigned nLoads = getLdCount().getZExtValue();
-  unsigned nStores = getStCount().getZExtValue();
+std::string handshake::MemoryOp::getOperandName(unsigned int idx) {
+  return getMemoryOperandName(getStCount().getZExtValue(), idx);
+}
+
+static std::string getMemoryResultName(unsigned nLoads, unsigned nStores,
+                                       unsigned idx) {
   std::string name;
   if (idx < nLoads)
     name = "lddata" + std::to_string(idx);
@@ -805,6 +806,11 @@ std::string handshake::MemoryOp::getResultName(unsigned int idx) {
   else
     name = "ldDone" + std::to_string(idx - nLoads - nStores);
   return name;
+}
+
+std::string handshake::MemoryOp::getResultName(unsigned int idx) {
+  return getMemoryResultName(getLdCount().getZExtValue(),
+                             getStCount().getZExtValue(), idx);
 }
 
 static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
@@ -817,6 +823,17 @@ static LogicalResult verifyMemoryOp(handshake::MemoryOp op) {
     return op.emitOpError() << "memref must have only a single dimension.";
 
   return success();
+}
+
+std::string handshake::ExternalMemoryOp::getOperandName(unsigned int idx) {
+  if (idx == 0)
+    return "extmem";
+
+  return getMemoryOperandName(st_count(), idx - 1);
+}
+
+std::string handshake::ExternalMemoryOp::getResultName(unsigned int idx) {
+  return getMemoryResultName(ld_count(), st_count(), idx);
 }
 
 void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,

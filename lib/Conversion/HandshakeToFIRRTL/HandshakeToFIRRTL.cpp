@@ -591,31 +591,29 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
   llvm::SmallVector<PortInfo, 8> ports;
 
   // Add all inputs of funcOp.
-  unsigned argIndex = 0;
-  for (auto &arg : funcOp.getArguments()) {
-    auto portName = getArgumentName(argIndex);
+  for (auto &arg : llvm::enumerate(funcOp.getArguments())) {
+    auto portName = funcOp.getArgName(arg.index());
     FIRRTLType bundlePortType;
-    if (arg.getType().isa<MemRefType>())
-      bundlePortType = getMemrefBundleType(rewriter, arg, /*flip=*/true);
+    if (arg.value().getType().isa<MemRefType>())
+      bundlePortType =
+          getMemrefBundleType(rewriter, arg.value(), /*flip=*/true);
     else
-      bundlePortType = getBundleType(arg.getType());
+      bundlePortType = getBundleType(arg.value().getType());
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
                        "(signed, unsigned, signless), index, none.");
 
-    ports.push_back(
-        {portName, bundlePortType, Direction::In, StringAttr{}, arg.getLoc()});
-    ++argIndex;
+    ports.push_back({portName, bundlePortType, Direction::In, StringAttr{},
+                     arg.value().getLoc()});
   }
 
   auto funcLoc = funcOp.getLoc();
 
   // Add all outputs of funcOp.
-  argIndex = 0;
-  for (auto portType : funcOp.getType().getResults()) {
-    auto portName = funcOp.getResName(argIndex);
-    auto bundlePortType = getBundleType(portType);
+  for (auto portType : llvm::enumerate(funcOp.getType().getResults())) {
+    auto portName = funcOp.getResName(portType.index());
+    auto bundlePortType = getBundleType(portType.value());
 
     if (!bundlePortType)
       funcOp.emitError("Unsupported data type. Supported data types: integer "
@@ -623,7 +621,6 @@ static FModuleOp createTopModuleOp(handshake::FuncOp funcOp, unsigned numClocks,
 
     ports.push_back(
         {portName, bundlePortType, Direction::Out, StringAttr{}, funcLoc});
-    ++argIndex;
   }
 
   // Add clock and reset signals.
