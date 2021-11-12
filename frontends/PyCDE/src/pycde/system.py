@@ -115,7 +115,7 @@ class System:
     if isinstance(op, circt.dialects.msft.MSFTModuleOp):
       self._generate_queue.append(spec_mod)
       file_name = spec_mod.modcls.__name__ + ".sv"
-      self.files.add(file_name)
+      self.files.add(os.path.join(self._output_directory, file_name))
       op.fileName = ir.StringAttr.get(file_name)
 
   def _get_symbol_module(self, symbol):
@@ -157,10 +157,12 @@ class System:
     return self.mod.body
 
   @property
-  def passes(self):
+  def _passes(self):
     tops = ",".join(self.symbols.keys())
     verilog_file = self.name + ".sv"
     tcl_file = self.name + ".tcl"
+    self.files.add(os.path.join(self._output_directory, verilog_file))
+    self.files.add(os.path.join(self._output_directory, tcl_file))
     return self.PASSES.format(tops=tops,
                               verilog_file=verilog_file,
                               tcl_file=tcl_file).strip()
@@ -199,7 +201,7 @@ class System:
     if len(self._generate_queue) > 0:
       print("WARNING: running lowering passes on partially generated design!",
             file=sys.stderr)
-    pm = mlir.passmanager.PassManager.parse(self.passes)
+    pm = mlir.passmanager.PassManager.parse(self._passes)
     # Invalidate the symbol cache
     self._symbols = None
     pm.run(self.mod)
