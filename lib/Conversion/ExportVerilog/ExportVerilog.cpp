@@ -123,14 +123,13 @@ static bool isDuplicatableNullaryExpression(Operation *op) {
 }
 
 /// Return the verilog name of the operations that can define a symbol.
+/// Except for <WireOp, RegOp, LocalParamOp, InstanceOp>, check global state
+/// `getDeclarationVerilogName` for them.
 static StringRef getSymOpName(Operation *symOp) {
   // Typeswitch of operation types which can define a symbol.
   return TypeSwitch<Operation *, StringRef>(symOp)
       .Case<HWModuleOp, HWModuleExternOp, HWModuleGeneratedOp>(
           [](Operation *op) { return getVerilogModuleName(op); })
-      .Case<InstanceOp>([&](InstanceOp op) { return op.getName().getValue(); })
-      .Case<WireOp>([&](WireOp op) { return op.name(); })
-      .Case<RegOp>([&](RegOp op) { return op.name(); })
       .Case<InterfaceOp>([&](InterfaceOp op) {
         return getVerilogModuleNameAttr(op).getValue();
       })
@@ -289,23 +288,23 @@ static StringRef getVerilogDeclWord(Operation *op,
 /// looking into an instance from a different module as happens with bind.  It
 /// may return "" when unable to determine a name.  This works in situations
 /// where names are pre-legalized during prepare.
-static StringRef getNameRemotely(Value value,
-                                 const ModulePortInfo &modulePorts) {
+static StringRef getNameRemotely(Value value, const ModulePortInfo &modulePorts,
+                                 HWModuleOp mod,
+                                 const GlobalNameTable &globalNames) {
   if (auto barg = value.dyn_cast<BlockArgument>())
-    return modulePorts.inputs[barg.getArgNumber()].getName();
+    return globalNames.getPortVerilogName(
+        mod, modulePorts.inputs[barg.getArgNumber()]);
 
   if (auto readinout = dyn_cast<ReadInOutOp>(value.getDefiningOp())) {
     auto *wireInput = readinout.input().getDefiningOp();
     if (!wireInput)
       return {};
 
-    if (auto wire = dyn_cast<WireOp>(wireInput))
-      return wire.name();
-    if (auto reg = dyn_cast<RegOp>(wireInput))
-      return reg.name();
+    if (isa<WireOp, RegOp>(wireInput))
+      return globalNames.getDeclarationVerilogName(wireInput);
   }
   if (auto localparam = dyn_cast<LocalParamOp>(value.getDefiningOp()))
-    return localparam.name();
+    return globalNames.getDeclarationVerilogName(localparam);
   return {};
 }
 
@@ -3527,8 +3526,8 @@ void ModuleEmitter::emitBind(BindOp op) {
   auto childVerilogName = getVerilogModuleNameAttr(childMod);
 
   indent() << "bind " << parentVerilogName.getValue() << " "
-           << childVerilogName.getValue() << ' ' << inst.getName().getValue()
-           << " (";
+           << childVerilogName.getValue() << ' '
+           << state.globalNames.getDeclarationVerilogName(inst) << " (";
 
   ModulePortInfo parentPortInfo = parentMod.getPorts();
   SmallVector<PortInfo> childPortInfo = getAllModulePortInfos(inst);
@@ -3587,7 +3586,8 @@ void ModuleEmitter::emitBind(BindOp op) {
     os.indent(maxNameLength - elt.getName().size()) << " (";
 
     // Emit the value as an expression.
-    auto name = getNameRemotely(portVal, parentPortInfo);
+    auto name =
+        getNameRemotely(portVal, parentPortInfo, parentMod, state.globalNames);
     if (name.empty()) {
       // Non stable names will come from expressions.  Since we are lowering the
       // instance also, we can ensure that expressions feeding bound instances
@@ -3611,8 +3611,8 @@ void ModuleEmitter::emitBindInterface(BindInterfaceOp bind) {
   auto *interface = bind->getParentOfType<ModuleOp>().lookupSymbol(
       instance.getInterfaceType().getInterface());
   os << "bind " << instantiator << " "
-     << cast<InterfaceOp>(*interface).sym_name() << " " << instance.name()
-     << " (.*);\n\n";
+     << cast<InterfaceOp>(*interface).sym_name() << " "
+     << state.globalNames.getDeclarationVerilogName(instance) << " (.*);\n\n";
 }
 
 void ModuleEmitter::emitHWModule(HWModuleOp module) {

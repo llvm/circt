@@ -1,11 +1,11 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -split-input-file %s | FileCheck %s
 
 // CHECK-LABEL: firrtl.module @handshake_buffer_3slots_seq_1ins_1outs_ctrl(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-// CHECK:   %[[IN_VALID:.+]] = firrtl.subfield %arg0(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[IN_READY:.+]] = firrtl.subfield %arg0(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[OUT_VALID:.+]] = firrtl.subfield %arg1(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[OUT_READY:.+]] = firrtl.subfield %arg1(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK-SAME:  in %[[arg0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[arg1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+// CHECK:   %[[IN_VALID:.+]] = firrtl.subfield %[[arg0]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[IN_READY:.+]] = firrtl.subfield %[[arg0]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[OUT_VALID:.+]] = firrtl.subfield %[[arg1]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[OUT_READY:.+]] = firrtl.subfield %[[arg1]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
 // CHECK:   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
 
 // Stage 0 ready wire and valid register.
@@ -75,7 +75,7 @@
 // CHECK: }
 
 // CHECK: firrtl.module @test_buffer(in %[[VAL_60:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_61:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_62:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_63:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_64:.*]]: !firrtl.clock, in %[[VAL_65:.*]]: !firrtl.uint<1>) {
-// CHECK:   %[[VAL_66:.*]], %[[VAL_67:.*]], %[[VAL_68:.*]], %[[VAL_69:.*]] = firrtl.instance handshake_buffer  @handshake_buffer_3slots_seq_1ins_1outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+// CHECK:   %[[VAL_66:.*]], %[[VAL_67:.*]], %[[VAL_68:.*]], %[[VAL_69:.*]] = firrtl.instance handshake_buffer  @handshake_buffer_3slots_seq_1ins_1outs_ctrl(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
 // CHECK:   firrtl.connect %[[VAL_66]], %[[VAL_60]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
 // CHECK:   firrtl.connect %[[VAL_68]], %[[VAL_64]] : !firrtl.clock, !firrtl.clock
 // CHECK:   firrtl.connect %[[VAL_69]], %[[VAL_65]] : !firrtl.uint<1>, !firrtl.uint<1>
@@ -90,9 +90,9 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 // -----
 
 // CHECK-LABEL: firrtl.module @handshake_buffer_in_ui64_out_ui64_2slots_seq(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-// CHECK:   %[[IN_DATA:.+]] = firrtl.subfield %arg0(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
-// CHECK:   %[[OUT_DATA:.+]] = firrtl.subfield %arg1(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK-SAME:  in %[[arg0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[arg1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+// CHECK:   %[[IN_DATA:.+]] = firrtl.subfield %[[arg0]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK:   %[[OUT_DATA:.+]] = firrtl.subfield %[[arg1]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
 // CHECK:   %c0_ui64 = firrtl.constant 0 : !firrtl.uint<64>
 
 // CHECK:   %dataReg0 = firrtl.regreset %clock, %reset, %c0_ui64 : !firrtl.uint<1>, !firrtl.uint<64>, !firrtl.uint<64>
@@ -118,7 +118,7 @@ handshake.func @test_buffer(%arg0: none, %arg1: none, ...) -> (none, none) {
 // CHECK: }
 
 // CHECK: firrtl.module @test_buffer_data(in %[[VAL_64:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_65:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_66:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_67:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_68:.*]]: !firrtl.clock, in %[[VAL_69:.*]]: !firrtl.uint<1>) {
-// CHECK:   %[[VAL_70:.*]], %[[VAL_71:.*]], %[[VAL_72:.*]], %[[VAL_73:.*]] = firrtl.instance handshake_buffer  @handshake_buffer_in_ui64_out_ui64_2slots_seq(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+// CHECK:   %[[VAL_70:.*]], %[[VAL_71:.*]], %[[VAL_72:.*]], %[[VAL_73:.*]] = firrtl.instance handshake_buffer  @handshake_buffer_in_ui64_out_ui64_2slots_seq(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
 // CHECK:   firrtl.connect %[[VAL_70]], %[[VAL_64]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // CHECK:   firrtl.connect %[[VAL_72]], %[[VAL_68]] : !firrtl.clock, !firrtl.clock
 // CHECK:   firrtl.connect %[[VAL_73]], %[[VAL_69]] : !firrtl.uint<1>, !firrtl.uint<1>

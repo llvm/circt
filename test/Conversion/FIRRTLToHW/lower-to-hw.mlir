@@ -277,13 +277,20 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %48 = firrtl.asAsyncReset %44 : (!firrtl.uint<1>) -> !firrtl.asyncreset
 
     // CHECK: [[VERB1:%.+]] = sv.verbatim.expr "MAGIC_CONSTANT" : () -> i42
-    // CHECK: [[VERB2:%.+]] = sv.verbatim.expr "$bits({{[{][{]0[}][}]}})"([[VERB1]]) : (i42) -> i32
+    // CHECK: [[VERB2:%.+]] = sv.verbatim.expr "$bits({{[{][{]0[}][}]}}, {{[{][{]1[}][}]}})"([[VERB1]]) : (i42) -> i32 {symbols = [@Simple]}
+    // CHECK: [[VERB3:%.+]] = sv.verbatim.expr "$size({{[{][{]0[}][}]}}, {{[{][{]1[}][}]}})"([[VERB1]]) : (i42) -> !hw.inout<i32> {symbols = [@Simple]}
+    // CHECK: [[VERB3READ:%.+]] = sv.read_inout [[VERB3]]
     // CHECK: [[VERB1EXT:%.+]] = comb.concat {{%.+}}, [[VERB1]] : i1, i42
     // CHECK: [[VERB2EXT:%.+]] = comb.concat {{%.+}}, [[VERB2]] : i11, i32
-    // CHECK: = comb.add [[VERB1EXT]], [[VERB2EXT]] : i43
+    // CHECK: [[ADD:%.+]] = comb.add [[VERB1EXT]], [[VERB2EXT]] : i43
+    // CHECK: [[VERB3EXT:%.+]] = comb.concat {{%.+}}, [[VERB3READ]] : i12, i32
+    // CHECK: [[ADDEXT:%.+]] = comb.concat {{%.+}}, [[ADD]] : i1, i43
+    // CHECK: = comb.add [[VERB3EXT]], [[ADDEXT]] : i44
     %56 = firrtl.verbatim.expr "MAGIC_CONSTANT" : () -> !firrtl.uint<42>
-    %57 = firrtl.verbatim.expr "$bits({{0}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32>
-    %58 = firrtl.add %56, %57 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+    %57 = firrtl.verbatim.expr "$bits({{0}}, {{1}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32> {symbols = [@Simple]}
+    %58 = firrtl.verbatim.wire "$size({{0}}, {{1}})"(%56) : (!firrtl.uint<42>) -> !firrtl.uint<32> {symbols = [@Simple]}
+    %59 = firrtl.add %56, %57 : (!firrtl.uint<42>, !firrtl.uint<32>) -> !firrtl.uint<43>
+    %60 = firrtl.add %58, %59 : (!firrtl.uint<32>, !firrtl.uint<43>) -> !firrtl.uint<44>
 
     // Issue #353
     // CHECK: [[PADRES_EXT:%.+]] = comb.sext [[PADRES]] : (i3) -> i8
@@ -1197,11 +1204,30 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   firrtl.extmodule @chkcoverAnno(in clock: !firrtl.clock) attributes {annotations = [{class = "freechips.rocketchip.annotations.InternalVerifBlackBoxAnnotation"}]}
 
+  // CHECK-LABEL: hw.module.extern @InnerNamesExt
+  // CHECK-SAME:  (
+  // CHECK-SAME:    clockIn: i1 {hw.exportPort = @extClockInSym}
+  // CHECK-SAME:  ) -> (
+  // CHECK-SAME:    clockOut: i1 {hw.exportPort = @extClockOutSym}
+  // CHECK-SAME:  )
+  firrtl.extmodule @InnerNamesExt(
+    in clockIn: !firrtl.clock sym @extClockInSym,
+    out clockOut: !firrtl.clock sym @extClockOutSym
+  )
+
   // CHECK-LABEL: hw.module @InnerNames
+  // CHECK-SAME:  (
+  // CHECK-SAME:    %value: i42 {hw.exportPort = @portValueSym}
+  // CHECK-SAME:    %clock: i1 {hw.exportPort = @portClockSym}
+  // CHECK-SAME:    %reset: i1 {hw.exportPort = @portResetSym}
+  // CHECK-SAME:  ) -> (
+  // CHECK-SAME:    out: i1 {hw.exportPort = @portOutSym}
+  // CHECK-SAME:  )
   firrtl.module @InnerNames(
-    in %value: !firrtl.uint<42>,
-    in %clock: !firrtl.clock,
-    in %reset: !firrtl.uint<1>
+    in %value: !firrtl.uint<42> sym @portValueSym,
+    in %clock: !firrtl.clock sym @portClockSym,
+    in %reset: !firrtl.uint<1> sym @portResetSym,
+    out %out: !firrtl.uint<1> sym @portOutSym
   ) {
     firrtl.instance instName sym @instSym @BitCast1()
     // CHECK: hw.instance "instName" sym @instSym @BitCast1
@@ -1216,5 +1242,6 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK: %regResetName = sv.reg sym @regResetSym : !hw.inout<i42>
     %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     // CHECK: {{%.+}} = hw.instance "memName" sym @memSym
+    firrtl.connect %out, %reset : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

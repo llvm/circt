@@ -56,7 +56,7 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
 
   // Verify the port annotations.
   auto portAnnotations = module.getPortAnnotationsAttr();
-  if (!portNames)
+  if (!portAnnotations)
     return module.emitOpError("requires valid port annotations");
   // TODO: it seems weird to allow empty port annotations.
   if (!portAnnotations.empty() && portAnnotations.size() != numPorts)
@@ -73,6 +73,16 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
       return module.emitOpError(
           "annotations must be dictionaries or subannotations");
   }
+
+  // Verify the port symbols.
+  auto portSymbols = module.getPortSymbolsAttr();
+  if (!portSymbols)
+    return module.emitOpError("requires valid port symbols");
+  if (portSymbols.size() != numPorts)
+    return module.emitOpError("requires ") << numPorts << " port symbols";
+  if (llvm::any_of(portSymbols.getValue(),
+                   [](Attribute attr) { return !attr.isa<StringAttr>(); }))
+    return module.emitOpError("port symbols should all be string attributes");
 
   // Verify the body.
   if (module->getNumRegions() != 1)

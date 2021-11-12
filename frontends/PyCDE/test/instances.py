@@ -1,6 +1,6 @@
 # RUN: rm -rf %t
-# RUN: OUTPUT_DIRECTORY=%t %PYTHON% %s 2>&1 | FileCheck %s
-# RUN: FileCheck %s --check-prefix=OUTPUT < %t/Test.tcl
+# RUN: %PYTHON% %s %t 2>&1 | FileCheck %s
+# RUN: FileCheck %s --input-file %t/Test.tcl --check-prefix=OUTPUT
 
 import pycde
 import circt.dialects.hw
@@ -8,7 +8,7 @@ import circt.dialects.hw
 from pycde.attributes import placement
 from pycde.devicedb import PhysLocation, PrimitiveType
 
-import os
+import sys
 
 
 @pycde.externmodule
@@ -53,10 +53,7 @@ print(PhysLocation(PrimitiveType.DSP, 39, 25))
 
 # CHECK: msft.module @UnParameterized
 # CHECK-NOT: msft.module @UnParameterized
-t = pycde.System([Test],
-                 primdb,
-                 name="Test",
-                 output_directory=os.environ["OUTPUT_DIRECTORY"])
+t = pycde.System([Test], primdb, name="Test", output_directory=sys.argv[1])
 t.generate(["construct"])
 t.print()
 

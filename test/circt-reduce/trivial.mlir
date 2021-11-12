@@ -1,11 +1,11 @@
-// RUN: circt-reduce %s --test %S/trivial.sh --test-arg firtool | FileCheck %s
+// RUN: circt-reduce %s --test %S/trivial.sh --test-arg firtool --keep-best=0 | FileCheck %s
 
 firrtl.circuit "Foo" {
-  // CHECK: firrtl.extmodule @FooFooFoo
+  // CHECK-NOT: firrtl.module @FooFooFoo
   firrtl.module @FooFooFoo(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     firrtl.connect %y, %x : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK: firrtl.extmodule @FooFooBar
+  // CHECK-NOT: firrtl.module @FooFooBar
   firrtl.module @FooFooBar(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     firrtl.connect %y, %x : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -17,7 +17,7 @@ firrtl.circuit "Foo" {
     // Skip %x1_x to trigger a "sink not fully initialized" warning
     firrtl.connect %y, %x0_y : !firrtl.uint<1>, !firrtl.uint<1>
   }
-  // CHECK: firrtl.extmodule @FooBar
+  // CHECK-NOT: firrtl.odule @FooBar
   firrtl.module @FooBar(in %x: !firrtl.uint<1>, out %y: !firrtl.uint<1>) {
     firrtl.connect %y, %x : !firrtl.uint<1>, !firrtl.uint<1>
   }

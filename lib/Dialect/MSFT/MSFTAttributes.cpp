@@ -13,6 +13,7 @@
 #include "circt/Dialect/MSFT/MSFTAttributes.h"
 
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -113,6 +114,50 @@ Attribute PhysLocationAttr::parse(DialectAsmParser &p, Type type) {
 void PhysLocationAttr::print(DialectAsmPrinter &p) const {
   p << "physloc<" << stringifyPrimitiveType(getPrimitiveType().getValue())
     << ", " << getX() << ", " << getY() << ", " << getNum() << '>';
+}
+
+Attribute PhysicalRegionRefAttr::parse(DialectAsmParser &p, Type type) {
+  StringAttr physicalRegion;
+  NamedAttrList attrs;
+  if (p.parseLess() ||
+      p.parseSymbolName(physicalRegion, "physicalRegion", attrs) ||
+      p.parseGreater()) {
+    llvm::SMLoc loc = p.getCurrentLocation();
+    p.emitError(loc, "unable to parse PhysicalRegion reference");
+    return Attribute();
+  }
+
+  auto physicalRegionAttr =
+      FlatSymbolRefAttr::get(p.getContext(), physicalRegion.getValue());
+
+  return PhysicalRegionRefAttr::get(p.getContext(), physicalRegionAttr);
+}
+
+void PhysicalRegionRefAttr::print(DialectAsmPrinter &p) const {
+  p << "physical_region_ref<" << getPhysicalRegion() << '>';
+}
+
+Attribute PhysicalBoundsAttr::parse(DialectAsmParser &p, Type type) {
+  uint64_t xMin, xMax, yMin, yMax;
+  if (p.parseLess() || p.parseKeyword("x") || p.parseColon() ||
+      p.parseLSquare() || p.parseInteger(xMin) || p.parseComma() ||
+      p.parseInteger(xMax) || p.parseRSquare() || p.parseComma() ||
+      p.parseKeyword("y") || p.parseColon() || p.parseLSquare() ||
+      p.parseInteger(yMin) || p.parseComma() || p.parseInteger(yMax) ||
+      p.parseRSquare() || p.parseGreater()) {
+    llvm::SMLoc loc = p.getCurrentLocation();
+    p.emitError(loc, "unable to parse PhysicalBounds");
+    return Attribute();
+  }
+
+  return PhysicalBoundsAttr::get(p.getContext(), xMin, xMax, yMin, yMax);
+}
+
+void PhysicalBoundsAttr::print(DialectAsmPrinter &p) const {
+  p << "physical_bounds<";
+  p << "x: [" << getXMin() << ", " << getXMax() << "], ";
+  p << "y: [" << getYMin() << ", " << getYMax() << ']';
+  p << '>';
 }
 
 Attribute MSFTDialect::parseAttribute(DialectAsmParser &p, Type type) const {

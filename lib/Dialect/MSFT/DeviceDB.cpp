@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/MSFT/DeviceDB.h"
+#include "circt/Dialect/MSFT/MSFTOps.h"
 
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -92,6 +93,20 @@ LogicalResult PlacementDB::addPlacement(PhysLocationAttr loc,
   return success();
 }
 
+/// Assign an operation to a physical region. Return false on failure.
+LogicalResult PlacementDB::addPlacement(PhysicalRegionRefAttr regionRef,
+                                        PlacedInstance inst) {
+  auto topModule = inst.op->getParentOfType<mlir::ModuleOp>();
+  auto physicalRegion =
+      topModule.lookupSymbol<PhysicalRegionOp>(regionRef.getPhysicalRegion());
+  if (!physicalRegion)
+    return inst.op->emitOpError("referenced non-existant PhysicalRegion named ")
+           << regionRef.getPhysicalRegion().getValue();
+
+  regionPlacements.emplace_back(regionRef, inst);
+  return success();
+}
+
 /// Using the operation attributes, add the proper placements to the database.
 /// Return the number of placements which weren't added due to conflicts.
 size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
@@ -120,6 +135,12 @@ size_t PlacementDB::addPlacements(FlatSymbolRefAttr rootMod,
               }
               LogicalResult added = addPlacement(
                   loc, PlacedInstance{instPath, attrName.substr(4), op});
+              if (failed(added))
+                ++numFailed;
+            } else if (auto loc = caseAttr.getAttr()
+                                      .dyn_cast<PhysicalRegionRefAttr>()) {
+              LogicalResult added =
+                  addPlacement(loc, PlacedInstance{instPath, StringRef(), op});
               if (failed(added))
                 ++numFailed;
             }
@@ -251,4 +272,12 @@ void PlacementDB::walkPlacements(
       }
     }
   }
+}
+
+/// Walk the region placement information.
+void PlacementDB::walkRegionPlacements(
+    function_ref<void(PhysicalRegionRefAttr, PlacedInstance)> callback) {
+  for (auto iter = regionPlacements.begin(), end = regionPlacements.end();
+       iter != end; ++iter)
+    callback(iter->first, iter->second);
 }

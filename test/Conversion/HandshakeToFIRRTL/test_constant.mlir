@@ -2,12 +2,12 @@
 
 // Submodule for the index and i64 ConstantOps as they have the same value and converted type.
 // CHECK-LABEL: firrtl.module @handshake_constant_c42_out_ui64(
-// CHECK-SAME: in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
-// CHECK:   %[[ARG0_VALID:.+]] = firrtl.subfield %arg0(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG0_READY:.+]] = firrtl.subfield %arg0(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG1_VALID:.+]] = firrtl.subfield %arg1(0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG1_READY:.+]] = firrtl.subfield %arg1(1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
-// CHECK:   %[[ARG1_DATA:.+]] = firrtl.subfield %arg1(2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
+// CHECK-SAME: in %[[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) {
+// CHECK:   %[[ARG0_VALID:.+]] = firrtl.subfield %[[ARG0]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG0_READY:.+]] = firrtl.subfield %[[ARG0]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG1_VALID:.+]] = firrtl.subfield %[[ARG1]](0) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG1_READY:.+]] = firrtl.subfield %[[ARG1]](1) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<1>
+// CHECK:   %[[ARG1_DATA:.+]] = firrtl.subfield %[[ARG1]](2) : (!firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>) -> !firrtl.uint<64>
 // CHECK:   firrtl.connect %[[ARG1_VALID:.+]], %[[ARG0_VALID:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   firrtl.connect %[[ARG0_READY:.+]], %[[ARG1_READY:.+]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:   %c42_ui64 = firrtl.constant 42 : !firrtl.uint<64>
@@ -16,20 +16,20 @@
 
 // Submodule for the ui32 ConstantOp.
 // CHECK-LABEL: firrtl.module @handshake_constant_c42_out_ui32(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) {
+// CHECK-SAME:  in %[[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>) {
 // CHECK:   %c42_ui32 = firrtl.constant 42 : !firrtl.uint<32>
 
 // Submodule for the si32 ConstantOp.
 // CHECK-LABEL: firrtl.module @"handshake_constant_c-11_out_si32"(
-// CHECK-SAME:  in %arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>) {
+// CHECK-SAME:  in %[[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>) {
 // CHECK:   %c-11_si32 = firrtl.constant -11 : !firrtl.sint<32>
 
 // CHECK: firrtl.module @test_constant(in %[[VAL_97:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_98:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_99:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, out %[[VAL_100:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>, out %[[VAL_101:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>, out %[[VAL_102:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_103:.*]]: !firrtl.clock, in %[[VAL_104:.*]]: !firrtl.uint<1>) {
-// CHECK:   %[[VAL_105:.*]], %[[VAL_106:.*]], %[[VAL_107:.*]], %[[VAL_108:.*]], %[[VAL_109:.*]], %[[VAL_110:.*]], %[[VAL_111:.*]], %[[VAL_112:.*]] = firrtl.instance handshake_fork  @handshake_fork_1ins_5outs_ctrl(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg2: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg3: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg4: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg5: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
-// CHECK:   %[[VAL_113:.*]], %[[VAL_114:.*]] = firrtl.instance handshake_constant  @handshake_constant_c42_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
-// CHECK:   %[[VAL_115:.*]], %[[VAL_116:.*]] = firrtl.instance handshake_constant  @handshake_constant_c42_out_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
-// CHECK:   %[[VAL_117:.*]], %[[VAL_118:.*]] = firrtl.instance handshake_constant  @handshake_constant_c42_out_ui32(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>)
-// CHECK:   %[[VAL_119:.*]], %[[VAL_120:.*]] = firrtl.instance handshake_constant  @"handshake_constant_c-11_out_si32"(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out arg1: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>)
+// CHECK:   %[[VAL_105:.*]], %[[VAL_106:.*]], %[[VAL_107:.*]], %[[VAL_108:.*]], %[[VAL_109:.*]], %[[VAL_110:.*]], %[[VAL_111:.*]], %[[VAL_112:.*]] = firrtl.instance handshake_fork  @handshake_fork_1ins_5outs_ctrl(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG2:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG3:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG4:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG5:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in clock: !firrtl.clock, in reset: !firrtl.uint<1>)
+// CHECK:   %[[VAL_113:.*]], %[[VAL_114:.*]] = firrtl.instance handshake_constant  @handshake_constant_c42_out_ui64(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+// CHECK:   %[[VAL_115:.*]], %[[VAL_116:.*]] = firrtl.instance handshake_constant  @handshake_constant_c42_out_ui64(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+// CHECK:   %[[VAL_117:.*]], %[[VAL_118:.*]] = firrtl.instance handshake_constant  @handshake_constant_c42_out_ui32(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<32>>)
+// CHECK:   %[[VAL_119:.*]], %[[VAL_120:.*]] = firrtl.instance handshake_constant  @"handshake_constant_c-11_out_si32"(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out [[ARG1:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: sint<32>>)
 handshake.func @test_constant(%arg0: none, ...) -> (index, i64, ui32, si32, none) {
   %0:5 = "handshake.fork"(%arg0) {control = true} : (none) -> (none, none, none, none, none)
   %1 = "handshake.constant"(%0#0) {value = 42 : index}: (none) -> index

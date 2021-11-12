@@ -8,7 +8,7 @@
 // CHECK:             firrtl.connect %[[VAL_1]], %[[VAL_2]] : !firrtl.uint<1>, !firrtl.uint<1>
 // CHECK:           }
 // CHECK:           firrtl.module @test_sink(in %[[VAL_3:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, in %[[VAL_4:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, out %[[VAL_5:.*]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, in %[[VAL_6:.*]]: !firrtl.clock, in %[[VAL_7:.*]]: !firrtl.uint<1>) {
-// CHECK:             %[[VAL_8:.*]] = firrtl.instance handshake_sink  @handshake_sink_in_ui64(in arg0: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
+// CHECK:             %[[VAL_8:.*]] = firrtl.instance handshake_sink  @handshake_sink_in_ui64(in [[ARG0:.+]]: !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>)
 // CHECK:             firrtl.connect %[[VAL_8]], %[[VAL_3]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>, data: uint<64>>
 // CHECK:             firrtl.connect %[[VAL_5]], %[[VAL_4]] : !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>, !firrtl.bundle<valid: uint<1>, ready flip: uint<1>>
 // CHECK:           }
