@@ -1,0 +1,11 @@
+module {
+  // A simple function which loads a value from memory, adds 42 and stores it
+  // back to the same index.
+  func @extmem(%mem : memref<16xi32>, %idx : index) -> () {
+    %c42_i32 = arith.constant 42 : i32
+    %0 = memref.load %mem[%idx] : memref<16xi32>
+    %1 = arith.addi %0, %c42_i32 : i32
+    memref.store %1, %mem[%idx] : memref<16xi32>
+    return
+  }
+}
