@@ -74,9 +74,7 @@ def MSFTModuleOp : MSFTOp<"module",
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "StringAttr":$name, "ArrayRef<hw::PortInfo>":$ports,
-                   "ArrayRef<NamedAttribute>":$params)>,
-    OpBuilder<(ins "StringAttr":$name, "ArrayRef<hw::PortInfo>":$ports,
-                   "ArrayRef<NamedAttribute>":$params, "StringAttr":$fileName)>
+                   "ArrayRef<NamedAttribute>":$params)>
   ];
 
   let extraClassDeclaration = [{
