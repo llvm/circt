@@ -17,8 +17,6 @@ def FlowKind : OpInterface<"FlowKind"> {
   let description = [{
     Allows operations to specify what kind of flow they have.  When an operation
     does not implement this interface, they are assumed to have "source" flow.
-
-    If an operation has results, they should implement `getFlow`.  If they
   }];
   let methods = [
     InterfaceMethod<"Get the flow of a value",
