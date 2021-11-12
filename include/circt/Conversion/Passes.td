@@ -141,11 +141,6 @@ def ConvertHWToLLHD : Pass<"convert-hw-to-llhd", "mlir::ModuleOp"> {
 // StandardToHandshake
 //===----------------------------------------------------------------------===//
 
-def HandshakeAnalysis : Pass<"handshake-analyze", "mlir::ModuleOp"> {
-  let summary = "Print resource (operation) statistics";
-  let constructor = "circt::createHandshakeAnalysisPass()";
-}
-
 def HandshakeDataflow : Pass<"lower-std-to-handshake", "mlir::ModuleOp"> {
   let summary = "Lower Standard MLIR into Handshake IR";
   let constructor = "circt::createHandshakeDataflowPass()";

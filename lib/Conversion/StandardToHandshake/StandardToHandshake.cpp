@@ -1927,55 +1927,6 @@ struct HandshakeCanonicalizePass
 };
 } // namespace
 
-// Temporary: print resources (operation counts)
-namespace {
-
-struct HandshakeAnalysisPass
-    : public HandshakeAnalysisBase<HandshakeAnalysisPass> {
-  void runOnOperation() override {
-    ModuleOp m = getOperation();
-
-    for (auto func : m.getOps<handshake::FuncOp>()) {
-      dotPrint(func, func.getName());
-
-      int count = 0;
-      int fork_count = 0;
-      int merge_count = 0;
-      int branch_count = 0;
-      int join_count = 0;
-
-      for (Operation &op : func.getOps()) {
-
-        if (isa<ForkOp>(op))
-          fork_count++;
-        else if (isa<MergeLikeOpInterface>(op))
-          merge_count++;
-        else if (isa<ConditionalBranchOp>(op))
-          branch_count++;
-        else if (isa<JoinOp>(op))
-          join_count++;
-        else if (!isa<handshake::BranchOp>(op) && !isa<SinkOp>(op) &&
-                 !isa<TerminatorOp>(op))
-          count++;
-      }
-
-      llvm::outs() << "// Fork count: " << fork_count << "\n";
-      llvm::outs() << "// Merge count: " << merge_count << "\n";
-      llvm::outs() << "// Branch count: " << branch_count << "\n";
-      llvm::outs() << "// Join count: " << join_count << "\n";
-      int total = count + fork_count + merge_count + branch_count;
-
-      llvm::outs() << "// Total op count: " << total << "\n";
-    }
-  }
-};
-} // namespace
-
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-circt::createHandshakeAnalysisPass() {
-  return std::make_unique<HandshakeAnalysisPass>();
-}
-
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 circt::createHandshakeDataflowPass() {
   return std::make_unique<HandshakeDataflowPass>();
