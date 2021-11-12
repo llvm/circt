@@ -36,10 +36,6 @@ static void checkMemrefDependence(SmallVectorImpl<Operation *> &memoryOps,
       if (results.count(destination) == 0)
         results[destination] = SmallVector<MemoryDependence>();
 
-      // Initialize the dependence list for this destination.
-      if (results.count(destination) == 0)
-        results[destination] = SmallVector<MemoryDependence>();
-
       // Look for for inter-iteration dependences on the same memory location.
       MemRefAccess src(source);
       MemRefAccess dst(destination);

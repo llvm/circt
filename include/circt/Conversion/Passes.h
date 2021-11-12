@@ -23,7 +23,6 @@
 #include "circt/Conversion/SCFToCalyx.h"
 #include "circt/Conversion/StandardToHandshake.h"
 #include "circt/Conversion/StandardToStaticLogic.h"
-
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 
