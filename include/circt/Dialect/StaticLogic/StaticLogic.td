@@ -132,6 +132,11 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
   let verifier = [{
     return ::verify$cppClass(*this);
   }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::ValueRange":$iterArgs)>
+  ];
 }
 
 def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",

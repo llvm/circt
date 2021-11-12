@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/StaticLogic/StaticLogic.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/FunctionImplementation.h"
 
 using namespace mlir;
@@ -137,6 +138,26 @@ static LogicalResult verifyPipelineWhileOp(PipelineWhileOp op) {
   // definitions and uses of `iter_args`.
 
   return success();
+}
+
+void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
+                            TypeRange resultTypes, ValueRange iterArgs) {
+  OpBuilder::InsertionGuard g(builder);
+
+  state.addTypes(resultTypes);
+  state.addOperands(iterArgs);
+
+  Region *condRegion = state.addRegion();
+  Block &condBlock = condRegion->emplaceBlock();
+  condBlock.addArguments(iterArgs.getTypes());
+  builder.setInsertionPointToEnd(&condBlock);
+  builder.create<PipelineRegisterOp>(builder.getUnknownLoc(), ValueRange());
+
+  Region *stagesRegion = state.addRegion();
+  Block &stagesBlock = stagesRegion->emplaceBlock();
+  stagesBlock.addArguments(iterArgs.getTypes());
+  builder.setInsertionPointToEnd(&stagesBlock);
+  builder.create<PipelineRegisterOp>(builder.getUnknownLoc(), ValueRange());
 }
 
 //===----------------------------------------------------------------------===//
