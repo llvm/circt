@@ -1694,6 +1694,90 @@ bool circt::firrtl::scatterCustomAnnotations(
       continue;
     }
 
+    if (clazz == "sifive.enterprise.grandcentral.ModuleReplacementAnnotation") {
+      auto id = newID();
+      NamedAttrList fields;
+      auto annotationsAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "annotations", loc, clazz);
+      auto circuitAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuit", loc, clazz);
+      auto circuitPackageAttr =
+          tryGetAs<StringAttr>(dict, dict, "circuitPackage", loc, clazz);
+      auto dontTouchesAttr =
+          tryGetAs<ArrayAttr>(dict, dict, "dontTouches", loc, clazz);
+      if (!annotationsAttr || !circuitAttr || !circuitPackageAttr ||
+          !dontTouchesAttr)
+        return false;
+      fields.append("class", classAttr);
+      fields.append("id", id);
+      fields.append("annotations", annotationsAttr);
+      fields.append("circuit", circuitAttr);
+      fields.append("circuitPackage", circuitPackageAttr);
+      newAnnotations["~"].push_back(DictionaryAttr::get(context, fields));
+
+      // Add a don't touches for each target in "dontTouches" list
+      for (auto dontTouch : dontTouchesAttr) {
+        StringAttr targetString = dontTouch.dyn_cast<StringAttr>();
+        if (!targetString) {
+          mlir::emitError(
+              loc,
+              "ModuleReplacementAnnotation dontTouches entries must be strings")
+                  .attachNote()
+              << "annotation:" << dict << "\n";
+          return false;
+        }
+        auto canonTarget = canonicalizeTarget(targetString.getValue());
+        if (!canonTarget)
+          return false;
+        auto nlaTargets = expandNonLocal(*canonTarget);
+        auto leafTarget = splitAndAppendTarget(
+            fields, std::get<0>(nlaTargets.back()), context);
+
+        // Add a don't touch annotation to whatever this annotation targets.
+        addDontTouch(leafTarget.first, leafTarget.second);
+      }
+
+      auto targets = tryGetAs<ArrayAttr>(dict, dict, "targets", loc, clazz);
+      if (!targets)
+        return false;
+      for (auto targetAttr : targets) {
+        NamedAttrList fields;
+        fields.append("id", id);
+        StringAttr targetString = targetAttr.dyn_cast<StringAttr>();
+        if (!targetString) {
+          mlir::emitError(
+              loc,
+              "ModuleReplacementAnnotation targets entries must be strings")
+                  .attachNote()
+              << "annotation:" << dict << "\n";
+          return false;
+        }
+        auto canonTarget = canonicalizeTarget(targetString.getValue());
+        if (!canonTarget)
+          return false;
+        auto nlaTargets = expandNonLocal(*canonTarget);
+        auto leafTarget = splitAndAppendTarget(
+            fields, std::get<0>(nlaTargets.back()), context);
+        if (nlaTargets.size() > 1) {
+          buildNLA(circuit, ++nlaNumber, nlaTargets);
+          fields.append("circt.nonlocal",
+                        FlatSymbolRefAttr::get(context, *canonTarget));
+        }
+        newAnnotations[leafTarget.first].push_back(
+            DictionaryAttr::get(context, fields));
+
+        // Annotate instances along the NLA path.
+        for (int i = 0, e = nlaTargets.size() - 1; i < e; ++i) {
+          NamedAttrList fields;
+          fields.append("circt.nonlocal",
+                        FlatSymbolRefAttr::get(context, *canonTarget));
+          fields.append("class", StringAttr::get(context, "circt.nonlocal"));
+          newAnnotations[std::get<0>(nlaTargets[i])].push_back(
+              DictionaryAttr::get(context, fields));
+        }
+      }
+    }
+
     // Scatter trackers out from OMIR JSON.
     if (clazz == omirAnnoClass) {
       auto newAnno = scatterOMIRAnnotation(dict, annotationID, newAnnotations,
