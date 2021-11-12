@@ -777,7 +777,7 @@ hw.module @ModuleWithLocInfo()  {
 // CHECK-LABEL: module SignedshiftResultSign
 // Issue #1681: https://github.com/llvm/circt/issues/1681
 hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
-  // CHECK: assign b = ($signed($signed(a) >>> a[6:0])) ^ 18'hB28;
+  // CHECK: assign b = $signed($signed(a) >>> a[6:0]) ^ 18'hB28;
   %c2856_i18 = hw.constant 2856 : i18
   %c0_i11 = hw.constant 0 : i11
   %0 = comb.extract %a from 0 : (i18) -> i7
@@ -785,6 +785,15 @@ hw.module @SignedshiftResultSign(%a: i18) -> (b: i18) {
   %2 = comb.shrs %a, %1 : i18
   %3 = comb.xor %2, %c2856_i18 : i18
   hw.output %3 : i18
+}
+// CHECK-LABEL: module SignedShiftRightPrecendence
+hw.module @SignedShiftRightPrecendence(%p: i1, %x: i45) -> (o: i45) {
+  // CHECK: assign o = $signed($signed(x) >>> (p ? 45'h5 : 45'h8))
+  %c5_i45 = hw.constant 5 : i45
+  %c8_i45 = hw.constant 8 : i45
+  %0 = comb.mux %p, %c5_i45, %c8_i45 : i45
+  %1 = comb.shrs %x, %0 : i45
+  hw.output %1 : i45
 }
 
 // CHECK-LABEL: module parameters
