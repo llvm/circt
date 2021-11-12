@@ -157,6 +157,23 @@ void PipelineWhileOp::build(OpBuilder &builder, OperationState &state,
   Block &stagesBlock = stagesRegion->emplaceBlock();
   stagesBlock.addArguments(iterArgs.getTypes());
   builder.setInsertionPointToEnd(&stagesBlock);
+  builder.create<PipelineTerminatorOp>(builder.getUnknownLoc(), ValueRange(),
+                                       ValueRange());
+}
+
+//===----------------------------------------------------------------------===//
+// PipelineStageOp
+//===----------------------------------------------------------------------===//
+
+void PipelineStageOp::build(OpBuilder &builder, OperationState &state,
+                            TypeRange resultTypes) {
+  OpBuilder::InsertionGuard g(builder);
+
+  state.addTypes(resultTypes);
+
+  Region *region = state.addRegion();
+  Block &block = region->emplaceBlock();
+  builder.setInsertionPointToEnd(&block);
   builder.create<PipelineRegisterOp>(builder.getUnknownLoc(), ValueRange());
 }
 

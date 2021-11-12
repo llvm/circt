@@ -137,6 +137,11 @@ def PipelineWhileOp : Op<StaticLogic_Dialect, "pipeline.while", []> {
   let builders = [
     OpBuilder<(ins "mlir::TypeRange":$resultTypes, "mlir::ValueRange":$iterArgs)>
   ];
+
+  let extraClassDeclaration = [{
+    Block &getCondBlock() { return condition().front(); }
+    Block &getStagesBlock() { return stages().front(); }
+  }];
 }
 
 def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
@@ -179,6 +184,15 @@ def PipelineStageOp : Op<StaticLogic_Dialect, "pipeline.stage",
 
   let assemblyFormat = [{
     (`when` $when^)? $body (`:` type($results)^)? attr-dict
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "mlir::TypeRange":$resultTypes)>
+  ];
+
+  let extraClassDeclaration = [{
+    Block &getBodyBlock() { return body().front(); }
   }];
 }
 
