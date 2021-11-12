@@ -1356,7 +1356,7 @@ LogicalResult connectToMemory(handshake::FuncOp f,
     if (isExternalMemory)
       newOp = rewriter.create<ExternalMemoryOp>(
           entryBlock->front().getLoc(), memrefOperand, operands, ld_count,
-          cntrl_count, mem_count++);
+          cntrl_count - ld_count, mem_count++);
     else
       newOp = rewriter.create<MemoryOp>(entryBlock->front().getLoc(), operands,
                                         ld_count, cntrl_count, lsq, mem_count++,

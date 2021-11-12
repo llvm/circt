@@ -829,16 +829,16 @@ std::string handshake::ExternalMemoryOp::getOperandName(unsigned int idx) {
   if (idx == 0)
     return "extmem";
 
-  return getMemoryOperandName(st_count(), idx - 1);
+  return getMemoryOperandName(stCount(), idx - 1);
 }
 
 std::string handshake::ExternalMemoryOp::getResultName(unsigned int idx) {
-  return getMemoryResultName(ld_count(), st_count(), idx);
+  return getMemoryResultName(ldCount(), stCount(), idx);
 }
 
 void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
-                             Value memref, ArrayRef<Value> inputs, int outputs,
-                             int control_outputs, int id) {
+                             Value memref, ArrayRef<Value> inputs, int ldCount,
+                             int stCount, int id) {
   SmallVector<Value> ops;
   ops.push_back(memref);
   llvm::append_range(ops, inputs);
@@ -847,17 +847,16 @@ void ExternalMemoryOp::build(OpBuilder &builder, OperationState &result,
   auto memrefType = memref.getType().cast<MemRefType>();
 
   // Data outputs (get their type from memref)
-  result.types.append(outputs, memrefType.getElementType());
+  result.types.append(ldCount, memrefType.getElementType());
 
   // Control outputs
-  result.types.append(control_outputs, builder.getNoneType());
+  result.types.append(stCount + ldCount, builder.getNoneType());
 
   // Memory ID (individual ID for each MemoryOp)
   Type i32Type = builder.getIntegerType(32);
   result.addAttribute("id", builder.getIntegerAttr(i32Type, id));
-  result.addAttribute("ld_count", builder.getIntegerAttr(i32Type, outputs));
-  result.addAttribute(
-      "st_count", builder.getIntegerAttr(i32Type, control_outputs - outputs));
+  result.addAttribute("ldCount", builder.getIntegerAttr(i32Type, ldCount));
+  result.addAttribute("stCount", builder.getIntegerAttr(i32Type, stCount));
 }
 
 bool handshake::ExternalMemoryOp::tryExecute(

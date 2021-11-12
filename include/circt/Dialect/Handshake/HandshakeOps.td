@@ -569,7 +569,7 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
 
     ```mlir
     handshake.func @main(%i: index, %v: i32, %mem : memref<10xi32>, %ctrl: none) -> none {
-      %stCtrl = "handshake.extmemory"(%mem, %vout, %addr) {id = 0 : i32, ld_count = 0 : i32, lsq = false, st_count = 1 : i32} : (memref<10xi32>, i32, index, index) -> (none)
+      %stCtrl = "handshake.extmemory"[ld = 0, st = 1](%mem : memref<10xi32>)(%vout, %addr) {id = 0 : i32} : (i32, index) -> (none)
       %vout, %addr = "handshake.store"(%v, %i, %ctrl) : (i32, index, none) -> (i32, index)
       ...
     }
@@ -577,17 +577,17 @@ def ExternalMemoryOp : Handshake_Op<"extmemory", [
   }];
   let arguments = (ins AnyMemRef:$memref,
                        Variadic<AnyType>:$inputs,
-                       I32Attr : $ld_count,
-                       I32Attr : $st_count,
+                       I32Attr : $ldCount,
+                       I32Attr : $stCount,
                        I32Attr : $id);
   let results = (outs Variadic<AnyType>:$outputs);
 
   let skipDefaultBuilders = 1;
   let builders = [OpBuilder<(
-      ins "Value":$memref, "ArrayRef<Value>":$inputs, "int":$ld_count, "int":$st_count,
+      ins "Value":$memref, "ArrayRef<Value>":$inputs, "int":$ldCount, "int":$stCount,
       "int":$id)>
   ];
-  let assemblyFormat = "`[` `ld` `=` $ld_count `,` `st` `=`  $st_count `]` `(` $memref `:` type($memref) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
+  let assemblyFormat = "`[` `ld` `=` $ldCount `,` `st` `=`  $stCount `]` `(` $memref `:` type($memref) `)` `(` $inputs `)` attr-dict `:` functional-type($inputs, $outputs)";
 
   let extraClassDeclaration = [{
     MemRefType getMemRefType() {
