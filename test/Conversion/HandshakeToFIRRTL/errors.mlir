@@ -1,7 +1,7 @@
 // RUN: circt-opt -lower-handshake-to-firrtl -verify-diagnostics -split-input-file %s
 
 // Test cycle through a component
-// expected-error @+1 {{'builtin.module' op cannot lower handshake program - cycle detected in instance graph (bar->baz->foo->bar).}}
+// expected-error @+1 {{'builtin.module' op cannot deduce top level function - cycle detected in instance graph (bar->baz->foo->bar).}}
 module {
   handshake.func @bar(%ctrl : none) -> (none) {
     %0 = handshake.instance @baz(%ctrl) : (none) -> (none)
