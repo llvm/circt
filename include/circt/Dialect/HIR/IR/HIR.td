@@ -557,7 +557,7 @@ def MemrefExtractOp :HIR_Op<"memref.extract",[NoSideEffect]>{
   let results = (outs HIR_MemrefType: $res);
 
   let assemblyFormat = [{$mem `[` `port` $port `]`  custom<WithSSANames>(attr-dict) `:`
-    type($res) `ports` $ports  custom<CopyType>(type($mem),ref(type($res)))}];
+    type($res) `port` $ports  custom<CopyType>(type($mem),ref(type($res)))}];
 }
 
 def UnpackTupleOp:HIR_Op<"unpack_tuple",[NoSideEffect]>{

@@ -219,8 +219,8 @@ llvm::Optional<std::string> typeMismatch(Location loc, hir::FuncType ta,
       return std::string("Type Mismatch in result arg ") + std::to_string(i);
   }
 
-  if (ta != tb)
-    return std::string("Mismatch in function types.");
+  // if (ta != tb)
+  //  return std::string("Mismatch in FuncType.");
   return llvm::None;
 }
 
@@ -267,7 +267,9 @@ LogicalResult verifyCallOp(hir::CallOp op) {
     if (error)
       return op.emitError("Mismatch with function definition.")
                  .attachNote(funcOp.getLoc())
-             << error.getValue();
+             << error.getValue() << "\n\ntypes are \n"
+             << funcOp.getFuncType() << "\n and \n"
+             << op.getFuncType();
   } else if (hir::FuncExternOp funcExternOp =
                  dyn_cast_or_null<hir::FuncExternOp>(calleeDeclOperation)) {
     auto error =
@@ -287,6 +289,9 @@ LogicalResult verifyCallOp(hir::CallOp op) {
 }
 
 LogicalResult verifyCastOp(hir::CastOp op) {
+  if (op.input().getType().isa<mlir::IndexType>() &&
+      op.res().getType().isa<mlir::IntegerType>())
+    return success();
   auto inputHWType = helper::convertToHWType(op.input().getType());
   auto resultHWType = helper::convertToHWType(op.res().getType());
   if (!inputHWType)

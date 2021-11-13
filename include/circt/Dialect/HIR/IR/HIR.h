@@ -78,7 +78,8 @@ struct FuncTypeStorage : public TypeStorage {
 
   /// Define a hash function for the key type.
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
+                              std::get<2>(key), std::get<3>(key));
   }
 
   /// Define a construction function for the key type.
@@ -123,7 +124,8 @@ struct BusTypeStorage : public TypeStorage {
 
   /// Define a hash function for the key type.
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
+                              std::get<2>(key));
   }
 
   /// Define a construction function for the key type.

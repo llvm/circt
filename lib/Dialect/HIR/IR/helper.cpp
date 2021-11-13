@@ -131,7 +131,10 @@ llvm::Optional<int64_t> getConstantIntValue(Value var) {
 
   auto integerAttr = constantOp.value().dyn_cast<IntegerAttr>();
   assert(integerAttr);
-  return integerAttr.getInt();
+  auto out = integerAttr.getValue().getZExtValue();
+  if (out > 100000)
+    constantOp->emitError() << "This should not be -ve.";
+  return out;
 }
 
 mlir::LogicalResult isConstantIntValue(mlir::Value var) {
@@ -154,8 +157,13 @@ llvm::Optional<int64_t> calcLinearIndex(mlir::ArrayRef<mlir::Value> indices,
     if (!idxConst)
       return llvm::None;
     linearIdx += idxConst.getValue() * stride;
+    assert(linearIdx <= 1000000);
     stride *= dims[i];
   }
+  if (0 > linearIdx) {
+    assert(linearIdx);
+  }
+  assert(linearIdx <= 1000000);
   return linearIdx;
 }
 

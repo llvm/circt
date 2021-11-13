@@ -64,5 +64,7 @@ std::pair<Value, Value> insertForOpEntryLogic(OpBuilder &builder,
       emitReg(builder, builder.getI1Type(), nextIterCondition, tstartLoopBody);
   auto iv = builder.create<comb::ExtractOp>(uLoc, lb.getType(), ivWide,
                                             builder.getI32IntegerAttr(0));
-  return std::make_pair(nextIterConditionSafe, iv);
+  auto ivLatched = builder.create<hir::LatchOp>(uLoc, iv.getType(), iv,
+                                                tstartLoopBody, zeroAttr);
+  return std::make_pair(nextIterConditionSafe, ivLatched);
 }

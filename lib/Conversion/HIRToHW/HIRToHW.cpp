@@ -21,14 +21,19 @@ private:
                                      mlir::Block::BlockArgListType,
                                      FuncToHWModulePortMap);
 
-  LogicalResult visitRegion(mlir::Region &);
-  LogicalResult visitOperation(Operation *);
+  std::string getUniquePostfix() { return "_" + std::to_string(uniqueInt++); }
 
+  LogicalResult visitHWOp(Operation *);
+  LogicalResult visitOperation(Operation *);
   LogicalResult visitOp(hir::BusAssignOp);
   LogicalResult visitOp(hir::BusBroadcastOp);
   LogicalResult visitOp(hir::BusMapOp);
   LogicalResult visitOp(hir::BusOp);
+  LogicalResult visitOp(hir::BusRecvOp);
+  LogicalResult visitOp(hir::BusSendOp);
   LogicalResult visitOp(hir::BusTensorAssignOp);
+  LogicalResult visitOp(hir::BusTensorGetElementOp);
+  LogicalResult visitOp(hir::BusTensorInsertElementOp);
   LogicalResult visitOp(hir::BusTensorMapOp);
   LogicalResult visitOp(hir::BusTensorOp);
   LogicalResult visitOp(hir::CallOp);
@@ -39,16 +44,13 @@ private:
   LogicalResult visitOp(hir::FuncExternOp);
   LogicalResult visitOp(hir::FuncOp);
   LogicalResult visitOp(hir::IsFirstIterOp);
+  LogicalResult visitOp(hir::LatchOp);
   LogicalResult visitOp(hir::NextIterOp);
   LogicalResult visitOp(hir::ProbeOp);
-  LogicalResult visitOp(hir::BusRecvOp);
   LogicalResult visitOp(hir::ReturnOp);
-  LogicalResult visitOp(hir::BusSendOp);
-  LogicalResult visitOp(hir::BusTensorGetElementOp);
-  LogicalResult visitOp(hir::BusTensorInsertElementOp);
   LogicalResult visitOp(hir::TimeOp);
   LogicalResult visitOp(hir::WhileOp);
-  LogicalResult visitHWOp(Operation *);
+  LogicalResult visitRegion(mlir::Region &);
 
 private:
   OpBuilder *builder;
@@ -58,6 +60,7 @@ private:
   Value clk;
   Value reset;
   hw::HWModuleOp hwModuleOp;
+  size_t uniqueInt = 0;
 };
 
 LogicalResult HIRToHWPass::visitOp(hir::BusMapOp op) {
@@ -95,7 +98,7 @@ LogicalResult HIRToHWPass::visitOp(hir::BusTensorMapOp op) {
     auto results =
         insertBusMapLogic(*builder, op.body().front(), hwOperandTensors);
     for (size_t i = 0; i < op.getNumResults(); i++)
-      op.getResult(i).replaceAllUsesWith(results[i]);
+      mapHIRToHWValue.map(op.getResult(i), results[i]);
     return success();
   }
 
@@ -216,6 +219,19 @@ LogicalResult HIRToHWPass::visitOp(hir::CallOp op) {
 }
 
 LogicalResult HIRToHWPass::visitOp(hir::CastOp op) {
+  if (op.input().getType().isa<mlir::IndexType>()) {
+    assert(op.res().getType().isa<mlir::IntegerType>());
+    auto constantOp =
+        dyn_cast<mlir::arith::ConstantOp>(op.input().getDefiningOp());
+    assert(constantOp);
+    auto value = constantOp.value().dyn_cast<mlir::IntegerAttr>().getInt();
+    mapHIRToHWValue.map(op.res(),
+                        builder->create<hw::ConstantOp>(
+                            builder->getUnknownLoc(),
+                            IntegerAttr::get(op.res().getType(), value)));
+    return success();
+  }
+
   assert(*helper::convertToHWType(op.input().getType()) ==
          *helper::convertToHWType(op.res().getType()));
   mapHIRToHWValue.map(op.res(), mapHIRToHWValue.lookup(op.input()));
@@ -298,10 +314,30 @@ LogicalResult HIRToHWPass::visitOp(hir::IsFirstIterOp op) {
   return success();
 }
 
+LogicalResult HIRToHWPass::visitOp(hir::LatchOp op) {
+  auto tstart = mapHIRToHWValue.lookup(op.tstart());
+  auto uLoc = builder->getUnknownLoc();
+  auto hwInput = mapHIRToHWValue.lookup(op.input());
+  auto latchReg = builder->create<sv::RegOp>(uLoc, hwInput.getType());
+  auto bodyCtor = [&uLoc, &latchReg, hwInput, &tstart, this] {
+    builder->create<sv::IfOp>(uLoc, tstart, [&uLoc, &latchReg, hwInput, this] {
+      builder->create<sv::PAssignOp>(uLoc, latchReg.result(), hwInput);
+    });
+  };
+  builder->create<sv::AlwaysOp>(uLoc, sv::EventControl::AtPosEdge, clk,
+                                bodyCtor);
+  auto latchRegOut = builder->create<sv::ReadInOutOp>(uLoc, latchReg.result());
+  auto latchOut =
+      builder->create<comb::MuxOp>(uLoc, tstart, hwInput, latchRegOut);
+  mapHIRToHWValue.map(op.res(), latchOut);
+  return success();
+}
+
 LogicalResult HIRToHWPass::visitOp(hir::NextIterOp op) {
   assert(op.offset().getValue() == 0);
   return success();
 }
+
 LogicalResult HIRToHWPass::visitOp(hir::ProbeOp op) {
   auto input = mapHIRToHWValue.lookup(op.input());
   assert(input);
@@ -632,6 +668,8 @@ LogicalResult HIRToHWPass::visitOperation(Operation *operation) {
   if (auto op = dyn_cast<hir::WhileOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::IsFirstIterOp>(operation))
+    return visitOp(op);
+  if (auto op = dyn_cast<hir::LatchOp>(operation))
     return visitOp(op);
   if (auto op = dyn_cast<hir::BusSendOp>(operation))
     return visitOp(op);

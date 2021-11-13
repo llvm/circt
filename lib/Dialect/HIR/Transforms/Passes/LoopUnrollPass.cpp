@@ -94,7 +94,8 @@ void LoopUnrollPass::runOnOperation() {
   hir::FuncOp funcOp = getOperation();
   WalkResult result = funcOp.walk([](Operation *operation) -> WalkResult {
     if (auto forOp = dyn_cast<hir::ForOp>(operation)) {
-      if (forOp->getAttr("unroll"))
+      if (forOp->getAttr("unroll") ||
+          forOp.getInductionVar().getType().isa<mlir::IndexType>())
         if (failed(unrollLoopFull(forOp)))
           return WalkResult::interrupt();
     }
