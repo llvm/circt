@@ -2016,9 +2016,18 @@ static bool isExpressionEmittedInline(Operation *op) {
 
   // If this operation has multiple uses, we can't generally inline it.
   if (!op->getResult(0).hasOneUse()) {
-    // ... unless it is nullary and duplicable, then we can emit it inline.
-    if (op->getNumOperands() != 0 || !isDuplicatableNullaryExpression(op))
-      return false;
+    // We don't want `hw.name` affecting inline vs not, so count the number of
+    // non-`hw.name` users and get the rest of this branch on that being more
+    // than 1. Do this after the above check since this is more expensive.
+    size_t nonHwNameUserCount = 0;
+    for (auto user : op->getResult(0).getUsers())
+      if (!isa<NameOp>(user))
+        nonHwNameUserCount++;
+
+    if (nonHwNameUserCount != 1)
+      // ... unless it is nullary and duplicable, then we can emit it inline.
+      if (op->getNumOperands() != 0 || !isDuplicatableNullaryExpression(op))
+        return false;
   }
 
   // If it isn't structurally possible to inline this expression, emit it out
@@ -2062,8 +2071,9 @@ void NameCollector::collectNames(Block &block) {
 
   SmallString<32> nameTmp;
 
-  // Loop over all of the results of all of the ops.  Anything that defines a
-  // value needs to be noticed.
+  // Loop over all of the results of all of the ops. Anything that defines a
+  // value needs to be noticed. If a value needs a name and is not already
+  // named, name it.
   for (auto &op : block) {
     // Instances have a instance name to recognize but we don't need to look
     // at the result values and don't need to schedule them as valuesToEmit.
@@ -2080,6 +2090,12 @@ void NameCollector::collectNames(Block &block) {
       continue;
     }
 
+    // Name anything which has a name hint and is an expression. Do not add it
+    // to `outOfLineExpressions` since `hw.name` is only a hint.
+    auto nameOp = dyn_cast<hw::NameOp>(op);
+    if (nameOp && isVerilogExpression(nameOp.input().getDefiningOp()))
+      names.addName(nameOp.input(), nameOp.name());
+
     bool isExpr = isVerilogExpression(&op);
     for (auto result : op.getResults()) {
       // If this is an expression emitted inline or unused, it doesn't need a
@@ -2092,12 +2108,9 @@ void NameCollector::collectNames(Block &block) {
         // Remember that this expression should be emitted out of line.
         moduleEmitter.outOfLineExpressions.insert(&op);
 
-        // Since this will be used out-of-line, we'll need a name for it.  If
-        // this expression has a random "name" attribute, keep track of it in
-        // case we end up spilling this.
-        // FIXME: This is highly unprincipled and should be removed.
-        //   https://github.com/llvm/circt/issues/1752
-        names.addName(result, op.getAttrOfType<StringAttr>("name"));
+        // If the expression does not already have a name, generate one.
+        if (!names.hasName(result))
+          names.addName(result, StringAttr());
 
         // Don't measure or emit wires that are emitted inline (i.e. the wire
         // definition is emitted on the line of the expression instead of a
@@ -2257,6 +2270,7 @@ private:
   LogicalResult visitSV(InterfaceInstanceOp op);
   LogicalResult visitStmt(OutputOp op);
   LogicalResult visitStmt(InstanceOp op);
+  LogicalResult visitStmt(NameOp op) { return emitNoop(); }
 
   LogicalResult emitIfDef(Operation *op, StringRef cond);
   LogicalResult visitSV(IfDefOp op) { return emitIfDef(op, op.cond()); }

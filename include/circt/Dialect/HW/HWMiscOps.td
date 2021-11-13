@@ -87,3 +87,13 @@ def ParamValueOp : HWOp<"param.value",
   let verifier = "return ::verifyParamValueOp(*this);";
   let hasFolder = true;
 }
+
+def NameOp : HWOp<"name", []> {
+  let summary =
+    "Assign a name hint to a value which is optionally used in outputs.";
+
+  let arguments = (ins AnyType:$input, StrAttr:$name);
+  let assemblyFormat = [{
+    $input $name attr-dict `:` type($input)
+  }];
+}

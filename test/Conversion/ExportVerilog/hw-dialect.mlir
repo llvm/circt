@@ -78,6 +78,10 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
   %41 = hw.struct_create (%c, %a) : !hw.struct<foo: i2, bar: i4>
   %42 = hw.struct_inject %41["bar"], %b : !hw.struct<foo: i2, bar: i4>
 
+
+  hw.name %41 "structfoobar" : !hw.struct<foo: i2, bar: i4>
+  hw.name %42 "shouldBeInlined" : !hw.struct<foo: i2, bar: i4>
+
   hw.output %0, %2, %4, %6, %7, %8, %9, %10, %11, %12, %13, %14,
               %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27,
               %28, %29, %30, %31, %33, %34, %35, %36, %37, %38, %40, %42 :
@@ -111,7 +115,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-EMPTY:
 // CHECK-NEXT:   wire [8:0][3:0] [[WIRE0:.+]] = {{[{}][{}]}}4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}, {4'hF}};
 // CHECK-NEXT:   wire [2:0][3:0] [[WIRE1:.+]] = {{[{}][{}]}}4'hF}, {a + b}, {4'hF}};
-// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } [[WIRE2:.+]] = '{foo: c, bar: a};
+// CHECK-NEXT:   wire struct packed {logic [1:0] foo; logic [3:0] bar; } structfoobar = '{foo: c, bar: a};
 // CHECK-NEXT:   assign r0 = a + b;
 // CHECK-NEXT:   assign r2 = a - b;
 // CHECK-NEXT:   assign r4 = a * b;
@@ -148,7 +152,7 @@ hw.module @TESTSIMPLE(%a: i4, %b: i4, %c: i2, %cond: i1,
 // CHECK-NEXT:   assign r37 = array2d[a][b];
 // CHECK-NEXT:   assign r38 = {[[WIRE1]], [[WIRE1]]};
 // CHECK-NEXT:   assign r40 = '{foo: structA.foo, bar: a};
-// CHECK-NEXT:   assign r41 = '{foo: _T_1.foo, bar: b};
+// CHECK-NEXT:   assign r41 = '{foo: structfoobar.foo, bar: b};
 // CHECK-NEXT: endmodule
 
 

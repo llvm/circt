@@ -92,8 +92,10 @@ hw.module @test1(%arg0: i3, %arg1: i1, %arg2: !hw.array<1000xi8>) -> (result: i5
   // CHECK-NEXT: :2 = hw.struct_explode [[STR]] : !hw.struct<foo: i19, bar: i7>
   %se:2 = hw.struct_explode %s0 : !hw.struct<foo: i19, bar: i7>
 
-  // CHECK-NEXT: hw.bitcast [[STR]] : (!hw.struct<foo: i19, bar: i7>)
+  // CHECK-NEXT: [[STRBITS:%.+]] = hw.bitcast [[STR]] : (!hw.struct<foo: i19, bar: i7>)
   %structBits = hw.bitcast %s0 : (!hw.struct<foo: i19, bar: i7>) -> i26
+  // CHECK-NEXT: hw.name [[STRBITS]] "bitcastedStruct" : i26
+  hw.name %structBits "bitcastedStruct" : i26
 
   // CHECK-NEXT: = arith.constant 13 : i10
   %idx = arith.constant 13 : i10
