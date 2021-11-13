@@ -2020,7 +2020,7 @@ static bool isExpressionEmittedInline(Operation *op) {
   // `hasOneUse()` check, so run it only if that check fails.
   auto hasOneNonHwNameUse = [op]() {
     size_t nonHwNameUserCount = 0;
-    for (auto user : op->getResult(0).getUsers())
+    for (auto *user : op->getResult(0).getUsers())
       if (!isa<NameOp>(user))
         nonHwNameUserCount++;
     return nonHwNameUserCount == 1;
